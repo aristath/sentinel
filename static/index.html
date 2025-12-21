@@ -649,7 +649,7 @@
                 },
 
                 updateChart() {
-                    if (!this.geoChart || !this.allocation.geographic) return;
+                    if (!this.geoChart || !this.geoChart.data || !this.allocation.geographic) return;
                     try {
                         const data = this.allocation.geographic.map(g => g.current_value || 1);
                         // Ensure we have valid data (at least some non-zero values)
@@ -657,9 +657,12 @@
                             data[0] = 1; // Prevent empty chart
                         }
                         this.geoChart.data.datasets[0].data = data;
-                        this.geoChart.update();
+                        this.geoChart.update('none');  // 'none' mode skips animations, reduces errors
                     } catch (e) {
                         console.error('Chart update error:', e);
+                        // Try to recreate chart if it's broken
+                        this.geoChart = null;
+                        this.initChart();
                     }
                 },
 
