@@ -58,30 +58,34 @@ async def get_portfolio_summary(db: aiosqlite.Connection) -> PortfolioSummary:
         key = f"{row[0]}:{row[1]}"
         targets[key] = row[2]
 
-    # Get positions with stock info
+    # Get positions with stock info - use market_value_eur for EUR-converted values
     cursor = await db.execute("""
         SELECT p.symbol, p.quantity, p.current_price, p.avg_price,
-               s.name, s.geography, s.industry
+               p.market_value_eur, s.name, s.geography, s.industry
         FROM positions p
         JOIN stocks s ON p.symbol = s.symbol
     """)
     positions = await cursor.fetchall()
 
-    # Calculate totals by geography and industry
+    # Calculate totals by geography and industry using EUR values
     geo_values = {}
     industry_values = {}
     total_value = 0.0
 
     for pos in positions:
-        price = pos[2] or pos[3]  # current_price or avg_price
-        value = pos[1] * price
-        total_value += value
+        # Use stored EUR value if available, otherwise fallback to calculation
+        eur_value = pos[4]  # market_value_eur
+        if eur_value is None or eur_value == 0:
+            price = pos[2] or pos[3]  # current_price or avg_price
+            eur_value = pos[1] * price
 
-        geo = pos[5]
-        industry = pos[6]
+        total_value += eur_value
 
-        geo_values[geo] = geo_values.get(geo, 0) + value
-        industry_values[industry] = industry_values.get(industry, 0) + value
+        geo = pos[6]  # geography (shifted due to new column)
+        industry = pos[7]  # industry (shifted due to new column)
+
+        geo_values[geo] = geo_values.get(geo, 0) + eur_value
+        industry_values[industry] = industry_values.get(industry, 0) + eur_value
 
     # Get cash balance from latest snapshot
     cursor = await db.execute("""

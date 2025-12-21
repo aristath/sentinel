@@ -59,8 +59,9 @@
                 <p class="text-2xl font-bold" x-text="status.active_positions || 0"></p>
             </div>
             <div class="bg-gray-800 rounded-lg p-4">
-                <p class="text-gray-400 text-sm">Monthly Deposit</p>
-                <p class="text-2xl font-bold text-blue-400" x-text="formatCurrency(status.monthly_deposit)"></p>
+                <p class="text-gray-400 text-sm">Rebalance Status</p>
+                <p class="text-2xl font-bold" :class="status.rebalance_ready ? 'text-green-400' : 'text-gray-400'"
+                   x-text="status.rebalance_ready ? 'Ready' : 'Cash < €' + (status.min_cash_threshold || 400)"></p>
             </div>
         </div>
 
@@ -529,7 +530,7 @@
 
                 formatCurrency(value) {
                     if (value == null) return '-';
-                    return new Intl.NumberFormat('de-DE', {
+                    return new Intl.NumberFormat('en-IE', {
                         style: 'currency',
                         currency: 'EUR'
                     }).format(value);
