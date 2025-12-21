@@ -111,7 +111,8 @@
                             </span>
                             <span class="text-blue-400 font-mono" x-text="geoTargets.EU + '%'"></span>
                         </div>
-                        <input type="range" min="0" max="100" x-model.number="geoTargets.EU"
+                        <input type="range" min="0" max="100" :value="geoTargets.EU"
+                               @input="adjustGeoSlider('EU', parseInt($event.target.value))"
                                class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
                     </div>
 
@@ -124,7 +125,8 @@
                             </span>
                             <span class="text-red-400 font-mono" x-text="geoTargets.ASIA + '%'"></span>
                         </div>
-                        <input type="range" min="0" max="100" x-model.number="geoTargets.ASIA"
+                        <input type="range" min="0" max="100" :value="geoTargets.ASIA"
+                               @input="adjustGeoSlider('ASIA', parseInt($event.target.value))"
                                class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-red-500">
                     </div>
 
@@ -137,7 +139,8 @@
                             </span>
                             <span class="text-green-400 font-mono" x-text="geoTargets.US + '%'"></span>
                         </div>
-                        <input type="range" min="0" max="100" x-model.number="geoTargets.US"
+                        <input type="range" min="0" max="100" :value="geoTargets.US"
+                               @input="adjustGeoSlider('US', parseInt($event.target.value))"
                                class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500">
                     </div>
 
@@ -613,6 +616,28 @@
 
                 cancelEditGeo() {
                     this.editingGeo = false;
+                },
+
+                adjustGeoSlider(changed, newValue) {
+                    const oldValue = this.geoTargets[changed];
+                    const delta = newValue - oldValue;
+                    if (delta === 0) return;
+
+                    const others = ['EU', 'ASIA', 'US'].filter(r => r !== changed);
+                    const otherTotal = this.geoTargets[others[0]] + this.geoTargets[others[1]];
+
+                    if (otherTotal === 0) {
+                        // Edge case: split evenly
+                        this.geoTargets[others[0]] = Math.max(0, Math.round(-delta / 2));
+                        this.geoTargets[others[1]] = Math.max(0, Math.round(-delta / 2));
+                    } else {
+                        // Distribute proportionally
+                        const ratio0 = this.geoTargets[others[0]] / otherTotal;
+                        const ratio1 = this.geoTargets[others[1]] / otherTotal;
+                        this.geoTargets[others[0]] = Math.max(0, Math.round(this.geoTargets[others[0]] - delta * ratio0));
+                        this.geoTargets[others[1]] = Math.max(0, Math.round(this.geoTargets[others[1]] - delta * ratio1));
+                    }
+                    this.geoTargets[changed] = newValue;
                 },
 
                 async saveGeoTargets() {
