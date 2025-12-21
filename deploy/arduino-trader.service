@@ -1,0 +1,24 @@
+[Unit]
+Description=Arduino Trader - Automated Portfolio Management
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/arduino/arduino-trader
+Environment=PATH=/home/arduino/arduino-trader/venv/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/arduino/arduino-trader/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=arduino-trader
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
