@@ -1,6 +1,7 @@
 #!/bin/bash
-# Initial setup script for Arduino Uno Q trader-display app
-# Run this once on a new board to set up auto-deployment
+# Arduino LED Display Setup Script
+# Run this as the arduino user (not root) after running deploy/setup.sh
+# Usage: ./arduino-app/deploy/setup.sh
 
 set -e
 
@@ -8,7 +9,7 @@ REPO_URL="https://github.com/aristath/autoTrader.git"
 REPO_DIR="/home/arduino/repos/autoTrader"
 APP_DIR="/home/arduino/ArduinoApps/trader-display"
 
-echo "=== Arduino Trader Display Setup ==="
+echo "=== Arduino Trader LED Display Setup ==="
 
 # Create directories
 echo "Creating directories..."
@@ -33,9 +34,10 @@ echo "Installing deploy script..."
 cp "$REPO_DIR/arduino-app/deploy/auto-deploy.sh" /home/arduino/bin/
 chmod +x /home/arduino/bin/auto-deploy.sh
 
-# Initial sync
+# Sync app files (using cp since rsync may not be available)
 echo "Syncing app files..."
-rsync -av --delete "$REPO_DIR/arduino-app/" "$APP_DIR/"
+rm -rf "$APP_DIR"/* 2>/dev/null || true
+cp -r "$REPO_DIR/arduino-app/"* "$APP_DIR/"
 
 # Set up cron job (if not already set)
 if ! crontab -l 2>/dev/null | grep -q "auto-deploy.sh"; then
@@ -45,11 +47,24 @@ else
     echo "Cron job already exists"
 fi
 
+# Set as default app (auto-starts on boot)
+echo "Setting as default app for auto-start..."
+arduino-app-cli properties set default user:trader-display
+
 # Start the app
 echo "Starting trader-display app..."
-arduino-app-cli app restart user:trader-display
+arduino-app-cli app restart user:trader-display || arduino-app-cli app start user:trader-display
 
 echo ""
 echo "=== Setup Complete ==="
-echo "The app will auto-update every 5 minutes from GitHub."
+echo ""
+echo "LED Display Status:"
+arduino-app-cli app list | grep trader
+echo ""
+echo "The app will:"
+echo "  - Auto-start on boot (set as default)"
+echo "  - Auto-update every 5 minutes from GitHub"
+echo ""
 echo "Logs: /home/arduino/logs/auto-deploy.log"
+echo "App logs: arduino-app-cli app logs user:trader-display"
+echo ""
