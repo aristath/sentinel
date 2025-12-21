@@ -59,37 +59,37 @@ def init_scheduler() -> AsyncIOScheduler:
     from app.jobs.daily_sync import sync_portfolio, sync_prices
     from app.jobs.cash_rebalance import check_and_rebalance
 
-    # Daily portfolio sync (at configured hour)
+    # Tradernet portfolio sync (every 2 minutes)
     scheduler.add_job(
         sync_portfolio,
-        CronTrigger(hour=settings.daily_sync_hour, minute=0),
-        id="daily_portfolio_sync",
-        name="Daily Portfolio Sync",
+        IntervalTrigger(minutes=2),
+        id="portfolio_sync",
+        name="Portfolio Sync",
         replace_existing=True,
     )
 
-    # Daily price sync (every 4 hours during market hours)
+    # Yahoo price sync (every 7 minutes)
     scheduler.add_job(
         sync_prices,
-        CronTrigger(hour="9,13,17,21", minute=0),
+        IntervalTrigger(minutes=7),
         id="price_sync",
         name="Price Sync",
         replace_existing=True,
     )
 
-    # Cash-based rebalance check (every N minutes)
+    # Cash-based rebalance check (every 15 minutes)
     scheduler.add_job(
         check_and_rebalance,
-        IntervalTrigger(minutes=settings.cash_check_interval_minutes),
+        IntervalTrigger(minutes=15),
         id="cash_rebalance_check",
         name="Cash Rebalance Check",
         replace_existing=True,
     )
 
-    # LED heartbeat pulse (every 60 seconds)
+    # LED heartbeat pulse (every 20 seconds)
     scheduler.add_job(
         heartbeat_job,
-        IntervalTrigger(seconds=60),
+        IntervalTrigger(seconds=20),
         id="led_heartbeat",
         name="LED Heartbeat",
         replace_existing=True,
