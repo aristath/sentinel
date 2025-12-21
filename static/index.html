@@ -7,7 +7,7 @@
     <link rel="icon" href="data:,">
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body class="bg-gray-900 text-gray-100 min-h-screen">
     <div x-data="dashboard()" x-init="init()" class="container mx-auto px-4 py-8">
@@ -535,6 +535,8 @@
                 addingStock: false,
 
                 async init() {
+                    // Ensure any existing chart is destroyed before initializing
+                    this.destroyChart();
                     this.initChart();        // Create chart FIRST
                     await this.fetchAll();   // Now updateChart() will work
                     setInterval(() => this.fetchAll(), 60000);
@@ -617,12 +619,33 @@
                     }
                 },
 
+                destroyChart() {
+                    if (this.geoChart && typeof this.geoChart.destroy === 'function') {
+                        try {
+                            this.geoChart.destroy();
+                        } catch (e) {
+                            console.error('Error destroying chart:', e);
+                        }
+                    }
+                    this.geoChart = null;
+                },
+
                 initChart() {
-                    if (this.geoChart) return;  // Already initialized
+                    // Destroy existing chart if it exists
+                    this.destroyChart();
+                    
                     const canvas = document.getElementById('geoChart');
-                    if (!canvas) return;
+                    if (!canvas) {
+                        console.warn('Canvas element not found');
+                        return;
+                    }
+                    
                     const ctx = canvas.getContext('2d');
-                    if (!ctx) return;
+                    if (!ctx) {
+                        console.warn('Could not get canvas context');
+                        return;
+                    }
+                    
                     try {
                         this.geoChart = new Chart(ctx, {
                             type: 'doughnut',
@@ -645,24 +668,59 @@
                         });
                     } catch (e) {
                         console.error('Chart init error:', e);
+                        this.geoChart = null;
                     }
                 },
 
                 updateChart() {
-                    if (!this.geoChart || !this.geoChart.data || !this.allocation.geographic) return;
+                    // Validate allocation data structure
+                    if (!this.allocation || !Array.isArray(this.allocation.geographic) || this.allocation.geographic.length === 0) {
+                        console.warn('Invalid or missing allocation.geographic data');
+                        return;
+                    }
+                    
+                    // If chart doesn't exist, initialize it
+                    if (!this.geoChart) {
+                        this.initChart();
+                        // Wait a bit for chart to initialize before updating
+                        setTimeout(() => this.updateChart(), 100);
+                        return;
+                    }
+                    
+                    // Validate chart structure
+                    if (!this.geoChart.data || !this.geoChart.data.datasets || !this.geoChart.data.datasets[0]) {
+                        console.warn('Chart data structure invalid, reinitializing');
+                        this.destroyChart();
+                        this.initChart();
+                        setTimeout(() => this.updateChart(), 100);
+                        return;
+                    }
+                    
                     try {
-                        const data = this.allocation.geographic.map(g => g.current_value || 1);
+                        const data = this.allocation.geographic.map(g => {
+                            // Ensure we have a valid number
+                            const value = g.current_value;
+                            return (typeof value === 'number' && !isNaN(value) && value >= 0) ? value : 1;
+                        });
+                        
                         // Ensure we have valid data (at least some non-zero values)
                         if (data.every(v => v === 0)) {
                             data[0] = 1; // Prevent empty chart
                         }
+                        
                         this.geoChart.data.datasets[0].data = data;
                         this.geoChart.update('none');  // 'none' mode skips animations, reduces errors
                     } catch (e) {
                         console.error('Chart update error:', e);
-                        // Try to recreate chart if it's broken
-                        this.geoChart = null;
+                        // Properly destroy and recreate chart if it's broken
+                        this.destroyChart();
                         this.initChart();
+                        // Try updating again after recreation
+                        setTimeout(() => {
+                            if (this.geoChart && this.allocation.geographic) {
+                                this.updateChart();
+                            }
+                        }, 100);
                     }
                 },
 
