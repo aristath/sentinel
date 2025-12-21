@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arduino Trader</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    <div x-data="dashboard()" x-init="init()" class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-blue-400">Arduino Trader</h1>
+            <p class="text-gray-400">Automated Portfolio Management</p>
+        </header>
+
+        <!-- Status Bar -->
+        <div class="bg-gray-800 rounded-lg p-4 mb-6 flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <span class="flex items-center">
+                    <span class="w-3 h-3 rounded-full mr-2"
+                          :class="status.status === 'healthy' ? 'bg-green-500' : 'bg-red-500'"></span>
+                    <span x-text="status.status === 'healthy' ? 'System Online' : 'System Offline'"></span>
+                </span>
+                <span class="text-gray-500">|</span>
+                <span class="text-gray-400">
+                    Last sync: <span x-text="status.last_sync || 'Never'"></span>
+                </span>
+            </div>
+            <div class="text-gray-400">
+                Next rebalance: <span x-text="formatDate(status.next_rebalance)"></span>
+            </div>
+        </div>
+
+        <!-- Portfolio Summary -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-gray-800 rounded-lg p-4">
+                <p class="text-gray-400 text-sm">Total Value</p>
+                <p class="text-2xl font-bold text-green-400" x-text="formatCurrency(summary.total_value)"></p>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-4">
+                <p class="text-gray-400 text-sm">Cash Balance</p>
+                <p class="text-2xl font-bold" x-text="formatCurrency(summary.cash_balance)"></p>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-4">
+                <p class="text-gray-400 text-sm">Active Positions</p>
+                <p class="text-2xl font-bold" x-text="status.active_positions || 0"></p>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-4">
+                <p class="text-gray-400 text-sm">Monthly Deposit</p>
+                <p class="text-2xl font-bold text-blue-400" x-text="formatCurrency(status.monthly_deposit)"></p>
+            </div>
+        </div>
+
+        <!-- Allocation Charts -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <!-- Geographic Allocation -->
+            <div class="bg-gray-800 rounded-lg p-4">
+                <h2 class="text-lg font-semibold mb-4">Geographic Allocation</h2>
+                <div class="space-y-3">
+                    <template x-for="(target, geo) in {EU: 0.50, ASIA: 0.30, US: 0.20}" :key="geo">
+                        <div>
+                            <div class="flex justify-between text-sm mb-1">
+                                <span x-text="geo"></span>
+                                <span>
+                                    <span x-text="((summary.allocations?.[geo] || 0) * 100).toFixed(1)"></span>%
+                                    / <span x-text="(target * 100)"></span>%
+                                </span>
+                            </div>
+                            <div class="w-full bg-gray-700 rounded-full h-2">
+                                <div class="h-2 rounded-full transition-all"
+                                     :class="Math.abs((summary.allocations?.[geo] || 0) - target) < 0.05 ? 'bg-green-500' : 'bg-yellow-500'"
+                                     :style="`width: ${Math.min((summary.allocations?.[geo] || 0) / target * 100, 100)}%`"></div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="bg-gray-800 rounded-lg p-4">
+                <h2 class="text-lg font-semibold mb-4">Quick Actions</h2>
+                <div class="space-y-3">
+                    <button @click="previewRebalance()"
+                            class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded">
+                        Preview Rebalance
+                    </button>
+                    <button @click="refreshScores()"
+                            class="w-full bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded">
+                        Refresh All Scores
+                    </button>
+                    <button @click="syncPortfolio()"
+                            class="w-full bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded">
+                        Sync Portfolio
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stock Universe -->
+        <div class="bg-gray-800 rounded-lg p-4 mb-8">
+            <h2 class="text-lg font-semibold mb-4">Stock Universe</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left text-gray-400 border-b border-gray-700">
+                            <th class="pb-2">Symbol</th>
+                            <th class="pb-2">Name</th>
+                            <th class="pb-2">Industry</th>
+                            <th class="pb-2">Region</th>
+                            <th class="pb-2 text-right">Score</th>
+                            <th class="pb-2 text-right">Technical</th>
+                            <th class="pb-2 text-right">Analyst</th>
+                            <th class="pb-2 text-right">Fundamental</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="stock in stocks" :key="stock.symbol">
+                            <tr class="border-b border-gray-700 hover:bg-gray-750">
+                                <td class="py-2 font-mono text-blue-400" x-text="stock.symbol"></td>
+                                <td class="py-2" x-text="stock.name"></td>
+                                <td class="py-2" x-text="stock.industry"></td>
+                                <td class="py-2">
+                                    <span class="px-2 py-1 rounded text-xs"
+                                          :class="{
+                                              'bg-blue-900 text-blue-300': stock.geography === 'EU',
+                                              'bg-red-900 text-red-300': stock.geography === 'ASIA',
+                                              'bg-green-900 text-green-300': stock.geography === 'US'
+                                          }"
+                                          x-text="stock.geography"></span>
+                                </td>
+                                <td class="py-2 text-right font-bold"
+                                    :class="stock.total_score > 0.7 ? 'text-green-400' : stock.total_score > 0.4 ? 'text-yellow-400' : 'text-gray-400'"
+                                    x-text="stock.total_score ? stock.total_score.toFixed(2) : '-'"></td>
+                                <td class="py-2 text-right text-gray-400" x-text="stock.technical_score?.toFixed(2) || '-'"></td>
+                                <td class="py-2 text-right text-gray-400" x-text="stock.analyst_score?.toFixed(2) || '-'"></td>
+                                <td class="py-2 text-right text-gray-400" x-text="stock.fundamental_score?.toFixed(2) || '-'"></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Recent Trades -->
+        <div class="bg-gray-800 rounded-lg p-4">
+            <h2 class="text-lg font-semibold mb-4">Recent Trades</h2>
+            <div x-show="trades.length === 0" class="text-gray-500 text-center py-8">
+                No trades yet
+            </div>
+            <div x-show="trades.length > 0" class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left text-gray-400 border-b border-gray-700">
+                            <th class="pb-2">Date</th>
+                            <th class="pb-2">Symbol</th>
+                            <th class="pb-2">Side</th>
+                            <th class="pb-2 text-right">Quantity</th>
+                            <th class="pb-2 text-right">Price</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="trade in trades" :key="trade.id">
+                            <tr class="border-b border-gray-700">
+                                <td class="py-2" x-text="formatDate(trade.executed_at)"></td>
+                                <td class="py-2 font-mono text-blue-400" x-text="trade.symbol"></td>
+                                <td class="py-2">
+                                    <span :class="trade.side === 'BUY' ? 'text-green-400' : 'text-red-400'"
+                                          x-text="trade.side"></span>
+                                </td>
+                                <td class="py-2 text-right" x-text="trade.quantity"></td>
+                                <td class="py-2 text-right" x-text="formatCurrency(trade.price)"></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function dashboard() {
+            return {
+                status: {},
+                summary: { allocations: {} },
+                stocks: [],
+                trades: [],
+
+                async init() {
+                    await this.fetchAll();
+                    // Refresh every 60 seconds
+                    setInterval(() => this.fetchAll(), 60000);
+                },
+
+                async fetchAll() {
+                    await Promise.all([
+                        this.fetchStatus(),
+                        this.fetchSummary(),
+                        this.fetchStocks(),
+                        this.fetchTrades()
+                    ]);
+                },
+
+                async fetchStatus() {
+                    try {
+                        const res = await fetch('/api/status');
+                        this.status = await res.json();
+                    } catch (e) {
+                        console.error('Failed to fetch status:', e);
+                    }
+                },
+
+                async fetchSummary() {
+                    try {
+                        const res = await fetch('/api/portfolio/summary');
+                        this.summary = await res.json();
+                    } catch (e) {
+                        console.error('Failed to fetch summary:', e);
+                    }
+                },
+
+                async fetchStocks() {
+                    try {
+                        const res = await fetch('/api/stocks');
+                        this.stocks = await res.json();
+                    } catch (e) {
+                        console.error('Failed to fetch stocks:', e);
+                    }
+                },
+
+                async fetchTrades() {
+                    try {
+                        const res = await fetch('/api/trades');
+                        this.trades = await res.json();
+                    } catch (e) {
+                        console.error('Failed to fetch trades:', e);
+                    }
+                },
+
+                async previewRebalance() {
+                    const res = await fetch('/api/trades/rebalance/preview', { method: 'POST' });
+                    const data = await res.json();
+                    alert(data.message);
+                },
+
+                async refreshScores() {
+                    alert('Score refresh not yet implemented');
+                },
+
+                async syncPortfolio() {
+                    alert('Portfolio sync not yet implemented');
+                },
+
+                formatCurrency(value) {
+                    if (value == null) return '-';
+                    return new Intl.NumberFormat('de-DE', {
+                        style: 'currency',
+                        currency: 'EUR'
+                    }).format(value);
+                },
+
+                formatDate(dateStr) {
+                    if (!dateStr) return '-';
+                    return new Date(dateStr).toLocaleDateString('de-DE');
+                }
+            };
+        }
+    </script>
+</body>
+</html>

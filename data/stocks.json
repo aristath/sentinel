@@ -1,0 +1,31 @@
+{
+  "stocks": [
+    {"symbol": "ASML", "name": "ASML Holding", "industry": "Technology", "geography": "EU"},
+    {"symbol": "SAP", "name": "SAP SE", "industry": "Technology", "geography": "EU"},
+    {"symbol": "MC.PA", "name": "LVMH", "industry": "Consumer", "geography": "EU"},
+    {"symbol": "NOVO-B.CO", "name": "Novo Nordisk", "industry": "Healthcare", "geography": "EU"},
+    {"symbol": "SIE.DE", "name": "Siemens AG", "industry": "Industrial", "geography": "EU"},
+    {"symbol": "BNP.PA", "name": "BNP Paribas", "industry": "Finance", "geography": "EU"},
+    {"symbol": "AIR.PA", "name": "Airbus SE", "industry": "Industrial", "geography": "EU"},
+    {"symbol": "SAN.PA", "name": "Sanofi", "industry": "Healthcare", "geography": "EU"},
+
+    {"symbol": "9984.T", "name": "SoftBank Group", "industry": "Technology", "geography": "ASIA"},
+    {"symbol": "9432.T", "name": "NTT", "industry": "Technology", "geography": "ASIA"},
+    {"symbol": "7203.T", "name": "Toyota", "industry": "Industrial", "geography": "ASIA"},
+    {"symbol": "6758.T", "name": "Sony", "industry": "Consumer", "geography": "ASIA"},
+    {"symbol": "005930.KS", "name": "Samsung Electronics", "industry": "Technology", "geography": "ASIA"},
+    {"symbol": "9988.HK", "name": "Alibaba Group", "industry": "Consumer", "geography": "ASIA"},
+    {"symbol": "1398.HK", "name": "ICBC", "industry": "Finance", "geography": "ASIA"},
+    {"symbol": "2269.HK", "name": "WuXi Biologics", "industry": "Healthcare", "geography": "ASIA"},
+
+    {"symbol": "AAPL", "name": "Apple", "industry": "Technology", "geography": "US"},
+    {"symbol": "MSFT", "name": "Microsoft", "industry": "Technology", "geography": "US"},
+    {"symbol": "JNJ", "name": "Johnson & Johnson", "industry": "Healthcare", "geography": "US"},
+    {"symbol": "JPM", "name": "JPMorgan Chase", "industry": "Finance", "geography": "US"},
+    {"symbol": "CAT", "name": "Caterpillar", "industry": "Industrial", "geography": "US"},
+    {"symbol": "PG", "name": "Procter & Gamble", "industry": "Consumer", "geography": "US"},
+    {"symbol": "UNH", "name": "UnitedHealth", "industry": "Healthcare", "geography": "US"},
+    {"symbol": "V", "name": "Visa", "industry": "Finance", "geography": "US"},
+    {"symbol": "HD", "name": "Home Depot", "industry": "Consumer", "geography": "US"}
+  ]
+}
