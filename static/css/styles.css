@@ -868,13 +868,69 @@ body {
   color: #dc2626;
 }
 
+.action-link--secondary {
+  color: var(--color-text-muted);
+}
+
+.action-link--secondary:hover {
+  color: var(--color-text);
+}
+
+/* ========================================
+   Action Icons (for tables)
+   ======================================== */
+.action-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+
+.action-icon svg {
+  display: block;
+}
+
+.action-icon--primary {
+  color: var(--color-primary);
+}
+
+.action-icon--primary:hover {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--color-primary-hover);
+}
+
+.action-icon--secondary {
+  color: var(--color-text-muted);
+}
+
+.action-icon--secondary:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.action-icon--danger {
+  color: var(--color-danger);
+}
+
+.action-icon--danger:hover {
+  background: var(--color-danger-bg);
+  color: #dc2626;
+}
+
 /* ========================================
    Table Actions Cell
    ======================================== */
 .table-actions {
   display: flex;
   justify-content: center;
-  gap: var(--gap-sm);
+  gap: var(--gap-xs);
 }
 
 /* ========================================
