@@ -196,13 +196,13 @@ document.addEventListener('alpine:init', () => {
       return Array.from(set).sort();
     },
 
-    // Get active geographies (only those with stocks assigned)
+    // Get active geographies (derived from actual stocks, not allocation targets)
     get activeGeographies() {
-      const geos = new Set(this.stocks.map(s => s.geography));
-      return this.geographies.filter(g => geos.has(g));
+      const geos = new Set(this.stocks.map(s => s.geography).filter(Boolean));
+      return Array.from(geos).sort();
     },
 
-    // Get active industries (only those with stocks assigned)
+    // Get active industries (derived from actual stocks, not allocation targets)
     get activeIndustries() {
       const inds = new Set();
       this.stocks.forEach(s => {
@@ -210,7 +210,7 @@ document.addEventListener('alpine:init', () => {
           s.industry.split(',').forEach(i => inds.add(i.trim()));
         }
       });
-      return this.industries.filter(i => inds.has(i));
+      return Array.from(inds).sort();
     },
 
     // Filtered & Sorted Stocks
@@ -340,8 +340,12 @@ document.addEventListener('alpine:init', () => {
 
     // Geographic Allocation Editing (weight-based: -1 to +1)
     startEditGeo() {
-      // Load weights directly from allocation data
+      // Initialize all active geographies with default 0 (neutral)
       this.geoTargets = {};
+      this.activeGeographies.forEach(geo => {
+        this.geoTargets[geo] = 0;
+      });
+      // Override with saved weights from allocation data
       if (this.allocation.geographic) {
         this.allocation.geographic.forEach(g => {
           // target_pct now stores weight (-1 to +1), default to 0 (neutral)
@@ -386,8 +390,12 @@ document.addEventListener('alpine:init', () => {
 
     // Industry Allocation Editing (weight-based: -1 to +1)
     startEditIndustry() {
-      // Load weights directly from allocation data
+      // Initialize all active industries with default 0 (neutral)
       this.industryTargets = {};
+      this.activeIndustries.forEach(ind => {
+        this.industryTargets[ind] = 0;
+      });
+      // Override with saved weights from allocation data
       if (this.allocation.industry) {
         this.allocation.industry.forEach(ind => {
           // target_pct now stores weight (-1 to +1), default to 0 (neutral)
