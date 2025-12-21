@@ -9,13 +9,20 @@ Display modes:
 - health: Portfolio allocation bars
 - trading: Active trade animation
 - error: Blinking error pattern
+- balance: Abacus-style portfolio value display
+- api_call: Scrolling dots during API calls
+- syncing: Wave animation during sync
+- no_wifi: Scrolling "NO WIFI" text
+- heartbeat: Brief pulse animation
 """
 
 import json
 import logging
+import socket
 from dataclasses import dataclass
 from typing import Optional
 from enum import Enum
+from contextlib import contextmanager
 
 try:
     import serial
@@ -33,6 +40,11 @@ class DisplayMode(Enum):
     TRADING = "trading"
     ERROR = "error"
     SUCCESS = "success"
+    BALANCE = "balance"       # Abacus-style portfolio value
+    API_CALL = "api_call"     # Scrolling dots on matrix
+    SYNCING = "syncing"       # Wave pattern on matrix
+    NO_WIFI = "no_wifi"       # Scrolling "NO WIFI" text
+    HEARTBEAT = "heartbeat"   # Brief pulse animation
 
 
 @dataclass
@@ -187,6 +199,86 @@ class LEDDisplay:
         """Get current display state."""
         return self._current_state
 
+    def show_balance(self, value: float) -> bool:
+        """
+        Display portfolio balance in abacus-style dots.
+
+        Each row represents a digit place, with dots lit to show the digit value.
+        Example: €20,520 → rows showing 2,0,5,2,0
+
+        Args:
+            value: Portfolio value in EUR
+        """
+        if self._current_state:
+            self._current_state.mode = DisplayMode.BALANCE
+
+        return self._send_command({
+            "cmd": "balance",
+            "value": int(value)
+        })
+
+    def show_heartbeat(self) -> bool:
+        """
+        Show brief heartbeat pulse animation.
+
+        Called every 60 seconds to prove the app is alive.
+        """
+        return self._send_command({"cmd": "heartbeat"})
+
+    def show_syncing(self) -> bool:
+        """Show wave animation during sync operations."""
+        return self._send_command({
+            "cmd": "mode",
+            "mode": DisplayMode.SYNCING.value
+        })
+
+    def show_api_call(self) -> bool:
+        """Show scrolling dots animation during API calls."""
+        return self._send_command({
+            "cmd": "mode",
+            "mode": DisplayMode.API_CALL.value
+        })
+
+    def show_no_wifi(self) -> bool:
+        """Show scrolling 'NO WIFI' text when disconnected."""
+        return self._send_command({
+            "cmd": "scroll",
+            "text": "NO WIFI",
+            "loop": True
+        })
+
+    def flash_rgb(self, color: list[int]) -> bool:
+        """
+        Flash RGB LEDs briefly without changing matrix display.
+
+        Used for web request indication.
+
+        Args:
+            color: RGB color as [r, g, b] (0-255 each)
+        """
+        return self._send_command({
+            "cmd": "flash",
+            "color": color
+        })
+
+    def flash_web_request(self) -> bool:
+        """Flash cyan on RGB LEDs to indicate web request."""
+        return self.flash_rgb([0, 255, 255])  # Cyan
+
+    @staticmethod
+    def check_wifi() -> bool:
+        """
+        Check if we have network connectivity.
+
+        Returns True if we can reach the internet.
+        """
+        try:
+            # Try to connect to Google's DNS
+            socket.create_connection(("8.8.8.8", 53), timeout=3)
+            return True
+        except OSError:
+            return False
+
 
 # Singleton instance
 _display: Optional[LEDDisplay] = None
@@ -239,3 +331,87 @@ async def update_display_from_portfolio(db) -> bool:
         display.set_system_status("error")
 
     return False
+
+
+async def update_balance_display(db) -> bool:
+    """
+    Update LED display with current portfolio balance in abacus style.
+
+    Called after sync operations to show total portfolio value.
+    """
+    display = get_led_display()
+
+    if not display.is_connected:
+        return False
+
+    try:
+        # Get total portfolio value in EUR
+        cursor = await db.execute("""
+            SELECT SUM(market_value_eur) as total
+            FROM positions
+        """)
+        row = await cursor.fetchone()
+
+        if row and row[0]:
+            display.show_balance(row[0])
+            return True
+
+    except Exception as e:
+        logger.error(f"Failed to update balance display: {e}")
+
+    return False
+
+
+@contextmanager
+def led_api_call():
+    """
+    Context manager to show API call animation during external API requests.
+
+    Usage:
+        with led_api_call():
+            response = requests.get(url)
+    """
+    display = get_led_display()
+    previous_state = display.get_state()
+
+    if display.is_connected:
+        display.show_api_call()
+
+    try:
+        yield
+    finally:
+        if display.is_connected and previous_state:
+            # Restore previous state
+            if previous_state.mode == DisplayMode.HEALTH:
+                display.update_allocation(
+                    previous_state.geo_eu,
+                    previous_state.geo_asia,
+                    previous_state.geo_us
+                )
+            elif previous_state.mode == DisplayMode.BALANCE:
+                # Re-show balance (value not stored in state, will need to refresh)
+                display.set_mode(DisplayMode.IDLE)
+            else:
+                display.set_mode(DisplayMode.IDLE)
+
+
+@contextmanager
+def led_syncing():
+    """
+    Context manager to show syncing animation during sync operations.
+
+    Usage:
+        with led_syncing():
+            await sync_portfolio()
+    """
+    display = get_led_display()
+
+    if display.is_connected:
+        display.show_syncing()
+        display.set_system_status("syncing")
+
+    try:
+        yield
+    finally:
+        if display.is_connected:
+            display.set_system_status("ok")

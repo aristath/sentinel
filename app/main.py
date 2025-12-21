@@ -3,7 +3,7 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
@@ -12,6 +12,7 @@ from app.database import init_db
 from app.api import portfolio, stocks, trades, status, allocation
 from app.jobs.scheduler import init_scheduler, start_scheduler, stop_scheduler
 from app.services.tradernet import get_tradernet_client
+from app.led.display import get_led_display
 
 # Configure logging
 logging.basicConfig(
@@ -32,6 +33,18 @@ async def lifespan(app: FastAPI):
     init_scheduler()
     start_scheduler()
 
+    # Try to connect to LED display
+    display = get_led_display()
+    if display.connect():
+        logger.info("LED display connected")
+        # Check wifi and show appropriate state
+        if display.check_wifi():
+            display.set_system_status("ok")
+        else:
+            display.show_no_wifi()
+    else:
+        logger.warning("LED display not connected")
+
     # Try to connect to Tradernet
     client = get_tradernet_client()
     if client.connect():
@@ -44,6 +57,7 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Shutting down Arduino Trader...")
     stop_scheduler()
+    display.disconnect()
 
 
 app = FastAPI(
@@ -52,6 +66,19 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+
+@app.middleware("http")
+async def led_request_indicator(request: Request, call_next):
+    """Flash RGB LEDs on web requests to show activity."""
+    display = get_led_display()
+    if display.is_connected:
+        # Flash cyan on RGB LEDs (doesn't interrupt matrix display)
+        display.flash_web_request()
+
+    response = await call_next(request)
+    return response
+
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")

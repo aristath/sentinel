@@ -13,6 +13,35 @@ logger = logging.getLogger(__name__)
 scheduler: AsyncIOScheduler = None
 
 
+def heartbeat_job():
+    """Send heartbeat pulse to LED display every 60 seconds."""
+    from app.led.display import get_led_display
+
+    display = get_led_display()
+    if display.is_connected:
+        display.show_heartbeat()
+        logger.debug("Heartbeat pulse sent to LED")
+
+
+def wifi_check_job():
+    """Check wifi connectivity and update LED display."""
+    from app.led.display import get_led_display, LEDDisplay
+
+    display = get_led_display()
+    if not display.is_connected:
+        return
+
+    if LEDDisplay.check_wifi():
+        # Wifi is OK - ensure we're not showing "NO WIFI"
+        state = display.get_state()
+        if state and state.system_status == "no_wifi":
+            display.set_system_status("ok")
+    else:
+        # No wifi - show scrolling text
+        display.show_no_wifi()
+        logger.warning("WiFi disconnected - showing NO WIFI on LED")
+
+
 def init_scheduler() -> AsyncIOScheduler:
     """Initialize the APScheduler."""
     global scheduler
@@ -47,6 +76,24 @@ def init_scheduler() -> AsyncIOScheduler:
         IntervalTrigger(minutes=settings.cash_check_interval_minutes),
         id="cash_rebalance_check",
         name="Cash Rebalance Check",
+        replace_existing=True,
+    )
+
+    # LED heartbeat pulse (every 60 seconds)
+    scheduler.add_job(
+        heartbeat_job,
+        IntervalTrigger(seconds=60),
+        id="led_heartbeat",
+        name="LED Heartbeat",
+        replace_existing=True,
+    )
+
+    # WiFi connectivity check (every 30 seconds)
+    scheduler.add_job(
+        wifi_check_job,
+        IntervalTrigger(seconds=30),
+        id="wifi_check",
+        name="WiFi Check",
         replace_existing=True,
     )
 

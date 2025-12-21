@@ -8,6 +8,7 @@ import aiosqlite
 from app.config import settings
 from app.services.tradernet import get_tradernet_client
 from app.services import yahoo
+from app.led.display import get_led_display, update_balance_display
 
 logger = logging.getLogger(__name__)
 
@@ -23,11 +24,19 @@ async def sync_portfolio():
     """
     logger.info("Starting portfolio sync")
 
+    # Show syncing animation on LED
+    display = get_led_display()
+    if display.is_connected:
+        display.show_syncing()
+        display.set_system_status("syncing")
+
     client = get_tradernet_client()
 
     if not client.is_connected:
         if not client.connect():
             logger.error("Failed to connect to Tradernet, skipping sync")
+            if display.is_connected:
+                display.set_system_status("error")
             return
 
     try:
@@ -108,13 +117,23 @@ async def sync_portfolio():
 
             await db.commit()
 
+            # Update LED with new balance
+            await update_balance_display(db)
+
         logger.info(
             f"Portfolio sync complete: {len(positions)} positions, "
             f"total value: {total_value:.2f}, cash: {cash_balance:.2f}"
         )
 
+        # Set LED status to OK
+        if display.is_connected:
+            display.set_system_status("ok")
+            display.show_success()
+
     except Exception as e:
         logger.error(f"Portfolio sync failed: {e}")
+        if display.is_connected:
+            display.set_system_status("error")
         raise
 
 
@@ -127,6 +146,12 @@ async def sync_prices():
     2. Updates positions with current prices
     """
     logger.info("Starting price sync")
+
+    # Show syncing animation on LED
+    display = get_led_display()
+    if display.is_connected:
+        display.show_syncing()
+        display.set_system_status("syncing")
 
     try:
         async with aiosqlite.connect(settings.database_path) as db:
@@ -160,8 +185,17 @@ async def sync_prices():
 
             await db.commit()
 
+            # Update LED with new balance
+            await update_balance_display(db)
+
         logger.info(f"Price sync complete: {len(quotes)} quotes, {updated} positions updated")
+
+        # Set LED status to OK
+        if display.is_connected:
+            display.set_system_status("ok")
 
     except Exception as e:
         logger.error(f"Price sync failed: {e}")
+        if display.is_connected:
+            display.set_system_status("error")
         raise

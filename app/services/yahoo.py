@@ -7,7 +7,16 @@ from dataclasses import dataclass
 
 import yfinance as yf
 
+from app.led.display import get_led_display
+
 logger = logging.getLogger(__name__)
+
+
+def _led_api_indicator():
+    """Show LED API call indicator if connected."""
+    display = get_led_display()
+    if display.is_connected:
+        display.show_api_call()
 
 
 @dataclass
@@ -76,6 +85,7 @@ def get_analyst_data(symbol: str) -> Optional[AnalystData]:
         AnalystData if available, None otherwise
     """
     yf_symbol = _normalize_symbol(symbol)
+    _led_api_indicator()
 
     try:
         ticker = yf.Ticker(yf_symbol)
@@ -131,6 +141,7 @@ def get_fundamental_data(symbol: str) -> Optional[FundamentalData]:
         FundamentalData if available, None otherwise
     """
     yf_symbol = _normalize_symbol(symbol)
+    _led_api_indicator()
 
     try:
         ticker = yf.Ticker(yf_symbol)
@@ -206,6 +217,7 @@ def get_current_price(symbol: str) -> Optional[float]:
         Current price or None
     """
     yf_symbol = _normalize_symbol(symbol)
+    _led_api_indicator()
 
     try:
         ticker = yf.Ticker(yf_symbol)
@@ -296,6 +308,7 @@ def get_batch_quotes(symbols: list[str]) -> dict[str, float]:
         Dict mapping symbol to current price
     """
     result = {}
+    _led_api_indicator()
 
     # Convert symbols
     yf_symbols = [_normalize_symbol(s) for s in symbols]
