@@ -17,6 +17,7 @@ class StockCreate(BaseModel):
     name: str
     geography: str  # EU, ASIA, US
     industry: Optional[str] = None  # Auto-detect if not provided
+    min_lot: Optional[int] = 1  # Minimum lot size (e.g., 100 for Japanese stocks)
 
 
 class StockUpdate(BaseModel):
@@ -26,16 +27,18 @@ class StockUpdate(BaseModel):
     geography: Optional[str] = None
     industry: Optional[str] = None
     priority_multiplier: Optional[float] = None  # Manual priority adjustment (0.1 to 3.0)
+    min_lot: Optional[int] = None  # Minimum lot size for trading
     active: Optional[bool] = None
 
 
 @router.get("")
 async def get_stocks(db: aiosqlite.Connection = Depends(get_db)):
     """Get all stocks in universe with current scores, position data, and priority."""
-    # Get allocation deviations for priority calculation
+    # Get allocation weights for priority calculation
     summary = await get_portfolio_summary(db)
-    geo_devs = {g.name: g.deviation for g in summary.geographic_allocations}
-    ind_devs = {i.name: i.deviation for i in summary.industry_allocations}
+    # target_pct now stores weights (-1 to +1) instead of percentages
+    geo_weights = {g.name: g.target_pct for g in summary.geographic_allocations}
+    ind_weights = {i.name: i.target_pct for i in summary.industry_allocations}
 
     total_value = summary.total_value or 1  # Avoid division by zero
 
@@ -66,33 +69,34 @@ async def get_stocks(db: aiosqlite.Connection = Depends(get_db)):
         conviction_boost = max(0, (stock_score - 0.5) * 0.4) if stock_score > 0.5 else 0
         quality = stock_score + conviction_boost
 
-        # 2. Non-linear urgency for allocation deviations
-        # Underweight (negative deviation) = high urgency to buy
-        # Overweight (positive deviation) = zero urgency
-        geo_dev = geo_devs.get(geo, 0)
-        geo_urgency = calculate_urgency(geo_dev)
+        # 2. Allocation weight boost
+        # Get weight for this stock's geography and industries
+        # Weight ranges from -1 (avoid) to +1 (prioritize), 0 = neutral
+        geo_weight = geo_weights.get(geo, 0)  # Default 0 = neutral
+        geo_boost = calculate_weight_boost(geo_weight)
 
-        ind_urgency = 0
+        ind_boost = 0.5  # Default neutral
         if industries:
-            ind_urgencies = [calculate_urgency(ind_devs.get(ind, 0)) for ind in industries]
-            ind_urgency = sum(ind_urgencies) / len(ind_urgencies)
+            ind_boosts = [calculate_weight_boost(ind_weights.get(ind, 0)) for ind in industries]
+            ind_boost = sum(ind_boosts) / len(ind_boosts)
 
-        urgency = geo_urgency * 0.6 + ind_urgency * 0.4
+        # Combined allocation boost (weighted average of geo and industry)
+        allocation_boost = geo_boost * 0.6 + ind_boost * 0.4
 
         # 3. Diversification penalty (reduce priority for concentrated positions)
         position_pct = position_value / total_value if total_value > 0 else 0
-        geo_overweight = max(0, geo_dev)
-        ind_overweight = max(0, sum(ind_devs.get(ind, 0) for ind in industries) / max(1, len(industries))) if industries else 0
-        diversification = 1.0 - calculate_diversification_penalty(position_pct, geo_overweight, ind_overweight)
+        # Higher weight = ok to have more, lower weight = penalize concentration more
+        geo_concentration_penalty = position_pct * (1 - geo_boost)
+        diversification = 1.0 - min(0.5, geo_concentration_penalty * 3)
 
         # 4. Risk adjustment based on volatility (lower vol = higher score)
         risk_adj = calculate_risk_adjustment(volatility)
 
-        # Weighted combination (quality 35%, urgency 30%, diversification 20%, risk 15%)
+        # Weighted combination (quality 40%, allocation 30%, diversification 15%, risk 15%)
         raw_priority = (
-            quality * 0.35 +
-            urgency * 0.30 +
-            diversification * 0.20 +
+            quality * 0.40 +
+            allocation_boost * 0.30 +
+            diversification * 0.15 +
             risk_adj * 0.15
         )
 
@@ -105,31 +109,19 @@ async def get_stocks(db: aiosqlite.Connection = Depends(get_db)):
     return stocks
 
 
-def calculate_urgency(deviation: float) -> float:
-    """Non-linear urgency: only underweight (negative deviation) gives urgency."""
-    if deviation >= 0:  # Overweight or balanced - no urgency to buy more
-        return 0
-    abs_dev = abs(deviation)
-    if abs_dev < 0.02:  # < 2%
-        return abs_dev * 0.5  # Reduced urgency
-    elif abs_dev < 0.05:  # 2-5%
-        return 0.01 + (abs_dev - 0.02) * 2
-    else:  # > 5%
-        return 0.07 + (abs_dev - 0.05) * 3
+def calculate_weight_boost(weight: float) -> float:
+    """
+    Convert allocation weight (-1 to +1) to priority boost (0 to 1).
 
-
-def calculate_diversification_penalty(
-    position_pct: float,
-    geo_overweight: float,
-    industry_overweight: float
-) -> float:
-    """Penalty for concentrated positions."""
-    position_penalty = min(0.3, position_pct * 3)  # 10% position = 0.3 penalty
-    geo_penalty = max(0, geo_overweight * 0.5)
-    industry_penalty = max(0, industry_overweight * 0.5)
-
-    total_penalty = position_penalty * 0.4 + geo_penalty * 0.3 + industry_penalty * 0.3
-    return min(0.5, total_penalty)  # Cap at 0.5
+    Weight scale:
+    - weight = +1 → boost = 1.0 (strong buy signal)
+    - weight = 0 → boost = 0.5 (neutral)
+    - weight = -1 → boost = 0.0 (avoid)
+    """
+    # Clamp weight to valid range
+    weight = max(-1, min(1, weight))
+    # Linear mapping: -1 → 0, 0 → 0.5, +1 → 1.0
+    return (weight + 1) / 2
 
 
 def calculate_risk_adjustment(volatility: float) -> float:
@@ -269,11 +261,15 @@ async def create_stock(stock: StockCreate, db: aiosqlite.Connection = Depends(ge
     if await cursor.fetchone():
         raise HTTPException(status_code=400, detail="Stock already exists")
 
-    # Validate geography
-    if stock.geography.upper() not in ["EU", "ASIA", "US"]:
+    # Validate geography against allocation targets
+    cursor = await db.execute(
+        "SELECT name FROM allocation_targets WHERE type = 'geography'"
+    )
+    valid_geos = [row[0] for row in await cursor.fetchall()]
+    if stock.geography.upper() not in valid_geos:
         raise HTTPException(
             status_code=400,
-            detail="Geography must be EU, ASIA, or US"
+            detail=f"Geography must be one of: {', '.join(valid_geos)}"
         )
 
     # Auto-detect industry if not provided
@@ -282,11 +278,14 @@ async def create_stock(stock: StockCreate, db: aiosqlite.Connection = Depends(ge
         from app.services import yahoo
         industry = yahoo.get_stock_industry(stock.symbol, stock.yahoo_symbol)
 
+    # Validate min_lot
+    min_lot = max(1, stock.min_lot or 1)
+
     # Insert stock
     await db.execute(
         """
-        INSERT INTO stocks (symbol, yahoo_symbol, name, geography, industry, active)
-        VALUES (?, ?, ?, ?, ?, 1)
+        INSERT INTO stocks (symbol, yahoo_symbol, name, geography, industry, min_lot, active)
+        VALUES (?, ?, ?, ?, ?, ?, 1)
         """,
         (
             stock.symbol.upper(),
@@ -294,9 +293,33 @@ async def create_stock(stock: StockCreate, db: aiosqlite.Connection = Depends(ge
             stock.name,
             stock.geography.upper(),
             industry,
+            min_lot,
         )
     )
     await db.commit()
+
+    # Auto-calculate score for new stock
+    from app.services.scorer import calculate_stock_score
+    score = calculate_stock_score(stock.symbol.upper(), stock.yahoo_symbol)
+    if score:
+        await db.execute(
+            """
+            INSERT OR REPLACE INTO scores
+            (symbol, technical_score, analyst_score, fundamental_score,
+             total_score, volatility, calculated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                stock.symbol.upper(),
+                score.technical.total,
+                score.analyst.total,
+                score.fundamental.total,
+                score.total_score,
+                score.technical.volatility_raw,
+                score.calculated_at.isoformat(),
+            ),
+        )
+        await db.commit()
 
     return {
         "message": f"Stock {stock.symbol.upper()} added to universe",
@@ -305,6 +328,8 @@ async def create_stock(stock: StockCreate, db: aiosqlite.Connection = Depends(ge
         "name": stock.name,
         "geography": stock.geography.upper(),
         "industry": industry,
+        "min_lot": min_lot,
+        "total_score": score.total_score if score else None,
     }
 
 
@@ -338,10 +363,15 @@ async def update_stock(
         values.append(update.yahoo_symbol if update.yahoo_symbol else None)
 
     if update.geography is not None:
-        if update.geography.upper() not in ["EU", "ASIA", "US"]:
+        # Validate geography against allocation targets
+        cursor = await db.execute(
+            "SELECT name FROM allocation_targets WHERE type = 'geography'"
+        )
+        valid_geos = [row[0] for row in await cursor.fetchall()]
+        if update.geography.upper() not in valid_geos:
             raise HTTPException(
                 status_code=400,
-                detail="Geography must be EU, ASIA, or US"
+                detail=f"Geography must be one of: {', '.join(valid_geos)}"
             )
         updates.append("geography = ?")
         values.append(update.geography.upper())
@@ -355,6 +385,12 @@ async def update_stock(
         multiplier = max(0.1, min(3.0, update.priority_multiplier))
         updates.append("priority_multiplier = ?")
         values.append(multiplier)
+
+    if update.min_lot is not None:
+        # Ensure min_lot is at least 1
+        min_lot = max(1, update.min_lot)
+        updates.append("min_lot = ?")
+        values.append(min_lot)
 
     if update.active is not None:
         updates.append("active = ?")
@@ -371,13 +407,39 @@ async def update_stock(
     )
     await db.commit()
 
-    # Return updated stock
+    # Get updated stock data
     cursor = await db.execute(
         "SELECT * FROM stocks WHERE symbol = ?",
         (symbol.upper(),)
     )
     row = await cursor.fetchone()
-    return dict(row)
+    stock_data = dict(row)
+
+    # Auto-refresh score after update
+    from app.services.scorer import calculate_stock_score
+    score = calculate_stock_score(symbol.upper(), stock_data.get('yahoo_symbol'))
+    if score:
+        await db.execute(
+            """
+            INSERT OR REPLACE INTO scores
+            (symbol, technical_score, analyst_score, fundamental_score,
+             total_score, volatility, calculated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                symbol.upper(),
+                score.technical.total,
+                score.analyst.total,
+                score.fundamental.total,
+                score.total_score,
+                score.technical.volatility_raw,
+                score.calculated_at.isoformat(),
+            ),
+        )
+        await db.commit()
+        stock_data['total_score'] = score.total_score
+
+    return stock_data
 
 
 @router.delete("/{symbol}")

@@ -58,6 +58,7 @@ def init_scheduler() -> AsyncIOScheduler:
     # Import jobs here to avoid circular imports
     from app.jobs.daily_sync import sync_portfolio, sync_prices
     from app.jobs.cash_rebalance import check_and_rebalance
+    from app.jobs.score_refresh import refresh_all_scores
 
     # Tradernet portfolio sync (every 2 minutes)
     scheduler.add_job(
@@ -83,6 +84,15 @@ def init_scheduler() -> AsyncIOScheduler:
         IntervalTrigger(minutes=15),
         id="cash_rebalance_check",
         name="Cash Rebalance Check",
+        replace_existing=True,
+    )
+
+    # Stock score refresh (every 10 minutes)
+    scheduler.add_job(
+        refresh_all_scores,
+        IntervalTrigger(minutes=10),
+        id="score_refresh",
+        name="Score Refresh",
         replace_existing=True,
     )
 

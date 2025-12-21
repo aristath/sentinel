@@ -45,9 +45,9 @@ class EditStockModal extends HTMLElement {
               <div class="form-group">
                 <label class="label">Region</label>
                 <select x-model="$store.app.editingStock.geography" class="input">
-                  <option value="EU">EU</option>
-                  <option value="ASIA">Asia</option>
-                  <option value="US">US</option>
+                  <template x-for="geo in $store.app.geographies" :key="geo">
+                    <option :value="geo" x-text="geo"></option>
+                  </template>
                 </select>
               </div>
 
@@ -58,6 +58,16 @@ class EditStockModal extends HTMLElement {
                        placeholder="e.g., Industrial, Defense"
                        class="input">
                 <small class="text-muted">Comma-separated for multiple industries</small>
+              </div>
+
+              <div class="form-group">
+                <label class="label">Min Lot Size</label>
+                <input type="number"
+                       x-model="$store.app.editingStock.min_lot"
+                       min="1"
+                       step="1"
+                       class="input">
+                <small class="text-muted">Minimum shares per trade (e.g., 100 for Japanese stocks)</small>
               </div>
             </div>
           </template>

@@ -12,22 +12,35 @@ router = APIRouter()
 class AllocationTarget(BaseModel):
     """Single allocation target."""
     name: str
-    target_pct: float  # 0.0 to 1.0
+    target_pct: float  # Now stores weight: -1.0 to +1.0
 
 
 class GeographyTargets(BaseModel):
-    """Geography allocation targets."""
-    EU: Optional[float] = None
-    ASIA: Optional[float] = None
-    US: Optional[float] = None
+    """
+    Dynamic geography allocation weights.
+
+    Accepts any geography names as keys with weight values (-1 to +1).
+    Example: {"EU": 0.5, "ASIA": -0.5, "US": 0.0}
+
+    Weight scale:
+    - -1 = Avoid/underweight this region
+    -  0 = Neutral (default)
+    - +1 = Prioritize/overweight this region
+    """
+    targets: dict[str, float]
 
 
 class IndustryTargets(BaseModel):
     """
-    Dynamic industry allocation targets.
+    Dynamic industry allocation weights.
 
-    Accepts any industry names as keys with percentage values.
-    Example: {"Technology": 0.20, "Defense": 0.10, "Industrial": 0.30}
+    Accepts any industry names as keys with weight values (-1 to +1).
+    Example: {"Technology": 0.8, "Defense": 0.2, "Industrial": -0.3}
+
+    Weight scale:
+    - -1 = Avoid/underweight this industry
+    -  0 = Neutral (default)
+    - +1 = Prioritize/overweight this industry
     """
     targets: dict[str, float]
 
@@ -61,56 +74,50 @@ async def update_geography_targets(
     db: aiosqlite.Connection = Depends(get_db)
 ):
     """
-    Update geography allocation targets.
+    Update geography allocation weights.
 
-    Targets should be decimals (e.g., 0.60 for 60%).
-    Sum should equal 1.0 (100%).
+    Accepts dynamic geography names with weight values (-1 to +1).
+    Weight scale:
+    - -1 = Avoid/underweight this region
+    -  0 = Neutral (default)
+    - +1 = Prioritize/overweight this region
     """
-    updates = {}
-
-    if targets.EU is not None:
-        updates["EU"] = targets.EU
-    if targets.ASIA is not None:
-        updates["ASIA"] = targets.ASIA
-    if targets.US is not None:
-        updates["US"] = targets.US
+    updates = targets.targets
 
     if not updates:
-        raise HTTPException(status_code=400, detail="No targets provided")
+        raise HTTPException(status_code=400, detail="No weights provided")
 
-    # Validate percentages are between 0 and 1
-    for name, pct in updates.items():
-        if pct < 0 or pct > 1:
+    # Validate weights are between -1 and 1
+    for name, weight in updates.items():
+        if weight < -1 or weight > 1:
             raise HTTPException(
                 status_code=400,
-                detail=f"Target for {name} must be between 0 and 1"
+                detail=f"Weight for {name} must be between -1 and 1"
             )
 
-    # Update targets
-    for name, pct in updates.items():
+    # Update/insert all weights (including 0 = neutral)
+    for name, weight in updates.items():
         await db.execute(
             """
             INSERT OR REPLACE INTO allocation_targets (type, name, target_pct)
             VALUES ('geography', ?, ?)
             """,
-            (name, pct)
+            (name, weight)
         )
 
     await db.commit()
 
-    # Fetch and return current targets
+    # Fetch and return current weights
     cursor = await db.execute(
         "SELECT name, target_pct FROM allocation_targets WHERE type = 'geography'"
     )
     rows = await cursor.fetchall()
 
     result = {row["name"]: row["target_pct"] for row in rows}
-    total = sum(result.values())
 
     return {
-        "targets": result,
-        "total": round(total, 4),
-        "balanced": abs(total - 1.0) < 0.0001,
+        "weights": result,
+        "count": len(result),
     }
 
 
@@ -120,60 +127,50 @@ async def update_industry_targets(
     db: aiosqlite.Connection = Depends(get_db)
 ):
     """
-    Update industry allocation targets.
+    Update industry allocation weights.
 
-    Accepts dynamic industry names with percentage values.
-    Targets should be decimals (e.g., 0.20 for 20%).
-    Industries with 0% target will be removed from tracking.
-    Sum should equal 1.0 (100%).
+    Accepts dynamic industry names with weight values (-1 to +1).
+    Weight scale:
+    - -1 = Avoid/underweight this industry
+    -  0 = Neutral (default)
+    - +1 = Prioritize/overweight this industry
     """
     updates = targets.targets
 
     if not updates:
-        raise HTTPException(status_code=400, detail="No targets provided")
+        raise HTTPException(status_code=400, detail="No weights provided")
 
-    # Validate percentages are between 0 and 1
-    for name, pct in updates.items():
-        if pct < 0 or pct > 1:
+    # Validate weights are between -1 and 1
+    for name, weight in updates.items():
+        if weight < -1 or weight > 1:
             raise HTTPException(
                 status_code=400,
-                detail=f"Target for {name} must be between 0 and 1"
+                detail=f"Weight for {name} must be between -1 and 1"
             )
 
-    # Remove industries with 0% target
-    to_remove = [name for name, pct in updates.items() if pct == 0]
-    for name in to_remove:
+    # Update/insert all weights (including 0 = neutral)
+    for name, weight in updates.items():
         await db.execute(
-            "DELETE FROM allocation_targets WHERE type = 'industry' AND name = ?",
-            (name,)
+            """
+            INSERT OR REPLACE INTO allocation_targets (type, name, target_pct)
+            VALUES ('industry', ?, ?)
+            """,
+            (name, weight)
         )
-
-    # Update/insert non-zero targets
-    for name, pct in updates.items():
-        if pct > 0:
-            await db.execute(
-                """
-                INSERT OR REPLACE INTO allocation_targets (type, name, target_pct)
-                VALUES ('industry', ?, ?)
-                """,
-                (name, pct)
-            )
 
     await db.commit()
 
-    # Fetch and return current targets
+    # Fetch and return current weights
     cursor = await db.execute(
         "SELECT name, target_pct FROM allocation_targets WHERE type = 'industry'"
     )
     rows = await cursor.fetchall()
 
     result = {row["name"]: row["target_pct"] for row in rows}
-    total = sum(result.values())
 
     return {
-        "targets": result,
-        "total": round(total, 4),
-        "balanced": abs(total - 1.0) < 0.0001,
+        "weights": result,
+        "count": len(result),
     }
 
 

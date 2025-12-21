@@ -16,6 +16,14 @@ document.addEventListener('alpine:init', () => {
     stocks: [],
     trades: [],
     tradernet: { connected: false },
+    pnl: {
+      pnl: null,
+      pnl_pct: null,
+      total_value: null,
+      net_deposits: null,
+      loading: false,
+      error: null
+    },
 
     // UI State - Filters
     stockFilter: 'all',
@@ -45,12 +53,13 @@ document.addEventListener('alpine:init', () => {
 
     // Edit Mode States
     editingGeo: false,
-    geoTargets: { EU: 50, ASIA: 30, US: 20 },
+    geoTargets: {},  // Dynamic - populated from API
+    geographies: [],  // Available geography options
     editingIndustry: false,
     industryTargets: {},  // Dynamic - populated from API
 
     // Add Stock Form
-    newStock: { symbol: '', name: '', geography: 'EU', industry: '' },
+    newStock: { symbol: '', name: '', geography: '', industry: '' },
     addingStock: false,
 
     // Fetch All Data
@@ -60,8 +69,30 @@ document.addEventListener('alpine:init', () => {
         this.fetchAllocation(),
         this.fetchStocks(),
         this.fetchTrades(),
-        this.fetchTradernet()
+        this.fetchTradernet(),
+        this.fetchGeographies(),
+        this.fetchPnl()
       ]);
+    },
+
+    // Fetch available geographies
+    async fetchGeographies() {
+      try {
+        const res = await fetch('/api/allocation/targets');
+        const data = await res.json();
+        // Extract geography names and weights (stored as -1 to +1)
+        this.geographies = Object.keys(data.geography || {});
+        this.geoTargets = {};
+        for (const [name, weight] of Object.entries(data.geography || {})) {
+          this.geoTargets[name] = weight;  // Store weight directly
+        }
+        // Set default geography for new stock if not set
+        if (!this.newStock.geography && this.geographies.length > 0) {
+          this.newStock.geography = this.geographies[0];
+        }
+      } catch (e) {
+        console.error('Failed to fetch geographies:', e);
+      }
     },
 
     async fetchStatus() {
@@ -109,6 +140,48 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
+    async fetchPnl() {
+      this.pnl.loading = true;
+      this.pnl.error = null;
+      try {
+        const res = await fetch('/api/portfolio/pnl');
+        const data = await res.json();
+        if (data.error) {
+          this.pnl.error = data.error;
+        } else {
+          this.pnl.pnl = data.pnl;
+          this.pnl.pnl_pct = data.pnl_pct;
+          this.pnl.total_value = data.total_value;
+          this.pnl.net_deposits = data.net_deposits;
+          this.pnl.deposits_set = data.deposits_set;
+          this.pnl.manual_deposits = data.manual_deposits;
+          this.pnl.total_withdrawals = data.total_withdrawals;
+        }
+      } catch (e) {
+        console.error('Failed to fetch P&L:', e);
+        this.pnl.error = 'Failed to fetch P&L data';
+      }
+      this.pnl.loading = false;
+    },
+
+    async setManualDeposits(amount) {
+      try {
+        const res = await fetch('/api/portfolio/deposits', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amount: parseFloat(amount) })
+        });
+        if (res.ok) {
+          this.showMessage('Deposits updated', 'success');
+          await this.fetchPnl();
+        } else {
+          this.showMessage('Failed to update deposits', 'error');
+        }
+      } catch (e) {
+        this.showMessage('Failed to update deposits', 'error');
+      }
+    },
+
     // Get unique industries for filter dropdown (handles comma-separated)
     get industries() {
       const set = new Set();
@@ -121,6 +194,23 @@ document.addEventListener('alpine:init', () => {
         }
       });
       return Array.from(set).sort();
+    },
+
+    // Get active geographies (only those with stocks assigned)
+    get activeGeographies() {
+      const geos = new Set(this.stocks.map(s => s.geography));
+      return this.geographies.filter(g => geos.has(g));
+    },
+
+    // Get active industries (only those with stocks assigned)
+    get activeIndustries() {
+      const inds = new Set();
+      this.stocks.forEach(s => {
+        if (s.industry) {
+          s.industry.split(',').forEach(i => inds.add(i.trim()));
+        }
+      });
+      return this.industries.filter(i => inds.has(i));
     },
 
     // Filtered & Sorted Stocks
@@ -248,17 +338,14 @@ document.addEventListener('alpine:init', () => {
       this.loading.sync = false;
     },
 
-    // Geographic Allocation Editing
-    get geoTotal() {
-      return Math.round(this.geoTargets.EU + this.geoTargets.ASIA + this.geoTargets.US);
-    },
-
+    // Geographic Allocation Editing (weight-based: -1 to +1)
     startEditGeo() {
+      // Load weights directly from allocation data
+      this.geoTargets = {};
       if (this.allocation.geographic) {
         this.allocation.geographic.forEach(g => {
-          if (g.name === 'EU') this.geoTargets.EU = Math.round(g.target_pct * 100);
-          if (g.name === 'ASIA') this.geoTargets.ASIA = Math.round(g.target_pct * 100);
-          if (g.name === 'US') this.geoTargets.US = Math.round(g.target_pct * 100);
+          // target_pct now stores weight (-1 to +1), default to 0 (neutral)
+          this.geoTargets[g.name] = g.target_pct || 0;
         });
       }
       this.editingGeo = true;
@@ -269,64 +356,42 @@ document.addEventListener('alpine:init', () => {
     },
 
     adjustGeoSlider(changed, newValue) {
-      const others = ['EU', 'ASIA', 'US'].filter(r => r !== changed);
-      const remaining = 100 - newValue;
-      const otherTotal = this.geoTargets[others[0]] + this.geoTargets[others[1]];
-
-      if (otherTotal === 0) {
-        this.geoTargets[others[0]] = Math.round(remaining / 2);
-        this.geoTargets[others[1]] = remaining - Math.round(remaining / 2);
-      } else {
-        const ratio0 = this.geoTargets[others[0]] / otherTotal;
-        this.geoTargets[others[0]] = Math.round(remaining * ratio0);
-        this.geoTargets[others[1]] = remaining - this.geoTargets[others[0]];
-      }
+      // Simple direct assignment - no proportional adjustment needed
       this.geoTargets[changed] = newValue;
     },
 
     async saveGeoTargets() {
-      if (this.geoTotal !== 100) {
-        this.showMessage('Targets must sum to 100%', 'error');
-        return;
-      }
       this.loading.geoSave = true;
       try {
+        // Send weights directly (already -1 to +1)
+        const targets = { ...this.geoTargets };
         const res = await fetch('/api/allocation/targets/geography', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            EU: this.geoTargets.EU / 100,
-            ASIA: this.geoTargets.ASIA / 100,
-            US: this.geoTargets.US / 100
-          })
+          body: JSON.stringify({ targets })
         });
         if (res.ok) {
-          this.showMessage('Allocation targets updated', 'success');
+          this.showMessage('Geographic weights updated', 'success');
           this.editingGeo = false;
           await this.fetchAllocation();
           await this.fetchStocks();  // Refresh priority scores
         } else {
-          this.showMessage('Failed to save targets', 'error');
+          this.showMessage('Failed to save weights', 'error');
         }
       } catch (e) {
-        this.showMessage('Failed to save targets', 'error');
+        this.showMessage('Failed to save weights', 'error');
       }
       this.loading.geoSave = false;
     },
 
-    // Industry Allocation Editing (dynamic industries)
-    get industryTotal() {
-      return Math.round(
-        Object.values(this.industryTargets).reduce((sum, val) => sum + val, 0)
-      );
-    },
-
+    // Industry Allocation Editing (weight-based: -1 to +1)
     startEditIndustry() {
-      // Load current targets from allocation data
+      // Load weights directly from allocation data
       this.industryTargets = {};
       if (this.allocation.industry) {
         this.allocation.industry.forEach(ind => {
-          this.industryTargets[ind.name] = Math.round(ind.target_pct * 100);
+          // target_pct now stores weight (-1 to +1), default to 0 (neutral)
+          this.industryTargets[ind.name] = ind.target_pct || 0;
         });
       }
       this.editingIndustry = true;
@@ -337,61 +402,30 @@ document.addEventListener('alpine:init', () => {
     },
 
     adjustIndustrySlider(changed, newValue) {
-      const industries = Object.keys(this.industryTargets);
-      const others = industries.filter(i => i !== changed);
-      const remaining = 100 - newValue;
-      const otherTotal = others.reduce((sum, i) => sum + this.industryTargets[i], 0);
-
-      if (otherTotal === 0) {
-        const each = Math.floor(remaining / others.length);
-        others.forEach((i, idx) => {
-          this.industryTargets[i] = idx === others.length - 1
-            ? remaining - each * (others.length - 1)
-            : each;
-        });
-      } else {
-        let distributed = 0;
-        others.forEach((i, idx) => {
-          if (idx === others.length - 1) {
-            this.industryTargets[i] = remaining - distributed;
-          } else {
-            const ratio = this.industryTargets[i] / otherTotal;
-            const val = Math.round(remaining * ratio);
-            this.industryTargets[i] = val;
-            distributed += val;
-          }
-        });
-      }
+      // Simple direct assignment - no proportional adjustment needed
       this.industryTargets[changed] = newValue;
     },
 
     async saveIndustryTargets() {
-      if (this.industryTotal !== 100) {
-        this.showMessage('Targets must sum to 100%', 'error');
-        return;
-      }
       this.loading.industrySave = true;
       try {
-        // Convert percentages to decimals for API
-        const targets = {};
-        for (const [name, pct] of Object.entries(this.industryTargets)) {
-          targets[name] = pct / 100;
-        }
+        // Send weights directly (already -1 to +1)
+        const targets = { ...this.industryTargets };
         const res = await fetch('/api/allocation/targets/industry', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ targets })
         });
         if (res.ok) {
-          this.showMessage('Industry targets updated', 'success');
+          this.showMessage('Industry weights updated', 'success');
           this.editingIndustry = false;
           await this.fetchAllocation();
           await this.fetchStocks();  // Refresh priority scores
         } else {
-          this.showMessage('Failed to save targets', 'error');
+          this.showMessage('Failed to save weights', 'error');
         }
       } catch (e) {
-        this.showMessage('Failed to save targets', 'error');
+        this.showMessage('Failed to save weights', 'error');
       }
       this.loading.industrySave = false;
     },
@@ -458,7 +492,8 @@ document.addEventListener('alpine:init', () => {
         yahoo_symbol: stock.yahoo_symbol || '',
         name: stock.name,
         geography: stock.geography,
-        industry: stock.industry || ''
+        industry: stock.industry || '',
+        min_lot: stock.min_lot || 1
       };
       this.showEditStockModal = true;
     },
@@ -477,7 +512,8 @@ document.addEventListener('alpine:init', () => {
           name: this.editingStock.name,
           yahoo_symbol: this.editingStock.yahoo_symbol || null,
           geography: this.editingStock.geography,
-          industry: this.editingStock.industry || null
+          industry: this.editingStock.industry || null,
+          min_lot: parseInt(this.editingStock.min_lot) || 1
         };
 
         const res = await fetch(`/api/stocks/${this.editingStock.symbol}`, {

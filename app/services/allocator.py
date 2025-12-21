@@ -117,20 +117,32 @@ async def get_portfolio_summary(db: aiosqlite.Connection) -> PortfolioSummary:
     row = await cursor.fetchone()
     cash_balance = row[0] if row else 0
 
-    # Build allocation status lists
+    # Build dynamic geography list from targets + actual positions
+    # This ensures we show all geographies that have targets OR holdings
+    all_geographies = set()
+
+    # Add geographies from targets
+    for key in targets:
+        if key.startswith("geography:"):
+            all_geographies.add(key.split(":", 1)[1])
+
+    # Add geographies from current holdings
+    all_geographies.update(geo_values.keys())
+
     geo_allocations = []
-    for geo in ["EU", "ASIA", "US"]:
-        target = targets.get(f"geography:{geo}", 0)
+    for geo in sorted(all_geographies):
+        # target_pct now stores weight (-1 to +1), not percentage
+        weight = targets.get(f"geography:{geo}", 0)
         current_val = geo_values.get(geo, 0)
         current_pct = current_val / total_value if total_value > 0 else 0
 
         geo_allocations.append(AllocationStatus(
             category="geography",
             name=geo,
-            target_pct=target,
+            target_pct=weight,  # Now stores weight, not percentage
             current_pct=round(current_pct, 4),
             current_value=round(current_val, 2),
-            deviation=round(current_pct - target, 4),
+            deviation=round(current_pct - weight, 4),  # Deviation still computed for display
         ))
 
     # Build dynamic industry list from targets + actual positions
@@ -147,17 +159,18 @@ async def get_portfolio_summary(db: aiosqlite.Connection) -> PortfolioSummary:
 
     industry_allocations = []
     for industry in sorted(all_industries):
-        target = targets.get(f"industry:{industry}", 0)
+        # target_pct now stores weight (-1 to +1), not percentage
+        weight = targets.get(f"industry:{industry}", 0)
         current_val = industry_values.get(industry, 0)
         current_pct = current_val / total_value if total_value > 0 else 0
 
         industry_allocations.append(AllocationStatus(
             category="industry",
             name=industry,
-            target_pct=target,
+            target_pct=weight,  # Now stores weight, not percentage
             current_pct=round(current_pct, 4),
             current_value=round(current_val, 2),
-            deviation=round(current_pct - target, 4),
+            deviation=round(current_pct - weight, 4),  # Deviation still computed for display
         ))
 
     return PortfolioSummary(
@@ -178,22 +191,31 @@ class StockPriority:
     stock_score: float
     volatility: float  # Raw volatility (0.0-1.0)
     multiplier: float  # Manual priority multiplier
+    min_lot: int  # Minimum lot size for trading
     geo_need: float  # How underweight is this geography (0 to 1)
     industry_need: float  # How underweight is this industry (0 to 1)
     combined_priority: float  # Enhanced priority score
 
 
-def calculate_urgency(deviation: float) -> float:
-    """Non-linear urgency: only underweight (negative deviation) gives urgency."""
-    if deviation >= 0:  # Overweight or balanced - no urgency to buy more
-        return 0
-    abs_dev = abs(deviation)
-    if abs_dev < 0.02:  # < 2%
-        return abs_dev * 0.5  # Reduced urgency
-    elif abs_dev < 0.05:  # 2-5%
-        return 0.01 + (abs_dev - 0.02) * 2
-    else:  # > 5%
-        return 0.07 + (abs_dev - 0.05) * 3
+def calculate_weight_boost(weight: float) -> float:
+    """
+    Convert allocation weight (-1 to +1) to priority boost (0 to 1).
+
+    Weight scale:
+    - weight = +1 → boost = 1.0 (strong buy signal)
+    - weight = 0 → boost = 0.5 (neutral)
+    - weight = -1 → boost = 0.0 (avoid)
+
+    Args:
+        weight: Allocation weight from -1 to +1
+
+    Returns:
+        Priority boost from 0 to 1
+    """
+    # Clamp weight to valid range
+    weight = max(-1, min(1, weight))
+    # Linear mapping: -1 → 0, 0 → 0.5, +1 → 1.0
+    return (weight + 1) / 2
 
 
 def calculate_diversification_penalty(
@@ -270,9 +292,12 @@ async def calculate_rebalance_trades(
     Strategy:
     1. Only consider stocks with score > min_stock_score
     2. Calculate enhanced priority:
-       - Quality (35%): stock score + conviction boost
-       - Urgency (30%): non-linear allocation deviation
-       - Diversification (20%): penalty for concentrated positions
+       - Quality (40%): stock score + conviction boost
+       - Allocation Weight (30%): boost from geo/industry weights
+         * Weight +1 = 100% boost (prioritize)
+         * Weight 0 = 50% boost (neutral)
+         * Weight -1 = 0% boost (avoid)
+       - Diversification (15%): penalty for concentrated positions
        - Risk (15%): volatility-based adjustment
     3. Apply manual multiplier from user
     4. Select top N stocks by combined priority
@@ -289,18 +314,18 @@ async def calculate_rebalance_trades(
     if max_trades == 0:
         return []
 
-    # Get current portfolio summary for deviation calculations
+    # Get current portfolio summary for weight lookups
     summary = await get_portfolio_summary(db)
     total_value = summary.total_value or 1  # Avoid division by zero
 
-    # Build deviation maps for quick lookup
-    geo_deviations = {a.name: a.deviation for a in summary.geographic_allocations}
-    industry_deviations = {a.name: a.deviation for a in summary.industry_allocations}
+    # Build weight maps for quick lookup (target_pct now stores weights -1 to +1)
+    geo_weights = {a.name: a.target_pct for a in summary.geographic_allocations}
+    industry_weights = {a.name: a.target_pct for a in summary.industry_allocations}
 
-    # Get scored stocks from universe with volatility and multiplier
+    # Get scored stocks from universe with volatility, multiplier, and min_lot
     cursor = await db.execute("""
         SELECT s.symbol, s.name, s.geography, s.industry,
-               s.priority_multiplier,
+               s.priority_multiplier, s.min_lot,
                sc.total_score, sc.volatility,
                p.quantity, p.current_price, p.market_value_eur
         FROM stocks s
@@ -319,9 +344,10 @@ async def calculate_rebalance_trades(
         geography = stock[2]
         industry = stock[3]
         multiplier = stock[4] or 1.0
-        score = stock[5] or 0
-        volatility = stock[6]
-        position_value = stock[9] or 0
+        min_lot = stock[5] or 1
+        score = stock[6] or 0
+        volatility = stock[7]
+        position_value = stock[10] or 0
 
         # Only consider stocks with score above threshold
         if score < settings.min_stock_score:
@@ -334,37 +360,38 @@ async def calculate_rebalance_trades(
         conviction_boost = max(0, (score - 0.5) * 0.4) if score > 0.5 else 0
         quality = score + conviction_boost
 
-        # 2. Non-linear urgency for allocation deviations
-        # Underweight (negative deviation) = high urgency to buy
-        # Overweight (positive deviation) = zero urgency
-        geo_deviation = geo_deviations.get(geography, 0)
-        geo_urgency = calculate_urgency(geo_deviation)
-        geo_need = max(0, -geo_deviation)  # For logging
+        # 2. Allocation weight boost
+        # Get weight for this stock's geography and industries
+        # Weight ranges from -1 (avoid) to +1 (prioritize), 0 = neutral
+        geo_weight = geo_weights.get(geography, 0)  # Default 0 = neutral
+        geo_boost = calculate_weight_boost(geo_weight)
+        geo_need = geo_boost  # For logging (higher = more desired)
 
-        ind_urgency = 0
-        industry_need = 0
+        ind_boost = 0.5  # Default neutral
+        industry_need = 0.5
         if industries:
-            ind_urgencies = [calculate_urgency(industry_deviations.get(ind, 0)) for ind in industries]
-            ind_urgency = sum(ind_urgencies) / len(ind_urgencies)
-            industry_needs = [max(0, -industry_deviations.get(ind, 0)) for ind in industries]
-            industry_need = sum(industry_needs) / len(industry_needs)
+            ind_weights = [industry_weights.get(ind, 0) for ind in industries]
+            ind_boosts = [calculate_weight_boost(w) for w in ind_weights]
+            ind_boost = sum(ind_boosts) / len(ind_boosts)
+            industry_need = ind_boost
 
-        urgency = geo_urgency * 0.6 + ind_urgency * 0.4
+        # Combined allocation boost (weighted average of geo and industry)
+        allocation_boost = geo_boost * 0.6 + ind_boost * 0.4
 
-        # 3. Diversification penalty
+        # 3. Diversification penalty (reduce priority for concentrated positions)
         position_pct = position_value / total_value if total_value > 0 else 0
-        geo_overweight = max(0, geo_deviation)
-        ind_overweight = max(0, sum(industry_deviations.get(ind, 0) for ind in industries) / max(1, len(industries))) if industries else 0
-        diversification = 1.0 - calculate_diversification_penalty(position_pct, geo_overweight, ind_overweight)
+        # Higher weight = ok to have more, lower weight = penalize concentration more
+        geo_concentration_penalty = position_pct * (1 - geo_boost)  # More penalty if weight is low
+        diversification = 1.0 - min(0.5, geo_concentration_penalty * 3)
 
         # 4. Risk adjustment based on volatility
         risk_adj = calculate_risk_adjustment(volatility)
 
         # Weighted combination
         raw_priority = (
-            quality * 0.35 +
-            urgency * 0.30 +
-            diversification * 0.20 +
+            quality * 0.40 +
+            allocation_boost * 0.30 +
+            diversification * 0.15 +
             risk_adj * 0.15
         )
 
@@ -379,6 +406,7 @@ async def calculate_rebalance_trades(
             stock_score=score,
             volatility=volatility,
             multiplier=multiplier,
+            min_lot=min_lot,
             geo_need=round(geo_need, 4),
             industry_need=round(industry_need, 4),
             combined_priority=round(combined_priority, 4),
@@ -425,7 +453,22 @@ async def calculate_rebalance_trades(
         if invest_amount < settings.min_trade_size:
             continue
 
-        qty = int(invest_amount / price)
+        # Calculate quantity with minimum lot size rounding
+        min_lot = candidate.min_lot or 1
+        lot_cost = min_lot * price
+
+        # Check if we can afford at least one lot
+        if lot_cost > invest_amount:
+            logger.debug(
+                f"Skipping {candidate.symbol}: min lot {min_lot} @ €{price:.2f} = "
+                f"€{lot_cost:.2f} > available €{invest_amount:.2f}"
+            )
+            continue
+
+        # Calculate how many lots we can buy (rounding down to whole lots)
+        num_lots = int(invest_amount / lot_cost)
+        qty = num_lots * min_lot
+
         if qty <= 0:
             continue
 
@@ -433,12 +476,16 @@ async def calculate_rebalance_trades(
 
         # Build reason string with more detail
         reason_parts = []
-        if candidate.geo_need > 0:
-            reason_parts.append(f"{candidate.geography} underweight")
-        if candidate.industry_need > 0:
+        # geo_need and industry_need are now weight boosts (0-1)
+        # > 0.5 = prioritized, < 0.5 = deprioritized
+        if candidate.geo_need > 0.6:
+            reason_parts.append(f"{candidate.geography} prioritized")
+        elif candidate.geo_need < 0.4:
+            reason_parts.append(f"{candidate.geography} neutral")
+        if candidate.industry_need > 0.6:
             industries = parse_industries(candidate.industry)
             if industries:
-                reason_parts.append(f"{industries[0]} underweight")
+                reason_parts.append(f"{industries[0]} prioritized")
         reason_parts.append(f"score: {candidate.stock_score:.2f}")
         if candidate.multiplier != 1.0:
             reason_parts.append(f"mult: {candidate.multiplier:.1f}x")

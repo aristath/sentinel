@@ -35,9 +35,9 @@ class AddStockModal extends HTMLElement {
             <div class="form-group">
               <label class="label">Region *</label>
               <select x-model="$store.app.newStock.geography" class="input">
-                <option value="EU">EU</option>
-                <option value="ASIA">Asia</option>
-                <option value="US">US</option>
+                <template x-for="geo in $store.app.geographies" :key="geo">
+                  <option :value="geo" x-text="geo"></option>
+                </template>
               </select>
             </div>
 

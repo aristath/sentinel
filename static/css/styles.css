@@ -622,6 +622,53 @@ body {
 .slider-control__value--us { color: var(--color-us); }
 .slider-control__value--purple { color: var(--color-purple); }
 
+.slider-control__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+}
+
+/* ========================================
+   Add Item Row
+   ======================================== */
+.add-item-row {
+  display: flex;
+  gap: var(--gap-sm);
+  margin-bottom: var(--gap);
+}
+
+.add-item-row .input {
+  flex: 1;
+}
+
+/* ========================================
+   Icon Button (small)
+   ======================================== */
+.btn--icon {
+  background: none;
+  border: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--font-size-base);
+  line-height: 1;
+  transition: background var(--transition), color var(--transition);
+}
+
+.btn--icon--danger {
+  color: var(--color-text-muted);
+}
+
+.btn--icon--danger:hover {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+
 /* ========================================
    Modal
    ======================================== */
@@ -1029,6 +1076,72 @@ body {
 }
 
 /* ========================================
+   Deviation Bar (Industry Allocation)
+   ======================================== */
+.deviation-item {
+  margin-bottom: var(--gap);
+}
+
+.deviation-item__header {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-size-sm);
+  margin-bottom: var(--gap-xs);
+}
+
+.deviation-item__value {
+  font-family: ui-monospace, monospace;
+  font-weight: 600;
+}
+
+.deviation-item__value--positive {
+  color: var(--color-success);
+}
+
+.deviation-item__value--negative {
+  color: var(--color-danger);
+}
+
+.deviation-bar {
+  height: 0.5rem;
+  position: relative;
+}
+
+.deviation-bar__track {
+  position: absolute;
+  inset: 0;
+  background: var(--color-surface-hover);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.deviation-bar__center {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-text-muted);
+  transform: translateX(-50%);
+  z-index: 2;
+}
+
+.deviation-bar__fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: var(--radius-full);
+}
+
+.deviation-bar__fill--positive {
+  background: var(--color-success);
+}
+
+.deviation-bar__fill--negative {
+  background: var(--color-danger);
+}
+
+/* ========================================
    Loading Spinner
    ======================================== */
 .loading {
@@ -1119,4 +1232,273 @@ body {
    ======================================== */
 .flex-1 {
   flex: 1;
+}
+
+/* ========================================
+   Layout Stack (for stacked components)
+   ======================================== */
+.layout__stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+/* ========================================
+   Ghost Button
+   ======================================== */
+.btn--ghost {
+  background: transparent;
+  color: var(--color-text-muted);
+  padding: var(--gap-xs);
+}
+
+.btn--ghost:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+/* ========================================
+   P&L Card
+   ======================================== */
+.card--pnl {
+  text-align: center;
+}
+
+.pnl-display {
+  min-height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pnl-content {
+  width: 100%;
+}
+
+.pnl-value {
+  font-size: var(--font-size-2xl);
+  font-weight: 700;
+  font-family: ui-monospace, monospace;
+}
+
+.pnl-value--positive {
+  color: var(--color-success);
+}
+
+.pnl-value--negative {
+  color: var(--color-danger);
+}
+
+.pnl-percent {
+  font-size: var(--font-size-lg);
+  font-family: ui-monospace, monospace;
+  margin-top: var(--gap-xs);
+}
+
+.pnl-percent--positive {
+  color: var(--color-success);
+}
+
+.pnl-percent--negative {
+  color: var(--color-danger);
+}
+
+.pnl-details {
+  display: flex;
+  justify-content: center;
+  gap: var(--gap-lg);
+  margin-top: var(--gap);
+  padding-top: var(--gap);
+  border-top: 1px solid var(--color-border);
+}
+
+.pnl-detail {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.pnl-loading {
+  color: var(--color-text-muted);
+}
+
+.pnl-error {
+  color: var(--color-danger);
+  font-size: var(--font-size-sm);
+}
+
+.pnl-setup {
+  width: 100%;
+}
+
+.pnl-setup__prompt {
+  text-align: center;
+}
+
+.pnl-setup__text {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  margin-bottom: var(--gap);
+}
+
+.pnl-setup__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+}
+
+.pnl-setup__actions {
+  display: flex;
+  gap: var(--gap-sm);
+  justify-content: center;
+}
+
+.pnl-edit-link {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  padding: 0;
+  margin-top: var(--gap-sm);
+}
+
+.pnl-edit-link:hover {
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+
+/* ========================================
+   Weight System (for allocation priorities)
+   ======================================== */
+
+/* Weight Legend */
+.weight-legend {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  margin-bottom: var(--gap);
+  padding: var(--gap-sm);
+  background: var(--color-surface-hover);
+  border-radius: var(--radius);
+}
+
+.weight-legend__item {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-xs);
+}
+
+.weight-legend__item--negative {
+  color: var(--color-danger);
+}
+
+.weight-legend__item--neutral {
+  color: var(--color-text-muted);
+}
+
+.weight-legend__item--positive {
+  color: var(--color-success);
+}
+
+/* Weight Value Colors */
+.weight--positive {
+  color: var(--color-success);
+}
+
+.weight--negative {
+  color: var(--color-danger);
+}
+
+.weight--neutral {
+  color: var(--color-text-muted);
+}
+
+/* Weight Badge (inline display) */
+.weight-badge {
+  display: inline-block;
+  font-family: ui-monospace, monospace;
+  font-size: var(--font-size-xs);
+  padding: 0.1rem 0.35rem;
+  border-radius: var(--radius-sm);
+  margin-left: var(--gap-sm);
+}
+
+.weight-badge.weight--positive {
+  background: var(--color-success-bg);
+}
+
+.weight-badge.weight--negative {
+  background: var(--color-danger-bg);
+}
+
+.weight-badge.weight--neutral {
+  background: var(--color-surface-hover);
+}
+
+/* Weight Item (view mode) */
+.weight-item {
+  margin-bottom: var(--gap);
+}
+
+.weight-item__header {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-size-sm);
+  margin-bottom: var(--gap-xs);
+}
+
+.weight-item__value {
+  font-family: ui-monospace, monospace;
+  font-weight: 600;
+}
+
+/* Weight Bar (horizontal visualization) */
+.weight-bar {
+  height: 0.5rem;
+  position: relative;
+}
+
+.weight-bar__track {
+  position: absolute;
+  inset: 0;
+  background: var(--color-surface-hover);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.weight-bar__center {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-text-muted);
+  transform: translateX(-50%);
+  z-index: 2;
+}
+
+.weight-bar__fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: var(--radius-full);
+}
+
+.weight-bar__fill--positive {
+  background: var(--color-success);
+}
+
+.weight-bar__fill--negative {
+  background: var(--color-danger);
+}
+
+/* Weight Slider (centered at 0) */
+.slider--weight {
+  background: linear-gradient(
+    to right,
+    var(--color-danger) 0%,
+    var(--color-surface-hover) 50%,
+    var(--color-success) 100%
+  );
 }

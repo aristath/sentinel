@@ -408,6 +408,83 @@ class TradernetClient:
             logger.error(f"Failed to cancel order {order_id}: {e}")
             return False
 
+    def get_cash_movements(self) -> dict:
+        """
+        Get total deposits and withdrawals from account.
+
+        Returns dict with:
+        - total_deposits: Sum of all deposits in EUR
+        - total_withdrawals: Sum of all withdrawals in EUR
+        - net_deposits: total_deposits - total_withdrawals
+        """
+        import json as json_lib
+
+        if not self.is_connected:
+            raise ConnectionError("Not connected to Tradernet")
+
+        try:
+            with _led_api_call():
+                # Get cash movement history
+                # status_c: 3 = completed transactions
+                history = self._client.authorized_request(
+                    "getClientCpsHistory",
+                    {"limit": 500},
+                    version=2
+                )
+
+            total_deposits = 0.0
+            total_withdrawals = 0.0
+
+            # Parse the response - it's a list of transactions
+            records = history if isinstance(history, list) else []
+
+            for record in records:
+                # Only process completed transactions (status_c = 3)
+                if record.get("status_c") != 3:
+                    continue
+
+                # Parse the params JSON string
+                params_str = record.get("params", "{}")
+                try:
+                    params = json_lib.loads(params_str) if isinstance(params_str, str) else params_str
+                except json_lib.JSONDecodeError:
+                    continue
+
+                type_doc_id = record.get("type_doc_id")
+                currency = params.get("currency", "EUR")
+
+                # Determine amount and type
+                # type_doc_id 337 = withdrawal
+                # type_doc_id 336 or others = deposit
+                if type_doc_id == 337:  # Withdrawal
+                    amount = float(params.get("totalMoneyOut", 0))
+                    if currency != "EUR" and amount > 0:
+                        rate = get_exchange_rate(currency, "EUR")
+                        if rate > 0:
+                            amount = amount / rate
+                    total_withdrawals += abs(amount)
+                elif type_doc_id in [336, 335, 334]:  # Various deposit types
+                    amount = float(params.get("amount", params.get("totalMoneyIn", 0)))
+                    if currency != "EUR" and amount > 0:
+                        rate = get_exchange_rate(currency, "EUR")
+                        if rate > 0:
+                            amount = amount / rate
+                    total_deposits += abs(amount)
+
+            return {
+                "total_deposits": round(total_deposits, 2),
+                "total_withdrawals": round(total_withdrawals, 2),
+                "net_deposits": round(total_deposits - total_withdrawals, 2),
+            }
+        except Exception as e:
+            logger.error(f"Failed to get cash movements: {e}")
+            return {
+                "total_deposits": 0,
+                "total_withdrawals": 0,
+                "net_deposits": 0,
+                "error": str(e),
+            }
+
 
 # Singleton instance
 _client: Optional[TradernetClient] = None

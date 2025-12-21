@@ -1,10 +1,17 @@
 """Portfolio API endpoints."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from typing import Optional
 import aiosqlite
 from app.database import get_db
 
 router = APIRouter()
+
+
+class ManualDeposits(BaseModel):
+    """Model for setting manual deposits."""
+    amount: float
 
 
 @router.get("")
@@ -85,3 +92,86 @@ async def get_portfolio_history(db: aiosqlite.Connection = Depends(get_db)):
     """)
     rows = await cursor.fetchall()
     return [dict(row) for row in rows]
+
+
+@router.get("/deposits")
+async def get_manual_deposits(db: aiosqlite.Connection = Depends(get_db)):
+    """Get manual deposits setting."""
+    cursor = await db.execute(
+        "SELECT value FROM settings WHERE key = 'manual_deposits'"
+    )
+    row = await cursor.fetchone()
+    amount = float(row["value"]) if row else 0.0
+    return {"amount": amount}
+
+
+@router.put("/deposits")
+async def set_manual_deposits(
+    deposits: ManualDeposits,
+    db: aiosqlite.Connection = Depends(get_db)
+):
+    """Set manual deposits amount (EUR)."""
+    await db.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES ('manual_deposits', ?)",
+        (str(deposits.amount),)
+    )
+    await db.commit()
+    return {"message": "Manual deposits updated", "amount": deposits.amount}
+
+
+@router.get("/pnl")
+async def get_portfolio_pnl(db: aiosqlite.Connection = Depends(get_db)):
+    """
+    Get portfolio profit/loss.
+
+    Calculates: Total P&L = Current Total Value - Net Deposits
+    Where Net Deposits = Manual Deposits - Withdrawals
+    """
+    from app.services.tradernet import get_tradernet_client
+
+    client = get_tradernet_client()
+    if not client.is_connected:
+        if not client.connect():
+            return {
+                "error": "Not connected to Tradernet",
+                "pnl": None,
+                "pnl_pct": None,
+            }
+
+    try:
+        # Get current total portfolio value (positions + cash)
+        total_value = client.get_total_portfolio_value_eur()
+
+        # Get withdrawal history from API
+        cash_movements = client.get_cash_movements()
+        total_withdrawals = cash_movements.get("total_withdrawals", 0)
+
+        # Get manual deposits from database
+        cursor = await db.execute(
+            "SELECT value FROM settings WHERE key = 'manual_deposits'"
+        )
+        row = await cursor.fetchone()
+        manual_deposits = float(row["value"]) if row else 0.0
+
+        # Calculate net deposits (manual deposits - withdrawals)
+        net_deposits = manual_deposits - total_withdrawals
+
+        # Calculate P&L
+        pnl = total_value - net_deposits
+        pnl_pct = (pnl / net_deposits * 100) if net_deposits > 0 else 0
+
+        return {
+            "total_value": round(total_value, 2),
+            "manual_deposits": manual_deposits,
+            "total_withdrawals": total_withdrawals,
+            "net_deposits": round(net_deposits, 2),
+            "pnl": round(pnl, 2),
+            "pnl_pct": round(pnl_pct, 2),
+            "deposits_set": manual_deposits > 0,
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "pnl": None,
+            "pnl_pct": None,
+        }

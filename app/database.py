@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS stocks (
     industry TEXT,
     geography TEXT NOT NULL,
     priority_multiplier REAL DEFAULT 1,
+    min_lot INTEGER DEFAULT 1,
     active INTEGER DEFAULT 1
 );
 
@@ -105,4 +106,10 @@ INSERT OR IGNORE INTO allocation_targets (type, name, target_pct) VALUES
     ('industry', 'Finance', 0.20),
     ('industry', 'Consumer', 0.20),
     ('industry', 'Industrial', 0.20);
+
+-- Settings (key-value store for app settings)
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 """
