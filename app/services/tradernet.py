@@ -362,6 +362,9 @@ class TradernetClient:
             with _led_api_call():
                 data = self._client.get_candles(symbol, start=start, end=end)
             result = []
+            
+            # Debug: log what we received
+            logger.info(f"get_candles response for {symbol}: type={type(data)}, value={str(data)[:200] if data else 'None'}")
 
             # Handle different response types
             if isinstance(data, str):
@@ -374,27 +377,57 @@ class TradernetClient:
                     return []
 
             if isinstance(data, dict):
-                candles = data.get("candles", data.get("hloc", []))
-                if not candles:
-                    # Try direct list format
-                    if isinstance(data, list):
-                        candles = data
-                    else:
-                        # Check if data itself is a list of candles
-                        if "t" in data or "timestamp" in data:
-                            candles = [data]
-                for candle in candles:
-                    if isinstance(candle, dict):
-                        result.append(OHLC(
-                            timestamp=datetime.fromtimestamp(candle.get("t", 0)),
-                            open=float(candle.get("o", 0)),
-                            high=float(candle.get("h", 0)),
-                            low=float(candle.get("l", 0)),
-                            close=float(candle.get("c", 0)),
-                            volume=int(candle.get("v", 0)),
-                        ))
+                # Check for hloc format: {'hloc': {'SYMBOL': [[high, low, open, close], ...]}}
+                hloc_data = data.get("hloc", {})
+                if hloc_data and isinstance(hloc_data, dict):
+                    # Get the data for this symbol
+                    symbol_data = hloc_data.get(symbol, [])
+                    if symbol_data and isinstance(symbol_data, list):
+                        # Calculate start date for timestamps (assuming daily candles)
+                        current_date = start
+                        for candle_array in symbol_data:
+                            if isinstance(candle_array, list) and len(candle_array) >= 4:
+                                # Format appears to be [high, low, open, close] or [open, high, low, close]
+                                # Try both interpretations
+                                if len(candle_array) == 4:
+                                    # Assume [high, low, open, close] based on typical OHLC order
+                                    high = float(candle_array[0])
+                                    low = float(candle_array[1])
+                                    open_price = float(candle_array[2])
+                                    close = float(candle_array[3])
+                                else:
+                                    # Fallback
+                                    high = float(candle_array[0]) if len(candle_array) > 0 else 0
+                                    low = float(candle_array[1]) if len(candle_array) > 1 else 0
+                                    open_price = float(candle_array[2]) if len(candle_array) > 2 else 0
+                                    close = float(candle_array[3]) if len(candle_array) > 3 else 0
+                                
+                                result.append(OHLC(
+                                    timestamp=current_date,
+                                    open=open_price,
+                                    high=high,
+                                    low=low,
+                                    close=close,
+                                    volume=0,  # Volume not provided in this format
+                                ))
+                                # Move to next day
+                                current_date += timedelta(days=1)
+                
+                # Fallback: try candles format (dict with keys)
+                if not result:
+                    candles = data.get("candles", [])
+                    for candle in candles:
+                        if isinstance(candle, dict):
+                            result.append(OHLC(
+                                timestamp=datetime.fromtimestamp(candle.get("t", 0)),
+                                open=float(candle.get("o", 0)),
+                                high=float(candle.get("h", 0)),
+                                low=float(candle.get("l", 0)),
+                                close=float(candle.get("c", 0)),
+                                volume=int(candle.get("v", 0)),
+                            ))
             elif isinstance(data, list):
-                # Direct list of candles
+                # Direct list of candles (dict format)
                 for candle in data:
                     if isinstance(candle, dict):
                         result.append(OHLC(
