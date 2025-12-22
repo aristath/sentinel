@@ -2,6 +2,151 @@
  * Stock Chart Modal Component
  * Displays stock price history in a modal using Lightweight Charts
  */
+
+/**
+ * Alpine.js component for stock chart
+ */
+function stockChartComponent() {
+  return {
+    selectedRange: '1Y',
+    selectedSource: 'tradernet',
+    loading: false,
+    error: null,
+    chartData: null,
+    chart: null,
+    lineSeries: null,
+    symbol: null,
+    stockName: null,
+
+    init() {
+      // Watch for symbol changes from store
+      this.$watch('$store.app.selectedStockSymbol', (symbol) => {
+        if (symbol) {
+          this.symbol = symbol;
+          // Find stock name from store
+          const stocks = this.$store.app.stocks || [];
+          const stock = stocks.find(s => s.symbol === symbol);
+          this.stockName = stock ? stock.name : null;
+          this.loadChart();
+        }
+      });
+
+      // Load chart when modal opens
+      this.$watch('$store.app.showStockChart', (show) => {
+        if (show && this.symbol) {
+          this.loadChart();
+        } else if (!show) {
+          this.closeChart();
+        }
+      });
+    },
+
+    async loadChart() {
+      if (!this.symbol) return;
+
+      this.loading = true;
+      this.error = null;
+
+      try {
+        const data = await API.fetchStockChart(this.symbol, this.selectedRange, this.selectedSource);
+        
+        if (!data || data.length === 0) {
+          this.chartData = [];
+          if (this.chart) {
+            this.chart.remove();
+            this.chart = null;
+            this.lineSeries = null;
+          }
+          this.loading = false;
+          return;
+        }
+
+        this.chartData = data;
+
+        // Initialize or update chart
+        await this.$nextTick();
+        this.renderChart();
+      } catch (err) {
+        console.error('Failed to load stock chart:', err);
+        this.error = 'Failed to load chart data';
+        if (this.chart) {
+          this.chart.remove();
+          this.chart = null;
+          this.lineSeries = null;
+        }
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    renderChart() {
+      const container = document.getElementById('stock-chart-container');
+      if (!container) return;
+
+      // Remove existing chart
+      if (this.chart) {
+        this.chart.remove();
+      }
+
+      // Create chart
+      this.chart = LightweightCharts.createChart(container, {
+        layout: {
+          background: { color: '#1f2937' }, // gray-800
+          textColor: '#9ca3af', // gray-400
+        },
+        grid: {
+          vertLines: { color: '#374151' }, // gray-700
+          horzLines: { color: '#374151' },
+        },
+        timeScale: {
+          timeVisible: true,
+          secondsVisible: false,
+        },
+        width: container.clientWidth,
+        height: 384,
+      });
+
+      // Add line series
+      this.lineSeries = this.chart.addLineSeries({
+        color: '#10b981', // green-500
+        lineWidth: 2,
+        priceFormat: {
+          type: 'price',
+          precision: 2,
+          minMove: 0.01,
+        },
+      });
+
+      // Set data
+      this.lineSeries.setData(this.chartData);
+
+      // Fit content
+      this.chart.timeScale().fitContent();
+
+      // Handle resize
+      const resizeObserver = new ResizeObserver(entries => {
+        if (entries.length > 0) {
+          const { width, height } = entries[0].contentRect;
+          this.chart.applyOptions({ width, height: Math.max(height, 300) });
+        }
+      });
+      resizeObserver.observe(container);
+    },
+
+    closeChart() {
+      if (this.chart) {
+        this.chart.remove();
+        this.chart = null;
+        this.lineSeries = null;
+      }
+      this.chartData = null;
+      this.error = null;
+      this.symbol = null;
+      this.stockName = null;
+    },
+  };
+}
+
 class StockChartModal extends HTMLElement {
   connectedCallback() {
     this.innerHTML = `
@@ -62,148 +207,6 @@ class StockChartModal extends HTMLElement {
         </div>
       </div>
     `;
-
-    // Initialize Alpine.js component
-    if (window.Alpine) {
-      Alpine.data('stockChartComponent', () => ({
-        selectedRange: '1Y',
-        selectedSource: 'tradernet',
-        loading: false,
-        error: null,
-        chartData: null,
-        chart: null,
-        lineSeries: null,
-        symbol: null,
-        stockName: null,
-
-        init() {
-          // Watch for symbol changes from store
-          this.$watch('$store.app.selectedStockSymbol', (symbol) => {
-            if (symbol) {
-              this.symbol = symbol;
-              // Find stock name from store
-              const stocks = this.$store.app.stocks || [];
-              const stock = stocks.find(s => s.symbol === symbol);
-              this.stockName = stock ? stock.name : null;
-              this.loadChart();
-            }
-          });
-
-          // Load chart when modal opens
-          this.$watch('$store.app.showStockChart', (show) => {
-            if (show && this.symbol) {
-              this.loadChart();
-            } else if (!show) {
-              this.closeChart();
-            }
-          });
-        },
-
-        async loadChart() {
-          if (!this.symbol) return;
-
-          this.loading = true;
-          this.error = null;
-
-          try {
-            const data = await API.fetchStockChart(this.symbol, this.selectedRange, this.selectedSource);
-            
-            if (!data || data.length === 0) {
-              this.chartData = [];
-              if (this.chart) {
-                this.chart.remove();
-                this.chart = null;
-                this.lineSeries = null;
-              }
-              this.loading = false;
-              return;
-            }
-
-            this.chartData = data;
-
-            // Initialize or update chart
-            await this.$nextTick();
-            this.renderChart();
-          } catch (err) {
-            console.error('Failed to load stock chart:', err);
-            this.error = 'Failed to load chart data';
-            if (this.chart) {
-              this.chart.remove();
-              this.chart = null;
-              this.lineSeries = null;
-            }
-          } finally {
-            this.loading = false;
-          }
-        },
-
-        renderChart() {
-          const container = document.getElementById('stock-chart-container');
-          if (!container) return;
-
-          // Remove existing chart
-          if (this.chart) {
-            this.chart.remove();
-          }
-
-          // Create chart
-          this.chart = LightweightCharts.createChart(container, {
-            layout: {
-              background: { color: '#1f2937' }, // gray-800
-              textColor: '#9ca3af', // gray-400
-            },
-            grid: {
-              vertLines: { color: '#374151' }, // gray-700
-              horzLines: { color: '#374151' },
-            },
-            timeScale: {
-              timeVisible: true,
-              secondsVisible: false,
-            },
-            width: container.clientWidth,
-            height: 384,
-          });
-
-          // Add line series
-          this.lineSeries = this.chart.addLineSeries({
-            color: '#10b981', // green-500
-            lineWidth: 2,
-            priceFormat: {
-              type: 'price',
-              precision: 2,
-              minMove: 0.01,
-            },
-          });
-
-          // Set data
-          this.lineSeries.setData(this.chartData);
-
-          // Fit content
-          this.chart.timeScale().fitContent();
-
-          // Handle resize
-          const resizeObserver = new ResizeObserver(entries => {
-            if (entries.length > 0) {
-              const { width, height } = entries[0].contentRect;
-              this.chart.applyOptions({ width, height: Math.max(height, 300) });
-            }
-          });
-          resizeObserver.observe(container);
-        },
-
-        closeChart() {
-          if (this.chart) {
-            this.chart.remove();
-            this.chart = null;
-            this.lineSeries = null;
-          }
-          this.chartData = null;
-          this.error = null;
-          this.symbol = null;
-          this.stockName = null;
-        },
-      }));
-    }
   }
 }
 

@@ -2,6 +2,115 @@
  * Portfolio Chart Component
  * Displays portfolio value over time using Lightweight Charts
  */
+
+/**
+ * Alpine.js component for portfolio chart
+ */
+function portfolioChartComponent() {
+  return {
+    selectedRange: 'all',
+    loading: false,
+    error: null,
+    chartData: null,
+    chart: null,
+    lineSeries: null,
+
+    async init() {
+      await this.loadChart();
+    },
+
+    async loadChart() {
+      this.loading = true;
+      this.error = null;
+
+      try {
+        const data = await API.fetchPortfolioChart(this.selectedRange);
+        
+        if (!data || data.length === 0) {
+          this.chartData = [];
+          if (this.chart) {
+            this.chart.remove();
+            this.chart = null;
+            this.lineSeries = null;
+          }
+          this.loading = false;
+          return;
+        }
+
+        this.chartData = data;
+
+        // Initialize or update chart
+        await this.$nextTick();
+        this.renderChart();
+      } catch (err) {
+        console.error('Failed to load portfolio chart:', err);
+        this.error = 'Failed to load chart data';
+        if (this.chart) {
+          this.chart.remove();
+          this.chart = null;
+          this.lineSeries = null;
+        }
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    renderChart() {
+      const container = document.getElementById('portfolio-chart-container');
+      if (!container) return;
+
+      // Remove existing chart
+      if (this.chart) {
+        this.chart.remove();
+      }
+
+      // Create chart
+      this.chart = LightweightCharts.createChart(container, {
+        layout: {
+          background: { color: '#1f2937' }, // gray-800
+          textColor: '#9ca3af', // gray-400
+        },
+        grid: {
+          vertLines: { color: '#374151' }, // gray-700
+          horzLines: { color: '#374151' },
+        },
+        timeScale: {
+          timeVisible: true,
+          secondsVisible: false,
+        },
+        width: container.clientWidth,
+        height: 256,
+      });
+
+      // Add line series
+      this.lineSeries = this.chart.addLineSeries({
+        color: '#3b82f6', // blue-500
+        lineWidth: 2,
+        priceFormat: {
+          type: 'price',
+          precision: 2,
+          minMove: 0.01,
+        },
+      });
+
+      // Set data
+      this.lineSeries.setData(this.chartData);
+
+      // Fit content
+      this.chart.timeScale().fitContent();
+
+      // Handle resize
+      const resizeObserver = new ResizeObserver(entries => {
+        if (entries.length > 0) {
+          const { width, height } = entries[0].contentRect;
+          this.chart.applyOptions({ width, height: Math.max(height, 200) });
+        }
+      });
+      resizeObserver.observe(container);
+    },
+  };
+}
+
 class PortfolioChart extends HTMLElement {
   connectedCallback() {
     this.innerHTML = `
@@ -38,112 +147,6 @@ class PortfolioChart extends HTMLElement {
         </div>
       </div>
     `;
-
-    // Initialize Alpine.js component
-    if (window.Alpine) {
-      Alpine.data('portfolioChartComponent', () => ({
-        selectedRange: 'all',
-        loading: false,
-        error: null,
-        chartData: null,
-        chart: null,
-        lineSeries: null,
-
-        async init() {
-          await this.loadChart();
-        },
-
-        async loadChart() {
-          this.loading = true;
-          this.error = null;
-
-          try {
-            const data = await API.fetchPortfolioChart(this.selectedRange);
-            
-            if (!data || data.length === 0) {
-              this.chartData = [];
-              if (this.chart) {
-                this.chart.remove();
-                this.chart = null;
-                this.lineSeries = null;
-              }
-              this.loading = false;
-              return;
-            }
-
-            this.chartData = data;
-
-            // Initialize or update chart
-            await this.$nextTick();
-            this.renderChart();
-          } catch (err) {
-            console.error('Failed to load portfolio chart:', err);
-            this.error = 'Failed to load chart data';
-            if (this.chart) {
-              this.chart.remove();
-              this.chart = null;
-              this.lineSeries = null;
-            }
-          } finally {
-            this.loading = false;
-          }
-        },
-
-        renderChart() {
-          const container = document.getElementById('portfolio-chart-container');
-          if (!container) return;
-
-          // Remove existing chart
-          if (this.chart) {
-            this.chart.remove();
-          }
-
-          // Create chart
-          this.chart = LightweightCharts.createChart(container, {
-            layout: {
-              background: { color: '#1f2937' }, // gray-800
-              textColor: '#9ca3af', // gray-400
-            },
-            grid: {
-              vertLines: { color: '#374151' }, // gray-700
-              horzLines: { color: '#374151' },
-            },
-            timeScale: {
-              timeVisible: true,
-              secondsVisible: false,
-            },
-            width: container.clientWidth,
-            height: 256,
-          });
-
-          // Add line series
-          this.lineSeries = this.chart.addLineSeries({
-            color: '#3b82f6', // blue-500
-            lineWidth: 2,
-            priceFormat: {
-              type: 'price',
-              precision: 2,
-              minMove: 0.01,
-            },
-          });
-
-          // Set data
-          this.lineSeries.setData(this.chartData);
-
-          // Fit content
-          this.chart.timeScale().fitContent();
-
-          // Handle resize
-          const resizeObserver = new ResizeObserver(entries => {
-            if (entries.length > 0) {
-              const { width, height } = entries[0].contentRect;
-              this.chart.applyOptions({ width, height: Math.max(height, 200) });
-            }
-          });
-          resizeObserver.observe(container);
-        },
-      }));
-    }
   }
 }
 

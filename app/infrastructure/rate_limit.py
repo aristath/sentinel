@@ -36,11 +36,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if current_time - self._last_cleanup > self._cleanup_interval:
             self._cleanup_old_entries(current_time)
             self._last_cleanup = current_time
-        
+
         # Get client IP
         client_ip = request.client.host if request.client else "unknown"
         path = request.url.path
-        
+
+        # Skip rate limiting for internal endpoints (LED display, static files)
+        if path.startswith("/api/status/led") or path.startswith("/static"):
+            return await call_next(request)
+
         # Check rate limit for trade execution endpoints
         if path.startswith("/api/trades/execute") or path.startswith("/api/trades/rebalance/execute"):
             # Stricter limits for trade execution
