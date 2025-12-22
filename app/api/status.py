@@ -191,3 +191,73 @@ async def get_job_status():
             "message": str(e),
             "jobs": {},
         }
+
+
+@router.get("/database/stats")
+async def get_database_stats():
+    """Get database statistics including historical data counts."""
+    import aiosqlite
+    
+    try:
+        async with aiosqlite.connect(settings.database_path) as db:
+            db.row_factory = aiosqlite.Row
+            
+            # Count stock price history records
+            cursor = await db.execute("SELECT COUNT(*) as count FROM stock_price_history")
+            price_history_count = (await cursor.fetchone())["count"]
+            
+            # Count unique symbols in price history
+            cursor = await db.execute("SELECT COUNT(DISTINCT symbol) as count FROM stock_price_history")
+            price_history_symbols = (await cursor.fetchone())["count"]
+            
+            # Get date range of price history
+            cursor = await db.execute("""
+                SELECT MIN(date) as min_date, MAX(date) as max_date 
+                FROM stock_price_history
+            """)
+            price_range = await cursor.fetchone()
+            
+            # Count portfolio snapshots
+            cursor = await db.execute("SELECT COUNT(*) as count FROM portfolio_snapshots")
+            snapshot_count = (await cursor.fetchone())["count"]
+            
+            # Get date range of snapshots
+            cursor = await db.execute("""
+                SELECT MIN(date) as min_date, MAX(date) as max_date 
+                FROM portfolio_snapshots
+            """)
+            snapshot_range = await cursor.fetchone()
+            
+            # Count active stocks
+            cursor = await db.execute("SELECT COUNT(*) as count FROM stocks WHERE active = 1")
+            active_stocks = (await cursor.fetchone())["count"]
+            
+            # Count trades
+            cursor = await db.execute("SELECT COUNT(*) as count FROM trades")
+            trades_count = (await cursor.fetchone())["count"]
+            
+            return {
+                "status": "ok",
+                "stock_price_history": {
+                    "total_records": price_history_count,
+                    "unique_symbols": price_history_symbols,
+                    "date_range": {
+                        "min": price_range["min_date"] if price_range["min_date"] else None,
+                        "max": price_range["max_date"] if price_range["max_date"] else None,
+                    }
+                },
+                "portfolio_snapshots": {
+                    "total_records": snapshot_count,
+                    "date_range": {
+                        "min": snapshot_range["min_date"] if snapshot_range["min_date"] else None,
+                        "max": snapshot_range["max_date"] if snapshot_range["max_date"] else None,
+                    }
+                },
+                "active_stocks": active_stocks,
+                "trades": trades_count,
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e),
+        }
