@@ -109,21 +109,6 @@ async def _sync_portfolio_internal():
                     if geo:
                         geo_values[geo] = geo_values.get(geo, 0) + market_value
 
-                # Sync min_lot from Tradernet security_info for each position
-                for pos in positions:
-                    try:
-                        info = client.get_security_info(pos.symbol)
-                        if info and "lot" in info:
-                            lot_size = int(info.get("lot", 1))
-                            if lot_size > 0:
-                                await db.execute(
-                                    "UPDATE stocks SET min_lot = ? WHERE symbol = ?",
-                                    (lot_size, pos.symbol)
-                                )
-                                logger.debug(f"Updated min_lot for {pos.symbol}: {lot_size}")
-                    except Exception as e:
-                        logger.debug(f"Could not get security info for {pos.symbol}: {e}")
-
                 # Create daily snapshot
                 today = datetime.now().strftime("%Y-%m-%d")
                 await db.execute(

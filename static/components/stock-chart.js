@@ -93,6 +93,7 @@ function stockChartComponent() {
         layout: {
           background: { color: '#1f2937' }, // gray-800
           textColor: '#9ca3af', // gray-400
+          attributionLogo: false,
         },
         grid: {
           vertLines: { color: '#374151' }, // gray-700

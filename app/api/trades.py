@@ -60,7 +60,7 @@ async def get_trades(
     trades = await trade_repo.get_history(limit=limit)
     return [
         {
-            "id": None,  # Not in domain model
+            "id": t.id,
             "symbol": t.symbol,
             "side": t.side,
             "quantity": t.quantity,

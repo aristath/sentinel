@@ -62,6 +62,7 @@ class StockTable extends HTMLElement {
                   <span x-show="$store.app.sortBy === 'symbol'" class="ml-1"
                         x-text="$store.app.sortDesc ? '▼' : '▲'"></span>
                 </th>
+                <th class="py-2 px-1 hidden md:table-cell">Chart</th>
                 <th @click="$store.app.sortStocks('name')"
                     class="py-2 px-2 cursor-pointer hover:text-gray-300 hidden sm:table-cell">
                   Company
@@ -117,6 +118,12 @@ class StockTable extends HTMLElement {
                             title="View chart">
                       <span x-text="stock.symbol"></span>
                     </button>
+                  </td>
+                  <td class="py-1.5 px-1 hidden md:table-cell">
+                    <div class="sparkline-container"
+                         :data-symbol="stock.symbol"
+                         :data-has-position="stock.position_value > 0"
+                         style="width: 80px; height: 32px;"></div>
                   </td>
                   <td class="py-1.5 px-2 text-gray-300 truncate max-w-32 hidden sm:table-cell" x-text="stock.name"></td>
                   <td class="py-1.5 px-2 text-center">

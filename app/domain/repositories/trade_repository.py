@@ -15,6 +15,7 @@ class Trade:
     price: float
     executed_at: datetime
     order_id: Optional[str]
+    id: Optional[int] = None  # Database ID
 
 
 class TradeRepository(ABC):

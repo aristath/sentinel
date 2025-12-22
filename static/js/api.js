@@ -68,6 +68,7 @@ const API = {
     const params = new URLSearchParams({ range, source });
     return fetch(`/api/charts/stocks/${symbol}?${params}`).then(r => r.json());
   },
+  fetchSparklines: () => fetch('/api/charts/sparklines').then(r => r.json()),
 
   // Settings
   fetchSettings: () => fetch('/api/settings').then(r => r.json()),

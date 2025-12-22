@@ -141,6 +141,46 @@ async def _store_stock_prices(
     await db.commit()
 
 
+@router.get("/sparklines")
+async def get_all_stock_sparklines(
+    db: aiosqlite.Connection = Depends(get_db),
+):
+    """
+    Get 1-year sparkline data for all active stocks.
+    Returns dict: {symbol: [{time, value}, ...]}
+    """
+    try:
+        start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+
+        cursor = await db.execute("""
+            SELECT s.symbol, sph.date, sph.close_price
+            FROM stocks s
+            LEFT JOIN stock_price_history sph ON s.symbol = sph.symbol
+                AND sph.date >= ?
+            WHERE s.active = 1
+            ORDER BY s.symbol, sph.date ASC
+        """, (start_date,))
+
+        rows = await cursor.fetchall()
+
+        # Group by symbol
+        result = {}
+        for row in rows:
+            symbol = row["symbol"]
+            if symbol not in result:
+                result[symbol] = []
+            if row["date"] and row["close_price"]:
+                result[symbol].append({
+                    "time": row["date"],
+                    "value": row["close_price"]
+                })
+
+        return result
+    except Exception as e:
+        logger.error(f"Failed to get sparklines data: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get sparklines data: {str(e)}")
+
+
 @router.get("/stocks/{symbol}")
 async def get_stock_chart(
     symbol: str,

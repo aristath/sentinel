@@ -18,6 +18,7 @@ document.addEventListener('alpine:init', () => {
     tradernet: { connected: false },
     recommendations: [],
     settings: { min_trade_size: 400 },
+    sparklines: {},  // {symbol: [{time, value}, ...]}
 
     // UI State - Filters
     stockFilter: 'all',
@@ -68,7 +69,8 @@ document.addEventListener('alpine:init', () => {
         this.fetchTradernet(),
         this.fetchGeographies(),
         this.fetchRecommendations(),
-        this.fetchSettings()
+        this.fetchSettings(),
+        this.fetchSparklines()
       ]);
     },
 
@@ -145,6 +147,14 @@ document.addEventListener('alpine:init', () => {
         this.settings = await API.fetchSettings();
       } catch (e) {
         console.error('Failed to fetch settings:', e);
+      }
+    },
+
+    async fetchSparklines() {
+      try {
+        this.sparklines = await API.fetchSparklines();
+      } catch (e) {
+        console.error('Failed to fetch sparklines:', e);
       }
     },
 

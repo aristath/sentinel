@@ -43,8 +43,6 @@ async def get_status(
         "stock_universe_count": stock_count,
         "active_positions": position_count,
         "cash_balance": cash_balance,
-        "min_cash_threshold": settings.min_cash_threshold,
-        "rebalance_ready": cash_balance >= settings.min_cash_threshold,
         "check_interval_minutes": settings.cash_check_interval_minutes,
     }
 

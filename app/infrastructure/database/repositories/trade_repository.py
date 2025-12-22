@@ -66,6 +66,7 @@ class SQLiteTradeRepository(TradeRepository):
                     executed_at = datetime.now()
 
             trades.append(Trade(
+                id=row["id"],
                 symbol=row["symbol"],
                 side=row["side"],
                 quantity=row["quantity"],
