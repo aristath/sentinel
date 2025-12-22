@@ -32,7 +32,7 @@ class StockTable extends HTMLElement {
             <select x-model="$store.app.industryFilter"
                     class="px-2 py-1.5 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none hidden sm:block">
               <option value="all">All Sectors</option>
-              <template x-for="ind in $store.app.industries" :key="ind">
+              <template x-for="ind in ($store.app.industries || [])" :key="ind">
                 <option :value="ind" x-text="ind"></option>
               </template>
             </select>
@@ -108,7 +108,7 @@ class StockTable extends HTMLElement {
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-800">
-              <template x-for="stock in $store.app.filteredStocks" :key="stock.symbol">
+              <template x-for="stock in ($store.app.filteredStocks || [])" :key="stock.symbol">
                 <tr class="hover:bg-gray-800/50 cursor-pointer md:cursor-default"
                     @click="window.innerWidth < 768 && $store.app.openEditStock(stock)">
                   <td class="py-1.5 px-2 font-mono text-blue-400 sticky left-0 bg-gray-800">

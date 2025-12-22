@@ -50,7 +50,7 @@ class EditStockModal extends HTMLElement {
                        placeholder="e.g., EU, US, ASIA"
                        class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
                 <datalist id="edit-geographies-list">
-                  <template x-for="geo in $store.app.geographies" :key="geo">
+                  <template x-for="geo in ($store.app.geographies || [])" :key="geo">
                     <option :value="geo"></option>
                   </template>
                 </datalist>
@@ -64,7 +64,7 @@ class EditStockModal extends HTMLElement {
                        placeholder="e.g., Industrial, Defense"
                        class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
                 <datalist id="edit-industries-list">
-                  <template x-for="ind in $store.app.industries" :key="ind">
+                  <template x-for="ind in ($store.app.industries || [])" :key="ind">
                     <option :value="ind"></option>
                   </template>
                 </datalist>

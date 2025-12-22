@@ -28,7 +28,7 @@ class TradesTable extends HTMLElement {
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-800">
-              <template x-for="trade in $store.app.trades" :key="trade.id">
+              <template x-for="trade in ($store.app.trades || [])" :key="trade.id">
                 <tr class="hover:bg-gray-800/50">
                   <td class="py-1.5 px-2 text-gray-400" x-text="formatDateTime(trade.executed_at)"></td>
                   <td class="py-1.5 px-2 font-mono text-blue-400" x-text="trade.symbol"></td>

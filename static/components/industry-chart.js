@@ -18,7 +18,7 @@ class IndustryChart extends HTMLElement {
 
         <!-- View Mode - Show weights as horizontal bars -->
         <div x-show="!$store.app.editingIndustry" class="space-y-2">
-          <template x-for="ind in industryAllocations.filter(i => $store.app.activeIndustries.includes(i.name))" :key="ind.name">
+          <template x-for="ind in (industryAllocations || []).filter(i => $store.app.activeIndustries && $store.app.activeIndustries.includes(i.name))" :key="ind.name">
             <div>
               <div class="flex items-center justify-between text-sm mb-1">
                 <span class="text-gray-300 truncate" x-text="ind.name"></span>
@@ -47,7 +47,7 @@ class IndustryChart extends HTMLElement {
             <span class="text-green-400">+1 Prioritize</span>
           </div>
 
-          <template x-for="name in $store.app.activeIndustries.sort()" :key="name">
+          <template x-for="name in (($store.app.activeIndustries || []).sort())" :key="name">
             <div class="space-y-1">
               <div class="flex items-center justify-between text-sm">
                 <span class="text-gray-300 truncate" x-text="name"></span>

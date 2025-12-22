@@ -62,7 +62,7 @@ class GeoChart extends HTMLElement {
           </div>
 
           <!-- Dynamic Geo Sliders - only for active geographies -->
-          <template x-for="name in $store.app.activeGeographies.sort()" :key="name">
+          <template x-for="name in (($store.app.activeGeographies || []).sort())" :key="name">
             <div class="space-y-1">
               <div class="flex items-center justify-between text-sm">
                 <span class="flex items-center gap-2">
