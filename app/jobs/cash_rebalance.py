@@ -1,11 +1,10 @@
-"""Cash-based rebalance job.
+"""Cash-based rebalance job with drip execution strategy.
 
-Checks cash balance periodically and executes trades when sufficient funds available.
-Replaces the fixed monthly deposit schedule with dynamic cash-triggered rebalancing.
+Executes ONE trade per cycle (15 minutes) with fresh data before each decision.
+Priority: SELL before BUY.
 """
 
 import logging
-from datetime import datetime
 
 import aiosqlite
 
@@ -19,68 +18,24 @@ logger = logging.getLogger(__name__)
 
 async def check_and_rebalance():
     """
-    Check cash balance and execute rebalancing if threshold is met.
+    Check for trade opportunities and execute ONE trade if available.
 
-    This job runs every 15 minutes and:
-    1. Gets current cash balance from Tradernet
-    2. If cash >= min_cash_threshold (€400), calculates and executes trades
-    3. Logs the result
+    Priority: SELL before BUY
+    Limit: One trade per 15-minute cycle
 
-    Trade sizing:
-    - Minimum €400 per trade (keeps commission at 0.5%)
-    - Maximum 5 trades per cycle
-    - Formula: max_trades = min(5, floor(cash / 400))
+    This "drip" strategy ensures:
+    - Fresh data before each decision
+    - Time for broker to settle orders
+    - Recalculated recommendations each cycle
     """
-    logger.info("Checking cash balance for potential rebalance...")
-
-    try:
-        # Get cash balance from Tradernet
-        client = get_tradernet_client()
-        if not client.is_connected:
-            if not client.connect():
-                logger.warning("Cannot connect to Tradernet, skipping cash check")
-                display = get_led_display()
-                if display.is_connected:
-                    display.show_error("BROKER DOWN")
-                return
-
-        cash_balance = client.get_total_cash_eur()
-        logger.info(f"Current cash balance: €{cash_balance:.2f}")
-
-        # Fetch per-currency balances for execution-time validation
-        currency_balances = {
-            cb.currency: cb.amount
-            for cb in client.get_cash_balances()
-        }
-        logger.info(f"Currency balances: {currency_balances}")
-
-        # Check if we have enough cash to trade
-        if cash_balance < settings.min_cash_threshold:
-            logger.info(
-                f"Cash €{cash_balance:.2f} below threshold €{settings.min_cash_threshold:.2f}, "
-                "no rebalance needed"
-            )
-            return
-
-        # We have enough cash - proceed with rebalancing
-        logger.info(f"Cash €{cash_balance:.2f} >= threshold, initiating rebalance")
-
-        # Use lock to prevent concurrent rebalancing
-        async with file_lock("rebalance", timeout=600.0):
-            await _check_and_rebalance_internal(cash_balance, currency_balances)
-    except Exception as e:
-        logger.error(f"Error during cash rebalance check: {e}", exc_info=True)
-        display = get_led_display()
-        if display.is_connected:
-            display.show_error("REBAL FAIL")
+    async with file_lock("rebalance", timeout=600.0):
+        await _check_and_rebalance_internal()
 
 
-async def _check_and_rebalance_internal(
-    cash_balance: float,
-    currency_balances: dict[str, float] | None = None
-):
-    """Internal rebalance implementation."""
+async def _check_and_rebalance_internal():
+    """Internal rebalance implementation with drip execution."""
     from app.jobs.daily_sync import sync_portfolio
+    from app.api.settings import get_min_trade_size
     from app.services.scorer import score_all_stocks
     from app.infrastructure.dependencies import (
         get_stock_repository,
@@ -92,67 +47,136 @@ async def _check_and_rebalance_internal(
     from app.application.services.rebalancing_service import RebalancingService
     from app.application.services.trade_execution_service import TradeExecutionService
 
-    # Step 1: Sync portfolio to get latest positions
-    logger.info("Step 1: Syncing portfolio...")
-    await sync_portfolio()
+    logger.info("Starting trade cycle check...")
 
-    async with aiosqlite.connect(settings.database_path) as db:
-        db.row_factory = aiosqlite.Row
-        
-        # Step 2: Refresh scores
-        logger.info("Step 2: Refreshing stock scores...")
-        scores = await score_all_stocks(db)
-        logger.info(f"Scored {len(scores)} stocks")
+    display = get_led_display()
 
-        # Step 3: Calculate rebalance trades using application services
-        logger.info("Step 3: Calculating rebalance trades...")
-        stock_repo = get_stock_repository(db)
-        position_repo = get_position_repository(db)
-        allocation_repo = get_allocation_repository(db)
-        portfolio_repo = get_portfolio_repository(db)
-
-        rebalancing_service = RebalancingService(
-            stock_repo, position_repo, allocation_repo, portfolio_repo
-        )
-        trades = await rebalancing_service.calculate_rebalance_trades(cash_balance)
-
-        if not trades:
-            logger.info("No rebalance trades recommended")
-            return
-
-        logger.info(f"Generated {len(trades)} trade recommendations:")
-        for trade in trades:
-            logger.info(
-                f"  {trade.side} {trade.quantity} {trade.symbol} "
-                f"@ €{trade.estimated_price:.2f} = €{trade.estimated_value:.2f} "
-                f"({trade.reason})"
-            )
-
-        # Step 4: Execute trades using application service with transaction
-        logger.info("Step 4: Executing trades...")
-        trade_repo = get_trade_repository(db)
-        trade_execution_service = TradeExecutionService(
-            trade_repo, db=db, position_repo=position_repo
-        )
-        results = await trade_execution_service.execute_trades(
-            trades,
-            use_transaction=True,
-            currency_balances=currency_balances
-        )
-
-        successful = sum(1 for r in results if r["status"] == "success")
-        failed = sum(1 for r in results if r["status"] != "success")
-
-        logger.info(
-            f"Rebalance complete: {successful} successful, {failed} failed"
-        )
-
-        # Create snapshot after rebalance
+    try:
+        # Step 1: Sync portfolio for fresh data
+        logger.info("Step 1: Syncing portfolio for fresh data...")
         await sync_portfolio()
 
-        # Log summary
-        total_invested = sum(t.estimated_value for t in trades)
-        logger.info(
-            f"Cash rebalance finished at {datetime.now().isoformat()}: "
-            f"invested €{total_invested:.2f} from €{cash_balance:.2f} available"
-        )
+        # Get configurable threshold from database
+        min_trade_size = await get_min_trade_size()
+
+        # Connect to broker
+        client = get_tradernet_client()
+        if not client.is_connected:
+            if not client.connect():
+                logger.warning("Cannot connect to Tradernet, skipping cycle")
+                if display.is_connected:
+                    display.show_error("BROKER DOWN")
+                return
+
+        cash_balance = client.get_total_cash_eur()
+        logger.info(f"Cash balance: €{cash_balance:.2f}, threshold: €{min_trade_size:.2f}")
+
+        async with aiosqlite.connect(settings.database_path) as db:
+            db.row_factory = aiosqlite.Row
+
+            # Step 2: Refresh scores
+            logger.info("Step 2: Refreshing stock scores...")
+            await score_all_stocks(db)
+
+            # Initialize services
+            stock_repo = get_stock_repository(db)
+            position_repo = get_position_repository(db)
+            allocation_repo = get_allocation_repository(db)
+            portfolio_repo = get_portfolio_repository(db)
+            trade_repo = get_trade_repository(db)
+
+            rebalancing_service = RebalancingService(
+                stock_repo, position_repo, allocation_repo, portfolio_repo
+            )
+            trade_execution = TradeExecutionService(
+                trade_repo, db=db, position_repo=position_repo
+            )
+
+            # Step 3: Check for SELL recommendation (priority)
+            logger.info("Step 3: Checking for SELL recommendations...")
+            sell_recommendations = await rebalancing_service.calculate_sell_recommendations(limit=1)
+
+            if sell_recommendations:
+                trade = sell_recommendations[0]
+                logger.info(
+                    f"Executing SELL: {trade.quantity} {trade.symbol} "
+                    f"@ €{trade.estimated_price:.2f} = €{trade.estimated_value:.2f} "
+                    f"({trade.reason})"
+                )
+
+                if display.is_connected:
+                    display.show_syncing()
+
+                results = await trade_execution.execute_trades([trade], use_transaction=True)
+
+                if results and results[0]["status"] == "success":
+                    logger.info(f"SELL executed successfully: {trade.symbol}")
+                    if display.is_connected:
+                        display.show_success()
+                else:
+                    error = results[0].get("error", "Unknown error") if results else "No result"
+                    logger.error(f"SELL failed for {trade.symbol}: {error}")
+                    if display.is_connected:
+                        display.show_error("SELL FAIL")
+
+                # Sync portfolio to update state after trade
+                await sync_portfolio()
+                return  # Exit - wait for next cycle
+
+            # Step 4: Check for BUY recommendation
+            logger.info("Step 4: Checking for BUY recommendations...")
+
+            if cash_balance < min_trade_size:
+                logger.info(
+                    f"Cash €{cash_balance:.2f} below threshold €{min_trade_size:.2f}, "
+                    "no buy possible"
+                )
+                return
+
+            # Get currency balances for buy validation
+            currency_balances = {
+                cb.currency: cb.amount
+                for cb in client.get_cash_balances()
+            }
+            logger.info(f"Currency balances: {currency_balances}")
+
+            # Calculate buy recommendations
+            buy_recommendations = await rebalancing_service.calculate_rebalance_trades(cash_balance)
+
+            if buy_recommendations:
+                trade = buy_recommendations[0]  # Only execute top one
+                logger.info(
+                    f"Executing BUY: {trade.quantity} {trade.symbol} "
+                    f"@ €{trade.estimated_price:.2f} = €{trade.estimated_value:.2f} "
+                    f"({trade.reason})"
+                )
+
+                if display.is_connected:
+                    display.show_syncing()
+
+                results = await trade_execution.execute_trades(
+                    [trade],
+                    use_transaction=True,
+                    currency_balances=currency_balances
+                )
+
+                if results and results[0]["status"] == "success":
+                    logger.info(f"BUY executed successfully: {trade.symbol}")
+                    if display.is_connected:
+                        display.show_success()
+                else:
+                    error = results[0].get("error", "Unknown error") if results else "No result"
+                    logger.error(f"BUY failed for {trade.symbol}: {error}")
+                    if display.is_connected:
+                        display.show_error("BUY FAIL")
+
+                # Sync portfolio to update state after trade
+                await sync_portfolio()
+                return  # Exit - wait for next cycle
+
+            logger.info("No trades recommended this cycle")
+
+    except Exception as e:
+        logger.error(f"Trade cycle error: {e}", exc_info=True)
+        if display.is_connected:
+            display.show_error("TRADE ERR")
