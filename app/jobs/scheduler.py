@@ -104,6 +104,7 @@ def init_scheduler() -> AsyncIOScheduler:
     from app.jobs.daily_sync import sync_portfolio, sync_prices
     from app.jobs.cash_rebalance import check_and_rebalance
     from app.jobs.score_refresh import refresh_all_scores
+    from app.jobs.cash_flow_sync import sync_cash_flows
 
     # Tradernet portfolio sync (every 2 minutes)
     scheduler.add_job(
@@ -156,6 +157,15 @@ def init_scheduler() -> AsyncIOScheduler:
         IntervalTrigger(seconds=30),
         id="wifi_check",
         name="WiFi Check",
+        replace_existing=True,
+    )
+
+    # Cash flow sync (daily at 1 AM)
+    scheduler.add_job(
+        sync_cash_flows,
+        CronTrigger(hour=1, minute=0),
+        id="cash_flow_sync",
+        name="Cash Flow Sync",
         replace_existing=True,
     )
 

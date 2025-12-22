@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 
 from app.config import settings
 from app.database import init_db
-from app.api import portfolio, stocks, trades, status, allocation
+from app.api import portfolio, stocks, trades, status, allocation, cash_flows
 from app.jobs.scheduler import init_scheduler, start_scheduler, stop_scheduler
 from app.services.tradernet import get_tradernet_client
 from app.infrastructure.hardware.led_display import get_led_display
@@ -116,6 +116,7 @@ app.include_router(stocks.router, prefix="/api/stocks", tags=["Stocks"])
 app.include_router(trades.router, prefix="/api/trades", tags=["Trades"])
 app.include_router(status.router, prefix="/api/status", tags=["Status"])
 app.include_router(allocation.router, prefix="/api/allocation", tags=["Allocation"])
+app.include_router(cash_flows.router, prefix="/api/cash-flows", tags=["Cash Flows"])
 
 
 @app.get("/")

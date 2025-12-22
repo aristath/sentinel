@@ -170,4 +170,26 @@ CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+-- Cash flow transactions
+CREATE TABLE IF NOT EXISTS cash_flows (
+    id INTEGER PRIMARY KEY,
+    transaction_id TEXT UNIQUE NOT NULL,
+    type_doc_id INTEGER NOT NULL,
+    transaction_type TEXT,
+    date TEXT NOT NULL,
+    amount REAL NOT NULL,
+    currency TEXT NOT NULL,
+    amount_eur REAL NOT NULL,
+    status TEXT,
+    status_c INTEGER,
+    description TEXT,
+    params_json TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_cash_flows_date ON cash_flows(date);
+CREATE INDEX IF NOT EXISTS idx_cash_flows_type ON cash_flows(transaction_type);
+CREATE INDEX IF NOT EXISTS idx_cash_flows_type_doc_id ON cash_flows(type_doc_id);
 """

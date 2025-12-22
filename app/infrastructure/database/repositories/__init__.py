@@ -21,6 +21,9 @@ from app.infrastructure.database.repositories.trade_repository import (
 from app.infrastructure.database.repositories.settings_repository import (
     SQLiteSettingsRepository,
 )
+from app.infrastructure.database.repositories.cash_flow_repository import (
+    SQLiteCashFlowRepository,
+)
 
 __all__ = [
     "SQLiteStockRepository",
@@ -30,4 +33,5 @@ __all__ = [
     "SQLiteScoreRepository",
     "SQLiteTradeRepository",
     "SQLiteSettingsRepository",
+    "SQLiteCashFlowRepository",
 ]

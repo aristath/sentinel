@@ -15,6 +15,7 @@ from app.infrastructure.database.repositories import (
     SQLiteScoreRepository,
     SQLiteTradeRepository,
     SQLiteSettingsRepository,
+    SQLiteCashFlowRepository,
 )
 from app.domain.repositories import (
     StockRepository,
@@ -24,6 +25,7 @@ from app.domain.repositories import (
     ScoreRepository,
     TradeRepository,
     SettingsRepository,
+    CashFlowRepository,
 )
 
 
@@ -74,3 +76,10 @@ def get_settings_repository(
 ) -> SettingsRepository:
     """Get settings repository instance."""
     return SQLiteSettingsRepository(db)
+
+
+def get_cash_flow_repository(
+    db: aiosqlite.Connection = Depends(get_db)
+) -> CashFlowRepository:
+    """Get cash flow repository instance."""
+    return SQLiteCashFlowRepository(db)

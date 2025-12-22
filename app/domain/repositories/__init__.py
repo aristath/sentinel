@@ -27,6 +27,9 @@ from app.domain.repositories.trade_repository import (
 from app.domain.repositories.settings_repository import (
     SettingsRepository,
 )
+from app.domain.repositories.cash_flow_repository import (
+    CashFlowRepository,
+)
 
 __all__ = [
     "StockRepository",
@@ -42,4 +45,5 @@ __all__ = [
     "TradeRepository",
     "Trade",
     "SettingsRepository",
+    "CashFlowRepository",
 ]
