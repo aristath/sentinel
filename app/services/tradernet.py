@@ -363,17 +363,48 @@ class TradernetClient:
                 data = self._client.get_candles(symbol, start=start, end=end)
             result = []
 
+            # Handle different response types
+            if isinstance(data, str):
+                # If it's a JSON string, parse it
+                import json
+                try:
+                    data = json.loads(data)
+                except json.JSONDecodeError:
+                    logger.warning(f"Received non-JSON string response for {symbol}: {data[:100]}")
+                    return []
+
             if isinstance(data, dict):
                 candles = data.get("candles", data.get("hloc", []))
+                if not candles:
+                    # Try direct list format
+                    if isinstance(data, list):
+                        candles = data
+                    else:
+                        # Check if data itself is a list of candles
+                        if "t" in data or "timestamp" in data:
+                            candles = [data]
                 for candle in candles:
-                    result.append(OHLC(
-                        timestamp=datetime.fromtimestamp(candle.get("t", 0)),
-                        open=float(candle.get("o", 0)),
-                        high=float(candle.get("h", 0)),
-                        low=float(candle.get("l", 0)),
-                        close=float(candle.get("c", 0)),
-                        volume=int(candle.get("v", 0)),
-                    ))
+                    if isinstance(candle, dict):
+                        result.append(OHLC(
+                            timestamp=datetime.fromtimestamp(candle.get("t", 0)),
+                            open=float(candle.get("o", 0)),
+                            high=float(candle.get("h", 0)),
+                            low=float(candle.get("l", 0)),
+                            close=float(candle.get("c", 0)),
+                            volume=int(candle.get("v", 0)),
+                        ))
+            elif isinstance(data, list):
+                # Direct list of candles
+                for candle in data:
+                    if isinstance(candle, dict):
+                        result.append(OHLC(
+                            timestamp=datetime.fromtimestamp(candle.get("t", 0)),
+                            open=float(candle.get("o", 0)),
+                            high=float(candle.get("h", 0)),
+                            low=float(candle.get("l", 0)),
+                            close=float(candle.get("c", 0)),
+                            volume=int(candle.get("v", 0)),
+                        ))
 
             return result
         except Exception as e:
