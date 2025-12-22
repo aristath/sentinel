@@ -119,6 +119,42 @@ async def set_manual_deposits(
     return {"message": "Manual deposits updated", "amount": deposits.amount}
 
 
+@router.get("/debug/cashflows")
+async def debug_cashflows():
+    """Debug endpoint to inspect Tradernet cashflows API response."""
+    from app.services.tradernet import get_tradernet_client
+
+    client = get_tradernet_client()
+    if not client.is_connected:
+        if not client.connect():
+            return {"error": "Not connected to Tradernet"}
+
+    try:
+        # Try the getCashflows endpoint
+        result = client._client.authorized_request("getCashflows", {"limit": 100}, version=2)
+        return {"endpoint": "getCashflows", "raw_response": result}
+    except Exception as e:
+        return {"error": str(e), "endpoint": "getCashflows"}
+
+
+@router.get("/debug/cps-history")
+async def debug_cps_history():
+    """Debug endpoint to inspect Tradernet CPS history API response."""
+    from app.services.tradernet import get_tradernet_client
+
+    client = get_tradernet_client()
+    if not client.is_connected:
+        if not client.connect():
+            return {"error": "Not connected to Tradernet"}
+
+    try:
+        # Current endpoint we're using
+        result = client._client.authorized_request("getClientCpsHistory", {"limit": 100}, version=2)
+        return {"endpoint": "getClientCpsHistory", "raw_response": result}
+    except Exception as e:
+        return {"error": str(e), "endpoint": "getClientCpsHistory"}
+
+
 @router.get("/pnl")
 async def get_portfolio_pnl(db: aiosqlite.Connection = Depends(get_db)):
     """
