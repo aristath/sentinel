@@ -91,9 +91,11 @@ class StockPriority:
     volatility: float  # Raw volatility (0.0-1.0)
     multiplier: float  # Manual priority multiplier
     min_lot: int  # Minimum lot size for trading
-    geo_need: float  # How underweight is this geography (0 to 1)
-    industry_need: float  # How underweight is this industry (0 to 1)
     combined_priority: float  # Enhanced priority score
+    # Score breakdown (for display)
+    quality_score: Optional[float] = None
+    opportunity_score: Optional[float] = None
+    allocation_fit_score: Optional[float] = None
 
 
 def calculate_diversification_penalty(

@@ -7,6 +7,14 @@ from datetime import datetime
 from app.domain.repositories.score_repository import ScoreRepository, StockScore
 
 
+def _safe_get(row: aiosqlite.Row, key: str, default=None):
+    """Safely get a value from a row, handling missing columns."""
+    try:
+        return row[key]
+    except (KeyError, IndexError):
+        return default
+
+
 class SQLiteScoreRepository(ScoreRepository):
     """SQLite implementation of ScoreRepository."""
 
@@ -32,9 +40,19 @@ class SQLiteScoreRepository(ScoreRepository):
 
         return StockScore(
             symbol=row["symbol"],
-            technical_score=row["technical_score"],
+            # New primary scores
+            quality_score=_safe_get(row, "quality_score"),
+            opportunity_score=_safe_get(row, "opportunity_score"),
             analyst_score=row["analyst_score"],
+            allocation_fit_score=_safe_get(row, "allocation_fit_score"),
+            # Quality breakdown
+            cagr_score=_safe_get(row, "cagr_score"),
+            consistency_score=_safe_get(row, "consistency_score"),
+            history_years=_safe_get(row, "history_years"),
+            # Legacy fields
+            technical_score=row["technical_score"],
             fundamental_score=row["fundamental_score"],
+            # Common fields
             total_score=row["total_score"],
             volatility=row["volatility"],
             calculated_at=calculated_at,
@@ -43,7 +61,7 @@ class SQLiteScoreRepository(ScoreRepository):
     async def upsert(self, score: StockScore, auto_commit: bool = True) -> None:
         """
         Insert or update a score.
-        
+
         Args:
             score: Stock score to upsert
             auto_commit: If True, commit immediately. If False, caller manages transaction.
@@ -59,17 +77,27 @@ class SQLiteScoreRepository(ScoreRepository):
             """
             INSERT OR REPLACE INTO scores
             (symbol, technical_score, analyst_score, fundamental_score,
-             total_score, volatility, calculated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+             total_score, volatility, calculated_at,
+             quality_score, opportunity_score, allocation_fit_score,
+             cagr_score, consistency_score, history_years)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 score.symbol,
+                # Legacy fields
                 score.technical_score,
                 score.analyst_score,
                 score.fundamental_score,
                 score.total_score,
                 score.volatility,
                 calculated_at_str,
+                # New fields
+                score.quality_score,
+                score.opportunity_score,
+                score.allocation_fit_score,
+                score.cagr_score,
+                score.consistency_score,
+                score.history_years,
             ),
         )
         if auto_commit:
@@ -90,9 +118,19 @@ class SQLiteScoreRepository(ScoreRepository):
 
             scores.append(StockScore(
                 symbol=row["symbol"],
-                technical_score=row["technical_score"],
+                # New primary scores
+                quality_score=_safe_get(row, "quality_score"),
+                opportunity_score=_safe_get(row, "opportunity_score"),
                 analyst_score=row["analyst_score"],
+                allocation_fit_score=_safe_get(row, "allocation_fit_score"),
+                # Quality breakdown
+                cagr_score=_safe_get(row, "cagr_score"),
+                consistency_score=_safe_get(row, "consistency_score"),
+                history_years=_safe_get(row, "history_years"),
+                # Legacy fields
+                technical_score=row["technical_score"],
                 fundamental_score=row["fundamental_score"],
+                # Common fields
                 total_score=row["total_score"],
                 volatility=row["volatility"],
                 calculated_at=calculated_at,

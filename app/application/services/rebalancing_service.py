@@ -1,6 +1,7 @@
 """Rebalancing application service.
 
 Orchestrates rebalancing operations using domain services and repositories.
+Uses long-term value scoring with portfolio-aware allocation fit.
 """
 
 import logging
@@ -22,14 +23,13 @@ from app.services.allocator import (
     StockPriority,
     calculate_position_size,
     get_max_trades,
-    parse_industries,
 )
-from app.domain.constants import (
-    HIGH_GEO_NEED_THRESHOLD,
-    LOW_GEO_NEED_THRESHOLD,
-    HIGH_INDUSTRY_NEED_THRESHOLD,
+from app.services.scorer import (
+    calculate_allocation_fit_score,
+    PortfolioContext,
 )
 from app.services import yahoo
+from app.domain.constants import TRADE_SIDE_BUY
 
 logger = logging.getLogger(__name__)
 
@@ -54,15 +54,16 @@ class RebalancingService:
         available_cash: float
     ) -> List[TradeRecommendation]:
         """
-        Calculate optimal trades using enhanced multi-factor priority algorithm.
+        Calculate optimal trades using long-term value scoring with allocation fit.
 
         Strategy:
-        1. Only consider stocks with score > min_stock_score
-        2. Calculate enhanced priority using PriorityCalculator
-        3. Select top N stocks by combined priority
-        4. Dynamic position sizing based on conviction/risk
-        5. Minimum €400 per trade (min_trade_size)
-        6. Maximum 5 trades per cycle (max_trades_per_cycle)
+        1. Build portfolio context for allocation-aware scoring
+        2. Calculate scores with allocation fit (geo gaps, industry gaps, averaging down)
+        3. Only consider stocks with score > min_stock_score
+        4. Select top N stocks by combined priority
+        5. Dynamic position sizing based on conviction/risk
+        6. Minimum €400 per trade (min_trade_size)
+        7. Maximum 5 trades per cycle (max_trades_per_cycle)
         """
         # Check minimum cash threshold
         if available_cash < settings.min_cash_threshold:
@@ -83,14 +84,29 @@ class RebalancingService:
         summary = await portfolio_service.get_portfolio_summary()
         total_value = summary.total_value if summary.total_value and summary.total_value > 0 else 1.0  # Avoid division by zero
 
-        # Build weight maps for quick lookup (target_pct now stores weights -1 to +1)
+        # Build weight maps for quick lookup (target_pct stores weights -1 to +1)
         geo_weights = {a.name: a.target_pct for a in summary.geographic_allocations}
         industry_weights = {a.name: a.target_pct for a in summary.industry_allocations}
 
         # Get scored stocks from universe with volatility, multiplier, and min_lot
         stocks_data = await self._stock_repo.get_with_scores()
 
-        # Calculate priority for each stock
+        # Build positions map for portfolio context
+        positions = {}
+        for stock in stocks_data:
+            position_value = stock.get("position_value") or 0
+            if position_value > 0:
+                positions[stock["symbol"]] = position_value
+
+        # Create portfolio context for allocation fit calculation
+        portfolio_context = PortfolioContext(
+            geo_weights=geo_weights,
+            industry_weights=industry_weights,
+            positions=positions,
+            total_value=total_value,
+        )
+
+        # Calculate priority for each stock with allocation fit
         priority_inputs = []
         stock_metadata = {}  # Store min_lot for later use
 
@@ -99,15 +115,37 @@ class RebalancingService:
             name = stock["name"]
             geography = stock["geography"]
             industry = stock.get("industry")
+            yahoo_symbol = stock.get("yahoo_symbol")
             multiplier = stock.get("priority_multiplier") or 1.0
             min_lot = stock.get("min_lot") or 1
-            score = stock.get("total_score") or 0
             volatility = stock.get("volatility")
-            position_value = stock.get("position_value") or 0
+
+            # Use cached base scores from database
+            quality_score = stock.get("quality_score") or stock.get("total_score") or 0
+            opportunity_score = stock.get("opportunity_score") or stock.get("fundamental_score") or 0.5
+
+            # Calculate allocation fit on-the-fly with current portfolio context
+            allocation_fit = calculate_allocation_fit_score(
+                symbol=symbol,
+                geography=geography,
+                industry=industry,
+                quality_score=quality_score,
+                opportunity_score=opportunity_score,
+                portfolio_context=portfolio_context,
+            )
+
+            # Calculate final score: Quality (35%) + Opportunity (35%) + Analyst (15%) + Allocation Fit (15%)
+            analyst_score = stock.get("analyst_score") or 0.5
+            final_score = (
+                quality_score * 0.35 +
+                opportunity_score * 0.35 +
+                analyst_score * 0.15 +
+                allocation_fit.total * 0.15
+            )
 
             # Only consider stocks with score above threshold
-            if score < settings.min_stock_score:
-                logger.debug(f"Skipping {symbol}: score {score:.2f} < {settings.min_stock_score}")
+            if final_score < settings.min_stock_score:
+                logger.debug(f"Skipping {symbol}: score {final_score:.2f} < {settings.min_stock_score}")
                 continue
 
             priority_inputs.append(PriorityInput(
@@ -115,11 +153,12 @@ class RebalancingService:
                 name=name,
                 geography=geography,
                 industry=industry,
-                stock_score=score,
+                stock_score=final_score,
                 volatility=volatility,
                 multiplier=multiplier,
-                position_value=position_value,
-                total_portfolio_value=total_value,
+                quality_score=quality_score,
+                opportunity_score=opportunity_score,
+                allocation_fit_score=allocation_fit.total,
             ))
 
             stock_metadata[symbol] = {
@@ -127,13 +166,14 @@ class RebalancingService:
                 "name": name,
                 "geography": geography,
                 "industry": industry,
+                "yahoo_symbol": yahoo_symbol,
             }
 
         if not priority_inputs:
             logger.warning("No stocks qualify for purchase (all scores below threshold)")
             return []
 
-        # Calculate priorities using domain service
+        # Calculate priorities using domain service (now just applies multiplier)
         priority_results = PriorityCalculator.calculate_priorities(
             priority_inputs,
             geo_weights,
@@ -179,9 +219,10 @@ class RebalancingService:
                 volatility=result.volatility,
                 multiplier=result.multiplier,
                 min_lot=metadata["min_lot"],
-                geo_need=result.geo_need,
-                industry_need=result.industry_need,
                 combined_priority=result.combined_priority,
+                quality_score=result.quality_score,
+                opportunity_score=result.opportunity_score,
+                allocation_fit_score=result.allocation_fit_score,
             )
 
             # Dynamic position sizing based on conviction and risk
@@ -215,23 +256,19 @@ class RebalancingService:
 
             actual_value = qty * price
 
-            # Build reason string with more detail
+            # Build reason string with new scoring breakdown
             reason_parts = []
-            if result.geo_need > HIGH_GEO_NEED_THRESHOLD:
-                reason_parts.append(f"{result.geography} prioritized")
-            elif result.geo_need < LOW_GEO_NEED_THRESHOLD:
-                reason_parts.append(f"{result.geography} neutral")
-            if result.industry_need > HIGH_INDUSTRY_NEED_THRESHOLD:
-                industries = parse_industries(result.industry)
-                if industries:
-                    reason_parts.append(f"{industries[0]} prioritized")
+            if result.quality_score and result.quality_score >= 0.7:
+                reason_parts.append("high quality")
+            if result.opportunity_score and result.opportunity_score >= 0.7:
+                reason_parts.append("buy opportunity")
+            if result.allocation_fit_score and result.allocation_fit_score >= 0.7:
+                reason_parts.append("fills gap")
             reason_parts.append(f"score: {result.stock_score:.2f}")
             if result.multiplier != 1.0:
                 reason_parts.append(f"mult: {result.multiplier:.1f}x")
             reason = ", ".join(reason_parts)
 
-            from app.domain.constants import TRADE_SIDE_BUY
-            
             recommendations.append(TradeRecommendation(
                 symbol=result.symbol,
                 name=result.name,

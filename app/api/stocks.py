@@ -83,7 +83,11 @@ async def get_stocks(
         multiplier = stock_dict.get("priority_multiplier") or 1.0
         geo = stock_dict.get("geography")
         industry = stock_dict.get("industry")
-        position_value = stock_dict.get("position_value") or 0
+
+        # New scoring breakdown fields
+        quality_score = stock_dict.get("quality_score")
+        opportunity_score = stock_dict.get("opportunity_score")
+        allocation_fit_score = stock_dict.get("allocation_fit_score")
 
         priority_inputs.append(PriorityInput(
             symbol=stock_dict["symbol"],
@@ -93,8 +97,9 @@ async def get_stocks(
             stock_score=stock_score,
             volatility=volatility,
             multiplier=multiplier,
-            position_value=position_value,
-            total_portfolio_value=total_value,
+            quality_score=quality_score,
+            opportunity_score=opportunity_score,
+            allocation_fit_score=allocation_fit_score,
         ))
         stock_dicts.append(stock_dict)
 
@@ -144,11 +149,21 @@ async def get_stock(
 
     if score:
         result.update({
-            "technical_score": score.technical_score,
+            # New scoring breakdown
+            "quality_score": score.quality_score,
+            "opportunity_score": score.opportunity_score,
             "analyst_score": score.analyst_score,
-            "fundamental_score": score.fundamental_score,
+            "allocation_fit_score": score.allocation_fit_score,
             "total_score": score.total_score,
+            # Additional details
+            "cagr_score": score.cagr_score,
+            "consistency_score": score.consistency_score,
+            "history_years": score.history_years,
+            "volatility": score.volatility,
             "calculated_at": score.calculated_at.isoformat() if score.calculated_at is not None else None,
+            # Legacy fields for backwards compatibility
+            "technical_score": score.technical_score,
+            "fundamental_score": score.fundamental_score,
         })
 
     if position:
@@ -182,15 +197,26 @@ async def refresh_stock_score(
     from app.application.services.scoring_service import ScoringService
     scoring_service = ScoringService(stock_repo, score_repo)
     
-    score = await scoring_service.calculate_and_save_score(symbol, stock.yahoo_symbol)
+    score = await scoring_service.calculate_and_save_score(
+        symbol,
+        stock.yahoo_symbol,
+        geography=stock.geography,
+        industry=stock.industry,
+    )
     if score:
         return {
             "symbol": symbol,
             "total_score": score.total_score,
-            "technical": score.technical.total,
+            "quality": score.quality.total,
+            "opportunity": score.opportunity.total,
             "analyst": score.analyst.total,
-            "fundamental": score.fundamental.total,
-            "volatility": score.technical.volatility_raw,
+            "allocation_fit": score.allocation_fit.total if score.allocation_fit else None,
+            "volatility": score.volatility,
+            # Quality breakdown
+            "cagr_score": score.quality.total_return_score,
+            "consistency_score": score.quality.consistency_score,
+            "dividend_bonus": score.quality.dividend_bonus,
+            "history_years": score.quality.history_years,
         }
 
     raise HTTPException(status_code=500, detail="Failed to calculate score")

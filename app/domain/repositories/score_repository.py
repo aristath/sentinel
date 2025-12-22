@@ -8,14 +8,24 @@ from datetime import datetime
 
 @dataclass
 class StockScore:
-    """Stock score domain model."""
+    """Stock score domain model for long-term value investing."""
     symbol: str
-    technical_score: Optional[float]
-    analyst_score: Optional[float]
-    fundamental_score: Optional[float]
-    total_score: Optional[float]
-    volatility: Optional[float]
-    calculated_at: Optional[datetime]
+    # New primary scores
+    quality_score: Optional[float] = None
+    opportunity_score: Optional[float] = None
+    analyst_score: Optional[float] = None
+    allocation_fit_score: Optional[float] = None
+    # Quality breakdown
+    cagr_score: Optional[float] = None
+    consistency_score: Optional[float] = None
+    history_years: Optional[float] = None
+    # Legacy fields (for backwards compatibility)
+    technical_score: Optional[float] = None
+    fundamental_score: Optional[float] = None
+    # Common fields
+    total_score: Optional[float] = None
+    volatility: Optional[float] = None
+    calculated_at: Optional[datetime] = None
 
 
 class ScoreRepository(ABC):

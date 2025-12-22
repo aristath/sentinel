@@ -58,6 +58,7 @@ class FundamentalData:
     current_ratio: Optional[float]
     market_cap: Optional[float]
     dividend_yield: Optional[float]
+    five_year_avg_dividend_yield: Optional[float]  # For DRIP scoring
 
 
 @dataclass
@@ -197,6 +198,7 @@ def get_fundamental_data(symbol: str, yahoo_symbol: str = None) -> Optional[Fund
                 current_ratio=info.get("currentRatio"),
                 market_cap=info.get("marketCap"),
                 dividend_yield=info.get("dividendYield"),
+                five_year_avg_dividend_yield=info.get("fiveYearAvgDividendYield"),
             )
     except Exception as e:
         logger.error(f"Failed to get fundamental data for {symbol}: {e}")

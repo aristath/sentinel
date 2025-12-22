@@ -78,8 +78,45 @@ async def init_db():
                 (1, datetime.now().isoformat(), "Initial schema")
             )
             logger.info("Database initialized with schema version 1")
-        
+            current_version = 1
+
+        # Apply migrations
+        await apply_migrations(db, current_version)
+
         await db.commit()
+
+
+async def apply_migrations(db: aiosqlite.Connection, current_version: int):
+    """Apply pending database migrations."""
+    from datetime import datetime
+
+    # Migration 2: Add new scoring columns for long-term value investing
+    if current_version < 2:
+        logger.info("Applying migration 2: Adding new scoring columns...")
+
+        # Check if columns already exist (in case of partial migration)
+        cursor = await db.execute("PRAGMA table_info(scores)")
+        existing_columns = {row[1] for row in await cursor.fetchall()}
+
+        new_columns = [
+            ("quality_score", "REAL"),
+            ("opportunity_score", "REAL"),
+            ("allocation_fit_score", "REAL"),
+            ("cagr_score", "REAL"),
+            ("consistency_score", "REAL"),
+            ("history_years", "REAL"),
+        ]
+
+        for col_name, col_type in new_columns:
+            if col_name not in existing_columns:
+                await db.execute(f"ALTER TABLE scores ADD COLUMN {col_name} {col_type}")
+                logger.info(f"  Added column: scores.{col_name}")
+
+        await db.execute(
+            "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
+            (2, datetime.now().isoformat(), "Add new scoring columns for long-term value investing")
+        )
+        logger.info("Migration 2 complete")
 
 
 SCHEMA = """
