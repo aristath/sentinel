@@ -80,34 +80,26 @@ class EditStockModal extends HTMLElement {
                 <p class="text-xs text-gray-500 mt-1">Minimum shares per trade (e.g., 100 for Japanese stocks)</p>
               </div>
 
-              <div class="border-t border-gray-700 pt-4 mt-4">
-                <div class="flex items-center justify-between mb-3">
+              <div class="border-t border-gray-700 pt-4 mt-4 space-y-3">
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox"
+                         x-model="$store.app.editingStock.allow_buy"
+                         class="w-4 h-4 rounded border-gray-600 bg-gray-900 text-green-600 focus:ring-green-500 focus:ring-offset-gray-800">
                   <div>
-                    <label class="text-sm text-gray-400">Allow BUY</label>
+                    <span class="text-sm text-gray-300">Allow BUY</span>
                     <p class="text-xs text-gray-500">Include in buy recommendations</p>
                   </div>
-                  <button type="button"
-                          @click="$store.app.editingStock.allow_buy = !$store.app.editingStock.allow_buy"
-                          :class="$store.app.editingStock.allow_buy ? 'bg-green-600' : 'bg-gray-600'"
-                          class="relative w-11 h-6 rounded-full transition-colors flex-shrink-0">
-                    <span :class="$store.app.editingStock.allow_buy ? 'left-6' : 'left-1'"
-                          class="absolute top-1 w-4 h-4 rounded-full bg-white transition-all"></span>
-                  </button>
-                </div>
+                </label>
 
-                <div class="flex items-center justify-between">
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox"
+                         x-model="$store.app.editingStock.allow_sell"
+                         class="w-4 h-4 rounded border-gray-600 bg-gray-900 text-red-600 focus:ring-red-500 focus:ring-offset-gray-800">
                   <div>
-                    <label class="text-sm text-gray-400">Allow SELL</label>
+                    <span class="text-sm text-gray-300">Allow SELL</span>
                     <p class="text-xs text-gray-500">Include in sell recommendations</p>
                   </div>
-                  <button type="button"
-                          @click="$store.app.editingStock.allow_sell = !$store.app.editingStock.allow_sell"
-                          :class="$store.app.editingStock.allow_sell ? 'bg-red-600' : 'bg-gray-600'"
-                          class="relative w-11 h-6 rounded-full transition-colors flex-shrink-0">
-                    <span :class="$store.app.editingStock.allow_sell ? 'left-6' : 'left-1'"
-                          class="absolute top-1 w-4 h-4 rounded-full bg-white transition-all"></span>
-                  </button>
-                </div>
+                </label>
               </div>
             </div>
           </template>
