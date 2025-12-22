@@ -189,15 +189,18 @@ class LEDDisplay:
             "side": side
         })
 
-    def show_error(self, message: str = "ERROR") -> bool:
+    def show_error(self, message: str = "ERROR", speed_ms: int = None) -> bool:
         """Show error state with scrolling message."""
         self._error_message = message
         self._system_status = "error"
         self._display_mode = DisplayMode.ERROR
         self.set_mode(DisplayMode.ERROR)
+        if speed_ms is None:
+            speed_ms = settings.led_error_scroll_speed_ms
         return self._send_command({
             "cmd": "error",
-            "message": message[:20]  # Truncate
+            "message": message[:20],  # Truncate
+            "speed": speed_ms
         })
 
     def clear_error(self) -> None:
@@ -209,11 +212,14 @@ class LEDDisplay:
         """Show success animation."""
         return self._send_command({"cmd": "success"})
 
-    def scroll_text(self, text: str) -> bool:
+    def scroll_text(self, text: str, speed_ms: int = None) -> bool:
         """Scroll text across matrix."""
+        if speed_ms is None:
+            speed_ms = settings.led_error_scroll_speed_ms
         return self._send_command({
             "cmd": "scroll",
-            "text": text[:50]  # Limit length
+            "text": text[:50],  # Limit length
+            "speed": speed_ms
         })
 
     def clear(self) -> bool:
@@ -269,7 +275,8 @@ class LEDDisplay:
         return self._send_command({
             "cmd": "scroll",
             "text": "NO WIFI",
-            "loop": True
+            "loop": True,
+            "speed": settings.led_error_scroll_speed_ms
         })
 
     def flash_rgb(self, color: list[int]) -> bool:

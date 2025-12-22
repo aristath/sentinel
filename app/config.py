@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     # LED Display
     led_serial_port: str = "/dev/ttyACM0"
     led_baud_rate: int = 115200
+    led_error_scroll_speed_ms: int = 30  # Scroll speed in milliseconds (lower = faster)
 
     # Investment / Rebalancing
     min_cash_threshold: float = 400.0  # EUR - minimum cash to trigger rebalance
