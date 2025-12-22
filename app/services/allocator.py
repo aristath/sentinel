@@ -76,6 +76,7 @@ class TradeRecommendation:
     estimated_price: float
     estimated_value: float
     reason: str  # Why this trade is recommended
+    currency: str = "EUR"  # Stock's native currency (EUR, USD, HKD, etc.)
 
 
 # Removed get_portfolio_summary() - use PortfolioService.get_portfolio_summary() instead

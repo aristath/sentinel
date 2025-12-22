@@ -525,6 +525,9 @@ class RebalancingService:
                 reason_parts.append(f"mult: {result.multiplier:.1f}x")
             reason = ", ".join(reason_parts)
 
+            # Determine the stock's native currency
+            stock_currency = _determine_stock_currency(stock_data) if stock_data else "EUR"
+
             recommendations.append(TradeRecommendation(
                 symbol=result.symbol,
                 name=result.name,
@@ -533,6 +536,7 @@ class RebalancingService:
                 estimated_price=round(price, 2),
                 estimated_value=round(actual_value, 2),
                 reason=reason,
+                currency=stock_currency,
             ))
 
             remaining_cash -= actual_value

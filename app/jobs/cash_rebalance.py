@@ -47,6 +47,13 @@ async def check_and_rebalance():
         cash_balance = client.get_total_cash_eur()
         logger.info(f"Current cash balance: €{cash_balance:.2f}")
 
+        # Fetch per-currency balances for execution-time validation
+        currency_balances = {
+            cb.currency: cb.amount
+            for cb in client.get_cash_balances()
+        }
+        logger.info(f"Currency balances: {currency_balances}")
+
         # Check if we have enough cash to trade
         if cash_balance < settings.min_cash_threshold:
             logger.info(
@@ -60,7 +67,7 @@ async def check_and_rebalance():
 
         # Use lock to prevent concurrent rebalancing
         async with file_lock("rebalance", timeout=600.0):
-            await _check_and_rebalance_internal(cash_balance)
+            await _check_and_rebalance_internal(cash_balance, currency_balances)
     except Exception as e:
         logger.error(f"Error during cash rebalance check: {e}", exc_info=True)
         display = get_led_display()
@@ -68,7 +75,10 @@ async def check_and_rebalance():
             display.show_error("REBAL FAIL")
 
 
-async def _check_and_rebalance_internal(cash_balance: float):
+async def _check_and_rebalance_internal(
+    cash_balance: float,
+    currency_balances: dict[str, float] | None = None
+):
     """Internal rebalance implementation."""
     from app.jobs.daily_sync import sync_portfolio
     from app.services.scorer import score_all_stocks
@@ -122,7 +132,11 @@ async def _check_and_rebalance_internal(cash_balance: float):
         logger.info("Step 4: Executing trades...")
         trade_repo = get_trade_repository(db)
         trade_execution_service = TradeExecutionService(trade_repo, db=db)
-        results = await trade_execution_service.execute_trades(trades, use_transaction=True)
+        results = await trade_execution_service.execute_trades(
+            trades,
+            use_transaction=True,
+            currency_balances=currency_balances
+        )
 
         successful = sum(1 for r in results if r["status"] == "success")
         failed = sum(1 for r in results if r["status"] != "success")

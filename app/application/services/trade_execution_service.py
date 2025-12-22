@@ -30,7 +30,8 @@ class TradeExecutionService:
     async def execute_trades(
         self,
         trades: List[TradeRecommendation],
-        use_transaction: bool = True
+        use_transaction: bool = True,
+        currency_balances: Optional[dict[str, float]] = None
     ) -> List[dict]:
         """
         Execute a list of trade recommendations via Tradernet.
@@ -38,6 +39,7 @@ class TradeExecutionService:
         Args:
             trades: List of trade recommendations to execute
             use_transaction: If True and db is available, wrap all trades in a transaction
+            currency_balances: Per-currency cash balances for validation (optional)
 
         Returns:
             List of execution results with status for each trade
@@ -54,21 +56,45 @@ class TradeExecutionService:
         # Use transaction if available and requested
         if use_transaction and self._db:
             async with transaction(self._db) as tx_db:
-                return await self._execute_trades_internal(trades, client, auto_commit=False)
+                return await self._execute_trades_internal(
+                    trades, client, auto_commit=False, currency_balances=currency_balances
+                )
         else:
-            return await self._execute_trades_internal(trades, client, auto_commit=True)
+            return await self._execute_trades_internal(
+                trades, client, auto_commit=True, currency_balances=currency_balances
+            )
 
     async def _execute_trades_internal(
         self,
         trades: List[TradeRecommendation],
         client,
-        auto_commit: bool = True
+        auto_commit: bool = True,
+        currency_balances: Optional[dict[str, float]] = None
     ) -> List[dict]:
         """Internal method to execute trades."""
         results = []
+        skipped_count = 0
 
         for trade in trades:
             try:
+                # Check currency balance before executing (BUY orders only)
+                if trade.side.upper() == "BUY" and currency_balances is not None:
+                    required = trade.quantity * trade.estimated_price
+                    available = currency_balances.get(trade.currency, 0)
+
+                    if available < required:
+                        logger.warning(
+                            f"Skipping {trade.symbol}: insufficient {trade.currency} balance "
+                            f"(need {required:.2f}, have {available:.2f})"
+                        )
+                        results.append({
+                            "symbol": trade.symbol,
+                            "status": "skipped",
+                            "error": f"Insufficient {trade.currency} balance (need {required:.2f}, have {available:.2f})",
+                        })
+                        skipped_count += 1
+                        continue
+
                 result = client.place_order(
                     symbol=trade.symbol,
                     side=trade.side,
@@ -125,5 +151,13 @@ class TradeExecutionService:
                 # Note: If place_order() succeeded but DB write failed, the trade
                 # is executed externally but not recorded. We log this but continue.
                 # The transaction ensures DB consistency for recorded trades.
+
+        # Show LED warning if trades were skipped due to insufficient currency balance
+        if skipped_count > 0:
+            logger.warning(f"Skipped {skipped_count} trades due to insufficient currency balance")
+            if skipped_count >= 2:
+                display = get_led_display()
+                if display.is_connected:
+                    display.show_error("LOW FX BAL")
 
         return results
