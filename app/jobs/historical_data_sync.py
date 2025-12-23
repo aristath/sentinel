@@ -6,18 +6,13 @@ from datetime import datetime, timedelta
 
 import aiosqlite
 
+from app.config import settings
 from app.database import get_db_connection
 from app.services.tradernet import get_tradernet_client
 from app.infrastructure.locking import file_lock
 from app.infrastructure.hardware.led_display import get_led_display
 
 logger = logging.getLogger(__name__)
-
-# Rate limiting: 3 requests per second = 0.33 seconds delay
-RATE_LIMIT_DELAY = 0.33
-
-# Only keep 1 year of daily data (for sparklines, volatility, opportunity scores)
-DAILY_RETENTION_DAYS = 365
 
 
 async def sync_historical_data():
@@ -84,7 +79,7 @@ async def _sync_stock_price_history():
         errors = 0
 
         # Only fetch 1 year of data
-        start_date = datetime.now() - timedelta(days=DAILY_RETENTION_DAYS)
+        start_date = datetime.now() - timedelta(days=settings.daily_price_retention_days)
         end_date = datetime.now()
 
         for symbol in stocks:
@@ -116,7 +111,7 @@ async def _sync_stock_price_history():
                     logger.info(f"Processed {processed}/{len(stocks)} stocks")
 
                 # Rate limiting
-                await asyncio.sleep(RATE_LIMIT_DELAY)
+                await asyncio.sleep(settings.external_api_rate_limit_delay)
 
             except Exception as e:
                 errors += 1

@@ -20,11 +20,6 @@ from app.infrastructure.locking import file_lock
 
 logger = logging.getLogger(__name__)
 
-# Configuration
-DAILY_PRICE_RETENTION_DAYS = 365  # Keep 1 year of daily prices
-SNAPSHOT_RETENTION_DAYS = 90  # Keep 90 days of portfolio snapshots
-BACKUP_RETENTION_COUNT = 7  # Keep last 7 backups
-
 
 async def create_backup():
     """
@@ -70,7 +65,7 @@ async def _cleanup_old_backups(backup_dir: Path):
     """Remove old backup files, keeping only the most recent ones."""
     backups = sorted(backup_dir.glob("trader_*.db"), key=os.path.getmtime, reverse=True)
 
-    for old_backup in backups[BACKUP_RETENTION_COUNT:]:
+    for old_backup in backups[settings.backup_retention_count:]:
         try:
             old_backup.unlink()
             logger.info(f"Removed old backup: {old_backup.name}")
@@ -157,7 +152,7 @@ async def _cleanup_old_daily_prices_internal():
 
     try:
         async with get_db_connection() as db:
-            cutoff = (datetime.now() - timedelta(days=DAILY_PRICE_RETENTION_DAYS)).strftime("%Y-%m-%d")
+            cutoff = (datetime.now() - timedelta(days=settings.daily_price_retention_days)).strftime("%Y-%m-%d")
 
             # Count records to be deleted
             cursor = await db.execute(
@@ -199,7 +194,7 @@ async def _cleanup_old_snapshots_internal():
 
     try:
         async with get_db_connection() as db:
-            cutoff = (datetime.now() - timedelta(days=SNAPSHOT_RETENTION_DAYS)).strftime("%Y-%m-%d")
+            cutoff = (datetime.now() - timedelta(days=settings.snapshot_retention_days)).strftime("%Y-%m-%d")
 
             # Count records to be deleted
             cursor = await db.execute(

@@ -44,10 +44,18 @@ class Settings(BaseSettings):
     rate_limit_window_seconds: int = 60  # Rate limit window in seconds
     rate_limit_trade_max: int = 10  # Trade execution rate limit per window
     rate_limit_trade_window: int = 60  # Trade execution rate limit window in seconds
-    
+
     # Job failure tracking
     job_failure_threshold: int = 5  # Consecutive failures before alerting
     job_failure_window_hours: int = 1  # Time window for failure tracking
+
+    # Data retention
+    daily_price_retention_days: int = 365  # Keep 1 year of daily prices
+    snapshot_retention_days: int = 90  # Keep 90 days of portfolio snapshots
+    backup_retention_count: int = 7  # Keep last 7 database backups
+
+    # External API rate limiting
+    external_api_rate_limit_delay: float = 0.33  # Delay between API calls (3 req/sec)
 
     class Config:
         env_file = ".env"
