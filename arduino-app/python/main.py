@@ -170,8 +170,8 @@ def animate_normal(phase: int, temp: float = 0) -> np.ndarray:
             # Only light pixels within current expansion radius
             if dist <= expansion:
                 # Radial fade: brightest at center, dimmer toward edge
-                # Sharp falloff for visible gradient
-                radial_fade = 1.0 - (dist / max_radius) ** 2.5
+                # Linear falloff for 8 smooth brightness steps
+                radial_fade = 1.0 - (dist / max_radius)
 
                 # Combined brightness: radial gradient * time fade
                 brightness = int(peak_brightness * radial_fade * time_fade)
