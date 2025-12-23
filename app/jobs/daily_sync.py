@@ -8,7 +8,7 @@ import aiosqlite
 from app.config import settings
 from app.services.tradernet import get_tradernet_client
 from app.services import yahoo
-from app.infrastructure.hardware.led_display import get_led_display, update_balance_display
+from app.infrastructure.events import emit, SystemEvent
 from app.infrastructure.dependencies import get_position_repository
 from app.infrastructure.locking import file_lock
 from app.domain.constants import DEFAULT_CURRENCY
@@ -25,7 +25,7 @@ async def sync_portfolio():
     1. Fetches current positions from Tradernet
     2. Updates local positions table
     3. Creates a daily portfolio snapshot
-    
+
     Uses file locking to prevent concurrent syncs.
     """
     async with file_lock("portfolio_sync", timeout=60.0):
@@ -36,19 +36,14 @@ async def _sync_portfolio_internal():
     """Internal portfolio sync implementation."""
     logger.info("Starting portfolio sync")
 
-    # Show syncing animation on LED
-    display = get_led_display()
-    if display.is_connected:
-        display.show_syncing()
-        display.set_system_status("syncing")
+    emit(SystemEvent.SYNC_START)
 
     client = get_tradernet_client()
 
     if not client.is_connected:
         if not client.connect():
             logger.error("Failed to connect to Tradernet, skipping sync")
-            if display.is_connected:
-                display.show_error("BROKER DOWN")
+            emit(SystemEvent.ERROR_OCCURRED, message="BROKER DOWN")
             return
 
     try:
@@ -58,8 +53,6 @@ async def _sync_portfolio_internal():
 
         async with aiosqlite.connect(settings.database_path) as db:
             db.row_factory = aiosqlite.Row
-            # Use transaction for atomic position update
-            # Clear old positions and insert new ones atomically
             await db.execute("BEGIN TRANSACTION")
             try:
                 position_repo = get_position_repository(db)
@@ -73,15 +66,13 @@ async def _sync_portfolio_internal():
                     for row in await cursor.fetchall()
                 }
 
-                # Clear old positions (no commit - part of transaction)
                 await position_repo.delete_all(auto_commit=False)
 
                 # Insert current positions
                 total_value = 0.0
                 geo_values = {"EU": 0.0, "ASIA": 0.0, "US": 0.0}
-                
+
                 for pos in positions:
-                    # Get saved tracking dates for this symbol
                     saved_dates = tracking_dates.get(pos.symbol, (None, None))
 
                     position = Position(
@@ -93,16 +84,15 @@ async def _sync_portfolio_internal():
                         currency_rate=pos.currency_rate,
                         market_value_eur=pos.market_value_eur,
                         last_updated=datetime.now().isoformat(),
-                        first_bought_at=saved_dates[0],  # Preserve existing
-                        last_sold_at=saved_dates[1],      # Preserve existing
+                        first_bought_at=saved_dates[0],
+                        last_sold_at=saved_dates[1],
                     )
                     await position_repo.upsert(position, auto_commit=False)
 
-                    # Use market_value_eur (converted to EUR)
                     market_value = pos.market_value_eur
                     total_value += market_value
 
-                    # Determine geography from symbol suffix or stocks table
+                    # Determine geography
                     geo = None
                     cursor = await db.execute(
                         "SELECT geography FROM stocks WHERE symbol = ?",
@@ -112,7 +102,6 @@ async def _sync_portfolio_internal():
                     if row:
                         geo = row[0]
                     else:
-                        # Infer geography from symbol suffix
                         symbol = pos.symbol.upper()
                         if symbol.endswith(".GR") or symbol.endswith(".DE") or symbol.endswith(".PA"):
                             geo = "EU"
@@ -147,34 +136,22 @@ async def _sync_portfolio_internal():
                 await db.rollback()
                 raise
 
-            # Update LED with new balance
-            position_repo = get_position_repository(db)
-            await update_balance_display(position_repo)
-
         logger.info(
             f"Portfolio sync complete: {len(positions)} positions, "
             f"total value: {total_value:.2f}, cash: {cash_balance:.2f}"
         )
 
-        # Set LED status to OK
-        if display.is_connected:
-            display.set_system_status("ok")
-            display.show_success()
+        emit(SystemEvent.SYNC_COMPLETE)
 
     except Exception as e:
         logger.error(f"Portfolio sync failed: {e}")
-        if display.is_connected:
-            display.show_error("SYNC FAIL")
+        emit(SystemEvent.ERROR_OCCURRED, message="SYNC FAIL")
         raise
 
 
 async def sync_prices():
     """
     Sync current prices for all stocks in universe.
-
-    This job:
-    1. Fetches current prices from Yahoo Finance
-    2. Updates positions with current prices
 
     Uses file locking to prevent concurrent syncs.
     """
@@ -186,18 +163,13 @@ async def _sync_prices_internal():
     """Internal price sync implementation."""
     logger.info("Starting price sync")
 
-    # Show syncing animation on LED
-    display = get_led_display()
-    if display.is_connected:
-        display.show_syncing()
-        display.set_system_status("syncing")
+    emit(SystemEvent.SYNC_START)
 
     try:
         async with aiosqlite.connect(settings.database_path) as db:
-            # Enable WAL mode and busy timeout
             await db.execute("PRAGMA journal_mode=WAL")
             await db.execute("PRAGMA busy_timeout=30000")
-            # Get all active stocks
+
             cursor = await db.execute(
                 "SELECT symbol, yahoo_symbol FROM stocks WHERE active = 1"
             )
@@ -205,15 +177,13 @@ async def _sync_prices_internal():
 
             if not rows:
                 logger.info("No stocks to sync")
+                emit(SystemEvent.SYNC_COMPLETE)
                 return
 
-            # Build symbol -> yahoo_symbol mapping
             symbol_yahoo_map = {row[0]: row[1] for row in rows}
 
-            # Get batch quotes from Yahoo Finance
             quotes = yahoo.get_batch_quotes(symbol_yahoo_map)
 
-            # Update positions with new prices
             updated = 0
             for symbol, price in quotes.items():
                 result = await db.execute(
@@ -229,18 +199,11 @@ async def _sync_prices_internal():
 
             await db.commit()
 
-            # Update LED with new balance
-            position_repo = get_position_repository(db)
-            await update_balance_display(position_repo)
-
         logger.info(f"Price sync complete: {len(quotes)} quotes, {updated} positions updated")
 
-        # Set LED status to OK
-        if display.is_connected:
-            display.set_system_status("ok")
+        emit(SystemEvent.SYNC_COMPLETE)
 
     except Exception as e:
         logger.error(f"Price sync failed: {e}")
-        if display.is_connected:
-            display.show_error("PRICE FAIL")
+        emit(SystemEvent.ERROR_OCCURRED, message="PRICE FAIL")
         raise

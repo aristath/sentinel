@@ -68,79 +68,43 @@ async def get_status(
 
 @router.get("/led")
 async def get_led_status():
-    """Get current LED matrix state."""
-    from app.infrastructure.hardware.led_display import get_led_display
+    """Get current LED display state."""
+    from app.infrastructure.hardware.led_display import get_display_state
 
-    display = get_led_display()
-    state = display.get_state()
+    state = get_display_state()
 
     return {
-        "connected": display.is_connected,
-        "mode": state.mode.value if state else "disconnected",
-        "allocation": {
-            "eu": state.geo_eu if state else 0,
-            "asia": state.geo_asia if state else 0,
-            "us": state.geo_us if state else 0,
-        } if state else None,
-        "system_status": state.system_status if state else "unknown",
+        "connected": True,  # Always "connected" - we just manage state now
+        "mode": state["mode"],
+        "error_message": state.get("error_message"),
     }
 
 
 @router.get("/led/display")
-async def get_led_display_state(
-    position_repo: PositionRepository = Depends(get_position_repository),
-):
+async def get_led_display_state():
     """
     Get display state for Arduino Bridge apps.
 
     Returns what the LED display should show including:
-    - mode: current display mode (balance, syncing, api_call, error, etc.)
-    - value: portfolio value for balance display
-    - heartbeat: true if a heartbeat pulse should be shown
-    - rgb_flash: RGB color array if RGB should flash
+    - mode: current display mode (normal, syncing, trade, error)
+    - error_message: error text for scrolling (only in error mode)
+    - trade_is_buy: true for buy, false for sell (only in trade mode)
+    - since: timestamp when mode last changed
+    - led3: RGB values for LED 3 (sync indicator)
+    - led4: RGB values for LED 4 (processing indicator)
     """
-    from app.infrastructure.hardware.led_display import get_led_display
+    from app.infrastructure.hardware.led_display import get_display_state
 
-    display = get_led_display()
-
-    # Get current portfolio value from positions
-    positions = await position_repo.get_all()
-    portfolio_value = sum(pos.market_value_eur for pos in positions if pos.market_value_eur)
-
-    # Update display value
-    display.set_display_value(portfolio_value)
-
-    return display.get_display_state()
-
-
-@router.post("/led/connect")
-async def connect_led():
-    """Attempt to connect to LED display."""
-    from app.infrastructure.hardware.led_display import get_led_display
-
-    display = get_led_display()
-    success = display.connect()
-
-    return {
-        "connected": success,
-        "message": "Connected to LED display" if success else "Failed to connect",
-    }
+    return get_display_state()
 
 
 @router.post("/led/test")
 async def test_led():
-    """Test LED display with success animation."""
-    from app.infrastructure.hardware.led_display import get_led_display
+    """Test LED display with trade animation."""
+    from app.infrastructure.events import emit, SystemEvent
 
-    display = get_led_display()
-    if not display.is_connected:
-        display.connect()
-
-    if display.is_connected:
-        display.show_success()
-        return {"status": "success", "message": "Test animation sent"}
-
-    return {"status": "error", "message": "LED display not connected"}
+    emit(SystemEvent.TRADE_EXECUTED, is_buy=True)
+    return {"status": "success", "message": "Test animation triggered"}
 
 
 @router.post("/sync/portfolio")

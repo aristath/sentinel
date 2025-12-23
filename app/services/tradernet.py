@@ -15,22 +15,19 @@ from tradernet import TraderNetAPI
 Tradernet = TraderNetAPI
 
 from app.config import settings
-from app.infrastructure.hardware.led_display import get_led_display
+from app.infrastructure.events import emit, SystemEvent
 
 logger = logging.getLogger(__name__)
 
 
 @contextmanager
 def _led_api_call():
-    """Context manager to show LED API call indicator during API calls."""
-    display = get_led_display()
-    display.set_api_call_active(True)
-    if display.is_connected:
-        display.show_api_call()
+    """Context manager to emit events during API calls for LED indication."""
+    emit(SystemEvent.API_CALL_START)
     try:
         yield
     finally:
-        display.set_api_call_active(False)
+        emit(SystemEvent.API_CALL_END)
 
 # Cache for exchange rates (refreshed every hour)
 _exchange_rates: dict[str, float] = {}

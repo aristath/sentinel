@@ -11,7 +11,7 @@ import aiosqlite
 from app.config import settings
 from app.services.tradernet import get_tradernet_client
 from app.infrastructure.locking import file_lock
-from app.infrastructure.hardware.led_display import get_led_display
+from app.infrastructure.events import emit, SystemEvent
 
 logger = logging.getLogger(__name__)
 
@@ -49,8 +49,6 @@ async def _check_and_rebalance_internal():
 
     logger.info("Starting trade cycle check...")
 
-    display = get_led_display()
-
     try:
         # Step 1: Sync portfolio for fresh data
         logger.info("Step 1: Syncing portfolio for fresh data...")
@@ -64,8 +62,7 @@ async def _check_and_rebalance_internal():
         if not client.is_connected:
             if not client.connect():
                 logger.warning("Cannot connect to Tradernet, skipping cycle")
-                if display.is_connected:
-                    display.show_error("BROKER DOWN")
+                emit(SystemEvent.ERROR_OCCURRED, message="BROKER DOWN")
                 return
 
         cash_balance = client.get_total_cash_eur()
@@ -104,24 +101,20 @@ async def _check_and_rebalance_internal():
                     f"({trade.reason})"
                 )
 
-                if display.is_connected:
-                    display.show_syncing()
+                emit(SystemEvent.SYNC_START)
 
                 results = await trade_execution.execute_trades([trade], use_transaction=True)
 
                 if results and results[0]["status"] == "success":
                     logger.info(f"SELL executed successfully: {trade.symbol}")
-                    if display.is_connected:
-                        display.show_success()
+                    emit(SystemEvent.TRADE_EXECUTED, is_buy=False)
                 else:
                     error = results[0].get("error", "Unknown error") if results else "No result"
                     logger.error(f"SELL failed for {trade.symbol}: {error}")
-                    if display.is_connected:
-                        display.show_error("SELL FAIL")
+                    emit(SystemEvent.ERROR_OCCURRED, message="SELL FAIL")
 
-                # Sync portfolio to update state after trade
                 await sync_portfolio()
-                return  # Exit - wait for next cycle
+                return
 
             # Step 4: Check for BUY recommendation
             logger.info("Step 4: Checking for BUY recommendations...")
@@ -133,26 +126,23 @@ async def _check_and_rebalance_internal():
                 )
                 return
 
-            # Get currency balances for buy validation
             currency_balances = {
                 cb.currency: cb.amount
                 for cb in client.get_cash_balances()
             }
             logger.info(f"Currency balances: {currency_balances}")
 
-            # Calculate buy recommendations
             buy_recommendations = await rebalancing_service.calculate_rebalance_trades(cash_balance)
 
             if buy_recommendations:
-                trade = buy_recommendations[0]  # Only execute top one
+                trade = buy_recommendations[0]
                 logger.info(
                     f"Executing BUY: {trade.quantity} {trade.symbol} "
                     f"@ €{trade.estimated_price:.2f} = €{trade.estimated_value:.2f} "
                     f"({trade.reason})"
                 )
 
-                if display.is_connected:
-                    display.show_syncing()
+                emit(SystemEvent.SYNC_START)
 
                 results = await trade_execution.execute_trades(
                     [trade],
@@ -162,21 +152,17 @@ async def _check_and_rebalance_internal():
 
                 if results and results[0]["status"] == "success":
                     logger.info(f"BUY executed successfully: {trade.symbol}")
-                    if display.is_connected:
-                        display.show_success()
+                    emit(SystemEvent.TRADE_EXECUTED, is_buy=True)
                 else:
                     error = results[0].get("error", "Unknown error") if results else "No result"
                     logger.error(f"BUY failed for {trade.symbol}: {error}")
-                    if display.is_connected:
-                        display.show_error("BUY FAIL")
+                    emit(SystemEvent.ERROR_OCCURRED, message="BUY FAIL")
 
-                # Sync portfolio to update state after trade
                 await sync_portfolio()
-                return  # Exit - wait for next cycle
+                return
 
             logger.info("No trades recommended this cycle")
 
     except Exception as e:
         logger.error(f"Trade cycle error: {e}", exc_info=True)
-        if display.is_connected:
-            display.show_error("TRADE ERR")
+        emit(SystemEvent.ERROR_OCCURRED, message="TRADE ERR")

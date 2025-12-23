@@ -14,7 +14,8 @@ from app.database import init_db
 from app.api import portfolio, stocks, trades, status, allocation, cash_flows, charts, settings as settings_api
 from app.jobs.scheduler import init_scheduler, start_scheduler, stop_scheduler
 from app.services.tradernet import get_tradernet_client
-from app.infrastructure.hardware.led_display import get_led_display
+from app.infrastructure.hardware.led_display import setup_event_subscriptions
+from app.infrastructure.events import emit, SystemEvent
 
 # Configure logging with correlation ID support and log rotation
 from app.infrastructure.logging_context import CorrelationIDFilter
@@ -75,17 +76,8 @@ async def lifespan(app: FastAPI):
     init_scheduler()
     start_scheduler()
 
-    # Try to connect to LED display
-    display = get_led_display()
-    if display.connect():
-        logger.info("LED display connected")
-        # Check wifi and show appropriate state
-        if display.check_wifi():
-            display.set_system_status("ok")
-        else:
-            display.show_no_wifi()
-    else:
-        logger.warning("LED display not connected")
+    # Setup LED display event subscriptions
+    setup_event_subscriptions()
 
     # Try to connect to Tradernet
     client = get_tradernet_client()
@@ -99,7 +91,6 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Shutting down Arduino Trader...")
     stop_scheduler()
-    display.disconnect()
 
 
 app = FastAPI(
@@ -118,22 +109,16 @@ app.add_middleware(RateLimitMiddleware)  # Uses values from config
 async def request_context_middleware(request: Request, call_next):
     """Add correlation ID and LED indicators to requests."""
     from app.infrastructure.logging_context import set_correlation_id, clear_correlation_id
-    
+
     # Set correlation ID for this request
     correlation_id = set_correlation_id()
-    
-    # Flash RGB LEDs on web requests to show activity
-    display = get_led_display()
-    # Don't mark LED polling as a web request (it polls every second)
+
+    # Flash LED 2 on web requests (skip LED polling to avoid feedback loop)
     if not request.url.path.startswith("/api/status/led"):
-        display.mark_web_request()
-        display.trigger_rgb_flash([0, 255, 255])  # Cyan
-        if display.is_connected:
-            display.flash_web_request()
+        emit(SystemEvent.WEB_REQUEST)
 
     try:
         response = await call_next(request)
-        # Add correlation ID to response headers for debugging
         response.headers["X-Correlation-ID"] = correlation_id
         return response
     finally:

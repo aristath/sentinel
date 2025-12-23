@@ -12,7 +12,7 @@ from app.domain.repositories import TradeRepository, Trade, PositionRepository
 from app.services.allocator import TradeRecommendation
 from app.services.tradernet import get_tradernet_client
 from app.database import transaction
-from app.infrastructure.hardware.led_display import get_led_display
+from app.infrastructure.events import emit, SystemEvent
 
 logger = logging.getLogger(__name__)
 
@@ -54,9 +54,7 @@ class TradeExecutionService:
 
         if not client.is_connected:
             if not client.connect():
-                display = get_led_display()
-                if display.is_connected:
-                    display.show_error("TRADE FAIL")
+                emit(SystemEvent.ERROR_OCCURRED, message="TRADE FAIL")
                 raise ConnectionError("Failed to connect to Tradernet")
 
         # Use transaction if available and requested
@@ -170,9 +168,7 @@ class TradeExecutionService:
                         "side": trade.side,
                     })
                 else:
-                    display = get_led_display()
-                    if display.is_connected:
-                        display.show_error("ORDER FAIL")
+                    emit(SystemEvent.ERROR_OCCURRED, message="ORDER FAIL")
                     results.append({
                         "symbol": trade.symbol,
                         "status": "failed",
@@ -181,9 +177,7 @@ class TradeExecutionService:
 
             except Exception as e:
                 logger.error(f"Failed to execute trade for {trade.symbol}: {e}")
-                display = get_led_display()
-                if display.is_connected:
-                    display.show_error("ORDER FAIL")
+                emit(SystemEvent.ERROR_OCCURRED, message="ORDER FAIL")
                 results.append({
                     "symbol": trade.symbol,
                     "status": "error",
@@ -197,8 +191,6 @@ class TradeExecutionService:
         if skipped_count > 0:
             logger.warning(f"Skipped {skipped_count} trades due to insufficient currency balance")
             if skipped_count >= 2:
-                display = get_led_display()
-                if display.is_connected:
-                    display.show_error("LOW FX BAL")
+                emit(SystemEvent.ERROR_OCCURRED, message="LOW FX BAL")
 
         return results

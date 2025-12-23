@@ -10,7 +10,7 @@ from app.config import settings
 from app.database import get_db_connection
 from app.services.tradernet import get_tradernet_client
 from app.infrastructure.locking import file_lock
-from app.infrastructure.hardware.led_display import get_led_display
+from app.infrastructure.events import emit, SystemEvent
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ async def sync_historical_data():
 
     Uses file locking to prevent concurrent runs.
     """
-    async with file_lock("historical_data_sync", timeout=3600.0):  # 1 hour timeout
+    async with file_lock("historical_data_sync", timeout=3600.0):
         await _sync_historical_data_internal()
 
 
@@ -33,19 +33,16 @@ async def _sync_historical_data_internal():
     """Internal historical data sync implementation."""
     logger.info("Starting historical data sync")
 
+    emit(SystemEvent.SYNC_START)
+
     try:
-        # Sync stock price history (daily for 1 year)
         await _sync_stock_price_history()
-
-        # Aggregate to monthly for long-term storage
         await _aggregate_to_monthly()
-
         logger.info("Historical data sync complete")
+        emit(SystemEvent.SYNC_COMPLETE)
     except Exception as e:
         logger.error(f"Historical data sync failed: {e}")
-        display = get_led_display()
-        if display.is_connected:
-            display.show_error("HIST FAIL")
+        emit(SystemEvent.ERROR_OCCURRED, message="HIST FAIL")
         raise
 
 
@@ -58,13 +55,10 @@ async def _sync_stock_price_history():
     if not client.is_connected:
         if not client.connect():
             logger.error("Failed to connect to Tradernet, skipping stock price history sync")
-            display = get_led_display()
-            if display.is_connected:
-                display.show_error("BROKER DOWN")
+            emit(SystemEvent.ERROR_OCCURRED, message="BROKER DOWN")
             return
 
     async with get_db_connection() as db:
-        # Get all active stocks
         cursor = await db.execute("SELECT symbol FROM stocks WHERE active = 1")
         rows = await cursor.fetchall()
         stocks = [row["symbol"] for row in rows]
@@ -78,13 +72,11 @@ async def _sync_stock_price_history():
         processed = 0
         errors = 0
 
-        # Only fetch 1 year of data
         start_date = datetime.now() - timedelta(days=settings.daily_price_retention_days)
         end_date = datetime.now()
 
         for symbol in stocks:
             try:
-                # Check if we already have recent data
                 cursor = await db.execute("""
                     SELECT MAX(date) as max_date
                     FROM stock_price_history
@@ -94,14 +86,11 @@ async def _sync_stock_price_history():
 
                 if row and row["max_date"]:
                     max_date = datetime.strptime(row["max_date"], "%Y-%m-%d")
-                    # Only fetch if we're missing recent data
                     if max_date >= datetime.now() - timedelta(days=1):
                         processed += 1
                         continue
-                    # Fetch from last known date to now
                     fetch_start = max_date + timedelta(days=1)
                 else:
-                    # No data - fetch full year
                     fetch_start = start_date
 
                 await _fetch_and_store_prices(db, client, symbol, fetch_start, end_date)
@@ -110,7 +99,6 @@ async def _sync_stock_price_history():
                 if processed % 10 == 0:
                     logger.info(f"Processed {processed}/{len(stocks)} stocks")
 
-                # Rate limiting
                 await asyncio.sleep(settings.external_api_rate_limit_delay)
 
             except Exception as e:
@@ -170,7 +158,6 @@ async def _aggregate_to_monthly():
     logger.info("Aggregating daily prices to monthly averages")
 
     async with get_db_connection() as db:
-        # Get all symbols with daily data
         cursor = await db.execute("SELECT DISTINCT symbol FROM stock_price_history")
         symbols = [row["symbol"] for row in await cursor.fetchall()]
 
