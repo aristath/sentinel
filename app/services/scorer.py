@@ -154,6 +154,18 @@ class CalculatedStockScore:
     calculated_at: datetime
 
 
+@dataclass
+class PrefetchedStockData:
+    """Pre-fetched data to avoid duplicate API calls.
+
+    Used to share data between calculate_quality_score and
+    calculate_opportunity_score when called together.
+    """
+    daily_prices: list  # List of dicts with date, close, high, low, open, volume
+    monthly_prices: list  # List of dicts with month, avg_adj_close
+    fundamentals: Optional[object]  # Yahoo fundamentals data
+
+
 # =============================================================================
 # Bell Curve Scoring for Total Return
 # =============================================================================
@@ -353,13 +365,76 @@ async def _store_daily_prices(
 
 
 # =============================================================================
+# Data Prefetching (Performance Optimization)
+# =============================================================================
+
+async def prefetch_stock_data(
+    db: aiosqlite.Connection,
+    symbol: str,
+    yahoo_symbol: str = None
+) -> PrefetchedStockData:
+    """
+    Prefetch all data needed for scoring to avoid duplicate API calls.
+
+    This function fetches daily prices, monthly prices, and fundamentals
+    once, so they can be shared between calculate_quality_score and
+    calculate_opportunity_score.
+
+    Args:
+        db: Database connection
+        symbol: Tradernet symbol
+        yahoo_symbol: Optional explicit Yahoo symbol override
+
+    Returns:
+        PrefetchedStockData with all fetched data
+    """
+    # Fetch daily prices (needed by both quality and opportunity)
+    daily_prices = await _get_daily_prices_from_db(db, symbol, days=365)
+    if len(daily_prices) < 50:
+        logger.info(f"Insufficient local daily data for {symbol}, fetching from Yahoo")
+        yahoo_prices = yahoo.get_historical_prices(symbol, yahoo_symbol=yahoo_symbol, period="1y")
+        if len(yahoo_prices) >= 50:
+            await _store_daily_prices(db, symbol, yahoo_prices)
+            daily_prices = [
+                {
+                    "date": p.date.strftime("%Y-%m-%d"),
+                    "close": p.close,
+                    "high": p.high,
+                    "low": p.low,
+                    "open": p.open,
+                    "volume": p.volume,
+                }
+                for p in yahoo_prices
+            ]
+
+    # Fetch monthly prices (needed by quality)
+    monthly_prices = await _get_monthly_prices_from_db(db, symbol, years=10)
+    if len(monthly_prices) < MIN_MONTHS_FOR_CAGR:
+        logger.info(f"Insufficient local monthly data for {symbol}, fetching from Yahoo")
+        prices_10y = yahoo.get_historical_prices(symbol, yahoo_symbol=yahoo_symbol, period="10y")
+        if len(prices_10y) >= 252:  # At least 1 year
+            monthly_prices = _aggregate_to_monthly(prices_10y)
+            await _store_monthly_prices(db, symbol, monthly_prices)
+
+    # Fetch fundamentals (needed by both quality and opportunity)
+    fundamentals = yahoo.get_fundamental_data(symbol, yahoo_symbol=yahoo_symbol)
+
+    return PrefetchedStockData(
+        daily_prices=daily_prices,
+        monthly_prices=monthly_prices,
+        fundamentals=fundamentals
+    )
+
+
+# =============================================================================
 # Quality Score Calculation
 # =============================================================================
 
 async def calculate_quality_score(
     db: aiosqlite.Connection,
     symbol: str,
-    yahoo_symbol: str = None
+    yahoo_symbol: str = None,
+    prefetched: PrefetchedStockData = None
 ) -> Optional[QualityScore]:
     """
     Calculate quality score based on long-term track record.
@@ -378,43 +453,55 @@ async def calculate_quality_score(
         db: Database connection
         symbol: Tradernet symbol
         yahoo_symbol: Optional explicit Yahoo symbol override
+        prefetched: Optional pre-fetched data to avoid duplicate API calls
     """
     try:
-        # Try local monthly data first (10 years)
-        monthly_prices = await _get_monthly_prices_from_db(db, symbol, years=10)
+        # Use prefetched data if available, otherwise fetch
+        if prefetched:
+            monthly_prices = prefetched.monthly_prices
+            daily_prices = prefetched.daily_prices
+            fundamentals = prefetched.fundamentals
+        else:
+            # Try local monthly data first (10 years)
+            monthly_prices = await _get_monthly_prices_from_db(db, symbol, years=10)
 
-        # Need at least 12 months of data for meaningful CAGR
-        if len(monthly_prices) < 12:
-            logger.info(f"Insufficient local monthly data for {symbol} ({len(monthly_prices)} months), fetching from Yahoo")
-            # Fetch from Yahoo and store
-            prices_10y = yahoo.get_historical_prices(symbol, yahoo_symbol=yahoo_symbol, period="10y")
-            if len(prices_10y) >= 252:  # At least 1 year
-                monthly_prices = _aggregate_to_monthly(prices_10y)
-                await _store_monthly_prices(db, symbol, monthly_prices)
-            else:
-                logger.warning(f"Insufficient Yahoo price data for {symbol}")
-                return None
+            # Need at least 12 months of data for meaningful CAGR
+            if len(monthly_prices) < 12:
+                logger.info(f"Insufficient local monthly data for {symbol} ({len(monthly_prices)} months), fetching from Yahoo")
+                # Fetch from Yahoo and store
+                prices_10y = yahoo.get_historical_prices(symbol, yahoo_symbol=yahoo_symbol, period="10y")
+                if len(prices_10y) >= 252:  # At least 1 year
+                    monthly_prices = _aggregate_to_monthly(prices_10y)
+                    await _store_monthly_prices(db, symbol, monthly_prices)
+                else:
+                    logger.warning(f"Insufficient Yahoo price data for {symbol}")
+                    return None
 
-        # Get fundamentals (always from Yahoo - no local cache)
-        fundamentals = yahoo.get_fundamental_data(symbol, yahoo_symbol=yahoo_symbol)
+            # Get fundamentals (always from Yahoo - no local cache)
+            fundamentals = yahoo.get_fundamental_data(symbol, yahoo_symbol=yahoo_symbol)
+
+            # Fetch daily prices for Sharpe ratio and max drawdown (need 1 year minimum)
+            daily_prices = await _get_daily_prices_from_db(db, symbol, days=365)
+            if len(daily_prices) < 50:
+                # Fetch from Yahoo if insufficient local data
+                yahoo_prices = yahoo.get_historical_prices(symbol, yahoo_symbol=yahoo_symbol, period="1y")
+                if len(yahoo_prices) >= 50:
+                    await _store_daily_prices(db, symbol, yahoo_prices)
+                    daily_prices = [
+                        {
+                            "date": p.date.strftime("%Y-%m-%d"),
+                            "close": p.close,
+                        }
+                        for p in yahoo_prices
+                    ]
+
+        # Validate we have enough data
+        if len(monthly_prices) < MIN_MONTHS_FOR_CAGR:
+            logger.warning(f"Insufficient monthly price data for {symbol}")
+            return None
 
         # Calculate history in years (12 months = 1 year)
         history_years = len(monthly_prices) / 12.0
-
-        # Fetch daily prices for Sharpe ratio and max drawdown (need 1 year minimum)
-        daily_prices = await _get_daily_prices_from_db(db, symbol, days=365)
-        if len(daily_prices) < 50:
-            # Fetch from Yahoo if insufficient local data
-            yahoo_prices = yahoo.get_historical_prices(symbol, yahoo_symbol=yahoo_symbol, period="1y")
-            if len(yahoo_prices) >= 50:
-                await _store_daily_prices(db, symbol, yahoo_prices)
-                daily_prices = [
-                    {
-                        "date": p.date.strftime("%Y-%m-%d"),
-                        "close": p.close,
-                    }
-                    for p in yahoo_prices
-                ]
 
         # Calculate daily returns for risk metrics
         sharpe_ratio = None
@@ -578,7 +665,8 @@ async def calculate_quality_score(
 async def calculate_opportunity_score(
     db: aiosqlite.Connection,
     symbol: str,
-    yahoo_symbol: str = None
+    yahoo_symbol: str = None,
+    prefetched: PrefetchedStockData = None
 ) -> Optional[OpportunityScore]:
     """
     Calculate opportunity score based on buy-the-dip signals.
@@ -603,36 +691,47 @@ async def calculate_opportunity_score(
         db: Database connection
         symbol: Tradernet symbol
         yahoo_symbol: Optional explicit Yahoo symbol override
+        prefetched: Optional pre-fetched data to avoid duplicate API calls
     """
     try:
-        # Try local daily data first (1 year = 365 days)
-        daily_prices = await _get_daily_prices_from_db(db, symbol, days=365)
+        # Use prefetched data if available, otherwise fetch
+        if prefetched:
+            daily_prices = prefetched.daily_prices
+            fundamentals = prefetched.fundamentals
+        else:
+            # Try local daily data first (1 year = 365 days)
+            daily_prices = await _get_daily_prices_from_db(db, symbol, days=365)
 
-        # Need at least 50 days for meaningful calculations
-        if len(daily_prices) < 50:
-            logger.info(f"Insufficient local daily data for {symbol} ({len(daily_prices)} days), fetching from Yahoo")
-            # Fetch from Yahoo and store
-            yahoo_prices = yahoo.get_historical_prices(symbol, yahoo_symbol=yahoo_symbol, period="1y")
-            if len(yahoo_prices) >= 50:
-                await _store_daily_prices(db, symbol, yahoo_prices)
-                # Convert to our dict format
-                daily_prices = [
-                    {
-                        "date": p.date.strftime("%Y-%m-%d"),
-                        "close": p.close,
-                        "high": p.high,
-                        "low": p.low,
-                        "open": p.open,
-                        "volume": p.volume,
-                    }
-                    for p in yahoo_prices
-                ]
-            else:
-                logger.warning(f"Insufficient Yahoo price data for opportunity score: {symbol}")
-                return None
+            # Need at least 50 days for meaningful calculations
+            if len(daily_prices) < 50:
+                logger.info(f"Insufficient local daily data for {symbol} ({len(daily_prices)} days), fetching from Yahoo")
+                # Fetch from Yahoo and store
+                yahoo_prices = yahoo.get_historical_prices(symbol, yahoo_symbol=yahoo_symbol, period="1y")
+                if len(yahoo_prices) >= 50:
+                    await _store_daily_prices(db, symbol, yahoo_prices)
+                    # Convert to our dict format
+                    daily_prices = [
+                        {
+                            "date": p.date.strftime("%Y-%m-%d"),
+                            "close": p.close,
+                            "high": p.high,
+                            "low": p.low,
+                            "open": p.open,
+                            "volume": p.volume,
+                        }
+                        for p in yahoo_prices
+                    ]
+                else:
+                    logger.warning(f"Insufficient Yahoo price data for opportunity score: {symbol}")
+                    return None
 
-        # Get fundamentals (always from Yahoo - no local cache)
-        fundamentals = yahoo.get_fundamental_data(symbol, yahoo_symbol=yahoo_symbol)
+            # Get fundamentals (always from Yahoo - no local cache)
+            fundamentals = yahoo.get_fundamental_data(symbol, yahoo_symbol=yahoo_symbol)
+
+        # Validate we have enough data
+        if len(daily_prices) < MIN_DAYS_FOR_OPPORTUNITY:
+            logger.warning(f"Insufficient daily price data for {symbol}")
+            return None
 
         closes = np.array([p["close"] for p in daily_prices])
         highs = np.array([p["high"] for p in daily_prices if p["high"]])
@@ -1118,8 +1217,11 @@ async def calculate_stock_score(
         industry: Stock industry - required for allocation fit
         portfolio_context: Portfolio weights and positions for allocation fit
     """
-    quality = await calculate_quality_score(db, symbol, yahoo_symbol)
-    opportunity = await calculate_opportunity_score(db, symbol, yahoo_symbol)
+    # Prefetch data once for both quality and opportunity scoring (avoids duplicate API calls)
+    prefetched = await prefetch_stock_data(db, symbol, yahoo_symbol)
+
+    quality = await calculate_quality_score(db, symbol, yahoo_symbol, prefetched=prefetched)
+    opportunity = await calculate_opportunity_score(db, symbol, yahoo_symbol, prefetched=prefetched)
     analyst = calculate_analyst_score(symbol, yahoo_symbol)  # Still sync, uses Yahoo directly
 
     # Handle missing scores with defaults
