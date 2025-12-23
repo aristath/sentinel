@@ -1,6 +1,9 @@
 """System status API endpoints."""
 
+import os
+import shutil
 from datetime import datetime
+from pathlib import Path
 from fastapi import APIRouter, Depends
 from app.config import settings
 from app.infrastructure.dependencies import (
@@ -166,12 +169,24 @@ async def trigger_price_sync():
 
 @router.post("/sync/historical")
 async def trigger_historical_sync():
-    """Manually trigger historical data sync (stock prices + portfolio reconstruction)."""
+    """Manually trigger historical data sync (stock prices + monthly aggregation)."""
     from app.jobs.historical_data_sync import sync_historical_data
 
     try:
         await sync_historical_data()
         return {"status": "success", "message": "Historical data sync completed"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@router.post("/maintenance/daily")
+async def trigger_daily_maintenance():
+    """Manually trigger daily maintenance (backup, cleanup, WAL checkpoint)."""
+    from app.jobs.maintenance import run_daily_maintenance
+
+    try:
+        await run_daily_maintenance()
+        return {"status": "success", "message": "Daily maintenance completed"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -211,53 +226,76 @@ async def get_job_status():
 async def get_database_stats():
     """Get database statistics including historical data counts."""
     import aiosqlite
-    
+
     try:
         async with aiosqlite.connect(settings.database_path) as db:
             db.row_factory = aiosqlite.Row
-            
-            # Count stock price history records
+
+            # Count daily stock price history records
             cursor = await db.execute("SELECT COUNT(*) as count FROM stock_price_history")
             price_history_count = (await cursor.fetchone())["count"]
-            
+
             # Count unique symbols in price history
             cursor = await db.execute("SELECT COUNT(DISTINCT symbol) as count FROM stock_price_history")
             price_history_symbols = (await cursor.fetchone())["count"]
-            
-            # Get date range of price history
+
+            # Get date range of daily price history
             cursor = await db.execute("""
-                SELECT MIN(date) as min_date, MAX(date) as max_date 
+                SELECT MIN(date) as min_date, MAX(date) as max_date
                 FROM stock_price_history
             """)
             price_range = await cursor.fetchone()
-            
+
+            # Count monthly price records
+            cursor = await db.execute("SELECT COUNT(*) as count FROM stock_price_monthly")
+            monthly_count = (await cursor.fetchone())["count"]
+
+            # Count unique symbols in monthly prices
+            cursor = await db.execute("SELECT COUNT(DISTINCT symbol) as count FROM stock_price_monthly")
+            monthly_symbols = (await cursor.fetchone())["count"]
+
+            # Get date range of monthly prices
+            cursor = await db.execute("""
+                SELECT MIN(year_month) as min_date, MAX(year_month) as max_date
+                FROM stock_price_monthly
+            """)
+            monthly_range = await cursor.fetchone()
+
             # Count portfolio snapshots
             cursor = await db.execute("SELECT COUNT(*) as count FROM portfolio_snapshots")
             snapshot_count = (await cursor.fetchone())["count"]
-            
+
             # Get date range of snapshots
             cursor = await db.execute("""
-                SELECT MIN(date) as min_date, MAX(date) as max_date 
+                SELECT MIN(date) as min_date, MAX(date) as max_date
                 FROM portfolio_snapshots
             """)
             snapshot_range = await cursor.fetchone()
-            
+
             # Count active stocks
             cursor = await db.execute("SELECT COUNT(*) as count FROM stocks WHERE active = 1")
             active_stocks = (await cursor.fetchone())["count"]
-            
+
             # Count trades
             cursor = await db.execute("SELECT COUNT(*) as count FROM trades")
             trades_count = (await cursor.fetchone())["count"]
-            
+
             return {
                 "status": "ok",
-                "stock_price_history": {
+                "stock_price_history_daily": {
                     "total_records": price_history_count,
                     "unique_symbols": price_history_symbols,
                     "date_range": {
                         "min": price_range["min_date"] if price_range["min_date"] else None,
                         "max": price_range["max_date"] if price_range["max_date"] else None,
+                    }
+                },
+                "stock_price_monthly": {
+                    "total_records": monthly_count,
+                    "unique_symbols": monthly_symbols,
+                    "date_range": {
+                        "min": monthly_range["min_date"] if monthly_range["min_date"] else None,
+                        "max": monthly_range["max_date"] if monthly_range["max_date"] else None,
                     }
                 },
                 "portfolio_snapshots": {
@@ -270,6 +308,79 @@ async def get_database_stats():
                 "active_stocks": active_stocks,
                 "trades": trades_count,
             }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e),
+        }
+
+
+@router.get("/disk")
+async def get_disk_usage():
+    """
+    Get disk usage information for monitoring.
+
+    Returns:
+        - disk_total_mb: Total disk space
+        - disk_free_mb: Free disk space
+        - disk_used_percent: Percentage of disk used
+        - db_size_mb: Database file size
+        - wal_size_mb: WAL file size
+        - log_size_mb: Log directory size
+        - backup_size_mb: Backup directory size
+    """
+    try:
+        db_path = Path(settings.database_path)
+        data_dir = db_path.parent
+
+        # System disk usage
+        disk = shutil.disk_usage("/")
+
+        # Database file sizes
+        db_size = db_path.stat().st_size if db_path.exists() else 0
+        wal_path = Path(f"{db_path}-wal")
+        wal_size = wal_path.stat().st_size if wal_path.exists() else 0
+        shm_path = Path(f"{db_path}-shm")
+        shm_size = shm_path.stat().st_size if shm_path.exists() else 0
+
+        # Log directory size
+        log_dir = data_dir / "logs"
+        log_size = 0
+        if log_dir.exists():
+            for f in log_dir.glob("**/*"):
+                if f.is_file():
+                    log_size += f.stat().st_size
+
+        # Backup directory size
+        backup_dir = data_dir / "backups"
+        backup_size = 0
+        backup_count = 0
+        if backup_dir.exists():
+            for f in backup_dir.glob("trader_*.db"):
+                backup_size += f.stat().st_size
+                backup_count += 1
+
+        return {
+            "status": "ok",
+            "disk": {
+                "total_mb": round(disk.total / (1024 * 1024), 1),
+                "free_mb": round(disk.free / (1024 * 1024), 1),
+                "used_percent": round((disk.used / disk.total) * 100, 1),
+            },
+            "database": {
+                "db_size_mb": round(db_size / (1024 * 1024), 2),
+                "wal_size_mb": round(wal_size / (1024 * 1024), 2),
+                "shm_size_mb": round(shm_size / (1024 * 1024), 2),
+                "total_mb": round((db_size + wal_size + shm_size) / (1024 * 1024), 2),
+            },
+            "logs": {
+                "size_mb": round(log_size / (1024 * 1024), 2),
+            },
+            "backups": {
+                "count": backup_count,
+                "size_mb": round(backup_size / (1024 * 1024), 2),
+            },
+        }
     except Exception as e:
         return {
             "status": "error",

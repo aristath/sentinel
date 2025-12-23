@@ -8,17 +8,24 @@ Scoring weights:
 
 This scoring system is optimized for a 10-20 year retirement portfolio,
 prioritizing steady growers bought at discount over momentum plays.
+
+Price data strategy:
+- Monthly prices (stock_price_monthly table): Used for 5y/10y CAGR calculations
+- Daily prices (stock_price_history table): Used for 52-week high, 200-day MA, volatility
+- Falls back to Yahoo API if local data is insufficient, then stores for future use
 """
 
 import math
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 from dataclasses import dataclass
 
+import aiosqlite
 import numpy as np
 
 from app.services import yahoo
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -163,12 +170,162 @@ def calculate_dividend_bonus(dividend_yield: Optional[float]) -> float:
 
 
 # =============================================================================
+# Local Database Price Helpers
+# =============================================================================
+
+async def _get_monthly_prices_from_db(
+    db: aiosqlite.Connection,
+    symbol: str,
+    years: int
+) -> list[dict]:
+    """
+    Get monthly prices from local database.
+
+    Args:
+        db: Database connection
+        symbol: Stock symbol
+        years: Number of years of data to fetch
+
+    Returns:
+        List of dicts with year_month and avg_adj_close
+    """
+    cutoff = (datetime.now() - timedelta(days=years * 365)).strftime("%Y-%m")
+    cursor = await db.execute("""
+        SELECT year_month, avg_adj_close, avg_close
+        FROM stock_price_monthly
+        WHERE symbol = ? AND year_month >= ?
+        ORDER BY year_month ASC
+    """, (symbol, cutoff))
+    rows = await cursor.fetchall()
+    return [
+        {
+            "year_month": row[0],
+            "avg_adj_close": row[1] if row[1] else row[2],  # Fallback to avg_close
+        }
+        for row in rows
+    ]
+
+
+async def _get_daily_prices_from_db(
+    db: aiosqlite.Connection,
+    symbol: str,
+    days: int
+) -> list[dict]:
+    """
+    Get daily prices from local database.
+
+    Args:
+        db: Database connection
+        symbol: Stock symbol
+        days: Number of days of data to fetch
+
+    Returns:
+        List of dicts with date, close, high, low, open, volume
+    """
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    cursor = await db.execute("""
+        SELECT date, close_price, high_price, low_price, open_price, volume
+        FROM stock_price_history
+        WHERE symbol = ? AND date >= ?
+        ORDER BY date ASC
+    """, (symbol, cutoff))
+    rows = await cursor.fetchall()
+    return [
+        {
+            "date": row[0],
+            "close": row[1],
+            "high": row[2],
+            "low": row[3],
+            "open": row[4],
+            "volume": row[5],
+        }
+        for row in rows
+    ]
+
+
+def _aggregate_to_monthly(daily_prices: list) -> list[dict]:
+    """
+    Convert daily prices to monthly averages.
+
+    Args:
+        daily_prices: List of HistoricalPrice objects from Yahoo
+
+    Returns:
+        List of dicts with year_month and avg_adj_close
+    """
+    from collections import defaultdict
+    monthly = defaultdict(list)
+
+    for price in daily_prices:
+        ym = price.date.strftime("%Y-%m")
+        monthly[ym].append(price.adj_close)
+
+    return [
+        {"year_month": ym, "avg_adj_close": sum(prices) / len(prices)}
+        for ym, prices in sorted(monthly.items())
+    ]
+
+
+async def _store_monthly_prices(
+    db: aiosqlite.Connection,
+    symbol: str,
+    monthly_data: list[dict]
+):
+    """
+    Store monthly prices in database.
+
+    Args:
+        db: Database connection
+        symbol: Stock symbol
+        monthly_data: List of dicts with year_month and avg_adj_close
+    """
+    now = datetime.now().isoformat()
+    for m in monthly_data:
+        await db.execute("""
+            INSERT OR REPLACE INTO stock_price_monthly
+            (symbol, year_month, avg_close, avg_adj_close, source, created_at)
+            VALUES (?, ?, ?, ?, 'yahoo', ?)
+        """, (symbol, m["year_month"], m["avg_adj_close"], m["avg_adj_close"], now))
+    await db.commit()
+
+
+async def _store_daily_prices(
+    db: aiosqlite.Connection,
+    symbol: str,
+    daily_prices: list
+):
+    """
+    Store daily prices in database.
+
+    Args:
+        db: Database connection
+        symbol: Stock symbol
+        daily_prices: List of HistoricalPrice objects from Yahoo
+    """
+    now = datetime.now().isoformat()
+    for price in daily_prices:
+        date_str = price.date.strftime("%Y-%m-%d")
+        await db.execute("""
+            INSERT OR REPLACE INTO stock_price_history
+            (symbol, date, close_price, open_price, high_price, low_price, volume, source, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'yahoo', ?)
+        """, (symbol, date_str, price.close, price.open, price.high, price.low, price.volume, now))
+    await db.commit()
+
+
+# =============================================================================
 # Quality Score Calculation
 # =============================================================================
 
-def calculate_quality_score(symbol: str, yahoo_symbol: str = None) -> Optional[QualityScore]:
+async def calculate_quality_score(
+    db: aiosqlite.Connection,
+    symbol: str,
+    yahoo_symbol: str = None
+) -> Optional[QualityScore]:
     """
     Calculate quality score based on long-term track record.
+
+    Uses local monthly price data when available, falls back to Yahoo API.
 
     Components:
     - Total Return (50%): CAGR + Dividend Yield, bell curve with 11% peak
@@ -177,35 +334,52 @@ def calculate_quality_score(symbol: str, yahoo_symbol: str = None) -> Optional[Q
     - Dividend Bonus: +0.15 max for high-yield stocks (DRIP priority)
 
     Args:
+        db: Database connection
         symbol: Tradernet symbol
         yahoo_symbol: Optional explicit Yahoo symbol override
     """
     try:
-        # Get 5-year and 10-year price history
-        prices_5y = yahoo.get_historical_prices(symbol, yahoo_symbol=yahoo_symbol, period="5y")
-        prices_10y = yahoo.get_historical_prices(symbol, yahoo_symbol=yahoo_symbol, period="10y")
+        # Try local monthly data first (10 years)
+        monthly_prices = await _get_monthly_prices_from_db(db, symbol, years=10)
+
+        # Need at least 12 months of data for meaningful CAGR
+        if len(monthly_prices) < 12:
+            logger.info(f"Insufficient local monthly data for {symbol} ({len(monthly_prices)} months), fetching from Yahoo")
+            # Fetch from Yahoo and store
+            prices_10y = yahoo.get_historical_prices(symbol, yahoo_symbol=yahoo_symbol, period="10y")
+            if len(prices_10y) >= 252:  # At least 1 year
+                monthly_prices = _aggregate_to_monthly(prices_10y)
+                await _store_monthly_prices(db, symbol, monthly_prices)
+            else:
+                logger.warning(f"Insufficient Yahoo price data for {symbol}")
+                return None
+
+        # Get fundamentals (always from Yahoo - no local cache)
         fundamentals = yahoo.get_fundamental_data(symbol, yahoo_symbol=yahoo_symbol)
 
-        if len(prices_5y) < 252:  # Need at least 1 year of data
-            logger.warning(f"Insufficient price data for {symbol}")
-            return None
+        # Calculate history in years (12 months = 1 year)
+        history_years = len(monthly_prices) / 12.0
 
-        # Calculate CAGRs
-        history_years = len(prices_5y) / 252  # Trading days per year
+        # Calculate CAGRs from monthly data
+        # 5-year CAGR: use last 60 months or all available
+        months_5y = min(60, len(monthly_prices))
+        if months_5y >= 12:
+            prices_5y = monthly_prices[-months_5y:]
+            start_price_5y = prices_5y[0]["avg_adj_close"]
+            end_price_5y = prices_5y[-1]["avg_adj_close"]
+            years_5y = months_5y / 12.0
+            cagr_5y = (end_price_5y / start_price_5y) ** (1 / years_5y) - 1 if start_price_5y > 0 else 0
+        else:
+            cagr_5y = 0
 
-        # 5-year CAGR
-        start_price_5y = prices_5y[0].adj_close
-        end_price_5y = prices_5y[-1].adj_close
-        years_5y = min(5.0, history_years)
-        cagr_5y = (end_price_5y / start_price_5y) ** (1 / years_5y) - 1 if years_5y > 0 else 0
-
-        # 10-year CAGR (if available)
+        # 10-year CAGR: use all available data if > 5 years
         cagr_10y = None
-        if len(prices_10y) > len(prices_5y) + 252:  # Has more than 5 years of data
-            start_price_10y = prices_10y[0].adj_close
-            end_price_10y = prices_10y[-1].adj_close
-            years_10y = len(prices_10y) / 252
-            cagr_10y = (end_price_10y / start_price_10y) ** (1 / years_10y) - 1
+        if len(monthly_prices) > 60:  # More than 5 years
+            start_price_10y = monthly_prices[0]["avg_adj_close"]
+            end_price_10y = monthly_prices[-1]["avg_adj_close"]
+            years_10y = len(monthly_prices) / 12.0
+            if start_price_10y > 0:
+                cagr_10y = (end_price_10y / start_price_10y) ** (1 / years_10y) - 1
 
         # Get dividend yield
         dividend_yield = fundamentals.dividend_yield if fundamentals else None
@@ -283,9 +457,15 @@ def calculate_quality_score(symbol: str, yahoo_symbol: str = None) -> Optional[Q
 # Opportunity Score Calculation (Buy the Dip)
 # =============================================================================
 
-def calculate_opportunity_score(symbol: str, yahoo_symbol: str = None) -> Optional[OpportunityScore]:
+async def calculate_opportunity_score(
+    db: aiosqlite.Connection,
+    symbol: str,
+    yahoo_symbol: str = None
+) -> Optional[OpportunityScore]:
     """
     Calculate opportunity score based on buy-the-dip signals.
+
+    Uses local daily price data when available, falls back to Yahoo API.
 
     INVERTED from typical momentum scoring - we WANT stocks that are:
     - Below their 52-week high (temporary dip)
@@ -298,19 +478,44 @@ def calculate_opportunity_score(symbol: str, yahoo_symbol: str = None) -> Option
     - P/E vs Historical (35%): Below average = opportunity
 
     Args:
+        db: Database connection
         symbol: Tradernet symbol
         yahoo_symbol: Optional explicit Yahoo symbol override
     """
     try:
-        prices = yahoo.get_historical_prices(symbol, yahoo_symbol=yahoo_symbol, period="1y")
+        # Try local daily data first (1 year = 365 days)
+        daily_prices = await _get_daily_prices_from_db(db, symbol, days=365)
+
+        # Need at least 50 days for meaningful calculations
+        if len(daily_prices) < 50:
+            logger.info(f"Insufficient local daily data for {symbol} ({len(daily_prices)} days), fetching from Yahoo")
+            # Fetch from Yahoo and store
+            yahoo_prices = yahoo.get_historical_prices(symbol, yahoo_symbol=yahoo_symbol, period="1y")
+            if len(yahoo_prices) >= 50:
+                await _store_daily_prices(db, symbol, yahoo_prices)
+                # Convert to our dict format
+                daily_prices = [
+                    {
+                        "date": p.date.strftime("%Y-%m-%d"),
+                        "close": p.close,
+                        "high": p.high,
+                        "low": p.low,
+                        "open": p.open,
+                        "volume": p.volume,
+                    }
+                    for p in yahoo_prices
+                ]
+            else:
+                logger.warning(f"Insufficient Yahoo price data for opportunity score: {symbol}")
+                return None
+
+        # Get fundamentals (always from Yahoo - no local cache)
         fundamentals = yahoo.get_fundamental_data(symbol, yahoo_symbol=yahoo_symbol)
 
-        if len(prices) < 50:
-            logger.warning(f"Insufficient price data for opportunity score: {symbol}")
-            return None
-
-        closes = np.array([p.close for p in prices])
-        highs = np.array([p.high for p in prices])
+        closes = np.array([p["close"] for p in daily_prices])
+        highs = np.array([p["high"] for p in daily_prices if p["high"]])
+        if len(highs) == 0:
+            highs = closes  # Fallback to close prices
         current_price = closes[-1]
 
         # 1. Below 52-week High Score (35%)
@@ -712,7 +917,8 @@ def calculate_post_transaction_score(
 # Combined Stock Score
 # =============================================================================
 
-def calculate_stock_score(
+async def calculate_stock_score(
+    db: aiosqlite.Connection,
     symbol: str,
     yahoo_symbol: str = None,
     geography: str = None,
@@ -721,6 +927,8 @@ def calculate_stock_score(
 ) -> Optional[StockScore]:
     """
     Calculate complete stock score with all components.
+
+    Uses local database for price data, falling back to Yahoo API when needed.
 
     Final weights (optimized for long-term value investing):
     - Quality: 35% (total return, consistency, financial strength, dividend bonus)
@@ -732,15 +940,16 @@ def calculate_stock_score(
     Without portfolio_context, a normalized base score (85% -> 100%) is returned.
 
     Args:
+        db: Database connection
         symbol: Tradernet symbol
         yahoo_symbol: Optional explicit Yahoo symbol override
         geography: Stock geography (EU, ASIA, US) - required for allocation fit
         industry: Stock industry - required for allocation fit
         portfolio_context: Portfolio weights and positions for allocation fit
     """
-    quality = calculate_quality_score(symbol, yahoo_symbol)
-    opportunity = calculate_opportunity_score(symbol, yahoo_symbol)
-    analyst = calculate_analyst_score(symbol, yahoo_symbol)
+    quality = await calculate_quality_score(db, symbol, yahoo_symbol)
+    opportunity = await calculate_opportunity_score(db, symbol, yahoo_symbol)
+    analyst = calculate_analyst_score(symbol, yahoo_symbol)  # Still sync, uses Yahoo directly
 
     # Handle missing scores with defaults
     quality_score = quality.total if quality else 0.5
@@ -781,12 +990,12 @@ def calculate_stock_score(
         )
         total_score = base_score / 0.85
 
-    # Get volatility from price data for risk assessment
+    # Get volatility from local daily price data (already fetched by opportunity score)
     volatility = None
     try:
-        prices = yahoo.get_historical_prices(symbol, yahoo_symbol=yahoo_symbol, period="1y")
-        if len(prices) >= 30:
-            closes = np.array([p.close for p in prices])
+        daily_prices = await _get_daily_prices_from_db(db, symbol, days=365)
+        if len(daily_prices) >= 30:
+            closes = np.array([p["close"] for p in daily_prices])
             returns = np.diff(closes) / closes[:-1]
             volatility = float(np.std(returns) * np.sqrt(252))  # Annualized
     except Exception:
@@ -840,7 +1049,8 @@ async def score_all_stocks(db, portfolio_context: PortfolioContext = None) -> li
         geography = row[2]
         industry = row[3]
         logger.info(f"Scoring {symbol}...")
-        score = calculate_stock_score(
+        score = await calculate_stock_score(
+            db,
             symbol,
             yahoo_symbol=yahoo_symbol,
             geography=geography,

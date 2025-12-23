@@ -341,4 +341,19 @@ CREATE TABLE IF NOT EXISTS stock_price_history (
 );
 
 CREATE INDEX IF NOT EXISTS idx_stock_price_symbol_date ON stock_price_history(symbol, date);
+
+-- Stock price monthly averages (for long-term CAGR calculations)
+CREATE TABLE IF NOT EXISTS stock_price_monthly (
+    symbol TEXT NOT NULL,
+    year_month TEXT NOT NULL,  -- 'YYYY-MM' format
+    avg_close REAL NOT NULL,
+    avg_adj_close REAL,  -- Adjusted close for CAGR (accounts for splits/dividends)
+    min_price REAL,
+    max_price REAL,
+    source TEXT,  -- 'yahoo', 'calculated', or 'tradernet'
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (symbol, year_month)
+);
+
+CREATE INDEX IF NOT EXISTS idx_stock_price_monthly_symbol ON stock_price_monthly(symbol);
 """

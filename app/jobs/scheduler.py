@@ -106,6 +106,7 @@ def init_scheduler() -> AsyncIOScheduler:
     from app.jobs.score_refresh import refresh_all_scores
     from app.jobs.cash_flow_sync import sync_cash_flows
     from app.jobs.historical_data_sync import sync_historical_data
+    from app.jobs.maintenance import run_daily_maintenance, run_weekly_maintenance
 
     # Tradernet portfolio sync (every 2 minutes)
     scheduler.add_job(
@@ -176,6 +177,24 @@ def init_scheduler() -> AsyncIOScheduler:
         CronTrigger(hour=20, minute=0),
         id="historical_data_sync",
         name="Historical Data Sync",
+        replace_existing=True,
+    )
+
+    # Daily maintenance (at 3 AM - backup, cleanup, WAL checkpoint)
+    scheduler.add_job(
+        run_daily_maintenance,
+        CronTrigger(hour=3, minute=0),
+        id="daily_maintenance",
+        name="Daily Maintenance",
+        replace_existing=True,
+    )
+
+    # Weekly maintenance (Sunday at 4 AM - integrity check)
+    scheduler.add_job(
+        run_weekly_maintenance,
+        CronTrigger(day_of_week=6, hour=4, minute=0),  # Sunday
+        id="weekly_maintenance",
+        name="Weekly Maintenance",
         replace_existing=True,
     )
 

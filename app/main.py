@@ -1,7 +1,9 @@
 """FastAPI application entry point."""
 
 import logging
+from logging.handlers import RotatingFileHandler
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
@@ -14,19 +16,34 @@ from app.jobs.scheduler import init_scheduler, start_scheduler, stop_scheduler
 from app.services.tradernet import get_tradernet_client
 from app.infrastructure.hardware.led_display import get_led_display
 
-# Configure logging with correlation ID support
-# Add filter to handler (not logger) to ensure ALL log records get correlation_id
+# Configure logging with correlation ID support and log rotation
 from app.infrastructure.logging_context import CorrelationIDFilter
 
-handler = logging.StreamHandler()
-handler.setFormatter(logging.Formatter(
+# Log format with correlation ID
+log_format = logging.Formatter(
     "%(asctime)s - [%(correlation_id)s] - %(name)s - %(levelname)s - %(message)s"
-))
-handler.addFilter(CorrelationIDFilter())
+)
+
+# Console handler (for systemd/docker logs)
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(log_format)
+console_handler.addFilter(CorrelationIDFilter())
+
+# File handler with rotation (5MB per file, keep 3 backups = 20MB max)
+log_dir = Path(settings.database_path).parent / "logs"
+log_dir.mkdir(parents=True, exist_ok=True)
+file_handler = RotatingFileHandler(
+    log_dir / "arduino-trader.log",
+    maxBytes=5 * 1024 * 1024,  # 5MB
+    backupCount=3,
+    encoding="utf-8",
+)
+file_handler.setFormatter(log_format)
+file_handler.addFilter(CorrelationIDFilter())
 
 logging.basicConfig(
     level=logging.DEBUG if settings.debug else logging.INFO,
-    handlers=[handler],
+    handlers=[console_handler, file_handler],
 )
 logger = logging.getLogger(__name__)
 
