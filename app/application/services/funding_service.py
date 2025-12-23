@@ -249,14 +249,20 @@ class FundingService:
 
         return {s.symbol: s for s in scores}
 
-    def _determine_currency(self, stock: dict) -> str:
-        """Determine currency for a stock."""
-        currency = stock.get("currency")
-        if currency:
-            return currency
-
-        geography = stock.get("geography", "").upper()
-        yahoo_symbol = stock.get("yahoo_symbol", "")
+    def _determine_currency(self, stock) -> str:
+        """Determine currency for a stock (Stock object or dict)."""
+        # Handle both Stock objects and dicts
+        if hasattr(stock, 'geography'):
+            # Stock object
+            geography = (stock.geography or "").upper()
+            yahoo_symbol = stock.yahoo_symbol or ""
+        else:
+            # Dict (from get_with_scores)
+            currency = stock.get("currency")
+            if currency:
+                return currency
+            geography = stock.get("geography", "").upper()
+            yahoo_symbol = stock.get("yahoo_symbol", "")
 
         if geography == "EU":
             return "EUR"
@@ -386,10 +392,12 @@ class FundingService:
         )
 
         # Calculate post-transaction score (with buy)
-        buy_geography = buy_stock.get("geography", "")
-        buy_industry = buy_stock.get("industry")
-        buy_quality = buy_stock.get("quality_score") or buy_stock.get("total_score") or 0.5
-        buy_dividend = buy_stock.get("dividend_yield") or 0
+        # buy_stock is a Stock object, access attributes directly
+        buy_geography = buy_stock.geography or ""
+        buy_industry = buy_stock.industry
+        # Get quality score and dividend from portfolio context if available
+        buy_quality = portfolio_context.stock_scores.get(buy_symbol, 0.5)
+        buy_dividend = portfolio_context.stock_dividends.get(buy_symbol, 0)
 
         new_score, score_change = calculate_post_transaction_score(
             symbol=buy_symbol,
