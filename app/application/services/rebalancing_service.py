@@ -154,16 +154,32 @@ class RebalancingService:
                     closes = np.array([p['close'] for p in daily_prices])
                     closes_series = pd.Series(closes)
 
+                    # Validate no zero/negative prices that would corrupt returns
+                    if np.any(closes <= 0):
+                        logger.warning(f"Zero/negative prices detected for {symbol}, using fallback values")
+                        result[symbol] = TechnicalData(
+                            current_volatility=0.20,
+                            historical_volatility=0.20,
+                            distance_from_ma_200=0.0
+                        )
+                        continue
+
                     # Current volatility (last 60 days) using empyrical
                     if len(closes) >= 60:
-                        recent_returns = np.diff(closes[-60:]) / closes[-61:-1]
+                        recent_returns = np.diff(closes[-60:]) / closes[-60:-1]
                         current_vol = float(empyrical.annual_volatility(recent_returns))
+                        # Validate empyrical output
+                        if not np.isfinite(current_vol) or current_vol < 0:
+                            current_vol = 0.20
                     else:
                         current_vol = 0.20
 
                     # Historical volatility (full period, up to 365 days) using empyrical
                     returns = np.diff(closes) / closes[:-1]
                     historical_vol = float(empyrical.annual_volatility(returns))
+                    # Validate empyrical output
+                    if not np.isfinite(historical_vol) or historical_vol < 0:
+                        historical_vol = 0.20
 
                     # Distance from 200-day EMA using pandas-ta (more responsive than SMA)
                     if len(closes) >= 200:
@@ -171,7 +187,8 @@ class RebalancingService:
                         if ema_200 is not None and len(ema_200) > 0 and not pd.isna(ema_200.iloc[-1]):
                             ema_value = float(ema_200.iloc[-1])
                         else:
-                            # Fallback to SMA
+                            # Fallback to SMA when EMA unavailable
+                            logger.debug(f"EMA unavailable for {symbol}, using SMA fallback")
                             ema_value = float(np.mean(closes[-200:]))
                         current_price = float(closes[-1])
                         distance = (current_price - ema_value) / ema_value if ema_value > 0 else 0.0
@@ -184,8 +201,15 @@ class RebalancingService:
                         distance_from_ma_200=distance
                     )
 
+                except (ValueError, ZeroDivisionError) as e:
+                    logger.warning(f"Invalid data for {symbol}: {e}")
+                    result[symbol] = TechnicalData(
+                        current_volatility=0.20,
+                        historical_volatility=0.20,
+                        distance_from_ma_200=0.0
+                    )
                 except Exception as e:
-                    logger.warning(f"Failed to get technical data for {symbol}: {e}")
+                    logger.error(f"Unexpected error getting technical data for {symbol}: {e}", exc_info=True)
                     result[symbol] = TechnicalData(
                         current_volatility=0.20,
                         historical_volatility=0.20,

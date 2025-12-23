@@ -34,6 +34,32 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
+# Constants
+# =============================================================================
+
+# Scoring thresholds
+OPTIMAL_CAGR = 0.11  # 11% target annual return (bell curve peak)
+HIGH_DIVIDEND_THRESHOLD = 0.06  # 6%+ yield gets max dividend bonus
+MID_DIVIDEND_THRESHOLD = 0.03  # 3%+ yield gets mid dividend bonus
+MARKET_AVG_PE = 22  # Market average P/E ratio for comparison
+
+# Technical indicator parameters
+TRADING_DAYS_PER_YEAR = 252
+EMA_LENGTH = 200
+RSI_LENGTH = 14
+BOLLINGER_LENGTH = 20
+BOLLINGER_STD = 2
+
+# Minimum data requirements
+MIN_DAYS_FOR_VOLATILITY = 30
+MIN_DAYS_FOR_OPPORTUNITY = 50
+MIN_MONTHS_FOR_CAGR = 12
+
+# Fallback values for missing data
+DEFAULT_VOLATILITY = 0.20  # 20% annual volatility baseline
+
+
+# =============================================================================
 # Data Classes
 # =============================================================================
 
@@ -395,12 +421,21 @@ async def calculate_quality_score(
         max_drawdown = None
         if len(daily_prices) >= 50:
             closes = np.array([p["close"] for p in daily_prices])
-            returns = np.diff(closes) / closes[:-1]
-            try:
-                sharpe_ratio = float(empyrical.sharpe_ratio(returns, annualization=252))
-                max_drawdown = float(empyrical.max_drawdown(returns))
-            except Exception as e:
-                logger.debug(f"Could not calculate risk metrics for {symbol}: {e}")
+            # Validate no zero/negative prices
+            if np.any(closes[:-1] <= 0):
+                logger.debug(f"Zero/negative prices detected for {symbol}, skipping risk metrics")
+            else:
+                returns = np.diff(closes) / closes[:-1]
+                try:
+                    sharpe_ratio = float(empyrical.sharpe_ratio(returns, annualization=252))
+                    max_drawdown = float(empyrical.max_drawdown(returns))
+                    # Validate empyrical outputs
+                    if not np.isfinite(sharpe_ratio):
+                        sharpe_ratio = None
+                    if not np.isfinite(max_drawdown):
+                        max_drawdown = None
+                except Exception as e:
+                    logger.debug(f"Could not calculate risk metrics for {symbol}: {e}")
 
         # Calculate CAGRs from monthly data
         # 5-year CAGR: use last 60 months or all available
@@ -632,6 +667,7 @@ async def calculate_opportunity_score(
             ema_value = float(ema_200.iloc[-1])
         else:
             # Fallback to SMA if EMA not available (not enough data)
+            logger.debug(f"EMA unavailable for {symbol}, using SMA fallback")
             ema_value = float(np.mean(closes[-200:])) if len(closes) >= 200 else float(np.mean(closes))
 
         pct_from_ema = (current_price - ema_value) / ema_value if ema_value > 0 else 0
@@ -693,19 +729,20 @@ async def calculate_opportunity_score(
         # 5. Bollinger Band Score (10%): Near lower band = opportunity
         # Position within bands: 0=lower band, 1=upper band
         bbands = ta.bbands(closes_series, length=20, std=2)
-        if bbands is not None and 'BBL_20_2.0_2.0' in bbands.columns and 'BBU_20_2.0_2.0' in bbands.columns:
-            bb_lower = bbands['BBL_20_2.0_2.0'].iloc[-1]
-            bb_upper = bbands['BBU_20_2.0_2.0'].iloc[-1]
-            if not pd.isna(bb_lower) and not pd.isna(bb_upper) and bb_upper > bb_lower:
-                # Where is price within the bands? (0=lower, 1=upper)
-                bb_position = (current_price - bb_lower) / (bb_upper - bb_lower)
-                # Lower position = better score (buying opportunity)
-                bollinger_score = 1.0 - bb_position
-                bollinger_score = max(0.0, min(1.0, bollinger_score))  # Clamp to 0-1
-            else:
-                bollinger_score = 0.5  # Neutral
-        else:
-            bollinger_score = 0.5  # Neutral if no Bollinger data
+        bollinger_score = 0.5  # Default neutral
+        if bbands is not None:
+            # Dynamic column detection for version compatibility
+            bb_lower_cols = [c for c in bbands.columns if c.startswith('BBL_')]
+            bb_upper_cols = [c for c in bbands.columns if c.startswith('BBU_')]
+            if bb_lower_cols and bb_upper_cols:
+                bb_lower = bbands[bb_lower_cols[0]].iloc[-1]
+                bb_upper = bbands[bb_upper_cols[0]].iloc[-1]
+                if not pd.isna(bb_lower) and not pd.isna(bb_upper) and bb_upper > bb_lower:
+                    # Where is price within the bands? (0=lower, 1=upper)
+                    bb_position = (current_price - bb_lower) / (bb_upper - bb_lower)
+                    # Lower position = better score (buying opportunity)
+                    bollinger_score = 1.0 - bb_position
+                    bollinger_score = max(0.0, min(1.0, bollinger_score))  # Clamp to 0-1
 
         # Combined Opportunity Score
         # Weights: 52w High 30%, EMA 25%, P/E 25%, RSI 10%, Bollinger 10%
@@ -1130,18 +1167,49 @@ async def calculate_stock_score(
         daily_prices = await _get_daily_prices_from_db(db, symbol, days=365)
         if len(daily_prices) >= 30:
             closes = np.array([p["close"] for p in daily_prices])
-            returns = np.diff(closes) / closes[:-1]
-            volatility = float(empyrical.annual_volatility(returns))
+            # Validate no zero/negative prices
+            if not np.any(closes[:-1] <= 0):
+                returns = np.diff(closes) / closes[:-1]
+                volatility = float(empyrical.annual_volatility(returns))
+                # Validate empyrical output
+                if not np.isfinite(volatility) or volatility < 0:
+                    volatility = None
     except Exception:
         pass
 
     # Create default scores if missing
     if not quality:
-        quality = QualityScore(0.5, 0.5, 0.5, 0.0, 0.5, 0.5, 0.5, None, None, None, None, None, None, 0)
+        quality = QualityScore(
+            total_return_score=0.5,
+            consistency_score=0.5,
+            financial_strength_score=0.5,
+            dividend_bonus=0.0,
+            sharpe_ratio_score=0.5,
+            max_drawdown_score=0.5,
+            total=0.5,
+            cagr_5y=None,
+            cagr_10y=None,
+            total_return=None,
+            dividend_yield=None,
+            sharpe_ratio=None,
+            max_drawdown=None,
+            history_years=0
+        )
     if not opportunity:
-        opportunity = OpportunityScore(0.5, 0.5, 0.5, 0.5, 0.5, 0.5)
+        opportunity = OpportunityScore(
+            below_52w_high=0.5,
+            ema_distance=0.5,
+            pe_vs_historical=0.5,
+            rsi_score=0.5,
+            bollinger_score=0.5,
+            total=0.5
+        )
     if not analyst:
-        analyst = AnalystScore(0.5, 0.5, 0.5)
+        analyst = AnalystScore(
+            recommendation_score=0.5,
+            target_score=0.5,
+            total=0.5
+        )
 
     return CalculatedStockScore(
         symbol=symbol,
