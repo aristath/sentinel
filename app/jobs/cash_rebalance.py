@@ -136,28 +136,41 @@ async def _check_and_rebalance_internal():
             buy_recommendations = await rebalancing_service.calculate_rebalance_trades(cash_balance)
 
             if buy_recommendations:
-                trade = buy_recommendations[0]
-                logger.info(
-                    f"Executing BUY: {trade.quantity} {trade.symbol} "
-                    f"@ €{trade.estimated_price:.2f} = €{trade.estimated_value:.2f} "
-                    f"({trade.reason})"
-                )
-
                 emit(SystemEvent.SYNC_START)
+                executed = False
 
-                results = await trade_execution.execute_trades(
-                    [trade],
-                    use_transaction=True,
-                    currency_balances=currency_balances
-                )
+                for trade in buy_recommendations:
+                    logger.info(
+                        f"Trying BUY: {trade.quantity} {trade.symbol} "
+                        f"@ €{trade.estimated_price:.2f} = €{trade.estimated_value:.2f} "
+                        f"({trade.reason})"
+                    )
 
-                if results and results[0]["status"] == "success":
-                    logger.info(f"BUY executed successfully: {trade.symbol}")
-                    emit(SystemEvent.TRADE_EXECUTED, is_buy=True)
-                else:
-                    error = results[0].get("error", "Unknown error") if results else "No result"
-                    logger.error(f"BUY failed for {trade.symbol}: {error}")
-                    emit(SystemEvent.ERROR_OCCURRED, message="BUY FAIL")
+                    results = await trade_execution.execute_trades(
+                        [trade],
+                        use_transaction=True,
+                        currency_balances=currency_balances
+                    )
+
+                    if results and results[0]["status"] == "success":
+                        logger.info(f"BUY executed successfully: {trade.symbol}")
+                        emit(SystemEvent.TRADE_EXECUTED, is_buy=True)
+                        executed = True
+                        break
+                    elif results and results[0]["status"] == "skipped":
+                        # Currency mismatch or other skip reason - try next
+                        reason = results[0].get("error", "unknown")
+                        logger.info(f"Skipped {trade.symbol}: {reason}, trying next...")
+                        continue
+                    else:
+                        # Actual failure - stop trying
+                        error = results[0].get("error", "Unknown error") if results else "No result"
+                        logger.error(f"BUY failed for {trade.symbol}: {error}")
+                        emit(SystemEvent.ERROR_OCCURRED, message="BUY FAIL")
+                        break
+
+                if not executed:
+                    logger.info("No executable trades found (all skipped or failed)")
 
                 emit(SystemEvent.SYNC_COMPLETE)
                 await sync_portfolio()
