@@ -119,16 +119,15 @@ def get_max_temperature() -> float:
 # =============================================================================
 
 def animate_normal(phase: int, temp: float = 0) -> np.ndarray:
-    """Heartbeat pulse - ring emanates from center, speed/brightness vary with temp.
+    """Heartbeat pulse - smooth ring emanates from center.
 
     Speed (cycle time):
-    - < 45°C: 3s
-    - 45-55°C: 2.5s
-    - 55-60°C: 2s
-    - 60-65°C: 1.5s
-    - 65+°C: 1s
+    - < 45°C: 1.5s
+    - 45-55°C: 1.2s
+    - 55-65°C: 1s
+    - 65+°C: 0.8s
 
-    Brightness scales with temperature (brighter when hotter).
+    Uses Gaussian falloff for smooth edges.
     """
     arr = np.zeros((ROWS, COLS), dtype=np.uint8)
 
@@ -139,46 +138,45 @@ def animate_normal(phase: int, temp: float = 0) -> np.ndarray:
     # Max radius to reach edges
     max_radius = 8
 
-    # Determine cycle speed based on temperature
+    # Faster cycle: 1.5s base, speeds up with temp
     if temp >= 65:
-        cycle_frames = 10  # 1s
-    elif temp >= 60:
-        cycle_frames = 15  # 1.5s
+        cycle_frames = 8   # 0.8s
     elif temp >= 55:
-        cycle_frames = 20  # 2s
+        cycle_frames = 10  # 1s
     elif temp >= 45:
-        cycle_frames = 25  # 2.5s
+        cycle_frames = 12  # 1.2s
     else:
-        cycle_frames = 30  # 3s
+        cycle_frames = 15  # 1.5s
 
     # Peak brightness based on temperature
     if temp <= 45:
-        peak_brightness = 60
+        peak_brightness = 120
     elif temp >= 65:
-        peak_brightness = 150
+        peak_brightness = 200
     else:
-        peak_brightness = int(60 + (temp - 45) * 4.5)
+        peak_brightness = int(120 + (temp - 45) * 4)
 
-    # Current ring radius (expands over cycle)
+    # Ring position (0 to max_radius)
     ring_radius = (phase % cycle_frames) * max_radius / cycle_frames
 
-    # Ring thickness
-    ring_width = 2.0
+    # Thicker ring with smooth falloff
+    ring_width = 4.0
 
     for row in range(ROWS):
         for col in range(COLS):
             # Distance from center
             dist = math.sqrt((row - center_row) ** 2 + (col - center_col) ** 2)
 
-            # Check if pixel is within the ring band
+            # Distance from ring center
             dist_from_ring = abs(dist - ring_radius)
+
             if dist_from_ring < ring_width:
-                # Brightness fades as ring expands
-                fade = 1 - (ring_radius / max_radius)
-                # Softer edges within the ring
-                edge_fade = 1 - (dist_from_ring / ring_width)
-                brightness = int(peak_brightness * fade * edge_fade)
-                arr[row, col] = max(0, brightness)
+                # Smooth gaussian-like falloff within ring
+                ring_factor = math.exp(-(dist_from_ring ** 2) / (ring_width * 0.8))
+                # Fade as ring expands (sqrt for slower initial fade)
+                expansion_fade = 1 - (ring_radius / max_radius) ** 0.5
+                brightness = int(peak_brightness * ring_factor * expansion_fade)
+                arr[row, col] = max(0, min(255, brightness))
 
     return arr
 
