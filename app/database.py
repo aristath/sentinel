@@ -14,6 +14,9 @@ async def get_db():
     """Get database connection."""
     db = await aiosqlite.connect(settings.database_path)
     db.row_factory = aiosqlite.Row
+    # Enable WAL mode for better concurrency and busy timeout for retries
+    await db.execute("PRAGMA journal_mode=WAL")
+    await db.execute("PRAGMA busy_timeout=30000")  # 30 seconds
     try:
         yield db
     finally:
@@ -52,7 +55,10 @@ async def init_db():
 
     async with aiosqlite.connect(settings.database_path) as db:
         db.row_factory = aiosqlite.Row
-        
+        # Enable WAL mode for better concurrency and busy timeout for retries
+        await db.execute("PRAGMA journal_mode=WAL")
+        await db.execute("PRAGMA busy_timeout=30000")  # 30 seconds
+
         # Create schema version table first
         await db.execute("""
             CREATE TABLE IF NOT EXISTS schema_version (

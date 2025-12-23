@@ -175,7 +175,15 @@ async def sync_prices():
     This job:
     1. Fetches current prices from Yahoo Finance
     2. Updates positions with current prices
+
+    Uses file locking to prevent concurrent syncs.
     """
+    async with file_lock("price_sync", timeout=120.0):
+        await _sync_prices_internal()
+
+
+async def _sync_prices_internal():
+    """Internal price sync implementation."""
     logger.info("Starting price sync")
 
     # Show syncing animation on LED
@@ -186,6 +194,9 @@ async def sync_prices():
 
     try:
         async with aiosqlite.connect(settings.database_path) as db:
+            # Enable WAL mode and busy timeout
+            await db.execute("PRAGMA journal_mode=WAL")
+            await db.execute("PRAGMA busy_timeout=30000")
             # Get all active stocks
             cursor = await db.execute(
                 "SELECT symbol, yahoo_symbol FROM stocks WHERE active = 1"

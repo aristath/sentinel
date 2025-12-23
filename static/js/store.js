@@ -473,7 +473,7 @@ document.addEventListener('alpine:init', () => {
         industry: stock.industry || '',
         min_lot: stock.min_lot || 1,
         allow_buy: stock.allow_buy !== false,  // Default true
-        allow_sell: stock.allow_sell === true   // Default false
+        allow_sell: !!stock.allow_sell   // Default false (SQLite stores as 0/1)
       };
       this.showEditStockModal = true;
     },
