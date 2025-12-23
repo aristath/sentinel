@@ -2,8 +2,8 @@
 
 import logging
 import aiosqlite
-from typing import List, Optional
-from datetime import datetime
+from typing import List, Optional, Set
+from datetime import datetime, timedelta
 
 from app.domain.repositories.trade_repository import TradeRepository, Trade
 
@@ -75,3 +75,16 @@ class SQLiteTradeRepository(TradeRepository):
                 order_id=row["order_id"],
             ))
         return trades
+
+    async def get_recently_bought_symbols(self, days: int = 30) -> Set[str]:
+        """Get symbols that were bought in the last N days."""
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat()
+        cursor = await self.db.execute(
+            """
+            SELECT DISTINCT symbol FROM trades
+            WHERE UPPER(side) = 'BUY' AND executed_at >= ?
+            """,
+            (cutoff,)
+        )
+        rows = await cursor.fetchall()
+        return {row[0] for row in rows}

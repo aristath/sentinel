@@ -20,6 +20,7 @@ from app.domain.repositories import (
     PositionRepository,
     AllocationRepository,
     PortfolioRepository,
+    TradeRepository,
 )
 from app.domain.services.priority_calculator import (
     PriorityCalculator,
@@ -42,7 +43,7 @@ from app.services.scorer import (
 from app.services import yahoo
 from app.services.tradernet import get_exchange_rate
 from app.services.sell_scorer import calculate_all_sell_scores, SellScore, TechnicalData
-from app.domain.constants import TRADE_SIDE_BUY, TRADE_SIDE_SELL
+from app.domain.constants import TRADE_SIDE_BUY, TRADE_SIDE_SELL, BUY_COOLDOWN_DAYS
 
 logger = logging.getLogger(__name__)
 
@@ -111,11 +112,13 @@ class RebalancingService:
         position_repo: PositionRepository,
         allocation_repo: AllocationRepository,
         portfolio_repo: PortfolioRepository,
+        trade_repo: TradeRepository | None = None,
     ):
         self._stock_repo = stock_repo
         self._position_repo = position_repo
         self._allocation_repo = allocation_repo
         self._portfolio_repo = portfolio_repo
+        self._trade_repo = trade_repo
 
     async def _get_technical_data_for_positions(
         self,
@@ -245,6 +248,11 @@ class RebalancingService:
         # Get scored stocks
         stocks_data = await self._stock_repo.get_with_scores()
 
+        # Get recently bought symbols for cooldown filtering
+        recently_bought: set[str] = set()
+        if self._trade_repo:
+            recently_bought = await self._trade_repo.get_recently_bought_symbols(BUY_COOLDOWN_DAYS)
+
         # Build complete portfolio context with all metadata
         positions = {}
         stock_geographies = {}
@@ -302,6 +310,10 @@ class RebalancingService:
             # Skip stocks where allow_buy is disabled
             allow_buy = stock.get("allow_buy")
             if allow_buy is not None and not allow_buy:
+                continue
+
+            # Skip stocks bought recently (cooldown period)
+            if symbol in recently_bought:
                 continue
 
             quality_score = stock.get("quality_score") or stock.get("total_score") or 0

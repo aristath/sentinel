@@ -15,6 +15,9 @@ DEFAULT_CURRENCY = "EUR"
 TRADE_SIDE_BUY = "BUY"
 TRADE_SIDE_SELL = "SELL"
 
+# Cooldown periods (days)
+BUY_COOLDOWN_DAYS = 30
+
 # Geography codes
 GEO_EU = "EU"
 GEO_ASIA = "ASIA"

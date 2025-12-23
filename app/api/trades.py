@@ -173,6 +173,7 @@ async def get_recommendations(
     position_repo: PositionRepository = Depends(get_position_repository),
     allocation_repo: AllocationRepository = Depends(get_allocation_repository),
     portfolio_repo: PortfolioRepository = Depends(get_portfolio_repository),
+    trade_repo: TradeRepository = Depends(get_trade_repository),
 ):
     """
     Get top N trade recommendations based on current portfolio state.
@@ -195,6 +196,7 @@ async def get_recommendations(
             position_repo,
             allocation_repo,
             portfolio_repo,
+            trade_repo,
         )
         recommendations = await rebalancing_service.get_recommendations(limit=limit)
 
@@ -252,6 +254,7 @@ async def execute_recommendation(
             position_repo,
             allocation_repo,
             portfolio_repo,
+            trade_repo,
         )
         recommendations = await rebalancing_service.get_recommendations(limit=10)
 
@@ -382,6 +385,7 @@ async def execute_sell_recommendation(
             position_repo,
             allocation_repo,
             portfolio_repo,
+            trade_repo,
         )
 
         # Get sell recommendations (fetch more to find the symbol)

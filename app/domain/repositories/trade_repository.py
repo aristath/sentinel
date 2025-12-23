@@ -1,7 +1,7 @@
 """Repository interface for trade data access."""
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List, Optional, Set
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -35,4 +35,9 @@ class TradeRepository(ABC):
     @abstractmethod
     async def get_history(self, limit: int = 50) -> List[Trade]:
         """Get trade history."""
+        pass
+
+    @abstractmethod
+    async def get_recently_bought_symbols(self, days: int = 30) -> Set[str]:
+        """Get symbols that were bought in the last N days."""
         pass
