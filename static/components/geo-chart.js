@@ -152,18 +152,18 @@ function geoChartComponent() {
       return (deviation >= 0 ? '+' : '') + pct + '%';
     },
 
-    // Badge class for deviation value - consistent with bar colors
+    // Badge class for deviation value - using colors that exist in CSS
     getDeviationBadgeClass(deviation) {
       if (Math.abs(deviation) < 0.02) return 'bg-gray-700 text-gray-400'; // At target
       return deviation > 0
-        ? 'bg-amber-900/50 text-amber-400'  // Overweight
-        : 'bg-blue-900/50 text-blue-400';   // Underweight
+        ? 'bg-red-900 text-red-400'    // Overweight
+        : 'bg-blue-900 text-blue-400'; // Underweight
     },
 
-    // Bar color - simple over/under logic
+    // Bar color - using colors that exist in CSS
     getDeviationBarColor(name, deviation) {
       if (Math.abs(deviation) < 0.02) return 'bg-gray-500'; // At target
-      return deviation > 0 ? 'bg-amber-500' : 'bg-blue-500';
+      return deviation > 0 ? 'bg-red-500' : 'bg-blue-500';
     },
 
     // Bar style for deviation visualization
