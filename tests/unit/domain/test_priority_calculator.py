@@ -11,39 +11,6 @@ from app.domain.services.priority_calculator import (
     PriorityCalculator,
     PriorityInput,
 )
-from app.domain.utils.priority_helpers import (
-    calculate_weight_boost,
-    calculate_risk_adjustment,
-)
-
-
-class TestPriorityHelpers:
-    """Tests for priority helper functions (kept for backwards compatibility)."""
-
-    def test_calculate_weight_boost_positive(self):
-        """Test weight boost calculation for positive weights."""
-        assert calculate_weight_boost(1.0) == 1.0
-        assert calculate_weight_boost(0.5) == 0.75
-        assert calculate_weight_boost(0.0) == 0.5
-
-    def test_calculate_weight_boost_negative(self):
-        """Test weight boost calculation for negative weights."""
-        assert calculate_weight_boost(-1.0) == 0.0
-        assert calculate_weight_boost(-0.5) == 0.25
-
-    def test_calculate_weight_boost_clamping(self):
-        """Test that weight boost clamps values outside -1 to +1."""
-        assert calculate_weight_boost(2.0) == 1.0
-        assert calculate_weight_boost(-2.0) == 0.0
-
-    def test_calculate_risk_adjustment(self):
-        """Test risk adjustment calculation."""
-        # Low volatility should give high score
-        assert calculate_risk_adjustment(0.15) == pytest.approx(1.0, abs=0.01)
-        # High volatility should give low score
-        assert calculate_risk_adjustment(0.50) == pytest.approx(0.0, abs=0.01)
-        # None should return neutral
-        assert calculate_risk_adjustment(None) == 0.5
 
 
 class TestPriorityCalculator:

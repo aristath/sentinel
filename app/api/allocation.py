@@ -2,7 +2,6 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from typing import Optional
 from app.infrastructure.dependencies import (
     get_allocation_repository,
     get_portfolio_repository,

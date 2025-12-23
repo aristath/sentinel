@@ -14,18 +14,6 @@ from app.domain.constants import (
     MAX_PRIORITY_MULTIPLIER,
     MIN_VOLATILITY_MULTIPLIER,
     MAX_POSITION_SIZE_MULTIPLIER,
-    POSITION_PENALTY_WEIGHT,
-    GEO_PENALTY_WEIGHT,
-    INDUSTRY_PENALTY_WEIGHT,
-    MAX_DIVERSIFICATION_PENALTY,
-    MAX_POSITION_PENALTY,
-    HIGH_GEO_NEED_THRESHOLD,
-    LOW_GEO_NEED_THRESHOLD,
-    HIGH_INDUSTRY_NEED_THRESHOLD,
-)
-from app.domain.utils.priority_helpers import (
-    calculate_weight_boost,
-    calculate_risk_adjustment,
 )
 
 logger = logging.getLogger(__name__)
@@ -97,34 +85,6 @@ class StockPriority:
     quality_score: Optional[float] = None
     opportunity_score: Optional[float] = None
     allocation_fit_score: Optional[float] = None
-
-
-def calculate_diversification_penalty(
-    position_pct: float,
-    geo_overweight: float,
-    industry_overweight: float
-) -> float:
-    """
-    Calculate penalty for concentrated positions.
-    
-    Args:
-        position_pct: Position size as percentage of portfolio (0.0 to 1.0)
-        geo_overweight: Geographic overweight amount (0.0 to 1.0)
-        industry_overweight: Industry overweight amount (0.0 to 1.0)
-        
-    Returns:
-        Penalty value (0.0 to 0.5)
-    """
-    position_penalty = min(MAX_POSITION_PENALTY, position_pct * 3)  # 10% position = 0.3 penalty
-    geo_penalty = max(0, geo_overweight * 0.5)
-    industry_penalty = max(0, industry_overweight * 0.5)
-
-    total_penalty = (
-        position_penalty * POSITION_PENALTY_WEIGHT +
-        geo_penalty * GEO_PENALTY_WEIGHT +
-        industry_penalty * INDUSTRY_PENALTY_WEIGHT
-    )
-    return min(MAX_DIVERSIFICATION_PENALTY, total_penalty)
 
 
 def calculate_position_size(

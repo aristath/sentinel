@@ -24,7 +24,6 @@ from app.domain.services.priority_calculator import (
     PriorityCalculator,
     PriorityInput,
 )
-from app.services.allocator import parse_industries
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

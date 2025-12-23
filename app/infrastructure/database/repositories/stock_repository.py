@@ -5,7 +5,6 @@ from typing import Optional, List
 from datetime import datetime
 
 from app.domain.repositories.stock_repository import StockRepository, Stock
-from app.domain.exceptions import StockNotFoundError
 
 
 class SQLiteStockRepository(StockRepository):

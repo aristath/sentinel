@@ -48,15 +48,10 @@ TRADING_DAYS_PER_YEAR = 252
 EMA_LENGTH = 200
 RSI_LENGTH = 14
 BOLLINGER_LENGTH = 20
-BOLLINGER_STD = 2
 
 # Minimum data requirements
-MIN_DAYS_FOR_VOLATILITY = 30
 MIN_DAYS_FOR_OPPORTUNITY = 50
 MIN_MONTHS_FOR_CAGR = 12
-
-# Fallback values for missing data
-DEFAULT_VOLATILITY = 0.20  # 20% annual volatility baseline
 
 
 # =============================================================================

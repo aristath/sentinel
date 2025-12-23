@@ -1,7 +1,6 @@
 """Portfolio API endpoints."""
 
 from fastapi import APIRouter, Depends, HTTPException
-from typing import Optional
 from app.infrastructure.dependencies import (
     get_portfolio_repository,
     get_position_repository,
@@ -51,18 +50,6 @@ async def get_portfolio(
     # Sort by market value
     result.sort(key=lambda x: (x.get("quantity", 0) or 0) * (x.get("current_price") or x.get("avg_price") or 0), reverse=True)
     return result
-
-
-def infer_geography(symbol: str) -> str:
-    """Infer geography from symbol suffix."""
-    symbol = symbol.upper()
-    if symbol.endswith(".GR") or symbol.endswith(".DE") or symbol.endswith(".PA"):
-        return "EU"
-    elif symbol.endswith(".AS") or symbol.endswith(".HK") or symbol.endswith(".T"):
-        return "ASIA"
-    elif symbol.endswith(".US"):
-        return "US"
-    return "OTHER"
 
 
 @router.get("/summary")
