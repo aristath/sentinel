@@ -1,8 +1,7 @@
 """Periodic stock score refresh job."""
 
 import logging
-import aiosqlite
-from app.config import settings
+from app.database import get_db_connection
 from app.services.scorer import score_all_stocks
 from app.infrastructure.hardware.led_display import get_led_display
 from app.infrastructure.locking import file_lock
@@ -21,11 +20,7 @@ async def _refresh_all_scores_internal():
     logger.info("Starting periodic score refresh...")
 
     try:
-        async with aiosqlite.connect(settings.database_path) as db:
-            db.row_factory = aiosqlite.Row
-            # Enable WAL mode and busy timeout
-            await db.execute("PRAGMA journal_mode=WAL")
-            await db.execute("PRAGMA busy_timeout=30000")
+        async with get_db_connection() as db:
             scores = await score_all_stocks(db)
             logger.info(f"Refreshed scores for {len(scores)} stocks")
     except Exception as e:

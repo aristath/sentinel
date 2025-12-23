@@ -14,9 +14,8 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import aiosqlite
-
 from app.config import settings
+from app.database import get_db_connection
 from app.infrastructure.locking import file_lock
 
 logger = logging.getLogger(__name__)
@@ -95,7 +94,7 @@ async def _checkpoint_wal_internal():
     logger.info("Running WAL checkpoint")
 
     try:
-        async with aiosqlite.connect(settings.database_path) as db:
+        async with get_db_connection() as db:
             # Run checkpoint with TRUNCATE mode
             result = await db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
             row = await result.fetchone()
@@ -125,7 +124,7 @@ async def _integrity_check_internal():
     logger.info("Running database integrity check")
 
     try:
-        async with aiosqlite.connect(settings.database_path) as db:
+        async with get_db_connection() as db:
             result = await db.execute("PRAGMA integrity_check")
             row = await result.fetchone()
 
@@ -157,7 +156,7 @@ async def _cleanup_old_daily_prices_internal():
     logger.info("Cleaning up old daily prices")
 
     try:
-        async with aiosqlite.connect(settings.database_path) as db:
+        async with get_db_connection() as db:
             cutoff = (datetime.now() - timedelta(days=DAILY_PRICE_RETENTION_DAYS)).strftime("%Y-%m-%d")
 
             # Count records to be deleted
@@ -199,7 +198,7 @@ async def _cleanup_old_snapshots_internal():
     logger.info("Cleaning up old portfolio snapshots")
 
     try:
-        async with aiosqlite.connect(settings.database_path) as db:
+        async with get_db_connection() as db:
             cutoff = (datetime.now() - timedelta(days=SNAPSHOT_RETENTION_DAYS)).strftime("%Y-%m-%d")
 
             # Count records to be deleted

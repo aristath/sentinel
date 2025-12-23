@@ -6,9 +6,7 @@ Orchestrates stock scoring operations using the long-term value scoring system.
 from typing import List, Optional
 from datetime import datetime
 
-import aiosqlite
-
-from app.config import settings
+from app.database import get_db_connection
 from app.domain.repositories import (
     StockRepository,
     ScoreRepository,
@@ -50,11 +48,7 @@ class ScoringService:
         Returns:
             Calculated score or None if calculation failed
         """
-        async with aiosqlite.connect(settings.database_path) as db:
-            db.row_factory = aiosqlite.Row
-            await db.execute("PRAGMA journal_mode=WAL")
-            await db.execute("PRAGMA busy_timeout=30000")
-
+        async with get_db_connection() as db:
             score = await calculate_stock_score(
                 db,
                 symbol,
@@ -96,11 +90,7 @@ class ScoringService:
         stocks = await self.stock_repo.get_all_active()
         scores = []
 
-        async with aiosqlite.connect(settings.database_path) as db:
-            db.row_factory = aiosqlite.Row
-            await db.execute("PRAGMA journal_mode=WAL")
-            await db.execute("PRAGMA busy_timeout=30000")
-
+        async with get_db_connection() as db:
             for stock in stocks:
                 score = await calculate_stock_score(
                     db,

@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 
 import aiosqlite
 
-from app.config import settings
+from app.database import get_db_connection
 from app.services.tradernet import get_tradernet_client
 from app.infrastructure.locking import file_lock
 from app.infrastructure.hardware.led_display import get_led_display
@@ -68,11 +68,7 @@ async def _sync_stock_price_history():
                 display.show_error("BROKER DOWN")
             return
 
-    async with aiosqlite.connect(settings.database_path) as db:
-        db.row_factory = aiosqlite.Row
-        await db.execute("PRAGMA journal_mode=WAL")
-        await db.execute("PRAGMA busy_timeout=30000")
-
+    async with get_db_connection() as db:
         # Get all active stocks
         cursor = await db.execute("SELECT symbol FROM stocks WHERE active = 1")
         rows = await cursor.fetchall()
@@ -178,11 +174,7 @@ async def _aggregate_to_monthly():
     """Aggregate daily prices to monthly averages for all symbols."""
     logger.info("Aggregating daily prices to monthly averages")
 
-    async with aiosqlite.connect(settings.database_path) as db:
-        db.row_factory = aiosqlite.Row
-        await db.execute("PRAGMA journal_mode=WAL")
-        await db.execute("PRAGMA busy_timeout=30000")
-
+    async with get_db_connection() as db:
         # Get all symbols with daily data
         cursor = await db.execute("SELECT DISTINCT symbol FROM stock_price_history")
         symbols = [row["symbol"] for row in await cursor.fetchall()]
