@@ -159,8 +159,11 @@ def animate_normal(phase: int, temp: float = 0) -> np.ndarray:
     # Current expansion radius (0 to max_radius)
     expansion = (phase % cycle_frames) * max_radius / cycle_frames
 
-    # Time-based fade (1.0 at start, 0.0 at end of cycle)
-    time_fade = 1.0 - (phase % cycle_frames) / cycle_frames
+    # Time-based fade (quadratic for steeper falloff)
+    time_fade = (1.0 - (phase % cycle_frames) / cycle_frames) ** 2
+
+    # Effective radius for radial fade (minimum 1.0 to avoid div by zero)
+    effective_radius = max(expansion, 1.0)
 
     for row in range(ROWS):
         for col in range(COLS):
@@ -169,9 +172,9 @@ def animate_normal(phase: int, temp: float = 0) -> np.ndarray:
 
             # Only light pixels within current expansion radius
             if dist <= expansion:
-                # Radial fade: brightest at center, dimmer toward edge
-                # Steeper falloff
-                radial_fade = 1.0 - (dist / max_radius) ** 2.0
+                # Radial fade relative to current expansion (not max_radius)
+                # This ensures edge pixels are always visibly dimmer
+                radial_fade = 1.0 - (dist / effective_radius) ** 2.0
 
                 # Combined brightness: radial gradient * time fade
                 brightness = int(peak_brightness * radial_fade * time_fade)
