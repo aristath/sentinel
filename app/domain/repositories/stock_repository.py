@@ -45,14 +45,14 @@ class StockRepository(ABC):
         pass
 
     @abstractmethod
-    async def update(self, symbol: str, auto_commit: bool = True, **updates) -> None:
+    async def update(self, current_symbol: str, auto_commit: bool = True, **updates) -> None:
         """
         Update stock fields.
-        
+
         Args:
-            symbol: Stock symbol to update
+            current_symbol: Current stock symbol to update (renamed to avoid conflict with symbol in updates)
             auto_commit: If True, commit immediately. If False, caller manages transaction.
-            **updates: Field updates
+            **updates: Field updates (may include 'symbol' for renames)
         """
         pass
 

@@ -85,19 +85,19 @@ class SQLiteStockRepository(StockRepository):
         if auto_commit:
             await self.db.commit()
 
-    async def update(self, symbol: str, auto_commit: bool = True, **updates) -> None:
+    async def update(self, current_symbol: str, auto_commit: bool = True, **updates) -> None:
         """
         Update stock fields.
 
         Args:
-            symbol: Stock symbol to update
+            current_symbol: Current stock symbol to update (renamed to avoid conflict with symbol in updates)
             auto_commit: If True, commit immediately. If False, caller manages transaction.
             **updates: Field updates (name, industry, geography, symbol for rename, etc.)
         """
         if not updates:
             return
 
-        old_symbol = symbol.upper()
+        old_symbol = current_symbol.upper()
         new_symbol = updates.pop("symbol", None)  # Extract symbol rename if present
 
         # Handle symbol rename with cascading updates
