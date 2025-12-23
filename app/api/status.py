@@ -24,10 +24,26 @@ async def get_status(
     position_repo: PositionRepository = Depends(get_position_repository),
 ):
     """Get system health and status."""
-    # Get last sync time and cash balance from latest portfolio snapshot
+    # Get cash balance from latest portfolio snapshot
     latest_snapshot = await portfolio_repo.get_latest()
-    last_sync = latest_snapshot.date if latest_snapshot else None
     cash_balance = latest_snapshot.cash_balance if latest_snapshot else 0
+
+    # Get last sync time from positions (most recent last_updated)
+    positions = await position_repo.get_all()
+    last_sync = None
+    if positions:
+        # Find most recent last_updated, format as "YYYY-MM-DD HH:MM"
+        latest = max(
+            (p.last_updated for p in positions if p.last_updated),
+            default=None
+        )
+        if latest:
+            # Parse ISO format and reformat to "YYYY-MM-DD HH:MM"
+            try:
+                dt = datetime.fromisoformat(latest)
+                last_sync = dt.strftime("%Y-%m-%d %H:%M")
+            except (ValueError, TypeError):
+                last_sync = latest[:16] if len(latest) >= 16 else latest
 
     # Get stock count
     active_stocks = await stock_repo.get_all_active()
