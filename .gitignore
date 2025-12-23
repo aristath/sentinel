@@ -15,6 +15,9 @@ ENV/
 *.db
 data/*.db
 
+# Logs
+data/logs/
+
 # IDE
 .idea/
 .vscode/
