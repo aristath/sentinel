@@ -119,7 +119,7 @@ def get_max_temperature() -> float:
 # =============================================================================
 
 def animate_normal(phase: int, temp: float = 0) -> np.ndarray:
-    """Slow breathing wave - speed and brightness vary with temperature.
+    """Heartbeat pulse - ring emanates from center, speed/brightness vary with temp.
 
     Speed (cycle time):
     - < 45°C: 3s
@@ -128,38 +128,56 @@ def animate_normal(phase: int, temp: float = 0) -> np.ndarray:
     - 60-65°C: 1.5s
     - 65+°C: 1s
 
-    Brightness scales linearly from 50% at 45°C to 100% at 65°C.
+    Brightness scales with temperature (brighter when hotter).
     """
     arr = np.zeros((ROWS, COLS), dtype=np.uint8)
 
+    # Center of matrix
+    center_row = (ROWS - 1) / 2  # 3.5
+    center_col = (COLS - 1) / 2  # 6
+
+    # Max radius to reach edges
+    max_radius = 8
+
     # Determine cycle speed based on temperature
     if temp >= 65:
-        cycle_frames = 10  # 1s cycle
+        cycle_frames = 10  # 1s
     elif temp >= 60:
-        cycle_frames = 15  # 1.5s cycle
+        cycle_frames = 15  # 1.5s
     elif temp >= 55:
-        cycle_frames = 20  # 2s cycle
+        cycle_frames = 20  # 2s
     elif temp >= 45:
-        cycle_frames = 25  # 2.5s cycle
+        cycle_frames = 25  # 2.5s
     else:
-        cycle_frames = 30  # 3s cycle
+        cycle_frames = 30  # 3s
 
-    # Calculate brightness (50% at 45°C, 100% at 65°C, linear interpolation)
+    # Peak brightness based on temperature
     if temp <= 45:
-        peak_brightness = 40  # 50% of 80
+        peak_brightness = 60
     elif temp >= 65:
-        peak_brightness = 80  # 100% of 80
+        peak_brightness = 150
     else:
-        # Linear interpolation: 40 + (temp - 45) * (80 - 40) / (65 - 45)
-        peak_brightness = int(40 + (temp - 45) * 2)
+        peak_brightness = int(60 + (temp - 45) * 4.5)
 
-    wave_col = (phase % cycle_frames) * COLS / cycle_frames
+    # Current ring radius (expands over cycle)
+    ring_radius = (phase % cycle_frames) * max_radius / cycle_frames
 
-    for col in range(COLS):
-        dist = abs(col - wave_col)
-        if dist <= 2:
-            brightness = int(peak_brightness * (1 - dist / 2.5))
-            for row in range(ROWS):
+    # Ring thickness
+    ring_width = 2.0
+
+    for row in range(ROWS):
+        for col in range(COLS):
+            # Distance from center
+            dist = math.sqrt((row - center_row) ** 2 + (col - center_col) ** 2)
+
+            # Check if pixel is within the ring band
+            dist_from_ring = abs(dist - ring_radius)
+            if dist_from_ring < ring_width:
+                # Brightness fades as ring expands
+                fade = 1 - (ring_radius / max_radius)
+                # Softer edges within the ring
+                edge_fade = 1 - (dist_from_ring / ring_width)
+                brightness = int(peak_brightness * fade * edge_fade)
                 arr[row, col] = max(0, brightness)
 
     return arr
