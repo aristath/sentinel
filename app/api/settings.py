@@ -1,11 +1,11 @@
 """Settings API endpoints."""
 
-import aiosqlite
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.config import settings
 from app.infrastructure.cache import cache
+from app.repositories import SettingsRepository
 
 router = APIRouter()
 
@@ -46,14 +46,9 @@ class SettingUpdate(BaseModel):
 
 async def get_setting(key: str, default: str = None) -> str | None:
     """Get a setting value from the database."""
-    from app.database import get_db_connection
-    async with get_db_connection() as db:
-        cursor = await db.execute(
-            "SELECT value FROM settings WHERE key = ?",
-            (key,)
-        )
-        row = await cursor.fetchone()
-        return row[0] if row else default
+    settings_repo = SettingsRepository()
+    value = await settings_repo.get_value(key)
+    return str(value) if value is not None else default
 
 
 async def get_settings_batch(keys: list[str]) -> dict[str, str]:
@@ -65,11 +60,8 @@ async def get_settings_batch(keys: list[str]) -> dict[str, str]:
         return {k: v for k, v in cached.items() if k in keys}
 
     # Fetch all settings from DB
-    from app.database import get_db_connection
-    async with get_db_connection() as db:
-        cursor = await db.execute("SELECT key, value FROM settings")
-        rows = await cursor.fetchall()
-        all_settings = {row[0]: row[1] for row in rows}
+    settings_repo = SettingsRepository()
+    all_settings = await settings_repo.get_all()
 
     # Cache for 3 seconds
     cache.set(cache_key, all_settings, ttl_seconds=3)
@@ -79,16 +71,8 @@ async def get_settings_batch(keys: list[str]) -> dict[str, str]:
 
 async def set_setting(key: str, value: str) -> None:
     """Set a setting value in the database."""
-    from app.database import get_db_connection
-    async with get_db_connection() as db:
-        await db.execute(
-            """
-            INSERT INTO settings (key, value) VALUES (?, ?)
-            ON CONFLICT(key) DO UPDATE SET value = excluded.value
-            """,
-            (key, value)
-        )
-        await db.commit()
+    settings_repo = SettingsRepository()
+    await settings_repo.set_value(key, float(value))
     # Invalidate settings cache
     cache.invalidate("settings:all")
 

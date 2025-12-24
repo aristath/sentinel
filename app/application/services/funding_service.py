@@ -7,28 +7,26 @@ warnings for rule overrides and net portfolio score impact.
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import List, Dict, Optional
 
-from app.domain.repositories import (
+from app.repositories import (
     StockRepository,
     PositionRepository,
     AllocationRepository,
     PortfolioRepository,
 )
-from app.services.sell_scorer import (
+from app.domain.scoring import (
     calculate_all_sell_scores,
+    calculate_portfolio_score,
+    calculate_post_transaction_score,
+    get_sell_settings,
     SellScore,
     TechnicalData,
-    get_sell_settings,
+    PortfolioContext,
     DEFAULT_MIN_HOLD_DAYS,
     DEFAULT_SELL_COOLDOWN_DAYS,
     DEFAULT_MAX_LOSS_THRESHOLD,
-)
-from app.services.scorer import (
-    calculate_portfolio_score,
-    calculate_post_transaction_score,
-    PortfolioContext,
 )
 from app.services.tradernet import get_exchange_rate
 

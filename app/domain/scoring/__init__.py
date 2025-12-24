@@ -99,6 +99,7 @@ from app.domain.scoring.sell import (
     calculate_instability_score,
     check_sell_eligibility,
     determine_sell_quantity,
+    get_sell_settings,
 )
 
 # Stock scorer (orchestrator)
@@ -166,6 +167,7 @@ __all__ = [
     "calculate_instability_score",
     "check_sell_eligibility",
     "determine_sell_quantity",
+    "get_sell_settings",
     # Technical indicators
     "calculate_ema",
     "calculate_rsi",

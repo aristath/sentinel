@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from app.config import settings
-from app.database import init_db
+from app.infrastructure.database.manager import get_db_manager
 from app.api import portfolio, stocks, trades, status, allocation, cash_flows, charts, settings as settings_api
 from app.jobs.scheduler import init_scheduler, start_scheduler, stop_scheduler
 from app.services.tradernet import get_tradernet_client
@@ -31,7 +31,7 @@ console_handler.setFormatter(log_format)
 console_handler.addFilter(CorrelationIDFilter())
 
 # File handler with rotation (5MB per file, keep 3 backups = 20MB max)
-log_dir = Path(settings.database_path).parent / "logs"
+log_dir = settings.data_dir / "logs"
 log_dir.mkdir(parents=True, exist_ok=True)
 file_handler = RotatingFileHandler(
     log_dir / "arduino-trader.log",
@@ -56,7 +56,7 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Arduino Trader...")
 
     # Clean up stale lock files from previous crashes
-    lock_dir = Path(settings.database_path).parent / "locks"
+    lock_dir = settings.data_dir / "locks"
     if lock_dir.exists():
         for lock_file in lock_dir.glob("*.lock"):
             try:
@@ -69,8 +69,10 @@ async def lifespan(app: FastAPI):
     if not settings.tradernet_api_key or not settings.tradernet_api_secret:
         logger.error("Missing Tradernet API credentials. Please set TRADERNET_API_KEY and TRADERNET_API_SECRET in .env file")
         raise ValueError("Missing required Tradernet API credentials")
-    
-    await init_db()
+
+    # Initialize database manager (creates all databases with schemas)
+    db_manager = get_db_manager()
+    await db_manager.initialize()
 
     # Initialize and start scheduler
     await init_scheduler()
@@ -91,6 +93,7 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Shutting down Arduino Trader...")
     stop_scheduler()
+    await db_manager.close()
 
 
 app = FastAPI(
@@ -149,7 +152,7 @@ async def root():
 async def health():
     """
     Health check endpoint with external service status.
-    
+
     Returns:
         - status: Overall health status
         - app: Application name
@@ -164,18 +167,16 @@ async def health():
         "tradernet": "unknown",
         "yahoo_finance": "unknown",
     }
-    
+
     # Check database
     try:
-        from app.database import get_db
-        async for db in get_db():
-            await db.execute("SELECT 1")
-            health_status["database"] = "connected"
-            break
+        db_manager = get_db_manager()
+        await db_manager.state.execute("SELECT 1")
+        health_status["database"] = "connected"
     except Exception as e:
         health_status["database"] = f"error: {str(e)}"
         health_status["status"] = "degraded"
-    
+
     # Check Tradernet
     try:
         from app.services.tradernet import get_tradernet_client
@@ -190,7 +191,7 @@ async def health():
     except Exception as e:
         health_status["tradernet"] = f"error: {str(e)}"
         health_status["status"] = "degraded"
-    
+
     # Check Yahoo Finance (basic connectivity test)
     try:
         import yfinance as yf
@@ -205,9 +206,9 @@ async def health():
     except Exception as e:
         health_status["yahoo_finance"] = f"error: {str(e)}"
         health_status["status"] = "degraded"
-    
+
     from fastapi import status as http_status
-    
+
     # Return appropriate status code based on health
     if health_status["status"] == "healthy":
         return health_status

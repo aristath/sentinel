@@ -520,6 +520,18 @@ def calculate_sell_score(
     )
 
 
+async def get_sell_settings() -> dict:
+    """Load sell-related settings from database, with defaults fallback."""
+    from app.repositories import SettingsRepository
+    settings_repo = SettingsRepository()
+    return {
+        "min_hold_days": int(await settings_repo.get_value("min_hold_days", DEFAULT_MIN_HOLD_DAYS)),
+        "sell_cooldown_days": int(await settings_repo.get_value("sell_cooldown_days", DEFAULT_SELL_COOLDOWN_DAYS)),
+        "max_loss_threshold": await settings_repo.get_value("max_loss_threshold", DEFAULT_MAX_LOSS_THRESHOLD),
+        "min_sell_value": await settings_repo.get_value("min_sell_value", DEFAULT_MIN_SELL_VALUE_EUR),
+    }
+
+
 def calculate_all_sell_scores(
     positions: List[dict],
     total_portfolio_value: float,

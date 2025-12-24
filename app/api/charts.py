@@ -3,12 +3,11 @@
 import logging
 from datetime import datetime, timedelta
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
-from app.infrastructure.dependencies import get_db
+from fastapi import APIRouter, HTTPException, Query
+from app.infrastructure.database.manager import get_db_manager
 from app.infrastructure.cache import cache
 from app.services.tradernet import get_tradernet_client
 from app.services import yahoo
-import aiosqlite
 
 logger = logging.getLogger(__name__)
 
@@ -38,41 +37,44 @@ def _parse_date_range(range_str: str) -> Optional[datetime]:
 
 
 async def _get_cached_stock_prices(
-    db: aiosqlite.Connection,
     symbol: str,
     start_date: Optional[datetime]
 ) -> list[dict]:
-    """Get cached stock prices from database."""
+    """Get cached stock prices from per-symbol database."""
+    db_manager = get_db_manager()
+
     if start_date:
         start_date_str = start_date.strftime("%Y-%m-%d")
-        cursor = await db.execute("""
-            SELECT date, close_price 
-            FROM stock_price_history 
-            WHERE symbol = ? AND date >= ?
+        rows = await db_manager.history(symbol).fetch_all(
+            """
+            SELECT date, close_price
+            FROM daily_prices
+            WHERE date >= ?
             ORDER BY date ASC
-        """, (symbol, start_date_str))
+            """,
+            (start_date_str,)
+        )
     else:
-        cursor = await db.execute("""
-            SELECT date, close_price 
-            FROM stock_price_history 
-            WHERE symbol = ?
+        rows = await db_manager.history(symbol).fetch_all(
+            """
+            SELECT date, close_price
+            FROM daily_prices
             ORDER BY date ASC
-        """, (symbol,))
-    
-    rows = await cursor.fetchall()
+            """
+        )
+
     return [{"time": row["date"], "value": row["close_price"]} for row in rows]
 
 
 async def _store_stock_prices(
-    db: aiosqlite.Connection,
     symbol: str,
     prices: list,
     source: str
 ):
-    """Store stock prices in cache table."""
-    from datetime import datetime
-    
+    """Store stock prices in per-symbol database."""
+    db_manager = get_db_manager()
     now = datetime.now().isoformat()
+
     for price_data in prices:
         # price_data can be OHLC from Tradernet or HistoricalPrice from Yahoo
         if hasattr(price_data, 'timestamp'):
@@ -93,20 +95,19 @@ async def _store_stock_prices(
             volume = price_data.volume
         else:
             continue
-        
-        await db.execute("""
-            INSERT OR REPLACE INTO stock_price_history 
-            (symbol, date, close_price, open_price, high_price, low_price, volume, source, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (symbol, date, close_price, open_price, high_price, low_price, volume, source, now))
-    
-    await db.commit()
+
+        await db_manager.history(symbol).execute(
+            """
+            INSERT OR REPLACE INTO daily_prices
+            (date, close_price, open_price, high_price, low_price, volume, source, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (date, close_price, open_price, high_price, low_price, volume, source, now)
+        )
 
 
 @router.get("/sparklines")
-async def get_all_stock_sparklines(
-    db: aiosqlite.Connection = Depends(get_db),
-):
+async def get_all_stock_sparklines():
     """
     Get 1-year sparkline data for all active stocks.
     Returns dict: {symbol: [{time, value}, ...]}
@@ -118,30 +119,33 @@ async def get_all_stock_sparklines(
         return cached
 
     try:
+        db_manager = get_db_manager()
         start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
 
-        cursor = await db.execute("""
-            SELECT s.symbol, sph.date, sph.close_price
-            FROM stocks s
-            LEFT JOIN stock_price_history sph ON s.symbol = sph.symbol
-                AND sph.date >= ?
-            WHERE s.active = 1
-            ORDER BY s.symbol, sph.date ASC
-        """, (start_date,))
+        # Get all active stocks
+        stocks = await db_manager.config.fetch_all(
+            "SELECT symbol FROM stocks WHERE active = 1"
+        )
 
-        rows = await cursor.fetchall()
-
-        # Group by symbol
         result = {}
-        for row in rows:
-            symbol = row["symbol"]
-            if symbol not in result:
-                result[symbol] = []
-            if row["date"] and row["close_price"]:
-                result[symbol].append({
-                    "time": row["date"],
-                    "value": row["close_price"]
-                })
+        for stock in stocks:
+            symbol = stock["symbol"]
+            # Get prices from per-symbol database
+            prices = await db_manager.history(symbol).fetch_all(
+                """
+                SELECT date, close_price
+                FROM daily_prices
+                WHERE date >= ?
+                ORDER BY date ASC
+                """,
+                (start_date,)
+            )
+            if prices:
+                result[symbol] = [
+                    {"time": row["date"], "value": row["close_price"]}
+                    for row in prices
+                    if row["date"] and row["close_price"]
+                ]
 
         # Cache for 12 hours
         cache.set("sparklines", result, ttl_seconds=43200)
@@ -156,20 +160,19 @@ async def get_stock_chart(
     symbol: str,
     range: str = Query("1Y", description="Time range: 1M, 3M, 6M, 1Y, all"),
     source: str = Query("tradernet", description="Data source: tradernet or yahoo"),
-    db: aiosqlite.Connection = Depends(get_db),
 ):
     """
     Get stock price history for charting.
-    
+
     Returns array of {time: 'YYYY-MM-DD', value: number} using close prices.
     Checks cache first, then fetches from API if missing.
     """
     try:
         start_date = _parse_date_range(range)
-        
+
         # Check cache first
-        cached_data = await _get_cached_stock_prices(db, symbol, start_date)
-        
+        cached_data = await _get_cached_stock_prices(symbol, start_date)
+
         # Determine if we need to fetch more data
         need_fetch = False
         if not cached_data:
@@ -179,7 +182,7 @@ async def get_stock_chart(
             first_cached_date = datetime.strptime(cached_data[0]["time"], "%Y-%m-%d")
             if first_cached_date > start_date:
                 need_fetch = True
-        
+
         fetched_data = []
         if need_fetch:
             # Determine date range to fetch
@@ -188,16 +191,16 @@ async def get_stock_chart(
             else:
                 # For "all" range, fetch from 2010-01-01
                 fetch_start = datetime(2010, 1, 1)
-            
+
             fetch_end = datetime.now()
-            
+
             # Try to fetch from API
             if source == "tradernet":
                 try:
                     tradernet_client = get_tradernet_client()
                     if not tradernet_client.is_connected:
                         tradernet_client.connect()
-                    
+
                     if tradernet_client.is_connected:
                         ohlc_data = tradernet_client.get_historical_prices(
                             symbol,
@@ -210,12 +213,12 @@ async def get_stock_chart(
                                 for ohlc in ohlc_data
                             ]
                             # Store in cache
-                            await _store_stock_prices(db, symbol, ohlc_data, "tradernet")
+                            await _store_stock_prices(symbol, ohlc_data, "tradernet")
                 except Exception as e:
                     logger.warning(f"Failed to fetch from Tradernet for {symbol}: {e}")
                     # Fallback to Yahoo
                     source = "yahoo"
-            
+
             if source == "yahoo" and not fetched_data:
                 try:
                     # Map range to Yahoo period
@@ -229,7 +232,7 @@ async def get_stock_chart(
                         "all": "max"
                     }
                     yahoo_period = period_map.get(range, "10y")
-                    
+
                     historical_prices = yahoo.get_historical_prices(symbol, period=yahoo_period)
                     if historical_prices:
                         fetched_data = [
@@ -237,27 +240,27 @@ async def get_stock_chart(
                             for hp in historical_prices
                         ]
                         # Store in cache
-                        await _store_stock_prices(db, symbol, historical_prices, "yahoo")
+                        await _store_stock_prices(symbol, historical_prices, "yahoo")
                 except Exception as e:
                     logger.error(f"Failed to fetch from Yahoo for {symbol}: {e}")
-        
+
         # Combine cached and fetched data, removing duplicates
         all_data = {}
         for item in cached_data:
             all_data[item["time"]] = item["value"]
         for item in fetched_data:
             all_data[item["time"]] = item["value"]
-        
+
         # Convert to list and sort by date
         result = [{"time": date, "value": value} for date, value in sorted(all_data.items())]
-        
+
         # Filter by date range if specified
         if start_date:
             result = [
                 item for item in result
                 if datetime.strptime(item["time"], "%Y-%m-%d") >= start_date
             ]
-        
+
         return result
     except Exception as e:
         logger.error(f"Failed to get stock chart data for {symbol}: {e}")
