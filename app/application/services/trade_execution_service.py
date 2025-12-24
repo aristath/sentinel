@@ -8,7 +8,7 @@ from typing import List, Optional
 from datetime import datetime
 import aiosqlite
 
-from app.domain.repositories import TradeRepository, Trade, PositionRepository
+from app.domain.repositories import TradeRepository, PositionRepository
 from app.services.allocator import TradeRecommendation
 from app.services.tradernet import get_tradernet_client
 from app.database import transaction
@@ -184,26 +184,9 @@ class TradeExecutionService:
                 )
 
                 if result:
-                    # Record trade using repository
-                    trade_record = Trade(
-                        symbol=trade.symbol,
-                        side=trade.side,
-                        quantity=trade.quantity,
-                        price=result.price or trade.estimated_price,
-                        executed_at=datetime.now(),
-                        order_id=result.order_id,
-                    )
-                    # Only auto-commit if not in transaction
-                    if hasattr(self._trade_repo, 'create'):
-                        # Check if create method supports auto_commit parameter
-                        import inspect
-                        sig = inspect.signature(self._trade_repo.create)
-                        if 'auto_commit' in sig.parameters:
-                            await self._trade_repo.create(trade_record, auto_commit=auto_commit)
-                        else:
-                            await self._trade_repo.create(trade_record)
-                    else:
-                        await self._trade_repo.create(trade_record)
+                    # Note: Trade recording is handled by sync_trades job
+                    # which fetches executed trades from Tradernet API.
+                    # This prevents sync issues if user cancels orders externally.
 
                     # For successful SELL orders, update last_sold_at in positions
                     if trade.side.upper() == "SELL" and self._position_repo:

@@ -64,6 +64,7 @@ def init_scheduler() -> AsyncIOScheduler:
     from app.jobs.cash_flow_sync import sync_cash_flows
     from app.jobs.historical_data_sync import sync_historical_data
     from app.jobs.maintenance import run_daily_maintenance, run_weekly_maintenance
+    from app.jobs.sync_trades import sync_trades
 
     # Tradernet portfolio sync (every 2 minutes)
     scheduler.add_job(
@@ -71,6 +72,15 @@ def init_scheduler() -> AsyncIOScheduler:
         IntervalTrigger(minutes=2),
         id="portfolio_sync",
         name="Portfolio Sync",
+        replace_existing=True,
+    )
+
+    # Tradernet trade sync (every 4 minutes)
+    scheduler.add_job(
+        sync_trades,
+        IntervalTrigger(minutes=4),
+        id="trade_sync",
+        name="Trade Sync",
         replace_existing=True,
     )
 

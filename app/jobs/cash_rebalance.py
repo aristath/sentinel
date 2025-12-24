@@ -35,6 +35,7 @@ async def check_and_rebalance():
 async def _check_and_rebalance_internal():
     """Internal rebalance implementation with drip execution."""
     from app.jobs.daily_sync import sync_portfolio
+    from app.jobs.sync_trades import sync_trades
     from app.api.settings import get_min_trade_size
     from app.services.scorer import score_all_stocks
     from app.infrastructure.dependencies import (
@@ -50,6 +51,10 @@ async def _check_and_rebalance_internal():
     logger.info("Starting trade cycle check...")
 
     try:
+        # Step 0: Sync trades from Tradernet for accurate cooldown calculations
+        logger.info("Step 0: Syncing trades from Tradernet...")
+        await sync_trades()
+
         # Step 1: Sync portfolio for fresh data
         logger.info("Step 1: Syncing portfolio for fresh data...")
         await sync_portfolio()

@@ -600,6 +600,67 @@ class TradernetClient:
             logger.error(f"Failed to cancel order {order_id}: {e}")
             return False
 
+    def get_executed_trades(self, limit: int = 500) -> list[dict]:
+        """
+        Get executed trades from Tradernet.
+
+        Returns list of trade dicts with: order_id, symbol, side, quantity, price, executed_at
+        """
+        if not self.is_connected:
+            raise ConnectionError("Not connected to Tradernet")
+
+        try:
+            with _led_api_call():
+                trades_data = self._client.get_trades_history()
+
+            # Parse trades - response format: {"trades": {"trade": [...]}}
+            trade_list = trades_data.get("trades", {}).get("trade", [])
+
+            # Handle single trade (dict) vs multiple trades (list)
+            if isinstance(trade_list, dict):
+                trade_list = [trade_list]
+
+            executed = []
+            for trade in trade_list[:limit]:
+                try:
+                    # Get order ID - try multiple possible fields
+                    order_id = str(trade.get("id") or trade.get("order_id") or "")
+                    if not order_id:
+                        continue
+
+                    # Parse quantity
+                    qty_str = trade.get("q") or trade.get("qty") or "0"
+                    quantity = float(qty_str) if qty_str else 0
+
+                    # Parse price
+                    price_str = trade.get("price") or trade.get("p") or "0"
+                    price = float(price_str) if price_str else 0
+
+                    # Parse date
+                    trade_date = trade.get("date") or trade.get("d") or ""
+
+                    # Parse side (BUY/SELL)
+                    side = trade.get("buy_sell") or trade.get("bs") or ""
+                    side = side.upper() if side else ""
+
+                    executed.append({
+                        "order_id": order_id,
+                        "symbol": trade.get("instr_nm") or trade.get("i") or "",
+                        "side": side,
+                        "quantity": quantity,
+                        "price": price,
+                        "executed_at": trade_date,
+                    })
+                except Exception as e:
+                    logger.warning(f"Failed to parse trade: {e}")
+                    continue
+
+            logger.info(f"Fetched {len(executed)} executed trades from Tradernet")
+            return executed
+        except Exception as e:
+            logger.error(f"Failed to get executed trades: {e}")
+            return []
+
     def get_cash_movements(self) -> dict:
         """
         Get withdrawal history from account.
