@@ -1068,8 +1068,7 @@ class RebalancingService:
             # If we found a recommendation, add it to steps
             if best_recommendation:
                 rec = best_recommendation["rec"]
-                transaction = best_recommendation["transaction"]
-                
+
                 # Determine currency
                 currency = "EUR"
                 if best_recommendation["type"] == "SELL":
