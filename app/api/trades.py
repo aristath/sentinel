@@ -475,6 +475,8 @@ async def execute_multi_step_recommendation_step(step_number: int):
 
     if step_number < 1:
         raise HTTPException(status_code=400, detail="Step number must be >= 1")
+    if step_number > 5:
+        raise HTTPException(status_code=400, detail="Step number must be between 1 and 5")
 
     trade_repo = TradeRepository()
     position_repo = PositionRepository()
