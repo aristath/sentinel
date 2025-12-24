@@ -89,11 +89,10 @@ class Database:
         """
         conn = await self.connect()
         try:
-            await conn.execute("BEGIN IMMEDIATE")
             yield conn
-            await conn.execute("COMMIT")
+            await conn.commit()
         except Exception:
-            await conn.execute("ROLLBACK")
+            await conn.rollback()
             raise
 
     async def execute(self, sql: str, params: tuple = ()) -> aiosqlite.Cursor:
@@ -171,6 +170,8 @@ class DatabaseManager:
         - Independent recovery (can re-fetch from Yahoo if corrupted)
         - Smaller files (easier backup/restore)
         """
+        from app.infrastructure.database.schemas import init_history_schema
+
         # Sanitize symbol for filename (replace dots with underscores)
         safe_symbol = symbol.replace(".", "_").replace("-", "_")
 
@@ -178,7 +179,11 @@ class DatabaseManager:
             if symbol not in self._history:
                 self.history_dir.mkdir(parents=True, exist_ok=True)
                 db_path = self.history_dir / f"{safe_symbol}.db"
-                self._history[symbol] = Database(db_path)
+                db = Database(db_path)
+                self._history[symbol] = db
+
+                # Initialize schema for new history database
+                await init_history_schema(db)
                 logger.debug(f"Initialized history database for {symbol}")
 
             return self._history[symbol]
