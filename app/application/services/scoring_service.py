@@ -3,11 +3,16 @@
 Orchestrates stock scoring operations using the long-term value scoring system.
 """
 
+import logging
 from typing import List, Optional
 
 from app.repositories import StockRepository, ScoreRepository
 from app.domain.models import StockScore
 from app.domain.scoring import calculate_stock_score, CalculatedStockScore
+from app.infrastructure.database.manager import get_db_manager
+from app.services import yahoo
+
+logger = logging.getLogger(__name__)
 
 
 def _to_domain_score(score: CalculatedStockScore) -> StockScore:
@@ -40,6 +45,27 @@ class ScoringService:
         self.stock_repo = stock_repo
         self.score_repo = score_repo
 
+    async def _get_price_data(self, symbol: str, yahoo_symbol: str):
+        """Fetch daily and monthly price data for a symbol."""
+        db_manager = get_db_manager()
+
+        # Get history database for this symbol
+        history_db = await db_manager.history(symbol)
+
+        # Fetch daily prices
+        rows = await history_db.fetchall(
+            "SELECT date, close_price as close, high_price as high, low_price as low, open_price as open FROM daily_prices ORDER BY date DESC LIMIT 400"
+        )
+        daily_prices = [dict(row) for row in rows]
+
+        # Fetch monthly prices
+        rows = await history_db.fetchall(
+            "SELECT year_month, avg_adj_close FROM monthly_prices ORDER BY year_month DESC LIMIT 150"
+        )
+        monthly_prices = [{"year_month": row[0], "avg_adj_close": row[1]} for row in rows]
+
+        return daily_prices, monthly_prices
+
     async def calculate_and_save_score(
         self,
         symbol: str,
@@ -59,15 +85,36 @@ class ScoringService:
         Returns:
             Calculated score or None if calculation failed
         """
-        score = await calculate_stock_score(
-            symbol,
-            yahoo_symbol=yahoo_symbol,
-            geography=geography,
-            industry=industry,
-        )
-        if score:
-            await self.score_repo.upsert(_to_domain_score(score))
-        return score
+        try:
+            # Fetch price data
+            daily_prices, monthly_prices = await self._get_price_data(symbol, yahoo_symbol)
+
+            if not daily_prices or len(daily_prices) < 50:
+                logger.warning(f"Insufficient daily data for {symbol}: {len(daily_prices)} days")
+                return None
+
+            if not monthly_prices or len(monthly_prices) < 12:
+                logger.warning(f"Insufficient monthly data for {symbol}: {len(monthly_prices)} months")
+                return None
+
+            # Fetch fundamentals from Yahoo
+            fundamentals = yahoo.get_fundamentals(symbol, yahoo_symbol=yahoo_symbol)
+
+            score = calculate_stock_score(
+                symbol,
+                daily_prices=daily_prices,
+                monthly_prices=monthly_prices,
+                fundamentals=fundamentals,
+                yahoo_symbol=yahoo_symbol,
+                geography=geography,
+                industry=industry,
+            )
+            if score:
+                await self.score_repo.upsert(_to_domain_score(score))
+            return score
+        except Exception as e:
+            logger.error(f"Failed to calculate score for {symbol}: {e}")
+            return None
 
     async def score_all_stocks(self) -> List[CalculatedStockScore]:
         """
@@ -80,7 +127,8 @@ class ScoringService:
         scores = []
 
         for stock in stocks:
-            score = await calculate_stock_score(
+            logger.info(f"Scoring {stock.symbol}...")
+            score = await self.calculate_and_save_score(
                 stock.symbol,
                 yahoo_symbol=stock.yahoo_symbol,
                 geography=stock.geography,
@@ -88,6 +136,7 @@ class ScoringService:
             )
             if score:
                 scores.append(score)
-                await self.score_repo.upsert(_to_domain_score(score))
+                logger.info(f"Scored {stock.symbol}: {score.total_score:.3f}")
 
+        logger.info(f"Scored {len(scores)} stocks")
         return scores
