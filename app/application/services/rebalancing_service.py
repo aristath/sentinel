@@ -221,8 +221,8 @@ class RebalancingService:
         Each recommendation respects min_lot and shows the actual trade amount.
         Recommendations are scored by how much they IMPROVE portfolio balance.
         """
-        from app.api.settings import get_min_trade_size
-        base_trade_amount = await get_min_trade_size()
+        from app.api.settings import get_setting_value
+        base_trade_amount = await get_setting_value("min_trade_size")
 
         # Get portfolio summary for allocation context
         from app.application.services.portfolio_service import PortfolioService

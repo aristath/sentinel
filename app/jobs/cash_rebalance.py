@@ -36,7 +36,7 @@ async def _check_and_rebalance_internal():
     """Internal rebalance implementation with drip execution."""
     from app.jobs.daily_sync import sync_portfolio
     from app.jobs.sync_trades import sync_trades
-    from app.api.settings import get_min_trade_size
+    from app.api.settings import get_setting_value
     from app.services.scorer import score_all_stocks
     from app.infrastructure.dependencies import (
         get_stock_repository,
@@ -60,7 +60,7 @@ async def _check_and_rebalance_internal():
         await sync_portfolio()
 
         # Get configurable threshold from database
-        min_trade_size = await get_min_trade_size()
+        min_trade_size = await get_setting_value("min_trade_size")
 
         # Connect to broker
         client = get_tradernet_client()
