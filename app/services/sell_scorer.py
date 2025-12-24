@@ -25,17 +25,28 @@ from typing import Optional, Dict, List
 
 logger = logging.getLogger(__name__)
 
-# Constants for sell scoring
-MIN_HOLD_DAYS = 90  # 3 months minimum hold
-SELL_COOLDOWN_DAYS = 180  # 6 months between sells
-MAX_LOSS_THRESHOLD = -0.20  # Never sell if down more than 20%
-MIN_SELL_VALUE_EUR = 100  # Minimum sell value in EUR
+# Default constants for sell scoring (can be overridden via settings)
+DEFAULT_MIN_HOLD_DAYS = 90  # 3 months minimum hold
+DEFAULT_SELL_COOLDOWN_DAYS = 180  # 6 months between sells
+DEFAULT_MAX_LOSS_THRESHOLD = -0.20  # Never sell if down more than 20%
+DEFAULT_MIN_SELL_VALUE_EUR = 100  # Minimum sell value in EUR
 MIN_SELL_PCT = 0.10  # Minimum 10% of position
 MAX_SELL_PCT = 0.50  # Maximum 50% of position
 
 # Target annual return range (ideal performance)
 TARGET_RETURN_MIN = 0.08  # 8%
 TARGET_RETURN_MAX = 0.15  # 15%
+
+
+async def get_sell_settings() -> dict:
+    """Load sell-related settings from database, with defaults fallback."""
+    from app.api.settings import get_setting_value
+    return {
+        "min_hold_days": int(await get_setting_value("min_hold_days")),
+        "sell_cooldown_days": int(await get_setting_value("sell_cooldown_days")),
+        "max_loss_threshold": await get_setting_value("max_loss_threshold"),
+        "min_sell_value": await get_setting_value("min_sell_value"),
+    }
 
 
 @dataclass
@@ -67,7 +78,8 @@ class SellScore:
 def calculate_underperformance_score(
     current_price: float,
     avg_price: float,
-    days_held: int
+    days_held: int,
+    max_loss_threshold: float = DEFAULT_MAX_LOSS_THRESHOLD
 ) -> tuple[float, float]:
     """
     Calculate underperformance score based on annualized return vs target.
@@ -93,7 +105,7 @@ def calculate_underperformance_score(
 
     # Score based on return vs target (8-15% annual ideal)
     # Higher score = more reason to sell
-    if profit_pct < MAX_LOSS_THRESHOLD:
+    if profit_pct < max_loss_threshold:
         # BLOCKED - loss too big
         return 0.0, profit_pct
     elif annualized_return < -0.05:
@@ -113,7 +125,10 @@ def calculate_underperformance_score(
         return 0.3, profit_pct
 
 
-def calculate_time_held_score(first_bought_at: Optional[str]) -> tuple[float, int]:
+def calculate_time_held_score(
+    first_bought_at: Optional[str],
+    min_hold_days: int = DEFAULT_MIN_HOLD_DAYS
+) -> tuple[float, int]:
     """
     Calculate time held score. Longer hold with underperformance = higher sell priority.
 
@@ -132,7 +147,7 @@ def calculate_time_held_score(first_bought_at: Optional[str]) -> tuple[float, in
     except (ValueError, TypeError):
         return 0.6, 365
 
-    if days_held < MIN_HOLD_DAYS:
+    if days_held < min_hold_days:
         # BLOCKED - held less than 3 months
         return 0.0, days_held
     elif days_held < 180:
@@ -281,7 +296,10 @@ def check_sell_eligibility(
     allow_sell: bool,
     profit_pct: float,
     first_bought_at: Optional[str],
-    last_sold_at: Optional[str]
+    last_sold_at: Optional[str],
+    max_loss_threshold: float = DEFAULT_MAX_LOSS_THRESHOLD,
+    min_hold_days: int = DEFAULT_MIN_HOLD_DAYS,
+    sell_cooldown_days: int = DEFAULT_SELL_COOLDOWN_DAYS
 ) -> tuple[bool, Optional[str]]:
     """
     Check if selling is allowed based on hard blocks.
@@ -294,8 +312,8 @@ def check_sell_eligibility(
         return False, "allow_sell=false"
 
     # Check loss threshold
-    if profit_pct < MAX_LOSS_THRESHOLD:
-        return False, f"Loss {profit_pct*100:.1f}% exceeds -20% threshold"
+    if profit_pct < max_loss_threshold:
+        return False, f"Loss {profit_pct*100:.1f}% exceeds {max_loss_threshold*100:.0f}% threshold"
 
     # Check minimum hold time
     if first_bought_at:
@@ -304,8 +322,8 @@ def check_sell_eligibility(
             if bought_date.tzinfo:
                 bought_date = bought_date.replace(tzinfo=None)
             days_held = (datetime.now() - bought_date).days
-            if days_held < MIN_HOLD_DAYS:
-                return False, f"Held only {days_held} days (min {MIN_HOLD_DAYS})"
+            if days_held < min_hold_days:
+                return False, f"Held only {days_held} days (min {min_hold_days})"
         except (ValueError, TypeError):
             pass  # Unknown date - allow
 
@@ -316,8 +334,8 @@ def check_sell_eligibility(
             if sold_date.tzinfo:
                 sold_date = sold_date.replace(tzinfo=None)
             days_since_sell = (datetime.now() - sold_date).days
-            if days_since_sell < SELL_COOLDOWN_DAYS:
-                return False, f"Sold {days_since_sell} days ago (cooldown {SELL_COOLDOWN_DAYS})"
+            if days_since_sell < sell_cooldown_days:
+                return False, f"Sold {days_since_sell} days ago (cooldown {sell_cooldown_days})"
         except (ValueError, TypeError):
             pass  # Unknown date - allow
 
@@ -328,7 +346,8 @@ def determine_sell_quantity(
     sell_score: float,
     quantity: float,
     min_lot: int,
-    current_price: float
+    current_price: float,
+    min_sell_value: float = DEFAULT_MIN_SELL_VALUE_EUR
 ) -> tuple[int, float]:
     """
     Determine how much to sell based on score.
@@ -359,7 +378,7 @@ def determine_sell_quantity(
 
     # Check minimum value
     sell_value = sell_quantity * current_price
-    if sell_value < MIN_SELL_VALUE_EUR:
+    if sell_value < min_sell_value:
         sell_quantity = 0  # Below minimum value threshold
         sell_pct = 0
     else:
@@ -383,7 +402,8 @@ def calculate_sell_score(
     total_portfolio_value: float,
     geo_allocations: Dict[str, float],
     ind_allocations: Dict[str, float],
-    technical_data: Optional[TechnicalData] = None
+    technical_data: Optional[TechnicalData] = None,
+    settings: Optional[Dict] = None
 ) -> SellScore:
     """
     Calculate complete sell score for a position.
@@ -407,6 +427,13 @@ def calculate_sell_score(
     Returns:
         SellScore with all components and recommendations
     """
+    # Extract settings with defaults
+    settings = settings or {}
+    min_hold_days = settings.get("min_hold_days", DEFAULT_MIN_HOLD_DAYS)
+    sell_cooldown_days = settings.get("sell_cooldown_days", DEFAULT_SELL_COOLDOWN_DAYS)
+    max_loss_threshold = settings.get("max_loss_threshold", DEFAULT_MAX_LOSS_THRESHOLD)
+    min_sell_value = settings.get("min_sell_value", DEFAULT_MIN_SELL_VALUE_EUR)
+
     # Calculate position value
     position_value = quantity * current_price
 
@@ -415,16 +442,21 @@ def calculate_sell_score(
 
     # Check eligibility (hard blocks)
     eligible, block_reason = check_sell_eligibility(
-        allow_sell, profit_pct, first_bought_at, last_sold_at
+        allow_sell, profit_pct, first_bought_at, last_sold_at,
+        max_loss_threshold=max_loss_threshold,
+        min_hold_days=min_hold_days,
+        sell_cooldown_days=sell_cooldown_days
     )
 
     # Calculate time held
-    time_held_score, days_held = calculate_time_held_score(first_bought_at)
+    time_held_score, days_held = calculate_time_held_score(
+        first_bought_at, min_hold_days=min_hold_days
+    )
 
     # If blocked by time held, mark as ineligible
-    if time_held_score == 0.0 and first_bought_at and days_held < MIN_HOLD_DAYS:
+    if time_held_score == 0.0 and first_bought_at and days_held < min_hold_days:
         eligible = False
-        block_reason = block_reason or f"Held only {days_held} days (min {MIN_HOLD_DAYS})"
+        block_reason = block_reason or f"Held only {days_held} days (min {min_hold_days})"
 
     if not eligible:
         return SellScore(
@@ -445,15 +477,15 @@ def calculate_sell_score(
 
     # Calculate component scores
     underperformance_score, _ = calculate_underperformance_score(
-        current_price, avg_price, days_held
+        current_price, avg_price, days_held, max_loss_threshold=max_loss_threshold
     )
 
     # If underperformance score is 0 (big loss), block the sell
-    if underperformance_score == 0.0 and profit_pct < MAX_LOSS_THRESHOLD:
+    if underperformance_score == 0.0 and profit_pct < max_loss_threshold:
         return SellScore(
             symbol=symbol,
             eligible=False,
-            block_reason=f"Loss {profit_pct*100:.1f}% exceeds -20% threshold",
+            block_reason=f"Loss {profit_pct*100:.1f}% exceeds {max_loss_threshold*100:.0f}% threshold",
             underperformance_score=0,
             time_held_score=time_held_score,
             portfolio_balance_score=0,
@@ -496,7 +528,7 @@ def calculate_sell_score(
 
     # Determine sell quantity
     sell_quantity, sell_pct = determine_sell_quantity(
-        total_score, quantity, min_lot, current_price
+        total_score, quantity, min_lot, current_price, min_sell_value=min_sell_value
     )
     sell_value = sell_quantity * current_price
 
@@ -522,7 +554,8 @@ def calculate_all_sell_scores(
     total_portfolio_value: float,
     geo_allocations: Dict[str, float],
     ind_allocations: Dict[str, float],
-    technical_data: Optional[Dict[str, TechnicalData]] = None
+    technical_data: Optional[Dict[str, TechnicalData]] = None,
+    settings: Optional[Dict] = None
 ) -> List[SellScore]:
     """
     Calculate sell scores for all positions.
@@ -533,6 +566,7 @@ def calculate_all_sell_scores(
         geo_allocations: Current geography allocation percentages
         ind_allocations: Current industry allocation percentages
         technical_data: Dict mapping symbol to TechnicalData for instability detection
+        settings: Optional settings dict with min_hold_days, sell_cooldown_days, etc.
 
     Returns:
         List of SellScore objects, sorted by total_score descending
@@ -556,7 +590,8 @@ def calculate_all_sell_scores(
             total_portfolio_value=total_portfolio_value,
             geo_allocations=geo_allocations,
             ind_allocations=ind_allocations,
-            technical_data=technical_data.get(symbol)
+            technical_data=technical_data.get(symbol),
+            settings=settings
         )
         scores.append(score)
 

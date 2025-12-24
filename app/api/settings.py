@@ -10,7 +10,19 @@ from app.infrastructure.cache import cache
 router = APIRouter()
 
 
-class MinTradeSizeUpdate(BaseModel):
+# Default values for all configurable settings
+SETTING_DEFAULTS = {
+    "min_trade_size": 400.0,        # Minimum EUR for a trade
+    "min_hold_days": 90,            # Minimum days before selling
+    "sell_cooldown_days": 180,      # Days between sells of same stock
+    "max_loss_threshold": -0.20,    # Don't sell if loss exceeds this (as decimal)
+    "min_sell_value": 100.0,        # Minimum EUR value to sell
+    "target_annual_return": 0.11,   # Optimal CAGR for scoring (11%)
+    "market_avg_pe": 22.0,          # Reference P/E for valuation
+}
+
+
+class SettingUpdate(BaseModel):
     value: float
 
 
@@ -38,33 +50,32 @@ async def set_setting(key: str, value: str) -> None:
         await db.commit()
 
 
-async def get_min_trade_size() -> float:
-    """Get the minimum trade size, checking DB first then falling back to config."""
-    db_value = await get_setting("min_trade_size")
+async def get_setting_value(key: str) -> float:
+    """Get a setting value, falling back to default."""
+    db_value = await get_setting(key)
     if db_value:
         return float(db_value)
-    return settings.min_trade_size
+    return SETTING_DEFAULTS.get(key, 0)
 
 
 @router.get("")
-async def get_settings():
+async def get_all_settings():
     """Get all configurable settings."""
-    min_trade_size = await get_setting("min_trade_size")
+    result = {}
+    for key, default in SETTING_DEFAULTS.items():
+        db_value = await get_setting(key)
+        result[key] = float(db_value) if db_value else default
+    return result
 
-    return {
-        "min_trade_size": float(min_trade_size) if min_trade_size else settings.min_trade_size,
-    }
 
+@router.put("/{key}")
+async def update_setting_value(key: str, data: SettingUpdate):
+    """Update a setting value."""
+    if key not in SETTING_DEFAULTS:
+        raise HTTPException(status_code=400, detail=f"Unknown setting: {key}")
 
-@router.put("/min_trade_size")
-async def update_min_trade_size(data: MinTradeSizeUpdate):
-    """Update the minimum trade size setting."""
-    if data.value <= 0:
-        raise HTTPException(status_code=400, detail="Value must be positive")
-
-    await set_setting("min_trade_size", str(data.value))
-
-    return {"min_trade_size": data.value}
+    await set_setting(key, str(data.value))
+    return {key: data.value}
 
 
 @router.post("/restart")

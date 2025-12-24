@@ -37,11 +37,20 @@ logger = logging.getLogger(__name__)
 # Constants
 # =============================================================================
 
-# Scoring thresholds
-OPTIMAL_CAGR = 0.11  # 11% target annual return (bell curve peak)
+# Scoring thresholds (defaults - can be overridden via settings)
+DEFAULT_OPTIMAL_CAGR = 0.11  # 11% target annual return (bell curve peak)
 HIGH_DIVIDEND_THRESHOLD = 0.06  # 6%+ yield gets max dividend bonus
 MID_DIVIDEND_THRESHOLD = 0.03  # 3%+ yield gets mid dividend bonus
-MARKET_AVG_PE = 22  # Market average P/E ratio for comparison
+DEFAULT_MARKET_AVG_PE = 22  # Market average P/E ratio for comparison
+
+
+async def get_scoring_settings() -> dict:
+    """Load scoring-related settings from database, with defaults fallback."""
+    from app.api.settings import get_setting_value
+    return {
+        "target_annual_return": await get_setting_value("target_annual_return"),
+        "market_avg_pe": await get_setting_value("market_avg_pe"),
+    }
 
 # Technical indicator parameters
 TRADING_DAYS_PER_YEAR = 252
@@ -165,20 +174,21 @@ class PrefetchedStockData:
 # Bell Curve Scoring for Total Return
 # =============================================================================
 
-def score_total_return(total_return: float) -> float:
+def score_total_return(total_return: float, target_annual_return: float = DEFAULT_OPTIMAL_CAGR) -> float:
     """
     Bell curve scoring for total return (CAGR + dividend yield).
 
-    Peak at 11% (target for ~€1M retirement goal with €20K + €1K/month over 20 years).
+    Peak at target_annual_return (default 11% for ~€1M retirement goal).
     Uses asymmetric Gaussian: steeper rise, gentler fall for high growth.
 
     Args:
         total_return: Combined CAGR + dividend yield as decimal (e.g., 0.11 for 11%)
+        target_annual_return: Target annual return (default 0.11 = 11%)
 
     Returns:
-        Score from 0.15 (floor) to 1.0 (peak at 11%)
+        Score from 0.15 (floor) to 1.0 (peak at target)
     """
-    peak = 0.11  # 11% optimal
+    peak = target_annual_return
     sigma_left = 0.06  # Steeper rise (0% to peak)
     sigma_right = 0.10  # Gentler fall (peak to high growth)
     floor = 0.15  # Minimum score
@@ -429,7 +439,8 @@ async def calculate_quality_score(
     db: aiosqlite.Connection,
     symbol: str,
     yahoo_symbol: str = None,
-    prefetched: PrefetchedStockData = None
+    prefetched: PrefetchedStockData = None,
+    target_annual_return: float = DEFAULT_OPTIMAL_CAGR
 ) -> Optional[QualityScore]:
     """
     Calculate quality score based on long-term track record.
@@ -547,7 +558,7 @@ async def calculate_quality_score(
         total_return = cagr_5y + (dividend_yield or 0)
 
         # 1. Total Return Score (50%)
-        total_return_score = score_total_return(total_return)
+        total_return_score = score_total_return(total_return, target_annual_return)
 
         # 2. Consistency Score (25%): 5-year vs 10-year CAGR similarity
         if cagr_10y is not None:
@@ -661,7 +672,8 @@ async def calculate_opportunity_score(
     db: aiosqlite.Connection,
     symbol: str,
     yahoo_symbol: str = None,
-    prefetched: PrefetchedStockData = None
+    prefetched: PrefetchedStockData = None,
+    market_avg_pe: float = DEFAULT_MARKET_AVG_PE
 ) -> Optional[OpportunityScore]:
     """
     Calculate opportunity score based on buy-the-dip signals.
@@ -781,8 +793,8 @@ async def calculate_opportunity_score(
         # Below average P/E = HIGHER score (cheap)
         if fundamentals and fundamentals.pe_ratio and fundamentals.pe_ratio > 0:
             current_pe = fundamentals.pe_ratio
-            # Use sector average P/E as proxy (could be enhanced with historical tracking)
-            avg_pe = 22  # Market average
+            # Use configured market average P/E as proxy
+            avg_pe = market_avg_pe
 
             # Also consider forward P/E for growth adjustment
             if fundamentals.forward_pe and fundamentals.forward_pe > 0:
@@ -1212,11 +1224,20 @@ async def calculate_stock_score(
         industry: Stock industry - required for allocation fit
         portfolio_context: Portfolio weights and positions for allocation fit
     """
+    # Load scoring settings from database
+    settings = await get_scoring_settings()
+    target_annual_return = settings.get("target_annual_return", DEFAULT_OPTIMAL_CAGR)
+    market_avg_pe = settings.get("market_avg_pe", DEFAULT_MARKET_AVG_PE)
+
     # Prefetch data once for both quality and opportunity scoring (avoids duplicate API calls)
     prefetched = await prefetch_stock_data(db, symbol, yahoo_symbol)
 
-    quality = await calculate_quality_score(db, symbol, yahoo_symbol, prefetched=prefetched)
-    opportunity = await calculate_opportunity_score(db, symbol, yahoo_symbol, prefetched=prefetched)
+    quality = await calculate_quality_score(
+        db, symbol, yahoo_symbol, prefetched=prefetched, target_annual_return=target_annual_return
+    )
+    opportunity = await calculate_opportunity_score(
+        db, symbol, yahoo_symbol, prefetched=prefetched, market_avg_pe=market_avg_pe
+    )
     analyst = calculate_analyst_score(symbol, yahoo_symbol)  # Still sync, uses Yahoo directly
 
     # Handle missing scores with defaults

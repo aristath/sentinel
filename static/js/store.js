@@ -207,6 +207,18 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
+    async updateSetting(key, value) {
+      const numValue = parseFloat(value);
+      if (isNaN(numValue)) return;
+      try {
+        await API.updateSetting(key, numValue);
+        this.settings[key] = numValue;
+        this.showMessage(`Setting "${key}" updated`, 'success');
+      } catch (e) {
+        this.showMessage(`Failed to update ${key}`, 'error');
+      }
+    },
+
     async executeRecommendation(symbol) {
       this.loading.execute = true;
       this.executingSymbol = symbol;

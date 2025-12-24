@@ -42,7 +42,7 @@ from app.services.scorer import (
 )
 from app.services import yahoo
 from app.services.tradernet import get_exchange_rate
-from app.services.sell_scorer import calculate_all_sell_scores, SellScore, TechnicalData
+from app.services.sell_scorer import calculate_all_sell_scores, SellScore, TechnicalData, get_sell_settings
 from app.domain.constants import TRADE_SIDE_BUY, TRADE_SIDE_SELL, BUY_COOLDOWN_DAYS
 
 logger = logging.getLogger(__name__)
@@ -525,13 +525,17 @@ class RebalancingService:
         symbols = [p['symbol'] for p in positions]
         technical_data = await self._get_technical_data_for_positions(symbols)
 
+        # Load settings from database
+        settings = await get_sell_settings()
+
         # Calculate sell scores for all positions
         sell_scores = calculate_all_sell_scores(
             positions=positions,
             total_portfolio_value=total_value,
             geo_allocations=geo_allocations,
             ind_allocations=ind_allocations,
-            technical_data=technical_data
+            technical_data=technical_data,
+            settings=settings
         )
 
         # Filter to eligible sells

@@ -20,9 +20,10 @@ from app.services.sell_scorer import (
     calculate_all_sell_scores,
     SellScore,
     TechnicalData,
-    MIN_HOLD_DAYS,
-    SELL_COOLDOWN_DAYS,
-    MAX_LOSS_THRESHOLD,
+    get_sell_settings,
+    DEFAULT_MIN_HOLD_DAYS,
+    DEFAULT_SELL_COOLDOWN_DAYS,
+    DEFAULT_MAX_LOSS_THRESHOLD,
 )
 from app.services.scorer import (
     calculate_portfolio_score,
@@ -240,11 +241,15 @@ class FundingService:
         geo_allocations = {a.name: a.current_pct for a in summary.geographic_allocations}
         ind_allocations = {a.name: a.current_pct for a in summary.industry_allocations}
 
+        # Load settings from database
+        settings = await get_sell_settings()
+
         scores = calculate_all_sell_scores(
             positions=positions,
             total_portfolio_value=portfolio_context.total_value,
             geo_allocations=geo_allocations,
             ind_allocations=ind_allocations,
+            settings=settings,
         )
 
         return {s.symbol: s for s in scores}
@@ -290,8 +295,8 @@ class FundingService:
                 if bought_date.tzinfo:
                     bought_date = bought_date.replace(tzinfo=None)
                 days_held = (datetime.now() - bought_date).days
-                if days_held < MIN_HOLD_DAYS:
-                    warnings.append(f"Held only {days_held} days (min: {MIN_HOLD_DAYS})")
+                if days_held < DEFAULT_MIN_HOLD_DAYS:
+                    warnings.append(f"Held only {days_held} days (min: {DEFAULT_MIN_HOLD_DAYS})")
             except (ValueError, TypeError):
                 pass
 
@@ -303,8 +308,8 @@ class FundingService:
                 if sold_date.tzinfo:
                     sold_date = sold_date.replace(tzinfo=None)
                 days_since_sell = (datetime.now() - sold_date).days
-                if days_since_sell < SELL_COOLDOWN_DAYS:
-                    warnings.append(f"Sold {days_since_sell} days ago (cooldown: {SELL_COOLDOWN_DAYS})")
+                if days_since_sell < DEFAULT_SELL_COOLDOWN_DAYS:
+                    warnings.append(f"Sold {days_since_sell} days ago (cooldown: {DEFAULT_SELL_COOLDOWN_DAYS})")
             except (ValueError, TypeError):
                 pass
 
@@ -313,8 +318,8 @@ class FundingService:
         current_price = pos.get("current_price", 0)
         if avg_price > 0 and current_price > 0:
             profit_pct = (current_price - avg_price) / avg_price
-            if profit_pct < MAX_LOSS_THRESHOLD:
-                warnings.append(f"Loss of {profit_pct*100:.1f}% exceeds {MAX_LOSS_THRESHOLD*100:.0f}% threshold")
+            if profit_pct < DEFAULT_MAX_LOSS_THRESHOLD:
+                warnings.append(f"Loss of {profit_pct*100:.1f}% exceeds {DEFAULT_MAX_LOSS_THRESHOLD*100:.0f}% threshold")
 
         return warnings
 
