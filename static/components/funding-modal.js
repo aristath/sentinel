@@ -103,10 +103,27 @@ class FundingModal extends HTMLElement {
                                 <span class="text-xs px-1.5 py-0.5 bg-red-900/50 text-red-300 rounded">SELL</span>
                                 <span class="font-mono text-white" x-text="sell.symbol"></span>
                                 <span class="text-gray-500" x-text="sell.sell_pct.toFixed(0) + '%'"></span>
-                                <!-- Warnings -->
+                                <!-- Warnings Popover -->
                                 <template x-if="sell.warnings && sell.warnings.length > 0">
-                                  <span class="text-yellow-500 cursor-help"
-                                        :title="sell.warnings.join('\\n')">&#9888;</span>
+                                  <div class="relative inline-block" x-data="{ open: false }">
+                                    <span class="text-yellow-500 cursor-pointer hover:text-yellow-400"
+                                          @mouseenter="open = true"
+                                          @mouseleave="open = false"
+                                          @click="open = !open">&#9888;</span>
+                                    <div x-show="open" x-cloak
+                                         x-transition:enter="transition ease-out duration-100"
+                                         x-transition:enter-start="opacity-0 scale-95"
+                                         x-transition:enter-end="opacity-100 scale-100"
+                                         class="absolute z-50 left-6 top-0 w-64 p-2 bg-yellow-900/95 border border-yellow-700 rounded shadow-lg text-xs">
+                                      <div class="font-semibold text-yellow-300 mb-1 pb-1 border-b border-yellow-700/50">Warnings:</div>
+                                      <template x-for="warning in sell.warnings" :key="warning">
+                                        <div class="py-1 text-yellow-200 flex items-start gap-1">
+                                          <span class="text-yellow-500">•</span>
+                                          <span x-text="warning"></span>
+                                        </div>
+                                      </template>
+                                    </div>
+                                  </div>
                                 </template>
                               </div>
                               <div class="text-right">
@@ -125,7 +142,7 @@ class FundingModal extends HTMLElement {
                             <span class="text-gray-400">Total:</span>
                             <span class="font-mono text-white ml-1" x-text="'€' + option.total_sell_value.toLocaleString()"></span>
                             <template x-if="option.has_warnings">
-                              <span class="ml-2 text-xs text-yellow-500">&#9888; Has warnings</span>
+                              <span class="ml-2 text-xs text-yellow-500">&#9888; Review warnings above</span>
                             </template>
                           </div>
                           <button @click="$store.app.executeFunding(option)"
