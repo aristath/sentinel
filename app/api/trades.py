@@ -397,7 +397,10 @@ async def get_multi_step_recommendations(depth: int = None):
         }
 
         # Cache for 5 minutes (same as single recommendations)
+        # Cache to both the specific key and :default to ensure execute endpoints can find it
         cache.set(cache_key, result, ttl_seconds=300)
+        if cache_key != "multi_step_recommendations:default":
+            cache.set("multi_step_recommendations:default", result, ttl_seconds=300)
         return result
     except HTTPException:
         raise
