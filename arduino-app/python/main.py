@@ -300,6 +300,40 @@ def set_rgb4(r: int, g: int, b: int) -> bool:
         return False
 
 
+def scroll_text(text: str, speed: int = 50) -> bool:
+    """Scroll text across LED matrix using native ArduinoGraphics.
+
+    Args:
+        text: Text to scroll (ASCII only, no Euro symbol)
+        speed: Milliseconds per scroll step (lower = faster)
+    """
+    try:
+        # Replace Euro symbol with EUR (Font_5x7 only has ASCII 32-126)
+        text = text.replace("€", "EUR")
+        Bridge.call("scrollText", text, speed, timeout=30)
+        return True
+    except Exception as e:
+        logger.debug(f"scrollText failed: {e}")
+        return False
+
+
+def print_text(text: str, x: int = 0, y: int = 1) -> bool:
+    """Display static text at position using native ArduinoGraphics.
+
+    Args:
+        text: Text to display (ASCII only)
+        x: X position
+        y: Y position
+    """
+    try:
+        text = text.replace("€", "EUR")
+        Bridge.call("printText", text, x, y, timeout=2)
+        return True
+    except Exception as e:
+        logger.debug(f"printText failed: {e}")
+        return False
+
+
 # =============================================================================
 # API communication
 # =============================================================================
@@ -374,22 +408,18 @@ def loop():
                 draw_frame(Frame(animate_trade(phase, trade_is_buy)))
                 time.sleep(0.1)
             else:
-                # Trade animation done, show ticker
+                # Trade animation done, show ticker using native text
                 if ticker_text:
-                    draw_frame(Frame(animate_ticker(ticker_text, scroll_offset, led_brightness)))
-                    scroll_offset += 1
-                    time.sleep(ticker_sleep)
+                    scroll_text(ticker_text, int(ticker_speed_ms))
                 else:
                     draw_frame(Frame(animate_normal(phase)))
                     time.sleep(0.1)
 
         elif activity_message:
-            # Activity message (higher priority than ticker/syncing)
+            # Activity message using native text (higher priority than ticker)
             # Activity runs slightly faster than normal ticker
-            activity_sleep = max(0.02, ticker_sleep * 0.8)
-            draw_frame(Frame(animate_ticker(activity_message, scroll_offset, led_brightness)))
-            scroll_offset += 1
-            time.sleep(activity_sleep)
+            activity_speed = max(20, int(ticker_speed_ms * 0.8))
+            scroll_text(activity_message, activity_speed)
 
         elif mode == "syncing":
             # Active sync wave
@@ -397,11 +427,9 @@ def loop():
             time.sleep(0.1)
 
         else:
-            # Normal mode - show ticker (replaces heartbeat)
+            # Normal mode - show ticker using native ArduinoGraphics text
             if ticker_text:
-                draw_frame(Frame(animate_ticker(ticker_text, scroll_offset, led_brightness)))
-                scroll_offset += 1
-                time.sleep(ticker_sleep)
+                scroll_text(ticker_text, int(ticker_speed_ms))
             else:
                 # Fallback to heartbeat if no ticker
                 draw_frame(Frame(animate_normal(phase)))
