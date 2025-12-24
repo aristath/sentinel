@@ -89,6 +89,25 @@ class Recommendation:
     score_change: float | None = None  # Positive = improvement
 
 
+@dataclass
+class MultiStepRecommendation:
+    """A single step in a multi-step recommendation sequence."""
+    step: int  # 1-indexed step number
+    side: str  # "BUY" or "SELL"
+    symbol: str
+    name: str
+    quantity: int
+    estimated_price: float
+    estimated_value: float  # In EUR
+    currency: str
+    reason: str
+    portfolio_score_before: float
+    portfolio_score_after: float
+    score_change: float
+    available_cash_before: float
+    available_cash_after: float
+
+
 class RebalancingService:
     """Application service for rebalancing operations."""
 
@@ -99,6 +118,7 @@ class RebalancingService:
         allocation_repo: Optional[AllocationRepository] = None,
         portfolio_repo: Optional[PortfolioRepository] = None,
         trade_repo: Optional[TradeRepository] = None,
+        settings_repo: Optional[SettingsRepository] = None,
     ):
         # Use provided repos or create new ones
         self._stock_repo = stock_repo or StockRepository()
@@ -106,7 +126,7 @@ class RebalancingService:
         self._allocation_repo = allocation_repo or AllocationRepository()
         self._portfolio_repo = portfolio_repo or PortfolioRepository()
         self._trade_repo = trade_repo or TradeRepository()
-        self._settings_repo = SettingsRepository()
+        self._settings_repo = settings_repo or SettingsRepository()
         self._db_manager = get_db_manager()
 
     async def _get_technical_data_for_positions(
@@ -732,3 +752,380 @@ class RebalancingService:
             logger.debug(f"Could not calculate performance-adjusted weights: {e}")
             # Return empty dicts on error (use base weights)
             return {}, {}
+
+    async def _simulate_portfolio_after_transaction(
+        self,
+        portfolio_context: PortfolioContext,
+        transaction: dict,
+        available_cash: float = 0.0
+    ) -> Tuple[PortfolioContext, float]:
+        """
+        Simulate portfolio state after a transaction.
+        
+        Args:
+            portfolio_context: Current portfolio context
+            transaction: Transaction dict with:
+                - side: "BUY" or "SELL"
+                - symbol: Stock symbol
+                - value_eur: Transaction value in EUR
+                - geography: Stock geography
+                - industry: Stock industry (optional)
+                - stock_quality: Quality score (for buys)
+                - stock_dividend: Dividend yield (for buys)
+            available_cash: Current available cash in EUR
+        
+        Returns:
+            Tuple of (new_portfolio_context, new_available_cash)
+        """
+        side = transaction["side"]
+        symbol = transaction["symbol"]
+        value_eur = transaction["value_eur"]
+        geography = transaction.get("geography", "")
+        industry = transaction.get("industry")
+        
+        # Create new positions dict
+        new_positions = dict(portfolio_context.positions)
+        
+        # Update positions based on transaction side
+        if side == TRADE_SIDE_SELL:
+            # Subtract from position value
+            current_value = new_positions.get(symbol, 0)
+            new_positions[symbol] = max(0, current_value - value_eur)
+            # If position becomes zero or negative, remove it
+            if new_positions[symbol] <= 0:
+                new_positions.pop(symbol, None)
+            # Add to available cash
+            new_available_cash = available_cash + value_eur
+            # Total value decreases
+            new_total_value = portfolio_context.total_value - value_eur
+        else:  # BUY
+            # Add to position value (or create new position)
+            new_positions[symbol] = new_positions.get(symbol, 0) + value_eur
+            # Subtract from available cash
+            new_available_cash = max(0, available_cash - value_eur)
+            # Total value increases
+            new_total_value = portfolio_context.total_value + value_eur
+        
+        # Update geographies
+        new_geographies = dict(portfolio_context.stock_geographies or {})
+        if side == TRADE_SIDE_BUY:
+            new_geographies[symbol] = geography
+        elif side == TRADE_SIDE_SELL and new_positions.get(symbol, 0) <= 0:
+            # Remove geography if position is gone
+            new_geographies.pop(symbol, None)
+        
+        # Update industries
+        new_industries = dict(portfolio_context.stock_industries or {})
+        if side == TRADE_SIDE_BUY and industry:
+            new_industries[symbol] = industry
+        elif side == TRADE_SIDE_SELL and new_positions.get(symbol, 0) <= 0:
+            # Remove industry if position is gone
+            new_industries.pop(symbol, None)
+        
+        # Update scores (only for buys - sells don't change stock quality)
+        new_scores = dict(portfolio_context.stock_scores or {})
+        if side == TRADE_SIDE_BUY:
+            stock_quality = transaction.get("stock_quality", 0.5)
+            new_scores[symbol] = stock_quality
+        
+        # Update dividends (only for buys)
+        new_dividends = dict(portfolio_context.stock_dividends or {})
+        if side == TRADE_SIDE_BUY:
+            stock_dividend = transaction.get("stock_dividend", 0.0)
+            new_dividends[symbol] = stock_dividend
+        
+        # Create new portfolio context
+        new_context = PortfolioContext(
+            geo_weights=portfolio_context.geo_weights,
+            industry_weights=portfolio_context.industry_weights,
+            positions=new_positions,
+            total_value=max(0.01, new_total_value),  # Prevent division by zero
+            stock_geographies=new_geographies,
+            stock_industries=new_industries,
+            stock_scores=new_scores,
+            stock_dividends=new_dividends,
+            position_avg_prices=portfolio_context.position_avg_prices,
+            current_prices=portfolio_context.current_prices,
+        )
+        
+        return new_context, new_available_cash
+
+    async def get_multi_step_recommendations(
+        self,
+        depth: Optional[int] = None
+    ) -> List[MultiStepRecommendation]:
+        """
+        Generate multi-step recommendation sequence.
+        
+        Each step simulates the portfolio state after the previous transaction,
+        enabling smarter recommendations that consider cumulative effects.
+        
+        Args:
+            depth: Number of steps (1-5). If None, reads from settings (default: 1).
+        
+        Returns:
+            List of MultiStepRecommendation objects, one per step
+        """
+        # Get depth from settings if not provided
+        if depth is None:
+            depth = await self._settings_repo.get_int("recommendation_depth", 1)
+        
+        # Clamp depth to valid range
+        depth = max(1, min(5, depth))
+        
+        if depth == 1:
+            # For depth=1, return single recommendation (maintains backward compatibility)
+            buy_recs = await self.get_recommendations(limit=1)
+            if buy_recs:
+                rec = buy_recs[0]
+                # Get current cash (approximate - we don't have real-time access here)
+                from app.services.tradernet import get_tradernet_client
+                client = get_tradernet_client()
+                available_cash = client.get_total_cash_eur() if client.is_connected else 0.0
+                
+                return [MultiStepRecommendation(
+                    step=1,
+                    side=TRADE_SIDE_BUY,
+                    symbol=rec.symbol,
+                    name=rec.name,
+                    quantity=rec.quantity or 0,
+                    estimated_price=rec.current_price or 0.0,
+                    estimated_value=rec.amount,
+                    currency=_determine_stock_currency({"symbol": rec.symbol, "geography": rec.geography}),
+                    reason=rec.reason,
+                    portfolio_score_before=rec.current_portfolio_score or 0.0,
+                    portfolio_score_after=rec.new_portfolio_score or 0.0,
+                    score_change=rec.score_change or 0.0,
+                    available_cash_before=available_cash,
+                    available_cash_after=max(0, available_cash - rec.amount),
+                )]
+            return []
+        
+        # Multi-step generation
+        steps = []
+        current_context = await self._build_portfolio_context()
+        
+        # Get performance-adjusted weights
+        adjusted_geo_weights, adjusted_ind_weights = await self._get_performance_adjusted_weights()
+        if adjusted_geo_weights:
+            current_context.geo_weights.update(adjusted_geo_weights)
+        if adjusted_ind_weights:
+            current_context.industry_weights.update(adjusted_ind_weights)
+        
+        # Get current cash balance
+        from app.services.tradernet import get_tradernet_client
+        client = get_tradernet_client()
+        available_cash = client.get_total_cash_eur() if client.is_connected else 0.0
+        
+        # Track used symbols to avoid duplicates
+        used_symbols = set()
+        
+        # Get recently bought symbols for cooldown
+        recently_bought = await self._trade_repo.get_recently_bought_symbols(BUY_COOLDOWN_DAYS)
+        
+        for step_num in range(1, depth + 1):
+            # Calculate current portfolio score
+            current_score = calculate_portfolio_score(current_context)
+            
+            # Determine if we should prioritize sells or buys
+            # First step: prioritize sells to free up cash
+            # Subsequent steps: prioritize buys if cash available, else sells
+            prioritize_sells = (step_num == 1) or (available_cash < settings.min_cash_threshold)
+            
+            best_recommendation = None
+            best_score_change = -999.0
+            
+            if prioritize_sells:
+                # Try to get sell recommendation
+                # For step 1, use real portfolio; for subsequent steps, we'll filter based on simulated context
+                sell_recs = await self.calculate_sell_recommendations(limit=10)
+                for sell_rec in sell_recs:
+                    if sell_rec.symbol in used_symbols:
+                        continue
+                    
+                    # Check if this position still exists in simulated context
+                    if step_num > 1 and sell_rec.symbol not in current_context.positions:
+                        continue  # Position was already sold in a previous step
+                    
+                    # Check if we have enough position value to sell
+                    current_position_value = current_context.positions.get(sell_rec.symbol, 0)
+                    if sell_rec.estimated_value > current_position_value:
+                        # Adjust sell value to available position
+                        if current_position_value <= 0:
+                            continue  # No position to sell
+                        # Use a smaller sell amount
+                        sell_value = min(sell_rec.estimated_value, current_position_value * 0.5)
+                    else:
+                        sell_value = sell_rec.estimated_value
+                    
+                    # Get stock info for geography/industry
+                    stock = await self._stock_repo.get_by_symbol(sell_rec.symbol)
+                    geography = stock.geography if stock else ""
+                    industry = stock.industry if stock else None
+                    
+                    # Simulate this sell
+                    transaction = {
+                        "side": TRADE_SIDE_SELL,
+                        "symbol": sell_rec.symbol,
+                        "value_eur": sell_value,
+                        "geography": geography,
+                        "industry": industry,
+                    }
+                    
+                    # Simulate portfolio after this transaction
+                    sim_context, sim_cash = await self._simulate_portfolio_after_transaction(
+                        current_context, transaction, available_cash
+                    )
+                    
+                    # Calculate score change
+                    new_score = calculate_portfolio_score(sim_context)
+                    score_change = new_score.total - current_score.total
+                    
+                    # Prefer recommendations that improve portfolio score
+                    if score_change > best_score_change:
+                        best_score_change = score_change
+                        # Create adjusted sell recommendation with correct value
+                        adjusted_sell_rec = TradeRecommendation(
+                            symbol=sell_rec.symbol,
+                            name=sell_rec.name,
+                            side=sell_rec.side,
+                            quantity=sell_rec.quantity,
+                            estimated_price=sell_rec.estimated_price,
+                            estimated_value=sell_value,
+                            reason=sell_rec.reason,
+                            currency=sell_rec.currency,
+                        )
+                        best_recommendation = {
+                            "type": "SELL",
+                            "rec": adjusted_sell_rec,
+                            "transaction": transaction,
+                            "sim_context": sim_context,
+                            "sim_cash": sim_cash,
+                            "score_change": score_change,
+                            "new_score": new_score,
+                        }
+            
+            # If no sell recommendation or we have cash, try buy recommendations
+            if not best_recommendation or (available_cash >= settings.min_cash_threshold and not prioritize_sells):
+                # For step 1, use get_recommendations (uses real portfolio)
+                # For step 2+, we should ideally use simulated context, but get_recommendations
+                # rebuilds context. We'll use it anyway and simulate the impact correctly.
+                buy_recs = await self.get_recommendations(limit=10)
+                for buy_rec in buy_recs:
+                    if buy_rec.symbol in used_symbols or buy_rec.symbol in recently_bought:
+                        continue
+                    
+                    if buy_rec.amount > available_cash:
+                        continue  # Can't afford this buy
+                    
+                    # For step 2+, we need to recalculate the recommendation using simulated context
+                    # to get accurate portfolio impact. However, the buy_rec already has the right
+                    # amount and price, so we'll use it but simulate against current_context.
+                    
+                    # Get stock quality score
+                    score_row = await self._db_manager.state.fetchone(
+                        "SELECT quality_score FROM scores WHERE symbol = ?",
+                        (buy_rec.symbol,)
+                    )
+                    stock_quality = score_row["quality_score"] if score_row else 0.5
+                    
+                    transaction = {
+                        "side": TRADE_SIDE_BUY,
+                        "symbol": buy_rec.symbol,
+                        "value_eur": buy_rec.amount,
+                        "geography": buy_rec.geography,
+                        "industry": buy_rec.industry,
+                        "stock_quality": stock_quality,
+                        "stock_dividend": 0.0,  # Could be enhanced
+                    }
+                    
+                    # Simulate portfolio after this transaction using CURRENT (simulated) context
+                    sim_context, sim_cash = await self._simulate_portfolio_after_transaction(
+                        current_context, transaction, available_cash
+                    )
+                    
+                    # Calculate score change based on simulated context
+                    new_score = calculate_portfolio_score(sim_context)
+                    score_change = new_score.total - current_score.total
+                    
+                    # Skip if worsens portfolio significantly
+                    if score_change < -1.0:
+                        continue
+                    
+                    # Prefer recommendations that improve portfolio score
+                    if score_change > best_score_change:
+                        best_score_change = score_change
+                        best_recommendation = {
+                            "type": "BUY",
+                            "rec": buy_rec,
+                            "transaction": transaction,
+                            "sim_context": sim_context,
+                            "sim_cash": sim_cash,
+                            "score_change": score_change,
+                            "new_score": new_score,
+                        }
+            
+            # If we found a recommendation, add it to steps
+            if best_recommendation:
+                rec = best_recommendation["rec"]
+                transaction = best_recommendation["transaction"]
+                
+                # Determine currency
+                currency = "EUR"
+                if best_recommendation["type"] == "SELL":
+                    currency = rec.currency
+                else:
+                    stock = await self._stock_repo.get_by_symbol(rec.symbol)
+                    if stock:
+                        currency = stock.currency or "EUR"
+                
+                # Build step recommendation
+                if best_recommendation["type"] == "SELL":
+                    # Sell recommendation
+                    step_rec = MultiStepRecommendation(
+                        step=step_num,
+                        side=TRADE_SIDE_SELL,
+                        symbol=rec.symbol,
+                        name=rec.name,
+                        quantity=int(rec.quantity),
+                        estimated_price=rec.estimated_price,
+                        estimated_value=rec.estimated_value,
+                        currency=currency,
+                        reason=rec.reason,
+                        portfolio_score_before=current_score.total,
+                        portfolio_score_after=best_recommendation["new_score"].total,
+                        score_change=best_recommendation["score_change"],
+                        available_cash_before=available_cash,
+                        available_cash_after=best_recommendation["sim_cash"],
+                    )
+                else:
+                    # Buy recommendation
+                    step_rec = MultiStepRecommendation(
+                        step=step_num,
+                        side=TRADE_SIDE_BUY,
+                        symbol=rec.symbol,
+                        name=rec.name,
+                        quantity=rec.quantity or 0,
+                        estimated_price=rec.current_price or 0.0,
+                        estimated_value=rec.amount,
+                        currency=currency,
+                        reason=rec.reason,
+                        portfolio_score_before=current_score.total,
+                        portfolio_score_after=best_recommendation["new_score"].total,
+                        score_change=best_recommendation["score_change"],
+                        available_cash_before=available_cash,
+                        available_cash_after=best_recommendation["sim_cash"],
+                    )
+                
+                steps.append(step_rec)
+                
+                # Update state for next iteration
+                current_context = best_recommendation["sim_context"]
+                available_cash = best_recommendation["sim_cash"]
+                used_symbols.add(rec.symbol)
+            else:
+                # No valid recommendation found, stop early
+                logger.info(f"No valid recommendation found at step {step_num}, stopping early")
+                break
+        
+        return steps

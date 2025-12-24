@@ -1,5 +1,6 @@
 """Trade execution API endpoints."""
 
+import logging
 from datetime import datetime
 from typing import List
 from fastapi import APIRouter, HTTPException
@@ -16,6 +17,7 @@ from app.repositories import (
 )
 from app.infrastructure.cache import cache
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -252,6 +254,13 @@ async def execute_recommendation(symbol: str):
             )
             await trade_repo.create(trade_record)
 
+            # Invalidate caches
+            cache.invalidate("recommendations")
+            cache.invalidate("multi_step_recommendations:default")
+            # Invalidate all depth-specific caches
+            for depth in range(1, 6):
+                cache.invalidate(f"multi_step_recommendations:{depth}")
+
             return {
                 "status": "success",
                 "order_id": result.order_id,
@@ -308,6 +317,414 @@ async def get_sell_recommendations(limit: int = 3):
         cache.set(cache_key, result, ttl_seconds=300)
         return result
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/multi-step-recommendations")
+async def get_multi_step_recommendations(depth: int = None):
+    """
+    Get multi-step recommendation sequence.
+
+    Generates a sequence of buy/sell recommendations that build on each other.
+    Each step simulates the portfolio state after the previous transaction.
+
+    Args:
+        depth: Number of steps (1-5). If None, uses setting value (default: 1).
+
+    Returns:
+        Multi-step recommendation sequence with portfolio state at each step.
+    """
+    # Validate depth parameter
+    if depth is not None:
+        if depth < 1 or depth > 5:
+            raise HTTPException(
+                status_code=400,
+                detail="Depth must be between 1 and 5"
+            )
+
+    # Build cache key
+    cache_key = f"multi_step_recommendations:{depth or 'default'}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    from app.application.services.rebalancing_service import RebalancingService
+
+    try:
+        rebalancing_service = RebalancingService()
+        steps = await rebalancing_service.get_multi_step_recommendations(depth=depth)
+
+        if not steps:
+            return {
+                "depth": depth or 1,
+                "steps": [],
+                "total_score_improvement": 0.0,
+                "final_available_cash": 0.0,
+            }
+
+        # Calculate totals
+        total_score_improvement = sum(step.score_change for step in steps)
+        final_available_cash = steps[-1].available_cash_after if steps else 0.0
+
+        result = {
+            "depth": depth or len(steps),
+            "steps": [
+                {
+                    "step": step.step,
+                    "side": step.side,
+                    "symbol": step.symbol,
+                    "name": step.name,
+                    "quantity": step.quantity,
+                    "estimated_price": round(step.estimated_price, 2),
+                    "estimated_value": round(step.estimated_value, 2),
+                    "currency": step.currency,
+                    "reason": step.reason,
+                    "portfolio_score_before": round(step.portfolio_score_before, 1),
+                    "portfolio_score_after": round(step.portfolio_score_after, 1),
+                    "score_change": round(step.score_change, 2),
+                    "available_cash_before": round(step.available_cash_before, 2),
+                    "available_cash_after": round(step.available_cash_after, 2),
+                }
+                for step in steps
+            ],
+            "total_score_improvement": round(total_score_improvement, 2),
+            "final_available_cash": round(final_available_cash, 2),
+        }
+
+        # Cache for 5 minutes (same as single recommendations)
+        cache.set(cache_key, result, ttl_seconds=300)
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating multi-step recommendations: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/multi-step-recommendations/execute-step/{step_number}")
+async def execute_multi_step_recommendation_step(step_number: int):
+    """
+    Execute a single step from the multi-step recommendation sequence.
+
+    Args:
+        step_number: The step number (1-indexed) to execute
+
+    Returns:
+        Execution result for the step
+    """
+    from app.application.services.rebalancing_service import RebalancingService
+    from app.services.tradernet import get_tradernet_client
+
+    if step_number < 1:
+        raise HTTPException(status_code=400, detail="Step number must be >= 1")
+
+    trade_repo = TradeRepository()
+    position_repo = PositionRepository()
+
+    try:
+        # Get the cached multi-step recommendations
+        cache_key = "multi_step_recommendations:default"
+        cached = cache.get(cache_key)
+        
+        # If cache miss, regenerate recommendations
+        if not cached or not cached.get("steps"):
+            logger.info("Cache miss for multi-step recommendations, regenerating...")
+            rebalancing_service = RebalancingService()
+            steps_data = await rebalancing_service.get_multi_step_recommendations(depth=None)
+            
+            if not steps_data:
+                raise HTTPException(
+                    status_code=404,
+                    detail="No multi-step recommendations available. Please check your portfolio and settings."
+                )
+            
+            # Rebuild cached format
+            total_score_improvement = sum(step.score_change for step in steps_data)
+            final_available_cash = steps_data[-1].available_cash_after if steps_data else 0.0
+            
+            cached = {
+                "depth": len(steps_data),
+                "steps": [
+                    {
+                        "step": step.step,
+                        "side": step.side,
+                        "symbol": step.symbol,
+                        "name": step.name,
+                        "quantity": step.quantity,
+                        "estimated_price": round(step.estimated_price, 2),
+                        "estimated_value": round(step.estimated_value, 2),
+                        "currency": step.currency,
+                        "reason": step.reason,
+                        "portfolio_score_before": round(step.portfolio_score_before, 1),
+                        "portfolio_score_after": round(step.portfolio_score_after, 1),
+                        "score_change": round(step.score_change, 2),
+                        "available_cash_before": round(step.available_cash_before, 2),
+                        "available_cash_after": round(step.available_cash_after, 2),
+                    }
+                    for step in steps_data
+                ],
+                "total_score_improvement": round(total_score_improvement, 2),
+                "final_available_cash": round(final_available_cash, 2),
+            }
+            # Cache the regenerated recommendations
+            cache.set(cache_key, cached, ttl_seconds=300)
+
+        steps = cached["steps"]
+        if step_number > len(steps):
+            raise HTTPException(
+                status_code=404,
+                detail=f"Step {step_number} not found. Only {len(steps)} steps available."
+            )
+
+        step = steps[step_number - 1]  # Convert to 0-indexed
+
+        # Connect to Tradernet
+        client = get_tradernet_client()
+        if not client.is_connected:
+            if not client.connect():
+                raise HTTPException(
+                    status_code=503,
+                    detail="Failed to connect to Tradernet"
+                )
+
+        # Check cooldown for BUY orders
+        if step["side"] == TRADE_SIDE_BUY:
+            from app.domain.constants import BUY_COOLDOWN_DAYS
+            recently_bought = await trade_repo.get_recently_bought_symbols(BUY_COOLDOWN_DAYS)
+            if step["symbol"] in recently_bought:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cannot buy {step['symbol']}: cooldown period active (bought within {BUY_COOLDOWN_DAYS} days)"
+                )
+
+        # Execute the trade
+        result = client.place_order(
+            symbol=step["symbol"],
+            side=step["side"],
+            quantity=step["quantity"],
+        )
+
+        if result:
+            # Record the trade
+            trade_record = Trade(
+                symbol=step["symbol"],
+                side=step["side"],
+                quantity=step["quantity"],
+                price=result.price,
+                executed_at=datetime.now(),
+                order_id=result.order_id,
+            )
+            await trade_repo.create(trade_record)
+
+            # Update last_sold_at for SELL orders
+            if step["side"] == TRADE_SIDE_SELL and position_repo:
+                try:
+                    await position_repo.update_last_sold_at(step["symbol"])
+                except Exception as e:
+                    logger.warning(f"Failed to update last_sold_at: {e}")
+
+            # Invalidate cache to force refresh
+            cache.invalidate("multi_step_recommendations:default")
+            cache.invalidate("recommendations")
+            cache.invalidate("sell_recommendations")
+            # Invalidate all depth-specific caches
+            for depth in range(1, 6):
+                cache.invalidate(f"multi_step_recommendations:{depth}")
+
+            return {
+                "status": "success",
+                "step": step_number,
+                "order_id": result.order_id,
+                "symbol": step["symbol"],
+                "side": step["side"],
+                "quantity": step["quantity"],
+                "price": result.price,
+                "estimated_value": step["estimated_value"],
+            }
+
+        raise HTTPException(status_code=500, detail="Trade execution failed")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error executing multi-step recommendation step {step_number}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/multi-step-recommendations/execute-all")
+async def execute_all_multi_step_recommendations():
+    """
+    Execute all steps in the multi-step recommendation sequence in order.
+
+    Executes each step sequentially, stopping if any step fails.
+
+    Returns:
+        List of execution results for each step
+    """
+    from app.application.services.rebalancing_service import RebalancingService
+    from app.services.tradernet import get_tradernet_client
+
+    trade_repo = TradeRepository()
+    position_repo = PositionRepository()
+
+    try:
+        # Get the cached multi-step recommendations
+        cache_key = "multi_step_recommendations:default"
+        cached = cache.get(cache_key)
+        
+        # If cache miss, regenerate recommendations
+        if not cached or not cached.get("steps"):
+            logger.info("Cache miss for multi-step recommendations in execute-all, regenerating...")
+            rebalancing_service = RebalancingService()
+            steps_data = await rebalancing_service.get_multi_step_recommendations(depth=None)
+            
+            if not steps_data:
+                raise HTTPException(
+                    status_code=404,
+                    detail="No multi-step recommendations available. Please check your portfolio and settings."
+                )
+            
+            # Rebuild cached format
+            total_score_improvement = sum(step.score_change for step in steps_data)
+            final_available_cash = steps_data[-1].available_cash_after if steps_data else 0.0
+            
+            cached = {
+                "depth": len(steps_data),
+                "steps": [
+                    {
+                        "step": step.step,
+                        "side": step.side,
+                        "symbol": step.symbol,
+                        "name": step.name,
+                        "quantity": step.quantity,
+                        "estimated_price": round(step.estimated_price, 2),
+                        "estimated_value": round(step.estimated_value, 2),
+                        "currency": step.currency,
+                        "reason": step.reason,
+                        "portfolio_score_before": round(step.portfolio_score_before, 1),
+                        "portfolio_score_after": round(step.portfolio_score_after, 1),
+                        "score_change": round(step.score_change, 2),
+                        "available_cash_before": round(step.available_cash_before, 2),
+                        "available_cash_after": round(step.available_cash_after, 2),
+                    }
+                    for step in steps_data
+                ],
+                "total_score_improvement": round(total_score_improvement, 2),
+                "final_available_cash": round(final_available_cash, 2),
+            }
+            # Cache the regenerated recommendations
+            cache.set(cache_key, cached, ttl_seconds=300)
+
+        steps = cached["steps"]
+        if not steps:
+            raise HTTPException(
+                status_code=404,
+                detail="No steps available in multi-step recommendations"
+            )
+
+        # Connect to Tradernet
+        client = get_tradernet_client()
+        if not client.is_connected:
+            if not client.connect():
+                raise HTTPException(
+                    status_code=503,
+                    detail="Failed to connect to Tradernet"
+                )
+
+        # Check cooldown for all BUY steps
+        from app.domain.constants import BUY_COOLDOWN_DAYS
+        recently_bought = await trade_repo.get_recently_bought_symbols(BUY_COOLDOWN_DAYS)
+        buy_steps = [s for s in steps if s["side"] == TRADE_SIDE_BUY]
+        blocked_buys = [s for s in buy_steps if s["symbol"] in recently_bought]
+        if blocked_buys:
+            symbols = ", ".join([s["symbol"] for s in blocked_buys])
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot execute: {symbols} in cooldown period (bought within {BUY_COOLDOWN_DAYS} days)"
+            )
+
+        results = []
+
+        # Execute each step sequentially
+        for idx, step in enumerate(steps, start=1):
+            try:
+                result = client.place_order(
+                    symbol=step["symbol"],
+                    side=step["side"],
+                    quantity=step["quantity"],
+                )
+
+                if result:
+                    # Record the trade
+                    trade_record = Trade(
+                        symbol=step["symbol"],
+                        side=step["side"],
+                        quantity=step["quantity"],
+                        price=result.price,
+                        executed_at=datetime.now(),
+                        order_id=result.order_id,
+                    )
+                    await trade_repo.create(trade_record)
+
+                    # Update last_sold_at for SELL orders
+                    if step["side"] == TRADE_SIDE_SELL and position_repo:
+                        try:
+                            await position_repo.update_last_sold_at(step["symbol"])
+                        except Exception as e:
+                            logger.warning(f"Failed to update last_sold_at: {e}")
+
+                    results.append({
+                        "step": idx,
+                        "status": "success",
+                        "order_id": result.order_id,
+                        "symbol": step["symbol"],
+                        "side": step["side"],
+                        "quantity": step["quantity"],
+                        "price": result.price,
+                        "estimated_value": step["estimated_value"],
+                    })
+                else:
+                    results.append({
+                        "step": idx,
+                        "status": "failed",
+                        "symbol": step["symbol"],
+                        "error": "Order placement returned None",
+                    })
+                    # Continue with remaining steps instead of stopping
+                    logger.warning(f"Step {idx} failed, continuing with remaining steps")
+                    continue
+
+            except Exception as e:
+                logger.error(f"Error executing step {idx}: {e}", exc_info=True)
+                results.append({
+                    "step": idx,
+                    "status": "error",
+                    "symbol": step["symbol"],
+                    "error": str(e),
+                })
+                # Continue with remaining steps instead of stopping
+                logger.warning(f"Step {idx} errored, continuing with remaining steps")
+                continue
+
+        # Invalidate cache to force refresh after all steps complete
+        cache.invalidate("multi_step_recommendations:default")
+        cache.invalidate("recommendations")
+        cache.invalidate("sell_recommendations")
+        # Invalidate all depth-specific caches
+        for depth in range(1, 6):
+            cache.invalidate(f"multi_step_recommendations:{depth}")
+
+        return {
+            "status": "completed",
+            "total_steps": len(steps),
+            "executed_steps": len([r for r in results if r["status"] == "success"]),
+            "results": results,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error executing all multi-step recommendations: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -370,6 +787,10 @@ async def execute_sell_recommendation(symbol: str):
             # Clear cache
             cache.invalidate("sell_recommendations:3")
             cache.invalidate("sell_recommendations:20")
+            cache.invalidate("multi_step_recommendations:default")
+            # Invalidate all depth-specific caches
+            for depth in range(1, 6):
+                cache.invalidate(f"multi_step_recommendations:{depth}")
 
             return {
                 "status": "success",
@@ -633,6 +1054,10 @@ async def execute_funding(symbol: str, request: ExecuteFundingRequest):
             cache.invalidate("recommendations:10")
             cache.invalidate("sell_recommendations:3")
             cache.invalidate("sell_recommendations:20")
+            cache.invalidate("multi_step_recommendations:default")
+            # Invalidate all depth-specific caches
+            for depth in range(1, 6):
+                cache.invalidate(f"multi_step_recommendations:{depth}")
 
             return {
                 "status": "success",

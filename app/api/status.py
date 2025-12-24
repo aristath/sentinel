@@ -119,28 +119,51 @@ async def _build_ticker_text() -> str:
 
         # Add recommendations if enabled (cache-only, populated by Rebalance Check job)
         if show_actions:
-            sell_recs = cache.get("sell_recommendations:3")
-            buy_recs = cache.get("recommendations:3")
-
-            # Add sell recommendations (priority - shown first)
-            if sell_recs and sell_recs.get("recommendations"):
-                for rec in sell_recs["recommendations"][:max_actions]:
-                    symbol = rec["symbol"].split(".")[0]  # Remove .US/.EU suffix
-                    value = int(rec.get("estimated_value", 0))
+            # Check for multi-step recommendations first (if depth > 1)
+            multi_step = cache.get("multi_step_recommendations:default")
+            if not multi_step:
+                # Try with explicit depth from settings (reuse settings_repo from above)
+                depth = await settings_repo.get_int("recommendation_depth", 1)
+                if depth > 1:
+                    multi_step = cache.get(f"multi_step_recommendations:{depth}")
+            
+            if multi_step and multi_step.get("steps"):
+                # Show multi-step recommendations - format: [step/total]
+                total_steps = multi_step.get("depth", len(multi_step["steps"]))
+                for step in multi_step["steps"][:max_actions]:
+                    symbol = step["symbol"].split(".")[0]  # Remove .US/.EU suffix
+                    value = int(step.get("estimated_value", 0))
+                    side = step.get("side", "BUY")
+                    step_num = step.get("step", 1)
+                    step_label = f"[{step_num}/{total_steps}]"
                     if show_amounts and value > 0:
-                        parts.append(f"SELL {symbol} EUR{value:,}")
+                        parts.append(f"{side} {symbol} EUR{value:,} {step_label}")
                     else:
-                        parts.append(f"SELL {symbol}")
+                        parts.append(f"{side} {symbol} {step_label}")
+            else:
+                # Fall back to single recommendations
+                sell_recs = cache.get("sell_recommendations:3")
+                buy_recs = cache.get("recommendations:3")
 
-            # Add buy recommendations
-            if buy_recs and buy_recs.get("recommendations"):
-                for rec in buy_recs["recommendations"][:max_actions]:
-                    symbol = rec["symbol"].split(".")[0]  # Remove .US/.EU suffix
-                    value = int(rec.get("amount", 0))
-                    if show_amounts and value > 0:
-                        parts.append(f"BUY {symbol} EUR{value:,}")
-                    else:
-                        parts.append(f"BUY {symbol}")
+                # Add sell recommendations (priority - shown first)
+                if sell_recs and sell_recs.get("recommendations"):
+                    for rec in sell_recs["recommendations"][:max_actions]:
+                        symbol = rec["symbol"].split(".")[0]  # Remove .US/.EU suffix
+                        value = int(rec.get("estimated_value", 0))
+                        if show_amounts and value > 0:
+                            parts.append(f"SELL {symbol} EUR{value:,}")
+                        else:
+                            parts.append(f"SELL {symbol}")
+
+                # Add buy recommendations
+                if buy_recs and buy_recs.get("recommendations"):
+                    for rec in buy_recs["recommendations"][:max_actions]:
+                        symbol = rec["symbol"].split(".")[0]  # Remove .US/.EU suffix
+                        value = int(rec.get("amount", 0))
+                        if show_amounts and value > 0:
+                            parts.append(f"BUY {symbol} EUR{value:,}")
+                        else:
+                            parts.append(f"BUY {symbol}")
 
     except Exception:
         # On error, just return empty (no ticker)

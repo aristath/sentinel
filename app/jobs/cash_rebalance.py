@@ -5,6 +5,7 @@ Priority: SELL before BUY.
 """
 
 import logging
+from typing import TYPE_CHECKING
 
 from app.config import settings
 from app.services.tradernet import get_tradernet_client
@@ -26,6 +27,9 @@ from app.domain.scoring import (
     PortfolioContext,
     TechnicalData,
 )
+
+if TYPE_CHECKING:
+    from app.domain.models import TradeRecommendation
 
 logger = logging.getLogger(__name__)
 
@@ -635,9 +639,49 @@ async def _refresh_recommendation_cache():
     from app.application.services.rebalancing_service import RebalancingService
 
     try:
-        rebalancing_service = RebalancingService()
+        # Create settings_repo once and reuse
+        settings_repo = SettingsRepository()
+        rebalancing_service = RebalancingService(settings_repo=settings_repo)
 
-        # Get buy recommendations
+        # Get recommendation depth setting
+        depth = await settings_repo.get_int("recommendation_depth", 1)
+
+        # Get multi-step recommendations if depth > 1
+        if depth > 1:
+            multi_step_steps = await rebalancing_service.get_multi_step_recommendations(depth=depth)
+            if multi_step_steps:
+                multi_step_data = {
+                    "depth": depth,
+                    "steps": [
+                        {
+                            "step": step.step,
+                            "side": step.side,
+                            "symbol": step.symbol,
+                            "name": step.name,
+                            "quantity": step.quantity,
+                            "estimated_price": step.estimated_price,
+                            "estimated_value": step.estimated_value,
+                            "currency": step.currency,
+                            "reason": step.reason,
+                            "portfolio_score_before": step.portfolio_score_before,
+                            "portfolio_score_after": step.portfolio_score_after,
+                            "score_change": step.score_change,
+                            "available_cash_before": step.available_cash_before,
+                            "available_cash_after": step.available_cash_after,
+                        }
+                        for step in multi_step_steps
+                    ],
+                    "total_score_improvement": sum(step.score_change for step in multi_step_steps),
+                    "final_available_cash": multi_step_steps[-1].available_cash_after if multi_step_steps else 0.0,
+                }
+                cache.set("multi_step_recommendations:default", multi_step_data, ttl_seconds=900)
+                cache.set(f"multi_step_recommendations:{depth}", multi_step_data, ttl_seconds=900)
+                logger.info(f"Multi-step recommendation cache refreshed: {len(multi_step_steps)} steps")
+        else:
+            # Clear multi-step cache if depth is 1
+            cache.invalidate("multi_step_recommendations:default")
+
+        # Always cache single recommendations (for fallback and depth=1)
         buy_recommendations = await rebalancing_service.get_recommendations(limit=3)
         buy_recs = {
             "recommendations": [

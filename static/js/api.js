@@ -74,6 +74,12 @@ const API = {
   executeRecommendation: (symbol) => API._post(`/api/trades/recommendations/${symbol}/execute`),
   fetchSellRecommendations: () => fetch('/api/trades/sell-recommendations').then(r => r.json()),
   executeSellRecommendation: (symbol) => API._post(`/api/trades/sell-recommendations/${symbol}/execute`),
+  fetchMultiStepRecommendations: (depth = null) => {
+    const params = depth ? `?depth=${depth}` : '';
+    return fetch(`/api/trades/multi-step-recommendations${params}`).then(r => r.json());
+  },
+  executeMultiStepStep: (stepNumber) => API._post(`/api/trades/multi-step-recommendations/execute-step/${stepNumber}`),
+  executeAllMultiStep: () => API._post('/api/trades/multi-step-recommendations/execute-all'),
 
   // Charts
   fetchStockChart: (symbol, range = '1Y', source = 'tradernet') => {

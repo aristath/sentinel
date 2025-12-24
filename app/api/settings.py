@@ -20,6 +20,7 @@ SETTING_DEFAULTS = {
     "min_sell_value": 100.0,        # Minimum EUR value to sell
     "target_annual_return": 0.11,   # Optimal CAGR for scoring (11%)
     "market_avg_pe": 22.0,          # Reference P/E for valuation
+    "recommendation_depth": 1.0,    # Number of steps in multi-step recommendations (1-5)
     # LED Matrix settings
     "ticker_speed": 50.0,           # Ticker scroll speed in ms per frame (lower = faster)
     "led_brightness": 150.0,        # LED brightness (0-255)

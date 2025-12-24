@@ -83,6 +83,7 @@ DEFAULT_SETTINGS = [
     ("min_trade_size", "400", "Minimum EUR trade size (keeps commission at 0.5%)"),
     ("max_trades_per_cycle", "5", "Maximum trades per rebalance cycle"),
     ("min_stock_score", "0.5", "Minimum score to consider buying"),
+    ("recommendation_depth", "1", "Number of steps in multi-step recommendations (1-5)"),
     ("job_portfolio_sync_minutes", "15", "Portfolio sync interval in minutes"),
     ("job_trade_sync_minutes", "5", "Trade sync interval in minutes"),
     ("job_price_sync_minutes", "5", "Price sync interval in minutes"),
