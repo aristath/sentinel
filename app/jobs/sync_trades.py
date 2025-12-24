@@ -103,8 +103,8 @@ async def _sync_trades_internal():
                 try:
                     await db_manager.ledger.execute(
                         """
-                        INSERT INTO trades (symbol, side, quantity, price, executed_at, order_id)
-                        VALUES (?, ?, ?, ?, ?, ?)
+                        INSERT INTO trades (symbol, side, quantity, price, executed_at, order_id, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
                         """,
                         (symbol, side, quantity, price, executed_at, order_id)
                     )
