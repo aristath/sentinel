@@ -63,6 +63,13 @@ class FundingOption:
     new_score: float
     net_score_change: float
     has_warnings: bool
+    signature: str = ""  # Unique signature for deduplication
+
+
+def _get_option_signature(sells: List[FundingSell]) -> str:
+    """Create unique signature from sells to detect duplicates."""
+    sells_key = tuple(sorted((s.symbol, round(s.sell_pct, 2)) for s in sells))
+    return str(sells_key)
 
 
 class FundingService:
@@ -85,6 +92,7 @@ class FundingService:
         buy_symbol: str,
         buy_amount_eur: float,
         available_cash: float,
+        exclude_signatures: Optional[List[str]] = None,
     ) -> List[FundingOption]:
         """
         Generate 3-4 funding options for a buy recommendation.
@@ -99,6 +107,7 @@ class FundingService:
             buy_symbol: Symbol of stock to buy
             buy_amount_eur: Amount needed in EUR
             available_cash: Current cash available in EUR
+            exclude_signatures: List of signatures to exclude (for pagination)
 
         Returns:
             List of FundingOption with different strategies
@@ -170,10 +179,20 @@ class FundingService:
             if currency_match:
                 options.append(currency_match)
 
-        # Sort by net score change (best improvement first)
-        options.sort(key=lambda x: x.net_score_change, reverse=True)
+        # Assign signatures and deduplicate (including excluded from previous pages)
+        seen_signatures = set(exclude_signatures or [])
+        unique_options = []
+        for option in options:
+            sig = _get_option_signature(option.sells)
+            option.signature = sig
+            if sig not in seen_signatures:
+                seen_signatures.add(sig)
+                unique_options.append(option)
 
-        return options
+        # Sort by net score change (best improvement first)
+        unique_options.sort(key=lambda x: x.net_score_change, reverse=True)
+
+        return unique_options
 
     async def _build_portfolio_context(self) -> Optional[PortfolioContext]:
         """Build portfolio context for scoring calculations."""

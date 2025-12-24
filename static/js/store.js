@@ -47,6 +47,9 @@ document.addEventListener('alpine:init', () => {
     fundingData: null,
     loadingFundingOptions: false,
     executingFunding: false,
+    seenFundingSignatures: [],
+    hasMoreFundingOptions: false,
+    loadingMoreFundingOptions: false,
 
     // Loading States
     loading: {
@@ -268,11 +271,16 @@ document.addEventListener('alpine:init', () => {
       this.loadingFundingOptions = true;
       this.fundingOptions = [];
       this.fundingData = null;
+      this.seenFundingSignatures = [];
+      this.hasMoreFundingOptions = false;
 
       try {
         const data = await API.getFundingOptions(recommendation.symbol);
         this.fundingData = data;
         this.fundingOptions = data.options || [];
+        this.hasMoreFundingOptions = data.has_more || false;
+        // Track seen signatures for pagination
+        this.seenFundingSignatures = (data.options || []).map(opt => opt.signature);
       } catch (e) {
         console.error('Failed to fetch funding options:', e);
         this.showMessage('Failed to fetch funding options', 'error');
@@ -280,11 +288,33 @@ document.addEventListener('alpine:init', () => {
       this.loadingFundingOptions = false;
     },
 
+    async loadMoreFundingOptions() {
+      if (!this.fundingTarget || this.loadingMoreFundingOptions) return;
+
+      this.loadingMoreFundingOptions = true;
+      try {
+        const excludeList = this.seenFundingSignatures.join(',');
+        const data = await API.getFundingOptions(this.fundingTarget.symbol, excludeList);
+        const newOptions = data.options || [];
+
+        // Add new options and track their signatures
+        this.fundingOptions = [...this.fundingOptions, ...newOptions];
+        newOptions.forEach(opt => this.seenFundingSignatures.push(opt.signature));
+        this.hasMoreFundingOptions = data.has_more && newOptions.length > 0;
+      } catch (e) {
+        console.error('Failed to load more funding options:', e);
+        this.showMessage('Failed to load more options', 'error');
+      }
+      this.loadingMoreFundingOptions = false;
+    },
+
     closeFundingModal() {
       this.showFundingModal = false;
       this.fundingTarget = null;
       this.fundingOptions = [];
       this.fundingData = null;
+      this.seenFundingSignatures = [];
+      this.hasMoreFundingOptions = false;
     },
 
     async executeFunding(option) {

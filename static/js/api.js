@@ -91,8 +91,10 @@ const API = {
   rescheduleJobs: () => API._post('/api/settings/reschedule-jobs'),
 
   // Funding
-  getFundingOptions: (symbol) =>
-    fetch(`/api/trades/recommendations/${symbol}/funding-options`).then(r => r.json()),
+  getFundingOptions: (symbol, excludeSignatures = '') => {
+    const params = excludeSignatures ? `?exclude_signatures=${encodeURIComponent(excludeSignatures)}` : '';
+    return fetch(`/api/trades/recommendations/${symbol}/funding-options${params}`).then(r => r.json());
+  },
   executeFunding: (symbol, options) =>
     API._post(`/api/trades/recommendations/${symbol}/execute-funding`, options),
 };

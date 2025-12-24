@@ -157,6 +157,18 @@ class FundingModal extends HTMLElement {
                   </template>
                 </div>
               </template>
+
+              <!-- Load More Button -->
+              <template x-if="!$store.app.loadingFundingOptions && $store.app.hasMoreFundingOptions">
+                <div class="mt-4">
+                  <button @click="$store.app.loadMoreFundingOptions()"
+                          :disabled="$store.app.loadingMoreFundingOptions"
+                          class="w-full py-2 text-gray-400 hover:text-white border border-gray-700 hover:border-gray-600 rounded transition-colors disabled:opacity-50">
+                    <span x-show="!$store.app.loadingMoreFundingOptions">Load More Options</span>
+                    <span x-show="$store.app.loadingMoreFundingOptions" class="animate-spin inline-block">&#9696;</span>
+                  </button>
+                </div>
+              </template>
             </div>
 
             <!-- Footer -->

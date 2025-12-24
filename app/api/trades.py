@@ -472,6 +472,7 @@ class ExecuteFundingRequest(BaseModel):
 @router.get("/recommendations/{symbol}/funding-options")
 async def get_funding_options(
     symbol: str,
+    exclude_signatures: str = "",
     stock_repo: StockRepository = Depends(get_stock_repository),
     position_repo: PositionRepository = Depends(get_position_repository),
     allocation_repo: AllocationRepository = Depends(get_allocation_repository),
@@ -541,10 +542,14 @@ async def get_funding_options(
             portfolio_repo,
         )
 
+        # Parse excluded signatures for pagination
+        excluded = [s.strip() for s in exclude_signatures.split(",") if s.strip()]
+
         options = await funding_service.get_funding_options(
             buy_symbol=symbol,
             buy_amount_eur=rec.amount,
             available_cash=available_cash,
+            exclude_signatures=excluded,
         )
 
         return {
@@ -552,10 +557,12 @@ async def get_funding_options(
             "buy_amount": rec.amount,
             "cash_available": round(available_cash, 2),
             "cash_needed": round(rec.amount - available_cash, 2),
+            "has_more": len(options) > 0,  # If we got options, there might be more
             "options": [
                 {
                     "strategy": opt.strategy,
                     "description": opt.description,
+                    "signature": opt.signature,
                     "sells": [
                         {
                             "symbol": s.symbol,
