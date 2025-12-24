@@ -250,7 +250,7 @@ async def _refresh_led_display_cache():
     from app.infrastructure.cache import cache
     from app.api.settings import get_setting_value
     from app.database import get_db_connection
-    from app.infrastructure.repositories import (
+    from app.infrastructure.database.repositories import (
         SQLitePortfolioRepository,
         SQLitePositionRepository,
         SQLiteAllocationRepository,
