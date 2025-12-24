@@ -24,52 +24,6 @@ PIXEL_OFF = 0
 DEFAULT_TICKER_SPEED = 50
 
 
-# =============================================================================
-# Character patterns for scrolling text (3x5 pixels each) - legacy
-# =============================================================================
-
-DIGITS = {
-    '0': ['111', '101', '101', '101', '111'],
-    '1': ['010', '110', '010', '010', '111'],
-    '2': ['111', '001', '111', '100', '111'],
-    '3': ['111', '001', '111', '001', '111'],
-    '4': ['101', '101', '111', '001', '001'],
-    '5': ['111', '100', '111', '001', '111'],
-    '6': ['111', '100', '111', '101', '111'],
-    '7': ['111', '001', '001', '001', '001'],
-    '8': ['111', '101', '111', '101', '111'],
-    '9': ['111', '101', '111', '001', '111'],
-}
-
-LETTERS = {
-    'A': ['010', '101', '111', '101', '101'],
-    'B': ['110', '101', '110', '101', '110'],
-    'C': ['011', '100', '100', '100', '011'],
-    'D': ['110', '101', '101', '101', '110'],
-    'E': ['111', '100', '110', '100', '111'],
-    'F': ['111', '100', '110', '100', '100'],
-    'G': ['011', '100', '101', '101', '011'],
-    'H': ['101', '101', '111', '101', '101'],
-    'I': ['111', '010', '010', '010', '111'],
-    'J': ['001', '001', '001', '101', '010'],
-    'K': ['101', '110', '100', '110', '101'],
-    'L': ['100', '100', '100', '100', '111'],
-    'M': ['101', '111', '101', '101', '101'],
-    'N': ['101', '111', '111', '101', '101'],
-    'O': ['111', '101', '101', '101', '111'],
-    'P': ['110', '101', '110', '100', '100'],
-    'Q': ['010', '101', '101', '110', '011'],
-    'R': ['110', '101', '110', '101', '101'],
-    'S': ['011', '100', '010', '001', '110'],
-    'T': ['111', '010', '010', '010', '010'],
-    'U': ['101', '101', '101', '101', '111'],
-    'V': ['101', '101', '101', '101', '010'],
-    'W': ['101', '101', '101', '111', '101'],
-    'X': ['101', '101', '010', '101', '101'],
-    'Y': ['101', '101', '010', '010', '010'],
-    'Z': ['111', '001', '010', '100', '111'],
-    ' ': ['000', '000', '000', '000', '000'],
-}
 
 # =============================================================================
 # 7-pixel tall variable-width font for ticker
@@ -287,30 +241,12 @@ def animate_trade(phase: int, is_buy: bool) -> np.ndarray:
     return arr
 
 
-def animate_error_scroll(text: str, offset: int) -> np.ndarray:
-    """Scrolling error text across matrix."""
-    arr = np.zeros((ROWS, COLS), dtype=np.uint8)
+def animate_error_scroll(text: str, offset: int, brightness: int = PIXEL_BRIGHT) -> np.ndarray:
+    """Scrolling error text across matrix using 7px font.
 
-    text_width = len(text) * 4  # Each char is 3 wide + 1 space
-    start_col = COLS - (offset % (text_width + COLS))
-    start_row = 1  # Vertically center the 5-row text
-
-    col = start_col
-    for char in text.upper():
-        pattern = LETTERS.get(char, DIGITS.get(char))
-        if pattern:
-            for row_idx, row_pattern in enumerate(pattern):
-                for col_idx, pixel in enumerate(row_pattern):
-                    if pixel == '1':
-                        r = start_row + row_idx
-                        c = col + col_idx
-                        if 0 <= r < ROWS and 0 <= c < COLS:
-                            arr[r, c] = PIXEL_BRIGHT
-            col += 4
-        elif char == ' ':
-            col += 2
-
-    return arr
+    This is now just a wrapper around animate_ticker for consistency.
+    """
+    return animate_ticker(text, offset, brightness)
 
 
 def get_char_width(char: str) -> int:
@@ -433,8 +369,8 @@ def loop():
         state = fetch_display_state()
 
         if state is None:
-            # API unreachable - show scrolling error
-            draw_frame(Frame(animate_error_scroll("API DOWN", scroll_offset)))
+            # API unreachable - show scrolling error with default brightness
+            draw_frame(Frame(animate_error_scroll("API DOWN", scroll_offset, PIXEL_BRIGHT)))
             scroll_offset += 1
             time.sleep(0.12)
             return
@@ -466,8 +402,8 @@ def loop():
         # Matrix animation based on mode
         # Priority: error > trade > activity > syncing > ticker
         if mode == "error" and error_message:
-            # Scrolling error text
-            draw_frame(Frame(animate_error_scroll(error_message, scroll_offset)))
+            # Scrolling error text using configured brightness
+            draw_frame(Frame(animate_error_scroll(error_message, scroll_offset, led_brightness)))
             scroll_offset += 1
             time.sleep(0.12)
 
