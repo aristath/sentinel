@@ -87,6 +87,22 @@ class SettingsModal extends HTMLElement {
                          @change="$store.app.updateSetting('min_sell_value', $event.target.value)"
                          class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
                 </div>
+
+                <!-- Recommendation Depth -->
+                <div>
+                  <span class="text-sm text-gray-300">Recommendation Depth</span>
+                  <p class="text-xs text-gray-500">Number of steps in multi-step recommendations (1-5). Higher values create more complex trading plans</p>
+                </div>
+                <div class="flex items-center gap-1">
+                  <input type="number"
+                         min="1"
+                         max="5"
+                         step="1"
+                         :value="$store.app.settings.recommendation_depth"
+                         @change="$store.app.updateSetting('recommendation_depth', $event.target.value)"
+                         class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                  <span class="text-gray-400 text-sm">steps</span>
+                </div>
               </div>
             </div>
 
