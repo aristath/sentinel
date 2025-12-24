@@ -72,6 +72,7 @@ async def init_scheduler() -> AsyncIOScheduler:
     from app.jobs.historical_data_sync import sync_historical_data
     from app.jobs.maintenance import run_daily_maintenance, run_weekly_maintenance
     from app.jobs.sync_trades import sync_trades
+    from app.jobs.health_check import run_health_check
 
     # Get all job intervals from database in one query
     job_settings = await _get_all_job_settings()
@@ -165,6 +166,15 @@ async def init_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 
+    # Database health check (hourly)
+    scheduler.add_job(
+        run_health_check,
+        IntervalTrigger(hours=1),
+        id="health_check",
+        name="Database Health Check",
+        replace_existing=True,
+    )
+
     logger.info(
         f"Scheduler initialized - portfolio:{portfolio_minutes}m, trade:{trade_minutes}m, "
         f"price:{price_minutes}m, score:{score_minutes}m, rebalance:{rebalance_minutes}m"
@@ -222,6 +232,8 @@ async def reschedule_all_jobs():
         "weekly_maintenance",
         trigger=CronTrigger(day_of_week=6, hour=(maintenance_hour + 1) % 24, minute=0),
     )
+
+    # Health check is fixed at hourly, no reschedule needed
 
     logger.info(
         f"Jobs rescheduled - portfolio:{portfolio_minutes}m, trade:{trade_minutes}m, "

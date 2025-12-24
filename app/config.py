@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     debug: bool = False
 
     # Database
+    data_dir: Path = Path("data")
     database_path: Path = Path("data/trader.db")
 
     # Tradernet API
