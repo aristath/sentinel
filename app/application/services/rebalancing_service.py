@@ -14,17 +14,21 @@ import empyrical
 import pandas_ta as ta
 
 from app.config import settings
-from app.database import get_db_connection
-from app.domain.repositories import (
+from app.infrastructure.database.manager import get_db_manager
+from app.repositories import (
     StockRepository,
     PositionRepository,
     AllocationRepository,
     PortfolioRepository,
     TradeRepository,
+    SettingsRepository,
 )
-from app.domain.services.priority_calculator import (
-    PriorityCalculator,
-    PriorityInput,
+from app.domain.scoring import (
+    calculate_portfolio_score,
+    calculate_post_transaction_score,
+    calculate_all_sell_scores,
+    PortfolioContext,
+    TechnicalData,
 )
 from app.services.allocator import (
     TradeRecommendation,
@@ -32,17 +36,8 @@ from app.services.allocator import (
     calculate_position_size,
     get_max_trades,
 )
-from app.services.scorer import (
-    calculate_allocation_fit_score,
-    calculate_portfolio_score,
-    calculate_post_transaction_score,
-    PortfolioContext,
-    PortfolioScore,
-    _get_daily_prices_from_db,
-)
 from app.services import yahoo
 from app.services.tradernet import get_exchange_rate
-from app.services.sell_scorer import calculate_all_sell_scores, SellScore, TechnicalData, get_sell_settings
 from app.domain.constants import TRADE_SIDE_BUY, TRADE_SIDE_SELL, BUY_COOLDOWN_DAYS
 from app.infrastructure.hardware.led_display import set_activity
 
@@ -59,22 +54,19 @@ def _determine_stock_currency(stock: dict) -> str:
     3. Default to EUR
 
     Args:
-        stock: Stock dict from get_with_scores()
+        stock: Stock dict with currency info
 
     Returns:
         Currency code (EUR, USD, HKD, GBP, etc.)
     """
-    # Use stored currency from Tradernet sync (most accurate)
     currency = stock.get("currency")
     if currency:
         return currency
 
-    # Fallback: position currency from broker (for existing positions)
     pos_currency = stock.get("pos_currency")
     if pos_currency:
         return pos_currency
 
-    # Last resort: default to EUR and log warning
     symbol = stock.get("symbol", "unknown")
     logger.warning(f"No currency found for {symbol}, defaulting to EUR")
     return "EUR"
@@ -102,17 +94,20 @@ class RebalancingService:
 
     def __init__(
         self,
-        stock_repo: StockRepository,
-        position_repo: PositionRepository,
-        allocation_repo: AllocationRepository,
-        portfolio_repo: PortfolioRepository,
-        trade_repo: TradeRepository | None = None,
+        stock_repo: Optional[StockRepository] = None,
+        position_repo: Optional[PositionRepository] = None,
+        allocation_repo: Optional[AllocationRepository] = None,
+        portfolio_repo: Optional[PortfolioRepository] = None,
+        trade_repo: Optional[TradeRepository] = None,
     ):
-        self._stock_repo = stock_repo
-        self._position_repo = position_repo
-        self._allocation_repo = allocation_repo
-        self._portfolio_repo = portfolio_repo
-        self._trade_repo = trade_repo
+        # Use provided repos or create new ones
+        self._stock_repo = stock_repo or StockRepository()
+        self._position_repo = position_repo or PositionRepository()
+        self._allocation_repo = allocation_repo or AllocationRepository()
+        self._portfolio_repo = portfolio_repo or PortfolioRepository()
+        self._trade_repo = trade_repo or TradeRepository()
+        self._settings_repo = SettingsRepository()
+        self._db_manager = get_db_manager()
 
     async def _get_technical_data_for_positions(
         self,
@@ -121,99 +116,132 @@ class RebalancingService:
         """
         Calculate technical indicators for instability detection.
 
-        Uses stock_price_history table to calculate:
+        Uses per-symbol history databases to calculate:
         - Current volatility (last 60 days)
         - Historical volatility (last 365 days)
         - Distance from 200-day MA
-
-        Args:
-            symbols: List of stock symbols to fetch data for
-
-        Returns:
-            Dict mapping symbol to TechnicalData
         """
         result = {}
 
-        async with get_db_connection() as db:
-            for symbol in symbols:
-                try:
-                    daily_prices = await _get_daily_prices_from_db(db, symbol, days=400)
+        for symbol in symbols:
+            try:
+                history_db = self._db_manager.history(symbol)
+                rows = await history_db.fetchall(
+                    """
+                    SELECT date, close FROM daily_prices
+                    ORDER BY date DESC LIMIT 400
+                    """,
+                )
 
-                    if len(daily_prices) < 60:
-                        # Not enough data - use neutral values
-                        result[symbol] = TechnicalData(
-                            current_volatility=0.20,  # Assume 20% baseline
-                            historical_volatility=0.20,
-                            distance_from_ma_200=0.0
-                        )
-                        continue
+                if len(rows) < 60:
+                    result[symbol] = TechnicalData(
+                        current_volatility=0.20,
+                        historical_volatility=0.20,
+                        distance_from_ma_200=0.0
+                    )
+                    continue
 
-                    closes = np.array([p['close'] for p in daily_prices])
-                    closes_series = pd.Series(closes)
+                closes = np.array([row['close'] for row in reversed(rows)])
+                closes_series = pd.Series(closes)
 
-                    # Validate no zero/negative prices that would corrupt returns
-                    if np.any(closes <= 0):
-                        logger.warning(f"Zero/negative prices detected for {symbol}, using fallback values")
-                        result[symbol] = TechnicalData(
-                            current_volatility=0.20,
-                            historical_volatility=0.20,
-                            distance_from_ma_200=0.0
-                        )
-                        continue
+                if np.any(closes <= 0):
+                    logger.warning(f"Zero/negative prices detected for {symbol}, using fallback values")
+                    result[symbol] = TechnicalData(
+                        current_volatility=0.20,
+                        historical_volatility=0.20,
+                        distance_from_ma_200=0.0
+                    )
+                    continue
 
-                    # Current volatility (last 60 days) using empyrical
-                    if len(closes) >= 60:
-                        recent_returns = np.diff(closes[-60:]) / closes[-60:-1]
-                        current_vol = float(empyrical.annual_volatility(recent_returns))
-                        # Validate empyrical output
-                        if not np.isfinite(current_vol) or current_vol < 0:
-                            current_vol = 0.20
-                    else:
+                # Current volatility (last 60 days) using empyrical
+                if len(closes) >= 60:
+                    recent_returns = np.diff(closes[-60:]) / closes[-60:-1]
+                    current_vol = float(empyrical.annual_volatility(recent_returns))
+                    if not np.isfinite(current_vol) or current_vol < 0:
                         current_vol = 0.20
+                else:
+                    current_vol = 0.20
 
-                    # Historical volatility (full period, up to 365 days) using empyrical
-                    returns = np.diff(closes) / closes[:-1]
-                    historical_vol = float(empyrical.annual_volatility(returns))
-                    # Validate empyrical output
-                    if not np.isfinite(historical_vol) or historical_vol < 0:
-                        historical_vol = 0.20
+                # Historical volatility using empyrical
+                returns = np.diff(closes) / closes[:-1]
+                historical_vol = float(empyrical.annual_volatility(returns))
+                if not np.isfinite(historical_vol) or historical_vol < 0:
+                    historical_vol = 0.20
 
-                    # Distance from 200-day EMA using pandas-ta (more responsive than SMA)
-                    if len(closes) >= 200:
-                        ema_200 = ta.ema(closes_series, length=200)
-                        if ema_200 is not None and len(ema_200) > 0 and not pd.isna(ema_200.iloc[-1]):
-                            ema_value = float(ema_200.iloc[-1])
-                        else:
-                            # Fallback to SMA when EMA unavailable
-                            logger.debug(f"EMA unavailable for {symbol}, using SMA fallback")
-                            ema_value = float(np.mean(closes[-200:]))
-                        current_price = float(closes[-1])
-                        distance = (current_price - ema_value) / ema_value if ema_value > 0 else 0.0
+                # Distance from 200-day EMA using pandas-ta
+                if len(closes) >= 200:
+                    ema_200 = ta.ema(closes_series, length=200)
+                    if ema_200 is not None and len(ema_200) > 0 and not pd.isna(ema_200.iloc[-1]):
+                        ema_value = float(ema_200.iloc[-1])
                     else:
-                        distance = 0.0
+                        ema_value = float(np.mean(closes[-200:]))
+                    current_price = float(closes[-1])
+                    distance = (current_price - ema_value) / ema_value if ema_value > 0 else 0.0
+                else:
+                    distance = 0.0
 
-                    result[symbol] = TechnicalData(
-                        current_volatility=current_vol,
-                        historical_volatility=historical_vol,
-                        distance_from_ma_200=distance
-                    )
+                result[symbol] = TechnicalData(
+                    current_volatility=current_vol,
+                    historical_volatility=historical_vol,
+                    distance_from_ma_200=distance
+                )
 
-                except (ValueError, ZeroDivisionError) as e:
-                    logger.warning(f"Invalid data for {symbol}: {e}")
-                    result[symbol] = TechnicalData(
-                        current_volatility=0.20,
-                        historical_volatility=0.20,
-                        distance_from_ma_200=0.0
-                    )
-                except Exception as e:
-                    logger.error(f"Unexpected error getting technical data for {symbol}: {e}", exc_info=True)
-                    result[symbol] = TechnicalData(
-                        current_volatility=0.20,
-                        historical_volatility=0.20,
-                        distance_from_ma_200=0.0
-                    )
+            except (ValueError, ZeroDivisionError) as e:
+                logger.warning(f"Invalid data for {symbol}: {e}")
+                result[symbol] = TechnicalData(
+                    current_volatility=0.20,
+                    historical_volatility=0.20,
+                    distance_from_ma_200=0.0
+                )
+            except Exception as e:
+                logger.error(f"Unexpected error getting technical data for {symbol}: {e}", exc_info=True)
+                result[symbol] = TechnicalData(
+                    current_volatility=0.20,
+                    historical_volatility=0.20,
+                    distance_from_ma_200=0.0
+                )
 
         return result
+
+    async def _build_portfolio_context(self) -> PortfolioContext:
+        """Build portfolio context for scoring."""
+        positions = await self._position_repo.get_all()
+        stocks = await self._stock_repo.get_all_active()
+        allocations = await self._allocation_repo.get_all()
+        total_value = await self._position_repo.get_total_value()
+
+        # Build allocation weight maps
+        geo_weights = {}
+        industry_weights = {}
+        for alloc in allocations:
+            if alloc.category == "geography":
+                geo_weights[alloc.name] = alloc.target_pct
+            elif alloc.category == "industry":
+                industry_weights[alloc.name] = alloc.target_pct
+
+        # Build stock metadata maps
+        position_map = {p.symbol: p.market_value_eur or 0 for p in positions}
+        stock_geographies = {s.symbol: s.geography for s in stocks}
+        stock_industries = {s.symbol: s.industry for s in stocks if s.industry}
+        stock_scores = {}
+
+        # Get existing scores
+        score_rows = await self._db_manager.state.fetchall(
+            "SELECT symbol, quality_score FROM scores"
+        )
+        for row in score_rows:
+            if row["quality_score"]:
+                stock_scores[row["symbol"]] = row["quality_score"]
+
+        return PortfolioContext(
+            geo_weights=geo_weights,
+            industry_weights=industry_weights,
+            positions=position_map,
+            total_value=total_value if total_value > 0 else 1.0,
+            stock_geographies=stock_geographies,
+            stock_industries=stock_industries,
+            stock_scores=stock_scores,
+        )
 
     async def get_recommendations(self, limit: int = 3) -> List[Recommendation]:
         """
@@ -224,137 +252,85 @@ class RebalancingService:
         """
         set_activity("PROCESSING RECOMMENDATIONS (BUY)...", duration=10.0)
 
-        from app.api.settings import get_setting_value
-        base_trade_amount = await get_setting_value("min_trade_size")
+        base_trade_amount = await self._settings_repo.get_value("min_trade_size", 150.0)
 
-        # Get portfolio summary for allocation context
-        from app.application.services.portfolio_service import PortfolioService
-        portfolio_service = PortfolioService(
-            self._portfolio_repo,
-            self._position_repo,
-            self._allocation_repo,
-        )
-        summary = await portfolio_service.get_portfolio_summary()
-        total_value = summary.total_value if summary.total_value and summary.total_value > 0 else 1.0
-
-        # Build weight maps
-        geo_weights = {a.name: a.target_pct for a in summary.geographic_allocations}
-        industry_weights = {a.name: a.target_pct for a in summary.industry_allocations}
-
-        # Get scored stocks
-        stocks_data = await self._stock_repo.get_with_scores()
+        # Build portfolio context
+        portfolio_context = await self._build_portfolio_context()
 
         # Get recently bought symbols for cooldown filtering
-        recently_bought: set[str] = set()
-        if self._trade_repo:
-            recently_bought = await self._trade_repo.get_recently_bought_symbols(BUY_COOLDOWN_DAYS)
+        recently_bought = await self._trade_repo.get_recently_bought_symbols(BUY_COOLDOWN_DAYS)
 
-        # Build complete portfolio context with all metadata
-        positions = {}
-        stock_geographies = {}
-        stock_industries = {}
-        stock_scores = {}
-        stock_dividends = {}
-        position_avg_prices = {}
-        current_prices = {}
-
-        for stock in stocks_data:
-            symbol = stock["symbol"]
-            position_value = stock.get("position_value") or 0
-            if position_value > 0:
-                positions[symbol] = position_value
-                # Track cost basis data for averaging down
-                if stock.get("avg_price"):
-                    position_avg_prices[symbol] = stock["avg_price"]
-                if stock.get("current_price"):
-                    current_prices[symbol] = stock["current_price"]
-            stock_geographies[symbol] = stock["geography"]
-            stock_industries[symbol] = stock.get("industry")
-            stock_scores[symbol] = stock.get("quality_score") or stock.get("total_score") or 0.5
-            # Get dividend yield from fundamentals if available
-            stock_dividends[symbol] = stock.get("dividend_yield") or 0
-
-        # Create rich portfolio context
-        portfolio_context = PortfolioContext(
-            geo_weights=geo_weights,
-            industry_weights=industry_weights,
-            positions=positions,
-            total_value=total_value,
-            stock_geographies=stock_geographies,
-            stock_industries=stock_industries,
-            stock_scores=stock_scores,
-            stock_dividends=stock_dividends,
-            position_avg_prices=position_avg_prices,
-            current_prices=current_prices,
-        )
+        # Get all active stocks with scores
+        stocks = await self._stock_repo.get_all_active()
 
         # Calculate current portfolio score
         current_portfolio_score = calculate_portfolio_score(portfolio_context)
 
-        # Calculate priority for each stock with POST-TRANSACTION scoring
         candidates = []
 
-        for stock in stocks_data:
-            symbol = stock["symbol"]
-            name = stock["name"]
-            geography = stock["geography"]
-            industry = stock.get("industry")
-            multiplier = stock.get("priority_multiplier") or 1.0
-            min_lot = stock.get("min_lot") or 1
-            yahoo_symbol = stock.get("yahoo_symbol")
+        for stock in stocks:
+            symbol = stock.symbol
+            name = stock.name
+            geography = stock.geography
+            industry = stock.industry
+            multiplier = stock.priority_multiplier or 1.0
+            min_lot = stock.min_lot or 1
 
             # Skip stocks where allow_buy is disabled
-            allow_buy = stock.get("allow_buy")
-            if allow_buy is not None and not allow_buy:
+            if not stock.allow_buy:
                 continue
 
             # Skip stocks bought recently (cooldown period)
             if symbol in recently_bought:
                 continue
 
-            quality_score = stock.get("quality_score") or stock.get("total_score") or 0
-            opportunity_score = stock.get("opportunity_score") or stock.get("fundamental_score") or 0.5
-            analyst_score = stock.get("analyst_score") or 0.5
-            dividend_yield = stock.get("dividend_yield") or 0
+            # Get scores from database
+            score_row = await self._db_manager.state.fetchone(
+                "SELECT * FROM scores WHERE symbol = ?",
+                (symbol,)
+            )
 
-            # Get current price early to calculate actual trade value
-            price = yahoo.get_current_price(symbol, yahoo_symbol)
+            if not score_row:
+                continue
+
+            quality_score = score_row["quality_score"] or 0.5
+            opportunity_score = score_row["opportunity_score"] or 0.5
+            analyst_score = score_row["analyst_score"] or 0.5
+            total_score = score_row["total_score"] or 0.5
+
+            if total_score < settings.min_stock_score:
+                continue
+
+            # Get current price
+            price = yahoo.get_current_price(symbol, stock.yahoo_symbol)
             if not price or price <= 0:
                 continue
 
-            # Determine stock currency
-            currency = _determine_stock_currency(stock)
-
-            # Get exchange rate for currency conversion
+            # Determine stock currency and exchange rate
+            currency = stock.currency or "EUR"
             exchange_rate = 1.0
             if currency != "EUR":
                 exchange_rate = get_exchange_rate(currency, "EUR")
                 if exchange_rate <= 0:
-                    logger.warning(f"Invalid exchange rate for {currency} to EUR, assuming 1.0")
                     exchange_rate = 1.0
 
             # Calculate actual transaction value (respecting min_lot)
-            # lot_cost is in native currency, convert to EUR for comparison with base_trade_amount
             lot_cost_native = min_lot * price
             lot_cost_eur = lot_cost_native / exchange_rate
 
-            # If min_lot cost exceeds base trade amount, use 1 lot
-            # Otherwise, use as many lots as fit in base_trade_amount
             if lot_cost_eur > base_trade_amount:
                 quantity = min_lot
                 trade_value_native = lot_cost_native
             else:
-                # Convert base_trade_amount to native currency for lot calculation
                 base_trade_amount_native = base_trade_amount * exchange_rate
                 num_lots = int(base_trade_amount_native / lot_cost_native)
                 quantity = num_lots * min_lot
                 trade_value_native = quantity * price
 
-            # Convert trade_value to EUR for display
             trade_value_eur = trade_value_native / exchange_rate
 
             # Calculate POST-TRANSACTION portfolio score
-            # Use EUR value since portfolio is tracked in EUR
+            dividend_yield = 0  # Could be enhanced later
             new_score, score_change = calculate_post_transaction_score(
                 symbol=symbol,
                 geography=geography,
@@ -370,21 +346,14 @@ class RebalancingService:
                 logger.debug(f"Skipping {symbol}: transaction worsens balance ({score_change:.2f})")
                 continue
 
-            # Base score from quality and opportunity
+            # Calculate final priority score
             base_score = (
                 quality_score * 0.35 +
                 opportunity_score * 0.35 +
                 analyst_score * 0.15
             )
-
-            # Use score_change as allocation fit component
-            # Normalize: -5 to +5 -> 0 to 1
             normalized_score_change = max(0, min(1, (score_change + 5) / 10))
-
             final_score = base_score * 0.85 + normalized_score_change * 0.15
-
-            if final_score < settings.min_stock_score:
-                continue
 
             # Build reason
             reason_parts = []
@@ -405,7 +374,7 @@ class RebalancingService:
                 "industry": industry,
                 "price": price,
                 "quantity": quantity,
-                "trade_value": trade_value_eur,  # Already converted to EUR
+                "trade_value": trade_value_eur,
                 "final_score": final_score * multiplier,
                 "reason": reason,
                 "current_portfolio_score": current_portfolio_score.total,
@@ -413,10 +382,10 @@ class RebalancingService:
                 "score_change": score_change,
             })
 
-        # Sort by final score (with multiplier applied)
+        # Sort by final score
         candidates.sort(key=lambda x: x["final_score"], reverse=True)
 
-        # Build recommendations for top N
+        # Build recommendations
         recommendations = []
         for candidate in candidates[:limit]:
             recommendations.append(Recommendation(
@@ -442,10 +411,7 @@ class RebalancingService:
     ) -> List[TradeRecommendation]:
         """
         Calculate optimal trades using get_recommendations() as the source of truth.
-
-        This ensures all filtering (including cooldown) is applied consistently.
         """
-        # Check minimum cash threshold
         if available_cash < settings.min_cash_threshold:
             logger.info(f"Cash €{available_cash:.2f} below minimum €{settings.min_cash_threshold:.2f}")
             return []
@@ -454,7 +420,6 @@ class RebalancingService:
         if max_trades == 0:
             return []
 
-        # Get recommendations (includes cooldown filtering, score filtering, etc.)
         recommendations = await self.get_recommendations(limit=max_trades)
 
         if not recommendations:
@@ -463,14 +428,16 @@ class RebalancingService:
 
         # Convert Recommendation → TradeRecommendation
         trades = []
+        stocks = await self._stock_repo.get_all_active()
+        stocks_by_symbol = {s.symbol: s for s in stocks}
+
         for rec in recommendations:
-            # Skip if missing required fields
             if rec.quantity is None or rec.current_price is None:
                 logger.warning(f"Skipping {rec.symbol}: missing quantity or price")
                 continue
 
-            # Determine stock currency from geography
-            currency = _determine_stock_currency({"geography": rec.geography})
+            stock = stocks_by_symbol.get(rec.symbol)
+            currency = stock.currency if stock else "EUR"
 
             trades.append(TradeRecommendation(
                 symbol=rec.symbol,
@@ -493,54 +460,83 @@ class RebalancingService:
     ) -> List[TradeRecommendation]:
         """
         Calculate optimal SELL recommendations based on sell scoring system.
-
-        Strategy:
-        1. Get all positions with stock info (including allow_sell flag)
-        2. Calculate sell scores using the 4-component weighted model
-        3. Filter to eligible sells (passes hard blocks)
-        4. Return top N sell candidates
-
-        Returns:
-            List of TradeRecommendation with side=SELL
         """
         set_activity("PROCESSING RECOMMENDATIONS (SELL)...", duration=10.0)
 
-        # Get portfolio summary for allocation context
-        from app.application.services.portfolio_service import PortfolioService
-        portfolio_service = PortfolioService(
-            self._portfolio_repo,
-            self._position_repo,
-            self._allocation_repo,
-        )
-        summary = await portfolio_service.get_portfolio_summary()
-        total_value = summary.total_value if summary.total_value and summary.total_value > 0 else 1.0
+        # Build portfolio context
+        portfolio_context = await self._build_portfolio_context()
+        total_value = portfolio_context.total_value
 
-        # Build allocation maps (current allocations)
-        geo_allocations = {a.name: a.current_pct for a in summary.geographic_allocations}
-        ind_allocations = {a.name: a.current_pct for a in summary.industry_allocations}
-
-        # Get all positions with stock info
-        positions = await self._position_repo.get_with_stock_info()
-
+        # Get all positions
+        positions = await self._position_repo.get_all()
         if not positions:
             logger.info("No positions to evaluate for selling")
             return []
 
-        # Get technical data for instability detection
-        symbols = [p['symbol'] for p in positions]
+        # Get stock info
+        stocks = await self._stock_repo.get_all_active()
+        stocks_by_symbol = {s.symbol: s for s in stocks}
+
+        # Build position dicts for sell scoring
+        position_dicts = []
+        for pos in positions:
+            stock = stocks_by_symbol.get(pos.symbol)
+            if not stock:
+                continue
+
+            first_buy = await self._trade_repo.get_first_buy_date(pos.symbol)
+            last_sell = await self._trade_repo.get_last_sell_date(pos.symbol)
+
+            position_dicts.append({
+                "symbol": pos.symbol,
+                "name": stock.name,
+                "quantity": pos.quantity,
+                "avg_price": pos.avg_price,
+                "current_price": pos.current_price,
+                "market_value_eur": pos.market_value_eur,
+                "currency": pos.currency,
+                "geography": stock.geography,
+                "industry": stock.industry,
+                "allow_sell": stock.allow_sell,
+                "first_bought_at": first_buy,
+                "last_sold_at": last_sell,
+            })
+
+        if not position_dicts:
+            return []
+
+        # Get technical data
+        symbols = [p["symbol"] for p in position_dicts]
         technical_data = await self._get_technical_data_for_positions(symbols)
 
-        # Load settings from database
-        settings = await get_sell_settings()
+        # Build allocation maps
+        geo_allocations = {}
+        ind_allocations = {}
+        for pos in position_dicts:
+            geo = pos.get("geography")
+            ind = pos.get("industry")
+            value = pos.get("market_value_eur") or 0
+            if geo:
+                geo_allocations[geo] = geo_allocations.get(geo, 0) + value / total_value
+            if ind:
+                ind_allocations[ind] = ind_allocations.get(ind, 0) + value / total_value
 
-        # Calculate sell scores for all positions
+        # Get sell settings
+        sell_settings = {
+            "min_hold_days": await self._settings_repo.get_value("min_hold_days", 90),
+            "sell_cooldown_days": await self._settings_repo.get_value("sell_cooldown_days", 180),
+            "max_loss_threshold": await self._settings_repo.get_value("max_loss_threshold", 0.20),
+            "target_annual_return": await self._settings_repo.get_value("target_annual_return", 0.10),
+        }
+
+        # Calculate sell scores
         sell_scores = calculate_all_sell_scores(
-            positions=positions,
+            positions=position_dicts,
             total_portfolio_value=total_value,
             geo_allocations=geo_allocations,
             ind_allocations=ind_allocations,
             technical_data=technical_data,
-            settings=settings
+            settings=sell_settings,
         )
 
         # Filter to eligible sells
@@ -552,19 +548,15 @@ class RebalancingService:
 
         logger.info(f"Found {len(eligible_sells)} positions eligible for selling")
 
-        # Build recommendations for top N
+        # Build recommendations
         recommendations = []
         for score in eligible_sells[:limit]:
-            # Get position data
-            pos = next((p for p in positions if p['symbol'] == score.symbol), None)
+            pos = next((p for p in position_dicts if p["symbol"] == score.symbol), None)
             if not pos:
                 continue
 
-            # Determine currency
-            currency = pos.get('currency', 'EUR')
-
-            # Get current price
-            current_price = pos.get('current_price') or pos.get('avg_price', 0)
+            currency = pos.get("currency", "EUR")
+            current_price = pos.get("current_price") or pos.get("avg_price", 0)
 
             # Build reason string
             reason_parts = []
@@ -580,14 +572,12 @@ class RebalancingService:
                 reason_parts.append("overweight")
             if score.instability_score >= 0.6:
                 reason_parts.append("high instability")
-            elif score.instability_score >= 0.4:
-                reason_parts.append("elevated instability")
             reason_parts.append(f"sell score: {score.total_score:.2f}")
             reason = ", ".join(reason_parts) if reason_parts else "eligible for sell"
 
             recommendations.append(TradeRecommendation(
                 symbol=score.symbol,
-                name=pos.get('name', score.symbol),
+                name=pos.get("name", score.symbol),
                 side=TRADE_SIDE_SELL,
                 quantity=score.suggested_sell_quantity,
                 estimated_price=round(current_price, 2),
@@ -596,10 +586,6 @@ class RebalancingService:
                 currency=currency,
             ))
 
-        logger.info(
-            f"Generated {len(recommendations)} sell recommendations"
-        )
+        logger.info(f"Generated {len(recommendations)} sell recommendations")
 
         return recommendations
-
-

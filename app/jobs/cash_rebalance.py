@@ -6,13 +6,28 @@ Priority: SELL before BUY.
 
 import logging
 
-import aiosqlite
-
 from app.config import settings
 from app.services.tradernet import get_tradernet_client
 from app.infrastructure.locking import file_lock
 from app.infrastructure.events import emit, SystemEvent
 from app.infrastructure.hardware.led_display import set_activity
+from app.infrastructure.database.manager import get_db_manager
+from app.repositories import (
+    StockRepository,
+    PositionRepository,
+    TradeRepository,
+    AllocationRepository,
+    PortfolioRepository,
+    SettingsRepository,
+)
+from app.domain.scoring import (
+    calculate_stock_score,
+    calculate_all_sell_scores,
+    calculate_portfolio_score,
+    calculate_post_transaction_score,
+    PortfolioContext,
+    TechnicalData,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,17 +52,11 @@ async def _check_and_rebalance_internal():
     """Internal rebalance implementation with drip execution."""
     from app.jobs.daily_sync import sync_portfolio
     from app.jobs.sync_trades import sync_trades
-    from app.api.settings import get_setting_value
-    from app.services.scorer import score_all_stocks
-    from app.infrastructure.dependencies import (
-        get_stock_repository,
-        get_position_repository,
-        get_allocation_repository,
-        get_portfolio_repository,
-        get_trade_repository,
-    )
-    from app.application.services.rebalancing_service import RebalancingService
+    from app.services import yahoo
+    from app.services.tradernet import get_exchange_rate
     from app.application.services.trade_execution_service import TradeExecutionService
+    from app.services.allocator import TradeRecommendation
+    from app.domain.constants import TRADE_SIDE_BUY, TRADE_SIDE_SELL, BUY_COOLDOWN_DAYS
 
     logger.info("Starting trade cycle check...")
 
@@ -64,7 +73,8 @@ async def _check_and_rebalance_internal():
         await sync_portfolio()
 
         # Get configurable threshold from database
-        min_trade_size = await get_setting_value("min_trade_size")
+        settings_repo = SettingsRepository()
+        min_trade_size = await settings_repo.get_value("min_trade_size", 150.0)
 
         # Connect to broker
         client = get_tradernet_client()
@@ -77,139 +87,178 @@ async def _check_and_rebalance_internal():
         cash_balance = client.get_total_cash_eur()
         logger.info(f"Cash balance: €{cash_balance:.2f}, threshold: €{min_trade_size:.2f}")
 
-        async with aiosqlite.connect(settings.database_path) as db:
-            db.row_factory = aiosqlite.Row
+        # Initialize repositories
+        stock_repo = StockRepository()
+        position_repo = PositionRepository()
+        trade_repo = TradeRepository()
+        allocation_repo = AllocationRepository()
+        portfolio_repo = PortfolioRepository()
+        db_manager = get_db_manager()
 
-            # Step 2: Refresh scores
-            logger.info("Step 2: Refreshing stock scores...")
-            set_activity("REFRESHING SCORES...", duration=60.0)
-            await score_all_stocks(db)
+        # Step 2: Build portfolio context
+        logger.info("Step 2: Building portfolio context...")
+        set_activity("BUILDING PORTFOLIO CONTEXT...", duration=30.0)
 
-            # Initialize services
-            stock_repo = get_stock_repository(db)
-            position_repo = get_position_repository(db)
-            allocation_repo = get_allocation_repository(db)
-            portfolio_repo = get_portfolio_repository(db)
-            trade_repo = get_trade_repository(db)
+        positions = await position_repo.get_all()
+        stocks = await stock_repo.get_all_active()
+        allocations = await allocation_repo.get_all()
+        total_value = await position_repo.get_total_value()
 
-            rebalancing_service = RebalancingService(
-                stock_repo, position_repo, allocation_repo, portfolio_repo, trade_repo
+        # Build portfolio context for scoring
+        geo_weights = {}
+        industry_weights = {}
+        for alloc in allocations:
+            if alloc.category == "geography":
+                geo_weights[alloc.name] = alloc.target_pct
+            elif alloc.category == "industry":
+                industry_weights[alloc.name] = alloc.target_pct
+
+        position_map = {p.symbol: p.market_value_eur or 0 for p in positions}
+        stock_geographies = {s.symbol: s.geography for s in stocks}
+        stock_industries = {s.symbol: s.industry for s in stocks if s.industry}
+        stock_scores = {}
+
+        # Get existing scores
+        score_rows = await db_manager.state.fetchall(
+            "SELECT symbol, quality_score FROM scores"
+        )
+        for row in score_rows:
+            if row["quality_score"]:
+                stock_scores[row["symbol"]] = row["quality_score"]
+
+        portfolio_context = PortfolioContext(
+            geo_weights=geo_weights,
+            industry_weights=industry_weights,
+            positions=position_map,
+            total_value=total_value if total_value > 0 else 1.0,
+            stock_geographies=stock_geographies,
+            stock_industries=stock_industries,
+            stock_scores=stock_scores,
+        )
+
+        # Step 3: Check for SELL recommendation (priority)
+        logger.info("Step 3: Checking for SELL recommendations...")
+        set_activity("PROCESSING SELL RECOMMENDATIONS...", duration=30.0)
+
+        sell_trade = await _get_best_sell_trade(
+            positions, stocks, trade_repo, portfolio_context, db_manager
+        )
+
+        if sell_trade:
+            logger.info(
+                f"Executing SELL: {sell_trade.quantity} {sell_trade.symbol} "
+                f"@ €{sell_trade.estimated_price:.2f} = €{sell_trade.estimated_value:.2f} "
+                f"({sell_trade.reason})"
             )
-            trade_execution = TradeExecutionService(
-                trade_repo, db=db, position_repo=position_repo
+
+            emit(SystemEvent.SYNC_START)
+
+            trade_execution = TradeExecutionService(trade_repo, position_repo)
+            results = await trade_execution.execute_trades([sell_trade])
+
+            if results and results[0]["status"] == "success":
+                logger.info(f"SELL executed successfully: {sell_trade.symbol}")
+                emit(SystemEvent.TRADE_EXECUTED, is_buy=False)
+            else:
+                error = results[0].get("error", "Unknown error") if results else "No result"
+                logger.error(f"SELL failed for {sell_trade.symbol}: {error}")
+                emit(SystemEvent.ERROR_OCCURRED, message="SELL ORDER FAILED")
+
+            emit(SystemEvent.SYNC_COMPLETE)
+            await sync_portfolio()
+            return
+
+        # Step 4: Check for BUY recommendation
+        logger.info("Step 4: Checking for BUY recommendations...")
+
+        if cash_balance < min_trade_size:
+            logger.info(
+                f"Cash €{cash_balance:.2f} below threshold €{min_trade_size:.2f}, "
+                "no buy possible"
             )
+            emit(SystemEvent.REBALANCE_COMPLETE)
+            return
 
-            # Step 3: Check for SELL recommendation (priority)
-            logger.info("Step 3: Checking for SELL recommendations...")
-            sell_recommendations = await rebalancing_service.calculate_sell_recommendations(limit=1)
+        currency_balances = {
+            cb.currency: cb.amount
+            for cb in client.get_cash_balances()
+        }
+        logger.info(f"Currency balances: {currency_balances}")
 
-            if sell_recommendations:
-                trade = sell_recommendations[0]
+        # Deduct pending order amounts from available balances
+        pending_totals = client.get_pending_order_totals()
+        if pending_totals:
+            logger.info(f"Pending order totals by currency: {pending_totals}")
+            for currency, pending_amount in pending_totals.items():
+                if currency in currency_balances:
+                    currency_balances[currency] = max(0, currency_balances[currency] - pending_amount)
+                    logger.info(
+                        f"Adjusted {currency} balance: {currency_balances[currency]:.2f} "
+                        f"(pending: {pending_amount:.2f})"
+                    )
+
+            # Check if adjusted total is still above threshold
+            adjusted_cash = sum(currency_balances.values())
+            if adjusted_cash < min_trade_size:
                 logger.info(
-                    f"Executing SELL: {trade.quantity} {trade.symbol} "
+                    f"Adjusted cash €{adjusted_cash:.2f} below threshold "
+                    f"after pending orders, skipping"
+                )
+                emit(SystemEvent.REBALANCE_COMPLETE)
+                return
+
+        # Get recently bought symbols for cooldown
+        recently_bought = await trade_repo.get_recently_bought_symbols(BUY_COOLDOWN_DAYS)
+
+        # Get buy recommendations
+        set_activity("PROCESSING BUY RECOMMENDATIONS...", duration=30.0)
+        buy_trades = await _get_buy_trades(
+            stocks, positions, portfolio_context, recently_bought,
+            min_trade_size, db_manager
+        )
+
+        if buy_trades:
+            emit(SystemEvent.SYNC_START)
+            executed = False
+            trade_execution = TradeExecutionService(trade_repo, position_repo)
+
+            for trade in buy_trades:
+                logger.info(
+                    f"Trying BUY: {trade.quantity} {trade.symbol} "
                     f"@ €{trade.estimated_price:.2f} = €{trade.estimated_value:.2f} "
                     f"({trade.reason})"
                 )
 
-                emit(SystemEvent.SYNC_START)
-
-                results = await trade_execution.execute_trades([trade], use_transaction=True)
+                results = await trade_execution.execute_trades(
+                    [trade],
+                    currency_balances=currency_balances,
+                    auto_convert_currency=True,
+                    source_currency="EUR"
+                )
 
                 if results and results[0]["status"] == "success":
-                    logger.info(f"SELL executed successfully: {trade.symbol}")
-                    emit(SystemEvent.TRADE_EXECUTED, is_buy=False)
+                    logger.info(f"BUY executed successfully: {trade.symbol}")
+                    emit(SystemEvent.TRADE_EXECUTED, is_buy=True)
+                    executed = True
+                    break
+                elif results and results[0]["status"] == "skipped":
+                    reason = results[0].get("error", "unknown")
+                    logger.info(f"Skipped {trade.symbol}: {reason}, trying next...")
+                    continue
                 else:
                     error = results[0].get("error", "Unknown error") if results else "No result"
-                    logger.error(f"SELL failed for {trade.symbol}: {error}")
-                    emit(SystemEvent.ERROR_OCCURRED, message="SELL ORDER FAILED")
+                    logger.error(f"BUY failed for {trade.symbol}: {error}")
+                    emit(SystemEvent.ERROR_OCCURRED, message="BUY ORDER FAILED")
+                    break
 
-                emit(SystemEvent.SYNC_COMPLETE)
-                await sync_portfolio()
-                return
+            if not executed:
+                logger.info("No executable trades found (all skipped or failed)")
 
-            # Step 4: Check for BUY recommendation
-            logger.info("Step 4: Checking for BUY recommendations...")
+            emit(SystemEvent.SYNC_COMPLETE)
+            await sync_portfolio()
+            return
 
-            if cash_balance < min_trade_size:
-                logger.info(
-                    f"Cash €{cash_balance:.2f} below threshold €{min_trade_size:.2f}, "
-                    "no buy possible"
-                )
-                return
-
-            currency_balances = {
-                cb.currency: cb.amount
-                for cb in client.get_cash_balances()
-            }
-            logger.info(f"Currency balances: {currency_balances}")
-
-            # Deduct pending order amounts from available balances
-            pending_totals = client.get_pending_order_totals()
-            if pending_totals:
-                logger.info(f"Pending order totals by currency: {pending_totals}")
-                for currency, pending_amount in pending_totals.items():
-                    if currency in currency_balances:
-                        currency_balances[currency] = max(0, currency_balances[currency] - pending_amount)
-                        logger.info(
-                            f"Adjusted {currency} balance: {currency_balances[currency]:.2f} "
-                            f"(pending: {pending_amount:.2f})"
-                        )
-
-                # Check if adjusted total is still above threshold
-                adjusted_cash = sum(currency_balances.values())
-                if adjusted_cash < min_trade_size:
-                    logger.info(
-                        f"Adjusted cash €{adjusted_cash:.2f} below threshold "
-                        f"after pending orders, skipping"
-                    )
-                    return
-
-            buy_recommendations = await rebalancing_service.calculate_rebalance_trades(cash_balance)
-
-            if buy_recommendations:
-                emit(SystemEvent.SYNC_START)
-                executed = False
-
-                for trade in buy_recommendations:
-                    logger.info(
-                        f"Trying BUY: {trade.quantity} {trade.symbol} "
-                        f"@ €{trade.estimated_price:.2f} = €{trade.estimated_value:.2f} "
-                        f"({trade.reason})"
-                    )
-
-                    results = await trade_execution.execute_trades(
-                        [trade],
-                        use_transaction=True,
-                        currency_balances=currency_balances,
-                        auto_convert_currency=True,
-                        source_currency="EUR"
-                    )
-
-                    if results and results[0]["status"] == "success":
-                        logger.info(f"BUY executed successfully: {trade.symbol}")
-                        emit(SystemEvent.TRADE_EXECUTED, is_buy=True)
-                        executed = True
-                        break
-                    elif results and results[0]["status"] == "skipped":
-                        # Currency mismatch or other skip reason - try next
-                        reason = results[0].get("error", "unknown")
-                        logger.info(f"Skipped {trade.symbol}: {reason}, trying next...")
-                        continue
-                    else:
-                        # Actual failure - stop trying
-                        error = results[0].get("error", "Unknown error") if results else "No result"
-                        logger.error(f"BUY failed for {trade.symbol}: {error}")
-                        emit(SystemEvent.ERROR_OCCURRED, message="BUY ORDER FAILED")
-                        break
-
-                if not executed:
-                    logger.info("No executable trades found (all skipped or failed)")
-
-                emit(SystemEvent.SYNC_COMPLETE)
-                await sync_portfolio()
-                return
-
-            logger.info("No trades recommended this cycle")
+        logger.info("No trades recommended this cycle")
 
         emit(SystemEvent.REBALANCE_COMPLETE)
         set_activity("REBALANCE CHECK COMPLETE", duration=5.0)
@@ -217,3 +266,332 @@ async def _check_and_rebalance_internal():
     except Exception as e:
         logger.error(f"Trade cycle error: {e}", exc_info=True)
         emit(SystemEvent.ERROR_OCCURRED, message="TRADE CYCLE ERROR")
+
+
+async def _get_best_sell_trade(
+    positions, stocks, trade_repo, portfolio_context, db_manager
+) -> "TradeRecommendation | None":
+    """Calculate and return the best sell trade, if any."""
+    from app.services.allocator import TradeRecommendation
+    from app.domain.constants import TRADE_SIDE_SELL
+    from app.domain.scoring import TechnicalData, calculate_all_sell_scores
+    import numpy as np
+    import pandas as pd
+    import empyrical
+    import pandas_ta as ta
+
+    if not positions:
+        return None
+
+    # Get stock info by symbol for lookup
+    stocks_by_symbol = {s.symbol: s for s in stocks}
+
+    # Build position dicts for sell scoring
+    position_dicts = []
+    for pos in positions:
+        stock = stocks_by_symbol.get(pos.symbol)
+        if not stock:
+            continue
+
+        # Get trade dates for position
+        first_buy = await trade_repo.get_first_buy_date(pos.symbol)
+        last_sell = await trade_repo.get_last_sell_date(pos.symbol)
+
+        position_dicts.append({
+            "symbol": pos.symbol,
+            "name": stock.name,
+            "quantity": pos.quantity,
+            "avg_price": pos.avg_price,
+            "current_price": pos.current_price,
+            "market_value_eur": pos.market_value_eur,
+            "currency": pos.currency,
+            "geography": stock.geography,
+            "industry": stock.industry,
+            "allow_sell": stock.allow_sell,
+            "first_bought_at": first_buy,
+            "last_sold_at": last_sell,
+        })
+
+    if not position_dicts:
+        return None
+
+    # Get technical data for instability scoring
+    technical_data = {}
+    for pos in position_dicts:
+        symbol = pos["symbol"]
+        try:
+            history_db = db_manager.history(symbol)
+            rows = await history_db.fetchall(
+                """
+                SELECT date, close FROM daily_prices
+                ORDER BY date DESC LIMIT 400
+                """,
+            )
+
+            if len(rows) < 60:
+                technical_data[symbol] = TechnicalData(
+                    current_volatility=0.20,
+                    historical_volatility=0.20,
+                    distance_from_ma_200=0.0
+                )
+                continue
+
+            closes = np.array([row["close"] for row in reversed(rows)])
+            closes_series = pd.Series(closes)
+
+            # Current volatility (last 60 days)
+            if len(closes) >= 60:
+                recent_returns = np.diff(closes[-60:]) / closes[-60:-1]
+                current_vol = float(empyrical.annual_volatility(recent_returns))
+                if not np.isfinite(current_vol) or current_vol < 0:
+                    current_vol = 0.20
+            else:
+                current_vol = 0.20
+
+            # Historical volatility
+            returns = np.diff(closes) / closes[:-1]
+            historical_vol = float(empyrical.annual_volatility(returns))
+            if not np.isfinite(historical_vol) or historical_vol < 0:
+                historical_vol = 0.20
+
+            # Distance from 200-day EMA
+            if len(closes) >= 200:
+                ema_200 = ta.ema(closes_series, length=200)
+                if ema_200 is not None and len(ema_200) > 0 and not pd.isna(ema_200.iloc[-1]):
+                    ema_value = float(ema_200.iloc[-1])
+                else:
+                    ema_value = float(np.mean(closes[-200:]))
+                current_price = float(closes[-1])
+                distance = (current_price - ema_value) / ema_value if ema_value > 0 else 0.0
+            else:
+                distance = 0.0
+
+            technical_data[symbol] = TechnicalData(
+                current_volatility=current_vol,
+                historical_volatility=historical_vol,
+                distance_from_ma_200=distance
+            )
+
+        except Exception as e:
+            logger.warning(f"Error getting technical data for {symbol}: {e}")
+            technical_data[symbol] = TechnicalData(
+                current_volatility=0.20,
+                historical_volatility=0.20,
+                distance_from_ma_200=0.0
+            )
+
+    # Calculate sell scores
+    total_value = portfolio_context.total_value
+    geo_allocations = {
+        geo: sum(pos["market_value_eur"] or 0 for pos in position_dicts if pos.get("geography") == geo) / total_value
+        for geo in set(pos.get("geography") for pos in position_dicts if pos.get("geography"))
+    }
+    ind_allocations = {
+        ind: sum(pos["market_value_eur"] or 0 for pos in position_dicts if pos.get("industry") == ind) / total_value
+        for ind in set(pos.get("industry") for pos in position_dicts if pos.get("industry"))
+    }
+
+    # Get sell settings
+    settings_repo = SettingsRepository()
+    sell_settings = {
+        "min_hold_days": await settings_repo.get_value("min_hold_days", 90),
+        "sell_cooldown_days": await settings_repo.get_value("sell_cooldown_days", 180),
+        "max_loss_threshold": await settings_repo.get_value("max_loss_threshold", 0.20),
+        "target_annual_return": await settings_repo.get_value("target_annual_return", 0.10),
+    }
+
+    sell_scores = calculate_all_sell_scores(
+        positions=position_dicts,
+        total_portfolio_value=total_value,
+        geo_allocations=geo_allocations,
+        ind_allocations=ind_allocations,
+        technical_data=technical_data,
+        settings=sell_settings,
+    )
+
+    # Get best eligible sell
+    eligible_sells = [s for s in sell_scores if s.eligible]
+    if not eligible_sells:
+        return None
+
+    best_sell = eligible_sells[0]
+
+    # Build trade recommendation
+    pos = next((p for p in position_dicts if p["symbol"] == best_sell.symbol), None)
+    if not pos:
+        return None
+
+    # Build reason string
+    reason_parts = []
+    if best_sell.profit_pct > 0.30:
+        reason_parts.append(f"profit {best_sell.profit_pct*100:.1f}%")
+    elif best_sell.profit_pct < 0:
+        reason_parts.append(f"loss {best_sell.profit_pct*100:.1f}%")
+    if best_sell.underperformance_score >= 0.7:
+        reason_parts.append("underperforming")
+    if best_sell.time_held_score >= 0.8:
+        reason_parts.append(f"held {best_sell.days_held} days")
+    if best_sell.portfolio_balance_score >= 0.7:
+        reason_parts.append("overweight")
+    reason_parts.append(f"sell score: {best_sell.total_score:.2f}")
+    reason = ", ".join(reason_parts) if reason_parts else "eligible for sell"
+
+    return TradeRecommendation(
+        symbol=best_sell.symbol,
+        name=pos.get("name", best_sell.symbol),
+        side=TRADE_SIDE_SELL,
+        quantity=best_sell.suggested_sell_quantity,
+        estimated_price=round(pos.get("current_price") or pos.get("avg_price", 0), 2),
+        estimated_value=round(best_sell.suggested_sell_value, 2),
+        reason=reason,
+        currency=pos.get("currency", "EUR"),
+    )
+
+
+async def _get_buy_trades(
+    stocks, positions, portfolio_context, recently_bought, min_trade_size, db_manager
+) -> "list[TradeRecommendation]":
+    """Calculate and return buy trades."""
+    from app.services.allocator import TradeRecommendation
+    from app.services import yahoo
+    from app.services.tradernet import get_exchange_rate
+    from app.domain.constants import TRADE_SIDE_BUY
+    from app.domain.scoring import (
+        calculate_portfolio_score,
+        calculate_post_transaction_score,
+    )
+
+    candidates = []
+    position_map = {p.symbol: p for p in positions}
+
+    for stock in stocks:
+        symbol = stock.symbol
+
+        # Skip if allow_buy is disabled
+        if not stock.allow_buy:
+            continue
+
+        # Skip if in cooldown
+        if symbol in recently_bought:
+            continue
+
+        # Get current price
+        price = yahoo.get_current_price(symbol, stock.yahoo_symbol)
+        if not price or price <= 0:
+            continue
+
+        # Get stock scores from database
+        score_row = await db_manager.state.fetchone(
+            "SELECT * FROM scores WHERE symbol = ?",
+            (symbol,)
+        )
+
+        if not score_row:
+            continue
+
+        quality_score = score_row["quality_score"] or 0.5
+        opportunity_score = score_row["opportunity_score"] or 0.5
+        analyst_score = score_row["analyst_score"] or 0.5
+        total_score = score_row["total_score"] or 0.5
+
+        if total_score < settings.min_stock_score:
+            continue
+
+        # Determine currency and exchange rate
+        currency = stock.currency or "EUR"
+        exchange_rate = 1.0
+        if currency != "EUR":
+            exchange_rate = get_exchange_rate(currency, "EUR")
+            if exchange_rate <= 0:
+                exchange_rate = 1.0
+
+        # Calculate trade quantity
+        min_lot = stock.min_lot or 1
+        lot_cost_native = min_lot * price
+        lot_cost_eur = lot_cost_native / exchange_rate
+
+        if lot_cost_eur > min_trade_size:
+            quantity = min_lot
+            trade_value_native = lot_cost_native
+        else:
+            base_trade_amount_native = min_trade_size * exchange_rate
+            num_lots = int(base_trade_amount_native / lot_cost_native)
+            quantity = num_lots * min_lot
+            trade_value_native = quantity * price
+
+        trade_value_eur = trade_value_native / exchange_rate
+
+        # Calculate post-transaction portfolio score
+        dividend_yield = 0
+        if score_row.get("history_years"):
+            # We could fetch dividend data, but for now use stored cagr as proxy
+            pass
+
+        current_portfolio_score = calculate_portfolio_score(portfolio_context)
+        new_score, score_change = calculate_post_transaction_score(
+            symbol=symbol,
+            geography=stock.geography,
+            industry=stock.industry,
+            proposed_value=trade_value_eur,
+            stock_quality=quality_score,
+            stock_dividend=dividend_yield,
+            portfolio_context=portfolio_context,
+        )
+
+        # Skip if worsens portfolio balance significantly
+        if score_change < -1.0:
+            continue
+
+        # Calculate final priority
+        base_score = (
+            quality_score * 0.35 +
+            opportunity_score * 0.35 +
+            analyst_score * 0.15
+        )
+        normalized_score_change = max(0, min(1, (score_change + 5) / 10))
+        final_score = base_score * 0.85 + normalized_score_change * 0.15
+
+        # Apply priority multiplier
+        final_score *= stock.priority_multiplier or 1.0
+
+        # Build reason
+        reason_parts = []
+        if quality_score >= 0.7:
+            reason_parts.append("high quality")
+        if opportunity_score >= 0.7:
+            reason_parts.append("buy opportunity")
+        if score_change > 0.5:
+            reason_parts.append(f"↑{score_change:.1f} portfolio")
+        if stock.priority_multiplier and stock.priority_multiplier != 1.0:
+            reason_parts.append(f"{stock.priority_multiplier:.1f}x mult")
+        reason = ", ".join(reason_parts) if reason_parts else "good score"
+
+        candidates.append({
+            "symbol": symbol,
+            "name": stock.name,
+            "quantity": quantity,
+            "price": price,
+            "trade_value_eur": trade_value_eur,
+            "final_score": final_score,
+            "reason": reason,
+            "currency": currency,
+        })
+
+    # Sort by score
+    candidates.sort(key=lambda x: x["final_score"], reverse=True)
+
+    # Build trade recommendations
+    trades = []
+    for c in candidates[:5]:  # Top 5 candidates
+        trades.append(TradeRecommendation(
+            symbol=c["symbol"],
+            name=c["name"],
+            side=TRADE_SIDE_BUY,
+            quantity=c["quantity"],
+            estimated_price=round(c["price"], 2),
+            estimated_value=round(c["trade_value_eur"], 2),
+            reason=c["reason"],
+            currency=c["currency"],
+        ))
+
+    return trades

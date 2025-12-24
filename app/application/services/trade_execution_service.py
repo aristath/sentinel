@@ -6,12 +6,10 @@ Orchestrates trade execution via Tradernet and records trades.
 import logging
 from typing import List, Optional
 from datetime import datetime
-import aiosqlite
 
-from app.domain.repositories import TradeRepository, PositionRepository
+from app.repositories import TradeRepository, PositionRepository
 from app.services.allocator import TradeRecommendation
 from app.services.tradernet import get_tradernet_client
-from app.database import transaction
 from app.infrastructure.events import emit, SystemEvent
 from app.infrastructure.hardware.led_display import set_activity
 from app.application.services.currency_exchange_service import (
@@ -28,20 +26,14 @@ class TradeExecutionService:
     def __init__(
         self,
         trade_repo: TradeRepository,
-        db: Optional[aiosqlite.Connection] = None,
         position_repo: Optional[PositionRepository] = None
     ):
         self._trade_repo = trade_repo
         self._position_repo = position_repo
-        self._db = db
-        # Try to get db from repository if it has one
-        if db is None and hasattr(trade_repo, 'db'):
-            self._db = trade_repo.db
 
     async def execute_trades(
         self,
         trades: List[TradeRecommendation],
-        use_transaction: bool = True,
         currency_balances: Optional[dict[str, float]] = None,
         auto_convert_currency: bool = False,
         source_currency: str = "EUR"
@@ -51,7 +43,6 @@ class TradeExecutionService:
 
         Args:
             trades: List of trade recommendations to execute
-            use_transaction: If True and db is available, wrap all trades in a transaction
             currency_balances: Per-currency cash balances for validation (optional)
             auto_convert_currency: If True, automatically convert currency before buying
             source_currency: Currency to convert from when auto_convert is enabled (default: EUR)
@@ -69,24 +60,15 @@ class TradeExecutionService:
         # Get currency exchange service if auto-convert is enabled
         currency_service = get_currency_exchange_service() if auto_convert_currency else None
 
-        # Use transaction if available and requested
-        if use_transaction and self._db:
-            async with transaction(self._db) as tx_db:
-                return await self._execute_trades_internal(
-                    trades, client, auto_commit=False, currency_balances=currency_balances,
-                    currency_service=currency_service, source_currency=source_currency
-                )
-        else:
-            return await self._execute_trades_internal(
-                trades, client, auto_commit=True, currency_balances=currency_balances,
-                currency_service=currency_service, source_currency=source_currency
-            )
+        return await self._execute_trades_internal(
+            trades, client, currency_balances=currency_balances,
+            currency_service=currency_service, source_currency=source_currency
+        )
 
     async def _execute_trades_internal(
         self,
         trades: List[TradeRecommendation],
         client,
-        auto_commit: bool = True,
         currency_balances: Optional[dict[str, float]] = None,
         currency_service: Optional[CurrencyExchangeService] = None,
         source_currency: str = "EUR"
@@ -222,11 +204,11 @@ class TradeExecutionService:
 
                     # For successful SELL orders, update last_sold_at in positions
                     if trade.side.upper() == "SELL" and self._position_repo:
-                        if hasattr(self._position_repo, 'update_last_sold_at'):
-                            await self._position_repo.update_last_sold_at(
-                                trade.symbol, auto_commit=auto_commit
-                            )
+                        try:
+                            await self._position_repo.update_last_sold_at(trade.symbol)
                             logger.info(f"Updated last_sold_at for {trade.symbol}")
+                        except Exception as e:
+                            logger.warning(f"Failed to update last_sold_at: {e}")
 
                     results.append({
                         "symbol": trade.symbol,
@@ -250,9 +232,6 @@ class TradeExecutionService:
                     "status": "error",
                     "error": str(e),
                 })
-                # Note: If place_order() succeeded but DB write failed, the trade
-                # is executed externally but not recorded. We log this but continue.
-                # The transaction ensures DB consistency for recorded trades.
 
         # Show LED warning if trades were skipped due to insufficient currency balance
         if skipped_count > 0:
@@ -261,5 +240,3 @@ class TradeExecutionService:
                 emit(SystemEvent.ERROR_OCCURRED, message="INSUFFICIENT FOREIGN CURRENCY BALANCE")
 
         return results
-
-
