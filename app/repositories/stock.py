@@ -100,14 +100,14 @@ class StockRepository:
         )
         stocks = {row["symbol"]: dict(row) for row in stock_rows}
 
-        # Fetch scores from ledger.db
-        score_rows = await db_manager.ledger.fetchall(
+        # Fetch scores from state.db
+        score_rows = await db_manager.state.fetchall(
             "SELECT * FROM scores"
         )
         scores = {row["symbol"]: dict(row) for row in score_rows}
 
-        # Fetch positions from ledger.db
-        position_rows = await db_manager.ledger.fetchall(
+        # Fetch positions from state.db
+        position_rows = await db_manager.state.fetchall(
             "SELECT * FROM positions"
         )
         positions = {row["symbol"]: dict(row) for row in position_rows}
