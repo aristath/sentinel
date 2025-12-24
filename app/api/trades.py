@@ -401,6 +401,64 @@ async def get_multi_step_recommendations(depth: int = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+async def _regenerate_multi_step_cache(cache_key: str = "multi_step_recommendations:default") -> dict:
+    """
+    Regenerate multi-step recommendations cache if missing.
+    
+    Args:
+        cache_key: Cache key to use (default: "multi_step_recommendations:default")
+        
+    Returns:
+        Cached recommendations dict with steps, depth, totals, etc.
+        
+    Raises:
+        HTTPException: If no recommendations are available
+    """
+    from app.application.services.rebalancing_service import RebalancingService
+    
+    logger.info(f"Cache miss for multi-step recommendations, regenerating (key: {cache_key})...")
+    rebalancing_service = RebalancingService()
+    steps_data = await rebalancing_service.get_multi_step_recommendations(depth=None)
+    
+    if not steps_data:
+        raise HTTPException(
+            status_code=404,
+            detail="No multi-step recommendations available. Please check your portfolio and settings."
+        )
+    
+    # Rebuild cached format
+    total_score_improvement = sum(step.score_change for step in steps_data)
+    final_available_cash = steps_data[-1].available_cash_after if steps_data and len(steps_data) > 0 else 0.0
+    
+    cached = {
+        "depth": len(steps_data),
+        "steps": [
+            {
+                "step": step.step,
+                "side": step.side,
+                "symbol": step.symbol,
+                "name": step.name,
+                "quantity": step.quantity,
+                "estimated_price": round(step.estimated_price, 2),
+                "estimated_value": round(step.estimated_value, 2),
+                "currency": step.currency,
+                "reason": step.reason,
+                "portfolio_score_before": round(step.portfolio_score_before, 1),
+                "portfolio_score_after": round(step.portfolio_score_after, 1),
+                "score_change": round(step.score_change, 2),
+                "available_cash_before": round(step.available_cash_before, 2),
+                "available_cash_after": round(step.available_cash_after, 2),
+            }
+            for step in steps_data
+        ],
+        "total_score_improvement": round(total_score_improvement, 2),
+        "final_available_cash": round(final_available_cash, 2),
+    }
+    # Cache the regenerated recommendations
+    cache.set(cache_key, cached, ttl_seconds=300)
+    return cached
+
+
 @router.post("/multi-step-recommendations/execute-step/{step_number}")
 async def execute_multi_step_recommendation_step(step_number: int):
     """
@@ -428,46 +486,7 @@ async def execute_multi_step_recommendation_step(step_number: int):
         
         # If cache miss, regenerate recommendations
         if not cached or not cached.get("steps"):
-            logger.info("Cache miss for multi-step recommendations, regenerating...")
-            rebalancing_service = RebalancingService()
-            steps_data = await rebalancing_service.get_multi_step_recommendations(depth=None)
-            
-            if not steps_data:
-                raise HTTPException(
-                    status_code=404,
-                    detail="No multi-step recommendations available. Please check your portfolio and settings."
-                )
-            
-            # Rebuild cached format
-            total_score_improvement = sum(step.score_change for step in steps_data)
-            final_available_cash = steps_data[-1].available_cash_after if steps_data else 0.0
-            
-            cached = {
-                "depth": len(steps_data),
-                "steps": [
-                    {
-                        "step": step.step,
-                        "side": step.side,
-                        "symbol": step.symbol,
-                        "name": step.name,
-                        "quantity": step.quantity,
-                        "estimated_price": round(step.estimated_price, 2),
-                        "estimated_value": round(step.estimated_value, 2),
-                        "currency": step.currency,
-                        "reason": step.reason,
-                        "portfolio_score_before": round(step.portfolio_score_before, 1),
-                        "portfolio_score_after": round(step.portfolio_score_after, 1),
-                        "score_change": round(step.score_change, 2),
-                        "available_cash_before": round(step.available_cash_before, 2),
-                        "available_cash_after": round(step.available_cash_after, 2),
-                    }
-                    for step in steps_data
-                ],
-                "total_score_improvement": round(total_score_improvement, 2),
-                "final_available_cash": round(final_available_cash, 2),
-            }
-            # Cache the regenerated recommendations
-            cache.set(cache_key, cached, ttl_seconds=300)
+            cached = await _regenerate_multi_step_cache(cache_key)
 
         steps = cached["steps"]
         if step_number > len(steps):
@@ -556,7 +575,7 @@ async def execute_all_multi_step_recommendations():
     """
     Execute all steps in the multi-step recommendation sequence in order.
 
-    Executes each step sequentially, stopping if any step fails.
+    Executes each step sequentially, continuing with remaining steps if any step fails.
 
     Returns:
         List of execution results for each step
@@ -574,46 +593,7 @@ async def execute_all_multi_step_recommendations():
         
         # If cache miss, regenerate recommendations
         if not cached or not cached.get("steps"):
-            logger.info("Cache miss for multi-step recommendations in execute-all, regenerating...")
-            rebalancing_service = RebalancingService()
-            steps_data = await rebalancing_service.get_multi_step_recommendations(depth=None)
-            
-            if not steps_data:
-                raise HTTPException(
-                    status_code=404,
-                    detail="No multi-step recommendations available. Please check your portfolio and settings."
-                )
-            
-            # Rebuild cached format
-            total_score_improvement = sum(step.score_change for step in steps_data)
-            final_available_cash = steps_data[-1].available_cash_after if steps_data else 0.0
-            
-            cached = {
-                "depth": len(steps_data),
-                "steps": [
-                    {
-                        "step": step.step,
-                        "side": step.side,
-                        "symbol": step.symbol,
-                        "name": step.name,
-                        "quantity": step.quantity,
-                        "estimated_price": round(step.estimated_price, 2),
-                        "estimated_value": round(step.estimated_value, 2),
-                        "currency": step.currency,
-                        "reason": step.reason,
-                        "portfolio_score_before": round(step.portfolio_score_before, 1),
-                        "portfolio_score_after": round(step.portfolio_score_after, 1),
-                        "score_change": round(step.score_change, 2),
-                        "available_cash_before": round(step.available_cash_before, 2),
-                        "available_cash_after": round(step.available_cash_after, 2),
-                    }
-                    for step in steps_data
-                ],
-                "total_score_improvement": round(total_score_improvement, 2),
-                "final_available_cash": round(final_available_cash, 2),
-            }
-            # Cache the regenerated recommendations
-            cache.set(cache_key, cached, ttl_seconds=300)
+            cached = await _regenerate_multi_step_cache(cache_key)
 
         steps = cached["steps"]
         if not steps:
