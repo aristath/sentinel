@@ -98,7 +98,7 @@ class ScoringService:
                 return None
 
             # Fetch fundamentals from Yahoo
-            fundamentals = yahoo.get_fundamentals(symbol, yahoo_symbol=yahoo_symbol)
+            fundamentals = yahoo.get_fundamental_data(symbol, yahoo_symbol=yahoo_symbol)
 
             score = calculate_stock_score(
                 symbol,
