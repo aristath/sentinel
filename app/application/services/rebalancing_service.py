@@ -279,6 +279,16 @@ class RebalancingService:
         # Calculate current portfolio score
         current_portfolio_score = calculate_portfolio_score(portfolio_context)
 
+        # BATCH FETCH ALL PRICES UPFRONT (performance optimization)
+        # This replaces sequential get_current_price() calls which caused timeouts
+        symbol_yahoo_map = {
+            s.symbol: s.yahoo_symbol
+            for s in stocks
+            if s.allow_buy and s.symbol not in recently_bought
+        }
+        batch_prices = yahoo.get_batch_quotes(symbol_yahoo_map)
+        logger.info(f"Batch fetched {len(batch_prices)} prices for {len(symbol_yahoo_map)} eligible stocks")
+
         candidates = []
 
         for stock in stocks:
@@ -314,8 +324,8 @@ class RebalancingService:
             if total_score < settings.min_stock_score:
                 continue
 
-            # Get current price
-            price = yahoo.get_current_price(symbol, stock.yahoo_symbol)
+            # Get current price from batch-fetched prices
+            price = batch_prices.get(symbol)
             if not price or price <= 0:
                 continue
 
