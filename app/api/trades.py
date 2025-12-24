@@ -364,7 +364,7 @@ async def get_multi_step_recommendations(depth: int = None):
 
         # Calculate totals
         total_score_improvement = sum(step.score_change for step in steps)
-        final_available_cash = steps[-1].available_cash_after if steps else 0.0
+        final_available_cash = steps[-1].available_cash_after
 
         result = {
             "depth": depth or len(steps),
