@@ -74,7 +74,11 @@ from app.domain.scoring.technicals import (
 from app.domain.scoring.opinion import calculate_opinion_score
 
 # Diversification scoring (renamed from allocation)
-from app.domain.scoring.diversification import calculate_diversification_score
+from app.domain.scoring.diversification import (
+    calculate_diversification_score,
+    calculate_portfolio_score,
+    calculate_post_transaction_score,
+)
 
 
 # Sell scoring
@@ -141,6 +145,8 @@ __all__ = [
     "calculate_technicals_score",
     "calculate_opinion_score",
     "calculate_diversification_score",
+    "calculate_portfolio_score",
+    "calculate_post_transaction_score",
     # Scoring helpers
     "score_below_52w_high",
     "score_ema_distance",
