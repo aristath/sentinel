@@ -13,6 +13,7 @@ document.addEventListener('alpine:init', () => {
       total_value: 0,
       cash_balance: 0
     },
+    cashBreakdown: [],  // [{currency: 'EUR', amount: 1000}, ...]
     stocks: [],
     trades: [],
     tradernet: { connected: false },
@@ -76,6 +77,7 @@ document.addEventListener('alpine:init', () => {
       await Promise.all([
         this.fetchStatus(),
         this.fetchAllocation(),
+        this.fetchCashBreakdown(),
         this.fetchStocks(),
         this.fetchTrades(),
         this.fetchTradernet(),
@@ -101,6 +103,16 @@ document.addEventListener('alpine:init', () => {
         this.allocation = await API.fetchAllocation();
       } catch (e) {
         console.error('Failed to fetch allocation:', e);
+      }
+    },
+
+    async fetchCashBreakdown() {
+      try {
+        const response = await fetch('/api/portfolio/cash-breakdown');
+        const data = await response.json();
+        this.cashBreakdown = data.balances || [];
+      } catch (e) {
+        console.error('Failed to fetch cash breakdown:', e);
       }
     },
 

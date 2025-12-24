@@ -17,7 +17,7 @@ class AllocationRadar extends HTMLElement {
             </button>
           </div>
           <div class="relative w-full" style="height: 180px;">
-            <canvas id="geo-radar-chart" style="width: 100%; height: 100%;"></canvas>
+            <canvas id="geo-radar-chart"></canvas>
           </div>
         </div>
 
@@ -31,7 +31,7 @@ class AllocationRadar extends HTMLElement {
             </button>
           </div>
           <div class="relative w-full" style="height: 180px;">
-            <canvas id="industry-radar-chart" style="width: 100%; height: 100%;"></canvas>
+            <canvas id="industry-radar-chart"></canvas>
           </div>
         </div>
 

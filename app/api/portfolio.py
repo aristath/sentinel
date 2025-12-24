@@ -123,3 +123,25 @@ async def get_transaction_history():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get transaction history: {str(e)}")
+
+
+@router.get("/cash-breakdown")
+async def get_cash_breakdown():
+    """Get cash balance breakdown by currency."""
+    from app.services.tradernet import get_tradernet_client
+
+    client = get_tradernet_client()
+    if not client.is_connected:
+        if not client.connect():
+            return {"balances": [], "total_eur": 0}
+
+    try:
+        balances = client.get_cash_balances()
+        total_eur = client.get_total_cash_eur()
+
+        return {
+            "balances": [{"currency": b.currency, "amount": b.amount} for b in balances],
+            "total_eur": total_eur,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get cash breakdown: {str(e)}")
