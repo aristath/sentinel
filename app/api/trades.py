@@ -2,23 +2,17 @@
 
 from datetime import datetime
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
 from enum import Enum
 from app.domain.constants import TRADE_SIDE_BUY, TRADE_SIDE_SELL
-from app.infrastructure.dependencies import (
-    get_portfolio_repository,
-    get_position_repository,
-    get_allocation_repository,
-    get_trade_repository,
-    get_stock_repository,
-)
-from app.domain.repositories import (
-    PortfolioRepository,
-    PositionRepository,
-    AllocationRepository,
-    TradeRepository,
+from app.domain.models import Trade
+from app.repositories import (
     StockRepository,
+    PositionRepository,
+    TradeRepository,
+    AllocationRepository,
+    PortfolioRepository,
 )
 from app.infrastructure.cache import cache
 
@@ -54,11 +48,9 @@ class TradeRequest(BaseModel):
 
 
 @router.get("")
-async def get_trades(
-    limit: int = 50,
-    trade_repo: TradeRepository = Depends(get_trade_repository),
-):
+async def get_trades(limit: int = 50):
     """Get trade history."""
+    trade_repo = TradeRepository()
     trades = await trade_repo.get_history(limit=limit)
     return [
         {
@@ -75,13 +67,10 @@ async def get_trades(
 
 
 @router.post("/execute")
-async def execute_trade(
-    trade: TradeRequest,
-    stock_repo: StockRepository = Depends(get_stock_repository),
-    trade_repo: TradeRepository = Depends(get_trade_repository),
-):
+async def execute_trade(trade: TradeRequest):
     """Execute a manual trade."""
-    # Side is now validated by Pydantic enum
+    stock_repo = StockRepository()
+    trade_repo = TradeRepository()
 
     # Check stock exists
     stock = await stock_repo.get_by_symbol(trade.symbol)
@@ -89,7 +78,6 @@ async def execute_trade(
         raise HTTPException(status_code=404, detail="Stock not found")
 
     from app.services.tradernet import get_tradernet_client
-    from app.domain.repositories import Trade
 
     client = get_tradernet_client()
     if not client.is_connected:
@@ -126,13 +114,13 @@ async def execute_trade(
 
 
 @router.get("/allocation")
-async def get_allocation(
-    portfolio_repo: PortfolioRepository = Depends(get_portfolio_repository),
-    position_repo: PositionRepository = Depends(get_position_repository),
-    allocation_repo: AllocationRepository = Depends(get_allocation_repository),
-):
+async def get_allocation():
     """Get current portfolio allocation vs targets."""
     from app.application.services.portfolio_service import PortfolioService
+
+    portfolio_repo = PortfolioRepository()
+    position_repo = PositionRepository()
+    allocation_repo = AllocationRepository()
 
     portfolio_service = PortfolioService(
         portfolio_repo,
@@ -168,14 +156,7 @@ async def get_allocation(
 
 
 @router.get("/recommendations")
-async def get_recommendations(
-    limit: int = 3,
-    stock_repo: StockRepository = Depends(get_stock_repository),
-    position_repo: PositionRepository = Depends(get_position_repository),
-    allocation_repo: AllocationRepository = Depends(get_allocation_repository),
-    portfolio_repo: PortfolioRepository = Depends(get_portfolio_repository),
-    trade_repo: TradeRepository = Depends(get_trade_repository),
-):
+async def get_recommendations(limit: int = 3):
     """
     Get top N trade recommendations based on current portfolio state.
 
@@ -192,13 +173,7 @@ async def get_recommendations(
     from app.application.services.rebalancing_service import RebalancingService
 
     try:
-        rebalancing_service = RebalancingService(
-            stock_repo,
-            position_repo,
-            allocation_repo,
-            portfolio_repo,
-            trade_repo,
-        )
+        rebalancing_service = RebalancingService()
         recommendations = await rebalancing_service.get_recommendations(limit=limit)
 
         result = {
@@ -229,14 +204,7 @@ async def get_recommendations(
 
 
 @router.post("/recommendations/{symbol}/execute")
-async def execute_recommendation(
-    symbol: str,
-    stock_repo: StockRepository = Depends(get_stock_repository),
-    position_repo: PositionRepository = Depends(get_position_repository),
-    allocation_repo: AllocationRepository = Depends(get_allocation_repository),
-    portfolio_repo: PortfolioRepository = Depends(get_portfolio_repository),
-    trade_repo: TradeRepository = Depends(get_trade_repository),
-):
+async def execute_recommendation(symbol: str):
     """
     Execute a single recommendation by symbol.
 
@@ -244,19 +212,13 @@ async def execute_recommendation(
     """
     from app.application.services.rebalancing_service import RebalancingService
     from app.services.tradernet import get_tradernet_client
-    from app.domain.repositories import Trade
 
     symbol = symbol.upper()
+    trade_repo = TradeRepository()
 
     try:
         # Get recommendations to find this symbol
-        rebalancing_service = RebalancingService(
-            stock_repo,
-            position_repo,
-            allocation_repo,
-            portfolio_repo,
-            trade_repo,
-        )
+        rebalancing_service = RebalancingService()
         recommendations = await rebalancing_service.get_recommendations(limit=10)
 
         # Find the recommendation for this symbol
@@ -309,14 +271,7 @@ async def execute_recommendation(
 
 
 @router.get("/sell-recommendations")
-async def get_sell_recommendations(
-    limit: int = 3,
-    stock_repo: StockRepository = Depends(get_stock_repository),
-    position_repo: PositionRepository = Depends(get_position_repository),
-    allocation_repo: AllocationRepository = Depends(get_allocation_repository),
-    portfolio_repo: PortfolioRepository = Depends(get_portfolio_repository),
-    trade_repo: TradeRepository = Depends(get_trade_repository),
-):
+async def get_sell_recommendations(limit: int = 3):
     """
     Get top N sell recommendations based on sell scoring system.
 
@@ -331,16 +286,8 @@ async def get_sell_recommendations(
     from app.application.services.rebalancing_service import RebalancingService
 
     try:
-        rebalancing_service = RebalancingService(
-            stock_repo,
-            position_repo,
-            allocation_repo,
-            portfolio_repo,
-            trade_repo,
-        )
-        recommendations = await rebalancing_service.calculate_sell_recommendations(
-            limit=limit
-        )
+        rebalancing_service = RebalancingService()
+        recommendations = await rebalancing_service.calculate_sell_recommendations(limit=limit)
 
         result = {
             "recommendations": [
@@ -365,14 +312,7 @@ async def get_sell_recommendations(
 
 
 @router.post("/sell-recommendations/{symbol}/execute")
-async def execute_sell_recommendation(
-    symbol: str,
-    stock_repo: StockRepository = Depends(get_stock_repository),
-    position_repo: PositionRepository = Depends(get_position_repository),
-    allocation_repo: AllocationRepository = Depends(get_allocation_repository),
-    portfolio_repo: PortfolioRepository = Depends(get_portfolio_repository),
-    trade_repo: TradeRepository = Depends(get_trade_repository),
-):
+async def execute_sell_recommendation(symbol: str):
     """
     Execute a sell recommendation for a specific symbol.
 
@@ -380,24 +320,17 @@ async def execute_sell_recommendation(
     """
     from app.application.services.rebalancing_service import RebalancingService
     from app.services.tradernet import get_tradernet_client
-    from app.domain.repositories import Trade
+
+    symbol = symbol.upper()
+    trade_repo = TradeRepository()
+    position_repo = PositionRepository()
 
     try:
-        rebalancing_service = RebalancingService(
-            stock_repo,
-            position_repo,
-            allocation_repo,
-            portfolio_repo,
-            trade_repo,
-        )
-
-        # Get sell recommendations (fetch more to find the symbol)
-        recommendations = await rebalancing_service.calculate_sell_recommendations(
-            limit=20
-        )
+        rebalancing_service = RebalancingService()
+        recommendations = await rebalancing_service.calculate_sell_recommendations(limit=20)
 
         # Find the recommendation for the requested symbol
-        rec = next((r for r in recommendations if r.symbol == symbol.upper()), None)
+        rec = next((r for r in recommendations if r.symbol == symbol), None)
         if not rec:
             raise HTTPException(
                 status_code=404,
@@ -422,7 +355,7 @@ async def execute_sell_recommendation(
         if result:
             # Record the trade
             trade_record = Trade(
-                symbol=symbol.upper(),
+                symbol=symbol,
                 side=TRADE_SIDE_SELL,
                 quantity=rec.quantity,
                 price=result.price,
@@ -432,8 +365,7 @@ async def execute_sell_recommendation(
             await trade_repo.create(trade_record)
 
             # Update last_sold_at
-            if hasattr(position_repo, 'update_last_sold_at'):
-                await position_repo.update_last_sold_at(symbol.upper())
+            await position_repo.update_last_sold_at(symbol)
 
             # Clear cache
             cache.invalidate("sell_recommendations:3")
@@ -442,7 +374,7 @@ async def execute_sell_recommendation(
             return {
                 "status": "success",
                 "order_id": result.order_id,
-                "symbol": symbol.upper(),
+                "symbol": symbol,
                 "side": TRADE_SIDE_SELL,
                 "quantity": rec.quantity,
                 "price": result.price,
@@ -470,15 +402,7 @@ class ExecuteFundingRequest(BaseModel):
 
 
 @router.get("/recommendations/{symbol}/funding-options")
-async def get_funding_options(
-    symbol: str,
-    exclude_signatures: str = "",
-    stock_repo: StockRepository = Depends(get_stock_repository),
-    position_repo: PositionRepository = Depends(get_position_repository),
-    allocation_repo: AllocationRepository = Depends(get_allocation_repository),
-    portfolio_repo: PortfolioRepository = Depends(get_portfolio_repository),
-    trade_repo: TradeRepository = Depends(get_trade_repository),
-):
+async def get_funding_options(symbol: str, exclude_signatures: str = ""):
     """
     Get funding options for a buy recommendation that can't be executed due to insufficient cash.
 
@@ -496,13 +420,7 @@ async def get_funding_options(
 
     try:
         # Get current recommendation for this symbol
-        rebalancing_service = RebalancingService(
-            stock_repo,
-            position_repo,
-            allocation_repo,
-            portfolio_repo,
-            trade_repo,
-        )
+        rebalancing_service = RebalancingService()
         recommendations = await rebalancing_service.get_recommendations(limit=10)
 
         rec = next((r for r in recommendations if r.symbol == symbol), None)
@@ -535,12 +453,7 @@ async def get_funding_options(
             }
 
         # Generate funding options
-        funding_service = FundingService(
-            stock_repo,
-            position_repo,
-            allocation_repo,
-            portfolio_repo,
-        )
+        funding_service = FundingService()
 
         # Parse excluded signatures for pagination
         excluded = [s.strip() for s in exclude_signatures.split(",") if s.strip()]
@@ -557,7 +470,7 @@ async def get_funding_options(
             "buy_amount": rec.amount,
             "cash_available": round(available_cash, 2),
             "cash_needed": round(rec.amount - available_cash, 2),
-            "has_more": len(options) > 0,  # If we got options, there might be more
+            "has_more": len(options) > 0,
             "options": [
                 {
                     "strategy": opt.strategy,
@@ -594,23 +507,18 @@ async def get_funding_options(
 
 
 @router.post("/recommendations/{symbol}/execute-funding")
-async def execute_funding(
-    symbol: str,
-    request: ExecuteFundingRequest,
-    stock_repo: StockRepository = Depends(get_stock_repository),
-    position_repo: PositionRepository = Depends(get_position_repository),
-    trade_repo: TradeRepository = Depends(get_trade_repository),
-):
+async def execute_funding(symbol: str, request: ExecuteFundingRequest):
     """
     Execute a funding plan: sell specified positions then buy the target stock.
 
     Executes all sells first, then executes the buy with the newly available cash.
     """
     from app.services.tradernet import get_tradernet_client
-    from app.domain.repositories import Trade
     from app.domain.constants import BUY_COOLDOWN_DAYS
 
     symbol = symbol.upper()
+    trade_repo = TradeRepository()
+    stock_repo = StockRepository()
 
     # Check cooldown before executing any trades
     recently_bought = await trade_repo.get_recently_bought_symbols(BUY_COOLDOWN_DAYS)
@@ -676,10 +584,6 @@ async def execute_funding(
                 status_code=500,
                 detail="All sell orders failed, cannot proceed with buy"
             )
-
-        # Get the buy recommendation
-        from app.application.services.rebalancing_service import RebalancingService
-        from app.infrastructure.dependencies import get_allocation_repository, get_portfolio_repository
 
         # Execute the buy
         stock = await stock_repo.get_by_symbol(symbol)

@@ -3,33 +3,28 @@
 import shutil
 from datetime import datetime
 from pathlib import Path
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from app.config import settings
-from app.infrastructure.dependencies import (
-    get_portfolio_repository,
-    get_stock_repository,
-    get_position_repository,
-    get_allocation_repository,
-    get_trade_repository,
-)
-from app.domain.repositories import (
+from app.infrastructure.database.manager import get_db_manager
+from app.repositories import (
     PortfolioRepository,
     StockRepository,
     PositionRepository,
     AllocationRepository,
     TradeRepository,
+    SettingsRepository,
 )
 
 router = APIRouter()
 
 
 @router.get("")
-async def get_status(
-    portfolio_repo: PortfolioRepository = Depends(get_portfolio_repository),
-    stock_repo: StockRepository = Depends(get_stock_repository),
-    position_repo: PositionRepository = Depends(get_position_repository),
-):
+async def get_status():
     """Get system health and status."""
+    portfolio_repo = PortfolioRepository()
+    stock_repo = StockRepository()
+    position_repo = PositionRepository()
+
     # Get cash balance from latest portfolio snapshot
     latest_snapshot = await portfolio_repo.get_latest()
     cash_balance = latest_snapshot.cash_balance if latest_snapshot else 0
@@ -83,13 +78,7 @@ async def get_led_status():
     }
 
 
-async def _build_ticker_text(
-    portfolio_repo: PortfolioRepository,
-    position_repo: PositionRepository,
-    allocation_repo: AllocationRepository,
-    stock_repo: StockRepository,
-    trade_repo: TradeRepository,
-) -> str:
+async def _build_ticker_text() -> str:
     """Build ticker text from portfolio data and recommendations.
 
     Format: EUR12,345 | CASH EUR675 | SELL ABC EUR200 | BUY XIAO EUR855
@@ -98,19 +87,23 @@ async def _build_ticker_text(
     from app.infrastructure.cache import cache
     from app.application.services.portfolio_service import PortfolioService
     from app.application.services.rebalancing_service import RebalancingService
-    from app.api.settings import get_setting_value
 
     parts = []
 
     try:
         # Get display settings
-        show_value = await get_setting_value("ticker_show_value") == 1.0
-        show_cash = await get_setting_value("ticker_show_cash") == 1.0
-        show_actions = await get_setting_value("ticker_show_actions") == 1.0
-        show_amounts = await get_setting_value("ticker_show_amounts") == 1.0
-        max_actions = int(await get_setting_value("ticker_max_actions"))
+        settings_repo = SettingsRepository()
+        show_value = await settings_repo.get_value("ticker_show_value", 1.0) == 1.0
+        show_cash = await settings_repo.get_value("ticker_show_cash", 1.0) == 1.0
+        show_actions = await settings_repo.get_value("ticker_show_actions", 1.0) == 1.0
+        show_amounts = await settings_repo.get_value("ticker_show_amounts", 1.0) == 1.0
+        max_actions = int(await settings_repo.get_value("ticker_max_actions", 3))
 
         # Get portfolio summary
+        portfolio_repo = PortfolioRepository()
+        position_repo = PositionRepository()
+        allocation_repo = AllocationRepository()
+
         portfolio_service = PortfolioService(
             portfolio_repo,
             position_repo,
@@ -134,18 +127,10 @@ async def _build_ticker_text(
 
             # Calculate recommendations if not cached
             if buy_recs is None or sell_recs is None:
-                rebalancing_service = RebalancingService(
-                    stock_repo,
-                    position_repo,
-                    allocation_repo,
-                    portfolio_repo,
-                    trade_repo,
-                )
+                rebalancing_service = RebalancingService()
 
                 if buy_recs is None:
-                    recommendations = await rebalancing_service.get_recommendations(
-                        limit=3
-                    )
+                    recommendations = await rebalancing_service.get_recommendations(limit=3)
                     buy_recs = {
                         "recommendations": [
                             {
@@ -158,9 +143,7 @@ async def _build_ticker_text(
                     cache.set("recommendations:3", buy_recs, ttl_seconds=300)
 
                 if sell_recs is None:
-                    sell_recommendations = (
-                        await rebalancing_service.get_sell_recommendations(limit=3)
-                    )
+                    sell_recommendations = await rebalancing_service.calculate_sell_recommendations(limit=3)
                     sell_recs = {
                         "recommendations": [
                             {
@@ -248,33 +231,15 @@ async def get_led_display_state():
 async def _refresh_led_display_cache():
     """Refresh cached LED display data (ticker text + settings)."""
     from app.infrastructure.cache import cache
-    from app.api.settings import get_setting_value
-    from app.database import get_db_connection
-    from app.infrastructure.database.repositories import (
-        SQLitePortfolioRepository,
-        SQLitePositionRepository,
-        SQLiteAllocationRepository,
-        SQLiteStockRepository,
-        SQLiteTradeRepository,
-    )
 
     try:
-        async with get_db_connection() as db:
-            # Create all repos with single connection
-            portfolio_repo = SQLitePortfolioRepository(db)
-            position_repo = SQLitePositionRepository(db)
-            allocation_repo = SQLiteAllocationRepository(db)
-            stock_repo = SQLiteStockRepository(db)
-            trade_repo = SQLiteTradeRepository(db)
+        # Build ticker text
+        ticker = await _build_ticker_text()
 
-            # Build ticker text
-            ticker = await _build_ticker_text(
-                portfolio_repo, position_repo, allocation_repo, stock_repo, trade_repo
-            )
-
-        # Get settings (uses cached batch query)
-        ticker_speed = await get_setting_value("ticker_speed")
-        led_brightness = int(await get_setting_value("led_brightness"))
+        # Get settings
+        settings_repo = SettingsRepository()
+        ticker_speed = await settings_repo.get_value("ticker_speed", 50.0)
+        led_brightness = int(await settings_repo.get_value("led_brightness", 150))
 
         # Cache for 2 seconds
         cache.set("led_display:ticker_data", {
@@ -364,7 +329,7 @@ async def get_tradernet_status():
 async def get_job_status():
     """Get status of all scheduled jobs."""
     from app.jobs.scheduler import get_job_health_status
-    
+
     try:
         job_status = get_job_health_status()
         return {
@@ -382,125 +347,14 @@ async def get_job_status():
 @router.get("/database/stats")
 async def get_database_stats():
     """Get database statistics including historical data counts and freshness."""
-    import aiosqlite
+    from app.jobs.health_check import get_database_stats as get_db_stats
 
     try:
-        async with aiosqlite.connect(settings.database_path) as db:
-            db.row_factory = aiosqlite.Row
-
-            # Count daily stock price history records
-            cursor = await db.execute("SELECT COUNT(*) as count FROM stock_price_history")
-            price_history_count = (await cursor.fetchone())["count"]
-
-            # Count unique symbols in price history
-            cursor = await db.execute("SELECT COUNT(DISTINCT symbol) as count FROM stock_price_history")
-            price_history_symbols = (await cursor.fetchone())["count"]
-
-            # Get date range of daily price history
-            cursor = await db.execute("""
-                SELECT MIN(date) as min_date, MAX(date) as max_date
-                FROM stock_price_history
-            """)
-            price_range = await cursor.fetchone()
-
-            # Count monthly price records
-            cursor = await db.execute("SELECT COUNT(*) as count FROM stock_price_monthly")
-            monthly_count = (await cursor.fetchone())["count"]
-
-            # Count unique symbols in monthly prices
-            cursor = await db.execute("SELECT COUNT(DISTINCT symbol) as count FROM stock_price_monthly")
-            monthly_symbols = (await cursor.fetchone())["count"]
-
-            # Get date range of monthly prices
-            cursor = await db.execute("""
-                SELECT MIN(year_month) as min_date, MAX(year_month) as max_date
-                FROM stock_price_monthly
-            """)
-            monthly_range = await cursor.fetchone()
-
-            # Count portfolio snapshots
-            cursor = await db.execute("SELECT COUNT(*) as count FROM portfolio_snapshots")
-            snapshot_count = (await cursor.fetchone())["count"]
-
-            # Get date range of snapshots
-            cursor = await db.execute("""
-                SELECT MIN(date) as min_date, MAX(date) as max_date
-                FROM portfolio_snapshots
-            """)
-            snapshot_range = await cursor.fetchone()
-
-            # Count active stocks
-            cursor = await db.execute("SELECT COUNT(*) as count FROM stocks WHERE active = 1")
-            active_stocks = (await cursor.fetchone())["count"]
-
-            # Count trades
-            cursor = await db.execute("SELECT COUNT(*) as count FROM trades")
-            trades_count = (await cursor.fetchone())["count"]
-
-            # Calculate data freshness
-            today = datetime.now().date()
-
-            # Daily price freshness
-            daily_latest = price_range["max_date"] if price_range["max_date"] else None
-            daily_days_old = None
-            daily_stale = False
-            if daily_latest:
-                try:
-                    latest_date = datetime.strptime(daily_latest, "%Y-%m-%d").date()
-                    daily_days_old = (today - latest_date).days
-                    daily_stale = daily_days_old > 3  # Stale if > 3 days old (weekend buffer)
-                except ValueError:
-                    pass
-
-            # Monthly price freshness
-            monthly_latest = monthly_range["max_date"] if monthly_range["max_date"] else None
-            monthly_days_old = None
-            monthly_stale = False
-            if monthly_latest:
-                try:
-                    # Parse YYYY-MM format
-                    latest_month = datetime.strptime(monthly_latest + "-01", "%Y-%m-%d").date()
-                    monthly_days_old = (today - latest_month).days
-                    monthly_stale = monthly_days_old > 45  # Stale if > 45 days (1.5 months)
-                except ValueError:
-                    pass
-
-            return {
-                "status": "ok",
-                "stock_price_history_daily": {
-                    "total_records": price_history_count,
-                    "unique_symbols": price_history_symbols,
-                    "date_range": {
-                        "min": price_range["min_date"] if price_range["min_date"] else None,
-                        "max": daily_latest,
-                    },
-                    "freshness": {
-                        "days_old": daily_days_old,
-                        "stale": daily_stale,
-                    }
-                },
-                "stock_price_monthly": {
-                    "total_records": monthly_count,
-                    "unique_symbols": monthly_symbols,
-                    "date_range": {
-                        "min": monthly_range["min_date"] if monthly_range["min_date"] else None,
-                        "max": monthly_latest,
-                    },
-                    "freshness": {
-                        "days_old": monthly_days_old,
-                        "stale": monthly_stale,
-                    }
-                },
-                "portfolio_snapshots": {
-                    "total_records": snapshot_count,
-                    "date_range": {
-                        "min": snapshot_range["min_date"] if snapshot_range["min_date"] else None,
-                        "max": snapshot_range["max_date"] if snapshot_range["max_date"] else None,
-                    }
-                },
-                "active_stocks": active_stocks,
-                "trades": trades_count,
-            }
+        stats = await get_db_stats()
+        return {
+            "status": "ok",
+            **stats,
+        }
     except Exception as e:
         return {
             "status": "error",
@@ -517,41 +371,55 @@ async def get_disk_usage():
         - disk_total_mb: Total disk space
         - disk_free_mb: Free disk space
         - disk_used_percent: Percentage of disk used
-        - db_size_mb: Database file size
-        - wal_size_mb: WAL file size
-        - log_size_mb: Log directory size
-        - backup_size_mb: Backup directory size
+        - data_dir_size_mb: Data directory size
     """
     try:
-        db_path = Path(settings.database_path)
-        data_dir = db_path.parent
+        db_manager = get_db_manager()
+        data_dir = settings.data_dir
 
         # System disk usage
         disk = shutil.disk_usage("/")
 
-        # Database file sizes
-        db_size = db_path.stat().st_size if db_path.exists() else 0
-        wal_path = Path(f"{db_path}-wal")
-        wal_size = wal_path.stat().st_size if wal_path.exists() else 0
-        shm_path = Path(f"{db_path}-shm")
-        shm_size = shm_path.stat().st_size if shm_path.exists() else 0
-
-        # Log directory size
-        log_dir = data_dir / "logs"
-        log_size = 0
-        if log_dir.exists():
-            for f in log_dir.glob("**/*"):
+        # Data directory size
+        data_size = 0
+        if data_dir.exists():
+            for f in data_dir.glob("**/*"):
                 if f.is_file():
-                    log_size += f.stat().st_size
+                    try:
+                        data_size += f.stat().st_size
+                    except (OSError, FileNotFoundError):
+                        pass
+
+        # Count databases
+        core_dbs = ["config.db", "ledger.db", "state.db", "cache.db"]
+        db_sizes = {}
+        for db_name in core_dbs:
+            db_path = data_dir / db_name
+            if db_path.exists():
+                db_sizes[db_name] = round(db_path.stat().st_size / (1024 * 1024), 2)
+
+        # Count history databases
+        history_dir = data_dir / "history"
+        history_count = 0
+        history_size = 0
+        if history_dir.exists():
+            for f in history_dir.glob("*.db"):
+                history_count += 1
+                history_size += f.stat().st_size
 
         # Backup directory size
         backup_dir = data_dir / "backups"
         backup_size = 0
         backup_count = 0
         if backup_dir.exists():
-            for f in backup_dir.glob("trader_*.db"):
+            for f in backup_dir.glob("*.db"):
                 backup_size += f.stat().st_size
                 backup_count += 1
+            for d in backup_dir.glob("history_*"):
+                if d.is_dir():
+                    for f in d.glob("*.db"):
+                        backup_size += f.stat().st_size
+                    backup_count += 1
 
         return {
             "status": "ok",
@@ -560,14 +428,13 @@ async def get_disk_usage():
                 "free_mb": round(disk.free / (1024 * 1024), 1),
                 "used_percent": round((disk.used / disk.total) * 100, 1),
             },
-            "database": {
-                "db_size_mb": round(db_size / (1024 * 1024), 2),
-                "wal_size_mb": round(wal_size / (1024 * 1024), 2),
-                "shm_size_mb": round(shm_size / (1024 * 1024), 2),
-                "total_mb": round((db_size + wal_size + shm_size) / (1024 * 1024), 2),
+            "databases": {
+                **db_sizes,
+                "history_count": history_count,
+                "history_size_mb": round(history_size / (1024 * 1024), 2),
             },
-            "logs": {
-                "size_mb": round(log_size / (1024 * 1024), 2),
+            "data_directory": {
+                "total_size_mb": round(data_size / (1024 * 1024), 2),
             },
             "backups": {
                 "count": backup_count,
