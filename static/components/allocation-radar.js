@@ -2,13 +2,29 @@
  * Allocation Radar Chart Component
  * Displays geographic and industry allocations as radar charts
  * Shows target vs current allocation for easy deviation visualization
+ * 
+ * Attributes:
+ * - type: "geographic" | "industry" | "both" (default: "both")
  */
 class AllocationRadar extends HTMLElement {
   connectedCallback() {
-    this.innerHTML = `
-      <div x-data="allocationRadarComponent()" x-init="initCharts()">
+    const type = this.getAttribute('type') || 'both';
+    const uniqueId = Math.random().toString(36).substring(2, 9);
+    const geoCanvasId = `geo-radar-chart-${uniqueId}`;
+    const industryCanvasId = `industry-radar-chart-${uniqueId}`;
+    
+    // Store IDs for use in Alpine component
+    this.dataset.geoCanvasId = geoCanvasId;
+    this.dataset.industryCanvasId = industryCanvasId;
+    this.dataset.chartType = type;
+
+    let html = `<div x-data="allocationRadarComponent('${geoCanvasId}', '${industryCanvasId}', '${type}')" x-init="initCharts()">`;
+    
+    // Geographic Radar
+    if (type === 'geographic' || type === 'both') {
+      html += `
         <!-- Geographic Radar -->
-        <div class="mb-4">
+        <div ${type === 'both' ? 'class="mb-4"' : ''}>
           <div class="flex items-center justify-between mb-2">
             <h3 class="text-xs text-gray-500 font-medium">Geographic</h3>
             <button @click="$store.app.startEditGeo()"
@@ -17,10 +33,14 @@ class AllocationRadar extends HTMLElement {
             </button>
           </div>
           <div class="relative w-full" style="aspect-ratio: 1;">
-            <canvas id="geo-radar-chart"></canvas>
+            <canvas id="${geoCanvasId}"></canvas>
           </div>
-        </div>
+        </div>`;
+    }
 
+    // Industry Radar
+    if (type === 'industry' || type === 'both') {
+      html += `
         <!-- Industry Radar -->
         <div>
           <div class="flex items-center justify-between mb-2">
@@ -31,10 +51,12 @@ class AllocationRadar extends HTMLElement {
             </button>
           </div>
           <div class="relative w-full" style="aspect-ratio: 1;">
-            <canvas id="industry-radar-chart"></canvas>
+            <canvas id="${industryCanvasId}"></canvas>
           </div>
-        </div>
+        </div>`;
+    }
 
+    html += `
         <!-- Edit Mode Overlays -->
         <div x-show="$store.app.editingGeo" x-transition
              class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -51,19 +73,23 @@ class AllocationRadar extends HTMLElement {
             <industry-chart></industry-chart>
           </div>
         </div>
-      </div>
-    `;
+      </div>`;
+    
+    this.innerHTML = html;
   }
 }
 
 /**
  * Alpine.js component for radar charts
  */
-function allocationRadarComponent() {
+function allocationRadarComponent(geoCanvasId, industryCanvasId, chartType) {
   return {
     geoChart: null,
     industryChart: null,
     chartsInitialized: false,
+    geoCanvasId: geoCanvasId,
+    industryCanvasId: industryCanvasId,
+    chartType: chartType,
 
     initCharts() {
       // Check if Chart.js is available
@@ -109,16 +135,17 @@ function allocationRadarComponent() {
       const hasIndustryData = (this.$store.app.activeIndustries || []).length > 0 &&
                              (this.$store.app.allocation?.industry || []).length > 0;
 
-      if (hasGeoData) {
+      if (hasGeoData && (this.chartType === 'geographic' || this.chartType === 'both')) {
         this.createGeoChart();
       }
 
-      if (hasIndustryData) {
+      if (hasIndustryData && (this.chartType === 'industry' || this.chartType === 'both')) {
         this.createIndustryChart();
       }
 
       // Mark as initialized if at least one chart was created
-      if (hasGeoData || hasIndustryData) {
+      if ((hasGeoData && (this.chartType === 'geographic' || this.chartType === 'both')) ||
+          (hasIndustryData && (this.chartType === 'industry' || this.chartType === 'both'))) {
         this.chartsInitialized = true;
       }
     },
@@ -146,7 +173,7 @@ function allocationRadarComponent() {
         return;
       }
 
-      const canvas = document.getElementById('geo-radar-chart');
+      const canvas = document.getElementById(this.geoCanvasId);
       if (!canvas) {
         console.warn('Geo radar chart canvas not found');
         return;
@@ -230,7 +257,7 @@ function allocationRadarComponent() {
         return;
       }
 
-      const canvas = document.getElementById('industry-radar-chart');
+      const canvas = document.getElementById(this.industryCanvasId);
       if (!canvas) {
         console.warn('Industry radar chart canvas not found');
         return;
@@ -354,10 +381,11 @@ function allocationRadarComponent() {
 
     updateCharts() {
       // Update or create geo chart
-      const activeGeos = this.$store.app.activeGeographies || [];
-      const geoAllocation = this.$store.app.allocation?.geographic || [];
+      if (this.chartType === 'geographic' || this.chartType === 'both') {
+        const activeGeos = this.$store.app.activeGeographies || [];
+        const geoAllocation = this.$store.app.allocation?.geographic || [];
 
-      if (activeGeos.length > 0 && Array.isArray(geoAllocation) && geoAllocation.length > 0) {
+        if (activeGeos.length > 0 && Array.isArray(geoAllocation) && geoAllocation.length > 0) {
         if (this.geoChart) {
           // Update existing chart
           const currentData = activeGeos.map(geo => {
@@ -385,12 +413,14 @@ function allocationRadarComponent() {
           this.createGeoChart();
         }
       }
+      }
 
       // Update or create industry chart
-      const activeIndustries = this.$store.app.activeIndustries || [];
-      const industryAllocation = this.$store.app.allocation?.industry || [];
+      if (this.chartType === 'industry' || this.chartType === 'both') {
+        const activeIndustries = this.$store.app.activeIndustries || [];
+        const industryAllocation = this.$store.app.allocation?.industry || [];
 
-      if (activeIndustries.length > 0 && Array.isArray(industryAllocation) && industryAllocation.length > 0) {
+        if (activeIndustries.length > 0 && Array.isArray(industryAllocation) && industryAllocation.length > 0) {
         if (this.industryChart) {
           // Update existing chart
           const currentData = activeIndustries.map(ind => {
@@ -417,6 +447,7 @@ function allocationRadarComponent() {
           // Chart doesn't exist yet, create it
           this.createIndustryChart();
         }
+      }
       }
     }
   };

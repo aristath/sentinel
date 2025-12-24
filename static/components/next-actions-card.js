@@ -18,7 +18,7 @@ class NextActionsCard extends HTMLElement {
         </div>
 
         <!-- Scrollable content area -->
-        <div class="max-h-[500px] overflow-y-auto">
+        <div class="max-h-[300px] overflow-y-auto">
 
         <!-- Empty state -->
         <template x-if="!$store.app.loading.recommendations && !$store.app.loading.sellRecommendations && $store.app.recommendations.length === 0 && $store.app.sellRecommendations.length === 0">

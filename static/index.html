@@ -30,9 +30,14 @@
     <!-- Portfolio Summary -->
     <summary-cards></summary-cards>
 
-    <!-- Allocation & Actions Row -->
+    <!-- Radar Charts Row -->
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <allocation-weights-card></allocation-weights-card>
+      <geographic-radar-card></geographic-radar-card>
+      <industry-radar-card></industry-radar-card>
+    </div>
+
+    <!-- Next Actions Row -->
+    <div class="w-full">
       <next-actions-card></next-actions-card>
     </div>
 
@@ -59,7 +64,8 @@
   <script src="/static/components/geo-chart.js"></script>
   <script src="/static/components/industry-chart.js"></script>
   <script src="/static/components/allocation-radar.js"></script>
-  <script src="/static/components/allocation-weights-card.js"></script>
+  <script src="/static/components/geographic-radar-card.js"></script>
+  <script src="/static/components/industry-radar-card.js"></script>
   <script src="/static/components/quick-actions.js"></script>
   <script src="/static/components/stock-table.js"></script>
   <script src="/static/components/trades-table.js"></script>
