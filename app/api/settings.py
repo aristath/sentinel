@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from app.config import settings
 from app.infrastructure.cache import cache
 from app.repositories import SettingsRepository
+from app.domain.scoring.cache import get_score_cache
 
 router = APIRouter()
 
@@ -179,9 +180,30 @@ async def restart_system():
 
 @router.post("/reset-cache")
 async def reset_cache():
-    """Clear all cached data."""
+    """Clear all cached data including score cache."""
+    # Clear simple cache
     cache.clear()
-    return {"status": "ok", "message": "All caches cleared"}
+
+    # Clear score cache
+    score_cache = get_score_cache()
+    if score_cache:
+        await score_cache.invalidate_all()
+
+    return {"status": "ok", "message": "All caches cleared (including score cache)"}
+
+
+@router.get("/cache-stats")
+async def get_cache_stats():
+    """Get cache statistics."""
+    score_cache = get_score_cache()
+    score_stats = await score_cache.get_stats() if score_cache else {}
+
+    return {
+        "simple_cache": {
+            "entries": len(cache._cache) if hasattr(cache, '_cache') else 0,
+        },
+        "score_cache": score_stats,
+    }
 
 
 @router.post("/reschedule-jobs")

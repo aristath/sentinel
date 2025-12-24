@@ -110,6 +110,15 @@ from app.domain.scoring.technical import (
     calculate_distance_from_ma,
 )
 
+# Score caching
+from app.domain.scoring.cache import (
+    init_score_cache,
+    get_score_cache,
+    ScoreCache,
+    CACHE_TTL,
+    SUBCOMPONENTS,
+)
+
 __all__ = [
     # Models
     "PortfolioContext",
@@ -166,4 +175,10 @@ __all__ = [
     "DEFAULT_MIN_HOLD_DAYS",
     "DEFAULT_SELL_COOLDOWN_DAYS",
     "DEFAULT_MAX_LOSS_THRESHOLD",
+    # Score caching
+    "init_score_cache",
+    "get_score_cache",
+    "ScoreCache",
+    "CACHE_TTL",
+    "SUBCOMPONENTS",
 ]

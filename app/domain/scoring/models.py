@@ -97,6 +97,9 @@ class CalculatedStockScore:
     # New 8-group scores (Dict with long_term, fundamentals, opportunity, etc.)
     group_scores: Optional[Dict[str, float]] = None
 
+    # Sub-component scores for each group (e.g., long_term: {cagr, sortino, sharpe})
+    sub_scores: Optional[Dict[str, Dict[str, float]]] = None
+
     # Legacy fields - deprecated, kept for backwards compatibility
     quality: Optional[QualityScore] = None
     opportunity: Optional[OpportunityScore] = None

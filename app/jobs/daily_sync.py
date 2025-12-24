@@ -11,6 +11,7 @@ from app.infrastructure.hardware.led_display import set_activity
 from app.infrastructure.locking import file_lock
 from app.infrastructure.database.manager import get_db_manager
 from app.domain.constants import DEFAULT_CURRENCY
+from app.domain.scoring.cache import get_score_cache
 
 logger = logging.getLogger(__name__)
 
@@ -235,6 +236,15 @@ async def _sync_prices_internal():
                     updated += 1
 
         logger.info(f"Price sync complete: {len(quotes)} quotes, {updated} positions updated")
+
+        # Invalidate FAST cache components for updated symbols
+        cache = get_score_cache()
+        if cache:
+            for symbol in quotes.keys():
+                await cache.invalidate(symbol, "opportunity")
+                await cache.invalidate(symbol, "short_term")
+                await cache.invalidate(symbol, "technicals")
+            logger.debug(f"Invalidated FAST score cache for {len(quotes)} symbols")
 
         emit(SystemEvent.SYNC_COMPLETE)
 

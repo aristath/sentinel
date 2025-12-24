@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def calculate_opinion_score(
     symbol: str,
     yahoo_symbol: str = None
-) -> float:
+) -> tuple:
     """
     Calculate opinion score from analyst recommendations and price targets.
 
@@ -26,13 +26,15 @@ def calculate_opinion_score(
         yahoo_symbol: Optional explicit Yahoo symbol override
 
     Returns:
-        Score from 0 to 1.0
+        Tuple of (total_score, sub_components_dict)
+        sub_components_dict: {"recommendation": float, "price_target": float}
     """
     try:
         data = yahoo.get_analyst_data(symbol, yahoo_symbol=yahoo_symbol)
 
         if not data:
-            return 0.5  # Neutral if no data
+            sub_components = {"recommendation": 0.5, "price_target": 0.5}
+            return 0.5, sub_components
 
         # Recommendation score (already 0-1 from yahoo service)
         recommendation_score = data.recommendation_score
@@ -46,8 +48,14 @@ def calculate_opinion_score(
         # Combined (60% recommendation, 40% target)
         total = recommendation_score * 0.60 + target_score * 0.40
 
-        return round(total, 3)
+        sub_components = {
+            "recommendation": round(recommendation_score, 3),
+            "price_target": round(target_score, 3),
+        }
+
+        return round(total, 3), sub_components
 
     except Exception as e:
         logger.error(f"Failed to calculate opinion score for {symbol}: {e}")
-        return 0.5
+        sub_components = {"recommendation": 0.5, "price_target": 0.5}
+        return 0.5, sub_components

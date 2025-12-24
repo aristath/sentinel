@@ -12,6 +12,7 @@ Combines 8 scoring groups with configurable weights:
 - Diversification (8%): Geography, Industry, Averaging down
 
 Weights are configurable via settings (must sum to 1.0).
+Uses tiered caching for performance optimization.
 """
 
 import logging
@@ -38,6 +39,7 @@ from app.domain.scoring.technicals import calculate_technicals_score
 from app.domain.scoring.opinion import calculate_opinion_score
 from app.domain.scoring.diversification import calculate_diversification_score
 from app.domain.scoring.technical import calculate_volatility
+from app.domain.scoring.cache import get_score_cache, SUBCOMPONENTS
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +55,18 @@ DEFAULT_WEIGHTS = {
     "diversification": 0.08,
 }
 
+# Sub-component weights for reconstructing group scores from cache
+SUBCOMPONENT_WEIGHTS = {
+    "long_term": {"cagr": 0.40, "sortino": 0.35, "sharpe": 0.25},
+    "fundamentals": {"financial_strength": 0.50, "consistency": 0.50},
+    "dividends": {"yield": 0.70, "consistency": 0.30},
+    "opportunity": {"below_52w_high": 0.50, "pe_ratio": 0.50},
+    "short_term": {"momentum": 0.50, "drawdown": 0.50},
+    "technicals": {"rsi": 0.35, "bollinger": 0.35, "ema": 0.30},
+    "opinion": {"recommendation": 0.60, "price_target": 0.40},
+    # diversification is not cached (dynamic)
+}
+
 
 async def get_score_weights() -> Dict[str, float]:
     """Get score weights from settings or use defaults."""
@@ -64,7 +78,46 @@ async def get_score_weights() -> Dict[str, float]:
         return DEFAULT_WEIGHTS
 
 
-def calculate_stock_score(
+async def _get_or_calculate_group(
+    symbol: str,
+    group: str,
+    calculate_fn,
+    cache,
+) -> tuple:
+    """
+    Get group score from cache or calculate it.
+
+    Args:
+        symbol: Stock symbol
+        group: Score group name
+        calculate_fn: Function to calculate score if not cached
+        cache: ScoreCache instance
+
+    Returns:
+        Tuple of (total_score, sub_components_dict)
+    """
+    if cache and group in SUBCOMPONENT_WEIGHTS:
+        # Try to get all sub-components from cache
+        cached = await cache.get_group(symbol, group)
+        expected_subs = set(SUBCOMPONENTS.get(group, []))
+
+        if cached and set(cached.keys()) == expected_subs:
+            # All sub-components cached - reconstruct total
+            weights = SUBCOMPONENT_WEIGHTS[group]
+            total = sum(cached[sub] * weights[sub] for sub in cached)
+            return round(min(1.0, total), 3), cached
+
+    # Calculate fresh
+    total, subs = calculate_fn()
+
+    # Cache the sub-components
+    if cache and group in SUBCOMPONENT_WEIGHTS:
+        await cache.set_group(symbol, group, subs)
+
+    return total, subs
+
+
+async def calculate_stock_score(
     symbol: str,
     daily_prices: List[dict],
     monthly_prices: List[dict],
@@ -81,6 +134,9 @@ def calculate_stock_score(
 ) -> Optional[CalculatedStockScore]:
     """
     Calculate complete stock score with all 8 groups.
+
+    Uses tiered caching for performance - slow-changing scores are cached
+    longer than fast-changing ones.
 
     Args:
         symbol: Tradernet symbol
@@ -103,50 +159,93 @@ def calculate_stock_score(
     if weights is None:
         weights = DEFAULT_WEIGHTS
 
-    # Calculate all 8 group scores
+    cache = get_score_cache()
     scores = {}
+    sub_scores = {}
 
-    # 1. Long-term Performance
-    scores["long_term"] = calculate_long_term_score(
-        monthly_prices=monthly_prices,
-        daily_prices=daily_prices,
-        sortino_ratio=sortino_ratio,
-        target_annual_return=target_annual_return,
+    # 1. Long-term Performance (SLOW - 7 day cache)
+    total, subs = await _get_or_calculate_group(
+        symbol, "long_term",
+        lambda: calculate_long_term_score(
+            monthly_prices=monthly_prices,
+            daily_prices=daily_prices,
+            sortino_ratio=sortino_ratio,
+            target_annual_return=target_annual_return,
+        ),
+        cache,
     )
+    scores["long_term"] = total
+    sub_scores["long_term"] = subs
 
-    # 2. Fundamentals
-    scores["fundamentals"] = calculate_fundamentals_score(
-        monthly_prices=monthly_prices,
-        fundamentals=fundamentals,
+    # 2. Fundamentals (SLOW - 7 day cache)
+    total, subs = await _get_or_calculate_group(
+        symbol, "fundamentals",
+        lambda: calculate_fundamentals_score(
+            monthly_prices=monthly_prices,
+            fundamentals=fundamentals,
+        ),
+        cache,
     )
+    scores["fundamentals"] = total
+    sub_scores["fundamentals"] = subs
 
-    # 3. Opportunity
-    scores["opportunity"] = calculate_opportunity_score(
-        daily_prices=daily_prices,
-        fundamentals=fundamentals,
-        market_avg_pe=market_avg_pe,
+    # 3. Opportunity (FAST - 4 hour cache)
+    total, subs = await _get_or_calculate_group(
+        symbol, "opportunity",
+        lambda: calculate_opportunity_score(
+            daily_prices=daily_prices,
+            fundamentals=fundamentals,
+            market_avg_pe=market_avg_pe,
+        ),
+        cache,
     )
+    scores["opportunity"] = total
+    sub_scores["opportunity"] = subs
 
-    # 4. Dividends
-    scores["dividends"] = calculate_dividends_score(fundamentals)
-
-    # 5. Short-term Performance
-    scores["short_term"] = calculate_short_term_score(
-        daily_prices=daily_prices,
-        pyfolio_drawdown=pyfolio_drawdown,
+    # 4. Dividends (SLOW - 7 day cache)
+    total, subs = await _get_or_calculate_group(
+        symbol, "dividends",
+        lambda: calculate_dividends_score(fundamentals),
+        cache,
     )
+    scores["dividends"] = total
+    sub_scores["dividends"] = subs
 
-    # 6. Technicals
-    scores["technicals"] = calculate_technicals_score(daily_prices)
+    # 5. Short-term Performance (FAST - 4 hour cache)
+    total, subs = await _get_or_calculate_group(
+        symbol, "short_term",
+        lambda: calculate_short_term_score(
+            daily_prices=daily_prices,
+            pyfolio_drawdown=pyfolio_drawdown,
+        ),
+        cache,
+    )
+    scores["short_term"] = total
+    sub_scores["short_term"] = subs
 
-    # 7. Opinion
-    scores["opinion"] = calculate_opinion_score(symbol, yahoo_symbol=yahoo_symbol)
+    # 6. Technicals (FAST - 4 hour cache)
+    total, subs = await _get_or_calculate_group(
+        symbol, "technicals",
+        lambda: calculate_technicals_score(daily_prices),
+        cache,
+    )
+    scores["technicals"] = total
+    sub_scores["technicals"] = subs
 
-    # 8. Diversification
+    # 7. Opinion (MEDIUM - 24 hour cache)
+    total, subs = await _get_or_calculate_group(
+        symbol, "opinion",
+        lambda: calculate_opinion_score(symbol, yahoo_symbol=yahoo_symbol),
+        cache,
+    )
+    scores["opinion"] = total
+    sub_scores["opinion"] = subs
+
+    # 8. Diversification (DYNAMIC - never cached)
     if portfolio_context and geography:
         # Need quality and opportunity for averaging down calculation
         quality_approx = (scores["long_term"] + scores["fundamentals"]) / 2
-        scores["diversification"] = calculate_diversification_score(
+        total, subs = calculate_diversification_score(
             symbol=symbol,
             geography=geography,
             industry=industry,
@@ -154,8 +253,11 @@ def calculate_stock_score(
             opportunity_score=scores["opportunity"],
             portfolio_context=portfolio_context,
         )
+        scores["diversification"] = total
+        sub_scores["diversification"] = subs
     else:
-        scores["diversification"] = 0.5  # Neutral
+        scores["diversification"] = 0.5
+        sub_scores["diversification"] = {"geography": 0.5, "industry": 0.5, "averaging": 0.5}
 
     # Calculate weighted total
     total_score = sum(
@@ -180,10 +282,11 @@ def calculate_stock_score(
         calculated_at=datetime.now(),
         # New group scores
         group_scores=scores,
+        sub_scores=sub_scores,
     )
 
 
-def calculate_stock_score_from_prefetched(
+async def calculate_stock_score_from_prefetched(
     symbol: str,
     prefetched: PrefetchedStockData,
     geography: str = None,
@@ -211,7 +314,7 @@ def calculate_stock_score_from_prefetched(
     Returns:
         CalculatedStockScore with all components
     """
-    return calculate_stock_score(
+    return await calculate_stock_score(
         symbol=symbol,
         daily_prices=prefetched.daily_prices,
         monthly_prices=prefetched.monthly_prices,

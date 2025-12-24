@@ -109,7 +109,7 @@ def score_drawdown(max_drawdown: Optional[float]) -> float:
 def calculate_short_term_score(
     daily_prices: List[Dict],
     pyfolio_drawdown: Optional[float] = None,
-) -> float:
+) -> tuple:
     """
     Calculate short-term performance score.
 
@@ -118,7 +118,8 @@ def calculate_short_term_score(
         pyfolio_drawdown: Current drawdown from PyFolio (optional)
 
     Returns:
-        Combined score from 0 to 1.0
+        Tuple of (total_score, sub_components_dict)
+        sub_components_dict: {"momentum": float, "drawdown": float}
     """
     # Momentum
     momentum = calculate_recent_momentum(daily_prices)
@@ -138,4 +139,9 @@ def calculate_short_term_score(
     # 50% momentum, 50% drawdown
     total = momentum_score * 0.50 + drawdown_score * 0.50
 
-    return round(min(1.0, total), 3)
+    sub_components = {
+        "momentum": round(momentum_score, 3),
+        "drawdown": round(drawdown_score, 3),
+    }
+
+    return round(min(1.0, total), 3), sub_components

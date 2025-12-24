@@ -13,6 +13,7 @@ from app.infrastructure.locking import file_lock
 from app.infrastructure.events import emit, SystemEvent
 from app.infrastructure.hardware.led_display import set_activity
 from app.infrastructure.database.manager import get_db_manager
+from app.domain.scoring.cache import get_score_cache
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,12 @@ async def _sync_stock_price_history():
                     continue
 
             await _fetch_and_store_prices(history_db, symbol, yahoo_symbol)
+
+            # Invalidate SLOW cache components after historical data update
+            cache = get_score_cache()
+            if cache:
+                await cache.invalidate(symbol, "long_term")
+                await cache.invalidate(symbol, "fundamentals")
 
             processed += 1
             if processed % 10 == 0:

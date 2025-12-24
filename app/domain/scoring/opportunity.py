@@ -100,7 +100,7 @@ def calculate_opportunity_score(
     daily_prices: List[Dict],
     fundamentals,
     market_avg_pe: float = DEFAULT_MARKET_AVG_PE
-) -> float:
+) -> tuple:
     """
     Calculate opportunity score (value/dip signals).
 
@@ -110,11 +110,13 @@ def calculate_opportunity_score(
         market_avg_pe: Market average P/E for comparison
 
     Returns:
-        Score from 0 to 1.0
+        Tuple of (total_score, sub_components_dict)
+        sub_components_dict: {"below_52w_high": float, "pe_ratio": float}
     """
     if len(daily_prices) < MIN_DAYS_FOR_OPPORTUNITY:
         logger.warning(f"Insufficient daily data: {len(daily_prices)} days")
-        return 0.5
+        sub_components = {"below_52w_high": 0.5, "pe_ratio": 0.5}
+        return 0.5, sub_components
 
     # Extract price arrays
     closes = np.array([p["close"] for p in daily_prices])
@@ -133,4 +135,9 @@ def calculate_opportunity_score(
     # Combined score (50/50 split)
     total = below_52w_score * 0.50 + pe_score * 0.50
 
-    return round(min(1.0, total), 3)
+    sub_components = {
+        "below_52w_high": round(below_52w_score, 3),
+        "pe_ratio": round(pe_score, 3),
+    }
+
+    return round(min(1.0, total), 3), sub_components

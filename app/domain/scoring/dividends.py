@@ -79,7 +79,7 @@ def score_dividend_consistency(fundamentals) -> float:
     return (payout_score * 0.5 + growth_score * 0.5)
 
 
-def calculate_dividends_score(fundamentals) -> float:
+def calculate_dividends_score(fundamentals) -> tuple:
     """
     Calculate dividends score.
 
@@ -87,7 +87,8 @@ def calculate_dividends_score(fundamentals) -> float:
         fundamentals: Yahoo fundamentals data
 
     Returns:
-        Combined score from 0 to 1.0
+        Tuple of (total_score, sub_components_dict)
+        sub_components_dict: {"yield": float, "consistency": float}
     """
     dividend_yield = fundamentals.dividend_yield if fundamentals else None
 
@@ -97,4 +98,9 @@ def calculate_dividends_score(fundamentals) -> float:
     # 70% yield, 30% consistency
     total = yield_score * 0.70 + consistency_score * 0.30
 
-    return round(min(1.0, total), 3)
+    sub_components = {
+        "yield": round(yield_score, 3),
+        "consistency": round(consistency_score, 3),
+    }
+
+    return round(min(1.0, total), 3), sub_components

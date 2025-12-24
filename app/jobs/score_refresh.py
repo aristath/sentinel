@@ -75,7 +75,7 @@ async def _refresh_all_scores_internal():
                     continue
 
                 # Calculate score using 8-group scoring system
-                score = calculate_stock_score(
+                score = await calculate_stock_score(
                     symbol=symbol,
                     daily_prices=daily_prices,
                     monthly_prices=monthly_prices,

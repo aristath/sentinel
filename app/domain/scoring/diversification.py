@@ -33,7 +33,7 @@ def calculate_diversification_score(
     quality_score: float,
     opportunity_score: float,
     portfolio_context: PortfolioContext,
-) -> float:
+) -> tuple:
     """
     Calculate diversification score based on portfolio awareness.
 
@@ -46,7 +46,8 @@ def calculate_diversification_score(
         portfolio_context: Portfolio weights and positions
 
     Returns:
-        Score from 0 to 1.0
+        Tuple of (total_score, sub_components_dict)
+        sub_components_dict: {"geography": float, "industry": float, "averaging": float}
     """
     # 1. Geography Gap Score (40%)
     geo_weight = portfolio_context.geo_weights.get(geography, 0)
@@ -114,4 +115,10 @@ def calculate_diversification_score(
         averaging_down_score * WEIGHT_AVERAGING
     )
 
-    return round(min(1.0, total), 3)
+    sub_components = {
+        "geography": round(geo_gap_score, 3),
+        "industry": round(industry_gap_score, 3),
+        "averaging": round(averaging_down_score, 3),
+    }
+
+    return round(min(1.0, total), 3), sub_components

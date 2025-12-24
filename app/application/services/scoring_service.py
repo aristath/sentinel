@@ -100,7 +100,7 @@ class ScoringService:
             # Fetch fundamentals from Yahoo
             fundamentals = yahoo.get_fundamental_data(symbol, yahoo_symbol=yahoo_symbol)
 
-            score = calculate_stock_score(
+            score = await calculate_stock_score(
                 symbol,
                 daily_prices=daily_prices,
                 monthly_prices=monthly_prices,

@@ -104,7 +104,7 @@ def calculate_consistency_score(cagr_5y: float, cagr_10y: Optional[float]) -> fl
 def calculate_fundamentals_score(
     monthly_prices: List[Dict],
     fundamentals,
-) -> float:
+) -> tuple:
     """
     Calculate fundamentals score.
 
@@ -113,7 +113,8 @@ def calculate_fundamentals_score(
         fundamentals: Yahoo fundamentals data
 
     Returns:
-        Combined score from 0 to 1.0
+        Tuple of (total_score, sub_components_dict)
+        sub_components_dict: {"financial_strength": float, "consistency": float}
     """
     # Financial strength
     financial_score = calculate_financial_strength_score(fundamentals)
@@ -135,4 +136,9 @@ def calculate_fundamentals_score(
         consistency_score * WEIGHT_CONSISTENCY
     )
 
-    return round(min(1.0, total), 3)
+    sub_components = {
+        "financial_strength": round(financial_score, 3),
+        "consistency": round(consistency_score, 3),
+    }
+
+    return round(min(1.0, total), 3), sub_components

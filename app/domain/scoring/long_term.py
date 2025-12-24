@@ -139,7 +139,7 @@ def calculate_long_term_score(
     daily_prices: List[Dict],
     sortino_ratio: Optional[float] = None,
     target_annual_return: float = OPTIMAL_CAGR,
-) -> float:
+) -> tuple:
     """
     Calculate long-term performance score.
 
@@ -150,7 +150,8 @@ def calculate_long_term_score(
         target_annual_return: Target return for CAGR scoring
 
     Returns:
-        Combined score from 0 to 1.0
+        Tuple of (total_score, sub_components_dict)
+        sub_components_dict: {"cagr": float, "sortino": float, "sharpe": float}
     """
     # Calculate CAGR
     cagr = calculate_cagr(monthly_prices, 60)  # 5 years
@@ -175,4 +176,10 @@ def calculate_long_term_score(
         sharpe_score * WEIGHT_SHARPE
     )
 
-    return round(min(1.0, total), 3)
+    sub_components = {
+        "cagr": round(cagr_score, 3),
+        "sortino": round(sortino_score, 3),
+        "sharpe": round(sharpe_score, 3),
+    }
+
+    return round(min(1.0, total), 3), sub_components

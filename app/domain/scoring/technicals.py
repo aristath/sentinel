@@ -92,7 +92,7 @@ def score_ema_distance(current_price: float, ema_value: float) -> float:
         return 1.0
 
 
-def calculate_technicals_score(daily_prices: List[Dict]) -> float:
+def calculate_technicals_score(daily_prices: List[Dict]) -> tuple:
     """
     Calculate technicals score.
 
@@ -100,10 +100,12 @@ def calculate_technicals_score(daily_prices: List[Dict]) -> float:
         daily_prices: Daily price data
 
     Returns:
-        Combined score from 0 to 1.0
+        Tuple of (total_score, sub_components_dict)
+        sub_components_dict: {"rsi": float, "bollinger": float, "ema": float}
     """
     if len(daily_prices) < 20:
-        return 0.5  # Neutral if insufficient data
+        sub_components = {"rsi": 0.5, "bollinger": 0.5, "ema": 0.5}
+        return 0.5, sub_components
 
     closes = np.array([p["close"] for p in daily_prices])
     current_price = closes[-1]
@@ -127,4 +129,10 @@ def calculate_technicals_score(daily_prices: List[Dict]) -> float:
         ema_score * 0.30
     )
 
-    return round(min(1.0, total), 3)
+    sub_components = {
+        "rsi": round(rsi_score, 3),
+        "bollinger": round(bb_score, 3),
+        "ema": round(ema_score, 3),
+    }
+
+    return round(min(1.0, total), 3), sub_components
