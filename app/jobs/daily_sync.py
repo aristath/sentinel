@@ -189,14 +189,19 @@ async def _sync_prices_internal():
             quotes = yahoo.get_batch_quotes(symbol_yahoo_map)
 
             updated = 0
+            now = datetime.now().isoformat()
             for symbol, price in quotes.items():
+                # Update current_price and recalculate market_value_eur from Yahoo price
+                # This ensures portfolio value uses fresh Yahoo prices, not stale Tradernet values
                 result = await db.execute(
                     """
                     UPDATE positions
-                    SET current_price = ?, last_updated = ?
+                    SET current_price = ?,
+                        market_value_eur = quantity * ? / currency_rate,
+                        last_updated = ?
                     WHERE symbol = ?
                     """,
-                    (price, datetime.now().isoformat(), symbol),
+                    (price, price, now, symbol),
                 )
                 if result.rowcount > 0:
                     updated += 1
