@@ -21,7 +21,6 @@ from app.repositories import (
 )
 from app.domain.scoring import (
     calculate_all_sell_scores,
-    calculate_portfolio_score,
     calculate_post_transaction_score,
     PortfolioContext,
     TechnicalData,
@@ -321,10 +320,10 @@ async def _get_best_sell_trade(
     for pos in position_dicts:
         symbol = pos["symbol"]
         try:
-            history_db = db_manager.history(symbol)
+            history_db = await db_manager.history(symbol)
             rows = await history_db.fetchall(
                 """
-                SELECT date, close FROM daily_prices
+                SELECT date, close_price FROM daily_prices
                 ORDER BY date DESC LIMIT 400
                 """,
             )
@@ -337,7 +336,7 @@ async def _get_best_sell_trade(
                 )
                 continue
 
-            closes = np.array([row["close"] for row in reversed(rows)])
+            closes = np.array([row["close_price"] for row in reversed(rows)])
             closes_series = pd.Series(closes)
 
             # Current volatility (last 60 days)
@@ -463,7 +462,6 @@ async def _get_buy_trades(
     )
 
     candidates = []
-    position_map = {p.symbol: p for p in positions}
 
     for stock in stocks:
         symbol = stock.symbol
@@ -553,7 +551,6 @@ async def _get_buy_trades(
             # We could fetch dividend data, but for now use stored cagr as proxy
             pass
 
-        current_portfolio_score = calculate_portfolio_score(portfolio_context)
         new_score, score_change = calculate_post_transaction_score(
             symbol=symbol,
             geography=stock.geography,
