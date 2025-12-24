@@ -73,7 +73,7 @@ async def lifespan(app: FastAPI):
     await init_db()
 
     # Initialize and start scheduler
-    init_scheduler()
+    await init_scheduler()
     start_scheduler()
 
     # Setup LED display event subscriptions

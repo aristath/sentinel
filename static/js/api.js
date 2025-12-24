@@ -88,6 +88,7 @@ const API = {
   updateMinTradeSize: (value) => API._put('/api/settings/min_trade_size', { value }),
   restartSystem: () => API._post('/api/settings/restart'),
   resetCache: () => API._post('/api/settings/reset-cache'),
+  rescheduleJobs: () => API._post('/api/settings/reschedule-jobs'),
 
   // Funding
   getFundingOptions: (symbol) =>

@@ -19,6 +19,13 @@ scheduler: AsyncIOScheduler = None
 _job_failures: dict[str, list[datetime]] = defaultdict(list)
 
 
+async def _get_job_setting(key: str) -> float:
+    """Get job interval setting from database."""
+    from app.api.settings import get_setting_value
+
+    return await get_setting_value(key)
+
+
 def job_listener(event):
     """Listen to job execution events and track failures."""
     from app.config import settings
@@ -50,7 +57,7 @@ def job_listener(event):
             _job_failures[event.job_id].clear()
 
 
-def init_scheduler() -> AsyncIOScheduler:
+async def init_scheduler() -> AsyncIOScheduler:
     """Initialize the APScheduler with error tracking."""
     global scheduler
 
@@ -66,89 +73,158 @@ def init_scheduler() -> AsyncIOScheduler:
     from app.jobs.maintenance import run_daily_maintenance, run_weekly_maintenance
     from app.jobs.sync_trades import sync_trades
 
-    # Tradernet portfolio sync (every 2 minutes)
+    # Get intervals from database settings
+    portfolio_minutes = int(await _get_job_setting("job_portfolio_sync_minutes"))
+    trade_minutes = int(await _get_job_setting("job_trade_sync_minutes"))
+    price_minutes = int(await _get_job_setting("job_price_sync_minutes"))
+    score_minutes = int(await _get_job_setting("job_score_refresh_minutes"))
+    rebalance_minutes = int(await _get_job_setting("job_rebalance_check_minutes"))
+    cash_flow_hour = int(await _get_job_setting("job_cash_flow_sync_hour"))
+    historical_hour = int(await _get_job_setting("job_historical_sync_hour"))
+    maintenance_hour = int(await _get_job_setting("job_maintenance_hour"))
+
+    # Tradernet portfolio sync
     scheduler.add_job(
         sync_portfolio,
-        IntervalTrigger(minutes=2),
+        IntervalTrigger(minutes=portfolio_minutes),
         id="portfolio_sync",
         name="Portfolio Sync",
         replace_existing=True,
     )
 
-    # Tradernet trade sync (every 4 minutes)
+    # Tradernet trade sync
     scheduler.add_job(
         sync_trades,
-        IntervalTrigger(minutes=4),
+        IntervalTrigger(minutes=trade_minutes),
         id="trade_sync",
         name="Trade Sync",
         replace_existing=True,
     )
 
-    # Yahoo price sync (every 7 minutes)
+    # Yahoo price sync
     scheduler.add_job(
         sync_prices,
-        IntervalTrigger(minutes=7),
+        IntervalTrigger(minutes=price_minutes),
         id="price_sync",
         name="Price Sync",
         replace_existing=True,
     )
 
-    # Cash-based rebalance check (every 15 minutes)
+    # Cash-based rebalance check
     scheduler.add_job(
         check_and_rebalance,
-        IntervalTrigger(minutes=15),
+        IntervalTrigger(minutes=rebalance_minutes),
         id="cash_rebalance_check",
         name="Cash Rebalance Check",
         replace_existing=True,
     )
 
-    # Stock score refresh (every 10 minutes)
+    # Stock score refresh
     scheduler.add_job(
         refresh_all_scores,
-        IntervalTrigger(minutes=10),
+        IntervalTrigger(minutes=score_minutes),
         id="score_refresh",
         name="Score Refresh",
         replace_existing=True,
     )
 
-    # Cash flow sync (daily at 1 AM)
+    # Cash flow sync (daily)
     scheduler.add_job(
         sync_cash_flows,
-        CronTrigger(hour=1, minute=0),
+        CronTrigger(hour=cash_flow_hour, minute=0),
         id="cash_flow_sync",
         name="Cash Flow Sync",
         replace_existing=True,
     )
 
-    # Historical data sync (daily at 8 PM, after market close)
+    # Historical data sync (daily, after market close)
     scheduler.add_job(
         sync_historical_data,
-        CronTrigger(hour=20, minute=0),
+        CronTrigger(hour=historical_hour, minute=0),
         id="historical_data_sync",
         name="Historical Data Sync",
         replace_existing=True,
     )
 
-    # Daily maintenance (at 3 AM - backup, cleanup, WAL checkpoint)
+    # Daily maintenance (backup, cleanup, WAL checkpoint)
     scheduler.add_job(
         run_daily_maintenance,
-        CronTrigger(hour=3, minute=0),
+        CronTrigger(hour=maintenance_hour, minute=0),
         id="daily_maintenance",
         name="Daily Maintenance",
         replace_existing=True,
     )
 
-    # Weekly maintenance (Sunday at 4 AM - integrity check)
+    # Weekly maintenance (Sunday, 1 hour after daily maintenance)
     scheduler.add_job(
         run_weekly_maintenance,
-        CronTrigger(day_of_week=6, hour=4, minute=0),
+        CronTrigger(day_of_week=6, hour=(maintenance_hour + 1) % 24, minute=0),
         id="weekly_maintenance",
         name="Weekly Maintenance",
         replace_existing=True,
     )
 
-    logger.info("Scheduler initialized with jobs")
+    logger.info(
+        f"Scheduler initialized - portfolio:{portfolio_minutes}m, trade:{trade_minutes}m, "
+        f"price:{price_minutes}m, score:{score_minutes}m, rebalance:{rebalance_minutes}m"
+    )
     return scheduler
+
+
+async def reschedule_all_jobs():
+    """Reschedule all jobs with current settings from database."""
+    global scheduler
+
+    if not scheduler:
+        logger.warning("Scheduler not initialized, cannot reschedule")
+        return
+
+    # Get current intervals from database
+    portfolio_minutes = int(await _get_job_setting("job_portfolio_sync_minutes"))
+    trade_minutes = int(await _get_job_setting("job_trade_sync_minutes"))
+    price_minutes = int(await _get_job_setting("job_price_sync_minutes"))
+    score_minutes = int(await _get_job_setting("job_score_refresh_minutes"))
+    rebalance_minutes = int(await _get_job_setting("job_rebalance_check_minutes"))
+    cash_flow_hour = int(await _get_job_setting("job_cash_flow_sync_hour"))
+    historical_hour = int(await _get_job_setting("job_historical_sync_hour"))
+    maintenance_hour = int(await _get_job_setting("job_maintenance_hour"))
+
+    # Reschedule interval jobs
+    scheduler.reschedule_job(
+        "portfolio_sync", trigger=IntervalTrigger(minutes=portfolio_minutes)
+    )
+    scheduler.reschedule_job(
+        "trade_sync", trigger=IntervalTrigger(minutes=trade_minutes)
+    )
+    scheduler.reschedule_job(
+        "price_sync", trigger=IntervalTrigger(minutes=price_minutes)
+    )
+    scheduler.reschedule_job(
+        "score_refresh", trigger=IntervalTrigger(minutes=score_minutes)
+    )
+    scheduler.reschedule_job(
+        "cash_rebalance_check", trigger=IntervalTrigger(minutes=rebalance_minutes)
+    )
+
+    # Reschedule cron jobs
+    scheduler.reschedule_job(
+        "cash_flow_sync", trigger=CronTrigger(hour=cash_flow_hour, minute=0)
+    )
+    scheduler.reschedule_job(
+        "historical_data_sync", trigger=CronTrigger(hour=historical_hour, minute=0)
+    )
+    scheduler.reschedule_job(
+        "daily_maintenance", trigger=CronTrigger(hour=maintenance_hour, minute=0)
+    )
+    scheduler.reschedule_job(
+        "weekly_maintenance",
+        trigger=CronTrigger(day_of_week=6, hour=(maintenance_hour + 1) % 24, minute=0),
+    )
+
+    logger.info(
+        f"Jobs rescheduled - portfolio:{portfolio_minutes}m, trade:{trade_minutes}m, "
+        f"price:{price_minutes}m, score:{score_minutes}m, rebalance:{rebalance_minutes}m"
+    )
 
 
 def start_scheduler():
@@ -170,8 +246,6 @@ def stop_scheduler():
 def get_scheduler() -> AsyncIOScheduler:
     """Get the scheduler instance."""
     global scheduler
-    if scheduler is None:
-        scheduler = init_scheduler()
     return scheduler
 
 

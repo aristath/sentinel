@@ -231,6 +231,147 @@ class SettingsModal extends HTMLElement {
               </div>
             </div>
 
+            <!-- Job Scheduling Section -->
+            <div class="border-b border-gray-700 pb-4">
+              <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wide mb-3">Job Scheduling</h3>
+
+              <div class="grid grid-cols-[1fr_auto] gap-x-4 gap-y-3 items-start">
+                <!-- Portfolio Sync -->
+                <div>
+                  <span class="text-sm text-gray-300">Portfolio Sync</span>
+                  <p class="text-xs text-gray-500">Fetch positions from broker</p>
+                </div>
+                <div class="flex items-center gap-1">
+                  <input type="number"
+                         min="1"
+                         max="60"
+                         step="1"
+                         :value="$store.app.settings.job_portfolio_sync_minutes"
+                         @change="$store.app.updateJobSetting('job_portfolio_sync_minutes', $event.target.value)"
+                         class="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                  <span class="text-gray-400 text-sm">min</span>
+                </div>
+
+                <!-- Trade Sync -->
+                <div>
+                  <span class="text-sm text-gray-300">Trade Sync</span>
+                  <p class="text-xs text-gray-500">Sync executed trades from broker</p>
+                </div>
+                <div class="flex items-center gap-1">
+                  <input type="number"
+                         min="1"
+                         max="60"
+                         step="1"
+                         :value="$store.app.settings.job_trade_sync_minutes"
+                         @change="$store.app.updateJobSetting('job_trade_sync_minutes', $event.target.value)"
+                         class="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                  <span class="text-gray-400 text-sm">min</span>
+                </div>
+
+                <!-- Price Sync -->
+                <div>
+                  <span class="text-sm text-gray-300">Price Sync</span>
+                  <p class="text-xs text-gray-500">Fetch current stock prices</p>
+                </div>
+                <div class="flex items-center gap-1">
+                  <input type="number"
+                         min="1"
+                         max="60"
+                         step="1"
+                         :value="$store.app.settings.job_price_sync_minutes"
+                         @change="$store.app.updateJobSetting('job_price_sync_minutes', $event.target.value)"
+                         class="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                  <span class="text-gray-400 text-sm">min</span>
+                </div>
+
+                <!-- Score Refresh -->
+                <div>
+                  <span class="text-sm text-gray-300">Score Refresh</span>
+                  <p class="text-xs text-gray-500">Recalculate stock scores</p>
+                </div>
+                <div class="flex items-center gap-1">
+                  <input type="number"
+                         min="1"
+                         max="60"
+                         step="1"
+                         :value="$store.app.settings.job_score_refresh_minutes"
+                         @change="$store.app.updateJobSetting('job_score_refresh_minutes', $event.target.value)"
+                         class="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                  <span class="text-gray-400 text-sm">min</span>
+                </div>
+
+                <!-- Rebalance Check -->
+                <div>
+                  <span class="text-sm text-gray-300">Rebalance Check</span>
+                  <p class="text-xs text-gray-500">Check for trade opportunities</p>
+                </div>
+                <div class="flex items-center gap-1">
+                  <input type="number"
+                         min="1"
+                         max="60"
+                         step="1"
+                         :value="$store.app.settings.job_rebalance_check_minutes"
+                         @change="$store.app.updateJobSetting('job_rebalance_check_minutes', $event.target.value)"
+                         class="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                  <span class="text-gray-400 text-sm">min</span>
+                </div>
+              </div>
+
+              <!-- Daily Jobs -->
+              <div class="mt-4 pt-3 border-t border-gray-700/50">
+                <span class="text-xs text-gray-500 uppercase tracking-wide">Daily Jobs (Hour, 0-23)</span>
+                <div class="mt-2 grid grid-cols-[1fr_auto] gap-x-4 gap-y-3 items-start">
+                  <!-- Cash Flow Sync -->
+                  <div>
+                    <span class="text-sm text-gray-300">Cash Flow Sync</span>
+                    <p class="text-xs text-gray-500">Sync cash transactions</p>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <input type="number"
+                           min="0"
+                           max="23"
+                           step="1"
+                           :value="$store.app.settings.job_cash_flow_sync_hour"
+                           @change="$store.app.updateJobSetting('job_cash_flow_sync_hour', $event.target.value)"
+                           class="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                    <span class="text-gray-400 text-sm">h</span>
+                  </div>
+
+                  <!-- Historical Sync -->
+                  <div>
+                    <span class="text-sm text-gray-300">Historical Sync</span>
+                    <p class="text-xs text-gray-500">Fetch historical prices</p>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <input type="number"
+                           min="0"
+                           max="23"
+                           step="1"
+                           :value="$store.app.settings.job_historical_sync_hour"
+                           @change="$store.app.updateJobSetting('job_historical_sync_hour', $event.target.value)"
+                           class="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                    <span class="text-gray-400 text-sm">h</span>
+                  </div>
+
+                  <!-- Maintenance -->
+                  <div>
+                    <span class="text-sm text-gray-300">Maintenance</span>
+                    <p class="text-xs text-gray-500">Backup, cleanup, WAL checkpoint</p>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <input type="number"
+                           min="0"
+                           max="23"
+                           step="1"
+                           :value="$store.app.settings.job_maintenance_hour"
+                           @change="$store.app.updateJobSetting('job_maintenance_hour', $event.target.value)"
+                           class="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                    <span class="text-gray-400 text-sm">h</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <!-- System Actions Section -->
             <div>
               <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wide mb-3">System</h3>

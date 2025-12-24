@@ -219,6 +219,20 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
+    async updateJobSetting(key, value) {
+      const numValue = parseFloat(value);
+      if (isNaN(numValue)) return;
+      try {
+        await API.updateSetting(key, numValue);
+        this.settings[key] = numValue;
+        // Reschedule jobs after updating job setting
+        await API.rescheduleJobs();
+        this.showMessage('Job schedule updated', 'success');
+      } catch (e) {
+        this.showMessage(`Failed to update job schedule`, 'error');
+      }
+    },
+
     async executeRecommendation(symbol) {
       this.loading.execute = true;
       this.executingSymbol = symbol;
