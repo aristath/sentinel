@@ -8,7 +8,7 @@ import aiosqlite
 
 from app.config import settings
 from app.database import get_db_connection
-from app.services.tradernet import get_tradernet_client
+from app.services import yahoo
 from app.infrastructure.locking import file_lock
 from app.infrastructure.events import emit, SystemEvent
 
@@ -48,20 +48,14 @@ async def _sync_historical_data_internal():
 
 async def _sync_stock_price_history():
     """Fetch and store historical stock prices for all active stocks (1 year)."""
-    logger.info("Starting stock price history sync")
-
-    client = get_tradernet_client()
-
-    if not client.is_connected:
-        if not client.connect():
-            logger.error("Failed to connect to Tradernet, skipping stock price history sync")
-            emit(SystemEvent.ERROR_OCCURRED, message="BROKER DOWN")
-            return
+    logger.info("Starting stock price history sync (using Yahoo Finance)")
 
     async with get_db_connection() as db:
-        cursor = await db.execute("SELECT symbol FROM stocks WHERE active = 1")
+        cursor = await db.execute(
+            "SELECT symbol, yahoo_symbol FROM stocks WHERE active = 1"
+        )
         rows = await cursor.fetchall()
-        stocks = [row["symbol"] for row in rows]
+        stocks = [(row["symbol"], row["yahoo_symbol"]) for row in rows]
 
         if not stocks:
             logger.info("No active stocks to sync")
@@ -72,11 +66,9 @@ async def _sync_stock_price_history():
         processed = 0
         errors = 0
 
-        start_date = datetime.now() - timedelta(days=settings.daily_price_retention_days)
-        end_date = datetime.now()
-
-        for symbol in stocks:
+        for symbol, yahoo_symbol in stocks:
             try:
+                # Check if we already have recent data
                 cursor = await db.execute("""
                     SELECT MAX(date) as max_date
                     FROM stock_price_history
@@ -89,11 +81,8 @@ async def _sync_stock_price_history():
                     if max_date >= datetime.now() - timedelta(days=1):
                         processed += 1
                         continue
-                    fetch_start = max_date + timedelta(days=1)
-                else:
-                    fetch_start = start_date
 
-                await _fetch_and_store_prices(db, client, symbol, fetch_start, end_date)
+                await _fetch_and_store_prices(db, symbol, yahoo_symbol)
 
                 processed += 1
                 if processed % 10 == 0:
@@ -111,24 +100,23 @@ async def _sync_stock_price_history():
 
 async def _fetch_and_store_prices(
     db: aiosqlite.Connection,
-    client,
     symbol: str,
-    start: datetime,
-    end: datetime
+    yahoo_symbol: str = None
 ):
-    """Fetch historical prices for a symbol and store in database."""
+    """Fetch historical prices from Yahoo Finance and store in database."""
     try:
-        ohlc_data = client.get_historical_prices(symbol, start=start, end=end)
+        # Fetch 1 year of historical data from Yahoo Finance
+        ohlc_data = yahoo.get_historical_prices(symbol, yahoo_symbol, period="1y")
 
         if not ohlc_data:
-            logger.warning(f"No price data returned for {symbol} from {start.date()} to {end.date()}")
+            logger.warning(f"No price data from Yahoo for {symbol}")
             return
 
-        logger.info(f"Fetched {len(ohlc_data)} price records for {symbol}")
+        logger.info(f"Fetched {len(ohlc_data)} price records for {symbol} from Yahoo")
 
         now = datetime.now().isoformat()
         for ohlc in ohlc_data:
-            date = ohlc.timestamp.strftime("%Y-%m-%d")
+            date = ohlc.date.strftime("%Y-%m-%d")
             await db.execute("""
                 INSERT OR REPLACE INTO stock_price_history
                 (symbol, date, close_price, open_price, high_price, low_price, volume, source, created_at)
@@ -141,15 +129,15 @@ async def _fetch_and_store_prices(
                 ohlc.high,
                 ohlc.low,
                 ohlc.volume,
-                "tradernet",
+                "yahoo",
                 now,
             ))
 
         await db.commit()
-        logger.debug(f"Stored {len(ohlc_data)} price records for {symbol}")
+        logger.debug(f"Stored {len(ohlc_data)} Yahoo price records for {symbol}")
 
     except Exception as e:
-        logger.error(f"Failed to fetch/store prices for {symbol} ({start} to {end}): {e}")
+        logger.error(f"Failed to fetch/store Yahoo prices for {symbol}: {e}")
         raise
 
 
