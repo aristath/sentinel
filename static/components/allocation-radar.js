@@ -63,18 +63,64 @@ function allocationRadarComponent() {
   return {
     geoChart: null,
     industryChart: null,
+    chartsInitialized: false,
 
     initCharts() {
+      // Check if Chart.js is available
+      if (typeof Chart === 'undefined') {
+        console.error('Chart.js is not loaded. Please ensure chart.umd.min.js is loaded before this component.');
+        return;
+      }
+
       // Wait for Alpine and data to be ready
       this.$nextTick(() => {
-        this.createGeoChart();
-        this.createIndustryChart();
+        // Try to initialize charts if data is available
+        this.tryInitializeCharts();
 
         // Watch for allocation changes
         this.$watch('$store.app.allocation', () => {
           this.updateCharts();
         });
+
+        // Watch for active geographies to become available
+        this.$watch('$store.app.activeGeographies', () => {
+          if (!this.chartsInitialized) {
+            this.tryInitializeCharts();
+          } else {
+            this.updateCharts();
+          }
+        });
+
+        // Watch for active industries to become available
+        this.$watch('$store.app.activeIndustries', () => {
+          if (!this.chartsInitialized) {
+            this.tryInitializeCharts();
+          } else {
+            this.updateCharts();
+          }
+        });
       });
+    },
+
+    tryInitializeCharts() {
+      // Check if we have the necessary data
+      const hasGeoData = (this.$store.app.activeGeographies || []).length > 0 &&
+                         (this.$store.app.allocation?.geographic || []).length > 0;
+      const hasIndustryData = (this.$store.app.activeIndustries || []).length > 0 &&
+                             (this.$store.app.allocation?.industry || []).length > 0;
+
+      if (hasGeoData) {
+        this.createGeoChart();
+      }
+
+      if (hasIndustryData) {
+        this.createIndustryChart();
+      }
+
+      // Mark as initialized if at least one chart was created
+      if (hasGeoData || hasIndustryData) {
+        this.chartsInitialized = true;
+      }
     },
 
     getTargetPcts(weights, activeItems) {
@@ -94,14 +140,42 @@ function allocationRadarComponent() {
     },
 
     createGeoChart() {
+      // Check Chart.js availability
+      if (typeof Chart === 'undefined') {
+        console.error('Chart.js is not loaded');
+        return;
+      }
+
       const canvas = document.getElementById('geo-radar-chart');
-      if (!canvas) return;
+      if (!canvas) {
+        console.warn('Geo radar chart canvas not found');
+        return;
+      }
+
+      // Destroy existing chart if it exists
+      if (this.geoChart) {
+        this.geoChart.destroy();
+        this.geoChart = null;
+      }
 
       const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        console.error('Could not get 2D context from canvas');
+        return;
+      }
+
       const activeGeos = this.$store.app.activeGeographies || [];
       const allocation = this.$store.app.allocation?.geographic || [];
 
-      if (activeGeos.length === 0) return;
+      if (activeGeos.length === 0) {
+        console.warn('No active geographies available for chart');
+        return;
+      }
+
+      if (!Array.isArray(allocation) || allocation.length === 0) {
+        console.warn('No geographic allocation data available');
+        return;
+      }
 
       // Get current allocations
       const currentData = activeGeos.map(geo => {
@@ -146,14 +220,42 @@ function allocationRadarComponent() {
     },
 
     createIndustryChart() {
+      // Check Chart.js availability
+      if (typeof Chart === 'undefined') {
+        console.error('Chart.js is not loaded');
+        return;
+      }
+
       const canvas = document.getElementById('industry-radar-chart');
-      if (!canvas) return;
+      if (!canvas) {
+        console.warn('Industry radar chart canvas not found');
+        return;
+      }
+
+      // Destroy existing chart if it exists
+      if (this.industryChart) {
+        this.industryChart.destroy();
+        this.industryChart = null;
+      }
 
       const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        console.error('Could not get 2D context from canvas');
+        return;
+      }
+
       const activeIndustries = this.$store.app.activeIndustries || [];
       const allocation = this.$store.app.allocation?.industry || [];
 
-      if (activeIndustries.length === 0) return;
+      if (activeIndustries.length === 0) {
+        console.warn('No active industries available for chart');
+        return;
+      }
+
+      if (!Array.isArray(allocation) || allocation.length === 0) {
+        console.warn('No industry allocation data available');
+        return;
+      }
 
       // Get current allocations
       const currentData = activeIndustries.map(ind => {
@@ -239,44 +341,58 @@ function allocationRadarComponent() {
     },
 
     updateCharts() {
-      if (this.geoChart) {
-        const activeGeos = this.$store.app.activeGeographies || [];
-        const allocation = this.$store.app.allocation?.geographic || [];
+      // Update or create geo chart
+      const activeGeos = this.$store.app.activeGeographies || [];
+      const geoAllocation = this.$store.app.allocation?.geographic || [];
 
-        const currentData = activeGeos.map(geo => {
-          const item = allocation.find(a => a.name === geo);
-          return item ? item.current_pct * 100 : 0;
-        });
+      if (activeGeos.length > 0 && Array.isArray(geoAllocation) && geoAllocation.length > 0) {
+        if (this.geoChart) {
+          // Update existing chart
+          const currentData = activeGeos.map(geo => {
+            const item = geoAllocation.find(a => a.name === geo);
+            return item ? item.current_pct * 100 : 0;
+          });
 
-        const weights = {};
-        allocation.forEach(a => { weights[a.name] = a.target_pct || 0; });
-        const targetPcts = this.getTargetPcts(weights, activeGeos);
-        const targetData = activeGeos.map(geo => (targetPcts[geo] || 0) * 100);
+          const weights = {};
+          geoAllocation.forEach(a => { weights[a.name] = a.target_pct || 0; });
+          const targetPcts = this.getTargetPcts(weights, activeGeos);
+          const targetData = activeGeos.map(geo => (targetPcts[geo] || 0) * 100);
 
-        this.geoChart.data.labels = activeGeos;
-        this.geoChart.data.datasets[0].data = targetData;
-        this.geoChart.data.datasets[1].data = currentData;
-        this.geoChart.update('none');
+          this.geoChart.data.labels = activeGeos;
+          this.geoChart.data.datasets[0].data = targetData;
+          this.geoChart.data.datasets[1].data = currentData;
+          this.geoChart.update('none');
+        } else {
+          // Chart doesn't exist yet, create it
+          this.createGeoChart();
+        }
       }
 
-      if (this.industryChart) {
-        const activeIndustries = this.$store.app.activeIndustries || [];
-        const allocation = this.$store.app.allocation?.industry || [];
+      // Update or create industry chart
+      const activeIndustries = this.$store.app.activeIndustries || [];
+      const industryAllocation = this.$store.app.allocation?.industry || [];
 
-        const currentData = activeIndustries.map(ind => {
-          const item = allocation.find(a => a.name === ind);
-          return item ? item.current_pct * 100 : 0;
-        });
+      if (activeIndustries.length > 0 && Array.isArray(industryAllocation) && industryAllocation.length > 0) {
+        if (this.industryChart) {
+          // Update existing chart
+          const currentData = activeIndustries.map(ind => {
+            const item = industryAllocation.find(a => a.name === ind);
+            return item ? item.current_pct * 100 : 0;
+          });
 
-        const weights = {};
-        allocation.forEach(a => { weights[a.name] = a.target_pct || 0; });
-        const targetPcts = this.getTargetPcts(weights, activeIndustries);
-        const targetData = activeIndustries.map(ind => (targetPcts[ind] || 0) * 100);
+          const weights = {};
+          industryAllocation.forEach(a => { weights[a.name] = a.target_pct || 0; });
+          const targetPcts = this.getTargetPcts(weights, activeIndustries);
+          const targetData = activeIndustries.map(ind => (targetPcts[ind] || 0) * 100);
 
-        this.industryChart.data.labels = activeIndustries;
-        this.industryChart.data.datasets[0].data = targetData;
-        this.industryChart.data.datasets[1].data = currentData;
-        this.industryChart.update('none');
+          this.industryChart.data.labels = activeIndustries;
+          this.industryChart.data.datasets[0].data = targetData;
+          this.industryChart.data.datasets[1].data = currentData;
+          this.industryChart.update('none');
+        } else {
+          // Chart doesn't exist yet, create it
+          this.createIndustryChart();
+        }
       }
     }
   };
