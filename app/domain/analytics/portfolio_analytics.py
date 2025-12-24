@@ -135,6 +135,40 @@ async def reconstruct_cash_balance(
     return cash_series
 
 
+async def _batch_load_prices(
+    symbols: List[str],
+    start_date: str,
+    end_date: str
+) -> Dict[str, Dict[str, float]]:
+    """
+    Batch-load all prices for given symbols and date range.
+
+    Returns:
+        Dict[symbol][date] = price (with "_last" key for forward-fill)
+    """
+    prices = {}
+
+    for symbol in symbols:
+        try:
+            history_repo = HistoryRepository(symbol)
+            price_data = await history_repo.get_daily_range(start_date, end_date)
+
+            prices[symbol] = {}
+            last_price = None
+            for p in price_data:
+                prices[symbol][p.date] = p.close_price
+                last_price = p.close_price
+
+            # Store last known price for forward-fill
+            if last_price:
+                prices[symbol]["_last"] = last_price
+        except Exception as e:
+            logger.debug(f"Could not load prices for {symbol}: {e}")
+            prices[symbol] = {}
+
+    return prices
+
+
 async def reconstruct_portfolio_values(
     start_date: str,
     end_date: str,
@@ -142,60 +176,67 @@ async def reconstruct_portfolio_values(
 ) -> pd.Series:
     """
     Reconstruct daily portfolio values from positions + prices + cash.
-    
+
+    Uses batch price loading for performance and forward-fill for missing prices.
+
     Args:
         start_date: Start date (YYYY-MM-DD)
         end_date: End date (YYYY-MM-DD)
         initial_cash: Starting cash balance
-    
+
     Returns:
         Series with date index and portfolio values
     """
     # Get position history
     positions_df = await reconstruct_historical_positions(start_date, end_date)
-    
+
     # Get cash balance history
     cash_series = await reconstruct_cash_balance(start_date, end_date, initial_cash)
-    
+
     # Get all unique dates
     dates = pd.date_range(start=start_date, end=end_date, freq="D")
     portfolio_values = pd.Series(0.0, index=dates)
-    
-    db_manager = get_db_manager()
-    stock_repo = StockRepository()
-    
+
     # Get all symbols that had positions
     symbols = positions_df["symbol"].unique() if not positions_df.empty else []
-    
+
+    # Batch load all prices upfront (performance optimization)
+    all_prices = await _batch_load_prices(list(symbols), start_date, end_date)
+
     # For each date, calculate portfolio value
     for date in dates:
         date_str = date.strftime("%Y-%m-%d")
         total_value = cash_series.get(date, initial_cash)
-        
+
         # Get positions on this date
         date_positions = positions_df[positions_df["date"] <= date]
         if not date_positions.empty:
             # Group by symbol and get latest quantity for each
             latest_positions = date_positions.groupby("symbol").last()
-            
+
             for symbol, row in latest_positions.iterrows():
                 quantity = row["quantity"]
                 if quantity <= 0:
                     continue
-                
-                # Get price for this symbol on this date
-                try:
-                    history_repo = HistoryRepository(symbol)
-                    price_data = await history_repo.get_daily_range(date_str, date_str)
-                    
-                    if price_data:
-                        price = price_data[0].close_price
-                        total_value += quantity * price
-                except Exception as e:
-                    logger.debug(f"Could not get price for {symbol} on {date_str}: {e}")
-        
+
+                # Use batch-loaded prices with forward-fill
+                symbol_prices = all_prices.get(symbol, {})
+                price = symbol_prices.get(date_str)
+
+                if price is None:
+                    # Forward-fill: find most recent price
+                    for prev_date in sorted(symbol_prices.keys(), reverse=True):
+                        if prev_date != "_last" and prev_date <= date_str:
+                            price = symbol_prices[prev_date]
+                            break
+                    if price is None:
+                        price = symbol_prices.get("_last", 0)
+
+                if price:
+                    total_value += quantity * price
+
         portfolio_values[date] = total_value
-    
+
     return portfolio_values
 
 
@@ -386,14 +427,15 @@ async def get_performance_attribution(
     for geo, contributions in geo_returns.items():
         if contributions:
             total_return = sum(contributions)
-            # Annualize (assuming 252 trading days)
-            annualized = total_return * (252 / len(contributions)) if contributions else 0.0
+            # Use compound annualization: (1 + r)^(252/n) - 1
+            annualized = (1 + total_return) ** (252 / len(contributions)) - 1 if len(contributions) > 0 else 0.0
             attribution["geography"][geo] = float(annualized) if np.isfinite(annualized) else 0.0
-    
+
     for ind, contributions in industry_returns.items():
         if contributions:
             total_return = sum(contributions)
-            annualized = total_return * (252 / len(contributions)) if contributions else 0.0
+            # Use compound annualization: (1 + r)^(252/n) - 1
+            annualized = (1 + total_return) ** (252 / len(contributions)) - 1 if len(contributions) > 0 else 0.0
             attribution["industry"][ind] = float(annualized) if np.isfinite(annualized) else 0.0
     
     return attribution
@@ -544,35 +586,42 @@ async def get_factor_attribution(
     end_date: str
 ) -> Dict[str, float]:
     """
-    Analyze which factors (dividends, geography, industry) contributed most to returns.
-    
-    Args:
-        returns: Daily portfolio returns
-        start_date: Start date for analysis
-        end_date: End date for analysis
-    
+    Analyze which factors contributed most to returns.
+
     Returns:
-        Dict with factor contributions (e.g., dividend_contribution, geography_contribution)
+        Dict with factor contributions as weighted averages of attributed returns.
     """
-    # This is a simplified version - full factor attribution would require
-    # more sophisticated analysis. For now, we'll use performance attribution
-    # to infer factor contributions.
-    
-    attribution = await get_performance_attribution(returns, start_date, end_date)
-    
-    # Calculate total portfolio return
     if returns.empty:
+        return {
+            "geography_contribution": 0.0,
+            "industry_contribution": 0.0,
+            "total_return": 0.0,
+        }
+
+    # Get performance attribution
+    attribution = await get_performance_attribution(returns, start_date, end_date)
+
+    # Calculate total portfolio return using empyrical
+    total_return = float(empyrical.annual_return(returns))
+    if not np.isfinite(total_return):
         total_return = 0.0
-    else:
-        total_return = float(empyrical.annual_return(returns))
-    
-    # Calculate contributions
-    factor_attribution = {
-        "dividend_contribution": 0.0,  # Would need dividend data to calculate
-        "geography_contribution": sum(attribution["geography"].values()) if attribution["geography"] else 0.0,
-        "industry_contribution": sum(attribution["industry"].values()) if attribution["industry"] else 0.0,
+
+    # Calculate weighted contributions (average of attributed returns)
+    geo_attribution = attribution.get("geography", {})
+    ind_attribution = attribution.get("industry", {})
+
+    geo_contribution = 0.0
+    ind_contribution = 0.0
+
+    # Average the attributed returns (already weighted by position value in get_performance_attribution)
+    if geo_attribution:
+        geo_contribution = sum(geo_attribution.values()) / len(geo_attribution)
+    if ind_attribution:
+        ind_contribution = sum(ind_attribution.values()) / len(ind_attribution)
+
+    return {
+        "geography_contribution": geo_contribution if np.isfinite(geo_contribution) else 0.0,
+        "industry_contribution": ind_contribution if np.isfinite(ind_contribution) else 0.0,
         "total_return": total_return,
     }
-    
-    return factor_attribution
 

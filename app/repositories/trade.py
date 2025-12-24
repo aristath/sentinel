@@ -172,59 +172,90 @@ class TradeRepository:
     async def get_position_history(self, start_date: str, end_date: str) -> List[dict]:
         """
         Get historical position quantities by date for portfolio reconstruction.
-        
+
+        Includes positions held before start_date (carried forward).
         Returns list of dicts with keys: date, symbol, quantity
         where quantity is cumulative (sum of BUY - sum of SELL up to that date).
         """
-        # Get all trades in date range, ordered by date
+        # Get all trades up to end_date to build complete position history
         rows = await self._db.fetchall(
             """
             SELECT symbol, side, quantity, executed_at
             FROM trades
-            WHERE executed_at >= ? AND executed_at <= ?
+            WHERE executed_at <= ?
             ORDER BY executed_at ASC
             """,
-            (start_date, end_date)
+            (end_date,)
         )
-        
-        # Group by date and symbol, calculate cumulative quantities
-        positions_by_date = {}  # {date: {symbol: quantity}}
-        
+
+        # Build position state up to start_date
+        cumulative_positions = {}  # {symbol: quantity}
+        pre_start_trades = []
+        in_range_trades = []
+
         for row in rows:
             date = row["executed_at"][:10]  # Extract YYYY-MM-DD
+            if date < start_date:
+                pre_start_trades.append(row)
+            else:
+                in_range_trades.append(row)
+
+        # Process pre-start trades to get initial positions
+        for row in pre_start_trades:
             symbol = row["symbol"]
             side = row["side"].upper()
             quantity = row["quantity"]
-            
+
+            if symbol not in cumulative_positions:
+                cumulative_positions[symbol] = 0.0
+
+            if side == "BUY":
+                cumulative_positions[symbol] += quantity
+            elif side == "SELL":
+                cumulative_positions[symbol] -= quantity
+                if cumulative_positions[symbol] < 0:
+                    cumulative_positions[symbol] = 0.0
+
+        # Build result including initial positions
+        result = []
+
+        # Add initial position entries at start_date
+        for symbol, quantity in cumulative_positions.items():
+            if quantity > 0:
+                result.append({
+                    "date": start_date,
+                    "symbol": symbol,
+                    "quantity": quantity
+                })
+
+        # Process trades in range
+        positions_by_date = {}
+        for row in in_range_trades:
+            date = row["executed_at"][:10]
+            symbol = row["symbol"]
+            side = row["side"].upper()
+            quantity = row["quantity"]
+
             if date not in positions_by_date:
                 positions_by_date[date] = {}
-            
+
             if symbol not in positions_by_date[date]:
                 positions_by_date[date][symbol] = 0.0
-            
+
             if side == "BUY":
                 positions_by_date[date][symbol] += quantity
             elif side == "SELL":
                 positions_by_date[date][symbol] -= quantity
-        
-        # Convert to list format and ensure cumulative quantities
-        result = []
-        cumulative_positions = {}  # {symbol: cumulative_quantity}
-        
-        # Get all unique dates sorted
-        all_dates = sorted(positions_by_date.keys())
-        
-        for date in all_dates:
-            # Update cumulative positions for this date
+
+        # Update cumulative positions for each date
+        for date in sorted(positions_by_date.keys()):
             for symbol, delta in positions_by_date[date].items():
                 if symbol not in cumulative_positions:
                     cumulative_positions[symbol] = 0.0
                 cumulative_positions[symbol] += delta
-                # Don't allow negative positions (shouldn't happen, but safety check)
                 if cumulative_positions[symbol] < 0:
                     cumulative_positions[symbol] = 0.0
-            
-            # Add entry for each symbol with position on this date
+
             for symbol, quantity in cumulative_positions.items():
                 if quantity > 0:
                     result.append({
@@ -232,7 +263,7 @@ class TradeRepository:
                         "symbol": symbol,
                         "quantity": quantity
                     })
-        
+
         return result
 
     def _row_to_trade(self, row) -> Trade:

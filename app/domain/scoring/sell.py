@@ -32,6 +32,7 @@ from app.domain.scoring.constants import (
     SELL_WEIGHT_TIME_HELD,
     SELL_WEIGHT_PORTFOLIO_BALANCE,
     SELL_WEIGHT_INSTABILITY,
+    SELL_WEIGHT_DRAWDOWN,
     INSTABILITY_RATE_VERY_HOT,
     INSTABILITY_RATE_HOT,
     INSTABILITY_RATE_WARM,
@@ -489,41 +490,47 @@ async def calculate_sell_score(
         # No technical data - use neutral instability score
         instability_score = 0.3
 
-    # Add drawdown analysis penalty (PyFolio enhancement)
-    drawdown_penalty = 0.0
+    # Calculate drawdown score as a weighted component (not additive penalty)
+    drawdown_score = 0.0
     try:
         from app.domain.analytics import get_position_drawdown
         from datetime import datetime, timedelta
-        
-        # Calculate date range (last 365 days)
+
         end_date = datetime.now().strftime("%Y-%m-%d")
         start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
-        
+
         drawdown_data = await get_position_drawdown(symbol, start_date, end_date)
-        
-        # Penalize extended drawdowns
-        if drawdown_data.get("current_drawdown") and drawdown_data["current_drawdown"] < -0.15:
-            days_in_drawdown = drawdown_data.get("days_in_drawdown", 0)
-            if days_in_drawdown and days_in_drawdown > 180:  # 6+ months
-                # Significant penalty for extended drawdowns
-                drawdown_penalty = 0.3
-            elif days_in_drawdown and days_in_drawdown > 90:  # 3+ months
-                # Moderate penalty
-                drawdown_penalty = 0.15
+
+        # Score based on drawdown severity and duration
+        current_dd = drawdown_data.get("current_drawdown", 0) or 0
+        days_in_dd = drawdown_data.get("days_in_drawdown", 0) or 0
+
+        if current_dd < -0.25:  # >25% drawdown
+            drawdown_score = 1.0
+        elif current_dd < -0.15:  # >15% drawdown
+            if days_in_dd and days_in_dd > 180:  # 6+ months
+                drawdown_score = 0.9  # Extended deep drawdown
+            elif days_in_dd and days_in_dd > 90:  # 3+ months
+                drawdown_score = 0.7
+            else:
+                drawdown_score = 0.5
+        elif current_dd < -0.10:  # >10% drawdown
+            drawdown_score = 0.3
+        else:
+            drawdown_score = 0.1  # Minimal drawdown
     except Exception as e:
         logger.debug(f"Could not calculate drawdown for {symbol}: {e}")
-        # Continue without drawdown penalty if calculation fails
+        drawdown_score = 0.3  # Neutral on error
 
-    # Calculate total score (weighted) with drawdown penalty
+    # Calculate total score with all weighted components (sum to 1.0)
     total_score = (
         (underperformance_score * SELL_WEIGHT_UNDERPERFORMANCE) +
         (time_held_score * SELL_WEIGHT_TIME_HELD) +
         (portfolio_balance_score * SELL_WEIGHT_PORTFOLIO_BALANCE) +
         (instability_score * SELL_WEIGHT_INSTABILITY) +
-        drawdown_penalty  # Add drawdown penalty
+        (drawdown_score * SELL_WEIGHT_DRAWDOWN)
     )
-    # Cap at 1.0
-    total_score = min(1.0, total_score)
+    # Weights sum to 1.0, so no capping needed
 
     # Determine sell quantity
     sell_quantity, sell_pct = determine_sell_quantity(

@@ -327,34 +327,46 @@ class RebalancingService:
                 if exchange_rate <= 0:
                     exchange_rate = 1.0
 
-            # Get Sortino ratio for risk-adjusted position sizing (PyFolio enhancement)
+            # Get Sortino ratio and correlation for risk-adjusted position sizing (PyFolio)
             sortino_ratio = None
+            portfolio_correlation = 0.0
             try:
                 from datetime import datetime, timedelta
                 from app.domain.analytics import get_position_risk_metrics
-                
+
                 end_date = datetime.now().strftime("%Y-%m-%d")
                 start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
                 risk_metrics = await get_position_risk_metrics(symbol, start_date, end_date)
                 sortino_ratio = risk_metrics.get("sortino_ratio")
+
+                # Estimate correlation using volatility ratio (simplified approach)
+                stock_vol = risk_metrics.get("volatility", 0.20)
+                if portfolio_context.total_value > 0:
+                    # High-vol stocks tend to be more correlated in stress
+                    portfolio_correlation = min(0.9, stock_vol / 0.30)
             except Exception as e:
-                logger.debug(f"Could not get Sortino ratio for {symbol}: {e}")
-            
-            # Calculate base trade amount with risk adjustment
+                logger.debug(f"Could not get risk metrics for {symbol}: {e}")
+
+            # Calculate base trade amount with risk adjustment (reduced influence)
             risk_adjusted_amount = base_trade_amount
             if sortino_ratio is not None:
+                # Dampen adjustment based on correlation (avoid concentration risk)
+                correlation_dampener = max(0.3, 1 - portfolio_correlation)
+
                 if sortino_ratio > 2.0:
-                    # Excellent risk-adjusted returns - increase size by 15%
-                    risk_adjusted_amount = base_trade_amount * 1.15
+                    # Excellent risk-adjusted returns - modest increase (+10% max)
+                    adjustment = 0.10 * correlation_dampener
+                    risk_adjusted_amount = base_trade_amount * (1 + adjustment)
                 elif sortino_ratio > 1.5:
-                    # Good risk-adjusted returns - increase by 5%
-                    risk_adjusted_amount = base_trade_amount * 1.05
+                    # Good risk-adjusted returns - small increase (+3% max)
+                    adjustment = 0.03 * correlation_dampener
+                    risk_adjusted_amount = base_trade_amount * (1 + adjustment)
                 elif sortino_ratio < 0.5:
-                    # Poor risk-adjusted returns - reduce by 20%
-                    risk_adjusted_amount = base_trade_amount * 0.8
-                elif sortino_ratio < 1.0:
-                    # Below average - reduce by 10%
+                    # Poor risk-adjusted returns - reduce by 10%
                     risk_adjusted_amount = base_trade_amount * 0.9
+                elif sortino_ratio < 1.0:
+                    # Below average - reduce by 5%
+                    risk_adjusted_amount = base_trade_amount * 0.95
             
             # Calculate actual transaction value (respecting min_lot)
             lot_cost_native = min_lot * price
@@ -683,29 +695,29 @@ class RebalancingService:
             avg_geo_return = sum(geo_attribution.values()) / len(geo_attribution) if geo_attribution else 0.0
             avg_ind_return = sum(ind_attribution.values()) / len(ind_attribution) if ind_attribution else 0.0
             
-            # Adjust geography weights (max 5% adjustment)
+            # Adjust geography weights (max 3% adjustment - reduced influence)
             for geo, base_weight in base_geo_weights.items():
                 perf_return = geo_attribution.get(geo, 0.0)
                 if perf_return > avg_geo_return * 1.2:  # 20% above average
-                    # Increase weight by up to 5%
-                    adjustment = min(0.05, (perf_return - avg_geo_return) * 0.1)
+                    # Increase weight by up to 3%
+                    adjustment = min(0.03, (perf_return - avg_geo_return) * 0.1)
                     adjusted_geo[geo] = base_weight + adjustment
                 elif perf_return < avg_geo_return * 0.8:  # 20% below average
-                    # Decrease weight by up to 5%
-                    adjustment = min(0.05, (avg_geo_return - perf_return) * 0.1)
-                    adjusted_geo[geo] = max(-1.0, base_weight - adjustment)
+                    # Decrease weight by up to 3%
+                    adjustment = min(0.03, (avg_geo_return - perf_return) * 0.1)
+                    adjusted_geo[geo] = max(0.0, base_weight - adjustment)
                 else:
                     adjusted_geo[geo] = base_weight
-            
-            # Adjust industry weights (max 3% adjustment)
+
+            # Adjust industry weights (max 2% adjustment - reduced influence)
             for ind, base_weight in base_ind_weights.items():
                 perf_return = ind_attribution.get(ind, 0.0)
                 if perf_return > avg_ind_return * 1.2:  # 20% above average
-                    adjustment = min(0.03, (perf_return - avg_ind_return) * 0.1)
+                    adjustment = min(0.02, (perf_return - avg_ind_return) * 0.1)
                     adjusted_ind[ind] = base_weight + adjustment
                 elif perf_return < avg_ind_return * 0.8:  # 20% below average
-                    adjustment = min(0.03, (avg_ind_return - perf_return) * 0.1)
-                    adjusted_ind[ind] = max(-1.0, base_weight - adjustment)
+                    adjustment = min(0.02, (avg_ind_return - perf_return) * 0.1)
+                    adjusted_ind[ind] = max(0.0, base_weight - adjustment)
                 else:
                     adjusted_ind[ind] = base_weight
             
