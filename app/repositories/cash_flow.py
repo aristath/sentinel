@@ -166,6 +166,65 @@ class CashFlowRepository:
         )
         return row["total"] if row else 0.0
 
+    async def get_cash_balance_history(self, start_date: str, end_date: str, initial_cash: float = 0.0) -> List[dict]:
+        """
+        Get cash balance history over time from cash flows.
+        
+        Args:
+            start_date: Start date (YYYY-MM-DD)
+            end_date: End date (YYYY-MM-DD)
+            initial_cash: Starting cash balance (default 0.0)
+        
+        Returns:
+            List of dicts with keys: date, cash_balance
+        """
+        # Get all cash flows in date range
+        rows = await self._db.fetchall(
+            """
+            SELECT date, amount_eur, transaction_type
+            FROM cash_flows
+            WHERE date >= ? AND date <= ?
+            ORDER BY date ASC
+            """,
+            (start_date, end_date)
+        )
+        
+        # Group by date and calculate net cash flow per day
+        cash_flows_by_date = {}  # {date: net_amount}
+        
+        for row in rows:
+            date = row["date"]
+            amount_eur = row["amount_eur"] or 0.0
+            tx_type = (row["transaction_type"] or "").upper()
+            
+            if date not in cash_flows_by_date:
+                cash_flows_by_date[date] = 0.0
+            
+            # Deposits increase cash, withdrawals decrease cash
+            if "DEPOSIT" in tx_type:
+                cash_flows_by_date[date] += amount_eur
+            elif "WITHDRAWAL" in tx_type:
+                cash_flows_by_date[date] -= abs(amount_eur)
+            # Dividends increase cash
+            elif "DIVIDEND" in tx_type:
+                cash_flows_by_date[date] += amount_eur
+        
+        # Calculate cumulative cash balance
+        result = []
+        current_cash = initial_cash
+        
+        # Get all unique dates sorted
+        all_dates = sorted(cash_flows_by_date.keys())
+        
+        for date in all_dates:
+            current_cash += cash_flows_by_date[date]
+            result.append({
+                "date": date,
+                "cash_balance": current_cash
+            })
+        
+        return result
+
     def _row_to_cash_flow(self, row) -> CashFlow:
         """Convert database row to CashFlow model."""
         return CashFlow(

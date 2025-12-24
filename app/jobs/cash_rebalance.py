@@ -400,7 +400,7 @@ async def _get_best_sell_trade(
         "target_annual_return": await settings_repo.get_value("target_annual_return", 0.10),
     }
 
-    sell_scores = calculate_all_sell_scores(
+    sell_scores = await calculate_all_sell_scores(
         positions=position_dicts,
         total_portfolio_value=total_value,
         geo_allocations=geo_allocations,
@@ -505,16 +505,41 @@ async def _get_buy_trades(
             if exchange_rate <= 0:
                 exchange_rate = 1.0
 
+        # Get Sortino ratio for risk-adjusted position sizing (PyFolio enhancement)
+        sortino_ratio = None
+        try:
+            from datetime import datetime, timedelta
+            from app.domain.analytics import get_position_risk_metrics
+            
+            end_date = datetime.now().strftime("%Y-%m-%d")
+            start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+            risk_metrics = await get_position_risk_metrics(symbol, start_date, end_date)
+            sortino_ratio = risk_metrics.get("sortino_ratio")
+        except Exception as e:
+            logger.debug(f"Could not get Sortino ratio for {symbol}: {e}")
+        
+        # Calculate risk-adjusted trade size
+        risk_adjusted_size = min_trade_size
+        if sortino_ratio is not None:
+            if sortino_ratio > 2.0:
+                risk_adjusted_size = min_trade_size * 1.15
+            elif sortino_ratio > 1.5:
+                risk_adjusted_size = min_trade_size * 1.05
+            elif sortino_ratio < 0.5:
+                risk_adjusted_size = min_trade_size * 0.8
+            elif sortino_ratio < 1.0:
+                risk_adjusted_size = min_trade_size * 0.9
+        
         # Calculate trade quantity
         min_lot = stock.min_lot or 1
         lot_cost_native = min_lot * price
         lot_cost_eur = lot_cost_native / exchange_rate
 
-        if lot_cost_eur > min_trade_size:
+        if lot_cost_eur > risk_adjusted_size:
             quantity = min_lot
             trade_value_native = lot_cost_native
         else:
-            base_trade_amount_native = min_trade_size * exchange_rate
+            base_trade_amount_native = risk_adjusted_size * exchange_rate
             num_lots = int(base_trade_amount_native / lot_cost_native)
             quantity = num_lots * min_lot
             trade_value_native = quantity * price

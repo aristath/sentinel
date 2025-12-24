@@ -1,5 +1,6 @@
 """Portfolio API endpoints."""
 
+import logging
 from fastapi import APIRouter, HTTPException
 from app.repositories import (
     PortfolioRepository,
@@ -9,6 +10,7 @@ from app.repositories import (
 )
 from app.application.services.portfolio_service import PortfolioService
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -138,3 +140,95 @@ async def get_cash_breakdown():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get cash breakdown: {str(e)}")
+
+
+@router.get("/analytics")
+async def get_portfolio_analytics(days: int = 365):
+    """
+    Get comprehensive portfolio performance analytics using PyFolio.
+    
+    Args:
+        days: Number of days to analyze (default 365)
+    
+    Returns:
+        Dict with returns, risk_metrics, attribution, drawdowns
+    """
+    try:
+        from datetime import datetime, timedelta
+        from app.domain.analytics import (
+            reconstruct_portfolio_values,
+            calculate_portfolio_returns,
+            get_portfolio_metrics,
+            get_performance_attribution,
+        )
+        
+        # Calculate date range
+        end_date = datetime.now().strftime("%Y-%m-%d")
+        start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+        
+        # Reconstruct portfolio history
+        portfolio_values = await reconstruct_portfolio_values(start_date, end_date)
+        
+        if portfolio_values.empty:
+            return {
+                "error": "Insufficient data",
+                "returns": {},
+                "risk_metrics": {},
+                "attribution": {},
+            }
+        
+        # Calculate returns
+        returns = calculate_portfolio_returns(portfolio_values)
+        
+        if returns.empty:
+            return {
+                "error": "Could not calculate returns",
+                "returns": {},
+                "risk_metrics": {},
+                "attribution": {},
+            }
+        
+        # Get portfolio metrics
+        metrics = await get_portfolio_metrics(returns)
+        
+        # Get performance attribution
+        attribution = await get_performance_attribution(returns, start_date, end_date)
+        
+        # Calculate daily/monthly/annual returns
+        daily_returns = returns.tolist()
+        returns_index = returns.index.strftime("%Y-%m-%d").tolist()
+        
+        # Monthly returns
+        monthly_returns = returns.resample("M").apply(lambda x: (1 + x).prod() - 1)
+        monthly_returns_list = monthly_returns.tolist()
+        monthly_index = monthly_returns.index.strftime("%Y-%m").tolist()
+        
+        # Annual return
+        annual_return = metrics.get("annual_return", 0.0)
+        
+        return {
+            "returns": {
+                "daily": [{"date": d, "return": r} for d, r in zip(returns_index, daily_returns)],
+                "monthly": [{"month": m, "return": r} for m, r in zip(monthly_index, monthly_returns_list)],
+                "annual": annual_return,
+            },
+            "risk_metrics": {
+                "sharpe_ratio": metrics.get("sharpe_ratio", 0.0),
+                "sortino_ratio": metrics.get("sortino_ratio", 0.0),
+                "calmar_ratio": metrics.get("calmar_ratio", 0.0),
+                "volatility": metrics.get("volatility", 0.0),
+                "max_drawdown": metrics.get("max_drawdown", 0.0),
+            },
+            "attribution": {
+                "geography": attribution.get("geography", {}),
+                "industry": attribution.get("industry", {}),
+            },
+            "period": {
+                "start_date": start_date,
+                "end_date": end_date,
+                "days": days,
+            },
+        }
+    except Exception as e:
+        logger.error(f"Error calculating portfolio analytics: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to calculate analytics: {str(e)}")

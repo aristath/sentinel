@@ -13,5 +13,6 @@ pandas>=2.0.0
 numpy>=1.24.0
 empyrical-reloaded>=0.5.10
 pandas-ta>=0.3.14b
+pyfolio>=0.9.2
 pytest>=7.4.0
 pytest-asyncio>=0.21.0

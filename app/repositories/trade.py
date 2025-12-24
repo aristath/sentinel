@@ -78,6 +78,18 @@ class TradeRepository:
         )
         return [self._row_to_trade(row) for row in rows]
 
+    async def get_all_in_range(self, start_date: str, end_date: str) -> List[Trade]:
+        """Get all trades within a date range, ordered by date."""
+        rows = await self._db.fetchall(
+            """
+            SELECT * FROM trades
+            WHERE executed_at >= ? AND executed_at <= ?
+            ORDER BY executed_at ASC
+            """,
+            (start_date, end_date)
+        )
+        return [self._row_to_trade(row) for row in rows]
+
     async def get_by_symbol(self, symbol: str, limit: int = 100) -> List[Trade]:
         """Get trades for a specific symbol."""
         rows = await self._db.fetchall(
@@ -156,6 +168,72 @@ class TradeRepository:
             }
             for row in rows
         }
+
+    async def get_position_history(self, start_date: str, end_date: str) -> List[dict]:
+        """
+        Get historical position quantities by date for portfolio reconstruction.
+        
+        Returns list of dicts with keys: date, symbol, quantity
+        where quantity is cumulative (sum of BUY - sum of SELL up to that date).
+        """
+        # Get all trades in date range, ordered by date
+        rows = await self._db.fetchall(
+            """
+            SELECT symbol, side, quantity, executed_at
+            FROM trades
+            WHERE executed_at >= ? AND executed_at <= ?
+            ORDER BY executed_at ASC
+            """,
+            (start_date, end_date)
+        )
+        
+        # Group by date and symbol, calculate cumulative quantities
+        positions_by_date = {}  # {date: {symbol: quantity}}
+        
+        for row in rows:
+            date = row["executed_at"][:10]  # Extract YYYY-MM-DD
+            symbol = row["symbol"]
+            side = row["side"].upper()
+            quantity = row["quantity"]
+            
+            if date not in positions_by_date:
+                positions_by_date[date] = {}
+            
+            if symbol not in positions_by_date[date]:
+                positions_by_date[date][symbol] = 0.0
+            
+            if side == "BUY":
+                positions_by_date[date][symbol] += quantity
+            elif side == "SELL":
+                positions_by_date[date][symbol] -= quantity
+        
+        # Convert to list format and ensure cumulative quantities
+        result = []
+        cumulative_positions = {}  # {symbol: cumulative_quantity}
+        
+        # Get all unique dates sorted
+        all_dates = sorted(positions_by_date.keys())
+        
+        for date in all_dates:
+            # Update cumulative positions for this date
+            for symbol, delta in positions_by_date[date].items():
+                if symbol not in cumulative_positions:
+                    cumulative_positions[symbol] = 0.0
+                cumulative_positions[symbol] += delta
+                # Don't allow negative positions (shouldn't happen, but safety check)
+                if cumulative_positions[symbol] < 0:
+                    cumulative_positions[symbol] = 0.0
+            
+            # Add entry for each symbol with position on this date
+            for symbol, quantity in cumulative_positions.items():
+                if quantity > 0:
+                    result.append({
+                        "date": date,
+                        "symbol": symbol,
+                        "quantity": quantity
+                    })
+        
+        return result
 
     def _row_to_trade(self, row) -> Trade:
         """Convert database row to Trade model."""

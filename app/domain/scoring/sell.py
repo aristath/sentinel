@@ -359,7 +359,7 @@ def determine_sell_quantity(
     return sell_quantity, sell_pct
 
 
-def calculate_sell_score(
+async def calculate_sell_score(
     symbol: str,
     quantity: float,
     avg_price: float,
@@ -489,13 +489,41 @@ def calculate_sell_score(
         # No technical data - use neutral instability score
         instability_score = 0.3
 
-    # Calculate total score (weighted)
+    # Add drawdown analysis penalty (PyFolio enhancement)
+    drawdown_penalty = 0.0
+    try:
+        from app.domain.analytics import get_position_drawdown
+        from datetime import datetime, timedelta
+        
+        # Calculate date range (last 365 days)
+        end_date = datetime.now().strftime("%Y-%m-%d")
+        start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+        
+        drawdown_data = await get_position_drawdown(symbol, start_date, end_date)
+        
+        # Penalize extended drawdowns
+        if drawdown_data.get("current_drawdown") and drawdown_data["current_drawdown"] < -0.15:
+            days_in_drawdown = drawdown_data.get("days_in_drawdown", 0)
+            if days_in_drawdown and days_in_drawdown > 180:  # 6+ months
+                # Significant penalty for extended drawdowns
+                drawdown_penalty = 0.3
+            elif days_in_drawdown and days_in_drawdown > 90:  # 3+ months
+                # Moderate penalty
+                drawdown_penalty = 0.15
+    except Exception as e:
+        logger.debug(f"Could not calculate drawdown for {symbol}: {e}")
+        # Continue without drawdown penalty if calculation fails
+
+    # Calculate total score (weighted) with drawdown penalty
     total_score = (
         (underperformance_score * SELL_WEIGHT_UNDERPERFORMANCE) +
         (time_held_score * SELL_WEIGHT_TIME_HELD) +
         (portfolio_balance_score * SELL_WEIGHT_PORTFOLIO_BALANCE) +
-        (instability_score * SELL_WEIGHT_INSTABILITY)
+        (instability_score * SELL_WEIGHT_INSTABILITY) +
+        drawdown_penalty  # Add drawdown penalty
     )
+    # Cap at 1.0
+    total_score = min(1.0, total_score)
 
     # Determine sell quantity
     sell_quantity, sell_pct = determine_sell_quantity(
@@ -532,7 +560,7 @@ async def get_sell_settings() -> dict:
     }
 
 
-def calculate_all_sell_scores(
+async def calculate_all_sell_scores(
     positions: List[dict],
     total_portfolio_value: float,
     geo_allocations: Dict[str, float],
@@ -559,7 +587,7 @@ def calculate_all_sell_scores(
 
     for pos in positions:
         symbol = pos['symbol']
-        score = calculate_sell_score(
+        score = await calculate_sell_score(
             symbol=symbol,
             quantity=pos['quantity'],
             avg_price=pos['avg_price'],

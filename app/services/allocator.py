@@ -1,6 +1,7 @@
 """Portfolio allocation and rebalancing logic."""
 
 import logging
+from typing import Optional
 
 from app.config import settings
 from app.domain.constants import (
@@ -40,14 +41,16 @@ def calculate_position_size(
     candidate: StockPriority,
     base_size: float,
     min_size: float,
+    sortino_ratio: Optional[float] = None,
 ) -> float:
     """
-    Calculate position size based on conviction and risk.
+    Calculate position size based on conviction, risk, and risk-adjusted returns.
 
     Args:
         candidate: Stock priority data
         base_size: Base investment amount per trade
         min_size: Minimum trade size
+        sortino_ratio: Optional Sortino ratio for risk-adjusted sizing
 
     Returns:
         Adjusted position size (0.8x to 1.2x of base)
@@ -66,7 +69,23 @@ def calculate_position_size(
     else:
         vol_mult = 1.0
 
-    size = base_size * conviction_mult * priority_mult * vol_mult
+    # Risk-adjusted multiplier based on Sortino ratio (PyFolio enhancement)
+    risk_mult = 1.0
+    if sortino_ratio is not None:
+        if sortino_ratio > 2.0:
+            # Excellent risk-adjusted returns - increase size
+            risk_mult = 1.15
+        elif sortino_ratio > 1.5:
+            # Good risk-adjusted returns - slight increase
+            risk_mult = 1.05
+        elif sortino_ratio < 0.5:
+            # Poor risk-adjusted returns - reduce size
+            risk_mult = 0.8
+        elif sortino_ratio < 1.0:
+            # Below average - slight reduction
+            risk_mult = 0.9
+
+    size = base_size * conviction_mult * priority_mult * vol_mult * risk_mult
     return max(min_size, min(size, base_size * MAX_POSITION_SIZE_MULTIPLIER))
 
 

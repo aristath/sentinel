@@ -321,7 +321,7 @@ class FundingService:
         # Load settings from database
         settings = await get_sell_settings()
 
-        scores = calculate_all_sell_scores(
+        scores = await calculate_all_sell_scores(
             positions=positions,
             total_portfolio_value=portfolio_context.total_value,
             geo_allocations=geo_allocations,
