@@ -20,7 +20,6 @@ import logging
 from typing import Optional, List, Dict
 
 import numpy as np
-import pandas as pd
 
 from app.domain.scoring.models import OpportunityScore
 from app.domain.scoring.constants import (

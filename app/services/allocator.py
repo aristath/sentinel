@@ -12,12 +12,7 @@ from app.domain.constants import (
     MIN_VOLATILITY_MULTIPLIER,
     MAX_POSITION_SIZE_MULTIPLIER,
 )
-from app.domain.models import (
-    AllocationStatus,
-    PortfolioSummary,
-    TradeRecommendation,
-    StockPriority,
-)
+from app.domain.models import StockPriority
 
 logger = logging.getLogger(__name__)
 

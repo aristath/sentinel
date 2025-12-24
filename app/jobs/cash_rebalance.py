@@ -17,11 +17,9 @@ from app.repositories import (
     PositionRepository,
     TradeRepository,
     AllocationRepository,
-    PortfolioRepository,
     SettingsRepository,
 )
 from app.domain.scoring import (
-    calculate_stock_score,
     calculate_all_sell_scores,
     calculate_portfolio_score,
     calculate_post_transaction_score,
@@ -74,7 +72,7 @@ async def _check_and_rebalance_internal():
 
         # Get configurable threshold from database
         settings_repo = SettingsRepository()
-        min_trade_size = await settings_repo.get_value("min_trade_size", 150.0)
+        min_trade_size = await settings_repo.get_float("min_trade_size", 150.0)
 
         # Connect to broker
         client = get_tradernet_client()
@@ -92,7 +90,6 @@ async def _check_and_rebalance_internal():
         position_repo = PositionRepository()
         trade_repo = TradeRepository()
         allocation_repo = AllocationRepository()
-        portfolio_repo = PortfolioRepository()
         db_manager = get_db_manager()
 
         # Step 2: Build portfolio context
@@ -105,13 +102,17 @@ async def _check_and_rebalance_internal():
         total_value = await position_repo.get_total_value()
 
         # Build portfolio context for scoring
+        # get_all() returns Dict[str, float] with keys like "geography:name"
         geo_weights = {}
         industry_weights = {}
-        for alloc in allocations:
-            if alloc.category == "geography":
-                geo_weights[alloc.name] = alloc.target_pct
-            elif alloc.category == "industry":
-                industry_weights[alloc.name] = alloc.target_pct
+        for key, target_pct in allocations.items():
+            parts = key.split(":", 1)
+            if len(parts) == 2:
+                alloc_type, name = parts
+                if alloc_type == "geography":
+                    geo_weights[name] = target_pct
+                elif alloc_type == "industry":
+                    industry_weights[name] = target_pct
 
         position_map = {p.symbol: p.market_value_eur or 0 for p in positions}
         stock_geographies = {s.symbol: s.geography for s in stocks}

@@ -10,7 +10,6 @@ from app.infrastructure.events import emit, SystemEvent
 from app.infrastructure.hardware.led_display import set_activity
 from app.infrastructure.locking import file_lock
 from app.infrastructure.database.manager import get_db_manager
-from app.domain.models import Position
 from app.domain.constants import DEFAULT_CURRENCY
 
 logger = logging.getLogger(__name__)

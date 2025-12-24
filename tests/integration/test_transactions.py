@@ -28,7 +28,7 @@ async def test_transaction_rollback_on_error(db, trade_repo):
     try:
         async with db.transaction():
             # First trade should be inserted
-            await trade_repo.create(trade1, auto_commit=False)
+            await trade_repo.create(trade1)
 
             # Force an error by violating a constraint
             await db.execute("INSERT INTO trades (symbol) VALUES (NULL)")
@@ -76,8 +76,8 @@ async def test_transaction_commit_on_success(db, stock_repo, trade_repo):
     )
 
     async with db.transaction():
-        await trade_repo.create(trade1, auto_commit=False)
-        await trade_repo.create(trade2, auto_commit=False)
+        await trade_repo.create(trade1)
+        await trade_repo.create(trade2)
 
     # Both trades should be committed
     history = await trade_repo.get_history(limit=10)
@@ -116,8 +116,8 @@ async def test_multiple_repository_operations_in_transaction(db):
     )
 
     async with db.transaction():
-        await stock_repo.create(stock, auto_commit=False)
-        await position_repo.upsert(position, auto_commit=False)
+        await stock_repo.create(stock)
+        await position_repo.upsert(position)
 
     # Both should be committed
     retrieved_stock = await stock_repo.get_by_symbol("AAPL")
@@ -155,13 +155,13 @@ async def test_auto_commit_behavior(db, stock_repo, trade_repo):
         order_id="order1",
     )
 
-    # With auto_commit=True, should commit immediately
-    await trade_repo.create(trade, auto_commit=True)
+    # Trade should commit after create
+    await trade_repo.create(trade)
 
     history = await trade_repo.get_history(limit=10)
     assert len(history) == 1
 
-    # With auto_commit=False inside a transaction, changes are committed at the end
+    # Inside a transaction, changes are committed at the end
     trade2 = Trade(
         symbol="MSFT",
         side="BUY",
@@ -171,9 +171,8 @@ async def test_auto_commit_behavior(db, stock_repo, trade_repo):
         order_id="order2",
     )
 
-    # Start a transaction to test auto_commit=False behavior
     async with db.transaction():
-        await trade_repo.create(trade2, auto_commit=False)
+        await trade_repo.create(trade2)
 
     # After transaction commits, should have 2 trades
     history = await trade_repo.get_history(limit=10)

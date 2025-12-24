@@ -5,7 +5,6 @@ from datetime import datetime
 from pathlib import Path
 from fastapi import APIRouter
 from app.config import settings
-from app.infrastructure.database.manager import get_db_manager
 from app.repositories import (
     PortfolioRepository,
     StockRepository,
@@ -93,11 +92,11 @@ async def _build_ticker_text() -> str:
     try:
         # Get display settings
         settings_repo = SettingsRepository()
-        show_value = await settings_repo.get_value("ticker_show_value", 1.0) == 1.0
-        show_cash = await settings_repo.get_value("ticker_show_cash", 1.0) == 1.0
-        show_actions = await settings_repo.get_value("ticker_show_actions", 1.0) == 1.0
-        show_amounts = await settings_repo.get_value("ticker_show_amounts", 1.0) == 1.0
-        max_actions = int(await settings_repo.get_value("ticker_max_actions", 3))
+        show_value = await settings_repo.get_float("ticker_show_value", 1.0) == 1.0
+        show_cash = await settings_repo.get_float("ticker_show_cash", 1.0) == 1.0
+        show_actions = await settings_repo.get_float("ticker_show_actions", 1.0) == 1.0
+        show_amounts = await settings_repo.get_float("ticker_show_amounts", 1.0) == 1.0
+        max_actions = int(await settings_repo.get_float("ticker_max_actions", 3))
 
         # Get portfolio summary
         portfolio_repo = PortfolioRepository()
@@ -238,8 +237,8 @@ async def _refresh_led_display_cache():
 
         # Get settings
         settings_repo = SettingsRepository()
-        ticker_speed = await settings_repo.get_value("ticker_speed", 50.0)
-        led_brightness = int(await settings_repo.get_value("led_brightness", 150))
+        ticker_speed = await settings_repo.get_float("ticker_speed", 50.0)
+        led_brightness = int(await settings_repo.get_float("led_brightness", 150))
 
         # Cache for 2 seconds
         cache.set("led_display:ticker_data", {
@@ -374,7 +373,6 @@ async def get_disk_usage():
         - data_dir_size_mb: Data directory size
     """
     try:
-        db_manager = get_db_manager()
         data_dir = settings.data_dir
 
         # System disk usage

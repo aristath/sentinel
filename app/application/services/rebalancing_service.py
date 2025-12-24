@@ -129,7 +129,7 @@ class RebalancingService:
                 history_db = await self._db_manager.history(symbol)
                 rows = await history_db.fetchall(
                     """
-                    SELECT date, close FROM daily_prices
+                    SELECT date, close_price FROM daily_prices
                     ORDER BY date DESC LIMIT 400
                     """,
                 )

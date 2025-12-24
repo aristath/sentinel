@@ -4,7 +4,7 @@ Scoring Models - All dataclasses for scoring calculations.
 These models represent the computed scores and their components.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, Dict
 
