@@ -19,11 +19,11 @@ scheduler: AsyncIOScheduler = None
 _job_failures: dict[str, list[datetime]] = defaultdict(list)
 
 
-async def _get_job_setting(key: str) -> float:
-    """Get job interval setting from database."""
-    from app.api.settings import get_setting_value
+async def _get_all_job_settings() -> dict[str, float]:
+    """Get all job interval settings from database in one query."""
+    from app.api.settings import get_job_settings
 
-    return await get_setting_value(key)
+    return await get_job_settings()
 
 
 def job_listener(event):
@@ -73,15 +73,16 @@ async def init_scheduler() -> AsyncIOScheduler:
     from app.jobs.maintenance import run_daily_maintenance, run_weekly_maintenance
     from app.jobs.sync_trades import sync_trades
 
-    # Get intervals from database settings
-    portfolio_minutes = int(await _get_job_setting("job_portfolio_sync_minutes"))
-    trade_minutes = int(await _get_job_setting("job_trade_sync_minutes"))
-    price_minutes = int(await _get_job_setting("job_price_sync_minutes"))
-    score_minutes = int(await _get_job_setting("job_score_refresh_minutes"))
-    rebalance_minutes = int(await _get_job_setting("job_rebalance_check_minutes"))
-    cash_flow_hour = int(await _get_job_setting("job_cash_flow_sync_hour"))
-    historical_hour = int(await _get_job_setting("job_historical_sync_hour"))
-    maintenance_hour = int(await _get_job_setting("job_maintenance_hour"))
+    # Get all job intervals from database in one query
+    job_settings = await _get_all_job_settings()
+    portfolio_minutes = int(job_settings["job_portfolio_sync_minutes"])
+    trade_minutes = int(job_settings["job_trade_sync_minutes"])
+    price_minutes = int(job_settings["job_price_sync_minutes"])
+    score_minutes = int(job_settings["job_score_refresh_minutes"])
+    rebalance_minutes = int(job_settings["job_rebalance_check_minutes"])
+    cash_flow_hour = int(job_settings["job_cash_flow_sync_hour"])
+    historical_hour = int(job_settings["job_historical_sync_hour"])
+    maintenance_hour = int(job_settings["job_maintenance_hour"])
 
     # Tradernet portfolio sync
     scheduler.add_job(
@@ -179,15 +180,16 @@ async def reschedule_all_jobs():
         logger.warning("Scheduler not initialized, cannot reschedule")
         return
 
-    # Get current intervals from database
-    portfolio_minutes = int(await _get_job_setting("job_portfolio_sync_minutes"))
-    trade_minutes = int(await _get_job_setting("job_trade_sync_minutes"))
-    price_minutes = int(await _get_job_setting("job_price_sync_minutes"))
-    score_minutes = int(await _get_job_setting("job_score_refresh_minutes"))
-    rebalance_minutes = int(await _get_job_setting("job_rebalance_check_minutes"))
-    cash_flow_hour = int(await _get_job_setting("job_cash_flow_sync_hour"))
-    historical_hour = int(await _get_job_setting("job_historical_sync_hour"))
-    maintenance_hour = int(await _get_job_setting("job_maintenance_hour"))
+    # Get all job intervals from database in one query
+    job_settings = await _get_all_job_settings()
+    portfolio_minutes = int(job_settings["job_portfolio_sync_minutes"])
+    trade_minutes = int(job_settings["job_trade_sync_minutes"])
+    price_minutes = int(job_settings["job_price_sync_minutes"])
+    score_minutes = int(job_settings["job_score_refresh_minutes"])
+    rebalance_minutes = int(job_settings["job_rebalance_check_minutes"])
+    cash_flow_hour = int(job_settings["job_cash_flow_sync_hour"])
+    historical_hour = int(job_settings["job_historical_sync_hour"])
+    maintenance_hour = int(job_settings["job_maintenance_hour"])
 
     # Reschedule interval jobs
     scheduler.reschedule_job(

@@ -46,7 +46,8 @@ class SettingUpdate(BaseModel):
 
 async def get_setting(key: str, default: str = None) -> str | None:
     """Get a setting value from the database."""
-    async with aiosqlite.connect(settings.database_path) as db:
+    from app.database import get_db_connection
+    async with get_db_connection() as db:
         cursor = await db.execute(
             "SELECT value FROM settings WHERE key = ?",
             (key,)
@@ -55,9 +56,23 @@ async def get_setting(key: str, default: str = None) -> str | None:
         return row[0] if row else default
 
 
+async def get_settings_batch(keys: list[str]) -> dict[str, str]:
+    """Get multiple settings in a single database query."""
+    from app.database import get_db_connection
+    async with get_db_connection() as db:
+        placeholders = ",".join("?" * len(keys))
+        cursor = await db.execute(
+            f"SELECT key, value FROM settings WHERE key IN ({placeholders})",
+            keys
+        )
+        rows = await cursor.fetchall()
+        return {row[0]: row[1] for row in rows}
+
+
 async def set_setting(key: str, value: str) -> None:
     """Set a setting value in the database."""
-    async with aiosqlite.connect(settings.database_path) as db:
+    from app.database import get_db_connection
+    async with get_db_connection() as db:
         await db.execute(
             """
             INSERT INTO settings (key, value) VALUES (?, ?)
@@ -76,13 +91,32 @@ async def get_setting_value(key: str) -> float:
     return SETTING_DEFAULTS.get(key, 0)
 
 
+async def get_job_settings() -> dict[str, float]:
+    """Get all job scheduling settings in one query."""
+    job_keys = [k for k in SETTING_DEFAULTS if k.startswith("job_")]
+    db_values = await get_settings_batch(job_keys)
+    result = {}
+    for key in job_keys:
+        if key in db_values:
+            result[key] = float(db_values[key])
+        else:
+            result[key] = SETTING_DEFAULTS[key]
+    return result
+
+
 @router.get("")
 async def get_all_settings():
     """Get all configurable settings."""
+    # Get all settings in a single query
+    keys = list(SETTING_DEFAULTS.keys())
+    db_values = await get_settings_batch(keys)
+
     result = {}
     for key, default in SETTING_DEFAULTS.items():
-        db_value = await get_setting(key)
-        result[key] = float(db_value) if db_value else default
+        if key in db_values:
+            result[key] = float(db_values[key])
+        else:
+            result[key] = default
     return result
 
 
