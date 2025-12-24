@@ -36,3 +36,4 @@ class AllocationRepository(ABC):
             auto_commit: If True, commit immediately. If False, caller manages transaction.
         """
         pass
+

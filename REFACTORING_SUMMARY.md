@@ -141,3 +141,4 @@ pytest
 Test structure:
 - `tests/unit/domain/` - Domain logic tests (no database needed)
 - `tests/integration/` - Repository integration tests (with database)
+

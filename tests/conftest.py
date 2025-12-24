@@ -106,3 +106,4 @@ def setup_test_environment(monkeypatch, tmp_path):
     from app.infrastructure import locking
     locking.LOCK_DIR = lock_dir
     locking.LOCK_DIR.mkdir(parents=True, exist_ok=True)
+

@@ -248,3 +248,4 @@ async def test_allocation_target_validation_error(db):
     asia_target = next((t for t in targets if t.name == "ASIA"), None)
     assert asia_target is not None
     assert asia_target.target_pct == 0.3
+

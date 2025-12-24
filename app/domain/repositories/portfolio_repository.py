@@ -44,3 +44,4 @@ class PortfolioRepository(ABC):
     async def get_latest_cash_balance(self) -> float:
         """Get cash balance from latest snapshot."""
         pass
+

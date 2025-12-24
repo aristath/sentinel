@@ -132,3 +132,4 @@ class PortfolioService:
             geographic_allocations=geo_allocations,
             industry_allocations=industry_allocations,
         )
+

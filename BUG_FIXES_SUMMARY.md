@@ -233,3 +233,4 @@ New environment variables available (with defaults):
 - `RATE_LIMIT_TRADE_WINDOW` (default: 60)
 - `JOB_FAILURE_THRESHOLD` (default: 5)
 - `JOB_FAILURE_WINDOW_HOURS` (default: 1)
+

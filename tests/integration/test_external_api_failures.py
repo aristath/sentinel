@@ -233,3 +233,4 @@ async def test_health_check_with_degraded_services():
             assert "status" in data
             assert "tradernet" in data
             assert "yahoo_finance" in data
+

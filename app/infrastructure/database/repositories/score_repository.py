@@ -136,3 +136,4 @@ class SQLiteScoreRepository(ScoreRepository):
                 calculated_at=calculated_at,
             ))
         return scores
+

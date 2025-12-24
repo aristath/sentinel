@@ -71,3 +71,4 @@ class SQLiteAllocationRepository(AllocationRepository):
         )
         if auto_commit:
             await self.db.commit()
+

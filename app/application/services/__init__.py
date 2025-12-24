@@ -19,3 +19,4 @@ __all__ = [
     "get_currency_exchange_service",
     "get_stock_currency",
 ]
+

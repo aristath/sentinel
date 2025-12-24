@@ -51,3 +51,4 @@ class ScoreRepository(ABC):
     async def get_all(self) -> List[StockScore]:
         """Get all scores."""
         pass
+

@@ -71,3 +71,4 @@ class StockRepository(ABC):
     async def get_with_scores(self) -> List[dict]:
         """Get all active stocks with their scores and positions."""
         pass
+

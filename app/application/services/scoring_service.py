@@ -124,3 +124,4 @@ class ScoringService:
                     await self.score_repo.upsert(domain_score)
 
         return scores
+

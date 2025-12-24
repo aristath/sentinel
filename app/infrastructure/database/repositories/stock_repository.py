@@ -181,3 +181,4 @@ class SQLiteStockRepository(StockRepository):
         """)
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
+

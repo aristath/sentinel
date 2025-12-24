@@ -79,3 +79,4 @@ The following utility functions and dataclasses are still in `allocator.py` beca
 ---
 
 **Status:** ✅ Complete - All backward compatibility code removed
+

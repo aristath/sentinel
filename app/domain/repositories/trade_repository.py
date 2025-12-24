@@ -41,3 +41,4 @@ class TradeRepository(ABC):
     async def get_recently_bought_symbols(self, days: int = 30) -> Set[str]:
         """Get symbols that were bought in the last N days."""
         pass
+

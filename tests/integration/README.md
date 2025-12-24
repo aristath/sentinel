@@ -65,3 +65,4 @@ Tests require:
 - `pytest>=7.4.0`
 - `pytest-asyncio>=0.21.0`
 - Test database fixtures (from `conftest.py`)
+

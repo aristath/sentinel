@@ -229,3 +229,4 @@ class TradeExecutionService:
                 emit(SystemEvent.ERROR_OCCURRED, message="LOW FX BAL")
 
         return results
+

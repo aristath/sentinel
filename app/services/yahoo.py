@@ -377,9 +377,11 @@ def get_batch_quotes(symbol_yahoo_map: dict[str, Optional[str]]) -> dict[str, fl
     try:
         with _led_api_call():
             # Use yfinance download for batch efficiency
+            # Use period="5d" to handle markets with different trading schedules
+            # (e.g., Christmas Eve: Asian markets open, US/EU closed)
             data = yf.download(
                 tickers=" ".join(yf_symbols),
-                period="1d",
+                period="5d",
                 progress=False,
                 threads=True
             )
@@ -389,14 +391,18 @@ def get_batch_quotes(symbol_yahoo_map: dict[str, Optional[str]]) -> dict[str, fl
                 if len(yf_symbols) == 1:
                     yf_sym = yf_symbols[0]
                     orig_sym = symbol_map[yf_sym]
-                    result[orig_sym] = float(data["Close"].iloc[-1])
+                    # Get last non-NaN value
+                    close_series = data["Close"].dropna()
+                    if len(close_series) > 0:
+                        result[orig_sym] = float(close_series.iloc[-1])
                 else:
                     for yf_sym in yf_symbols:
                         orig_sym = symbol_map[yf_sym]
                         if yf_sym in data["Close"].columns:
-                            price = data["Close"][yf_sym].iloc[-1]
-                            if not pd.isna(price):
-                                result[orig_sym] = float(price)
+                            # Get last non-NaN value for this symbol
+                            close_series = data["Close"][yf_sym].dropna()
+                            if len(close_series) > 0:
+                                result[orig_sym] = float(close_series.iloc[-1])
 
     except Exception as e:
         logger.error(f"Failed to get batch quotes: {e}")

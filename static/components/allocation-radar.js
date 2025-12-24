@@ -299,7 +299,10 @@ function allocationRadarComponent() {
       });
     },
 
-    getChartOptions() {
+    getChartOptions(suggestedMax = 100) {
+      // Add 25% padding above the max value for better visual spacing
+      const paddedMax = suggestedMax > 0 ? Math.ceil(suggestedMax * 1.25) : 100;
+      
       return {
         responsive: true,
         maintainAspectRatio: false,
@@ -318,7 +321,7 @@ function allocationRadarComponent() {
         scales: {
           r: {
             beginAtZero: true,
-            max: 100,
+            suggestedMax: paddedMax,
             ticks: {
               stepSize: 25,
               color: '#6B7280',

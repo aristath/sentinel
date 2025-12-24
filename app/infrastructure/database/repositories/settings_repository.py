@@ -36,3 +36,4 @@ class SQLiteSettingsRepository(SettingsRepository):
     async def set_float(self, key: str, value: float) -> None:
         """Set a setting value as float."""
         await self.set(key, str(value))
+

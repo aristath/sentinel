@@ -87,3 +87,4 @@ class SQLitePortfolioRepository(PortfolioRepository):
         """)
         row = await cursor.fetchone()
         return row[0] if row else 0.0
+

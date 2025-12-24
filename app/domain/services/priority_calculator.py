@@ -138,3 +138,4 @@ class PriorityCalculator:
         results.sort(key=lambda x: x.combined_priority, reverse=True)
 
         return results
+

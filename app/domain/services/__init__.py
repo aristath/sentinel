@@ -11,3 +11,4 @@ __all__ = [
     "PriorityInput",
     "PriorityResult",
 ]
+
