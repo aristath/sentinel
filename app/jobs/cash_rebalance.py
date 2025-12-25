@@ -678,9 +678,16 @@ async def _get_buy_trades(
     candidates.sort(key=lambda x: x["final_score"], reverse=True)
 
     # Build trade recommendations
+    from app.domain.value_objects.currency import Currency
+    from app.domain.value_objects.recommendation_status import RecommendationStatus
+    
     trades = []
     for c in candidates[:5]:  # Top 5 candidates
-        trades.append(TradeRecommendation(
+        currency_str = c.get("currency", "EUR")
+        currency_enum = Currency.from_string(currency_str) if isinstance(currency_str, str) else currency_str
+        stock = next((s for s in stocks if s.symbol == c["symbol"]), None)
+        
+        trades.append(Recommendation(
             symbol=c["symbol"],
             name=c["name"],
             side=TradeSide.BUY,
@@ -688,7 +695,9 @@ async def _get_buy_trades(
             estimated_price=round(c["price"], 2),
             estimated_value=round(c["trade_value_eur"], 2),
             reason=c["reason"],
-            currency=c["currency"],
+            geography=stock.geography if stock else "",
+            currency=currency_enum,
+            status=RecommendationStatus.PENDING,
         ))
 
     return trades
