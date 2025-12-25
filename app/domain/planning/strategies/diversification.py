@@ -206,7 +206,7 @@ class DiversificationStrategy(RecommendationStrategy):
             if not score_row:
                 continue
             
-            total_score = score_row.get("total_score") or 0.5
+            total_score = score_row["total_score"] or 0.5
             if total_score < settings.min_stock_score:
                 continue
             
@@ -235,7 +235,7 @@ class DiversificationStrategy(RecommendationStrategy):
             # Calculate portfolio score improvement
             geography = stock.geography
             industry = stock.industry
-            quality_score = score_row.get("quality_score") or 0.5
+            quality_score = score_row["quality_score"] or 0.5
             
             new_score, score_change = calculate_post_transaction_score(
                 symbol=symbol,

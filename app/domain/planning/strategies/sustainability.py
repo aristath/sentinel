@@ -167,8 +167,8 @@ class SustainabilityStrategy(RecommendationStrategy):
             if not score_row:
                 continue
             
-            quality_score = score_row.get("quality_score") or 0.5
-            total_score = score_row.get("total_score") or 0.5
+            quality_score = score_row["quality_score"] or 0.5
+            total_score = score_row["total_score"] or 0.5
             
             # Only consider high-quality stocks
             if quality_score < 0.65 or total_score < settings.min_stock_score:

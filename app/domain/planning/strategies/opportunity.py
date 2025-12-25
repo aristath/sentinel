@@ -68,7 +68,7 @@ class OpportunityStrategy(RecommendationStrategy):
         )
         
         # Build score map
-        opportunity_scores = {row["symbol"]: row.get("opportunity_score") or 0.5 for row in score_rows}
+        opportunity_scores = {row["symbol"]: row["opportunity_score"] or 0.5 for row in score_rows}
         
         # Calculate average opportunity score
         portfolio_opportunity_scores = [
@@ -191,8 +191,8 @@ class OpportunityStrategy(RecommendationStrategy):
             if not score_row:
                 continue
             
-            opportunity_score = score_row.get("opportunity_score") or 0.5
-            total_score = score_row.get("total_score") or 0.5
+            opportunity_score = score_row["opportunity_score"] or 0.5
+            total_score = score_row["total_score"] or 0.5
             
             # Only consider high-opportunity stocks
             if opportunity_score < 0.60 or total_score < settings.min_stock_score:
@@ -241,7 +241,7 @@ class OpportunityStrategy(RecommendationStrategy):
                 trade_value_eur = quantity * price / exchange_rate
             
             # Calculate portfolio score improvement
-            quality_score = score_row.get("quality_score") or 0.5
+            quality_score = score_row["quality_score"] or 0.5
             new_score, score_change = calculate_post_transaction_score(
                 symbol=symbol,
                 geography=stock.geography,
@@ -314,7 +314,7 @@ class OpportunityStrategy(RecommendationStrategy):
                 (pos.symbol,)
             )
             if score_row:
-                opp_score = score_row.get("opportunity_score") or 0.5
+                opp_score = score_row["opportunity_score"] or 0.5
                 if opp_score < recovered_threshold and pos.market_value_eur and pos.market_value_eur > 0:
                     candidate_positions.append((pos, stock, opp_score))
         
