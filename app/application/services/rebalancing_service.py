@@ -280,19 +280,26 @@ class RebalancingService:
             # Convert cached dicts back to Recommendation objects
             recommendations = []
             for c in cached[:limit]:
+                # Map old fields to unified model
+                from app.domain.value_objects.currency import Currency
+                currency_str = c.get("currency", "EUR")
+                currency = Currency.from_string(currency_str) if isinstance(currency_str, str) else currency_str
+                
                 recommendations.append(Recommendation(
                     symbol=c["symbol"],
                     name=c["name"],
-                    amount=c["amount"],
-                    priority=c["priority"],
+                    side=TradeSide.BUY,
+                    quantity=c.get("quantity", 0),
+                    estimated_price=c.get("current_price") or c.get("estimated_price", 0),
+                    estimated_value=c.get("amount") or c.get("estimated_value", 0),
                     reason=c["reason"],
                     geography=c["geography"],
-                    industry=c["industry"],
-                    current_price=c.get("current_price"),
-                    quantity=c.get("quantity"),
+                    industry=c.get("industry"),
+                    currency=currency,
+                    priority=c.get("priority"),
                     current_portfolio_score=c.get("current_portfolio_score"),
                     new_portfolio_score=c.get("new_portfolio_score"),
-                    score_change=c.get("score_change"),
+                    status=RecommendationStatus.PENDING,
                 ))
             return recommendations
 
@@ -494,24 +501,26 @@ class RebalancingService:
         # Build recommendations and store them
         recommendations = []
         for candidate in candidates[:limit]:
+            # Get currency from stock
+            stock = next((s for s in stocks if s.symbol == candidate["symbol"]), None)
+            currency = stock.currency if stock else Currency.EUR
+            
             rec = Recommendation(
                 symbol=candidate["symbol"],
                 name=candidate["name"],
-                amount=round(candidate["trade_value"], 2),
-                priority=round(candidate["final_score"], 2),
+                side=TradeSide.BUY,
+                quantity=candidate["quantity"],
+                estimated_price=round(candidate["price"], 2),
+                estimated_value=round(candidate["trade_value"], 2),
                 reason=candidate["reason"],
                 geography=candidate["geography"],
-                industry=candidate["industry"],
-                current_price=round(candidate["price"], 2),
-                quantity=candidate["quantity"],
+                industry=candidate.get("industry"),
+                currency=currency,
+                priority=round(candidate["final_score"], 2),
                 current_portfolio_score=round(candidate["current_portfolio_score"], 1),
                 new_portfolio_score=round(candidate["new_portfolio_score"], 1),
-                score_change=round(candidate["score_change"], 2),
+                status=RecommendationStatus.PENDING,
             )
-
-            # Get currency from stock
-            stock = next((s for s in stocks if s.symbol == rec.symbol), None)
-            currency = stock.currency if stock else "EUR"
             
             # Store recommendation in database (create or update)
             recommendation_data = {
@@ -567,7 +576,7 @@ class RebalancingService:
     async def calculate_rebalance_trades(
         self,
         available_cash: float
-    ) -> List[TradeRecommendation]:
+    ) -> List[Recommendation]:
         """
         Calculate optimal trades using get_recommendations() as the source of truth.
         """
@@ -585,29 +594,15 @@ class RebalancingService:
             logger.info("No buy recommendations available")
             return []
 
-        # Convert Recommendation → TradeRecommendation
+        # Recommendations are already in unified format, just filter valid ones
         trades = []
-        stocks = await self._stock_repo.get_all_active()
-        stocks_by_symbol = {s.symbol: s for s in stocks}
-
         for rec in recommendations:
-            if rec.quantity is None or rec.current_price is None:
-                logger.warning(f"Skipping {rec.symbol}: missing quantity or price")
+            if rec.quantity is None or rec.quantity <= 0 or rec.estimated_price is None or rec.estimated_price <= 0:
+                logger.warning(f"Skipping {rec.symbol}: missing or invalid quantity or price")
                 continue
 
-            stock = stocks_by_symbol.get(rec.symbol)
-            currency = stock.currency if stock else "EUR"
-
-            trades.append(TradeRecommendation(
-                symbol=rec.symbol,
-                name=rec.name,
-                side=TradeSide.BUY,
-                quantity=rec.quantity,
-                estimated_price=rec.current_price,
-                estimated_value=rec.amount,
-                reason=rec.reason,
-                currency=currency,
-            ))
+            # Recommendation is already in the correct format
+            trades.append(rec)
 
         logger.info(f"Generated {len(trades)} trade recommendations from {len(recommendations)} buy recommendations")
 
@@ -616,7 +611,7 @@ class RebalancingService:
     async def calculate_sell_recommendations(
         self,
         limit: int = 3
-    ) -> List[TradeRecommendation]:
+    ) -> List[Recommendation]:
         """
         Calculate optimal SELL recommendations based on sell scoring system.
         """
@@ -640,10 +635,13 @@ class RebalancingService:
         cached = await rec_cache.get_recommendations(portfolio_hash, "sell")
         if cached:
             logger.info(f"Using cached sell recommendations ({len(cached)} items)")
-            # Convert cached dicts back to TradeRecommendation objects
+            # Convert cached dicts back to Recommendation objects
             recommendations = []
             for c in cached[:limit]:
-                recommendations.append(TradeRecommendation(
+                currency_str = c.get("currency", "EUR")
+                currency = Currency.from_string(currency_str) if isinstance(currency_str, str) else currency_str
+                
+                recommendations.append(Recommendation(
                     symbol=c["symbol"],
                     name=c["name"],
                     side=TradeSide.SELL,
@@ -651,7 +649,9 @@ class RebalancingService:
                     estimated_price=c["estimated_price"],
                     estimated_value=c["estimated_value"],
                     reason=c["reason"],
-                    currency=c.get("currency", "EUR"),
+                    geography=c.get("geography", ""),
+                    currency=currency,
+                    status=RecommendationStatus.PENDING,
                 ))
             return recommendations
 
@@ -757,7 +757,7 @@ class RebalancingService:
             reason_parts.append(f"sell score: {score.total_score:.2f}")
             reason = ", ".join(reason_parts) if reason_parts else "eligible for sell"
 
-            rec = TradeRecommendation(
+            rec = Recommendation(
                 symbol=score.symbol,
                 name=pos.get("name", score.symbol),
                 side=TradeSide.SELL,
@@ -765,7 +765,9 @@ class RebalancingService:
                 estimated_price=round(current_price, 2),
                 estimated_value=round(score.suggested_sell_value, 2),
                 reason=reason,
+                geography=stock.geography if stock else "",
                 currency=currency,
+                status=RecommendationStatus.PENDING,
             )
 
             # Store recommendation in database (create or update)
@@ -1231,7 +1233,7 @@ class RebalancingService:
                     if score_change > best_score_change:
                         best_score_change = score_change
                         # Create adjusted sell recommendation with correct value
-                        adjusted_sell_rec = TradeRecommendation(
+                        adjusted_sell_rec = Recommendation(
                             symbol=sell_rec.symbol,
                             name=sell_rec.name,
                             side=sell_rec.side,
@@ -1239,7 +1241,9 @@ class RebalancingService:
                             estimated_price=sell_rec.estimated_price,
                             estimated_value=sell_value,
                             reason=sell_rec.reason,
+                            geography=sell_rec.geography,
                             currency=sell_rec.currency,
+                            status=sell_rec.status,
                         )
                         best_recommendation = {
                             "type": "SELL",
