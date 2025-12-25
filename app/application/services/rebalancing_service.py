@@ -31,7 +31,8 @@ from app.domain.scoring import (
     PortfolioContext,
     TechnicalData,
 )
-from app.domain.models import TradeRecommendation, StockPriority
+from app.domain.models import Recommendation, StockPriority
+from app.domain.value_objects.recommendation_status import RecommendationStatus
 from app.services.allocator import calculate_position_size, get_max_trades
 from app.services import yahoo
 from app.services.tradernet import get_exchange_rate
@@ -75,21 +76,8 @@ def _determine_stock_currency(stock: dict) -> str:
     return "EUR"
 
 
-@dataclass
-class Recommendation:
-    """A single trade recommendation."""
-    symbol: str
-    name: str
-    amount: float  # Trade amount in EUR (converted from native currency)
-    priority: float  # Combined priority score
-    reason: str
-    geography: str
-    industry: str | None
-    current_price: float | None = None
-    quantity: int | None = None  # Actual shares to buy (respects min_lot)
-    current_portfolio_score: float | None = None  # Portfolio score before transaction
-    new_portfolio_score: float | None = None  # Portfolio score after transaction
-    score_change: float | None = None  # Positive = improvement
+# Recommendation model moved to app.domain.models - use unified Recommendation
+# Local Recommendation model removed - use domain model instead
 
 
 @dataclass
