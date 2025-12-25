@@ -223,8 +223,9 @@ function allocationRadarComponent(geoCanvasId, industryCanvasId, chartType) {
         return;
       }
 
-      const activeGeos = this.$store.app.activeGeographies || [];
-      const allocation = this.$store.app.allocation?.geographic || [];
+      // Cache reactive data before Chart.js operations to prevent reactivity loops
+      const activeGeos = Array.from(this.$store.app.activeGeographies || []);
+      const allocation = JSON.parse(JSON.stringify(this.$store.app.allocation?.geographic || []));
 
       if (activeGeos.length === 0) {
         console.warn('No active geographies available for chart');
@@ -323,8 +324,9 @@ function allocationRadarComponent(geoCanvasId, industryCanvasId, chartType) {
         return;
       }
 
-      const activeIndustries = this.$store.app.activeIndustries || [];
-      const allocation = this.$store.app.allocation?.industry || [];
+      // Cache reactive data before Chart.js operations to prevent reactivity loops
+      const activeIndustries = Array.from(this.$store.app.activeIndustries || []);
+      const allocation = JSON.parse(JSON.stringify(this.$store.app.allocation?.industry || []));
 
       if (activeIndustries.length === 0) {
         console.warn('No active industries available for chart');
@@ -431,20 +433,29 @@ function allocationRadarComponent(geoCanvasId, industryCanvasId, chartType) {
       // Prevent recursive updates
       if (this.updatingCharts) return;
 
+      // Set flag immediately to prevent reactive property access from triggering updates
+      this.updatingCharts = true;
+
       // Clear any pending updates
       if (this.updateTimer) {
         clearTimeout(this.updateTimer);
         this.updateTimer = null;
       }
 
+      // Cache all reactive data before Chart.js operations to prevent reactivity loops
+      const cachedActiveGeos = Array.from(this.$store.app.activeGeographies || []);
+      const cachedActiveIndustries = Array.from(this.$store.app.activeIndustries || []);
+      const cachedGeoAllocation = JSON.parse(JSON.stringify(this.$store.app.allocation?.geographic || []));
+      const cachedIndustryAllocation = JSON.parse(JSON.stringify(this.$store.app.allocation?.industry || []));
+
       // Debounce the update
       this.updateTimer = setTimeout(() => {
-        this.updatingCharts = true;
         try {
           // Update or create geo chart
           if (this.chartType === 'geographic' || this.chartType === 'both') {
-            const activeGeos = this.$store.app.activeGeographies || [];
-            const geoAllocation = this.$store.app.allocation?.geographic || [];
+            // Use cached data to prevent reactive property access
+            const activeGeos = cachedActiveGeos;
+            const geoAllocation = cachedGeoAllocation;
 
             if (activeGeos.length > 0 && Array.isArray(geoAllocation) && geoAllocation.length > 0) {
               // Prepare data for change detection
@@ -496,8 +507,9 @@ function allocationRadarComponent(geoCanvasId, industryCanvasId, chartType) {
 
           // Update or create industry chart
           if (this.chartType === 'industry' || this.chartType === 'both') {
-            const activeIndustries = this.$store.app.activeIndustries || [];
-            const industryAllocation = this.$store.app.allocation?.industry || [];
+            // Use cached data to prevent reactive property access
+            const activeIndustries = cachedActiveIndustries;
+            const industryAllocation = cachedIndustryAllocation;
 
             if (activeIndustries.length > 0 && Array.isArray(industryAllocation) && industryAllocation.length > 0) {
               // Prepare data for change detection
