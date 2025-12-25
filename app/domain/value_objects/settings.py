@@ -1,7 +1,7 @@
 """Settings value objects for application configuration."""
 
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 
 
 @dataclass(frozen=True)
@@ -74,7 +74,7 @@ class Settings:
             recommendation_depth=get_int("recommendation_depth", 1),
         )
     
-    def to_dict(self) -> Dict[str, float | int]:
+    def to_dict(self) -> Dict[str, Union[float, int]]:
         """Convert Settings to dictionary.
         
         Returns:
