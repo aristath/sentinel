@@ -107,6 +107,21 @@ class SettingsModal extends HTMLElement {
                            class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
                     <span class="text-gray-400 text-sm">steps</span>
                   </div>
+
+                  <!-- Min Stock Score -->
+                  <div>
+                    <span class="text-sm text-gray-300">Min Stock Score</span>
+                    <p class="text-xs text-gray-500">Minimum score to consider buying (0-1)</p>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <input type="number"
+                           min="0"
+                           max="1"
+                           step="0.05"
+                           :value="$store.app.settings.min_stock_score"
+                           @change="$store.app.updateSetting('min_stock_score', $event.target.value)"
+                           class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                  </div>
                 </div>
               </div>
 

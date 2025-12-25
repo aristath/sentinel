@@ -7,7 +7,7 @@ from typing import Dict, Optional, Union
 @dataclass(frozen=True)
 class Settings:
     """Application settings value object.
-    
+
     Encapsulates all application settings with validation and type safety.
     """
     min_trade_size: float = 150.0
@@ -16,6 +16,7 @@ class Settings:
     max_loss_threshold: float = -0.20
     target_annual_return: float = 0.10
     recommendation_depth: int = 1
+    min_stock_score: float = 0.5
     
     def __post_init__(self):
         """Validate settings values."""
@@ -36,6 +37,9 @@ class Settings:
         
         if self.recommendation_depth <= 0:
             raise ValueError("recommendation_depth must be positive")
+
+        if not 0 <= self.min_stock_score <= 1:
+            raise ValueError("min_stock_score must be between 0 and 1")
     
     @classmethod
     def from_dict(cls, data: Dict[str, str]) -> "Settings":
@@ -72,6 +76,7 @@ class Settings:
             max_loss_threshold=get_float("max_loss_threshold", -0.20),
             target_annual_return=get_float("target_annual_return", 0.10),
             recommendation_depth=get_int("recommendation_depth", 1),
+            min_stock_score=get_float("min_stock_score", 0.5),
         )
     
     def to_dict(self) -> Dict[str, Union[float, int]]:
@@ -87,6 +92,7 @@ class Settings:
             "max_loss_threshold": self.max_loss_threshold,
             "target_annual_return": self.target_annual_return,
             "recommendation_depth": self.recommendation_depth,
+            "min_stock_score": self.min_stock_score,
         }
 
 
