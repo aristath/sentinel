@@ -32,7 +32,7 @@ from app.domain.scoring import (
 )
 
 if TYPE_CHECKING:
-    from app.domain.models import TradeRecommendation
+    from app.domain.models import Recommendation
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ async def _check_and_rebalance_internal():
     from app.services import yahoo
     from app.services.tradernet import get_exchange_rate
     from app.application.services.trade_execution_service import TradeExecutionService
-    from app.domain.models import TradeRecommendation
+    from app.domain.models import Recommendation
     from app.domain.value_objects.trade_side import TradeSide
     from app.domain.constants import BUY_COOLDOWN_DAYS
 
@@ -332,9 +332,9 @@ async def _check_and_rebalance_internal():
 
 async def _get_best_sell_trade(
     positions, stocks, trade_repo, portfolio_context, db_manager
-) -> "TradeRecommendation | None":
+) -> "Recommendation | None":
     """Calculate and return the best sell trade, if any."""
-    from app.domain.models import TradeRecommendation
+    from app.domain.models import Recommendation
     from app.domain.value_objects.trade_side import TradeSide
     from app.domain.scoring import TechnicalData, calculate_all_sell_scores
     import numpy as np
@@ -501,7 +501,14 @@ async def _get_best_sell_trade(
     reason_parts.append(f"sell score: {best_sell.total_score:.2f}")
     reason = ", ".join(reason_parts) if reason_parts else "eligible for sell"
 
-    return TradeRecommendation(
+    from app.domain.value_objects.currency import Currency
+    from app.domain.value_objects.recommendation_status import RecommendationStatus
+    
+    currency_str = pos.get("currency", "EUR")
+    currency_enum = Currency.from_string(currency_str) if isinstance(currency_str, str) else currency_str
+    stock = next((s for s in stocks if s.get("symbol") == best_sell.symbol), None)
+    
+    return Recommendation(
         symbol=best_sell.symbol,
         name=pos.get("name", best_sell.symbol),
         side=TradeSide.SELL,
@@ -509,15 +516,17 @@ async def _get_best_sell_trade(
         estimated_price=round(pos.get("current_price") or pos.get("avg_price", 0), 2),
         estimated_value=round(best_sell.suggested_sell_value, 2),
         reason=reason,
-        currency=pos.get("currency", "EUR"),
+        geography=stock.get("geography", "") if stock else "",
+        currency=currency_enum,
+        status=RecommendationStatus.PENDING,
     )
 
 
 async def _get_buy_trades(
     stocks, positions, portfolio_context, recently_bought, min_trade_size, db_manager
-) -> "list[TradeRecommendation]":
+) -> "list[Recommendation]":
     """Calculate and return buy trades."""
-    from app.domain.models import TradeRecommendation
+    from app.domain.models import Recommendation
     from app.services import yahoo
     from app.services.tradernet import get_exchange_rate
     from app.domain.value_objects.trade_side import TradeSide
