@@ -1,6 +1,7 @@
 """Recommendation-related domain events."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from app.domain.events.base import DomainEvent
 from app.domain.models import Recommendation
 from app.domain.value_objects.trade_side import TradeSide
@@ -14,6 +15,7 @@ class RecommendationCreatedEvent(DomainEvent):
     has been generated for rebalancing.
     """
     recommendation: Recommendation
+    occurred_at: datetime = field(default_factory=datetime.now)
     
     @property
     def symbol(self) -> str:

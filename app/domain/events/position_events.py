@@ -1,6 +1,7 @@
 """Position-related domain events."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Optional
 from app.domain.events.base import DomainEvent
 from app.domain.models import Position
@@ -14,6 +15,7 @@ class PositionUpdatedEvent(DomainEvent):
     (quantity, price, etc. changed).
     """
     position: Position
+    occurred_at: datetime = field(default_factory=datetime.now)
     
     @property
     def symbol(self) -> str:
