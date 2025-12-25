@@ -1028,35 +1028,42 @@ class RebalancingService:
                 logger.warning(f"Strategic planning failed, falling back to forward-looking: {e}")
         
         # Fall back to existing forward-looking logic
-        # Multi-step generation
+        # Multi-step generation: MUST start with a SELL to make sense
+        # If no sell available, return empty (fall back to normal recommendations)
         steps = []
         current_context = await self._build_portfolio_context()
-        
+
         # Get performance-adjusted weights
         adjusted_geo_weights, adjusted_ind_weights = await self._get_performance_adjusted_weights()
         if adjusted_geo_weights:
             current_context.geo_weights.update(adjusted_geo_weights)
         if adjusted_ind_weights:
             current_context.industry_weights.update(adjusted_ind_weights)
-        
+
         # Get current cash balance
         from app.services.tradernet import get_tradernet_client
         client = get_tradernet_client()
         available_cash = client.get_total_cash_eur() if client.is_connected else 0.0
-        
+
         # Track used symbols to avoid duplicates
         used_symbols = set()
-        
+
         # Get recently bought symbols for cooldown
         recently_bought = await self._trade_repo.get_recently_bought_symbols(BUY_COOLDOWN_DAYS)
-        
+
+        # Multi-step MUST start with a sell - check if we have sellable positions first
+        sell_recs = await self.calculate_sell_recommendations(limit=10)
+        if not sell_recs:
+            logger.info("No sell recommendations available - multi-step not possible")
+            return []  # No multi-step possible without a sell to start
+
         for step_num in range(1, depth + 1):
             # Calculate current portfolio score
             current_score = calculate_portfolio_score(current_context)
-            
-            # Determine if we should prioritize sells or buys
-            # First step: prioritize sells to free up cash
-            # Subsequent steps: prioritize buys if cash available, else sells
+
+            # Multi-step logic:
+            # Step 1: MUST be a sell (to generate cash and start the sequence)
+            # Subsequent steps: buys using freed cash, or more sells if beneficial
             prioritize_sells = (step_num == 1) or (available_cash < settings.min_cash_threshold)
             
             best_recommendation = None
@@ -1194,6 +1201,11 @@ class RebalancingService:
             
             # If we found a recommendation, add it to steps
             if best_recommendation:
+                # Step 1 MUST be a SELL for multi-step to make sense
+                if step_num == 1 and best_recommendation["type"] != "SELL":
+                    logger.info("Multi-step requires SELL as first step, but found BUY - aborting multi-step")
+                    return []  # Multi-step doesn't make sense without starting with a sell
+
                 rec = best_recommendation["rec"]
 
                 # Determine currency

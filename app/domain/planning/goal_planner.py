@@ -291,13 +291,19 @@ async def create_strategic_plan(
         
         new_score = calculate_portfolio_score(new_context)
         score_change = new_score.total - current_score.total
-        
+
+        # Strategic planners should only recommend buys that improve the portfolio
+        # Skip if this buy would lower the portfolio score
+        if score_change < 0:
+            logger.debug(f"Skipping {symbol}: buy would lower portfolio score by {score_change:.2f}")
+            continue
+
         # Build goal contribution
         goal_contrib = buy_candidate.get("reason", "buy")
-        
+
         estimated_price = buy_candidate.get("price", 0.0)
         currency = stock.currency or "EUR"
-        
+
         steps.append(PlanStep(
             step_number=step_num,
             side=TRADE_SIDE_BUY,
