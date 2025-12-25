@@ -397,6 +397,22 @@ class TradernetClient:
 
         return totals
 
+    def has_pending_order_for_symbol(self, symbol: str) -> bool:
+        """
+        Check if a pending order exists for the given symbol.
+
+        Args:
+            symbol: Stock symbol to check (e.g., "AAPL.US")
+
+        Returns:
+            True if any pending order exists for this symbol (regardless of side)
+        """
+        pending = self.get_pending_orders()
+        for order in pending:
+            if order["symbol"] == symbol:
+                return True
+        return False
+
     def get_historical_prices(
         self,
         symbol: str,

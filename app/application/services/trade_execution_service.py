@@ -185,6 +185,16 @@ class TradeExecutionService:
                         skipped_count += 1
                         continue
 
+                # Check for pending orders for this symbol (applies to both BUY and SELL)
+                if client.has_pending_order_for_symbol(trade.symbol):
+                    logger.warning(f"SAFETY BLOCK: {trade.symbol} has pending order, refusing to execute")
+                    results.append({
+                        "symbol": trade.symbol,
+                        "status": "blocked",
+                        "error": f"Pending order already exists for {trade.symbol}",
+                    })
+                    continue
+
                 # Show activity message for the trade
                 side_text = "BUYING" if trade.side.upper() == "BUY" else "SELLING"
                 value = int(trade.quantity * trade.estimated_price)

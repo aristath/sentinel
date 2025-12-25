@@ -85,6 +85,13 @@ async def execute_trade(trade: TradeRequest):
     if not client.is_connected:
         raise HTTPException(status_code=503, detail="Tradernet not connected")
 
+    # Check for pending orders for this symbol
+    if client.has_pending_order_for_symbol(trade.symbol):
+        raise HTTPException(
+            status_code=409,
+            detail=f"A pending order already exists for {trade.symbol}"
+        )
+
     result = client.place_order(
         symbol=trade.symbol,
         side=trade.side,
@@ -235,6 +242,13 @@ async def execute_recommendation(symbol: str):
         client = get_tradernet_client()
         if not client.is_connected:
             raise HTTPException(status_code=503, detail="Tradernet not connected")
+
+        # Check for pending orders for this symbol
+        if client.has_pending_order_for_symbol(symbol):
+            raise HTTPException(
+                status_code=409,
+                detail=f"A pending order already exists for {symbol}"
+            )
 
         result = client.place_order(
             symbol=symbol,
@@ -683,6 +697,13 @@ async def execute_multi_step_recommendation_step(step_number: int):
                     detail=f"Cannot buy {step['symbol']}: cooldown period active (bought within {BUY_COOLDOWN_DAYS} days)"
                 )
 
+        # Check for pending orders for this symbol
+        if client.has_pending_order_for_symbol(step["symbol"]):
+            raise HTTPException(
+                status_code=409,
+                detail=f"A pending order already exists for {step['symbol']}"
+            )
+
         # Execute the trade
         result = client.place_order(
             symbol=step["symbol"],
@@ -800,6 +821,17 @@ async def execute_all_multi_step_recommendations():
         # Execute each step sequentially
         for idx, step in enumerate(steps, start=1):
             try:
+                # Check for pending orders for this symbol
+                if client.has_pending_order_for_symbol(step["symbol"]):
+                    results.append({
+                        "step": idx,
+                        "status": "blocked",
+                        "symbol": step["symbol"],
+                        "error": f"A pending order already exists for {step['symbol']}",
+                    })
+                    logger.warning(f"Step {idx} blocked: pending order exists for {step['symbol']}")
+                    continue
+
                 result = client.place_order(
                     symbol=step["symbol"],
                     side=step["side"],
@@ -918,6 +950,13 @@ async def execute_sell_recommendation(symbol: str):
                     status_code=503,
                     detail="Failed to connect to Tradernet"
                 )
+
+        # Check for pending orders for this symbol
+        if client.has_pending_order_for_symbol(rec.symbol):
+            raise HTTPException(
+                status_code=409,
+                detail=f"A pending order already exists for {rec.symbol}"
+            )
 
         result = client.place_order(
             symbol=rec.symbol,
@@ -1121,6 +1160,15 @@ async def execute_funding(symbol: str, request: ExecuteFundingRequest):
         for sell in request.sells:
             sell_symbol = sell.symbol.upper()
 
+            # Check for pending orders for this symbol
+            if client.has_pending_order_for_symbol(sell_symbol):
+                sell_results.append({
+                    "symbol": sell_symbol,
+                    "status": "blocked",
+                    "error": f"A pending order already exists for {sell_symbol}",
+                })
+                continue
+
             result = client.place_order(
                 symbol=sell_symbol,
                 side=TRADE_SIDE_SELL,
@@ -1185,6 +1233,13 @@ async def execute_funding(symbol: str, request: ExecuteFundingRequest):
             raise HTTPException(
                 status_code=400,
                 detail=f"Insufficient cash for minimum lot of {symbol}"
+            )
+
+        # Check for pending orders for the buy symbol
+        if client.has_pending_order_for_symbol(symbol):
+            raise HTTPException(
+                status_code=409,
+                detail=f"A pending order already exists for {symbol}"
             )
 
         buy_result = client.place_order(
