@@ -169,9 +169,10 @@ class SustainabilityStrategy(RecommendationStrategy):
             
             quality_score = score_row["quality_score"] or 0.5
             total_score = score_row["total_score"] or 0.5
-            
-            # Only consider high-quality stocks
-            if quality_score < 0.65 or total_score < settings.min_stock_score:
+
+            # Only consider above-average quality stocks
+            # Lowered from 0.65 to 0.55 to ensure buy candidates are available
+            if quality_score < 0.55 or total_score < settings.min_stock_score:
                 continue
             
             # Determine currency and exchange rate
