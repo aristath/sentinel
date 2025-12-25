@@ -1326,6 +1326,7 @@ class RebalancingService:
             return []  # No multi-step possible without a sell to start
 
         for step_num in range(1, depth + 1):
+            print(f"=== MULTI-STEP {step_num} ===  available_cash={available_cash:.2f}, used_symbols={used_symbols}", flush=True)
             logger.warning(f"=== MULTI-STEP {step_num} ===  available_cash={available_cash:.2f}, used_symbols={used_symbols}")
 
             # Calculate current portfolio score
@@ -1413,11 +1414,14 @@ class RebalancingService:
                         }
             
             # If no sell recommendation or we have cash, try buy recommendations
-            if not best_recommendation or (available_cash >= settings.min_cash_threshold and not prioritize_sells):
+            buy_condition = not best_recommendation or (available_cash >= settings.min_cash_threshold and not prioritize_sells)
+            print(f"Step {step_num}: buy_condition={buy_condition}, best_rec={best_recommendation is not None}, cash={available_cash:.2f}, threshold={settings.min_cash_threshold}", flush=True)
+            if buy_condition:
                 # For step 1, use get_recommendations (uses real portfolio)
                 # For step 2+, we should ideally use simulated context, but get_recommendations
                 # rebuilds context. We'll use it anyway and simulate the impact correctly.
                 buy_recs = await self.get_recommendations(limit=10)
+                print(f"Step {step_num}: Got {len(buy_recs)} buy recs", flush=True)
                 logger.info(f"Multi-step {step_num}: Got {len(buy_recs)} buy recs, available_cash={available_cash:.2f}, used={used_symbols}")
                 for buy_rec in buy_recs:
                     if buy_rec.symbol in used_symbols or buy_rec.symbol in recently_bought:
@@ -1546,6 +1550,7 @@ class RebalancingService:
                 used_symbols.add(rec.symbol)
             else:
                 # No valid recommendation found, stop early
+                print(f"Step {step_num}: No valid recommendation found, stopping early. best_score_change={best_score_change}", flush=True)
                 logger.warning(f"No valid recommendation found at step {step_num}, stopping early. best_score_change={best_score_change}")
                 break
         
