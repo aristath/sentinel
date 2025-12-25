@@ -54,6 +54,8 @@ SETTING_DEFAULTS = {
     "sell_weight_portfolio_balance": 0.18,  # Overweight detection
     "sell_weight_instability": 0.14,        # Bubble/volatility
     "sell_weight_drawdown": 0.15,           # PyFolio drawdown
+    # Trading mode
+    "trading_mode": "research",             # "live" or "research" - blocks trades in research mode
 }
 
 
@@ -100,6 +102,24 @@ async def get_setting_value(key: str) -> float:
     if db_value:
         return float(db_value)
     return SETTING_DEFAULTS.get(key, 0)
+
+
+async def get_trading_mode() -> str:
+    """Get trading mode setting (returns "live" or "research")."""
+    db_value = await get_setting("trading_mode")
+    if db_value in ("live", "research"):
+        return db_value
+    return SETTING_DEFAULTS.get("trading_mode", "research")
+
+
+async def set_trading_mode(mode: str) -> None:
+    """Set trading mode setting (must be "live" or "research")."""
+    if mode not in ("live", "research"):
+        raise ValueError(f"Invalid trading mode: {mode}. Must be 'live' or 'research'")
+    settings_repo = SettingsRepository()
+    await settings_repo.set("trading_mode", mode, "Trading mode: 'live' or 'research'")
+    # Invalidate settings cache
+    cache.invalidate("settings:all")
 
 
 async def get_job_settings() -> dict[str, float]:
@@ -155,7 +175,11 @@ async def get_all_settings():
     result = {}
     for key, default in SETTING_DEFAULTS.items():
         if key in db_values:
-            result[key] = float(db_values[key])
+            # trading_mode is a string, all others are floats
+            if key == "trading_mode":
+                result[key] = db_values[key]
+            else:
+                result[key] = float(db_values[key])
         else:
             result[key] = default
     return result
@@ -167,6 +191,14 @@ async def update_setting_value(key: str, data: SettingUpdate):
     if key not in SETTING_DEFAULTS:
         raise HTTPException(status_code=400, detail=f"Unknown setting: {key}")
 
+    # Special handling for trading_mode (string, not float)
+    if key == "trading_mode":
+        mode = str(data.value).lower()
+        if mode not in ("live", "research"):
+            raise HTTPException(status_code=400, detail=f"Invalid trading mode: {mode}. Must be 'live' or 'research'")
+        await set_trading_mode(mode)
+        return {key: mode}
+    
     await set_setting(key, str(data.value))
     return {key: data.value}
 
@@ -233,3 +265,19 @@ async def reschedule_jobs():
 
     await reschedule_all_jobs()
     return {"status": "ok", "message": "Jobs rescheduled"}
+
+
+@router.get("/trading-mode")
+async def get_trading_mode_endpoint():
+    """Get current trading mode."""
+    mode = await get_trading_mode()
+    return {"trading_mode": mode}
+
+
+@router.post("/trading-mode")
+async def toggle_trading_mode():
+    """Toggle trading mode between 'live' and 'research'."""
+    current_mode = await get_trading_mode()
+    new_mode = "research" if current_mode == "live" else "live"
+    await set_trading_mode(new_mode)
+    return {"trading_mode": new_mode, "previous_mode": current_mode}
