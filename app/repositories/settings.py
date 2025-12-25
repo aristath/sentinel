@@ -74,7 +74,8 @@ class SettingsRepository:
         if value is None:
             return default
         try:
-            return int(value)
+            # Parse via float first to handle "12.0" strings from database
+            return int(float(value))
         except (ValueError, TypeError):
             return default
 
