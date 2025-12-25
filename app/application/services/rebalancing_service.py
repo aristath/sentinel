@@ -1326,6 +1326,8 @@ class RebalancingService:
             return []  # No multi-step possible without a sell to start
 
         for step_num in range(1, depth + 1):
+            logger.warning(f"=== MULTI-STEP {step_num} ===  available_cash={available_cash:.2f}, used_symbols={used_symbols}")
+
             # Calculate current portfolio score
             current_score = await calculate_portfolio_score(current_context)
 
@@ -1333,6 +1335,7 @@ class RebalancingService:
             # Step 1: MUST be a sell (to generate cash and start the sequence)
             # Subsequent steps: buys using freed cash, or more sells if beneficial
             prioritize_sells = (step_num == 1) or (available_cash < settings.min_cash_threshold)
+            logger.warning(f"Step {step_num}: prioritize_sells={prioritize_sells}, min_cash_threshold={settings.min_cash_threshold}")
             
             best_recommendation = None
             best_score_change = -999.0
@@ -1543,7 +1546,7 @@ class RebalancingService:
                 used_symbols.add(rec.symbol)
             else:
                 # No valid recommendation found, stop early
-                logger.info(f"No valid recommendation found at step {step_num}, stopping early")
+                logger.warning(f"No valid recommendation found at step {step_num}, stopping early. best_score_change={best_score_change}")
                 break
         
         return steps
