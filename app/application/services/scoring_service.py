@@ -17,17 +17,43 @@ logger = logging.getLogger(__name__)
 
 def _to_domain_score(score: CalculatedStockScore) -> StockScore:
     """Convert CalculatedStockScore to domain StockScore model."""
+    group_scores = score.group_scores or {}
+    sub_scores = score.sub_scores or {}
+    
+    # Map new group scores to domain model
+    # quality_score = average of long_term and fundamentals
+    quality_score = None
+    if "long_term" in group_scores and "fundamentals" in group_scores:
+        quality_score = (group_scores["long_term"] + group_scores["fundamentals"]) / 2
+    elif "long_term" in group_scores:
+        quality_score = group_scores["long_term"]
+    elif "fundamentals" in group_scores:
+        quality_score = group_scores["fundamentals"]
+    
+    # Extract sub-component scores
+    long_term_subs = sub_scores.get("long_term", {})
+    fundamentals_subs = sub_scores.get("fundamentals", {})
+    
+    cagr_score = long_term_subs.get("cagr")
+    consistency_score = fundamentals_subs.get("consistency")
+    
+    # Calculate history_years from available data (approximate)
+    history_years = None
+    if long_term_subs or fundamentals_subs:
+        # If we have CAGR data, assume at least 5 years
+        history_years = 5.0 if cagr_score else None
+    
     return StockScore(
         symbol=score.symbol,
-        quality_score=score.quality.total,
-        opportunity_score=score.opportunity.total,
-        analyst_score=score.analyst.total,
-        allocation_fit_score=score.allocation_fit.total if score.allocation_fit else None,
-        cagr_score=score.quality.total_return_score,
-        consistency_score=score.quality.consistency_score,
-        history_years=score.quality.history_years,
-        technical_score=score.quality.total,
-        fundamental_score=score.opportunity.total,
+        quality_score=quality_score,
+        opportunity_score=group_scores.get("opportunity"),
+        analyst_score=group_scores.get("opinion"),
+        allocation_fit_score=group_scores.get("diversification"),
+        cagr_score=cagr_score,
+        consistency_score=consistency_score,
+        history_years=history_years,
+        technical_score=group_scores.get("technicals"),
+        fundamental_score=group_scores.get("fundamentals"),
         total_score=score.total_score,
         volatility=score.volatility,
         calculated_at=score.calculated_at,
@@ -140,3 +166,4 @@ class ScoringService:
 
         logger.info(f"Scored {len(scores)} stocks")
         return scores
+

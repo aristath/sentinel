@@ -228,7 +228,7 @@ async def create_stock(stock_data: StockCreate):
         "name": stock_data.name,
         "geography": stock_data.geography.upper(),
         "industry": industry,
-        "min_lot": min_lot,
+        "min_lot": new_stock.min_lot,
         "total_score": score.total_score if score else None,
     }
 
@@ -303,15 +303,15 @@ async def refresh_stock_score(symbol: str):
         return {
             "symbol": symbol,
             "total_score": score.total_score,
-            "quality": score.quality.total,
-            "opportunity": score.opportunity.total,
-            "analyst": score.analyst.total,
-            "allocation_fit": score.allocation_fit.total if score.allocation_fit else None,
+            "quality": (score.group_scores.get("long_term", 0) + score.group_scores.get("fundamentals", 0)) / 2 if score.group_scores else None,
+            "opportunity": score.group_scores.get("opportunity") if score.group_scores else None,
+            "analyst": score.group_scores.get("opinion") if score.group_scores else None,
+            "allocation_fit": score.group_scores.get("diversification") if score.group_scores else None,
             "volatility": score.volatility,
-            "cagr_score": score.quality.total_return_score,
-            "consistency_score": score.quality.consistency_score,
-            "dividend_bonus": score.quality.dividend_bonus,
-            "history_years": score.quality.history_years,
+            "cagr_score": score.sub_scores.get("long_term", {}).get("cagr") if score.sub_scores else None,
+            "consistency_score": score.sub_scores.get("fundamentals", {}).get("consistency") if score.sub_scores else None,
+            "dividend_bonus": score.sub_scores.get("dividends", {}).get("yield") if score.sub_scores else None,
+            "history_years": 5.0 if score.sub_scores and score.sub_scores.get("long_term", {}).get("cagr") else None,
         }
 
     raise HTTPException(status_code=500, detail="Failed to calculate score")

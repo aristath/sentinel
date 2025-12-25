@@ -144,6 +144,7 @@ class DatabaseManager:
     - ledger: Trades, cash flows (append-only audit trail)
     - state: Positions, scores, snapshots (current state, rebuildable)
     - cache: Computed aggregates (ephemeral, can be rebuilt)
+    - calculations: Pre-computed raw metrics (RSI, EMA, Sharpe, CAGR, etc.)
     - history: Per-symbol price databases (isolated for corruption containment)
     """
 
@@ -156,6 +157,7 @@ class DatabaseManager:
         self.ledger = Database(data_dir / "ledger.db")
         self.state = Database(data_dir / "state.db")
         self.cache = Database(data_dir / "cache.db")
+        self.calculations = Database(data_dir / "calculations.db")
 
         # Per-symbol history databases (lazy loaded)
         self._history: dict[str, Database] = {}
@@ -194,6 +196,7 @@ class DatabaseManager:
         await self.ledger.close()
         await self.state.close()
         await self.cache.close()
+        await self.calculations.close()
 
         for db in self._history.values():
             await db.close()
@@ -214,6 +217,7 @@ class DatabaseManager:
             ("ledger", self.ledger),
             ("state", self.state),
             ("cache", self.cache),
+            ("calculations", self.calculations),
         ]:
             try:
                 results[name] = await db.integrity_check()
@@ -231,7 +235,7 @@ class DatabaseManager:
 
     async def checkpoint_all(self):
         """Run WAL checkpoint on all databases."""
-        for db in [self.config, self.ledger, self.state, self.cache]:
+        for db in [self.config, self.ledger, self.state, self.cache, self.calculations]:
             await db.checkpoint()
 
         for db in self._history.values():
@@ -280,6 +284,7 @@ async def init_databases(data_dir: Path) -> DatabaseManager:
         init_ledger_schema,
         init_state_schema,
         init_cache_schema,
+        init_calculations_schema,
     )
 
     _db_manager = DatabaseManager(data_dir)
@@ -289,6 +294,7 @@ async def init_databases(data_dir: Path) -> DatabaseManager:
     await init_ledger_schema(_db_manager.ledger)
     await init_state_schema(_db_manager.state)
     await init_cache_schema(_db_manager.cache)
+    await init_calculations_schema(_db_manager.calculations)
 
     logger.info(f"Database manager initialized with data directory: {data_dir}")
 

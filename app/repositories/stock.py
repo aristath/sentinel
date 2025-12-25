@@ -5,13 +5,28 @@ from typing import List, Optional
 
 from app.domain.models import Stock
 from app.infrastructure.database import get_db_manager
+from app.repositories.base import transaction_context
 
 
 class StockRepository:
     """Repository for stock universe operations."""
 
-    def __init__(self):
-        self._db = get_db_manager().config
+    def __init__(self, db=None):
+        """Initialize repository.
+        
+        Args:
+            db: Optional database connection for testing. If None, uses get_db_manager().config
+                Can be a Database instance or raw aiosqlite.Connection (will be wrapped)
+        """
+        if db is not None:
+            # If it's a raw connection without fetchone/fetchall, wrap it
+            if not hasattr(db, 'fetchone') and hasattr(db, 'execute'):
+                from app.repositories.base import DatabaseAdapter
+                self._db = DatabaseAdapter(db)
+            else:
+                self._db = db
+        else:
+            self._db = get_db_manager().config
 
     async def get_by_symbol(self, symbol: str) -> Optional[Stock]:
         """Get stock by symbol."""
@@ -38,7 +53,7 @@ class StockRepository:
     async def create(self, stock: Stock) -> None:
         """Create a new stock."""
         now = datetime.now().isoformat()
-        async with self._db.transaction() as conn:
+        async with transaction_context(self._db) as conn:
             await conn.execute(
                 """
                 INSERT INTO stocks
@@ -80,7 +95,7 @@ class StockRepository:
         set_clause = ", ".join(f"{k} = ?" for k in updates.keys())
         values = list(updates.values()) + [symbol.upper()]
 
-        async with self._db.transaction() as conn:
+        async with transaction_context(self._db) as conn:
             await conn.execute(
                 f"UPDATE stocks SET {set_clause} WHERE symbol = ?",
                 values

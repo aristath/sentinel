@@ -17,8 +17,6 @@ from app.domain.scoring.constants import (
     DRAWDOWN_OK,
     DRAWDOWN_POOR,
 )
-from app.domain.scoring.technical import calculate_max_drawdown
-
 logger = logging.getLogger(__name__)
 
 
@@ -106,7 +104,8 @@ def score_drawdown(max_drawdown: Optional[float]) -> float:
         return max(0.0, 0.2 - (dd_pct - DRAWDOWN_POOR))
 
 
-def calculate_short_term_score(
+async def calculate_short_term_score(
+    symbol: str,
     daily_prices: List[Dict],
     pyfolio_drawdown: Optional[float] = None,
 ) -> tuple:
@@ -114,6 +113,7 @@ def calculate_short_term_score(
     Calculate short-term performance score.
 
     Args:
+        symbol: Stock symbol (for cache lookup)
         daily_prices: Daily price data
         pyfolio_drawdown: Current drawdown from PyFolio (optional)
 
@@ -121,16 +121,48 @@ def calculate_short_term_score(
         Tuple of (total_score, sub_components_dict)
         sub_components_dict: {"momentum": float, "drawdown": float}
     """
-    # Momentum
-    momentum = calculate_recent_momentum(daily_prices)
+    from app.repositories.calculations import CalculationsRepository
+    from app.domain.scoring.technical import get_max_drawdown
+
+    calc_repo = CalculationsRepository()
+
+    # Momentum - calculate and cache
+    momentum_30d = None
+    momentum_90d = None
+    if len(daily_prices) >= 30:
+        closes = [p["close"] for p in daily_prices]
+        current = closes[-1]
+
+        # 30-day momentum
+        price_30d = closes[-30] if len(closes) >= 30 else closes[0]
+        momentum_30d = (current - price_30d) / price_30d if price_30d > 0 else 0
+        await calc_repo.set_metric(symbol, "MOMENTUM_30D", momentum_30d)
+
+        # 90-day momentum
+        if len(closes) >= 90:
+            price_90d = closes[-90]
+            momentum_90d = (current - price_90d) / price_90d if price_90d > 0 else 0
+            await calc_repo.set_metric(symbol, "MOMENTUM_90D", momentum_90d)
+
+    # Blend momentum
+    momentum = None
+    if momentum_30d is not None and momentum_90d is not None:
+        momentum = momentum_30d * 0.6 + momentum_90d * 0.4
+    elif momentum_30d is not None:
+        momentum = momentum_30d
+    else:
+        momentum = calculate_recent_momentum(daily_prices)
+
     momentum_score = score_momentum(momentum)
 
-    # Drawdown - use PyFolio if available, else calculate
+    # Drawdown - get from cache or calculate
+    max_dd = None
     if pyfolio_drawdown is not None:
         max_dd = pyfolio_drawdown
+        await calc_repo.set_metric(symbol, "MAX_DRAWDOWN", max_dd)
     elif len(daily_prices) >= 30:
         closes = np.array([p["close"] for p in daily_prices])
-        max_dd = calculate_max_drawdown(closes)
+        max_dd = await get_max_drawdown(symbol, closes)
     else:
         max_dd = None
 

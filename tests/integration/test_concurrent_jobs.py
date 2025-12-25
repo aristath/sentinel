@@ -81,7 +81,7 @@ async def test_concurrent_position_updates_with_lock(db):
                 market_value_eur=quantity * 155.0 * 1.05,
                 last_updated=datetime.now().isoformat(),
             )
-            await position_repo.upsert(position, auto_commit=True)
+            await position_repo.upsert(position)
             await asyncio.sleep(delay)
             updates_completed.append(symbol)
 
@@ -140,7 +140,7 @@ async def test_concurrent_trade_execution_atomicity(db):
                     executed_at=datetime.now(),
                     order_id=f"order_{symbol}",
                 )
-                await trade_repo.create(trade, auto_commit=False)
+                await trade_repo.create(trade)
                 await asyncio.sleep(0.05)  # Simulate processing time
                 trades_created.append(symbol)
 
@@ -165,3 +165,4 @@ async def test_concurrent_trade_execution_atomicity(db):
 
 
 # Lock directory setup is handled in conftest.py
+

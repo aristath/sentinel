@@ -5,13 +5,28 @@ from typing import List, Optional
 
 from app.domain.models import PortfolioSnapshot
 from app.infrastructure.database import get_db_manager
+from app.repositories.base import transaction_context
 
 
 class PortfolioRepository:
     """Repository for portfolio snapshot operations."""
 
-    def __init__(self):
-        self._db = get_db_manager().state
+    def __init__(self, db=None):
+        """Initialize repository.
+        
+        Args:
+            db: Optional database connection for testing. If None, uses get_db_manager().state
+                Can be a Database instance or raw aiosqlite.Connection (will be wrapped)
+        """
+        if db is not None:
+            # If it's a raw connection without fetchone/fetchall, wrap it
+            if not hasattr(db, 'fetchone') and hasattr(db, 'execute'):
+                from app.repositories.base import DatabaseAdapter
+                self._db = DatabaseAdapter(db)
+            else:
+                self._db = db
+        else:
+            self._db = get_db_manager().state
 
     async def get_by_date(self, date: str) -> Optional[PortfolioSnapshot]:
         """Get snapshot for a specific date."""
@@ -67,7 +82,7 @@ class PortfolioRepository:
         """Insert or update a snapshot."""
         now = datetime.now().isoformat()
 
-        async with self._db.transaction() as conn:
+        async with transaction_context(self._db) as conn:
             await conn.execute(
                 """
                 INSERT OR REPLACE INTO portfolio_snapshots
@@ -100,7 +115,7 @@ class PortfolioRepository:
         count = row["cnt"] if row else 0
 
         if count > 0:
-            async with self._db.transaction() as conn:
+            async with transaction_context(self._db) as conn:
                 await conn.execute(
                     "DELETE FROM portfolio_snapshots WHERE date < ?",
                     (date,)

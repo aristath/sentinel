@@ -154,3 +154,58 @@ BOLLINGER_STD = 2
 MIN_DAYS_FOR_OPPORTUNITY = 50
 MIN_MONTHS_FOR_CAGR = 12
 MIN_DAYS_FOR_VOLATILITY = 30
+
+# =============================================================================
+# Metric TTL Configuration (for calculations.db cache)
+# =============================================================================
+
+# TTL in seconds for each metric type
+# These determine how long calculated metrics are cached before recalculation
+METRIC_TTL = {
+    # Real-time (24 hours) - Changes daily after market close
+    "RSI_14": 86400,
+    "RSI_30": 86400,
+    "EMA_50": 86400,
+    "EMA_200": 86400,
+    "BB_LOWER": 86400,
+    "BB_MIDDLE": 86400,
+    "BB_UPPER": 86400,
+    "BB_POSITION": 86400,
+    "DISTANCE_FROM_EMA_200": 86400,
+    "MOMENTUM_30D": 86400,
+    "MOMENTUM_90D": 86400,
+    "MAX_DRAWDOWN": 86400,
+    "CURRENT_DRAWDOWN": 86400,
+    "VOLATILITY_30D": 86400,
+    "VOLATILITY_ANNUAL": 86400,
+    "HIGH_52W": 86400,
+    "LOW_52W": 86400,
+    "DISTANCE_FROM_52W_HIGH": 86400,
+    
+    # Daily (7 days) - Stable calculation, but recalculated daily
+    "SHARPE": 604800,
+    "SORTINO": 604800,
+    
+    # Weekly (7 days) - Slow-changing historical metrics
+    "CAGR_5Y": 604800,
+    "CAGR_10Y": 604800,
+    "CONSISTENCY_SCORE": 604800,
+    
+    # Quarterly (30 days) - Fundamentals update with earnings
+    "PE_RATIO": 2592000,
+    "FORWARD_PE": 2592000,
+    "PROFIT_MARGIN": 2592000,
+    "DEBT_TO_EQUITY": 2592000,
+    "CURRENT_RATIO": 2592000,
+    "FINANCIAL_STRENGTH": 2592000,
+    "DIVIDEND_YIELD": 2592000,
+    "PAYOUT_RATIO": 2592000,
+    "DIVIDEND_CONSISTENCY": 2592000,
+    
+    # On-demand (24 hours) - Analyst data fetched when needed
+    "ANALYST_RECOMMENDATION": 86400,
+    "PRICE_TARGET_UPSIDE": 86400,
+}
+
+# Default TTL for unknown metrics (24 hours)
+DEFAULT_METRIC_TTL = 86400

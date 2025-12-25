@@ -13,6 +13,7 @@ from app.infrastructure.database.schemas import (
     STATE_SCHEMA,
     CACHE_SCHEMA,
     HISTORY_SCHEMA,
+    CALCULATIONS_SCHEMA,
 )
 from app.repositories import (
     StockRepository,
@@ -44,6 +45,7 @@ async def db():
             await db.executescript(LEDGER_SCHEMA)
             await db.executescript(STATE_SCHEMA)
             await db.executescript(CACHE_SCHEMA)
+            await db.executescript(CALCULATIONS_SCHEMA)
             await db.executescript(HISTORY_SCHEMA)
 
             await db.commit()
@@ -102,4 +104,5 @@ def setup_test_environment(monkeypatch, tmp_path):
     from app.infrastructure import locking
     locking.LOCK_DIR = lock_dir
     locking.LOCK_DIR.mkdir(parents=True, exist_ok=True)
+
 

@@ -11,7 +11,6 @@ from app.infrastructure.hardware.led_display import set_activity
 from app.infrastructure.locking import file_lock
 from app.infrastructure.database.manager import get_db_manager
 from app.domain.value_objects.currency import Currency
-from app.domain.scoring.cache import get_score_cache
 from app.domain.events import PositionUpdatedEvent, get_event_bus
 
 logger = logging.getLogger(__name__)
@@ -268,14 +267,9 @@ async def _sync_prices_internal():
 
         logger.info(f"Price sync complete: {len(quotes)} quotes, {updated} positions updated")
 
-        # Invalidate FAST cache components for updated symbols
-        cache = get_score_cache()
-        if cache:
-            for symbol in quotes.keys():
-                await cache.invalidate(symbol, "opportunity")
-                await cache.invalidate(symbol, "short_term")
-                await cache.invalidate(symbol, "technicals")
-            logger.debug(f"Invalidated FAST score cache for {len(quotes)} symbols")
+        # Metrics in calculations.db will expire naturally via TTL
+        # No manual invalidation needed
+        logger.debug(f"Price sync complete for {len(quotes)} symbols")
 
         emit(SystemEvent.SYNC_COMPLETE)
 

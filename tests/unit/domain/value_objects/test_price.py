@@ -73,7 +73,8 @@ class TestPrice:
         price = Price(amount=100.50, currency=Currency.EUR)
         
         assert str(price) == "100.50 EUR"
-        assert repr(price) == "Price(amount=100.50, currency=Currency.EUR)"
+        # repr uses Python's default float representation (100.5 not 100.50)
+        assert repr(price) == "Price(amount=100.5, currency=Currency.EUR)"
 
     def test_price_from_money(self):
         """Test creating price from money."""

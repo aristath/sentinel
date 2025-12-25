@@ -47,7 +47,7 @@ async def _create_backup_internal():
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # Backup core databases
-        core_dbs = ["config.db", "ledger.db", "state.db", "cache.db"]
+        core_dbs = ["config.db", "ledger.db", "state.db", "cache.db", "calculations.db"]
         for db_name in core_dbs:
             db_path = settings.data_dir / db_name
             if db_path.exists():
@@ -145,6 +145,7 @@ async def _checkpoint_wal_internal():
             ("ledger", db_manager.ledger),
             ("state", db_manager.state),
             ("cache", db_manager.cache),
+            ("calculations", db_manager.calculations),
         ]:
             try:
                 result = await db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
@@ -188,6 +189,7 @@ async def _integrity_check_internal():
             ("ledger", db_manager.ledger),
             ("state", db_manager.state),
             ("cache", db_manager.cache),
+            ("calculations", db_manager.calculations),
         ]:
             try:
                 result = await db.execute("PRAGMA integrity_check")
@@ -283,6 +285,7 @@ async def cleanup_expired_caches():
     Clean up expired recommendation and analytics cache entries.
 
     These caches have 48h (recommendation) and 4h (symbol data) TTLs.
+    Also cleans up expired metrics from calculations.db.
     """
     async with file_lock("cleanup_caches", timeout=60.0):
         await _cleanup_expired_caches_internal()
@@ -296,12 +299,23 @@ async def _cleanup_expired_caches_internal():
 
     try:
         from app.infrastructure.recommendation_cache import get_recommendation_cache
+        from app.repositories.calculations import CalculationsRepository
 
+        # Clean recommendation cache
         rec_cache = get_recommendation_cache()
         removed_count = await rec_cache.cleanup_expired()
 
-        if removed_count > 0:
-            logger.info(f"Cleaned up {removed_count} expired cache entries")
+        # Clean expired metrics from calculations.db
+        calc_repo = CalculationsRepository()
+        expired_metrics = await calc_repo.delete_expired()
+
+        total_removed = removed_count + expired_metrics
+
+        if total_removed > 0:
+            logger.info(
+                f"Cleaned up {total_removed} expired entries "
+                f"({removed_count} cache, {expired_metrics} metrics)"
+            )
         else:
             logger.info("No expired cache entries to clean up")
 

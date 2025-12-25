@@ -5,13 +5,28 @@ from typing import Dict, List
 
 from app.domain.models import AllocationTarget
 from app.infrastructure.database import get_db_manager
+from app.repositories.base import transaction_context
 
 
 class AllocationRepository:
     """Repository for allocation target operations."""
 
-    def __init__(self):
-        self._db = get_db_manager().config
+    def __init__(self, db=None):
+        """Initialize repository.
+        
+        Args:
+            db: Optional database connection for testing. If None, uses get_db_manager().config
+                Can be a Database instance or raw aiosqlite.Connection (will be wrapped)
+        """
+        if db is not None:
+            # If it's a raw connection without fetchone/fetchall, wrap it
+            if not hasattr(db, 'fetchone') and hasattr(db, 'execute'):
+                from app.repositories.base import DatabaseAdapter
+                self._db = DatabaseAdapter(db)
+            else:
+                self._db = db
+        else:
+            self._db = get_db_manager().config
 
     async def get_all(self) -> Dict[str, float]:
         """Get all allocation targets as dict with key 'type:name'."""
@@ -49,7 +64,7 @@ class AllocationRepository:
         """Insert or update an allocation target."""
         now = datetime.now().isoformat()
 
-        async with self._db.transaction() as conn:
+        async with transaction_context(self._db) as conn:
             await conn.execute(
                 """
                 INSERT INTO allocation_targets (type, name, target_pct, created_at, updated_at)
@@ -63,7 +78,7 @@ class AllocationRepository:
 
     async def delete(self, target_type: str, name: str) -> None:
         """Delete an allocation target."""
-        async with self._db.transaction() as conn:
+        async with transaction_context(self._db) as conn:
             await conn.execute(
                 "DELETE FROM allocation_targets WHERE type = ? AND name = ?",
                 (target_type, name)

@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from app.application.services.trade_safety_service import TradeSafetyService
 from app.repositories import TradeRepository, PositionRepository
 from app.services.tradernet import TradernetClient
-from app.domain.constants import TRADE_SIDE_BUY, TRADE_SIDE_SELL
+from app.domain.value_objects.trade_side import TradeSide
 
 
 @pytest.fixture
@@ -44,7 +44,7 @@ def safety_service(mock_trade_repo, mock_position_repo):
 async def test_check_pending_orders_no_pending(safety_service, mock_client):
     """Test checking pending orders when none exist."""
     result = await safety_service.check_pending_orders(
-        "AAPL.US", TRADE_SIDE_BUY, mock_client
+        "AAPL.US", TradeSide.BUY, mock_client
     )
     assert result is False
     mock_client.has_pending_order_for_symbol.assert_called_once_with("AAPL.US")
@@ -55,7 +55,7 @@ async def test_check_pending_orders_broker_has_pending(safety_service, mock_clie
     """Test checking pending orders when broker has pending."""
     mock_client.has_pending_order_for_symbol.return_value = True
     result = await safety_service.check_pending_orders(
-        "AAPL.US", TRADE_SIDE_BUY, mock_client
+        "AAPL.US", TradeSide.BUY, mock_client
     )
     assert result is True
 
@@ -65,7 +65,7 @@ async def test_check_pending_orders_recent_sell_in_db(safety_service, mock_clien
     """Test checking pending orders when recent SELL exists in database."""
     mock_trade_repo.has_recent_sell_order.return_value = True
     result = await safety_service.check_pending_orders(
-        "AAPL.US", TRADE_SIDE_SELL, mock_client
+        "AAPL.US", TradeSide.SELL, mock_client
     )
     assert result is True
     mock_trade_repo.has_recent_sell_order.assert_called_once_with("AAPL.US", hours=2)
@@ -75,7 +75,7 @@ async def test_check_pending_orders_recent_sell_in_db(safety_service, mock_clien
 async def test_check_cooldown_not_in_cooldown(safety_service, mock_trade_repo):
     """Test cooldown check when symbol is not in cooldown."""
     mock_trade_repo.get_recently_bought_symbols.return_value = set()
-    is_cooldown, error = await safety_service.check_cooldown("AAPL.US", TRADE_SIDE_BUY)
+    is_cooldown, error = await safety_service.check_cooldown("AAPL.US", TradeSide.BUY)
     assert is_cooldown is False
     assert error is None
 
@@ -84,7 +84,7 @@ async def test_check_cooldown_not_in_cooldown(safety_service, mock_trade_repo):
 async def test_check_cooldown_in_cooldown(safety_service, mock_trade_repo):
     """Test cooldown check when symbol is in cooldown."""
     mock_trade_repo.get_recently_bought_symbols.return_value = {"AAPL.US"}
-    is_cooldown, error = await safety_service.check_cooldown("AAPL.US", TRADE_SIDE_BUY)
+    is_cooldown, error = await safety_service.check_cooldown("AAPL.US", TradeSide.BUY)
     assert is_cooldown is True
     assert "cooldown period active" in error
 
@@ -92,7 +92,7 @@ async def test_check_cooldown_in_cooldown(safety_service, mock_trade_repo):
 @pytest.mark.asyncio
 async def test_check_cooldown_ignores_sell(safety_service):
     """Test that cooldown check is skipped for SELL orders."""
-    is_cooldown, error = await safety_service.check_cooldown("AAPL.US", TRADE_SIDE_SELL)
+    is_cooldown, error = await safety_service.check_cooldown("AAPL.US", TradeSide.SELL)
     assert is_cooldown is False
     assert error is None
 
@@ -145,7 +145,7 @@ async def test_validate_sell_position_no_position(safety_service, mock_position_
 async def test_validate_trade_success(safety_service, mock_client):
     """Test full trade validation when all checks pass."""
     is_valid, error = await safety_service.validate_trade(
-        "AAPL.US", TRADE_SIDE_BUY, 10.0, mock_client, raise_on_error=False
+        "AAPL.US", TradeSide.BUY, 10.0, mock_client, raise_on_error=False
     )
     assert is_valid is True
     assert error is None
@@ -158,7 +158,7 @@ async def test_validate_trade_raises_on_error(safety_service, mock_client, mock_
     
     with pytest.raises(HTTPException) as exc_info:
         await safety_service.validate_trade(
-            "AAPL.US", TRADE_SIDE_BUY, 10.0, mock_client, raise_on_error=True
+            "AAPL.US", TradeSide.BUY, 10.0, mock_client, raise_on_error=True
         )
     
     assert exc_info.value.status_code == 400

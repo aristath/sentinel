@@ -6,6 +6,7 @@ This module contains schema definitions for:
 - ledger.db: Trades, cash flows (append-only)
 - state.db: Positions, scores, snapshots (current state)
 - cache.db: Computed aggregates
+- calculations.db: Pre-computed raw metrics (RSI, EMA, Sharpe, CAGR, etc.)
 - history/{symbol}.db: Per-symbol price data
 """
 
@@ -578,3 +579,50 @@ async def init_history_schema(db):
             (1, now, "Initial history schema")
         )
         await db.commit()
+        logger.info("History database initialized with schema version 1")
+
+
+# =============================================================================
+# CALCULATIONS.DB - Pre-computed raw metrics
+# =============================================================================
+
+CALCULATIONS_SCHEMA = """
+-- Pre-computed raw metrics for all stocks
+CREATE TABLE IF NOT EXISTS calculated_metrics (
+    symbol TEXT NOT NULL,
+    metric TEXT NOT NULL,           -- e.g., 'RSI_14', 'EMA_200', 'BB_LOWER', 'CAGR_5Y', 'SHARPE'
+    value REAL NOT NULL,
+    calculated_at TEXT NOT NULL,    -- ISO datetime
+    expires_at TEXT,                -- Optional TTL for cache invalidation
+    source TEXT DEFAULT 'calculated', -- 'calculated', 'yahoo', 'pyfolio'
+    PRIMARY KEY (symbol, metric)
+);
+
+CREATE INDEX IF NOT EXISTS idx_calculations_symbol ON calculated_metrics(symbol);
+CREATE INDEX IF NOT EXISTS idx_calculations_metric ON calculated_metrics(metric);
+CREATE INDEX IF NOT EXISTS idx_calculations_expires ON calculated_metrics(expires_at);
+
+-- Schema version tracking
+CREATE TABLE IF NOT EXISTS schema_version (
+    version INTEGER PRIMARY KEY,
+    applied_at TEXT NOT NULL,
+    description TEXT
+);
+"""
+
+
+async def init_calculations_schema(db):
+    """Initialize calculations database schema."""
+    await db.executescript(CALCULATIONS_SCHEMA)
+
+    row = await db.fetchone("SELECT MAX(version) as v FROM schema_version")
+    current_version = row["v"] if row and row["v"] else 0
+
+    if current_version == 0:
+        now = datetime.now().isoformat()
+        await db.execute(
+            "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
+            (1, now, "Initial calculations schema")
+        )
+        await db.commit()
+        logger.info("Calculations database initialized with schema version 1")

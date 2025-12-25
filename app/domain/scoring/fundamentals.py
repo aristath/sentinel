@@ -101,7 +101,8 @@ def calculate_consistency_score(cagr_5y: float, cagr_10y: Optional[float]) -> fl
         return max(0.4, 1.0 - diff * 4)
 
 
-def calculate_fundamentals_score(
+async def calculate_fundamentals_score(
+    symbol: str,
     monthly_prices: List[Dict],
     fundamentals,
 ) -> tuple:
@@ -109,6 +110,7 @@ def calculate_fundamentals_score(
     Calculate fundamentals score.
 
     Args:
+        symbol: Stock symbol (for cache lookup)
         monthly_prices: Monthly price data for consistency
         fundamentals: Yahoo fundamentals data
 
@@ -116,17 +118,38 @@ def calculate_fundamentals_score(
         Tuple of (total_score, sub_components_dict)
         sub_components_dict: {"financial_strength": float, "consistency": float}
     """
-    # Financial strength
+    from app.repositories.calculations import CalculationsRepository
+
+    calc_repo = CalculationsRepository()
+
+    # Financial strength - cache individual components
+    profit_margin = fundamentals.profit_margin if fundamentals else None
+    debt_to_equity = fundamentals.debt_to_equity if fundamentals else None
+    current_ratio = fundamentals.current_ratio if fundamentals else None
+
+    if profit_margin is not None:
+        await calc_repo.set_metric(symbol, "PROFIT_MARGIN", profit_margin)
+    if debt_to_equity is not None:
+        await calc_repo.set_metric(symbol, "DEBT_TO_EQUITY", debt_to_equity)
+    if current_ratio is not None:
+        await calc_repo.set_metric(symbol, "CURRENT_RATIO", current_ratio)
+
     financial_score = calculate_financial_strength_score(fundamentals)
 
-    # Consistency
-    cagr_5y = calculate_cagr(monthly_prices, 60)
+    # Consistency - get CAGR from cache
+    cagr_5y = await calc_repo.get_metric(symbol, "CAGR_5Y")
     if cagr_5y is None:
-        cagr_5y = calculate_cagr(monthly_prices, len(monthly_prices))
+        cagr_5y = calculate_cagr(monthly_prices, 60)
+        if cagr_5y is None:
+            cagr_5y = calculate_cagr(monthly_prices, len(monthly_prices))
+        if cagr_5y is not None:
+            await calc_repo.set_metric(symbol, "CAGR_5Y", cagr_5y)
 
-    cagr_10y = None
-    if len(monthly_prices) > 60:
+    cagr_10y = await calc_repo.get_metric(symbol, "CAGR_10Y")
+    if cagr_10y is None and len(monthly_prices) > 60:
         cagr_10y = calculate_cagr(monthly_prices, len(monthly_prices))
+        if cagr_10y is not None:
+            await calc_repo.set_metric(symbol, "CAGR_10Y", cagr_10y)
 
     consistency_score = calculate_consistency_score(cagr_5y or 0, cagr_10y)
 

@@ -73,6 +73,7 @@ async def init_scheduler() -> AsyncIOScheduler:
     from app.jobs.maintenance import run_daily_maintenance, run_weekly_maintenance
     from app.jobs.sync_trades import sync_trades
     from app.jobs.health_check import run_health_check
+    from app.jobs.metrics_calculation import calculate_metrics_for_all_stocks
 
     # Get all job intervals from database in one query
     job_settings = await _get_all_job_settings()
@@ -145,6 +146,15 @@ async def init_scheduler() -> AsyncIOScheduler:
         CronTrigger(hour=historical_hour, minute=0),
         id="historical_data_sync",
         name="Historical Data Sync",
+        replace_existing=True,
+    )
+
+    # Metrics calculation (daily, after historical data sync)
+    scheduler.add_job(
+        calculate_metrics_for_all_stocks,
+        CronTrigger(hour=historical_hour, minute=30),  # 30 minutes after historical sync
+        id="metrics_calculation",
+        name="Metrics Calculation",
         replace_existing=True,
     )
 
@@ -224,6 +234,9 @@ async def reschedule_all_jobs():
     )
     scheduler.reschedule_job(
         "historical_data_sync", trigger=CronTrigger(hour=historical_hour, minute=0)
+    )
+    scheduler.reschedule_job(
+        "metrics_calculation", trigger=CronTrigger(hour=historical_hour, minute=30)
     )
     scheduler.reschedule_job(
         "daily_maintenance", trigger=CronTrigger(hour=maintenance_hour, minute=0)

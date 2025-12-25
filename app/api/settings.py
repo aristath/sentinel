@@ -6,7 +6,6 @@ from pydantic import BaseModel
 from app.config import settings
 from app.infrastructure.cache import cache
 from app.repositories import SettingsRepository
-from app.domain.scoring.cache import get_score_cache
 
 router = APIRouter()
 
@@ -257,25 +256,34 @@ async def reset_cache():
     # Clear simple cache
     cache.clear()
 
-    # Clear score cache
-    score_cache = get_score_cache()
-    if score_cache:
-        await score_cache.invalidate_all()
+    # Metrics expire naturally via TTL, no manual invalidation needed
 
-    return {"status": "ok", "message": "All caches cleared (including score cache)"}
+    return {"status": "ok", "message": "All caches cleared"}
 
 
 @router.get("/cache-stats")
 async def get_cache_stats():
     """Get cache statistics."""
-    score_cache = get_score_cache()
-    score_stats = await score_cache.get_stats() if score_cache else {}
+    from app.repositories.calculations import CalculationsRepository
+    from app.infrastructure.database import get_db_manager
+
+    calc_repo = CalculationsRepository()
+    db = get_db_manager().calculations
+
+    # Get calculations.db stats
+    row = await db.fetchone("SELECT COUNT(*) as cnt FROM calculated_metrics")
+    calc_count = row["cnt"] if row else 0
+
+    expired_count = await calc_repo.delete_expired()
 
     return {
         "simple_cache": {
             "entries": len(cache._cache) if hasattr(cache, '_cache') else 0,
         },
-        "score_cache": score_stats,
+        "calculations_db": {
+            "entries": calc_count,
+            "expired_cleaned": expired_count,
+        },
     }
 
 

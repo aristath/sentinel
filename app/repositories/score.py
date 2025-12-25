@@ -5,13 +5,28 @@ from typing import List, Optional
 
 from app.domain.models import StockScore
 from app.infrastructure.database import get_db_manager
+from app.repositories.base import transaction_context
 
 
 class ScoreRepository:
     """Repository for stock score operations."""
 
-    def __init__(self):
-        self._db = get_db_manager().state
+    def __init__(self, db=None):
+        """Initialize repository.
+        
+        Args:
+            db: Optional database connection for testing. If None, uses get_db_manager().state
+                Can be a Database instance or raw aiosqlite.Connection (will be wrapped)
+        """
+        if db is not None:
+            # If it's a raw connection without fetchone/fetchall, wrap it
+            if not hasattr(db, 'fetchone') and hasattr(db, 'execute'):
+                from app.repositories.base import DatabaseAdapter
+                self._db = DatabaseAdapter(db)
+            else:
+                self._db = db
+        else:
+            self._db = get_db_manager().state
 
     async def get_by_symbol(self, symbol: str) -> Optional[StockScore]:
         """Get score by symbol."""
@@ -49,7 +64,7 @@ class ScoreRepository:
             else score.calculated_at or datetime.now().isoformat()
         )
 
-        async with self._db.transaction() as conn:
+        async with transaction_context(self._db) as conn:
             await conn.execute(
                 """
                 INSERT OR REPLACE INTO scores
@@ -84,7 +99,7 @@ class ScoreRepository:
 
     async def delete(self, symbol: str) -> None:
         """Delete score for a symbol."""
-        async with self._db.transaction() as conn:
+        async with transaction_context(self._db) as conn:
             await conn.execute(
                 "DELETE FROM scores WHERE symbol = ?",
                 (symbol.upper(),)
@@ -92,7 +107,7 @@ class ScoreRepository:
 
     async def delete_all(self) -> None:
         """Delete all scores."""
-        async with self._db.transaction() as conn:
+        async with transaction_context(self._db) as conn:
             await conn.execute("DELETE FROM scores")
 
     def _row_to_score(self, row) -> StockScore:

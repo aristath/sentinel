@@ -11,9 +11,23 @@ from app.infrastructure.database import get_db_manager
 class PositionRepository:
     """Repository for current position operations."""
 
-    def __init__(self):
-        self._manager = get_db_manager()
-        self._db = self._manager.state
+    def __init__(self, db=None):
+        """Initialize repository.
+        
+        Args:
+            db: Optional database connection for testing. If None, uses get_db_manager().state
+                Can be a Database instance or raw aiosqlite.Connection (will be wrapped)
+        """
+        if db is not None:
+            # If it's a raw connection without fetchone/fetchall, wrap it
+            if not hasattr(db, 'fetchone') and hasattr(db, 'execute'):
+                from app.repositories.base import DatabaseAdapter
+                self._db = DatabaseAdapter(db)
+            else:
+                self._db = db
+        else:
+            self._manager = get_db_manager()
+            self._db = self._manager.state
 
     async def get_by_symbol(self, symbol: str) -> Optional[Position]:
         """Get position by symbol."""
@@ -34,7 +48,7 @@ class PositionRepository:
         """Insert or update a position."""
         now = datetime.now().isoformat()
 
-        async with self._db.transaction() as conn:
+        async with transaction_context(self._db) as conn:
             await conn.execute(
                 """
                 INSERT OR REPLACE INTO positions
@@ -63,12 +77,12 @@ class PositionRepository:
 
     async def delete_all(self) -> None:
         """Delete all positions (used during sync)."""
-        async with self._db.transaction() as conn:
+        async with transaction_context(self._db) as conn:
             await conn.execute("DELETE FROM positions")
 
     async def delete(self, symbol: str) -> None:
         """Delete a specific position."""
-        async with self._db.transaction() as conn:
+        async with transaction_context(self._db) as conn:
             await conn.execute(
                 "DELETE FROM positions WHERE symbol = ?",
                 (symbol.upper(),)
@@ -78,7 +92,7 @@ class PositionRepository:
         """Update current price and recalculate market value."""
         now = datetime.now().isoformat()
 
-        async with self._db.transaction() as conn:
+        async with transaction_context(self._db) as conn:
             await conn.execute(
                 """
                 UPDATE positions SET
@@ -99,7 +113,7 @@ class PositionRepository:
         """Update the last_sold_at timestamp after a sell."""
         now = datetime.now().isoformat()
 
-        async with self._db.transaction() as conn:
+        async with transaction_context(self._db) as conn:
             await conn.execute(
                 "UPDATE positions SET last_sold_at = ? WHERE symbol = ?",
                 (now, symbol.upper())

@@ -102,26 +102,24 @@ from app.domain.scoring.stock_scorer import (
 
 # Technical indicators
 from app.domain.scoring.technical import (
+    # Async functions (check cache first)
+    get_ema,
+    get_rsi,
+    get_bollinger_bands,
+    get_sharpe_ratio,
+    get_max_drawdown,
+    get_52_week_high,
+    get_52_week_low,
+    # Sync functions (internal use, or when cache not needed)
     calculate_ema,
     calculate_rsi,
     calculate_bollinger_bands,
-    calculate_bollinger_position,
     calculate_volatility,
     calculate_sharpe_ratio,
     calculate_max_drawdown,
-    get_52_week_high,
-    get_52_week_low,
     calculate_distance_from_ma,
 )
 
-# Score caching
-from app.domain.scoring.cache import (
-    init_score_cache,
-    get_score_cache,
-    ScoreCache,
-    CACHE_TTL,
-    SUBCOMPONENTS,
-)
 
 __all__ = [
     # Models
@@ -161,16 +159,21 @@ __all__ = [
     "check_sell_eligibility",
     "determine_sell_quantity",
     "get_sell_settings",
-    # Technical indicators
+    # Technical indicators (async - check cache first)
+    "get_ema",
+    "get_rsi",
+    "get_bollinger_bands",
+    "get_sharpe_ratio",
+    "get_max_drawdown",
+    "get_52_week_high",
+    "get_52_week_low",
+    # Technical indicators (sync - internal use)
     "calculate_ema",
     "calculate_rsi",
     "calculate_bollinger_bands",
-    "calculate_bollinger_position",
     "calculate_volatility",
     "calculate_sharpe_ratio",
     "calculate_max_drawdown",
-    "get_52_week_high",
-    "get_52_week_low",
     "calculate_distance_from_ma",
     # Constants
     "OPTIMAL_CAGR",
@@ -181,10 +184,4 @@ __all__ = [
     "DEFAULT_MIN_HOLD_DAYS",
     "DEFAULT_SELL_COOLDOWN_DAYS",
     "DEFAULT_MAX_LOSS_THRESHOLD",
-    # Score caching
-    "init_score_cache",
-    "get_score_cache",
-    "ScoreCache",
-    "CACHE_TTL",
-    "SUBCOMPONENTS",
 ]

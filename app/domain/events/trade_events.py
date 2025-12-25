@@ -16,6 +16,7 @@ class TradeExecutedEvent(DomainEvent):
     a trade has been successfully executed and recorded.
     """
     trade: Trade
+    occurred_at: datetime = field(default_factory=datetime.now)
     
     @property
     def symbol(self) -> str:

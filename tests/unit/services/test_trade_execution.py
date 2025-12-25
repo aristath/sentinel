@@ -7,7 +7,7 @@ Wrong validation could cause trades that shouldn't happen (or block ones that sh
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from app.application.services.trade_execution_service import TradeExecutionService
-from app.domain.models import TradeRecommendation
+from app.domain.models import Recommendation
 
 
 class TestTradeValidation:
@@ -61,9 +61,9 @@ class TestTradeValidation:
         quantity: float = 10,
         price: float = 100,
         currency: str = "EUR",
-    ) -> TradeRecommendation:
+    ) -> Recommendation:
         """Helper to create test trades."""
-        return TradeRecommendation(
+        return Recommendation(
             symbol=symbol,
             name="Test Stock",
             side=side,
@@ -71,6 +71,7 @@ class TestTradeValidation:
             estimated_price=price,
             estimated_value=quantity * price,
             reason="Test",
+            geography="US",
             currency=currency,
         )
 

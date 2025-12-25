@@ -28,6 +28,27 @@ class Stock:
     allow_buy: bool = True
     allow_sell: bool = False
     currency: Optional[Currency] = None
+    
+    def __post_init__(self):
+        """Validate stock data."""
+        if not self.symbol or not self.symbol.strip():
+            raise ValidationError("Symbol cannot be empty")
+        
+        if not self.name or not self.name.strip():
+            raise ValidationError("Name cannot be empty")
+        
+        # Validate geography
+        valid_geographies = {"US", "EU", "ASIA"}
+        if self.geography.upper() not in valid_geographies:
+            raise ValidationError(f"Invalid geography: {self.geography}. Must be one of {valid_geographies}")
+        
+        # Normalize symbol and geography
+        object.__setattr__(self, 'symbol', self.symbol.upper().strip())
+        object.__setattr__(self, 'geography', self.geography.upper())
+        
+        # Ensure min_lot is at least 1
+        if self.min_lot < 1:
+            object.__setattr__(self, 'min_lot', 1)
 
 
 @dataclass
@@ -124,7 +145,6 @@ class StockScore:
     total_score: Optional[float] = None
     sell_score: Optional[float] = None
 
-    # Legacy compatibility scores
     technical_score: Optional[float] = None
     fundamental_score: Optional[float] = None
 

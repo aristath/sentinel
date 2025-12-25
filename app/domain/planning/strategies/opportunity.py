@@ -9,7 +9,7 @@ from app.domain.planning.strategies.base import RecommendationStrategy, Strategi
 from app.domain.scoring.models import PortfolioContext
 from app.domain.scoring.diversification import calculate_portfolio_score
 from app.domain.scoring import calculate_post_transaction_score
-from app.domain.scoring.technical import get_52_week_high
+# get_52_week_high is now async - imported in function
 from app.domain.models import Stock, Position
 from app.services import yahoo
 from app.services.tradernet import get_exchange_rate
@@ -200,6 +200,8 @@ class OpportunityStrategy(RecommendationStrategy):
             
             # Get price history to calculate 52W high distance
             try:
+                from app.domain.scoring.technical import get_52_week_high
+                
                 history_db = await db_manager.history(symbol)
                 rows = await history_db.fetchall(
                     "SELECT high_price FROM daily_prices ORDER BY date DESC LIMIT 252"
@@ -208,7 +210,7 @@ class OpportunityStrategy(RecommendationStrategy):
                 if rows:
                     highs = np.array([row['high_price'] for row in rows if row['high_price']])
                     if len(highs) > 0:
-                        high_52w = get_52_week_high(highs)
+                        high_52w = await get_52_week_high(symbol, highs)
                         pct_below = (high_52w - price) / high_52w if high_52w > 0 else 0
                     else:
                         pct_below = 0

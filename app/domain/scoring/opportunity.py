@@ -20,8 +20,6 @@ from app.domain.scoring.constants import (
     BELOW_HIGH_OK,
     MIN_DAYS_FOR_OPPORTUNITY,
 )
-from app.domain.scoring.technical import get_52_week_high
-
 logger = logging.getLogger(__name__)
 
 
@@ -96,7 +94,8 @@ def score_pe_ratio(
         return 1.0
 
 
-def calculate_opportunity_score(
+async def calculate_opportunity_score(
+    symbol: str,
     daily_prices: List[Dict],
     fundamentals,
     market_avg_pe: float = DEFAULT_MARKET_AVG_PE
@@ -105,6 +104,7 @@ def calculate_opportunity_score(
     Calculate opportunity score (value/dip signals).
 
     Args:
+        symbol: Stock symbol (for cache lookup)
         daily_prices: List of daily price dicts
         fundamentals: Yahoo fundamentals data
         market_avg_pe: Market average P/E for comparison
@@ -113,23 +113,38 @@ def calculate_opportunity_score(
         Tuple of (total_score, sub_components_dict)
         sub_components_dict: {"below_52w_high": float, "pe_ratio": float}
     """
+    from app.repositories.calculations import CalculationsRepository
+    from app.domain.scoring.technical import get_52_week_high
+
     if len(daily_prices) < MIN_DAYS_FOR_OPPORTUNITY:
         logger.warning(f"Insufficient daily data: {len(daily_prices)} days")
         sub_components = {"below_52w_high": 0.5, "pe_ratio": 0.5}
         return 0.5, sub_components
+
+    calc_repo = CalculationsRepository()
 
     # Extract price arrays
     closes = np.array([p["close"] for p in daily_prices])
     highs = np.array([p.get("high") or p["close"] for p in daily_prices])
     current_price = closes[-1]
 
-    # 1. Below 52-week high score (50%)
-    high_52w = get_52_week_high(highs)
+    # 1. Below 52-week high score (50%) - get from cache
+    high_52w = await get_52_week_high(symbol, highs)
     below_52w_score = score_below_52w_high(current_price, high_52w)
 
-    # 2. P/E ratio score (50%)
+    # Calculate distance from 52W high and cache it
+    distance_from_52w = (high_52w - current_price) / high_52w if high_52w > 0 else 0
+    await calc_repo.set_metric(symbol, "DISTANCE_FROM_52W_HIGH", distance_from_52w)
+
+    # 2. P/E ratio score (50%) - cache P/E ratios
     pe_ratio = fundamentals.pe_ratio if fundamentals else None
     forward_pe = fundamentals.forward_pe if fundamentals else None
+
+    if pe_ratio is not None:
+        await calc_repo.set_metric(symbol, "PE_RATIO", pe_ratio)
+    if forward_pe is not None:
+        await calc_repo.set_metric(symbol, "FORWARD_PE", forward_pe)
+
     pe_score = score_pe_ratio(pe_ratio, forward_pe, market_avg_pe)
 
     # Combined score (50/50 split)

@@ -13,12 +13,12 @@ from app.application.services.trade_execution_service import TradeExecutionServi
 async def test_trade_execution_rollback_on_database_error(db):
     """Test that trade execution rolls back when database write fails."""
     from app.repositories import TradeRepository
-    from app.domain.models import TradeRecommendation
+    from app.domain.models import Recommendation
 
     trade_repo = TradeRepository(db=db)
     
     # Create a trade recommendation (what TradeExecutionService expects)
-    trade_rec = TradeRecommendation(
+    trade_rec = Recommendation(
         symbol="AAPL",
         name="Apple Inc.",
         side="BUY",
@@ -26,6 +26,7 @@ async def test_trade_execution_rollback_on_database_error(db):
         estimated_price=150.0,
         estimated_value=1500.0,
         reason="Test trade",
+        geography="US",
     )
     
     # Mock external trade execution to succeed, but database write to fail
@@ -39,11 +40,11 @@ async def test_trade_execution_rollback_on_database_error(db):
         )
         mock_get_client.return_value = mock_client
         
-        service = TradeExecutionService(trade_repo=trade_repo, db=db)
+        service = TradeExecutionService(trade_repo=trade_repo)
         
         # Mock repository create to fail
         original_create = trade_repo.create
-        async def failing_create(trade, auto_commit=True):
+        async def failing_create(trade):
             raise Exception("Database write failed")
         
         trade_repo.create = failing_create
@@ -66,11 +67,11 @@ async def test_trade_execution_rollback_on_database_error(db):
 @pytest.mark.asyncio
 async def test_trade_execution_handles_external_failure(db):
     """Test that trade execution handles external API failures."""
-    from app.domain.models import TradeRecommendation
+    from app.domain.models import Recommendation
 
     trade_repo = TradeRepository(db=db)
     
-    trade_rec = TradeRecommendation(
+    trade_rec = Recommendation(
         symbol="AAPL",
         name="Apple Inc.",
         side="BUY",
@@ -78,6 +79,7 @@ async def test_trade_execution_handles_external_failure(db):
         estimated_price=150.0,
         estimated_value=1500.0,
         reason="Test trade",
+        geography="US",
     )
     
     # Mock external trade execution to fail
@@ -87,7 +89,7 @@ async def test_trade_execution_handles_external_failure(db):
         mock_client.place_order.side_effect = Exception("API Error")
         mock_get_client.return_value = mock_client
         
-        service = TradeExecutionService(trade_repo=trade_repo, db=db)
+        service = TradeExecutionService(trade_repo=trade_repo)
         
         # Should handle error gracefully, no trade should be recorded
         results = await service.execute_trades([trade_rec])
@@ -118,7 +120,7 @@ async def test_position_sync_recovery_after_partial_failure(db):
         last_updated=datetime.now().isoformat(),
     )
     
-    await position_repo.upsert(position1, auto_commit=True)
+    await position_repo.upsert(position1)
     
     # Verify initial position exists
     retrieved = await position_repo.get_by_symbol("AAPL")
@@ -141,11 +143,11 @@ async def test_position_sync_recovery_after_partial_failure(db):
         # Use the database transaction context manager
         async with db.transaction():
             # Delete all positions (simulating sync start)
-            await position_repo.delete_all(auto_commit=False)
+            await position_repo.delete_all()
 
             # Insert new positions
-            await position_repo.upsert(position1, auto_commit=False)
-            await position_repo.upsert(position2, auto_commit=False)
+            await position_repo.upsert(position1)
+            await position_repo.upsert(position2)
 
             # Simulate error
             raise ValueError("Sync error")
@@ -245,4 +247,5 @@ async def test_allocation_target_validation_error(db):
     asia_target = next((t for t in targets if t.name == "ASIA"), None)
     assert asia_target is not None
     assert asia_target.target_pct == 0.3
+
 

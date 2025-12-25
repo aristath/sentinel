@@ -101,7 +101,7 @@ async def test_portfolio_repository_create_and_get(portfolio_repo):
         geo_us_pct=0.2,
     )
 
-    await portfolio_repo.create(snapshot)
+    await portfolio_repo.upsert(snapshot)
 
     latest = await portfolio_repo.get_latest()
     assert latest is not None
@@ -185,3 +185,4 @@ async def test_trade_repository_create(stock_repo, trade_repo):
     assert len(history) == 1
     assert history[0].symbol == "AAPL"
     assert history[0].side == "BUY"
+

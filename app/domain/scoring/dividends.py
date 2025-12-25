@@ -79,18 +79,30 @@ def score_dividend_consistency(fundamentals) -> float:
     return (payout_score * 0.5 + growth_score * 0.5)
 
 
-def calculate_dividends_score(fundamentals) -> tuple:
+async def calculate_dividends_score(symbol: str, fundamentals) -> tuple:
     """
     Calculate dividends score.
 
     Args:
+        symbol: Stock symbol (for cache lookup)
         fundamentals: Yahoo fundamentals data
 
     Returns:
         Tuple of (total_score, sub_components_dict)
         sub_components_dict: {"yield": float, "consistency": float}
     """
+    from app.repositories.calculations import CalculationsRepository
+
+    calc_repo = CalculationsRepository()
+
     dividend_yield = fundamentals.dividend_yield if fundamentals else None
+    payout_ratio = fundamentals.payout_ratio if hasattr(fundamentals, 'payout_ratio') else None
+
+    # Cache dividend metrics
+    if dividend_yield is not None:
+        await calc_repo.set_metric(symbol, "DIVIDEND_YIELD", dividend_yield, source='yahoo')
+    if payout_ratio is not None:
+        await calc_repo.set_metric(symbol, "PAYOUT_RATIO", payout_ratio, source='yahoo')
 
     yield_score = score_dividend_yield(dividend_yield)
     consistency_score = score_dividend_consistency(fundamentals)

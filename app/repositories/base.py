@@ -1,8 +1,10 @@
 """Base repository utilities for common operations."""
 
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Optional, AsyncIterator, Union
+import aiosqlite
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +30,28 @@ def safe_get(row: Any, key: str, default: Any = None) -> Any:
             return default
     except (KeyError, IndexError, AttributeError):
         return default
+
+
+@asynccontextmanager
+async def transaction_context(db: Union[Any, aiosqlite.Connection]) -> AsyncIterator[aiosqlite.Connection]:
+    """
+    Transaction context manager that works with both Database instances and raw aiosqlite.Connection.
+    
+    Args:
+        db: Either a Database instance (from manager) or raw aiosqlite.Connection
+        
+    Yields:
+        aiosqlite.Connection for executing queries
+    """
+    # Check if db has transaction method (Database instance)
+    if hasattr(db, 'transaction'):
+        async with db.transaction() as conn:
+            yield conn
+    else:
+        # Raw aiosqlite.Connection - use its transaction support
+        # aiosqlite connections support async context manager for transactions
+        async with db:
+            yield db
 
 
 def safe_get_datetime(row: Any, key: str) -> Optional[datetime]:
@@ -145,4 +169,35 @@ def safe_get_int(row: Any, key: str, default: Optional[int] = None) -> Optional[
             return default
     
     return default
+
+
+class DatabaseAdapter:
+    """Adapter to make raw aiosqlite.Connection work like Database instance for testing."""
+    
+    def __init__(self, conn: aiosqlite.Connection):
+        self._conn = conn
+    
+    async def fetchone(self, sql: str, params: tuple = ()):
+        """Execute and fetch one row."""
+        cursor = await self._conn.execute(sql, params)
+        return await cursor.fetchone()
+    
+    async def fetchall(self, sql: str, params: tuple = ()):
+        """Execute and fetch all rows."""
+        cursor = await self._conn.execute(sql, params)
+        return await cursor.fetchall()
+    
+    async def execute(self, sql: str, params: tuple = ()):
+        """Execute a single SQL statement."""
+        return await self._conn.execute(sql, params)
+    
+    async def commit(self):
+        """Commit current transaction."""
+        await self._conn.commit()
+    
+    @asynccontextmanager
+    async def transaction(self) -> AsyncIterator[aiosqlite.Connection]:
+        """Transaction context manager."""
+        async with self._conn:
+            yield self._conn
 

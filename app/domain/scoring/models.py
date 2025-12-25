@@ -10,55 +10,6 @@ from typing import Optional, Dict
 
 
 @dataclass
-class QualityScore:
-    """Long-term quality score components."""
-    total_return_score: float  # 0-1, bell curve for CAGR + dividend
-    consistency_score: float   # 0-1, 5y vs 10y CAGR similarity
-    financial_strength_score: float  # 0-1, margins, debt, liquidity
-    dividend_bonus: float      # 0-0.10, extra for high dividend stocks
-    sharpe_ratio_score: float  # 0-1, risk-adjusted return quality
-    max_drawdown_score: float  # 0-1, resilience to losses
-    total: float
-
-    # Metadata
-    cagr_5y: Optional[float] = None   # 5-year CAGR
-    cagr_10y: Optional[float] = None  # 10-year CAGR (if available)
-    total_return: Optional[float] = None  # CAGR + dividend yield
-    dividend_yield: Optional[float] = None
-    sharpe_ratio: Optional[float] = None  # Actual Sharpe ratio value
-    max_drawdown: Optional[float] = None  # Actual max drawdown (negative)
-    history_years: float = 0  # Years of price data available
-
-
-@dataclass
-class OpportunityScore:
-    """Buy-the-dip opportunity score components."""
-    below_52w_high: float    # 0-1, further below = higher (BUY signal)
-    ema_distance: float      # 0-1, below 200-EMA = higher (BUY signal)
-    pe_vs_historical: float  # 0-1, below avg P/E = higher (BUY signal)
-    rsi_score: float         # 0-1, RSI < 30 = 1.0, RSI > 70 = 0.0
-    bollinger_score: float   # 0-1, near lower band = higher
-    total: float
-
-
-@dataclass
-class AnalystScore:
-    """Analyst recommendation score components."""
-    recommendation_score: float  # 0-1, based on buy/hold/sell
-    target_score: float          # 0-1, based on upside potential
-    total: float
-
-
-@dataclass
-class AllocationFitScore:
-    """Allocation fit score components (portfolio awareness)."""
-    geo_gap_score: float         # 0-1, boost for underweight geographies
-    industry_gap_score: float    # 0-1, boost for underweight industries
-    averaging_down_score: float  # 0-1, bonus for quality dips we own
-    total: float
-
-
-@dataclass
 class PortfolioContext:
     """Portfolio context for allocation fit calculations."""
     geo_weights: Dict[str, float]       # name -> weight (-1 to +1)
@@ -99,12 +50,6 @@ class CalculatedStockScore:
 
     # Sub-component scores for each group (e.g., long_term: {cagr, sortino, sharpe})
     sub_scores: Optional[Dict[str, Dict[str, float]]] = None
-
-    # Legacy fields - deprecated, kept for backwards compatibility
-    quality: Optional[QualityScore] = None
-    opportunity: Optional[OpportunityScore] = None
-    analyst: Optional[AnalystScore] = None
-    allocation_fit: Optional[AllocationFitScore] = None
 
 
 @dataclass

@@ -19,11 +19,7 @@ from app.domain.scoring.constants import (
     EMA_BELOW,
     EMA_VERY_ABOVE,
 )
-from app.domain.scoring.technical import (
-    calculate_ema,
-    calculate_rsi,
-    calculate_bollinger_position,
-)
+# Technical functions are imported in calculate_technicals_score
 
 logger = logging.getLogger(__name__)
 
@@ -92,35 +88,60 @@ def score_ema_distance(current_price: float, ema_value: float) -> float:
         return 1.0
 
 
-def calculate_technicals_score(daily_prices: List[Dict]) -> tuple:
+async def calculate_technicals_score(symbol: str, daily_prices: List[Dict]) -> tuple:
     """
     Calculate technicals score.
 
     Args:
+        symbol: Stock symbol (for cache lookup)
         daily_prices: Daily price data
 
     Returns:
         Tuple of (total_score, sub_components_dict)
         sub_components_dict: {"rsi": float, "bollinger": float, "ema": float}
     """
+    from app.repositories.calculations import CalculationsRepository
+    from app.domain.scoring.technical import (
+        get_rsi,
+        get_bollinger_bands,
+        get_ema,
+        calculate_distance_from_ma,
+    )
+
     if len(daily_prices) < 20:
         sub_components = {"rsi": 0.5, "bollinger": 0.5, "ema": 0.5}
         return 0.5, sub_components
 
+    calc_repo = CalculationsRepository()
     closes = np.array([p["close"] for p in daily_prices])
     current_price = closes[-1]
 
-    # RSI
-    rsi_value = calculate_rsi(closes)
+    # RSI - get from cache
+    rsi_value = await get_rsi(symbol, closes)
     rsi_score = score_rsi(rsi_value)
 
-    # Bollinger position
-    bb_position = calculate_bollinger_position(closes)
+    # Bollinger position - get from cache
+    bands = await get_bollinger_bands(symbol, closes)
+    if bands:
+        lower, middle, upper = bands
+        if upper > lower:
+            bb_position = (current_price - lower) / (upper - lower)
+            bb_position = max(0.0, min(1.0, bb_position))
+        else:
+            bb_position = 0.5
+        await calc_repo.set_metric(symbol, "BB_POSITION", bb_position)
+    else:
+        bb_position = 0.5
     bb_score = score_bollinger(bb_position)
 
-    # EMA distance
-    ema_value = calculate_ema(closes)
-    ema_score = score_ema_distance(current_price, ema_value or current_price)
+    # EMA distance - get from cache
+    ema_value = await get_ema(symbol, closes)
+    if ema_value:
+        distance_from_ema = calculate_distance_from_ma(current_price, ema_value)
+        await calc_repo.set_metric(symbol, "DISTANCE_FROM_EMA_200", distance_from_ema)
+    else:
+        ema_value = current_price
+    ema_score = score_ema_distance(current_price, ema_value)
 
     # 35% RSI, 35% Bollinger, 30% EMA
     total = (

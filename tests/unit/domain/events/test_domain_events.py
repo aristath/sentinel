@@ -21,7 +21,13 @@ class TestDomainEvents:
 
     def test_domain_event_base(self):
         """Test that DomainEvent is a base class."""
-        event = DomainEvent(occurred_at=datetime.now())
+        # DomainEvent is abstract - test with a concrete subclass
+        from app.domain.events.stock_events import StockAddedEvent
+        from app.domain.models import Stock
+        from app.domain.value_objects.currency import Currency
+        
+        stock = Stock(symbol="AAPL.US", name="Apple Inc.", geography="US", currency=Currency.USD)
+        event = StockAddedEvent(stock=stock)
         assert event.occurred_at is not None
 
     def test_trade_executed_event(self):

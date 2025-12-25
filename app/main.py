@@ -16,7 +16,6 @@ from app.jobs.scheduler import init_scheduler, start_scheduler, stop_scheduler
 from app.services.tradernet import get_tradernet_client
 from app.infrastructure.hardware.led_display import setup_event_subscriptions
 from app.infrastructure.events import emit, SystemEvent
-from app.domain.scoring.cache import init_score_cache
 
 # Configure logging with correlation ID support and log rotation
 from app.infrastructure.logging_context import CorrelationIDFilter
@@ -73,9 +72,6 @@ async def lifespan(app: FastAPI):
 
     # Initialize database manager (creates all databases with schemas)
     db_manager = await init_databases(settings.data_dir)
-
-    # Initialize score cache with database persistence
-    init_score_cache(db_manager)
 
     # Initialize and start scheduler
     await init_scheduler()
