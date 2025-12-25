@@ -56,6 +56,11 @@ from app.infrastructure.recommendation_cache import get_recommendation_cache
 
 logger = logging.getLogger(__name__)
 
+# Threshold for filtering out stocks that worsen portfolio balance
+# A stock is skipped if buying it decreases portfolio score by more than this amount
+# (on a 0-100 scale). More negative = more lenient.
+MAX_BALANCE_WORSENING_THRESHOLD = -5.0
+
 
 def _determine_stock_currency(stock: dict) -> str:
     """
@@ -478,7 +483,7 @@ class RebalancingService:
             )
 
             # Skip stocks that worsen portfolio balance significantly
-            if score_change < -1.0:
+            if score_change < MAX_BALANCE_WORSENING_THRESHOLD:
                 filter_stats["worsens_balance"] += 1
                 logger.debug(f"Skipping {symbol}: transaction worsens balance ({score_change:.2f})")
                 continue
@@ -688,7 +693,7 @@ class RebalancingService:
                     portfolio_context=portfolio_context,
                     portfolio_hash=cache_key,
                 )
-                if score_change < -1.0:
+                if score_change < MAX_BALANCE_WORSENING_THRESHOLD:
                     filter_stats["worsens_balance"].append({
                         "symbol": symbol,
                         "geography": stock.geography,
@@ -1449,7 +1454,7 @@ class RebalancingService:
                     score_change = new_score.total - current_score.total
                     
                     # Skip if worsens portfolio significantly
-                    if score_change < -1.0:
+                    if score_change < MAX_BALANCE_WORSENING_THRESHOLD:
                         continue
                     
                     # Prefer recommendations that improve portfolio score
