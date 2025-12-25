@@ -674,7 +674,7 @@ async def _get_buy_trades(
         trades.append(TradeRecommendation(
             symbol=c["symbol"],
             name=c["name"],
-            side=TRADE_SIDE_BUY,
+            side=TradeSide.BUY,
             quantity=c["quantity"],
             estimated_price=round(c["price"], 2),
             estimated_value=round(c["trade_value_eur"], 2),
