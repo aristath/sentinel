@@ -13,7 +13,7 @@ import pandas as pd
 import empyrical
 import pandas_ta as ta
 
-from app.config import settings
+from app.config import settings as app_settings
 from app.infrastructure.database.manager import get_db_manager
 from app.repositories import (
     StockRepository,
@@ -720,8 +720,8 @@ class RebalancingService:
         """
         Calculate optimal trades using get_recommendations() as the source of truth.
         """
-        if available_cash < settings.min_cash_threshold:
-            logger.info(f"Cash €{available_cash:.2f} below minimum €{settings.min_cash_threshold:.2f}")
+        if available_cash < app_settings.min_cash_threshold:
+            logger.info(f"Cash €{available_cash:.2f} below minimum €{app_settings.min_cash_threshold:.2f}")
             return []
 
         max_trades = get_max_trades(available_cash)
@@ -1335,8 +1335,8 @@ class RebalancingService:
             # Multi-step logic:
             # Step 1: MUST be a sell (to generate cash and start the sequence)
             # Subsequent steps: buys using freed cash, or more sells if beneficial
-            prioritize_sells = (step_num == 1) or (available_cash < settings.min_cash_threshold)
-            logger.warning(f"Step {step_num}: prioritize_sells={prioritize_sells}, min_cash_threshold={settings.min_cash_threshold}")
+            prioritize_sells = (step_num == 1) or (available_cash < app_settings.min_cash_threshold)
+            logger.warning(f"Step {step_num}: prioritize_sells={prioritize_sells}, min_cash_threshold={app_settings.min_cash_threshold}")
             
             best_recommendation = None
             best_score_change = -999.0
@@ -1414,7 +1414,7 @@ class RebalancingService:
                         }
             
             # If no sell recommendation or we have cash, try buy recommendations
-            buy_condition = not best_recommendation or (available_cash >= settings.min_cash_threshold and not prioritize_sells)
+            buy_condition = not best_recommendation or (available_cash >= app_settings.min_cash_threshold and not prioritize_sells)
             logger.error(f"Step {step_num}: buy_condition={buy_condition}, best_rec={best_recommendation is not None}, cash={available_cash:.2f}, prioritize_sells={prioritize_sells}")
             if buy_condition:
                 # For step 1, use get_recommendations (uses real portfolio)
