@@ -205,7 +205,28 @@ METRIC_TTL = {
     # On-demand (24 hours) - Analyst data fetched when needed
     "ANALYST_RECOMMENDATION": 86400,
     "PRICE_TARGET_UPSIDE": 86400,
+
+    # Holistic planning metrics
+    "TOTAL_RETURN": 604800,        # 7 days - CAGR + dividend yield
+    "LONG_TERM_PROMISE": 604800,   # 7 days - Composite promise score
+    "STABILITY_SCORE": 86400,      # 24 hours - Volatility-based
+    "EXCESS_GAIN": 86400,          # 24 hours - Windfall detection
+    "WINDFALL_SCORE": 86400,       # 24 hours - Profit-taking signal
 }
 
 # Default TTL for unknown metrics (24 hours)
 DEFAULT_METRIC_TTL = 86400
+
+# =============================================================================
+# Holistic Planning Constants
+# =============================================================================
+
+# Windfall detection thresholds
+WINDFALL_EXCESS_HIGH = 0.50       # 50%+ above expected = high windfall
+WINDFALL_EXCESS_MEDIUM = 0.25    # 25-50% above expected = medium windfall
+WINDFALL_SELL_PCT_HIGH = 0.40    # Sell 40% on high windfall
+WINDFALL_SELL_PCT_MEDIUM = 0.20  # Sell 20% on medium windfall
+CONSISTENT_DOUBLE_SELL_PCT = 0.30  # Sell 30% on consistent doubler
+
+# Dividend cut threshold
+DIVIDEND_CUT_THRESHOLD = 0.20    # 20% YoY cut = "big cut"

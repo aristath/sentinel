@@ -1175,18 +1175,20 @@ class RebalancingService:
     async def get_multi_step_recommendations(
         self,
         depth: Optional[int] = None,
-        strategy_type: str = "diversification"
+        strategy_type: str = "diversification",
+        use_holistic: bool = False,
     ) -> List[MultiStepRecommendation]:
         """
         Generate multi-step recommendation sequence using specified strategy.
-        
+
         Each step simulates the portfolio state after the previous transaction,
         enabling smarter recommendations that consider cumulative effects.
-        
+
         Args:
             depth: Number of steps (1-5). If None, reads from settings (default: 1).
             strategy_type: Strategy to use ("diversification", "sustainability", "opportunity")
-        
+            use_holistic: If True, use holistic planner with end-state optimization
+
         Returns:
             List of MultiStepRecommendation objects, one per step
         """
@@ -1197,7 +1199,68 @@ class RebalancingService:
         
         # Clamp depth to valid range
         depth = max(1, min(5, depth))
-        
+
+        # Use holistic planner if requested
+        if use_holistic:
+            try:
+                from app.domain.planning.holistic_planner import create_holistic_plan
+
+                # Build portfolio context
+                portfolio_context = await self._build_portfolio_context()
+
+                # Get positions and stocks
+                positions = await self._position_repo.get_all()
+                stocks = await self._stock_repo.get_all_active()
+
+                # Get current cash balance
+                from app.services.tradernet import get_tradernet_client
+                client = get_tradernet_client()
+                available_cash = client.get_total_cash_eur() if client.is_connected else 0.0
+
+                # Create holistic plan
+                plan = await create_holistic_plan(
+                    portfolio_context=portfolio_context,
+                    available_cash=available_cash,
+                    stocks=stocks,
+                    positions=positions,
+                    max_steps=depth,
+                )
+
+                # Convert HolisticPlan to MultiStepRecommendation list
+                if plan.steps:
+                    recommendations = []
+                    running_cash = available_cash
+                    for step in plan.steps:
+                        cash_before = running_cash
+                        if step.side == TradeSide.SELL:
+                            running_cash += step.estimated_value
+                        else:
+                            running_cash -= step.estimated_value
+                        running_cash = max(0, running_cash)
+
+                        recommendations.append(MultiStepRecommendation(
+                            step=step.step_number,
+                            side=step.side,
+                            symbol=step.symbol,
+                            name=step.name,
+                            quantity=step.quantity,
+                            estimated_price=step.estimated_price,
+                            estimated_value=step.estimated_value,
+                            currency=step.currency,
+                            reason=step.narrative,  # Use narrative instead of reason
+                            portfolio_score_before=plan.current_score,
+                            portfolio_score_after=plan.end_state_score,
+                            score_change=plan.improvement,
+                            available_cash_before=cash_before,
+                            available_cash_after=running_cash,
+                        ))
+                    return recommendations
+                return []
+
+            except Exception as e:
+                logger.warning(f"Holistic planner failed, falling back to standard: {e}")
+                # Fall through to standard planning
+
         if depth == 1:
             # For depth=1, return single recommendation (maintains backward compatibility)
             buy_recs = await self.get_recommendations(limit=1)
