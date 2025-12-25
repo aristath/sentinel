@@ -24,6 +24,7 @@ from app.repositories import (
     SettingsRepository,
     RecommendationRepository,
 )
+from app.domain.services.settings_service import SettingsService
 from app.domain.scoring import (
     calculate_portfolio_score,
     calculate_post_transaction_score,
@@ -119,6 +120,7 @@ class RebalancingService:
         self._portfolio_repo = portfolio_repo or PortfolioRepository()
         self._trade_repo = trade_repo or TradeRepository()
         self._settings_repo = settings_repo or SettingsRepository()
+        self._settings_service = SettingsService(self._settings_repo)
         self._recommendation_repo = recommendation_repo or RecommendationRepository()
         self._db_manager = get_db_manager()
 
@@ -303,7 +305,8 @@ class RebalancingService:
                 ))
             return recommendations
 
-        base_trade_amount = await self._settings_repo.get_float("min_trade_size", 150.0)
+        settings = await self._settings_service.get_settings()
+        base_trade_amount = settings.min_trade_size
 
         # Build portfolio context
         portfolio_context = await self._build_portfolio_context()
@@ -704,11 +707,14 @@ class RebalancingService:
                 ind_allocations[ind] = ind_allocations.get(ind, 0) + value / total_value
 
         # Get sell settings
+        settings = await self._settings_service.get_settings()
+        from app.domain.value_objects.settings import TradingSettings
+        trading_settings = TradingSettings.from_settings(settings)
         sell_settings = {
-            "min_hold_days": await self._settings_repo.get_int("min_hold_days", 90),
-            "sell_cooldown_days": await self._settings_repo.get_int("sell_cooldown_days", 180),
-            "max_loss_threshold": await self._settings_repo.get_float("max_loss_threshold", -0.20),
-            "target_annual_return": await self._settings_repo.get_float("target_annual_return", 0.10),
+            "min_hold_days": trading_settings.min_hold_days,
+            "sell_cooldown_days": trading_settings.sell_cooldown_days,
+            "max_loss_threshold": trading_settings.max_loss_threshold,
+            "target_annual_return": trading_settings.target_annual_return,
         }
 
         # Calculate sell scores
@@ -1042,7 +1048,8 @@ class RebalancingService:
         """
         # Get depth from settings if not provided
         if depth is None:
-            depth = await self._settings_repo.get_int("recommendation_depth", 1)
+            settings = await self._settings_service.get_settings()
+            depth = settings.recommendation_depth
         
         # Clamp depth to valid range
         depth = max(1, min(5, depth))

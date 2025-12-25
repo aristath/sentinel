@@ -79,8 +79,10 @@ async def _check_and_rebalance_internal():
         await sync_portfolio()
 
         # Get configurable threshold from database
-        settings_repo = SettingsRepository()
-        min_trade_size = await settings_repo.get_float("min_trade_size", 150.0)
+        from app.domain.services.settings_service import SettingsService
+        settings_service = SettingsService(SettingsRepository())
+        settings = await settings_service.get_settings()
+        min_trade_size = settings.min_trade_size
 
         # Connect to broker
         client = get_tradernet_client()
@@ -457,12 +459,16 @@ async def _get_best_sell_trade(
     }
 
     # Get sell settings
-    settings_repo = SettingsRepository()
+    from app.domain.services.settings_service import SettingsService
+    from app.domain.value_objects.settings import TradingSettings
+    settings_service = SettingsService(SettingsRepository())
+    settings = await settings_service.get_settings()
+    trading_settings = TradingSettings.from_settings(settings)
     sell_settings = {
-        "min_hold_days": await settings_repo.get_int("min_hold_days", 90),
-        "sell_cooldown_days": await settings_repo.get_int("sell_cooldown_days", 180),
-        "max_loss_threshold": await settings_repo.get_float("max_loss_threshold", -0.20),
-        "target_annual_return": await settings_repo.get_float("target_annual_return", 0.10),
+        "min_hold_days": trading_settings.min_hold_days,
+        "sell_cooldown_days": trading_settings.sell_cooldown_days,
+        "max_loss_threshold": trading_settings.max_loss_threshold,
+        "target_annual_return": trading_settings.target_annual_return,
     }
 
     sell_scores = await calculate_all_sell_scores(
