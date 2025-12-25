@@ -1,5 +1,7 @@
 """Stock factory for creating Stock domain objects."""
 
+from typing import Optional
+
 from app.domain.models import Stock
 from app.domain.value_objects.currency import Currency
 from app.domain.exceptions import ValidationError
@@ -74,7 +76,7 @@ class StockFactory:
         )
 
     @classmethod
-    def create_with_industry_detection(cls, data: dict, industry: str | None = None) -> Stock:
+    def create_with_industry_detection(cls, data: dict, industry: Optional[str] = None) -> Stock:
         """Create Stock with industry detection.
         
         Args:
