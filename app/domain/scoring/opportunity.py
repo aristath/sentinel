@@ -20,7 +20,27 @@ from app.domain.scoring.constants import (
     BELOW_HIGH_OK,
     MIN_DAYS_FOR_OPPORTUNITY,
 )
+from app.domain.constants import MAX_PRICE_VS_52W_HIGH
+
 logger = logging.getLogger(__name__)
+
+
+def is_price_too_high(current_price: float, high_52w: float) -> bool:
+    """
+    Check if price is too close to 52-week high for buying.
+
+    Guardrail to prevent chasing all-time highs.
+
+    Args:
+        current_price: Current stock price
+        high_52w: 52-week high price
+
+    Returns:
+        True if price is above threshold (should block buy)
+    """
+    if high_52w <= 0:
+        return False  # No data, allow trade
+    return current_price >= high_52w * MAX_PRICE_VS_52W_HIGH
 
 
 def score_below_52w_high(current_price: float, high_52w: float) -> float:
@@ -72,7 +92,7 @@ def score_pe_ratio(
         Score from 0.2 to 1.0
     """
     if not pe_ratio or pe_ratio <= 0:
-        return 0.5  # Neutral if no P/E
+        return 0.3  # Penalty for missing P/E data - unknown = risky
 
     # Blend current and forward P/E
     if forward_pe and forward_pe > 0:

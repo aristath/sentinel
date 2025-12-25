@@ -20,6 +20,19 @@ DEFAULT_VOLATILITY = 0.20           # Default if volatility unknown
 # Only rebalance when position deviates significantly from target
 REBALANCE_BAND_PCT = 0.07  # 7% deviation triggers rebalance
 
+# Trading Guardrails
+# Price ceiling - don't chase all-time highs
+MAX_PRICE_VS_52W_HIGH = 0.95  # Block buys if price > 95% of 52-week high
+
+# Position concentration limit
+MAX_POSITION_PCT = 0.15  # Max 15% of portfolio in any single position
+
+# Daily loss circuit breaker (tiered)
+# -2%: Block sells (don't lock in losses), allow buys (capture opportunities)
+# -5%: Block all trading (extreme volatility, wait for clarity)
+DAILY_LOSS_SELL_HALT = 0.02  # Block SELLS if portfolio down 2%+
+DAILY_LOSS_FULL_HALT = 0.05  # Block ALL trading if down 5%+
+
 # Currency codes - Use Currency enum from app.domain.value_objects.currency
 
 # Trade sides - Use TradeSide enum from app.domain.value_objects.trade_side

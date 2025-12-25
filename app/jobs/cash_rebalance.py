@@ -30,6 +30,7 @@ from app.domain.scoring import (
     PortfolioContext,
     TechnicalData,
 )
+from app.infrastructure.daily_pnl import get_daily_pnl_tracker
 
 if TYPE_CHECKING:
     from app.domain.models import Recommendation
@@ -77,6 +78,17 @@ async def _check_and_rebalance_internal():
         # Step 1: Sync portfolio for fresh data
         logger.info("Step 1: Syncing portfolio for fresh data...")
         await sync_portfolio()
+
+        # GUARDRAIL: Check daily P&L circuit breaker
+        pnl_tracker = get_daily_pnl_tracker()
+        pnl_status = await pnl_tracker.get_trading_status()
+        logger.info(f"Daily P&L status: {pnl_status['pnl_display']} ({pnl_status['status']})")
+
+        if pnl_status["status"] == "halted":
+            logger.warning(f"Trading halted: {pnl_status['reason']}")
+            emit(SystemEvent.ERROR_OCCURRED, message="TRADING HALTED - SEVERE DRAWDOWN")
+            emit(SystemEvent.REBALANCE_COMPLETE)
+            return
 
         # Get configurable threshold from database
         from app.domain.services.settings_service import SettingsService
@@ -156,9 +168,14 @@ async def _check_and_rebalance_internal():
         logger.info("Step 3: Checking for SELL recommendations...")
         set_activity("PROCESSING SELL RECOMMENDATIONS...", duration=30.0)
 
-        sell_trade = await _get_best_sell_trade(
-            positions, stocks, trade_repo, portfolio_context, db_manager
-        )
+        # GUARDRAIL: Check if sells are allowed (blocked during drawdowns)
+        if not pnl_status["can_sell"]:
+            logger.info(f"Sells blocked by P&L guardrail: {pnl_status['reason']}")
+            sell_trade = None
+        else:
+            sell_trade = await _get_best_sell_trade(
+                positions, stocks, trade_repo, portfolio_context, db_manager
+            )
 
         if sell_trade:
             # Additional safety check: verify no recent sell order in database
@@ -213,6 +230,12 @@ async def _check_and_rebalance_internal():
 
         # Step 4: Check for BUY recommendation
         logger.info("Step 4: Checking for BUY recommendations...")
+
+        # GUARDRAIL: Check if buys are allowed (blocked during severe crashes)
+        if not pnl_status["can_buy"]:
+            logger.warning(f"Buys blocked by P&L guardrail: {pnl_status['reason']}")
+            emit(SystemEvent.REBALANCE_COMPLETE)
+            return
 
         if cash_balance < min_trade_size:
             logger.info(
@@ -649,10 +672,10 @@ async def _get_buy_trades(
         base_score = (
             quality_score * 0.35 +
             opportunity_score * 0.35 +
-            analyst_score * 0.15
+            analyst_score * 0.05  # Reduced from 0.15 - tiebreaker only
         )
         normalized_score_change = max(0, min(1, (score_change + 5) / 10))
-        final_score = base_score * 0.85 + normalized_score_change * 0.15
+        final_score = base_score * 0.75 + normalized_score_change * 0.25  # Increased portfolio impact weight
 
         # Apply priority multiplier
         final_score *= stock.priority_multiplier or 1.0

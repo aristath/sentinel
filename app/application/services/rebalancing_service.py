@@ -50,7 +50,10 @@ from app.domain.constants import (
     MAX_VOL_WEIGHT,
     MIN_VOLATILITY_FOR_SIZING,
     REBALANCE_BAND_PCT,
+    MAX_PRICE_VS_52W_HIGH,
+    MAX_POSITION_PCT,
 )
+from app.domain.scoring.opportunity import is_price_too_high
 from app.services import yahoo
 from app.services.tradernet import get_exchange_rate
 from app.domain.value_objects.trade_side import TradeSide
@@ -386,7 +389,7 @@ class RebalancingService:
             logger.warning(f"Missing prices for {len(missing_prices)} stocks: {missing_prices[:10]}")
 
         candidates = []
-        filter_stats = {"no_allow_buy": 0, "recently_bought": 0, "no_score": 0, "low_score": 0, "no_price": 0, "worsens_balance": 0}
+        filter_stats = {"no_allow_buy": 0, "recently_bought": 0, "no_score": 0, "low_score": 0, "no_price": 0, "price_too_high": 0, "exceeds_position_cap": 0, "worsens_balance": 0}
 
         for stock in stocks:
             symbol = stock.symbol
@@ -429,6 +432,16 @@ class RebalancingService:
             price = batch_prices.get(symbol)
             if not price or price <= 0:
                 filter_stats["no_price"] += 1
+                continue
+
+            # GUARDRAIL: Price ceiling - don't buy near 52-week highs
+            # Get 52-week high from cached calculations
+            from app.repositories.calculations import CalculationsRepository
+            calc_repo = CalculationsRepository()
+            high_52w = await calc_repo.get_metric(symbol, "52W_HIGH")
+            if high_52w and is_price_too_high(price, high_52w):
+                filter_stats["price_too_high"] += 1
+                logger.debug(f"Skipping {symbol}: price ${price:.2f} too close to 52W high ${high_52w:.2f}")
                 continue
 
             # Determine stock currency and exchange rate
@@ -478,6 +491,16 @@ class RebalancingService:
 
             trade_value_eur = trade_value_native / exchange_rate
 
+            # GUARDRAIL: Position size cap - no single position > 15% of portfolio
+            current_position_value = portfolio_context.positions.get(symbol, 0)
+            new_position_value = current_position_value + trade_value_eur
+            total_after = portfolio_context.total_value + trade_value_eur
+            new_position_pct = new_position_value / total_after if total_after > 0 else 0
+            if new_position_pct > MAX_POSITION_PCT:
+                filter_stats["exceeds_position_cap"] += 1
+                logger.debug(f"Skipping {symbol}: would be {new_position_pct*100:.1f}% of portfolio (max {MAX_POSITION_PCT*100:.0f}%)")
+                continue
+
             # Calculate POST-TRANSACTION portfolio score (with caching)
             dividend_yield = 0  # Could be enhanced later
             new_score, score_change = await calculate_post_transaction_score(
@@ -501,10 +524,10 @@ class RebalancingService:
             base_score = (
                 quality_score * 0.35 +
                 opportunity_score * 0.35 +
-                analyst_score * 0.15
+                analyst_score * 0.05  # Reduced from 0.15 - tiebreaker only
             )
             normalized_score_change = max(0, min(1, (score_change + 5) / 10))
-            final_score = base_score * 0.85 + normalized_score_change * 0.15
+            final_score = base_score * 0.75 + normalized_score_change * 0.25  # Increased portfolio impact weight
 
             # Build reason
             reason_parts = []
@@ -1243,10 +1266,10 @@ class RebalancingService:
         self,
         depth: Optional[int] = None,
         strategy_type: str = "diversification",
-        use_holistic: bool = False,
+        use_holistic: bool = True,  # Default to holistic planner (end-state optimization)
     ) -> List[MultiStepRecommendation]:
         """
-        Generate multi-step recommendation sequence using specified strategy.
+        Generate multi-step recommendation sequence using holistic planner.
 
         Each step simulates the portfolio state after the previous transaction,
         enabling smarter recommendations that consider cumulative effects.
@@ -1254,7 +1277,7 @@ class RebalancingService:
         Args:
             depth: Number of steps (1-5). If None, reads from settings (default: 1).
             strategy_type: Strategy to use ("diversification", "sustainability", "opportunity")
-            use_holistic: If True, use holistic planner with end-state optimization
+            use_holistic: Use holistic planner (default True, recommended)
 
         Returns:
             List of MultiStepRecommendation objects, one per step
@@ -1414,265 +1437,8 @@ class RebalancingService:
                             logger.info(f"Generated {len(recommendations)} strategic recommendations using {strategy_type} strategy")
                             return recommendations
             except Exception as e:
-                logger.warning(f"Strategic planning failed, falling back to forward-looking: {e}")
-        
-        # Fall back to existing forward-looking logic
-        # Multi-step generation: MUST start with a SELL to make sense
-        # If no sell available, return empty (fall back to normal recommendations)
-        steps = []
-        current_context = await self._build_portfolio_context()
+                logger.warning(f"Strategic planning failed: {e}")
 
-        # Get settings for thresholds (fetch here since we skipped the strategic branch)
-        # Use a different name to avoid shadowing the imported config settings
-        user_settings = await self._settings_service.get_settings()
-
-        # Generate portfolio hash for caching
-        from app.domain.portfolio_hash import generate_portfolio_hash
-        positions = await self._position_repo.get_all()
-        position_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
-        portfolio_hash = generate_portfolio_hash(position_dicts)
-
-        # Get performance-adjusted weights (with caching)
-        adjusted_geo_weights, adjusted_ind_weights = await self._get_performance_adjusted_weights(portfolio_hash)
-        if adjusted_geo_weights:
-            current_context.geo_weights.update(adjusted_geo_weights)
-        if adjusted_ind_weights:
-            current_context.industry_weights.update(adjusted_ind_weights)
-
-        # Get current cash balance
-        from app.services.tradernet import get_tradernet_client
-        client = get_tradernet_client()
-        available_cash = client.get_total_cash_eur() if client.is_connected else 0.0
-
-        # Track used symbols to avoid duplicates
-        used_symbols = set()
-
-        # Get recently bought symbols for cooldown
-        recently_bought = await self._trade_repo.get_recently_bought_symbols(BUY_COOLDOWN_DAYS)
-
-        # Multi-step MUST start with a sell - check if we have sellable positions first
-        sell_recs = await self.calculate_sell_recommendations(limit=10)
-        if not sell_recs:
-            logger.info("No sell recommendations available - multi-step not possible")
-            return []  # No multi-step possible without a sell to start
-
-        for step_num in range(1, depth + 1):
-            logger.debug(f"=== MULTI-STEP {step_num} ===  available_cash={available_cash:.2f}, used_symbols={used_symbols}")
-
-            # Calculate current portfolio score
-            current_score = await calculate_portfolio_score(current_context)
-
-            # Multi-step logic:
-            # Step 1: MUST be a sell (to generate cash and start the sequence)
-            # Subsequent steps: buys using freed cash, or more sells if beneficial
-            prioritize_sells = (step_num == 1) or (available_cash < app_settings.min_cash_threshold)
-            
-            best_recommendation = None
-            best_score_change = -999.0
-            
-            if prioritize_sells:
-                # Try to get sell recommendation
-                # For step 1, use real portfolio; for subsequent steps, we'll filter based on simulated context
-                sell_recs = await self.calculate_sell_recommendations(limit=10)
-                for sell_rec in sell_recs:
-                    if sell_rec.symbol in used_symbols:
-                        continue
-                    
-                    # Check if this position still exists in simulated context
-                    if step_num > 1 and sell_rec.symbol not in current_context.positions:
-                        continue  # Position was already sold in a previous step
-                    
-                    # Check if we have enough position value to sell
-                    current_position_value = current_context.positions.get(sell_rec.symbol, 0)
-                    if sell_rec.estimated_value > current_position_value:
-                        # Adjust sell value to available position
-                        if current_position_value <= 0:
-                            continue  # No position to sell
-                        # Use a smaller sell amount
-                        sell_value = min(sell_rec.estimated_value, current_position_value * 0.5)
-                    else:
-                        sell_value = sell_rec.estimated_value
-                    
-                    # Get stock info for geography/industry
-                    stock = await self._stock_repo.get_by_symbol(sell_rec.symbol)
-                    geography = stock.geography if stock else ""
-                    industry = stock.industry if stock else None
-                    
-                    # Simulate this sell
-                    transaction = {
-                        "side": TradeSide.SELL,
-                        "symbol": sell_rec.symbol,
-                        "value_eur": sell_value,
-                        "geography": geography,
-                        "industry": industry,
-                    }
-                    
-                    # Simulate portfolio after this transaction
-                    sim_context, sim_cash = await self._simulate_portfolio_after_transaction(
-                        current_context, transaction, available_cash
-                    )
-                    
-                    # Calculate score change
-                    new_score = await calculate_portfolio_score(sim_context)
-                    score_change = new_score.total - current_score.total
-                    
-                    # Prefer recommendations that improve portfolio score
-                    if score_change > best_score_change:
-                        best_score_change = score_change
-                        # Create adjusted sell recommendation with correct value
-                        adjusted_sell_rec = Recommendation(
-                            symbol=sell_rec.symbol,
-                            name=sell_rec.name,
-                            side=sell_rec.side,
-                            quantity=sell_rec.quantity,
-                            estimated_price=sell_rec.estimated_price,
-                            estimated_value=sell_value,
-                            reason=sell_rec.reason,
-                            geography=sell_rec.geography,
-                            currency=sell_rec.currency,
-                            status=sell_rec.status,
-                        )
-                        best_recommendation = {
-                            "type": "SELL",
-                            "rec": adjusted_sell_rec,
-                            "transaction": transaction,
-                            "sim_context": sim_context,
-                            "sim_cash": sim_cash,
-                            "score_change": score_change,
-                            "new_score": new_score,
-                        }
-            
-            # If no sell recommendation or we have cash, try buy recommendations
-            buy_condition = not best_recommendation or (available_cash >= app_settings.min_cash_threshold and not prioritize_sells)
-            if buy_condition:
-                # For step 1, use get_recommendations (uses real portfolio)
-                # For step 2+, we should ideally use simulated context, but get_recommendations
-                # rebuilds context. We'll use it anyway and simulate the impact correctly.
-                buy_recs = await self.get_recommendations(limit=10)
-                logger.debug(f"Multi-step {step_num}: Got {len(buy_recs)} buy recs, available_cash={available_cash:.2f}")
-                for buy_rec in buy_recs:
-                    if buy_rec.symbol in used_symbols or buy_rec.symbol in recently_bought:
-                        continue
-
-                    if buy_rec.estimated_value > available_cash:
-                        continue  # Can't afford this buy
-
-                    # For step 2+, we need to recalculate the recommendation using simulated context
-                    # to get accurate portfolio impact. However, the buy_rec already has the right
-                    # amount and price, so we'll use it but simulate against current_context.
-
-                    # Get stock quality score
-                    score_row = await self._db_manager.state.fetchone(
-                        "SELECT quality_score FROM scores WHERE symbol = ?",
-                        (buy_rec.symbol,)
-                    )
-                    stock_quality = score_row["quality_score"] if score_row else 0.5
-
-                    transaction = {
-                        "side": TradeSide.BUY,
-                        "symbol": buy_rec.symbol,
-                        "value_eur": buy_rec.estimated_value,
-                        "geography": buy_rec.geography,
-                        "industry": buy_rec.industry,
-                        "stock_quality": stock_quality,
-                        "stock_dividend": 0.0,  # Could be enhanced
-                    }
-                    
-                    # Simulate portfolio after this transaction using CURRENT (simulated) context
-                    sim_context, sim_cash = await self._simulate_portfolio_after_transaction(
-                        current_context, transaction, available_cash
-                    )
-                    
-                    # Calculate score change based on simulated context
-                    new_score = await calculate_portfolio_score(sim_context)
-                    score_change = new_score.total - current_score.total
-                    
-                    logger.debug(f"Multi-step {step_num}: {buy_rec.symbol} score_change={score_change:.2f}, best_so_far={best_score_change:.2f}")
-
-                    # Skip if worsens portfolio significantly (only for step 1)
-                    # For step 2+, skip the threshold since we're committed to multi-step
-                    # The goal is to use the freed cash, even if it slightly worsens balance
-                    if step_num == 1 and score_change < user_settings.max_balance_worsening:
-                        continue
-
-                    # Prefer recommendations that improve portfolio score
-                    if score_change > best_score_change:
-                        best_score_change = score_change
-                        best_recommendation = {
-                            "type": "BUY",
-                            "rec": buy_rec,
-                            "transaction": transaction,
-                            "sim_context": sim_context,
-                            "sim_cash": sim_cash,
-                            "score_change": score_change,
-                            "new_score": new_score,
-                        }
-
-            # If we found a recommendation, add it to steps
-            if best_recommendation:
-                # Step 1 MUST be a SELL for multi-step to make sense
-                if step_num == 1 and best_recommendation["type"] != "SELL":
-                    logger.info("Multi-step requires SELL as first step, but found BUY - aborting multi-step")
-                    return []  # Multi-step doesn't make sense without starting with a sell
-
-                rec = best_recommendation["rec"]
-
-                # Determine currency
-                currency = "EUR"
-                if best_recommendation["type"] == "SELL":
-                    currency = rec.currency
-                else:
-                    stock = await self._stock_repo.get_by_symbol(rec.symbol)
-                    if stock:
-                        currency = stock.currency or "EUR"
-
-                # Build step recommendation
-                if best_recommendation["type"] == "SELL":
-                    # Sell recommendation
-                    step_rec = MultiStepRecommendation(
-                        step=step_num,
-                        side=TradeSide.SELL,
-                        symbol=rec.symbol,
-                        name=rec.name,
-                        quantity=int(rec.quantity),
-                        estimated_price=rec.estimated_price,
-                        estimated_value=rec.estimated_value,
-                        currency=currency,
-                        reason=rec.reason,
-                        portfolio_score_before=current_score.total,
-                        portfolio_score_after=best_recommendation["new_score"].total,
-                        score_change=best_recommendation["score_change"],
-                        available_cash_before=available_cash,
-                        available_cash_after=best_recommendation["sim_cash"],
-                    )
-                else:
-                    # Buy recommendation
-                    step_rec = MultiStepRecommendation(
-                        step=step_num,
-                        side=TradeSide.BUY,
-                        symbol=rec.symbol,
-                        name=rec.name,
-                        quantity=rec.quantity or 0,
-                        estimated_price=rec.estimated_price or 0.0,
-                        estimated_value=rec.estimated_value,
-                        currency=currency,
-                        reason=rec.reason,
-                        portfolio_score_before=current_score.total,
-                        portfolio_score_after=best_recommendation["new_score"].total,
-                        score_change=best_recommendation["score_change"],
-                        available_cash_before=available_cash,
-                        available_cash_after=best_recommendation["sim_cash"],
-                    )
-
-                steps.append(step_rec)
-
-                # Update state for next iteration
-                current_context = best_recommendation["sim_context"]
-                available_cash = best_recommendation["sim_cash"]
-                used_symbols.add(rec.symbol)
-            else:
-                # No valid recommendation found, stop early
-                logger.info(f"Step {step_num}: No recommendation found, stopping multi-step early")
-                break
-        
-        return steps
+        # All planners failed - return empty for multi-step, holistic planner is required
+        logger.info("Multi-step planning requires holistic or strategic planner - no recommendations available")
+        return []

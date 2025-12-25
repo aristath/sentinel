@@ -79,11 +79,11 @@ OPPORTUNITY_WEIGHT_BOLLINGER = 0.10
 # Final score weights for BUY decisions (must sum to 1.0)
 SCORE_WEIGHT_QUALITY = 0.35
 SCORE_WEIGHT_OPPORTUNITY = 0.35
-SCORE_WEIGHT_ANALYST = 0.15
-SCORE_WEIGHT_ALLOCATION_FIT = 0.15
+SCORE_WEIGHT_ANALYST = 0.05    # Reduced from 0.15 - tiebreaker only
+SCORE_WEIGHT_ALLOCATION_FIT = 0.25  # Increased from 0.15 - prioritize diversification
 
-# Without allocation fit, these 3 sum to 0.85, normalized to 1.0
-SCORE_WEIGHT_BASE = 0.85  # Quality + Opportunity + Analyst
+# Without allocation fit, these 3 sum to 0.75, normalized to 1.0
+SCORE_WEIGHT_BASE = 0.75  # Quality + Opportunity + Analyst
 
 # =============================================================================
 # Allocation Fit Constants
