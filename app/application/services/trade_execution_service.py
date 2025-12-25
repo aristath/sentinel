@@ -10,6 +10,8 @@ from datetime import datetime
 from app.repositories import TradeRepository, PositionRepository
 from app.domain.models import TradeRecommendation, Trade
 from app.domain.value_objects.currency import Currency
+from app.domain.value_objects.trade_side import TradeSide
+from app.domain.factories.trade_factory import TradeFactory
 from app.services.tradernet import get_tradernet_client
 from app.infrastructure.events import emit, SystemEvent
 from app.infrastructure.hardware.led_display import set_activity
@@ -72,14 +74,33 @@ class TradeExecutionService:
                     logger.debug(f"Order {order_id} already exists in database, skipping")
                     return None
             
-            trade_record = Trade(
+            # Convert side to TradeSide enum
+            trade_side = TradeSide.from_string(side)
+            
+            # Convert currency to Currency enum and get exchange rate
+            trade_currency = Currency.EUR
+            currency_rate = None
+            if currency:
+                if isinstance(currency, str):
+                    trade_currency = Currency.from_string(currency)
+                else:
+                    trade_currency = currency
+                
+                # Get exchange rate if not EUR
+                if trade_currency != Currency.EUR:
+                    from app.services.tradernet import get_exchange_rate
+                    currency_rate = get_exchange_rate(str(trade_currency), str(Currency.EUR))
+            
+            # Use factory to create trade
+            trade_record = TradeFactory.create_from_execution(
                 symbol=symbol,
-                side=side.upper(),
+                side=trade_side,
                 quantity=quantity,
                 price=final_price,
-                executed_at=datetime.now(),
                 order_id=order_id,
-                currency=currency,
+                executed_at=datetime.now(),
+                currency=trade_currency,
+                currency_rate=currency_rate,
                 source=source,
             )
             
@@ -87,7 +108,7 @@ class TradeExecutionService:
             logger.info(f"Stored order {order_id or '(no order_id)'} for {symbol} immediately")
             
             # For successful SELL orders, update last_sold_at in positions
-            if side.upper() == "SELL" and self._position_repo:
+            if trade_side.is_sell() and self._position_repo:
                 try:
                     await self._position_repo.update_last_sold_at(symbol)
                     logger.info(f"Updated last_sold_at for {symbol}")
