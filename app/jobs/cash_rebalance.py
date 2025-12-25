@@ -735,53 +735,52 @@ async def _get_buy_trades(
 async def _refresh_recommendation_cache():
     """Refresh the recommendation cache for the LED ticker display."""
     from app.application.services.rebalancing_service import RebalancingService
+    from app.domain.portfolio_hash import generate_recommendation_cache_key
+    from app.domain.services.settings_service import SettingsService
 
     try:
-        # Create settings_repo once and reuse
+        # Create repos once and reuse
         settings_repo = SettingsRepository()
+        position_repo = PositionRepository()
+        settings_service = SettingsService(settings_repo)
         rebalancing_service = RebalancingService(settings_repo=settings_repo)
 
-        # Get recommendation depth setting
-        depth = await settings_repo.get_int("recommendation_depth", 1)
+        # Generate portfolio-aware cache key
+        positions = await position_repo.get_all()
+        settings = await settings_service.get_settings()
+        position_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
+        portfolio_cache_key = generate_recommendation_cache_key(position_dicts, settings.to_dict())
+        cache_key = f"multi_step_recommendations:{portfolio_cache_key}"
 
-        # Get multi-step recommendations if depth > 1
-        if depth > 1:
-            # Use diversification strategy by default for cache refresh
-            strategy = "diversification"
-            multi_step_steps = await rebalancing_service.get_multi_step_recommendations(depth=depth, strategy_type=strategy)
-            if multi_step_steps:
-                multi_step_data = {
-                    "strategy": strategy,
-                    "depth": depth,
-                    "steps": [
-                        {
-                            "step": step.step,
-                            "side": step.side,
-                            "symbol": step.symbol,
-                            "name": step.name,
-                            "quantity": step.quantity,
-                            "estimated_price": step.estimated_price,
-                            "estimated_value": step.estimated_value,
-                            "currency": step.currency,
-                            "reason": step.reason,
-                            "portfolio_score_before": step.portfolio_score_before,
-                            "portfolio_score_after": step.portfolio_score_after,
-                            "score_change": step.score_change,
-                            "available_cash_before": step.available_cash_before,
-                            "available_cash_after": step.available_cash_after,
-                        }
-                        for step in multi_step_steps
-                    ],
-                    "total_score_improvement": sum(step.score_change for step in multi_step_steps),
-                    "final_available_cash": multi_step_steps[-1].available_cash_after if multi_step_steps else 0.0,
-                }
-                default_cache_key = f"multi_step_recommendations:{strategy}:default"
-                cache.set(default_cache_key, multi_step_data, ttl_seconds=900)
-                cache.set(f"multi_step_recommendations:{strategy}:{depth}", multi_step_data, ttl_seconds=900)
-                logger.info(f"Multi-step recommendation cache refreshed: {len(multi_step_steps)} steps")
-        else:
-            # Clear multi-step cache if depth is 1
-            cache.invalidate("multi_step_recommendations:diversification:default")
+        # Get multi-step recommendations (holistic planner auto-tests depths 1-5)
+        multi_step_steps = await rebalancing_service.get_multi_step_recommendations()
+        if multi_step_steps:
+            multi_step_data = {
+                "depth": len(multi_step_steps),
+                "steps": [
+                    {
+                        "step": step.step,
+                        "side": step.side,
+                        "symbol": step.symbol,
+                        "name": step.name,
+                        "quantity": step.quantity,
+                        "estimated_price": step.estimated_price,
+                        "estimated_value": step.estimated_value,
+                        "currency": step.currency,
+                        "reason": step.reason,
+                        "portfolio_score_before": step.portfolio_score_before,
+                        "portfolio_score_after": step.portfolio_score_after,
+                        "score_change": step.score_change,
+                        "available_cash_before": step.available_cash_before,
+                        "available_cash_after": step.available_cash_after,
+                    }
+                    for step in multi_step_steps
+                ],
+                "total_score_improvement": multi_step_steps[0].score_change if multi_step_steps else 0.0,
+                "final_available_cash": multi_step_steps[-1].available_cash_after if multi_step_steps else 0.0,
+            }
+            cache.set(cache_key, multi_step_data, ttl_seconds=900)
+            logger.info(f"Multi-step recommendation cache refreshed: {len(multi_step_steps)} steps (key: {cache_key})")
 
         # Always cache single recommendations (for fallback and depth=1)
         buy_recommendations = await rebalancing_service.get_recommendations(limit=3)

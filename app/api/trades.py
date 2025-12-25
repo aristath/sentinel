@@ -360,92 +360,69 @@ async def dismiss_sell_recommendation(uuid: str):
 @router.get("/multi-step-recommendations/strategies")
 async def list_recommendation_strategies():
     """
-    List all available recommendation strategies.
-    
+    List available recommendation strategies.
+
     Returns:
-        Dictionary mapping strategy names to descriptions
+        Dictionary with the holistic planner as the only strategy.
     """
-    try:
-        from app.domain.planning.strategies import list_strategies
-        strategies = list_strategies()
-        return {"strategies": strategies}
-    except Exception as e:
-        logger.error(f"Error listing strategies: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "strategies": {
+            "holistic": "End-state optimization planner that tests all depths (1-5) automatically"
+        }
+    }
 
 
 @router.get("/multi-step-recommendations/all")
-async def get_all_strategy_recommendations(depth: int = None, holistic: bool = True):
+async def get_all_strategy_recommendations():
     """
-    Get multi-step recommendations from ALL strategies.
+    Get multi-step recommendations using the holistic planner.
 
-    Runs all available strategies in parallel and returns recommendations from each.
-    This allows comparing different strategic approaches side-by-side.
-
-    Args:
-        depth: Number of steps (1-5). If None, uses setting value (default: 1).
-        holistic: If True, use holistic planner with end-state optimization.
+    The holistic planner automatically tests all depths (1-5) and returns
+    the sequence with the best end-state score.
 
     Returns:
-        Dictionary with strategy names as keys and their recommendations as values.
-        Format: {
-            "diversification": {...},
-            "sustainability": {...},
-            "opportunity": {...}
-        }
+        Dictionary with "holistic" as key containing the recommendations.
     """
-    # Validate depth parameter
-    if depth is not None:
-        if depth < 1 or depth > 5:
-            raise HTTPException(
-                status_code=400,
-                detail="Depth must be between 1 and 5"
-            )
-    
-    # Build cache key (include holistic flag)
-    holistic_suffix = ":holistic" if holistic else ""
-    cache_key = f"multi_step_recommendations:all:{depth or 'default'}{holistic_suffix}"
+    from app.application.services.rebalancing_service import RebalancingService
+    from app.domain.portfolio_hash import generate_recommendation_cache_key
+    from app.repositories import PositionRepository, SettingsRepository
+    from app.domain.services.settings_service import SettingsService
+
+    # Generate portfolio-aware cache key
+    position_repo = PositionRepository()
+    settings_repo = SettingsRepository()
+    settings_service = SettingsService(settings_repo)
+
+    positions = await position_repo.get_all()
+    settings = await settings_service.get_settings()
+    position_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
+    portfolio_cache_key = generate_recommendation_cache_key(position_dicts, settings.to_dict())
+    cache_key = f"multi_step_recommendations:all:{portfolio_cache_key}"
+
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
-    
-    from app.application.services.rebalancing_service import RebalancingService
-    from app.domain.planning.strategies import list_strategies
-    
+
     try:
         rebalancing_service = RebalancingService()
-        available_strategies = list_strategies()
-        
-        # Run all strategies in parallel
-        import asyncio
-        
-        async def get_strategy_recommendations(strategy_name: str):
-            """Get recommendations for a single strategy."""
-            try:
-                steps = await rebalancing_service.get_multi_step_recommendations(
-                    depth=depth,
-                    strategy_type=strategy_name,
-                    use_holistic=holistic
-                )
-                
-                if not steps:
-                    return {
-                        "strategy": strategy_name,
-                        "depth": depth or 1,
-                        "holistic": holistic,
-                        "steps": [],
-                        "total_score_improvement": 0.0,
-                        "final_available_cash": 0.0,
-                        "error": None,
-                    }
-                
-                total_score_improvement = sum(step.score_change for step in steps)
-                final_available_cash = steps[-1].available_cash_after if steps else 0.0
+        steps = await rebalancing_service.get_multi_step_recommendations()
 
-                return {
-                    "strategy": strategy_name,
-                    "depth": depth or len(steps),
-                    "holistic": holistic,
+        if not steps:
+            result = {
+                "holistic": {
+                    "steps": [],
+                    "depth": 0,
+                    "total_score_improvement": 0.0,
+                    "final_available_cash": 0.0,
+                }
+            }
+        else:
+            total_score_improvement = steps[0].score_change if steps else 0.0
+            final_available_cash = steps[-1].available_cash_after if steps else 0.0
+
+            result = {
+                "holistic": {
+                    "depth": len(steps),
                     "steps": [
                         {
                             "step": step.step,
@@ -467,113 +444,69 @@ async def get_all_strategy_recommendations(depth: int = None, holistic: bool = T
                     ],
                     "total_score_improvement": round(total_score_improvement, 2),
                     "final_available_cash": round(final_available_cash, 2),
-                    "error": None,
                 }
-            except Exception as e:
-                logger.error(f"Error generating recommendations for strategy {strategy_name}: {e}", exc_info=True)
-                return {
-                    "strategy": strategy_name,
-                    "depth": depth or 1,
-                    "steps": [],
-                    "total_score_improvement": 0.0,
-                    "final_available_cash": 0.0,
-                    "error": str(e),
-                }
-        
-        # Run all strategies concurrently
-        strategy_names = list(available_strategies.keys())
-        results = await asyncio.gather(*[
-            get_strategy_recommendations(name) for name in strategy_names
-        ])
-        
-        # Build result dictionary
-        result = {
-            strategy_result["strategy"]: strategy_result
-            for strategy_result in results
-        }
-        
+            }
+
         # Cache for 5 minutes
         cache.set(cache_key, result, ttl_seconds=300)
         return result
-        
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error generating all-strategy recommendations: {e}", exc_info=True)
+        logger.error(f"Error generating recommendations: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/multi-step-recommendations")
-async def get_multi_step_recommendations(
-    depth: int = None,
-    strategy: str = "diversification",
-    holistic: bool = True,
-):
+async def get_multi_step_recommendations():
     """
-    Get multi-step recommendation sequence.
+    Get multi-step recommendation sequence using the holistic planner.
 
-    Generates a sequence of buy/sell recommendations that build on each other.
-    Each step simulates the portfolio state after the previous transaction.
-
-    Args:
-        depth: Number of steps (1-5). If None, uses setting value (default: 1).
-        strategy: Strategy to use ("diversification", "sustainability", "opportunity"). Default: "diversification".
-        holistic: If True, use holistic planner with end-state optimization,
-                  windfall detection, and narrative explanations.
+    The holistic planner automatically tests all depths (1-5) and returns
+    the sequence with the best end-state score.
 
     Returns:
         Multi-step recommendation sequence with portfolio state at each step.
     """
-    # Validate depth parameter
-    if depth is not None:
-        if depth < 1 or depth > 5:
-            raise HTTPException(
-                status_code=400,
-                detail="Depth must be between 1 and 5"
-            )
-    
-    # Validate strategy parameter
-    from app.domain.planning.strategies import list_strategies
-    available_strategies = list_strategies()
-    if strategy not in available_strategies:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid strategy '{strategy}'. Available strategies: {', '.join(available_strategies.keys())}"
-        )
+    from app.application.services.rebalancing_service import RebalancingService
+    from app.domain.portfolio_hash import generate_recommendation_cache_key
+    from app.repositories import PositionRepository, SettingsRepository
+    from app.domain.services.settings_service import SettingsService
 
-    # Build cache key (include strategy and holistic flag in cache key)
-    holistic_suffix = ":holistic" if holistic else ""
-    cache_key = f"multi_step_recommendations:{strategy}:{depth or 'default'}{holistic_suffix}"
+    # Generate portfolio-aware cache key
+    position_repo = PositionRepository()
+    settings_repo = SettingsRepository()
+    settings_service = SettingsService(settings_repo)
+
+    positions = await position_repo.get_all()
+    settings = await settings_service.get_settings()
+    position_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
+    portfolio_cache_key = generate_recommendation_cache_key(position_dicts, settings.to_dict())
+    cache_key = f"multi_step_recommendations:{portfolio_cache_key}"
+
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
 
-    from app.application.services.rebalancing_service import RebalancingService
-
     try:
         rebalancing_service = RebalancingService()
-        steps = await rebalancing_service.get_multi_step_recommendations(
-            depth=depth, strategy_type=strategy, use_holistic=holistic
-        )
+        steps = await rebalancing_service.get_multi_step_recommendations()
 
         if not steps:
             return {
-                "strategy": strategy,
-                "depth": depth or 1,
-                "holistic": holistic,
+                "depth": 0,
                 "steps": [],
                 "total_score_improvement": 0.0,
                 "final_available_cash": 0.0,
             }
 
         # Calculate totals
-        total_score_improvement = sum(step.score_change for step in steps)
+        total_score_improvement = steps[0].score_change if steps else 0.0
         final_available_cash = steps[-1].available_cash_after
 
         result = {
-            "strategy": strategy,
-            "depth": depth or len(steps),
-            "holistic": holistic,
+            "depth": len(steps),
             "steps": [
                 {
                     "step": step.step,
@@ -597,12 +530,8 @@ async def get_multi_step_recommendations(
             "final_available_cash": round(final_available_cash, 2),
         }
 
-        # Cache for 5 minutes (same as single recommendations)
-        # Cache to both the specific key and :default to ensure execute endpoints can find it
+        # Cache for 5 minutes
         cache.set(cache_key, result, ttl_seconds=300)
-        default_cache_key = f"multi_step_recommendations:{strategy}:default{holistic_suffix}"
-        if cache_key != default_cache_key:
-            cache.set(default_cache_key, result, ttl_seconds=300)
         return result
     except HTTPException:
         raise
@@ -611,38 +540,47 @@ async def get_multi_step_recommendations(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-async def _regenerate_multi_step_cache(cache_key: str = "multi_step_recommendations:diversification:default", strategy: str = "diversification") -> dict:
+async def _regenerate_multi_step_cache() -> tuple:
     """
     Regenerate multi-step recommendations cache if missing.
-    
-    Args:
-        cache_key: Cache key to use (default: "multi_step_recommendations:diversification:default")
-        strategy: Strategy to use (default: "diversification")
-        
+
     Returns:
-        Cached recommendations dict with steps, depth, totals, etc.
-        
+        Tuple of (cached_data, cache_key) - the recommendations dict and the portfolio-aware cache key
+
     Raises:
         HTTPException: If no recommendations are available
     """
     from app.application.services.rebalancing_service import RebalancingService
-    
-    logger.info(f"Cache miss for multi-step recommendations, regenerating (key: {cache_key}, strategy: {strategy})...")
+    from app.domain.portfolio_hash import generate_recommendation_cache_key
+    from app.repositories import PositionRepository, SettingsRepository
+    from app.domain.services.settings_service import SettingsService
+
+    # Generate portfolio-aware cache key
+    position_repo = PositionRepository()
+    settings_repo = SettingsRepository()
+    settings_service = SettingsService(settings_repo)
+
+    positions = await position_repo.get_all()
+    settings = await settings_service.get_settings()
+    position_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
+    portfolio_cache_key = generate_recommendation_cache_key(position_dicts, settings.to_dict())
+    cache_key = f"multi_step_recommendations:{portfolio_cache_key}"
+
+    logger.info(f"Cache miss for multi-step recommendations, regenerating...")
     rebalancing_service = RebalancingService()
-    steps_data = await rebalancing_service.get_multi_step_recommendations(depth=None, strategy_type=strategy)
-    
+    steps_data = await rebalancing_service.get_multi_step_recommendations()
+
     if not steps_data:
         raise HTTPException(
             status_code=404,
             detail="No multi-step recommendations available. Please check your portfolio and settings."
         )
-    
+
     # Rebuild cached format
-    total_score_improvement = sum(step.score_change for step in steps_data)
-    final_available_cash = steps_data[-1].available_cash_after if steps_data and len(steps_data) > 0 else 0.0
-    
+    total_score_improvement = steps_data[0].score_change if steps_data else 0.0
+    final_available_cash = steps_data[-1].available_cash_after if steps_data else 0.0
+
     cached = {
-        "strategy": strategy,
         "depth": len(steps_data),
         "steps": [
             {
@@ -668,7 +606,7 @@ async def _regenerate_multi_step_cache(cache_key: str = "multi_step_recommendati
     }
     # Cache the regenerated recommendations
     cache.set(cache_key, cached, ttl_seconds=300)
-    return cached
+    return cached, cache_key
 
 
 @router.post("/multi-step-recommendations/execute-step/{step_number}")
@@ -683,6 +621,8 @@ async def execute_multi_step_recommendation_step(step_number: int):
         Execution result for the step
     """
     from app.application.services.rebalancing_service import RebalancingService
+    from app.domain.portfolio_hash import generate_recommendation_cache_key
+    from app.domain.services.settings_service import SettingsService
 
     if step_number < 1:
         raise HTTPException(status_code=400, detail="Step number must be >= 1")
@@ -691,16 +631,22 @@ async def execute_multi_step_recommendation_step(step_number: int):
 
     trade_repo = TradeRepository()
     position_repo = PositionRepository()
+    settings_repo = SettingsRepository()
+    settings_service = SettingsService(settings_repo)
 
     try:
-        # Get the cached multi-step recommendations (default to diversification strategy)
-        strategy = "diversification"
-        cache_key = f"multi_step_recommendations:{strategy}:default"
+        # Generate portfolio-aware cache key
+        positions = await position_repo.get_all()
+        settings = await settings_service.get_settings()
+        position_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
+        portfolio_cache_key = generate_recommendation_cache_key(position_dicts, settings.to_dict())
+        cache_key = f"multi_step_recommendations:{portfolio_cache_key}"
+
         cached = cache.get(cache_key)
-        
+
         # If cache miss, regenerate recommendations
         if not cached or not cached.get("steps"):
-            cached = await _regenerate_multi_step_cache(cache_key, strategy)
+            cached, cache_key = await _regenerate_multi_step_cache()
 
         steps = cached["steps"]
         if step_number > len(steps):
@@ -777,19 +723,27 @@ async def execute_all_multi_step_recommendations():
         List of execution results for each step
     """
     from app.application.services.rebalancing_service import RebalancingService
+    from app.domain.portfolio_hash import generate_recommendation_cache_key
+    from app.domain.services.settings_service import SettingsService
 
     trade_repo = TradeRepository()
     position_repo = PositionRepository()
+    settings_repo = SettingsRepository()
+    settings_service = SettingsService(settings_repo)
 
     try:
-        # Get the cached multi-step recommendations (default to diversification strategy)
-        strategy = "diversification"
-        cache_key = f"multi_step_recommendations:{strategy}:default"
+        # Generate portfolio-aware cache key
+        positions = await position_repo.get_all()
+        settings = await settings_service.get_settings()
+        position_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
+        portfolio_cache_key = generate_recommendation_cache_key(position_dicts, settings.to_dict())
+        cache_key = f"multi_step_recommendations:{portfolio_cache_key}"
+
         cached = cache.get(cache_key)
-        
+
         # If cache miss, regenerate recommendations
         if not cached or not cached.get("steps"):
-            cached = await _regenerate_multi_step_cache(cache_key, strategy)
+            cached, cache_key = await _regenerate_multi_step_cache()
 
         steps = cached["steps"]
         if not steps:

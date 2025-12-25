@@ -1262,183 +1262,68 @@ class RebalancingService:
         
         return new_context, new_available_cash
 
-    async def get_multi_step_recommendations(
-        self,
-        depth: Optional[int] = None,
-        strategy_type: str = "diversification",
-        use_holistic: bool = True,  # Default to holistic planner (end-state optimization)
-    ) -> List[MultiStepRecommendation]:
+    async def get_multi_step_recommendations(self) -> List[MultiStepRecommendation]:
         """
-        Generate multi-step recommendation sequence using holistic planner.
+        Generate optimal recommendation sequence using the holistic planner.
 
-        Each step simulates the portfolio state after the previous transaction,
-        enabling smarter recommendations that consider cumulative effects.
-
-        Args:
-            depth: Number of steps (1-5). If None, reads from settings (default: 1).
-            strategy_type: Strategy to use ("diversification", "sustainability", "opportunity")
-            use_holistic: Use holistic planner (default True, recommended)
+        The holistic planner automatically tests sequences at all depths (1-5)
+        and returns the sequence with the best end-state score.
 
         Returns:
-            List of MultiStepRecommendation objects, one per step
+            List of MultiStepRecommendation objects representing the optimal sequence
         """
-        # Get depth from settings if not provided
-        if depth is None:
-            settings = await self._settings_service.get_settings()
-            depth = settings.recommendation_depth
-        
-        # Clamp depth to valid range
-        depth = max(1, min(5, depth))
+        from app.domain.planning.holistic_planner import create_holistic_plan
 
-        # Use holistic planner if requested
-        if use_holistic:
-            try:
-                from app.domain.planning.holistic_planner import create_holistic_plan
+        # Build portfolio context
+        portfolio_context = await self._build_portfolio_context()
 
-                # Build portfolio context
-                portfolio_context = await self._build_portfolio_context()
+        # Get positions and stocks
+        positions = await self._position_repo.get_all()
+        stocks = await self._stock_repo.get_all_active()
 
-                # Get positions and stocks
-                positions = await self._position_repo.get_all()
-                stocks = await self._stock_repo.get_all_active()
+        # Get current cash balance
+        from app.services.tradernet import get_tradernet_client
+        client = get_tradernet_client()
+        available_cash = client.get_total_cash_eur() if client.is_connected else 0.0
 
-                # Get current cash balance
-                from app.services.tradernet import get_tradernet_client
-                client = get_tradernet_client()
-                available_cash = client.get_total_cash_eur() if client.is_connected else 0.0
+        # Create holistic plan (auto-tests depths 1-5)
+        plan = await create_holistic_plan(
+            portfolio_context=portfolio_context,
+            available_cash=available_cash,
+            stocks=stocks,
+            positions=positions,
+        )
 
-                # Create holistic plan
-                plan = await create_holistic_plan(
-                    portfolio_context=portfolio_context,
-                    available_cash=available_cash,
-                    stocks=stocks,
-                    positions=positions,
-                    max_steps=depth,
-                )
-
-                # Convert HolisticPlan to MultiStepRecommendation list
-                if plan.steps:
-                    recommendations = []
-                    running_cash = available_cash
-                    for step in plan.steps:
-                        cash_before = running_cash
-                        if step.side == TradeSide.SELL:
-                            running_cash += step.estimated_value
-                        else:
-                            running_cash -= step.estimated_value
-                        running_cash = max(0, running_cash)
-
-                        recommendations.append(MultiStepRecommendation(
-                            step=step.step_number,
-                            side=step.side,
-                            symbol=step.symbol,
-                            name=step.name,
-                            quantity=step.quantity,
-                            estimated_price=step.estimated_price,
-                            estimated_value=step.estimated_value,
-                            currency=step.currency,
-                            reason=step.narrative,  # Use narrative instead of reason
-                            portfolio_score_before=plan.current_score,
-                            portfolio_score_after=plan.end_state_score,
-                            score_change=plan.improvement,
-                            available_cash_before=cash_before,
-                            available_cash_after=running_cash,
-                        ))
-                    return recommendations
-                return []
-
-            except Exception as e:
-                logger.warning(f"Holistic planner failed, falling back to standard: {e}")
-                # Fall through to standard planning
-
-        if depth == 1:
-            # For depth=1, return single recommendation (maintains backward compatibility)
-            buy_recs = await self.get_recommendations(limit=1)
-            if buy_recs:
-                rec = buy_recs[0]
-                # Get current cash (approximate - we don't have real-time access here)
-                from app.services.tradernet import get_tradernet_client
-                client = get_tradernet_client()
-                available_cash = client.get_total_cash_eur() if client.is_connected else 0.0
-                
-                return [MultiStepRecommendation(
-                    step=1,
-                    side=TradeSide.BUY,
-                    symbol=rec.symbol,
-                    name=rec.name,
-                    quantity=rec.quantity or 0,
-                    estimated_price=rec.estimated_price or 0.0,
-                    estimated_value=rec.estimated_value,
-                    currency=_determine_stock_currency({"symbol": rec.symbol, "geography": rec.geography}),
-                    reason=rec.reason,
-                    portfolio_score_before=rec.current_portfolio_score or 0.0,
-                    portfolio_score_after=rec.new_portfolio_score or 0.0,
-                    score_change=rec.score_change or 0.0,
-                    available_cash_before=available_cash,
-                    available_cash_after=max(0, available_cash - rec.estimated_value),
-                )]
+        # Convert HolisticPlan to MultiStepRecommendation list
+        if not plan.steps:
             return []
-        
-        # Try to use strategic planning if depth > 1
-        if depth > 1:
-            try:
-                from app.domain.planning.strategies import get_strategy
-                from app.domain.planning.goal_planner import create_strategic_plan, convert_plan_to_recommendations
-                
-                strategy = get_strategy(strategy_type)
-                
-                if strategy:
-                    # Build portfolio context
-                    portfolio_context = await self._build_portfolio_context()
 
-                    # Get positions and stocks first (needed for portfolio hash)
-                    positions = await self._position_repo.get_all()
-                    stocks = await self._stock_repo.get_all_active()
+        recommendations = []
+        running_cash = available_cash
+        for step in plan.steps:
+            cash_before = running_cash
+            if step.side == TradeSide.SELL:
+                running_cash += step.estimated_value
+            else:
+                running_cash -= step.estimated_value
+            running_cash = max(0, running_cash)
 
-                    # Generate portfolio hash for caching
-                    from app.domain.portfolio_hash import generate_portfolio_hash
-                    position_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
-                    portfolio_hash = generate_portfolio_hash(position_dicts)
+            recommendations.append(MultiStepRecommendation(
+                step=step.step_number,
+                side=step.side,
+                symbol=step.symbol,
+                name=step.name,
+                quantity=step.quantity,
+                estimated_price=step.estimated_price,
+                estimated_value=step.estimated_value,
+                currency=step.currency,
+                reason=step.narrative,
+                portfolio_score_before=plan.current_score,
+                portfolio_score_after=plan.end_state_score,
+                score_change=plan.improvement,
+                available_cash_before=cash_before,
+                available_cash_after=running_cash,
+            ))
 
-                    # Get performance-adjusted weights (with caching)
-                    adjusted_geo_weights, adjusted_ind_weights = await self._get_performance_adjusted_weights(portfolio_hash)
-                    if adjusted_geo_weights:
-                        portfolio_context.geo_weights.update(adjusted_geo_weights)
-                    if adjusted_ind_weights:
-                        portfolio_context.industry_weights.update(adjusted_ind_weights)
-
-                    # Get current cash balance
-                    from app.services.tradernet import get_tradernet_client
-                    client = get_tradernet_client()
-                    available_cash = client.get_total_cash_eur() if client.is_connected else 0.0
-                    
-                    # Analyze goals using strategy
-                    goals = await strategy.analyze_goals(
-                        portfolio_context, positions, stocks
-                    )
-                    
-                    if goals and len(goals) > 0:
-                        # Use goal-driven planner with strategy
-                        plan = await create_strategic_plan(
-                            strategy,
-                            goals,
-                            portfolio_context,
-                            available_cash,
-                            stocks,
-                            positions,
-                            max_steps=depth,
-                            simulate_portfolio_after_transaction=self._simulate_portfolio_after_transaction
-                        )
-                        
-                        # Convert PlanStep → MultiStepRecommendation
-                        recommendations = convert_plan_to_recommendations(plan)
-                        
-                        if recommendations:
-                            logger.info(f"Generated {len(recommendations)} strategic recommendations using {strategy_type} strategy")
-                            return recommendations
-            except Exception as e:
-                logger.warning(f"Strategic planning failed: {e}")
-
-        # All planners failed - return empty for multi-step, holistic planner is required
-        logger.info("Multi-step planning requires holistic or strategic planner - no recommendations available")
-        return []
+        logger.info(f"Holistic planner generated {len(recommendations)} recommendations")
+        return recommendations

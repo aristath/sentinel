@@ -316,28 +316,12 @@ async def identify_opportunities(
     return opportunities
 
 
-async def generate_action_sequences(
+def _generate_patterns_at_depth(
     opportunities: Dict[str, List[ActionCandidate]],
     available_cash: float,
-    max_steps: int = 5,
+    max_steps: int,
 ) -> List[List[ActionCandidate]]:
-    """
-    Generate candidate action sequences from opportunities.
-
-    Sequences are built with these priorities:
-    1. Profit-taking first (generates cash + reduces risk)
-    2. Averaging down on quality dips
-    3. Rebalancing (sells then buys)
-    4. Opportunity buys
-
-    Args:
-        opportunities: Categorized opportunities from identify_opportunities
-        available_cash: Starting available cash
-        max_steps: Maximum steps in a sequence
-
-    Returns:
-        List of action sequences (each sequence is a list of ActionCandidate)
-    """
+    """Generate sequence patterns capped at a specific depth."""
     sequences = []
 
     # Get top candidates from each category
@@ -347,7 +331,7 @@ async def generate_action_sequences(
     top_rebalance_buys = opportunities.get("rebalance_buys", [])[:3]
     top_opportunity = opportunities.get("opportunity_buys", [])[:2]
 
-    # Sequence 1: Direct buys only (if cash available)
+    # Pattern 1: Direct buys only (if cash available)
     if available_cash > 0:
         direct_buys = []
         remaining_cash = available_cash
@@ -358,24 +342,23 @@ async def generate_action_sequences(
         if direct_buys:
             sequences.append(direct_buys)
 
-    # Sequence 2: Profit-taking + reinvest
+    # Pattern 2: Profit-taking + reinvest
     if top_profit_taking:
-        profit_sequence = list(top_profit_taking)
+        profit_sequence = list(top_profit_taking[:min(len(top_profit_taking), max_steps)])
         cash_from_sells = sum(c.value_eur for c in profit_sequence)
         total_cash = available_cash + cash_from_sells
 
-        # Add best buys within budget
         for candidate in (top_averaging + top_rebalance_buys):
             if candidate.value_eur <= total_cash and len(profit_sequence) < max_steps:
                 profit_sequence.append(candidate)
                 total_cash -= candidate.value_eur
 
-        if len(profit_sequence) > len(top_profit_taking):  # Only if we added buys
+        if len(profit_sequence) > 0:
             sequences.append(profit_sequence)
 
-    # Sequence 3: Rebalance (sell overweight + buy underweight)
+    # Pattern 3: Rebalance (sell overweight + buy underweight)
     if top_rebalance_sells:
-        rebalance_sequence = list(top_rebalance_sells)
+        rebalance_sequence = list(top_rebalance_sells[:min(len(top_rebalance_sells), max_steps)])
         cash_from_sells = sum(c.value_eur for c in rebalance_sequence)
         total_cash = available_cash + cash_from_sells
 
@@ -384,10 +367,10 @@ async def generate_action_sequences(
                 rebalance_sequence.append(candidate)
                 total_cash -= candidate.value_eur
 
-        if len(rebalance_sequence) > len(top_rebalance_sells):
+        if len(rebalance_sequence) > 0:
             sequences.append(rebalance_sequence)
 
-    # Sequence 4: Averaging down focus
+    # Pattern 4: Averaging down focus
     if top_averaging:
         avg_sequence = []
         total_cash = available_cash
@@ -405,22 +388,57 @@ async def generate_action_sequences(
         if avg_sequence:
             sequences.append(avg_sequence)
 
-    # Sequence 5: Single best action (for when minimal intervention is best)
-    all_candidates = (
-        top_profit_taking + top_averaging +
-        top_rebalance_sells + top_rebalance_buys + top_opportunity
-    )
-    if all_candidates:
-        best = max(all_candidates, key=lambda x: x.priority)
-        if best.side == TradeSide.BUY and best.value_eur <= available_cash:
-            sequences.append([best])
-        elif best.side == TradeSide.SELL:
-            sequences.append([best])
+    # Pattern 5: Single best action (for minimal intervention)
+    if max_steps >= 1:
+        all_candidates = (
+            top_profit_taking + top_averaging +
+            top_rebalance_sells + top_rebalance_buys + top_opportunity
+        )
+        if all_candidates:
+            best = max(all_candidates, key=lambda x: x.priority)
+            if best.side == TradeSide.BUY and best.value_eur <= available_cash:
+                sequences.append([best])
+            elif best.side == TradeSide.SELL:
+                sequences.append([best])
+
+    return sequences
+
+
+async def generate_action_sequences(
+    opportunities: Dict[str, List[ActionCandidate]],
+    available_cash: float,
+) -> List[List[ActionCandidate]]:
+    """
+    Generate candidate action sequences at ALL depths (1-5).
+
+    Automatically tests sequences of varying lengths to find the optimal depth.
+    Each depth generates 5 pattern variants:
+    1. Direct buys (if cash available)
+    2. Profit-taking + reinvest
+    3. Rebalance (sell overweight, buy underweight)
+    4. Averaging down focus
+    5. Single best action
+
+    Args:
+        opportunities: Categorized opportunities from identify_opportunities
+        available_cash: Starting available cash
+
+    Returns:
+        List of action sequences (each sequence is a list of ActionCandidate)
+    """
+    all_sequences = []
+
+    # Generate patterns at each depth (1 to 5)
+    for depth in range(1, 6):
+        depth_sequences = _generate_patterns_at_depth(
+            opportunities, available_cash, depth
+        )
+        all_sequences.extend(depth_sequences)
 
     # Remove duplicates and empty sequences
     unique_sequences = []
     seen = set()
-    for seq in sequences:
+    for seq in all_sequences:
         if not seq:
             continue
         key = tuple((c.symbol, c.side) for c in seq)
@@ -429,10 +447,10 @@ async def generate_action_sequences(
             unique_sequences.append(seq)
 
     # Log sequences generated
-    logger.info(f"Holistic planner generated {len(unique_sequences)} unique sequences")
-    for i, seq in enumerate(unique_sequences[:3]):  # Log first 3
+    logger.info(f"Holistic planner generated {len(unique_sequences)} unique sequences (testing depths 1-5)")
+    for i, seq in enumerate(unique_sequences[:5]):  # Log first 5
         symbols = [f"{c.side.value}:{c.symbol}" for c in seq]
-        logger.info(f"  Sequence {i+1}: {symbols}")
+        logger.info(f"  Sequence {i+1} (len={len(seq)}): {symbols}")
 
     return unique_sequences
 
@@ -507,19 +525,18 @@ async def create_holistic_plan(
     available_cash: float,
     stocks: List[Stock],
     positions: List[Position],
-    max_steps: int = 5,
 ) -> HolisticPlan:
     """
     Create a holistic plan by evaluating action sequences and selecting the best.
 
-    This is the main entry point for holistic planning.
+    This is the main entry point for holistic planning. The planner automatically
+    tests sequences at all depths (1-5) and returns the optimal sequence.
 
     Args:
         portfolio_context: Current portfolio state
         available_cash: Available cash in EUR
         stocks: Available stocks
         positions: Current positions
-        max_steps: Maximum steps in the plan (1-5)
 
     Returns:
         HolisticPlan with the best sequence and end-state analysis
@@ -534,9 +551,9 @@ async def create_holistic_plan(
         portfolio_context, positions, stocks, available_cash
     )
 
-    # Generate candidate sequences
+    # Generate candidate sequences at all depths (1-5)
     sequences = await generate_action_sequences(
-        opportunities, available_cash, max_steps
+        opportunities, available_cash
     )
 
     if not sequences:
