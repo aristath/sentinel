@@ -1,6 +1,6 @@
 """Trade factory for creating Trade domain objects."""
 
-from typing import Optional
+from typing import Optional, Union
 from datetime import datetime
 
 from app.domain.models import Trade
@@ -68,12 +68,12 @@ class TradeFactory:
     def create_from_sync(
         cls,
         symbol: str,
-        side: str | TradeSide,  # type: ignore
+        side: Union[str, TradeSide],
         quantity: float,
         price: float,
-        executed_at: str | datetime,  # type: ignore
+        executed_at: Union[str, datetime],
         order_id: str,
-        currency: str | Currency | None = None,  # type: ignore
+        currency: Optional[Union[str, Currency]] = None,
         currency_rate: Optional[float] = None,
         source: str = "tradernet",
     ) -> Trade:
