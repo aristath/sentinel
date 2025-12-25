@@ -11,12 +11,8 @@ ENV/
 # Environment
 .env
 
-# Database
-*.db
-data/*.db
-
-# Logs
-data/logs/
+# Database and data files - NEVER delete these
+data/
 
 # IDE
 .idea/
