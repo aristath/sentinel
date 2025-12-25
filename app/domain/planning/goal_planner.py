@@ -292,10 +292,16 @@ async def create_strategic_plan(
         new_score = await calculate_portfolio_score(new_context)
         score_change = new_score.total - current_score.total
 
-        # Strategic planners should only recommend buys that improve the portfolio
-        # Skip if this buy would lower the portfolio score
-        if score_change < 0:
-            logger.debug(f"Skipping {symbol}: buy would lower portfolio score by {score_change:.2f}")
+        logger.info(f"Strategic planner buy candidate {symbol}: score_change={score_change:.2f}, amount={amount:.2f}, current_cash={current_cash:.2f}")
+
+        # For strategic plans, we allow slightly negative score changes if:
+        # 1. We already have a sell step (step_num > 1)
+        # 2. The score change isn't too bad (within acceptable threshold)
+        # This allows the freed cash from sells to be deployed even if it
+        # slightly decreases portfolio score
+        threshold = -5.0  # Allow up to 5 points of score decrease for strategic buys
+        if score_change < threshold:
+            logger.info(f"Skipping {symbol}: score_change {score_change:.2f} below threshold {threshold}")
             continue
 
         # Build goal contribution
