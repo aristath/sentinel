@@ -8,7 +8,7 @@ from typing import List, Optional
 from datetime import datetime
 
 from app.repositories import TradeRepository, PositionRepository
-from app.domain.models import TradeRecommendation, Trade
+from app.domain.models import Recommendation, Trade
 from app.domain.value_objects.currency import Currency
 from app.domain.value_objects.trade_side import TradeSide
 from app.domain.factories.trade_factory import TradeFactory
@@ -125,7 +125,7 @@ class TradeExecutionService:
 
     async def execute_trades(
         self,
-        trades: List[TradeRecommendation],
+        trades: List[Recommendation],
         currency_balances: Optional[dict[str, float]] = None,
         auto_convert_currency: bool = False,
         source_currency: str = Currency.EUR
@@ -159,7 +159,7 @@ class TradeExecutionService:
 
     async def _execute_trades_internal(
         self,
-        trades: List[TradeRecommendation],
+        trades: List[Recommendation],
         client,
         currency_balances: Optional[dict[str, float]] = None,
         currency_service: Optional[CurrencyExchangeService] = None,
