@@ -199,7 +199,7 @@ class TradeExecutionService:
                 side_text = "BUYING" if trade.side.upper() == "BUY" else "SELLING"
                 value = int(trade.quantity * trade.estimated_price)
                 symbol_short = trade.symbol.split(".")[0]  # Remove .US/.EU suffix
-                set_activity(f"{side_text} {symbol_short} EUR {value}", duration=10.0)
+                set_activity(f"{side_text} {symbol_short} €{value}", duration=10.0)
 
                 result = client.place_order(
                     symbol=trade.symbol,

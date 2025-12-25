@@ -80,7 +80,7 @@ async def get_led_status():
 async def _build_ticker_text() -> str:
     """Build ticker text from portfolio data and recommendations.
 
-    Format: EUR12,345 | CASH EUR675 | SELL ABC EUR200 | BUY XIAO EUR855
+    Format: €12,345 | CASH €675 | SELL ABC €200 | BUY XIAO €855
     Respects user settings for what to show.
     """
     from app.infrastructure.cache import cache
@@ -111,11 +111,11 @@ async def _build_ticker_text() -> str:
 
         # Portfolio value
         if show_value and summary.total_value:
-            parts.append(f"EUR{int(summary.total_value):,}")
+            parts.append(f"€{int(summary.total_value):,}")
 
         # Cash balance
         if show_cash and summary.cash_balance:
-            parts.append(f"CASH EUR{int(summary.cash_balance):,}")
+            parts.append(f"CASH €{int(summary.cash_balance):,}")
 
         # Add recommendations if enabled (cache-only, populated by Rebalance Check job)
         if show_actions:
@@ -137,7 +137,7 @@ async def _build_ticker_text() -> str:
                     step_num = step.get("step", 1)
                     step_label = f"[{step_num}/{total_steps}]"
                     if show_amounts and value > 0:
-                        parts.append(f"{side} {symbol} EUR{value:,} {step_label}")
+                        parts.append(f"{side} {symbol} €{value:,} {step_label}")
                     else:
                         parts.append(f"{side} {symbol} {step_label}")
             else:
@@ -151,7 +151,7 @@ async def _build_ticker_text() -> str:
                         symbol = rec["symbol"].split(".")[0]  # Remove .US/.EU suffix
                         value = int(rec.get("estimated_value", 0))
                         if show_amounts and value > 0:
-                            parts.append(f"SELL {symbol} EUR{value:,}")
+                            parts.append(f"SELL {symbol} €{value:,}")
                         else:
                             parts.append(f"SELL {symbol}")
 
@@ -161,7 +161,7 @@ async def _build_ticker_text() -> str:
                         symbol = rec["symbol"].split(".")[0]  # Remove .US/.EU suffix
                         value = int(rec.get("amount", 0))
                         if show_amounts and value > 0:
-                            parts.append(f"BUY {symbol} EUR{value:,}")
+                            parts.append(f"BUY {symbol} €{value:,}")
                         else:
                             parts.append(f"BUY {symbol}")
 
