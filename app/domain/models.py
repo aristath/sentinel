@@ -247,10 +247,33 @@ class Recommendation:
     portfolio_hash: Optional[str] = None
     
     def __post_init__(self):
-        """Calculate score_change if both portfolio scores are provided."""
+        """Validate recommendation data and calculate score_change."""
+        if not self.symbol or not self.symbol.strip():
+            raise ValidationError("Symbol cannot be empty")
+        
+        if not self.name or not self.name.strip():
+            raise ValidationError("Name cannot be empty")
+        
+        if self.quantity <= 0:
+            raise ValidationError("Quantity must be positive")
+        
+        if self.estimated_price <= 0:
+            raise ValidationError("Estimated price must be positive")
+        
+        if self.estimated_value <= 0:
+            raise ValidationError("Estimated value must be positive")
+        
+        if not self.reason or not self.reason.strip():
+            raise ValidationError("Reason cannot be empty")
+        
+        # Normalize symbol and geography
+        object.__setattr__(self, 'symbol', self.symbol.upper().strip())
+        object.__setattr__(self, 'geography', self.geography.upper())
+        
+        # Calculate score_change if both portfolio scores are provided
         if self.current_portfolio_score is not None and self.new_portfolio_score is not None:
             if self.score_change is None:
-                self.score_change = self.new_portfolio_score - self.current_portfolio_score
+                object.__setattr__(self, 'score_change', self.new_portfolio_score - self.current_portfolio_score)
 
 
 @dataclass
