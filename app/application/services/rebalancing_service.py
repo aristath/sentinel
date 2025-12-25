@@ -1327,8 +1327,7 @@ class RebalancingService:
             return []  # No multi-step possible without a sell to start
 
         for step_num in range(1, depth + 1):
-            print(f"=== MULTI-STEP {step_num} ===  available_cash={available_cash:.2f}, used_symbols={used_symbols}", flush=True)
-            logger.warning(f"=== MULTI-STEP {step_num} ===  available_cash={available_cash:.2f}, used_symbols={used_symbols}")
+            logger.debug(f"=== MULTI-STEP {step_num} ===  available_cash={available_cash:.2f}, used_symbols={used_symbols}")
 
             # Calculate current portfolio score
             current_score = await calculate_portfolio_score(current_context)
@@ -1337,7 +1336,6 @@ class RebalancingService:
             # Step 1: MUST be a sell (to generate cash and start the sequence)
             # Subsequent steps: buys using freed cash, or more sells if beneficial
             prioritize_sells = (step_num == 1) or (available_cash < app_settings.min_cash_threshold)
-            logger.warning(f"Step {step_num}: prioritize_sells={prioritize_sells}, min_cash_threshold={app_settings.min_cash_threshold}")
             
             best_recommendation = None
             best_score_change = -999.0
@@ -1416,26 +1414,18 @@ class RebalancingService:
             
             # If no sell recommendation or we have cash, try buy recommendations
             buy_condition = not best_recommendation or (available_cash >= app_settings.min_cash_threshold and not prioritize_sells)
-            logger.error(f"Step {step_num}: buy_condition={buy_condition}, best_rec={best_recommendation is not None}, cash={available_cash:.2f}, prioritize_sells={prioritize_sells}")
             if buy_condition:
                 # For step 1, use get_recommendations (uses real portfolio)
                 # For step 2+, we should ideally use simulated context, but get_recommendations
                 # rebuilds context. We'll use it anyway and simulate the impact correctly.
                 buy_recs = await self.get_recommendations(limit=10)
-                logger.error(f"Multi-step {step_num}: Got {len(buy_recs)} buy recs, available_cash={available_cash:.2f}, used={used_symbols}")
-                skipped_used = 0
-                skipped_expensive = 0
-                skipped_score = 0
+                logger.debug(f"Multi-step {step_num}: Got {len(buy_recs)} buy recs, available_cash={available_cash:.2f}")
                 for buy_rec in buy_recs:
                     if buy_rec.symbol in used_symbols or buy_rec.symbol in recently_bought:
-                        skipped_used += 1
                         continue
 
                     if buy_rec.estimated_value > available_cash:
-                        skipped_expensive += 1
                         continue  # Can't afford this buy
-
-                    logger.info(f"Multi-step {step_num}: Evaluating {buy_rec.symbol} (€{buy_rec.estimated_value:.2f})")
 
                     # For step 2+, we need to recalculate the recommendation using simulated context
                     # to get accurate portfolio impact. However, the buy_rec already has the right
@@ -1467,13 +1457,12 @@ class RebalancingService:
                     new_score = await calculate_portfolio_score(sim_context)
                     score_change = new_score.total - current_score.total
                     
-                    logger.info(f"Multi-step {step_num}: {buy_rec.symbol} score_change={score_change:.2f}, best_so_far={best_score_change:.2f}")
+                    logger.debug(f"Multi-step {step_num}: {buy_rec.symbol} score_change={score_change:.2f}, best_so_far={best_score_change:.2f}")
 
-                    # Skip if worsens portfolio significantly
+                    # Skip if worsens portfolio significantly (only for step 1)
                     # For step 2+, skip the threshold since we're committed to multi-step
                     # The goal is to use the freed cash, even if it slightly worsens balance
                     if step_num == 1 and score_change < user_settings.max_balance_worsening:
-                        skipped_score += 1
                         continue
 
                     # Prefer recommendations that improve portfolio score
@@ -1488,9 +1477,6 @@ class RebalancingService:
                             "score_change": score_change,
                             "new_score": new_score,
                         }
-
-                # Log summary after buy loop
-                logger.error(f"Step {step_num} buy loop summary: skipped_used={skipped_used}, skipped_expensive={skipped_expensive}, skipped_score={skipped_score}, best_rec={best_recommendation is not None}")
 
             # If we found a recommendation, add it to steps
             if best_recommendation:
@@ -1556,7 +1542,7 @@ class RebalancingService:
                 used_symbols.add(rec.symbol)
             else:
                 # No valid recommendation found, stop early
-                logger.error(f"Step {step_num}: No recommendation found! prioritize_sells={prioritize_sells}, available_cash={available_cash:.2f}, used_symbols={used_symbols}")
+                logger.info(f"Step {step_num}: No recommendation found, stopping multi-step early")
                 break
         
         return steps
