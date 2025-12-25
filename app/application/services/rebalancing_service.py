@@ -603,6 +603,69 @@ class RebalancingService:
 
         return recommendations
 
+    async def get_recommendations_debug(self) -> dict:
+        """
+        Debug method to show why recommendations are being filtered.
+        Returns detailed filter statistics.
+        """
+        from app.services import yahoo
+
+        settings = await self._settings_service.get_settings()
+        recently_bought = await self._trade_repo.get_recently_bought_symbols(BUY_COOLDOWN_DAYS)
+        stocks = await self._stock_repo.get_all_active()
+
+        symbol_yahoo_map = {
+            s.symbol: s.yahoo_symbol
+            for s in stocks
+            if s.allow_buy and s.symbol not in recently_bought
+        }
+        batch_prices = yahoo.get_batch_quotes(symbol_yahoo_map)
+
+        filter_stats = {
+            "total_stocks": len(stocks),
+            "eligible_for_pricing": len(symbol_yahoo_map),
+            "got_prices": len(batch_prices),
+            "recently_bought": list(recently_bought),
+            "no_allow_buy": [],
+            "no_score": [],
+            "low_score": [],
+            "no_price": [],
+            "passed_filters": [],
+        }
+
+        for stock in stocks:
+            symbol = stock.symbol
+            if not stock.allow_buy:
+                filter_stats["no_allow_buy"].append(symbol)
+                continue
+            if symbol in recently_bought:
+                continue
+
+            score_row = await self._db_manager.state.fetchone(
+                "SELECT * FROM scores WHERE symbol = ?", (symbol,)
+            )
+            if not score_row:
+                filter_stats["no_score"].append(symbol)
+                continue
+
+            total_score = score_row["total_score"] or 0.5
+            if total_score < settings.min_stock_score:
+                filter_stats["low_score"].append({"symbol": symbol, "score": total_score})
+                continue
+
+            price = batch_prices.get(symbol)
+            if not price or price <= 0:
+                filter_stats["no_price"].append(symbol)
+                continue
+
+            filter_stats["passed_filters"].append({
+                "symbol": symbol,
+                "score": total_score,
+                "price": price
+            })
+
+        return filter_stats
+
     async def calculate_rebalance_trades(
         self,
         available_cash: float

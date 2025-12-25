@@ -165,6 +165,18 @@ async def get_allocation():
     }
 
 
+@router.get("/recommendations/debug")
+async def debug_recommendations():
+    """
+    Debug endpoint to see why recommendations are filtered out.
+    """
+    from app.application.services.rebalancing_service import RebalancingService
+
+    rebalancing_service = RebalancingService()
+    debug_info = await rebalancing_service.get_recommendations_debug()
+    return debug_info
+
+
 @router.get("/recommendations")
 async def get_recommendations(limit: int = 3):
     """
