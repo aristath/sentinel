@@ -19,7 +19,7 @@ class DomainEvent(ABC):
     domain experts care about. They are immutable and contain all the
     information needed to understand what happened.
     """
-    occurred_at: datetime = field(default_factory=datetime.now, kw_only=True)
+    # occurred_at is defined in each subclass to avoid dataclass field ordering issues
 
 
 class DomainEventBus:
