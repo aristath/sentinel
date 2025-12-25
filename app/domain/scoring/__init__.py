@@ -120,6 +120,33 @@ from app.domain.scoring.technical import (
     calculate_distance_from_ma,
 )
 
+# === HOLISTIC PLANNING SCORING ===
+
+# End-state scoring (for holistic planner)
+from app.domain.scoring.end_state import (
+    calculate_total_return_score,
+    calculate_long_term_promise,
+    calculate_stability_score,
+    calculate_portfolio_end_state_score,
+)
+
+# Windfall detection (profit-taking signals)
+from app.domain.scoring.windfall import (
+    calculate_excess_gain,
+    calculate_windfall_score,
+    should_take_profits,
+    get_windfall_recommendation,
+)
+
+# Dividend history analysis
+from app.domain.scoring.dividend_history import (
+    has_big_dividend_cut,
+    calculate_dividend_growth_rate,
+    calculate_dividend_stability_score,
+    get_dividend_analysis,
+    is_dividend_consistent,
+)
+
 
 __all__ = [
     # Models
@@ -184,4 +211,20 @@ __all__ = [
     "DEFAULT_MIN_HOLD_DAYS",
     "DEFAULT_SELL_COOLDOWN_DAYS",
     "DEFAULT_MAX_LOSS_THRESHOLD",
+    # Holistic planning - End state scoring
+    "calculate_total_return_score",
+    "calculate_long_term_promise",
+    "calculate_stability_score",
+    "calculate_portfolio_end_state_score",
+    # Holistic planning - Windfall detection
+    "calculate_excess_gain",
+    "calculate_windfall_score",
+    "should_take_profits",
+    "get_windfall_recommendation",
+    # Holistic planning - Dividend history
+    "has_big_dividend_cut",
+    "calculate_dividend_growth_rate",
+    "calculate_dividend_stability_score",
+    "get_dividend_analysis",
+    "is_dividend_consistent",
 ]

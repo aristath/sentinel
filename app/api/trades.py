@@ -499,7 +499,11 @@ async def get_all_strategy_recommendations(depth: int = None):
 
 
 @router.get("/multi-step-recommendations")
-async def get_multi_step_recommendations(depth: int = None, strategy: str = "diversification"):
+async def get_multi_step_recommendations(
+    depth: int = None,
+    strategy: str = "diversification",
+    holistic: bool = False,
+):
     """
     Get multi-step recommendation sequence.
 
@@ -509,6 +513,8 @@ async def get_multi_step_recommendations(depth: int = None, strategy: str = "div
     Args:
         depth: Number of steps (1-5). If None, uses setting value (default: 1).
         strategy: Strategy to use ("diversification", "sustainability", "opportunity"). Default: "diversification".
+        holistic: If True, use holistic planner with end-state optimization,
+                  windfall detection, and narrative explanations.
 
     Returns:
         Multi-step recommendation sequence with portfolio state at each step.
@@ -530,8 +536,9 @@ async def get_multi_step_recommendations(depth: int = None, strategy: str = "div
             detail=f"Invalid strategy '{strategy}'. Available strategies: {', '.join(available_strategies.keys())}"
         )
 
-    # Build cache key (include strategy in cache key)
-    cache_key = f"multi_step_recommendations:{strategy}:{depth or 'default'}"
+    # Build cache key (include strategy and holistic flag in cache key)
+    holistic_suffix = ":holistic" if holistic else ""
+    cache_key = f"multi_step_recommendations:{strategy}:{depth or 'default'}{holistic_suffix}"
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
@@ -540,12 +547,15 @@ async def get_multi_step_recommendations(depth: int = None, strategy: str = "div
 
     try:
         rebalancing_service = RebalancingService()
-        steps = await rebalancing_service.get_multi_step_recommendations(depth=depth, strategy_type=strategy)
+        steps = await rebalancing_service.get_multi_step_recommendations(
+            depth=depth, strategy_type=strategy, use_holistic=holistic
+        )
 
         if not steps:
             return {
                 "strategy": strategy,
                 "depth": depth or 1,
+                "holistic": holistic,
                 "steps": [],
                 "total_score_improvement": 0.0,
                 "final_available_cash": 0.0,
@@ -558,6 +568,7 @@ async def get_multi_step_recommendations(depth: int = None, strategy: str = "div
         result = {
             "strategy": strategy,
             "depth": depth or len(steps),
+            "holistic": holistic,
             "steps": [
                 {
                     "step": step.step,
@@ -584,7 +595,7 @@ async def get_multi_step_recommendations(depth: int = None, strategy: str = "div
         # Cache for 5 minutes (same as single recommendations)
         # Cache to both the specific key and :default to ensure execute endpoints can find it
         cache.set(cache_key, result, ttl_seconds=300)
-        default_cache_key = f"multi_step_recommendations:{strategy}:default"
+        default_cache_key = f"multi_step_recommendations:{strategy}:default{holistic_suffix}"
         if cache_key != default_cache_key:
             cache.set(default_cache_key, result, ttl_seconds=300)
         return result
