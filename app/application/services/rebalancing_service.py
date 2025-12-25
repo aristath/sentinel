@@ -1414,12 +1414,17 @@ class RebalancingService:
                 # For step 2+, we should ideally use simulated context, but get_recommendations
                 # rebuilds context. We'll use it anyway and simulate the impact correctly.
                 buy_recs = await self.get_recommendations(limit=10)
+                logger.info(f"Multi-step {step_num}: Got {len(buy_recs)} buy recs, available_cash={available_cash:.2f}, used={used_symbols}")
                 for buy_rec in buy_recs:
                     if buy_rec.symbol in used_symbols or buy_rec.symbol in recently_bought:
+                        logger.debug(f"Multi-step {step_num}: Skipping {buy_rec.symbol} - already used or recently bought")
                         continue
-                    
+
                     if buy_rec.estimated_value > available_cash:
+                        logger.debug(f"Multi-step {step_num}: Skipping {buy_rec.symbol} - cost €{buy_rec.estimated_value:.2f} > available €{available_cash:.2f}")
                         continue  # Can't afford this buy
+
+                    logger.info(f"Multi-step {step_num}: Evaluating {buy_rec.symbol} (€{buy_rec.estimated_value:.2f})")
 
                     # For step 2+, we need to recalculate the recommendation using simulated context
                     # to get accurate portfolio impact. However, the buy_rec already has the right
@@ -1451,6 +1456,8 @@ class RebalancingService:
                     new_score = await calculate_portfolio_score(sim_context)
                     score_change = new_score.total - current_score.total
                     
+                    logger.info(f"Multi-step {step_num}: {buy_rec.symbol} score_change={score_change:.2f}, best_so_far={best_score_change:.2f}")
+
                     # Skip if worsens portfolio significantly
                     # For step 2+, skip the threshold since we're committed to multi-step
                     # The goal is to use the freed cash, even if it slightly worsens balance
