@@ -13,6 +13,7 @@ from app.repositories import (
     PortfolioRepository,
 )
 from app.domain.models import Stock
+from app.domain.factories.stock_factory import StockFactory
 from app.application.services.portfolio_service import PortfolioService
 from app.domain.services.priority_calculator import (
     PriorityCalculator,
@@ -183,25 +184,25 @@ async def create_stock(stock_data: StockCreate):
     if existing:
         raise HTTPException(status_code=400, detail="Stock already exists")
 
-    industry = stock_data.industry
-    if not industry:
+    # Use factory to create stock
+    stock_dict = {
+        "symbol": stock_data.symbol,
+        "name": stock_data.name,
+        "geography": stock_data.geography,
+        "industry": stock_data.industry,
+        "yahoo_symbol": stock_data.yahoo_symbol,
+        "min_lot": stock_data.min_lot,
+        "allow_buy": stock_data.allow_buy,
+        "allow_sell": stock_data.allow_sell,
+    }
+    
+    # Detect industry if not provided
+    if not stock_data.industry:
         from app.services import yahoo
         industry = yahoo.get_stock_industry(stock_data.symbol, stock_data.yahoo_symbol)
-
-    min_lot = max(1, stock_data.min_lot or 1)
-
-    new_stock = Stock(
-        symbol=stock_data.symbol.upper(),
-        yahoo_symbol=stock_data.yahoo_symbol,
-        name=stock_data.name,
-        geography=stock_data.geography.upper(),
-        industry=industry,
-        priority_multiplier=1.0,
-        min_lot=min_lot,
-        active=True,
-        allow_buy=stock_data.allow_buy if stock_data.allow_buy is not None else True,
-        allow_sell=stock_data.allow_sell if stock_data.allow_sell is not None else False,
-    )
+        new_stock = StockFactory.create_with_industry_detection(stock_dict, industry)
+    else:
+        new_stock = StockFactory.create_from_api_request(stock_dict)
 
     await stock_repo.create(new_stock)
 
