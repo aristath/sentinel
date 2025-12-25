@@ -13,12 +13,54 @@ class StockFactory:
     # Valid geographies
     VALID_GEOGRAPHIES = {"EU", "US", "ASIA"}
 
+    # Geography normalization map (country/region -> standard region)
+    GEOGRAPHY_NORMALIZATION = {
+        # Europe
+        "GREECE": "EU",
+        "GERMANY": "EU",
+        "FRANCE": "EU",
+        "ITALY": "EU",
+        "SPAIN": "EU",
+        "NETHERLANDS": "EU",
+        "BELGIUM": "EU",
+        "PORTUGAL": "EU",
+        "IRELAND": "EU",
+        "AUSTRIA": "EU",
+        "FINLAND": "EU",
+        "UK": "EU",
+        "SWITZERLAND": "EU",
+        "SWEDEN": "EU",
+        "NORWAY": "EU",
+        "DENMARK": "EU",
+        "EUROPE": "EU",
+        # Asia
+        "CHINA": "ASIA",
+        "JAPAN": "ASIA",
+        "HONG KONG": "ASIA",
+        "HONGKONG": "ASIA",
+        "HK": "ASIA",
+        "KOREA": "ASIA",
+        "TAIWAN": "ASIA",
+        "SINGAPORE": "ASIA",
+        "INDIA": "ASIA",
+        # US aliases
+        "USA": "US",
+        "UNITED STATES": "US",
+        "AMERICA": "US",
+    }
+
     # Geography to currency mapping
     GEOGRAPHY_CURRENCY_MAP = {
         "EU": Currency.EUR,
         "US": Currency.USD,
         "ASIA": Currency.HKD,
     }
+
+    @classmethod
+    def normalize_geography(cls, geography: str) -> str:
+        """Normalize geography to standard region (EU, US, ASIA)."""
+        geo_upper = geography.strip().upper()
+        return cls.GEOGRAPHY_NORMALIZATION.get(geo_upper, geo_upper)
 
     @classmethod
     def create_from_api_request(cls, data: dict) -> Stock:
@@ -49,9 +91,9 @@ class StockFactory:
         if not name:
             raise ValidationError("Name cannot be empty")
         
-        geography = data.get("geography", "").strip().upper()
+        geography = cls.normalize_geography(data.get("geography", ""))
         if geography not in cls.VALID_GEOGRAPHIES:
-            raise ValidationError(f"Invalid geography: {geography}. Must be one of {cls.VALID_GEOGRAPHIES}")
+            raise ValidationError(f"Invalid geography: {data.get('geography', '')}. Must be one of {cls.VALID_GEOGRAPHIES} (or a known country/region)")
         
         # Set currency based on geography
         currency = cls.GEOGRAPHY_CURRENCY_MAP.get(geography, Currency.EUR)
