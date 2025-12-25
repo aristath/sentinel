@@ -17,6 +17,17 @@ class AppHeader extends HTMLElement {
                   :class="$store.app.tradernet.connected ? 'bg-green-500' : 'bg-red-500'"></span>
             <span class="text-xs" x-text="$store.app.tradernet.connected ? 'Tradernet Connected' : 'Tradernet Offline'"></span>
           </div>
+          <!-- Trading Mode Toggle -->
+          <button @click="$store.app.toggleTradingMode()"
+                  class="flex items-center gap-2 px-3 py-1.5 rounded transition-colors border"
+                  :class="$store.app.tradingMode === 'research' 
+                    ? 'bg-yellow-900/30 border-yellow-600/50 text-yellow-400 hover:bg-yellow-900/40' 
+                    : 'bg-green-900/30 border-green-600/50 text-green-400 hover:bg-green-900/40'"
+                  :title="$store.app.tradingMode === 'research' ? 'Research Mode: Trades are simulated' : 'Live Mode: Trades are executed'">
+            <span class="w-2 h-2 rounded-full"
+                  :class="$store.app.tradingMode === 'research' ? 'bg-yellow-500' : 'bg-green-500'"></span>
+            <span class="text-xs font-medium" x-text="$store.app.tradingMode === 'research' ? 'Research' : 'Live'"></span>
+          </button>
           <button @click="$store.app.showSettingsModal = true"
                   class="p-1.5 text-gray-400 hover:text-gray-200 hover:bg-gray-700 rounded transition-colors"
                   title="Settings">

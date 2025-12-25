@@ -575,6 +575,42 @@ class TradernetClient:
         if not self.is_connected:
             raise ConnectionError("Not connected to Tradernet")
 
+        # Check trading mode - block trades in research mode
+        # Use cache to avoid async issues in sync method
+        from app.infrastructure.cache import cache
+        
+        trading_mode = "research"  # Default to research mode
+        try:
+            # Check cache first (settings are cached for 3 seconds)
+            cached_settings = cache.get("settings:all")
+            if cached_settings and "trading_mode" in cached_settings:
+                trading_mode = cached_settings["trading_mode"]
+            # If not in cache, default to "research" - cache will be populated on next settings fetch
+        except Exception as e:
+            logger.warning(f"Failed to check trading mode, defaulting to research: {e}")
+
+        if trading_mode == "research":
+            # In research mode, log what would have been executed and return mock result
+            logger.info(
+                f"[RESEARCH MODE] Would execute {side.upper()} {quantity} {symbol} "
+                f"(order_type={order_type}, limit_price={limit_price})"
+            )
+            # Get current price for mock result
+            try:
+                quote = self.get_quote(symbol)
+                mock_price = quote.price if quote else 0.0
+            except Exception:
+                mock_price = 0.0
+            
+            return OrderResult(
+                order_id=f"RESEARCH-{symbol}-{side}-{quantity}",
+                symbol=symbol,
+                side=side.upper(),
+                quantity=quantity,
+                price=mock_price,
+                status="simulated",
+            )
+
         try:
             if side.upper() == "BUY":
                 result = self._client.buy(symbol, quantity)

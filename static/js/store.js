@@ -22,6 +22,7 @@ document.addEventListener('alpine:init', () => {
     multiStepRecommendations: null,  // {depth: int, steps: [], total_score_improvement: float, final_available_cash: float}
     allStrategyRecommendations: null,  // {diversification: {...}, sustainability: {...}, opportunity: {...}}
     settings: { min_trade_size: 400 },
+    tradingMode: 'research',  // 'live' or 'research'
     sparklines: {},  // {symbol: [{time, value}, ...]}
 
     // UI State - Filters
@@ -230,6 +231,10 @@ document.addEventListener('alpine:init', () => {
     async fetchSettings() {
       try {
         this.settings = await API.fetchSettings();
+        // Extract trading_mode from settings (it's a string, not a number)
+        if (this.settings.trading_mode) {
+          this.tradingMode = this.settings.trading_mode;
+        }
         // Always refresh multi-step recommendations when settings are loaded
         // to ensure we have the correct depth
         await this.fetchMultiStepRecommendations();
@@ -764,6 +769,19 @@ document.addEventListener('alpine:init', () => {
         await this.fetchStocks();
       } catch (e) {
         this.showMessage('Failed to update multiplier', 'error');
+      }
+    },
+
+    // Trading Mode
+    async toggleTradingMode() {
+      try {
+        const result = await API.toggleTradingMode();
+        this.tradingMode = result.trading_mode;
+        const modeLabel = result.trading_mode === 'research' ? 'Research' : 'Live';
+        this.showMessage(`Trading mode set to ${modeLabel}`, 'success');
+      } catch (e) {
+        console.error('Failed to toggle trading mode:', e);
+        this.showMessage('Failed to toggle trading mode', 'error');
       }
     },
 

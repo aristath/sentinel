@@ -99,6 +99,8 @@ const API = {
   fetchSettings: () => fetch('/api/settings').then(r => r.json()),
   updateSetting: (key, value) => API._put(`/api/settings/${key}`, { value: parseFloat(value) }),
   updateMinTradeSize: (value) => API._put('/api/settings/min_trade_size', { value }),
+  getTradingMode: () => fetch('/api/settings/trading-mode').then(r => r.json()),
+  toggleTradingMode: () => API._post('/api/settings/trading-mode'),
   restartService: () => API._post('/api/settings/restart-service'),
   restartSystem: () => API._post('/api/settings/restart'),
   resetCache: () => API._post('/api/settings/reset-cache'),
