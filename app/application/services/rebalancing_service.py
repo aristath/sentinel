@@ -779,6 +779,7 @@ class RebalancingService:
         if cached:
             logger.info(f"Using cached sell recommendations ({len(cached)} items)")
             # Convert cached dicts back to Recommendation objects
+            from app.domain.value_objects.currency import Currency
             recommendations = []
             for c in cached[:limit]:
                 currency_str = c.get("currency", "EUR")
