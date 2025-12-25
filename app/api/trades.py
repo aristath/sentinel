@@ -502,7 +502,7 @@ async def get_all_strategy_recommendations(depth: int = None):
 async def get_multi_step_recommendations(
     depth: int = None,
     strategy: str = "diversification",
-    holistic: bool = False,
+    holistic: bool = True,
 ):
     """
     Get multi-step recommendation sequence.
