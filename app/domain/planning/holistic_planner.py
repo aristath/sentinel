@@ -469,13 +469,14 @@ async def simulate_sequence(
         new_industries = dict(current_context.stock_industries or {})
 
         if action.side == TradeSide.SELL:
-            # Reduce position
+            # Reduce position (cash is PART of portfolio, so total doesn't change)
             current_value = new_positions.get(action.symbol, 0)
             new_positions[action.symbol] = max(0, current_value - action.value_eur)
             if new_positions[action.symbol] <= 0:
                 new_positions.pop(action.symbol, None)
             current_cash += action.value_eur
-            new_total = max(0.01, current_context.total_value - action.value_eur)
+            # Total portfolio value stays the same - we just converted stock to cash
+            new_total = current_context.total_value
         else:  # BUY
             if action.value_eur > current_cash:
                 continue  # Skip if can't afford
@@ -484,7 +485,8 @@ async def simulate_sequence(
             if industry:
                 new_industries[action.symbol] = industry
             current_cash -= action.value_eur
-            new_total = current_context.total_value + action.value_eur
+            # Total portfolio value stays the same - we just converted cash to stock
+            new_total = current_context.total_value
 
         current_context = PortfolioContext(
             geo_weights=current_context.geo_weights,
@@ -574,11 +576,12 @@ async def create_holistic_plan(
         )
 
         # Log sequence evaluation
+        invested_value = sum(end_context.positions.values())
         symbols = [f"{c.side.value}:{c.symbol}" for c in sequence]
         logger.info(f"Sequence {seq_idx+1} evaluation: {symbols}")
         logger.info(f"  End-state score: {end_score:.3f}, Diversification: {div_score.total:.1f}")
         logger.info(f"  Breakdown: {breakdown}")
-        logger.info(f"  End cash: €{end_cash:.2f}, Total value: €{end_context.total_value:.2f}")
+        logger.info(f"  Cash: €{end_cash:.2f}, Invested: €{invested_value:.2f}, Total: €{end_context.total_value:.2f}")
 
         if end_score > best_end_score:
             best_end_score = end_score
