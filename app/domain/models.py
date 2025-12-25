@@ -51,7 +51,7 @@ class Position:
 class Trade:
     """Executed trade record."""
     symbol: str
-    side: str  # 'BUY' or 'SELL'
+    side: TradeSide  # BUY or SELL
     quantity: float
     price: float
     executed_at: datetime
