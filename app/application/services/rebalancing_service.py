@@ -609,10 +609,21 @@ class RebalancingService:
         Returns detailed filter statistics.
         """
         from app.services import yahoo
+        from app.domain.portfolio_hash import generate_recommendation_cache_key
+        from app.domain.services.portfolio_score import (
+            calculate_portfolio_score,
+            calculate_post_transaction_score,
+        )
 
         settings = await self._settings_service.get_settings()
         recently_bought = await self._trade_repo.get_recently_bought_symbols(BUY_COOLDOWN_DAYS)
         stocks = await self._stock_repo.get_all_active()
+
+        # Get portfolio context for score calculation
+        positions = await self._position_repo.get_all()
+        position_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
+        cache_key = generate_recommendation_cache_key(position_dicts, settings.to_dict())
+        portfolio_context = await self._build_portfolio_context()
 
         symbol_yahoo_map = {
             s.symbol: s.yahoo_symbol
@@ -626,11 +637,16 @@ class RebalancingService:
             "eligible_for_pricing": len(symbol_yahoo_map),
             "got_prices": len(batch_prices),
             "recently_bought": list(recently_bought),
+            "settings": {
+                "min_trade_size": settings.min_trade_size,
+                "min_stock_score": settings.min_stock_score,
+            },
             "no_allow_buy": [],
             "no_score": [],
             "low_score": [],
             "no_price": [],
-            "passed_filters": [],
+            "worsens_balance": [],
+            "passed_all_filters": [],
         }
 
         for stock in stocks:
@@ -649,6 +665,7 @@ class RebalancingService:
                 continue
 
             total_score = score_row["total_score"] or 0.5
+            quality_score = score_row["quality_score"] or 0.5
             if total_score < settings.min_stock_score:
                 filter_stats["low_score"].append({"symbol": symbol, "score": total_score})
                 continue
@@ -658,11 +675,44 @@ class RebalancingService:
                 filter_stats["no_price"].append(symbol)
                 continue
 
-            filter_stats["passed_filters"].append({
-                "symbol": symbol,
-                "score": total_score,
-                "price": price
-            })
+            # Calculate trade value
+            min_lot = stock.min_lot or 1
+            trade_value = max(settings.min_trade_size, min_lot * price)
+
+            # Calculate portfolio score impact
+            try:
+                new_score, score_change = await calculate_post_transaction_score(
+                    symbol=symbol,
+                    geography=stock.geography,
+                    industry=stock.industry,
+                    proposed_value=trade_value,
+                    stock_quality=quality_score,
+                    stock_dividend=0,
+                    portfolio_context=portfolio_context,
+                    portfolio_hash=cache_key,
+                )
+                if score_change < -1.0:
+                    filter_stats["worsens_balance"].append({
+                        "symbol": symbol,
+                        "geography": stock.geography,
+                        "industry": stock.industry,
+                        "score_change": round(score_change, 2),
+                        "trade_value": round(trade_value, 2),
+                    })
+                    continue
+
+                filter_stats["passed_all_filters"].append({
+                    "symbol": symbol,
+                    "score": total_score,
+                    "price": round(price, 2),
+                    "trade_value": round(trade_value, 2),
+                    "score_change": round(score_change, 2),
+                })
+            except Exception as e:
+                filter_stats["worsens_balance"].append({
+                    "symbol": symbol,
+                    "error": str(e),
+                })
 
         return filter_stats
 
