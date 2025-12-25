@@ -11,6 +11,7 @@ from typing import Optional
 from app.domain.value_objects.currency import Currency
 from app.domain.value_objects.trade_side import TradeSide
 from app.domain.value_objects.recommendation_status import RecommendationStatus
+from app.domain.exceptions import ValidationError
 
 
 @dataclass
@@ -45,6 +46,24 @@ class Position:
     last_updated: Optional[str] = None
     first_bought_at: Optional[str] = None
     last_sold_at: Optional[str] = None
+    
+    def __post_init__(self):
+        """Validate position data."""
+        if not self.symbol or not self.symbol.strip():
+            raise ValidationError("Symbol cannot be empty")
+        
+        if self.quantity < 0:
+            raise ValidationError("Quantity must be non-negative")
+        
+        if self.avg_price <= 0:
+            raise ValidationError("Average price must be positive")
+        
+        # Normalize symbol
+        object.__setattr__(self, 'symbol', self.symbol.upper().strip())
+        
+        # Validate currency_rate is positive
+        if self.currency_rate <= 0:
+            object.__setattr__(self, 'currency_rate', 1.0)
 
 
 @dataclass
@@ -61,6 +80,20 @@ class Trade:
     value_eur: Optional[float] = None
     source: str = "tradernet"
     id: Optional[int] = None
+    
+    def __post_init__(self):
+        """Validate trade data."""
+        if not self.symbol or not self.symbol.strip():
+            raise ValidationError("Symbol cannot be empty")
+        
+        if self.quantity <= 0:
+            raise ValidationError("Quantity must be positive")
+        
+        if self.price <= 0:
+            raise ValidationError("Price must be positive")
+        
+        # Normalize symbol
+        object.__setattr__(self, 'symbol', self.symbol.upper().strip())
 
 
 @dataclass
