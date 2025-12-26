@@ -345,6 +345,134 @@ async def _build_recommendations_from_candidates(
     return recommendations
 
 
+async def _build_and_adjust_portfolio_context(
+    position_repo,
+    stock_repo,
+    allocation_repo,
+    db_manager,
+    cache_key: str,
+):
+    """Build portfolio context and apply performance-adjusted weights."""
+    portfolio_context = await build_portfolio_context(
+        position_repo=position_repo,
+        stock_repo=stock_repo,
+        allocation_repo=allocation_repo,
+        db_manager=db_manager,
+    )
+
+    adjusted_geo_weights, adjusted_ind_weights = (
+        await get_performance_adjusted_weights(
+            allocation_repo=allocation_repo,
+            portfolio_hash=cache_key,
+        )
+    )
+
+    if adjusted_geo_weights:
+        portfolio_context.geo_weights.update(adjusted_geo_weights)
+    if adjusted_ind_weights:
+        portfolio_context.industry_weights.update(adjusted_ind_weights)
+
+    return portfolio_context
+
+
+def _fetch_batch_prices(stocks: list, recently_bought: set) -> dict:
+    """Fetch batch prices for eligible stocks."""
+    symbol_yahoo_map = {
+        s.symbol: s.yahoo_symbol
+        for s in stocks
+        if s.allow_buy and s.symbol not in recently_bought
+    }
+    batch_prices = yahoo.get_batch_quotes(symbol_yahoo_map)
+    logger.info(
+        f"Batch fetched {len(batch_prices)} prices for {len(symbol_yahoo_map)} eligible stocks"
+    )
+
+    missing_prices = [s for s in symbol_yahoo_map if s not in batch_prices]
+    if missing_prices:
+        logger.warning(
+            f"Missing prices for {len(missing_prices)} stocks: {missing_prices[:10]}"
+        )
+
+    return batch_prices
+
+
+async def _process_stocks_for_candidates(
+    stocks: list,
+    batch_prices: dict,
+    recently_bought: set,
+    settings,
+    portfolio_context,
+    cache_key: str,
+    exchange_rate_service,
+    db_manager,
+    base_trade_amount: float,
+    current_portfolio_score,
+) -> tuple[list, dict]:
+    """Process stocks and return candidates with filter stats."""
+    candidates = []
+    filter_stats = {
+        "no_allow_buy": 0,
+        "recently_bought": 0,
+        "no_score": 0,
+        "low_score": 0,
+        "no_price": 0,
+        "price_too_high": 0,
+        "exceeds_position_cap": 0,
+        "worsens_balance": 0,
+    }
+
+    for stock in stocks:
+        symbol = stock.symbol
+
+        if not stock.allow_buy:
+            filter_stats["no_allow_buy"] += 1
+            continue
+
+        if symbol in recently_bought:
+            filter_stats["recently_bought"] += 1
+            continue
+
+        score_row = await db_manager.state.fetchone(
+            "SELECT * FROM scores WHERE symbol = ?", (symbol,)
+        )
+        if not score_row:
+            filter_stats["no_score"] += 1
+            continue
+
+        if (score_row.get("total_score") or 0.5) < settings.min_stock_score:
+            filter_stats["low_score"] += 1
+            continue
+
+        price = batch_prices.get(symbol)
+        if not price or price <= 0:
+            filter_stats["no_price"] += 1
+            continue
+
+        candidate = await _process_stock_candidate(
+            stock,
+            score_row,
+            price,
+            recently_bought,
+            settings,
+            portfolio_context,
+            cache_key,
+            exchange_rate_service,
+            db_manager,
+            base_trade_amount,
+        )
+
+        if candidate:
+            candidate["current_portfolio_score"] = current_portfolio_score.total
+            candidates.append(candidate)
+        else:
+            if symbol not in batch_prices:
+                filter_stats["no_price"] += 1
+            else:
+                filter_stats["worsens_balance"] += 1
+
+    return candidates, filter_stats
+
+
 def _prepare_cache_data(candidates: list) -> list:
     """Prepare candidate data for caching."""
     return [
@@ -400,15 +528,12 @@ class RebalancingService:
         Each recommendation respects min_lot and shows the actual trade amount.
         Recommendations are scored by how much they IMPROVE portfolio balance.
         """
-        # Get settings first (needed for cache key)
         settings = await self._settings_service.get_settings()
-        # Calculate minimum worthwhile trade from transaction costs
         base_trade_amount = calculate_min_trade_amount(
             settings.transaction_cost_fixed,
             settings.transaction_cost_percent,
         )
 
-        # Generate cache key from both positions and settings
         from app.domain.portfolio_hash import generate_recommendation_cache_key
 
         positions = await self._position_repo.get_all()
@@ -425,123 +550,37 @@ class RebalancingService:
             logger.info(f"Using cached buy recommendations ({len(cached)} items)")
             return await _convert_cached_recommendations(cached, limit)
 
-        # Build portfolio context
-        portfolio_context = await build_portfolio_context(
-            position_repo=self._position_repo,
-            stock_repo=self._stock_repo,
-            allocation_repo=self._allocation_repo,
-            db_manager=self._db_manager,
+        portfolio_context = await _build_and_adjust_portfolio_context(
+            self._position_repo,
+            self._stock_repo,
+            self._allocation_repo,
+            self._db_manager,
+            cache_key,
         )
 
-        # Get performance-adjusted allocation weights (PyFolio enhancement)
-        # Pass cache_key for caching (saves ~27s on repeat calls)
-        adjusted_geo_weights, adjusted_ind_weights = (
-            await get_performance_adjusted_weights(
-                allocation_repo=self._allocation_repo,
-                portfolio_hash=cache_key,
-            )
-        )
-
-        # Update portfolio context with adjusted weights if available
-        if adjusted_geo_weights:
-            portfolio_context.geo_weights.update(adjusted_geo_weights)
-        if adjusted_ind_weights:
-            portfolio_context.industry_weights.update(adjusted_ind_weights)
-
-        # Get recently bought symbols for cooldown filtering
         recently_bought = await self._trade_repo.get_recently_bought_symbols(
             BUY_COOLDOWN_DAYS
         )
-
-        # Get all active stocks with scores
         stocks = await self._stock_repo.get_all_active()
-
-        # Calculate current portfolio score (with caching)
         current_portfolio_score = await calculate_portfolio_score(
             portfolio_context, portfolio_hash=cache_key
         )
 
-        # BATCH FETCH ALL PRICES UPFRONT (performance optimization)
-        # This replaces sequential get_current_price() calls which caused timeouts
-        symbol_yahoo_map = {
-            s.symbol: s.yahoo_symbol
-            for s in stocks
-            if s.allow_buy and s.symbol not in recently_bought
-        }
-        batch_prices = yahoo.get_batch_quotes(symbol_yahoo_map)
-        logger.info(
-            f"Batch fetched {len(batch_prices)} prices for {len(symbol_yahoo_map)} eligible stocks"
+        batch_prices = _fetch_batch_prices(stocks, recently_bought)
+
+        candidates, filter_stats = await _process_stocks_for_candidates(
+            stocks,
+            batch_prices,
+            recently_bought,
+            settings,
+            portfolio_context,
+            cache_key,
+            self._exchange_rate_service,
+            self._db_manager,
+            base_trade_amount,
+            current_portfolio_score,
         )
 
-        # Debug: log stocks that didn't get prices
-        missing_prices = [s for s in symbol_yahoo_map if s not in batch_prices]
-        if missing_prices:
-            logger.warning(
-                f"Missing prices for {len(missing_prices)} stocks: {missing_prices[:10]}"
-            )
-
-        candidates = []
-        filter_stats = {
-            "no_allow_buy": 0,
-            "recently_bought": 0,
-            "no_score": 0,
-            "low_score": 0,
-            "no_price": 0,
-            "price_too_high": 0,
-            "exceeds_position_cap": 0,
-            "worsens_balance": 0,
-        }
-
-        for stock in stocks:
-            symbol = stock.symbol
-
-            if not stock.allow_buy:
-                filter_stats["no_allow_buy"] += 1
-                continue
-
-            if symbol in recently_bought:
-                filter_stats["recently_bought"] += 1
-                continue
-
-            score_row = await self._db_manager.state.fetchone(
-                "SELECT * FROM scores WHERE symbol = ?", (symbol,)
-            )
-            if not score_row:
-                filter_stats["no_score"] += 1
-                continue
-
-            if (score_row.get("total_score") or 0.5) < settings.min_stock_score:
-                filter_stats["low_score"] += 1
-                continue
-
-            price = batch_prices.get(symbol)
-            if not price or price <= 0:
-                filter_stats["no_price"] += 1
-                continue
-
-            candidate = await _process_stock_candidate(
-                stock,
-                score_row,
-                price,
-                recently_bought,
-                settings,
-                portfolio_context,
-                cache_key,
-                self._exchange_rate_service,
-                self._db_manager,
-                base_trade_amount,
-            )
-
-            if candidate:
-                candidate["current_portfolio_score"] = current_portfolio_score.total
-                candidates.append(candidate)
-            else:
-                if symbol not in batch_prices:
-                    filter_stats["no_price"] += 1
-                else:
-                    filter_stats["worsens_balance"] += 1
-
-        # Log filter statistics
         logger.info(
             f"Recommendation filtering: {len(stocks)} total -> {len(candidates)} candidates. Filtered: {filter_stats}"
         )
