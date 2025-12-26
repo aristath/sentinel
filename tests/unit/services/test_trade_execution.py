@@ -92,7 +92,7 @@ class TestTradeValidation:
 
     @pytest.mark.asyncio
     async def test_buy_blocked_when_insufficient_balance(
-        self, mock_trade_repo, mock_position_repo, mock_client, mock_currency_exchange_service
+        self, mock_trade_repo, mock_position_repo, mock_client, mock_currency_exchange_service, mock_exchange_rate_service
     ):
         """BUY order should be skipped if insufficient currency balance.
 
@@ -130,7 +130,7 @@ class TestTradeValidation:
 
     @pytest.mark.asyncio
     async def test_buy_allowed_when_sufficient_balance(
-        self, mock_trade_repo, mock_position_repo, mock_client, mock_currency_exchange_service
+        self, mock_trade_repo, mock_position_repo, mock_client, mock_currency_exchange_service, mock_exchange_rate_service
     ):
         """BUY order should proceed if sufficient currency balance.
 
@@ -167,7 +167,7 @@ class TestTradeValidation:
 
     @pytest.mark.asyncio
     async def test_sell_blocked_when_no_position(
-        self, mock_trade_repo, mock_position_repo, mock_client, mock_currency_exchange_service
+        self, mock_trade_repo, mock_position_repo, mock_client, mock_currency_exchange_service, mock_exchange_rate_service
     ):
         """SELL order should be skipped if no position exists.
 

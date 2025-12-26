@@ -7,7 +7,7 @@ from datetime import datetime
 from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.external.tradernet import get_tradernet_client
 from app.domain.services.exchange_rate_service import ExchangeRateService
-from app.infrastructure.database.manager import get_db_manager
+from app.infrastructure.database.manager import DatabaseManager
 from app.domain.models import Stock, Position
 from app.repositories import (
     StockRepository,
@@ -158,8 +158,10 @@ async def test_rebalancing_service_handles_price_fetch_failure(db):
 
 
 @pytest.mark.asyncio
-async def test_exchange_rate_cache_fallback():
+async def test_exchange_rate_cache_fallback(db):
     """Test that exchange rate cache falls back when API fails."""
+    from app.infrastructure.database.manager import DatabaseManager
+    
     # Mock httpx to fail
     with patch('httpx.AsyncClient') as mock_client:
         mock_instance = MagicMock()
@@ -169,7 +171,8 @@ async def test_exchange_rate_cache_fallback():
         mock_client.return_value = mock_instance
 
         # Should use fallback rates
-        exchange_service = ExchangeRateService(get_db_manager())
+        db_manager = DatabaseManager()
+        exchange_service = ExchangeRateService(db_manager)
         rate = await exchange_service.get_rate("USD", "EUR")
 
         # Should return a valid rate (from fallback)
