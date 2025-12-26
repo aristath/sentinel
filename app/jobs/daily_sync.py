@@ -85,6 +85,21 @@ async def _sync_portfolio_internal():
             # Clear existing positions
             await db_manager.state.execute("DELETE FROM positions")
 
+            # Pre-fetch exchange rates for all currencies we'll need
+            currencies_needed = set()
+            for pos in positions:
+                currency = pos.currency or Currency.EUR
+                if currency != Currency.EUR:
+                    currencies_needed.add(str(currency))
+
+            exchange_rates = {"EUR": 1.0}
+            for curr in currencies_needed:
+                try:
+                    exchange_rates[curr] = await get_exchange_rate(curr, "EUR")
+                except Exception as e:
+                    logger.warning(f"Failed to get rate for {curr}: {e}, using fallback")
+                    exchange_rates[curr] = 8.33 if curr == "HKD" else 1.05  # Fallback
+
             # Insert current positions
             total_value = 0.0
             invested_value = 0.0
@@ -98,12 +113,9 @@ async def _sync_portfolio_internal():
                 current_price = price_data.get("current_price")
                 market_value_eur = price_data.get("market_value_eur")
 
-                # Get fresh exchange rate from centralized service
+                # Use pre-fetched exchange rate
                 currency = pos.currency or Currency.EUR
-                if currency != Currency.EUR:
-                    exchange_rate = await get_exchange_rate(str(currency), "EUR")
-                else:
-                    exchange_rate = 1.0
+                exchange_rate = exchange_rates.get(str(currency), 1.0)
 
                 if current_price and exchange_rate > 0:
                     market_value_eur = pos.quantity * current_price / exchange_rate
