@@ -42,7 +42,7 @@ from app.domain.constants import (
     MAX_POSITION_PCT,
     REBALANCE_BAND_PCT,
 )
-from app.domain.scoring.opportunity import is_price_too_high
+from app.domain.scoring.groups.opportunity import is_price_too_high
 from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.external.tradernet import TradernetClient
 from app.domain.services.exchange_rate_service import ExchangeRateService
