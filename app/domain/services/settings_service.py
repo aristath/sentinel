@@ -7,7 +7,6 @@ from typing import Optional, Union
 
 from app.domain.repositories.protocols import ISettingsRepository
 from app.domain.value_objects.settings import Settings
-from app.repositories import SettingsRepository
 
 
 class SettingsService:

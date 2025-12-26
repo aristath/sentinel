@@ -1,10 +1,7 @@
 """Integration tests for concurrent job execution and locking."""
 
 import asyncio
-import os
-import tempfile
 from datetime import datetime
-from pathlib import Path
 
 import pytest
 

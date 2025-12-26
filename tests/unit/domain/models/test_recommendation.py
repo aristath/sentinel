@@ -1,8 +1,5 @@
 """Tests for unified Recommendation domain model."""
 
-from datetime import datetime
-
-import pytest
 
 from app.domain.models import Recommendation
 from app.domain.value_objects.currency import Currency

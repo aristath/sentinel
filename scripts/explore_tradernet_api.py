@@ -150,7 +150,7 @@ for method in potential_methods:
             print(
                 f"      Length/Keys: {len(result) if isinstance(result, list) else list(result.keys())[:5]}"
             )
-    except Exception as e:
+    except Exception:
         # Silently skip methods that don't exist
         pass
 

@@ -86,7 +86,6 @@ from app.domain.scoring.groups import (
     calculate_opportunity_score,
     calculate_short_term_score,
     calculate_technicals_score,
-    is_price_too_high,
 )
 
 # Models - All dataclasses for scoring
@@ -138,17 +137,7 @@ from app.domain.scoring.windfall import (
 # === 8-GROUP SCORING MODULES ===
 
 
-
-
-
-
-
-
-
 # === HOLISTIC PLANNING SCORING ===
-
-
-
 
 
 __all__ = [

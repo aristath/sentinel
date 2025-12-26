@@ -3,7 +3,6 @@
 
 import json
 import os
-import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -35,7 +34,7 @@ try:
             action_type = action.get("type", "unknown")
             types[action_type] = types.get(action_type, 0) + 1
 
-        print(f"\nExecuted action types:")
+        print("\nExecuted action types:")
         for action_type, count in sorted(types.items()):
             print(f"  {action_type}: {count}")
 
@@ -88,7 +87,7 @@ try:
         if trade_list:
             # Check what fields are available
             sample = trade_list[0]
-            print(f"\nSample trade fields:")
+            print("\nSample trade fields:")
             print(
                 json.dumps(
                     {

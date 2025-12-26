@@ -263,7 +263,6 @@ _query_queue: Optional[QueryQueue] = None
 
 def get_query_queue() -> QueryQueue:
     """Get the global query queue instance."""
-    global _query_queue
     if _query_queue is None:
         raise RuntimeError(
             "Query queue not initialized. Call init_query_queue() first."

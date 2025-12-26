@@ -2,7 +2,6 @@
 
 import pytest
 
-from app.domain.exceptions import ValidationError
 from app.domain.value_objects.currency import Currency
 from app.domain.value_objects.price import Price
 

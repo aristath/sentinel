@@ -19,7 +19,7 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.infrastructure.database import (
+from app.infrastructure.database import (  # noqa: E402
     get_db_manager,
     init_databases,
     shutdown_databases,
@@ -79,7 +79,7 @@ async def seed_stocks(json_path: Path):
                 print(f"  Error inserting {stock['symbol']}: {e}")
                 skipped += 1
 
-    print(f"\nSeeding complete:")
+    print("\nSeeding complete:")
     print(f"  Inserted: {inserted}")
     print(f"  Skipped:  {skipped}")
 
@@ -87,7 +87,7 @@ async def seed_stocks(json_path: Path):
     result = await db_manager.config.fetchall(
         "SELECT geography, COUNT(*) as cnt, SUM(active) as active FROM stocks GROUP BY geography"
     )
-    print(f"\nBy geography:")
+    print("\nBy geography:")
     for row in result:
         print(f"  {row['geography']}: {row['cnt']} total, {row['active']} active")
 

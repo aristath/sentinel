@@ -7,7 +7,6 @@ Components:
 """
 
 import logging
-from typing import Optional
 
 from app.domain.responses import ScoreResult
 from app.infrastructure.external import yahoo_finance as yahoo

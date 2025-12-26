@@ -1,7 +1,6 @@
 """Integration tests for transaction management and rollback scenarios."""
 
 from datetime import datetime
-from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -9,7 +8,6 @@ from app.domain.models import Position, Stock, Trade
 from app.repositories import (
     PositionRepository,
     StockRepository,
-    TradeRepository,
 )
 from app.repositories.base import transaction_context
 

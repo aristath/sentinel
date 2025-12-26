@@ -19,7 +19,6 @@ Brightness values: 0-255.
 
 import logging
 import threading
-import time
 from typing import Optional
 
 logger = logging.getLogger(__name__)

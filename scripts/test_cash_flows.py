@@ -39,7 +39,7 @@ client = TraderNetAPI(api_key, api_secret)
 try:
     # Test connection
     user_info = client.user_info()
-    print(f"✓ Connected successfully")
+    print("✓ Connected successfully")
     print(f"  User: {user_info.get('login', 'N/A')}")
     print()
 except Exception as e:
@@ -107,7 +107,7 @@ try:
             params = (
                 json.loads(params_str) if isinstance(params_str, str) else params_str
             )
-        except:
+        except Exception:
             params = {}
 
         # Look for clues in params

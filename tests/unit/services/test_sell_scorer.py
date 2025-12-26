@@ -8,14 +8,6 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from app.domain.scoring.constants import (
-    DEFAULT_MAX_LOSS_THRESHOLD as MAX_LOSS_THRESHOLD,
-)
-from app.domain.scoring.constants import DEFAULT_MIN_HOLD_DAYS as MIN_HOLD_DAYS
-from app.domain.scoring.constants import (
-    TARGET_RETURN_MAX,
-    TARGET_RETURN_MIN,
-)
 from app.domain.scoring.sell import (
     calculate_portfolio_balance_score,
     calculate_time_held_score,

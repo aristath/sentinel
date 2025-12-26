@@ -1,6 +1,5 @@
 """Tests for domain exceptions."""
 
-import pytest
 
 from app.domain.exceptions import (
     CurrencyConversionError,

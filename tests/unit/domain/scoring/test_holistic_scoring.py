@@ -7,15 +7,11 @@ These tests ensure the holistic planner makes CORRECT decisions about:
 - End-state portfolio evaluation
 """
 
-from datetime import datetime, timedelta
 
 import pytest
 
 from app.domain.scoring.constants import (
     CONSISTENT_DOUBLE_SELL_PCT,
-    DIVIDEND_CUT_THRESHOLD,
-    WINDFALL_EXCESS_HIGH,
-    WINDFALL_EXCESS_MEDIUM,
     WINDFALL_SELL_PCT_HIGH,
     WINDFALL_SELL_PCT_MEDIUM,
 )

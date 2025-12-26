@@ -9,9 +9,9 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import aiosqlite
+import aiosqlite  # noqa: E402
 
-from app.database import SCHEMA
+from app.database import SCHEMA  # noqa: E402
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 DB_PATH = DATA_DIR / "trader.db"

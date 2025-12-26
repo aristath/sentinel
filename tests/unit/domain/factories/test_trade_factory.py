@@ -2,10 +2,8 @@
 
 from datetime import datetime
 
-import pytest
 
 from app.domain.factories.trade_factory import TradeFactory
-from app.domain.models import Trade
 from app.domain.value_objects.currency import Currency
 from app.domain.value_objects.trade_side import TradeSide
 

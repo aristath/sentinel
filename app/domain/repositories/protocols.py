@@ -5,11 +5,9 @@ Using protocols allows for better testability and dependency injection
 without requiring abstract base classes.
 """
 
-from datetime import datetime
 from typing import Dict, List, Optional, Protocol
 
 from app.domain.models import AllocationTarget, Position, Stock, Trade
-from app.domain.value_objects.currency import Currency
 
 
 class IStockRepository(Protocol):

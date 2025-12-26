@@ -3,7 +3,6 @@
 import logging
 import time
 from collections import defaultdict
-from typing import Callable
 
 from fastapi import Request, status
 from starlette.middleware.base import BaseHTTPMiddleware

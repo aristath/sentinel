@@ -10,7 +10,6 @@ from app.infrastructure.cache import cache
 from app.infrastructure.hardware.display_service import set_next_actions
 from app.repositories import (
     PortfolioRepository,
-    PositionRepository,
     SettingsRepository,
 )
 

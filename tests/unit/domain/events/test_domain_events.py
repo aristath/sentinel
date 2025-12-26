@@ -2,7 +2,6 @@
 
 from datetime import datetime
 
-import pytest
 
 from app.domain.events import (
     DomainEvent,
@@ -14,7 +13,6 @@ from app.domain.events import (
 )
 from app.domain.models import Position, Recommendation, Stock, Trade
 from app.domain.value_objects.currency import Currency
-from app.domain.value_objects.recommendation_status import RecommendationStatus
 from app.domain.value_objects.trade_side import TradeSide
 
 

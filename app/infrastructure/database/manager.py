@@ -269,7 +269,6 @@ _db_manager: Optional[DatabaseManager] = None
 
 def get_db_manager() -> DatabaseManager:
     """Get the global database manager instance."""
-    global _db_manager
     if _db_manager is None:
         raise RuntimeError(
             "Database manager not initialized. Call init_databases() first."

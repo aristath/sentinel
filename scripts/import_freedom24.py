@@ -122,16 +122,6 @@ def import_cash_flows(
         details = cf.get("details")
 
         # Calculate amount in EUR
-        value_usd_details = cf.get("value_usd_details")
-        if value_usd_details and isinstance(value_usd_details, str):
-            try:
-                usd_details = json.loads(value_usd_details)
-                exchange_rate = usd_details.get("exchange_rate", 1)
-            except json.JSONDecodeError:
-                exchange_rate = 1
-        else:
-            exchange_rate = 1
-
         if currency == "EUR":
             amount_eur = amount
         elif currency == "USD":

@@ -17,7 +17,6 @@ from app.domain.scoring.calculations import (
     calculate_max_drawdown,
     calculate_rsi,
     calculate_sharpe_ratio,
-    calculate_volatility,
 )
 from app.domain.scoring.constants import (
     BOLLINGER_LENGTH,

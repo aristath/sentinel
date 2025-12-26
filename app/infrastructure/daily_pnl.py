@@ -8,7 +8,7 @@ Tracks daily portfolio performance and halts trading based on loss thresholds:
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional, Tuple
 
 from app.domain.constants import DAILY_LOSS_FULL_HALT, DAILY_LOSS_SELL_HALT

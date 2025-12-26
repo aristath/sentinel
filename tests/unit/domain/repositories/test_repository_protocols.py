@@ -1,18 +1,5 @@
 """Tests for repository protocols."""
 
-from typing import Protocol
-
-import pytest
-
-from app.domain.models import Position, Stock, Trade
-from app.domain.repositories.protocols import (
-    IPositionRepository,
-    ISettingsRepository,
-    IStockRepository,
-    ITradeRepository,
-)
-from app.domain.value_objects.currency import Currency
-
 
 class TestRepositoryProtocols:
     """Test that repository protocols are properly defined."""

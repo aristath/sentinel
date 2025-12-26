@@ -6,7 +6,6 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from app.domain.value_objects.trade_side import TradeSide
-from app.infrastructure.cache import cache
 from app.infrastructure.cache_invalidation import get_cache_invalidation_service
 from app.infrastructure.dependencies import (
     PortfolioServiceDep,
