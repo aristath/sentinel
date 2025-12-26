@@ -3,7 +3,7 @@
 Provides consistent return types for all scoring functions.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, Optional, Any
 
 
@@ -11,26 +11,29 @@ from typing import Dict, Optional, Any
 class ScoreResult:
     """Standard result for scoring functions.
     
-    Use this for all scoring functions that compute a score,
-    replacing tuple[float, Dict[str, float]] return types.
+    Replaces the tuple[float, Dict[str, float]] pattern used by scoring functions.
     
-    Attributes:
-        score: Main score value (0-1 range, typically)
-        sub_scores: Component scores (e.g., {"cagr": 0.8, "sharpe": 0.7})
-        confidence: How confident we are in this score (0-1, optional)
-        metadata: Additional context (calculation details, warnings)
+    Example:
+        # Before
+        return (0.85, {"cagr": 0.8, "sharpe": 0.7})
+        
+        # After
+        return ScoreResult(
+            score=0.85,
+            sub_scores={"cagr": 0.8, "sharpe": 0.7}
+        )
     """
-    score: float
-    sub_scores: Dict[str, float]
-    confidence: Optional[float] = None
-    metadata: Optional[Dict[str, Any]] = None
+    score: float  # Main score (0-1)
+    sub_scores: Dict[str, float] = field(default_factory=dict)  # Component scores
+    confidence: Optional[float] = None  # How confident we are in this score (0-1)
+    metadata: Optional[Dict[str, Any]] = None  # Additional context
     
-    def __post_init__(self):
-        """Ensure score is always a float."""
-        if self.sub_scores is None:
-            self.sub_scores = {}
-        if not isinstance(self.score, (int, float)):
-            raise ValueError(f"score must be numeric, got {type(self.score)}")
-        if self.confidence is not None and not (0 <= self.confidence <= 1):
-            raise ValueError(f"confidence must be between 0 and 1, got {self.confidence}")
+    def to_tuple(self) -> tuple:
+        """Convert to legacy tuple format for backward compatibility."""
+        return (self.score, self.sub_scores)
+    
+    @classmethod
+    def from_tuple(cls, t: tuple) -> "ScoreResult":
+        """Create from legacy tuple format."""
+        return cls(score=t[0], sub_scores=t[1] if len(t) > 1 else {})
 

@@ -33,21 +33,6 @@ class ListResult(Generic[T]):
     metadata: Optional[Dict[str, Any]] = None
     
     def __post_init__(self):
-        """Validate result state."""
-        if self.items is None:
-            self.items = []
-        if not isinstance(self.total, int) or self.total < 0:
-            raise ValueError(f"total must be non-negative integer, got {self.total}")
-    
-    def __len__(self) -> int:
-        """Return number of items."""
-        return len(self.items)
-    
-    def __iter__(self):
-        """Allow iteration over items."""
-        return iter(self.items)
-    
-    def __getitem__(self, index):
-        """Allow indexing into items."""
-        return self.items[index]
+        if self.total == 0 and self.items:
+            self.total = len(self.items)
 

@@ -9,38 +9,31 @@ from typing import Dict, Optional, Any
 
 @dataclass
 class CalculationResult:
-    """Standard result for any calculation.
+    """Standard result for calculation functions.
     
-    Use this for all calculation functions that compute a single numeric value,
-    replacing Optional[float] return types.
+    Replaces Optional[float] pattern with richer information about the calculation.
     
-    Attributes:
-        value: The calculated value (always present, use 0.0 if calculation fails)
-        sub_components: Breakdown of calculation components (e.g., {"5y": 0.11, "10y": 0.10})
-        metadata: Additional context (errors, warnings, calculation parameters)
+    Example:
+        # Before
+        if insufficient_data:
+            return None
+        return 0.11
+        
+        # After
+        if insufficient_data:
+            return CalculationResult(
+                value=0.0,
+                success=False,
+                error="insufficient_data"
+            )
+        return CalculationResult(
+            value=0.11,
+            sub_components={"5y": 0.11, "10y": 0.10}
+        )
     """
-    value: float
-    sub_components: Dict[str, float]
-    metadata: Optional[Dict[str, Any]] = None
-    
-    def __post_init__(self):
-        """Ensure value is always a float."""
-        if self.sub_components is None:
-            self.sub_components = {}
-        if not isinstance(self.value, (int, float)):
-            raise ValueError(f"value must be numeric, got {type(self.value)}")
-    
-    @property
-    def is_valid(self) -> bool:
-        """Check if calculation was successful."""
-        if self.metadata and self.metadata.get("error"):
-            return False
-        return True
-    
-    @property
-    def error_message(self) -> Optional[str]:
-        """Get error message if calculation failed."""
-        if self.metadata and "error" in self.metadata:
-            return self.metadata["error"]
-        return None
+    value: float  # The calculated value
+    success: bool = True  # Whether calculation succeeded
+    sub_components: Dict[str, float] = field(default_factory=dict)  # Breakdown
+    error: Optional[str] = None  # Error message if failed
+    metadata: Optional[Dict[str, Any]] = None  # Additional context (e.g., months_used)
 
