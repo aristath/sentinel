@@ -11,15 +11,12 @@ Used by the holistic planner to evaluate and compare action sequences.
 """
 
 import logging
-import math
 from typing import Dict, Optional, Tuple
 
-from app.domain.scoring.constants import (
-    OPTIMAL_CAGR,
-    BELL_CURVE_SIGMA_LEFT,
-    BELL_CURVE_SIGMA_RIGHT,
-    BELL_CURVE_FLOOR,
-)
+from app.domain.scoring.constants import OPTIMAL_CAGR
+
+# Import scorer from dedicated module
+from app.domain.scoring.scorers.end_state import score_total_return
 
 logger = logging.getLogger(__name__)
 
@@ -40,30 +37,6 @@ PROMISE_WEIGHT_SORTINO = 0.15
 STABILITY_WEIGHT_VOLATILITY = 0.50
 STABILITY_WEIGHT_DRAWDOWN = 0.30
 STABILITY_WEIGHT_SHARPE = 0.20
-
-
-def score_total_return(total_return: float, target: float = 0.12) -> float:
-    """
-    Bell curve scoring for total return (CAGR + dividend yield).
-
-    Peak at target (default 12%). Uses asymmetric Gaussian.
-    Higher total return is better, but extremely high may indicate risk.
-
-    Args:
-        total_return: Combined CAGR + dividend yield (e.g., 0.12 = 12%)
-        target: Optimal total return (default 12%)
-
-    Returns:
-        Score from 0.15 to 1.0
-    """
-    if total_return <= 0:
-        return BELL_CURVE_FLOOR
-
-    # Use slightly wider sigma for total return (more forgiving)
-    sigma = BELL_CURVE_SIGMA_LEFT if total_return < target else BELL_CURVE_SIGMA_RIGHT * 1.2
-    raw_score = math.exp(-((total_return - target) ** 2) / (2 * sigma ** 2))
-
-    return BELL_CURVE_FLOOR + raw_score * (1 - BELL_CURVE_FLOOR)
 
 
 async def calculate_total_return_score(
