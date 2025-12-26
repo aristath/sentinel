@@ -61,34 +61,6 @@ from app.infrastructure.recommendation_cache import get_recommendation_cache
 logger = logging.getLogger(__name__)
 
 
-def _determine_stock_currency(stock: dict) -> str:
-    """
-    Determine the trading currency for a stock.
-
-    Priority:
-    1. Stored currency from stocks.currency (synced from Tradernet x_curr)
-    2. Position currency (from broker sync)
-    3. Default to EUR
-
-    Args:
-        stock: Stock dict with currency info
-
-    Returns:
-        Currency code (EUR, USD, HKD, GBP, etc.)
-    """
-    currency = stock.get("currency")
-    if currency:
-        return currency
-
-    pos_currency = stock.get("pos_currency")
-    if pos_currency:
-        return pos_currency
-
-    symbol = stock.get("symbol", "unknown")
-    logger.warning(f"No currency found for {symbol}, defaulting to EUR")
-    return "EUR"
-
-
 class RebalancingService:
     """Application service for rebalancing operations."""
 
