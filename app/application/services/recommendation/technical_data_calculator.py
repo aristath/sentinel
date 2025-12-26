@@ -30,7 +30,7 @@ def _calculate_current_volatility(closes: np.ndarray) -> float:
     """Calculate current volatility from last 60 days."""
     if len(closes) < 60:
         return 0.20
-    
+
     recent_returns = np.diff(closes[-60:]) / closes[-60:-1]
     current_vol = float(empyrical.annual_volatility(recent_returns))
     if not np.isfinite(current_vol) or current_vol < 0:
@@ -51,13 +51,13 @@ def _calculate_ema_distance(closes: np.ndarray, closes_series: pd.Series) -> flo
     """Calculate distance from 200-day EMA."""
     if len(closes) < 200:
         return 0.0
-    
+
     ema_200 = ta.ema(closes_series, length=200)
     if ema_200 is not None and len(ema_200) > 0 and not pd.isna(ema_200.iloc[-1]):
         ema_value = float(ema_200.iloc[-1])
     else:
         ema_value = float(np.mean(closes[-200:]))
-    
+
     current_price = float(closes[-1])
     return (current_price - ema_value) / ema_value if ema_value > 0 else 0.0
 

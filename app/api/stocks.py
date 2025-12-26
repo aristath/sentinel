@@ -366,13 +366,17 @@ async def _validate_symbol_change(
             )
 
 
-def _apply_string_update(updates: dict, field_name: str, value: str | None, transform=None) -> None:
+def _apply_string_update(
+    updates: dict, field_name: str, value: str | None, transform=None
+) -> None:
     """Apply a string field update with optional transformation."""
     if value is not None:
         updates[field_name] = transform(value) if transform else value
 
 
-def _apply_numeric_update(updates: dict, field_name: str, value: float | int | None, clamp=None) -> None:
+def _apply_numeric_update(
+    updates: dict, field_name: str, value: float | int | None, clamp=None
+) -> None:
     """Apply a numeric field update with optional clamping."""
     if value is not None:
         if clamp:
@@ -390,27 +394,29 @@ def _apply_boolean_update(updates: dict, field_name: str, value: bool | None) ->
 def _build_update_dict(update: StockUpdate, new_symbol: str | None) -> dict:
     """Build dictionary of fields to update."""
     updates = {}
-    
+
     _apply_string_update(updates, "name", update.name)
-    _apply_string_update(updates, "yahoo_symbol", update.yahoo_symbol, lambda v: v if v else None)
+    _apply_string_update(
+        updates, "yahoo_symbol", update.yahoo_symbol, lambda v: v if v else None
+    )
     _apply_string_update(updates, "geography", update.geography, str.upper)
     _apply_string_update(updates, "industry", update.industry)
-    
+
     _apply_numeric_update(
-        updates, 
-        "priority_multiplier", 
-        update.priority_multiplier, 
-        lambda v: max(0.1, min(3.0, v))
+        updates,
+        "priority_multiplier",
+        update.priority_multiplier,
+        lambda v: max(0.1, min(3.0, v)),
     )
     _apply_numeric_update(updates, "min_lot", update.min_lot, lambda v: max(1, v))
-    
+
     _apply_boolean_update(updates, "active", update.active)
     _apply_boolean_update(updates, "allow_buy", update.allow_buy)
     _apply_boolean_update(updates, "allow_sell", update.allow_sell)
-    
+
     if new_symbol:
         updates["symbol"] = new_symbol
-    
+
     return updates
 
 
@@ -451,7 +457,9 @@ async def update_stock(
         new_symbol = update.new_symbol.upper()
         await _validate_symbol_change(old_symbol, new_symbol, stock_repo)
 
-    updates = _build_update_dict(update, new_symbol if new_symbol != old_symbol else None)
+    updates = _build_update_dict(
+        update, new_symbol if new_symbol != old_symbol else None
+    )
     if not updates:
         raise HTTPException(status_code=400, detail="No updates provided")
 

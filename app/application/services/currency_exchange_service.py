@@ -362,7 +362,9 @@ class CurrencyExchangeService:
                 return False
 
         try:
-            current_balance, source_balance = self._get_balances(currency, source_currency)
+            current_balance, source_balance = self._get_balances(
+                currency, source_currency
+            )
 
             if current_balance >= min_amount:
                 logger.info(
@@ -371,7 +373,9 @@ class CurrencyExchangeService:
                 return True
 
             needed = min_amount - current_balance
-            return self._convert_for_balance(currency, source_currency, needed, source_balance)
+            return self._convert_for_balance(
+                currency, source_currency, needed, source_balance
+            )
 
         except Exception as e:
             logger.error(f"Failed to ensure {currency} balance: {e}")

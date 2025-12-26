@@ -17,9 +17,7 @@ def _validate_date_format(date_str: str) -> None:
     try:
         datetime.strptime(date_str, "%Y-%m-%d")
     except ValueError:
-        raise HTTPException(
-            status_code=400, detail="Date must be in YYYY-MM-DD format"
-        )
+        raise HTTPException(status_code=400, detail="Date must be in YYYY-MM-DD format")
 
 
 def _validate_date_range(start_date: Optional[str], end_date: Optional[str]) -> None:
