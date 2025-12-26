@@ -43,7 +43,6 @@ async def test_trade_execution_rollback_on_database_error(db):
     
     # Create mock currency exchange service
     from app.application.services.currency_exchange_service import CurrencyExchangeService
-    from unittest.mock import MagicMock
     mock_currency_service = MagicMock(spec=CurrencyExchangeService)
     
     service = TradeExecutionService(
@@ -100,10 +99,15 @@ async def test_trade_execution_handles_external_failure(db):
     mock_client.is_connected = True
     mock_client.place_order.side_effect = Exception("API Error")
 
+    # Create mock currency exchange service
+    from app.application.services.currency_exchange_service import CurrencyExchangeService
+    mock_currency_service = MagicMock(spec=CurrencyExchangeService)
+    
     service = TradeExecutionService(
         trade_repo=trade_repo,
         position_repo=position_repo,
         tradernet_client=mock_client,
+        currency_exchange_service=mock_currency_service,
     )
 
     # Should handle error gracefully, no trade should be recorded
