@@ -200,7 +200,9 @@ class TestDismissRecommendation:
         mock_recommendation_repo.get_by_uuid.return_value = {"uuid": "test-uuid"}
         mock_recommendation_repo.mark_dismissed.side_effect = Exception("DB error")
 
-        with patch("app.infrastructure.cache_invalidation.get_cache_invalidation_service"):
+        with patch(
+            "app.infrastructure.cache_invalidation.get_cache_invalidation_service"
+        ):
             with pytest.raises(HTTPException) as exc_info:
                 await dismiss_recommendation("test-uuid", mock_recommendation_repo)
 

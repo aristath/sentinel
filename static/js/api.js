@@ -72,8 +72,8 @@ const API = {
   fetchTrades: () => fetch('/api/trades').then(r => r.json()),
   fetchRecommendations: () => fetch('/api/trades/recommendations?limit=10').then(r => r.json()),
   dismissRecommendation: (uuid) => API._post(`/api/trades/recommendations/${uuid}/dismiss`),
-  fetchSellRecommendations: () => fetch('/api/trades/sell-recommendations').then(r => r.json()),
-  dismissSellRecommendation: (uuid) => API._post(`/api/trades/sell-recommendations/${uuid}/dismiss`),
+  fetchSellRecommendations: () => fetch('/api/trades/recommendations/sell').then(r => r.json()),
+  dismissSellRecommendation: (uuid) => API._post(`/api/trades/recommendations/sell/${uuid}/dismiss`),
   // Deprecated - recommendations now execute automatically
   // executeRecommendation: (symbol) => API._post(`/api/trades/recommendations/${symbol}/execute`),
   // executeSellRecommendation: (symbol) => API._post(`/api/trades/sell-recommendations/${symbol}/execute`),

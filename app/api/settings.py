@@ -1,5 +1,7 @@
 """Settings API endpoints."""
 
+from typing import Optional
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -61,7 +63,7 @@ class SettingUpdate(BaseModel):
 
 
 async def get_setting(
-    key: str, settings_repo: SettingsRepositoryDep, default: str = None
+    key: str, settings_repo: SettingsRepositoryDep, default: Optional[str] = None
 ) -> str | None:
     """Get a setting value from the database."""
     value = await settings_repo.get(key)
@@ -101,7 +103,7 @@ async def get_setting_value(key: str, settings_repo: SettingsRepositoryDep) -> f
     db_value = await get_setting(key, settings_repo)
     if db_value:
         return float(db_value)
-    return SETTING_DEFAULTS.get(key, 0)
+    return float(SETTING_DEFAULTS.get(key, 0))
 
 
 async def get_trading_mode(settings_repo: SettingsRepositoryDep) -> str:
@@ -109,7 +111,7 @@ async def get_trading_mode(settings_repo: SettingsRepositoryDep) -> str:
     db_value = await get_setting("trading_mode", settings_repo)
     if db_value in ("live", "research"):
         return db_value
-    return SETTING_DEFAULTS.get("trading_mode", "research")
+    return str(SETTING_DEFAULTS.get("trading_mode", "research"))
 
 
 async def set_trading_mode(mode: str, settings_repo: SettingsRepositoryDep) -> None:
@@ -130,7 +132,7 @@ async def get_job_settings(settings_repo: SettingsRepositoryDep) -> dict[str, fl
         if key in db_values:
             result[key] = float(db_values[key])
         else:
-            result[key] = SETTING_DEFAULTS[key]
+            result[key] = float(SETTING_DEFAULTS[key])
     return result
 
 
@@ -146,11 +148,14 @@ async def get_all_settings(settings_repo: SettingsRepositoryDep):
         if key in db_values:
             # trading_mode is a string, all others are floats
             if key == "trading_mode":
-                result[key] = db_values[key]
+                result[key] = str(db_values[key])
             else:
                 result[key] = float(db_values[key])
         else:
-            result[key] = default
+            if key == "trading_mode":
+                result[key] = str(default)
+            else:
+                result[key] = float(default)
     return result
 
 

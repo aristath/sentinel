@@ -332,7 +332,7 @@ class TestUpdateSettingEndpoint:
         mock_rec_cache = AsyncMock()
 
         with patch("app.api.settings.set_setting", new_callable=AsyncMock):
-            with patch("app.api.settings.cache") as mock_cache:
+            with patch("app.api.settings.cache"):
                 with patch(
                     "app.infrastructure.recommendation_cache.get_recommendation_cache",
                     return_value=mock_rec_cache,
