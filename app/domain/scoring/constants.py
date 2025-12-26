@@ -230,3 +230,30 @@ CONSISTENT_DOUBLE_SELL_PCT = 0.30  # Sell 30% on consistent doubler
 
 # Dividend cut threshold
 DIVIDEND_CUT_THRESHOLD = 0.20    # 20% YoY cut = "big cut"
+
+# =============================================================================
+# Portfolio Optimization Constants
+# =============================================================================
+
+# Target return for Mean-Variance optimization
+OPTIMIZER_TARGET_RETURN = 0.11  # 11% annual target
+
+# Expected returns calculation weights
+EXPECTED_RETURNS_CAGR_WEIGHT = 0.70      # 70% historical CAGR
+EXPECTED_RETURNS_SCORE_WEIGHT = 0.30     # 30% score-adjusted
+
+# Covariance matrix parameters
+COVARIANCE_LOOKBACK_DAYS = 365   # 1 year of daily returns
+COVARIANCE_MIN_HISTORY = 60      # Minimum days needed for covariance
+
+# Weight cutoffs
+OPTIMIZER_WEIGHT_CUTOFF = 0.005  # Ignore weights below 0.5%
+MAX_CONCENTRATION = 0.20         # Maximum 20% in any single stock
+
+# Expected return bounds (clamp to reasonable range)
+EXPECTED_RETURN_MIN = -0.10  # -10% floor
+EXPECTED_RETURN_MAX = 0.30   # +30% ceiling
+
+# Allocation tolerance bands for sector constraints
+GEO_ALLOCATION_TOLERANCE = 0.10   # +/- 10% from target
+IND_ALLOCATION_TOLERANCE = 0.15   # +/- 15% from target

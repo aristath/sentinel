@@ -1,0 +1,34 @@
+"""
+Portfolio Optimization Service.
+
+Provides portfolio-level optimization using PyPortfolioOpt with a blended
+Mean-Variance + Hierarchical Risk Parity approach.
+"""
+
+from app.application.services.optimization.portfolio_optimizer import (
+    PortfolioOptimizer,
+    OptimizationResult,
+    WeightChange,
+)
+from app.application.services.optimization.expected_returns import (
+    ExpectedReturnsCalculator,
+)
+from app.application.services.optimization.risk_models import (
+    RiskModelBuilder,
+)
+from app.application.services.optimization.constraints_manager import (
+    ConstraintsManager,
+    WeightBounds,
+    SectorConstraint,
+)
+
+__all__ = [
+    "PortfolioOptimizer",
+    "OptimizationResult",
+    "WeightChange",
+    "ExpectedReturnsCalculator",
+    "RiskModelBuilder",
+    "ConstraintsManager",
+    "WeightBounds",
+    "SectorConstraint",
+]
