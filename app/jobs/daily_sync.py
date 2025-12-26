@@ -13,6 +13,7 @@ from app.infrastructure.database.manager import get_db_manager
 from app.domain.value_objects.currency import Currency
 from app.domain.events import PositionUpdatedEvent, get_event_bus
 from app.domain.models import Position
+from app.domain.services.exchange_rate_service import get_exchange_rate
 
 logger = logging.getLogger(__name__)
 
@@ -97,16 +98,23 @@ async def _sync_portfolio_internal():
                 current_price = price_data.get("current_price")
                 market_value_eur = price_data.get("market_value_eur")
 
-                if current_price and pos.currency_rate:
-                    market_value_eur = pos.quantity * current_price / pos.currency_rate
+                # Get fresh exchange rate from centralized service
+                currency = pos.currency or Currency.EUR
+                if currency != Currency.EUR:
+                    exchange_rate = await get_exchange_rate(str(currency), "EUR")
+                else:
+                    exchange_rate = 1.0
+
+                if current_price and exchange_rate > 0:
+                    market_value_eur = pos.quantity * current_price / exchange_rate
 
                 # Calculate cost basis (invested value)
-                cost_basis_eur = pos.quantity * pos.avg_price / pos.currency_rate if pos.currency_rate else pos.quantity * pos.avg_price
+                cost_basis_eur = pos.quantity * pos.avg_price / exchange_rate if exchange_rate > 0 else pos.quantity * pos.avg_price
                 invested_value += cost_basis_eur
 
                 # Calculate unrealized P&L
-                if current_price and pos.currency_rate:
-                    position_unrealized_pnl = (current_price - pos.avg_price) * pos.quantity / pos.currency_rate
+                if current_price and exchange_rate > 0:
+                    position_unrealized_pnl = (current_price - pos.avg_price) * pos.quantity / exchange_rate
                     unrealized_pnl += position_unrealized_pnl
 
                 await db_manager.state.execute(
@@ -123,7 +131,7 @@ async def _sync_portfolio_internal():
                         pos.avg_price,
                         current_price,
                         pos.currency or Currency.EUR,
-                        pos.currency_rate,
+                        exchange_rate,  # Use fresh rate from ExchangeRateService
                         market_value_eur,
                         datetime.now().isoformat(),
                         dates.get("first_bought_at"),
@@ -138,7 +146,7 @@ async def _sync_portfolio_internal():
                     quantity=pos.quantity,
                     avg_price=pos.avg_price,
                     currency=pos.currency or Currency.EUR,
-                    currency_rate=pos.currency_rate,
+                    currency_rate=exchange_rate,  # Use fresh rate
                     current_price=current_price,
                     market_value_eur=market_value_eur,
                 )
