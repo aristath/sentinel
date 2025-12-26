@@ -74,6 +74,7 @@ async def init_scheduler() -> AsyncIOScheduler:
     from app.jobs.sync_trades import sync_trades
     from app.jobs.health_check import run_health_check
     from app.jobs.metrics_calculation import calculate_metrics_for_all_stocks
+    from app.jobs.ticker_text_generator import update_ticker_text
 
     # Get all job intervals from database in one query
     job_settings = await _get_all_job_settings()
@@ -182,6 +183,15 @@ async def init_scheduler() -> AsyncIOScheduler:
         IntervalTrigger(hours=1),
         id="health_check",
         name="Database Health Check",
+        replace_existing=True,
+    )
+
+    # Ticker text generator (every 30 seconds to keep display updated)
+    scheduler.add_job(
+        update_ticker_text,
+        IntervalTrigger(seconds=30),
+        id="ticker_text_generator",
+        name="Ticker Text Generator",
         replace_existing=True,
     )
 

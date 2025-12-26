@@ -12,7 +12,7 @@ from app.domain.models import Recommendation, Trade
 from app.domain.value_objects.currency import Currency
 from app.infrastructure.external.tradernet import TradernetClient
 from app.infrastructure.events import emit, SystemEvent
-from app.infrastructure.hardware.display_service import set_activity
+from app.infrastructure.hardware.display_service import set_processing, set_error
 from app.application.services.currency_exchange_service import (
     CurrencyExchangeService,
 )
@@ -105,7 +105,9 @@ class TradeExecutionService:
 
         if not client.is_connected:
             if not client.connect():
-                emit(SystemEvent.ERROR_OCCURRED, message="TRADE EXECUTION FAILED")
+                error_msg = "TRADE EXECUTION FAILED"
+                emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+                set_error(error_msg)
                 raise ConnectionError("Failed to connect to Tradernet")
 
         # Use currency exchange service if auto-convert is enabled
@@ -171,7 +173,7 @@ class TradeExecutionService:
                                     f"for {trade.symbol} (need {required:.2f} {trade_currency})"
                                 )
 
-                                set_activity(f"CONVERTING {source_currency} TO {trade_currency}...")
+                                set_processing(f"CONVERTING {source_currency} TO {trade_currency}...")
 
                                 # Ensure we have enough balance
                                 if currency_service.ensure_balance(
@@ -179,7 +181,7 @@ class TradeExecutionService:
                                 ):
                                     converted_currencies.add(trade_currency)
                                     logger.info(f"Currency conversion successful for {trade_currency}")
-                                    set_activity("CURRENCY CONVERSION COMPLETE")
+                                    set_processing("CURRENCY CONVERSION COMPLETE")
                                 else:
                                     logger.warning(
                                         f"Currency conversion failed for {trade.symbol}: "
@@ -263,7 +265,7 @@ class TradeExecutionService:
                 side_text = "BUYING" if trade.side.upper() == "BUY" else "SELLING"
                 value = int(trade.quantity * trade.estimated_price)
                 symbol_short = trade.symbol.split(".")[0]  # Remove .US/.EU suffix
-                set_activity(f"{side_text} {symbol_short} €{value}")
+                set_processing(f"{side_text} {symbol_short} €{value}")
 
                 result = client.place_order(
                     symbol=trade.symbol,
@@ -293,7 +295,9 @@ class TradeExecutionService:
                         "side": trade.side,
                     })
                 else:
-                    emit(SystemEvent.ERROR_OCCURRED, message="ORDER PLACEMENT FAILED")
+                    error_msg = "ORDER PLACEMENT FAILED"
+                    emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+                    set_error(error_msg)
                     results.append({
                         "symbol": trade.symbol,
                         "status": "failed",
@@ -302,7 +306,9 @@ class TradeExecutionService:
 
             except Exception as e:
                 logger.error(f"Failed to execute trade for {trade.symbol}: {e}")
-                emit(SystemEvent.ERROR_OCCURRED, message="ORDER PLACEMENT FAILED")
+                error_msg = "ORDER PLACEMENT FAILED"
+                emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+                set_error(error_msg)
                 results.append({
                     "symbol": trade.symbol,
                     "status": "error",
@@ -313,6 +319,8 @@ class TradeExecutionService:
         if skipped_count > 0:
             logger.warning(f"Skipped {skipped_count} trades due to insufficient currency balance")
             if skipped_count >= 2:
-                emit(SystemEvent.ERROR_OCCURRED, message="INSUFFICIENT FOREIGN CURRENCY BALANCE")
+                error_msg = "INSUFFICIENT FOREIGN CURRENCY BALANCE"
+                emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+                set_error(error_msg)
 
         return results

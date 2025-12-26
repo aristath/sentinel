@@ -16,7 +16,7 @@ from datetime import datetime
 
 from app.config import settings
 from app.infrastructure.events import emit, SystemEvent
-from app.infrastructure.hardware.display_service import set_activity, clear_activity
+from app.infrastructure.hardware.display_service import set_processing, clear_processing, set_error
 from app.infrastructure.locking import file_lock
 
 logger = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ async def _run_health_check_internal():
     """Internal health check implementation."""
     logger.info("Starting database health check...")
 
-    set_activity("CHECKING DATABASE HEALTH...")
+    set_processing("CHECKING DATABASE HEALTH...")
 
     issues = []
 
@@ -102,15 +102,19 @@ async def _run_health_check_internal():
         # Report results
         if issues:
             await _report_issues(issues)
-            emit(SystemEvent.ERROR_OCCURRED, message=f"DB HEALTH: {len(issues)} ISSUE(S)")
+            error_msg = f"DB HEALTH: {len(issues)} ISSUE(S)"
+            emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+            set_error(error_msg)
         else:
             logger.info("Database health check passed: all databases healthy")
 
     except Exception as e:
         logger.error(f"Health check failed: {e}", exc_info=True)
-        emit(SystemEvent.ERROR_OCCURRED, message="HEALTH CHECK FAILED")
+        error_msg = "HEALTH CHECK FAILED"
+        emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+        set_error(error_msg)
     finally:
-        clear_activity()
+        clear_processing()
 
 
 async def _check_database_integrity(db_path: Path) -> str:

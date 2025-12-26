@@ -66,8 +66,8 @@ async def get_status(
 async def get_display_text(settings_repo: SettingsRepositoryDep):
     """Get current text and display settings for Arduino LED matrix.
 
-    Returns the highest priority text (activity > default) plus settings.
-    Called every 2 seconds by Arduino bridge.
+    Returns the highest priority text (error > processing > next_actions) plus settings.
+    Called every 2 seconds by native LED display script.
     """
     from app.infrastructure.hardware.display_service import get_current_text
 

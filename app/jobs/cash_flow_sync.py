@@ -5,7 +5,7 @@ import logging
 from app.infrastructure.external.tradernet import get_tradernet_client
 from app.infrastructure.locking import file_lock
 from app.infrastructure.events import emit, SystemEvent
-from app.infrastructure.hardware.display_service import set_activity, clear_activity
+from app.infrastructure.hardware.display_service import set_processing, clear_processing, set_error
 from app.infrastructure.database.manager import get_db_manager
 
 logger = logging.getLogger(__name__)
@@ -31,14 +31,16 @@ async def _sync_cash_flows_internal():
     logger.info("Starting cash flow sync")
 
     emit(SystemEvent.CASH_FLOW_SYNC_START)
-    set_activity("SYNCING CASH FLOWS...")
+    set_processing("SYNCING CASH FLOWS...")
 
     client = get_tradernet_client()
 
     if not client.is_connected:
         if not client.connect():
             logger.warning("Failed to connect to Tradernet, skipping cash flow sync")
-            emit(SystemEvent.ERROR_OCCURRED, message="BROKER CONNECTION FAILED")
+            error_msg = "BROKER CONNECTION FAILED"
+            emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+            set_error(error_msg)
             return
 
     try:
@@ -102,6 +104,8 @@ async def _sync_cash_flows_internal():
 
     except Exception as e:
         logger.error(f"Cash flow sync failed: {e}", exc_info=True)
-        emit(SystemEvent.ERROR_OCCURRED, message="CASH FLOW SYNC FAILED")
+        error_msg = "CASH FLOW SYNC FAILED"
+        emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+        set_error(error_msg)
     finally:
-        clear_activity()
+        clear_processing()

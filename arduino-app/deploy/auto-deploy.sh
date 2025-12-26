@@ -1,14 +1,13 @@
 #!/bin/bash
 # Auto-deploy script for Arduino Trader
 # Runs via cron every 5 minutes to check for updates and deploy changes
-# Handles: Main FastAPI app, Arduino app, and sketch rebuilds
+# Handles: Main FastAPI app and sketch compilation/upload
 
 set -euo pipefail
 
 # Configuration
 REPO_DIR="/home/arduino/repos/autoTrader"
 MAIN_APP_DIR="/home/arduino/arduino-trader"
-ARDUINO_APP_DIR="/home/arduino/ArduinoApps/trader-display"
 LOG_FILE="/home/arduino/logs/auto-deploy.log"
 VENV_DIR="$MAIN_APP_DIR/venv"
 SERVICE_NAME="arduino-trader"
@@ -108,7 +107,6 @@ log "Changed files: $(echo "$CHANGED_FILES" | tr '\n' ' ')"
 
 # Categorize changes
 MAIN_APP_CHANGED=false
-ARDUINO_APP_CHANGED=false
 SKETCH_CHANGED=false
 REQUIREMENTS_CHANGED=false
 DEPLOY_SCRIPT_CHANGED=false
@@ -128,19 +126,14 @@ while IFS= read -r file; do
         fi
     fi
     
-    # Check for arduino-app changes
-    if [[ "$file" == arduino-app/* ]]; then
-        ARDUINO_APP_CHANGED=true
+    # Check for sketch changes
+    if [[ "$file" == arduino-app/sketch/* ]]; then
+        SKETCH_CHANGED=true
+    fi
 
-        # Check for sketch changes
-        if [[ "$file" == arduino-app/sketch/* ]]; then
-            SKETCH_CHANGED=true
-        fi
-
-        # Check for deploy script changes
-        if [[ "$file" == arduino-app/deploy/auto-deploy.sh ]]; then
-            DEPLOY_SCRIPT_CHANGED=true
-        fi
+    # Check for deploy script changes
+    if [[ "$file" == arduino-app/deploy/auto-deploy.sh ]]; then
+        DEPLOY_SCRIPT_CHANGED=true
     fi
 done <<< "$CHANGED_FILES"
 
@@ -203,61 +196,35 @@ if [ "$MAIN_APP_CHANGED" = true ]; then
     restart_service
 fi
 
-# Deploy Arduino app if needed
-if [ "$ARDUINO_APP_CHANGED" = true ]; then
-    log "Deploying Arduino app..."
-
-    # Sync arduino-app files using cp (rsync not available)
-    log "Syncing arduino-app files to $ARDUINO_APP_DIR"
-
-    # Create target directory if it doesn't exist
-    mkdir -p "$ARDUINO_APP_DIR"
-
-    # Remove old files (except hidden files like .git if any)
-    rm -rf "$ARDUINO_APP_DIR"/* 2>/dev/null || true
-
-    # Copy all arduino-app contents
-    cp -r "$REPO_DIR/arduino-app/"* "$ARDUINO_APP_DIR/" 2>>"$LOG_FILE" || error_exit "Failed to copy arduino-app files"
-
-    log "Arduino app files synced"
+# Handle sketch changes (compile and upload)
+if [ "$SKETCH_CHANGED" = true ]; then
+    log "Sketch files changed - compiling and uploading..."
     
-    # Rebuild sketch if sketch files changed
-    if [ "$SKETCH_CHANGED" = true ]; then
-        log "Sketch files changed - triggering rebuild..."
-        
-        if command -v arduino-app-cli >/dev/null 2>&1; then
-            # Stop the app first to ensure clean rebuild
-            log "Stopping app for sketch rebuild"
-            arduino-app-cli app stop user:trader-display >> "$LOG_FILE" 2>&1 || log "WARNING: Failed to stop app (may not be running)"
-            
-            # Wait a moment for app to fully stop
-            sleep 2
-            
-            # The Arduino App framework automatically rebuilds the sketch on restart
-            # if sketch files have changed. Restart the app to trigger rebuild.
-            log "Restarting app to trigger sketch rebuild"
-            if arduino-app-cli app restart user:trader-display >> "$LOG_FILE" 2>&1; then
-                log "Arduino app restarted - sketch rebuild triggered"
-            else
-                # If restart fails, try start instead
-                log "Restart failed, attempting to start app"
-                if arduino-app-cli app start user:trader-display >> "$LOG_FILE" 2>&1; then
-                    log "Arduino app started - sketch rebuild triggered"
-                else
-                    log "ERROR: Failed to start Arduino app after sketch changes"
-                fi
-            fi
+    # Stop LED display service during upload
+    log "Stopping LED display service for sketch upload"
+    sudo systemctl stop led-display >> "$LOG_FILE" 2>&1 || log "WARNING: Failed to stop LED display service"
+    
+    # Wait a moment for service to stop
+    sleep 2
+    
+    # Compile and upload sketch using native script
+    if [ -f "$MAIN_APP_DIR/scripts/compile_and_upload_sketch.sh" ]; then
+        log "Running sketch compilation script..."
+        if bash "$MAIN_APP_DIR/scripts/compile_and_upload_sketch.sh" >> "$LOG_FILE" 2>&1; then
+            log "Sketch compiled and uploaded successfully"
         else
-            log "WARNING: arduino-app-cli not found, cannot rebuild sketch"
+            log "ERROR: Sketch compilation/upload failed - check logs"
         fi
     else
-        # Just restart the app if no sketch changes
-        log "Restarting Arduino app (no sketch changes)"
-        if ! arduino-app-cli app restart user:trader-display >> "$LOG_FILE" 2>&1; then
-            log "WARNING: Failed to restart Arduino app"
-        else
-            log "Arduino app restarted successfully"
-        fi
+        log "WARNING: compile_and_upload_sketch.sh not found"
+    fi
+    
+    # Restart LED display service
+    log "Restarting LED display service"
+    if sudo systemctl start led-display >> "$LOG_FILE" 2>&1; then
+        log "LED display service restarted"
+    else
+        log "WARNING: Failed to restart LED display service"
     fi
 fi
 

@@ -11,7 +11,7 @@ from app.config import settings
 from app.infrastructure.external.tradernet import get_tradernet_client
 from app.infrastructure.locking import file_lock
 from app.infrastructure.events import emit, SystemEvent
-from app.infrastructure.hardware.display_service import set_activity, clear_activity
+from app.infrastructure.hardware.display_service import set_processing, clear_processing, set_error
 from app.infrastructure.database.manager import get_db_manager
 from app.infrastructure.cache import cache
 from app.infrastructure.recommendation_cache import get_recommendation_cache
@@ -61,7 +61,7 @@ async def _check_and_rebalance_internal():
     logger.info("Starting trade cycle check...")
 
     emit(SystemEvent.REBALANCE_START)
-    set_activity("CHECKING TRADE OPPORTUNITIES...")
+    set_processing("CHECKING TRADE OPPORTUNITIES...")
 
     try:
         # Step 0: Sync trades from Tradernet for accurate cooldown calculations
@@ -79,7 +79,9 @@ async def _check_and_rebalance_internal():
 
         if pnl_status["status"] == "halted":
             logger.warning(f"Trading halted: {pnl_status['reason']}")
-            emit(SystemEvent.ERROR_OCCURRED, message="TRADING HALTED - SEVERE DRAWDOWN")
+            error_msg = "TRADING HALTED - SEVERE DRAWDOWN"
+            emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+            set_error(error_msg)
             emit(SystemEvent.REBALANCE_COMPLETE)
             return
 
@@ -99,7 +101,9 @@ async def _check_and_rebalance_internal():
         if not client.is_connected:
             if not client.connect():
                 logger.warning("Cannot connect to Tradernet, skipping cycle")
-                emit(SystemEvent.ERROR_OCCURRED, message="BROKER CONNECTION FAILED")
+                error_msg = "BROKER CONNECTION FAILED"
+                emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+                set_error(error_msg)
                 return
 
         cash_balance = client.get_total_cash_eur()
@@ -114,7 +118,7 @@ async def _check_and_rebalance_internal():
 
         # Step 2: Build portfolio context
         logger.info("Step 2: Building portfolio context...")
-        set_activity("BUILDING PORTFOLIO CONTEXT...")
+        set_processing("BUILDING PORTFOLIO CONTEXT...")
 
         positions = await position_repo.get_all()
         stocks = await stock_repo.get_all_active()
@@ -164,7 +168,7 @@ async def _check_and_rebalance_internal():
 
         # Step 3: Get next action from holistic planner
         logger.info("Step 3: Getting recommendation from holistic planner...")
-        set_activity("GETTING HOLISTIC RECOMMENDATION...")
+        set_processing("GETTING HOLISTIC RECOMMENDATION...")
 
         next_action = await _get_next_holistic_action()
 
@@ -172,7 +176,7 @@ async def _check_and_rebalance_internal():
             logger.info("No trades recommended this cycle")
             emit(SystemEvent.REBALANCE_COMPLETE)
             await _refresh_recommendation_cache()
-            clear_activity()
+            clear_processing()
             return
 
         # Check P&L guardrails for the recommended action
@@ -269,7 +273,9 @@ async def _check_and_rebalance_internal():
         else:
             error = results[0].get("error", "Unknown error") if results else "No result"
             logger.error(f"{next_action.side} failed for {next_action.symbol}: {error}")
-            emit(SystemEvent.ERROR_OCCURRED, message=f"{next_action.side} ORDER FAILED")
+            error_msg = f"{next_action.side} ORDER FAILED"
+            emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+            set_error(error_msg)
 
         emit(SystemEvent.SYNC_COMPLETE)
         await sync_portfolio()
@@ -277,9 +283,11 @@ async def _check_and_rebalance_internal():
 
     except Exception as e:
         logger.error(f"Trade cycle error: {e}", exc_info=True)
-        emit(SystemEvent.ERROR_OCCURRED, message="TRADE CYCLE ERROR")
+        error_msg = "TRADE CYCLE ERROR"
+        emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+        set_error(error_msg)
     finally:
-        clear_activity()
+        clear_processing()
 
 
 async def _get_next_holistic_action() -> "Recommendation | None":

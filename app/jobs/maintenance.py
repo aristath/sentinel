@@ -15,7 +15,7 @@ from pathlib import Path
 
 from app.config import settings
 from app.infrastructure.locking import file_lock
-from app.infrastructure.hardware.display_service import set_activity, clear_activity
+from app.infrastructure.hardware.display_service import set_processing, clear_processing, set_error
 from app.infrastructure.events import emit, SystemEvent
 from app.infrastructure.database.manager import get_db_manager
 
@@ -37,7 +37,7 @@ async def _create_backup_internal():
     logger.info("Starting database backup")
 
     emit(SystemEvent.BACKUP_START)
-    set_activity("BACKING UP DATABASE...")
+    set_processing("BACKING UP DATABASE...")
 
     try:
         # Ensure backup directory exists
@@ -72,10 +72,12 @@ async def _create_backup_internal():
 
     except Exception as e:
         logger.error(f"Database backup failed: {e}")
-        emit(SystemEvent.ERROR_OCCURRED, message="BACKUP FAILED")
+        error_msg = "BACKUP FAILED"
+        emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+        set_error(error_msg)
         raise
     finally:
-        clear_activity()
+        clear_processing()
 
 
 def _backup_database(source_path: Path, dest_path: Path):
@@ -135,7 +137,7 @@ async def _checkpoint_wal_internal():
     """Internal WAL checkpoint implementation."""
     logger.info("Running WAL checkpoint on all databases")
 
-    set_activity("CHECKPOINTING DATABASE...")
+    set_processing("CHECKPOINTING DATABASE...")
 
     try:
         db_manager = get_db_manager()
@@ -178,7 +180,7 @@ async def _integrity_check_internal():
     logger.info("Running database integrity check")
 
     emit(SystemEvent.INTEGRITY_CHECK_START)
-    set_activity("CHECKING DATABASE INTEGRITY...")
+    set_processing("CHECKING DATABASE INTEGRITY...")
 
     try:
         db_manager = get_db_manager()
@@ -208,14 +210,18 @@ async def _integrity_check_internal():
         if all_ok:
             emit(SystemEvent.INTEGRITY_CHECK_COMPLETE)
         else:
-            emit(SystemEvent.ERROR_OCCURRED, message="INTEGRITY CHECK FAILED")
+            error_msg = "INTEGRITY CHECK FAILED"
+            emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+            set_error(error_msg)
 
     except Exception as e:
         logger.error(f"Database integrity check failed: {e}")
-        emit(SystemEvent.ERROR_OCCURRED, message="INTEGRITY CHECK FAILED")
+        error_msg = "INTEGRITY CHECK FAILED"
+        emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+        set_error(error_msg)
         raise
     finally:
-        clear_activity()
+        clear_processing()
 
 
 async def cleanup_old_daily_prices():
@@ -234,7 +240,7 @@ async def _cleanup_old_daily_prices_internal():
     logger.info("Cleaning up old daily prices")
 
     emit(SystemEvent.CLEANUP_START)
-    set_activity("CLEANING OLD PRICES...")
+    set_processing("CLEANING OLD PRICES...")
 
     try:
         db_manager = get_db_manager()
@@ -278,7 +284,9 @@ async def _cleanup_old_daily_prices_internal():
 
     except Exception as e:
         logger.error(f"Daily price cleanup failed: {e}")
-        emit(SystemEvent.ERROR_OCCURRED, message="CLEANUP FAILED")
+        error_msg = "CLEANUP FAILED"
+        emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+        set_error(error_msg)
         raise
 
 
@@ -297,7 +305,7 @@ async def _cleanup_expired_caches_internal():
     """Internal cache cleanup implementation."""
     logger.info("Cleaning up expired caches")
 
-    set_activity("CLEANING EXPIRED CACHES...")
+    set_processing("CLEANING EXPIRED CACHES...")
 
     try:
         from app.infrastructure.recommendation_cache import get_recommendation_cache
@@ -340,7 +348,7 @@ async def _cleanup_old_snapshots_internal():
     """Internal snapshot cleanup implementation."""
     logger.info("Cleaning up old portfolio snapshots")
 
-    set_activity("CLEANING OLD SNAPSHOTS...")
+    set_processing("CLEANING OLD SNAPSHOTS...")
 
     try:
         db_manager = get_db_manager()
@@ -379,7 +387,7 @@ async def run_daily_maintenance():
     logger.info("Starting daily maintenance")
 
     emit(SystemEvent.MAINTENANCE_START)
-    set_activity("RUNNING MAINTENANCE...")
+    set_processing("RUNNING MAINTENANCE...")
 
     try:
         # 1. Create backup first (before any cleanup)
@@ -398,10 +406,12 @@ async def run_daily_maintenance():
 
     except Exception as e:
         logger.error(f"Daily maintenance failed: {e}")
-        emit(SystemEvent.ERROR_OCCURRED, message="MAINTENANCE FAILED")
+        error_msg = "MAINTENANCE FAILED"
+        emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+        set_error(error_msg)
         raise
     finally:
-        clear_activity()
+        clear_processing()
 
 
 async def run_weekly_maintenance():
