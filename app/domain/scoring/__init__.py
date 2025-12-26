@@ -91,9 +91,8 @@ from app.domain.scoring.stock_scorer import (
     calculate_stock_score_from_prefetched,
 )
 
-# Technical indicators
-from app.domain.scoring.technical import (
-    # Async functions (check cache first)
+# Technical indicators - Caching layer
+from app.domain.scoring.caching import (
     get_ema,
     get_rsi,
     get_bollinger_bands,
@@ -101,14 +100,17 @@ from app.domain.scoring.technical import (
     get_max_drawdown,
     get_52_week_high,
     get_52_week_low,
-    # Sync functions (internal use, or when cache not needed)
+    calculate_distance_from_ma,
+)
+
+# Technical indicators - Pure calculation functions
+from app.domain.scoring.calculations import (
     calculate_ema,
     calculate_rsi,
     calculate_bollinger_bands,
     calculate_volatility,
     calculate_sharpe_ratio,
     calculate_max_drawdown,
-    calculate_distance_from_ma,
 )
 
 # === HOLISTIC PLANNING SCORING ===
