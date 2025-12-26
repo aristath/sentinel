@@ -22,7 +22,7 @@ from app.domain.scoring.technical import (
     get_52_week_high,
     get_52_week_low,
 )
-from app.domain.scoring.long_term import calculate_cagr
+from app.domain.scoring.calculations import calculate_cagr
 
 logger = logging.getLogger(__name__)
 
