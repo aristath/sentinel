@@ -119,7 +119,7 @@ async def get_transaction_history():
 @router.get("/cash-breakdown")
 async def get_cash_breakdown():
     """Get cash balance breakdown by currency."""
-    from app.domain.services.exchange_rate_service import get_exchange_rate
+    import httpx
 
     try:
         client = await ensure_tradernet_connected(raise_on_error=False)
@@ -131,13 +131,39 @@ async def get_cash_breakdown():
     try:
         balances = client.get_cash_balances()
 
-        # Calculate total EUR using async exchange rate service
+        # Collect currencies that need conversion
+        currencies_needed = {b.currency for b in balances if b.currency != "EUR" and b.amount > 0}
+
+        # Fetch exchange rates in one call (like daily_sync)
+        exchange_rates = {"EUR": 1.0}
+        if currencies_needed:
+            try:
+                async with httpx.AsyncClient() as http_client:
+                    response = await http_client.get(
+                        "https://api.exchangerate-api.com/v4/latest/EUR",
+                        timeout=15.0
+                    )
+                    if response.status_code == 200:
+                        api_rates = response.json().get("rates", {})
+                        for curr in currencies_needed:
+                            if curr in api_rates:
+                                exchange_rates[curr] = api_rates[curr]
+            except Exception:
+                pass  # Use fallbacks
+
+        # Apply fallbacks for any missing rates
+        fallback_rates = {"USD": 1.05, "HKD": 9.16, "GBP": 0.85}
+        for curr in currencies_needed:
+            if curr not in exchange_rates:
+                exchange_rates[curr] = fallback_rates.get(curr, 1.0)
+
+        # Calculate total EUR
         total_eur = 0.0
         for b in balances:
             if b.currency == "EUR":
                 total_eur += b.amount
             elif b.amount > 0:
-                rate = await get_exchange_rate(b.currency, "EUR")
+                rate = exchange_rates.get(b.currency, 1.0)
                 total_eur += b.amount / rate
 
         return {
