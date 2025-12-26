@@ -48,9 +48,9 @@ async def _sync_portfolio_internal():
             return
 
     try:
-        # Get positions from Tradernet
+        # Get positions and cash balances from Tradernet
         positions = client.get_portfolio()
-        cash_balance = client.get_total_cash_eur()
+        cash_balances = client.get_cash_balances()
 
         db_manager = get_db_manager()
 
@@ -84,12 +84,15 @@ async def _sync_portfolio_internal():
             # Clear existing positions
             await db_manager.state.execute("DELETE FROM positions")
 
-            # Pre-fetch exchange rates for all currencies we'll need
+            # Pre-fetch exchange rates for all currencies we'll need (positions + cash)
             currencies_needed = set()
             for pos in positions:
                 currency = pos.currency or Currency.EUR
                 if currency != Currency.EUR:
                     currencies_needed.add(str(currency))
+            for cb in cash_balances:
+                if cb.currency != "EUR":
+                    currencies_needed.add(cb.currency)
 
             # Fetch rates with simple HTTP call and fallback
             exchange_rates = {"EUR": 1.0}
@@ -116,6 +119,16 @@ async def _sync_portfolio_internal():
                 if curr not in exchange_rates:
                     exchange_rates[curr] = fallback_rates.get(curr, 1.0)
                     logger.warning(f"Using fallback rate for {curr}: {exchange_rates[curr]}")
+
+            # Calculate cash balance in EUR using fetched rates
+            cash_balance = 0.0
+            for cb in cash_balances:
+                if cb.currency == "EUR":
+                    cash_balance += cb.amount
+                elif cb.amount > 0:
+                    rate = exchange_rates.get(cb.currency, 1.0)
+                    cash_balance += cb.amount / rate
+            logger.info(f"Cash balance calculated: {cash_balance:.2f} EUR")
 
             # Insert current positions
             total_value = 0.0
