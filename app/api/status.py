@@ -141,7 +141,9 @@ async def _build_ticker_text() -> str:
                 for step in multi_step["steps"][:max_actions]:
                     symbol = step["symbol"].split(".")[0]  # Remove .US/.EU suffix
                     value = int(step.get("estimated_value", 0))
-                    side = step.get("side", "BUY")
+                    # Handle both string and TradeSide enum for side
+                    raw_side = step.get("side", "BUY")
+                    side = str(raw_side).replace("TradeSide.", "")  # Normalize enum to string
                     step_num = step.get("step", 1)
                     step_label = f"[{step_num}/{total_steps}]"
                     if show_amounts and value > 0:
