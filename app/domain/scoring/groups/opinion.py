@@ -10,6 +10,7 @@ import logging
 from typing import Optional
 
 from app.infrastructure.external import yahoo_finance as yahoo
+from app.domain.responses import ScoreResult
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 async def calculate_opinion_score(
     symbol: str,
     yahoo_symbol: str = None
-) -> tuple:
+) -> ScoreResult:
     """
     Calculate opinion score from analyst recommendations and price targets.
 
@@ -26,8 +27,8 @@ async def calculate_opinion_score(
         yahoo_symbol: Optional explicit Yahoo symbol override
 
     Returns:
-        Tuple of (total_score, sub_components_dict)
-        sub_components_dict: {"recommendation": float, "price_target": float}
+        ScoreResult with score and sub_scores
+        sub_scores: {"recommendation": float, "price_target": float}
     """
     from app.repositories.calculations import CalculationsRepository
 
@@ -50,7 +51,7 @@ async def calculate_opinion_score(
 
             if not data:
                 sub_components = {"recommendation": 0.5, "price_target": 0.5}
-                return 0.5, sub_components
+                return ScoreResult(score=0.5, sub_scores=sub_components)
 
             # Recommendation score (already 0-1 from yahoo service)
             recommendation_score = data.recommendation_score
@@ -68,7 +69,7 @@ async def calculate_opinion_score(
         except Exception as e:
             logger.error(f"Failed to calculate opinion score for {symbol}: {e}")
             sub_components = {"recommendation": 0.5, "price_target": 0.5}
-            return 0.5, sub_components
+            return ScoreResult(score=0.5, sub_scores=sub_components)
 
     # Combined (60% recommendation, 40% target)
     total = recommendation_score * 0.60 + target_score * 0.40
@@ -78,4 +79,7 @@ async def calculate_opinion_score(
         "price_target": round(target_score, 3),
     }
 
-    return round(total, 3), sub_components
+    return ScoreResult(
+        score=round(total, 3),
+        sub_scores=sub_components
+    )

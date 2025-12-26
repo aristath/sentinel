@@ -17,6 +17,8 @@ from app.domain.scoring.constants import (
     DRAWDOWN_OK,
     DRAWDOWN_POOR,
 )
+from app.domain.responses import ScoreResult
+
 logger = logging.getLogger(__name__)
 
 
@@ -58,7 +60,7 @@ async def calculate_short_term_score(
     symbol: str,
     daily_prices: List[Dict],
     pyfolio_drawdown: Optional[float] = None,
-) -> tuple:
+) -> ScoreResult:
     """
     Calculate short-term performance score.
 
@@ -68,8 +70,8 @@ async def calculate_short_term_score(
         pyfolio_drawdown: Current drawdown from PyFolio (optional)
 
     Returns:
-        Tuple of (total_score, sub_components_dict)
-        sub_components_dict: {"momentum": float, "drawdown": float}
+        ScoreResult with score and sub_scores
+        sub_scores: {"momentum": float, "drawdown": float}
     """
     from app.repositories.calculations import CalculationsRepository
     from app.domain.scoring.caching import get_max_drawdown
@@ -126,4 +128,7 @@ async def calculate_short_term_score(
         "drawdown": round(drawdown_score, 3),
     }
 
-    return round(min(1.0, total), 3), sub_components
+    return ScoreResult(
+        score=round(min(1.0, total), 3),
+        sub_scores=sub_components
+    )

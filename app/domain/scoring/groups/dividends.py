@@ -13,6 +13,7 @@ from app.domain.scoring.constants import (
     HIGH_DIVIDEND_THRESHOLD,
     MID_DIVIDEND_THRESHOLD,
 )
+from app.domain.responses import ScoreResult
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ from app.domain.scoring.scorers.dividends import (
 )
 
 
-async def calculate_dividends_score(symbol: str, fundamentals) -> tuple:
+async def calculate_dividends_score(symbol: str, fundamentals) -> ScoreResult:
     """
     Calculate dividends score.
 
@@ -33,8 +34,8 @@ async def calculate_dividends_score(symbol: str, fundamentals) -> tuple:
         fundamentals: Yahoo fundamentals data
 
     Returns:
-        Tuple of (total_score, sub_components_dict)
-        sub_components_dict: {"yield": float, "consistency": float}
+        ScoreResult with score and sub_scores
+        sub_scores: {"yield": float, "consistency": float}
     """
     from app.repositories.calculations import CalculationsRepository
 
@@ -60,4 +61,7 @@ async def calculate_dividends_score(symbol: str, fundamentals) -> tuple:
         "consistency": round(consistency_score, 3),
     }
 
-    return round(min(1.0, total), 3), sub_components
+    return ScoreResult(
+        score=round(min(1.0, total), 3),
+        sub_scores=sub_components
+    )

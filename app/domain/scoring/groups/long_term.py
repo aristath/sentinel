@@ -14,6 +14,7 @@ import numpy as np
 
 from app.domain.scoring.constants import OPTIMAL_CAGR
 from app.domain.scoring.calculations import calculate_cagr
+from app.domain.responses import ScoreResult
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ async def calculate_long_term_score(
     daily_prices: List[Dict],
     sortino_ratio: Optional[float] = None,
     target_annual_return: float = OPTIMAL_CAGR,
-) -> tuple:
+) -> ScoreResult:
     """
     Calculate long-term performance score.
 
@@ -49,8 +50,8 @@ async def calculate_long_term_score(
         target_annual_return: Target return for CAGR scoring
 
     Returns:
-        Tuple of (total_score, sub_components_dict)
-        sub_components_dict: {"cagr": float, "sortino": float, "sharpe": float}
+        ScoreResult with score and sub_scores
+        sub_scores: {"cagr": float, "sortino": float, "sharpe": float}
     """
     from app.repositories.calculations import CalculationsRepository
     from app.domain.scoring.caching import get_sharpe_ratio
@@ -96,4 +97,7 @@ async def calculate_long_term_score(
         "sharpe": round(sharpe_score, 3),
     }
 
-    return round(min(1.0, total), 3), sub_components
+    return ScoreResult(
+        score=round(min(1.0, total), 3),
+        sub_scores=sub_components
+    )

@@ -12,6 +12,8 @@ from typing import Optional, List, Dict
 
 import numpy as np
 
+from app.domain.responses import ScoreResult
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,7 +25,7 @@ from app.domain.scoring.scorers.technicals import (
 )
 
 
-async def calculate_technicals_score(symbol: str, daily_prices: List[Dict]) -> tuple:
+async def calculate_technicals_score(symbol: str, daily_prices: List[Dict]) -> ScoreResult:
     """
     Calculate technicals score.
 
@@ -32,8 +34,8 @@ async def calculate_technicals_score(symbol: str, daily_prices: List[Dict]) -> t
         daily_prices: Daily price data
 
     Returns:
-        Tuple of (total_score, sub_components_dict)
-        sub_components_dict: {"rsi": float, "bollinger": float, "ema": float}
+        ScoreResult with score and sub_scores
+        sub_scores: {"rsi": float, "bollinger": float, "ema": float}
     """
     from app.repositories.calculations import CalculationsRepository
     from app.domain.scoring.caching import (
@@ -45,7 +47,7 @@ async def calculate_technicals_score(symbol: str, daily_prices: List[Dict]) -> t
 
     if len(daily_prices) < 20:
         sub_components = {"rsi": 0.5, "bollinger": 0.5, "ema": 0.5}
-        return 0.5, sub_components
+        return ScoreResult(score=0.5, sub_scores=sub_components)
 
     calc_repo = CalculationsRepository()
     closes = np.array([p["close"] for p in daily_prices])
@@ -91,4 +93,7 @@ async def calculate_technicals_score(symbol: str, daily_prices: List[Dict]) -> t
         "ema": round(ema_score, 3),
     }
 
-    return round(min(1.0, total), 3), sub_components
+    return ScoreResult(
+        score=round(min(1.0, total), 3),
+        sub_scores=sub_components
+    )

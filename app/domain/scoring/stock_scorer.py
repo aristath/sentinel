@@ -109,73 +109,73 @@ async def calculate_stock_score(
     sub_scores = {}
 
     # 1. Long-term Performance
-    total, subs = await calculate_long_term_score(
+    result = await calculate_long_term_score(
         symbol=symbol,
         monthly_prices=monthly_prices,
         daily_prices=daily_prices,
         sortino_ratio=sortino_ratio,
         target_annual_return=target_annual_return,
     )
-    scores["long_term"] = total
-    sub_scores["long_term"] = subs
+    scores["long_term"] = result.score
+    sub_scores["long_term"] = result.sub_scores
 
     # 2. Fundamentals
-    total, subs = await calculate_fundamentals_score(
+    result = await calculate_fundamentals_score(
         symbol=symbol,
         monthly_prices=monthly_prices,
         fundamentals=fundamentals,
     )
-    scores["fundamentals"] = total
-    sub_scores["fundamentals"] = subs
+    scores["fundamentals"] = result.score
+    sub_scores["fundamentals"] = result.sub_scores
 
     # 3. Opportunity
-    total, subs = await calculate_opportunity_score(
+    result = await calculate_opportunity_score(
         symbol=symbol,
         daily_prices=daily_prices,
         fundamentals=fundamentals,
         market_avg_pe=market_avg_pe,
     )
-    scores["opportunity"] = total
-    sub_scores["opportunity"] = subs
+    scores["opportunity"] = result.score
+    sub_scores["opportunity"] = result.sub_scores
 
     # 4. Dividends
-    total, subs = await calculate_dividends_score(
+    result = await calculate_dividends_score(
         symbol=symbol,
         fundamentals=fundamentals,
     )
-    scores["dividends"] = total
-    sub_scores["dividends"] = subs
+    scores["dividends"] = result.score
+    sub_scores["dividends"] = result.sub_scores
 
     # 5. Short-term Performance
-    total, subs = await calculate_short_term_score(
+    result = await calculate_short_term_score(
         symbol=symbol,
         daily_prices=daily_prices,
         pyfolio_drawdown=pyfolio_drawdown,
     )
-    scores["short_term"] = total
-    sub_scores["short_term"] = subs
+    scores["short_term"] = result.score
+    sub_scores["short_term"] = result.sub_scores
 
     # 6. Technicals
-    total, subs = await calculate_technicals_score(
+    result = await calculate_technicals_score(
         symbol=symbol,
         daily_prices=daily_prices,
     )
-    scores["technicals"] = total
-    sub_scores["technicals"] = subs
+    scores["technicals"] = result.score
+    sub_scores["technicals"] = result.sub_scores
 
     # 7. Opinion
-    total, subs = await calculate_opinion_score(
+    result = await calculate_opinion_score(
         symbol=symbol,
         yahoo_symbol=yahoo_symbol,
     )
-    scores["opinion"] = total
-    sub_scores["opinion"] = subs
+    scores["opinion"] = result.score
+    sub_scores["opinion"] = result.sub_scores
 
     # 8. Diversification (DYNAMIC - never cached)
     if portfolio_context and geography:
         # Need quality and opportunity for averaging down calculation
         quality_approx = (scores["long_term"] + scores["fundamentals"]) / 2
-        total, subs = calculate_diversification_score(
+        result = calculate_diversification_score(
             symbol=symbol,
             geography=geography,
             industry=industry,
@@ -183,8 +183,8 @@ async def calculate_stock_score(
             opportunity_score=scores["opportunity"],
             portfolio_context=portfolio_context,
         )
-        scores["diversification"] = total
-        sub_scores["diversification"] = subs
+        scores["diversification"] = result.score
+        sub_scores["diversification"] = result.sub_scores
     else:
         scores["diversification"] = 0.5
         sub_scores["diversification"] = {"geography": 0.5, "industry": 0.5, "averaging": 0.5}

@@ -21,6 +21,7 @@ from app.domain.scoring.constants import (
     MIN_DAYS_FOR_OPPORTUNITY,
 )
 from app.domain.constants import MAX_PRICE_VS_52W_HIGH
+from app.domain.responses import ScoreResult
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,7 @@ async def calculate_opportunity_score(
     daily_prices: List[Dict],
     fundamentals,
     market_avg_pe: float = DEFAULT_MARKET_AVG_PE
-) -> tuple:
+) -> ScoreResult:
     """
     Calculate opportunity score (value/dip signals).
 
@@ -66,8 +67,8 @@ async def calculate_opportunity_score(
         market_avg_pe: Market average P/E for comparison
 
     Returns:
-        Tuple of (total_score, sub_components_dict)
-        sub_components_dict: {"below_52w_high": float, "pe_ratio": float}
+        ScoreResult with score and sub_scores
+        sub_scores: {"below_52w_high": float, "pe_ratio": float}
     """
     from app.repositories.calculations import CalculationsRepository
     from app.domain.scoring.caching import get_52_week_high
@@ -75,7 +76,7 @@ async def calculate_opportunity_score(
     if len(daily_prices) < MIN_DAYS_FOR_OPPORTUNITY:
         logger.warning(f"Insufficient daily data: {len(daily_prices)} days")
         sub_components = {"below_52w_high": 0.5, "pe_ratio": 0.5}
-        return 0.5, sub_components
+        return ScoreResult(score=0.5, sub_scores=sub_components)
 
     calc_repo = CalculationsRepository()
 
@@ -111,4 +112,7 @@ async def calculate_opportunity_score(
         "pe_ratio": round(pe_score, 3),
     }
 
-    return round(min(1.0, total), 3), sub_components
+    return ScoreResult(
+        score=round(min(1.0, total), 3),
+        sub_scores=sub_components
+    )

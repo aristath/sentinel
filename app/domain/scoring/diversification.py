@@ -17,6 +17,7 @@ from app.domain.scoring.constants import (
     CONCENTRATION_HIGH,
     CONCENTRATION_MED,
 )
+from app.domain.responses import ScoreResult
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ def calculate_diversification_score(
     quality_score: float,
     opportunity_score: float,
     portfolio_context: PortfolioContext,
-) -> tuple:
+) -> ScoreResult:
     """
     Calculate diversification score based on portfolio awareness.
 
@@ -46,8 +47,8 @@ def calculate_diversification_score(
         portfolio_context: Portfolio weights and positions
 
     Returns:
-        Tuple of (total_score, sub_components_dict)
-        sub_components_dict: {"geography": float, "industry": float, "averaging": float}
+        ScoreResult with score and sub_scores
+        sub_scores: {"geography": float, "industry": float, "averaging": float}
     """
     # 1. Geography Gap Score (40%)
     geo_weight = portfolio_context.geo_weights.get(geography, 0)
@@ -121,7 +122,10 @@ def calculate_diversification_score(
         "averaging": round(averaging_down_score, 3),
     }
 
-    return round(min(1.0, total), 3), sub_components
+    return ScoreResult(
+        score=round(min(1.0, total), 3),
+        sub_scores=sub_components
+    )
 
 
 async def calculate_portfolio_score(

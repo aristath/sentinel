@@ -10,6 +10,7 @@ import logging
 from typing import Optional, List, Dict
 
 from app.domain.scoring.calculations import calculate_cagr
+from app.domain.responses import ScoreResult
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +82,7 @@ async def calculate_fundamentals_score(
     symbol: str,
     monthly_prices: List[Dict],
     fundamentals,
-) -> tuple:
+) -> ScoreResult:
     """
     Calculate fundamentals score.
 
@@ -91,8 +92,8 @@ async def calculate_fundamentals_score(
         fundamentals: Yahoo fundamentals data
 
     Returns:
-        Tuple of (total_score, sub_components_dict)
-        sub_components_dict: {"financial_strength": float, "consistency": float}
+        ScoreResult with score and sub_scores
+        sub_scores: {"financial_strength": float, "consistency": float}
     """
     from app.repositories.calculations import CalculationsRepository
 
@@ -140,4 +141,7 @@ async def calculate_fundamentals_score(
         "consistency": round(consistency_score, 3),
     }
 
-    return round(min(1.0, total), 3), sub_components
+    return ScoreResult(
+        score=round(min(1.0, total), 3),
+        sub_scores=sub_components
+    )
