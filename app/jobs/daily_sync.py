@@ -12,6 +12,7 @@ from app.infrastructure.locking import file_lock
 from app.infrastructure.database.manager import get_db_manager
 from app.domain.value_objects.currency import Currency
 from app.domain.events import PositionUpdatedEvent, get_event_bus
+from app.domain.models import Position
 
 logger = logging.getLogger(__name__)
 
