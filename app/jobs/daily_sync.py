@@ -392,17 +392,8 @@ async def sync_stock_currencies():
             logger.info("No stocks to sync currencies for")
             return
 
-        # Fetch quotes to get x_curr
         quotes_response = client.get_quotes_raw(symbols)
-
-        if isinstance(quotes_response, list):
-            q_list = quotes_response
-        elif isinstance(quotes_response, dict):
-            q_list = quotes_response.get("result", {}).get("q", [])
-            if not q_list:
-                q_list = quotes_response.get("q", [])
-        else:
-            q_list = []
+        q_list = _extract_quotes_list(quotes_response)
 
         updated = 0
         async with db_manager.config.transaction():
