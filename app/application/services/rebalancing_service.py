@@ -55,7 +55,7 @@ from app.domain.constants import (
     MAX_POSITION_PCT,
 )
 from app.domain.scoring.opportunity import is_price_too_high
-from app.services import yahoo
+from app.infrastructure.external import yahoo_finance as yahoo
 from app.domain.services.exchange_rate_service import get_exchange_rate
 from app.domain.value_objects.trade_side import TradeSide
 from app.domain.constants import BUY_COOLDOWN_DAYS
@@ -641,7 +641,7 @@ class RebalancingService:
         Debug method to show why recommendations are being filtered.
         Returns detailed filter statistics.
         """
-        from app.services import yahoo
+        from app.infrastructure.external import yahoo_finance as yahoo
         from app.domain.portfolio_hash import generate_recommendation_cache_key
         from app.domain.scoring.diversification import calculate_post_transaction_score
 

@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 from datetime import datetime
 
-from app.services import yahoo
+from app.infrastructure.external import yahoo_finance as yahoo
 from app.services.tradernet import get_tradernet_client
 from app.domain.services.exchange_rate_service import get_exchange_rate
 from app.domain.models import Stock, Position

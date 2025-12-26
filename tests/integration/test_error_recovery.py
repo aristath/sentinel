@@ -157,7 +157,7 @@ async def test_position_sync_recovery_after_partial_failure(db):
 
 def test_price_fetch_retry_logic():
     """Test that price fetching retries on failure."""
-    from app.services import yahoo
+    from app.infrastructure.external import yahoo_finance as yahoo
 
     # Mock yfinance to fail first two times, then succeed
     call_count = 0
@@ -182,7 +182,7 @@ def test_price_fetch_retry_logic():
 
 def test_price_fetch_fails_after_max_retries():
     """Test that price fetching returns None after max retries."""
-    from app.services import yahoo
+    from app.infrastructure.external import yahoo_finance as yahoo
 
     # Mock yfinance to always fail
     def mock_ticker_factory(symbol):

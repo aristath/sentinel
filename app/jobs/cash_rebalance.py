@@ -58,7 +58,7 @@ async def _check_and_rebalance_internal():
     """Internal rebalance implementation with drip execution."""
     from app.jobs.daily_sync import sync_portfolio
     from app.jobs.sync_trades import sync_trades
-    from app.services import yahoo
+    from app.infrastructure.external import yahoo_finance as yahoo
     from app.application.services.trade_execution_service import TradeExecutionService
     from app.domain.models import Recommendation
     from app.domain.value_objects.trade_side import TradeSide

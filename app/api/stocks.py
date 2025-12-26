@@ -198,7 +198,7 @@ async def create_stock(
     
     # Detect industry if not provided
     if not stock_data.industry:
-        from app.services import yahoo
+        from app.infrastructure.external import yahoo_finance as yahoo
         industry = yahoo.get_stock_industry(stock_data.symbol, stock_data.yahoo_symbol)
         new_stock = StockFactory.create_with_industry_detection(stock_dict, industry)
     else:
@@ -235,7 +235,7 @@ async def refresh_all_scores(
     scoring_service: ScoringServiceDep,
 ):
     """Recalculate scores for all stocks in universe and update industries."""
-    from app.services import yahoo
+    from app.infrastructure.external import yahoo_finance as yahoo
 
     # Invalidate recommendation cache so new scores affect recommendations immediately
     recommendation_cache = get_recommendation_cache()

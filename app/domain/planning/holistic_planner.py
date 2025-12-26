@@ -102,7 +102,7 @@ async def identify_opportunities(
         Dict mapping category to list of ActionCandidate
     """
     from app.repositories import SettingsRepository, TradeRepository
-    from app.services import yahoo
+    from app.infrastructure.external import yahoo_finance as yahoo
     from app.domain.services.exchange_rate_service import get_exchange_rate
     from app.domain.services.trade_sizing_service import TradeSizingService
     from app.domain.constants import BUY_COOLDOWN_DAYS

@@ -9,7 +9,7 @@ Components:
 import logging
 from typing import Optional
 
-from app.services import yahoo
+from app.infrastructure.external import yahoo_finance as yahoo
 
 logger = logging.getLogger(__name__)
 

@@ -5,7 +5,7 @@ from datetime import datetime
 
 from app.config import settings
 from app.services.tradernet import get_tradernet_client
-from app.services import yahoo
+from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.events import emit, SystemEvent
 from app.infrastructure.hardware.led_display import set_activity
 from app.infrastructure.locking import file_lock

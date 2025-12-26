@@ -6,7 +6,7 @@ Uses the new scoring domain to calculate scores for all active stocks.
 import logging
 from datetime import datetime
 
-from app.services import yahoo
+from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.events import emit, SystemEvent
 from app.infrastructure.locking import file_lock
 from app.infrastructure.hardware.led_display import set_activity

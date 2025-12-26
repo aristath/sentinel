@@ -10,7 +10,7 @@ from app.repositories import StockRepository, ScoreRepository
 from app.domain.models import StockScore
 from app.domain.scoring import calculate_stock_score, CalculatedStockScore
 from app.infrastructure.database.manager import get_db_manager
-from app.services import yahoo
+from app.infrastructure.external import yahoo_finance as yahoo
 
 logger = logging.getLogger(__name__)
 

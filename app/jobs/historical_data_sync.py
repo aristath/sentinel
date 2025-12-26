@@ -8,7 +8,7 @@ import asyncio
 from datetime import datetime, timedelta
 
 from app.config import settings
-from app.services import yahoo
+from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.locking import file_lock
 from app.infrastructure.events import emit, SystemEvent
 from app.infrastructure.hardware.led_display import set_activity
