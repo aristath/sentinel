@@ -20,6 +20,76 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _add_strategy_summary(
+    parts: list, windfall_sells: list, averaging_buys: list, sells: list, buys: list
+) -> None:
+    """Add strategy summary to narrative parts."""
+    if windfall_sells and averaging_buys:
+        parts.append(
+            "This plan takes profits from windfall gains and reinvests in quality stocks "
+            "that are temporarily down."
+        )
+    elif windfall_sells:
+        parts.append(
+            "This plan captures windfall profits from positions that have exceeded "
+            "their historical growth rates."
+        )
+    elif averaging_buys:
+        parts.append(
+            "This plan focuses on averaging down on quality positions that are "
+            "temporarily undervalued."
+        )
+    elif sells and buys:
+        parts.append(
+            "This plan rebalances the portfolio by trimming overweight positions "
+            "and adding to underweight areas."
+        )
+    elif buys:
+        parts.append(
+            "This plan deploys available cash into high-quality opportunities."
+        )
+    elif sells:
+        parts.append(
+            "This plan reduces risk by taking profits from selected positions."
+        )
+
+
+def _add_step_summary(parts: list, steps: list, sells: list, buys: list) -> None:
+    """Add step summary to narrative parts."""
+    parts.append(f"The plan consists of {len(steps)} action(s):")
+
+    if sells:
+        total_sell = sum(s.estimated_value for s in sells)
+        sell_symbols = [s.symbol for s in sells]
+        parts.append(f"• Sell €{total_sell:.0f} from {', '.join(sell_symbols)}")
+
+    if buys:
+        total_buy = sum(s.estimated_value for s in buys)
+        buy_symbols = [s.symbol for s in buys]
+        parts.append(f"• Buy €{total_buy:.0f} in {', '.join(buy_symbols)}")
+
+
+def _add_expected_outcome(
+    parts: list, improvement: float, current_score: float, end_score: float
+) -> None:
+    """Add expected outcome to narrative parts."""
+    if improvement > 0:
+        parts.append(
+            f"Expected portfolio improvement: +{improvement:.1f} points "
+            f"(from {current_score:.1f} to {end_score:.1f})."
+        )
+    elif improvement < 0:
+        parts.append(
+            f"Note: Short-term score may decrease by {abs(improvement):.1f} points, "
+            f"but this positions the portfolio for better long-term growth."
+        )
+    else:
+        parts.append(
+            f"This maintains the current portfolio score of {current_score:.1f} "
+            f"while improving diversification."
+        )
+
+
 def generate_step_narrative(
     action: "ActionCandidate",
     portfolio_context: "PortfolioContext",
