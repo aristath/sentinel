@@ -30,7 +30,7 @@ class TradeExecutionService:
     def __init__(
         self,
         trade_repo: TradeRepository,
-        position_repo: Optional[PositionRepository] = None
+        position_repo: PositionRepository,
     ):
         self._trade_repo = trade_repo
         self._position_repo = position_repo

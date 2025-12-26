@@ -148,23 +148,22 @@ class RebalancingService:
 
     def __init__(
         self,
-        stock_repo: Optional[IStockRepository] = None,
-        position_repo: Optional[IPositionRepository] = None,
-        allocation_repo: Optional[IAllocationRepository] = None,
-        portfolio_repo: Optional[PortfolioRepository] = None,
-        trade_repo: Optional[ITradeRepository] = None,
-        settings_repo: Optional[ISettingsRepository] = None,
-        recommendation_repo: Optional[RecommendationRepository] = None,
+        stock_repo: IStockRepository,
+        position_repo: IPositionRepository,
+        allocation_repo: IAllocationRepository,
+        portfolio_repo: PortfolioRepository,
+        trade_repo: ITradeRepository,
+        settings_repo: ISettingsRepository,
+        recommendation_repo: RecommendationRepository,
     ):
-        # Use provided repos or create new ones
-        self._stock_repo = stock_repo or StockRepository()
-        self._position_repo = position_repo or PositionRepository()
-        self._allocation_repo = allocation_repo or AllocationRepository()
-        self._portfolio_repo = portfolio_repo or PortfolioRepository()
-        self._trade_repo = trade_repo or TradeRepository()
-        self._settings_repo = settings_repo or SettingsRepository()
+        self._stock_repo = stock_repo
+        self._position_repo = position_repo
+        self._allocation_repo = allocation_repo
+        self._portfolio_repo = portfolio_repo
+        self._trade_repo = trade_repo
+        self._settings_repo = settings_repo
         self._settings_service = SettingsService(self._settings_repo)
-        self._recommendation_repo = recommendation_repo or RecommendationRepository()
+        self._recommendation_repo = recommendation_repo
         self._db_manager = get_db_manager()
 
     async def _get_technical_data_for_positions(

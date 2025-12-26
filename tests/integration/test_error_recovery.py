@@ -40,8 +40,9 @@ async def test_trade_execution_rollback_on_database_error(db):
             status="filled"
         )
         mock_get_client.return_value = mock_client
-        
-        service = TradeExecutionService(trade_repo=trade_repo)
+
+        position_repo = PositionRepository(db=db)
+        service = TradeExecutionService(trade_repo=trade_repo, position_repo=position_repo)
         
         # Mock repository create to fail
         original_create = trade_repo.create
@@ -83,14 +84,16 @@ async def test_trade_execution_handles_external_failure(db):
         geography="US",
     )
     
+    position_repo = PositionRepository(db=db)
+
     # Mock external trade execution to fail
     with patch('app.application.services.trade_execution_service.get_tradernet_client') as mock_get_client:
         mock_client = MagicMock()
         mock_client.is_connected = True
         mock_client.place_order.side_effect = Exception("API Error")
         mock_get_client.return_value = mock_client
-        
-        service = TradeExecutionService(trade_repo=trade_repo)
+
+        service = TradeExecutionService(trade_repo=trade_repo, position_repo=position_repo)
         
         # Should handle error gracefully, no trade should be recorded
         results = await service.execute_trades([trade_rec])
