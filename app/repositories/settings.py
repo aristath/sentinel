@@ -19,7 +19,9 @@ class SettingsRepository:
         )
         return row["value"] if row else None
 
-    async def set(self, key: str, value: str, description: str = None) -> None:
+    async def set(
+        self, key: str, value: str, description: Optional[str] = None
+    ) -> None:
         """Set a setting value."""
         now = datetime.now().isoformat()
 

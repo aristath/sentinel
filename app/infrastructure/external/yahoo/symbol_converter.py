@@ -3,8 +3,12 @@
 Converts between Tradernet symbol format and Yahoo Finance format.
 """
 
+from typing import Optional
 
-def get_yahoo_symbol(tradernet_symbol: str, yahoo_override: str = None) -> str:
+
+def get_yahoo_symbol(
+    tradernet_symbol: str, yahoo_override: Optional[str] = None
+) -> str:
     """
     Convert Tradernet symbol format to Yahoo Finance format.
 

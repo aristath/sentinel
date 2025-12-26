@@ -122,7 +122,23 @@ async def _execute_trade(
     )
 
     emit(SystemEvent.SYNC_START)
-    trade_execution = TradeExecutionService(trade_repo, position_repo)
+    from app.domain.services.exchange_rate_service import ExchangeRateService
+    from app.infrastructure.dependencies import (
+        get_currency_exchange_service_dep,
+        get_exchange_rate_service,
+        get_tradernet_client,
+    )
+
+    tradernet_client = get_tradernet_client()
+    exchange_rate_service = get_exchange_rate_service()
+    currency_exchange_service = get_currency_exchange_service_dep()
+    trade_execution = TradeExecutionService(
+        trade_repo,
+        position_repo,
+        tradernet_client,
+        currency_exchange_service,
+        exchange_rate_service,
+    )
 
     currency_balances = None
     if next_action.side == TradeSide.BUY:
@@ -179,7 +195,6 @@ async def _execute_trade(
 
 async def _check_and_rebalance_internal():
     """Internal rebalance implementation with drip execution."""
-    from app.domain.value_objects.trade_side import TradeSide
     from app.jobs.daily_sync import sync_portfolio
     from app.jobs.sync_trades import sync_trades
 
@@ -351,10 +366,16 @@ async def _get_next_holistic_action() -> "Recommendation | None":
     else:
         currency = currency_val
 
+    # Convert side string to TradeSide if needed
+    if isinstance(step.side, str):
+        trade_side = TradeSide.from_string(step.side)
+    else:
+        trade_side = step.side
+
     return Recommendation(
         symbol=step.symbol,
         name=step.name,
-        side=step.side,
+        side=trade_side,
         quantity=step.quantity,
         estimated_price=step.estimated_price,
         estimated_value=step.estimated_value,

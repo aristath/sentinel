@@ -381,9 +381,13 @@ class PortfolioOptimizer:
 
         for symbol in all_symbols:
             # Current weight
-            pos = positions.get(symbol)
-            if pos and portfolio_value > 0:
-                current = pos.market_value_eur / portfolio_value
+            pos_maybe = positions.get(symbol)
+            if pos_maybe is not None and portfolio_value > 0:
+                market_value = pos_maybe.market_value_eur
+                if market_value is not None:
+                    current = market_value / portfolio_value
+                else:
+                    current = 0.0
             else:
                 current = 0.0
 

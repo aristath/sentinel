@@ -377,7 +377,7 @@ async def calculate_portfolio_end_state_score(
         Tuple of (total_score, detailed_breakdown)
     """
     if total_value <= 0 or not positions:
-        return 0.5, {"error": "Invalid portfolio data"}
+        return 0.5, {"error": "Invalid portfolio data"}  # type: ignore[dict-item]
 
     # Calculate weighted averages across all positions
     weighted_total_return = 0.0

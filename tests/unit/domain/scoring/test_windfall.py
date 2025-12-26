@@ -4,7 +4,7 @@ These tests verify the profit-taking detection which is CRITICAL
 for identifying when to sell positions with unexpected gains.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 

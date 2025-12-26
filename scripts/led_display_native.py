@@ -162,7 +162,7 @@ def _process_display_data(data: dict) -> None:
 
 def main_loop():
     """Main loop - fetch display text from API, update MCU if changed."""
-    global _last_text, _last_speed, _last_brightness
+    global _last_text
 
     logger.info("Starting LED display native script")
     logger.info(f"API URL: {API_URL}")

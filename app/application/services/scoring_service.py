@@ -115,9 +115,10 @@ class ScoringService:
             Calculated score or None if calculation failed
         """
         try:
-            # Fetch price data
+            # Fetch price data - use symbol as fallback if yahoo_symbol is None
+            yahoo_symbol_str = yahoo_symbol or symbol
             daily_prices, monthly_prices = await self._get_price_data(
-                symbol, yahoo_symbol
+                symbol, yahoo_symbol_str
             )
 
             if not daily_prices or len(daily_prices) < 50:
@@ -133,16 +134,17 @@ class ScoringService:
                 return None
 
             # Fetch fundamentals from Yahoo
-            fundamentals = yahoo.get_fundamental_data(symbol, yahoo_symbol=yahoo_symbol)
+            yahoo_symbol_str = yahoo_symbol or symbol
+            fundamentals = yahoo.get_fundamental_data(symbol, yahoo_symbol=yahoo_symbol_str)
 
             score = await calculate_stock_score(
                 symbol,
                 daily_prices=daily_prices,
                 monthly_prices=monthly_prices,
                 fundamentals=fundamentals,
-                yahoo_symbol=yahoo_symbol,
-                geography=geography,
-                industry=industry,
+                yahoo_symbol=yahoo_symbol_str,
+                geography=geography or "UNKNOWN",
+                industry=industry or "UNKNOWN",
             )
             if score:
                 await self.score_repo.upsert(_to_domain_score(score))

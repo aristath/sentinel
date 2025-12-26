@@ -104,8 +104,8 @@ async def calculate_short_term_score(
         max_dd = pyfolio_drawdown
         await calc_repo.set_metric(symbol, "MAX_DRAWDOWN", max_dd)
     elif len(daily_prices) >= 30:
-        closes = np.array([p["close"] for p in daily_prices])
-        max_dd = await get_max_drawdown(symbol, closes)
+        closes_array = np.array([p["close"] for p in daily_prices])
+        max_dd = await get_max_drawdown(symbol, closes_array)
     else:
         max_dd = None
 

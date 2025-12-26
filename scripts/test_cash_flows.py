@@ -46,6 +46,7 @@ except Exception as e:
     print(f"✗ Failed to connect: {e}")
     sys.exit(1)
 
+
 def _analyze_transaction_types(records: list) -> tuple[dict, dict, dict]:
     """Analyze transaction types and return counts and details."""
     type_counts = {}
@@ -116,7 +117,9 @@ def _print_transaction_summary(type_counts: dict, type_details: dict) -> None:
     print(f"\nFound {len(type_counts)} unique transaction types:\n")
 
     for type_doc_id in sorted(type_counts.keys()):
-        _print_type_details(type_doc_id, type_counts[type_doc_id], type_details[type_doc_id])
+        _print_type_details(
+            type_doc_id, type_counts[type_doc_id], type_details[type_doc_id]
+        )
 
 
 def _print_status_summary(status_counts: dict) -> None:

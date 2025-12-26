@@ -110,7 +110,10 @@ class ExpectedReturnsCalculator:
         # score=1.0 → factor=2.0 (double the target contribution)
         # score=0.5 → factor=1.0 (neutral)
         # score=0.0 → factor=0.0 (no target contribution)
-        score_factor = stock_score / 0.5 if stock_score > 0 else 0.0
+        if stock_score is None or stock_score <= 0:
+            score_factor = 0.0
+        else:
+            score_factor = stock_score / 0.5
 
         # Calculate base expected return
         base_return = (

@@ -127,7 +127,8 @@ class Database:
     async def fetchall(self, sql: str, params: tuple = ()) -> list[aiosqlite.Row]:
         """Execute and fetch all rows."""
         cursor = await self.execute(sql, params)
-        return await cursor.fetchall()
+        rows = await cursor.fetchall()
+        return list(rows)
 
     async def integrity_check(self) -> str:
         """Run SQLite integrity check."""

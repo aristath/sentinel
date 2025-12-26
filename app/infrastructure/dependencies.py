@@ -55,7 +55,8 @@ def get_position_repository() -> IPositionRepository:
 
 def get_trade_repository() -> ITradeRepository:
     """Get TradeRepository instance."""
-    return TradeRepository()
+    # Type ignore: TradeRepository implements ITradeRepository
+    return TradeRepository()  # type: ignore[return-value]
 
 
 def get_score_repository() -> ScoreRepository:

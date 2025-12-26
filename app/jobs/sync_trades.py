@@ -7,7 +7,6 @@ not just placed orders (which may be cancelled externally).
 
 import logging
 from datetime import datetime
-from typing import Optional
 
 from app.infrastructure.database.manager import get_db_manager
 from app.infrastructure.events import SystemEvent, emit
@@ -20,6 +19,66 @@ from app.infrastructure.hardware.display_service import (
 from app.infrastructure.locking import file_lock
 
 logger = logging.getLogger(__name__)
+
+
+async def _get_existing_order_ids(db_manager) -> set:
+    """Get set of existing order IDs from database."""
+    cursor = await db_manager.ledger.execute(
+        "SELECT order_id FROM trades WHERE order_id IS NOT NULL"
+    )
+    return {row[0] for row in await cursor.fetchall()}
+
+
+async def _get_valid_symbols(db_manager) -> set:
+    """Get set of valid stock symbols from database."""
+    cursor = await db_manager.config.execute("SELECT symbol FROM stocks")
+    return {row[0] for row in await cursor.fetchall()}
+
+
+def _validate_trade(
+    trade: dict, existing_order_ids: set, valid_symbols: set
+) -> tuple[bool, str]:
+    """Validate a trade and return (is_valid, reason)."""
+    order_id = trade.get("order_id")
+    if not order_id:
+        return False, "missing order_id"
+
+    if order_id in existing_order_ids:
+        return False, "duplicate"
+
+    symbol = trade.get("symbol", "")
+    if symbol not in valid_symbols:
+        return False, f"symbol {symbol} not in stocks table"
+
+    side = trade.get("side", "").upper()
+    if side not in ("BUY", "SELL"):
+        return False, f"invalid side '{side}'"
+
+    return True, ""
+
+
+async def _insert_trade(db_manager, trade: dict, order_id: str) -> bool:
+    """Insert a trade into the database."""
+    try:
+        symbol = trade.get("symbol", "")
+        side = trade.get("side", "").upper()
+        quantity = trade.get("quantity", 0)
+        price = trade.get("price", 0)
+        executed_at = trade.get("executed_at", "")
+        if not executed_at:
+            executed_at = datetime.now().isoformat()
+
+        await db_manager.ledger.execute(
+            """
+            INSERT INTO trades (symbol, side, quantity, price, executed_at, order_id, source)
+            VALUES (?, ?, ?, ?, ?, ?, 'tradernet')
+            """,
+            (symbol, side, quantity, price, executed_at, order_id),
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Failed to insert trade {order_id}: {e}")
+        return False
 
 
 async def sync_trades():

@@ -30,7 +30,8 @@ def calculate_bollinger_bands(
         return None
 
     series = pd.Series(closes)
-    bb = ta.bbands(series, length=length, std=std)
+    # Type ignore: pandas-ta bbands accepts float for std, but stubs may be incorrect
+    bb = ta.bbands(series, length=length, std=std)  # type: ignore[arg-type]
 
     if bb is None or len(bb) == 0:
         return None
@@ -46,6 +47,9 @@ def calculate_bollinger_bands(
         upper = bb[upper_col].iloc[-1] if upper_col in bb.columns else None
 
         if any(pd.isna([lower, middle, upper])):
+            return None
+
+        if lower is None or middle is None or upper is None:
             return None
 
         return float(lower), float(middle), float(upper)

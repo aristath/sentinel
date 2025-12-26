@@ -1,6 +1,5 @@
 """Tradernet (Freedom24) API client service."""
 
-import hashlib
 import logging
 import threading
 from contextlib import contextmanager
@@ -36,7 +35,7 @@ _rates_updated: Optional[datetime] = None
 _rates_lock = threading.Lock()
 
 
-def get_exchange_rate(from_currency: str, to_currency: str = None) -> float:
+def get_exchange_rate(from_currency: str, to_currency: Optional[str] = None) -> float:
     """Get exchange rate from currency to target currency using real-time data (thread-safe)."""
     from app.domain.value_objects.currency import Currency
 
@@ -144,6 +143,532 @@ class OrderResult:
     quantity: float
     price: float
     status: str
+
+
+def _parse_price_data_string(data, symbol: str):
+    """Parse price data if it's a JSON string."""
+    if isinstance(data, str):
+        import json
+
+        try:
+            return json.loads(data)
+        except json.JSONDecodeError:
+            logger.warning(
+                f"Received non-JSON string response for {symbol}: {data[:100]}"
+            )
+            return []
+    return data
+
+
+def _parse_hloc_format(data: dict, symbol: str, start: datetime) -> list[OHLC]:
+    """Parse hloc format: {'hloc': {'SYMBOL': [[high, low, open, close], ...]}}."""
+    hloc_data = data.get("hloc", {})
+    if not hloc_data or not isinstance(hloc_data, dict):
+        return []
+
+    symbol_data = hloc_data.get(symbol, [])
+    if not symbol_data or not isinstance(symbol_data, list):
+        return []
+
+    result = []
+    current_date = start
+    for candle_array in symbol_data:
+        if isinstance(candle_array, list) and len(candle_array) >= 4:
+            if len(candle_array) == 4:
+                high = float(candle_array[0])
+                low = float(candle_array[1])
+                open_price = float(candle_array[2])
+                close = float(candle_array[3])
+            else:
+                high = float(candle_array[0]) if len(candle_array) > 0 else 0
+                low = float(candle_array[1]) if len(candle_array) > 1 else 0
+                open_price = float(candle_array[2]) if len(candle_array) > 2 else 0
+                close = float(candle_array[3]) if len(candle_array) > 3 else 0
+
+            result.append(
+                OHLC(
+                    timestamp=current_date,
+                    open=open_price,
+                    high=high,
+                    low=low,
+                    close=close,
+                    volume=0,
+                )
+            )
+            current_date += timedelta(days=1)
+
+    return result
+
+
+def _parse_candles_format(data: dict) -> list[OHLC]:
+    """Parse candles format from dict."""
+    candles = data.get("candles", [])
+    result = []
+    for candle in candles:
+        if isinstance(candle, dict):
+            result.append(
+                OHLC(
+                    timestamp=datetime.fromtimestamp(candle.get("t", 0)),
+                    open=float(candle.get("o", 0)),
+                    high=float(candle.get("h", 0)),
+                    low=float(candle.get("l", 0)),
+                    close=float(candle.get("c", 0)),
+                    volume=int(candle.get("v", 0)),
+                )
+            )
+    return result
+
+
+def _parse_candles_list(data: list) -> list[OHLC]:
+    """Parse direct list of candles."""
+    result = []
+    for candle in data:
+        if isinstance(candle, dict):
+            result.append(
+                OHLC(
+                    timestamp=datetime.fromtimestamp(candle.get("t", 0)),
+                    open=float(candle.get("o", 0)),
+                    high=float(candle.get("h", 0)),
+                    low=float(candle.get("l", 0)),
+                    close=float(candle.get("c", 0)),
+                    volume=int(candle.get("v", 0)),
+                )
+            )
+    return result
+
+
+def _get_trading_mode() -> str:
+    """Get trading mode from cache."""
+    from app.infrastructure.cache import get_cache
+
+    cache = get_cache()
+    trading_mode = "research"
+    try:
+        cached_settings = cache.get("settings:all")
+        if cached_settings and "trading_mode" in cached_settings:
+            trading_mode = cached_settings["trading_mode"]
+    except Exception:
+        pass
+    return trading_mode
+
+
+def _create_research_mode_order(
+    symbol: str, side: str, quantity: float, client
+) -> OrderResult:
+    """Create a mock order result for research mode."""
+    try:
+        quote = client.get_quote(symbol)
+        mock_price = quote.price if quote else 0.0
+    except Exception:
+        mock_price = 0.0
+
+    return OrderResult(
+        order_id=f"RESEARCH_{symbol}_{datetime.now().timestamp()}",
+        symbol=symbol,
+        side=side.upper(),
+        quantity=quantity,
+        price=mock_price,
+        status="submitted",
+    )
+
+
+def _create_order_result(
+    result, symbol: str, side: str, quantity: float
+) -> OrderResult:
+    """Create OrderResult from API response."""
+    if isinstance(result, dict):
+        return OrderResult(
+            order_id=str(result.get("order_id", result.get("orderId", ""))),
+            symbol=symbol,
+            side=side.upper(),
+            quantity=quantity,
+            price=float(result.get("price", 0)),
+            status=result.get("status", "submitted"),
+        )
+    return OrderResult(
+        order_id=str(result) if result else "",
+        symbol=symbol,
+        side=side.upper(),
+        quantity=quantity,
+        price=0,
+        status="submitted",
+    )
+
+
+def _parse_cps_history_params(params_str) -> dict:
+    """Parse params JSON string from CPS history record."""
+    import json as json_lib
+
+    try:
+        return json_lib.loads(params_str) if isinstance(params_str, str) else params_str
+    except (json_lib.JSONDecodeError, TypeError):
+        return {}
+
+
+def _extract_amount_and_currency(params: dict, type_doc_id: int) -> tuple[float, str]:
+    """Extract amount and currency from params based on transaction type."""
+    amount = 0.0
+    currency = "EUR"
+
+    try:
+        if "totalMoneyOut" in params:
+            amount = float(params.get("totalMoneyOut", 0))
+            currency = params.get("currency", "EUR")
+        elif "totalMoneyIn" in params:
+            amount = float(params.get("totalMoneyIn", 0))
+            currency = params.get("currency", "EUR")
+        elif "structured_product_trade_sum" in params:
+            amount = float(params.get("structured_product_trade_sum", 0))
+            currency = params.get("structured_product_currency", "USD")
+        elif "amount" in params:
+            amount = float(params.get("amount", 0))
+            currency = params.get("currency", "EUR")
+        elif "sum" in params:
+            amount = float(params.get("sum", 0))
+            currency = params.get("currency", "EUR")
+    except (ValueError, TypeError):
+        pass
+
+    return amount, currency
+
+
+def _convert_amount_to_eur(amount: float, currency: str) -> float:
+    """Convert amount to EUR using exchange rate."""
+    if currency == "EUR" or amount == 0:
+        return amount
+
+    try:
+        rate = get_exchange_rate(currency, "EUR")
+        if rate > 0:
+            return amount / rate
+    except Exception:
+        pass
+
+    return amount
+
+
+def _create_transaction_id(record: dict, type_doc_id) -> str:
+    """Create unique transaction ID from record."""
+    import hashlib
+    import json as json_lib
+
+    transaction_id = (
+        record.get("id") or record.get("transaction_id") or record.get("doc_id")
+    )
+
+    if not transaction_id:
+        unique_str = f"{type_doc_id}_{record.get('date_crt', '')}_{record.get('status_c', '')}_{json_lib.dumps(record.get('params', {}), sort_keys=True)}"
+        transaction_id = (
+            f"{type_doc_id}_{hashlib.md5(unique_str.encode()).hexdigest()[:8]}"
+        )
+
+    return str(transaction_id)
+
+
+def _extract_withdrawal_fee(
+    params: dict, transaction_id: str, date: str, currency: str, status: str, status_c
+) -> Optional[dict]:
+    """Extract withdrawal fee as separate transaction."""
+    if "total_commission" not in params:
+        return None
+
+    withdrawal_fee = params.get("total_commission", 0)
+    if not withdrawal_fee or float(withdrawal_fee) <= 0:
+        return None
+
+    fee_currency = params.get("commission_currency", currency)
+    fee_amount_eur = _convert_amount_to_eur(float(withdrawal_fee), fee_currency)
+
+    return {
+        "transaction_id": f"{transaction_id}_fee",
+        "type_doc_id": "withdrawal_fee",
+        "transaction_type": "withdrawal_fee",
+        "date": date,
+        "amount": float(withdrawal_fee),
+        "currency": fee_currency,
+        "amount_eur": round(fee_amount_eur, 2),
+        "status": status,
+        "status_c": status_c,
+        "description": f"Withdrawal fee for {params.get('totalMoneyOut', 0)} {currency} withdrawal",
+        "params": {"withdrawal_id": transaction_id, **params},
+    }
+
+
+def _extract_structured_product_fee(
+    params: dict, transaction_id: str, date: str, currency: str, status: str, status_c
+) -> Optional[dict]:
+    """Extract structured product commission as separate transaction."""
+    if "structured_product_trade_commission" not in params:
+        return None
+
+    sp_commission = params.get("structured_product_trade_commission", 0)
+    if not sp_commission or float(sp_commission) <= 0:
+        return None
+
+    sp_comm_eur = _convert_amount_to_eur(float(sp_commission), currency)
+
+    return {
+        "transaction_id": f"{transaction_id}_fee",
+        "type_doc_id": "structured_product_fee",
+        "transaction_type": "structured_product_fee",
+        "date": date,
+        "amount": float(sp_commission),
+        "currency": currency,
+        "amount_eur": round(sp_comm_eur, 2),
+        "status": status,
+        "status_c": status_c,
+        "description": "Structured product commission",
+        "params": {"product_id": transaction_id, **params},
+    }
+
+
+def _process_cps_history_record(record: dict, type_mapping: dict) -> list[dict]:
+    """Process a single CPS history record and return transactions."""
+    transactions: list[dict] = []
+
+    try:
+        params = _parse_cps_history_params(record.get("params", "{}"))
+        type_doc_id = record.get("type_doc_id")
+        if type_doc_id is None:
+            return transactions
+
+        status_c = record.get("status_c")
+        transaction_type = type_mapping.get(type_doc_id, f"type_{type_doc_id}")
+
+        amount, currency = _extract_amount_and_currency(params, type_doc_id)
+        amount_eur = _convert_amount_to_eur(amount, currency)
+
+        transaction_id = _create_transaction_id(record, type_doc_id)
+
+        date_crt = record.get("date_crt", "")
+        date = (
+            date_crt[:10]
+            if len(date_crt) >= 10
+            else date_crt or datetime.now().strftime("%Y-%m-%d")
+        )
+
+        description = record.get("name", "") or record.get("description", "")
+
+        status_map: dict[int, str] = {
+            1: "pending",
+            2: "processing",
+            3: "completed",
+            4: "cancelled",
+            5: "rejected",
+        }
+        status = status_map.get(status_c or 0, f"status_{status_c}")
+
+        transactions.append(
+            {
+                "transaction_id": transaction_id,
+                "type_doc_id": type_doc_id,
+                "transaction_type": transaction_type,
+                "date": date,
+                "amount": amount,
+                "currency": currency or "EUR",
+                "amount_eur": round(amount_eur, 2),
+                "status": status,
+                "status_c": status_c,
+                "description": description,
+                "params": params,
+            }
+        )
+
+        fee_transaction = _extract_withdrawal_fee(
+            params, transaction_id, date, currency, status, status_c
+        )
+        if fee_transaction:
+            transactions.append(fee_transaction)
+
+        sp_fee_transaction = _extract_structured_product_fee(
+            params, transaction_id, date, currency, status, status_c
+        )
+        if sp_fee_transaction:
+            transactions.append(sp_fee_transaction)
+
+    except Exception as e:
+        logger.error(f"Failed to process transaction record: {e}")
+
+    return transactions
+
+
+def _process_corporate_action(action: dict) -> Optional[dict]:
+    """Process a single corporate action and return transaction dict."""
+    action_type = action.get("type", "").lower()
+
+    if action_type not in ["dividend", "coupon", "maturity", "partial_maturity"]:
+        return None
+
+    amount_per_one = float(action.get("amount_per_one", 0))
+    executed_count = int(action.get("executed_count", 0))
+    amount = amount_per_one * executed_count
+
+    if amount == 0:
+        return None
+
+    currency = action.get("currency", "USD")
+    pay_date = action.get("pay_date", action.get("ex_date", ""))
+    date = pay_date[:10] if len(pay_date) >= 10 else pay_date
+
+    amount_eur = _convert_amount_to_eur(amount, currency)
+
+    action_id = action.get("id") or action.get("corporate_action_id", "")
+    transaction_id = f"corp_action_{action_type}_{action_id}"
+
+    ticker = action.get("ticker", "")
+    description = f"{action_type.title()}: {ticker} ({executed_count} shares × {amount_per_one} {currency})"
+
+    return {
+        "transaction_id": transaction_id,
+        "type_doc_id": f"corp_{action_type}",
+        "transaction_type": action_type,
+        "date": date,
+        "amount": amount,
+        "currency": currency,
+        "amount_eur": round(amount_eur, 2),
+        "status": "completed",
+        "status_c": None,
+        "description": description,
+        "params": action,
+    }
+
+
+def _process_trade_fee(trade: dict) -> Optional[dict]:
+    """Process a single trade fee and return transaction dict."""
+    commission_str = trade.get("commission", "0")
+    try:
+        commission = float(commission_str) if commission_str else 0.0
+    except (ValueError, TypeError):
+        commission = 0.0
+
+    if commission == 0:
+        return None
+
+    currency = trade.get("commission_currency", trade.get("curr_c", "EUR"))
+    trade_date = trade.get("date", "")
+    date = trade_date[:10] if len(trade_date) >= 10 else trade_date
+
+    amount_eur = _convert_amount_to_eur(commission, currency)
+
+    trade_id = trade.get("id") or trade.get("order_id", "")
+    transaction_id = f"trade_fee_{trade_id}"
+
+    instr_name = trade.get("instr_nm", "")
+    description = f"Trading fee: {instr_name}"
+
+    return {
+        "transaction_id": transaction_id,
+        "type_doc_id": "trade_fee",
+        "transaction_type": "trading_fee",
+        "date": date,
+        "amount": commission,
+        "currency": currency,
+        "amount_eur": round(amount_eur, 2),
+        "status": "completed",
+        "status_c": None,
+        "description": description,
+        "params": trade,
+    }
+
+
+def _get_cps_history_transactions(client, limit: int) -> list[dict]:
+    """Get transactions from CPS history."""
+    try:
+        with _led_api_call():
+            history = client.authorized_request(
+                "getClientCpsHistory", {"limit": limit}, version=2
+            )
+
+        records = history if isinstance(history, list) else []
+        type_mapping = {337: "withdrawal", 297: "structured_product_purchase"}
+
+        transactions = []
+        for record in records:
+            transactions.extend(_process_cps_history_record(record, type_mapping))
+        return transactions
+    except Exception as e:
+        logger.warning(f"Failed to get CPS history: {e}")
+        return []
+
+
+def _get_corporate_action_transactions(client) -> list[dict]:
+    """Get transactions from corporate actions."""
+    try:
+        with _led_api_call():
+            corporate_actions = client.corporate_actions()
+
+        executed_actions = [
+            a
+            for a in corporate_actions
+            if isinstance(a, dict) and a.get("executed", False)
+        ]
+
+        transactions = []
+        for action in executed_actions:
+            transaction = _process_corporate_action(action)
+            if transaction:
+                transactions.append(transaction)
+        return transactions
+    except Exception as e:
+        logger.warning(f"Failed to get corporate actions: {e}")
+        return []
+
+
+def _parse_withdrawal_record(record: dict) -> Optional[dict]:
+    """Parse a withdrawal record and return withdrawal dict."""
+    import json as json_lib
+
+    if record.get("type_doc_id") != 337:
+        return None
+
+    if record.get("status_c") != 3:
+        return None
+
+    params_str = record.get("params", "{}")
+    try:
+        params = (
+            json_lib.loads(params_str) if isinstance(params_str, str) else params_str
+        )
+    except json_lib.JSONDecodeError:
+        return None
+
+    currency = params.get("currency", "EUR")
+    amount = float(params.get("totalMoneyOut", 0))
+
+    if currency != "EUR" and amount > 0:
+        rate = get_exchange_rate(currency, "EUR")
+        if rate > 0:
+            amount = amount / rate
+
+    date_crt = record.get("date_crt", "")
+    date = date_crt[:10] if len(date_crt) >= 10 else date_crt
+
+    return {
+        "date": date,
+        "amount": amount,
+        "amount_eur": round(amount, 2),
+        "currency": currency,
+        "description": record.get("name", ""),
+    }
+
+
+def _get_trade_fee_transactions(client) -> list[dict]:
+    """Get transactions from trade fees."""
+    try:
+        with _led_api_call():
+            trades_data = client.get_trades_history()
+
+        trade_list = trades_data.get("trades", {}).get("trade", [])
+
+        transactions = []
+        for trade in trade_list:
+            transaction = _process_trade_fee(trade)
+            if transaction:
+                transactions.append(transaction)
+        return transactions
+    except Exception as e:
+        logger.warning(f"Failed to get trades history: {e}")
+        return []
 
 
 class TradernetClient:
@@ -470,9 +995,9 @@ class TradernetClient:
 
             data = _parse_price_data_string(data, symbol)
             if isinstance(data, dict):
-                result = _parse_hloc_format(data, symbol, start) or _parse_candles_format(
-                    data
-                )
+                result = _parse_hloc_format(
+                    data, symbol, start
+                ) or _parse_candles_format(data)
             elif isinstance(data, list):
                 result = _parse_candles_list(data)
 
@@ -532,10 +1057,12 @@ class TradernetClient:
             return _create_research_mode_order(symbol, side, quantity, self)
 
         try:
+            # Convert quantity to int as Tradernet API expects int
+            quantity_int = int(quantity)
             if side.upper() == "BUY":
-                result = self._client.buy(symbol, quantity)
+                result = self._client.buy(symbol, quantity_int)  # type: ignore[arg-type]
             elif side.upper() == "SELL":
-                result = self._client.sell(symbol, quantity)
+                result = self._client.sell(symbol, quantity_int)  # type: ignore[arg-type]
             else:
                 raise ValueError(f"Invalid side: {side}")
 
@@ -550,7 +1077,14 @@ class TradernetClient:
             raise ConnectionError("Not connected to Tradernet")
 
         try:
-            self._client.cancel(order_id)
+            # Tradernet API expects int, but we use str internally
+            # Try to convert, or pass as-is if conversion fails
+            try:
+                order_id_int = int(order_id)
+                self._client.cancel(order_id_int)  # type: ignore[arg-type]
+            except (ValueError, TypeError):
+                # If conversion fails, try passing as string (some APIs accept both)
+                self._client.cancel(order_id)  # type: ignore[arg-type]
             return True
         except Exception as e:
             logger.error(f"Failed to cancel order {order_id}: {e}")
@@ -633,8 +1167,6 @@ class TradernetClient:
         - total_withdrawals: Sum of all completed withdrawals in EUR
         - withdrawals: List of individual withdrawal transactions
         """
-        import json as json_lib
-
         if not self.is_connected:
             raise ConnectionError("Not connected to Tradernet")
 
@@ -695,8 +1227,6 @@ class TradernetClient:
             - description: Transaction description
             - params: Full params dictionary
         """
-        import json as json_lib
-
         if not self.is_connected:
             raise ConnectionError("Not connected to Tradernet")
 

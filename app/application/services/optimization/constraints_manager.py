@@ -83,7 +83,11 @@ class ConstraintsManager:
             current_price = current_prices.get(symbol, 0)
 
             # Calculate current weight
-            if position and portfolio_value > 0:
+            if (
+                position is not None
+                and position.market_value_eur is not None
+                and portfolio_value > 0
+            ):
                 current_weight = position.market_value_eur / portfolio_value
             else:
                 current_weight = 0.0

@@ -74,8 +74,8 @@ class PriorityCalculator:
     @staticmethod
     def calculate_priority(
         input_data: PriorityInput,
-        geo_weights: Dict[str, float] = None,
-        industry_weights: Dict[str, float] = None,
+        geo_weights: Optional[Dict[str, float]] = None,
+        industry_weights: Optional[Dict[str, float]] = None,
     ) -> PriorityResult:
         """
         Calculate priority score for a stock.
@@ -117,8 +117,8 @@ class PriorityCalculator:
     @staticmethod
     def calculate_priorities(
         inputs: List[PriorityInput],
-        geo_weights: Dict[str, float] = None,
-        industry_weights: Dict[str, float] = None,
+        geo_weights: Optional[Dict[str, float]] = None,
+        industry_weights: Optional[Dict[str, float]] = None,
     ) -> List[PriorityResult]:
         """
         Calculate priorities for multiple stocks.

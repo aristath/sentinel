@@ -18,6 +18,38 @@ from app.infrastructure.recommendation_cache import get_recommendation_cache
 logger = logging.getLogger(__name__)
 
 
+def _adjust_geo_weights(
+    base_geo_weights: dict, geo_attribution: dict, avg_geo_return: float
+) -> dict:
+    """Adjust geography weights based on performance attribution."""
+    adjusted = {}
+    for geo, base_weight in base_geo_weights.items():
+        geo_return = geo_attribution.get(geo, avg_geo_return)
+        if geo_return > avg_geo_return:
+            adjusted[geo] = base_weight * 1.1
+        elif geo_return < avg_geo_return:
+            adjusted[geo] = base_weight * 0.9
+        else:
+            adjusted[geo] = base_weight
+    return adjusted
+
+
+def _adjust_ind_weights(
+    base_ind_weights: dict, ind_attribution: dict, avg_ind_return: float
+) -> dict:
+    """Adjust industry weights based on performance attribution."""
+    adjusted = {}
+    for ind, base_weight in base_ind_weights.items():
+        ind_return = ind_attribution.get(ind, avg_ind_return)
+        if ind_return > avg_ind_return:
+            adjusted[ind] = base_weight * 1.1
+        elif ind_return < avg_ind_return:
+            adjusted[ind] = base_weight * 0.9
+        else:
+            adjusted[ind] = base_weight
+    return adjusted
+
+
 async def get_performance_adjusted_weights(
     allocation_repo: IAllocationRepository,
     portfolio_hash: Optional[str] = None,

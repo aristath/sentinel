@@ -12,7 +12,9 @@ from app.infrastructure.external.tradernet import OrderResult, TradernetClient
 logger = logging.getLogger(__name__)
 
 
-def _find_rate_symbol(from_curr: str, to_curr: str, service) -> tuple[Optional[str], bool]:
+def _find_rate_symbol(
+    from_curr: str, to_curr: str, service
+) -> tuple[Optional[str], bool]:
     """Find exchange rate symbol and whether it's inverse."""
     if (from_curr, to_curr) in service.RATE_SYMBOLS:
         return service.RATE_SYMBOLS[(from_curr, to_curr)], False

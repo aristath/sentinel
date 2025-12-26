@@ -199,10 +199,6 @@ class TestExchangeRateServiceFallback:
         mock_db = MagicMock()
         service = ExchangeRateService(db_manager=mock_db)
 
-        # If we have USD->EUR, we should be able to get EUR->USD
-        usd_eur = FALLBACK_RATES.get(("USD", "EUR"), 1.05)
-        expected_eur_usd = 1.0 / usd_eur
-
         # But EUR->USD has its own entry, so use that
         rate = service._get_fallback_rate("EUR", "USD")
         assert rate == FALLBACK_RATES[("EUR", "USD")]

@@ -134,12 +134,16 @@ async def _check_pending_orders(trade, client, trade_repo) -> bool:
             logger.warning(f"Failed to check database for recent sell orders: {e}")
 
     if has_pending:
-        logger.warning(f"SAFETY BLOCK: {trade.symbol} has pending order, refusing to execute")
+        logger.warning(
+            f"SAFETY BLOCK: {trade.symbol} has pending order, refusing to execute"
+        )
 
     return has_pending
 
 
-async def _get_recently_bought_symbols(trade_repo, trades, cooldown_days: int) -> Optional[set]:
+async def _get_recently_bought_symbols(
+    trade_repo, trades, cooldown_days: int
+) -> Optional[set]:
     """Get recently bought symbols for cooldown check."""
     try:
         return await trade_repo.get_recently_bought_symbols(cooldown_days)

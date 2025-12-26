@@ -174,9 +174,7 @@ def _calculate_rate_of_gain_score(profit_pct: float, days_held: int) -> float:
 
     years = days_held / 365.0
     try:
-        annualized = (
-            ((1 + profit_pct) ** (1 / years)) - 1 if years > 0 else profit_pct
-        )
+        annualized = ((1 + profit_pct) ** (1 / years)) - 1 if years > 0 else profit_pct
     except (ValueError, OverflowError):
         annualized = profit_pct
 

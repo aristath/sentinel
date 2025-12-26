@@ -14,8 +14,6 @@ from app.application.services.optimization.expected_returns import (
 from app.domain.scoring.constants import (
     EXPECTED_RETURN_MAX,
     EXPECTED_RETURN_MIN,
-    EXPECTED_RETURNS_CAGR_WEIGHT,
-    EXPECTED_RETURNS_SCORE_WEIGHT,
 )
 
 

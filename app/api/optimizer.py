@@ -13,7 +13,7 @@ from app.application.services.optimization.portfolio_optimizer import (
 )
 from app.domain.services.settings_service import SettingsService
 from app.infrastructure.external import yahoo_finance as yahoo
-from app.infrastructure.external.tradernet_client import TradernetClient
+from app.infrastructure.external.tradernet import TradernetClient
 from app.repositories import (
     DividendRepository,
     PositionRepository,
@@ -92,7 +92,9 @@ async def run_optimization() -> Dict[str, Any]:
     positions = {p.symbol: p for p in positions_list}
 
     # Get current prices
-    yahoo_symbols = {s.symbol: s.yahoo_symbol for s in stocks if s.yahoo_symbol}
+    yahoo_symbols: dict[str, str | None] = {
+        s.symbol: s.yahoo_symbol for s in stocks if s.yahoo_symbol
+    }
     current_prices = yahoo.get_batch_quotes(yahoo_symbols)
 
     # Calculate portfolio value

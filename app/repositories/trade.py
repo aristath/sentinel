@@ -11,7 +11,9 @@ from app.repositories.base import transaction_context
 logger = logging.getLogger(__name__)
 
 
-def _process_pre_start_trades(pre_start_trades: list, cumulative_positions: dict) -> None:
+def _process_pre_start_trades(
+    pre_start_trades: list, cumulative_positions: dict
+) -> None:
     """Process trades before start_date to build initial positions."""
     for row in pre_start_trades:
         symbol = row["symbol"]
@@ -40,7 +42,7 @@ def _build_initial_positions(cumulative_positions: dict, start_date: str) -> lis
 
 def _build_positions_by_date(in_range_trades: list) -> dict:
     """Build positions_by_date dictionary from in-range trades."""
-    positions_by_date = {}
+    positions_by_date: dict[str, dict[str, float]] = {}
     for row in in_range_trades:
         date = row["executed_at"][:10]
         symbol = row["symbol"]
@@ -84,7 +86,9 @@ def _process_in_range_trades(
     positions_by_date = _build_positions_by_date(in_range_trades)
 
     for date in sorted(positions_by_date.keys()):
-        _update_positions_for_date(date, positions_by_date, cumulative_positions, result)
+        _update_positions_for_date(
+            date, positions_by_date, cumulative_positions, result
+        )
 
 
 class TradeRepository:
@@ -301,7 +305,7 @@ class TradeRepository:
         )
 
         # Build position state up to start_date
-        cumulative_positions = {}  # {symbol: quantity}
+        cumulative_positions: dict[str, float] = {}  # {symbol: quantity}
         pre_start_trades = []
         in_range_trades = []
 
@@ -320,13 +324,15 @@ class TradeRepository:
 
     def _row_to_trade(self, row) -> Trade:
         """Convert database row to Trade model."""
-        executed_at = None
+        executed_at: datetime
         if row["executed_at"]:
             try:
                 executed_at = datetime.fromisoformat(str(row["executed_at"]))
             except (ValueError, TypeError) as e:
                 logger.warning(f"Failed to parse executed_at: {e}")
                 executed_at = datetime.now()
+        else:
+            executed_at = datetime.now()
 
         return Trade(
             id=row["id"],

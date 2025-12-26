@@ -2,6 +2,7 @@
 
 import logging
 from datetime import datetime
+from typing import Optional
 
 from app.domain.events import PositionUpdatedEvent, get_event_bus
 from app.domain.models import Position
@@ -18,6 +19,18 @@ from app.infrastructure.hardware.display_service import (
 from app.infrastructure.locking import file_lock
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_quotes_list(quotes_response) -> list:
+    """Extract quotes list from Tradernet response."""
+    if isinstance(quotes_response, list):
+        return quotes_response
+    elif isinstance(quotes_response, dict):
+        q_list = quotes_response.get("result", {}).get("q", [])
+        if not q_list:
+            q_list = quotes_response.get("q", [])
+        return q_list
+    return []
 
 
 async def sync_portfolio():
@@ -185,7 +198,13 @@ async def _process_positions(
             unrealized_pnl += position_unrealized_pnl
 
         market_value = await _insert_position(
-            pos, current_price, market_value_eur, exchange_rate, dates, db_manager, event_bus
+            pos,
+            current_price,
+            market_value_eur,
+            exchange_rate,
+            dates,
+            db_manager,
+            event_bus,
         )
         total_value += market_value
 
@@ -300,7 +319,12 @@ async def _sync_portfolio_internal():
             event_bus = get_event_bus()
             total_value, invested_value, unrealized_pnl, geo_values = (
                 await _process_positions(
-                    positions, saved_price_data, trade_dates, exchange_rates, db_manager, event_bus
+                    positions,
+                    saved_price_data,
+                    trade_dates,
+                    exchange_rates,
+                    db_manager,
+                    event_bus,
                 )
             )
 

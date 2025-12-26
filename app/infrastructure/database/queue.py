@@ -49,8 +49,8 @@ class QueuedOperation:
     timestamp: datetime = field(compare=True)
     operation_id: str = field(default_factory=lambda: str(uuid4()), compare=False)
     name: str = field(default="", compare=False)
-    func: Callable[[], Coroutine] = field(compare=False, default=None)
-    result_future: asyncio.Future = field(compare=False, default=None)
+    func: Optional[Callable[[], Coroutine]] = field(compare=False, default=None)
+    result_future: Optional[asyncio.Future] = field(compare=False, default=None)
     retry_count: int = field(default=0, compare=False)
     max_retries: int = field(default=3, compare=False)
 
@@ -132,7 +132,7 @@ class QueryQueue:
         func: Callable[[], Coroutine],
         name: str = "",
         priority: Priority = Priority.NORMAL,
-        max_retries: int = None,
+        max_retries: Optional[int] = None,
     ) -> Any:
         """
         Enqueue an operation and wait for its result.
@@ -163,6 +163,8 @@ class QueryQueue:
         )
 
         # Wait for result
+        if operation.result_future is None:
+            raise RuntimeError("Operation result_future is None")
         return await operation.result_future
 
     def enqueue_nowait(
@@ -187,6 +189,8 @@ class QueryQueue:
         self._queue.put_nowait(operation)
         logger.debug(f"Enqueued (nowait): {name} (priority={priority})")
 
+        if operation.result_future is None:
+            raise RuntimeError("Operation result_future is None")
         return operation.result_future
 
     async def _worker(self):

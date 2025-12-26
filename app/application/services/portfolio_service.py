@@ -47,7 +47,7 @@ class PortfolioService:
                 geo_values[geo] = geo_values.get(geo, 0) + eur_value
 
             industry_str = pos.get("industry")
-            industries = parse_industries(industry_str)
+            industries = parse_industries(industry_str) if industry_str else []
             if industries:
                 split_value = eur_value / len(industries)
                 for ind in industries:

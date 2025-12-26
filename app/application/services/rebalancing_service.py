@@ -5,7 +5,7 @@ Uses long-term value scoring with portfolio-aware allocation fit.
 """
 
 import logging
-from typing import List
+from typing import List, Optional
 
 from app.application.services.recommendation.performance_adjustment_calculator import (
     get_performance_adjusted_weights,
@@ -97,7 +97,9 @@ def calculate_min_trade_amount(
 logger = logging.getLogger(__name__)
 
 
-async def _convert_cached_recommendations(cached: list, limit: int) -> List[Recommendation]:
+async def _convert_cached_recommendations(
+    cached: list, limit: int
+) -> List[Recommendation]:
     """Convert cached recommendation dicts to Recommendation objects."""
     from app.domain.value_objects.currency import Currency
 
@@ -135,6 +137,7 @@ async def _get_stock_volatility(symbol: str) -> float:
     """Get stock volatility for risk parity sizing."""
     try:
         from datetime import datetime, timedelta
+
         from app.domain.analytics import get_position_risk_metrics
 
         end_date = datetime.now().strftime("%Y-%m-%d")
@@ -156,9 +159,7 @@ def _calculate_risk_parity_amount(
     return base_trade_amount * vol_weight * score_adj
 
 
-def _check_position_cap(
-    symbol: str, trade_value_eur: float, portfolio_context
-) -> bool:
+def _check_position_cap(symbol: str, trade_value_eur: float, portfolio_context) -> bool:
     """Check if position would exceed maximum cap."""
     current_position_value = portfolio_context.positions.get(symbol, 0)
     new_position_value = current_position_value + trade_value_eur
@@ -168,7 +169,10 @@ def _check_position_cap(
 
 
 def _calculate_final_score(
-    quality_score: float, opportunity_score: float, analyst_score: float, score_change: float
+    quality_score: float,
+    opportunity_score: float,
+    analyst_score: float,
+    score_change: float,
 ) -> float:
     """Calculate final priority score."""
     base_score = quality_score * 0.35 + opportunity_score * 0.35 + analyst_score * 0.05
@@ -177,7 +181,10 @@ def _calculate_final_score(
 
 
 def _build_reason_string(
-    quality_score: float, opportunity_score: float, score_change: float, multiplier: float
+    quality_score: float,
+    opportunity_score: float,
+    score_change: float,
+    multiplier: float,
 ) -> str:
     """Build reason string for recommendation."""
     reason_parts = []
@@ -223,6 +230,8 @@ async def _process_stock_candidate(
     if total_score < settings.min_stock_score:
         return None
 
+    from app.repositories.calculations import CalculationsRepository
+
     calc_repo = CalculationsRepository()
     high_52w = await calc_repo.get_metric(symbol, "52W_HIGH")
     if high_52w and is_price_too_high(price, high_52w):
@@ -236,7 +245,9 @@ async def _process_stock_candidate(
             exchange_rate = 1.0
 
     stock_vol = await _get_stock_volatility(symbol)
-    risk_parity_amount = _calculate_risk_parity_amount(base_trade_amount, stock_vol, total_score)
+    risk_parity_amount = _calculate_risk_parity_amount(
+        base_trade_amount, stock_vol, total_score
+    )
 
     sized = TradeSizingService.calculate_buy_quantity(
         target_value_eur=risk_parity_amount,
@@ -264,8 +275,12 @@ async def _process_stock_candidate(
     if score_change < MAX_BALANCE_WORSENING:
         return None
 
-    final_score = _calculate_final_score(quality_score, opportunity_score, analyst_score, score_change)
-    reason = _build_reason_string(quality_score, opportunity_score, score_change, multiplier)
+    final_score = _calculate_final_score(
+        quality_score, opportunity_score, analyst_score, score_change
+    )
+    reason = _build_reason_string(
+        quality_score, opportunity_score, score_change, multiplier
+    )
 
     return {
         "symbol": symbol,
@@ -360,11 +375,9 @@ async def _build_and_adjust_portfolio_context(
         db_manager=db_manager,
     )
 
-    adjusted_geo_weights, adjusted_ind_weights = (
-        await get_performance_adjusted_weights(
-            allocation_repo=allocation_repo,
-            portfolio_hash=cache_key,
-        )
+    adjusted_geo_weights, adjusted_ind_weights = await get_performance_adjusted_weights(
+        allocation_repo=allocation_repo,
+        portfolio_hash=cache_key,
     )
 
     if adjusted_geo_weights:
@@ -473,7 +486,9 @@ async def _process_stocks_for_candidates(
     return candidates, filter_stats
 
 
-async def _convert_cached_sell_recommendations(cached: list, limit: int) -> List[Recommendation]:
+async def _convert_cached_sell_recommendations(
+    cached: list, limit: int
+) -> List[Recommendation]:
     """Convert cached sell recommendation dicts to Recommendation objects."""
     from app.domain.value_objects.currency import Currency
 
@@ -1104,7 +1119,8 @@ class RebalancingService:
             logger.info("No positions eligible for selling")
             return []
 
-        target_geo_weights, target_ind_weights = await _get_target_allocations(
+        # _get_target_allocations is not async, but mypy thinks it is
+        target_geo_weights, target_ind_weights = _get_target_allocations(
             self._allocation_repo
         )
 
@@ -1134,7 +1150,9 @@ class RebalancingService:
             cache_key,
         )
 
-        all_sells_for_cache = _prepare_sell_cache_data(band_filtered_sells, position_dicts)
+        all_sells_for_cache = _prepare_sell_cache_data(
+            band_filtered_sells, position_dicts
+        )
         if all_sells_for_cache:
             await rec_cache.set_recommendations(cache_key, "sell", all_sells_for_cache)
 

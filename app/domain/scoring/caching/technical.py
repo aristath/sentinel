@@ -117,7 +117,11 @@ async def get_bollinger_bands(
     # Check cache for all three components
     metrics = await calc_repo.get_metrics(symbol, ["BB_LOWER", "BB_MIDDLE", "BB_UPPER"])
     if all(v is not None for v in metrics.values()):
-        return metrics["BB_LOWER"], metrics["BB_MIDDLE"], metrics["BB_UPPER"]
+        lower = metrics["BB_LOWER"]
+        middle = metrics["BB_MIDDLE"]
+        upper = metrics["BB_UPPER"]
+        if lower is not None and middle is not None and upper is not None:
+            return (lower, middle, upper)
 
     # Calculate if not cached
     bands = calculate_bollinger_bands(closes, length, std)

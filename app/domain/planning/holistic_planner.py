@@ -62,7 +62,7 @@ def _calculate_weight_gaps(
                 }
             )
 
-    weight_gaps.sort(key=lambda x: abs(x["gap"]), reverse=True)
+    weight_gaps.sort(key=lambda x: abs(float(x["gap"])), reverse=True)
     return weight_gaps
 
 
@@ -142,7 +142,7 @@ def _process_sell_opportunity(
     symbol = gap_info["symbol"]
     gap_value = gap_info["gap_value"]
     sell_value = abs(gap_value)
-    quantity = int(sell_value / price)
+    quantity = int(float(sell_value) / float(price))
 
     if stock and stock.min_lot:
         remaining = position.quantity - quantity

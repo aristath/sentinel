@@ -45,7 +45,8 @@ class DomainEventBus:
         """
         if event_type not in self._handlers:
             self._handlers[event_type] = []
-        self._handlers[event_type].append(handler)
+        # Type ignore: handler accepts T which is bound to DomainEvent
+        self._handlers[event_type].append(handler)  # type: ignore[arg-type]
 
     def unsubscribe(self, event_type: Type[T], handler: Callable[[T], None]) -> None:
         """Unsubscribe a handler from an event type.
@@ -56,7 +57,8 @@ class DomainEventBus:
         """
         if event_type in self._handlers:
             try:
-                self._handlers[event_type].remove(handler)
+                # Type ignore: handler accepts T which is bound to DomainEvent
+                self._handlers[event_type].remove(handler)  # type: ignore[arg-type]
             except ValueError:
                 pass  # Handler wasn't subscribed
 

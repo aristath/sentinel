@@ -304,13 +304,16 @@ async def get_database_stats() -> dict:
                     cursor = await db.execute(
                         "SELECT COUNT(*) FROM sqlite_master WHERE type='table'"
                     )
-                    table_count = (await cursor.fetchone())[0]
+                    row = await cursor.fetchone()
+                    table_count = row[0] if row else 0
 
                     # Get page count and size
                     cursor = await db.execute("PRAGMA page_count")
-                    page_count = (await cursor.fetchone())[0]
+                    row = await cursor.fetchone()
+                    page_count = row[0] if row else 0
                     cursor = await db.execute("PRAGMA page_size")
-                    page_size = (await cursor.fetchone())[0]
+                    row = await cursor.fetchone()
+                    page_size = row[0] if row else 0
 
                 stats[db_file] = {
                     "size_bytes": db_path.stat().st_size,

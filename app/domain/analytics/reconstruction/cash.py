@@ -107,7 +107,7 @@ async def reconstruct_cash_balance(
     cash_flows = await cash_flow_repo.get_by_date_range(start_date, end_date)
     trades = await trade_repo.get_all_in_range(start_date, end_date)
 
-    transactions_by_date = {}
+    transactions_by_date: dict[str, list[dict]] = {}
     _process_cash_flows(cash_flows, transactions_by_date)
     _process_trades(trades, start_date, end_date, transactions_by_date)
 

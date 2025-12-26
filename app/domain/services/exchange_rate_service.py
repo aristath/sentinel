@@ -89,14 +89,16 @@ class ExchangeRateService:
                     return rate
 
             # Check database cache
-            rate = await self._get_from_db_cache(from_curr, to_curr)
-            if rate is not None:
+            cached_rate = await self._get_from_db_cache(from_curr, to_curr)
+            if cached_rate is not None:
+                rate = cached_rate
                 self._memory_cache[cache_key] = (rate, datetime.now())
                 return rate
 
             # Fetch fresh rate from API
-            rate = await self._fetch_rate_from_api(from_curr, to_curr)
-            if rate is not None:
+            fetched_rate = await self._fetch_rate_from_api(from_curr, to_curr)
+            if fetched_rate is not None:
+                rate = fetched_rate
                 await self._store_in_db_cache(from_curr, to_curr, rate)
                 self._memory_cache[cache_key] = (rate, datetime.now())
                 return rate

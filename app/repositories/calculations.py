@@ -111,7 +111,7 @@ class CalculationsRepository:
         rows = await db.fetchall(query, (symbol.upper(), *metrics, now))
 
         # Build result dict
-        result = {metric: None for metric in metrics}
+        result: dict[str, float | None] = {metric: None for metric in metrics}
         for row in rows:
             result[row["metric"]] = float(row["value"])
 

@@ -34,6 +34,7 @@ async def ensure_tradernet_connected(
             logger.error(error_msg)
             if raise_on_error:
                 raise HTTPException(status_code=503, detail=error_msg)
-            return None
+            # Type ignore: None return is acceptable when raise_on_error is False
+            return None  # type: ignore[return-value]
 
     return client

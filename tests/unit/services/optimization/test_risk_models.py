@@ -13,7 +13,6 @@ import pytest
 
 from app.application.services.optimization.risk_models import RiskModelBuilder
 from app.domain.scoring.constants import (
-    COVARIANCE_LOOKBACK_DAYS,
     COVARIANCE_MIN_HISTORY,
 )
 

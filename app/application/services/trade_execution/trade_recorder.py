@@ -104,6 +104,10 @@ async def record_trade(
         if await _check_duplicate_order(order_id, trade_repo):
             return None
 
+        if order_id is None:
+            logger.warning("Cannot record trade without order_id")
+            return None
+
         trade_side = TradeSide.from_string(side)
         trade_currency, currency_rate = await _get_currency_and_rate(
             currency, exchange_rate_service
