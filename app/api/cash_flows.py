@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
-from app.repositories import CashFlowRepository
+from app.infrastructure.dependencies import CashFlowRepositoryDep
 from app.services.tradernet_connection import ensure_tradernet_connected
 
 router = APIRouter()
@@ -10,6 +10,7 @@ router = APIRouter()
 
 @router.get("")
 async def get_cash_flows(
+    cash_flow_repo: CashFlowRepositoryDep,
     limit: Optional[int] = Query(None, ge=1, le=10000, description="Limit number of results (1-10000)"),
     transaction_type: Optional[str] = Query(None, description="Filter by transaction type"),
     start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
@@ -20,7 +21,6 @@ async def get_cash_flows(
 
     Supports filtering by type, date range, and limiting results.
     """
-    cash_flow_repo = CashFlowRepository()
 
     # Validate date format if provided
     if start_date or end_date:
@@ -76,13 +76,12 @@ async def get_cash_flows(
 
 
 @router.get("/sync")
-async def sync_cash_flows():
+async def sync_cash_flows(cash_flow_repo: CashFlowRepositoryDep):
     """
     Sync cash flows from tradernet API.
 
     Fetches all cash flow transactions from the API and upserts them into the database.
     """
-    cash_flow_repo = CashFlowRepository()
     client = await ensure_tradernet_connected()
 
     try:
@@ -111,13 +110,12 @@ async def sync_cash_flows():
 
 
 @router.get("/summary")
-async def get_cash_flows_summary():
+async def get_cash_flows_summary(cash_flow_repo: CashFlowRepositoryDep):
     """
     Get summary statistics for cash flows.
 
     Returns totals by transaction type (deposits, withdrawals, etc.)
     """
-    cash_flow_repo = CashFlowRepository()
 
     try:
         all_flows = await cash_flow_repo.get_all()

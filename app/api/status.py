@@ -5,24 +5,25 @@ from datetime import datetime
 from pathlib import Path
 from fastapi import APIRouter
 from app.config import settings
-from app.repositories import (
-    PortfolioRepository,
-    StockRepository,
-    PositionRepository,
-    AllocationRepository,
-    TradeRepository,
-    SettingsRepository,
+from app.infrastructure.dependencies import (
+    PortfolioRepositoryDep,
+    StockRepositoryDep,
+    PositionRepositoryDep,
+    AllocationRepositoryDep,
+    SettingsRepositoryDep,
+    PortfolioServiceDep,
 )
 
 router = APIRouter()
 
 
 @router.get("")
-async def get_status():
+async def get_status(
+    portfolio_repo: PortfolioRepositoryDep,
+    stock_repo: StockRepositoryDep,
+    position_repo: PositionRepositoryDep,
+):
     """Get system health and status."""
-    portfolio_repo = PortfolioRepository()
-    stock_repo = StockRepository()
-    position_repo = PositionRepository()
 
     # Get cash balance from latest portfolio snapshot
     latest_snapshot = await portfolio_repo.get_latest()
@@ -77,20 +78,21 @@ async def get_led_status():
     }
 
 
-async def _build_ticker_text() -> str:
+async def _build_ticker_text(
+    settings_repo: SettingsRepositoryDep,
+    portfolio_service: PortfolioServiceDep,
+) -> str:
     """Build ticker text from portfolio data and recommendations.
 
     Format: €12,345 | CASH €675 | SELL ABC €200 | BUY XIAO €855
     Respects user settings for what to show.
     """
     from app.infrastructure.cache import cache
-    from app.application.services.portfolio_service import PortfolioService
 
     parts = []
 
     try:
         # Get display settings
-        settings_repo = SettingsRepository()
         show_value = await settings_repo.get_float("ticker_show_value", 1.0) == 1.0
         show_cash = await settings_repo.get_float("ticker_show_cash", 1.0) == 1.0
         show_actions = await settings_repo.get_float("ticker_show_actions", 1.0) == 1.0
@@ -98,15 +100,6 @@ async def _build_ticker_text() -> str:
         max_actions = int(await settings_repo.get_float("ticker_max_actions", 3))
 
         # Get portfolio summary
-        portfolio_repo = PortfolioRepository()
-        position_repo = PositionRepository()
-        allocation_repo = AllocationRepository()
-
-        portfolio_service = PortfolioService(
-            portfolio_repo,
-            position_repo,
-            allocation_repo,
-        )
         summary = await portfolio_service.get_portfolio_summary()
 
         # Portfolio value
@@ -183,7 +176,10 @@ async def _build_ticker_text() -> str:
 
 
 @router.get("/led/display")
-async def get_led_display_state():
+async def get_led_display_state(
+    settings_repo: SettingsRepositoryDep,
+    portfolio_service: PortfolioServiceDep,
+):
     """
     Get display state for Arduino Bridge apps.
 
@@ -221,7 +217,7 @@ async def get_led_display_state():
     else:
         # Fetch fresh data with 2 second timeout to prevent hanging
         try:
-            await asyncio.wait_for(_refresh_led_display_cache(), timeout=2.0)
+            await asyncio.wait_for(_refresh_led_display_cache(settings_repo, portfolio_service), timeout=2.0)
             cached = cache.get("led_display:ticker_data") or {}
         except asyncio.TimeoutError:
             # On timeout, use empty ticker and cache it to prevent retries
@@ -238,16 +234,18 @@ async def get_led_display_state():
     return state
 
 
-async def _refresh_led_display_cache():
+async def _refresh_led_display_cache(
+    settings_repo: SettingsRepositoryDep,
+    portfolio_service: PortfolioServiceDep,
+):
     """Refresh cached LED display data (ticker text + settings)."""
     from app.infrastructure.cache import cache
 
     try:
         # Build ticker text
-        ticker = await _build_ticker_text()
+        ticker = await _build_ticker_text(settings_repo, portfolio_service)
 
         # Get settings
-        settings_repo = SettingsRepository()
         ticker_speed = await settings_repo.get_float("ticker_speed", 50.0)
         led_brightness = int(await settings_repo.get_float("led_brightness", 150))
 
