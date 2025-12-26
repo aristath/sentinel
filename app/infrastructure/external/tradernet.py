@@ -622,41 +622,9 @@ class TradernetClient:
         if not self.is_connected:
             raise ConnectionError("Not connected to Tradernet")
 
-        # Check trading mode - block trades in research mode
-        # Use cache to avoid async issues in sync method
-        from app.infrastructure.cache import cache
-
-        trading_mode = "research"  # Default to research mode
-        try:
-            # Check cache first (settings are cached for 3 seconds)
-            cached_settings = cache.get("settings:all")
-            if cached_settings and "trading_mode" in cached_settings:
-                trading_mode = cached_settings["trading_mode"]
-            # If not in cache, default to "research" - cache will be populated on next settings fetch
-        except Exception as e:
-            logger.warning(f"Failed to check trading mode, defaulting to research: {e}")
-
+        trading_mode = _get_trading_mode()
         if trading_mode == "research":
-            # In research mode, log what would have been executed and return mock result
-            logger.info(
-                f"[RESEARCH MODE] Would execute {side.upper()} {quantity} {symbol} "
-                f"(order_type={order_type}, limit_price={limit_price})"
-            )
-            # Get current price for mock result
-            try:
-                quote = self.get_quote(symbol)
-                mock_price = quote.price if quote else 0.0
-            except Exception:
-                mock_price = 0.0
-
-            return OrderResult(
-                order_id=f"RESEARCH-{symbol}-{side}-{quantity}",
-                symbol=symbol,
-                side=side.upper(),
-                quantity=quantity,
-                price=mock_price,
-                status="simulated",
-            )
+            return _create_research_mode_order(symbol, side, quantity, self)
 
         try:
             if side.upper() == "BUY":
@@ -666,23 +634,7 @@ class TradernetClient:
             else:
                 raise ValueError(f"Invalid side: {side}")
 
-            if isinstance(result, dict):
-                return OrderResult(
-                    order_id=str(result.get("order_id", result.get("orderId", ""))),
-                    symbol=symbol,
-                    side=side.upper(),
-                    quantity=quantity,
-                    price=float(result.get("price", 0)),
-                    status=result.get("status", "submitted"),
-                )
-            return OrderResult(
-                order_id=str(result) if result else "",
-                symbol=symbol,
-                side=side.upper(),
-                quantity=quantity,
-                price=0,
-                status="submitted",
-            )
+            return _create_order_result(result, symbol, side, quantity)
         except Exception as e:
             logger.error(f"Failed to place order: {e}")
             return None
@@ -795,42 +747,10 @@ class TradernetClient:
             records = history if isinstance(history, list) else []
 
             for record in records:
-                # Only process completed withdrawals (type_doc_id=337, status_c=3)
-                if record.get("type_doc_id") != 337:
-                    continue
-                if record.get("status_c") != 3:
-                    continue
-
-                # Parse the params JSON string
-                params_str = record.get("params", "{}")
-                try:
-                    params = (
-                        json_lib.loads(params_str)
-                        if isinstance(params_str, str)
-                        else params_str
-                    )
-                except json_lib.JSONDecodeError:
-                    continue
-
-                from app.domain.value_objects.currency import Currency
-
-                currency = params.get("currency", Currency.EUR)
-                amount = float(params.get("totalMoneyOut", 0))
-
-                # Convert to default currency (EUR) if needed
-                if currency != Currency.EUR and amount > 0:
-                    rate = get_exchange_rate(currency, Currency.EUR)
-                    if rate > 0:
-                        amount = amount / rate
-
-                total_withdrawals += amount
-                withdrawals.append(
-                    {
-                        "date": record.get("date_crt", "")[:10],
-                        "amount_eur": round(amount, 2),
-                        "currency": currency,
-                    }
-                )
+                withdrawal = _parse_withdrawal_record(record)
+                if withdrawal:
+                    total_withdrawals += withdrawal["amount_eur"]
+                    withdrawals.append(withdrawal)
 
             return {
                 "total_withdrawals": round(total_withdrawals, 2),

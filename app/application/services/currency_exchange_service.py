@@ -153,38 +153,13 @@ class CurrencyExchangeService:
                 return None
 
         try:
-            # Find the symbol for this pair
-            symbol = None
-            inverse = False
-
-            # Check direct lookup
-            if (from_curr, to_curr) in self.RATE_SYMBOLS:
-                symbol = self.RATE_SYMBOLS[(from_curr, to_curr)]
-            elif (to_curr, from_curr) in self.RATE_SYMBOLS:
-                symbol = self.RATE_SYMBOLS[(to_curr, from_curr)]
-                inverse = True
-
+            symbol, inverse = _find_rate_symbol(from_curr, to_curr, self)
             if not symbol:
-                # Try via conversion path
-                path = self.get_conversion_path(from_curr, to_curr)
-                if len(path) == 1:
-                    symbol = path[0].symbol
-                elif len(path) == 2:
-                    # Multi-step: calculate combined rate
-                    rate1 = self.get_rate(path[0].from_currency, path[0].to_currency)
-                    rate2 = self.get_rate(path[1].from_currency, path[1].to_currency)
-                    if rate1 and rate2:
-                        return rate1 * rate2
-                    return None
+                return _get_rate_via_path(from_curr, to_curr, self)
 
-            if not symbol:
-                return None
-
-            # Fetch quote
             quote = self.client.get_quote(symbol)
             if quote and quote.price > 0:
-                rate = quote.price
-                return 1.0 / rate if inverse else rate
+                return 1.0 / quote.price if inverse else quote.price
 
             return None
         except Exception as e:
