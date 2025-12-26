@@ -212,6 +212,83 @@ async def calculate_long_term_promise(
     return round(min(1.0, total), 3), sub_components
 
 
+def _convert_volatility_to_score(volatility: float) -> float:
+    """Convert volatility to score (inverse - lower is better)."""
+    if volatility <= 0.15:
+        return 1.0
+    elif volatility <= 0.25:
+        return 1.0 - ((volatility - 0.15) / 0.10) * 0.3
+    elif volatility <= 0.40:
+        return 0.7 - ((volatility - 0.25) / 0.15) * 0.4
+    else:
+        return max(0.1, 0.3 - (volatility - 0.40))
+
+
+async def _get_volatility_score(calc_repo, symbol: str, provided: Optional[float]) -> float:
+    """Get volatility score from cache or use provided value."""
+    if provided is not None:
+        return _convert_volatility_to_score(provided)
+
+    volatility = await calc_repo.get_metric(symbol, "VOLATILITY_ANNUAL")
+    if volatility is not None and volatility > 0:
+        return _convert_volatility_to_score(volatility)
+
+    return 0.5
+
+
+def _convert_drawdown_to_score(max_dd: float) -> float:
+    """Convert max drawdown to score."""
+    dd_pct = abs(max_dd)
+    if dd_pct <= 0.10:
+        return 1.0
+    elif dd_pct <= 0.20:
+        return 0.8 + (0.20 - dd_pct) * 2
+    elif dd_pct <= 0.30:
+        return 0.6 + (0.30 - dd_pct) * 2
+    elif dd_pct <= 0.50:
+        return 0.2 + (0.50 - dd_pct) * 2
+    else:
+        return max(0.0, 0.2 - (dd_pct - 0.50))
+
+
+async def _get_drawdown_score(calc_repo, symbol: str, provided: Optional[float]) -> float:
+    """Get drawdown score from cache or use provided value."""
+    if provided is not None:
+        return provided
+
+    max_dd = await calc_repo.get_metric(symbol, "MAX_DRAWDOWN")
+    if max_dd is not None:
+        return _convert_drawdown_to_score(max_dd)
+
+    return 0.5
+
+
+def _convert_sharpe_to_score(sharpe: float) -> float:
+    """Convert Sharpe ratio to score."""
+    if sharpe >= 2.0:
+        return 1.0
+    elif sharpe >= 1.0:
+        return 0.7 + (sharpe - 1.0) * 0.3
+    elif sharpe >= 0.5:
+        return 0.4 + (sharpe - 0.5) * 0.6
+    elif sharpe >= 0:
+        return sharpe * 0.8
+    else:
+        return 0.0
+
+
+async def _get_sharpe_score(calc_repo, symbol: str, provided: Optional[float]) -> float:
+    """Get Sharpe score from cache (converted) or use provided value."""
+    if provided is not None:
+        return provided
+
+    sharpe = await calc_repo.get_metric(symbol, "SHARPE")
+    if sharpe is not None:
+        return _convert_sharpe_to_score(sharpe)
+
+    return 0.5
+
+
 async def calculate_stability_score(
     symbol: str,
     volatility: Optional[float] = None,
@@ -239,67 +316,16 @@ async def calculate_stability_score(
 
     calc_repo = CalculationsRepository()
 
-    # Get volatility and convert to score (inverse - lower is better)
-    if volatility is None:
-        volatility = await calc_repo.get_metric(symbol, "VOLATILITY_ANNUAL")
+    volatility_score = await _get_volatility_score(calc_repo, symbol, volatility)
+    drawdown_score = await _get_drawdown_score(calc_repo, symbol, drawdown_score)
+    sharpe_score = await _get_sharpe_score(calc_repo, symbol, sharpe_score)
 
-    if volatility is not None and volatility > 0:
-        # Typical annual volatility: 15-40%
-        # Score: 30% vol = 0.5, 15% vol = 1.0, 50% vol = 0.2
-        if volatility <= 0.15:
-            volatility_score = 1.0
-        elif volatility <= 0.25:
-            volatility_score = 1.0 - ((volatility - 0.15) / 0.10) * 0.3
-        elif volatility <= 0.40:
-            volatility_score = 0.7 - ((volatility - 0.25) / 0.15) * 0.4
-        else:
-            volatility_score = max(0.1, 0.3 - (volatility - 0.40))
-    else:
-        volatility_score = 0.5
-
-    # Get drawdown score from cache if not provided
-    if drawdown_score is None:
-        max_dd = await calc_repo.get_metric(symbol, "MAX_DRAWDOWN")
-        if max_dd is not None:
-            dd_pct = abs(max_dd)
-            if dd_pct <= 0.10:
-                drawdown_score = 1.0
-            elif dd_pct <= 0.20:
-                drawdown_score = 0.8 + (0.20 - dd_pct) * 2
-            elif dd_pct <= 0.30:
-                drawdown_score = 0.6 + (0.30 - dd_pct) * 2
-            elif dd_pct <= 0.50:
-                drawdown_score = 0.2 + (0.50 - dd_pct) * 2
-            else:
-                drawdown_score = max(0.0, 0.2 - (dd_pct - 0.50))
-        else:
-            drawdown_score = 0.5
-
-    # Get Sharpe score from cache if not provided
-    if sharpe_score is None:
-        sharpe = await calc_repo.get_metric(symbol, "SHARPE")
-        if sharpe is not None:
-            if sharpe >= 2.0:
-                sharpe_score = 1.0
-            elif sharpe >= 1.0:
-                sharpe_score = 0.7 + (sharpe - 1.0) * 0.3
-            elif sharpe >= 0.5:
-                sharpe_score = 0.4 + (sharpe - 0.5) * 0.6
-            elif sharpe >= 0:
-                sharpe_score = sharpe * 0.8
-            else:
-                sharpe_score = 0.0
-        else:
-            sharpe_score = 0.5
-
-    # Calculate weighted total
     total = (
         volatility_score * STABILITY_WEIGHT_VOLATILITY
         + drawdown_score * STABILITY_WEIGHT_DRAWDOWN
         + sharpe_score * STABILITY_WEIGHT_SHARPE
     )
 
-    # Cache the result
     await calc_repo.set_metric(symbol, "STABILITY_SCORE", total)
 
     sub_components = {

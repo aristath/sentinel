@@ -28,6 +28,148 @@ from app.domain.value_objects.trade_side import TradeSide
 logger = logging.getLogger(__name__)
 
 
+def _calculate_weight_gaps(
+    target_weights: Dict[str, float],
+    current_weights: Dict[str, float],
+    total_value: float,
+) -> list[dict]:
+    """Calculate weight gaps between target and current weights."""
+    weight_gaps = []
+
+    for symbol, target in target_weights.items():
+        current = current_weights.get(symbol, 0.0)
+        gap = target - current
+        if abs(gap) > 0.005:  # Ignore tiny gaps (<0.5%)
+            weight_gaps.append(
+                {
+                    "symbol": symbol,
+                    "current": current,
+                    "target": target,
+                    "gap": gap,
+                    "gap_value": gap * total_value,
+                }
+            )
+
+    for symbol, current in current_weights.items():
+        if symbol not in target_weights and current > 0.005:
+            weight_gaps.append(
+                {
+                    "symbol": symbol,
+                    "current": current,
+                    "target": 0.0,
+                    "gap": -current,
+                    "gap_value": -current * total_value,
+                }
+            )
+
+    weight_gaps.sort(key=lambda x: abs(x["gap"]), reverse=True)
+    return weight_gaps
+
+
+def _is_trade_worthwhile(
+    gap_value: float, transaction_cost_fixed: float, transaction_cost_percent: float
+) -> bool:
+    """Check if trade is worthwhile based on transaction costs."""
+    trade_cost = transaction_cost_fixed + abs(gap_value) * transaction_cost_percent
+    return abs(gap_value) >= trade_cost * 2
+
+
+def _process_buy_opportunity(
+    gap_info: dict,
+    stock: Optional[Stock],
+    position: Optional[Position],
+    price: float,
+    opportunities: dict,
+) -> None:
+    """Process a buy opportunity from weight gap."""
+    if not stock or not stock.allow_buy:
+        return
+
+    symbol = gap_info["symbol"]
+    gap_value = gap_info["gap_value"]
+
+    quantity = int(gap_value / price)
+    if stock.min_lot and quantity < stock.min_lot:
+        quantity = stock.min_lot
+
+    if quantity <= 0:
+        return
+
+    trade_value = quantity * price
+    currency = position.currency if position else "EUR"
+
+    if position and position.avg_price > price:
+        category = "averaging_down"
+        tags = ["averaging_down", "optimizer_target"]
+    else:
+        category = "rebalance_buys"
+        tags = ["rebalance", "optimizer_target"]
+
+    opportunities[category].append(
+        ActionCandidate(
+            side=TradeSide.BUY,
+            symbol=symbol,
+            name=stock.name if stock else symbol,
+            quantity=quantity,
+            price=price,
+            value_eur=trade_value,
+            currency=currency,
+            priority=abs(gap_info["gap"]) * 100,
+            reason=f"Optimizer target: {gap_info['target']:.1%} (current: {gap_info['current']:.1%})",
+            tags=tags,
+        )
+    )
+
+
+def _process_sell_opportunity(
+    gap_info: dict,
+    stock: Optional[Stock],
+    position: Position,
+    price: float,
+    opportunities: dict,
+) -> None:
+    """Process a sell opportunity from weight gap."""
+    if not position:
+        return
+
+    if stock and not stock.allow_sell:
+        return
+
+    if stock and position.quantity <= stock.min_lot:
+        logger.debug(f"{gap_info['symbol']}: at min_lot, can't reduce further")
+        return
+
+    symbol = gap_info["symbol"]
+    gap_value = gap_info["gap_value"]
+    sell_value = abs(gap_value)
+    quantity = int(sell_value / price)
+
+    if stock and stock.min_lot:
+        remaining = position.quantity - quantity
+        if remaining < stock.min_lot and remaining > 0:
+            quantity = position.quantity - stock.min_lot
+
+    if quantity <= 0:
+        return
+
+    trade_value = quantity * price
+
+    opportunities["rebalance_sells"].append(
+        ActionCandidate(
+            side=TradeSide.SELL,
+            symbol=symbol,
+            name=stock.name if stock else symbol,
+            quantity=quantity,
+            price=price,
+            value_eur=trade_value,
+            currency=position.currency,
+            priority=abs(gap_info["gap"]) * 100,
+            reason=f"Optimizer target: {gap_info['target']:.1%} (current: {gap_info['current']:.1%})",
+            tags=["rebalance", "optimizer_target"],
+        )
+    )
+
+
 @dataclass
 class HolisticStep:
     """A single step in a holistic plan."""
@@ -131,39 +273,8 @@ async def identify_opportunities_from_weights(
     for symbol, value in portfolio_context.positions.items():
         current_weights[symbol] = value / total_value
 
-    # Calculate weight gaps
-    weight_gaps = []
-    for symbol, target in target_weights.items():
-        current = current_weights.get(symbol, 0.0)
-        gap = target - current
-        if abs(gap) > 0.005:  # Ignore tiny gaps (<0.5%)
-            weight_gaps.append(
-                {
-                    "symbol": symbol,
-                    "current": current,
-                    "target": target,
-                    "gap": gap,
-                    "gap_value": gap * total_value,
-                }
-            )
+    weight_gaps = _calculate_weight_gaps(target_weights, current_weights, total_value)
 
-    # Also check positions that aren't in target (should sell to 0)
-    for symbol, current in current_weights.items():
-        if symbol not in target_weights and current > 0.005:
-            weight_gaps.append(
-                {
-                    "symbol": symbol,
-                    "current": current,
-                    "target": 0.0,
-                    "gap": -current,
-                    "gap_value": -current * total_value,
-                }
-            )
-
-    # Sort by absolute gap (largest adjustments first)
-    weight_gaps.sort(key=lambda x: abs(x["gap"]), reverse=True)
-
-    # Process each gap
     for gap_info in weight_gaps:
         symbol = gap_info["symbol"]
         gap = gap_info["gap"]
@@ -176,95 +287,18 @@ async def identify_opportunities_from_weights(
         if price <= 0:
             continue
 
-        # Check if trade is worthwhile (transaction cost check)
-        trade_cost = transaction_cost_fixed + abs(gap_value) * transaction_cost_percent
-        if abs(gap_value) < trade_cost * 2:  # Need at least 2x cost to be worthwhile
+        if not _is_trade_worthwhile(
+            gap_value, transaction_cost_fixed, transaction_cost_percent
+        ):
             logger.debug(
-                f"{symbol}: gap €{gap_value:.0f} too small (cost €{trade_cost:.2f})"
+                f"{symbol}: gap €{gap_value:.0f} too small (cost would be high)"
             )
             continue
 
         if gap > 0:
-            # Underweight - BUY opportunity
-            if not stock or not stock.allow_buy:
-                continue
-
-            quantity = int(gap_value / price)
-            if stock.min_lot and quantity < stock.min_lot:
-                quantity = stock.min_lot
-
-            if quantity <= 0:
-                continue
-
-            trade_value = quantity * price
-            currency = position.currency if position else "EUR"
-
-            # Determine category based on existing position
-            if position and position.avg_price > price:
-                category = "averaging_down"
-                tags = ["averaging_down", "optimizer_target"]
-            else:
-                category = "rebalance_buys"
-                tags = ["rebalance", "optimizer_target"]
-
-            opportunities[category].append(
-                ActionCandidate(
-                    side=TradeSide.BUY,
-                    symbol=symbol,
-                    name=stock.name if stock else symbol,
-                    quantity=quantity,
-                    price=price,
-                    value_eur=trade_value,
-                    currency=currency,
-                    priority=abs(gap) * 100,  # Priority based on gap size
-                    reason=f"Optimizer target: {gap_info['target']:.1%} (current: {gap_info['current']:.1%})",
-                    tags=tags,
-                )
-            )
-
+            _process_buy_opportunity(gap_info, stock, position, price, opportunities)
         else:
-            # Overweight - SELL opportunity
-            if not position:
-                continue
-
-            if stock and not stock.allow_sell:
-                continue
-
-            # Check min_lot constraint
-            if stock and position.quantity <= stock.min_lot:
-                logger.debug(f"{symbol}: at min_lot, can't reduce further")
-                continue
-
-            # Calculate quantity to sell
-            sell_value = abs(gap_value)
-            quantity = int(sell_value / price)
-
-            # Respect min_lot when selling
-            if stock and stock.min_lot:
-                remaining = position.quantity - quantity
-                if remaining < stock.min_lot and remaining > 0:
-                    # Adjust to keep min_lot
-                    quantity = position.quantity - stock.min_lot
-
-            if quantity <= 0:
-                continue
-
-            trade_value = quantity * price
-
-            opportunities["rebalance_sells"].append(
-                ActionCandidate(
-                    side=TradeSide.SELL,
-                    symbol=symbol,
-                    name=stock.name if stock else symbol,
-                    quantity=quantity,
-                    price=price,
-                    value_eur=trade_value,
-                    currency=position.currency,
-                    priority=abs(gap) * 100,
-                    reason=f"Optimizer target: {gap_info['target']:.1%} (current: {gap_info['current']:.1%})",
-                    tags=["rebalance", "optimizer_target"],
-                )
-            )
+            _process_sell_opportunity(gap_info, stock, position, price, opportunities)
 
     # Sort each category by priority
     for category in opportunities:
