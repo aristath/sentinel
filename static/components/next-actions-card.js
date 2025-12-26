@@ -165,8 +165,8 @@ class NextActionsCard extends HTMLElement {
                       <div class="text-xs text-gray-500 mt-1" x-text="rec.reason"></div>
                     </div>
                     <div class="text-right flex-shrink-0 flex flex-col items-end gap-1">
-                      <div class="text-sm font-mono font-bold text-red-400" x-text="'-€' + rec.estimated_value.toLocaleString()"></div>
-                      <div class="text-xs text-gray-400" x-text="rec.quantity + ' @ €' + rec.estimated_price"></div>
+                      <div class="text-sm font-mono font-bold text-red-400" x-text="'-€' + rec.amount.toLocaleString()"></div>
+                      <div class="text-xs text-gray-400" x-text="rec.quantity + ' @ €' + rec.current_price"></div>
                       <button
                         @click="if (rec.uuid) { $store.app.dismissSellRecommendation(rec.uuid); } else { $store.app.showMessage('Recommendation does not have UUID yet. Please refresh.', 'warning'); }"
                         :disabled="!rec.uuid"
