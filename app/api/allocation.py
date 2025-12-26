@@ -2,13 +2,13 @@
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from app.repositories import (
-    AllocationRepository,
-    PortfolioRepository,
-    PositionRepository,
+from app.infrastructure.dependencies import (
+    AllocationRepositoryDep,
+    PortfolioRepositoryDep,
+    PositionRepositoryDep,
+    PortfolioServiceDep,
 )
 from app.domain.models import AllocationTarget
-from app.application.services.portfolio_service import PortfolioService
 
 router = APIRouter()
 
@@ -24,9 +24,8 @@ class IndustryTargets(BaseModel):
 
 
 @router.get("/targets")
-async def get_allocation_targets():
+async def get_allocation_targets(allocation_repo: AllocationRepositoryDep):
     """Get all allocation targets (geography and industry)."""
-    allocation_repo = AllocationRepository()
     targets = await allocation_repo.get_all()
 
     geography = {}
@@ -49,9 +48,8 @@ async def get_allocation_targets():
 
 
 @router.put("/targets/geography")
-async def update_geography_targets(targets: GeographyTargets):
+async def update_geography_targets(targets: GeographyTargets, allocation_repo: AllocationRepositoryDep):
     """Update geography allocation weights."""
-    allocation_repo = AllocationRepository()
     updates = targets.targets
 
     if not updates:
@@ -82,9 +80,8 @@ async def update_geography_targets(targets: GeographyTargets):
 
 
 @router.put("/targets/industry")
-async def update_industry_targets(targets: IndustryTargets):
+async def update_industry_targets(targets: IndustryTargets, allocation_repo: AllocationRepositoryDep):
     """Update industry allocation weights."""
-    allocation_repo = AllocationRepository()
     updates = targets.targets
 
     if not updates:
@@ -115,17 +112,8 @@ async def update_industry_targets(targets: IndustryTargets):
 
 
 @router.get("/current")
-async def get_current_allocation():
+async def get_current_allocation(portfolio_service: PortfolioServiceDep):
     """Get current allocation vs targets for both geography and industry."""
-    portfolio_repo = PortfolioRepository()
-    position_repo = PositionRepository()
-    allocation_repo = AllocationRepository()
-
-    portfolio_service = PortfolioService(
-        portfolio_repo,
-        position_repo,
-        allocation_repo,
-    )
     summary = await portfolio_service.get_portfolio_summary()
 
     return {
@@ -155,17 +143,8 @@ async def get_current_allocation():
 
 
 @router.get("/deviations")
-async def get_allocation_deviations():
+async def get_allocation_deviations(portfolio_service: PortfolioServiceDep):
     """Get allocation deviation scores for rebalancing decisions."""
-    portfolio_repo = PortfolioRepository()
-    position_repo = PositionRepository()
-    allocation_repo = AllocationRepository()
-
-    portfolio_service = PortfolioService(
-        portfolio_repo,
-        position_repo,
-        allocation_repo,
-    )
     summary = await portfolio_service.get_portfolio_summary()
 
     geo_deviations = {

@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.infrastructure.cache import cache
-from app.repositories import SettingsRepository
+from app.infrastructure.dependencies import SettingsRepositoryDep, CalculationsRepositoryDep
 
 router = APIRouter()
 
@@ -64,14 +64,13 @@ class SettingUpdate(BaseModel):
     value: float
 
 
-async def get_setting(key: str, default: str = None) -> str | None:
+async def get_setting(key: str, settings_repo: SettingsRepositoryDep, default: str = None) -> str | None:
     """Get a setting value from the database."""
-    settings_repo = SettingsRepository()
     value = await settings_repo.get(key)
     return str(value) if value is not None else default
 
 
-async def get_settings_batch(keys: list[str]) -> dict[str, str]:
+async def get_settings_batch(keys: list[str], settings_repo: SettingsRepositoryDep) -> dict[str, str]:
     """Get multiple settings in a single database query (cached 3s)."""
     cache_key = "settings:all"
     cached = cache.get(cache_key)
@@ -80,7 +79,6 @@ async def get_settings_batch(keys: list[str]) -> dict[str, str]:
         return {k: v for k, v in cached.items() if k in keys}
 
     # Fetch all settings from DB
-    settings_repo = SettingsRepository()
     all_settings = await settings_repo.get_all()
 
     # Cache for 3 seconds
@@ -89,44 +87,42 @@ async def get_settings_batch(keys: list[str]) -> dict[str, str]:
     return {k: v for k, v in all_settings.items() if k in keys}
 
 
-async def set_setting(key: str, value: str) -> None:
+async def set_setting(key: str, value: str, settings_repo: SettingsRepositoryDep) -> None:
     """Set a setting value in the database."""
-    settings_repo = SettingsRepository()
     await settings_repo.set_float(key, float(value))
     # Invalidate settings cache
     cache.invalidate("settings:all")
 
 
-async def get_setting_value(key: str) -> float:
+async def get_setting_value(key: str, settings_repo: SettingsRepositoryDep) -> float:
     """Get a setting value, falling back to default."""
-    db_value = await get_setting(key)
+    db_value = await get_setting(key, settings_repo)
     if db_value:
         return float(db_value)
     return SETTING_DEFAULTS.get(key, 0)
 
 
-async def get_trading_mode() -> str:
+async def get_trading_mode(settings_repo: SettingsRepositoryDep) -> str:
     """Get trading mode setting (returns "live" or "research")."""
-    db_value = await get_setting("trading_mode")
+    db_value = await get_setting("trading_mode", settings_repo)
     if db_value in ("live", "research"):
         return db_value
     return SETTING_DEFAULTS.get("trading_mode", "research")
 
 
-async def set_trading_mode(mode: str) -> None:
+async def set_trading_mode(mode: str, settings_repo: SettingsRepositoryDep) -> None:
     """Set trading mode setting (must be "live" or "research")."""
     if mode not in ("live", "research"):
         raise ValueError(f"Invalid trading mode: {mode}. Must be 'live' or 'research'")
-    settings_repo = SettingsRepository()
     await settings_repo.set("trading_mode", mode, "Trading mode: 'live' or 'research'")
     # Invalidate settings cache
     cache.invalidate("settings:all")
 
 
-async def get_job_settings() -> dict[str, float]:
+async def get_job_settings(settings_repo: SettingsRepositoryDep) -> dict[str, float]:
     """Get all job scheduling settings in one query."""
     job_keys = [k for k in SETTING_DEFAULTS if k.startswith("job_")]
-    db_values = await get_settings_batch(job_keys)
+    db_values = await get_settings_batch(job_keys, settings_repo)
     result = {}
     for key in job_keys:
         if key in db_values:
@@ -136,10 +132,10 @@ async def get_job_settings() -> dict[str, float]:
     return result
 
 
-async def get_buy_score_weights() -> dict[str, float]:
+async def get_buy_score_weights(settings_repo: SettingsRepositoryDep) -> dict[str, float]:
     """Get buy score group weights (8 groups, normalized at scoring time)."""
     weight_keys = [k for k in SETTING_DEFAULTS if k.startswith("score_weight_")]
-    db_values = await get_settings_batch(weight_keys)
+    db_values = await get_settings_batch(weight_keys, settings_repo)
     result = {}
     for key in weight_keys:
         # Extract group name from key (e.g., "score_weight_long_term" -> "long_term")
@@ -151,10 +147,10 @@ async def get_buy_score_weights() -> dict[str, float]:
     return result
 
 
-async def get_sell_score_weights() -> dict[str, float]:
+async def get_sell_score_weights(settings_repo: SettingsRepositoryDep) -> dict[str, float]:
     """Get sell score weights (5 groups, normalized at scoring time)."""
     weight_keys = [k for k in SETTING_DEFAULTS if k.startswith("sell_weight_")]
-    db_values = await get_settings_batch(weight_keys)
+    db_values = await get_settings_batch(weight_keys, settings_repo)
     result = {}
     for key in weight_keys:
         # Extract group name from key (e.g., "sell_weight_underperformance" -> "underperformance")
@@ -167,11 +163,11 @@ async def get_sell_score_weights() -> dict[str, float]:
 
 
 @router.get("")
-async def get_all_settings():
+async def get_all_settings(settings_repo: SettingsRepositoryDep):
     """Get all configurable settings."""
     # Get all settings in a single query
     keys = list(SETTING_DEFAULTS.keys())
-    db_values = await get_settings_batch(keys)
+    db_values = await get_settings_batch(keys, settings_repo)
 
     result = {}
     for key, default in SETTING_DEFAULTS.items():
@@ -187,7 +183,7 @@ async def get_all_settings():
 
 
 @router.put("/{key}")
-async def update_setting_value(key: str, data: SettingUpdate):
+async def update_setting_value(key: str, data: SettingUpdate, settings_repo: SettingsRepositoryDep):
     """Update a setting value."""
     if key not in SETTING_DEFAULTS:
         raise HTTPException(status_code=400, detail=f"Unknown setting: {key}")
@@ -197,10 +193,10 @@ async def update_setting_value(key: str, data: SettingUpdate):
         mode = str(data.value).lower()
         if mode not in ("live", "research"):
             raise HTTPException(status_code=400, detail=f"Invalid trading mode: {mode}. Must be 'live' or 'research'")
-        await set_trading_mode(mode)
+        await set_trading_mode(mode, settings_repo)
         return {key: mode}
 
-    await set_setting(key, str(data.value))
+    await set_setting(key, str(data.value), settings_repo)
 
     # Invalidate recommendation caches when recommendation-affecting settings change
     recommendation_settings = {
@@ -262,12 +258,10 @@ async def reset_cache():
 
 
 @router.get("/cache-stats")
-async def get_cache_stats():
+async def get_cache_stats(calc_repo: CalculationsRepositoryDep):
     """Get cache statistics."""
-    from app.repositories.calculations import CalculationsRepository
     from app.infrastructure.database import get_db_manager
 
-    calc_repo = CalculationsRepository()
     db = get_db_manager().calculations
 
     # Get calculations.db stats
@@ -297,16 +291,16 @@ async def reschedule_jobs():
 
 
 @router.get("/trading-mode")
-async def get_trading_mode_endpoint():
+async def get_trading_mode_endpoint(settings_repo: SettingsRepositoryDep):
     """Get current trading mode."""
-    mode = await get_trading_mode()
+    mode = await get_trading_mode(settings_repo)
     return {"trading_mode": mode}
 
 
 @router.post("/trading-mode")
-async def toggle_trading_mode():
+async def toggle_trading_mode(settings_repo: SettingsRepositoryDep):
     """Toggle trading mode between 'live' and 'research'."""
-    current_mode = await get_trading_mode()
+    current_mode = await get_trading_mode(settings_repo)
     new_mode = "research" if current_mode == "live" else "live"
-    await set_trading_mode(new_mode)
+    await set_trading_mode(new_mode, settings_repo)
     return {"trading_mode": new_mode, "previous_mode": current_mode}
