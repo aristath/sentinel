@@ -710,223 +710,20 @@ class TradernetClient:
                 )
 
             records = history if isinstance(history, list) else []
-
-            # Map of known type_doc_id to transaction types
-            # Based on API exploration, these are the cash flow related types:
             type_mapping = {
-                337: "withdrawal",  # Cash withdrawals
-                297: "structured_product_purchase",  # Structured product purchases
-                # Other types (217, 269, 278, 290, 355, 356) are document/account management, not cash flows
+                337: "withdrawal",
+                297: "structured_product_purchase",
             }
 
             for record in records:
-                try:
-                    # Parse the params JSON string
-                    params_str = record.get("params", "{}")
-                    try:
-                        params = (
-                            json_lib.loads(params_str)
-                            if isinstance(params_str, str)
-                            else params_str
-                        )
-                    except (json_lib.JSONDecodeError, TypeError):
-                        params = {}
-                        logger.warning(
-                            f"Failed to parse params for record: {record.get('id', 'unknown')}"
-                        )
-
-                    type_doc_id = record.get("type_doc_id")
-                    if type_doc_id is None:
-                        logger.warning(f"Skipping record with no type_doc_id: {record}")
-                        continue
-
-                    status_c = record.get("status_c")
-
-                    # Infer transaction type
-                    transaction_type = type_mapping.get(
-                        type_doc_id, f"type_{type_doc_id}"
-                    )
-
-                    # Try to determine amount and currency from params
-                    # Different transaction types may have different field names
-                    amount = 0.0
-                    currency = "EUR"
-
-                    # Check common field names based on transaction type
-                    try:
-                        if "totalMoneyOut" in params:
-                            # Withdrawals (type 337)
-                            amount = float(params.get("totalMoneyOut", 0))
-                            currency = params.get("currency", "EUR")
-                        elif "totalMoneyIn" in params:
-                            # Deposits (if any)
-                            amount = float(params.get("totalMoneyIn", 0))
-                            currency = params.get("currency", "EUR")
-                        elif "structured_product_trade_sum" in params:
-                            # Structured product purchases (type 297)
-                            amount = float(
-                                params.get("structured_product_trade_sum", 0)
-                            )
-                            currency = params.get("structured_product_currency", "USD")
-                        elif "amount" in params:
-                            amount = float(params.get("amount", 0))
-                            currency = params.get("currency", "EUR")
-                        elif "sum" in params:
-                            amount = float(params.get("sum", 0))
-                            currency = params.get("currency", "EUR")
-                    except (ValueError, TypeError) as e:
-                        logger.warning(
-                            f"Failed to parse amount for transaction {type_doc_id}: {e}"
-                        )
-                        amount = 0.0
-
-                    # Convert to EUR
-                    amount_eur = amount
-                    if currency and currency != "EUR" and amount != 0:
-                        try:
-                            rate = get_exchange_rate(currency, "EUR")
-                            if rate > 0:
-                                amount_eur = amount / rate
-                        except Exception as e:
-                            logger.warning(f"Failed to convert {currency} to EUR: {e}")
-                            # Keep original amount if conversion fails
-
-                    # Get transaction ID - try multiple possible ID fields
-                    # The API may provide: id, transaction_id, doc_id, or we construct one
-                    transaction_id = (
-                        record.get("id")
-                        or record.get("transaction_id")
-                        or record.get("doc_id")
-                    )
-
-                    # If no explicit ID, create a unique one from record fields
-                    if not transaction_id:
-                        # Use a combination of fields that should be unique
-                        unique_str = f"{type_doc_id}_{record.get('date_crt', '')}_{record.get('status_c', '')}_{amount}_{json_lib.dumps(params, sort_keys=True)}"
-                        # Create a short hash for uniqueness
-                        transaction_id = f"{type_doc_id}_{hashlib.md5(unique_str.encode()).hexdigest()[:8]}"
-
-                    # Ensure it's a string
-                    transaction_id = str(transaction_id)
-
-                    # Get date
-                    date_crt = record.get("date_crt", "")
-                    date = date_crt[:10] if len(date_crt) >= 10 else date_crt
-                    if not date:
-                        # Fallback to current date if no date provided
-                        date = datetime.now().strftime("%Y-%m-%d")
-
-                    # Get description
-                    description = record.get("name", "") or record.get(
-                        "description", ""
-                    )
-
-                    # Map status code to status text
-                    status_map = {
-                        1: "pending",
-                        2: "processing",
-                        3: "completed",
-                        4: "cancelled",
-                        5: "rejected",
-                    }
-                    status = status_map.get(status_c, f"status_{status_c}")
-
-                    all_transactions.append(
-                        {
-                            "transaction_id": transaction_id,
-                            "type_doc_id": type_doc_id,
-                            "transaction_type": transaction_type,
-                            "date": date,
-                            "amount": amount,
-                            "currency": currency or "EUR",
-                            "amount_eur": round(amount_eur, 2),
-                            "status": status,
-                            "status_c": status_c,
-                            "description": description,
-                            "params": params,
-                        }
-                    )
-
-                    # Extract fees from withdrawals and structured products as separate transactions
-                    if type_doc_id == 337 and "total_commission" in params:
-                        # Withdrawal fee
-                        withdrawal_fee = params.get("total_commission", 0)
-                        if withdrawal_fee and float(withdrawal_fee) > 0:
-                            fee_currency = params.get("commission_currency", currency)
-                            fee_amount_eur = float(withdrawal_fee)
-                            if fee_currency != "EUR":
-                                try:
-                                    rate = get_exchange_rate(fee_currency, "EUR")
-                                    if rate > 0:
-                                        fee_amount_eur = float(withdrawal_fee) / rate
-                                except Exception:
-                                    pass
-
-                            fee_transaction_id = f"{transaction_id}_fee"
-                            all_transactions.append(
-                                {
-                                    "transaction_id": fee_transaction_id,
-                                    "type_doc_id": "withdrawal_fee",
-                                    "transaction_type": "withdrawal_fee",
-                                    "date": date,
-                                    "amount": float(withdrawal_fee),
-                                    "currency": fee_currency,
-                                    "amount_eur": round(fee_amount_eur, 2),
-                                    "status": status,
-                                    "status_c": status_c,
-                                    "description": f"Withdrawal fee for {amount} {currency} withdrawal",
-                                    "params": {
-                                        "withdrawal_id": transaction_id,
-                                        **params,
-                                    },
-                                }
-                            )
-                    elif (
-                        type_doc_id == 297
-                        and "structured_product_trade_commission" in params
-                    ):
-                        # Structured product commission
-                        sp_commission = params.get(
-                            "structured_product_trade_commission", 0
-                        )
-                        if sp_commission and float(sp_commission) > 0:
-                            sp_comm_currency = currency
-                            sp_comm_eur = float(sp_commission)
-                            if sp_comm_currency != "EUR":
-                                try:
-                                    rate = get_exchange_rate(sp_comm_currency, "EUR")
-                                    if rate > 0:
-                                        sp_comm_eur = float(sp_commission) / rate
-                                except Exception:
-                                    pass
-
-                            fee_transaction_id = f"{transaction_id}_fee"
-                            all_transactions.append(
-                                {
-                                    "transaction_id": fee_transaction_id,
-                                    "type_doc_id": "structured_product_fee",
-                                    "transaction_type": "structured_product_fee",
-                                    "date": date,
-                                    "amount": float(sp_commission),
-                                    "currency": sp_comm_currency,
-                                    "amount_eur": round(sp_comm_eur, 2),
-                                    "status": status,
-                                    "status_c": status_c,
-                                    "description": "Structured product commission",
-                                    "params": {"product_id": transaction_id, **params},
-                                }
-                            )
-                except Exception as e:
-                    logger.error(f"Failed to process transaction record: {e}")
-                    logger.debug(f"Record data: {record}")
-                    continue
+                transactions = _process_cps_history_record(record, type_mapping)
+                all_transactions.extend(transactions)
 
             # 2. Get dividends, coupons, and other corporate actions
             try:
                 with _led_api_call():
                     corporate_actions = self._client.corporate_actions()
 
-                # Filter for executed actions that result in cash flows
                 executed_actions = [
                     a
                     for a in corporate_actions
@@ -934,71 +731,9 @@ class TradernetClient:
                 ]
 
                 for action in executed_actions:
-                    try:
-                        action_type = action.get("type", "").lower()
-
-                        # Only process cash flow generating actions
-                        if action_type not in [
-                            "dividend",
-                            "coupon",
-                            "maturity",
-                            "partial_maturity",
-                        ]:
-                            continue
-
-                        # Calculate amount
-                        amount_per_one = float(action.get("amount_per_one", 0))
-                        executed_count = int(action.get("executed_count", 0))
-                        amount = amount_per_one * executed_count
-
-                        if amount == 0:
-                            continue
-
-                        currency = action.get("currency", "USD")
-                        pay_date = action.get("pay_date", action.get("ex_date", ""))
-                        date = pay_date[:10] if len(pay_date) >= 10 else pay_date
-
-                        # Convert to EUR
-                        amount_eur = amount
-                        if currency != "EUR" and amount != 0:
-                            try:
-                                rate = get_exchange_rate(currency, "EUR")
-                                if rate > 0:
-                                    amount_eur = amount / rate
-                            except Exception as e:
-                                logger.warning(
-                                    f"Failed to convert {currency} to EUR: {e}"
-                                )
-
-                        # Create transaction ID
-                        action_id = action.get("id") or action.get(
-                            "corporate_action_id", ""
-                        )
-                        transaction_id = f"corp_action_{action_type}_{action_id}"
-
-                        # Description
-                        ticker = action.get("ticker", "")
-                        description = f"{action_type.title()}: {ticker} ({executed_count} shares × {amount_per_one} {currency})"
-
-                        all_transactions.append(
-                            {
-                                "transaction_id": transaction_id,
-                                "type_doc_id": f"corp_{action_type}",  # Use string ID for corporate actions
-                                "transaction_type": action_type,
-                                "date": date,
-                                "amount": amount,
-                                "currency": currency,
-                                "amount_eur": round(amount_eur, 2),
-                                "status": "completed",  # Executed actions are completed
-                                "status_c": None,
-                                "description": description,
-                                "params": action,
-                            }
-                        )
-                    except Exception as e:
-                        logger.error(f"Failed to process corporate action: {e}")
-                        continue
-
+                    transaction = _process_corporate_action(action)
+                    if transaction:
+                        all_transactions.append(transaction)
             except Exception as e:
                 logger.warning(f"Failed to get corporate actions: {e}")
 
@@ -1010,64 +745,9 @@ class TradernetClient:
                 trade_list = trades_data.get("trades", {}).get("trade", [])
 
                 for trade in trade_list:
-                    try:
-                        # Get commission
-                        commission_str = trade.get("commission", "0")
-                        try:
-                            commission = (
-                                float(commission_str) if commission_str else 0.0
-                            )
-                        except (ValueError, TypeError):
-                            commission = 0.0
-
-                        if commission == 0:
-                            continue
-
-                        currency = trade.get(
-                            "commission_currency", trade.get("curr_c", "EUR")
-                        )
-                        trade_date = trade.get("date", "")
-                        date = trade_date[:10] if len(trade_date) >= 10 else trade_date
-
-                        # Convert to EUR
-                        amount_eur = commission
-                        if currency != "EUR" and commission != 0:
-                            try:
-                                rate = get_exchange_rate(currency, "EUR")
-                                if rate > 0:
-                                    amount_eur = commission / rate
-                            except Exception as e:
-                                logger.warning(
-                                    f"Failed to convert {currency} to EUR: {e}"
-                                )
-
-                        # Create transaction ID
-                        trade_id = trade.get("id") or trade.get("order_id", "")
-                        transaction_id = f"trade_fee_{trade_id}"
-
-                        # Description
-                        instr_name = trade.get("instr_nm", "")
-                        description = f"Trading fee: {instr_name}"
-
-                        all_transactions.append(
-                            {
-                                "transaction_id": transaction_id,
-                                "type_doc_id": "trade_fee",
-                                "transaction_type": "trading_fee",
-                                "date": date,
-                                "amount": commission,
-                                "currency": currency,
-                                "amount_eur": round(amount_eur, 2),
-                                "status": "completed",
-                                "status_c": None,
-                                "description": description,
-                                "params": trade,
-                            }
-                        )
-                    except Exception as e:
-                        logger.error(f"Failed to process trade fee: {e}")
-                        continue
-
+                    transaction = _process_trade_fee(trade)
+                    if transaction:
+                        all_transactions.append(transaction)
             except Exception as e:
                 logger.warning(f"Failed to get trades history: {e}")
 
