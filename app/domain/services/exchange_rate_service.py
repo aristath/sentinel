@@ -18,13 +18,15 @@ from app.infrastructure.database.manager import get_db_manager
 logger = logging.getLogger(__name__)
 
 # Fallback rates (used when API is unavailable)
+# Format: (from, to) -> rate where conversion is: amount_to = amount_from / rate
+# These match API format: 1 EUR = X foreign
 FALLBACK_RATES: Dict[Tuple[str, str], float] = {
-    ("USD", "EUR"): 0.95,   # 1 USD = 0.95 EUR
-    ("HKD", "EUR"): 0.12,   # 1 HKD = 0.12 EUR
-    ("GBP", "EUR"): 1.17,   # 1 GBP = 1.17 EUR
-    ("EUR", "USD"): 1.05,
-    ("EUR", "HKD"): 8.33,
-    ("EUR", "GBP"): 0.85,
+    ("USD", "EUR"): 1.05,   # 1 EUR = 1.05 USD, so 100 USD / 1.05 = 95.24 EUR
+    ("HKD", "EUR"): 8.33,   # 1 EUR = 8.33 HKD, so 100 HKD / 8.33 = 12.00 EUR
+    ("GBP", "EUR"): 0.85,   # 1 EUR = 0.85 GBP, so 100 GBP / 0.85 = 117.6 EUR
+    ("EUR", "USD"): 0.95,   # Inverse: 100 EUR / 0.95 = 105.3 USD
+    ("EUR", "HKD"): 0.12,   # Inverse: 100 EUR / 0.12 = 833 HKD
+    ("EUR", "GBP"): 1.17,   # Inverse: 100 EUR / 1.17 = 85.5 GBP
 }
 
 # Default TTL for exchange rates (1 hour)
@@ -228,7 +230,7 @@ class ExchangeRateService:
             # Use exchangerate-api.com (free tier)
             url = f"https://api.exchangerate-api.com/v4/latest/{to_currency}"
             async with httpx.AsyncClient() as client:
-                response = await client.get(url, timeout=5.0)
+                response = await client.get(url, timeout=15.0)  # Increased for slow connections
 
             if response.status_code == 200:
                 data = response.json()
