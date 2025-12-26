@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.infrastructure.cache import cache
-from app.infrastructure.dependencies import SettingsRepositoryDep, CalculationsRepositoryDep
+from app.infrastructure.dependencies import SettingsRepositoryDep, CalculationsRepositoryDep, DatabaseManagerDep
 
 router = APIRouter()
 
@@ -258,11 +258,12 @@ async def reset_cache():
 
 
 @router.get("/cache-stats")
-async def get_cache_stats(calc_repo: CalculationsRepositoryDep):
+async def get_cache_stats(
+    calc_repo: CalculationsRepositoryDep,
+    db_manager: DatabaseManagerDep,
+):
     """Get cache statistics."""
-    from app.infrastructure.database import get_db_manager
-
-    db = get_db_manager().calculations
+    db = db_manager.calculations
 
     # Get calculations.db stats
     row = await db.fetchone("SELECT COUNT(*) as cnt FROM calculated_metrics")
