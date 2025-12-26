@@ -56,6 +56,7 @@ from app.domain.constants import BUY_COOLDOWN_DAYS
 from app.application.services.recommendation.portfolio_context_builder import build_portfolio_context
 from app.application.services.recommendation.technical_data_calculator import get_technical_data_for_positions
 from app.application.services.recommendation.performance_adjustment_calculator import get_performance_adjusted_weights
+from app.infrastructure.recommendation_cache import get_recommendation_cache
 
 logger = logging.getLogger(__name__)
 
