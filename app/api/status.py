@@ -62,213 +62,22 @@ async def get_status(
     }
 
 
-@router.get("/led")
-async def get_led_status():
-    """Get current LED display state."""
-    from app.infrastructure.hardware.led_display import get_display_state
+@router.get("/display/text")
+async def get_display_text(settings_repo: SettingsRepositoryDep):
+    """Get current text and display settings for Arduino LED matrix.
 
-    state = get_display_state()
+    Returns the highest priority text (activity > default) plus settings.
+    Called every 2 seconds by Arduino bridge.
+    """
+    from app.infrastructure.hardware.display_service import get_current_text
 
+    speed = await settings_repo.get_float("ticker_speed", 50.0)
+    brightness = int(await settings_repo.get_float("led_brightness", 150))
     return {
-        "connected": True,  # Always "connected" - we just manage state now
-        "mode": state["mode"],
-        "error_message": state.get("error_message"),
+        "text": get_current_text(),
+        "speed": int(speed),
+        "brightness": brightness,
     }
-
-
-async def _build_ticker_text(
-    settings_repo: SettingsRepositoryDep,
-    portfolio_service: PortfolioServiceDep,
-) -> str:
-    """Build ticker text from portfolio data and recommendations.
-
-    Format: €12,345 | CASH €675 | SELL ABC €200 | BUY XIAO €855
-    Respects user settings for what to show.
-    """
-    from app.infrastructure.cache import cache
-
-    parts = []
-
-    try:
-        # Get display settings
-        show_value = await settings_repo.get_float("ticker_show_value", 1.0) == 1.0
-        show_cash = await settings_repo.get_float("ticker_show_cash", 1.0) == 1.0
-        show_actions = await settings_repo.get_float("ticker_show_actions", 1.0) == 1.0
-        show_amounts = await settings_repo.get_float("ticker_show_amounts", 1.0) == 1.0
-        max_actions = int(await settings_repo.get_float("ticker_max_actions", 3))
-
-        # Get portfolio summary
-        summary = await portfolio_service.get_portfolio_summary()
-
-        # Portfolio value
-        if show_value and summary.total_value:
-            parts.append(f"€{int(summary.total_value):,}")
-
-        # Cash balance
-        if show_cash and summary.cash_balance:
-            parts.append(f"CASH €{int(summary.cash_balance):,}")
-
-        # Add recommendations if enabled (cache-only, populated by Rebalance Check job)
-        if show_actions:
-            # Check for multi-step recommendations first (if depth > 1)
-            # Try holistic cache keys first (new format), then legacy format
-            depth = await settings_repo.get_int("recommendation_depth", 1)
-            multi_step = None
-
-            if depth > 1:
-                # Try holistic cache keys (new format)
-                multi_step = cache.get(f"multi_step_recommendations:diversification:{depth}:holistic")
-                if not multi_step:
-                    multi_step = cache.get("multi_step_recommendations:diversification:default:holistic")
-                # Fall back to legacy cache keys
-                if not multi_step:
-                    multi_step = cache.get(f"multi_step_recommendations:{depth}")
-                if not multi_step:
-                    multi_step = cache.get("multi_step_recommendations:default")
-            
-            if multi_step and multi_step.get("steps"):
-                # Show multi-step recommendations - format: [step/total]
-                total_steps = multi_step.get("depth", len(multi_step["steps"]))
-                for step in multi_step["steps"][:max_actions]:
-                    symbol = step["symbol"].split(".")[0]  # Remove .US/.EU suffix
-                    value = int(step.get("estimated_value", 0))
-                    # Handle both string and TradeSide enum for side
-                    raw_side = step.get("side", "BUY")
-                    side = str(raw_side).replace("TradeSide.", "")  # Normalize enum to string
-                    step_num = step.get("step", 1)
-                    step_label = f"[{step_num}/{total_steps}]"
-                    if show_amounts and value > 0:
-                        parts.append(f"{side} {symbol} €{value:,} {step_label}")
-                    else:
-                        parts.append(f"{side} {symbol} {step_label}")
-            else:
-                # Fall back to single recommendations
-                sell_recs = cache.get("sell_recommendations:3")
-                buy_recs = cache.get("recommendations:3")
-
-                # Add sell recommendations (priority - shown first)
-                if sell_recs and sell_recs.get("recommendations"):
-                    for rec in sell_recs["recommendations"][:max_actions]:
-                        symbol = rec["symbol"].split(".")[0]  # Remove .US/.EU suffix
-                        value = int(rec.get("estimated_value", 0))
-                        if show_amounts and value > 0:
-                            parts.append(f"SELL {symbol} €{value:,}")
-                        else:
-                            parts.append(f"SELL {symbol}")
-
-                # Add buy recommendations
-                if buy_recs and buy_recs.get("recommendations"):
-                    for rec in buy_recs["recommendations"][:max_actions]:
-                        symbol = rec["symbol"].split(".")[0]  # Remove .US/.EU suffix
-                        value = int(rec.get("amount", 0))
-                        if show_amounts and value > 0:
-                            parts.append(f"BUY {symbol} €{value:,}")
-                        else:
-                            parts.append(f"BUY {symbol}")
-
-    except Exception:
-        # On error, just return empty (no ticker)
-        return ""
-
-    return " | ".join(parts) if parts else ""
-
-
-@router.get("/led/display")
-async def get_led_display_state(
-    settings_repo: SettingsRepositoryDep,
-    portfolio_service: PortfolioServiceDep,
-):
-    """
-    Get display state for Arduino Bridge apps.
-
-    Returns what the LED display should show including:
-    - mode: current display mode (normal, syncing, trade, error)
-    - error_message: error text for scrolling (only in error mode)
-    - trade_is_buy: true for buy, false for sell (only in trade mode)
-    - since: timestamp when mode last changed
-    - led3: RGB values for LED 3 (sync indicator)
-    - led4: RGB values for LED 4 (processing indicator)
-    - ticker_text: scrolling ticker with portfolio info
-    - activity_message: current activity (higher priority)
-    - ticker_speed: scroll speed in ms per frame
-    - led_brightness: brightness 0-255
-
-    Note: This endpoint is called ~10 times/second by the LED controller.
-    Response is cached for 2 seconds to prevent DB connection exhaustion.
-    Mode/activity changes are reflected immediately from in-memory state.
-    """
-    import asyncio
-    from app.infrastructure.hardware.led_display import get_display_state
-    from app.infrastructure.cache import cache
-
-    # Get live display state (in-memory, no DB)
-    state = get_display_state()
-
-    # Check if we have cached ticker data
-    cached = cache.get("led_display:ticker_data")
-
-    # Use cached ticker/settings if available, otherwise fetch fresh with timeout
-    if cached is not None:
-        state["ticker_text"] = state.get("ticker_text") or cached.get("ticker_text", "")
-        state["ticker_speed"] = cached.get("ticker_speed", 50.0)
-        state["led_brightness"] = cached.get("led_brightness", 150)
-    else:
-        # Fetch fresh data with 2 second timeout to prevent hanging
-        try:
-            await asyncio.wait_for(_refresh_led_display_cache(settings_repo, portfolio_service), timeout=2.0)
-            cached = cache.get("led_display:ticker_data") or {}
-        except asyncio.TimeoutError:
-            # On timeout, use empty ticker and cache it to prevent retries
-            cache.set("led_display:ticker_data", {
-                "ticker_text": "",
-                "ticker_speed": 50.0,
-                "led_brightness": 150,
-            }, ttl_seconds=5)
-            cached = {}
-        state["ticker_text"] = state.get("ticker_text") or cached.get("ticker_text", "")
-        state["ticker_speed"] = cached.get("ticker_speed", 50.0)
-        state["led_brightness"] = cached.get("led_brightness", 150)
-
-    return state
-
-
-async def _refresh_led_display_cache(
-    settings_repo: SettingsRepositoryDep,
-    portfolio_service: PortfolioServiceDep,
-):
-    """Refresh cached LED display data (ticker text + settings)."""
-    from app.infrastructure.cache import cache
-
-    try:
-        # Build ticker text
-        ticker = await _build_ticker_text(settings_repo, portfolio_service)
-
-        # Get settings
-        ticker_speed = await settings_repo.get_float("ticker_speed", 50.0)
-        led_brightness = int(await settings_repo.get_float("led_brightness", 150))
-
-        # Cache for 2 seconds
-        cache.set("led_display:ticker_data", {
-            "ticker_text": ticker,
-            "ticker_speed": ticker_speed,
-            "led_brightness": led_brightness,
-        }, ttl_seconds=2)
-    except Exception:
-        # On error, set minimal cache to prevent rapid retries
-        cache.set("led_display:ticker_data", {
-            "ticker_text": "",
-            "ticker_speed": 50.0,
-            "led_brightness": 150,
-        }, ttl_seconds=2)
-
-
-@router.post("/led/test")
-async def test_led():
-    """Test LED display with trade animation."""
-    from app.infrastructure.events import emit, SystemEvent
-
-    emit(SystemEvent.TRADE_EXECUTED, is_buy=True)
-    return {"status": "success", "message": "Test animation triggered"}
 
 
 @router.post("/sync/portfolio")

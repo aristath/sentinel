@@ -10,7 +10,7 @@ from datetime import datetime
 
 from app.infrastructure.external.tradernet import get_tradernet_client
 from app.infrastructure.locking import file_lock
-from app.infrastructure.hardware.led_display import set_activity
+from app.infrastructure.hardware.display_service import set_activity, clear_activity
 from app.infrastructure.events import emit, SystemEvent
 from app.infrastructure.database.manager import get_db_manager
 
@@ -33,7 +33,7 @@ async def _sync_trades_internal():
     logger.info("Starting trade sync from Tradernet...")
 
     emit(SystemEvent.TRADE_SYNC_START)
-    set_activity("SYNCING TRADES...", duration=15.0)
+    set_activity("SYNCING TRADES...")
 
     try:
         # Connect to broker
@@ -117,11 +117,12 @@ async def _sync_trades_internal():
         logger.info(f"Trade sync complete: {inserted} inserted, {skipped} skipped")
 
         emit(SystemEvent.TRADE_SYNC_COMPLETE)
-        set_activity("TRADE SYNC COMPLETE", duration=5.0)
 
     except Exception as e:
         logger.error(f"Trade sync failed: {e}", exc_info=True)
         emit(SystemEvent.ERROR_OCCURRED, message="TRADE SYNC FAILED")
+    finally:
+        clear_activity()
 
 
 async def clear_and_resync_trades():

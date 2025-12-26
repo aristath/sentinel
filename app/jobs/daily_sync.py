@@ -6,7 +6,7 @@ from datetime import datetime
 from app.infrastructure.external.tradernet import get_tradernet_client
 from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.events import emit, SystemEvent
-from app.infrastructure.hardware.led_display import set_activity
+from app.infrastructure.hardware.display_service import set_activity, clear_activity
 from app.infrastructure.locking import file_lock
 from app.infrastructure.database.manager import get_db_manager
 from app.domain.value_objects.currency import Currency
@@ -35,7 +35,7 @@ async def _sync_portfolio_internal():
     """Internal portfolio sync implementation."""
     logger.info("Starting portfolio sync")
 
-    set_activity("SYNCING PORTFOLIO...", duration=30.0)
+    set_activity("SYNCING PORTFOLIO...")
     emit(SystemEvent.SYNC_START)
 
     client = get_tradernet_client()
@@ -260,6 +260,8 @@ async def _sync_portfolio_internal():
         emit(SystemEvent.SYNC_COMPLETE)
         emit(SystemEvent.ERROR_OCCURRED, message="PORTFOLIO SYNC FAILED")
         raise
+    finally:
+        clear_activity()
 
 
 async def sync_prices():
@@ -276,7 +278,7 @@ async def _sync_prices_internal():
     """Internal price sync implementation."""
     logger.info("Starting price sync")
 
-    set_activity("UPDATING STOCK PRICES...", duration=60.0)
+    set_activity("UPDATING STOCK PRICES...")
     emit(SystemEvent.SYNC_START)
 
     try:
@@ -336,7 +338,7 @@ async def sync_stock_currencies():
     """
     logger.info("Starting stock currency sync")
 
-    set_activity("SYNCING STOCK CURRENCIES...", duration=30.0)
+    set_activity("SYNCING STOCK CURRENCIES...")
 
     client = get_tradernet_client()
 

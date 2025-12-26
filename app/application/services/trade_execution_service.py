@@ -15,7 +15,7 @@ from app.domain.factories.trade_factory import TradeFactory
 from app.domain.events import TradeExecutedEvent, get_event_bus
 from app.infrastructure.external.tradernet import TradernetClient
 from app.infrastructure.events import emit, SystemEvent
-from app.infrastructure.hardware.led_display import set_activity
+from app.infrastructure.hardware.display_service import set_activity
 from app.application.services.currency_exchange_service import (
     CurrencyExchangeService,
 )
@@ -222,7 +222,7 @@ class TradeExecutionService:
                                     f"for {trade.symbol} (need {required:.2f} {trade_currency})"
                                 )
 
-                                set_activity(f"CONVERTING {source_currency} TO {trade_currency}...", duration=10.0)
+                                set_activity(f"CONVERTING {source_currency} TO {trade_currency}...")
 
                                 # Ensure we have enough balance
                                 if currency_service.ensure_balance(
@@ -230,7 +230,7 @@ class TradeExecutionService:
                                 ):
                                     converted_currencies.add(trade_currency)
                                     logger.info(f"Currency conversion successful for {trade_currency}")
-                                    set_activity(f"CURRENCY CONVERSION COMPLETE", duration=3.0)
+                                    set_activity("CURRENCY CONVERSION COMPLETE")
                                 else:
                                     logger.warning(
                                         f"Currency conversion failed for {trade.symbol}: "
@@ -314,7 +314,7 @@ class TradeExecutionService:
                 side_text = "BUYING" if trade.side.upper() == "BUY" else "SELLING"
                 value = int(trade.quantity * trade.estimated_price)
                 symbol_short = trade.symbol.split(".")[0]  # Remove .US/.EU suffix
-                set_activity(f"{side_text} {symbol_short} €{value}", duration=10.0)
+                set_activity(f"{side_text} {symbol_short} €{value}")
 
                 result = client.place_order(
                     symbol=trade.symbol,

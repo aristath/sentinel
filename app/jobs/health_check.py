@@ -16,7 +16,7 @@ from datetime import datetime
 
 from app.config import settings
 from app.infrastructure.events import emit, SystemEvent
-from app.infrastructure.hardware.led_display import set_activity
+from app.infrastructure.hardware.display_service import set_activity, clear_activity
 from app.infrastructure.locking import file_lock
 
 logger = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ async def _run_health_check_internal():
     """Internal health check implementation."""
     logger.info("Starting database health check...")
 
-    set_activity("CHECKING DATABASE HEALTH...", duration=30.0)
+    set_activity("CHECKING DATABASE HEALTH...")
 
     issues = []
 
@@ -105,11 +105,12 @@ async def _run_health_check_internal():
             emit(SystemEvent.ERROR_OCCURRED, message=f"DB HEALTH: {len(issues)} ISSUE(S)")
         else:
             logger.info("Database health check passed: all databases healthy")
-            set_activity("DATABASE HEALTH OK", duration=5.0)
 
     except Exception as e:
         logger.error(f"Health check failed: {e}", exc_info=True)
         emit(SystemEvent.ERROR_OCCURRED, message="HEALTH CHECK FAILED")
+    finally:
+        clear_activity()
 
 
 async def _check_database_integrity(db_path: Path) -> str:
