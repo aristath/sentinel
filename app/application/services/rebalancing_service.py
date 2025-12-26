@@ -60,6 +60,7 @@ from app.domain.analytics import (
 )
 from app.infrastructure.recommendation_cache import get_recommendation_cache
 from app.application.services.recommendation.portfolio_context_builder import build_portfolio_context
+from app.application.services.recommendation.technical_data_calculator import get_technical_data_for_positions
 
 logger = logging.getLogger(__name__)
 
@@ -120,99 +121,6 @@ class RebalancingService:
         self._tradernet_client = tradernet_client
         self._exchange_rate_service = exchange_rate_service
 
-    async def _get_technical_data_for_positions(
-        self,
-        symbols: List[str]
-    ) -> Dict[str, TechnicalData]:
-        """
-        Calculate technical indicators for instability detection.
-
-        Uses per-symbol history databases to calculate:
-        - Current volatility (last 60 days)
-        - Historical volatility (last 365 days)
-        - Distance from 200-day MA
-        """
-        result = {}
-
-        for symbol in symbols:
-            try:
-                history_db = await self._db_manager.history(symbol)
-                rows = await history_db.fetchall(
-                    """
-                    SELECT date, close_price FROM daily_prices
-                    ORDER BY date DESC LIMIT 400
-                    """,
-                )
-
-                if len(rows) < 60:
-                    result[symbol] = TechnicalData(
-                        current_volatility=0.20,
-                        historical_volatility=0.20,
-                        distance_from_ma_200=0.0
-                    )
-                    continue
-
-                closes = np.array([row['close_price'] for row in reversed(rows)])
-                closes_series = pd.Series(closes)
-
-                if np.any(closes <= 0):
-                    logger.warning(f"Zero/negative prices detected for {symbol}, using fallback values")
-                    result[symbol] = TechnicalData(
-                        current_volatility=0.20,
-                        historical_volatility=0.20,
-                        distance_from_ma_200=0.0
-                    )
-                    continue
-
-                # Current volatility (last 60 days) using empyrical
-                if len(closes) >= 60:
-                    recent_returns = np.diff(closes[-60:]) / closes[-60:-1]
-                    current_vol = float(empyrical.annual_volatility(recent_returns))
-                    if not np.isfinite(current_vol) or current_vol < 0:
-                        current_vol = 0.20
-                else:
-                    current_vol = 0.20
-
-                # Historical volatility using empyrical
-                returns = np.diff(closes) / closes[:-1]
-                historical_vol = float(empyrical.annual_volatility(returns))
-                if not np.isfinite(historical_vol) or historical_vol < 0:
-                    historical_vol = 0.20
-
-                # Distance from 200-day EMA using pandas-ta
-                if len(closes) >= 200:
-                    ema_200 = ta.ema(closes_series, length=200)
-                    if ema_200 is not None and len(ema_200) > 0 and not pd.isna(ema_200.iloc[-1]):
-                        ema_value = float(ema_200.iloc[-1])
-                    else:
-                        ema_value = float(np.mean(closes[-200:]))
-                    current_price = float(closes[-1])
-                    distance = (current_price - ema_value) / ema_value if ema_value > 0 else 0.0
-                else:
-                    distance = 0.0
-
-                result[symbol] = TechnicalData(
-                    current_volatility=current_vol,
-                    historical_volatility=historical_vol,
-                    distance_from_ma_200=distance
-                )
-
-            except (ValueError, ZeroDivisionError) as e:
-                logger.warning(f"Invalid data for {symbol}: {e}")
-                result[symbol] = TechnicalData(
-                    current_volatility=0.20,
-                    historical_volatility=0.20,
-                    distance_from_ma_200=0.0
-                )
-            except Exception as e:
-                logger.error(f"Unexpected error getting technical data for {symbol}: {e}", exc_info=True)
-                result[symbol] = TechnicalData(
-                    current_volatility=0.20,
-                    historical_volatility=0.20,
-                    distance_from_ma_200=0.0
-                )
-
-        return result
 
 
     async def get_recommendations(self, limit: int = 3) -> List[Recommendation]:
