@@ -4,7 +4,6 @@ Orchestrates trade execution via Tradernet and records trades.
 """
 
 import logging
-from datetime import datetime
 from typing import List, Optional
 
 from app.application.services.currency_exchange_service import (

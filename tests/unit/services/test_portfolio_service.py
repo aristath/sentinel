@@ -4,7 +4,7 @@ These tests ensure portfolio allocations are calculated correctly.
 Wrong allocations could cause the rebalancer to make incorrect decisions.
 """
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 

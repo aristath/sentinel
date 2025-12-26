@@ -4,8 +4,6 @@
 class DomainError(Exception):
     """Base exception for domain errors."""
 
-    pass
-
 
 class StockNotFoundError(DomainError):
     """Raised when a stock is not found."""
