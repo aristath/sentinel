@@ -36,6 +36,77 @@ async def run_health_check():
         await _run_health_check_internal()
 
 
+async def _check_core_databases(issues: list) -> None:
+    """Check integrity of core databases."""
+    core_dbs = [
+        ("config.db", "Configuration database"),
+        ("ledger.db", "Ledger database"),
+        ("state.db", "State database"),
+        ("cache.db", "Cache database"),
+    ]
+
+    for db_file, description in core_dbs:
+        db_path = Path(settings.data_dir) / db_file
+        if db_path.exists():
+            result = await _check_database_integrity(db_path)
+            if result != "ok":
+                issues.append(
+                    {
+                        "database": db_file,
+                        "description": description,
+                        "error": result,
+                        "recoverable": db_file == "cache.db",
+                    }
+                )
+                logger.error(f"Integrity check failed for {db_file}: {result}")
+
+                if db_file == "cache.db":
+                    await _rebuild_cache_db(db_path)
+        else:
+            logger.warning(f"Database not found: {db_file}")
+
+
+async def _check_history_databases(issues: list) -> None:
+    """Check integrity of per-symbol history databases."""
+    history_dir = Path(settings.data_dir) / "history"
+    if not history_dir.exists():
+        return
+
+    for db_file in history_dir.glob("*.db"):
+        result = await _check_database_integrity(db_file)
+        if result != "ok":
+            symbol = db_file.stem
+            issues.append(
+                {
+                    "database": f"history/{db_file.name}",
+                    "description": f"History for {symbol}",
+                    "error": result,
+                    "recoverable": True,
+                }
+            )
+            logger.error(f"Integrity check failed for {db_file.name}: {result}")
+            await _rebuild_symbol_history(db_file, symbol)
+
+
+async def _check_legacy_database(issues: list) -> None:
+    """Check integrity of legacy database if it exists."""
+    legacy_db = Path(settings.database_path)
+    if not legacy_db.exists():
+        return
+
+    result = await _check_database_integrity(legacy_db)
+    if result != "ok":
+        issues.append(
+            {
+                "database": "trader.db (legacy)",
+                "description": "Legacy database",
+                "error": result,
+                "recoverable": False,
+            }
+        )
+        logger.error(f"Integrity check failed for legacy database: {result}")
+
+
 async def _run_health_check_internal():
     """Internal health check implementation."""
     logger.info("Starting database health check...")
@@ -45,72 +116,10 @@ async def _run_health_check_internal():
     issues = []
 
     try:
-        # Check core databases
-        core_dbs = [
-            ("config.db", "Configuration database"),
-            ("ledger.db", "Ledger database"),
-            ("state.db", "State database"),
-            ("cache.db", "Cache database"),
-        ]
+        await _check_core_databases(issues)
+        await _check_history_databases(issues)
+        await _check_legacy_database(issues)
 
-        for db_file, description in core_dbs:
-            db_path = Path(settings.data_dir) / db_file
-            if db_path.exists():
-                result = await _check_database_integrity(db_path)
-                if result != "ok":
-                    issues.append(
-                        {
-                            "database": db_file,
-                            "description": description,
-                            "error": result,
-                            "recoverable": db_file
-                            == "cache.db",  # Only cache is rebuildable
-                        }
-                    )
-                    logger.error(f"Integrity check failed for {db_file}: {result}")
-
-                    if db_file == "cache.db":
-                        # Cache can be safely rebuilt
-                        await _rebuild_cache_db(db_path)
-            else:
-                logger.warning(f"Database not found: {db_file}")
-
-        # Check per-symbol history databases
-        history_dir = Path(settings.data_dir) / "history"
-        if history_dir.exists():
-            for db_file in history_dir.glob("*.db"):
-                result = await _check_database_integrity(db_file)
-                if result != "ok":
-                    symbol = db_file.stem
-                    issues.append(
-                        {
-                            "database": f"history/{db_file.name}",
-                            "description": f"History for {symbol}",
-                            "error": result,
-                            "recoverable": True,
-                        }
-                    )
-                    logger.error(f"Integrity check failed for {db_file.name}: {result}")
-
-                    # Per-symbol databases can be rebuilt from Yahoo
-                    await _rebuild_symbol_history(db_file, symbol)
-
-        # Check legacy database if it exists
-        legacy_db = Path(settings.database_path)
-        if legacy_db.exists():
-            result = await _check_database_integrity(legacy_db)
-            if result != "ok":
-                issues.append(
-                    {
-                        "database": "trader.db (legacy)",
-                        "description": "Legacy database",
-                        "error": result,
-                        "recoverable": False,
-                    }
-                )
-                logger.error(f"Integrity check failed for legacy database: {result}")
-
-        # Report results
         if issues:
             await _report_issues(issues)
             error_msg = f"DB HEALTH: {len(issues)} ISSUE(S)"

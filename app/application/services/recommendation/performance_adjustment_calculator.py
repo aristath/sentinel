@@ -59,12 +59,6 @@ async def get_performance_adjusted_weights(
         geo_attribution = attribution.get("geography", {})
         ind_attribution = attribution.get("industry", {})
 
-        # Adjust weights based on performance
-        # If a geography/industry outperformed, increase its target slightly
-        adjusted_geo: Dict[str, float] = {}
-        adjusted_ind: Dict[str, float] = {}
-
-        # Get base allocation targets
         allocations = await allocation_repo.get_all()
 
         base_geo_weights = {
@@ -78,7 +72,6 @@ async def get_performance_adjusted_weights(
             if key.startswith("industry:")
         }
 
-        # Calculate average return for comparison
         avg_geo_return = (
             sum(geo_attribution.values()) / len(geo_attribution)
             if geo_attribution
@@ -90,31 +83,12 @@ async def get_performance_adjusted_weights(
             else 0.0
         )
 
-        # Adjust geography weights (max 3% adjustment - reduced influence)
-        for geo, base_weight in base_geo_weights.items():
-            perf_return = geo_attribution.get(geo, 0.0)
-            if perf_return > avg_geo_return * 1.2:  # 20% above average
-                # Increase weight by up to 3%
-                adjustment = min(0.03, (perf_return - avg_geo_return) * 0.1)
-                adjusted_geo[geo] = base_weight + adjustment
-            elif perf_return < avg_geo_return * 0.8:  # 20% below average
-                # Decrease weight by up to 3%
-                adjustment = min(0.03, (avg_geo_return - perf_return) * 0.1)
-                adjusted_geo[geo] = max(0.0, base_weight - adjustment)
-            else:
-                adjusted_geo[geo] = base_weight
-
-        # Adjust industry weights (max 2% adjustment - reduced influence)
-        for ind, base_weight in base_ind_weights.items():
-            perf_return = ind_attribution.get(ind, 0.0)
-            if perf_return > avg_ind_return * 1.2:  # 20% above average
-                adjustment = min(0.02, (perf_return - avg_ind_return) * 0.1)
-                adjusted_ind[ind] = base_weight + adjustment
-            elif perf_return < avg_ind_return * 0.8:  # 20% below average
-                adjustment = min(0.02, (avg_ind_return - perf_return) * 0.1)
-                adjusted_ind[ind] = max(0.0, base_weight - adjustment)
-            else:
-                adjusted_ind[ind] = base_weight
+        adjusted_geo = _adjust_geo_weights(
+            base_geo_weights, geo_attribution, avg_geo_return
+        )
+        adjusted_ind = _adjust_ind_weights(
+            base_ind_weights, ind_attribution, avg_ind_return
+        )
 
         # Cache the result (48h TTL)
         if portfolio_hash and (adjusted_geo or adjusted_ind):

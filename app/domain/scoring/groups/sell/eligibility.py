@@ -13,6 +13,56 @@ from app.domain.scoring.constants import (
 )
 
 
+def _parse_date_string(date_str: str) -> Optional[datetime]:
+    """Parse ISO date string, handling timezone."""
+    try:
+        date = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        if date.tzinfo:
+            date = date.replace(tzinfo=None)
+        return date
+    except (ValueError, TypeError):
+        return None
+
+
+def _check_min_hold_time(
+    first_bought_at: Optional[str], min_hold_days: int
+) -> tuple[bool, Optional[str]]:
+    """Check if position has been held for minimum required days."""
+    if not first_bought_at:
+        return True, None
+
+    bought_date = _parse_date_string(first_bought_at)
+    if not bought_date:
+        return True, None  # Unknown date - allow
+
+    days_held = (datetime.now() - bought_date).days
+    if days_held < min_hold_days:
+        return False, f"Held only {days_held} days (min {min_hold_days})"
+
+    return True, None
+
+
+def _check_sell_cooldown(
+    last_sold_at: Optional[str], sell_cooldown_days: int
+) -> tuple[bool, Optional[str]]:
+    """Check if enough time has passed since last sell."""
+    if not last_sold_at:
+        return True, None
+
+    sold_date = _parse_date_string(last_sold_at)
+    if not sold_date:
+        return True, None  # Unknown date - allow
+
+    days_since_sell = (datetime.now() - sold_date).days
+    if days_since_sell < sell_cooldown_days:
+        return (
+            False,
+            f"Sold {days_since_sell} days ago (cooldown {sell_cooldown_days})",
+        )
+
+    return True, None
+
+
 def check_sell_eligibility(
     allow_sell: bool,
     profit_pct: float,
@@ -28,42 +78,21 @@ def check_sell_eligibility(
     Returns:
         (is_eligible, block_reason) tuple
     """
-    # Check allow_sell flag
     if not allow_sell:
         return False, "allow_sell=false"
 
-    # Check loss threshold
     if profit_pct < max_loss_threshold:
         return (
             False,
             f"Loss {profit_pct*100:.1f}% exceeds {max_loss_threshold*100:.0f}% threshold",
         )
 
-    # Check minimum hold time
-    if first_bought_at:
-        try:
-            bought_date = datetime.fromisoformat(first_bought_at.replace("Z", "+00:00"))
-            if bought_date.tzinfo:
-                bought_date = bought_date.replace(tzinfo=None)
-            days_held = (datetime.now() - bought_date).days
-            if days_held < min_hold_days:
-                return False, f"Held only {days_held} days (min {min_hold_days})"
-        except (ValueError, TypeError):
-            pass  # Unknown date - allow
+    eligible, reason = _check_min_hold_time(first_bought_at, min_hold_days)
+    if not eligible:
+        return False, reason
 
-    # Check cooldown from last sell
-    if last_sold_at:
-        try:
-            sold_date = datetime.fromisoformat(last_sold_at.replace("Z", "+00:00"))
-            if sold_date.tzinfo:
-                sold_date = sold_date.replace(tzinfo=None)
-            days_since_sell = (datetime.now() - sold_date).days
-            if days_since_sell < sell_cooldown_days:
-                return (
-                    False,
-                    f"Sold {days_since_sell} days ago (cooldown {sell_cooldown_days})",
-                )
-        except (ValueError, TypeError):
-            pass  # Unknown date - allow
+    eligible, reason = _check_sell_cooldown(last_sold_at, sell_cooldown_days)
+    if not eligible:
+        return False, reason
 
     return True, None

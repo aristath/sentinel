@@ -288,6 +288,53 @@ class CurrencyExchangeService:
             quantity=amount,
         )
 
+    def _get_balances(self, currency: str, source_currency: str) -> tuple[float, float]:
+        """Get current and source currency balances."""
+        balances = self.client.get_cash_balances()
+        current_balance = 0.0
+        source_balance = 0.0
+
+        for bal in balances:
+            if bal.currency == currency:
+                current_balance = bal.amount
+            elif bal.currency == source_currency:
+                source_balance = bal.amount
+
+        return current_balance, source_balance
+
+    def _convert_for_balance(
+        self, currency: str, source_currency: str, needed: float, source_balance: float
+    ) -> bool:
+        """Convert source currency to target currency to meet balance requirement."""
+        needed_with_buffer = needed * 1.02
+
+        rate = self.get_rate(source_currency, currency)
+        if not rate:
+            logger.error(f"Could not get rate for {source_currency}/{currency}")
+            return False
+
+        source_amount_needed = needed_with_buffer / rate
+
+        if source_balance < source_amount_needed:
+            logger.warning(
+                f"Insufficient {source_currency} to convert: "
+                f"need {source_amount_needed:.2f}, have {source_balance:.2f}"
+            )
+            return False
+
+        logger.info(
+            f"Converting {source_amount_needed:.2f} {source_currency} "
+            f"to {currency} (need {needed:.2f})"
+        )
+        result = self.exchange(source_currency, currency, source_amount_needed)
+
+        if result:
+            logger.info(f"Currency exchange completed: {result.order_id}")
+            return True
+
+        logger.error(f"Failed to convert {source_currency} to {currency}")
+        return False
+
     def ensure_balance(
         self, currency: str, min_amount: float, source_currency: str = "EUR"
     ) -> bool:
@@ -315,16 +362,7 @@ class CurrencyExchangeService:
                 return False
 
         try:
-            # Get current balances
-            balances = self.client.get_cash_balances()
-            current_balance = 0.0
-            source_balance = 0.0
-
-            for bal in balances:
-                if bal.currency == currency:
-                    current_balance = bal.amount
-                elif bal.currency == source_currency:
-                    source_balance = bal.amount
+            current_balance, source_balance = self._get_balances(currency, source_currency)
 
             if current_balance >= min_amount:
                 logger.info(
@@ -332,11 +370,8 @@ class CurrencyExchangeService:
                 )
                 return True
 
-            # Calculate how much we need to convert
             needed = min_amount - current_balance
-
-            # Add 2% buffer for rate fluctuations and fees
-            needed_with_buffer = needed * 1.02
+            return self._convert_for_balance(currency, source_currency, needed, source_balance)
 
             # Get exchange rate to calculate source amount needed
             rate = self.get_rate(source_currency, currency)
