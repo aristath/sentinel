@@ -449,6 +449,15 @@ async def get_all_strategy_recommendations():
 
         # Cache for 5 minutes
         cache.set(cache_key, result, ttl_seconds=300)
+
+        # Also cache to LED ticker keys for display synchronization
+        if result.get("holistic", {}).get("steps"):
+            depth = settings.recommendation_depth
+            led_cache_key = f"multi_step_recommendations:diversification:{int(depth)}:holistic"
+            cache.set(led_cache_key, result["holistic"], ttl_seconds=300)
+            cache.set("multi_step_recommendations:diversification:default:holistic", result["holistic"], ttl_seconds=300)
+            logger.debug(f"LED ticker cache updated: {led_cache_key}")
+
         return result
 
     except HTTPException:
