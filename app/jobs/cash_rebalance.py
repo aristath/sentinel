@@ -11,7 +11,7 @@ from app.config import settings
 from app.infrastructure.external.tradernet import get_tradernet_client
 from app.infrastructure.locking import file_lock
 from app.infrastructure.events import emit, SystemEvent
-from app.infrastructure.hardware.led_display import set_activity
+from app.infrastructure.hardware.display_service import set_activity, clear_activity
 from app.infrastructure.database.manager import get_db_manager
 from app.infrastructure.cache import cache
 from app.infrastructure.recommendation_cache import get_recommendation_cache
@@ -61,7 +61,7 @@ async def _check_and_rebalance_internal():
     logger.info("Starting trade cycle check...")
 
     emit(SystemEvent.REBALANCE_START)
-    set_activity("CHECKING TRADE OPPORTUNITIES...", duration=300.0)
+    set_activity("CHECKING TRADE OPPORTUNITIES...")
 
     try:
         # Step 0: Sync trades from Tradernet for accurate cooldown calculations
@@ -109,7 +109,7 @@ async def _check_and_rebalance_internal():
 
         # Step 2: Build portfolio context
         logger.info("Step 2: Building portfolio context...")
-        set_activity("BUILDING PORTFOLIO CONTEXT...", duration=30.0)
+        set_activity("BUILDING PORTFOLIO CONTEXT...")
 
         positions = await position_repo.get_all()
         stocks = await stock_repo.get_all_active()
@@ -159,7 +159,7 @@ async def _check_and_rebalance_internal():
 
         # Step 3: Get next action from holistic planner
         logger.info("Step 3: Getting recommendation from holistic planner...")
-        set_activity("GETTING HOLISTIC RECOMMENDATION...", duration=30.0)
+        set_activity("GETTING HOLISTIC RECOMMENDATION...")
 
         next_action = await _get_next_holistic_action()
 
@@ -167,7 +167,7 @@ async def _check_and_rebalance_internal():
             logger.info("No trades recommended this cycle")
             emit(SystemEvent.REBALANCE_COMPLETE)
             await _refresh_recommendation_cache()
-            set_activity("REBALANCE CHECK COMPLETE", duration=5.0)
+            clear_activity()
             return
 
         # Check P&L guardrails for the recommended action
@@ -269,11 +269,12 @@ async def _check_and_rebalance_internal():
         emit(SystemEvent.SYNC_COMPLETE)
         await sync_portfolio()
         await _refresh_recommendation_cache()
-        set_activity("REBALANCE CHECK COMPLETE", duration=5.0)
 
     except Exception as e:
         logger.error(f"Trade cycle error: {e}", exc_info=True)
         emit(SystemEvent.ERROR_OCCURRED, message="TRADE CYCLE ERROR")
+    finally:
+        clear_activity()
 
 
 async def _get_next_holistic_action() -> "Recommendation | None":

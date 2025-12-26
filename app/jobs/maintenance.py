@@ -15,7 +15,7 @@ from pathlib import Path
 
 from app.config import settings
 from app.infrastructure.locking import file_lock
-from app.infrastructure.hardware.led_display import set_activity
+from app.infrastructure.hardware.display_service import set_activity, clear_activity
 from app.infrastructure.events import emit, SystemEvent
 from app.infrastructure.database.manager import get_db_manager
 
@@ -37,7 +37,7 @@ async def _create_backup_internal():
     logger.info("Starting database backup")
 
     emit(SystemEvent.BACKUP_START)
-    set_activity("BACKING UP DATABASE...", duration=60.0)
+    set_activity("BACKING UP DATABASE...")
 
     try:
         # Ensure backup directory exists
@@ -69,12 +69,13 @@ async def _create_backup_internal():
         await _cleanup_old_backups(backup_dir)
 
         emit(SystemEvent.BACKUP_COMPLETE)
-        set_activity("BACKUP COMPLETE", duration=5.0)
 
     except Exception as e:
         logger.error(f"Database backup failed: {e}")
         emit(SystemEvent.ERROR_OCCURRED, message="BACKUP FAILED")
         raise
+    finally:
+        clear_activity()
 
 
 def _backup_database(source_path: Path, dest_path: Path):
@@ -134,7 +135,7 @@ async def _checkpoint_wal_internal():
     """Internal WAL checkpoint implementation."""
     logger.info("Running WAL checkpoint on all databases")
 
-    set_activity("CHECKPOINTING DATABASE...", duration=30.0)
+    set_activity("CHECKPOINTING DATABASE...")
 
     try:
         db_manager = get_db_manager()
@@ -177,7 +178,7 @@ async def _integrity_check_internal():
     logger.info("Running database integrity check")
 
     emit(SystemEvent.INTEGRITY_CHECK_START)
-    set_activity("CHECKING DATABASE INTEGRITY...", duration=120.0)
+    set_activity("CHECKING DATABASE INTEGRITY...")
 
     try:
         db_manager = get_db_manager()
@@ -206,7 +207,6 @@ async def _integrity_check_internal():
 
         if all_ok:
             emit(SystemEvent.INTEGRITY_CHECK_COMPLETE)
-            set_activity("INTEGRITY CHECK PASSED", duration=5.0)
         else:
             emit(SystemEvent.ERROR_OCCURRED, message="INTEGRITY CHECK FAILED")
 
@@ -214,6 +214,8 @@ async def _integrity_check_internal():
         logger.error(f"Database integrity check failed: {e}")
         emit(SystemEvent.ERROR_OCCURRED, message="INTEGRITY CHECK FAILED")
         raise
+    finally:
+        clear_activity()
 
 
 async def cleanup_old_daily_prices():
@@ -232,7 +234,7 @@ async def _cleanup_old_daily_prices_internal():
     logger.info("Cleaning up old daily prices")
 
     emit(SystemEvent.CLEANUP_START)
-    set_activity("CLEANING OLD PRICES...", duration=60.0)
+    set_activity("CLEANING OLD PRICES...")
 
     try:
         db_manager = get_db_manager()
@@ -295,7 +297,7 @@ async def _cleanup_expired_caches_internal():
     """Internal cache cleanup implementation."""
     logger.info("Cleaning up expired caches")
 
-    set_activity("CLEANING EXPIRED CACHES...", duration=30.0)
+    set_activity("CLEANING EXPIRED CACHES...")
 
     try:
         from app.infrastructure.recommendation_cache import get_recommendation_cache
@@ -338,7 +340,7 @@ async def _cleanup_old_snapshots_internal():
     """Internal snapshot cleanup implementation."""
     logger.info("Cleaning up old portfolio snapshots")
 
-    set_activity("CLEANING OLD SNAPSHOTS...", duration=30.0)
+    set_activity("CLEANING OLD SNAPSHOTS...")
 
     try:
         db_manager = get_db_manager()
@@ -377,7 +379,7 @@ async def run_daily_maintenance():
     logger.info("Starting daily maintenance")
 
     emit(SystemEvent.MAINTENANCE_START)
-    set_activity("RUNNING MAINTENANCE...", duration=180.0)
+    set_activity("RUNNING MAINTENANCE...")
 
     try:
         # 1. Create backup first (before any cleanup)
@@ -393,12 +395,13 @@ async def run_daily_maintenance():
 
         logger.info("Daily maintenance complete")
         emit(SystemEvent.MAINTENANCE_COMPLETE)
-        set_activity("MAINTENANCE COMPLETE", duration=5.0)
 
     except Exception as e:
         logger.error(f"Daily maintenance failed: {e}")
         emit(SystemEvent.ERROR_OCCURRED, message="MAINTENANCE FAILED")
         raise
+    finally:
+        clear_activity()
 
 
 async def run_weekly_maintenance():

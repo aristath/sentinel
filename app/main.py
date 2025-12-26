@@ -14,7 +14,6 @@ from app.infrastructure.database.manager import init_databases, get_db_manager, 
 from app.api import portfolio, stocks, trades, status, allocation, cash_flows, charts, settings as settings_api
 from app.jobs.scheduler import init_scheduler, start_scheduler, stop_scheduler
 from app.infrastructure.external.tradernet import get_tradernet_client
-from app.infrastructure.hardware.led_display import setup_event_subscriptions
 from app.infrastructure.events import emit, SystemEvent
 
 # Configure logging with correlation ID support and log rotation
@@ -76,9 +75,6 @@ async def lifespan(app: FastAPI):
     # Initialize and start scheduler
     await init_scheduler()
     start_scheduler()
-
-    # Setup LED display event subscriptions
-    setup_event_subscriptions()
 
     # Try to connect to Tradernet
     client = get_tradernet_client()

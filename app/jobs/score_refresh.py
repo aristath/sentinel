@@ -9,7 +9,7 @@ from datetime import datetime
 from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.events import emit, SystemEvent
 from app.infrastructure.locking import file_lock
-from app.infrastructure.hardware.led_display import set_activity
+from app.infrastructure.hardware.display_service import set_activity, clear_activity
 from app.infrastructure.database.manager import get_db_manager
 from app.domain.scoring import (
     calculate_stock_score,
@@ -32,7 +32,7 @@ async def _refresh_all_scores_internal():
 
     emit(SystemEvent.SCORE_REFRESH_START)
     emit(SystemEvent.PROCESSING_START)
-    set_activity("REFRESHING STOCK SCORES...", duration=120.0)
+    set_activity("REFRESHING STOCK SCORES...")
 
     try:
         db_manager = get_db_manager()
@@ -119,12 +119,13 @@ async def _refresh_all_scores_internal():
 
         emit(SystemEvent.PROCESSING_END)
         emit(SystemEvent.SCORE_REFRESH_COMPLETE)
-        set_activity("SCORE REFRESH COMPLETE", duration=5.0)
 
     except Exception as e:
         logger.error(f"Score refresh failed: {e}")
         emit(SystemEvent.PROCESSING_END)
         emit(SystemEvent.ERROR_OCCURRED, message="SCORE REFRESH FAILED")
+    finally:
+        clear_activity()
 
 
 async def _build_portfolio_context(db_manager) -> PortfolioContext:

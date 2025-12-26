@@ -5,7 +5,7 @@ import logging
 from app.infrastructure.external.tradernet import get_tradernet_client
 from app.infrastructure.locking import file_lock
 from app.infrastructure.events import emit, SystemEvent
-from app.infrastructure.hardware.led_display import set_activity
+from app.infrastructure.hardware.display_service import set_activity, clear_activity
 from app.infrastructure.database.manager import get_db_manager
 
 logger = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ async def _sync_cash_flows_internal():
     logger.info("Starting cash flow sync")
 
     emit(SystemEvent.CASH_FLOW_SYNC_START)
-    set_activity("SYNCING CASH FLOWS...", duration=30.0)
+    set_activity("SYNCING CASH FLOWS...")
 
     client = get_tradernet_client()
 
@@ -99,9 +99,9 @@ async def _sync_cash_flows_internal():
         )
 
         emit(SystemEvent.CASH_FLOW_SYNC_COMPLETE)
-        set_activity("CASH FLOW SYNC COMPLETE", duration=5.0)
 
     except Exception as e:
         logger.error(f"Cash flow sync failed: {e}", exc_info=True)
         emit(SystemEvent.ERROR_OCCURRED, message="CASH FLOW SYNC FAILED")
-        return
+    finally:
+        clear_activity()

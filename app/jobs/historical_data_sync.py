@@ -11,7 +11,7 @@ from app.config import settings
 from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.locking import file_lock
 from app.infrastructure.events import emit, SystemEvent
-from app.infrastructure.hardware.led_display import set_activity
+from app.infrastructure.hardware.display_service import set_activity, clear_activity
 from app.infrastructure.database.manager import get_db_manager
 
 logger = logging.getLogger(__name__)
@@ -45,13 +45,15 @@ async def _sync_historical_data_internal():
         logger.error(f"Historical data sync failed: {e}")
         emit(SystemEvent.ERROR_OCCURRED, message="HISTORICAL DATA SYNC FAILED")
         raise
+    finally:
+        clear_activity()
 
 
 async def _sync_stock_price_history():
     """Fetch and store historical stock prices for all active stocks."""
     logger.info("Starting stock price history sync (using Yahoo Finance)")
 
-    set_activity("SYNCING HISTORICAL PRICES...", duration=300.0)
+    set_activity("SYNCING HISTORICAL PRICES...")
 
     db_manager = get_db_manager()
 
