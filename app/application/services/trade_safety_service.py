@@ -4,7 +4,7 @@ import logging
 from typing import Optional
 from fastapi import HTTPException
 
-from app.repositories import TradeRepository, PositionRepository
+from app.domain.repositories.protocols import ITradeRepository, IPositionRepository
 from app.infrastructure.external.tradernet import TradernetClient
 from app.domain.value_objects.trade_side import TradeSide
 from app.domain.constants import BUY_COOLDOWN_DAYS
@@ -17,8 +17,8 @@ class TradeSafetyService:
 
     def __init__(
         self,
-        trade_repo: TradeRepository,
-        position_repo: PositionRepository,
+        trade_repo: ITradeRepository,
+        position_repo: IPositionRepository,
     ):
         self._trade_repo = trade_repo
         self._position_repo = position_repo

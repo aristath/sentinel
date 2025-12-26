@@ -6,7 +6,8 @@ Orchestrates stock scoring operations using the long-term value scoring system.
 import logging
 from typing import List, Optional
 
-from app.repositories import StockRepository, ScoreRepository
+from app.repositories import ScoreRepository
+from app.domain.repositories.protocols import IStockRepository
 from app.domain.models import StockScore
 from app.domain.scoring import calculate_stock_score, CalculatedStockScore
 from app.infrastructure.database.manager import DatabaseManager
@@ -65,7 +66,7 @@ class ScoringService:
 
     def __init__(
         self,
-        stock_repo: StockRepository,
+        stock_repo: IStockRepository,
         score_repo: ScoreRepository,
         db_manager: DatabaseManager,
     ):

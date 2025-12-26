@@ -7,7 +7,7 @@ import logging
 from typing import List, Optional
 from datetime import datetime
 
-from app.repositories import TradeRepository, PositionRepository
+from app.domain.repositories.protocols import ITradeRepository, IPositionRepository
 from app.domain.models import Recommendation, Trade
 from app.domain.value_objects.currency import Currency
 from app.domain.value_objects.trade_side import TradeSide
@@ -29,8 +29,8 @@ class TradeExecutionService:
 
     def __init__(
         self,
-        trade_repo: TradeRepository,
-        position_repo: PositionRepository,
+        trade_repo: ITradeRepository,
+        position_repo: IPositionRepository,
         tradernet_client: TradernetClient,
     ):
         self._trade_repo = trade_repo

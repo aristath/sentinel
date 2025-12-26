@@ -3,11 +3,8 @@
 Orchestrates portfolio operations using repositories and domain services.
 """
 
-from app.repositories import (
-    PortfolioRepository,
-    PositionRepository,
-    AllocationRepository,
-)
+from app.repositories import PortfolioRepository
+from app.domain.repositories.protocols import IPositionRepository, IAllocationRepository
 from app.domain.models import AllocationStatus, PortfolioSummary
 from app.domain.services.allocation_calculator import parse_industries
 
@@ -18,8 +15,8 @@ class PortfolioService:
     def __init__(
         self,
         portfolio_repo: PortfolioRepository,
-        position_repo: PositionRepository,
-        allocation_repo: AllocationRepository,
+        position_repo: IPositionRepository,
+        allocation_repo: IAllocationRepository,
     ):
         self._portfolio_repo = portfolio_repo
         self._position_repo = position_repo
