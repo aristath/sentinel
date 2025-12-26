@@ -35,6 +35,199 @@ async def sync_portfolio():
         await _sync_portfolio_internal()
 
 
+async def _fetch_exchange_rates(currencies_needed: set) -> dict:
+    """Fetch exchange rates for currencies."""
+    exchange_rates = {"EUR": 1.0}
+    if not currencies_needed:
+        return exchange_rates
+
+    try:
+        import httpx
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                "https://api.exchangerate-api.com/v4/latest/EUR",
+                timeout=10.0,
+            )
+            if response.status_code == 200:
+                api_rates = response.json().get("rates", {})
+                for curr in currencies_needed:
+                    if curr in api_rates:
+                        exchange_rates[curr] = api_rates[curr]
+                        logger.info(f"Exchange rate {curr}/EUR: {api_rates[curr]}")
+    except Exception as e:
+        logger.warning(f"Failed to fetch exchange rates: {e}")
+
+    fallback_rates = {"USD": 1.05, "HKD": 8.33, "GBP": 0.85}
+    for curr in currencies_needed:
+        if curr not in exchange_rates:
+            exchange_rates[curr] = fallback_rates.get(curr, 1.0)
+            logger.warning(f"Using fallback rate for {curr}: {exchange_rates[curr]}")
+
+    return exchange_rates
+
+
+def _calculate_cash_balance_eur(cash_balances: list, exchange_rates: dict) -> float:
+    """Calculate total cash balance in EUR."""
+    cash_balance = 0.0
+    for cb in cash_balances:
+        if cb.currency == "EUR":
+            cash_balance += cb.amount
+        elif cb.amount > 0:
+            rate = exchange_rates.get(cb.currency, 1.0)
+            cash_balance += cb.amount / rate
+    return cash_balance
+
+
+async def _determine_geography(symbol: str, db_manager) -> Optional[str]:
+    """Determine geography for a symbol."""
+    cursor = await db_manager.config.execute(
+        "SELECT geography FROM stocks WHERE symbol = ?", (symbol,)
+    )
+    row = await cursor.fetchone()
+    if row:
+        return row[0]
+
+    symbol_upper = symbol.upper()
+    if symbol_upper.endswith((".GR", ".DE", ".PA")):
+        return "EU"
+    elif symbol_upper.endswith((".AS", ".HK", ".T")):
+        return "ASIA"
+    elif symbol_upper.endswith(".US"):
+        return "US"
+    return None
+
+
+async def _insert_position(
+    pos,
+    current_price: Optional[float],
+    market_value_eur: Optional[float],
+    exchange_rate: float,
+    dates: dict,
+    db_manager,
+    event_bus,
+) -> float:
+    """Insert a position and return its market value."""
+    await db_manager.state.execute(
+        """
+        INSERT INTO positions
+        (symbol, quantity, avg_price, current_price, currency,
+         currency_rate, market_value_eur, last_updated,
+         first_bought_at, last_sold_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            pos.symbol,
+            pos.quantity,
+            pos.avg_price,
+            current_price,
+            pos.currency or Currency.EUR,
+            exchange_rate,
+            market_value_eur,
+            datetime.now().isoformat(),
+            dates.get("first_bought_at"),
+            dates.get("last_sold_at"),
+        ),
+    )
+
+    updated_position = Position(
+        symbol=pos.symbol,
+        quantity=pos.quantity,
+        avg_price=pos.avg_price,
+        currency=pos.currency or Currency.EUR,
+        currency_rate=exchange_rate,
+        current_price=current_price,
+        market_value_eur=market_value_eur,
+    )
+    event_bus.publish(PositionUpdatedEvent(position=updated_position))
+
+    return market_value_eur or 0.0
+
+
+async def _process_positions(
+    positions: list,
+    saved_price_data: dict,
+    trade_dates: dict,
+    exchange_rates: dict,
+    db_manager,
+    event_bus,
+) -> tuple[float, float, float, dict]:
+    """Process all positions and return totals and geo values."""
+    total_value = 0.0
+    invested_value = 0.0
+    unrealized_pnl = 0.0
+    geo_values = {"EU": 0.0, "ASIA": 0.0, "US": 0.0}
+
+    for pos in positions:
+        price_data = saved_price_data.get(pos.symbol, {})
+        dates = trade_dates.get(pos.symbol, {})
+
+        current_price = price_data.get("current_price")
+        market_value_eur = price_data.get("market_value_eur")
+
+        currency = pos.currency or Currency.EUR
+        exchange_rate = exchange_rates.get(str(currency), 1.0)
+
+        if current_price and exchange_rate > 0:
+            market_value_eur = pos.quantity * current_price / exchange_rate
+
+        cost_basis_eur = (
+            pos.quantity * pos.avg_price / exchange_rate
+            if exchange_rate > 0
+            else pos.quantity * pos.avg_price
+        )
+        invested_value += cost_basis_eur
+
+        if current_price and exchange_rate > 0:
+            position_unrealized_pnl = (
+                (current_price - pos.avg_price) * pos.quantity / exchange_rate
+            )
+            unrealized_pnl += position_unrealized_pnl
+
+        market_value = await _insert_position(
+            pos, current_price, market_value_eur, exchange_rate, dates, db_manager, event_bus
+        )
+        total_value += market_value
+
+        geo = await _determine_geography(pos.symbol, db_manager)
+        if geo:
+            geo_values[geo] = geo_values.get(geo, 0) + market_value
+
+    return total_value, invested_value, unrealized_pnl, geo_values
+
+
+async def _create_portfolio_snapshot(
+    total_value: float,
+    cash_balance: float,
+    invested_value: float,
+    unrealized_pnl: float,
+    geo_values: dict,
+    position_count: int,
+    db_manager,
+) -> None:
+    """Create daily portfolio snapshot."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    await db_manager.state.execute(
+        """
+        INSERT OR REPLACE INTO portfolio_snapshots
+        (date, total_value, cash_balance, invested_value, unrealized_pnl,
+         geo_eu_pct, geo_asia_pct, geo_us_pct, position_count, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        """,
+        (
+            today,
+            total_value,
+            cash_balance,
+            invested_value,
+            unrealized_pnl,
+            geo_values["EU"] / total_value if total_value else 0,
+            geo_values["ASIA"] / total_value if total_value else 0,
+            geo_values["US"] / total_value if total_value else 0,
+            position_count,
+        ),
+    )
+
+
 async def _sync_portfolio_internal():
     """Internal portfolio sync implementation."""
     logger.info("Starting portfolio sync")
@@ -91,7 +284,6 @@ async def _sync_portfolio_internal():
             # Clear existing positions
             await db_manager.state.execute("DELETE FROM positions")
 
-            # Pre-fetch exchange rates for all currencies we'll need (positions + cash)
             currencies_needed = set()
             for pos in positions:
                 currency = pos.currency or Currency.EUR
@@ -101,171 +293,25 @@ async def _sync_portfolio_internal():
                 if cb.currency != "EUR":
                     currencies_needed.add(cb.currency)
 
-            # Fetch rates with simple HTTP call and fallback
-            exchange_rates = {"EUR": 1.0}
-            if currencies_needed:
-                try:
-                    import httpx
-
-                    async with httpx.AsyncClient() as client:
-                        response = await client.get(
-                            "https://api.exchangerate-api.com/v4/latest/EUR",
-                            timeout=10.0,
-                        )
-                        if response.status_code == 200:
-                            api_rates = response.json().get("rates", {})
-                            for curr in currencies_needed:
-                                if curr in api_rates:
-                                    exchange_rates[curr] = api_rates[curr]
-                                    logger.info(
-                                        f"Exchange rate {curr}/EUR: {api_rates[curr]}"
-                                    )
-                except Exception as e:
-                    logger.warning(f"Failed to fetch exchange rates: {e}")
-
-            # Apply fallbacks for any missing rates
-            fallback_rates = {"USD": 1.05, "HKD": 8.33, "GBP": 0.85}
-            for curr in currencies_needed:
-                if curr not in exchange_rates:
-                    exchange_rates[curr] = fallback_rates.get(curr, 1.0)
-                    logger.warning(
-                        f"Using fallback rate for {curr}: {exchange_rates[curr]}"
-                    )
-
-            # Calculate cash balance in EUR using fetched rates
-            cash_balance = 0.0
-            for cb in cash_balances:
-                if cb.currency == "EUR":
-                    cash_balance += cb.amount
-                elif cb.amount > 0:
-                    rate = exchange_rates.get(cb.currency, 1.0)
-                    cash_balance += cb.amount / rate
+            exchange_rates = await _fetch_exchange_rates(currencies_needed)
+            cash_balance = _calculate_cash_balance_eur(cash_balances, exchange_rates)
             logger.info(f"Cash balance calculated: {cash_balance:.2f} EUR")
 
-            # Insert current positions
-            total_value = 0.0
-            invested_value = 0.0
-            unrealized_pnl = 0.0
-            geo_values = {"EU": 0.0, "ASIA": 0.0, "US": 0.0}
-
-            for pos in positions:
-                price_data = saved_price_data.get(pos.symbol, {})
-                dates = trade_dates.get(pos.symbol, {})
-
-                current_price = price_data.get("current_price")
-                market_value_eur = price_data.get("market_value_eur")
-
-                # Use pre-fetched exchange rate
-                currency = pos.currency or Currency.EUR
-                exchange_rate = exchange_rates.get(str(currency), 1.0)
-
-                if current_price and exchange_rate > 0:
-                    market_value_eur = pos.quantity * current_price / exchange_rate
-
-                # Calculate cost basis (invested value)
-                cost_basis_eur = (
-                    pos.quantity * pos.avg_price / exchange_rate
-                    if exchange_rate > 0
-                    else pos.quantity * pos.avg_price
+            event_bus = get_event_bus()
+            total_value, invested_value, unrealized_pnl, geo_values = (
+                await _process_positions(
+                    positions, saved_price_data, trade_dates, exchange_rates, db_manager, event_bus
                 )
-                invested_value += cost_basis_eur
+            )
 
-                # Calculate unrealized P&L
-                if current_price and exchange_rate > 0:
-                    position_unrealized_pnl = (
-                        (current_price - pos.avg_price) * pos.quantity / exchange_rate
-                    )
-                    unrealized_pnl += position_unrealized_pnl
-
-                await db_manager.state.execute(
-                    """
-                    INSERT INTO positions
-                    (symbol, quantity, avg_price, current_price, currency,
-                     currency_rate, market_value_eur, last_updated,
-                     first_bought_at, last_sold_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        pos.symbol,
-                        pos.quantity,
-                        pos.avg_price,
-                        current_price,
-                        pos.currency or Currency.EUR,
-                        exchange_rate,  # Use fresh rate from ExchangeRateService
-                        market_value_eur,
-                        datetime.now().isoformat(),
-                        dates.get("first_bought_at"),
-                        dates.get("last_sold_at"),
-                    ),
-                )
-
-                # Publish domain event for position update
-                # Create Position object for event (with updated market_value_eur)
-                updated_position = Position(
-                    symbol=pos.symbol,
-                    quantity=pos.quantity,
-                    avg_price=pos.avg_price,
-                    currency=pos.currency or Currency.EUR,
-                    currency_rate=exchange_rate,  # Use fresh rate
-                    current_price=current_price,
-                    market_value_eur=market_value_eur,
-                )
-                event_bus = get_event_bus()
-                event_bus.publish(PositionUpdatedEvent(position=updated_position))
-
-                market_value = market_value_eur or 0
-                total_value += market_value
-
-                # Determine geography from config
-                cursor = await db_manager.config.execute(
-                    "SELECT geography FROM stocks WHERE symbol = ?", (pos.symbol,)
-                )
-                row = await cursor.fetchone()
-                if row:
-                    geo = row[0]
-                else:
-                    symbol = pos.symbol.upper()
-                    if (
-                        symbol.endswith(".GR")
-                        or symbol.endswith(".DE")
-                        or symbol.endswith(".PA")
-                    ):
-                        geo = "EU"
-                    elif (
-                        symbol.endswith(".AS")
-                        or symbol.endswith(".HK")
-                        or symbol.endswith(".T")
-                    ):
-                        geo = "ASIA"
-                    elif symbol.endswith(".US"):
-                        geo = "US"
-                    else:
-                        geo = None
-
-                if geo:
-                    geo_values[geo] = geo_values.get(geo, 0) + market_value
-
-            # Create daily snapshot
-            today = datetime.now().strftime("%Y-%m-%d")
-            position_count = len(positions)
-            await db_manager.state.execute(
-                """
-                INSERT OR REPLACE INTO portfolio_snapshots
-                (date, total_value, cash_balance, invested_value, unrealized_pnl,
-                 geo_eu_pct, geo_asia_pct, geo_us_pct, position_count, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-                """,
-                (
-                    today,
-                    total_value,
-                    cash_balance,
-                    invested_value,
-                    unrealized_pnl,
-                    geo_values["EU"] / total_value if total_value else 0,
-                    geo_values["ASIA"] / total_value if total_value else 0,
-                    geo_values["US"] / total_value if total_value else 0,
-                    position_count,
-                ),
+            await _create_portfolio_snapshot(
+                total_value,
+                cash_balance,
+                invested_value,
+                unrealized_pnl,
+                geo_values,
+                len(positions),
+                db_manager,
             )
 
         logger.info(
