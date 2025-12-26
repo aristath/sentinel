@@ -55,29 +55,8 @@ async def get_ema(symbol: str, closes: np.ndarray, length: int = EMA_LENGTH) -> 
     return ema
 
 
-def calculate_ema(closes: np.ndarray, length: int = EMA_LENGTH) -> Optional[float]:
-    """
-    Calculate Exponential Moving Average (internal function).
-
-    Args:
-        closes: Array of closing prices
-        length: EMA period (default 200)
-
-    Returns:
-        Current EMA value or None if insufficient data
-    """
-    if len(closes) < length:
-        # Fallback to SMA if not enough data for EMA
-        return float(np.mean(closes))
-
-    series = pd.Series(closes)
-    ema = ta.ema(series, length=length)
-
-    if ema is not None and len(ema) > 0 and not pd.isna(ema.iloc[-1]):
-        return float(ema.iloc[-1])
-
-    # Fallback to SMA
-    return float(np.mean(closes[-length:]))
+# Import from calculations module
+from app.domain.scoring.calculations import calculate_ema
 
 
 async def get_rsi(symbol: str, closes: np.ndarray, length: int = RSI_LENGTH) -> Optional[float]:
@@ -110,27 +89,8 @@ async def get_rsi(symbol: str, closes: np.ndarray, length: int = RSI_LENGTH) -> 
     return rsi
 
 
-def calculate_rsi(closes: np.ndarray, length: int = RSI_LENGTH) -> Optional[float]:
-    """
-    Calculate Relative Strength Index (internal function).
-
-    Args:
-        closes: Array of closing prices
-        length: RSI period (default 14)
-
-    Returns:
-        Current RSI value (0-100) or None if insufficient data
-    """
-    if len(closes) < length + 1:
-        return None
-
-    series = pd.Series(closes)
-    rsi = ta.rsi(series, length=length)
-
-    if rsi is not None and len(rsi) > 0 and not pd.isna(rsi.iloc[-1]):
-        return float(rsi.iloc[-1])
-
-    return None
+# Import from calculations module
+from app.domain.scoring.calculations import calculate_rsi
 
 
 async def get_bollinger_bands(
@@ -216,38 +176,8 @@ def calculate_bollinger_bands(
     return float(lower), float(middle), float(upper)
 
 
-def calculate_volatility(
-    closes: np.ndarray,
-    annualize: bool = True
-) -> Optional[float]:
-    """
-    Calculate annualized volatility using empyrical.
-
-    Args:
-        closes: Array of closing prices
-        annualize: Whether to annualize (default True)
-
-    Returns:
-        Annualized volatility or None if insufficient data
-    """
-    if len(closes) < 30:
-        return None
-
-    # Validate no zero/negative prices
-    if np.any(closes[:-1] <= 0):
-        logger.debug("Zero/negative prices detected, skipping volatility")
-        return None
-
-    returns = np.diff(closes) / closes[:-1]
-
-    try:
-        vol = float(empyrical.annual_volatility(returns))
-        if not np.isfinite(vol) or vol < 0:
-            return None
-        return vol
-    except Exception as e:
-        logger.debug(f"Volatility calculation failed: {e}")
-        return None
+# Import from calculations module
+from app.domain.scoring.calculations import calculate_volatility
 
 
 async def get_sharpe_ratio(
@@ -283,42 +213,8 @@ async def get_sharpe_ratio(
     return sharpe
 
 
-def calculate_sharpe_ratio(
-    closes: np.ndarray,
-    risk_free_rate: float = 0.0
-) -> Optional[float]:
-    """
-    Calculate Sharpe ratio using empyrical (internal function).
-
-    Args:
-        closes: Array of closing prices
-        risk_free_rate: Risk-free rate (default 0)
-
-    Returns:
-        Annualized Sharpe ratio or None if insufficient data
-    """
-    if len(closes) < 50:
-        return None
-
-    # Validate no zero/negative prices
-    if np.any(closes[:-1] <= 0):
-        logger.debug("Zero/negative prices detected, skipping Sharpe")
-        return None
-
-    returns = np.diff(closes) / closes[:-1]
-
-    try:
-        sharpe = float(empyrical.sharpe_ratio(
-            returns,
-            risk_free=risk_free_rate,
-            annualization=TRADING_DAYS_PER_YEAR
-        ))
-        if not np.isfinite(sharpe):
-            return None
-        return sharpe
-    except Exception as e:
-        logger.debug(f"Sharpe ratio calculation failed: {e}")
-        return None
+# Import from calculations module
+from app.domain.scoring.calculations import calculate_sharpe_ratio
 
 
 async def get_max_drawdown(symbol: str, closes: np.ndarray) -> Optional[float]:
