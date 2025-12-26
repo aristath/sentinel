@@ -7,6 +7,7 @@ not just placed orders (which may be cancelled externally).
 
 import logging
 from datetime import datetime
+from typing import Optional
 
 from app.infrastructure.database.manager import get_db_manager
 from app.infrastructure.events import SystemEvent, emit
@@ -57,69 +58,26 @@ async def _sync_trades_internal():
         logger.info(f"Fetched {len(executed_trades)} trades from Tradernet")
 
         db_manager = get_db_manager()
+        existing_order_ids = await _get_existing_order_ids(db_manager)
+        valid_symbols = await _get_valid_symbols(db_manager)
 
-        # Get existing order_ids to avoid duplicates
-        cursor = await db_manager.ledger.execute(
-            "SELECT order_id FROM trades WHERE order_id IS NOT NULL"
-        )
-        existing_order_ids = {row[0] for row in await cursor.fetchall()}
-        logger.info(f"Found {len(existing_order_ids)} existing trades in database")
-
-        # Get valid symbols from stocks table
-        cursor = await db_manager.config.execute("SELECT symbol FROM stocks")
-        valid_symbols = {row[0] for row in await cursor.fetchall()}
-
-        # Insert new trades
         inserted = 0
         skipped = 0
 
         async with db_manager.ledger.transaction():
             for trade in executed_trades:
                 order_id = trade.get("order_id")
-                if not order_id:
-                    logger.warning(f"Trade missing order_id, skipping: {trade}")
+                valid, reason = _validate_trade(trade, existing_order_ids, valid_symbols)
+
+                if not valid:
+                    if reason != "duplicate":
+                        logger.warning(f"Trade {order_id or 'unknown'} invalid: {reason}")
                     skipped += 1
                     continue
 
-                if order_id in existing_order_ids:
-                    skipped += 1
-                    continue
-
-                symbol = trade.get("symbol", "")
-                if symbol not in valid_symbols:
-                    logger.debug(f"Symbol {symbol} not in stocks table, skipping")
-                    skipped += 1
-                    continue
-
-                side = trade.get("side", "").upper()
-                if side not in ("BUY", "SELL"):
-                    logger.warning(
-                        f"Invalid side '{side}' for trade {order_id}, skipping"
-                    )
-                    skipped += 1
-                    continue
-
-                quantity = trade.get("quantity", 0)
-                price = trade.get("price", 0)
-                executed_at = trade.get("executed_at", "")
-
-                if not executed_at:
-                    executed_at = datetime.now().isoformat()
-
-                try:
-                    await db_manager.ledger.execute(
-                        """
-                        INSERT INTO trades (symbol, side, quantity, price, executed_at, order_id, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
-                        """,
-                        (symbol, side, quantity, price, executed_at, order_id),
-                    )
+                if await _insert_trade(db_manager, trade, order_id):
                     inserted += 1
-                    logger.debug(
-                        f"Inserted trade: {side} {quantity} {symbol} @ {price}"
-                    )
-                except Exception as e:
-                    logger.error(f"Failed to insert trade {order_id}: {e}")
+                else:
                     skipped += 1
 
         logger.info(f"Trade sync complete: {inserted} inserted, {skipped} skipped")

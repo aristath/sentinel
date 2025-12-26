@@ -27,6 +27,109 @@ WEIGHT_INDUSTRY = 0.30
 WEIGHT_AVERAGING = 0.30
 
 
+def _calculate_geo_gap_score(geography: str, portfolio_context: PortfolioContext) -> float:
+    """Calculate geography gap score (40% weight)."""
+    geo_weight = portfolio_context.geo_weights.get(geography, 0)
+    geo_gap_score = 0.5 + (geo_weight * 0.4)
+    return max(0.1, min(0.9, geo_gap_score))
+
+
+def _calculate_industry_gap_score(
+    industry: Optional[str], portfolio_context: PortfolioContext
+) -> float:
+    """Calculate industry gap score (30% weight)."""
+    if not industry:
+        return 0.5
+
+    industries = [ind.strip() for ind in industry.split(",") if ind.strip()]
+    if not industries:
+        return 0.5
+
+    ind_scores = []
+    for ind in industries:
+        ind_weight = portfolio_context.industry_weights.get(ind, 0)
+        ind_score = 0.5 + (ind_weight * 0.4)
+        ind_scores.append(max(0.1, min(0.9, ind_score)))
+
+    return sum(ind_scores) / len(ind_scores)
+
+
+def _calculate_averaging_down_score(
+    symbol: str,
+    quality_score: float,
+    opportunity_score: float,
+    portfolio_context: PortfolioContext,
+) -> float:
+    """Calculate averaging down score (30% weight)."""
+    position_value = portfolio_context.positions.get(symbol, 0)
+
+    if position_value <= 0:
+        return 0.5
+
+    avg_down_potential = quality_score * opportunity_score
+
+    if avg_down_potential >= 0.5:
+        averaging_down_score = 0.7 + (avg_down_potential - 0.5) * 0.6
+    elif avg_down_potential >= 0.3:
+        averaging_down_score = 0.5 + (avg_down_potential - 0.3) * 1.0
+    else:
+        averaging_down_score = 0.3
+
+    # Apply cost basis bonus
+    averaging_down_score = _apply_cost_basis_bonus(
+        symbol, averaging_down_score, portfolio_context
+    )
+
+    # Apply concentration penalty
+    averaging_down_score = _apply_concentration_penalty(
+        position_value, averaging_down_score, portfolio_context
+    )
+
+    return averaging_down_score
+
+
+def _apply_cost_basis_bonus(
+    symbol: str, score: float, portfolio_context: PortfolioContext
+) -> float:
+    """Apply cost basis bonus if price is below average."""
+    if not portfolio_context.position_avg_prices or not portfolio_context.current_prices:
+        return score
+
+    avg_price = portfolio_context.position_avg_prices.get(symbol)
+    current_price = portfolio_context.current_prices.get(symbol)
+
+    if not avg_price or not current_price or avg_price <= 0:
+        return score
+
+    price_vs_avg = (current_price - avg_price) / avg_price
+    if price_vs_avg >= 0:
+        return score
+
+    loss_pct = abs(price_vs_avg)
+    if loss_pct <= COST_BASIS_BOOST_THRESHOLD:
+        cost_basis_boost = min(MAX_COST_BASIS_BOOST, loss_pct * 2)
+        return min(1.0, score + cost_basis_boost)
+
+    return score
+
+
+def _apply_concentration_penalty(
+    position_value: float, score: float, portfolio_context: PortfolioContext
+) -> float:
+    """Apply penalty for over-concentration."""
+    total_value = portfolio_context.total_value
+    if total_value <= 0:
+        return score
+
+    position_pct = position_value / total_value
+    if position_pct > CONCENTRATION_HIGH:
+        return score * 0.7
+    elif position_pct > CONCENTRATION_MED:
+        return score * 0.9
+
+    return score
+
+
 def calculate_diversification_score(
     symbol: str,
     geography: str,
@@ -50,67 +153,12 @@ def calculate_diversification_score(
         ScoreResult with score and sub_scores
         sub_scores: {"geography": float, "industry": float, "averaging": float}
     """
-    # 1. Geography Gap Score (40%)
-    geo_weight = portfolio_context.geo_weights.get(geography, 0)
-    geo_gap_score = 0.5 + (geo_weight * 0.4)
-    geo_gap_score = max(0.1, min(0.9, geo_gap_score))
+    geo_gap_score = _calculate_geo_gap_score(geography, portfolio_context)
+    industry_gap_score = _calculate_industry_gap_score(industry, portfolio_context)
+    averaging_down_score = _calculate_averaging_down_score(
+        symbol, quality_score, opportunity_score, portfolio_context
+    )
 
-    # 2. Industry Gap Score (30%)
-    if industry:
-        industries = [ind.strip() for ind in industry.split(",") if ind.strip()]
-        if industries:
-            ind_scores = []
-            for ind in industries:
-                ind_weight = portfolio_context.industry_weights.get(ind, 0)
-                ind_score = 0.5 + (ind_weight * 0.4)
-                ind_scores.append(max(0.1, min(0.9, ind_score)))
-            industry_gap_score = sum(ind_scores) / len(ind_scores)
-        else:
-            industry_gap_score = 0.5
-    else:
-        industry_gap_score = 0.5
-
-    # 3. Averaging Down Score (30%)
-    position_value = portfolio_context.positions.get(symbol, 0)
-
-    if position_value > 0:
-        avg_down_potential = quality_score * opportunity_score
-
-        if avg_down_potential >= 0.5:
-            averaging_down_score = 0.7 + (avg_down_potential - 0.5) * 0.6
-        elif avg_down_potential >= 0.3:
-            averaging_down_score = 0.5 + (avg_down_potential - 0.3) * 1.0
-        else:
-            averaging_down_score = 0.3
-
-        # Cost basis bonus
-        if portfolio_context.position_avg_prices and portfolio_context.current_prices:
-            avg_price = portfolio_context.position_avg_prices.get(symbol)
-            current_price = portfolio_context.current_prices.get(symbol)
-
-            if avg_price and current_price and avg_price > 0:
-                price_vs_avg = (current_price - avg_price) / avg_price
-
-                if price_vs_avg < 0:
-                    loss_pct = abs(price_vs_avg)
-                    if loss_pct <= COST_BASIS_BOOST_THRESHOLD:
-                        cost_basis_boost = min(MAX_COST_BASIS_BOOST, loss_pct * 2)
-                        averaging_down_score = min(
-                            1.0, averaging_down_score + cost_basis_boost
-                        )
-
-        # Avoid over-concentration
-        total_value = portfolio_context.total_value
-        if total_value > 0:
-            position_pct = position_value / total_value
-            if position_pct > CONCENTRATION_HIGH:
-                averaging_down_score *= 0.7
-            elif position_pct > CONCENTRATION_MED:
-                averaging_down_score *= 0.9
-    else:
-        averaging_down_score = 0.5
-
-    # Combined score
     total = (
         geo_gap_score * WEIGHT_GEOGRAPHY
         + industry_gap_score * WEIGHT_INDUSTRY
