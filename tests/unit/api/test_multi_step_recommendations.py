@@ -191,7 +191,7 @@ class TestGetMultiStepRecommendations:
         with patch("app.api.multi_step_recommendations.cache") as mock_cache:
             mock_cache.get.return_value = cached_data
             with patch(
-                "app.api.multi_step_recommendations.generate_recommendation_cache_key",
+                "app.domain.portfolio_hash.generate_recommendation_cache_key",
                 return_value="test-key",
             ):
                 result = await get_multi_step_recommendations(
@@ -213,7 +213,7 @@ class TestGetMultiStepRecommendations:
         with patch("app.api.multi_step_recommendations.cache") as mock_cache:
             mock_cache.get.return_value = None
             with patch(
-                "app.api.multi_step_recommendations.generate_recommendation_cache_key",
+                "app.domain.portfolio_hash.generate_recommendation_cache_key",
                 return_value="test-key",
             ):
                 result = await get_multi_step_recommendations(
@@ -255,7 +255,7 @@ class TestGetMultiStepRecommendations:
         with patch("app.api.multi_step_recommendations.cache") as mock_cache:
             mock_cache.get.return_value = None
             with patch(
-                "app.api.multi_step_recommendations.generate_recommendation_cache_key",
+                "app.domain.portfolio_hash.generate_recommendation_cache_key",
                 return_value="test-key",
             ):
                 result = await get_multi_step_recommendations(
@@ -281,7 +281,7 @@ class TestGetMultiStepRecommendations:
         with patch("app.api.multi_step_recommendations.cache") as mock_cache:
             mock_cache.get.return_value = None
             with patch(
-                "app.api.multi_step_recommendations.generate_recommendation_cache_key",
+                "app.domain.portfolio_hash.generate_recommendation_cache_key",
                 return_value="test-key",
             ):
                 with pytest.raises(HTTPException) as exc_info:
@@ -376,7 +376,7 @@ class TestExecuteMultiStepRecommendationStep:
         with patch("app.api.multi_step_recommendations.cache") as mock_cache:
             mock_cache.get.return_value = cached_data
             with patch(
-                "app.api.multi_step_recommendations.generate_recommendation_cache_key",
+                "app.domain.portfolio_hash.generate_recommendation_cache_key",
                 return_value="test-key",
             ):
                 with pytest.raises(HTTPException) as exc_info:
@@ -430,16 +430,18 @@ class TestExecuteMultiStepRecommendationStep:
         with patch("app.api.multi_step_recommendations.cache") as mock_cache:
             mock_cache.get.return_value = cached_data
             with patch(
-                "app.api.multi_step_recommendations.generate_recommendation_cache_key",
+                "app.domain.portfolio_hash.generate_recommendation_cache_key",
                 return_value="test-key",
             ):
                 with patch(
-                    "app.api.multi_step_recommendations.ensure_tradernet_connected",
+                    "app.infrastructure.external.tradernet_connection."
+                    "ensure_tradernet_connected",
                     new_callable=AsyncMock,
                     return_value=mock_client,
                 ):
                     with patch(
-                        "app.api.multi_step_recommendations.get_cache_invalidation_service"
+                        "app.infrastructure.cache_invalidation."
+                        "get_cache_invalidation_service"
                     ):
                         result = await execute_multi_step_recommendation_step(
                             1,
@@ -505,16 +507,18 @@ class TestExecuteAllMultiStepRecommendations:
         with patch("app.api.multi_step_recommendations.cache") as mock_cache:
             mock_cache.get.return_value = cached_data
             with patch(
-                "app.api.multi_step_recommendations.generate_recommendation_cache_key",
+                "app.domain.portfolio_hash.generate_recommendation_cache_key",
                 return_value="test-key",
             ):
                 with patch(
-                    "app.api.multi_step_recommendations.ensure_tradernet_connected",
+                    "app.infrastructure.external.tradernet_connection."
+                    "ensure_tradernet_connected",
                     new_callable=AsyncMock,
                     return_value=mock_client,
                 ):
                     with patch(
-                        "app.api.multi_step_recommendations.get_cache_invalidation_service"
+                        "app.infrastructure.cache_invalidation."
+                        "get_cache_invalidation_service"
                     ):
                         result = await execute_all_multi_step_recommendations(
                             mock_trade_repo,
@@ -562,11 +566,12 @@ class TestExecuteAllMultiStepRecommendations:
         with patch("app.api.multi_step_recommendations.cache") as mock_cache:
             mock_cache.get.return_value = cached_data
             with patch(
-                "app.api.multi_step_recommendations.generate_recommendation_cache_key",
+                "app.domain.portfolio_hash.generate_recommendation_cache_key",
                 return_value="test-key",
             ):
                 with patch(
-                    "app.api.multi_step_recommendations.ensure_tradernet_connected",
+                    "app.infrastructure.external.tradernet_connection."
+                    "ensure_tradernet_connected",
                     new_callable=AsyncMock,
                 ):
                     with pytest.raises(HTTPException) as exc_info:
@@ -603,11 +608,12 @@ class TestExecuteAllMultiStepRecommendations:
         with patch("app.api.multi_step_recommendations.cache") as mock_cache:
             mock_cache.get.return_value = None  # No cache
             with patch(
-                "app.api.multi_step_recommendations.generate_recommendation_cache_key",
+                "app.domain.portfolio_hash.generate_recommendation_cache_key",
                 return_value="test-key",
             ):
                 with patch(
-                    "app.api.multi_step_recommendations.ensure_tradernet_connected",
+                    "app.infrastructure.external.tradernet_connection."
+                    "ensure_tradernet_connected",
                     new_callable=AsyncMock,
                 ):
                     with pytest.raises(HTTPException) as exc_info:
@@ -657,7 +663,7 @@ class TestRegenerateCacheFunction:
 
         with patch("app.api.multi_step_recommendations.cache") as mock_cache:
             with patch(
-                "app.api.multi_step_recommendations.generate_recommendation_cache_key",
+                "app.domain.portfolio_hash.generate_recommendation_cache_key",
                 return_value="test-key",
             ):
                 cached, cache_key = await _regenerate_multi_step_cache(
@@ -679,7 +685,7 @@ class TestRegenerateCacheFunction:
         mock_rebalancing_service.get_multi_step_recommendations.return_value = []
 
         with patch(
-            "app.api.multi_step_recommendations.generate_recommendation_cache_key",
+            "app.domain.portfolio_hash.generate_recommendation_cache_key",
             return_value="test-key",
         ):
             with pytest.raises(HTTPException) as exc_info:
@@ -752,7 +758,7 @@ class TestCacheKeyGeneration:
         with patch("app.api.multi_step_recommendations.cache") as mock_cache:
             mock_cache.get.return_value = None
             with patch(
-                "app.api.multi_step_recommendations.generate_recommendation_cache_key",
+                "app.domain.portfolio_hash.generate_recommendation_cache_key",
                 return_value="portfolio-hash-123",
             ) as mock_gen:
                 await get_multi_step_recommendations(
