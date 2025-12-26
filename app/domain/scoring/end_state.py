@@ -88,6 +88,76 @@ async def calculate_total_return_score(
     return round(score, 3), sub_components
 
 
+async def _get_consistency_score(calc_repo, symbol: str, provided: Optional[float]) -> float:
+    """Get consistency score from cache or use provided value."""
+    if provided is not None:
+        return provided
+    cached = await calc_repo.get_metric(symbol, "CONSISTENCY_SCORE")
+    return cached if cached is not None else 0.5
+
+
+async def _get_financial_strength(calc_repo, symbol: str, provided: Optional[float]) -> float:
+    """Get financial strength from cache or use provided value."""
+    if provided is not None:
+        return provided
+    cached = await calc_repo.get_metric(symbol, "FINANCIAL_STRENGTH")
+    return cached if cached is not None else 0.5
+
+
+def _derive_dividend_consistency_from_payout(payout: float) -> float:
+    """Derive dividend consistency score from payout ratio."""
+    if 0.3 <= payout <= 0.6:
+        return 1.0
+    elif payout < 0.3:
+        return 0.5 + (payout / 0.3) * 0.5
+    elif payout <= 0.8:
+        return 1.0 - ((payout - 0.6) / 0.2) * 0.3
+    else:
+        return 0.4
+
+
+async def _get_dividend_consistency(calc_repo, symbol: str, provided: Optional[float]) -> float:
+    """Get dividend consistency from cache, derive from payout, or use provided value."""
+    if provided is not None:
+        return provided
+
+    cached = await calc_repo.get_metric(symbol, "DIVIDEND_CONSISTENCY")
+    if cached is not None:
+        return cached
+
+    payout = await calc_repo.get_metric(symbol, "PAYOUT_RATIO")
+    if payout is not None:
+        return _derive_dividend_consistency_from_payout(payout)
+
+    return 0.5
+
+
+def _convert_sortino_to_score(sortino: float) -> float:
+    """Convert Sortino ratio to score (0-1)."""
+    if sortino >= 2.0:
+        return 1.0
+    elif sortino >= 1.5:
+        return 0.8 + (sortino - 1.5) * 0.4
+    elif sortino >= 1.0:
+        return 0.6 + (sortino - 1.0) * 0.4
+    elif sortino >= 0:
+        return sortino * 0.6
+    else:
+        return 0.0
+
+
+async def _get_sortino_score(calc_repo, symbol: str, provided: Optional[float]) -> float:
+    """Get Sortino score from cache (converted) or use provided value."""
+    if provided is not None:
+        return provided
+
+    sortino = await calc_repo.get_metric(symbol, "SORTINO")
+    if sortino is not None:
+        return _convert_sortino_to_score(sortino)
+
+    return 0.5
+
+
 async def calculate_long_term_promise(
     symbol: str,
     consistency_score: Optional[float] = None,
@@ -118,56 +188,11 @@ async def calculate_long_term_promise(
 
     calc_repo = CalculationsRepository()
 
-    # Get consistency score from cache if not provided
-    if consistency_score is None:
-        cached = await calc_repo.get_metric(symbol, "CONSISTENCY_SCORE")
-        consistency_score = cached if cached is not None else 0.5
+    consistency_score = await _get_consistency_score(calc_repo, symbol, consistency_score)
+    financial_strength = await _get_financial_strength(calc_repo, symbol, financial_strength)
+    dividend_consistency = await _get_dividend_consistency(calc_repo, symbol, dividend_consistency)
+    sortino_score = await _get_sortino_score(calc_repo, symbol, sortino_score)
 
-    # Get financial strength from cache if not provided
-    if financial_strength is None:
-        cached = await calc_repo.get_metric(symbol, "FINANCIAL_STRENGTH")
-        financial_strength = cached if cached is not None else 0.5
-
-    # Get dividend consistency - derive from payout ratio if not provided
-    if dividend_consistency is None:
-        cached = await calc_repo.get_metric(symbol, "DIVIDEND_CONSISTENCY")
-        if cached is not None:
-            dividend_consistency = cached
-        else:
-            # Derive from payout ratio
-            payout = await calc_repo.get_metric(symbol, "PAYOUT_RATIO")
-            if payout is not None:
-                # Ideal payout: 30-60%
-                if 0.3 <= payout <= 0.6:
-                    dividend_consistency = 1.0
-                elif payout < 0.3:
-                    dividend_consistency = 0.5 + (payout / 0.3) * 0.5
-                elif payout <= 0.8:
-                    dividend_consistency = 1.0 - ((payout - 0.6) / 0.2) * 0.3
-                else:
-                    dividend_consistency = 0.4
-            else:
-                dividend_consistency = 0.5
-
-    # Get Sortino score from cache if not provided
-    if sortino_score is None:
-        sortino = await calc_repo.get_metric(symbol, "SORTINO")
-        if sortino is not None:
-            # Convert ratio to score
-            if sortino >= 2.0:
-                sortino_score = 1.0
-            elif sortino >= 1.5:
-                sortino_score = 0.8 + (sortino - 1.5) * 0.4
-            elif sortino >= 1.0:
-                sortino_score = 0.6 + (sortino - 1.0) * 0.4
-            elif sortino >= 0:
-                sortino_score = sortino * 0.6
-            else:
-                sortino_score = 0.0
-        else:
-            sortino_score = 0.5
-
-    # Calculate weighted total
     total = (
         consistency_score * PROMISE_WEIGHT_CONSISTENCY
         + financial_strength * PROMISE_WEIGHT_FINANCIALS
@@ -175,7 +200,6 @@ async def calculate_long_term_promise(
         + sortino_score * PROMISE_WEIGHT_SORTINO
     )
 
-    # Cache the result
     await calc_repo.set_metric(symbol, "LONG_TERM_PROMISE", total)
 
     sub_components = {

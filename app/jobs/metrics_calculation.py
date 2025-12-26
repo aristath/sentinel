@@ -27,6 +27,133 @@ from app.repositories.stock import StockRepository
 logger = logging.getLogger(__name__)
 
 
+async def _calculate_technical_indicators(
+    symbol: str, closes_array: np.ndarray, highs_array: np.ndarray, lows_array: np.ndarray
+) -> tuple[int, Optional[float], Optional[float], Optional[tuple]]:
+    """Calculate technical indicators and return count and key values."""
+    metrics_count = 0
+
+    rsi = await get_rsi(symbol, closes_array)
+    if rsi is not None:
+        metrics_count += 1
+
+    ema_200 = await get_ema(symbol, closes_array, length=200)
+    if ema_200 is not None:
+        metrics_count += 1
+
+    ema_50 = await get_ema(symbol, closes_array, length=50)
+    if ema_50 is not None:
+        metrics_count += 1
+
+    bands = await get_bollinger_bands(symbol, closes_array)
+    if bands is not None:
+        metrics_count += 3  # Lower, Middle, Upper
+
+    sharpe = await get_sharpe_ratio(symbol, closes_array)
+    if sharpe is not None:
+        metrics_count += 1
+
+    max_dd = await get_max_drawdown(symbol, closes_array)
+    if max_dd is not None:
+        metrics_count += 1
+
+    high_52w = await get_52_week_high(symbol, highs_array)
+    if high_52w is not None:
+        metrics_count += 1
+
+    low_52w = await get_52_week_low(symbol, lows_array)
+    if low_52w is not None:
+        metrics_count += 1
+
+    return metrics_count, ema_200, high_52w, bands
+
+
+async def _calculate_cagr_metrics(
+    calc_repo, symbol: str, monthly_prices: list
+) -> int:
+    """Calculate CAGR metrics if monthly data is available."""
+    if not monthly_prices or len(monthly_prices) < 12:
+        return 0
+
+    metrics_count = 0
+    monthly_dicts = [
+        {"year_month": p.year_month, "avg_adj_close": p.avg_adj_close}
+        for p in monthly_prices
+    ]
+
+    cagr_5y = calculate_cagr(monthly_dicts, 60)
+    if cagr_5y is not None:
+        await calc_repo.set_metric(symbol, "CAGR_5Y", cagr_5y)
+        metrics_count += 1
+
+    if len(monthly_prices) > 60:
+        cagr_10y = calculate_cagr(monthly_dicts, len(monthly_dicts))
+        if cagr_10y is not None:
+            await calc_repo.set_metric(symbol, "CAGR_10Y", cagr_10y)
+            metrics_count += 1
+
+    return metrics_count
+
+
+async def _calculate_momentum_metrics(calc_repo, symbol: str, closes: list) -> int:
+    """Calculate momentum metrics."""
+    if len(closes) < 30:
+        return 0
+
+    metrics_count = 0
+    current = closes[-1]
+    price_30d = closes[-30] if len(closes) >= 30 else closes[0]
+    momentum_30d = (current - price_30d) / price_30d if price_30d > 0 else 0
+    await calc_repo.set_metric(symbol, "MOMENTUM_30D", momentum_30d)
+    metrics_count += 1
+
+    if len(closes) >= 90:
+        price_90d = closes[-90]
+        momentum_90d = (current - price_90d) / price_90d if price_90d > 0 else 0
+        await calc_repo.set_metric(symbol, "MOMENTUM_90D", momentum_90d)
+        metrics_count += 1
+
+    return metrics_count
+
+
+async def _calculate_distance_metrics(
+    calc_repo, symbol: str, closes: list, ema_200: Optional[float], high_52w: Optional[float]
+) -> int:
+    """Calculate distance metrics."""
+    metrics_count = 0
+    current_price = closes[-1]
+
+    if high_52w:
+        distance_from_52w = (high_52w - current_price) / high_52w if high_52w > 0 else 0
+        await calc_repo.set_metric(symbol, "DISTANCE_FROM_52W_HIGH", distance_from_52w)
+        metrics_count += 1
+
+    if ema_200:
+        distance_from_ema = (current_price - ema_200) / ema_200 if ema_200 > 0 else 0
+        await calc_repo.set_metric(symbol, "DISTANCE_FROM_EMA_200", distance_from_ema)
+        metrics_count += 1
+
+    return metrics_count
+
+
+async def _calculate_bollinger_position(
+    calc_repo, symbol: str, closes: list, bands: Optional[tuple]
+) -> int:
+    """Calculate Bollinger Band position metric."""
+    if not bands or not closes:
+        return 0
+
+    lower, middle, upper = bands
+    current_price = closes[-1]
+    if upper > lower:
+        bb_position = (current_price - lower) / (upper - lower)
+        bb_position = max(0.0, min(1.0, bb_position))
+        await calc_repo.set_metric(symbol, "BB_POSITION", bb_position)
+        return 1
+
+    return 0
+
+
 async def calculate_all_metrics_for_symbol(symbol: str) -> int:
     """
     Calculate and store all metrics for a single symbol.
@@ -39,7 +166,6 @@ async def calculate_all_metrics_for_symbol(symbol: str) -> int:
     metrics_calculated = 0
 
     try:
-        # Get price data
         daily_prices = await history_repo.get_daily_prices(limit=365)
         monthly_prices = await history_repo.get_monthly_prices(limit=120)
 
@@ -47,7 +173,6 @@ async def calculate_all_metrics_for_symbol(symbol: str) -> int:
             logger.debug(f"Insufficient data for {symbol}, skipping metrics")
             return 0
 
-        # Convert to arrays
         closes = [p.close_price for p in daily_prices]
         highs = [p.high_price for p in daily_prices]
         lows = [p.low_price for p in daily_prices]
@@ -55,102 +180,24 @@ async def calculate_all_metrics_for_symbol(symbol: str) -> int:
         highs_array = np.array(highs)
         lows_array = np.array(lows)
 
-        # Calculate technical indicators (will cache automatically)
-        rsi = await get_rsi(symbol, closes_array)
-        if rsi is not None:
-            metrics_calculated += 1
+        tech_count, ema_200, high_52w, bands = await _calculate_technical_indicators(
+            symbol, closes_array, highs_array, lows_array
+        )
+        metrics_calculated += tech_count
 
-        ema_200 = await get_ema(symbol, closes_array, length=200)
-        if ema_200 is not None:
-            metrics_calculated += 1
+        cagr_count = await _calculate_cagr_metrics(calc_repo, symbol, monthly_prices)
+        metrics_calculated += cagr_count
 
-        ema_50 = await get_ema(symbol, closes_array, length=50)
-        if ema_50 is not None:
-            metrics_calculated += 1
+        momentum_count = await _calculate_momentum_metrics(calc_repo, symbol, closes)
+        metrics_calculated += momentum_count
 
-        bands = await get_bollinger_bands(symbol, closes_array)
-        if bands is not None:
-            metrics_calculated += 3  # Lower, Middle, Upper
+        distance_count = await _calculate_distance_metrics(
+            calc_repo, symbol, closes, ema_200, high_52w
+        )
+        metrics_calculated += distance_count
 
-        sharpe = await get_sharpe_ratio(symbol, closes_array)
-        if sharpe is not None:
-            metrics_calculated += 1
-
-        max_dd = await get_max_drawdown(symbol, closes_array)
-        if max_dd is not None:
-            metrics_calculated += 1
-
-        high_52w = await get_52_week_high(symbol, highs_array)
-        if high_52w is not None:
-            metrics_calculated += 1
-
-        low_52w = await get_52_week_low(symbol, lows_array)
-        if low_52w is not None:
-            metrics_calculated += 1
-
-        # Calculate CAGR if we have monthly data
-        if monthly_prices and len(monthly_prices) >= 12:
-            monthly_dicts = [
-                {"year_month": p.year_month, "avg_adj_close": p.avg_adj_close}
-                for p in monthly_prices
-            ]
-
-            # Use the calculate_cagr from long_term (same function signature)
-            cagr_5y = calculate_cagr(monthly_dicts, 60)
-            if cagr_5y is not None:
-                await calc_repo.set_metric(symbol, "CAGR_5Y", cagr_5y)
-                metrics_calculated += 1
-
-            if len(monthly_prices) > 60:
-                cagr_10y = calculate_cagr(monthly_dicts, len(monthly_dicts))
-                if cagr_10y is not None:
-                    await calc_repo.set_metric(symbol, "CAGR_10Y", cagr_10y)
-                    metrics_calculated += 1
-
-        # Calculate momentum
-        if len(closes) >= 30:
-            current = closes[-1]
-            price_30d = closes[-30] if len(closes) >= 30 else closes[0]
-            momentum_30d = (current - price_30d) / price_30d if price_30d > 0 else 0
-            await calc_repo.set_metric(symbol, "MOMENTUM_30D", momentum_30d)
-            metrics_calculated += 1
-
-            if len(closes) >= 90:
-                price_90d = closes[-90]
-                momentum_90d = (current - price_90d) / price_90d if price_90d > 0 else 0
-                await calc_repo.set_metric(symbol, "MOMENTUM_90D", momentum_90d)
-                metrics_calculated += 1
-
-        # Calculate distance metrics
-        if high_52w and closes:
-            current_price = closes[-1]
-            distance_from_52w = (
-                (high_52w - current_price) / high_52w if high_52w > 0 else 0
-            )
-            await calc_repo.set_metric(
-                symbol, "DISTANCE_FROM_52W_HIGH", distance_from_52w
-            )
-            metrics_calculated += 1
-
-        if ema_200 and closes:
-            current_price = closes[-1]
-            distance_from_ema = (
-                (current_price - ema_200) / ema_200 if ema_200 > 0 else 0
-            )
-            await calc_repo.set_metric(
-                symbol, "DISTANCE_FROM_EMA_200", distance_from_ema
-            )
-            metrics_calculated += 1
-
-        # Calculate Bollinger position
-        if bands and closes:
-            lower, middle, upper = bands
-            current_price = closes[-1]
-            if upper > lower:
-                bb_position = (current_price - lower) / (upper - lower)
-                bb_position = max(0.0, min(1.0, bb_position))
-                await calc_repo.set_metric(symbol, "BB_POSITION", bb_position)
-                metrics_calculated += 1
+        bb_count = await _calculate_bollinger_position(calc_repo, symbol, closes, bands)
+        metrics_calculated += bb_count
 
         logger.debug(f"Calculated {metrics_calculated} metrics for {symbol}")
 
