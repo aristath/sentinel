@@ -161,6 +161,71 @@ def _create_cooldown_failed_results(trades) -> List[dict]:
     ]
 
 
+async def _validate_trade_before_execution(
+    trade,
+    recently_bought: set,
+    cooldown_days: int,
+    currency_balances: Optional[dict],
+    currency_service: Optional[CurrencyExchangeService],
+    source_currency: str,
+    converted_currencies: set,
+    position_repo,
+    client,
+    trade_repo,
+) -> tuple[Optional[dict], int]:
+    """Validate trade before execution and return blocking result if any."""
+    if trade.side.upper() == "BUY":
+        cooldown_result = await _check_buy_cooldown(
+            trade, recently_bought, cooldown_days
+        )
+        if cooldown_result:
+            return cooldown_result, 0
+
+        currency_result = await _handle_buy_currency(
+            trade,
+            currency_balances,
+            currency_service,
+            source_currency,
+            converted_currencies,
+        )
+        if currency_result:
+            return currency_result, 1
+
+    if trade.side.upper() == "SELL":
+        sell_result = await _validate_sell_order(trade, position_repo)
+        if sell_result:
+            return sell_result, 1
+
+    has_pending = await _check_pending_orders(trade, client, trade_repo)
+    if has_pending:
+        return {
+            "symbol": trade.symbol,
+            "status": "blocked",
+            "error": f"Pending order already exists for {trade.symbol}",
+        }, 0
+
+    return None, 0
+
+
+async def _execute_and_record_trade(trade, client, service) -> Optional[dict]:
+    """Execute trade and record it if successful."""
+    execution_result = await _execute_single_trade(trade, client)
+    if execution_result and execution_result.get("status") == "success":
+        result = execution_result["result"]
+        await service.record_trade(
+            symbol=trade.symbol,
+            side=trade.side,
+            quantity=trade.quantity,
+            price=result.price,
+            order_id=result.order_id,
+            currency=trade.currency,
+            estimated_price=trade.estimated_price,
+            source="tradernet",
+        )
+        return execution_result
+    return execution_result
+
+
 async def _process_single_trade(
     trade,
     recently_bought: set,
@@ -176,54 +241,23 @@ async def _process_single_trade(
 ) -> tuple[Optional[dict], int]:
     """Process a single trade and return result and skipped count."""
     try:
-        if trade.side.upper() == "BUY":
-            cooldown_result = await _check_buy_cooldown(
-                trade, recently_bought, cooldown_days
-            )
-            if cooldown_result:
-                return cooldown_result, 0
+        validation_result, skipped = await _validate_trade_before_execution(
+            trade,
+            recently_bought,
+            cooldown_days,
+            currency_balances,
+            currency_service,
+            source_currency,
+            converted_currencies,
+            position_repo,
+            client,
+            trade_repo,
+        )
+        if validation_result:
+            return validation_result, skipped
 
-            currency_result = await _handle_buy_currency(
-                trade,
-                currency_balances,
-                currency_service,
-                source_currency,
-                converted_currencies,
-            )
-            if currency_result:
-                return currency_result, 1
-
-        if trade.side.upper() == "SELL":
-            sell_result = await _validate_sell_order(trade, position_repo)
-            if sell_result:
-                return sell_result, 1
-
-        has_pending = await _check_pending_orders(trade, client, trade_repo)
-        if has_pending:
-            return {
-                "symbol": trade.symbol,
-                "status": "blocked",
-                "error": f"Pending order already exists for {trade.symbol}",
-            }, 0
-
-        execution_result = await _execute_single_trade(trade, client)
-        if execution_result and execution_result.get("status") == "success":
-            result = execution_result["result"]
-            await service.record_trade(
-                symbol=trade.symbol,
-                side=trade.side,
-                quantity=trade.quantity,
-                price=result.price,
-                order_id=result.order_id,
-                currency=trade.currency,
-                estimated_price=trade.estimated_price,
-                source="tradernet",
-            )
-            return execution_result, 0
-        elif execution_result:
-            return execution_result, 0
-
-        return None, 0
+        execution_result = await _execute_and_record_trade(trade, client, service)
+        return execution_result, 0
 
     except Exception as e:
         logger.error(f"Failed to execute trade for {trade.symbol}: {e}")
