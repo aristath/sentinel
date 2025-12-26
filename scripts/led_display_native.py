@@ -119,7 +119,7 @@ def set_brightness(brightness: int) -> bool:
 def fetch_display_data() -> Optional[dict]:
     """Fetch display text and settings from API. Returns None on error."""
     try:
-        response = _session.get(f"{API_URL}/api/status/display/text", timeout=2)
+        response = _session.get(f"{API_URL}/api/status/display/text", timeout=10)
         if response.status_code == 200:
             return response.json()
         else:
