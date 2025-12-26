@@ -28,7 +28,8 @@ def score_total_return(total_return: float, target: float = 0.12) -> float:
     if total_return <= 0:
         return BELL_CURVE_FLOOR
 
-    sigma = BELL_CURVE_SIGMA_LEFT if total_return < target else BELL_CURVE_SIGMA_RIGHT
+    # Use slightly wider sigma for total return (more forgiving than CAGR)
+    sigma = BELL_CURVE_SIGMA_LEFT if total_return < target else BELL_CURVE_SIGMA_RIGHT * 1.2
     raw_score = math.exp(-((total_return - target) ** 2) / (2 * sigma ** 2))
 
     return BELL_CURVE_FLOOR + raw_score * (1 - BELL_CURVE_FLOOR)
