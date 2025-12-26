@@ -60,14 +60,18 @@ def generate_settings_hash(settings_dict: Dict[str, Any]) -> str:
         hash = generate_settings_hash(settings)  # e.g., "b1c2d3e4"
     """
     # Settings that affect recommendation calculations
+    # Note: min_trade_size and recommendation_depth removed (handled by optimizer now)
     relevant_keys = sorted([
-        "min_trade_size",
         "min_stock_score",
         "min_hold_days",
         "sell_cooldown_days",
         "max_loss_threshold",
         "target_annual_return",
-        "recommendation_depth",
+        "optimizer_blend",
+        "optimizer_target_return",
+        "transaction_cost_fixed",
+        "transaction_cost_percent",
+        "min_cash_reserve",
     ])
 
     # Build canonical string: "key:value,key:value,..."

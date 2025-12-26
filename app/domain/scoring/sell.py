@@ -25,13 +25,15 @@ from app.domain.scoring.constants import (
     DEFAULT_MIN_SELL_VALUE_EUR,
 )
 
-# Default sell weights (fallback if settings can't be loaded)
-DEFAULT_SELL_WEIGHTS = {
-    "underperformance": 0.35,
-    "time_held": 0.18,
-    "portfolio_balance": 0.18,
-    "instability": 0.14,
-    "drawdown": 0.15,
+# Fixed sell weights - no longer configurable via settings
+# The portfolio optimizer now handles sell decisions via target weight gaps.
+# These weights are used for sell score calculation when the heuristic path is used.
+SELL_WEIGHTS = {
+    "underperformance": 0.35,   # Return vs target
+    "time_held": 0.18,          # Position age
+    "portfolio_balance": 0.18,  # Overweight detection
+    "instability": 0.14,        # Bubble/volatility
+    "drawdown": 0.15,           # Current drawdown from PyFolio
 }
 
 logger = logging.getLogger(__name__)
@@ -90,7 +92,7 @@ async def calculate_sell_score(
     """
     # Use provided weights or defaults
     if weights is None:
-        weights = DEFAULT_SELL_WEIGHTS
+        weights = SELL_WEIGHTS
     # Extract settings with defaults
     settings = settings or {}
     min_hold_days = settings.get("min_hold_days", DEFAULT_MIN_HOLD_DAYS)
@@ -215,14 +217,14 @@ async def calculate_sell_score(
 
     # Normalize weights so they sum to 1.0 (allows relative weight system)
     sell_groups = ["underperformance", "time_held", "portfolio_balance", "instability", "drawdown"]
-    weight_sum = sum(weights.get(g, DEFAULT_SELL_WEIGHTS[g]) for g in sell_groups)
+    weight_sum = sum(weights.get(g, SELL_WEIGHTS[g]) for g in sell_groups)
     if weight_sum > 0:
         normalized_weights = {
-            g: weights.get(g, DEFAULT_SELL_WEIGHTS[g]) / weight_sum
+            g: weights.get(g, SELL_WEIGHTS[g]) / weight_sum
             for g in sell_groups
         }
     else:
-        normalized_weights = DEFAULT_SELL_WEIGHTS
+        normalized_weights = SELL_WEIGHTS
 
     # Calculate total score with normalized weights
     total_score = (
@@ -292,14 +294,9 @@ async def calculate_all_sell_scores(
     Returns:
         List of SellScore objects, sorted by total_score descending
     """
-    # Load weights from settings if not provided
+    # Always use fixed weights - the optimizer handles portfolio-level decisions
     if weights is None:
-        try:
-            from app.api.settings import get_sell_score_weights
-            weights = await get_sell_score_weights()
-        except Exception as e:
-            logger.warning(f"Failed to load sell weights from settings: {e}")
-            weights = DEFAULT_SELL_WEIGHTS
+        weights = SELL_WEIGHTS
 
     scores = []
     technical_data = technical_data or {}

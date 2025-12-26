@@ -85,9 +85,14 @@ async def _check_and_rebalance_internal():
 
         # Get configurable threshold from database
         from app.domain.services.settings_service import SettingsService
+        from app.application.services.rebalancing_service import calculate_min_trade_amount
         settings_service = SettingsService(SettingsRepository())
         settings = await settings_service.get_settings()
-        min_trade_size = settings.min_trade_size
+        # Calculate minimum worthwhile trade from transaction costs
+        min_trade_size = calculate_min_trade_amount(
+            settings.transaction_cost_fixed,
+            settings.transaction_cost_percent,
+        )
 
         # Connect to broker
         client = get_tradernet_client()
@@ -418,7 +423,8 @@ async def _refresh_recommendation_cache():
 
             # Also cache to fixed keys for LED ticker display
             # LED ticker looks for: multi_step_recommendations:diversification:{depth}:holistic
-            depth = settings.recommendation_depth
+            # Use actual depth from holistic planner (it auto-determines optimal depth)
+            depth = len(multi_step_steps)
             led_cache_key = f"multi_step_recommendations:diversification:{depth}:holistic"
             cache.set(led_cache_key, multi_step_data, ttl_seconds=900)
             cache.set("multi_step_recommendations:diversification:default:holistic", multi_step_data, ttl_seconds=900)

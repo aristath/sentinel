@@ -152,21 +152,23 @@ def calculate_position_size_risk_parity(
     return max(min_size, size)
 
 
-def get_max_trades(cash: float) -> int:
+def get_max_trades(cash: float, min_trade_amount: float = 250.0) -> int:
     """
     Calculate maximum trades based on available cash.
-    
+
     Args:
         cash: Available cash in EUR
-        
+        min_trade_amount: Minimum trade amount (calculated from transaction costs)
+                         Default 250 is based on €2 + 0.2% = 1% cost at €250
+
     Returns:
         Maximum number of trades (0 to max_trades_per_cycle)
     """
-    if cash < settings.min_trade_size:
+    if cash < min_trade_amount:
         return 0
     return min(
         settings.max_trades_per_cycle,
-        int(cash / settings.min_trade_size)
+        int(cash / min_trade_amount)
     )
 
 

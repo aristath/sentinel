@@ -42,26 +42,20 @@ from app.domain.scoring.calculations import calculate_volatility
 
 logger = logging.getLogger(__name__)
 
-# Default weights (can be overridden by settings)
-DEFAULT_WEIGHTS = {
-    "long_term": 0.20,
-    "fundamentals": 0.15,
-    "opportunity": 0.15,
-    "dividends": 0.12,
-    "short_term": 0.10,
-    "technicals": 0.10,
-    "opinion": 0.10,
-    "diversification": 0.08,
+# Fixed weights for stock scoring
+# These are no longer configurable via settings - the portfolio optimizer
+# now handles portfolio-level allocation decisions. Per-stock scoring uses
+# these fixed weights that balance quality, opportunity, and diversification.
+SCORE_WEIGHTS = {
+    "long_term": 0.20,       # CAGR, Sortino, Sharpe
+    "fundamentals": 0.15,    # Financial strength, Consistency
+    "opportunity": 0.15,     # 52W high distance, P/E ratio
+    "dividends": 0.12,       # Yield, Dividend consistency
+    "short_term": 0.10,      # Recent momentum, Drawdown
+    "technicals": 0.10,      # RSI, Bollinger, EMA
+    "opinion": 0.10,         # Analyst recommendations, Price targets
+    "diversification": 0.08, # Geography, Industry, Averaging down
 }
-
-async def get_score_weights() -> Dict[str, float]:
-    """Get score weights from settings or use defaults."""
-    try:
-        from app.api.settings import get_buy_score_weights
-        return await get_buy_score_weights()
-    except Exception as e:
-        logger.warning(f"Failed to load score weights from settings: {e}")
-        return DEFAULT_WEIGHTS
 
 
 async def calculate_stock_score(
@@ -102,8 +96,9 @@ async def calculate_stock_score(
     Returns:
         CalculatedStockScore with all components
     """
+    # Always use fixed weights - the optimizer handles portfolio-level allocation
     if weights is None:
-        weights = DEFAULT_WEIGHTS
+        weights = SCORE_WEIGHTS
 
     scores = {}
     sub_scores = {}
@@ -190,14 +185,14 @@ async def calculate_stock_score(
         sub_scores["diversification"] = {"geography": 0.5, "industry": 0.5, "averaging": 0.5}
 
     # Normalize weights so they sum to 1.0 (allows relative weight system)
-    weight_sum = sum(weights.get(group, DEFAULT_WEIGHTS[group]) for group in scores)
+    weight_sum = sum(weights.get(group, SCORE_WEIGHTS[group]) for group in scores)
     if weight_sum > 0:
         normalized_weights = {
-            group: weights.get(group, DEFAULT_WEIGHTS[group]) / weight_sum
+            group: weights.get(group, SCORE_WEIGHTS[group]) / weight_sum
             for group in scores
         }
     else:
-        normalized_weights = DEFAULT_WEIGHTS
+        normalized_weights = SCORE_WEIGHTS
 
     # Calculate weighted total
     total_score = sum(

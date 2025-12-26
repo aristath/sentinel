@@ -10,17 +10,27 @@ router = APIRouter()
 
 
 # Default values for all configurable settings
+# NOTE: Score weights (score_weight_*, sell_weight_*) have been removed.
+# The optimizer now handles portfolio-level allocation. Per-stock scoring
+# uses fixed weights defined in app/domain/scoring/stock_scorer.py and sell.py.
 SETTING_DEFAULTS = {
-    "min_trade_size": 400.0,        # Minimum EUR for a trade
+    # Core trading constraints
     "min_hold_days": 90,            # Minimum days before selling
     "sell_cooldown_days": 180,      # Days between sells of same stock
     "max_loss_threshold": -0.20,    # Don't sell if loss exceeds this (as decimal)
-    "min_sell_value": 100.0,        # Minimum EUR value to sell
+    "min_stock_score": 0.5,         # Minimum score for stock to be recommended (0-1)
     "target_annual_return": 0.11,   # Optimal CAGR for scoring (11%)
     "market_avg_pe": 22.0,          # Reference P/E for valuation
-    "recommendation_depth": 1.0,    # Number of steps in multi-step recommendations (1-5)
-    "min_stock_score": 0.5,         # Minimum score for stock to be recommended (0-1)
-    "max_balance_worsening": -5.0,  # Max allowed portfolio score decrease for recommendations (-10 to 0)
+    # Trading mode
+    "trading_mode": "research",             # "live" or "research" - blocks trades in research mode
+    # Portfolio Optimizer settings
+    "optimizer_blend": 0.5,                 # 0.0 = pure Mean-Variance, 1.0 = pure HRP
+    "optimizer_target_return": 0.11,        # Target annual return for MV component
+    # Transaction costs (Freedom24) - replaces min_trade_size for smarter filtering
+    "transaction_cost_fixed": 2.0,          # Fixed cost per trade in EUR
+    "transaction_cost_percent": 0.002,      # Variable cost as fraction (0.2%)
+    # Cash management
+    "min_cash_reserve": 500.0,              # Minimum cash to keep (never fully deploy)
     # LED Matrix settings
     "ticker_speed": 50.0,           # Ticker scroll speed in ms per frame (lower = faster)
     "led_brightness": 150.0,        # LED brightness (0-255)
@@ -39,31 +49,6 @@ SETTING_DEFAULTS = {
     "job_cash_flow_sync_hour": 1.0,         # Cash flow sync hour (0-23)
     "job_historical_sync_hour": 20.0,       # Historical sync hour (0-23)
     "job_maintenance_hour": 3.0,            # Daily maintenance hour (0-23)
-    # Buy Score Group Weights (relative - normalized at scoring time)
-    "score_weight_long_term": 0.20,         # CAGR, Sortino, Sharpe
-    "score_weight_fundamentals": 0.15,      # Financial strength, Consistency
-    "score_weight_opportunity": 0.15,       # 52W high, P/E ratio
-    "score_weight_dividends": 0.12,         # Yield, Dividend consistency
-    "score_weight_short_term": 0.10,        # Recent momentum, Drawdown
-    "score_weight_technicals": 0.10,        # RSI, Bollinger, EMA
-    "score_weight_opinion": 0.10,           # Analyst recs, Price targets
-    "score_weight_diversification": 0.08,   # Geography, Industry, Averaging
-    # Sell Score Weights (relative - normalized at scoring time)
-    "sell_weight_underperformance": 0.35,   # Return vs target
-    "sell_weight_time_held": 0.18,          # Position age
-    "sell_weight_portfolio_balance": 0.18,  # Overweight detection
-    "sell_weight_instability": 0.14,        # Bubble/volatility
-    "sell_weight_drawdown": 0.15,           # PyFolio drawdown
-    # Trading mode
-    "trading_mode": "research",             # "live" or "research" - blocks trades in research mode
-    # Portfolio Optimizer settings
-    "optimizer_blend": 0.5,                 # 0.0 = pure Mean-Variance, 1.0 = pure HRP
-    "optimizer_target_return": 0.11,        # Target annual return for MV component
-    # Transaction costs (Freedom24) - for optimizer to evaluate trade worthiness
-    "transaction_cost_fixed": 2.0,          # Fixed cost per trade in EUR
-    "transaction_cost_percent": 0.002,      # Variable cost as fraction (0.2%)
-    # Cash management
-    "min_cash_reserve": 500.0,              # Minimum cash to keep (never fully deploy)
 }
 
 
@@ -139,36 +124,6 @@ async def get_job_settings(settings_repo: SettingsRepositoryDep) -> dict[str, fl
     return result
 
 
-async def get_buy_score_weights(settings_repo: SettingsRepositoryDep) -> dict[str, float]:
-    """Get buy score group weights (8 groups, normalized at scoring time)."""
-    weight_keys = [k for k in SETTING_DEFAULTS if k.startswith("score_weight_")]
-    db_values = await get_settings_batch(weight_keys, settings_repo)
-    result = {}
-    for key in weight_keys:
-        # Extract group name from key (e.g., "score_weight_long_term" -> "long_term")
-        group = key.replace("score_weight_", "")
-        if key in db_values:
-            result[group] = float(db_values[key])
-        else:
-            result[group] = SETTING_DEFAULTS[key]
-    return result
-
-
-async def get_sell_score_weights(settings_repo: SettingsRepositoryDep) -> dict[str, float]:
-    """Get sell score weights (5 groups, normalized at scoring time)."""
-    weight_keys = [k for k in SETTING_DEFAULTS if k.startswith("sell_weight_")]
-    db_values = await get_settings_batch(weight_keys, settings_repo)
-    result = {}
-    for key in weight_keys:
-        # Extract group name from key (e.g., "sell_weight_underperformance" -> "underperformance")
-        group = key.replace("sell_weight_", "")
-        if key in db_values:
-            result[group] = float(db_values[key])
-        else:
-            result[group] = SETTING_DEFAULTS[key]
-    return result
-
-
 @router.get("")
 async def get_all_settings(settings_repo: SettingsRepositoryDep):
     """Get all configurable settings."""
@@ -206,10 +161,13 @@ async def update_setting_value(key: str, data: SettingUpdate, settings_repo: Set
     await set_setting(key, str(data.value), settings_repo)
 
     # Invalidate recommendation caches when recommendation-affecting settings change
+    # Note: optimizer settings (optimizer_blend, optimizer_target_return) also affect recommendations
     recommendation_settings = {
-        "min_trade_size", "min_stock_score", "min_hold_days",
-        "sell_cooldown_days", "max_loss_threshold", "target_annual_return",
-        "recommendation_depth", "max_balance_worsening"
+        "min_stock_score", "min_hold_days", "sell_cooldown_days",
+        "max_loss_threshold", "target_annual_return",
+        "optimizer_blend", "optimizer_target_return",
+        "transaction_cost_fixed", "transaction_cost_percent",
+        "min_cash_reserve",
     }
     if key in recommendation_settings:
         from app.infrastructure.recommendation_cache import get_recommendation_cache

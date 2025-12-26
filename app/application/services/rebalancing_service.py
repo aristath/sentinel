@@ -48,6 +48,43 @@ from app.infrastructure.external.tradernet import TradernetClient
 from app.domain.services.exchange_rate_service import ExchangeRateService
 from app.domain.value_objects.trade_side import TradeSide
 from app.domain.constants import BUY_COOLDOWN_DAYS
+
+# Constants for heuristic path (optimizer path uses settings directly)
+# These replace the removed min_trade_size and max_balance_worsening settings
+MAX_BALANCE_WORSENING = -5.0  # Maximum allowed portfolio score decrease for recommendations
+
+
+def calculate_min_trade_amount(
+    transaction_cost_fixed: float,
+    transaction_cost_percent: float,
+    max_cost_ratio: float = 0.01,  # 1% max cost-to-trade ratio
+) -> float:
+    """
+    Calculate minimum trade amount where transaction costs are acceptable.
+
+    With Freedom24's €2 + 0.2% fee structure:
+    - €50 trade: €2.10 cost = 4.2% drag → not worthwhile
+    - €200 trade: €2.40 cost = 1.2% drag → marginal
+    - €400 trade: €2.80 cost = 0.7% drag → acceptable
+
+    Args:
+        transaction_cost_fixed: Fixed cost per trade (e.g., €2.00)
+        transaction_cost_percent: Variable cost as fraction (e.g., 0.002 = 0.2%)
+        max_cost_ratio: Maximum acceptable cost-to-trade ratio (default 1%)
+
+    Returns:
+        Minimum trade amount in EUR
+    """
+    # Solve for trade amount where: (fixed + trade * percent) / trade = max_ratio
+    # fixed / trade + percent = max_ratio
+    # trade = fixed / (max_ratio - percent)
+    denominator = max_cost_ratio - transaction_cost_percent
+    if denominator <= 0:
+        # If variable cost exceeds max ratio, return a high minimum
+        return 1000.0
+    return transaction_cost_fixed / denominator
+
+
 from app.application.services.recommendation.portfolio_context_builder import build_portfolio_context
 from app.application.services.recommendation.technical_data_calculator import get_technical_data_for_positions
 from app.application.services.recommendation.performance_adjustment_calculator import get_performance_adjusted_weights
@@ -95,7 +132,11 @@ class RebalancingService:
         """
         # Get settings first (needed for cache key)
         settings = await self._settings_service.get_settings()
-        base_trade_amount = settings.min_trade_size
+        # Calculate minimum worthwhile trade from transaction costs
+        base_trade_amount = calculate_min_trade_amount(
+            settings.transaction_cost_fixed,
+            settings.transaction_cost_percent,
+        )
 
         # Generate cache key from both positions and settings
         from app.domain.portfolio_hash import generate_recommendation_cache_key
@@ -301,7 +342,7 @@ class RebalancingService:
             )
 
             # Skip stocks that worsen portfolio balance significantly
-            if score_change < settings.max_balance_worsening:
+            if score_change < MAX_BALANCE_WORSENING:
                 filter_stats["worsens_balance"] += 1
                 logger.debug(f"Skipping {symbol}: transaction worsens balance ({score_change:.2f})")
                 continue
@@ -452,13 +493,19 @@ class RebalancingService:
         }
         batch_prices = yahoo.get_batch_quotes(symbol_yahoo_map)
 
+        # Calculate minimum worthwhile trade from transaction costs
+        min_trade_amount = calculate_min_trade_amount(
+            settings.transaction_cost_fixed,
+            settings.transaction_cost_percent,
+        )
+
         filter_stats = {
             "total_stocks": len(stocks),
             "eligible_for_pricing": len(symbol_yahoo_map),
             "got_prices": len(batch_prices),
             "recently_bought": list(recently_bought),
             "settings": {
-                "min_trade_size": settings.min_trade_size,
+                "min_trade_amount": min_trade_amount,
                 "min_stock_score": settings.min_stock_score,
             },
             "no_allow_buy": [],
@@ -497,7 +544,7 @@ class RebalancingService:
 
             # Calculate trade value
             min_lot = stock.min_lot or 1
-            trade_value = max(settings.min_trade_size, min_lot * price)
+            trade_value = max(min_trade_amount, min_lot * price)
 
             # Calculate portfolio score impact
             try:
@@ -511,7 +558,7 @@ class RebalancingService:
                     portfolio_context=portfolio_context,
                     portfolio_hash=cache_key,
                 )
-                if score_change < settings.max_balance_worsening:
+                if score_change < MAX_BALANCE_WORSENING:
                     filter_stats["worsens_balance"].append({
                         "symbol": symbol,
                         "geography": stock.geography,
@@ -543,11 +590,17 @@ class RebalancingService:
         """
         Calculate optimal trades using get_recommendations() as the source of truth.
         """
-        if available_cash < app_settings.min_cash_threshold:
-            logger.info(f"Cash €{available_cash:.2f} below minimum €{app_settings.min_cash_threshold:.2f}")
+        settings = await self._settings_service.get_settings()
+        min_trade_amount = calculate_min_trade_amount(
+            settings.transaction_cost_fixed,
+            settings.transaction_cost_percent,
+        )
+
+        if available_cash < min_trade_amount:
+            logger.info(f"Cash €{available_cash:.2f} below minimum trade €{min_trade_amount:.2f}")
             return []
 
-        max_trades = get_max_trades(available_cash)
+        max_trades = get_max_trades(available_cash, min_trade_amount)
         if max_trades == 0:
             return []
 

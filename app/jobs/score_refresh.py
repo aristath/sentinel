@@ -15,7 +15,6 @@ from app.domain.scoring import (
     calculate_stock_score,
     PortfolioContext,
 )
-from app.api.settings import get_buy_score_weights
 
 logger = logging.getLogger(__name__)
 
@@ -52,9 +51,6 @@ async def _refresh_all_scores_internal():
         # Build portfolio context for diversification scoring
         portfolio_context = await _build_portfolio_context(db_manager)
 
-        # Load scoring weights from settings
-        weights = await get_buy_score_weights()
-
         scores_updated = 0
         for row in stocks:
             symbol, yahoo_symbol, geography, industry = row
@@ -75,6 +71,7 @@ async def _refresh_all_scores_internal():
                     continue
 
                 # Calculate score using 8-group scoring system
+                # Weights are fixed (no longer configurable via settings)
                 score = await calculate_stock_score(
                     symbol=symbol,
                     daily_prices=daily_prices,
@@ -84,7 +81,6 @@ async def _refresh_all_scores_internal():
                     industry=industry,
                     portfolio_context=portfolio_context,
                     yahoo_symbol=yahoo_symbol,
-                    weights=weights,
                 )
 
                 if score and score.group_scores:
