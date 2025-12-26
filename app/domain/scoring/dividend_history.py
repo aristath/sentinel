@@ -10,7 +10,7 @@ Used by the holistic planner to assess long-term income reliability.
 """
 
 import logging
-from typing import List, Optional, Tuple, Dict
+from typing import Dict, List, Optional, Tuple
 
 from app.domain.scoring.constants import DIVIDEND_CUT_THRESHOLD
 
@@ -83,6 +83,58 @@ def calculate_dividend_growth_rate(dividend_history: List[float]) -> Optional[fl
         return None
 
 
+def _calculate_cut_penalty(
+    has_cut: bool, years_since: Optional[int], dividend_history: List[float]
+) -> tuple[float, float]:
+    """Calculate penalty for dividend cuts and bonus for no cuts."""
+    if has_cut:
+        if years_since is not None and years_since <= 2:
+            return 0.40, 0.0  # Full penalty for recent cuts
+        elif years_since is not None and years_since <= 5:
+            return 0.25, 0.0  # Partial penalty
+        else:
+            return 0.10, 0.0  # Old cut, less penalty
+    else:
+        # Bonus for no cuts in history
+        if len(dividend_history) >= 5:
+            return 0.0, 0.15  # Long track record without cuts
+        elif len(dividend_history) >= 3:
+            return 0.0, 0.10
+        else:
+            return 0.0, 0.0
+
+
+def _calculate_growth_bonus(growth_rate: Optional[float]) -> float:
+    """Calculate bonus based on dividend growth rate."""
+    if growth_rate is None:
+        return 0.0
+
+    if growth_rate >= 0.05:  # 5%+ annual growth
+        return 0.30
+    elif growth_rate >= 0.02:  # 2-5% growth
+        return 0.20
+    elif growth_rate >= 0:  # Stable
+        return 0.10
+    else:  # Declining
+        return 0.0
+
+
+def _calculate_yield_bonus(
+    current_yield: Optional[float], portfolio_avg_yield: float
+) -> tuple[float, bool]:
+    """Calculate bonus based on yield vs portfolio average."""
+    if current_yield is None or current_yield <= 0:
+        return 0.0, False
+
+    above_avg = current_yield >= portfolio_avg_yield
+    if current_yield >= portfolio_avg_yield * 1.5:
+        return 0.30, above_avg  # Significantly above average
+    elif current_yield >= portfolio_avg_yield:
+        return 0.15, above_avg  # Above average
+    else:
+        return 0.0, above_avg
+
+
 def calculate_dividend_stability_score(
     dividend_history: List[float],
     portfolio_avg_yield: float = 0.03,
@@ -114,62 +166,34 @@ def calculate_dividend_stability_score(
         "yield_bonus": 0.0,
     }
 
-    # Base score
-    score = 0.5
+    score = 0.5  # Base score
 
     # Check for big cuts (40% weight)
     has_cut, years_since = has_big_dividend_cut(dividend_history)
     details["has_big_cut"] = has_cut
     details["years_since_cut"] = years_since
 
-    if has_cut:
-        # Recent cuts are worse than old cuts
-        if years_since is not None and years_since <= 2:
-            cut_penalty = 0.40  # Full penalty for recent cuts
-        elif years_since is not None and years_since <= 5:
-            cut_penalty = 0.25  # Partial penalty
-        else:
-            cut_penalty = 0.10  # Old cut, less penalty
-        details["cut_penalty"] = cut_penalty
-        score -= cut_penalty
-    else:
-        # Bonus for no cuts in history
-        if len(dividend_history) >= 5:
-            score += 0.15  # Long track record without cuts
-        elif len(dividend_history) >= 3:
-            score += 0.10
+    cut_penalty, no_cut_bonus = _calculate_cut_penalty(
+        has_cut, years_since, dividend_history
+    )
+    details["cut_penalty"] = cut_penalty
+    score -= cut_penalty
+    score += no_cut_bonus
 
     # Check growth trend (30% weight)
     growth_rate = calculate_dividend_growth_rate(dividend_history)
     details["dividend_growth_rate"] = growth_rate
-
-    if growth_rate is not None:
-        if growth_rate >= 0.05:  # 5%+ annual growth
-            growth_bonus = 0.30
-        elif growth_rate >= 0.02:  # 2-5% growth
-            growth_bonus = 0.20
-        elif growth_rate >= 0:  # Stable
-            growth_bonus = 0.10
-        else:  # Declining
-            growth_bonus = 0.0
-        details["growth_bonus"] = growth_bonus
-        score += growth_bonus
+    growth_bonus = _calculate_growth_bonus(growth_rate)
+    details["growth_bonus"] = growth_bonus
+    score += growth_bonus
 
     # Check vs portfolio average (30% weight)
-    if current_yield is not None and current_yield > 0:
-        if current_yield >= portfolio_avg_yield * 1.5:
-            yield_bonus = 0.30  # Significantly above average
-        elif current_yield >= portfolio_avg_yield:
-            yield_bonus = 0.15  # Above average
-        else:
-            yield_bonus = 0.0
-        details["yield_bonus"] = yield_bonus
-        details["above_portfolio_avg"] = current_yield >= portfolio_avg_yield
-        score += yield_bonus
+    yield_bonus, above_avg = _calculate_yield_bonus(current_yield, portfolio_avg_yield)
+    details["yield_bonus"] = yield_bonus
+    details["above_portfolio_avg"] = above_avg
+    score += yield_bonus
 
-    # Clamp to valid range
-    score = max(0.0, min(1.0, score))
-
+    score = max(0.0, min(1.0, score))  # Clamp to valid range
     return round(score, 3), details
 
 
@@ -240,7 +264,9 @@ async def get_dividend_analysis(
         "symbol": symbol,
         "current_yield_pct": round((current_yield or 0) * 100, 2),
         "portfolio_avg_yield_pct": round(portfolio_avg_yield * 100, 2),
-        "payout_ratio_pct": round((payout_ratio or 0) * 100, 1) if payout_ratio else None,
+        "payout_ratio_pct": (
+            round((payout_ratio or 0) * 100, 1) if payout_ratio else None
+        ),
         "stability_score": round(estimated_stability, 3),
         "yield_assessment": yield_assessment,
         "above_portfolio_avg": above_avg,

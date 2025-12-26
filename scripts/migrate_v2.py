@@ -8,8 +8,9 @@ Adds:
 """
 
 import asyncio
-import aiosqlite
 from pathlib import Path
+
+import aiosqlite
 
 DB_PATH = Path(__file__).parent.parent / "data" / "trader.db"
 
@@ -46,7 +47,7 @@ async def migrate():
         for tradernet, yahoo in mappings.items():
             cursor = await db.execute(
                 "UPDATE stocks SET yahoo_symbol = ? WHERE symbol = ?",
-                (yahoo, tradernet)
+                (yahoo, tradernet),
             )
             if cursor.rowcount > 0:
                 print(f"  {tradernet} -> {yahoo}")

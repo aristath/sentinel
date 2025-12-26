@@ -77,13 +77,11 @@ const API = {
   // Deprecated - recommendations now execute automatically
   // executeRecommendation: (symbol) => API._post(`/api/trades/recommendations/${symbol}/execute`),
   // executeSellRecommendation: (symbol) => API._post(`/api/trades/sell-recommendations/${symbol}/execute`),
-  fetchMultiStepRecommendations: (depth = null) => {
-    const params = depth ? `?depth=${depth}` : '';
-    return fetch(`/api/trades/multi-step-recommendations${params}`).then(r => r.json());
+  fetchMultiStepRecommendations: () => {
+    return fetch('/api/trades/multi-step-recommendations').then(r => r.json());
   },
-  fetchAllStrategyRecommendations: (depth = null) => {
-    const params = depth ? `?depth=${depth}` : '';
-    return fetch(`/api/trades/multi-step-recommendations/all${params}`).then(r => r.json());
+  fetchAllStrategyRecommendations: () => {
+    return fetch('/api/trades/multi-step-recommendations/all').then(r => r.json());
   },
   executeMultiStepStep: (stepNumber) => API._post(`/api/trades/multi-step-recommendations/execute-step/${stepNumber}`),
   executeAllMultiStep: () => API._post('/api/trades/multi-step-recommendations/execute-all'),
@@ -98,7 +96,6 @@ const API = {
   // Settings
   fetchSettings: () => fetch('/api/settings').then(r => r.json()),
   updateSetting: (key, value) => API._put(`/api/settings/${key}`, { value: parseFloat(value) }),
-  updateMinTradeSize: (value) => API._put('/api/settings/min_trade_size', { value }),
   getTradingMode: () => fetch('/api/settings/trading-mode').then(r => r.json()),
   toggleTradingMode: () => API._post('/api/settings/trading-mode'),
   restartService: () => API._post('/api/settings/restart-service'),
@@ -106,13 +103,9 @@ const API = {
   resetCache: () => API._post('/api/settings/reset-cache'),
   rescheduleJobs: () => API._post('/api/settings/reschedule-jobs'),
 
-  // Funding
-  getFundingOptions: (symbol, excludeSignatures = '') => {
-    const params = excludeSignatures ? `?exclude_signatures=${encodeURIComponent(excludeSignatures)}` : '';
-    return fetch(`/api/trades/recommendations/${symbol}/funding-options${params}`).then(r => r.json());
-  },
-  executeFunding: (symbol, options) =>
-    API._post(`/api/trades/recommendations/${symbol}/execute-funding`, options),
+  // Optimizer
+  fetchOptimizerStatus: () => fetch('/api/optimizer').then(r => r.json()),
+  runOptimizer: () => API._post('/api/optimizer/run'),
 };
 
 // Make available globally

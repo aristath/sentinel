@@ -6,16 +6,19 @@ Uses the new scoring domain to calculate scores for all active stocks.
 import logging
 from datetime import datetime
 
-from app.services import yahoo
-from app.infrastructure.events import emit, SystemEvent
-from app.infrastructure.locking import file_lock
-from app.infrastructure.hardware.led_display import set_activity
-from app.infrastructure.database.manager import get_db_manager
 from app.domain.scoring import (
-    calculate_stock_score,
     PortfolioContext,
+    calculate_stock_score,
 )
-from app.api.settings import get_buy_score_weights
+from app.infrastructure.database.manager import get_db_manager
+from app.infrastructure.events import SystemEvent, emit
+from app.infrastructure.external import yahoo_finance as yahoo
+from app.infrastructure.hardware.display_service import (
+    clear_processing,
+    set_error,
+    set_processing,
+)
+from app.infrastructure.locking import file_lock
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +35,7 @@ async def _refresh_all_scores_internal():
 
     emit(SystemEvent.SCORE_REFRESH_START)
     emit(SystemEvent.PROCESSING_START)
-    set_activity("REFRESHING STOCK SCORES...", duration=120.0)
+    set_processing("REFRESHING STOCK SCORES...")
 
     try:
         db_manager = get_db_manager()
@@ -52,9 +55,6 @@ async def _refresh_all_scores_internal():
         # Build portfolio context for diversification scoring
         portfolio_context = await _build_portfolio_context(db_manager)
 
-        # Load scoring weights from settings
-        weights = await get_buy_score_weights()
-
         scores_updated = 0
         for row in stocks:
             symbol, yahoo_symbol, geography, industry = row
@@ -63,7 +63,9 @@ async def _refresh_all_scores_internal():
             try:
                 # Get price data
                 daily_prices = await _get_daily_prices(db_manager, symbol, yahoo_symbol)
-                monthly_prices = await _get_monthly_prices(db_manager, symbol, yahoo_symbol)
+                monthly_prices = await _get_monthly_prices(
+                    db_manager, symbol, yahoo_symbol
+                )
                 fundamentals = yahoo.get_fundamentals(symbol, yahoo_symbol=yahoo_symbol)
 
                 if not daily_prices or len(daily_prices) < 50:
@@ -75,6 +77,7 @@ async def _refresh_all_scores_internal():
                     continue
 
                 # Calculate score using 8-group scoring system
+                # Weights are fixed (no longer configurable via settings)
                 score = await calculate_stock_score(
                     symbol=symbol,
                     daily_prices=daily_prices,
@@ -84,7 +87,6 @@ async def _refresh_all_scores_internal():
                     industry=industry,
                     portfolio_context=portfolio_context,
                     yahoo_symbol=yahoo_symbol,
-                    weights=weights,
                 )
 
                 if score and score.group_scores:
@@ -106,7 +108,7 @@ async def _refresh_all_scores_internal():
                             gs.get("diversification", 0),
                             score.total_score,
                             datetime.now().isoformat(),
-                        )
+                        ),
                     )
                     scores_updated += 1
 
@@ -119,12 +121,15 @@ async def _refresh_all_scores_internal():
 
         emit(SystemEvent.PROCESSING_END)
         emit(SystemEvent.SCORE_REFRESH_COMPLETE)
-        set_activity("SCORE REFRESH COMPLETE", duration=5.0)
 
     except Exception as e:
         logger.error(f"Score refresh failed: {e}")
         emit(SystemEvent.PROCESSING_END)
-        emit(SystemEvent.ERROR_OCCURRED, message="SCORE REFRESH FAILED")
+        error_msg = "SCORE REFRESH FAILED"
+        emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+        set_error(error_msg)
+    finally:
+        clear_processing()
 
 
 async def _build_portfolio_context(db_manager) -> PortfolioContext:
@@ -161,9 +166,7 @@ async def _build_portfolio_context(db_manager) -> PortfolioContext:
     stock_industries = {row[0]: row[2] for row in stock_data if row[2]}
 
     # Get scores for quality weighting
-    cursor = await db_manager.state.execute(
-        "SELECT symbol, quality_score FROM scores"
-    )
+    cursor = await db_manager.state.execute("SELECT symbol, quality_score FROM scores")
     stock_scores = {row[0]: row[1] for row in await cursor.fetchall() if row[1]}
 
     return PortfolioContext(
@@ -207,11 +210,7 @@ async def _get_daily_prices(db_manager, symbol: str, yahoo_symbol: str = None) -
 
     # Fetch from Yahoo if not enough local data
     logger.info(f"Fetching daily prices for {symbol} from Yahoo")
-    prices = yahoo.get_historical_prices(
-        symbol,
-        yahoo_symbol=yahoo_symbol,
-        period="1y"
-    )
+    prices = yahoo.get_historical_prices(symbol, yahoo_symbol=yahoo_symbol, period="1y")
 
     if prices:
         # Store for future use
@@ -223,14 +222,22 @@ async def _get_daily_prices(db_manager, symbol: str, yahoo_symbol: str = None) -
                     (date, open_price, high_price, low_price, close_price, volume, source, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, 'yahoo', datetime('now'))
                     """,
-                    (p.date.strftime("%Y-%m-%d"), p.open, p.high,
-                     p.low, p.close, p.volume)
+                    (
+                        p.date.strftime("%Y-%m-%d"),
+                        p.open,
+                        p.high,
+                        p.low,
+                        p.close,
+                        p.volume,
+                    ),
                 )
 
     return prices or []
 
 
-async def _get_monthly_prices(db_manager, symbol: str, yahoo_symbol: str = None) -> list:
+async def _get_monthly_prices(
+    db_manager, symbol: str, yahoo_symbol: str = None
+) -> list:
     """Get monthly price data from history database or Yahoo."""
     history_db = await db_manager.history(symbol)
 
@@ -246,21 +253,19 @@ async def _get_monthly_prices(db_manager, symbol: str, yahoo_symbol: str = None)
 
     if len(rows) >= 12:
         return [
-            {"year_month": row[0], "avg_adj_close": row[1]}
-            for row in reversed(rows)
+            {"year_month": row[0], "avg_adj_close": row[1]} for row in reversed(rows)
         ]
 
     # Fetch from Yahoo if not enough local data
     logger.info(f"Fetching monthly prices for {symbol} from Yahoo")
     prices = yahoo.get_historical_prices(
-        symbol,
-        yahoo_symbol=yahoo_symbol,
-        period="10y"
+        symbol, yahoo_symbol=yahoo_symbol, period="10y"
     )
 
     if prices:
         # Aggregate to monthly averages
         from collections import defaultdict
+
         monthly_data = defaultdict(list)
         for p in prices:
             if p.date and p.close:
@@ -278,7 +283,7 @@ async def _get_monthly_prices(db_manager, symbol: str, yahoo_symbol: str = None)
                     (year_month, avg_close, avg_adj_close, source, created_at)
                     VALUES (?, ?, ?, 'calculated', datetime('now'))
                     """,
-                    (month, avg_close, avg_close)
+                    (month, avg_close, avg_close),
                 )
 
         return monthly_prices

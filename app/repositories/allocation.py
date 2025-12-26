@@ -13,15 +13,16 @@ class AllocationRepository:
 
     def __init__(self, db=None):
         """Initialize repository.
-        
+
         Args:
             db: Optional database connection for testing. If None, uses get_db_manager().config
                 Can be a Database instance or raw aiosqlite.Connection (will be wrapped)
         """
         if db is not None:
             # If it's a raw connection without fetchone/fetchall, wrap it
-            if not hasattr(db, 'fetchone') and hasattr(db, 'execute'):
+            if not hasattr(db, "fetchone") and hasattr(db, "execute"):
                 from app.repositories.base import DatabaseAdapter
+
                 self._db = DatabaseAdapter(db)
             else:
                 self._db = db
@@ -38,8 +39,7 @@ class AllocationRepository:
     async def get_by_type(self, target_type: str) -> List[AllocationTarget]:
         """Get allocation targets by type (geography or industry)."""
         rows = await self._db.fetchall(
-            "SELECT * FROM allocation_targets WHERE type = ?",
-            (target_type,)
+            "SELECT * FROM allocation_targets WHERE type = ?", (target_type,)
         )
         return [
             AllocationTarget(
@@ -73,7 +73,7 @@ class AllocationRepository:
                     target_pct = excluded.target_pct,
                     updated_at = excluded.updated_at
                 """,
-                (target.type, target.name, target.target_pct, now, now)
+                (target.type, target.name, target.target_pct, now, now),
             )
 
     async def delete(self, target_type: str, name: str) -> None:
@@ -81,5 +81,5 @@ class AllocationRepository:
         async with transaction_context(self._db) as conn:
             await conn.execute(
                 "DELETE FROM allocation_targets WHERE type = ? AND name = ?",
-                (target_type, name)
+                (target_type, name),
             )

@@ -22,10 +22,9 @@ After setup, the board will have:
 │   ├── data/                  # SQLite database
 │   ├── venv/                  # Python virtual environment
 │   └── .env                   # Configuration (API keys)
-├── ArduinoApps/trader-display/ # Arduino LED display app
-│   ├── python/main.py         # Display logic
-│   ├── sketch/sketch.ino      # MCU firmware
-│   └── app.yaml               # App configuration
+├── scripts/
+│   ├── led_display_native.py  # Native LED display script
+│   └── compile_and_upload_sketch.sh  # Sketch compilation script
 ├── bin/
 │   └── auto-deploy.sh         # Auto-deployment script
 └── logs/
@@ -43,9 +42,8 @@ mkdir -p repos && cd repos
 git clone https://github.com/aristath/autoTrader.git
 cd autoTrader
 
-# Run setup scripts
+# Run setup script (installs both main app and LED display)
 sudo deploy/setup.sh
-./arduino-app/deploy/setup.sh
 ```
 
 ## Manual Setup Steps
@@ -134,17 +132,25 @@ PrivateTmp=true
 WantedBy=multi-user.target
 ```
 
-### 5. Setup Arduino LED Display App
+### 5. Setup LED Display Service
+
+The setup script automatically installs the LED display service. Manual setup:
 
 ```bash
-# Copy app to ArduinoApps
-cp -r /home/arduino/repos/autoTrader/arduino-app /home/arduino/ArduinoApps/trader-display
+# Install LED display service
+sudo cp /home/arduino/repos/autoTrader/deploy/led-display.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable led-display
 
-# Set as default app (auto-starts on boot)
-arduino-app-cli properties set default user:trader-display
+# Install Arduino CLI (if not already installed)
+curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
 
-# Start the app
-arduino-app-cli app start user:trader-display
+# Compile and upload sketch
+chmod +x /home/arduino/repos/autoTrader/scripts/compile_and_upload_sketch.sh
+/home/arduino/repos/autoTrader/scripts/compile_and_upload_sketch.sh
+
+# Start LED display service
+sudo systemctl start led-display
 ```
 
 ### 6. Setup Auto-Deployment
@@ -243,7 +249,7 @@ Both services are configured to start automatically:
 | Service | Auto-start | Command |
 |---------|------------|---------|
 | arduino-trader | systemd enabled | `sudo systemctl enable arduino-trader` |
-| trader-display | default app | `arduino-app-cli properties set default user:trader-display` |
+| led-display | systemd enabled | `sudo systemctl enable led-display` |
 | auto-deploy | cron job | Runs every 5 minutes |
 
 ## Troubleshooting
@@ -256,8 +262,20 @@ journalctl -u arduino-trader -n 50
 
 ### LED display not working
 ```bash
-arduino-app-cli app logs user:trader-display
-arduino-app-cli app restart user:trader-display
+# Check service status
+sudo systemctl status led-display
+
+# View logs
+sudo journalctl -u led-display -f
+
+# Check serial port
+ls -l /dev/ttyACM0
+
+# Restart service
+sudo systemctl restart led-display
+
+# Recompile and upload sketch if needed
+/home/arduino/arduino-trader/scripts/compile_and_upload_sketch.sh
 ```
 
 ### Auto-deploy not running
@@ -272,25 +290,34 @@ tail -50 /home/arduino/logs/auto-deploy.log
 
 ### Reset everything
 ```bash
-sudo systemctl stop arduino-trader
-arduino-app-cli app stop user:trader-display
+sudo systemctl stop arduino-trader led-display
 rm -rf /home/arduino/arduino-trader
-rm -rf /home/arduino/ArduinoApps/trader-display
 # Then run setup again
+sudo /home/arduino/repos/autoTrader/deploy/setup.sh
 ```
 
 ## LED Display Features
 
-The 8x13 LED matrix shows:
+The 8x13 LED matrix displays scrolling text with 3-pool priority system:
 
-- **Rows 0-4**: Portfolio value in thousands (big digits)
-- **Column 12**: Progress bar for remainder (each pixel = 200 EUR)
-- **Row 7, Col 0**: Heartbeat pulse (sine wave animation)
-- **Rows 6-7, Cols 3-5**: API call indicator (pulses during sync)
-- **Rows 6-7, Cols 11-12**: Web request indicator
+1. **Error Pool** (highest priority): Error messages like "BACKUP FAILED", "ORDER PLACEMENT FAILED"
+2. **Processing Pool** (medium priority): Activity messages like "SYNCING...", "BUY AAPL €500"
+3. **Next Actions Pool** (lowest priority, default): Portfolio value, cash balance, recommendations
 
-### Night Mode
-Display automatically dims to 30% between 11pm-7am for LED longevity.
+The display automatically shows the highest priority non-empty text. Text scrolls horizontally across the matrix.
+
+### Sketch Compilation
+
+When the sketch (`.ino` file) changes, the auto-deploy script automatically:
+1. Stops the LED display service
+2. Compiles the sketch using Arduino CLI
+3. Uploads to the MCU via serial port
+4. Restarts the LED display service
+
+Manual compilation:
+```bash
+/home/arduino/arduino-trader/scripts/compile_and_upload_sketch.sh
+```
 
 ## Sync Intervals
 

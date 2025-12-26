@@ -6,7 +6,7 @@ from contextvars import ContextVar
 from typing import Optional
 
 # Context variable for correlation ID (thread-safe for async)
-_correlation_id: ContextVar[Optional[str]] = ContextVar('correlation_id', default=None)
+_correlation_id: ContextVar[Optional[str]] = ContextVar("correlation_id", default=None)
 
 
 def get_correlation_id() -> Optional[str]:
@@ -17,10 +17,10 @@ def get_correlation_id() -> Optional[str]:
 def set_correlation_id(cid: Optional[str] = None) -> str:
     """
     Set a correlation ID for the current context.
-    
+
     Args:
         cid: Optional correlation ID. If None, generates a new UUID.
-        
+
     Returns:
         The correlation ID (newly generated or provided)
     """
@@ -37,7 +37,7 @@ def clear_correlation_id():
 
 class CorrelationIDFilter(logging.Filter):
     """Logging filter that adds correlation ID to log records."""
-    
+
     def filter(self, record: logging.LogRecord) -> bool:
         """Add correlation_id to log record if available."""
         record.correlation_id = get_correlation_id() or "none"
@@ -54,13 +54,12 @@ def setup_correlation_logging():
 def get_logger(name: str) -> logging.Logger:
     """
     Get a logger with correlation ID support.
-    
+
     Args:
         name: Logger name (typically __name__)
-        
+
     Returns:
         Logger instance
     """
     setup_correlation_logging()
     return logging.getLogger(name)
-

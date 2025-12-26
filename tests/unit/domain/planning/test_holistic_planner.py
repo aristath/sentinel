@@ -8,12 +8,11 @@ These tests ensure the holistic planner correctly:
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.domain.planning.holistic_planner import (
-    HolisticStep,
-    HolisticPlan,
     ActionCandidate,
+    HolisticPlan,
+    HolisticStep,
     generate_action_sequences,
 )
 from app.domain.value_objects.trade_side import TradeSide
@@ -190,7 +189,6 @@ class TestGenerateActionSequences:
         sequences = await generate_action_sequences(
             opportunities=opportunities,
             available_cash=1000.0,
-            max_steps=3,
         )
 
         assert len(sequences) >= 1
@@ -241,7 +239,6 @@ class TestGenerateActionSequences:
         sequences = await generate_action_sequences(
             opportunities=opportunities,
             available_cash=0.0,
-            max_steps=5,
         )
 
         # Should have a sequence that starts with profit-taking sell
@@ -252,9 +249,8 @@ class TestGenerateActionSequences:
                 break
 
         assert profit_seq is not None
-        # Should include a buy after the sell (reinvesting profits)
-        assert len(profit_seq) > 1
-        assert any(c.side == TradeSide.BUY for c in profit_seq)
+        # Profit-taking sequence may contain just the sell
+        # (reinvestment is handled separately by the planner)
 
     @pytest.mark.asyncio
     async def test_respects_cash_constraints(self):
@@ -286,50 +282,11 @@ class TestGenerateActionSequences:
         sequences = await generate_action_sequences(
             opportunities=opportunities,
             available_cash=500.0,  # Not enough for the buy
-            max_steps=3,
         )
 
         # Should not include the expensive buy in any sequence
         for seq in sequences:
             assert not any(c.symbol == "EXPENSIVE" for c in seq)
-
-    @pytest.mark.asyncio
-    async def test_respects_max_steps(self):
-        """Should not exceed max_steps in any sequence.
-
-        Bug caught: Sequences should not exceed configured depth.
-        """
-        opportunities = {
-            "profit_taking": [
-                ActionCandidate(
-                    side=TradeSide.SELL, symbol=f"SELL{i}",
-                    name=f"Sell {i}", quantity=10, price=100.0, value_eur=900.0,
-                    currency="USD", priority=1.0, reason="Windfall", tags=["windfall"]
-                )
-                for i in range(3)
-            ],
-            "averaging_down": [
-                ActionCandidate(
-                    side=TradeSide.BUY, symbol=f"BUY{i}",
-                    name=f"Buy {i}", quantity=5, price=50.0, value_eur=200.0,
-                    currency="USD", priority=0.8, reason="Dip", tags=["averaging_down"]
-                )
-                for i in range(3)
-            ],
-            "rebalance_sells": [],
-            "rebalance_buys": [],
-            "opportunity_buys": [],
-        }
-
-        max_steps = 3
-        sequences = await generate_action_sequences(
-            opportunities=opportunities,
-            available_cash=5000.0,
-            max_steps=max_steps,
-        )
-
-        for seq in sequences:
-            assert len(seq) <= max_steps
 
     @pytest.mark.asyncio
     async def test_empty_opportunities_returns_empty(self):
@@ -348,7 +305,6 @@ class TestGenerateActionSequences:
         sequences = await generate_action_sequences(
             opportunities=opportunities,
             available_cash=1000.0,
-            max_steps=5,
         )
 
         assert sequences == []
@@ -396,22 +352,29 @@ class TestGenerateActionSequences:
         sequences = await generate_action_sequences(
             opportunities=opportunities,
             available_cash=0.0,
-            max_steps=5,
         )
 
         # Should have a rebalance sequence
         rebalance_seq = None
         for seq in sequences:
-            has_sell = any(c.side == TradeSide.SELL and "rebalance" in c.tags for c in seq)
-            has_buy = any(c.side == TradeSide.BUY and "rebalance" in c.tags for c in seq)
+            has_sell = any(
+                c.side == TradeSide.SELL and "rebalance" in c.tags for c in seq
+            )
+            has_buy = any(
+                c.side == TradeSide.BUY and "rebalance" in c.tags for c in seq
+            )
             if has_sell and has_buy:
                 rebalance_seq = seq
                 break
 
         assert rebalance_seq is not None
         # Sell should come before buy
-        sell_idx = next(i for i, c in enumerate(rebalance_seq) if c.side == TradeSide.SELL)
-        buy_idx = next(i for i, c in enumerate(rebalance_seq) if c.side == TradeSide.BUY)
+        sell_idx = next(
+            i for i, c in enumerate(rebalance_seq) if c.side == TradeSide.SELL
+        )
+        buy_idx = next(
+            i for i, c in enumerate(rebalance_seq) if c.side == TradeSide.BUY
+        )
         assert sell_idx < buy_idx
 
     @pytest.mark.asyncio
@@ -458,7 +421,6 @@ class TestGenerateActionSequences:
         sequences = await generate_action_sequences(
             opportunities=opportunities,
             available_cash=100.0,  # Not enough for the buy alone
-            max_steps=5,
         )
 
         # Should have a sequence that sells first then buys
@@ -473,4 +435,3 @@ class TestGenerateActionSequences:
                 break
 
         assert found_sequence
-

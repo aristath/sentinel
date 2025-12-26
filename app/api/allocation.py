@@ -2,31 +2,31 @@
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from app.repositories import (
-    AllocationRepository,
-    PortfolioRepository,
-    PositionRepository,
-)
+
 from app.domain.models import AllocationTarget
-from app.application.services.portfolio_service import PortfolioService
+from app.infrastructure.dependencies import (
+    AllocationRepositoryDep,
+    PortfolioServiceDep,
+)
 
 router = APIRouter()
 
 
 class GeographyTargets(BaseModel):
     """Dynamic geography allocation weights."""
+
     targets: dict[str, float]
 
 
 class IndustryTargets(BaseModel):
     """Dynamic industry allocation weights."""
+
     targets: dict[str, float]
 
 
 @router.get("/targets")
-async def get_allocation_targets():
+async def get_allocation_targets(allocation_repo: AllocationRepositoryDep):
     """Get all allocation targets (geography and industry)."""
-    allocation_repo = AllocationRepository()
     targets = await allocation_repo.get_all()
 
     geography = {}
@@ -49,9 +49,10 @@ async def get_allocation_targets():
 
 
 @router.put("/targets/geography")
-async def update_geography_targets(targets: GeographyTargets):
+async def update_geography_targets(
+    targets: GeographyTargets, allocation_repo: AllocationRepositoryDep
+):
     """Update geography allocation weights."""
-    allocation_repo = AllocationRepository()
     updates = targets.targets
 
     if not updates:
@@ -60,8 +61,7 @@ async def update_geography_targets(targets: GeographyTargets):
     for name, weight in updates.items():
         if weight < -1 or weight > 1:
             raise HTTPException(
-                status_code=400,
-                detail=f"Weight for {name} must be between -1 and 1"
+                status_code=400, detail=f"Weight for {name} must be between -1 and 1"
             )
 
     for name, weight in updates.items():
@@ -82,9 +82,10 @@ async def update_geography_targets(targets: GeographyTargets):
 
 
 @router.put("/targets/industry")
-async def update_industry_targets(targets: IndustryTargets):
+async def update_industry_targets(
+    targets: IndustryTargets, allocation_repo: AllocationRepositoryDep
+):
     """Update industry allocation weights."""
-    allocation_repo = AllocationRepository()
     updates = targets.targets
 
     if not updates:
@@ -93,8 +94,7 @@ async def update_industry_targets(targets: IndustryTargets):
     for name, weight in updates.items():
         if weight < -1 or weight > 1:
             raise HTTPException(
-                status_code=400,
-                detail=f"Weight for {name} must be between -1 and 1"
+                status_code=400, detail=f"Weight for {name} must be between -1 and 1"
             )
 
     for name, weight in updates.items():
@@ -115,17 +115,8 @@ async def update_industry_targets(targets: IndustryTargets):
 
 
 @router.get("/current")
-async def get_current_allocation():
+async def get_current_allocation(portfolio_service: PortfolioServiceDep):
     """Get current allocation vs targets for both geography and industry."""
-    portfolio_repo = PortfolioRepository()
-    position_repo = PositionRepository()
-    allocation_repo = AllocationRepository()
-
-    portfolio_service = PortfolioService(
-        portfolio_repo,
-        position_repo,
-        allocation_repo,
-    )
     summary = await portfolio_service.get_portfolio_summary()
 
     return {
@@ -155,25 +146,18 @@ async def get_current_allocation():
 
 
 @router.get("/deviations")
-async def get_allocation_deviations():
+async def get_allocation_deviations(portfolio_service: PortfolioServiceDep):
     """Get allocation deviation scores for rebalancing decisions."""
-    portfolio_repo = PortfolioRepository()
-    position_repo = PositionRepository()
-    allocation_repo = AllocationRepository()
-
-    portfolio_service = PortfolioService(
-        portfolio_repo,
-        position_repo,
-        allocation_repo,
-    )
     summary = await portfolio_service.get_portfolio_summary()
 
     geo_deviations = {
         a.name: {
             "deviation": a.deviation,
             "need": max(0, -a.deviation),
-            "status": "underweight" if a.deviation < -0.02 else (
-                "overweight" if a.deviation > 0.02 else "balanced"
+            "status": (
+                "underweight"
+                if a.deviation < -0.02
+                else ("overweight" if a.deviation > 0.02 else "balanced")
             ),
         }
         for a in summary.geographic_allocations
@@ -183,8 +167,10 @@ async def get_allocation_deviations():
         a.name: {
             "deviation": a.deviation,
             "need": max(0, -a.deviation),
-            "status": "underweight" if a.deviation < -0.02 else (
-                "overweight" if a.deviation > 0.02 else "balanced"
+            "status": (
+                "underweight"
+                if a.deviation < -0.02
+                else ("overweight" if a.deviation > 0.02 else "balanced")
             ),
         }
         for a in summary.industry_allocations

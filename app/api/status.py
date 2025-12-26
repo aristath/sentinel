@@ -2,27 +2,27 @@
 
 import shutil
 from datetime import datetime
-from pathlib import Path
+
 from fastapi import APIRouter
+
 from app.config import settings
-from app.repositories import (
-    PortfolioRepository,
-    StockRepository,
-    PositionRepository,
-    AllocationRepository,
-    TradeRepository,
-    SettingsRepository,
+from app.infrastructure.dependencies import (
+    PortfolioRepositoryDep,
+    PositionRepositoryDep,
+    SettingsRepositoryDep,
+    StockRepositoryDep,
 )
 
 router = APIRouter()
 
 
 @router.get("")
-async def get_status():
+async def get_status(
+    portfolio_repo: PortfolioRepositoryDep,
+    stock_repo: StockRepositoryDep,
+    position_repo: PositionRepositoryDep,
+):
     """Get system health and status."""
-    portfolio_repo = PortfolioRepository()
-    stock_repo = StockRepository()
-    position_repo = PositionRepository()
 
     # Get cash balance from latest portfolio snapshot
     latest_snapshot = await portfolio_repo.get_latest()
@@ -34,8 +34,7 @@ async def get_status():
     if positions:
         # Find most recent last_updated, format as "YYYY-MM-DD HH:MM"
         latest = max(
-            (p.last_updated for p in positions if p.last_updated),
-            default=None
+            (p.last_updated for p in positions if p.last_updated), default=None
         )
         if latest:
             # Parse ISO format and reformat to "YYYY-MM-DD HH:MM"
@@ -63,216 +62,22 @@ async def get_status():
     }
 
 
-@router.get("/led")
-async def get_led_status():
-    """Get current LED display state."""
-    from app.infrastructure.hardware.led_display import get_display_state
+@router.get("/display/text")
+async def get_display_text(settings_repo: SettingsRepositoryDep):
+    """Get current text and display settings for Arduino LED matrix.
 
-    state = get_display_state()
+    Returns the highest priority text (error > processing > next_actions) plus settings.
+    Called every 2 seconds by native LED display script.
+    """
+    from app.infrastructure.hardware.display_service import get_current_text
 
+    speed = await settings_repo.get_float("ticker_speed", 50.0)
+    brightness = int(await settings_repo.get_float("led_brightness", 150))
     return {
-        "connected": True,  # Always "connected" - we just manage state now
-        "mode": state["mode"],
-        "error_message": state.get("error_message"),
+        "text": get_current_text(),
+        "speed": int(speed),
+        "brightness": brightness,
     }
-
-
-async def _build_ticker_text() -> str:
-    """Build ticker text from portfolio data and recommendations.
-
-    Format: €12,345 | CASH €675 | SELL ABC €200 | BUY XIAO €855
-    Respects user settings for what to show.
-    """
-    from app.infrastructure.cache import cache
-    from app.application.services.portfolio_service import PortfolioService
-
-    parts = []
-
-    try:
-        # Get display settings
-        settings_repo = SettingsRepository()
-        show_value = await settings_repo.get_float("ticker_show_value", 1.0) == 1.0
-        show_cash = await settings_repo.get_float("ticker_show_cash", 1.0) == 1.0
-        show_actions = await settings_repo.get_float("ticker_show_actions", 1.0) == 1.0
-        show_amounts = await settings_repo.get_float("ticker_show_amounts", 1.0) == 1.0
-        max_actions = int(await settings_repo.get_float("ticker_max_actions", 3))
-
-        # Get portfolio summary
-        portfolio_repo = PortfolioRepository()
-        position_repo = PositionRepository()
-        allocation_repo = AllocationRepository()
-
-        portfolio_service = PortfolioService(
-            portfolio_repo,
-            position_repo,
-            allocation_repo,
-        )
-        summary = await portfolio_service.get_portfolio_summary()
-
-        # Portfolio value
-        if show_value and summary.total_value:
-            parts.append(f"€{int(summary.total_value):,}")
-
-        # Cash balance
-        if show_cash and summary.cash_balance:
-            parts.append(f"CASH €{int(summary.cash_balance):,}")
-
-        # Add recommendations if enabled (cache-only, populated by Rebalance Check job)
-        if show_actions:
-            # Check for multi-step recommendations first (if depth > 1)
-            # Try holistic cache keys first (new format), then legacy format
-            depth = await settings_repo.get_int("recommendation_depth", 1)
-            multi_step = None
-
-            if depth > 1:
-                # Try holistic cache keys (new format)
-                multi_step = cache.get(f"multi_step_recommendations:diversification:{depth}:holistic")
-                if not multi_step:
-                    multi_step = cache.get("multi_step_recommendations:diversification:default:holistic")
-                # Fall back to legacy cache keys
-                if not multi_step:
-                    multi_step = cache.get(f"multi_step_recommendations:{depth}")
-                if not multi_step:
-                    multi_step = cache.get("multi_step_recommendations:default")
-            
-            if multi_step and multi_step.get("steps"):
-                # Show multi-step recommendations - format: [step/total]
-                total_steps = multi_step.get("depth", len(multi_step["steps"]))
-                for step in multi_step["steps"][:max_actions]:
-                    symbol = step["symbol"].split(".")[0]  # Remove .US/.EU suffix
-                    value = int(step.get("estimated_value", 0))
-                    # Handle both string and TradeSide enum for side
-                    raw_side = step.get("side", "BUY")
-                    side = str(raw_side).replace("TradeSide.", "")  # Normalize enum to string
-                    step_num = step.get("step", 1)
-                    step_label = f"[{step_num}/{total_steps}]"
-                    if show_amounts and value > 0:
-                        parts.append(f"{side} {symbol} €{value:,} {step_label}")
-                    else:
-                        parts.append(f"{side} {symbol} {step_label}")
-            else:
-                # Fall back to single recommendations
-                sell_recs = cache.get("sell_recommendations:3")
-                buy_recs = cache.get("recommendations:3")
-
-                # Add sell recommendations (priority - shown first)
-                if sell_recs and sell_recs.get("recommendations"):
-                    for rec in sell_recs["recommendations"][:max_actions]:
-                        symbol = rec["symbol"].split(".")[0]  # Remove .US/.EU suffix
-                        value = int(rec.get("estimated_value", 0))
-                        if show_amounts and value > 0:
-                            parts.append(f"SELL {symbol} €{value:,}")
-                        else:
-                            parts.append(f"SELL {symbol}")
-
-                # Add buy recommendations
-                if buy_recs and buy_recs.get("recommendations"):
-                    for rec in buy_recs["recommendations"][:max_actions]:
-                        symbol = rec["symbol"].split(".")[0]  # Remove .US/.EU suffix
-                        value = int(rec.get("amount", 0))
-                        if show_amounts and value > 0:
-                            parts.append(f"BUY {symbol} €{value:,}")
-                        else:
-                            parts.append(f"BUY {symbol}")
-
-    except Exception:
-        # On error, just return empty (no ticker)
-        return ""
-
-    return " | ".join(parts) if parts else ""
-
-
-@router.get("/led/display")
-async def get_led_display_state():
-    """
-    Get display state for Arduino Bridge apps.
-
-    Returns what the LED display should show including:
-    - mode: current display mode (normal, syncing, trade, error)
-    - error_message: error text for scrolling (only in error mode)
-    - trade_is_buy: true for buy, false for sell (only in trade mode)
-    - since: timestamp when mode last changed
-    - led3: RGB values for LED 3 (sync indicator)
-    - led4: RGB values for LED 4 (processing indicator)
-    - ticker_text: scrolling ticker with portfolio info
-    - activity_message: current activity (higher priority)
-    - ticker_speed: scroll speed in ms per frame
-    - led_brightness: brightness 0-255
-
-    Note: This endpoint is called ~10 times/second by the LED controller.
-    Response is cached for 2 seconds to prevent DB connection exhaustion.
-    Mode/activity changes are reflected immediately from in-memory state.
-    """
-    import asyncio
-    from app.infrastructure.hardware.led_display import get_display_state
-    from app.infrastructure.cache import cache
-
-    # Get live display state (in-memory, no DB)
-    state = get_display_state()
-
-    # Check if we have cached ticker data
-    cached = cache.get("led_display:ticker_data")
-
-    # Use cached ticker/settings if available, otherwise fetch fresh with timeout
-    if cached is not None:
-        state["ticker_text"] = state.get("ticker_text") or cached.get("ticker_text", "")
-        state["ticker_speed"] = cached.get("ticker_speed", 50.0)
-        state["led_brightness"] = cached.get("led_brightness", 150)
-    else:
-        # Fetch fresh data with 2 second timeout to prevent hanging
-        try:
-            await asyncio.wait_for(_refresh_led_display_cache(), timeout=2.0)
-            cached = cache.get("led_display:ticker_data") or {}
-        except asyncio.TimeoutError:
-            # On timeout, use empty ticker and cache it to prevent retries
-            cache.set("led_display:ticker_data", {
-                "ticker_text": "",
-                "ticker_speed": 50.0,
-                "led_brightness": 150,
-            }, ttl_seconds=5)
-            cached = {}
-        state["ticker_text"] = state.get("ticker_text") or cached.get("ticker_text", "")
-        state["ticker_speed"] = cached.get("ticker_speed", 50.0)
-        state["led_brightness"] = cached.get("led_brightness", 150)
-
-    return state
-
-
-async def _refresh_led_display_cache():
-    """Refresh cached LED display data (ticker text + settings)."""
-    from app.infrastructure.cache import cache
-
-    try:
-        # Build ticker text
-        ticker = await _build_ticker_text()
-
-        # Get settings
-        settings_repo = SettingsRepository()
-        ticker_speed = await settings_repo.get_float("ticker_speed", 50.0)
-        led_brightness = int(await settings_repo.get_float("led_brightness", 150))
-
-        # Cache for 2 seconds
-        cache.set("led_display:ticker_data", {
-            "ticker_text": ticker,
-            "ticker_speed": ticker_speed,
-            "led_brightness": led_brightness,
-        }, ttl_seconds=2)
-    except Exception:
-        # On error, set minimal cache to prevent rapid retries
-        cache.set("led_display:ticker_data", {
-            "ticker_text": "",
-            "ticker_speed": 50.0,
-            "led_brightness": 150,
-        }, ttl_seconds=2)
-
-
-@router.post("/led/test")
-async def test_led():
-    """Test LED display with trade animation."""
-    from app.infrastructure.events import emit, SystemEvent
-
-    emit(SystemEvent.TRADE_EXECUTED, is_buy=True)
-    return {"status": "success", "message": "Test animation triggered"}
 
 
 @router.post("/sync/portfolio")
@@ -326,7 +131,9 @@ async def trigger_daily_maintenance():
 @router.get("/tradernet")
 async def get_tradernet_status():
     """Get Tradernet connection status."""
-    from app.services.tradernet_connection import ensure_tradernet_connected
+    from app.infrastructure.external.tradernet_connection import (
+        ensure_tradernet_connected,
+    )
 
     try:
         client = await ensure_tradernet_connected(raise_on_error=False)
@@ -337,7 +144,7 @@ async def get_tradernet_status():
             }
     except Exception:
         pass
-    
+
     return {
         "connected": False,
         "message": "Not connected",
@@ -381,6 +188,59 @@ async def get_database_stats():
         }
 
 
+def _calculate_data_dir_size(data_dir: Path) -> int:
+    """Calculate total size of data directory."""
+    data_size = 0
+    if data_dir.exists():
+        for f in data_dir.glob("**/*"):
+            if f.is_file():
+                try:
+                    data_size += f.stat().st_size
+                except (OSError, FileNotFoundError):
+                    pass
+    return data_size
+
+
+def _get_core_db_sizes(data_dir: Path) -> dict[str, float]:
+    """Get sizes of core databases."""
+    core_dbs = ["config.db", "ledger.db", "state.db", "cache.db"]
+    db_sizes = {}
+    for db_name in core_dbs:
+        db_path = data_dir / db_name
+        if db_path.exists():
+            db_sizes[db_name] = round(db_path.stat().st_size / (1024 * 1024), 2)
+    return db_sizes
+
+
+def _get_history_db_info(data_dir: Path) -> tuple[int, int]:
+    """Get count and total size of history databases."""
+    history_dir = data_dir / "history"
+    history_count = 0
+    history_size = 0
+    if history_dir.exists():
+        for f in history_dir.glob("*.db"):
+            history_count += 1
+            history_size += f.stat().st_size
+    return history_count, history_size
+
+
+def _get_backup_info(data_dir: Path) -> tuple[int, int]:
+    """Get count and total size of backup files."""
+    backup_dir = data_dir / "backups"
+    backup_size = 0
+    backup_count = 0
+    if backup_dir.exists():
+        for f in backup_dir.glob("*.db"):
+            backup_size += f.stat().st_size
+            backup_count += 1
+        for d in backup_dir.glob("history_*"):
+            if d.is_dir():
+                for f in d.glob("*.db"):
+                    backup_size += f.stat().st_size
+                backup_count += 1
+    return backup_count, backup_size
+
+
 @router.get("/disk")
 async def get_disk_usage():
     """
@@ -394,50 +254,12 @@ async def get_disk_usage():
     """
     try:
         data_dir = settings.data_dir
-
-        # System disk usage
         disk = shutil.disk_usage("/")
 
-        # Data directory size
-        data_size = 0
-        if data_dir.exists():
-            for f in data_dir.glob("**/*"):
-                if f.is_file():
-                    try:
-                        data_size += f.stat().st_size
-                    except (OSError, FileNotFoundError):
-                        pass
-
-        # Count databases
-        core_dbs = ["config.db", "ledger.db", "state.db", "cache.db"]
-        db_sizes = {}
-        for db_name in core_dbs:
-            db_path = data_dir / db_name
-            if db_path.exists():
-                db_sizes[db_name] = round(db_path.stat().st_size / (1024 * 1024), 2)
-
-        # Count history databases
-        history_dir = data_dir / "history"
-        history_count = 0
-        history_size = 0
-        if history_dir.exists():
-            for f in history_dir.glob("*.db"):
-                history_count += 1
-                history_size += f.stat().st_size
-
-        # Backup directory size
-        backup_dir = data_dir / "backups"
-        backup_size = 0
-        backup_count = 0
-        if backup_dir.exists():
-            for f in backup_dir.glob("*.db"):
-                backup_size += f.stat().st_size
-                backup_count += 1
-            for d in backup_dir.glob("history_*"):
-                if d.is_dir():
-                    for f in d.glob("*.db"):
-                        backup_size += f.stat().st_size
-                    backup_count += 1
+        data_size = _calculate_data_dir_size(data_dir)
+        db_sizes = _get_core_db_sizes(data_dir)
+        history_count, history_size = _get_history_db_info(data_dir)
+        backup_count, backup_size = _get_backup_info(data_dir)
 
         return {
             "status": "ok",

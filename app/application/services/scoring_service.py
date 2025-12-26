@@ -6,11 +6,12 @@ Orchestrates stock scoring operations using the long-term value scoring system.
 import logging
 from typing import List, Optional
 
-from app.repositories import StockRepository, ScoreRepository
 from app.domain.models import StockScore
-from app.domain.scoring import calculate_stock_score, CalculatedStockScore
-from app.infrastructure.database.manager import get_db_manager
-from app.services import yahoo
+from app.domain.repositories.protocols import IStockRepository
+from app.domain.scoring import CalculatedStockScore, calculate_stock_score
+from app.infrastructure.database.manager import DatabaseManager
+from app.infrastructure.external import yahoo_finance as yahoo
+from app.repositories import ScoreRepository
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ def _to_domain_score(score: CalculatedStockScore) -> StockScore:
     """Convert CalculatedStockScore to domain StockScore model."""
     group_scores = score.group_scores or {}
     sub_scores = score.sub_scores or {}
-    
+
     # Map new group scores to domain model
     # quality_score = average of long_term and fundamentals
     quality_score = None
@@ -29,20 +30,20 @@ def _to_domain_score(score: CalculatedStockScore) -> StockScore:
         quality_score = group_scores["long_term"]
     elif "fundamentals" in group_scores:
         quality_score = group_scores["fundamentals"]
-    
+
     # Extract sub-component scores
     long_term_subs = sub_scores.get("long_term", {})
     fundamentals_subs = sub_scores.get("fundamentals", {})
-    
+
     cagr_score = long_term_subs.get("cagr")
     consistency_score = fundamentals_subs.get("consistency")
-    
+
     # Calculate history_years from available data (approximate)
     history_years = None
     if long_term_subs or fundamentals_subs:
         # If we have CAGR data, assume at least 5 years
         history_years = 5.0 if cagr_score else None
-    
+
     return StockScore(
         symbol=score.symbol,
         quality_score=quality_score,
@@ -65,18 +66,18 @@ class ScoringService:
 
     def __init__(
         self,
-        stock_repo: StockRepository,
+        stock_repo: IStockRepository,
         score_repo: ScoreRepository,
+        db_manager: DatabaseManager,
     ):
         self.stock_repo = stock_repo
         self.score_repo = score_repo
+        self._db_manager = db_manager
 
     async def _get_price_data(self, symbol: str, yahoo_symbol: str):
         """Fetch daily and monthly price data for a symbol."""
-        db_manager = get_db_manager()
-
         # Get history database for this symbol
-        history_db = await db_manager.history(symbol)
+        history_db = await self._db_manager.history(symbol)
 
         # Fetch daily prices
         rows = await history_db.fetchall(
@@ -88,7 +89,9 @@ class ScoringService:
         rows = await history_db.fetchall(
             "SELECT year_month, avg_adj_close FROM monthly_prices ORDER BY year_month DESC LIMIT 150"
         )
-        monthly_prices = [{"year_month": row[0], "avg_adj_close": row[1]} for row in rows]
+        monthly_prices = [
+            {"year_month": row[0], "avg_adj_close": row[1]} for row in rows
+        ]
 
         return daily_prices, monthly_prices
 
@@ -113,14 +116,20 @@ class ScoringService:
         """
         try:
             # Fetch price data
-            daily_prices, monthly_prices = await self._get_price_data(symbol, yahoo_symbol)
+            daily_prices, monthly_prices = await self._get_price_data(
+                symbol, yahoo_symbol
+            )
 
             if not daily_prices or len(daily_prices) < 50:
-                logger.warning(f"Insufficient daily data for {symbol}: {len(daily_prices)} days")
+                logger.warning(
+                    f"Insufficient daily data for {symbol}: {len(daily_prices)} days"
+                )
                 return None
 
             if not monthly_prices or len(monthly_prices) < 12:
-                logger.warning(f"Insufficient monthly data for {symbol}: {len(monthly_prices)} months")
+                logger.warning(
+                    f"Insufficient monthly data for {symbol}: {len(monthly_prices)} months"
+                )
                 return None
 
             # Fetch fundamentals from Yahoo
@@ -166,4 +175,3 @@ class ScoringService:
 
         logger.info(f"Scored {len(scores)} stocks")
         return scores
-

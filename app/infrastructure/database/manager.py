@@ -59,8 +59,12 @@ class Database:
 
                 # Configure for reliability over speed
                 await self._connection.execute("PRAGMA journal_mode=WAL")
-                await self._connection.execute("PRAGMA busy_timeout=60000")  # 60 seconds
-                await self._connection.execute("PRAGMA synchronous=NORMAL")  # Balance of safety/speed
+                await self._connection.execute(
+                    "PRAGMA busy_timeout=60000"
+                )  # 60 seconds
+                await self._connection.execute(
+                    "PRAGMA synchronous=NORMAL"
+                )  # Balance of safety/speed
                 await self._connection.execute("PRAGMA cache_size=-8000")  # 8MB cache
                 await self._connection.execute("PRAGMA temp_store=MEMORY")
 
@@ -265,9 +269,10 @@ _db_manager: Optional[DatabaseManager] = None
 
 def get_db_manager() -> DatabaseManager:
     """Get the global database manager instance."""
-    global _db_manager
     if _db_manager is None:
-        raise RuntimeError("Database manager not initialized. Call init_databases() first.")
+        raise RuntimeError(
+            "Database manager not initialized. Call init_databases() first."
+        )
     return _db_manager
 
 
@@ -280,11 +285,11 @@ async def init_databases(data_dir: Path) -> DatabaseManager:
     global _db_manager
 
     from app.infrastructure.database.schemas import (
+        init_cache_schema,
+        init_calculations_schema,
         init_config_schema,
         init_ledger_schema,
         init_state_schema,
-        init_cache_schema,
-        init_calculations_schema,
     )
 
     _db_manager = DatabaseManager(data_dir)

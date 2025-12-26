@@ -10,18 +10,18 @@ Usage:
 """
 
 import asyncio
-import aiosqlite
 from pathlib import Path
 
+import aiosqlite
 
 # Known minimum lot sizes for Asian stocks
 KNOWN_LOT_SIZES = {
     # Japanese stocks trade in 100-share lots
-    "7203.T": 100,      # Toyota
-    "6758.T": 100,      # Sony
-    "9984.T": 100,      # SoftBank
+    "7203.T": 100,  # Toyota
+    "6758.T": 100,  # Sony
+    "9984.T": 100,  # SoftBank
     # Korean stocks typically trade in single shares
-    "005930.KS": 1,     # Samsung
+    "005930.KS": 1,  # Samsung
     # European and US stocks typically trade in single shares
 }
 
@@ -40,16 +40,13 @@ async def migrate():
         stock_columns = [row[1] for row in await cursor.fetchall()]
 
         if "min_lot" not in stock_columns:
-            await db.execute(
-                "ALTER TABLE stocks ADD COLUMN min_lot INTEGER DEFAULT 1"
-            )
+            await db.execute("ALTER TABLE stocks ADD COLUMN min_lot INTEGER DEFAULT 1")
             print("Added min_lot column to stocks table")
 
             # Update known lot sizes
             for symbol, lot_size in KNOWN_LOT_SIZES.items():
                 await db.execute(
-                    "UPDATE stocks SET min_lot = ? WHERE symbol = ?",
-                    (lot_size, symbol)
+                    "UPDATE stocks SET min_lot = ? WHERE symbol = ?", (lot_size, symbol)
                 )
             print(f"Updated {len(KNOWN_LOT_SIZES)} stocks with known lot sizes")
         else:

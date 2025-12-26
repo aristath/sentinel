@@ -11,15 +11,10 @@ Used by the holistic planner to evaluate and compare action sequences.
 """
 
 import logging
-import math
 from typing import Dict, Optional, Tuple
 
-from app.domain.scoring.constants import (
-    OPTIMAL_CAGR,
-    BELL_CURVE_SIGMA_LEFT,
-    BELL_CURVE_SIGMA_RIGHT,
-    BELL_CURVE_FLOOR,
-)
+# Import scorer from dedicated module
+from app.domain.scoring.scorers.end_state import score_total_return
 
 logger = logging.getLogger(__name__)
 
@@ -40,30 +35,6 @@ PROMISE_WEIGHT_SORTINO = 0.15
 STABILITY_WEIGHT_VOLATILITY = 0.50
 STABILITY_WEIGHT_DRAWDOWN = 0.30
 STABILITY_WEIGHT_SHARPE = 0.20
-
-
-def score_total_return(total_return: float, target: float = 0.12) -> float:
-    """
-    Bell curve scoring for total return (CAGR + dividend yield).
-
-    Peak at target (default 12%). Uses asymmetric Gaussian.
-    Higher total return is better, but extremely high may indicate risk.
-
-    Args:
-        total_return: Combined CAGR + dividend yield (e.g., 0.12 = 12%)
-        target: Optimal total return (default 12%)
-
-    Returns:
-        Score from 0.15 to 1.0
-    """
-    if total_return <= 0:
-        return BELL_CURVE_FLOOR
-
-    # Use slightly wider sigma for total return (more forgiving)
-    sigma = BELL_CURVE_SIGMA_LEFT if total_return < target else BELL_CURVE_SIGMA_RIGHT * 1.2
-    raw_score = math.exp(-((total_return - target) ** 2) / (2 * sigma ** 2))
-
-    return BELL_CURVE_FLOOR + raw_score * (1 - BELL_CURVE_FLOOR)
 
 
 async def calculate_total_return_score(
@@ -117,6 +88,84 @@ async def calculate_total_return_score(
     return round(score, 3), sub_components
 
 
+async def _get_consistency_score(
+    calc_repo, symbol: str, provided: Optional[float]
+) -> float:
+    """Get consistency score from cache or use provided value."""
+    if provided is not None:
+        return provided
+    cached = await calc_repo.get_metric(symbol, "CONSISTENCY_SCORE")
+    return cached if cached is not None else 0.5
+
+
+async def _get_financial_strength(
+    calc_repo, symbol: str, provided: Optional[float]
+) -> float:
+    """Get financial strength from cache or use provided value."""
+    if provided is not None:
+        return provided
+    cached = await calc_repo.get_metric(symbol, "FINANCIAL_STRENGTH")
+    return cached if cached is not None else 0.5
+
+
+def _derive_dividend_consistency_from_payout(payout: float) -> float:
+    """Derive dividend consistency score from payout ratio."""
+    if 0.3 <= payout <= 0.6:
+        return 1.0
+    elif payout < 0.3:
+        return 0.5 + (payout / 0.3) * 0.5
+    elif payout <= 0.8:
+        return 1.0 - ((payout - 0.6) / 0.2) * 0.3
+    else:
+        return 0.4
+
+
+async def _get_dividend_consistency(
+    calc_repo, symbol: str, provided: Optional[float]
+) -> float:
+    """Get dividend consistency from cache, derive from payout, or use provided value."""
+    if provided is not None:
+        return provided
+
+    cached = await calc_repo.get_metric(symbol, "DIVIDEND_CONSISTENCY")
+    if cached is not None:
+        return cached
+
+    payout = await calc_repo.get_metric(symbol, "PAYOUT_RATIO")
+    if payout is not None:
+        return _derive_dividend_consistency_from_payout(payout)
+
+    return 0.5
+
+
+def _convert_sortino_to_score(sortino: float) -> float:
+    """Convert Sortino ratio to score (0-1)."""
+    if sortino >= 2.0:
+        return 1.0
+    elif sortino >= 1.5:
+        return 0.8 + (sortino - 1.5) * 0.4
+    elif sortino >= 1.0:
+        return 0.6 + (sortino - 1.0) * 0.4
+    elif sortino >= 0:
+        return sortino * 0.6
+    else:
+        return 0.0
+
+
+async def _get_sortino_score(
+    calc_repo, symbol: str, provided: Optional[float]
+) -> float:
+    """Get Sortino score from cache (converted) or use provided value."""
+    if provided is not None:
+        return provided
+
+    sortino = await calc_repo.get_metric(symbol, "SORTINO")
+    if sortino is not None:
+        return _convert_sortino_to_score(sortino)
+
+    return 0.5
+
+
 async def calculate_long_term_promise(
     symbol: str,
     consistency_score: Optional[float] = None,
@@ -147,64 +196,24 @@ async def calculate_long_term_promise(
 
     calc_repo = CalculationsRepository()
 
-    # Get consistency score from cache if not provided
-    if consistency_score is None:
-        cached = await calc_repo.get_metric(symbol, "CONSISTENCY_SCORE")
-        consistency_score = cached if cached is not None else 0.5
+    consistency_score = await _get_consistency_score(
+        calc_repo, symbol, consistency_score
+    )
+    financial_strength = await _get_financial_strength(
+        calc_repo, symbol, financial_strength
+    )
+    dividend_consistency = await _get_dividend_consistency(
+        calc_repo, symbol, dividend_consistency
+    )
+    sortino_score = await _get_sortino_score(calc_repo, symbol, sortino_score)
 
-    # Get financial strength from cache if not provided
-    if financial_strength is None:
-        cached = await calc_repo.get_metric(symbol, "FINANCIAL_STRENGTH")
-        financial_strength = cached if cached is not None else 0.5
-
-    # Get dividend consistency - derive from payout ratio if not provided
-    if dividend_consistency is None:
-        cached = await calc_repo.get_metric(symbol, "DIVIDEND_CONSISTENCY")
-        if cached is not None:
-            dividend_consistency = cached
-        else:
-            # Derive from payout ratio
-            payout = await calc_repo.get_metric(symbol, "PAYOUT_RATIO")
-            if payout is not None:
-                # Ideal payout: 30-60%
-                if 0.3 <= payout <= 0.6:
-                    dividend_consistency = 1.0
-                elif payout < 0.3:
-                    dividend_consistency = 0.5 + (payout / 0.3) * 0.5
-                elif payout <= 0.8:
-                    dividend_consistency = 1.0 - ((payout - 0.6) / 0.2) * 0.3
-                else:
-                    dividend_consistency = 0.4
-            else:
-                dividend_consistency = 0.5
-
-    # Get Sortino score from cache if not provided
-    if sortino_score is None:
-        sortino = await calc_repo.get_metric(symbol, "SORTINO")
-        if sortino is not None:
-            # Convert ratio to score
-            if sortino >= 2.0:
-                sortino_score = 1.0
-            elif sortino >= 1.5:
-                sortino_score = 0.8 + (sortino - 1.5) * 0.4
-            elif sortino >= 1.0:
-                sortino_score = 0.6 + (sortino - 1.0) * 0.4
-            elif sortino >= 0:
-                sortino_score = sortino * 0.6
-            else:
-                sortino_score = 0.0
-        else:
-            sortino_score = 0.5
-
-    # Calculate weighted total
     total = (
-        consistency_score * PROMISE_WEIGHT_CONSISTENCY +
-        financial_strength * PROMISE_WEIGHT_FINANCIALS +
-        dividend_consistency * PROMISE_WEIGHT_DIVIDEND_STABILITY +
-        sortino_score * PROMISE_WEIGHT_SORTINO
+        consistency_score * PROMISE_WEIGHT_CONSISTENCY
+        + financial_strength * PROMISE_WEIGHT_FINANCIALS
+        + dividend_consistency * PROMISE_WEIGHT_DIVIDEND_STABILITY
+        + sortino_score * PROMISE_WEIGHT_SORTINO
     )
 
-    # Cache the result
     await calc_repo.set_metric(symbol, "LONG_TERM_PROMISE", total)
 
     sub_components = {
@@ -215,6 +224,87 @@ async def calculate_long_term_promise(
     }
 
     return round(min(1.0, total), 3), sub_components
+
+
+def _convert_volatility_to_score(volatility: float) -> float:
+    """Convert volatility to score (inverse - lower is better)."""
+    if volatility <= 0.15:
+        return 1.0
+    elif volatility <= 0.25:
+        return 1.0 - ((volatility - 0.15) / 0.10) * 0.3
+    elif volatility <= 0.40:
+        return 0.7 - ((volatility - 0.25) / 0.15) * 0.4
+    else:
+        return max(0.1, 0.3 - (volatility - 0.40))
+
+
+async def _get_volatility_score(
+    calc_repo, symbol: str, provided: Optional[float]
+) -> float:
+    """Get volatility score from cache or use provided value."""
+    if provided is not None:
+        return _convert_volatility_to_score(provided)
+
+    volatility = await calc_repo.get_metric(symbol, "VOLATILITY_ANNUAL")
+    if volatility is not None and volatility > 0:
+        return _convert_volatility_to_score(volatility)
+
+    return 0.5
+
+
+def _convert_drawdown_to_score(max_dd: float) -> float:
+    """Convert max drawdown to score."""
+    dd_pct = abs(max_dd)
+    if dd_pct <= 0.10:
+        return 1.0
+    elif dd_pct <= 0.20:
+        return 0.8 + (0.20 - dd_pct) * 2
+    elif dd_pct <= 0.30:
+        return 0.6 + (0.30 - dd_pct) * 2
+    elif dd_pct <= 0.50:
+        return 0.2 + (0.50 - dd_pct) * 2
+    else:
+        return max(0.0, 0.2 - (dd_pct - 0.50))
+
+
+async def _get_drawdown_score(
+    calc_repo, symbol: str, provided: Optional[float]
+) -> float:
+    """Get drawdown score from cache or use provided value."""
+    if provided is not None:
+        return provided
+
+    max_dd = await calc_repo.get_metric(symbol, "MAX_DRAWDOWN")
+    if max_dd is not None:
+        return _convert_drawdown_to_score(max_dd)
+
+    return 0.5
+
+
+def _convert_sharpe_to_score(sharpe: float) -> float:
+    """Convert Sharpe ratio to score."""
+    if sharpe >= 2.0:
+        return 1.0
+    elif sharpe >= 1.0:
+        return 0.7 + (sharpe - 1.0) * 0.3
+    elif sharpe >= 0.5:
+        return 0.4 + (sharpe - 0.5) * 0.6
+    elif sharpe >= 0:
+        return sharpe * 0.8
+    else:
+        return 0.0
+
+
+async def _get_sharpe_score(calc_repo, symbol: str, provided: Optional[float]) -> float:
+    """Get Sharpe score from cache (converted) or use provided value."""
+    if provided is not None:
+        return provided
+
+    sharpe = await calc_repo.get_metric(symbol, "SHARPE")
+    if sharpe is not None:
+        return _convert_sharpe_to_score(sharpe)
+
+    return 0.5
 
 
 async def calculate_stability_score(
@@ -244,67 +334,16 @@ async def calculate_stability_score(
 
     calc_repo = CalculationsRepository()
 
-    # Get volatility and convert to score (inverse - lower is better)
-    if volatility is None:
-        volatility = await calc_repo.get_metric(symbol, "VOLATILITY_ANNUAL")
+    volatility_score = await _get_volatility_score(calc_repo, symbol, volatility)
+    drawdown_score = await _get_drawdown_score(calc_repo, symbol, drawdown_score)
+    sharpe_score = await _get_sharpe_score(calc_repo, symbol, sharpe_score)
 
-    if volatility is not None and volatility > 0:
-        # Typical annual volatility: 15-40%
-        # Score: 30% vol = 0.5, 15% vol = 1.0, 50% vol = 0.2
-        if volatility <= 0.15:
-            volatility_score = 1.0
-        elif volatility <= 0.25:
-            volatility_score = 1.0 - ((volatility - 0.15) / 0.10) * 0.3
-        elif volatility <= 0.40:
-            volatility_score = 0.7 - ((volatility - 0.25) / 0.15) * 0.4
-        else:
-            volatility_score = max(0.1, 0.3 - (volatility - 0.40))
-    else:
-        volatility_score = 0.5
-
-    # Get drawdown score from cache if not provided
-    if drawdown_score is None:
-        max_dd = await calc_repo.get_metric(symbol, "MAX_DRAWDOWN")
-        if max_dd is not None:
-            dd_pct = abs(max_dd)
-            if dd_pct <= 0.10:
-                drawdown_score = 1.0
-            elif dd_pct <= 0.20:
-                drawdown_score = 0.8 + (0.20 - dd_pct) * 2
-            elif dd_pct <= 0.30:
-                drawdown_score = 0.6 + (0.30 - dd_pct) * 2
-            elif dd_pct <= 0.50:
-                drawdown_score = 0.2 + (0.50 - dd_pct) * 2
-            else:
-                drawdown_score = max(0.0, 0.2 - (dd_pct - 0.50))
-        else:
-            drawdown_score = 0.5
-
-    # Get Sharpe score from cache if not provided
-    if sharpe_score is None:
-        sharpe = await calc_repo.get_metric(symbol, "SHARPE")
-        if sharpe is not None:
-            if sharpe >= 2.0:
-                sharpe_score = 1.0
-            elif sharpe >= 1.0:
-                sharpe_score = 0.7 + (sharpe - 1.0) * 0.3
-            elif sharpe >= 0.5:
-                sharpe_score = 0.4 + (sharpe - 0.5) * 0.6
-            elif sharpe >= 0:
-                sharpe_score = sharpe * 0.8
-            else:
-                sharpe_score = 0.0
-        else:
-            sharpe_score = 0.5
-
-    # Calculate weighted total
     total = (
-        volatility_score * STABILITY_WEIGHT_VOLATILITY +
-        drawdown_score * STABILITY_WEIGHT_DRAWDOWN +
-        sharpe_score * STABILITY_WEIGHT_SHARPE
+        volatility_score * STABILITY_WEIGHT_VOLATILITY
+        + drawdown_score * STABILITY_WEIGHT_DRAWDOWN
+        + sharpe_score * STABILITY_WEIGHT_SHARPE
     )
 
-    # Cache the result
     await calc_repo.set_metric(symbol, "STABILITY_SCORE", total)
 
     sub_components = {
@@ -371,11 +410,11 @@ async def calculate_portfolio_end_state_score(
 
     # Calculate final end-state score
     end_state_score = (
-        weighted_total_return * WEIGHT_TOTAL_RETURN +
-        diversification_score * WEIGHT_DIVERSIFICATION +
-        weighted_promise * WEIGHT_LONG_TERM_PROMISE +
-        weighted_stability * WEIGHT_STABILITY +
-        opinion_score * WEIGHT_OPINION
+        weighted_total_return * WEIGHT_TOTAL_RETURN
+        + diversification_score * WEIGHT_DIVERSIFICATION
+        + weighted_promise * WEIGHT_LONG_TERM_PROMISE
+        + weighted_stability * WEIGHT_STABILITY
+        + opinion_score * WEIGHT_OPINION
     )
 
     detailed_breakdown = {

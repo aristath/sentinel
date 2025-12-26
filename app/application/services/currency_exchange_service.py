@@ -5,16 +5,40 @@ Handles currency conversions between EUR, USD, HKD, and GBP via Tradernet API.
 
 import logging
 from dataclasses import dataclass
-from typing import Optional, List, Tuple
+from typing import List, Optional
 
-from app.services.tradernet import TradernetClient, OrderResult, get_tradernet_client
+from app.infrastructure.external.tradernet import OrderResult, TradernetClient
 
 logger = logging.getLogger(__name__)
+
+
+def _find_rate_symbol(from_curr: str, to_curr: str, service) -> tuple[Optional[str], bool]:
+    """Find exchange rate symbol and whether it's inverse."""
+    if (from_curr, to_curr) in service.RATE_SYMBOLS:
+        return service.RATE_SYMBOLS[(from_curr, to_curr)], False
+    elif (to_curr, from_curr) in service.RATE_SYMBOLS:
+        return service.RATE_SYMBOLS[(to_curr, from_curr)], True
+    return None, False
+
+
+def _get_rate_via_path(from_curr: str, to_curr: str, service) -> Optional[float]:
+    """Get exchange rate via conversion path."""
+    path = service.get_conversion_path(from_curr, to_curr)
+    if len(path) == 1:
+        symbol = path[0].symbol
+        quote = service.client.get_quote(symbol)
+        return quote.price if quote and quote.price > 0 else None
+    elif len(path) == 2:
+        rate1 = service.get_rate(path[0].from_currency, path[0].to_currency)
+        rate2 = service.get_rate(path[1].from_currency, path[1].to_currency)
+        return rate1 * rate2 if rate1 and rate2 else None
+    return None
 
 
 @dataclass
 class ExchangeRate:
     """Exchange rate data."""
+
     from_currency: str
     to_currency: str
     rate: float
@@ -26,6 +50,7 @@ class ExchangeRate:
 @dataclass
 class ConversionStep:
     """A single step in a currency conversion path."""
+
     from_currency: str
     to_currency: str
     symbol: str
@@ -45,19 +70,15 @@ class CurrencyExchangeService:
         # EUR <-> USD (ITS_MONEY market)
         ("EUR", "USD"): ("EURUSD_T0.ITS", "BUY"),
         ("USD", "EUR"): ("EURUSD_T0.ITS", "SELL"),
-
         # EUR <-> GBP (ITS_MONEY market)
         ("EUR", "GBP"): ("EURGBP_T0.ITS", "BUY"),
         ("GBP", "EUR"): ("EURGBP_T0.ITS", "SELL"),
-
         # GBP <-> USD (ITS_MONEY market)
         ("GBP", "USD"): ("GBPUSD_T0.ITS", "BUY"),
         ("USD", "GBP"): ("GBPUSD_T0.ITS", "SELL"),
-
         # HKD <-> EUR (MONEY market, EXANTE)
         ("EUR", "HKD"): ("HKD/EUR", "BUY"),
         ("HKD", "EUR"): ("HKD/EUR", "SELL"),
-
         # HKD <-> USD (MONEY market, EXANTE)
         ("USD", "HKD"): ("HKD/USD", "BUY"),
         ("HKD", "USD"): ("HKD/USD", "SELL"),
@@ -72,19 +93,17 @@ class CurrencyExchangeService:
         ("HKD", "USD"): "HKD/USD",
     }
 
-    def __init__(self, client: Optional[TradernetClient] = None):
+    def __init__(self, client: TradernetClient):
         """Initialize the currency exchange service.
 
         Args:
-            client: TradernetClient instance. If None, uses singleton.
+            client: TradernetClient instance (required).
         """
         self._client = client
 
     @property
     def client(self) -> TradernetClient:
-        """Get the Tradernet client, initializing if needed."""
-        if self._client is None:
-            self._client = get_tradernet_client()
+        """Get the Tradernet client."""
         return self._client
 
     def get_conversion_path(
@@ -157,49 +176,63 @@ class CurrencyExchangeService:
                 return None
 
         try:
-            # Find the symbol for this pair
-            symbol = None
-            inverse = False
-
-            # Check direct lookup
-            if (from_curr, to_curr) in self.RATE_SYMBOLS:
-                symbol = self.RATE_SYMBOLS[(from_curr, to_curr)]
-            elif (to_curr, from_curr) in self.RATE_SYMBOLS:
-                symbol = self.RATE_SYMBOLS[(to_curr, from_curr)]
-                inverse = True
-
+            symbol, inverse = _find_rate_symbol(from_curr, to_curr, self)
             if not symbol:
-                # Try via conversion path
-                path = self.get_conversion_path(from_curr, to_curr)
-                if len(path) == 1:
-                    symbol = path[0].symbol
-                elif len(path) == 2:
-                    # Multi-step: calculate combined rate
-                    rate1 = self.get_rate(path[0].from_currency, path[0].to_currency)
-                    rate2 = self.get_rate(path[1].from_currency, path[1].to_currency)
-                    if rate1 and rate2:
-                        return rate1 * rate2
-                    return None
+                return _get_rate_via_path(from_curr, to_curr, self)
 
-            if not symbol:
-                return None
-
-            # Fetch quote
             quote = self.client.get_quote(symbol)
             if quote and quote.price > 0:
-                rate = quote.price
-                return 1.0 / rate if inverse else rate
+                return 1.0 / quote.price if inverse else quote.price
 
             return None
         except Exception as e:
             logger.error(f"Failed to get rate {from_curr}/{to_curr}: {e}")
             return None
 
+    def _validate_exchange_request(
+        self, from_curr: str, to_curr: str, amount: float
+    ) -> bool:
+        """Validate exchange request parameters."""
+        if from_curr == to_curr:
+            logger.warning(f"Same currency exchange requested: {from_curr}")
+            return False
+
+        if amount <= 0:
+            logger.error(f"Invalid exchange amount: {amount}")
+            return False
+
+        if not self.client.is_connected:
+            if not self.client.connect():
+                logger.error("Failed to connect to Tradernet for exchange")
+                return False
+
+        return True
+
+    def _execute_multi_step_conversion(
+        self, path: list, amount: float
+    ) -> Optional[OrderResult]:
+        """Execute multi-step currency conversion."""
+        current_amount = amount
+        last_result = None
+
+        for step in path:
+            result = self._execute_step(step, current_amount)
+            if not result:
+                logger.error(
+                    f"Failed at step {step.from_currency} -> {step.to_currency}"
+                )
+                return None
+
+            rate = self.get_rate(step.from_currency, step.to_currency)
+            if rate:
+                current_amount = current_amount * rate
+
+            last_result = result
+
+        return last_result
+
     def exchange(
-        self,
-        from_currency: str,
-        to_currency: str,
-        amount: float
+        self, from_currency: str, to_currency: str, amount: float
     ) -> Optional[OrderResult]:
         """Execute a currency exchange.
 
@@ -214,18 +247,8 @@ class CurrencyExchangeService:
         from_curr = from_currency.upper()
         to_curr = to_currency.upper()
 
-        if from_curr == to_curr:
-            logger.warning(f"Same currency exchange requested: {from_curr}")
+        if not self._validate_exchange_request(from_curr, to_curr, amount):
             return None
-
-        if amount <= 0:
-            logger.error(f"Invalid exchange amount: {amount}")
-            return None
-
-        if not self.client.is_connected:
-            if not self.client.connect():
-                logger.error("Failed to connect to Tradernet for exchange")
-                return None
 
         try:
             path = self.get_conversion_path(from_curr, to_curr)
@@ -233,34 +256,16 @@ class CurrencyExchangeService:
             if len(path) == 0:
                 return None
             elif len(path) == 1:
-                # Direct conversion
-                step = path[0]
-                return self._execute_step(step, amount)
+                return self._execute_step(path[0], amount)
             else:
-                # Multi-step conversion (GBP <-> HKD via EUR)
-                current_amount = amount
-                last_result = None
-
-                for step in path:
-                    result = self._execute_step(step, current_amount)
-                    if not result:
-                        logger.error(f"Failed at step {step.from_currency} -> {step.to_currency}")
-                        return None
-
-                    # Get the converted amount for next step
-                    rate = self.get_rate(step.from_currency, step.to_currency)
-                    if rate:
-                        current_amount = current_amount * rate
-
-                    last_result = result
-
-                return last_result
-
+                return self._execute_multi_step_conversion(path, amount)
         except Exception as e:
             logger.error(f"Failed to exchange {from_curr} -> {to_curr}: {e}")
             return None
 
-    def _execute_step(self, step: ConversionStep, amount: float) -> Optional[OrderResult]:
+    def _execute_step(
+        self, step: ConversionStep, amount: float
+    ) -> Optional[OrderResult]:
         """Execute a single conversion step.
 
         Args:
@@ -281,11 +286,55 @@ class CurrencyExchangeService:
             quantity=amount,
         )
 
+    def _get_balances(self, currency: str, source_currency: str) -> tuple[float, float]:
+        """Get current and source currency balances."""
+        balances = self.client.get_cash_balances()
+        current_balance = 0.0
+        source_balance = 0.0
+
+        for bal in balances:
+            if bal.currency == currency:
+                current_balance = bal.amount
+            elif bal.currency == source_currency:
+                source_balance = bal.amount
+
+        return current_balance, source_balance
+
+    def _convert_for_balance(
+        self, currency: str, source_currency: str, needed: float, source_balance: float
+    ) -> bool:
+        """Convert source currency to target currency to meet balance requirement."""
+        needed_with_buffer = needed * 1.02
+
+        rate = self.get_rate(source_currency, currency)
+        if not rate:
+            logger.error(f"Could not get rate for {source_currency}/{currency}")
+            return False
+
+        source_amount_needed = needed_with_buffer / rate
+
+        if source_balance < source_amount_needed:
+            logger.warning(
+                f"Insufficient {source_currency} to convert: "
+                f"need {source_amount_needed:.2f}, have {source_balance:.2f}"
+            )
+            return False
+
+        logger.info(
+            f"Converting {source_amount_needed:.2f} {source_currency} "
+            f"to {currency} (need {needed:.2f})"
+        )
+        result = self.exchange(source_currency, currency, source_amount_needed)
+
+        if result:
+            logger.info(f"Currency exchange completed: {result.order_id}")
+            return True
+
+        logger.error(f"Failed to convert {source_currency} to {currency}")
+        return False
+
     def ensure_balance(
-        self,
-        currency: str,
-        min_amount: float,
-        source_currency: str = "EUR"
+        self, currency: str, min_amount: float, source_currency: str = "EUR"
     ) -> bool:
         """Ensure we have at least min_amount in the target currency.
 
@@ -311,55 +360,20 @@ class CurrencyExchangeService:
                 return False
 
         try:
-            # Get current balances
-            balances = self.client.get_cash_balances()
-            current_balance = 0.0
-            source_balance = 0.0
-
-            for bal in balances:
-                if bal.currency == currency:
-                    current_balance = bal.amount
-                elif bal.currency == source_currency:
-                    source_balance = bal.amount
+            current_balance, source_balance = self._get_balances(
+                currency, source_currency
+            )
 
             if current_balance >= min_amount:
-                logger.info(f"Sufficient {currency} balance: {current_balance:.2f} >= {min_amount:.2f}")
-                return True
-
-            # Calculate how much we need to convert
-            needed = min_amount - current_balance
-
-            # Add 2% buffer for rate fluctuations and fees
-            needed_with_buffer = needed * 1.02
-
-            # Get exchange rate to calculate source amount needed
-            rate = self.get_rate(source_currency, currency)
-            if not rate:
-                logger.error(f"Could not get rate for {source_currency}/{currency}")
-                return False
-
-            source_amount_needed = needed_with_buffer / rate
-
-            if source_balance < source_amount_needed:
-                logger.warning(
-                    f"Insufficient {source_currency} to convert: "
-                    f"need {source_amount_needed:.2f}, have {source_balance:.2f}"
+                logger.info(
+                    f"Sufficient {currency} balance: {current_balance:.2f} >= {min_amount:.2f}"
                 )
-                return False
-
-            # Execute conversion
-            logger.info(
-                f"Converting {source_amount_needed:.2f} {source_currency} "
-                f"to {currency} (need {min_amount:.2f})"
-            )
-            result = self.exchange(source_currency, currency, source_amount_needed)
-
-            if result:
-                logger.info(f"Currency exchange completed: {result.order_id}")
                 return True
-            else:
-                logger.error("Currency exchange failed")
-                return False
+
+            needed = min_amount - current_balance
+            return self._convert_for_balance(
+                currency, source_currency, needed, source_balance
+            )
 
         except Exception as e:
             logger.error(f"Failed to ensure {currency} balance: {e}")
@@ -390,16 +404,6 @@ def get_stock_currency(geography: str) -> str:
         "ASIA": "HKD",
         "UK": "GBP",
         "GREECE": "EUR",
-    }.get(geography.upper(), "EUR")  # Default to EUR for unknown geographies
-
-
-# Singleton instance
-_service: Optional[CurrencyExchangeService] = None
-
-
-def get_currency_exchange_service() -> CurrencyExchangeService:
-    """Get or create the CurrencyExchangeService singleton."""
-    global _service
-    if _service is None:
-        _service = CurrencyExchangeService()
-    return _service
+    }.get(
+        geography.upper(), "EUR"
+    )  # Default to EUR for unknown geographies

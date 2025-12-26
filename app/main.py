@@ -1,24 +1,40 @@
 """FastAPI application entry point."""
 
 import logging
-from logging.handlers import RotatingFileHandler
 from contextlib import asynccontextmanager
-from pathlib import Path
+from logging.handlers import RotatingFileHandler
 
 from fastapi import FastAPI, Request
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
+from app.api import (
+    allocation,
+    cash_flows,
+    charts,
+    multi_step_recommendations,
+    optimizer,
+    portfolio,
+    recommendations,
+)
+from app.api import settings as settings_api
+from app.api import (
+    status,
+    stocks,
+    trades,
+)
 from app.config import settings
-from app.infrastructure.database.manager import init_databases, get_db_manager, shutdown_databases
-from app.api import portfolio, stocks, trades, status, allocation, cash_flows, charts, settings as settings_api
-from app.jobs.scheduler import init_scheduler, start_scheduler, stop_scheduler
-from app.services.tradernet import get_tradernet_client
-from app.infrastructure.hardware.led_display import setup_event_subscriptions
-from app.infrastructure.events import emit, SystemEvent
+from app.infrastructure.database.manager import (
+    get_db_manager,
+    init_databases,
+    shutdown_databases,
+)
+from app.infrastructure.events import SystemEvent, emit
+from app.infrastructure.external.tradernet import get_tradernet_client
 
 # Configure logging with correlation ID support and log rotation
 from app.infrastructure.logging_context import CorrelationIDFilter
+from app.jobs.scheduler import init_scheduler, start_scheduler, stop_scheduler
 
 # Log format with correlation ID
 log_format = logging.Formatter(
@@ -67,18 +83,17 @@ async def lifespan(app: FastAPI):
 
     # Validate required configuration
     if not settings.tradernet_api_key or not settings.tradernet_api_secret:
-        logger.error("Missing Tradernet API credentials. Please set TRADERNET_API_KEY and TRADERNET_API_SECRET in .env file")
+        logger.error(
+            "Missing Tradernet API credentials. Please set TRADERNET_API_KEY and TRADERNET_API_SECRET in .env file"
+        )
         raise ValueError("Missing required Tradernet API credentials")
 
     # Initialize database manager (creates all databases with schemas)
-    db_manager = await init_databases(settings.data_dir)
+    await init_databases(settings.data_dir)
 
     # Initialize and start scheduler
     await init_scheduler()
     start_scheduler()
-
-    # Setup LED display event subscriptions
-    setup_event_subscriptions()
 
     # Try to connect to Tradernet
     client = get_tradernet_client()
@@ -102,15 +117,19 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+from app.infrastructure.rate_limit import RateLimitMiddleware  # noqa: E402
+
 # Add rate limiting middleware (must be before other middleware)
-from app.infrastructure.rate_limit import RateLimitMiddleware
 app.add_middleware(RateLimitMiddleware)  # Uses values from config
 
 
 @app.middleware("http")
 async def request_context_middleware(request: Request, call_next):
     """Add correlation ID and LED indicators to requests."""
-    from app.infrastructure.logging_context import set_correlation_id, clear_correlation_id
+    from app.infrastructure.logging_context import (
+        clear_correlation_id,
+        set_correlation_id,
+    )
 
     # Set correlation ID for this request
     correlation_id = set_correlation_id()
@@ -134,17 +153,67 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 app.include_router(portfolio.router, prefix="/api/portfolio", tags=["Portfolio"])
 app.include_router(stocks.router, prefix="/api/stocks", tags=["Stocks"])
 app.include_router(trades.router, prefix="/api/trades", tags=["Trades"])
+app.include_router(
+    recommendations.router,
+    prefix="/api/trades/recommendations",
+    tags=["Recommendations"],
+)
+app.include_router(
+    multi_step_recommendations.router,
+    prefix="/api/trades/multi-step-recommendations",
+    tags=["Multi-Step Recommendations"],
+)
 app.include_router(status.router, prefix="/api/status", tags=["Status"])
 app.include_router(allocation.router, prefix="/api/allocation", tags=["Allocation"])
 app.include_router(cash_flows.router, prefix="/api/cash-flows", tags=["Cash Flows"])
 app.include_router(charts.router, prefix="/api/charts", tags=["Charts"])
 app.include_router(settings_api.router, prefix="/api/settings", tags=["Settings"])
+app.include_router(optimizer.router, prefix="/api/optimizer", tags=["Optimizer"])
 
 
 @app.get("/")
 async def root():
     """Serve the dashboard."""
     return FileResponse("static/index.html")
+
+
+async def _check_database_health() -> tuple[str, bool]:
+    """Check database connectivity."""
+    try:
+        db_manager = get_db_manager()
+        await db_manager.state.execute("SELECT 1")
+        return "connected", False
+    except Exception as e:
+        return f"error: {str(e)}", True
+
+
+def _check_tradernet_health() -> tuple[str, bool]:
+    """Check Tradernet API connectivity."""
+    try:
+        from app.infrastructure.external.tradernet import get_tradernet_client
+
+        client = get_tradernet_client()
+        if client.is_connected or client.connect():
+            return "connected", False
+        else:
+            return "disconnected", True
+    except Exception as e:
+        return f"error: {str(e)}", True
+
+
+def _check_yahoo_finance_health() -> tuple[str, bool]:
+    """Check Yahoo Finance API connectivity."""
+    try:
+        import yfinance as yf
+
+        ticker = yf.Ticker("AAPL")
+        info = ticker.info
+        if info:
+            return "available", False
+        else:
+            return "unavailable", True
+    except Exception as e:
+        return f"error: {str(e)}", True
 
 
 @app.get("/health")
@@ -167,53 +236,28 @@ async def health():
         "yahoo_finance": "unknown",
     }
 
-    # Check database
-    try:
-        db_manager = get_db_manager()
-        await db_manager.state.execute("SELECT 1")
-        health_status["database"] = "connected"
-    except Exception as e:
-        health_status["database"] = f"error: {str(e)}"
+    db_status, db_degraded = await _check_database_health()
+    health_status["database"] = db_status
+    if db_degraded:
         health_status["status"] = "degraded"
 
-    # Check Tradernet
-    try:
-        from app.services.tradernet import get_tradernet_client
-        client = get_tradernet_client()
-        if client.is_connected:
-            health_status["tradernet"] = "connected"
-        elif client.connect():
-            health_status["tradernet"] = "connected"
-        else:
-            health_status["tradernet"] = "disconnected"
-            health_status["status"] = "degraded"
-    except Exception as e:
-        health_status["tradernet"] = f"error: {str(e)}"
+    tradernet_status, tradernet_degraded = _check_tradernet_health()
+    health_status["tradernet"] = tradernet_status
+    if tradernet_degraded:
         health_status["status"] = "degraded"
 
-    # Check Yahoo Finance (basic connectivity test)
-    try:
-        import yfinance as yf
-        # Quick test with a known symbol
-        ticker = yf.Ticker("AAPL")
-        info = ticker.info
-        if info:
-            health_status["yahoo_finance"] = "available"
-        else:
-            health_status["yahoo_finance"] = "unavailable"
-            health_status["status"] = "degraded"
-    except Exception as e:
-        health_status["yahoo_finance"] = f"error: {str(e)}"
+    yahoo_status, yahoo_degraded = _check_yahoo_finance_health()
+    health_status["yahoo_finance"] = yahoo_status
+    if yahoo_degraded:
         health_status["status"] = "degraded"
 
     from fastapi import status as http_status
 
-    # Return appropriate status code based on health
     if health_status["status"] == "healthy":
         return health_status
     else:
         from fastapi.responses import JSONResponse
+
         return JSONResponse(
-            content=health_status,
-            status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE
+            content=health_status, status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE
         )

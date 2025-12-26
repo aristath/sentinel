@@ -4,18 +4,14 @@ These tests ensure trade sizes are calculated correctly. Wrong position
 sizes could lead to over-concentrated positions or wasted cash.
 """
 
-import pytest
-from app.domain.models import StockPriority
-from app.services.allocator import (
-    calculate_position_size,
-    parse_industries,
-    get_max_trades,
-)
 from app.domain.constants import (
-    MIN_CONVICTION_MULTIPLIER,
-    MAX_CONVICTION_MULTIPLIER,
-    MIN_VOLATILITY_MULTIPLIER,
     MAX_POSITION_SIZE_MULTIPLIER,
+)
+from app.domain.models import StockPriority
+from app.domain.services.allocation_calculator import (
+    calculate_position_size,
+    get_max_trades,
+    parse_industries,
 )
 
 

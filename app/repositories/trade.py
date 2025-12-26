@@ -6,8 +6,85 @@ from typing import List, Optional, Set
 
 from app.domain.models import Trade
 from app.infrastructure.database import get_db_manager
+from app.repositories.base import transaction_context
 
 logger = logging.getLogger(__name__)
+
+
+def _process_pre_start_trades(pre_start_trades: list, cumulative_positions: dict) -> None:
+    """Process trades before start_date to build initial positions."""
+    for row in pre_start_trades:
+        symbol = row["symbol"]
+        side = row["side"].upper()
+        quantity = row["quantity"]
+
+        if symbol not in cumulative_positions:
+            cumulative_positions[symbol] = 0.0
+
+        if side == "BUY":
+            cumulative_positions[symbol] += quantity
+        elif side == "SELL":
+            cumulative_positions[symbol] -= quantity
+            if cumulative_positions[symbol] < 0:
+                cumulative_positions[symbol] = 0.0
+
+
+def _build_initial_positions(cumulative_positions: dict, start_date: str) -> list:
+    """Build initial position entries at start_date."""
+    result = []
+    for symbol, quantity in cumulative_positions.items():
+        if quantity > 0:
+            result.append({"date": start_date, "symbol": symbol, "quantity": quantity})
+    return result
+
+
+def _build_positions_by_date(in_range_trades: list) -> dict:
+    """Build positions_by_date dictionary from in-range trades."""
+    positions_by_date = {}
+    for row in in_range_trades:
+        date = row["executed_at"][:10]
+        symbol = row["symbol"]
+        side = row["side"].upper()
+        quantity = row["quantity"]
+
+        if date not in positions_by_date:
+            positions_by_date[date] = {}
+
+        if symbol not in positions_by_date[date]:
+            positions_by_date[date][symbol] = 0.0
+
+        if side == "BUY":
+            positions_by_date[date][symbol] += quantity
+        elif side == "SELL":
+            positions_by_date[date][symbol] -= quantity
+
+    return positions_by_date
+
+
+def _update_positions_for_date(
+    date: str, positions_by_date: dict, cumulative_positions: dict, result: list
+) -> None:
+    """Update cumulative positions for a date and add to result."""
+    for symbol, delta in positions_by_date[date].items():
+        if symbol not in cumulative_positions:
+            cumulative_positions[symbol] = 0.0
+        cumulative_positions[symbol] += delta
+        if cumulative_positions[symbol] < 0:
+            cumulative_positions[symbol] = 0.0
+
+    for symbol, quantity in cumulative_positions.items():
+        if quantity > 0:
+            result.append({"date": date, "symbol": symbol, "quantity": quantity})
+
+
+def _process_in_range_trades(
+    in_range_trades: list, cumulative_positions: dict, result: list
+) -> None:
+    """Process trades in date range and update result."""
+    positions_by_date = _build_positions_by_date(in_range_trades)
+
+    for date in sorted(positions_by_date.keys()):
+        _update_positions_for_date(date, positions_by_date, cumulative_positions, result)
 
 
 class TradeRepository:
@@ -15,15 +92,16 @@ class TradeRepository:
 
     def __init__(self, db=None):
         """Initialize repository.
-        
+
         Args:
             db: Optional database connection for testing. If None, uses get_db_manager().ledger
                 Can be a Database instance or raw aiosqlite.Connection (will be wrapped)
         """
         if db is not None:
             # If it's a raw connection without fetchone/fetchall, wrap it
-            if not hasattr(db, 'fetchone') and hasattr(db, 'execute'):
+            if not hasattr(db, "fetchone") and hasattr(db, "execute"):
                 from app.repositories.base import DatabaseAdapter
+
                 self._db = DatabaseAdapter(db)
             else:
                 self._db = db
@@ -59,14 +137,13 @@ class TradeRepository:
                     trade.value_eur,
                     trade.source,
                     now,
-                )
+                ),
             )
 
     async def get_by_order_id(self, order_id: str) -> Optional[Trade]:
         """Get trade by broker order ID."""
         row = await self._db.fetchone(
-            "SELECT * FROM trades WHERE order_id = ?",
-            (order_id,)
+            "SELECT * FROM trades WHERE order_id = ?", (order_id,)
         )
         if not row:
             return None
@@ -75,8 +152,7 @@ class TradeRepository:
     async def exists(self, order_id: str) -> bool:
         """Check if trade with order_id already exists."""
         row = await self._db.fetchone(
-            "SELECT 1 FROM trades WHERE order_id = ?",
-            (order_id,)
+            "SELECT 1 FROM trades WHERE order_id = ?", (order_id,)
         )
         return row is not None
 
@@ -88,7 +164,7 @@ class TradeRepository:
             ORDER BY executed_at DESC
             LIMIT ?
             """,
-            (limit,)
+            (limit,),
         )
         return [self._row_to_trade(row) for row in rows]
 
@@ -100,7 +176,7 @@ class TradeRepository:
             WHERE executed_at >= ? AND executed_at <= ?
             ORDER BY executed_at ASC
             """,
-            (start_date, end_date)
+            (start_date, end_date),
         )
         return [self._row_to_trade(row) for row in rows]
 
@@ -113,7 +189,7 @@ class TradeRepository:
             ORDER BY executed_at DESC
             LIMIT ?
             """,
-            (symbol.upper(), limit)
+            (symbol.upper(), limit),
         )
         return [self._row_to_trade(row) for row in rows]
 
@@ -125,7 +201,7 @@ class TradeRepository:
             SELECT DISTINCT symbol FROM trades
             WHERE UPPER(side) = 'BUY' AND executed_at >= ?
             """,
-            (cutoff,)
+            (cutoff,),
         )
         return {row["symbol"] for row in rows}
 
@@ -137,18 +213,18 @@ class TradeRepository:
             SELECT DISTINCT symbol FROM trades
             WHERE UPPER(side) = 'SELL' AND executed_at >= ?
             """,
-            (cutoff,)
+            (cutoff,),
         )
         return {row["symbol"] for row in rows}
 
     async def has_recent_sell_order(self, symbol: str, hours: int = 2) -> bool:
         """
         Check if there's a recent SELL order for the given symbol.
-        
+
         Args:
             symbol: Stock symbol to check (e.g., "AAPL.US")
             hours: Number of hours to look back (default: 2)
-            
+
         Returns:
             True if a SELL order exists for this symbol within the time window
         """
@@ -159,7 +235,7 @@ class TradeRepository:
             WHERE symbol = ? AND UPPER(side) = 'SELL' AND executed_at >= ?
             LIMIT 1
             """,
-            (symbol.upper(), cutoff)
+            (symbol.upper(), cutoff),
         )
         return row is not None
 
@@ -170,7 +246,7 @@ class TradeRepository:
             SELECT MIN(executed_at) as first_buy FROM trades
             WHERE symbol = ? AND UPPER(side) = 'BUY'
             """,
-            (symbol.upper(),)
+            (symbol.upper(),),
         )
         return row["first_buy"] if row else None
 
@@ -181,7 +257,7 @@ class TradeRepository:
             SELECT MAX(executed_at) as last_sell FROM trades
             WHERE symbol = ? AND UPPER(side) = 'SELL'
             """,
-            (symbol.upper(),)
+            (symbol.upper(),),
         )
         return row["last_sell"] if row else None
 
@@ -200,7 +276,7 @@ class TradeRepository:
         return {
             row["symbol"]: {
                 "first_bought_at": row["first_buy"],
-                "last_sold_at": row["last_sell"]
+                "last_sold_at": row["last_sell"],
             }
             for row in rows
         }
@@ -221,7 +297,7 @@ class TradeRepository:
             WHERE executed_at <= ?
             ORDER BY executed_at ASC
             """,
-            (end_date,)
+            (end_date,),
         )
 
         # Build position state up to start_date
@@ -236,69 +312,9 @@ class TradeRepository:
             else:
                 in_range_trades.append(row)
 
-        # Process pre-start trades to get initial positions
-        for row in pre_start_trades:
-            symbol = row["symbol"]
-            side = row["side"].upper()
-            quantity = row["quantity"]
-
-            if symbol not in cumulative_positions:
-                cumulative_positions[symbol] = 0.0
-
-            if side == "BUY":
-                cumulative_positions[symbol] += quantity
-            elif side == "SELL":
-                cumulative_positions[symbol] -= quantity
-                if cumulative_positions[symbol] < 0:
-                    cumulative_positions[symbol] = 0.0
-
-        # Build result including initial positions
-        result = []
-
-        # Add initial position entries at start_date
-        for symbol, quantity in cumulative_positions.items():
-            if quantity > 0:
-                result.append({
-                    "date": start_date,
-                    "symbol": symbol,
-                    "quantity": quantity
-                })
-
-        # Process trades in range
-        positions_by_date = {}
-        for row in in_range_trades:
-            date = row["executed_at"][:10]
-            symbol = row["symbol"]
-            side = row["side"].upper()
-            quantity = row["quantity"]
-
-            if date not in positions_by_date:
-                positions_by_date[date] = {}
-
-            if symbol not in positions_by_date[date]:
-                positions_by_date[date][symbol] = 0.0
-
-            if side == "BUY":
-                positions_by_date[date][symbol] += quantity
-            elif side == "SELL":
-                positions_by_date[date][symbol] -= quantity
-
-        # Update cumulative positions for each date
-        for date in sorted(positions_by_date.keys()):
-            for symbol, delta in positions_by_date[date].items():
-                if symbol not in cumulative_positions:
-                    cumulative_positions[symbol] = 0.0
-                cumulative_positions[symbol] += delta
-                if cumulative_positions[symbol] < 0:
-                    cumulative_positions[symbol] = 0.0
-
-            for symbol, quantity in cumulative_positions.items():
-                if quantity > 0:
-                    result.append({
-                        "date": date,
-                        "symbol": symbol,
-                        "quantity": quantity
-                    })
+        _process_pre_start_trades(pre_start_trades, cumulative_positions)
+        result = _build_initial_positions(cumulative_positions, start_date)
+        _process_in_range_trades(in_range_trades, cumulative_positions, result)
 
         return result
 
@@ -321,7 +337,9 @@ class TradeRepository:
             executed_at=executed_at,
             order_id=row["order_id"],
             currency=row["currency"] if "currency" in row.keys() else None,
-            currency_rate=row["currency_rate"] if "currency_rate" in row.keys() else None,
+            currency_rate=(
+                row["currency_rate"] if "currency_rate" in row.keys() else None
+            ),
             value_eur=row["value_eur"] if "value_eur" in row.keys() else None,
             source=row["source"] if "source" in row.keys() else "tradernet",
         )

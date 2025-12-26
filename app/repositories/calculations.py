@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
-from app.domain.scoring.constants import METRIC_TTL, DEFAULT_METRIC_TTL
+from app.domain.scoring.constants import DEFAULT_METRIC_TTL, METRIC_TTL
 from app.infrastructure.database import get_db_manager
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ class CalculationsRepository:
         row = await db.fetchone(
             """SELECT value, expires_at FROM calculated_metrics
                WHERE symbol = ? AND metric = ? AND (expires_at IS NULL OR expires_at > ?)""",
-            (symbol.upper(), metric, now)
+            (symbol.upper(), metric, now),
         )
 
         if row:
@@ -51,7 +51,7 @@ class CalculationsRepository:
         metric: str,
         value: float,
         ttl_override: Optional[int] = None,
-        source: str = 'calculated'
+        source: str = "calculated",
     ) -> None:
         """
         Store or update a metric value with automatic TTL.
@@ -67,20 +67,28 @@ class CalculationsRepository:
         now = datetime.now()
 
         # Get TTL (use override if provided, otherwise lookup)
-        ttl_seconds = ttl_override if ttl_override is not None else self._get_ttl_for_metric(metric)
+        ttl_seconds = (
+            ttl_override
+            if ttl_override is not None
+            else self._get_ttl_for_metric(metric)
+        )
         expires_at = (now + timedelta(seconds=ttl_seconds)).isoformat()
 
         await db.execute(
             """INSERT OR REPLACE INTO calculated_metrics
                (symbol, metric, value, calculated_at, expires_at, source)
                VALUES (?, ?, ?, ?, ?, ?)""",
-            (symbol.upper(), metric, value, now.isoformat(), expires_at, source)
+            (symbol.upper(), metric, value, now.isoformat(), expires_at, source),
         )
         await db.commit()
 
-        logger.debug(f"Stored metric {metric} for {symbol}: {value} (TTL: {ttl_seconds}s)")
+        logger.debug(
+            f"Stored metric {metric} for {symbol}: {value} (TTL: {ttl_seconds}s)"
+        )
 
-    async def get_metrics(self, symbol: str, metrics: List[str]) -> Dict[str, Optional[float]]:
+    async def get_metrics(
+        self, symbol: str, metrics: List[str]
+    ) -> Dict[str, Optional[float]]:
         """
         Batch get multiple metrics for a symbol.
 
@@ -95,7 +103,7 @@ class CalculationsRepository:
         now = datetime.now().isoformat()
 
         # Build query with placeholders
-        placeholders = ','.join(['?'] * len(metrics))
+        placeholders = ",".join(["?"] * len(metrics))
         query = f"""SELECT metric, value FROM calculated_metrics
                     WHERE symbol = ? AND metric IN ({placeholders})
                     AND (expires_at IS NULL OR expires_at > ?)"""
@@ -114,7 +122,7 @@ class CalculationsRepository:
         symbol: str,
         metrics: Dict[str, float],
         ttl_override: Optional[int] = None,
-        source: str = 'calculated'
+        source: str = "calculated",
     ) -> None:
         """
         Batch set multiple metrics with per-metric TTL.
@@ -131,14 +139,25 @@ class CalculationsRepository:
         async with db.transaction():
             for metric, value in metrics.items():
                 # Get TTL for this specific metric (unless override provided)
-                ttl_seconds = ttl_override if ttl_override is not None else self._get_ttl_for_metric(metric)
+                ttl_seconds = (
+                    ttl_override
+                    if ttl_override is not None
+                    else self._get_ttl_for_metric(metric)
+                )
                 expires_at = (now + timedelta(seconds=ttl_seconds)).isoformat()
 
                 await db.execute(
                     """INSERT OR REPLACE INTO calculated_metrics
                        (symbol, metric, value, calculated_at, expires_at, source)
                        VALUES (?, ?, ?, ?, ?, ?)""",
-                    (symbol.upper(), metric, value, now.isoformat(), expires_at, source)
+                    (
+                        symbol.upper(),
+                        metric,
+                        value,
+                        now.isoformat(),
+                        expires_at,
+                        source,
+                    ),
                 )
 
         await db.commit()
@@ -160,7 +179,7 @@ class CalculationsRepository:
         rows = await db.fetchall(
             """SELECT metric, value FROM calculated_metrics
                WHERE symbol = ? AND (expires_at IS NULL OR expires_at > ?)""",
-            (symbol.upper(), now)
+            (symbol.upper(), now),
         )
 
         return {row["metric"]: float(row["value"]) for row in rows}
@@ -177,7 +196,7 @@ class CalculationsRepository:
 
         cursor = await db.execute(
             "DELETE FROM calculated_metrics WHERE expires_at IS NOT NULL AND expires_at < ?",
-            (now,)
+            (now,),
         )
         await db.commit()
 
@@ -197,4 +216,3 @@ class CalculationsRepository:
             TTL in seconds
         """
         return self._get_ttl_for_metric(metric)
-

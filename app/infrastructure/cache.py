@@ -1,7 +1,8 @@
 """Simple in-memory cache with TTL."""
+
+import threading
 import time
 from typing import Any, Optional
-import threading
 
 
 class SimpleCache:

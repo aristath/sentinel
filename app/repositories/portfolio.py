@@ -13,15 +13,16 @@ class PortfolioRepository:
 
     def __init__(self, db=None):
         """Initialize repository.
-        
+
         Args:
             db: Optional database connection for testing. If None, uses get_db_manager().state
                 Can be a Database instance or raw aiosqlite.Connection (will be wrapped)
         """
         if db is not None:
             # If it's a raw connection without fetchone/fetchall, wrap it
-            if not hasattr(db, 'fetchone') and hasattr(db, 'execute'):
+            if not hasattr(db, "fetchone") and hasattr(db, "execute"):
                 from app.repositories.base import DatabaseAdapter
+
                 self._db = DatabaseAdapter(db)
             else:
                 self._db = db
@@ -31,8 +32,7 @@ class PortfolioRepository:
     async def get_by_date(self, date: str) -> Optional[PortfolioSnapshot]:
         """Get snapshot for a specific date."""
         row = await self._db.fetchone(
-            "SELECT * FROM portfolio_snapshots WHERE date = ?",
-            (date,)
+            "SELECT * FROM portfolio_snapshots WHERE date = ?", (date,)
         )
         if not row:
             return None
@@ -62,11 +62,13 @@ class PortfolioRepository:
             ORDER BY date DESC
             LIMIT ?
             """,
-            (days,)
+            (days,),
         )
         return [self._row_to_snapshot(row) for row in rows]
 
-    async def get_range(self, start_date: str, end_date: str) -> List[PortfolioSnapshot]:
+    async def get_range(
+        self, start_date: str, end_date: str
+    ) -> List[PortfolioSnapshot]:
         """Get snapshots within a date range."""
         rows = await self._db.fetchall(
             """
@@ -74,7 +76,7 @@ class PortfolioRepository:
             WHERE date >= ? AND date <= ?
             ORDER BY date ASC
             """,
-            (start_date, end_date)
+            (start_date, end_date),
         )
         return [self._row_to_snapshot(row) for row in rows]
 
@@ -102,14 +104,13 @@ class PortfolioRepository:
                     snapshot.geo_us_pct,
                     snapshot.position_count,
                     now,
-                )
+                ),
             )
 
     async def delete_before(self, date: str) -> int:
         """Delete snapshots before a date. Returns count deleted."""
         cursor = await self._db.execute(
-            "SELECT COUNT(*) as cnt FROM portfolio_snapshots WHERE date < ?",
-            (date,)
+            "SELECT COUNT(*) as cnt FROM portfolio_snapshots WHERE date < ?", (date,)
         )
         row = await cursor.fetchone()
         count = row["cnt"] if row else 0
@@ -117,8 +118,7 @@ class PortfolioRepository:
         if count > 0:
             async with transaction_context(self._db) as conn:
                 await conn.execute(
-                    "DELETE FROM portfolio_snapshots WHERE date < ?",
-                    (date,)
+                    "DELETE FROM portfolio_snapshots WHERE date < ?", (date,)
                 )
 
         return count
@@ -145,6 +145,7 @@ class PortfolioRepository:
 
     def _row_to_snapshot(self, row) -> PortfolioSnapshot:
         """Convert database row to PortfolioSnapshot model."""
+
         def safe_get(key, default=None):
             try:
                 return row[key]
