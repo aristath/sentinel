@@ -196,7 +196,7 @@ class TestTradeValidation:
 
     @pytest.mark.asyncio
     async def test_sell_blocked_when_quantity_exceeds_position(
-        self, mock_trade_repo, mock_position_repo, mock_client, mock_currency_exchange_service
+        self, mock_trade_repo, mock_position_repo, mock_client, mock_currency_exchange_service, mock_exchange_rate_service
     ):
         """SELL order should be skipped if quantity > position.
 
@@ -228,7 +228,7 @@ class TestTradeValidation:
 
     @pytest.mark.asyncio
     async def test_sell_allowed_when_quantity_within_position(
-        self, mock_trade_repo, mock_position_repo, mock_client, mock_currency_exchange_service
+        self, mock_trade_repo, mock_position_repo, mock_client, mock_currency_exchange_service, mock_exchange_rate_service
     ):
         """SELL order should proceed if quantity <= position.
 
@@ -259,7 +259,7 @@ class TestTradeValidation:
 
     @pytest.mark.asyncio
     async def test_broker_connection_failure_raises_error(
-        self, mock_trade_repo, mock_position_repo, mock_currency_exchange_service
+        self, mock_trade_repo, mock_position_repo, mock_currency_exchange_service, mock_exchange_rate_service
     ):
         """Should raise error if broker connection fails.
 
@@ -284,7 +284,7 @@ class TestTradeValidation:
 
     @pytest.mark.asyncio
     async def test_multi_currency_validation(
-        self, mock_trade_repo, mock_position_repo, mock_client, mock_currency_exchange_service
+        self, mock_trade_repo, mock_position_repo, mock_client, mock_currency_exchange_service, mock_exchange_rate_service
     ):
         """Should validate each trade against correct currency balance.
 
