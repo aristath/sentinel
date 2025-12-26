@@ -53,48 +53,18 @@ async def get_performance_attribution(
     geo_returns = {}
     industry_returns = {}
 
-    # Get unique dates from returns (only trading days)
     return_dates = returns.index.tolist()
 
     for date in return_dates:
         date_str = date.strftime("%Y-%m-%d")
-
-        # Get positions on this date
         date_positions = positions_df[positions_df["date"] <= date]
         if date_positions.empty:
             continue
 
         latest_positions = date_positions.groupby("symbol").last()
-
-        # Calculate position values and weights
-        total_value = 0.0
-        position_values = {}
-
-        for symbol, row in latest_positions.iterrows():
-            quantity = row["quantity"]
-            if quantity <= 0:
-                continue
-
-            info = stock_info.get(symbol, {})
-            geography = info.get("geography", "UNKNOWN")
-            industry = info.get("industry")
-
-            # Get price
-            try:
-                history_repo = HistoryRepository(symbol)
-                price_data = await history_repo.get_daily_range(date_str, date_str)
-
-                if price_data:
-                    price = price_data[0].close_price
-                    value = quantity * price
-                    total_value += value
-                    position_values[symbol] = {
-                        "value": value,
-                        "geography": geography,
-                        "industry": industry,
-                    }
-            except Exception:
-                continue
+        total_value, position_values = await _calculate_position_values(
+            latest_positions, stock_info, date_str
+        )
 
         if total_value == 0:
             continue
