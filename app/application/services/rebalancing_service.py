@@ -131,6 +131,67 @@ async def _convert_cached_recommendations(cached: list, limit: int) -> List[Reco
     return recommendations
 
 
+async def _get_stock_volatility(symbol: str) -> float:
+    """Get stock volatility for risk parity sizing."""
+    try:
+        from datetime import datetime, timedelta
+        from app.domain.analytics import get_position_risk_metrics
+
+        end_date = datetime.now().strftime("%Y-%m-%d")
+        start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+        risk_metrics = await get_position_risk_metrics(symbol, start_date, end_date)
+        return risk_metrics.get("volatility", DEFAULT_VOLATILITY)
+    except Exception:
+        return DEFAULT_VOLATILITY
+
+
+def _calculate_risk_parity_amount(
+    base_trade_amount: float, stock_vol: float, total_score: float
+) -> float:
+    """Calculate risk parity trade amount."""
+    vol_weight = TARGET_PORTFOLIO_VOLATILITY / max(stock_vol, MIN_VOLATILITY_FOR_SIZING)
+    vol_weight = max(MIN_VOL_WEIGHT, min(MAX_VOL_WEIGHT, vol_weight))
+    score_adj = 1.0 + (total_score - 0.5) * 0.2
+    score_adj = max(0.9, min(1.1, score_adj))
+    return base_trade_amount * vol_weight * score_adj
+
+
+def _check_position_cap(
+    symbol: str, trade_value_eur: float, portfolio_context
+) -> bool:
+    """Check if position would exceed maximum cap."""
+    current_position_value = portfolio_context.positions.get(symbol, 0)
+    new_position_value = current_position_value + trade_value_eur
+    total_after = portfolio_context.total_value + trade_value_eur
+    new_position_pct = new_position_value / total_after if total_after > 0 else 0
+    return new_position_pct <= MAX_POSITION_PCT
+
+
+def _calculate_final_score(
+    quality_score: float, opportunity_score: float, analyst_score: float, score_change: float
+) -> float:
+    """Calculate final priority score."""
+    base_score = quality_score * 0.35 + opportunity_score * 0.35 + analyst_score * 0.05
+    normalized_score_change = max(0, min(1, (score_change + 5) / 10))
+    return base_score * 0.75 + normalized_score_change * 0.25
+
+
+def _build_reason_string(
+    quality_score: float, opportunity_score: float, score_change: float, multiplier: float
+) -> str:
+    """Build reason string for recommendation."""
+    reason_parts = []
+    if quality_score >= 0.7:
+        reason_parts.append("high quality")
+    if opportunity_score >= 0.7:
+        reason_parts.append("buy opportunity")
+    if score_change > 0.5:
+        reason_parts.append(f"↑{score_change:.1f} portfolio")
+    if multiplier != 1.0:
+        reason_parts.append(f"{multiplier:.1f}x mult")
+    return ", ".join(reason_parts) if reason_parts else "good score"
+
+
 async def _process_stock_candidate(
     stock,
     score_row: dict,
@@ -144,10 +205,6 @@ async def _process_stock_candidate(
     base_trade_amount: float,
 ) -> Optional[dict]:
     """Process a single stock and return candidate dict if valid."""
-    from typing import Optional
-    from datetime import datetime, timedelta
-    from app.domain.analytics import get_position_risk_metrics
-
     symbol = stock.symbol
     name = stock.name
     geography = stock.geography
@@ -178,22 +235,8 @@ async def _process_stock_candidate(
         if exchange_rate <= 0:
             exchange_rate = 1.0
 
-    stock_vol = DEFAULT_VOLATILITY
-    try:
-        end_date = datetime.now().strftime("%Y-%m-%d")
-        start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
-        risk_metrics = await get_position_risk_metrics(symbol, start_date, end_date)
-        stock_vol = risk_metrics.get("volatility", DEFAULT_VOLATILITY)
-    except Exception:
-        pass
-
-    vol_weight = TARGET_PORTFOLIO_VOLATILITY / max(stock_vol, MIN_VOLATILITY_FOR_SIZING)
-    vol_weight = max(MIN_VOL_WEIGHT, min(MAX_VOL_WEIGHT, vol_weight))
-
-    score_adj = 1.0 + (total_score - 0.5) * 0.2
-    score_adj = max(0.9, min(1.1, score_adj))
-
-    risk_parity_amount = base_trade_amount * vol_weight * score_adj
+    stock_vol = await _get_stock_volatility(symbol)
+    risk_parity_amount = _calculate_risk_parity_amount(base_trade_amount, stock_vol, total_score)
 
     sized = TradeSizingService.calculate_buy_quantity(
         target_value_eur=risk_parity_amount,
@@ -201,14 +244,9 @@ async def _process_stock_candidate(
         min_lot=min_lot,
         exchange_rate=exchange_rate,
     )
-    quantity = sized.quantity
     trade_value_eur = sized.value_eur
 
-    current_position_value = portfolio_context.positions.get(symbol, 0)
-    new_position_value = current_position_value + trade_value_eur
-    total_after = portfolio_context.total_value + trade_value_eur
-    new_position_pct = new_position_value / total_after if total_after > 0 else 0
-    if new_position_pct > MAX_POSITION_PCT:
+    if not _check_position_cap(symbol, trade_value_eur, portfolio_context):
         return None
 
     dividend_yield = 0
@@ -226,20 +264,8 @@ async def _process_stock_candidate(
     if score_change < MAX_BALANCE_WORSENING:
         return None
 
-    base_score = quality_score * 0.35 + opportunity_score * 0.35 + analyst_score * 0.05
-    normalized_score_change = max(0, min(1, (score_change + 5) / 10))
-    final_score = base_score * 0.75 + normalized_score_change * 0.25
-
-    reason_parts = []
-    if quality_score >= 0.7:
-        reason_parts.append("high quality")
-    if opportunity_score >= 0.7:
-        reason_parts.append("buy opportunity")
-    if score_change > 0.5:
-        reason_parts.append(f"↑{score_change:.1f} portfolio")
-    if multiplier != 1.0:
-        reason_parts.append(f"{multiplier:.1f}x mult")
-    reason = ", ".join(reason_parts) if reason_parts else "good score"
+    final_score = _calculate_final_score(quality_score, opportunity_score, analyst_score, score_change)
+    reason = _build_reason_string(quality_score, opportunity_score, score_change, multiplier)
 
     return {
         "symbol": symbol,
@@ -247,7 +273,7 @@ async def _process_stock_candidate(
         "geography": geography,
         "industry": industry,
         "price": price,
-        "quantity": quantity,
+        "quantity": sized.quantity,
         "trade_value": trade_value_eur,
         "final_score": final_score * multiplier,
         "reason": reason,
