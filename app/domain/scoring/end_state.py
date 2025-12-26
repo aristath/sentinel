@@ -88,7 +88,9 @@ async def calculate_total_return_score(
     return round(score, 3), sub_components
 
 
-async def _get_consistency_score(calc_repo, symbol: str, provided: Optional[float]) -> float:
+async def _get_consistency_score(
+    calc_repo, symbol: str, provided: Optional[float]
+) -> float:
     """Get consistency score from cache or use provided value."""
     if provided is not None:
         return provided
@@ -96,7 +98,9 @@ async def _get_consistency_score(calc_repo, symbol: str, provided: Optional[floa
     return cached if cached is not None else 0.5
 
 
-async def _get_financial_strength(calc_repo, symbol: str, provided: Optional[float]) -> float:
+async def _get_financial_strength(
+    calc_repo, symbol: str, provided: Optional[float]
+) -> float:
     """Get financial strength from cache or use provided value."""
     if provided is not None:
         return provided
@@ -116,7 +120,9 @@ def _derive_dividend_consistency_from_payout(payout: float) -> float:
         return 0.4
 
 
-async def _get_dividend_consistency(calc_repo, symbol: str, provided: Optional[float]) -> float:
+async def _get_dividend_consistency(
+    calc_repo, symbol: str, provided: Optional[float]
+) -> float:
     """Get dividend consistency from cache, derive from payout, or use provided value."""
     if provided is not None:
         return provided
@@ -146,7 +152,9 @@ def _convert_sortino_to_score(sortino: float) -> float:
         return 0.0
 
 
-async def _get_sortino_score(calc_repo, symbol: str, provided: Optional[float]) -> float:
+async def _get_sortino_score(
+    calc_repo, symbol: str, provided: Optional[float]
+) -> float:
     """Get Sortino score from cache (converted) or use provided value."""
     if provided is not None:
         return provided
@@ -188,9 +196,15 @@ async def calculate_long_term_promise(
 
     calc_repo = CalculationsRepository()
 
-    consistency_score = await _get_consistency_score(calc_repo, symbol, consistency_score)
-    financial_strength = await _get_financial_strength(calc_repo, symbol, financial_strength)
-    dividend_consistency = await _get_dividend_consistency(calc_repo, symbol, dividend_consistency)
+    consistency_score = await _get_consistency_score(
+        calc_repo, symbol, consistency_score
+    )
+    financial_strength = await _get_financial_strength(
+        calc_repo, symbol, financial_strength
+    )
+    dividend_consistency = await _get_dividend_consistency(
+        calc_repo, symbol, dividend_consistency
+    )
     sortino_score = await _get_sortino_score(calc_repo, symbol, sortino_score)
 
     total = (
@@ -224,7 +238,9 @@ def _convert_volatility_to_score(volatility: float) -> float:
         return max(0.1, 0.3 - (volatility - 0.40))
 
 
-async def _get_volatility_score(calc_repo, symbol: str, provided: Optional[float]) -> float:
+async def _get_volatility_score(
+    calc_repo, symbol: str, provided: Optional[float]
+) -> float:
     """Get volatility score from cache or use provided value."""
     if provided is not None:
         return _convert_volatility_to_score(provided)
@@ -251,7 +267,9 @@ def _convert_drawdown_to_score(max_dd: float) -> float:
         return max(0.0, 0.2 - (dd_pct - 0.50))
 
 
-async def _get_drawdown_score(calc_repo, symbol: str, provided: Optional[float]) -> float:
+async def _get_drawdown_score(
+    calc_repo, symbol: str, provided: Optional[float]
+) -> float:
     """Get drawdown score from cache or use provided value."""
     if provided is not None:
         return provided

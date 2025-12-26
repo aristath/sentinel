@@ -27,7 +27,9 @@ WEIGHT_INDUSTRY = 0.30
 WEIGHT_AVERAGING = 0.30
 
 
-def _calculate_geo_gap_score(geography: str, portfolio_context: PortfolioContext) -> float:
+def _calculate_geo_gap_score(
+    geography: str, portfolio_context: PortfolioContext
+) -> float:
     """Calculate geography gap score (40% weight)."""
     geo_weight = portfolio_context.geo_weights.get(geography, 0)
     geo_gap_score = 0.5 + (geo_weight * 0.4)
@@ -92,7 +94,10 @@ def _apply_cost_basis_bonus(
     symbol: str, score: float, portfolio_context: PortfolioContext
 ) -> float:
     """Apply cost basis bonus if price is below average."""
-    if not portfolio_context.position_avg_prices or not portfolio_context.current_prices:
+    if (
+        not portfolio_context.position_avg_prices
+        or not portfolio_context.current_prices
+    ):
         return score
 
     avg_price = portfolio_context.position_avg_prices.get(symbol)
@@ -296,7 +301,9 @@ async def calculate_portfolio_score(
             await _cache_portfolio_score(score, portfolio_hash)
         return score
 
-    diversification_score = _calculate_diversification_score(portfolio_context, total_value)
+    diversification_score = _calculate_diversification_score(
+        portfolio_context, total_value
+    )
     dividend_score = _calculate_dividend_score(portfolio_context, total_value)
     quality_score = _calculate_quality_score(portfolio_context, total_value)
 

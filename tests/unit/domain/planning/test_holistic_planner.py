@@ -7,7 +7,6 @@ These tests ensure the holistic planner correctly:
 - Builds balanced rebalancing sequences
 """
 
-
 import pytest
 
 from app.domain.planning.holistic_planner import (

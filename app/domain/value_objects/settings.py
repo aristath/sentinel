@@ -44,7 +44,9 @@ class Settings:
         if value >= 0:
             raise ValueError(f"{field_name} must be negative")
 
-    def _validate_range(self, value: float, field_name: str, min_val: float, max_val: float) -> None:
+    def _validate_range(
+        self, value: float, field_name: str, min_val: float, max_val: float
+    ) -> None:
         """Validate that a value is within a range."""
         if not min_val <= value <= max_val:
             raise ValueError(f"{field_name} must be between {min_val} and {max_val}")
@@ -58,8 +60,12 @@ class Settings:
         self._validate_range(self.min_stock_score, "min_stock_score", 0, 1)
         self._validate_range(self.optimizer_blend, "optimizer_blend", 0, 1)
         self._validate_positive(self.optimizer_target_return, "optimizer_target_return")
-        self._validate_non_negative(self.transaction_cost_fixed, "transaction_cost_fixed")
-        self._validate_non_negative(self.transaction_cost_percent, "transaction_cost_percent")
+        self._validate_non_negative(
+            self.transaction_cost_fixed, "transaction_cost_fixed"
+        )
+        self._validate_non_negative(
+            self.transaction_cost_percent, "transaction_cost_percent"
+        )
         self._validate_non_negative(self.min_cash_reserve, "min_cash_reserve")
 
     @classmethod

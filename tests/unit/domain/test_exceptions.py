@@ -1,6 +1,5 @@
 """Tests for domain exceptions."""
 
-
 from app.domain.exceptions import (
     CurrencyConversionError,
     DomainError,

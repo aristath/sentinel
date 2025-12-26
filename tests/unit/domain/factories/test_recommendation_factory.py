@@ -1,6 +1,5 @@
 """Tests for RecommendationFactory."""
 
-
 from app.domain.factories.recommendation_factory import RecommendationFactory
 from app.domain.value_objects.currency import Currency
 from app.domain.value_objects.trade_side import TradeSide

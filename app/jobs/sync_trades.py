@@ -67,11 +67,15 @@ async def _sync_trades_internal():
         async with db_manager.ledger.transaction():
             for trade in executed_trades:
                 order_id = trade.get("order_id")
-                valid, reason = _validate_trade(trade, existing_order_ids, valid_symbols)
+                valid, reason = _validate_trade(
+                    trade, existing_order_ids, valid_symbols
+                )
 
                 if not valid:
                     if reason != "duplicate":
-                        logger.warning(f"Trade {order_id or 'unknown'} invalid: {reason}")
+                        logger.warning(
+                            f"Trade {order_id or 'unknown'} invalid: {reason}"
+                        )
                     skipped += 1
                     continue
 

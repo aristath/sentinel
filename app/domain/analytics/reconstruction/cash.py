@@ -50,7 +50,9 @@ def _calculate_trade_value(trade) -> float:
     return trade.quantity * trade.price * exchange_rate
 
 
-def _process_trades(trades: list, start_date: str, end_date: str, transactions_by_date: dict) -> None:
+def _process_trades(
+    trades: list, start_date: str, end_date: str, transactions_by_date: dict
+) -> None:
     """Process trades and add to transactions dictionary."""
     for trade in trades:
         trade_date = _get_trade_date(trade)

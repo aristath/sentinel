@@ -7,7 +7,6 @@ These tests ensure the holistic planner makes CORRECT decisions about:
 - End-state portfolio evaluation
 """
 
-
 import pytest
 
 from app.domain.scoring.constants import (

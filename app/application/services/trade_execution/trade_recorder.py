@@ -37,7 +37,7 @@ async def _get_currency_and_rate(
     """Convert currency string to enum and get exchange rate if needed."""
     trade_currency = Currency.EUR
     currency_rate = None
-    
+
     if currency:
         if isinstance(currency, str):
             trade_currency = Currency.from_string(currency)
@@ -48,7 +48,7 @@ async def _get_currency_and_rate(
             currency_rate = await exchange_rate_service.get_rate(
                 str(trade_currency), str(Currency.EUR)
             )
-    
+
     return trade_currency, currency_rate
 
 

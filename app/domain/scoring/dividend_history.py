@@ -83,7 +83,9 @@ def calculate_dividend_growth_rate(dividend_history: List[float]) -> Optional[fl
         return None
 
 
-def _calculate_cut_penalty(has_cut: bool, years_since: Optional[int], dividend_history: List[float]) -> tuple[float, float]:
+def _calculate_cut_penalty(
+    has_cut: bool, years_since: Optional[int], dividend_history: List[float]
+) -> tuple[float, float]:
     """Calculate penalty for dividend cuts and bonus for no cuts."""
     if has_cut:
         if years_since is not None and years_since <= 2:
@@ -117,7 +119,9 @@ def _calculate_growth_bonus(growth_rate: Optional[float]) -> float:
         return 0.0
 
 
-def _calculate_yield_bonus(current_yield: Optional[float], portfolio_avg_yield: float) -> tuple[float, bool]:
+def _calculate_yield_bonus(
+    current_yield: Optional[float], portfolio_avg_yield: float
+) -> tuple[float, bool]:
     """Calculate bonus based on yield vs portfolio average."""
     if current_yield is None or current_yield <= 0:
         return 0.0, False
@@ -169,7 +173,9 @@ def calculate_dividend_stability_score(
     details["has_big_cut"] = has_cut
     details["years_since_cut"] = years_since
 
-    cut_penalty, no_cut_bonus = _calculate_cut_penalty(has_cut, years_since, dividend_history)
+    cut_penalty, no_cut_bonus = _calculate_cut_penalty(
+        has_cut, years_since, dividend_history
+    )
     details["cut_penalty"] = cut_penalty
     score -= cut_penalty
     score += no_cut_bonus

@@ -67,7 +67,11 @@ async def _check_pnl_guardrails() -> tuple[dict, bool]:
 
 
 async def _validate_next_action(
-    next_action, pnl_status: dict, cash_balance: float, min_trade_size: float, trade_repo
+    next_action,
+    pnl_status: dict,
+    cash_balance: float,
+    min_trade_size: float,
+    trade_repo,
 ) -> bool:
     """Validate next action against P&L guardrails, cash, and recent orders."""
     from app.domain.value_objects.trade_side import TradeSide
@@ -92,9 +96,7 @@ async def _validate_next_action(
         return False
 
     if next_action.side == TradeSide.SELL:
-        has_recent = await trade_repo.has_recent_sell_order(
-            next_action.symbol, hours=2
-        )
+        has_recent = await trade_repo.has_recent_sell_order(next_action.symbol, hours=2)
         if has_recent:
             logger.warning(
                 f"Skipping SELL {next_action.symbol}: recent sell order found "
@@ -146,9 +148,7 @@ async def _execute_trade(
         )
 
     if results and results[0]["status"] == "success":
-        logger.info(
-            f"{next_action.side} executed successfully: {next_action.symbol}"
-        )
+        logger.info(f"{next_action.side} executed successfully: {next_action.symbol}")
         emit(SystemEvent.TRADE_EXECUTED, is_buy=(next_action.side == TradeSide.BUY))
 
         rec_cache = get_recommendation_cache()

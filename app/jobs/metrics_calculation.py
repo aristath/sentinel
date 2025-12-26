@@ -28,7 +28,10 @@ logger = logging.getLogger(__name__)
 
 
 async def _calculate_technical_indicators(
-    symbol: str, closes_array: np.ndarray, highs_array: np.ndarray, lows_array: np.ndarray
+    symbol: str,
+    closes_array: np.ndarray,
+    highs_array: np.ndarray,
+    lows_array: np.ndarray,
 ) -> tuple[int, Optional[float], Optional[float], Optional[tuple]]:
     """Calculate technical indicators and return count and key values."""
     metrics_count = 0
@@ -68,9 +71,7 @@ async def _calculate_technical_indicators(
     return metrics_count, ema_200, high_52w, bands
 
 
-async def _calculate_cagr_metrics(
-    calc_repo, symbol: str, monthly_prices: list
-) -> int:
+async def _calculate_cagr_metrics(calc_repo, symbol: str, monthly_prices: list) -> int:
     """Calculate CAGR metrics if monthly data is available."""
     if not monthly_prices or len(monthly_prices) < 12:
         return 0
@@ -117,7 +118,11 @@ async def _calculate_momentum_metrics(calc_repo, symbol: str, closes: list) -> i
 
 
 async def _calculate_distance_metrics(
-    calc_repo, symbol: str, closes: list, ema_200: Optional[float], high_52w: Optional[float]
+    calc_repo,
+    symbol: str,
+    closes: list,
+    ema_200: Optional[float],
+    high_52w: Optional[float],
 ) -> int:
     """Calculate distance metrics."""
     metrics_count = 0
