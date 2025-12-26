@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 from app.infrastructure.database.manager import get_db_manager
 from app.infrastructure.cache import cache
-from app.services.tradernet_connection import ensure_tradernet_connected
+from app.infrastructure.external.tradernet_connection import ensure_tradernet_connected
 from app.infrastructure.external import yahoo_finance as yahoo
 
 logger = logging.getLogger(__name__)

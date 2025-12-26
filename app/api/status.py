@@ -324,7 +324,7 @@ async def trigger_daily_maintenance():
 @router.get("/tradernet")
 async def get_tradernet_status():
     """Get Tradernet connection status."""
-    from app.services.tradernet_connection import ensure_tradernet_connected
+    from app.infrastructure.external.tradernet_connection import ensure_tradernet_connected
 
     try:
         client = await ensure_tradernet_connected(raise_on_error=False)

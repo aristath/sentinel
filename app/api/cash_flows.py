@@ -3,7 +3,7 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 from app.infrastructure.dependencies import CashFlowRepositoryDep
-from app.services.tradernet_connection import ensure_tradernet_connected
+from app.infrastructure.external.tradernet_connection import ensure_tradernet_connected
 
 router = APIRouter()
 

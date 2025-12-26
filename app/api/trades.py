@@ -17,7 +17,7 @@ from app.infrastructure.dependencies import (
 )
 from app.infrastructure.cache import cache
 from app.infrastructure.cache_invalidation import get_cache_invalidation_service
-from app.services.tradernet_connection import ensure_tradernet_connected
+from app.infrastructure.external.tradernet_connection import ensure_tradernet_connected
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

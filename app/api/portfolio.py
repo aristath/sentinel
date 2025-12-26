@@ -9,7 +9,7 @@ from app.infrastructure.dependencies import (
     AllocationRepositoryDep,
     PortfolioServiceDep,
 )
-from app.services.tradernet_connection import ensure_tradernet_connected
+from app.infrastructure.external.tradernet_connection import ensure_tradernet_connected
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
