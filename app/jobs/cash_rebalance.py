@@ -47,9 +47,138 @@ async def check_and_rebalance():
         await _check_and_rebalance_internal()
 
 
+async def _check_pnl_guardrails() -> tuple[dict, bool]:
+    """Check P&L status and return status dict and whether trading is allowed."""
+    pnl_tracker = get_daily_pnl_tracker()
+    pnl_status = await pnl_tracker.get_trading_status()
+    logger.info(
+        f"Daily P&L status: {pnl_status['pnl_display']} ({pnl_status['status']})"
+    )
+
+    if pnl_status["status"] == "halted":
+        logger.warning(f"Trading halted: {pnl_status['reason']}")
+        error_msg = "TRADING HALTED - SEVERE DRAWDOWN"
+        emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+        set_error(error_msg)
+        emit(SystemEvent.REBALANCE_COMPLETE)
+        return pnl_status, False
+
+    return pnl_status, True
+
+
+async def _validate_next_action(
+    next_action, pnl_status: dict, cash_balance: float, min_trade_size: float, trade_repo
+) -> bool:
+    """Validate next action against P&L guardrails, cash, and recent orders."""
+    from app.domain.value_objects.trade_side import TradeSide
+
+    if next_action.side == TradeSide.SELL and not pnl_status["can_sell"]:
+        logger.info(
+            f"SELL {next_action.symbol} blocked by P&L guardrail: {pnl_status['reason']}"
+        )
+        return False
+
+    if next_action.side == TradeSide.BUY and not pnl_status["can_buy"]:
+        logger.info(
+            f"BUY {next_action.symbol} blocked by P&L guardrail: {pnl_status['reason']}"
+        )
+        return False
+
+    if next_action.side == TradeSide.BUY and cash_balance < min_trade_size:
+        logger.info(
+            f"Cash €{cash_balance:.2f} below threshold €{min_trade_size:.2f}, "
+            f"skipping BUY {next_action.symbol}"
+        )
+        return False
+
+    if next_action.side == TradeSide.SELL:
+        has_recent = await trade_repo.has_recent_sell_order(
+            next_action.symbol, hours=2
+        )
+        if has_recent:
+            logger.warning(
+                f"Skipping SELL {next_action.symbol}: recent sell order found "
+                f"(within last 2 hours)"
+            )
+            return False
+
+    return True
+
+
+async def _execute_trade(
+    next_action, client, trade_repo, position_repo, portfolio_hash: str
+) -> None:
+    """Execute the trade and handle post-execution tasks."""
+    from app.application.services.trade_execution_service import TradeExecutionService
+    from app.domain.value_objects.trade_side import TradeSide
+    from app.jobs.daily_sync import sync_portfolio
+
+    logger.info(
+        f"Executing {next_action.side}: {next_action.quantity} {next_action.symbol} "
+        f"@ €{next_action.estimated_price:.2f} = €{next_action.estimated_value:.2f} "
+        f"({next_action.reason})"
+    )
+
+    emit(SystemEvent.SYNC_START)
+    trade_execution = TradeExecutionService(trade_repo, position_repo)
+
+    currency_balances = None
+    if next_action.side == TradeSide.BUY:
+        currency_balances = {
+            cb.currency: cb.amount for cb in client.get_cash_balances()
+        }
+        pending_totals = client.get_pending_order_totals()
+        if pending_totals:
+            for currency, pending_amount in pending_totals.items():
+                if currency in currency_balances:
+                    currency_balances[currency] = max(
+                        0, currency_balances[currency] - pending_amount
+                    )
+
+    if next_action.side == TradeSide.SELL:
+        results = await trade_execution.execute_trades([next_action])
+    else:
+        results = await trade_execution.execute_trades(
+            [next_action],
+            currency_balances=currency_balances,
+            auto_convert_currency=True,
+            source_currency="EUR",
+        )
+
+    if results and results[0]["status"] == "success":
+        logger.info(
+            f"{next_action.side} executed successfully: {next_action.symbol}"
+        )
+        emit(SystemEvent.TRADE_EXECUTED, is_buy=(next_action.side == TradeSide.BUY))
+
+        rec_cache = get_recommendation_cache()
+        await rec_cache.invalidate_portfolio_hash(portfolio_hash)
+
+        recommendation_repo = RecommendationRepository()
+        matching_recs = await recommendation_repo.find_matching_for_execution(
+            symbol=next_action.symbol,
+            side=next_action.side,
+            portfolio_hash=portfolio_hash,
+        )
+        for rec in matching_recs:
+            await recommendation_repo.mark_executed(rec["uuid"])
+            logger.info(f"Marked recommendation {rec['uuid']} as executed")
+    elif results and results[0]["status"] == "skipped":
+        reason = results[0].get("error", "unknown")
+        logger.info(f"Trade skipped for {next_action.symbol}: {reason}")
+    else:
+        error = results[0].get("error", "Unknown error") if results else "No result"
+        logger.error(f"{next_action.side} failed for {next_action.symbol}: {error}")
+        error_msg = f"{next_action.side} ORDER FAILED"
+        emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+        set_error(error_msg)
+
+    emit(SystemEvent.SYNC_COMPLETE)
+    await sync_portfolio()
+
+
 async def _check_and_rebalance_internal():
     """Internal rebalance implementation with drip execution."""
-    from app.application.services.trade_execution_service import TradeExecutionService
     from app.domain.value_objects.trade_side import TradeSide
     from app.jobs.daily_sync import sync_portfolio
     from app.jobs.sync_trades import sync_trades
@@ -60,30 +189,16 @@ async def _check_and_rebalance_internal():
     set_processing("CHECKING TRADE OPPORTUNITIES...")
 
     try:
-        # Step 0: Sync trades from Tradernet for accurate cooldown calculations
         logger.info("Step 0: Syncing trades from Tradernet...")
         await sync_trades()
 
-        # Step 1: Sync portfolio for fresh data
         logger.info("Step 1: Syncing portfolio for fresh data...")
         await sync_portfolio()
 
-        # GUARDRAIL: Check daily P&L circuit breaker
-        pnl_tracker = get_daily_pnl_tracker()
-        pnl_status = await pnl_tracker.get_trading_status()
-        logger.info(
-            f"Daily P&L status: {pnl_status['pnl_display']} ({pnl_status['status']})"
-        )
-
-        if pnl_status["status"] == "halted":
-            logger.warning(f"Trading halted: {pnl_status['reason']}")
-            error_msg = "TRADING HALTED - SEVERE DRAWDOWN"
-            emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-            set_error(error_msg)
-            emit(SystemEvent.REBALANCE_COMPLETE)
+        pnl_status, can_trade = await _check_pnl_guardrails()
+        if not can_trade:
             return
 
-        # Get configurable threshold from database
         from app.application.services.rebalancing_service import (
             calculate_min_trade_amount,
         )
@@ -91,13 +206,11 @@ async def _check_and_rebalance_internal():
 
         settings_service = SettingsService(SettingsRepository())
         settings = await settings_service.get_settings()
-        # Calculate minimum worthwhile trade from transaction costs
         min_trade_size = calculate_min_trade_amount(
             settings.transaction_cost_fixed,
             settings.transaction_cost_percent,
         )
 
-        # Connect to broker
         client = get_tradernet_client()
         if not client.is_connected:
             if not client.connect():
@@ -112,17 +225,14 @@ async def _check_and_rebalance_internal():
             f"Cash balance: €{cash_balance:.2f}, threshold: €{min_trade_size:.2f}"
         )
 
-        # Initialize repositories
         position_repo = PositionRepository()
         trade_repo = TradeRepository()
 
-        # Step 2: Build portfolio context
         logger.info("Step 2: Building portfolio context...")
         set_processing("BUILDING PORTFOLIO CONTEXT...")
 
         positions = await position_repo.get_all()
 
-        # Generate portfolio hash for recommendation matching
         from app.domain.portfolio_hash import generate_portfolio_hash
 
         position_hash_dicts = [
@@ -130,7 +240,6 @@ async def _check_and_rebalance_internal():
         ]
         portfolio_hash = generate_portfolio_hash(position_hash_dicts)
 
-        # Step 3: Get next action from holistic planner
         logger.info("Step 3: Getting recommendation from holistic planner...")
         set_processing("GETTING HOLISTIC RECOMMENDATION...")
 
@@ -143,115 +252,16 @@ async def _check_and_rebalance_internal():
             clear_processing()
             return
 
-        # Check P&L guardrails for the recommended action
-        if next_action.side == TradeSide.SELL and not pnl_status["can_sell"]:
-            logger.info(
-                f"SELL {next_action.symbol} blocked by P&L guardrail: {pnl_status['reason']}"
-            )
+        if not await _validate_next_action(
+            next_action, pnl_status, cash_balance, min_trade_size, trade_repo
+        ):
             emit(SystemEvent.REBALANCE_COMPLETE)
             await _refresh_recommendation_cache()
             return
 
-        if next_action.side == TradeSide.BUY and not pnl_status["can_buy"]:
-            logger.info(
-                f"BUY {next_action.symbol} blocked by P&L guardrail: {pnl_status['reason']}"
-            )
-            emit(SystemEvent.REBALANCE_COMPLETE)
-            await _refresh_recommendation_cache()
-            return
-
-        # Check cash for BUY actions
-        if next_action.side == TradeSide.BUY and cash_balance < min_trade_size:
-            logger.info(
-                f"Cash €{cash_balance:.2f} below threshold €{min_trade_size:.2f}, "
-                f"skipping BUY {next_action.symbol}"
-            )
-            emit(SystemEvent.REBALANCE_COMPLETE)
-            await _refresh_recommendation_cache()
-            return
-
-        # Additional safety check for SELL: verify no recent sell order
-        if next_action.side == TradeSide.SELL:
-            has_recent = await trade_repo.has_recent_sell_order(
-                next_action.symbol, hours=2
-            )
-            if has_recent:
-                logger.warning(
-                    f"Skipping SELL {next_action.symbol}: recent sell order found "
-                    f"(within last 2 hours)"
-                )
-                emit(SystemEvent.REBALANCE_COMPLETE)
-                await _refresh_recommendation_cache()
-                return
-
-        # Execute the trade
-        logger.info(
-            f"Executing {next_action.side}: {next_action.quantity} {next_action.symbol} "
-            f"@ €{next_action.estimated_price:.2f} = €{next_action.estimated_value:.2f} "
-            f"({next_action.reason})"
+        await _execute_trade(
+            next_action, client, trade_repo, position_repo, portfolio_hash
         )
-
-        emit(SystemEvent.SYNC_START)
-        trade_execution = TradeExecutionService(trade_repo, position_repo)
-
-        # Get currency balances for BUY trades
-        currency_balances = None
-        if next_action.side == TradeSide.BUY:
-            currency_balances = {
-                cb.currency: cb.amount for cb in client.get_cash_balances()
-            }
-            # Deduct pending order amounts
-            pending_totals = client.get_pending_order_totals()
-            if pending_totals:
-                for currency, pending_amount in pending_totals.items():
-                    if currency in currency_balances:
-                        currency_balances[currency] = max(
-                            0, currency_balances[currency] - pending_amount
-                        )
-
-        # Execute based on trade type
-        if next_action.side == TradeSide.SELL:
-            results = await trade_execution.execute_trades([next_action])
-        else:
-            results = await trade_execution.execute_trades(
-                [next_action],
-                currency_balances=currency_balances,
-                auto_convert_currency=True,
-                source_currency="EUR",
-            )
-
-        if results and results[0]["status"] == "success":
-            logger.info(
-                f"{next_action.side} executed successfully: {next_action.symbol}"
-            )
-            emit(SystemEvent.TRADE_EXECUTED, is_buy=(next_action.side == TradeSide.BUY))
-
-            # Invalidate portfolio-hash-based caches (old portfolio is now stale)
-            rec_cache = get_recommendation_cache()
-            await rec_cache.invalidate_portfolio_hash(portfolio_hash)
-
-            # Mark matching stored recommendations as executed
-            recommendation_repo = RecommendationRepository()
-            matching_recs = await recommendation_repo.find_matching_for_execution(
-                symbol=next_action.symbol,
-                side=next_action.side,
-                portfolio_hash=portfolio_hash,
-            )
-            for rec in matching_recs:
-                await recommendation_repo.mark_executed(rec["uuid"])
-                logger.info(f"Marked recommendation {rec['uuid']} as executed")
-        elif results and results[0]["status"] == "skipped":
-            reason = results[0].get("error", "unknown")
-            logger.info(f"Trade skipped for {next_action.symbol}: {reason}")
-        else:
-            error = results[0].get("error", "Unknown error") if results else "No result"
-            logger.error(f"{next_action.side} failed for {next_action.symbol}: {error}")
-            error_msg = f"{next_action.side} ORDER FAILED"
-            emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-            set_error(error_msg)
-
-        emit(SystemEvent.SYNC_COMPLETE)
-        await sync_portfolio()
         await _refresh_recommendation_cache()
 
     except Exception as e:
