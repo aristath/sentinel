@@ -1,6 +1,7 @@
 """Tradernet connection helper - ensures consistent connection handling."""
 
 import logging
+from typing import Optional
 
 from fastapi import HTTPException
 
@@ -10,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 async def ensure_tradernet_connected(
-    client: TradernetClient = None, raise_on_error: bool = True
+    client: Optional[TradernetClient] = None, raise_on_error: bool = True
 ) -> TradernetClient:
     """
     Ensure Tradernet client is connected, connecting if necessary.
@@ -38,3 +39,5 @@ async def ensure_tradernet_connected(
             return None  # type: ignore[return-value]
 
     return client
+
+

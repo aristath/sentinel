@@ -6,6 +6,7 @@ Fetches historical prices from Yahoo and stores in per-symbol databases.
 import asyncio
 import logging
 from datetime import datetime, timedelta
+from typing import Optional
 
 from app.config import settings
 from app.infrastructure.database.manager import get_db_manager
@@ -117,7 +118,7 @@ async def _sync_stock_price_history():
     )
 
 
-async def _fetch_and_store_prices(history_db, symbol: str, yahoo_symbol: str = None):
+async def _fetch_and_store_prices(history_db, symbol: str, yahoo_symbol: Optional[str] = None):
     """Fetch historical prices from Yahoo Finance and store in per-symbol database."""
     try:
         # Check if we have monthly data (indicates initial seeding was done)
@@ -140,16 +141,12 @@ async def _fetch_and_store_prices(history_db, symbol: str, yahoo_symbol: str = N
 
         async with history_db.transaction():
             for ohlc in ohlc_data:
-                date = (
-                    ohlc.date.strftime("%Y-%m-%d")
-                    if hasattr(ohlc, "date")
-                    else ohlc.get("date")
-                )
-                close = ohlc.close if hasattr(ohlc, "close") else ohlc.get("close")
-                open_price = ohlc.open if hasattr(ohlc, "open") else ohlc.get("open")
-                high = ohlc.high if hasattr(ohlc, "high") else ohlc.get("high")
-                low = ohlc.low if hasattr(ohlc, "low") else ohlc.get("low")
-                volume = ohlc.volume if hasattr(ohlc, "volume") else ohlc.get("volume")
+                date = ohlc.date.strftime("%Y-%m-%d")
+                close = ohlc.close
+                open_price = ohlc.open
+                high = ohlc.high
+                low = ohlc.low
+                volume = ohlc.volume
 
                 await history_db.execute(
                     """

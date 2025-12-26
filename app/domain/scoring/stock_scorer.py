@@ -63,15 +63,15 @@ async def calculate_stock_score(
     daily_prices: List[dict],
     monthly_prices: List[dict],
     fundamentals,
-    geography: str = None,
-    industry: str = None,
-    portfolio_context: PortfolioContext = None,
-    yahoo_symbol: str = None,
+    geography: Optional[str] = None,
+    industry: Optional[str] = None,
+    portfolio_context: Optional[PortfolioContext] = None,
+    yahoo_symbol: Optional[str] = None,
     target_annual_return: float = DEFAULT_TARGET_ANNUAL_RETURN,
     market_avg_pe: float = DEFAULT_MARKET_AVG_PE,
     sortino_ratio: Optional[float] = None,
     pyfolio_drawdown: Optional[float] = None,
-    weights: Dict[str, float] = None,
+    weights: Optional[Dict[str, float]] = None,
 ) -> Optional[CalculatedStockScore]:
     """
     Calculate complete stock score with all 8 groups.
@@ -220,13 +220,13 @@ async def calculate_stock_score(
 async def calculate_stock_score_from_prefetched(
     symbol: str,
     prefetched: PrefetchedStockData,
-    geography: str = None,
-    industry: str = None,
-    portfolio_context: PortfolioContext = None,
-    yahoo_symbol: str = None,
+    geography: Optional[str] = None,
+    industry: Optional[str] = None,
+    portfolio_context: Optional[PortfolioContext] = None,
+    yahoo_symbol: Optional[str] = None,
     target_annual_return: float = DEFAULT_TARGET_ANNUAL_RETURN,
     market_avg_pe: float = DEFAULT_MARKET_AVG_PE,
-    weights: Dict[str, float] = None,
+    weights: Optional[Dict[str, float]] = None,
 ) -> Optional[CalculatedStockScore]:
     """
     Calculate stock score using pre-fetched data.

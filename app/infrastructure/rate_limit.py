@@ -3,6 +3,7 @@
 import logging
 import time
 from collections import defaultdict
+from typing import Optional
 
 from fastapi import Request, status
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -21,10 +22,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     def __init__(
         self,
         app,
-        max_requests: int = None,
-        window_seconds: int = None,
-        trade_max: int = None,
-        trade_window: int = None,
+        max_requests: Optional[int] = None,
+        window_seconds: Optional[int] = None,
+        trade_max: Optional[int] = None,
+        trade_window: Optional[int] = None,
     ):
         from app.config import settings
 
@@ -119,3 +120,4 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         for key in keys_to_remove:
             del self._request_history[key]
+

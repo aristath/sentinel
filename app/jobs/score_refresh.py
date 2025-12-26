@@ -5,6 +5,7 @@ Uses the new scoring domain to calculate scores for all active stocks.
 
 import logging
 from datetime import datetime
+from typing import Optional
 
 from app.domain.scoring import (
     PortfolioContext,
@@ -180,7 +181,7 @@ async def _build_portfolio_context(db_manager) -> PortfolioContext:
     )
 
 
-async def _get_daily_prices(db_manager, symbol: str, yahoo_symbol: str = None) -> list:
+async def _get_daily_prices(db_manager, symbol: str, yahoo_symbol: Optional[str] = None) -> list:
     """Get daily price data from history database or Yahoo."""
     history_db = await db_manager.history(symbol)
 
@@ -236,7 +237,7 @@ async def _get_daily_prices(db_manager, symbol: str, yahoo_symbol: str = None) -
 
 
 async def _get_monthly_prices(
-    db_manager, symbol: str, yahoo_symbol: str = None
+    db_manager, symbol: str, yahoo_symbol: Optional[str] = None
 ) -> list:
     """Get monthly price data from history database or Yahoo."""
     history_db = await db_manager.history(symbol)

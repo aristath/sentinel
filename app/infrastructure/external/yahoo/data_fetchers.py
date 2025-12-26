@@ -32,7 +32,7 @@ def _led_api_call():
         emit(SystemEvent.API_CALL_END)
 
 
-def get_analyst_data(symbol: str, yahoo_symbol: str = None) -> Optional[AnalystData]:
+def get_analyst_data(symbol: str, yahoo_symbol: Optional[str] = None) -> Optional[AnalystData]:
     """
     Get analyst recommendations and price targets.
 
@@ -92,7 +92,7 @@ def get_analyst_data(symbol: str, yahoo_symbol: str = None) -> Optional[AnalystD
 
 
 def get_fundamental_data(
-    symbol: str, yahoo_symbol: str = None
+    symbol: str, yahoo_symbol: Optional[str] = None
 ) -> Optional[FundamentalData]:
     """
     Get fundamental analysis data.
@@ -134,7 +134,7 @@ def get_fundamental_data(
 
 
 def get_historical_prices(
-    symbol: str, yahoo_symbol: str = None, period: str = "1y"
+    symbol: str, yahoo_symbol: Optional[str] = None, period: str = "1y"
 ) -> list[HistoricalPrice]:
     """
     Get historical price data.
@@ -174,7 +174,7 @@ def get_historical_prices(
 
 
 def get_current_price(
-    symbol: str, yahoo_symbol: str = None, max_retries: int = None
+    symbol: str, yahoo_symbol: Optional[str] = None, max_retries: Optional[int] = None
 ) -> Optional[float]:
     """
     Get current stock price with retry logic.
@@ -226,7 +226,7 @@ def get_current_price(
     return None
 
 
-def get_stock_industry(symbol: str, yahoo_symbol: str = None) -> Optional[str]:
+def get_stock_industry(symbol: str, yahoo_symbol: Optional[str] = None) -> Optional[str]:
     """
     Get stock industry/sector from Yahoo Finance.
 
