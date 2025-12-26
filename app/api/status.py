@@ -81,6 +81,41 @@ async def get_display_text(settings_repo: SettingsRepositoryDep):
     }
 
 
+@router.get("/led/display")
+async def get_led_display_state(settings_repo: SettingsRepositoryDep):
+    """Get LED display state for Arduino App Framework Docker app.
+
+    Returns display mode, text, and RGB LED states in the format expected
+    by the trader-display Arduino app.
+    """
+    from app.infrastructure.hardware.display_service import (
+        _error_text,
+        _processing_text,
+        _next_actions_text,
+    )
+
+    # Determine mode based on current state
+    if _error_text:
+        mode = "error"
+    elif _processing_text:
+        mode = "activity"
+    else:
+        mode = "normal"
+
+    ticker_speed = await settings_repo.get_float("ticker_speed", 50.0)
+
+    return {
+        "mode": mode,
+        "error_message": _error_text if _error_text else None,
+        "trade_is_buy": True,
+        "led3": [0, 0, 0],
+        "led4": [0, 0, 0],
+        "ticker_text": _next_actions_text,
+        "activity_message": _processing_text if _processing_text else None,
+        "ticker_speed": int(ticker_speed),
+    }
+
+
 @router.post("/sync/portfolio")
 async def trigger_portfolio_sync():
     """Manually trigger portfolio sync."""
