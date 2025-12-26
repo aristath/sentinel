@@ -474,6 +474,132 @@ async def identify_opportunities(
     return opportunities
 
 
+def _generate_direct_buy_pattern(
+    top_averaging: list,
+    top_rebalance_buys: list,
+    top_opportunity: list,
+    available_cash: float,
+    max_steps: int,
+) -> Optional[List[ActionCandidate]]:
+    """Generate pattern: Direct buys only (if cash available)."""
+    if available_cash <= 0:
+        return None
+
+    direct_buys = []
+    remaining_cash = available_cash
+    for candidate in top_averaging + top_rebalance_buys + top_opportunity:
+        if candidate.value_eur <= remaining_cash and len(direct_buys) < max_steps:
+            direct_buys.append(candidate)
+            remaining_cash -= candidate.value_eur
+
+    return direct_buys if direct_buys else None
+
+
+def _generate_profit_taking_pattern(
+    top_profit_taking: list,
+    top_averaging: list,
+    top_rebalance_buys: list,
+    available_cash: float,
+    max_steps: int,
+) -> Optional[List[ActionCandidate]]:
+    """Generate pattern: Profit-taking + reinvest."""
+    if not top_profit_taking:
+        return None
+
+    profit_sequence = list(top_profit_taking[: min(len(top_profit_taking), max_steps)])
+    cash_from_sells = sum(c.value_eur for c in profit_sequence)
+    total_cash = available_cash + cash_from_sells
+
+    for candidate in top_averaging + top_rebalance_buys:
+        if candidate.value_eur <= total_cash and len(profit_sequence) < max_steps:
+            profit_sequence.append(candidate)
+            total_cash -= candidate.value_eur
+
+    return profit_sequence if len(profit_sequence) > 0 else None
+
+
+def _generate_rebalance_pattern(
+    top_rebalance_sells: list,
+    top_rebalance_buys: list,
+    available_cash: float,
+    max_steps: int,
+) -> Optional[List[ActionCandidate]]:
+    """Generate pattern: Rebalance (sell overweight + buy underweight)."""
+    if not top_rebalance_sells:
+        return None
+
+    rebalance_sequence = list(
+        top_rebalance_sells[: min(len(top_rebalance_sells), max_steps)]
+    )
+    cash_from_sells = sum(c.value_eur for c in rebalance_sequence)
+    total_cash = available_cash + cash_from_sells
+
+    for candidate in top_rebalance_buys:
+        if candidate.value_eur <= total_cash and len(rebalance_sequence) < max_steps:
+            rebalance_sequence.append(candidate)
+            total_cash -= candidate.value_eur
+
+    return rebalance_sequence if len(rebalance_sequence) > 0 else None
+
+
+def _generate_averaging_down_pattern(
+    top_averaging: list,
+    top_profit_taking: list,
+    available_cash: float,
+    max_steps: int,
+) -> Optional[List[ActionCandidate]]:
+    """Generate pattern: Averaging down focus."""
+    if not top_averaging:
+        return None
+
+    avg_sequence = []
+    total_cash = available_cash
+
+    if total_cash < top_averaging[0].value_eur and top_profit_taking:
+        avg_sequence.extend(top_profit_taking[:1])
+        total_cash += top_profit_taking[0].value_eur
+
+    for candidate in top_averaging:
+        if candidate.value_eur <= total_cash and len(avg_sequence) < max_steps:
+            avg_sequence.append(candidate)
+            total_cash -= candidate.value_eur
+
+    return avg_sequence if avg_sequence else None
+
+
+def _generate_single_best_pattern(
+    top_profit_taking: list,
+    top_averaging: list,
+    top_rebalance_sells: list,
+    top_rebalance_buys: list,
+    top_opportunity: list,
+    available_cash: float,
+    max_steps: int,
+) -> Optional[List[ActionCandidate]]:
+    """Generate pattern: Single best action (for minimal intervention)."""
+    if max_steps < 1:
+        return None
+
+    all_candidates = (
+        top_profit_taking
+        + top_averaging
+        + top_rebalance_sells
+        + top_rebalance_buys
+        + top_opportunity
+    )
+
+    if not all_candidates:
+        return None
+
+    best = max(all_candidates, key=lambda x: x.priority)
+    if best.side == TradeSide.BUY and best.value_eur <= available_cash:
+        return [best]
+    elif best.side == TradeSide.SELL:
+        return [best]
+
+    return None
+
+
 def _generate_patterns_at_depth(
     opportunities: Dict[str, List[ActionCandidate]],
     available_cash: float,
@@ -482,92 +608,47 @@ def _generate_patterns_at_depth(
     """Generate sequence patterns capped at a specific depth."""
     sequences = []
 
-    # Get top candidates from each category
     top_profit_taking = opportunities.get("profit_taking", [])[:2]
     top_averaging = opportunities.get("averaging_down", [])[:2]
     top_rebalance_sells = opportunities.get("rebalance_sells", [])[:2]
     top_rebalance_buys = opportunities.get("rebalance_buys", [])[:3]
     top_opportunity = opportunities.get("opportunity_buys", [])[:2]
 
-    # Pattern 1: Direct buys only (if cash available)
-    if available_cash > 0:
-        direct_buys = []
-        remaining_cash = available_cash
-        for candidate in top_averaging + top_rebalance_buys + top_opportunity:
-            if candidate.value_eur <= remaining_cash and len(direct_buys) < max_steps:
-                direct_buys.append(candidate)
-                remaining_cash -= candidate.value_eur
-        if direct_buys:
-            sequences.append(direct_buys)
+    pattern1 = _generate_direct_buy_pattern(
+        top_averaging, top_rebalance_buys, top_opportunity, available_cash, max_steps
+    )
+    if pattern1:
+        sequences.append(pattern1)
 
-    # Pattern 2: Profit-taking + reinvest
-    if top_profit_taking:
-        profit_sequence = list(
-            top_profit_taking[: min(len(top_profit_taking), max_steps)]
-        )
-        cash_from_sells = sum(c.value_eur for c in profit_sequence)
-        total_cash = available_cash + cash_from_sells
+    pattern2 = _generate_profit_taking_pattern(
+        top_profit_taking, top_averaging, top_rebalance_buys, available_cash, max_steps
+    )
+    if pattern2:
+        sequences.append(pattern2)
 
-        for candidate in top_averaging + top_rebalance_buys:
-            if candidate.value_eur <= total_cash and len(profit_sequence) < max_steps:
-                profit_sequence.append(candidate)
-                total_cash -= candidate.value_eur
+    pattern3 = _generate_rebalance_pattern(
+        top_rebalance_sells, top_rebalance_buys, available_cash, max_steps
+    )
+    if pattern3:
+        sequences.append(pattern3)
 
-        if len(profit_sequence) > 0:
-            sequences.append(profit_sequence)
+    pattern4 = _generate_averaging_down_pattern(
+        top_averaging, top_profit_taking, available_cash, max_steps
+    )
+    if pattern4:
+        sequences.append(pattern4)
 
-    # Pattern 3: Rebalance (sell overweight + buy underweight)
-    if top_rebalance_sells:
-        rebalance_sequence = list(
-            top_rebalance_sells[: min(len(top_rebalance_sells), max_steps)]
-        )
-        cash_from_sells = sum(c.value_eur for c in rebalance_sequence)
-        total_cash = available_cash + cash_from_sells
-
-        for candidate in top_rebalance_buys:
-            if (
-                candidate.value_eur <= total_cash
-                and len(rebalance_sequence) < max_steps
-            ):
-                rebalance_sequence.append(candidate)
-                total_cash -= candidate.value_eur
-
-        if len(rebalance_sequence) > 0:
-            sequences.append(rebalance_sequence)
-
-    # Pattern 4: Averaging down focus
-    if top_averaging:
-        avg_sequence = []
-        total_cash = available_cash
-
-        # Add sells to fund if needed
-        if total_cash < top_averaging[0].value_eur and top_profit_taking:
-            avg_sequence.extend(top_profit_taking[:1])
-            total_cash += top_profit_taking[0].value_eur
-
-        for candidate in top_averaging:
-            if candidate.value_eur <= total_cash and len(avg_sequence) < max_steps:
-                avg_sequence.append(candidate)
-                total_cash -= candidate.value_eur
-
-        if avg_sequence:
-            sequences.append(avg_sequence)
-
-    # Pattern 5: Single best action (for minimal intervention)
-    if max_steps >= 1:
-        all_candidates = (
-            top_profit_taking
-            + top_averaging
-            + top_rebalance_sells
-            + top_rebalance_buys
-            + top_opportunity
-        )
-        if all_candidates:
-            best = max(all_candidates, key=lambda x: x.priority)
-            if best.side == TradeSide.BUY and best.value_eur <= available_cash:
-                sequences.append([best])
-            elif best.side == TradeSide.SELL:
-                sequences.append([best])
+    pattern5 = _generate_single_best_pattern(
+        top_profit_taking,
+        top_averaging,
+        top_rebalance_sells,
+        top_rebalance_buys,
+        top_opportunity,
+        available_cash,
+        max_steps,
+    )
+    if pattern5:
+        sequences.append(pattern5)
 
     return sequences
 

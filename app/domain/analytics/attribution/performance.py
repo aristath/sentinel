@@ -99,57 +99,11 @@ async def get_performance_attribution(
         if total_value == 0:
             continue
 
-        # Get return for this date
         daily_return = returns[date]
+        _attribute_return_by_category(
+            position_values, total_value, daily_return, geo_returns, industry_returns
+        )
 
-        # Attribute return by geography/industry
-        for symbol, data in position_values.items():
-            weight = data["value"] / total_value
-            geo = data["geography"]
-            ind = data["industry"]
-
-            contribution = daily_return * weight
-
-            if geo not in geo_returns:
-                geo_returns[geo] = []
-            geo_returns[geo].append(contribution)
-
-            if ind:
-                if ind not in industry_returns:
-                    industry_returns[ind] = []
-                industry_returns[ind].append(contribution)
-
-    # Calculate average returns (annualized)
-    attribution = {"geography": {}, "industry": {}}
-
-    for geo, contributions in geo_returns.items():
-        if contributions:
-            total_return = sum(contributions)
-            # Use compound annualization: (1 + r)^(252/n) - 1
-            # Guard against total loss (return <= -1) which would cause invalid power
-            if total_return <= -1:
-                annualized = -1.0  # Cap at -100% loss
-            elif len(contributions) > 0:
-                annualized = (1 + total_return) ** (252 / len(contributions)) - 1
-            else:
-                annualized = 0.0
-            attribution["geography"][geo] = (
-                float(annualized) if np.isfinite(annualized) else 0.0
-            )
-
-    for ind, contributions in industry_returns.items():
-        if contributions:
-            total_return = sum(contributions)
-            # Use compound annualization: (1 + r)^(252/n) - 1
-            # Guard against total loss (return <= -1) which would cause invalid power
-            if total_return <= -1:
-                annualized = -1.0  # Cap at -100% loss
-            elif len(contributions) > 0:
-                annualized = (1 + total_return) ** (252 / len(contributions)) - 1
-            else:
-                annualized = 0.0
-            attribution["industry"][ind] = (
-                float(annualized) if np.isfinite(annualized) else 0.0
-            )
+    attribution = _calculate_annualized_attribution(geo_returns, industry_returns)
 
     return attribution
