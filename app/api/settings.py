@@ -56,6 +56,14 @@ SETTING_DEFAULTS = {
     "sell_weight_drawdown": 0.15,           # PyFolio drawdown
     # Trading mode
     "trading_mode": "research",             # "live" or "research" - blocks trades in research mode
+    # Portfolio Optimizer settings
+    "optimizer_blend": 0.5,                 # 0.0 = pure Mean-Variance, 1.0 = pure HRP
+    "optimizer_target_return": 0.11,        # Target annual return for MV component
+    # Transaction costs (Freedom24) - for optimizer to evaluate trade worthiness
+    "transaction_cost_fixed": 2.0,          # Fixed cost per trade in EUR
+    "transaction_cost_percent": 0.002,      # Variable cost as fraction (0.2%)
+    # Cash management
+    "min_cash_reserve": 500.0,              # Minimum cash to keep (never fully deploy)
 }
 
 

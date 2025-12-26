@@ -855,15 +855,26 @@ class RebalancingService:
 
     async def get_multi_step_recommendations(self) -> List[MultiStepRecommendation]:
         """
-        Generate optimal recommendation sequence using the holistic planner.
+        Generate optimal recommendation sequence using the portfolio optimizer + holistic planner.
 
-        The holistic planner automatically tests sequences at all depths (1-5)
-        and returns the sequence with the best end-state score.
+        Flow:
+        1. Portfolio optimizer calculates target weights (MV + HRP blend)
+        2. Holistic planner identifies opportunities from weight gaps
+        3. Planner generates action sequences and evaluates end-states
+        4. Returns the optimal sequence
 
         Returns:
             List of MultiStepRecommendation objects representing the optimal sequence
         """
         from app.domain.planning.holistic_planner import create_holistic_plan
+        from app.application.services.optimization import PortfolioOptimizer
+
+        # Get optimizer settings
+        optimizer_blend = await self._settings_repo.get_float("optimizer_blend", 0.5)
+        optimizer_target = await self._settings_repo.get_float("optimizer_target_return", 0.11)
+        transaction_fixed = await self._settings_repo.get_float("transaction_cost_fixed", 2.0)
+        transaction_pct = await self._settings_repo.get_float("transaction_cost_percent", 0.002)
+        min_cash = await self._settings_repo.get_float("min_cash_reserve", 500.0)
 
         # Build portfolio context
         portfolio_context = await build_portfolio_context(
@@ -880,13 +891,61 @@ class RebalancingService:
         # Get current cash balance
         available_cash = self._tradernet_client.get_total_cash_eur() if self._tradernet_client.is_connected else 0.0
 
-        # Create holistic plan (auto-tests depths 1-5)
+        # Get current prices for all stocks
+        yahoo_symbols = {s.symbol: s.yahoo_symbol for s in stocks if s.yahoo_symbol}
+        current_prices = yahoo.get_batch_quotes(yahoo_symbols)
+
+        # Build positions dict for optimizer
+        positions_dict = {p.symbol: p for p in positions}
+
+        # Calculate portfolio value
+        portfolio_value = portfolio_context.total_value
+
+        # Get geography/industry targets from allocations
+        geo_allocations = await self._allocation_repo.get_by_type("geography")
+        ind_allocations = await self._allocation_repo.get_by_type("industry")
+        geo_targets = {a.name: a.target_pct / 100 for a in geo_allocations}
+        ind_targets = {a.name: a.target_pct / 100 for a in ind_allocations}
+
+        # Run portfolio optimizer
+        optimizer = PortfolioOptimizer()
+        optimization_result = await optimizer.optimize(
+            stocks=stocks,
+            positions=positions_dict,
+            portfolio_value=portfolio_value,
+            current_prices=current_prices,
+            cash_balance=available_cash,
+            blend=optimizer_blend,
+            target_return=optimizer_target,
+            geo_targets=geo_targets,
+            ind_targets=ind_targets,
+            min_cash_reserve=min_cash,
+        )
+
+        # Log optimizer result
+        if optimization_result.success:
+            logger.info(
+                f"Optimizer: blend={optimizer_blend}, "
+                f"target={optimizer_target:.1%}, "
+                f"achieved={optimization_result.achieved_expected_return:.1%}, "
+                f"fallback={optimization_result.fallback_used}"
+            )
+            target_weights = optimization_result.target_weights
+        else:
+            logger.warning(f"Optimizer failed: {optimization_result.error}, using heuristics")
+            target_weights = None
+
+        # Create holistic plan with optimizer weights
         plan = await create_holistic_plan(
             portfolio_context=portfolio_context,
             available_cash=available_cash,
             stocks=stocks,
             positions=positions,
             exchange_rate_service=self._exchange_rate_service,
+            target_weights=target_weights,
+            current_prices=current_prices,
+            transaction_cost_fixed=transaction_fixed,
+            transaction_cost_percent=transaction_pct,
         )
 
         # Convert HolisticPlan to MultiStepRecommendation list

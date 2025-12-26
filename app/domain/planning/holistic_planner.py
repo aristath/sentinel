@@ -75,6 +75,199 @@ class ActionCandidate:
     tags: List[str]  # e.g., ["windfall", "averaging_down", "underweight_asia"]
 
 
+async def identify_opportunities_from_weights(
+    target_weights: Dict[str, float],
+    portfolio_context: PortfolioContext,
+    positions: List[Position],
+    stocks: List[Stock],
+    available_cash: float,
+    current_prices: Dict[str, float],
+    transaction_cost_fixed: float = 2.0,
+    transaction_cost_percent: float = 0.002,
+    exchange_rate_service = None,
+) -> Dict[str, List[ActionCandidate]]:
+    """
+    Identify opportunities based on optimizer target weights.
+
+    Compares current portfolio weights to target weights and generates:
+    - Buy candidates for underweight positions
+    - Sell candidates for overweight positions
+
+    Args:
+        target_weights: Dict mapping symbol to target weight (0-1)
+        portfolio_context: Current portfolio state
+        positions: Current positions
+        stocks: Available stocks
+        available_cash: Available cash in EUR
+        current_prices: Dict mapping symbol to current price
+        transaction_cost_fixed: Fixed cost per trade (EUR)
+        transaction_cost_percent: Variable cost as fraction
+        exchange_rate_service: Optional exchange rate service
+
+    Returns:
+        Dict mapping category to list of ActionCandidate
+    """
+    from app.repositories import SettingsRepository
+    from app.domain.constants import BUY_COOLDOWN_DAYS
+
+    settings_repo = SettingsRepository()
+    stocks_by_symbol = {s.symbol: s for s in stocks}
+    positions_by_symbol = {p.symbol: p for p in positions}
+    total_value = portfolio_context.total_value
+
+    opportunities = {
+        "profit_taking": [],
+        "averaging_down": [],
+        "rebalance_sells": [],
+        "rebalance_buys": [],
+        "opportunity_buys": [],
+    }
+
+    if total_value <= 0:
+        return opportunities
+
+    # Calculate current weights
+    current_weights = {}
+    for symbol, value in portfolio_context.positions.items():
+        current_weights[symbol] = value / total_value
+
+    # Calculate weight gaps
+    weight_gaps = []
+    for symbol, target in target_weights.items():
+        current = current_weights.get(symbol, 0.0)
+        gap = target - current
+        if abs(gap) > 0.005:  # Ignore tiny gaps (<0.5%)
+            weight_gaps.append({
+                "symbol": symbol,
+                "current": current,
+                "target": target,
+                "gap": gap,
+                "gap_value": gap * total_value,
+            })
+
+    # Also check positions that aren't in target (should sell to 0)
+    for symbol, current in current_weights.items():
+        if symbol not in target_weights and current > 0.005:
+            weight_gaps.append({
+                "symbol": symbol,
+                "current": current,
+                "target": 0.0,
+                "gap": -current,
+                "gap_value": -current * total_value,
+            })
+
+    # Sort by absolute gap (largest adjustments first)
+    weight_gaps.sort(key=lambda x: abs(x["gap"]), reverse=True)
+
+    # Process each gap
+    for gap_info in weight_gaps:
+        symbol = gap_info["symbol"]
+        gap = gap_info["gap"]
+        gap_value = gap_info["gap_value"]
+
+        stock = stocks_by_symbol.get(symbol)
+        position = positions_by_symbol.get(symbol)
+        price = current_prices.get(symbol, 0)
+
+        if price <= 0:
+            continue
+
+        # Check if trade is worthwhile (transaction cost check)
+        trade_cost = transaction_cost_fixed + abs(gap_value) * transaction_cost_percent
+        if abs(gap_value) < trade_cost * 2:  # Need at least 2x cost to be worthwhile
+            logger.debug(f"{symbol}: gap €{gap_value:.0f} too small (cost €{trade_cost:.2f})")
+            continue
+
+        if gap > 0:
+            # Underweight - BUY opportunity
+            if not stock or not stock.allow_buy:
+                continue
+
+            quantity = int(gap_value / price)
+            if stock.min_lot and quantity < stock.min_lot:
+                quantity = stock.min_lot
+
+            if quantity <= 0:
+                continue
+
+            trade_value = quantity * price
+            currency = position.currency if position else "EUR"
+
+            # Determine category based on existing position
+            if position and position.avg_price > price:
+                category = "averaging_down"
+                tags = ["averaging_down", "optimizer_target"]
+            else:
+                category = "rebalance_buys"
+                tags = ["rebalance", "optimizer_target"]
+
+            opportunities[category].append(ActionCandidate(
+                side=TradeSide.BUY,
+                symbol=symbol,
+                name=stock.name if stock else symbol,
+                quantity=quantity,
+                price=price,
+                value_eur=trade_value,
+                currency=currency,
+                priority=abs(gap) * 100,  # Priority based on gap size
+                reason=f"Optimizer target: {gap_info['target']:.1%} (current: {gap_info['current']:.1%})",
+                tags=tags,
+            ))
+
+        else:
+            # Overweight - SELL opportunity
+            if not position:
+                continue
+
+            if stock and not stock.allow_sell:
+                continue
+
+            # Check min_lot constraint
+            if stock and position.quantity <= stock.min_lot:
+                logger.debug(f"{symbol}: at min_lot, can't reduce further")
+                continue
+
+            # Calculate quantity to sell
+            sell_value = abs(gap_value)
+            quantity = int(sell_value / price)
+
+            # Respect min_lot when selling
+            if stock and stock.min_lot:
+                remaining = position.quantity - quantity
+                if remaining < stock.min_lot and remaining > 0:
+                    # Adjust to keep min_lot
+                    quantity = position.quantity - stock.min_lot
+
+            if quantity <= 0:
+                continue
+
+            trade_value = quantity * price
+
+            opportunities["rebalance_sells"].append(ActionCandidate(
+                side=TradeSide.SELL,
+                symbol=symbol,
+                name=stock.name if stock else symbol,
+                quantity=quantity,
+                price=price,
+                value_eur=trade_value,
+                currency=position.currency,
+                priority=abs(gap) * 100,
+                reason=f"Optimizer target: {gap_info['target']:.1%} (current: {gap_info['current']:.1%})",
+                tags=["rebalance", "optimizer_target"],
+            ))
+
+    # Sort each category by priority
+    for category in opportunities:
+        opportunities[category].sort(key=lambda x: x.priority, reverse=True)
+
+    logger.info(f"Weight-based opportunities: "
+                f"rebalance_sells={len(opportunities['rebalance_sells'])}, "
+                f"rebalance_buys={len(opportunities['rebalance_buys'])}, "
+                f"averaging_down={len(opportunities['averaging_down'])}")
+
+    return opportunities
+
+
 async def identify_opportunities(
     portfolio_context: PortfolioContext,
     positions: List[Position],
@@ -413,6 +606,10 @@ async def create_holistic_plan(
     stocks: List[Stock],
     positions: List[Position],
     exchange_rate_service = None,
+    target_weights: Optional[Dict[str, float]] = None,
+    current_prices: Optional[Dict[str, float]] = None,
+    transaction_cost_fixed: float = 2.0,
+    transaction_cost_percent: float = 0.002,
 ) -> HolisticPlan:
     """
     Create a holistic plan by evaluating action sequences and selecting the best.
@@ -420,11 +617,19 @@ async def create_holistic_plan(
     This is the main entry point for holistic planning. The planner automatically
     tests sequences at all depths (1-5) and returns the optimal sequence.
 
+    If target_weights is provided (from optimizer), uses weight-based opportunity
+    identification. Otherwise falls back to heuristic-based identification.
+
     Args:
         portfolio_context: Current portfolio state
         available_cash: Available cash in EUR
         stocks: Available stocks
         positions: Current positions
+        exchange_rate_service: Optional exchange rate service
+        target_weights: Optional dict from optimizer (symbol -> target weight)
+        current_prices: Current prices (required if target_weights provided)
+        transaction_cost_fixed: Fixed transaction cost in EUR
+        transaction_cost_percent: Variable transaction cost as fraction
 
     Returns:
         HolisticPlan with the best sequence and end-state analysis
@@ -434,10 +639,25 @@ async def create_holistic_plan(
     # Calculate current portfolio score
     current_score = await calculate_portfolio_score(portfolio_context)
 
-    # Identify all opportunities
-    opportunities = await identify_opportunities(
-        portfolio_context, positions, stocks, available_cash, exchange_rate_service
-    )
+    # Identify opportunities (weight-based if optimizer provided, else heuristic)
+    if target_weights and current_prices:
+        logger.info("Using optimizer target weights for opportunity identification")
+        opportunities = await identify_opportunities_from_weights(
+            target_weights=target_weights,
+            portfolio_context=portfolio_context,
+            positions=positions,
+            stocks=stocks,
+            available_cash=available_cash,
+            current_prices=current_prices,
+            transaction_cost_fixed=transaction_cost_fixed,
+            transaction_cost_percent=transaction_cost_percent,
+            exchange_rate_service=exchange_rate_service,
+        )
+    else:
+        logger.info("Using heuristic opportunity identification")
+        opportunities = await identify_opportunities(
+            portfolio_context, positions, stocks, available_cash, exchange_rate_service
+        )
 
     # Generate candidate sequences at all depths (1-5)
     sequences = await generate_action_sequences(

@@ -13,6 +13,7 @@ from app.domain.planning.holistic_planner import (
     HolisticStep,
     ActionCandidate,
     identify_opportunities,
+    identify_opportunities_from_weights,
     generate_action_sequences,
 )
 
@@ -31,6 +32,7 @@ __all__ = [
     "HolisticStep",
     "ActionCandidate",
     "identify_opportunities",
+    "identify_opportunities_from_weights",
     "generate_action_sequences",
     # Narrative generator
     "generate_step_narrative",
