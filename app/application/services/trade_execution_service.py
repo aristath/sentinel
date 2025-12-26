@@ -21,6 +21,157 @@ from app.infrastructure.hardware.display_service import set_error, set_processin
 logger = logging.getLogger(__name__)
 
 
+async def _check_buy_cooldown(
+    trade, recently_bought: set, cooldown_days: int
+) -> Optional[dict]:
+    """Check if BUY trade is in cooldown period."""
+    if trade.symbol in recently_bought:
+        logger.warning(
+            f"SAFETY BLOCK: {trade.symbol} in cooldown period, refusing to execute"
+        )
+        return {
+            "symbol": trade.symbol,
+            "status": "blocked",
+            "error": f"Cooldown active (bought within {cooldown_days} days)",
+        }
+    return None
+
+
+async def _handle_buy_currency(
+    trade,
+    currency_balances: Optional[dict],
+    currency_service: Optional[CurrencyExchangeService],
+    source_currency: str,
+    converted_currencies: set,
+) -> Optional[dict]:
+    """Handle currency validation and conversion for BUY orders."""
+    required = trade.quantity * trade.estimated_price
+    trade_currency = trade.currency or Currency.EUR
+
+    if currency_service and trade_currency != source_currency:
+        available = currency_balances.get(trade_currency, 0) if currency_balances else 0
+
+        if available < required:
+            if trade_currency not in converted_currencies:
+                logger.info(
+                    f"Auto-converting {source_currency} to {trade_currency} "
+                    f"for {trade.symbol} (need {required:.2f} {trade_currency})"
+                )
+                set_processing(f"CONVERTING {source_currency} TO {trade_currency}...")
+
+                if currency_service.ensure_balance(
+                    trade_currency, required, source_currency
+                ):
+                    converted_currencies.add(trade_currency)
+                    logger.info(f"Currency conversion successful for {trade_currency}")
+                    set_processing("CURRENCY CONVERSION COMPLETE")
+                else:
+                    logger.warning(
+                        f"Currency conversion failed for {trade.symbol}: "
+                        f"could not convert {source_currency} to {trade_currency}"
+                    )
+                    return {
+                        "symbol": trade.symbol,
+                        "status": "skipped",
+                        "error": f"Currency conversion failed ({source_currency} to {trade_currency})",
+                    }
+
+    elif currency_balances is not None:
+        available = currency_balances.get(trade_currency, 0)
+        if available < required:
+            logger.warning(
+                f"Skipping {trade.symbol}: insufficient {trade_currency} balance "
+                f"(need {required:.2f}, have {available:.2f})"
+            )
+            return {
+                "symbol": trade.symbol,
+                "status": "skipped",
+                "error": f"Insufficient {trade_currency} balance (need {required:.2f}, have {available:.2f})",
+            }
+
+    return None
+
+
+async def _validate_sell_order(trade, position_repo) -> Optional[dict]:
+    """Validate SELL order against position."""
+    if not position_repo:
+        return None
+
+    position = await position_repo.get_by_symbol(trade.symbol)
+    if not position:
+        logger.warning(f"Skipping SELL {trade.symbol}: no position found")
+        return {
+            "symbol": trade.symbol,
+            "status": "skipped",
+            "error": "No position found for SELL order",
+        }
+
+    if trade.quantity > position.quantity:
+        logger.warning(
+            f"Skipping SELL {trade.symbol}: quantity {trade.quantity} "
+            f"> position {position.quantity}"
+        )
+        return {
+            "symbol": trade.symbol,
+            "status": "skipped",
+            "error": f"SELL quantity ({trade.quantity}) exceeds position ({position.quantity})",
+        }
+
+    return None
+
+
+async def _check_pending_orders(trade, client, trade_repo) -> bool:
+    """Check if there are pending orders for this symbol."""
+    has_pending = client.has_pending_order_for_symbol(trade.symbol)
+
+    if not has_pending and trade.side.upper() == "SELL":
+        try:
+            has_recent = await trade_repo.has_recent_sell_order(trade.symbol, hours=2)
+            if has_recent:
+                has_pending = True
+                logger.info(f"Found recent SELL order in database for {trade.symbol}")
+        except Exception as e:
+            logger.warning(f"Failed to check database for recent sell orders: {e}")
+
+    if has_pending:
+        logger.warning(f"SAFETY BLOCK: {trade.symbol} has pending order, refusing to execute")
+
+    return has_pending
+
+
+async def _execute_single_trade(trade, client) -> Optional[dict]:
+    """Execute a single trade and return result."""
+    side_text = "BUYING" if trade.side.upper() == "BUY" else "SELLING"
+    value = int(trade.quantity * trade.estimated_price)
+    symbol_short = trade.symbol.split(".")[0]
+    set_processing(f"{side_text} {symbol_short} €{value}")
+
+    result = client.place_order(
+        symbol=trade.symbol,
+        side=trade.side,
+        quantity=trade.quantity,
+    )
+
+    if result:
+        return {
+            "symbol": trade.symbol,
+            "status": "success",
+            "order_id": result.order_id,
+            "side": trade.side,
+            "price": result.price,
+            "result": result,
+        }
+    else:
+        error_msg = "ORDER PLACEMENT FAILED"
+        emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+        set_error(error_msg)
+        return {
+            "symbol": trade.symbol,
+            "status": "failed",
+            "error": "Order placement returned None",
+        }
+
+
 class TradeExecutionService:
     """Application service for trade execution."""
 
@@ -158,145 +309,42 @@ class TradeExecutionService:
 
         for trade in trades:
             try:
-                # Check currency balance before executing (BUY orders only)
+                # Check cooldown for BUY orders
                 if trade.side.upper() == "BUY":
-                    # SAFETY: Final cooldown check before any BUY
-                    if trade.symbol in recently_bought:
-                        logger.warning(
-                            f"SAFETY BLOCK: {trade.symbol} in cooldown period, refusing to execute"
-                        )
-                        results.append(
-                            {
-                                "symbol": trade.symbol,
-                                "status": "blocked",
-                                "error": f"Cooldown active (bought within {BUY_COOLDOWN_DAYS} days)",
-                            }
-                        )
-                        continue
-
-                    required = trade.quantity * trade.estimated_price
-                    trade_currency = trade.currency or Currency.EUR
-
-                    # If auto-convert is enabled and currency differs from source
-                    if currency_service and trade_currency != source_currency:
-                        # Check if we need to convert
-                        available = (
-                            currency_balances.get(trade_currency, 0)
-                            if currency_balances
-                            else 0
-                        )
-
-                        if available < required:
-                            # Only convert once per currency per batch
-                            if trade_currency not in converted_currencies:
-                                logger.info(
-                                    f"Auto-converting {source_currency} to {trade_currency} "
-                                    f"for {trade.symbol} (need {required:.2f} {trade_currency})"
-                                )
-
-                                set_processing(
-                                    f"CONVERTING {source_currency} TO {trade_currency}..."
-                                )
-
-                                # Ensure we have enough balance
-                                if currency_service.ensure_balance(
-                                    trade_currency, required, source_currency
-                                ):
-                                    converted_currencies.add(trade_currency)
-                                    logger.info(
-                                        f"Currency conversion successful for {trade_currency}"
-                                    )
-                                    set_processing("CURRENCY CONVERSION COMPLETE")
-                                else:
-                                    logger.warning(
-                                        f"Currency conversion failed for {trade.symbol}: "
-                                        f"could not convert {source_currency} to {trade_currency}"
-                                    )
-                                    results.append(
-                                        {
-                                            "symbol": trade.symbol,
-                                            "status": "skipped",
-                                            "error": f"Currency conversion failed ({source_currency} to {trade_currency})",
-                                        }
-                                    )
-                                    skipped_count += 1
-                                    continue
-
-                    # Validate balance if currency_balances provided and no auto-convert
-                    elif currency_balances is not None:
-                        available = currency_balances.get(trade_currency, 0)
-
-                        if available < required:
-                            logger.warning(
-                                f"Skipping {trade.symbol}: insufficient {trade_currency} balance "
-                                f"(need {required:.2f}, have {available:.2f})"
-                            )
-                            results.append(
-                                {
-                                    "symbol": trade.symbol,
-                                    "status": "skipped",
-                                    "error": f"Insufficient {trade_currency} balance (need {required:.2f}, have {available:.2f})",
-                                }
-                            )
-                            skipped_count += 1
-                            continue
-
-                # For SELL orders, validate quantity against position
-                if trade.side.upper() == "SELL" and self._position_repo:
-                    position = await self._position_repo.get_by_symbol(trade.symbol)
-                    if not position:
-                        logger.warning(
-                            f"Skipping SELL {trade.symbol}: no position found"
-                        )
-                        results.append(
-                            {
-                                "symbol": trade.symbol,
-                                "status": "skipped",
-                                "error": "No position found for SELL order",
-                            }
-                        )
-                        skipped_count += 1
-                        continue
-
-                    if trade.quantity > position.quantity:
-                        logger.warning(
-                            f"Skipping SELL {trade.symbol}: quantity {trade.quantity} "
-                            f"> position {position.quantity}"
-                        )
-                        results.append(
-                            {
-                                "symbol": trade.symbol,
-                                "status": "skipped",
-                                "error": f"SELL quantity ({trade.quantity}) exceeds position ({position.quantity})",
-                            }
-                        )
-                        skipped_count += 1
-                        continue
-
-                # Check for pending orders for this symbol (applies to both BUY and SELL)
-                # Check both broker API and local database for recent orders
-                has_pending = client.has_pending_order_for_symbol(trade.symbol)
-
-                # Also check database for recent SELL orders (catches orders just placed)
-                if not has_pending and trade.side.upper() == "SELL":
-                    try:
-                        has_recent = await self._trade_repo.has_recent_sell_order(
-                            trade.symbol, hours=2
-                        )
-                        if has_recent:
-                            has_pending = True
-                            logger.info(
-                                f"Found recent SELL order in database for {trade.symbol}"
-                            )
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to check database for recent sell orders: {e}"
-                        )
-
-                if has_pending:
-                    logger.warning(
-                        f"SAFETY BLOCK: {trade.symbol} has pending order, refusing to execute"
+                    cooldown_result = await _check_buy_cooldown(
+                        trade, recently_bought, BUY_COOLDOWN_DAYS
                     )
+                    if cooldown_result:
+                        results.append(cooldown_result)
+                        continue
+
+                # Validate and handle currency for BUY orders
+                if trade.side.upper() == "BUY":
+                    currency_result = await _handle_buy_currency(
+                        trade,
+                        currency_balances,
+                        currency_service,
+                        source_currency,
+                        converted_currencies,
+                    )
+                    if currency_result:
+                        results.append(currency_result)
+                        skipped_count += 1
+                        continue
+
+                # Validate SELL orders
+                if trade.side.upper() == "SELL":
+                    sell_result = await _validate_sell_order(trade, self._position_repo)
+                    if sell_result:
+                        results.append(sell_result)
+                        skipped_count += 1
+                        continue
+
+                # Check for pending orders
+                has_pending = await _check_pending_orders(
+                    trade, client, self._trade_repo
+                )
+                if has_pending:
                     results.append(
                         {
                             "symbol": trade.symbol,
@@ -306,22 +354,10 @@ class TradeExecutionService:
                     )
                     continue
 
-                # Show activity message for the trade
-                side_text = "BUYING" if trade.side.upper() == "BUY" else "SELLING"
-                value = int(trade.quantity * trade.estimated_price)
-                symbol_short = trade.symbol.split(".")[0]  # Remove .US/.EU suffix
-                set_processing(f"{side_text} {symbol_short} €{value}")
-
-                result = client.place_order(
-                    symbol=trade.symbol,
-                    side=trade.side,
-                    quantity=trade.quantity,
-                )
-
-                if result:
-                    # Store order immediately in database to prevent duplicate submissions
-                    # The sync_trades job will still sync executed trades from the API,
-                    # but storing immediately allows us to check for recent orders locally.
+                # Execute the trade
+                execution_result = await _execute_single_trade(trade, client)
+                if execution_result and execution_result.get("status") == "success":
+                    result = execution_result["result"]
                     await self.record_trade(
                         symbol=trade.symbol,
                         side=trade.side,
@@ -332,26 +368,9 @@ class TradeExecutionService:
                         estimated_price=trade.estimated_price,
                         source="tradernet",
                     )
-
-                    results.append(
-                        {
-                            "symbol": trade.symbol,
-                            "status": "success",
-                            "order_id": result.order_id,
-                            "side": trade.side,
-                        }
-                    )
-                else:
-                    error_msg = "ORDER PLACEMENT FAILED"
-                    emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-                    set_error(error_msg)
-                    results.append(
-                        {
-                            "symbol": trade.symbol,
-                            "status": "failed",
-                            "error": "Order placement returned None",
-                        }
-                    )
+                    results.append(execution_result)
+                elif execution_result:
+                    results.append(execution_result)
 
             except Exception as e:
                 logger.error(f"Failed to execute trade for {trade.symbol}: {e}")
