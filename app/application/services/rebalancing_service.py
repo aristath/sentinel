@@ -695,7 +695,10 @@ class RebalancingService:
 
         # Get technical data
         symbols = [p["symbol"] for p in position_dicts]
-        technical_data = await self._get_technical_data_for_positions(symbols)
+        technical_data = await get_technical_data_for_positions(
+            symbols=symbols,
+            db_manager=self._db_manager,
+        )
 
         # Build allocation maps
         geo_allocations = {}
