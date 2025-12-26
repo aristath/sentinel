@@ -473,6 +473,243 @@ async def _process_stocks_for_candidates(
     return candidates, filter_stats
 
 
+async def _convert_cached_sell_recommendations(cached: list, limit: int) -> List[Recommendation]:
+    """Convert cached sell recommendation dicts to Recommendation objects."""
+    from app.domain.value_objects.currency import Currency
+
+    recommendations = []
+    for c in cached[:limit]:
+        currency_str = c.get("currency", "EUR")
+        currency = (
+            Currency.from_string(currency_str)
+            if isinstance(currency_str, str)
+            else currency_str
+        )
+
+        recommendations.append(
+            Recommendation(
+                symbol=c["symbol"],
+                name=c["name"],
+                side=TradeSide.SELL,
+                quantity=c["quantity"],
+                estimated_price=c["estimated_price"],
+                estimated_value=c["estimated_value"],
+                reason=c["reason"],
+                geography=c.get("geography", ""),
+                currency=currency,
+                status=RecommendationStatus.PENDING,
+            )
+        )
+    return recommendations
+
+
+async def _build_position_dicts_for_sell(
+    positions: list, stocks_by_symbol: dict, trade_repo
+) -> list:
+    """Build position dicts for sell scoring."""
+    position_dicts = []
+    for pos in positions:
+        stock = stocks_by_symbol.get(pos.symbol)
+        if not stock:
+            continue
+
+        first_buy = await trade_repo.get_first_buy_date(pos.symbol)
+        last_sell = await trade_repo.get_last_sell_date(pos.symbol)
+
+        position_dicts.append(
+            {
+                "symbol": pos.symbol,
+                "name": stock.name,
+                "quantity": pos.quantity,
+                "avg_price": pos.avg_price,
+                "current_price": pos.current_price,
+                "market_value_eur": pos.market_value_eur,
+                "currency": pos.currency,
+                "geography": stock.geography,
+                "industry": stock.industry,
+                "allow_sell": stock.allow_sell,
+                "first_bought_at": first_buy,
+                "last_sold_at": last_sell,
+            }
+        )
+    return position_dicts
+
+
+def _build_allocation_maps(
+    position_dicts: list, total_value: float
+) -> tuple[dict, dict]:
+    """Build geography and industry allocation maps."""
+    geo_allocations = {}
+    ind_allocations = {}
+    for pos in position_dicts:
+        geo = pos.get("geography")
+        ind = pos.get("industry")
+        value = pos.get("market_value_eur") or 0
+        if geo:
+            geo_allocations[geo] = geo_allocations.get(geo, 0) + value / total_value
+        if ind:
+            ind_allocations[ind] = ind_allocations.get(ind, 0) + value / total_value
+    return geo_allocations, ind_allocations
+
+
+def _get_target_allocations(allocation_repo) -> tuple[dict, dict]:
+    """Get target geography and industry allocations."""
+    allocations = allocation_repo.get_all()
+    target_geo_weights = {
+        key.split(":", 1)[1]: val
+        for key, val in allocations.items()
+        if key.startswith("geography:")
+    }
+    target_ind_weights = {
+        key.split(":", 1)[1]: val
+        for key, val in allocations.items()
+        if key.startswith("industry:")
+    }
+    return target_geo_weights, target_ind_weights
+
+
+def _apply_rebalancing_band_filter(
+    eligible_sells: list,
+    position_dicts: list,
+    geo_allocations: dict,
+    ind_allocations: dict,
+    target_geo_weights: dict,
+    target_ind_weights: dict,
+) -> list:
+    """Apply rebalancing band filter to sell candidates."""
+    band_filtered_sells = []
+    for score in eligible_sells:
+        pos = next((p for p in position_dicts if p["symbol"] == score.symbol), None)
+        if not pos:
+            continue
+
+        geo = pos.get("geography")
+        ind = pos.get("industry")
+
+        geo_overweight = False
+        if geo:
+            current_geo_weight = geo_allocations.get(geo, 0)
+            target_geo_weight = target_geo_weights.get(geo, 0.33)
+            geo_overweight = current_geo_weight > target_geo_weight + REBALANCE_BAND_PCT
+
+        ind_overweight = False
+        if ind:
+            current_ind_weight = ind_allocations.get(ind, 0)
+            target_ind_weight = target_ind_weights.get(ind, 0.10)
+            ind_overweight = current_ind_weight > target_ind_weight + REBALANCE_BAND_PCT
+
+        if not geo_overweight and not ind_overweight:
+            logger.debug(
+                f"Skipping sell {score.symbol}: both geo ({geo}) and ind ({ind}) within band"
+            )
+            continue
+
+        band_filtered_sells.append(score)
+
+    return band_filtered_sells
+
+
+def _build_sell_reason_string(score) -> str:
+    """Build reason string for sell recommendation."""
+    reason_parts = []
+    if score.profit_pct > 0.30:
+        reason_parts.append(f"profit {score.profit_pct*100:.1f}%")
+    elif score.profit_pct < 0:
+        reason_parts.append(f"loss {score.profit_pct*100:.1f}%")
+    if score.underperformance_score >= 0.7:
+        reason_parts.append("underperforming")
+    if score.time_held_score >= 0.8:
+        reason_parts.append(f"held {score.days_held} days")
+    if score.portfolio_balance_score >= 0.7:
+        reason_parts.append("overweight")
+    if score.instability_score >= 0.6:
+        reason_parts.append("high instability")
+    reason_parts.append(f"sell score: {score.total_score:.2f}")
+    return ", ".join(reason_parts) if reason_parts else "eligible for sell"
+
+
+async def _build_sell_recommendations_from_scores(
+    eligible_sells: list,
+    position_dicts: list,
+    stocks_by_symbol: dict,
+    limit: int,
+    recommendation_repo,
+    cache_key: str,
+) -> List[Recommendation]:
+    """Build Recommendation objects from sell scores."""
+    recommendations = []
+    event_bus = get_event_bus()
+
+    for score in eligible_sells[:limit]:
+        pos = next((p for p in position_dicts if p["symbol"] == score.symbol), None)
+        if not pos:
+            continue
+
+        stock = stocks_by_symbol.get(score.symbol)
+        currency = pos.get("currency", "EUR")
+        current_price = pos.get("current_price") or pos.get("avg_price", 0)
+        reason = _build_sell_reason_string(score)
+
+        rec = Recommendation(
+            symbol=score.symbol,
+            name=pos.get("name", score.symbol),
+            side=TradeSide.SELL,
+            quantity=score.suggested_sell_quantity,
+            estimated_price=round(current_price, 2),
+            estimated_value=round(score.suggested_sell_value, 2),
+            reason=reason,
+            geography=stock.geography if stock else "",
+            currency=currency,
+            status=RecommendationStatus.PENDING,
+        )
+
+        recommendation_data = {
+            "symbol": rec.symbol,
+            "name": rec.name,
+            "side": "SELL",
+            "amount": rec.estimated_value,
+            "quantity": rec.quantity,
+            "estimated_price": rec.estimated_price,
+            "estimated_value": rec.estimated_value,
+            "reason": rec.reason,
+            "geography": pos.get("geography"),
+            "industry": pos.get("industry"),
+            "currency": currency,
+            "priority": score.total_score,
+        }
+
+        uuid = await recommendation_repo.create_or_update(
+            recommendation_data, portfolio_hash=cache_key
+        )
+        if uuid:
+            recommendations.append(rec)
+            event_bus.publish(RecommendationCreatedEvent(recommendation=rec))
+
+    return recommendations
+
+
+def _prepare_sell_cache_data(eligible_sells: list, position_dicts: list) -> list:
+    """Prepare sell recommendation data for caching."""
+    all_sells_for_cache = []
+    for score in eligible_sells:
+        pos = next((p for p in position_dicts if p["symbol"] == score.symbol), None)
+        if pos:
+            current_price = pos.get("current_price") or pos.get("avg_price", 0)
+            all_sells_for_cache.append(
+                {
+                    "symbol": score.symbol,
+                    "name": pos.get("name", score.symbol),
+                    "quantity": score.suggested_sell_quantity,
+                    "estimated_price": round(current_price, 2),
+                    "estimated_value": round(score.suggested_sell_value, 2),
+                    "reason": f"sell score: {score.total_score:.2f}",
+                    "currency": pos.get("currency", "EUR"),
+                    "priority": score.total_score,
+                }
+            )
+    return all_sells_for_cache
+
+
 def _prepare_cache_data(candidates: list) -> list:
     """Prepare candidate data for caching."""
     return [
@@ -817,93 +1054,31 @@ class RebalancingService:
             position_hash_dicts, settings.to_dict()
         )
 
-        # Check cache first (48h TTL)
         rec_cache = get_recommendation_cache()
         cached = await rec_cache.get_recommendations(cache_key, "sell")
         if cached:
             logger.info(f"Using cached sell recommendations ({len(cached)} items)")
-            # Convert cached dicts back to Recommendation objects
-            from app.domain.value_objects.currency import Currency
+            return await _convert_cached_sell_recommendations(cached, limit)
 
-            recommendations = []
-            for c in cached[:limit]:
-                currency_str = c.get("currency", "EUR")
-                currency = (
-                    Currency.from_string(currency_str)
-                    if isinstance(currency_str, str)
-                    else currency_str
-                )
-
-                recommendations.append(
-                    Recommendation(
-                        symbol=c["symbol"],
-                        name=c["name"],
-                        side=TradeSide.SELL,
-                        quantity=c["quantity"],
-                        estimated_price=c["estimated_price"],
-                        estimated_value=c["estimated_value"],
-                        reason=c["reason"],
-                        geography=c.get("geography", ""),
-                        currency=currency,
-                        status=RecommendationStatus.PENDING,
-                    )
-                )
-            return recommendations
-
-        # Get stock info
         stocks = await self._stock_repo.get_all_active()
         stocks_by_symbol = {s.symbol: s for s in stocks}
 
-        # Build position dicts for sell scoring
-        position_dicts = []
-        for pos in positions:
-            stock = stocks_by_symbol.get(pos.symbol)
-            if not stock:
-                continue
-
-            first_buy = await self._trade_repo.get_first_buy_date(pos.symbol)
-            last_sell = await self._trade_repo.get_last_sell_date(pos.symbol)
-
-            position_dicts.append(
-                {
-                    "symbol": pos.symbol,
-                    "name": stock.name,
-                    "quantity": pos.quantity,
-                    "avg_price": pos.avg_price,
-                    "current_price": pos.current_price,
-                    "market_value_eur": pos.market_value_eur,
-                    "currency": pos.currency,
-                    "geography": stock.geography,
-                    "industry": stock.industry,
-                    "allow_sell": stock.allow_sell,
-                    "first_bought_at": first_buy,
-                    "last_sold_at": last_sell,
-                }
-            )
-
+        position_dicts = await _build_position_dicts_for_sell(
+            positions, stocks_by_symbol, self._trade_repo
+        )
         if not position_dicts:
             return []
 
-        # Get technical data
         symbols = [p["symbol"] for p in position_dicts]
         technical_data = await get_technical_data_for_positions(
             symbols=symbols,
             db_manager=self._db_manager,
         )
 
-        # Build allocation maps
-        geo_allocations = {}
-        ind_allocations = {}
-        for pos in position_dicts:
-            geo = pos.get("geography")
-            ind = pos.get("industry")
-            value = pos.get("market_value_eur") or 0
-            if geo:
-                geo_allocations[geo] = geo_allocations.get(geo, 0) + value / total_value
-            if ind:
-                ind_allocations[ind] = ind_allocations.get(ind, 0) + value / total_value
+        geo_allocations, ind_allocations = _build_allocation_maps(
+            position_dicts, total_value
+        )
 
-        # Get sell settings
         settings = await self._settings_service.get_settings()
         from app.domain.value_objects.settings import TradingSettings
 
@@ -915,7 +1090,6 @@ class RebalancingService:
             "target_annual_return": trading_settings.target_annual_return,
         }
 
-        # Calculate sell scores
         sell_scores = await calculate_all_sell_scores(
             positions=position_dicts,
             total_portfolio_value=total_value,
@@ -925,162 +1099,42 @@ class RebalancingService:
             settings=sell_settings,
         )
 
-        # Filter to eligible sells
         eligible_sells = [s for s in sell_scores if s.eligible]
-
         if not eligible_sells:
             logger.info("No positions eligible for selling")
             return []
 
-        # Get target allocations for band check
-        allocations = await self._allocation_repo.get_all()
-        target_geo_weights = {
-            key.split(":", 1)[1]: val
-            for key, val in allocations.items()
-            if key.startswith("geography:")
-        }
-        target_ind_weights = {
-            key.split(":", 1)[1]: val
-            for key, val in allocations.items()
-            if key.startswith("industry:")
-        }
+        target_geo_weights, target_ind_weights = await _get_target_allocations(
+            self._allocation_repo
+        )
 
-        # Apply rebalancing band filter: skip positions where BOTH geography AND industry
-        # are within 7% of target. Sell if EITHER is significantly overweight.
-        band_filtered_sells = []
-        for score in eligible_sells:
-            pos = next((p for p in position_dicts if p["symbol"] == score.symbol), None)
-            if not pos:
-                continue
-
-            geo = pos.get("geography")
-            ind = pos.get("industry")
-
-            # Check if geography is overweight beyond the band
-            geo_overweight = False
-            if geo:
-                current_geo_weight = geo_allocations.get(geo, 0)
-                target_geo_weight = target_geo_weights.get(geo, 0.33)
-                geo_overweight = (
-                    current_geo_weight > target_geo_weight + REBALANCE_BAND_PCT
-                )
-
-            # Check if industry is overweight beyond the band
-            ind_overweight = False
-            if ind:
-                current_ind_weight = ind_allocations.get(ind, 0)
-                target_ind_weight = target_ind_weights.get(
-                    ind, 0.10
-                )  # Default 10% per industry
-                ind_overweight = (
-                    current_ind_weight > target_ind_weight + REBALANCE_BAND_PCT
-                )
-
-            # Include if EITHER geography OR industry is overweight
-            if not geo_overweight and not ind_overweight:
-                # Both are within band, skip this sell
-                logger.debug(
-                    f"Skipping sell {score.symbol}: both geo ({geo}) and ind ({ind}) within band"
-                )
-                continue
-
-            band_filtered_sells.append(score)
+        band_filtered_sells = _apply_rebalancing_band_filter(
+            eligible_sells,
+            position_dicts,
+            geo_allocations,
+            ind_allocations,
+            target_geo_weights,
+            target_ind_weights,
+        )
 
         if not band_filtered_sells:
             logger.info("No sells remain after rebalancing band filter")
             return []
 
-        eligible_sells = band_filtered_sells
         logger.info(
-            f"Found {len(eligible_sells)} positions eligible for selling (after band filter)"
+            f"Found {len(band_filtered_sells)} positions eligible for selling (after band filter)"
         )
 
-        # Build recommendations
-        recommendations = []
-        for score in eligible_sells[:limit]:
-            pos = next((p for p in position_dicts if p["symbol"] == score.symbol), None)
-            if not pos:
-                continue
+        recommendations = await _build_sell_recommendations_from_scores(
+            band_filtered_sells,
+            position_dicts,
+            stocks_by_symbol,
+            limit,
+            self._recommendation_repo,
+            cache_key,
+        )
 
-            currency = pos.get("currency", "EUR")
-            current_price = pos.get("current_price") or pos.get("avg_price", 0)
-
-            # Build reason string
-            reason_parts = []
-            if score.profit_pct > 0.30:
-                reason_parts.append(f"profit {score.profit_pct*100:.1f}%")
-            elif score.profit_pct < 0:
-                reason_parts.append(f"loss {score.profit_pct*100:.1f}%")
-            if score.underperformance_score >= 0.7:
-                reason_parts.append("underperforming")
-            if score.time_held_score >= 0.8:
-                reason_parts.append(f"held {score.days_held} days")
-            if score.portfolio_balance_score >= 0.7:
-                reason_parts.append("overweight")
-            if score.instability_score >= 0.6:
-                reason_parts.append("high instability")
-            reason_parts.append(f"sell score: {score.total_score:.2f}")
-            reason = ", ".join(reason_parts) if reason_parts else "eligible for sell"
-
-            rec = Recommendation(
-                symbol=score.symbol,
-                name=pos.get("name", score.symbol),
-                side=TradeSide.SELL,
-                quantity=score.suggested_sell_quantity,
-                estimated_price=round(current_price, 2),
-                estimated_value=round(score.suggested_sell_value, 2),
-                reason=reason,
-                geography=stock.geography if stock else "",
-                currency=currency,
-                status=RecommendationStatus.PENDING,
-            )
-
-            # Store recommendation in database (create or update)
-            recommendation_data = {
-                "symbol": rec.symbol,
-                "name": rec.name,
-                "side": "SELL",
-                "amount": rec.estimated_value,
-                "quantity": rec.quantity,
-                "estimated_price": rec.estimated_price,
-                "estimated_value": rec.estimated_value,
-                "reason": rec.reason,
-                "geography": pos.get("geography"),
-                "industry": pos.get("industry"),
-                "currency": currency,
-                "priority": score.total_score,
-            }
-
-            # create_or_update returns UUID if not dismissed, None if dismissed
-            uuid = await self._recommendation_repo.create_or_update(
-                recommendation_data, portfolio_hash=cache_key
-            )
-            if uuid:
-                # Only include if not dismissed
-                recommendations.append(rec)
-                # Publish domain event for recommendations (new or updated)
-                event_bus = get_event_bus()
-                event_bus.publish(RecommendationCreatedEvent(recommendation=rec))
-
-        # Cache all eligible sell recommendations
-        all_sells_for_cache = []
-        for score in eligible_sells:
-            pos = next((p for p in position_dicts if p["symbol"] == score.symbol), None)
-            if pos:
-                current_price = pos.get("current_price") or pos.get("avg_price", 0)
-                all_sells_for_cache.append(
-                    {
-                        "symbol": score.symbol,
-                        "name": pos.get("name", score.symbol),
-                        "quantity": score.suggested_sell_quantity,
-                        "estimated_price": round(current_price, 2),
-                        "estimated_value": round(score.suggested_sell_value, 2),
-                        "reason": f"sell score: {score.total_score:.2f}",
-                        "currency": pos.get("currency", "EUR"),
-                        "priority": score.total_score,
-                    }
-                )
-
+        all_sells_for_cache = _prepare_sell_cache_data(band_filtered_sells, position_dicts)
         if all_sells_for_cache:
             await rec_cache.set_recommendations(cache_key, "sell", all_sells_for_cache)
 
