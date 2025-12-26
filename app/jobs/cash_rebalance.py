@@ -418,8 +418,17 @@ async def _refresh_recommendation_cache():
                 "total_score_improvement": multi_step_steps[0].score_change if multi_step_steps else 0.0,
                 "final_available_cash": multi_step_steps[-1].available_cash_after if multi_step_steps else 0.0,
             }
+            # Cache to portfolio-hash-based key (for _get_next_holistic_action)
             cache.set(cache_key, multi_step_data, ttl_seconds=900)
             logger.info(f"Multi-step recommendation cache refreshed: {len(multi_step_steps)} steps (key: {cache_key})")
+
+            # Also cache to fixed keys for LED ticker display
+            # LED ticker looks for: multi_step_recommendations:diversification:{depth}:holistic
+            depth = settings.recommendation_depth
+            led_cache_key = f"multi_step_recommendations:diversification:{depth}:holistic"
+            cache.set(led_cache_key, multi_step_data, ttl_seconds=900)
+            cache.set("multi_step_recommendations:diversification:default:holistic", multi_step_data, ttl_seconds=900)
+            logger.info(f"LED ticker cache refreshed: {led_cache_key}")
 
         # Always cache single recommendations (for fallback and depth=1)
         buy_recommendations = await rebalancing_service.get_recommendations(limit=3)
