@@ -3,13 +3,13 @@
 Identifies overweight positions that should be reduced for rebalancing.
 """
 
-from typing import List, Optional, Dict
+from typing import Dict, List, Optional
 
 from app.domain.models import Position, Stock
-from app.domain.scoring.models import PortfolioContext
 from app.domain.planning.holistic_planner import ActionCandidate
-from app.domain.value_objects.trade_side import TradeSide
+from app.domain.scoring.models import PortfolioContext
 from app.domain.services.exchange_rate_service import ExchangeRateService
+from app.domain.value_objects.trade_side import TradeSide
 
 
 async def identify_rebalance_sell_opportunities(
@@ -57,25 +57,28 @@ async def identify_rebalance_sell_opportunities(
                 exchange_rate = 1.0
                 if pos.currency and pos.currency != "EUR":
                     if exchange_rate_service:
-                        exchange_rate = await exchange_rate_service.get_rate(pos.currency, "EUR")
+                        exchange_rate = await exchange_rate_service.get_rate(
+                            pos.currency, "EUR"
+                        )
                     else:
                         exchange_rate = 1.0  # Fallback if service not provided
                 sell_value_native = sell_value_eur * exchange_rate
                 sell_qty = int(sell_value_native / (pos.current_price or pos.avg_price))
 
                 if sell_qty > 0:
-                    opportunities.append(ActionCandidate(
-                        side=TradeSide.SELL,
-                        symbol=pos.symbol,
-                        name=stock.name,
-                        quantity=sell_qty,
-                        price=pos.current_price or pos.avg_price,
-                        value_eur=sell_value_eur,
-                        currency=pos.currency or "EUR",
-                        priority=overweight * 2,  # Proportional to overweight
-                        reason=f"Overweight {geo} by {overweight*100:.1f}%",
-                        tags=["rebalance", f"overweight_{geo.lower()}"],
-                    ))
+                    opportunities.append(
+                        ActionCandidate(
+                            side=TradeSide.SELL,
+                            symbol=pos.symbol,
+                            name=stock.name,
+                            quantity=sell_qty,
+                            price=pos.current_price or pos.avg_price,
+                            value_eur=sell_value_eur,
+                            currency=pos.currency or "EUR",
+                            priority=overweight * 2,  # Proportional to overweight
+                            reason=f"Overweight {geo} by {overweight*100:.1f}%",
+                            tags=["rebalance", f"overweight_{geo.lower()}"],
+                        )
+                    )
 
     return opportunities
-

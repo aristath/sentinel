@@ -21,12 +21,12 @@ logger = logging.getLogger(__name__)
 # Format: (from, to) -> rate where conversion is: amount_to = amount_from / rate
 # These match API format: 1 EUR = X foreign
 FALLBACK_RATES: Dict[Tuple[str, str], float] = {
-    ("USD", "EUR"): 1.05,   # 1 EUR = 1.05 USD, so 100 USD / 1.05 = 95.24 EUR
-    ("HKD", "EUR"): 8.33,   # 1 EUR = 8.33 HKD, so 100 HKD / 8.33 = 12.00 EUR
-    ("GBP", "EUR"): 0.85,   # 1 EUR = 0.85 GBP, so 100 GBP / 0.85 = 117.6 EUR
-    ("EUR", "USD"): 0.95,   # Inverse: 100 EUR / 0.95 = 105.3 USD
-    ("EUR", "HKD"): 0.12,   # Inverse: 100 EUR / 0.12 = 833 HKD
-    ("EUR", "GBP"): 1.17,   # Inverse: 100 EUR / 1.17 = 85.5 GBP
+    ("USD", "EUR"): 1.05,  # 1 EUR = 1.05 USD, so 100 USD / 1.05 = 95.24 EUR
+    ("HKD", "EUR"): 8.33,  # 1 EUR = 8.33 HKD, so 100 HKD / 8.33 = 12.00 EUR
+    ("GBP", "EUR"): 0.85,  # 1 EUR = 0.85 GBP, so 100 GBP / 0.85 = 117.6 EUR
+    ("EUR", "USD"): 0.95,  # Inverse: 100 EUR / 0.95 = 105.3 USD
+    ("EUR", "HKD"): 0.12,  # Inverse: 100 EUR / 0.12 = 833 HKD
+    ("EUR", "GBP"): 1.17,  # Inverse: 100 EUR / 1.17 = 85.5 GBP
 }
 
 # Default TTL for exchange rates (1 hour)
@@ -43,7 +43,9 @@ class ExchangeRateService:
     - Batch conversion support
     """
 
-    def __init__(self, db_manager: DatabaseManager, ttl_seconds: int = EXCHANGE_RATE_TTL_SECONDS):
+    def __init__(
+        self, db_manager: DatabaseManager, ttl_seconds: int = EXCHANGE_RATE_TTL_SECONDS
+    ):
         """Initialize the exchange rate service.
 
         Args:
@@ -105,10 +107,7 @@ class ExchangeRateService:
             return rate
 
     async def convert(
-        self,
-        amount: float,
-        from_currency: str,
-        to_currency: str = "EUR"
+        self, amount: float, from_currency: str, to_currency: str = "EUR"
     ) -> float:
         """Convert an amount from one currency to another.
 
@@ -132,10 +131,7 @@ class ExchangeRateService:
         # So: amount_in_to = amount / rate
         return amount / rate
 
-    async def batch_convert_to_eur(
-        self,
-        amounts: Dict[str, float]
-    ) -> Dict[str, float]:
+    async def batch_convert_to_eur(self, amounts: Dict[str, float]) -> Dict[str, float]:
         """Convert multiple amounts to EUR.
 
         Args:
@@ -167,9 +163,7 @@ class ExchangeRateService:
                         self._memory_cache[f"{curr}_EUR"] = (rate, datetime.now())
 
     async def _get_from_db_cache(
-        self,
-        from_currency: str,
-        to_currency: str
+        self, from_currency: str, to_currency: str
     ) -> Optional[float]:
         """Get rate from database cache if not expired."""
         try:
@@ -178,7 +172,7 @@ class ExchangeRateService:
                 SELECT rate, expires_at FROM exchange_rates
                 WHERE from_currency = ? AND to_currency = ?
                 """,
-                (from_currency, to_currency)
+                (from_currency, to_currency),
             )
 
             if row:
@@ -192,10 +186,7 @@ class ExchangeRateService:
             return None
 
     async def _store_in_db_cache(
-        self,
-        from_currency: str,
-        to_currency: str,
-        rate: float
+        self, from_currency: str, to_currency: str, rate: float
     ) -> None:
         """Store rate in database cache."""
         try:
@@ -213,24 +204,24 @@ class ExchangeRateService:
                     to_currency,
                     rate,
                     now.isoformat(),
-                    expires_at.isoformat()
-                )
+                    expires_at.isoformat(),
+                ),
             )
             await self._db_manager.cache.commit()
         except Exception as e:
             logger.warning(f"Failed to store rate in DB cache: {e}")
 
     async def _fetch_rate_from_api(
-        self,
-        from_currency: str,
-        to_currency: str
+        self, from_currency: str, to_currency: str
     ) -> Optional[float]:
         """Fetch exchange rate from external API."""
         try:
             # Use exchangerate-api.com (free tier)
             url = f"https://api.exchangerate-api.com/v4/latest/{to_currency}"
             async with httpx.AsyncClient() as client:
-                response = await client.get(url, timeout=15.0)  # Increased for slow connections
+                response = await client.get(
+                    url, timeout=15.0
+                )  # Increased for slow connections
 
             if response.status_code == 200:
                 data = response.json()
@@ -245,7 +236,9 @@ class ExchangeRateService:
 
                     return rate
 
-            logger.warning(f"API returned {response.status_code} for {from_currency}/{to_currency}")
+            logger.warning(
+                f"API returned {response.status_code} for {from_currency}/{to_currency}"
+            )
             return None
 
         except httpx.TimeoutException:
@@ -256,9 +249,7 @@ class ExchangeRateService:
             return None
 
     async def _cache_all_rates_from_response(
-        self,
-        base_currency: str,
-        rates: Dict[str, float]
+        self, base_currency: str, rates: Dict[str, float]
     ) -> None:
         """Cache all rates from API response for efficiency."""
         supported_currencies = ["USD", "HKD", "GBP", "EUR"]
@@ -270,11 +261,7 @@ class ExchangeRateService:
                     self._memory_cache[cache_key] = (rate, datetime.now())
                 await self._store_in_db_cache(curr, base_currency, rate)
 
-    def _get_fallback_rate(
-        self,
-        from_currency: str,
-        to_currency: str
-    ) -> float:
+    def _get_fallback_rate(self, from_currency: str, to_currency: str) -> float:
         """Get fallback rate when API is unavailable."""
         # Direct lookup
         key = (from_currency, to_currency)
@@ -296,5 +283,3 @@ class ExchangeRateService:
         # Ultimate fallback: 1.0 (no conversion)
         logger.error(f"No fallback rate for {from_currency}/{to_currency}, using 1.0")
         return 1.0
-
-

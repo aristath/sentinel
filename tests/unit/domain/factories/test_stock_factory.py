@@ -1,10 +1,11 @@
 """Tests for StockFactory."""
 
 import pytest
+
+from app.domain.exceptions import ValidationError
 from app.domain.factories.stock_factory import StockFactory
 from app.domain.models import Stock
 from app.domain.value_objects.currency import Currency
-from app.domain.exceptions import ValidationError
 
 
 class TestStockFactory:
@@ -21,9 +22,9 @@ class TestStockFactory:
             "allow_buy": True,
             "allow_sell": False,
         }
-        
+
         stock = StockFactory.create_from_api_request(data)
-        
+
         assert stock.symbol == "AAPL.US"
         assert stock.name == "Apple Inc."
         assert stock.geography == "US"
@@ -41,7 +42,7 @@ class TestStockFactory:
             "name": "Apple Inc.",
             "geography": "US",
         }
-        
+
         stock = StockFactory.create_from_api_request(data)
         assert stock.symbol == "AAPL.US"
 
@@ -52,7 +53,7 @@ class TestStockFactory:
             "name": "Apple Inc.",
             "geography": "us",
         }
-        
+
         stock = StockFactory.create_from_api_request(data)
         assert stock.geography == "US"
 
@@ -66,12 +67,12 @@ class TestStockFactory:
         }
         stock = StockFactory.create_from_api_request(data)
         assert stock.currency == Currency.USD
-        
+
         # EU geography -> EUR currency
         data["geography"] = "EU"
         stock = StockFactory.create_from_api_request(data)
         assert stock.currency == Currency.EUR
-        
+
         # ASIA geography -> HKD currency
         data["geography"] = "ASIA"
         stock = StockFactory.create_from_api_request(data)
@@ -85,10 +86,10 @@ class TestStockFactory:
             "geography": "US",
             "min_lot": 0,  # Invalid
         }
-        
+
         stock = StockFactory.create_from_api_request(data)
         assert stock.min_lot == 1  # Should default to 1
-        
+
         data["min_lot"] = -5
         stock = StockFactory.create_from_api_request(data)
         assert stock.min_lot == 1
@@ -100,7 +101,7 @@ class TestStockFactory:
             "name": "Apple Inc.",
             "geography": "US",
         }
-        
+
         with pytest.raises(ValidationError, match="Symbol cannot be empty"):
             StockFactory.create_from_api_request(data)
 
@@ -125,7 +126,7 @@ class TestStockFactory:
             "geography": "US",
             "industry": "Technology",
         }
-        
+
         stock = StockFactory.create_from_api_request(data)
         assert stock.industry == "Technology"
 
@@ -139,13 +140,12 @@ class TestStockFactory:
             "yahoo_symbol": "MSFT",
             "currency": "USD",
         }
-        
+
         stock = StockFactory.create_from_import(data)
-        
+
         assert stock.symbol == "MSFT.US"
         assert stock.name == "Microsoft Corporation"
         assert stock.geography == "US"
         assert stock.industry == "Technology"
         assert stock.yahoo_symbol == "MSFT"
         assert stock.currency == Currency.USD
-

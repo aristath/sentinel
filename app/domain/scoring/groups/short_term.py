@@ -7,17 +7,17 @@ Components:
 """
 
 import logging
-from typing import Optional, List, Dict
+from typing import Dict, List, Optional
 
 import numpy as np
 
+from app.domain.responses import ScoreResult
 from app.domain.scoring.constants import (
     DRAWDOWN_EXCELLENT,
     DRAWDOWN_GOOD,
     DRAWDOWN_OK,
     DRAWDOWN_POOR,
 )
-from app.domain.responses import ScoreResult
 
 logger = logging.getLogger(__name__)
 
@@ -51,8 +51,8 @@ def calculate_recent_momentum(daily_prices: List[Dict]) -> Optional[float]:
 
 # Import scorers from dedicated module
 from app.domain.scoring.scorers.short_term import (
-    score_momentum,
     score_drawdown,
+    score_momentum,
 )
 
 
@@ -73,8 +73,8 @@ async def calculate_short_term_score(
         ScoreResult with score and sub_scores
         sub_scores: {"momentum": float, "drawdown": float}
     """
-    from app.repositories.calculations import CalculationsRepository
     from app.domain.scoring.caching import get_max_drawdown
+    from app.repositories.calculations import CalculationsRepository
 
     calc_repo = CalculationsRepository()
 
@@ -128,7 +128,4 @@ async def calculate_short_term_score(
         "drawdown": round(drawdown_score, 3),
     }
 
-    return ScoreResult(
-        score=round(min(1.0, total), 3),
-        sub_scores=sub_components
-    )
+    return ScoreResult(score=round(min(1.0, total), 3), sub_scores=sub_components)

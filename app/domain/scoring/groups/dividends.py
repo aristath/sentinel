@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 
 # Import scorers from dedicated module
 from app.domain.scoring.scorers.dividends import (
-    score_dividend_yield,
     score_dividend_consistency,
+    score_dividend_yield,
 )
 
 
@@ -37,13 +37,17 @@ async def calculate_dividends_score(symbol: str, fundamentals) -> ScoreResult:
     calc_repo = CalculationsRepository()
 
     dividend_yield = fundamentals.dividend_yield if fundamentals else None
-    payout_ratio = fundamentals.payout_ratio if hasattr(fundamentals, 'payout_ratio') else None
+    payout_ratio = (
+        fundamentals.payout_ratio if hasattr(fundamentals, "payout_ratio") else None
+    )
 
     # Cache dividend metrics
     if dividend_yield is not None:
-        await calc_repo.set_metric(symbol, "DIVIDEND_YIELD", dividend_yield, source='yahoo')
+        await calc_repo.set_metric(
+            symbol, "DIVIDEND_YIELD", dividend_yield, source="yahoo"
+        )
     if payout_ratio is not None:
-        await calc_repo.set_metric(symbol, "PAYOUT_RATIO", payout_ratio, source='yahoo')
+        await calc_repo.set_metric(symbol, "PAYOUT_RATIO", payout_ratio, source="yahoo")
 
     yield_score = score_dividend_yield(dividend_yield)
     consistency_score = score_dividend_consistency(fundamentals)
@@ -56,7 +60,4 @@ async def calculate_dividends_score(symbol: str, fundamentals) -> ScoreResult:
         "consistency": round(consistency_score, 3),
     }
 
-    return ScoreResult(
-        score=round(min(1.0, total), 3),
-        sub_scores=sub_components
-    )
+    return ScoreResult(score=round(min(1.0, total), 3), sub_scores=sub_components)

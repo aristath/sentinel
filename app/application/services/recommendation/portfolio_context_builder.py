@@ -6,13 +6,13 @@ Builds PortfolioContext objects for use in scoring and recommendation generation
 import logging
 from typing import Dict
 
-from app.infrastructure.database.manager import DatabaseManager
 from app.domain.repositories.protocols import (
-    IStockRepository,
-    IPositionRepository,
     IAllocationRepository,
+    IPositionRepository,
+    IStockRepository,
 )
 from app.domain.scoring import PortfolioContext
+from app.infrastructure.database.manager import DatabaseManager
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +24,13 @@ async def build_portfolio_context(
     db_manager: DatabaseManager,
 ) -> PortfolioContext:
     """Build portfolio context for scoring.
-    
+
     Args:
         position_repo: Repository for positions
         stock_repo: Repository for stocks
         allocation_repo: Repository for allocations
         db_manager: Database manager for accessing scores
-        
+
     Returns:
         PortfolioContext with all portfolio metadata needed for scoring
     """
@@ -74,4 +74,3 @@ async def build_portfolio_context(
         stock_industries=stock_industries,
         stock_scores=stock_scores,
     )
-

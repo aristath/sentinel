@@ -16,15 +16,16 @@ class TradeRepository:
 
     def __init__(self, db=None):
         """Initialize repository.
-        
+
         Args:
             db: Optional database connection for testing. If None, uses get_db_manager().ledger
                 Can be a Database instance or raw aiosqlite.Connection (will be wrapped)
         """
         if db is not None:
             # If it's a raw connection without fetchone/fetchall, wrap it
-            if not hasattr(db, 'fetchone') and hasattr(db, 'execute'):
+            if not hasattr(db, "fetchone") and hasattr(db, "execute"):
                 from app.repositories.base import DatabaseAdapter
+
                 self._db = DatabaseAdapter(db)
             else:
                 self._db = db
@@ -60,14 +61,13 @@ class TradeRepository:
                     trade.value_eur,
                     trade.source,
                     now,
-                )
+                ),
             )
 
     async def get_by_order_id(self, order_id: str) -> Optional[Trade]:
         """Get trade by broker order ID."""
         row = await self._db.fetchone(
-            "SELECT * FROM trades WHERE order_id = ?",
-            (order_id,)
+            "SELECT * FROM trades WHERE order_id = ?", (order_id,)
         )
         if not row:
             return None
@@ -76,8 +76,7 @@ class TradeRepository:
     async def exists(self, order_id: str) -> bool:
         """Check if trade with order_id already exists."""
         row = await self._db.fetchone(
-            "SELECT 1 FROM trades WHERE order_id = ?",
-            (order_id,)
+            "SELECT 1 FROM trades WHERE order_id = ?", (order_id,)
         )
         return row is not None
 
@@ -89,7 +88,7 @@ class TradeRepository:
             ORDER BY executed_at DESC
             LIMIT ?
             """,
-            (limit,)
+            (limit,),
         )
         return [self._row_to_trade(row) for row in rows]
 
@@ -101,7 +100,7 @@ class TradeRepository:
             WHERE executed_at >= ? AND executed_at <= ?
             ORDER BY executed_at ASC
             """,
-            (start_date, end_date)
+            (start_date, end_date),
         )
         return [self._row_to_trade(row) for row in rows]
 
@@ -114,7 +113,7 @@ class TradeRepository:
             ORDER BY executed_at DESC
             LIMIT ?
             """,
-            (symbol.upper(), limit)
+            (symbol.upper(), limit),
         )
         return [self._row_to_trade(row) for row in rows]
 
@@ -126,7 +125,7 @@ class TradeRepository:
             SELECT DISTINCT symbol FROM trades
             WHERE UPPER(side) = 'BUY' AND executed_at >= ?
             """,
-            (cutoff,)
+            (cutoff,),
         )
         return {row["symbol"] for row in rows}
 
@@ -138,18 +137,18 @@ class TradeRepository:
             SELECT DISTINCT symbol FROM trades
             WHERE UPPER(side) = 'SELL' AND executed_at >= ?
             """,
-            (cutoff,)
+            (cutoff,),
         )
         return {row["symbol"] for row in rows}
 
     async def has_recent_sell_order(self, symbol: str, hours: int = 2) -> bool:
         """
         Check if there's a recent SELL order for the given symbol.
-        
+
         Args:
             symbol: Stock symbol to check (e.g., "AAPL.US")
             hours: Number of hours to look back (default: 2)
-            
+
         Returns:
             True if a SELL order exists for this symbol within the time window
         """
@@ -160,7 +159,7 @@ class TradeRepository:
             WHERE symbol = ? AND UPPER(side) = 'SELL' AND executed_at >= ?
             LIMIT 1
             """,
-            (symbol.upper(), cutoff)
+            (symbol.upper(), cutoff),
         )
         return row is not None
 
@@ -171,7 +170,7 @@ class TradeRepository:
             SELECT MIN(executed_at) as first_buy FROM trades
             WHERE symbol = ? AND UPPER(side) = 'BUY'
             """,
-            (symbol.upper(),)
+            (symbol.upper(),),
         )
         return row["first_buy"] if row else None
 
@@ -182,7 +181,7 @@ class TradeRepository:
             SELECT MAX(executed_at) as last_sell FROM trades
             WHERE symbol = ? AND UPPER(side) = 'SELL'
             """,
-            (symbol.upper(),)
+            (symbol.upper(),),
         )
         return row["last_sell"] if row else None
 
@@ -201,7 +200,7 @@ class TradeRepository:
         return {
             row["symbol"]: {
                 "first_bought_at": row["first_buy"],
-                "last_sold_at": row["last_sell"]
+                "last_sold_at": row["last_sell"],
             }
             for row in rows
         }
@@ -222,7 +221,7 @@ class TradeRepository:
             WHERE executed_at <= ?
             ORDER BY executed_at ASC
             """,
-            (end_date,)
+            (end_date,),
         )
 
         # Build position state up to start_date
@@ -259,11 +258,9 @@ class TradeRepository:
         # Add initial position entries at start_date
         for symbol, quantity in cumulative_positions.items():
             if quantity > 0:
-                result.append({
-                    "date": start_date,
-                    "symbol": symbol,
-                    "quantity": quantity
-                })
+                result.append(
+                    {"date": start_date, "symbol": symbol, "quantity": quantity}
+                )
 
         # Process trades in range
         positions_by_date = {}
@@ -295,11 +292,9 @@ class TradeRepository:
 
             for symbol, quantity in cumulative_positions.items():
                 if quantity > 0:
-                    result.append({
-                        "date": date,
-                        "symbol": symbol,
-                        "quantity": quantity
-                    })
+                    result.append(
+                        {"date": date, "symbol": symbol, "quantity": quantity}
+                    )
 
         return result
 
@@ -322,7 +317,9 @@ class TradeRepository:
             executed_at=executed_at,
             order_id=row["order_id"],
             currency=row["currency"] if "currency" in row.keys() else None,
-            currency_rate=row["currency_rate"] if "currency_rate" in row.keys() else None,
+            currency_rate=(
+                row["currency_rate"] if "currency_rate" in row.keys() else None
+            ),
             value_eur=row["value_eur"] if "value_eur" in row.keys() else None,
             source=row["source"] if "source" in row.keys() else "tradernet",
         )

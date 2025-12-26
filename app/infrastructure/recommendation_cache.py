@@ -51,18 +51,22 @@ class RecommendationCache:
         row = await db.fetchone(
             """SELECT data FROM recommendation_cache
                WHERE portfolio_hash = ? AND cache_type = ? AND expires_at > ?""",
-            (portfolio_hash, cache_type, now)
+            (portfolio_hash, cache_type, now),
         )
 
         if row:
             try:
                 data = json.loads(row["data"])
-                logger.debug(f"Cache HIT: {cache_type} recommendations for hash {portfolio_hash[:8]}...")
+                logger.debug(
+                    f"Cache HIT: {cache_type} recommendations for hash {portfolio_hash[:8]}..."
+                )
                 return data
             except (json.JSONDecodeError, KeyError) as e:
                 logger.warning(f"Failed to parse cached recommendations: {e}")
 
-        logger.debug(f"Cache MISS: {cache_type} recommendations for hash {portfolio_hash[:8]}...")
+        logger.debug(
+            f"Cache MISS: {cache_type} recommendations for hash {portfolio_hash[:8]}..."
+        )
         return None
 
     async def set_recommendations(
@@ -70,7 +74,7 @@ class RecommendationCache:
         portfolio_hash: str,
         cache_type: str,
         data: List[Dict],
-        ttl_hours: int = RECOMMENDATION_TTL_HOURS
+        ttl_hours: int = RECOMMENDATION_TTL_HOURS,
     ) -> None:
         """
         Cache recommendations for a portfolio hash.
@@ -89,10 +93,12 @@ class RecommendationCache:
             """INSERT OR REPLACE INTO recommendation_cache
                (portfolio_hash, cache_type, data, expires_at, created_at)
                VALUES (?, ?, ?, ?, ?)""",
-            (portfolio_hash, cache_type, json.dumps(data), expires_at, now.isoformat())
+            (portfolio_hash, cache_type, json.dumps(data), expires_at, now.isoformat()),
         )
         await db.commit()
-        logger.debug(f"Cached {len(data)} {cache_type} recommendations for hash {portfolio_hash[:8]}...")
+        logger.debug(
+            f"Cached {len(data)} {cache_type} recommendations for hash {portfolio_hash[:8]}..."
+        )
 
     async def get_analytics(self, cache_key: str) -> Optional[Any]:
         """
@@ -110,7 +116,7 @@ class RecommendationCache:
         row = await db.fetchone(
             """SELECT data FROM analytics_cache
                WHERE cache_key = ? AND expires_at > ?""",
-            (cache_key, now)
+            (cache_key, now),
         )
 
         if row:
@@ -125,10 +131,7 @@ class RecommendationCache:
         return None
 
     async def set_analytics(
-        self,
-        cache_key: str,
-        data: Any,
-        ttl_hours: int = ANALYTICS_TTL_HOURS
+        self, cache_key: str, data: Any, ttl_hours: int = ANALYTICS_TTL_HOURS
     ) -> None:
         """
         Cache analytics data.
@@ -146,7 +149,7 @@ class RecommendationCache:
             """INSERT OR REPLACE INTO analytics_cache
                (cache_key, data, expires_at, created_at)
                VALUES (?, ?, ?, ?)""",
-            (cache_key, json.dumps(data), expires_at, now.isoformat())
+            (cache_key, json.dumps(data), expires_at, now.isoformat()),
         )
         await db.commit()
         logger.debug(f"Cached analytics: {cache_key}")
@@ -168,14 +171,14 @@ class RecommendationCache:
         # Delete recommendation cache entries
         cursor = await db.execute(
             "DELETE FROM recommendation_cache WHERE portfolio_hash = ?",
-            (portfolio_hash,)
+            (portfolio_hash,),
         )
         rec_count = cursor.rowcount
 
         # Delete analytics entries keyed by this hash
         cursor = await db.execute(
             "DELETE FROM analytics_cache WHERE cache_key LIKE ?",
-            (f"%{portfolio_hash}%",)
+            (f"%{portfolio_hash}%",),
         )
         analytics_count = cursor.rowcount
 
@@ -183,7 +186,9 @@ class RecommendationCache:
 
         total = rec_count + analytics_count
         if total > 0:
-            logger.info(f"Invalidated {total} cache entries for portfolio hash {portfolio_hash[:8]}...")
+            logger.info(
+                f"Invalidated {total} cache entries for portfolio hash {portfolio_hash[:8]}..."
+            )
         return total
 
     async def invalidate_all_recommendations(self) -> int:
@@ -221,15 +226,13 @@ class RecommendationCache:
 
         # Clean recommendation cache
         cursor = await db.execute(
-            "DELETE FROM recommendation_cache WHERE expires_at < ?",
-            (now,)
+            "DELETE FROM recommendation_cache WHERE expires_at < ?", (now,)
         )
         total += cursor.rowcount
 
         # Clean analytics cache
         cursor = await db.execute(
-            "DELETE FROM analytics_cache WHERE expires_at < ?",
-            (now,)
+            "DELETE FROM analytics_cache WHERE expires_at < ?", (now,)
         )
         total += cursor.rowcount
 
@@ -255,7 +258,7 @@ class RecommendationCache:
                 COUNT(*) as total,
                 SUM(CASE WHEN expires_at > ? THEN 1 ELSE 0 END) as valid
                FROM recommendation_cache""",
-            (now,)
+            (now,),
         )
 
         # Analytics cache stats
@@ -264,7 +267,7 @@ class RecommendationCache:
                 COUNT(*) as total,
                 SUM(CASE WHEN expires_at > ? THEN 1 ELSE 0 END) as valid
                FROM analytics_cache""",
-            (now,)
+            (now,),
         )
 
         return {

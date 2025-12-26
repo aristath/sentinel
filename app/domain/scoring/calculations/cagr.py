@@ -4,7 +4,7 @@ This module provides the single source of truth for CAGR calculations
 used across the scoring system.
 """
 
-from typing import List, Dict, Optional
+from typing import Dict, List, Optional
 
 # Minimum months required for reliable CAGR calculation
 MIN_MONTHS_FOR_CAGR = 12

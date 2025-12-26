@@ -8,23 +8,27 @@ import logging
 from typing import TYPE_CHECKING
 
 from app.config import settings
-from app.infrastructure.external.tradernet import get_tradernet_client
-from app.infrastructure.locking import file_lock
-from app.infrastructure.events import emit, SystemEvent
-from app.infrastructure.hardware.display_service import set_processing, clear_processing, set_error
-from app.infrastructure.database.manager import get_db_manager
+from app.domain.scoring import PortfolioContext
 from app.infrastructure.cache import cache
+from app.infrastructure.daily_pnl import get_daily_pnl_tracker
+from app.infrastructure.database.manager import get_db_manager
+from app.infrastructure.events import SystemEvent, emit
+from app.infrastructure.external.tradernet import get_tradernet_client
+from app.infrastructure.hardware.display_service import (
+    clear_processing,
+    set_error,
+    set_processing,
+)
+from app.infrastructure.locking import file_lock
 from app.infrastructure.recommendation_cache import get_recommendation_cache
 from app.repositories import (
-    StockRepository,
-    PositionRepository,
-    TradeRepository,
     AllocationRepository,
-    SettingsRepository,
+    PositionRepository,
     RecommendationRepository,
+    SettingsRepository,
+    StockRepository,
+    TradeRepository,
 )
-from app.domain.scoring import PortfolioContext
-from app.infrastructure.daily_pnl import get_daily_pnl_tracker
 
 if TYPE_CHECKING:
     from app.domain.models import Recommendation
@@ -50,13 +54,13 @@ async def check_and_rebalance():
 
 async def _check_and_rebalance_internal():
     """Internal rebalance implementation with drip execution."""
-    from app.jobs.daily_sync import sync_portfolio
-    from app.jobs.sync_trades import sync_trades
-    from app.infrastructure.external import yahoo_finance as yahoo
     from app.application.services.trade_execution_service import TradeExecutionService
+    from app.domain.constants import BUY_COOLDOWN_DAYS
     from app.domain.models import Recommendation
     from app.domain.value_objects.trade_side import TradeSide
-    from app.domain.constants import BUY_COOLDOWN_DAYS
+    from app.infrastructure.external import yahoo_finance as yahoo
+    from app.jobs.daily_sync import sync_portfolio
+    from app.jobs.sync_trades import sync_trades
 
     logger.info("Starting trade cycle check...")
 
@@ -75,7 +79,9 @@ async def _check_and_rebalance_internal():
         # GUARDRAIL: Check daily P&L circuit breaker
         pnl_tracker = get_daily_pnl_tracker()
         pnl_status = await pnl_tracker.get_trading_status()
-        logger.info(f"Daily P&L status: {pnl_status['pnl_display']} ({pnl_status['status']})")
+        logger.info(
+            f"Daily P&L status: {pnl_status['pnl_display']} ({pnl_status['status']})"
+        )
 
         if pnl_status["status"] == "halted":
             logger.warning(f"Trading halted: {pnl_status['reason']}")
@@ -86,8 +92,11 @@ async def _check_and_rebalance_internal():
             return
 
         # Get configurable threshold from database
+        from app.application.services.rebalancing_service import (
+            calculate_min_trade_amount,
+        )
         from app.domain.services.settings_service import SettingsService
-        from app.application.services.rebalancing_service import calculate_min_trade_amount
+
         settings_service = SettingsService(SettingsRepository())
         settings = await settings_service.get_settings()
         # Calculate minimum worthwhile trade from transaction costs
@@ -107,7 +116,9 @@ async def _check_and_rebalance_internal():
                 return
 
         cash_balance = client.get_total_cash_eur()
-        logger.info(f"Cash balance: €{cash_balance:.2f}, threshold: €{min_trade_size:.2f}")
+        logger.info(
+            f"Cash balance: €{cash_balance:.2f}, threshold: €{min_trade_size:.2f}"
+        )
 
         # Initialize repositories
         stock_repo = StockRepository()
@@ -127,7 +138,10 @@ async def _check_and_rebalance_internal():
 
         # Generate portfolio hash for recommendation matching
         from app.domain.portfolio_hash import generate_portfolio_hash
-        position_hash_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
+
+        position_hash_dicts = [
+            {"symbol": p.symbol, "quantity": p.quantity} for p in positions
+        ]
         portfolio_hash = generate_portfolio_hash(position_hash_dicts)
 
         # Build portfolio context for scoring
@@ -181,13 +195,17 @@ async def _check_and_rebalance_internal():
 
         # Check P&L guardrails for the recommended action
         if next_action.side == TradeSide.SELL and not pnl_status["can_sell"]:
-            logger.info(f"SELL {next_action.symbol} blocked by P&L guardrail: {pnl_status['reason']}")
+            logger.info(
+                f"SELL {next_action.symbol} blocked by P&L guardrail: {pnl_status['reason']}"
+            )
             emit(SystemEvent.REBALANCE_COMPLETE)
             await _refresh_recommendation_cache()
             return
 
         if next_action.side == TradeSide.BUY and not pnl_status["can_buy"]:
-            logger.info(f"BUY {next_action.symbol} blocked by P&L guardrail: {pnl_status['reason']}")
+            logger.info(
+                f"BUY {next_action.symbol} blocked by P&L guardrail: {pnl_status['reason']}"
+            )
             emit(SystemEvent.REBALANCE_COMPLETE)
             await _refresh_recommendation_cache()
             return
@@ -204,7 +222,9 @@ async def _check_and_rebalance_internal():
 
         # Additional safety check for SELL: verify no recent sell order
         if next_action.side == TradeSide.SELL:
-            has_recent = await trade_repo.has_recent_sell_order(next_action.symbol, hours=2)
+            has_recent = await trade_repo.has_recent_sell_order(
+                next_action.symbol, hours=2
+            )
             if has_recent:
                 logger.warning(
                     f"Skipping SELL {next_action.symbol}: recent sell order found "
@@ -228,15 +248,16 @@ async def _check_and_rebalance_internal():
         currency_balances = None
         if next_action.side == TradeSide.BUY:
             currency_balances = {
-                cb.currency: cb.amount
-                for cb in client.get_cash_balances()
+                cb.currency: cb.amount for cb in client.get_cash_balances()
             }
             # Deduct pending order amounts
             pending_totals = client.get_pending_order_totals()
             if pending_totals:
                 for currency, pending_amount in pending_totals.items():
                     if currency in currency_balances:
-                        currency_balances[currency] = max(0, currency_balances[currency] - pending_amount)
+                        currency_balances[currency] = max(
+                            0, currency_balances[currency] - pending_amount
+                        )
 
         # Execute based on trade type
         if next_action.side == TradeSide.SELL:
@@ -246,11 +267,13 @@ async def _check_and_rebalance_internal():
                 [next_action],
                 currency_balances=currency_balances,
                 auto_convert_currency=True,
-                source_currency="EUR"
+                source_currency="EUR",
             )
 
         if results and results[0]["status"] == "success":
-            logger.info(f"{next_action.side} executed successfully: {next_action.symbol}")
+            logger.info(
+                f"{next_action.side} executed successfully: {next_action.symbol}"
+            )
             emit(SystemEvent.TRADE_EXECUTED, is_buy=(next_action.side == TradeSide.BUY))
 
             # Invalidate portfolio-hash-based caches (old portfolio is now stale)
@@ -299,13 +322,13 @@ async def _get_next_holistic_action() -> "Recommendation | None":
     Returns:
         First step from holistic plan as a Recommendation, or None if no actions.
     """
+    from app.application.services.rebalancing_service import RebalancingService
     from app.domain.models import Recommendation
     from app.domain.portfolio_hash import generate_recommendation_cache_key
-    from app.application.services.rebalancing_service import RebalancingService
     from app.domain.services.settings_service import SettingsService
-    from app.domain.value_objects.trade_side import TradeSide
     from app.domain.value_objects.currency import Currency
     from app.domain.value_objects.recommendation_status import RecommendationStatus
+    from app.domain.value_objects.trade_side import TradeSide
 
     position_repo = PositionRepository()
     settings_repo = SettingsRepository()
@@ -315,14 +338,18 @@ async def _get_next_holistic_action() -> "Recommendation | None":
     positions = await position_repo.get_all()
     settings = await settings_service.get_settings()
     position_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
-    portfolio_cache_key = generate_recommendation_cache_key(position_dicts, settings.to_dict())
+    portfolio_cache_key = generate_recommendation_cache_key(
+        position_dicts, settings.to_dict()
+    )
     cache_key = f"multi_step_recommendations:{portfolio_cache_key}"
 
     # Try cache first
     cached = cache.get(cache_key)
     if cached and cached.get("steps"):
         step = cached["steps"][0]
-        logger.info(f"Using cached holistic recommendation: {step['side']} {step['symbol']}")
+        logger.info(
+            f"Using cached holistic recommendation: {step['side']} {step['symbol']}"
+        )
 
         # Convert cached step dict to Recommendation
         side = TradeSide.BUY if step["side"] == "BUY" else TradeSide.SELL
@@ -394,8 +421,12 @@ async def _refresh_recommendation_cache():
         # Generate portfolio-aware cache key
         positions = await position_repo.get_all()
         settings = await settings_service.get_settings()
-        position_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
-        portfolio_cache_key = generate_recommendation_cache_key(position_dicts, settings.to_dict())
+        position_dicts = [
+            {"symbol": p.symbol, "quantity": p.quantity} for p in positions
+        ]
+        portfolio_cache_key = generate_recommendation_cache_key(
+            position_dicts, settings.to_dict()
+        )
         cache_key = f"multi_step_recommendations:{portfolio_cache_key}"
 
         # Get multi-step recommendations (holistic planner auto-tests depths 1-5)
@@ -422,20 +453,34 @@ async def _refresh_recommendation_cache():
                     }
                     for step in multi_step_steps
                 ],
-                "total_score_improvement": multi_step_steps[0].score_change if multi_step_steps else 0.0,
-                "final_available_cash": multi_step_steps[-1].available_cash_after if multi_step_steps else 0.0,
+                "total_score_improvement": (
+                    multi_step_steps[0].score_change if multi_step_steps else 0.0
+                ),
+                "final_available_cash": (
+                    multi_step_steps[-1].available_cash_after
+                    if multi_step_steps
+                    else 0.0
+                ),
             }
             # Cache to portfolio-hash-based key (for _get_next_holistic_action)
             cache.set(cache_key, multi_step_data, ttl_seconds=900)
-            logger.info(f"Multi-step recommendation cache refreshed: {len(multi_step_steps)} steps (key: {cache_key})")
+            logger.info(
+                f"Multi-step recommendation cache refreshed: {len(multi_step_steps)} steps (key: {cache_key})"
+            )
 
             # Also cache to fixed keys for LED ticker display
             # LED ticker looks for: multi_step_recommendations:diversification:{depth}:holistic
             # Use actual depth from holistic planner (it auto-determines optimal depth)
             depth = len(multi_step_steps)
-            led_cache_key = f"multi_step_recommendations:diversification:{depth}:holistic"
+            led_cache_key = (
+                f"multi_step_recommendations:diversification:{depth}:holistic"
+            )
             cache.set(led_cache_key, multi_step_data, ttl_seconds=900)
-            cache.set("multi_step_recommendations:diversification:default:holistic", multi_step_data, ttl_seconds=900)
+            cache.set(
+                "multi_step_recommendations:diversification:default:holistic",
+                multi_step_data,
+                ttl_seconds=900,
+            )
             logger.info(f"LED ticker cache refreshed: {led_cache_key}")
 
         # Always cache single recommendations (for fallback and depth=1)
@@ -449,7 +494,9 @@ async def _refresh_recommendation_cache():
         cache.set("recommendations:3", buy_recs, ttl_seconds=900)
 
         # Get sell recommendations
-        sell_recommendations = await rebalancing_service.calculate_sell_recommendations(limit=3)
+        sell_recommendations = await rebalancing_service.calculate_sell_recommendations(
+            limit=3
+        )
         sell_recs = {
             "recommendations": [
                 {"symbol": r.symbol, "estimated_value": r.estimated_value}
@@ -458,7 +505,9 @@ async def _refresh_recommendation_cache():
         }
         cache.set("sell_recommendations:3", sell_recs, ttl_seconds=900)
 
-        logger.info(f"Recommendation cache refreshed: {len(buy_recommendations)} buy, {len(sell_recommendations)} sell")
+        logger.info(
+            f"Recommendation cache refreshed: {len(buy_recommendations)} buy, {len(sell_recommendations)} sell"
+        )
 
     except Exception as e:
         logger.warning(f"Failed to refresh recommendation cache: {e}")

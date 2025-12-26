@@ -3,15 +3,19 @@
 import logging
 from datetime import datetime
 
-from app.infrastructure.external.tradernet import get_tradernet_client
-from app.infrastructure.external import yahoo_finance as yahoo
-from app.infrastructure.events import emit, SystemEvent
-from app.infrastructure.hardware.display_service import set_processing, clear_processing, set_error
-from app.infrastructure.locking import file_lock
-from app.infrastructure.database.manager import get_db_manager
-from app.domain.value_objects.currency import Currency
 from app.domain.events import PositionUpdatedEvent, get_event_bus
 from app.domain.models import Position
+from app.domain.value_objects.currency import Currency
+from app.infrastructure.database.manager import get_db_manager
+from app.infrastructure.events import SystemEvent, emit
+from app.infrastructure.external import yahoo_finance as yahoo
+from app.infrastructure.external.tradernet import get_tradernet_client
+from app.infrastructure.hardware.display_service import (
+    clear_processing,
+    set_error,
+    set_processing,
+)
+from app.infrastructure.locking import file_lock
 
 logger = logging.getLogger(__name__)
 
@@ -69,14 +73,16 @@ async def _sync_portfolio_internal():
             }
 
             # Derive first_bought_at and last_sold_at from trades table
-            cursor = await db_manager.ledger.execute("""
+            cursor = await db_manager.ledger.execute(
+                """
                 SELECT
                     symbol,
                     MIN(CASE WHEN UPPER(side) = 'BUY' THEN executed_at END) as first_buy,
                     MAX(CASE WHEN UPPER(side) = 'SELL' THEN executed_at END) as last_sell
                 FROM trades
                 GROUP BY symbol
-            """)
+            """
+            )
             trade_dates = {
                 row[0]: {"first_bought_at": row[1], "last_sold_at": row[2]}
                 for row in await cursor.fetchall()
@@ -100,17 +106,20 @@ async def _sync_portfolio_internal():
             if currencies_needed:
                 try:
                     import httpx
+
                     async with httpx.AsyncClient() as client:
                         response = await client.get(
                             "https://api.exchangerate-api.com/v4/latest/EUR",
-                            timeout=10.0
+                            timeout=10.0,
                         )
                         if response.status_code == 200:
                             api_rates = response.json().get("rates", {})
                             for curr in currencies_needed:
                                 if curr in api_rates:
                                     exchange_rates[curr] = api_rates[curr]
-                                    logger.info(f"Exchange rate {curr}/EUR: {api_rates[curr]}")
+                                    logger.info(
+                                        f"Exchange rate {curr}/EUR: {api_rates[curr]}"
+                                    )
                 except Exception as e:
                     logger.warning(f"Failed to fetch exchange rates: {e}")
 
@@ -119,7 +128,9 @@ async def _sync_portfolio_internal():
             for curr in currencies_needed:
                 if curr not in exchange_rates:
                     exchange_rates[curr] = fallback_rates.get(curr, 1.0)
-                    logger.warning(f"Using fallback rate for {curr}: {exchange_rates[curr]}")
+                    logger.warning(
+                        f"Using fallback rate for {curr}: {exchange_rates[curr]}"
+                    )
 
             # Calculate cash balance in EUR using fetched rates
             cash_balance = 0.0
@@ -152,12 +163,18 @@ async def _sync_portfolio_internal():
                     market_value_eur = pos.quantity * current_price / exchange_rate
 
                 # Calculate cost basis (invested value)
-                cost_basis_eur = pos.quantity * pos.avg_price / exchange_rate if exchange_rate > 0 else pos.quantity * pos.avg_price
+                cost_basis_eur = (
+                    pos.quantity * pos.avg_price / exchange_rate
+                    if exchange_rate > 0
+                    else pos.quantity * pos.avg_price
+                )
                 invested_value += cost_basis_eur
 
                 # Calculate unrealized P&L
                 if current_price and exchange_rate > 0:
-                    position_unrealized_pnl = (current_price - pos.avg_price) * pos.quantity / exchange_rate
+                    position_unrealized_pnl = (
+                        (current_price - pos.avg_price) * pos.quantity / exchange_rate
+                    )
                     unrealized_pnl += position_unrealized_pnl
 
                 await db_manager.state.execute(
@@ -179,9 +196,9 @@ async def _sync_portfolio_internal():
                         datetime.now().isoformat(),
                         dates.get("first_bought_at"),
                         dates.get("last_sold_at"),
-                    )
+                    ),
                 )
-                
+
                 # Publish domain event for position update
                 # Create Position object for event (with updated market_value_eur)
                 updated_position = Position(
@@ -201,17 +218,24 @@ async def _sync_portfolio_internal():
 
                 # Determine geography from config
                 cursor = await db_manager.config.execute(
-                    "SELECT geography FROM stocks WHERE symbol = ?",
-                    (pos.symbol,)
+                    "SELECT geography FROM stocks WHERE symbol = ?", (pos.symbol,)
                 )
                 row = await cursor.fetchone()
                 if row:
                     geo = row[0]
                 else:
                     symbol = pos.symbol.upper()
-                    if symbol.endswith(".GR") or symbol.endswith(".DE") or symbol.endswith(".PA"):
+                    if (
+                        symbol.endswith(".GR")
+                        or symbol.endswith(".DE")
+                        or symbol.endswith(".PA")
+                    ):
                         geo = "EU"
-                    elif symbol.endswith(".AS") or symbol.endswith(".HK") or symbol.endswith(".T"):
+                    elif (
+                        symbol.endswith(".AS")
+                        or symbol.endswith(".HK")
+                        or symbol.endswith(".T")
+                    ):
                         geo = "ASIA"
                     elif symbol.endswith(".US"):
                         geo = "US"
@@ -321,7 +345,9 @@ async def _sync_prices_internal():
                 if result.rowcount > 0:
                     updated += 1
 
-        logger.info(f"Price sync complete: {len(quotes)} quotes, {updated} positions updated")
+        logger.info(
+            f"Price sync complete: {len(quotes)} quotes, {updated} positions updated"
+        )
 
         # Metrics in calculations.db will expire naturally via TTL
         # No manual invalidation needed
@@ -387,7 +413,7 @@ async def sync_stock_currencies():
                     if symbol and currency:
                         await db_manager.config.execute(
                             "UPDATE stocks SET currency = ? WHERE symbol = ?",
-                            (currency, symbol)
+                            (currency, symbol),
                         )
                         updated += 1
 

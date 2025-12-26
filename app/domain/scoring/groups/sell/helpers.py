@@ -5,22 +5,22 @@ These functions are used by the main sell scoring orchestrator.
 """
 
 from datetime import datetime
-from typing import Optional, Dict
+from typing import Dict, Optional
 
 from app.domain.scoring.constants import (
-    DEFAULT_MIN_HOLD_DAYS,
     DEFAULT_MAX_LOSS_THRESHOLD,
-    TARGET_RETURN_MIN,
-    TARGET_RETURN_MAX,
-    INSTABILITY_RATE_VERY_HOT,
+    DEFAULT_MIN_HOLD_DAYS,
     INSTABILITY_RATE_HOT,
+    INSTABILITY_RATE_VERY_HOT,
     INSTABILITY_RATE_WARM,
-    VOLATILITY_SPIKE_HIGH,
-    VOLATILITY_SPIKE_MED,
-    VOLATILITY_SPIKE_LOW,
+    TARGET_RETURN_MAX,
+    TARGET_RETURN_MIN,
     VALUATION_STRETCH_HIGH,
-    VALUATION_STRETCH_MED,
     VALUATION_STRETCH_LOW,
+    VALUATION_STRETCH_MED,
+    VOLATILITY_SPIKE_HIGH,
+    VOLATILITY_SPIKE_LOW,
+    VOLATILITY_SPIKE_MED,
 )
 
 
@@ -28,7 +28,7 @@ def calculate_underperformance_score(
     current_price: float,
     avg_price: float,
     days_held: int,
-    max_loss_threshold: float = DEFAULT_MAX_LOSS_THRESHOLD
+    max_loss_threshold: float = DEFAULT_MAX_LOSS_THRESHOLD,
 ) -> tuple:
     """
     Calculate underperformance score based on annualized return vs target.
@@ -75,8 +75,7 @@ def calculate_underperformance_score(
 
 
 def calculate_time_held_score(
-    first_bought_at: Optional[str],
-    min_hold_days: int = DEFAULT_MIN_HOLD_DAYS
+    first_bought_at: Optional[str], min_hold_days: int = DEFAULT_MIN_HOLD_DAYS
 ) -> tuple:
     """
     Calculate time held score. Longer hold with underperformance = higher sell priority.
@@ -89,7 +88,7 @@ def calculate_time_held_score(
         return 0.6, 365
 
     try:
-        bought_date = datetime.fromisoformat(first_bought_at.replace('Z', '+00:00'))
+        bought_date = datetime.fromisoformat(first_bought_at.replace("Z", "+00:00"))
         if bought_date.tzinfo:
             bought_date = bought_date.replace(tzinfo=None)
         days_held = (datetime.now() - bought_date).days
@@ -146,7 +145,7 @@ def calculate_portfolio_balance_score(
     # Industry overweight (30% of this component)
     # Handle multiple industries
     if industry:
-        industries = [i.strip() for i in industry.split(',')]
+        industries = [i.strip() for i in industry.split(",")]
         ind_scores = []
         for ind in industries:
             ind_current = ind_allocations.get(ind, 0)
@@ -190,15 +189,17 @@ def calculate_instability_score(
     if days_held > 30:
         years = days_held / 365.0
         try:
-            annualized = ((1 + profit_pct) ** (1 / years)) - 1 if years > 0 else profit_pct
+            annualized = (
+                ((1 + profit_pct) ** (1 / years)) - 1 if years > 0 else profit_pct
+            )
         except (ValueError, OverflowError):
             annualized = profit_pct
 
         if annualized > INSTABILITY_RATE_VERY_HOT:  # >50% annualized = very hot
             rate_score = 1.0
-        elif annualized > INSTABILITY_RATE_HOT:     # >30% annualized = hot
+        elif annualized > INSTABILITY_RATE_HOT:  # >30% annualized = hot
             rate_score = 0.7
-        elif annualized > INSTABILITY_RATE_WARM:    # >20% annualized = warm
+        elif annualized > INSTABILITY_RATE_WARM:  # >20% annualized = warm
             rate_score = 0.4
         else:
             rate_score = 0.1  # Sustainable pace
@@ -209,11 +210,11 @@ def calculate_instability_score(
     # 2. Volatility spike (30%)
     if historical_volatility > 0:
         vol_ratio = current_volatility / historical_volatility
-        if vol_ratio > VOLATILITY_SPIKE_HIGH:     # Vol doubled
+        if vol_ratio > VOLATILITY_SPIKE_HIGH:  # Vol doubled
             vol_score = 1.0
-        elif vol_ratio > VOLATILITY_SPIKE_MED:    # Vol up 50%
+        elif vol_ratio > VOLATILITY_SPIKE_MED:  # Vol up 50%
             vol_score = 0.7
-        elif vol_ratio > VOLATILITY_SPIKE_LOW:    # Vol up 20%
+        elif vol_ratio > VOLATILITY_SPIKE_LOW:  # Vol up 20%
             vol_score = 0.4
         else:
             vol_score = 0.1  # Normal volatility
@@ -222,11 +223,11 @@ def calculate_instability_score(
     score += vol_score * 0.30
 
     # 3. Valuation stretch (30%)
-    if distance_from_ma_200 > VALUATION_STRETCH_HIGH:    # >30% above MA
+    if distance_from_ma_200 > VALUATION_STRETCH_HIGH:  # >30% above MA
         valuation_score = 1.0
-    elif distance_from_ma_200 > VALUATION_STRETCH_MED:   # >20% above MA
+    elif distance_from_ma_200 > VALUATION_STRETCH_MED:  # >20% above MA
         valuation_score = 0.7
-    elif distance_from_ma_200 > VALUATION_STRETCH_LOW:   # >10% above MA
+    elif distance_from_ma_200 > VALUATION_STRETCH_LOW:  # >10% above MA
         valuation_score = 0.4
     else:
         valuation_score = 0.1  # Near or below MA
@@ -239,4 +240,3 @@ def calculate_instability_score(
         score = max(score, 0.1)
 
     return score
-

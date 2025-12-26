@@ -1,7 +1,9 @@
 """Cash flows API endpoints."""
 
-from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
+
+from fastapi import APIRouter, HTTPException, Query
+
 from app.infrastructure.dependencies import CashFlowRepositoryDep
 from app.infrastructure.external.tradernet_connection import ensure_tradernet_connected
 
@@ -11,8 +13,12 @@ router = APIRouter()
 @router.get("")
 async def get_cash_flows(
     cash_flow_repo: CashFlowRepositoryDep,
-    limit: Optional[int] = Query(None, ge=1, le=10000, description="Limit number of results (1-10000)"),
-    transaction_type: Optional[str] = Query(None, description="Filter by transaction type"),
+    limit: Optional[int] = Query(
+        None, ge=1, le=10000, description="Limit number of results (1-10000)"
+    ),
+    transaction_type: Optional[str] = Query(
+        None, description="Filter by transaction type"
+    ),
     start_date: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
 ):
@@ -25,6 +31,7 @@ async def get_cash_flows(
     # Validate date format if provided
     if start_date or end_date:
         from datetime import datetime
+
         try:
             if start_date:
                 datetime.strptime(start_date, "%Y-%m-%d")
@@ -33,12 +40,11 @@ async def get_cash_flows(
             if start_date and end_date and start_date > end_date:
                 raise HTTPException(
                     status_code=400,
-                    detail="start_date must be before or equal to end_date"
+                    detail="start_date must be before or equal to end_date",
                 )
         except ValueError:
             raise HTTPException(
-                status_code=400,
-                detail="Date must be in YYYY-MM-DD format"
+                status_code=400, detail="Date must be in YYYY-MM-DD format"
             )
 
     try:
@@ -70,8 +76,7 @@ async def get_cash_flows(
         ]
     except Exception as e:
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to retrieve cash flows: {str(e)}"
+            status_code=500, detail=f"Failed to retrieve cash flows: {str(e)}"
         )
 
 
@@ -89,10 +94,7 @@ async def sync_cash_flows(cash_flow_repo: CashFlowRepositoryDep):
         transactions = client.get_all_cash_flows(limit=1000)
 
         if not transactions:
-            return {
-                "message": "No transactions found",
-                "synced": 0
-            }
+            return {"message": "No transactions found", "synced": 0}
 
         # Sync to database
         synced_count = await cash_flow_repo.sync_from_api(transactions)
@@ -100,12 +102,11 @@ async def sync_cash_flows(cash_flow_repo: CashFlowRepositoryDep):
         return {
             "message": f"Synced {synced_count} transactions",
             "synced": synced_count,
-            "total_from_api": len(transactions)
+            "total_from_api": len(transactions),
         }
     except Exception as e:
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to sync cash flows: {str(e)}"
+            status_code=500, detail=f"Failed to sync cash flows: {str(e)}"
         )
 
 
@@ -138,11 +139,13 @@ async def get_cash_flows_summary(cash_flow_repo: CashFlowRepositoryDep):
         # Note: These are heuristics based on transaction_type name
         # Adjust as needed based on actual transaction types discovered
         total_deposits = sum(
-            cf.amount_eur for cf in all_flows
+            cf.amount_eur
+            for cf in all_flows
             if cf.transaction_type and "deposit" in cf.transaction_type.lower()
         )
         total_withdrawals = sum(
-            cf.amount_eur for cf in all_flows
+            cf.amount_eur
+            for cf in all_flows
             if cf.transaction_type and "withdrawal" in cf.transaction_type.lower()
         )
 
@@ -152,15 +155,9 @@ async def get_cash_flows_summary(cash_flow_repo: CashFlowRepositoryDep):
             "total_withdrawals_eur": round(total_withdrawals, 2),
             "net_cash_flow_eur": round(total_deposits - total_withdrawals, 2),
             "by_type": {
-                tx_type: {
-                    "total_eur": round(total, 2),
-                    "count": type_counts[tx_type]
-                }
+                tx_type: {"total_eur": round(total, 2), "count": type_counts[tx_type]}
                 for tx_type, total in type_totals.items()
-            }
+            },
         }
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get summary: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get summary: {str(e)}")

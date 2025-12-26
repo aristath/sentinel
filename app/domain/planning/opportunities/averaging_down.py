@@ -3,14 +3,14 @@
 Identifies quality stocks that are down and present averaging down opportunities.
 """
 
-from typing import List, Optional, Dict
+from typing import Dict, List, Optional
 
 from app.domain.models import Stock
-from app.domain.scoring.models import PortfolioContext
 from app.domain.planning.holistic_planner import ActionCandidate
-from app.domain.value_objects.trade_side import TradeSide
+from app.domain.scoring.models import PortfolioContext
 from app.domain.services.exchange_rate_service import ExchangeRateService
 from app.domain.services.trade_sizing_service import TradeSizingService
+from app.domain.value_objects.trade_side import TradeSide
 
 
 async def identify_averaging_down_opportunities(
@@ -59,8 +59,14 @@ async def identify_averaging_down_opportunities(
                 if loss_pct < -0.20:  # Down 20%+ but quality
                     # Calculate buy amount with lot-aware sizing
                     exchange_rate = 1.0
-                    if stock.currency and stock.currency != "EUR" and exchange_rate_service:
-                        exchange_rate = await exchange_rate_service.get_rate(stock.currency or "EUR", "EUR")
+                    if (
+                        stock.currency
+                        and stock.currency != "EUR"
+                        and exchange_rate_service
+                    ):
+                        exchange_rate = await exchange_rate_service.get_rate(
+                            stock.currency or "EUR", "EUR"
+                        )
                     sized = TradeSizingService.calculate_buy_quantity(
                         target_value_eur=base_trade_amount,
                         price=price,
@@ -68,18 +74,22 @@ async def identify_averaging_down_opportunities(
                         exchange_rate=exchange_rate,
                     )
 
-                    opportunities.append(ActionCandidate(
-                        side=TradeSide.BUY,
-                        symbol=stock.symbol,
-                        name=stock.name,
-                        quantity=sized.quantity,
-                        price=price,
-                        value_eur=sized.value_eur,
-                        currency=stock.currency or "EUR",
-                        priority=quality_score + abs(loss_pct),  # Higher quality + bigger dip = higher priority
-                        reason=f"Quality stock down {abs(loss_pct)*100:.0f}%, averaging down",
-                        tags=["averaging_down", "buy_low"],
-                    ))
+                    opportunities.append(
+                        ActionCandidate(
+                            side=TradeSide.BUY,
+                            symbol=stock.symbol,
+                            name=stock.name,
+                            quantity=sized.quantity,
+                            price=price,
+                            value_eur=sized.value_eur,
+                            currency=stock.currency or "EUR",
+                            priority=quality_score
+                            + abs(
+                                loss_pct
+                            ),  # Higher quality + bigger dip = higher priority
+                            reason=f"Quality stock down {abs(loss_pct)*100:.0f}%, averaging down",
+                            tags=["averaging_down", "buy_low"],
+                        )
+                    )
 
     return opportunities
-

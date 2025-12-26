@@ -8,13 +8,13 @@ Components:
 """
 
 import logging
-from typing import Optional, List, Dict
+from typing import Dict, List, Optional
 
 import numpy as np
 
-from app.domain.scoring.constants import OPTIMAL_CAGR
-from app.domain.scoring.calculations import calculate_cagr
 from app.domain.responses import ScoreResult
+from app.domain.scoring.calculations import calculate_cagr
+from app.domain.scoring.constants import OPTIMAL_CAGR
 
 logger = logging.getLogger(__name__)
 
@@ -53,8 +53,8 @@ async def calculate_long_term_score(
         ScoreResult with score and sub_scores
         sub_scores: {"cagr": float, "sortino": float, "sharpe": float}
     """
-    from app.repositories.calculations import CalculationsRepository
     from app.domain.scoring.caching import get_sharpe_ratio
+    from app.repositories.calculations import CalculationsRepository
 
     calc_repo = CalculationsRepository()
 
@@ -86,9 +86,9 @@ async def calculate_long_term_score(
 
     # Combine with internal weights
     total = (
-        cagr_score * WEIGHT_CAGR +
-        sortino_score * WEIGHT_SORTINO +
-        sharpe_score * WEIGHT_SHARPE
+        cagr_score * WEIGHT_CAGR
+        + sortino_score * WEIGHT_SORTINO
+        + sharpe_score * WEIGHT_SHARPE
     )
 
     sub_components = {
@@ -97,7 +97,4 @@ async def calculate_long_term_score(
         "sharpe": round(sharpe_score, 3),
     }
 
-    return ScoreResult(
-        score=round(min(1.0, total), 3),
-        sub_scores=sub_components
-    )
+    return ScoreResult(score=round(min(1.0, total), 3), sub_scores=sub_components)

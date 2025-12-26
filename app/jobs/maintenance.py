@@ -14,10 +14,14 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from app.config import settings
-from app.infrastructure.locking import file_lock
-from app.infrastructure.hardware.display_service import set_processing, clear_processing, set_error
-from app.infrastructure.events import emit, SystemEvent
 from app.infrastructure.database.manager import get_db_manager
+from app.infrastructure.events import SystemEvent, emit
+from app.infrastructure.hardware.display_service import (
+    clear_processing,
+    set_error,
+    set_processing,
+)
+from app.infrastructure.locking import file_lock
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +55,9 @@ async def _create_backup_internal():
         for db_name in core_dbs:
             db_path = settings.data_dir / db_name
             if db_path.exists():
-                backup_path = backup_dir / f"{db_name.replace('.db', '')}_{timestamp}.db"
+                backup_path = (
+                    backup_dir / f"{db_name.replace('.db', '')}_{timestamp}.db"
+                )
                 _backup_database(db_path, backup_path)
 
         # Backup history databases
@@ -96,11 +102,9 @@ async def _cleanup_old_backups(backup_dir: Path):
     # Clean core database backups
     for prefix in ["config_", "ledger_", "state_", "cache_"]:
         backups = sorted(
-            backup_dir.glob(f"{prefix}*.db"),
-            key=os.path.getmtime,
-            reverse=True
+            backup_dir.glob(f"{prefix}*.db"), key=os.path.getmtime, reverse=True
         )
-        for old_backup in backups[settings.backup_retention_count:]:
+        for old_backup in backups[settings.backup_retention_count :]:
             try:
                 old_backup.unlink()
                 logger.info(f"Removed old backup: {old_backup.name}")
@@ -109,13 +113,18 @@ async def _cleanup_old_backups(backup_dir: Path):
 
     # Clean history backup directories
     history_dirs = sorted(
-        [d for d in backup_dir.iterdir() if d.is_dir() and d.name.startswith("history_")],
+        [
+            d
+            for d in backup_dir.iterdir()
+            if d.is_dir() and d.name.startswith("history_")
+        ],
         key=os.path.getmtime,
-        reverse=True
+        reverse=True,
     )
-    for old_dir in history_dirs[settings.backup_retention_count:]:
+    for old_dir in history_dirs[settings.backup_retention_count :]:
         try:
             import shutil
+
             shutil.rmtree(old_dir)
             logger.info(f"Removed old history backup: {old_dir.name}")
         except Exception as e:
@@ -154,7 +163,9 @@ async def _checkpoint_wal_internal():
                 result = await db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
                 row = await result.fetchone()
                 if row:
-                    logger.info(f"{db_name}: checkpoint complete - busy={row[0]}, log={row[1]}, checkpointed={row[2]}")
+                    logger.info(
+                        f"{db_name}: checkpoint complete - busy={row[0]}, log={row[1]}, checkpointed={row[2]}"
+                    )
             except Exception as e:
                 logger.warning(f"Checkpoint failed for {db_name}: {e}")
 
@@ -244,7 +255,9 @@ async def _cleanup_old_daily_prices_internal():
 
     try:
         db_manager = get_db_manager()
-        cutoff = (datetime.now() - timedelta(days=settings.daily_price_retention_days)).strftime("%Y-%m-%d")
+        cutoff = (
+            datetime.now() - timedelta(days=settings.daily_price_retention_days)
+        ).strftime("%Y-%m-%d")
 
         # Get all active symbols
         cursor = await db_manager.config.execute(
@@ -259,16 +272,14 @@ async def _cleanup_old_daily_prices_internal():
 
                 # Count records to be deleted
                 cursor = await history_db.execute(
-                    "SELECT COUNT(*) FROM daily_prices WHERE date < ?",
-                    (cutoff,)
+                    "SELECT COUNT(*) FROM daily_prices WHERE date < ?", (cutoff,)
                 )
                 row = await cursor.fetchone()
                 delete_count = row[0] if row else 0
 
                 if delete_count > 0:
                     await history_db.execute(
-                        "DELETE FROM daily_prices WHERE date < ?",
-                        (cutoff,)
+                        "DELETE FROM daily_prices WHERE date < ?", (cutoff,)
                     )
                     await history_db.commit()
                     total_deleted += delete_count
@@ -276,7 +287,9 @@ async def _cleanup_old_daily_prices_internal():
                 logger.warning(f"Cleanup failed for {symbol}: {e}")
 
         if total_deleted > 0:
-            logger.info(f"Deleted {total_deleted} old daily price records (before {cutoff})")
+            logger.info(
+                f"Deleted {total_deleted} old daily price records (before {cutoff})"
+            )
         else:
             logger.info("No old daily price records to clean up")
 
@@ -352,23 +365,25 @@ async def _cleanup_old_snapshots_internal():
 
     try:
         db_manager = get_db_manager()
-        cutoff = (datetime.now() - timedelta(days=settings.snapshot_retention_days)).strftime("%Y-%m-%d")
+        cutoff = (
+            datetime.now() - timedelta(days=settings.snapshot_retention_days)
+        ).strftime("%Y-%m-%d")
 
         # Count records to be deleted
         cursor = await db_manager.state.execute(
-            "SELECT COUNT(*) FROM portfolio_snapshots WHERE date < ?",
-            (cutoff,)
+            "SELECT COUNT(*) FROM portfolio_snapshots WHERE date < ?", (cutoff,)
         )
         row = await cursor.fetchone()
         delete_count = row[0] if row else 0
 
         if delete_count > 0:
             await db_manager.state.execute(
-                "DELETE FROM portfolio_snapshots WHERE date < ?",
-                (cutoff,)
+                "DELETE FROM portfolio_snapshots WHERE date < ?", (cutoff,)
             )
             await db_manager.state.commit()
-            logger.info(f"Deleted {delete_count} old portfolio snapshots (before {cutoff})")
+            logger.info(
+                f"Deleted {delete_count} old portfolio snapshots (before {cutoff})"
+            )
         else:
             logger.info("No old portfolio snapshots to clean up")
 

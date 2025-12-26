@@ -34,4 +34,3 @@ def get_yahoo_symbol(tradernet_symbol: str, yahoo_override: str = None) -> str:
         return symbol[:-3] + ".AT"
 
     return symbol
-

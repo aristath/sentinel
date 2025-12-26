@@ -7,10 +7,10 @@ Components:
 """
 
 import logging
-from typing import Optional, List, Dict
+from typing import Dict, List, Optional
 
-from app.domain.scoring.calculations import calculate_cagr
 from app.domain.responses import ScoreResult
+from app.domain.scoring.calculations import calculate_cagr
 
 logger = logging.getLogger(__name__)
 
@@ -49,11 +49,7 @@ def calculate_financial_strength_score(fundamentals) -> float:
     cr = min(3, fundamentals.current_ratio or 1)
     cr_score = min(1.0, cr / 2)
 
-    return (
-        margin_score * 0.40 +
-        de_score * 0.30 +
-        cr_score * 0.30
-    )
+    return margin_score * 0.40 + de_score * 0.30 + cr_score * 0.30
 
 
 def calculate_consistency_score(cagr_5y: float, cagr_10y: Optional[float]) -> float:
@@ -132,8 +128,8 @@ async def calculate_fundamentals_score(
 
     # Combine with internal weights
     total = (
-        financial_score * WEIGHT_FINANCIAL_STRENGTH +
-        consistency_score * WEIGHT_CONSISTENCY
+        financial_score * WEIGHT_FINANCIAL_STRENGTH
+        + consistency_score * WEIGHT_CONSISTENCY
     )
 
     sub_components = {
@@ -141,7 +137,4 @@ async def calculate_fundamentals_score(
         "consistency": round(consistency_score, 3),
     }
 
-    return ScoreResult(
-        score=round(min(1.0, total), 3),
-        sub_scores=sub_components
-    )
+    return ScoreResult(score=round(min(1.0, total), 3), sub_scores=sub_components)

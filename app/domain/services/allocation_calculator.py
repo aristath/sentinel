@@ -4,20 +4,19 @@ import logging
 from typing import Optional
 
 from app.config import settings
-from app.domain.constants import (
-    MIN_CONVICTION_MULTIPLIER,
-    MAX_CONVICTION_MULTIPLIER,
-    MIN_PRIORITY_MULTIPLIER,
-    MAX_PRIORITY_MULTIPLIER,
-    MIN_VOLATILITY_MULTIPLIER,
-    MAX_POSITION_SIZE_MULTIPLIER,
-    # Risk parity constants
-    TARGET_PORTFOLIO_VOLATILITY,
-    MIN_VOLATILITY_FOR_SIZING,
-    MAX_VOL_WEIGHT,
-    MIN_VOL_WEIGHT,
+from app.domain.constants import (  # Risk parity constants
     DEFAULT_VOLATILITY,
+    MAX_CONVICTION_MULTIPLIER,
+    MAX_POSITION_SIZE_MULTIPLIER,
+    MAX_PRIORITY_MULTIPLIER,
+    MAX_VOL_WEIGHT,
+    MIN_CONVICTION_MULTIPLIER,
+    MIN_PRIORITY_MULTIPLIER,
+    MIN_VOL_WEIGHT,
+    MIN_VOLATILITY_FOR_SIZING,
+    MIN_VOLATILITY_MULTIPLIER,
     REBALANCE_BAND_PCT,
+    TARGET_PORTFOLIO_VOLATILITY,
 )
 from app.domain.models import StockPriority
 
@@ -25,9 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 def is_outside_rebalance_band(
-    current_weight: float,
-    target_weight: float,
-    band_pct: float = REBALANCE_BAND_PCT
+    current_weight: float, target_weight: float, band_pct: float = REBALANCE_BAND_PCT
 ) -> bool:
     """
     Check if a position has drifted enough from target to warrant rebalancing.
@@ -82,15 +79,21 @@ def calculate_position_size(
     """
     # Conviction multiplier based on stock score
     conviction_mult = MIN_CONVICTION_MULTIPLIER + (candidate.stock_score - 0.5) * 0.8
-    conviction_mult = max(MIN_CONVICTION_MULTIPLIER, min(MAX_CONVICTION_MULTIPLIER, conviction_mult))
+    conviction_mult = max(
+        MIN_CONVICTION_MULTIPLIER, min(MAX_CONVICTION_MULTIPLIER, conviction_mult)
+    )
 
     # Priority multiplier based on combined priority
     priority_mult = MIN_PRIORITY_MULTIPLIER + (candidate.combined_priority / 3.0) * 0.2
-    priority_mult = max(MIN_PRIORITY_MULTIPLIER, min(MAX_PRIORITY_MULTIPLIER, priority_mult))
+    priority_mult = max(
+        MIN_PRIORITY_MULTIPLIER, min(MAX_PRIORITY_MULTIPLIER, priority_mult)
+    )
 
     # Volatility penalty (if available)
     if candidate.volatility is not None:
-        vol_mult = max(MIN_VOLATILITY_MULTIPLIER, 1.0 - (candidate.volatility - 0.15) * 0.5)
+        vol_mult = max(
+            MIN_VOLATILITY_MULTIPLIER, 1.0 - (candidate.volatility - 0.15) * 0.5
+        )
     else:
         vol_mult = 1.0
 
@@ -166,10 +169,7 @@ def get_max_trades(cash: float, min_trade_amount: float = 250.0) -> int:
     """
     if cash < min_trade_amount:
         return 0
-    return min(
-        settings.max_trades_per_cycle,
-        int(cash / min_trade_amount)
-    )
+    return min(settings.max_trades_per_cycle, int(cash / min_trade_amount))
 
 
 # Removed calculate_rebalance_trades() - use RebalancingService.calculate_rebalance_trades() instead

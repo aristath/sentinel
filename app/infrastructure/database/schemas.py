@@ -162,7 +162,7 @@ async def init_config_schema(db):
                 """INSERT OR IGNORE INTO allocation_targets
                    (type, name, target_pct, created_at, updated_at)
                    VALUES (?, ?, ?, ?, ?)""",
-                (type_, name, target, now, now)
+                (type_, name, target, now, now),
             )
 
         # Insert default settings
@@ -171,7 +171,7 @@ async def init_config_schema(db):
                 """INSERT OR IGNORE INTO settings
                    (key, value, description, updated_at)
                    VALUES (?, ?, ?, ?)""",
-                (key, value, desc, now)
+                (key, value, desc, now),
             )
 
         # Create portfolio_hash indexes for new installs
@@ -186,20 +186,24 @@ async def init_config_schema(db):
         # Record schema version
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (3, now, "Initial config schema with portfolio_hash recommendations")
+            (3, now, "Initial config schema with portfolio_hash recommendations"),
         )
 
         await db.commit()
-        logger.info("Config database initialized with schema version 3 (includes portfolio_hash recommendations)")
+        logger.info(
+            "Config database initialized with schema version 3 (includes portfolio_hash recommendations)"
+        )
     elif current_version == 1:
         # Migration: Add recommendations table (version 1 -> 2)
         now = datetime.now().isoformat()
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (2, now, "Added recommendations table for storage and dismissal tracking")
+            (2, now, "Added recommendations table for storage and dismissal tracking"),
         )
         await db.commit()
-        logger.info("Config database migrated to schema version 2 (recommendations table)")
+        logger.info(
+            "Config database migrated to schema version 2 (recommendations table)"
+        )
         current_version = 2  # Continue to next migration
 
     if current_version == 2:
@@ -214,7 +218,8 @@ async def init_config_schema(db):
         if "portfolio_hash" not in columns:
             # SQLite doesn't support DROP CONSTRAINT, need table recreation
             # Create new table with correct schema
-            await db.execute("""
+            await db.execute(
+                """
                 CREATE TABLE IF NOT EXISTS recommendations_new (
                     uuid TEXT PRIMARY KEY,
                     symbol TEXT NOT NULL,
@@ -240,21 +245,26 @@ async def init_config_schema(db):
                     dismissed_at TEXT,
                     UNIQUE(symbol, side, reason, portfolio_hash)
                 )
-            """)
+            """
+            )
 
             # Copy data (old recommendations get empty hash, will be regenerated)
-            await db.execute("""
+            await db.execute(
+                """
                 INSERT OR IGNORE INTO recommendations_new
                 SELECT uuid, symbol, name, side, amount, quantity, estimated_price,
                        estimated_value, reason, geography, industry, currency, priority,
                        current_portfolio_score, new_portfolio_score, score_change,
                        status, '', created_at, updated_at, executed_at, dismissed_at
                 FROM recommendations
-            """)
+            """
+            )
 
             # Swap tables
             await db.execute("DROP TABLE recommendations")
-            await db.execute("ALTER TABLE recommendations_new RENAME TO recommendations")
+            await db.execute(
+                "ALTER TABLE recommendations_new RENAME TO recommendations"
+            )
 
             # Recreate indexes
             await db.execute(
@@ -276,7 +286,11 @@ async def init_config_schema(db):
 
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (3, now, "Added portfolio_hash, changed unique constraint to (symbol, side, reason, portfolio_hash)")
+            (
+                3,
+                now,
+                "Added portfolio_hash, changed unique constraint to (symbol, side, reason, portfolio_hash)",
+            ),
         )
         await db.commit()
         logger.info("Config database migrated to schema version 3 (portfolio_hash)")
@@ -374,19 +388,23 @@ async def init_ledger_schema(db):
         now = datetime.now().isoformat()
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (2, now, "Initial ledger schema with dividend_history")
+            (2, now, "Initial ledger schema with dividend_history"),
         )
         await db.commit()
-        logger.info("Ledger database initialized with schema version 2 (includes dividend_history)")
+        logger.info(
+            "Ledger database initialized with schema version 2 (includes dividend_history)"
+        )
     elif current_version == 1:
         # Migration: Add dividend_history table (version 1 -> 2)
         now = datetime.now().isoformat()
-        logger.info("Migrating ledger database to schema version 2 (dividend_history)...")
+        logger.info(
+            "Migrating ledger database to schema version 2 (dividend_history)..."
+        )
 
         # Table is created by executescript above (CREATE IF NOT EXISTS)
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (2, now, "Added dividend_history table for DRIP tracking")
+            (2, now, "Added dividend_history table for DRIP tracking"),
         )
         await db.commit()
         logger.info("Ledger database migrated to schema version 2")
@@ -484,7 +502,7 @@ async def init_state_schema(db):
         now = datetime.now().isoformat()
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (1, now, "Initial state schema")
+            (1, now, "Initial state schema"),
         )
         await db.commit()
         logger.info("State database initialized with schema version 1")
@@ -571,7 +589,7 @@ async def init_cache_schema(db):
         now = datetime.now().isoformat()
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (2, now, "Initial cache schema with recommendation and analytics cache")
+            (2, now, "Initial cache schema with recommendation and analytics cache"),
         )
         await db.commit()
         logger.info("Cache database initialized with schema version 2")
@@ -583,7 +601,7 @@ async def init_cache_schema(db):
         # Tables are created by executescript above (CREATE IF NOT EXISTS)
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (2, now, "Added recommendation_cache and analytics_cache tables")
+            (2, now, "Added recommendation_cache and analytics_cache tables"),
         )
         await db.commit()
         logger.info("Cache database migrated to schema version 2")
@@ -639,7 +657,7 @@ async def init_history_schema(db):
         now = datetime.now().isoformat()
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (1, now, "Initial history schema")
+            (1, now, "Initial history schema"),
         )
         await db.commit()
         logger.info("History database initialized with schema version 1")
@@ -685,7 +703,7 @@ async def init_calculations_schema(db):
         now = datetime.now().isoformat()
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (1, now, "Initial calculations schema")
+            (1, now, "Initial calculations schema"),
         )
         await db.commit()
         logger.info("Calculations database initialized with schema version 1")

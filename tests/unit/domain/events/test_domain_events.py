@@ -1,19 +1,21 @@
 """Tests for domain events."""
 
-import pytest
 from datetime import datetime
+
+import pytest
+
 from app.domain.events import (
     DomainEvent,
-    TradeExecutedEvent,
+    DomainEventBus,
     PositionUpdatedEvent,
     RecommendationCreatedEvent,
     StockAddedEvent,
-    DomainEventBus,
+    TradeExecutedEvent,
 )
-from app.domain.models import Trade, Position, Recommendation, Stock
-from app.domain.value_objects.trade_side import TradeSide
+from app.domain.models import Position, Recommendation, Stock, Trade
 from app.domain.value_objects.currency import Currency
 from app.domain.value_objects.recommendation_status import RecommendationStatus
+from app.domain.value_objects.trade_side import TradeSide
 
 
 class TestDomainEvents:
@@ -25,8 +27,10 @@ class TestDomainEvents:
         from app.domain.events.stock_events import StockAddedEvent
         from app.domain.models import Stock
         from app.domain.value_objects.currency import Currency
-        
-        stock = Stock(symbol="AAPL.US", name="Apple Inc.", geography="US", currency=Currency.USD)
+
+        stock = Stock(
+            symbol="AAPL.US", name="Apple Inc.", geography="US", currency=Currency.USD
+        )
         event = StockAddedEvent(stock=stock)
         assert event.occurred_at is not None
 
@@ -41,9 +45,9 @@ class TestDomainEvents:
             order_id="ORD123",
             currency=Currency.USD,
         )
-        
+
         event = TradeExecutedEvent(trade=trade)
-        
+
         assert event.trade == trade
         assert event.symbol == "AAPL.US"
         assert event.side == TradeSide.BUY
@@ -58,9 +62,9 @@ class TestDomainEvents:
             avg_price=150.0,
             currency=Currency.USD,
         )
-        
+
         event = PositionUpdatedEvent(position=position)
-        
+
         assert event.position == position
         assert event.symbol == "AAPL.US"
         assert event.quantity == 10.0
@@ -78,9 +82,9 @@ class TestDomainEvents:
             geography="US",
             currency=Currency.USD,
         )
-        
+
         event = RecommendationCreatedEvent(recommendation=recommendation)
-        
+
         assert event.recommendation == recommendation
         assert event.symbol == "AAPL.US"
         assert event.side == TradeSide.BUY
@@ -93,9 +97,9 @@ class TestDomainEvents:
             geography="US",
             currency=Currency.USD,
         )
-        
+
         event = StockAddedEvent(stock=stock)
-        
+
         assert event.stock == stock
         assert event.symbol == "AAPL.US"
 
@@ -107,12 +111,12 @@ class TestDomainEventBus:
         """Test subscribing to events and publishing them."""
         bus = DomainEventBus()
         events_received = []
-        
+
         def handler(event: DomainEvent):
             events_received.append(event)
-        
+
         bus.subscribe(TradeExecutedEvent, handler)
-        
+
         trade = Trade(
             symbol="AAPL.US",
             side=TradeSide.BUY,
@@ -122,9 +126,9 @@ class TestDomainEventBus:
             currency=Currency.USD,
         )
         event = TradeExecutedEvent(trade=trade)
-        
+
         bus.publish(event)
-        
+
         assert len(events_received) == 1
         assert events_received[0] == event
 
@@ -133,16 +137,16 @@ class TestDomainEventBus:
         bus = DomainEventBus()
         handler1_events = []
         handler2_events = []
-        
+
         def handler1(event: DomainEvent):
             handler1_events.append(event)
-        
+
         def handler2(event: DomainEvent):
             handler2_events.append(event)
-        
+
         bus.subscribe(TradeExecutedEvent, handler1)
         bus.subscribe(TradeExecutedEvent, handler2)
-        
+
         trade = Trade(
             symbol="AAPL.US",
             side=TradeSide.BUY,
@@ -152,9 +156,9 @@ class TestDomainEventBus:
             currency=Currency.USD,
         )
         event = TradeExecutedEvent(trade=trade)
-        
+
         bus.publish(event)
-        
+
         assert len(handler1_events) == 1
         assert len(handler2_events) == 1
 
@@ -162,13 +166,13 @@ class TestDomainEventBus:
         """Test unsubscribing from events."""
         bus = DomainEventBus()
         events_received = []
-        
+
         def handler(event: DomainEvent):
             events_received.append(event)
-        
+
         bus.subscribe(TradeExecutedEvent, handler)
         bus.unsubscribe(TradeExecutedEvent, handler)
-        
+
         trade = Trade(
             symbol="AAPL.US",
             side=TradeSide.BUY,
@@ -178,9 +182,9 @@ class TestDomainEventBus:
             currency=Currency.USD,
         )
         event = TradeExecutedEvent(trade=trade)
-        
+
         bus.publish(event)
-        
+
         assert len(events_received) == 0
 
     def test_handler_exception_does_not_stop_others(self):
@@ -188,19 +192,19 @@ class TestDomainEventBus:
         bus = DomainEventBus()
         handler1_called = False
         handler2_called = False
-        
+
         def handler1(event: DomainEvent):
             nonlocal handler1_called
             handler1_called = True
             raise ValueError("Handler error")
-        
+
         def handler2(event: DomainEvent):
             nonlocal handler2_called
             handler2_called = True
-        
+
         bus.subscribe(TradeExecutedEvent, handler1)
         bus.subscribe(TradeExecutedEvent, handler2)
-        
+
         trade = Trade(
             symbol="AAPL.US",
             side=TradeSide.BUY,
@@ -210,10 +214,9 @@ class TestDomainEventBus:
             currency=Currency.USD,
         )
         event = TradeExecutedEvent(trade=trade)
-        
+
         # Should not raise exception
         bus.publish(event)
-        
+
         assert handler1_called is True
         assert handler2_called is True
-

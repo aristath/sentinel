@@ -32,7 +32,7 @@ class HistoryRepository:
             ORDER BY date DESC
             LIMIT ?
             """,
-            (limit,)
+            (limit,),
         )
         return [self._row_to_daily(row) for row in rows]
 
@@ -45,16 +45,14 @@ class HistoryRepository:
             WHERE date >= ? AND date <= ?
             ORDER BY date ASC
             """,
-            (start_date, end_date)
+            (start_date, end_date),
         )
         return [self._row_to_daily(row) for row in rows]
 
     async def get_latest_price(self) -> Optional[DailyPrice]:
         """Get most recent daily price."""
         db = await self._get_db()
-        row = await db.fetchone(
-            "SELECT * FROM daily_prices ORDER BY date DESC LIMIT 1"
-        )
+        row = await db.fetchone("SELECT * FROM daily_prices ORDER BY date DESC LIMIT 1")
         if not row:
             return None
         return self._row_to_daily(row)
@@ -81,7 +79,7 @@ class HistoryRepository:
                     price.volume,
                     price.source,
                     now,
-                )
+                ),
             )
 
     async def upsert_daily_batch(self, prices: List[DailyPrice]) -> int:
@@ -110,7 +108,7 @@ class HistoryRepository:
                         price.volume,
                         price.source,
                         now,
-                    )
+                    ),
                 )
 
         return len(prices)
@@ -124,7 +122,7 @@ class HistoryRepository:
             ORDER BY year_month DESC
             LIMIT ?
             """,
-            (limit,)
+            (limit,),
         )
         return [self._row_to_monthly(row) for row in rows]
 
@@ -149,7 +147,7 @@ class HistoryRepository:
                     price.max_price,
                     price.source,
                     now,
-                )
+                ),
             )
 
     async def aggregate_to_monthly(self) -> int:
@@ -173,7 +171,7 @@ class HistoryRepository:
                 FROM daily_prices
                 GROUP BY strftime('%Y-%m', date)
                 """,
-                (now,)
+                (now,),
             )
             return cursor.rowcount
 
@@ -182,18 +180,14 @@ class HistoryRepository:
         db = await self._get_db()
 
         cursor = await db.execute(
-            "SELECT COUNT(*) as cnt FROM daily_prices WHERE date < ?",
-            (date,)
+            "SELECT COUNT(*) as cnt FROM daily_prices WHERE date < ?", (date,)
         )
         row = await cursor.fetchone()
         count = row["cnt"] if row else 0
 
         if count > 0:
             async with db.transaction() as conn:
-                await conn.execute(
-                    "DELETE FROM daily_prices WHERE date < ?",
-                    (date,)
-                )
+                await conn.execute("DELETE FROM daily_prices WHERE date < ?", (date,))
 
         return count
 

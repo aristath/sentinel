@@ -3,10 +3,10 @@
 Orchestrates portfolio operations using repositories and domain services.
 """
 
-from app.repositories import PortfolioRepository
-from app.domain.repositories.protocols import IPositionRepository, IAllocationRepository
 from app.domain.models import AllocationStatus, PortfolioSummary
+from app.domain.repositories.protocols import IAllocationRepository, IPositionRepository
 from app.domain.services.allocation_calculator import parse_industries
+from app.repositories import PortfolioRepository
 
 
 class PortfolioService:
@@ -83,14 +83,18 @@ class PortfolioService:
             current_val = geo_values.get(geo, 0)
             current_pct = current_val / total_value if total_value > 0 else 0
 
-            geo_allocations.append(AllocationStatus(
-                category="geography",
-                name=geo,
-                target_pct=weight,  # Now stores weight, not percentage
-                current_pct=round(current_pct, 4),
-                current_value=round(current_val, 2),
-                deviation=round(current_pct - weight, 4),  # Deviation still computed for display
-            ))
+            geo_allocations.append(
+                AllocationStatus(
+                    category="geography",
+                    name=geo,
+                    target_pct=weight,  # Now stores weight, not percentage
+                    current_pct=round(current_pct, 4),
+                    current_value=round(current_val, 2),
+                    deviation=round(
+                        current_pct - weight, 4
+                    ),  # Deviation still computed for display
+                )
+            )
 
         # Build dynamic industry list from targets + actual positions
         all_industries = set()
@@ -110,14 +114,18 @@ class PortfolioService:
             current_val = industry_values.get(industry, 0)
             current_pct = current_val / total_value if total_value > 0 else 0
 
-            industry_allocations.append(AllocationStatus(
-                category="industry",
-                name=industry,
-                target_pct=weight,  # Now stores weight, not percentage
-                current_pct=round(current_pct, 4),
-                current_value=round(current_val, 2),
-                deviation=round(current_pct - weight, 4),  # Deviation still computed for display
-            ))
+            industry_allocations.append(
+                AllocationStatus(
+                    category="industry",
+                    name=industry,
+                    target_pct=weight,  # Now stores weight, not percentage
+                    current_pct=round(current_pct, 4),
+                    current_value=round(current_val, 2),
+                    deviation=round(
+                        current_pct - weight, 4
+                    ),  # Deviation still computed for display
+                )
+            )
 
         return PortfolioSummary(
             total_value=round(total_value, 2),
@@ -125,4 +133,3 @@ class PortfolioService:
             geographic_allocations=geo_allocations,
             industry_allocations=industry_allocations,
         )
-

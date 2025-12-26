@@ -1,13 +1,14 @@
 """Unit tests for TradeSafetyService."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 from fastapi import HTTPException
 
 from app.application.services.trade_safety_service import TradeSafetyService
-from app.repositories import TradeRepository, PositionRepository
-from app.infrastructure.external.tradernet import TradernetClient
 from app.domain.value_objects.trade_side import TradeSide
+from app.infrastructure.external.tradernet import TradernetClient
+from app.repositories import PositionRepository, TradeRepository
 
 
 @pytest.fixture
@@ -61,7 +62,9 @@ async def test_check_pending_orders_broker_has_pending(safety_service, mock_clie
 
 
 @pytest.mark.asyncio
-async def test_check_pending_orders_recent_sell_in_db(safety_service, mock_client, mock_trade_repo):
+async def test_check_pending_orders_recent_sell_in_db(
+    safety_service, mock_client, mock_trade_repo
+):
     """Test checking pending orders when recent SELL exists in database."""
     mock_trade_repo.has_recent_sell_order.return_value = True
     result = await safety_service.check_pending_orders(
@@ -101,14 +104,10 @@ async def test_check_cooldown_ignores_sell(safety_service):
 async def test_validate_sell_position_sufficient(safety_service, mock_position_repo):
     """Test SELL position validation when position is sufficient."""
     from app.domain.models import Position
-    
-    position = Position(
-        symbol="AAPL.US",
-        quantity=100.0,
-        avg_price=150.0
-    )
+
+    position = Position(symbol="AAPL.US", quantity=100.0, avg_price=150.0)
     mock_position_repo.get_by_symbol = AsyncMock(return_value=position)
-    
+
     is_valid, error = await safety_service.validate_sell_position("AAPL.US", 50.0)
     assert is_valid is True
     assert error is None
@@ -118,14 +117,10 @@ async def test_validate_sell_position_sufficient(safety_service, mock_position_r
 async def test_validate_sell_position_insufficient(safety_service, mock_position_repo):
     """Test SELL position validation when position is insufficient."""
     from app.domain.models import Position
-    
-    position = Position(
-        symbol="AAPL.US",
-        quantity=100.0,
-        avg_price=150.0
-    )
+
+    position = Position(symbol="AAPL.US", quantity=100.0, avg_price=150.0)
     mock_position_repo.get_by_symbol = AsyncMock(return_value=position)
-    
+
     is_valid, error = await safety_service.validate_sell_position("AAPL.US", 150.0)
     assert is_valid is False
     assert "exceeds position" in error
@@ -135,7 +130,7 @@ async def test_validate_sell_position_insufficient(safety_service, mock_position
 async def test_validate_sell_position_no_position(safety_service, mock_position_repo):
     """Test SELL position validation when no position exists."""
     mock_position_repo.get_by_symbol = AsyncMock(return_value=None)
-    
+
     is_valid, error = await safety_service.validate_sell_position("AAPL.US", 50.0)
     assert is_valid is False
     assert "No position found" in error
@@ -152,14 +147,15 @@ async def test_validate_trade_success(safety_service, mock_client):
 
 
 @pytest.mark.asyncio
-async def test_validate_trade_raises_on_error(safety_service, mock_client, mock_trade_repo):
+async def test_validate_trade_raises_on_error(
+    safety_service, mock_client, mock_trade_repo
+):
     """Test that validate_trade raises HTTPException when raise_on_error=True."""
     mock_trade_repo.get_recently_bought_symbols.return_value = {"AAPL.US"}
-    
+
     with pytest.raises(HTTPException) as exc_info:
         await safety_service.validate_trade(
             "AAPL.US", TradeSide.BUY, 10.0, mock_client, raise_on_error=True
         )
-    
-    assert exc_info.value.status_code == 400
 
+    assert exc_info.value.status_code == 400

@@ -1,14 +1,15 @@
 """Integration tests for concurrent job execution and locking."""
 
-import pytest
 import asyncio
-from pathlib import Path
-import tempfile
 import os
+import tempfile
 from datetime import datetime
+from pathlib import Path
 
-from app.infrastructure.locking import file_lock
+import pytest
+
 from app.domain.models import Position, Stock, Trade
+from app.infrastructure.locking import file_lock
 from app.repositories import PositionRepository, StockRepository, TradeRepository
 
 
@@ -34,8 +35,12 @@ async def test_file_lock_prevents_concurrent_execution():
     await asyncio.gather(operation1(), operation2())
 
     # Operations should not interleave
-    assert execution_order == ["start1", "end1", "start2", "end2"] or \
-           execution_order == ["start2", "end2", "start1", "end1"]
+    assert execution_order == [
+        "start1",
+        "end1",
+        "start2",
+        "end2",
+    ] or execution_order == ["start2", "end2", "start1", "end1"]
 
 
 @pytest.mark.asyncio
@@ -164,4 +169,3 @@ async def test_concurrent_trade_execution_atomicity(db):
 
 
 # Lock directory setup is handled in conftest.py
-

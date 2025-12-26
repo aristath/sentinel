@@ -3,12 +3,12 @@
 Functions to calculate how much of a position should be sold based on scores.
 """
 
-from app.domain.services.trade_sizing_service import TradeSizingService
 from app.domain.scoring.constants import (
     DEFAULT_MIN_SELL_VALUE_EUR,
-    MIN_SELL_PCT,
     MAX_SELL_PCT,
+    MIN_SELL_PCT,
 )
+from app.domain.services.trade_sizing_service import TradeSizingService
 
 
 def determine_sell_quantity(
@@ -16,7 +16,7 @@ def determine_sell_quantity(
     quantity: float,
     min_lot: int,
     current_price: float,
-    min_sell_value: float = DEFAULT_MIN_SELL_VALUE_EUR
+    min_sell_value: float = DEFAULT_MIN_SELL_VALUE_EUR,
 ) -> tuple:
     """
     Determine how much to sell based on score.
@@ -52,4 +52,3 @@ def determine_sell_quantity(
         sell_pct = sell_quantity / quantity if quantity > 0 else 0
 
     return sell_quantity, sell_pct
-

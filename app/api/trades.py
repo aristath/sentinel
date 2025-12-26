@@ -1,19 +1,21 @@
 """Trade execution API endpoints."""
 
 import logging
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
+
 from app.domain.value_objects.trade_side import TradeSide
-from app.infrastructure.dependencies import (
-    StockRepositoryDep,
-    PositionRepositoryDep,
-    TradeRepositoryDep,
-    TradeSafetyServiceDep,
-    TradeExecutionServiceDep,
-    PortfolioServiceDep,
-)
 from app.infrastructure.cache import cache
 from app.infrastructure.cache_invalidation import get_cache_invalidation_service
+from app.infrastructure.dependencies import (
+    PortfolioServiceDep,
+    PositionRepositoryDep,
+    StockRepositoryDep,
+    TradeExecutionServiceDep,
+    TradeRepositoryDep,
+    TradeSafetyServiceDep,
+)
 from app.infrastructure.external.tradernet_connection import ensure_tradernet_connected
 
 logger = logging.getLogger(__name__)
@@ -23,15 +25,17 @@ router = APIRouter()
 class TradeRequest(BaseModel):
     symbol: str = Field(..., min_length=1, description="Stock symbol")
     side: TradeSide = Field(..., description="Trade side: BUY or SELL")
-    quantity: float = Field(..., gt=0, description="Quantity to trade (must be positive)")
+    quantity: float = Field(
+        ..., gt=0, description="Quantity to trade (must be positive)"
+    )
 
-    @field_validator('symbol')
+    @field_validator("symbol")
     @classmethod
     def validate_symbol(cls, v: str) -> str:
         """Validate and normalize symbol."""
         return v.upper().strip()
 
-    @field_validator('quantity')
+    @field_validator("quantity")
     @classmethod
     def validate_quantity(cls, v: float) -> float:
         """Validate quantity is reasonable."""
@@ -82,7 +86,7 @@ async def execute_trade(
         side=trade.side,
         quantity=trade.quantity,
         client=client,
-        raise_on_error=True
+        raise_on_error=True,
     )
 
     result = client.place_order(
@@ -146,4 +150,3 @@ async def get_allocation(portfolio_service: PortfolioServiceDep):
             for a in summary.industry_allocations
         ],
     }
-

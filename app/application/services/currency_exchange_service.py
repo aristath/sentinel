@@ -7,7 +7,7 @@ import logging
 from dataclasses import dataclass
 from typing import List, Optional
 
-from app.infrastructure.external.tradernet import TradernetClient, OrderResult
+from app.infrastructure.external.tradernet import OrderResult, TradernetClient
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ExchangeRate:
     """Exchange rate data."""
+
     from_currency: str
     to_currency: str
     rate: float
@@ -26,6 +27,7 @@ class ExchangeRate:
 @dataclass
 class ConversionStep:
     """A single step in a currency conversion path."""
+
     from_currency: str
     to_currency: str
     symbol: str
@@ -45,19 +47,15 @@ class CurrencyExchangeService:
         # EUR <-> USD (ITS_MONEY market)
         ("EUR", "USD"): ("EURUSD_T0.ITS", "BUY"),
         ("USD", "EUR"): ("EURUSD_T0.ITS", "SELL"),
-
         # EUR <-> GBP (ITS_MONEY market)
         ("EUR", "GBP"): ("EURGBP_T0.ITS", "BUY"),
         ("GBP", "EUR"): ("EURGBP_T0.ITS", "SELL"),
-
         # GBP <-> USD (ITS_MONEY market)
         ("GBP", "USD"): ("GBPUSD_T0.ITS", "BUY"),
         ("USD", "GBP"): ("GBPUSD_T0.ITS", "SELL"),
-
         # HKD <-> EUR (MONEY market, EXANTE)
         ("EUR", "HKD"): ("HKD/EUR", "BUY"),
         ("HKD", "EUR"): ("HKD/EUR", "SELL"),
-
         # HKD <-> USD (MONEY market, EXANTE)
         ("USD", "HKD"): ("HKD/USD", "BUY"),
         ("HKD", "USD"): ("HKD/USD", "SELL"),
@@ -194,10 +192,7 @@ class CurrencyExchangeService:
             return None
 
     def exchange(
-        self,
-        from_currency: str,
-        to_currency: str,
-        amount: float
+        self, from_currency: str, to_currency: str, amount: float
     ) -> Optional[OrderResult]:
         """Execute a currency exchange.
 
@@ -242,7 +237,9 @@ class CurrencyExchangeService:
                 for step in path:
                     result = self._execute_step(step, current_amount)
                     if not result:
-                        logger.error(f"Failed at step {step.from_currency} -> {step.to_currency}")
+                        logger.error(
+                            f"Failed at step {step.from_currency} -> {step.to_currency}"
+                        )
                         return None
 
                     # Get the converted amount for next step
@@ -258,7 +255,9 @@ class CurrencyExchangeService:
             logger.error(f"Failed to exchange {from_curr} -> {to_curr}: {e}")
             return None
 
-    def _execute_step(self, step: ConversionStep, amount: float) -> Optional[OrderResult]:
+    def _execute_step(
+        self, step: ConversionStep, amount: float
+    ) -> Optional[OrderResult]:
         """Execute a single conversion step.
 
         Args:
@@ -280,10 +279,7 @@ class CurrencyExchangeService:
         )
 
     def ensure_balance(
-        self,
-        currency: str,
-        min_amount: float,
-        source_currency: str = "EUR"
+        self, currency: str, min_amount: float, source_currency: str = "EUR"
     ) -> bool:
         """Ensure we have at least min_amount in the target currency.
 
@@ -321,7 +317,9 @@ class CurrencyExchangeService:
                     source_balance = bal.amount
 
             if current_balance >= min_amount:
-                logger.info(f"Sufficient {currency} balance: {current_balance:.2f} >= {min_amount:.2f}")
+                logger.info(
+                    f"Sufficient {currency} balance: {current_balance:.2f} >= {min_amount:.2f}"
+                )
                 return True
 
             # Calculate how much we need to convert
@@ -388,6 +386,6 @@ def get_stock_currency(geography: str) -> str:
         "ASIA": "HKD",
         "UK": "GBP",
         "GREECE": "EUR",
-    }.get(geography.upper(), "EUR")  # Default to EUR for unknown geographies
-
-
+    }.get(
+        geography.upper(), "EUR"
+    )  # Default to EUR for unknown geographies

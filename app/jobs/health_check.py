@@ -11,12 +11,16 @@ Self-healing capabilities:
 """
 
 import logging
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 from app.config import settings
-from app.infrastructure.events import emit, SystemEvent
-from app.infrastructure.hardware.display_service import set_processing, clear_processing, set_error
+from app.infrastructure.events import SystemEvent, emit
+from app.infrastructure.hardware.display_service import (
+    clear_processing,
+    set_error,
+    set_processing,
+)
 from app.infrastructure.locking import file_lock
 
 logger = logging.getLogger(__name__)
@@ -54,12 +58,15 @@ async def _run_health_check_internal():
             if db_path.exists():
                 result = await _check_database_integrity(db_path)
                 if result != "ok":
-                    issues.append({
-                        "database": db_file,
-                        "description": description,
-                        "error": result,
-                        "recoverable": db_file == "cache.db",  # Only cache is rebuildable
-                    })
+                    issues.append(
+                        {
+                            "database": db_file,
+                            "description": description,
+                            "error": result,
+                            "recoverable": db_file
+                            == "cache.db",  # Only cache is rebuildable
+                        }
+                    )
                     logger.error(f"Integrity check failed for {db_file}: {result}")
 
                     if db_file == "cache.db":
@@ -75,12 +82,14 @@ async def _run_health_check_internal():
                 result = await _check_database_integrity(db_file)
                 if result != "ok":
                     symbol = db_file.stem
-                    issues.append({
-                        "database": f"history/{db_file.name}",
-                        "description": f"History for {symbol}",
-                        "error": result,
-                        "recoverable": True,
-                    })
+                    issues.append(
+                        {
+                            "database": f"history/{db_file.name}",
+                            "description": f"History for {symbol}",
+                            "error": result,
+                            "recoverable": True,
+                        }
+                    )
                     logger.error(f"Integrity check failed for {db_file.name}: {result}")
 
                     # Per-symbol databases can be rebuilt from Yahoo
@@ -91,12 +100,14 @@ async def _run_health_check_internal():
         if legacy_db.exists():
             result = await _check_database_integrity(legacy_db)
             if result != "ok":
-                issues.append({
-                    "database": "trader.db (legacy)",
-                    "description": "Legacy database",
-                    "error": result,
-                    "recoverable": False,
-                })
+                issues.append(
+                    {
+                        "database": "trader.db (legacy)",
+                        "description": "Legacy database",
+                        "error": result,
+                        "recoverable": False,
+                    }
+                )
                 logger.error(f"Integrity check failed for legacy database: {result}")
 
         # Report results
@@ -145,13 +156,16 @@ async def _rebuild_cache_db(db_path: Path):
 
     try:
         # Backup corrupted file
-        backup_path = db_path.with_suffix(f".corrupted.{datetime.now().strftime('%Y%m%d_%H%M%S')}.db")
+        backup_path = db_path.with_suffix(
+            f".corrupted.{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+        )
         db_path.rename(backup_path)
         logger.info(f"Backed up corrupted cache to: {backup_path}")
 
         # Create fresh cache database
-        from app.infrastructure.database.schemas import CACHE_SCHEMA
         import aiosqlite
+
+        from app.infrastructure.database.schemas import CACHE_SCHEMA
 
         async with aiosqlite.connect(str(db_path)) as db:
             await db.executescript(CACHE_SCHEMA)
@@ -176,13 +190,16 @@ async def _rebuild_symbol_history(db_path: Path, symbol: str):
 
     try:
         # Backup corrupted file
-        backup_path = db_path.with_suffix(f".corrupted.{datetime.now().strftime('%Y%m%d_%H%M%S')}.db")
+        backup_path = db_path.with_suffix(
+            f".corrupted.{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+        )
         db_path.rename(backup_path)
         logger.info(f"Backed up corrupted history to: {backup_path}")
 
         # Create fresh history database
-        from app.infrastructure.database.schemas import HISTORY_SCHEMA
         import aiosqlite
+
+        from app.infrastructure.database.schemas import HISTORY_SCHEMA
 
         async with aiosqlite.connect(str(db_path)) as db:
             await db.executescript(HISTORY_SCHEMA)
@@ -242,7 +259,9 @@ async def check_wal_status():
             wal_size_mb = wal_size / (1024 * 1024)
 
             if wal_size_mb > 10:  # WAL > 10MB
-                logger.warning(f"{db_file} WAL is {wal_size_mb:.1f}MB, running checkpoint...")
+                logger.warning(
+                    f"{db_file} WAL is {wal_size_mb:.1f}MB, running checkpoint..."
+                )
                 try:
                     async with aiosqlite.connect(str(db_path)) as db:
                         await db.execute("PRAGMA wal_checkpoint(TRUNCATE)")

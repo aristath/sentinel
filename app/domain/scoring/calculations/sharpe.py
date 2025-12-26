@@ -5,15 +5,14 @@ Pure calculation functions for risk-adjusted return metrics using empyrical.
 
 from typing import Optional
 
-import numpy as np
 import empyrical
+import numpy as np
 
 from app.domain.scoring.constants import TRADING_DAYS_PER_YEAR
 
 
 def calculate_sharpe_ratio(
-    closes: np.ndarray,
-    risk_free_rate: float = 0.0
+    closes: np.ndarray, risk_free_rate: float = 0.0
 ) -> Optional[float]:
     """
     Calculate Sharpe ratio using empyrical.
@@ -35,14 +34,13 @@ def calculate_sharpe_ratio(
     returns = np.diff(closes) / closes[:-1]
 
     try:
-        sharpe = float(empyrical.sharpe_ratio(
-            returns,
-            risk_free=risk_free_rate,
-            annualization=TRADING_DAYS_PER_YEAR
-        ))
+        sharpe = float(
+            empyrical.sharpe_ratio(
+                returns, risk_free=risk_free_rate, annualization=TRADING_DAYS_PER_YEAR
+            )
+        )
         if not np.isfinite(sharpe):
             return None
         return sharpe
     except Exception:
         return None
-

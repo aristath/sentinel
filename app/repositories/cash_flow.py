@@ -40,7 +40,7 @@ class CashFlowRepository:
                     cash_flow.description,
                     cash_flow.params_json,
                     now,
-                )
+                ),
             )
             cash_flow.id = cursor.lastrowid
             cash_flow.created_at = now
@@ -50,8 +50,7 @@ class CashFlowRepository:
     async def get_by_transaction_id(self, transaction_id: str) -> Optional[CashFlow]:
         """Get cash flow by transaction ID."""
         row = await self._db.fetchone(
-            "SELECT * FROM cash_flows WHERE transaction_id = ?",
-            (transaction_id,)
+            "SELECT * FROM cash_flows WHERE transaction_id = ?", (transaction_id,)
         )
         if not row:
             return None
@@ -60,8 +59,7 @@ class CashFlowRepository:
     async def exists(self, transaction_id: str) -> bool:
         """Check if cash flow with transaction_id already exists."""
         row = await self._db.fetchone(
-            "SELECT 1 FROM cash_flows WHERE transaction_id = ?",
-            (transaction_id,)
+            "SELECT 1 FROM cash_flows WHERE transaction_id = ?", (transaction_id,)
         )
         return row is not None
 
@@ -69,8 +67,7 @@ class CashFlowRepository:
         """Get all cash flows, optionally limited."""
         if limit:
             rows = await self._db.fetchall(
-                "SELECT * FROM cash_flows ORDER BY date DESC LIMIT ?",
-                (limit,)
+                "SELECT * FROM cash_flows ORDER BY date DESC LIMIT ?", (limit,)
             )
         else:
             rows = await self._db.fetchall(
@@ -86,7 +83,7 @@ class CashFlowRepository:
             WHERE date >= ? AND date <= ?
             ORDER BY date DESC
             """,
-            (start_date, end_date)
+            (start_date, end_date),
         )
         return [self._row_to_cash_flow(row) for row in rows]
 
@@ -98,7 +95,7 @@ class CashFlowRepository:
             WHERE transaction_type = ?
             ORDER BY date DESC
             """,
-            (transaction_type,)
+            (transaction_type,),
         )
         return [self._row_to_cash_flow(row) for row in rows]
 
@@ -166,15 +163,17 @@ class CashFlowRepository:
         )
         return row["total"] if row else 0.0
 
-    async def get_cash_balance_history(self, start_date: str, end_date: str, initial_cash: float = 0.0) -> List[dict]:
+    async def get_cash_balance_history(
+        self, start_date: str, end_date: str, initial_cash: float = 0.0
+    ) -> List[dict]:
         """
         Get cash balance history over time from cash flows.
-        
+
         Args:
             start_date: Start date (YYYY-MM-DD)
             end_date: End date (YYYY-MM-DD)
             initial_cash: Starting cash balance (default 0.0)
-        
+
         Returns:
             List of dicts with keys: date, cash_balance
         """
@@ -186,20 +185,20 @@ class CashFlowRepository:
             WHERE date >= ? AND date <= ?
             ORDER BY date ASC
             """,
-            (start_date, end_date)
+            (start_date, end_date),
         )
-        
+
         # Group by date and calculate net cash flow per day
         cash_flows_by_date = {}  # {date: net_amount}
-        
+
         for row in rows:
             date = row["date"]
             amount_eur = row["amount_eur"] or 0.0
             tx_type = (row["transaction_type"] or "").upper()
-            
+
             if date not in cash_flows_by_date:
                 cash_flows_by_date[date] = 0.0
-            
+
             # Deposits increase cash, withdrawals decrease cash
             if "DEPOSIT" in tx_type:
                 cash_flows_by_date[date] += amount_eur
@@ -208,21 +207,18 @@ class CashFlowRepository:
             # Dividends increase cash
             elif "DIVIDEND" in tx_type:
                 cash_flows_by_date[date] += amount_eur
-        
+
         # Calculate cumulative cash balance
         result = []
         current_cash = initial_cash
-        
+
         # Get all unique dates sorted
         all_dates = sorted(cash_flows_by_date.keys())
-        
+
         for date in all_dates:
             current_cash += cash_flows_by_date[date]
-            result.append({
-                "date": date,
-                "cash_balance": current_cash
-            })
-        
+            result.append({"date": date, "cash_balance": current_cash})
+
         return result
 
     def _row_to_cash_flow(self, row) -> CashFlow:

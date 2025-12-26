@@ -1,7 +1,7 @@
 """Position repository - CRUD operations for positions table."""
 
 from datetime import datetime
-from typing import List, Optional, Dict
+from typing import Dict, List, Optional
 
 from app.domain.models import Position
 from app.domain.value_objects.currency import Currency
@@ -14,15 +14,16 @@ class PositionRepository:
 
     def __init__(self, db=None):
         """Initialize repository.
-        
+
         Args:
             db: Optional database connection for testing. If None, uses get_db_manager().state
                 Can be a Database instance or raw aiosqlite.Connection (will be wrapped)
         """
         if db is not None:
             # If it's a raw connection without fetchone/fetchall, wrap it
-            if not hasattr(db, 'fetchone') and hasattr(db, 'execute'):
+            if not hasattr(db, "fetchone") and hasattr(db, "execute"):
                 from app.repositories.base import DatabaseAdapter
+
                 self._db = DatabaseAdapter(db)
             else:
                 self._db = db
@@ -33,8 +34,7 @@ class PositionRepository:
     async def get_by_symbol(self, symbol: str) -> Optional[Position]:
         """Get position by symbol."""
         row = await self._db.fetchone(
-            "SELECT * FROM positions WHERE symbol = ?",
-            (symbol.upper(),)
+            "SELECT * FROM positions WHERE symbol = ?", (symbol.upper(),)
         )
         if not row:
             return None
@@ -73,7 +73,7 @@ class PositionRepository:
                     position.last_updated or now,
                     position.first_bought_at,
                     position.last_sold_at,
-                )
+                ),
             )
 
     async def delete_all(self) -> None:
@@ -85,11 +85,12 @@ class PositionRepository:
         """Delete a specific position."""
         async with transaction_context(self._db) as conn:
             await conn.execute(
-                "DELETE FROM positions WHERE symbol = ?",
-                (symbol.upper(),)
+                "DELETE FROM positions WHERE symbol = ?", (symbol.upper(),)
             )
 
-    async def update_price(self, symbol: str, price: float, currency_rate: float = 1.0) -> None:
+    async def update_price(
+        self, symbol: str, price: float, currency_rate: float = 1.0
+    ) -> None:
         """Update current price and recalculate market value."""
         now = datetime.now().isoformat()
 
@@ -107,7 +108,16 @@ class PositionRepository:
                     last_updated = ?
                 WHERE symbol = ?
                 """,
-                (price, price, currency_rate, price, currency_rate, price, now, symbol.upper())
+                (
+                    price,
+                    price,
+                    currency_rate,
+                    price,
+                    currency_rate,
+                    price,
+                    now,
+                    symbol.upper(),
+                ),
             )
 
     async def update_last_sold_at(self, symbol: str) -> None:
@@ -117,7 +127,7 @@ class PositionRepository:
         async with transaction_context(self._db) as conn:
             await conn.execute(
                 "UPDATE positions SET last_sold_at = ? WHERE symbol = ?",
-                (now, symbol.upper())
+                (now, symbol.upper()),
             )
 
     async def get_total_value(self) -> float:
@@ -159,6 +169,7 @@ class PositionRepository:
             # Use stock currency if position doesn't have one
             if not pos_dict.get("currency"):
                 from app.domain.value_objects.currency import Currency
+
                 pos_dict["currency"] = stock.get("currency") or Currency.EUR
             result.append(pos_dict)
 
@@ -174,10 +185,20 @@ class PositionRepository:
             currency=row["currency"] or Currency.EUR,
             currency_rate=row["currency_rate"] or 1.0,
             market_value_eur=row["market_value_eur"],
-            cost_basis_eur=row["cost_basis_eur"] if "cost_basis_eur" in row.keys() else None,
-            unrealized_pnl=row["unrealized_pnl"] if "unrealized_pnl" in row.keys() else None,
-            unrealized_pnl_pct=row["unrealized_pnl_pct"] if "unrealized_pnl_pct" in row.keys() else None,
+            cost_basis_eur=(
+                row["cost_basis_eur"] if "cost_basis_eur" in row.keys() else None
+            ),
+            unrealized_pnl=(
+                row["unrealized_pnl"] if "unrealized_pnl" in row.keys() else None
+            ),
+            unrealized_pnl_pct=(
+                row["unrealized_pnl_pct"]
+                if "unrealized_pnl_pct" in row.keys()
+                else None
+            ),
             last_updated=row["last_updated"],
-            first_bought_at=row["first_bought_at"] if "first_bought_at" in row.keys() else None,
+            first_bought_at=(
+                row["first_bought_at"] if "first_bought_at" in row.keys() else None
+            ),
             last_sold_at=row["last_sold_at"] if "last_sold_at" in row.keys() else None,
         )

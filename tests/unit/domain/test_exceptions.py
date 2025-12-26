@@ -1,12 +1,13 @@
 """Tests for domain exceptions."""
 
 import pytest
+
 from app.domain.exceptions import (
+    CurrencyConversionError,
     DomainError,
-    StockNotFoundError,
     InsufficientFundsError,
     InvalidTradeError,
-    CurrencyConversionError,
+    StockNotFoundError,
     ValidationError,
 )
 
@@ -53,4 +54,3 @@ class TestDomainExceptions:
         """Test ValidationError."""
         error = ValidationError("Symbol cannot be empty")
         assert "Symbol cannot be empty" in str(error)
-

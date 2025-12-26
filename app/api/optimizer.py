@@ -3,23 +3,23 @@ Optimizer API - Provides portfolio optimization status and results.
 """
 
 from datetime import datetime
-from typing import Dict, Optional, Any
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, HTTPException
 
 from app.application.services.optimization.portfolio_optimizer import (
-    PortfolioOptimizer,
     OptimizationResult,
+    PortfolioOptimizer,
 )
+from app.domain.services.settings_service import SettingsService
+from app.infrastructure.external import yahoo_finance as yahoo
+from app.infrastructure.external.tradernet_client import TradernetClient
 from app.repositories import (
+    DividendRepository,
+    PositionRepository,
     SettingsRepository,
     StockRepository,
-    PositionRepository,
-    DividendRepository,
 )
-from app.infrastructure.external.tradernet_client import TradernetClient
-from app.infrastructure.external import yahoo_finance as yahoo
-from app.domain.services.settings_service import SettingsService
 
 router = APIRouter()
 
@@ -42,9 +42,9 @@ async def get_optimizer_status() -> Dict[str, Any]:
 
     # Calculate min trade amount from transaction costs
     from app.application.services.rebalancing_service import calculate_min_trade_amount
+
     min_trade_amount = calculate_min_trade_amount(
-        settings.transaction_cost_fixed,
-        settings.transaction_cost_percent
+        settings.transaction_cost_fixed, settings.transaction_cost_percent
     )
 
     response = {
@@ -60,7 +60,9 @@ async def get_optimizer_status() -> Dict[str, Any]:
 
     if _last_optimization_result:
         response["last_run"] = _last_optimization_result
-        response["last_run_time"] = _last_optimization_time.isoformat() if _last_optimization_time else None
+        response["last_run_time"] = (
+            _last_optimization_time.isoformat() if _last_optimization_time else None
+        )
 
     return response
 
@@ -95,7 +97,10 @@ async def run_optimization() -> Dict[str, Any]:
 
     # Calculate portfolio value
     portfolio_value = sum(
-        p.quantity * current_prices.get(p.symbol, p.market_value_eur / p.quantity if p.quantity > 0 else 0)
+        p.quantity
+        * current_prices.get(
+            p.symbol, p.market_value_eur / p.quantity if p.quantity > 0 else 0
+        )
         for p in positions_list
     )
 
@@ -145,20 +150,24 @@ async def run_optimization() -> Dict[str, Any]:
     }
 
 
-def _optimization_result_to_dict(result: OptimizationResult, portfolio_value: float) -> Dict[str, Any]:
+def _optimization_result_to_dict(
+    result: OptimizationResult, portfolio_value: float
+) -> Dict[str, Any]:
     """Convert OptimizationResult to a JSON-serializable dict."""
     # Get top 5 weight changes
     top_changes = []
     for wc in result.weight_changes[:5]:
         change_eur = wc.change * portfolio_value
-        top_changes.append({
-            "symbol": wc.symbol,
-            "current_pct": round(wc.current_weight * 100, 1),
-            "target_pct": round(wc.target_weight * 100, 1),
-            "change_pct": round(wc.change * 100, 1),
-            "change_eur": round(change_eur, 0),
-            "direction": "buy" if wc.change > 0 else "sell",
-        })
+        top_changes.append(
+            {
+                "symbol": wc.symbol,
+                "current_pct": round(wc.current_weight * 100, 1),
+                "target_pct": round(wc.target_weight * 100, 1),
+                "change_pct": round(wc.change * 100, 1),
+                "change_eur": round(change_eur, 0),
+                "direction": "buy" if wc.change > 0 else "sell",
+            }
+        )
 
     # Determine next action
     next_action = None
@@ -171,7 +180,11 @@ def _optimization_result_to_dict(result: OptimizationResult, portfolio_value: fl
         "success": result.success,
         "error": result.error,
         "target_return_pct": round(result.target_return * 100, 1),
-        "achieved_return_pct": round(result.achieved_expected_return * 100, 1) if result.achieved_expected_return else None,
+        "achieved_return_pct": (
+            round(result.achieved_expected_return * 100, 1)
+            if result.achieved_expected_return
+            else None
+        ),
         "blend_used": result.blend_used,
         "fallback_used": result.fallback_used,
         "total_stocks_optimized": len(result.target_weights),

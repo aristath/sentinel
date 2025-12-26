@@ -6,9 +6,9 @@ Calculates risk metrics for individual positions.
 import logging
 from typing import Dict
 
+import empyrical
 import numpy as np
 import pandas as pd
-import empyrical
 
 from app.repositories import HistoryRepository
 
@@ -16,9 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 async def get_position_risk_metrics(
-    symbol: str,
-    start_date: str,
-    end_date: str
+    symbol: str, start_date: str, end_date: str
 ) -> Dict[str, float]:
     """
     Calculate risk metrics for a specific position.
@@ -46,7 +44,7 @@ async def get_position_risk_metrics(
     try:
         history_repo = HistoryRepository(symbol)
         prices = await history_repo.get_daily_range(start_date, end_date)
-        
+
         if len(prices) < 2:
             return {
                 "sortino_ratio": 0.0,
@@ -54,11 +52,11 @@ async def get_position_risk_metrics(
                 "volatility": 0.0,
                 "max_drawdown": 0.0,
             }
-        
+
         # Calculate returns
         closes = [p.close_price for p in prices]
         returns = pd.Series(closes).pct_change().dropna()
-        
+
         if returns.empty:
             return {
                 "sortino_ratio": 0.0,
@@ -66,7 +64,7 @@ async def get_position_risk_metrics(
                 "volatility": 0.0,
                 "max_drawdown": 0.0,
             }
-        
+
         # Calculate metrics
         volatility = float(empyrical.annual_volatility(returns))
         sharpe_ratio = float(empyrical.sharpe_ratio(returns))
@@ -92,4 +90,3 @@ async def get_position_risk_metrics(
             "volatility": 0.0,
             "max_drawdown": 0.0,
         }
-

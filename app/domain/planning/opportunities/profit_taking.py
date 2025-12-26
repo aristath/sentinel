@@ -6,10 +6,10 @@ Identifies windfall positions that should be trimmed for profit-taking.
 from typing import List, Optional
 
 from app.domain.models import Position, Stock
-from app.domain.scoring.windfall import get_windfall_recommendation
 from app.domain.planning.holistic_planner import ActionCandidate
-from app.domain.value_objects.trade_side import TradeSide
+from app.domain.scoring.windfall import get_windfall_recommendation
 from app.domain.services.exchange_rate_service import ExchangeRateService
+from app.domain.value_objects.trade_side import TradeSide
 
 
 async def identify_profit_taking_opportunities(
@@ -44,7 +44,9 @@ async def identify_profit_taking_opportunities(
             symbol=pos.symbol,
             current_price=pos.current_price or pos.avg_price,
             avg_price=pos.avg_price,
-            first_bought_at=pos.first_bought_at if hasattr(pos, 'first_bought_at') else None,
+            first_bought_at=(
+                pos.first_bought_at if hasattr(pos, "first_bought_at") else None
+            ),
         )
 
         if windfall_rec.get("recommendation", {}).get("take_profits"):
@@ -57,23 +59,29 @@ async def identify_profit_taking_opportunities(
             exchange_rate = 1.0
             if pos.currency and pos.currency != "EUR":
                 if exchange_rate_service:
-                    exchange_rate = await exchange_rate_service.get_rate(pos.currency, "EUR")
+                    exchange_rate = await exchange_rate_service.get_rate(
+                        pos.currency, "EUR"
+                    )
                 else:
                     exchange_rate = 1.0  # Fallback if service not provided
-            sell_value_eur = sell_value / exchange_rate if exchange_rate > 0 else sell_value
+            sell_value_eur = (
+                sell_value / exchange_rate if exchange_rate > 0 else sell_value
+            )
 
-            opportunities.append(ActionCandidate(
-                side=TradeSide.SELL,
-                symbol=pos.symbol,
-                name=stock.name,
-                quantity=sell_qty,
-                price=pos.current_price or pos.avg_price,
-                value_eur=sell_value_eur,
-                currency=pos.currency or "EUR",
-                priority=windfall_rec.get("windfall_score", 0.5) + 0.5,  # High priority
-                reason=rec["reason"],
-                tags=["windfall", "profit_taking"],
-            ))
+            opportunities.append(
+                ActionCandidate(
+                    side=TradeSide.SELL,
+                    symbol=pos.symbol,
+                    name=stock.name,
+                    quantity=sell_qty,
+                    price=pos.current_price or pos.avg_price,
+                    value_eur=sell_value_eur,
+                    currency=pos.currency or "EUR",
+                    priority=windfall_rec.get("windfall_score", 0.5)
+                    + 0.5,  # High priority
+                    reason=rec["reason"],
+                    tags=["windfall", "profit_taking"],
+                )
+            )
 
     return opportunities
-

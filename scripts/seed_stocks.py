@@ -10,6 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import aiosqlite
+
 from app.database import SCHEMA
 
 DATA_DIR = Path(__file__).parent.parent / "data"

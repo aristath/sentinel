@@ -11,7 +11,7 @@ making the holistic planner's decisions transparent and educational.
 """
 
 import logging
-from typing import Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 if TYPE_CHECKING:
     from app.domain.planning.holistic_planner import ActionCandidate, HolisticStep
@@ -52,11 +52,23 @@ def generate_step_narrative(
     # Build the narrative based on action type and tags
     if side == TradeSide.SELL:
         narrative = _generate_sell_narrative(
-            symbol, name, action.value_eur, tags, reason, portfolio_context, all_opportunities
+            symbol,
+            name,
+            action.value_eur,
+            tags,
+            reason,
+            portfolio_context,
+            all_opportunities,
         )
     else:
         narrative = _generate_buy_narrative(
-            symbol, name, action.value_eur, tags, reason, portfolio_context, all_opportunities
+            symbol,
+            name,
+            action.value_eur,
+            tags,
+            reason,
+            portfolio_context,
+            all_opportunities,
         )
 
     return narrative
@@ -76,8 +88,12 @@ def _generate_sell_narrative(
 
     # Explain the primary reason
     if "windfall" in tags:
-        parts.append(f"This position has experienced windfall gains beyond normal growth. {reason}.")
-        parts.append("Taking profits locks in gains and frees capital for better opportunities.")
+        parts.append(
+            f"This position has experienced windfall gains beyond normal growth. {reason}."
+        )
+        parts.append(
+            "Taking profits locks in gains and frees capital for better opportunities."
+        )
 
     elif "profit_taking" in tags:
         parts.append(f"Reason: {reason}.")
@@ -102,9 +118,9 @@ def _generate_sell_narrative(
 
     # Add context about what the freed cash enables
     buy_opportunities = (
-        all_opportunities.get("averaging_down", []) +
-        all_opportunities.get("rebalance_buys", []) +
-        all_opportunities.get("opportunity_buys", [])
+        all_opportunities.get("averaging_down", [])
+        + all_opportunities.get("rebalance_buys", [])
+        + all_opportunities.get("opportunity_buys", [])
     )
 
     if buy_opportunities:
@@ -148,21 +164,31 @@ def _generate_buy_narrative(
 
         if underweight_geo:
             parts.append(f"The portfolio is underweight in {underweight_geo} region.")
-            parts.append(f"This purchase improves geographic diversification and reduces concentration risk.")
+            parts.append(
+                f"This purchase improves geographic diversification and reduces concentration risk."
+            )
         else:
             parts.append(f"Reason: {reason}.")
 
     elif "quality" in tags or "opportunity" in tags:
         parts.append(f"{reason}.")
-        parts.append("High-quality stocks with good fundamentals tend to outperform over the long term.")
+        parts.append(
+            "High-quality stocks with good fundamentals tend to outperform over the long term."
+        )
 
     else:
         parts.append(f"Reason: {reason}.")
 
     # Add dividend context if relevant
-    dividend_yield = portfolio_context.stock_dividends.get(symbol, 0) if portfolio_context.stock_dividends else 0
+    dividend_yield = (
+        portfolio_context.stock_dividends.get(symbol, 0)
+        if portfolio_context.stock_dividends
+        else 0
+    )
     if dividend_yield and dividend_yield > 0.03:
-        parts.append(f"This stock also provides a {dividend_yield*100:.1f}% dividend yield for income.")
+        parts.append(
+            f"This stock also provides a {dividend_yield*100:.1f}% dividend yield for income."
+        )
 
     return " ".join(parts)
 

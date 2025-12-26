@@ -4,18 +4,20 @@ Handles holistic multi-step recommendation sequences.
 """
 
 import logging
+
 from fastapi import APIRouter, HTTPException
+
+from app.domain.value_objects.trade_side import TradeSide
+from app.infrastructure.cache import cache
 from app.infrastructure.dependencies import (
     PositionRepositoryDep,
-    SettingsServiceDep,
     RebalancingServiceDep,
+    RecommendationRepositoryDep,
+    SettingsServiceDep,
+    TradeExecutionServiceDep,
     TradeRepositoryDep,
     TradeSafetyServiceDep,
-    TradeExecutionServiceDep,
-    RecommendationRepositoryDep,
 )
-from app.infrastructure.cache import cache
-from app.domain.value_objects.trade_side import TradeSide
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -42,7 +44,9 @@ async def get_multi_step_recommendations(
     positions = await position_repo.get_all()
     settings = await settings_service.get_settings()
     position_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
-    portfolio_cache_key = generate_recommendation_cache_key(position_dicts, settings.to_dict())
+    portfolio_cache_key = generate_recommendation_cache_key(
+        position_dicts, settings.to_dict()
+    )
     cache_key = f"multi_step_recommendations:{portfolio_cache_key}"
 
     cached = cache.get(cache_key)
@@ -118,7 +122,9 @@ async def _regenerate_multi_step_cache(
     positions = await position_repo.get_all()
     settings = await settings_service.get_settings()
     position_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
-    portfolio_cache_key = generate_recommendation_cache_key(position_dicts, settings.to_dict())
+    portfolio_cache_key = generate_recommendation_cache_key(
+        position_dicts, settings.to_dict()
+    )
     cache_key = f"multi_step_recommendations:{portfolio_cache_key}"
 
     logger.info(f"Cache miss for multi-step recommendations, regenerating...")
@@ -127,7 +133,7 @@ async def _regenerate_multi_step_cache(
     if not steps_data:
         raise HTTPException(
             status_code=404,
-            detail="No multi-step recommendations available. Please check your portfolio and settings."
+            detail="No multi-step recommendations available. Please check your portfolio and settings.",
         )
 
     # Rebuild cached format
@@ -183,20 +189,28 @@ async def execute_multi_step_recommendation_step(
         Execution result for the step
     """
     from app.domain.portfolio_hash import generate_recommendation_cache_key
-    from app.infrastructure.external.tradernet_connection import ensure_tradernet_connected
     from app.infrastructure.cache_invalidation import get_cache_invalidation_service
+    from app.infrastructure.external.tradernet_connection import (
+        ensure_tradernet_connected,
+    )
 
     if step_number < 1:
         raise HTTPException(status_code=400, detail="Step number must be >= 1")
     if step_number > 5:
-        raise HTTPException(status_code=400, detail="Step number must be between 1 and 5")
+        raise HTTPException(
+            status_code=400, detail="Step number must be between 1 and 5"
+        )
 
     try:
         # Generate portfolio-aware cache key
         positions = await position_repo.get_all()
         settings = await settings_service.get_settings()
-        position_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
-        portfolio_cache_key = generate_recommendation_cache_key(position_dicts, settings.to_dict())
+        position_dicts = [
+            {"symbol": p.symbol, "quantity": p.quantity} for p in positions
+        ]
+        portfolio_cache_key = generate_recommendation_cache_key(
+            position_dicts, settings.to_dict()
+        )
         cache_key = f"multi_step_recommendations:{portfolio_cache_key}"
 
         cached = cache.get(cache_key)
@@ -211,7 +225,7 @@ async def execute_multi_step_recommendation_step(
         if step_number > len(steps):
             raise HTTPException(
                 status_code=404,
-                detail=f"Step {step_number} not found. Only {len(steps)} steps available."
+                detail=f"Step {step_number} not found. Only {len(steps)} steps available.",
             )
 
         step = steps[step_number - 1]  # Convert to 0-indexed
@@ -225,7 +239,7 @@ async def execute_multi_step_recommendation_step(
             side=step["side"],
             quantity=step["quantity"],
             client=client,
-            raise_on_error=True
+            raise_on_error=True,
         )
 
         # Execute the trade
@@ -265,7 +279,10 @@ async def execute_multi_step_recommendation_step(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error executing multi-step recommendation step {step_number}: {e}", exc_info=True)
+        logger.error(
+            f"Error executing multi-step recommendation step {step_number}: {e}",
+            exc_info=True,
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -287,15 +304,21 @@ async def execute_all_multi_step_recommendations(
         List of execution results for each step
     """
     from app.domain.portfolio_hash import generate_recommendation_cache_key
-    from app.infrastructure.external.tradernet_connection import ensure_tradernet_connected
     from app.infrastructure.cache_invalidation import get_cache_invalidation_service
+    from app.infrastructure.external.tradernet_connection import (
+        ensure_tradernet_connected,
+    )
 
     try:
         # Generate portfolio-aware cache key
         positions = await position_repo.get_all()
         settings = await settings_service.get_settings()
-        position_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
-        portfolio_cache_key = generate_recommendation_cache_key(position_dicts, settings.to_dict())
+        position_dicts = [
+            {"symbol": p.symbol, "quantity": p.quantity} for p in positions
+        ]
+        portfolio_cache_key = generate_recommendation_cache_key(
+            position_dicts, settings.to_dict()
+        )
         cache_key = f"multi_step_recommendations:{portfolio_cache_key}"
 
         cached = cache.get(cache_key)
@@ -310,7 +333,7 @@ async def execute_all_multi_step_recommendations(
         if not steps:
             raise HTTPException(
                 status_code=404,
-                detail="No steps available in multi-step recommendations"
+                detail="No steps available in multi-step recommendations",
             )
 
         # Ensure connection
@@ -320,15 +343,16 @@ async def execute_all_multi_step_recommendations(
         buy_steps = [s for s in steps if s["side"] == TradeSide.BUY]
         blocked_buys = []
         for step in buy_steps:
-            is_cooldown, error = await safety_service.check_cooldown(step["symbol"], step["side"])
+            is_cooldown, error = await safety_service.check_cooldown(
+                step["symbol"], step["side"]
+            )
             if is_cooldown:
                 blocked_buys.append(step)
-        
+
         if blocked_buys:
             symbols = ", ".join([s["symbol"] for s in blocked_buys])
             raise HTTPException(
-                status_code=400,
-                detail=f"Cannot execute: {symbols} in cooldown period"
+                status_code=400, detail=f"Cannot execute: {symbols} in cooldown period"
             )
 
         results = []
@@ -340,15 +364,19 @@ async def execute_all_multi_step_recommendations(
                 has_pending = await safety_service.check_pending_orders(
                     step["symbol"], step["side"], client
                 )
-                
+
                 if has_pending:
-                    results.append({
-                        "step": idx,
-                        "status": "blocked",
-                        "symbol": step["symbol"],
-                        "error": f"A pending order already exists for {step['symbol']}",
-                    })
-                    logger.warning(f"Step {idx} blocked: pending order exists for {step['symbol']}")
+                    results.append(
+                        {
+                            "step": idx,
+                            "status": "blocked",
+                            "symbol": step["symbol"],
+                            "error": f"A pending order already exists for {step['symbol']}",
+                        }
+                    )
+                    logger.warning(
+                        f"Step {idx} blocked: pending order exists for {step['symbol']}"
+                    )
                     continue
 
                 result = client.place_order(
@@ -367,32 +395,38 @@ async def execute_all_multi_step_recommendations(
                         order_id=result.order_id,
                     )
 
-                    results.append({
-                        "step": idx,
-                        "status": "success",
-                        "order_id": result.order_id,
-                        "symbol": step["symbol"],
-                        "side": step["side"],
-                        "quantity": step["quantity"],
-                        "price": result.price,
-                        "estimated_value": step["estimated_value"],
-                    })
+                    results.append(
+                        {
+                            "step": idx,
+                            "status": "success",
+                            "order_id": result.order_id,
+                            "symbol": step["symbol"],
+                            "side": step["side"],
+                            "quantity": step["quantity"],
+                            "price": result.price,
+                            "estimated_value": step["estimated_value"],
+                        }
+                    )
                 else:
-                    results.append({
-                        "step": idx,
-                        "status": "failed",
-                        "symbol": step["symbol"],
-                        "error": "Trade execution failed",
-                    })
+                    results.append(
+                        {
+                            "step": idx,
+                            "status": "failed",
+                            "symbol": step["symbol"],
+                            "error": "Trade execution failed",
+                        }
+                    )
 
             except Exception as e:
                 logger.error(f"Error executing step {idx}: {e}", exc_info=True)
-                results.append({
-                    "step": idx,
-                    "status": "failed",
-                    "symbol": step["symbol"],
-                    "error": str(e),
-                })
+                results.append(
+                    {
+                        "step": idx,
+                        "status": "failed",
+                        "symbol": step["symbol"],
+                        "error": str(e),
+                    }
+                )
 
         # Invalidate caches after execution
         cache_service = get_cache_invalidation_service()
@@ -410,7 +444,9 @@ async def execute_all_multi_step_recommendations(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error executing all multi-step recommendations: {e}", exc_info=True)
+        logger.error(
+            f"Error executing all multi-step recommendations: {e}", exc_info=True
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -441,7 +477,7 @@ async def get_all_strategy_recommendations(
 
     Currently only supports 'portfolio-aware' strategy.
     """
-    
+
     # Generate recommendations
     await rebalancing_service.get_recommendations(limit=50)
 
@@ -472,4 +508,3 @@ async def get_all_strategy_recommendations(
             },
         }
     }
-

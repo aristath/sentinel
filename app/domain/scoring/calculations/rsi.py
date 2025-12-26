@@ -33,4 +33,3 @@ def calculate_rsi(closes: np.ndarray, length: int = RSI_LENGTH) -> Optional[floa
         return float(rsi.iloc[-1])
 
     return None
-

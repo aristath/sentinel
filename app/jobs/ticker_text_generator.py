@@ -5,8 +5,9 @@ then sets it via display_service.set_next_actions().
 """
 
 import logging
-from app.infrastructure.hardware.display_service import set_next_actions
+
 from app.infrastructure.cache import cache
+from app.infrastructure.hardware.display_service import set_next_actions
 from app.repositories import (
     PortfolioRepository,
     PositionRepository,
@@ -19,14 +20,14 @@ logger = logging.getLogger(__name__)
 async def generate_ticker_text() -> str:
     """
     Generate ticker text from portfolio data and recommendations.
-    
+
     Format: "Portfolio EUR12,345 | CASH EUR675 | BUY XIAO EUR855 | SELL ABC EUR200"
     """
     try:
         # Initialize repositories
         settings_repo = SettingsRepository()
         portfolio_repo = PortfolioRepository()
-        
+
         # Get display settings
         show_value = await settings_repo.get_float("ticker_show_value", 1.0)
         show_cash = await settings_repo.get_float("ticker_show_cash", 1.0)
@@ -55,7 +56,9 @@ async def generate_ticker_text() -> str:
             # Try to get multi-step recommendations first
             multi_step_data = None
             for depth in [5, 4, 3, 2, 1]:
-                cache_key = f"multi_step_recommendations:diversification:{depth}:holistic"
+                cache_key = (
+                    f"multi_step_recommendations:diversification:{depth}:holistic"
+                )
                 cached = cache.get(cache_key)
                 if cached:
                     multi_step_data = cached
@@ -68,7 +71,7 @@ async def generate_ticker_text() -> str:
                     symbol = step.get("symbol", "")
                     symbol_short = symbol.split(".")[0]  # Remove .US/.EU suffix
                     value = step.get("estimated_value", 0)
-                    
+
                     if show_amounts > 0:
                         parts.append(f"{side} {symbol_short} EUR{int(value)}")
                     else:
@@ -77,7 +80,7 @@ async def generate_ticker_text() -> str:
                 # Fallback to single recommendations
                 buy_recs = cache.get("recommendations:3")
                 sell_recs = cache.get("sell_recommendations:3")
-                
+
                 action_count = 0
                 if buy_recs and buy_recs.get("recommendations"):
                     for rec in buy_recs["recommendations"][:max_actions]:
@@ -91,7 +94,7 @@ async def generate_ticker_text() -> str:
                         else:
                             parts.append(f"BUY {symbol_short}")
                         action_count += 1
-                
+
                 if sell_recs and sell_recs.get("recommendations"):
                     for rec in sell_recs["recommendations"][:max_actions]:
                         if action_count >= max_actions:
@@ -122,7 +125,7 @@ async def update_ticker_text():
     try:
         text = await generate_ticker_text()
         set_next_actions(text)
-        
+
         if text:
             logger.debug(f"Ticker text updated: {text[:100]}...")
         else:
@@ -130,4 +133,3 @@ async def update_ticker_text():
 
     except Exception as e:
         logger.error(f"Failed to update ticker text: {e}", exc_info=True)
-

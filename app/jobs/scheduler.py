@@ -3,10 +3,11 @@
 import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
+
+from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
 
 from app.config import settings
 
@@ -38,9 +39,7 @@ def job_listener(event):
 
         failure_window = timedelta(hours=settings.job_failure_window_hours)
         cutoff = failure_time - failure_window
-        _job_failures[job_id] = [
-            ft for ft in _job_failures[job_id] if ft > cutoff
-        ]
+        _job_failures[job_id] = [ft for ft in _job_failures[job_id] if ft > cutoff]
 
         recent_failures = len(_job_failures[job_id])
         if recent_failures >= settings.job_failure_threshold:
@@ -65,15 +64,15 @@ async def init_scheduler() -> AsyncIOScheduler:
 
     scheduler.add_listener(job_listener, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
 
-    from app.jobs.daily_sync import sync_portfolio, sync_prices
-    from app.jobs.cash_rebalance import check_and_rebalance
-    from app.jobs.score_refresh import refresh_all_scores
     from app.jobs.cash_flow_sync import sync_cash_flows
+    from app.jobs.cash_rebalance import check_and_rebalance
+    from app.jobs.daily_sync import sync_portfolio, sync_prices
+    from app.jobs.health_check import run_health_check
     from app.jobs.historical_data_sync import sync_historical_data
     from app.jobs.maintenance import run_daily_maintenance, run_weekly_maintenance
-    from app.jobs.sync_trades import sync_trades
-    from app.jobs.health_check import run_health_check
     from app.jobs.metrics_calculation import calculate_metrics_for_all_stocks
+    from app.jobs.score_refresh import refresh_all_scores
+    from app.jobs.sync_trades import sync_trades
     from app.jobs.ticker_text_generator import update_ticker_text
 
     # Get all job intervals from database in one query
@@ -153,7 +152,9 @@ async def init_scheduler() -> AsyncIOScheduler:
     # Metrics calculation (daily, after historical data sync)
     scheduler.add_job(
         calculate_metrics_for_all_stocks,
-        CronTrigger(hour=historical_hour, minute=30),  # 30 minutes after historical sync
+        CronTrigger(
+            hour=historical_hour, minute=30
+        ),  # 30 minutes after historical sync
         id="metrics_calculation",
         name="Metrics Calculation",
         replace_existing=True,

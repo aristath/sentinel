@@ -10,7 +10,7 @@ Used by the holistic planner to assess long-term income reliability.
 """
 
 import logging
-from typing import List, Optional, Tuple, Dict
+from typing import Dict, List, Optional, Tuple
 
 from app.domain.scoring.constants import DIVIDEND_CUT_THRESHOLD
 
@@ -240,7 +240,9 @@ async def get_dividend_analysis(
         "symbol": symbol,
         "current_yield_pct": round((current_yield or 0) * 100, 2),
         "portfolio_avg_yield_pct": round(portfolio_avg_yield * 100, 2),
-        "payout_ratio_pct": round((payout_ratio or 0) * 100, 1) if payout_ratio else None,
+        "payout_ratio_pct": (
+            round((payout_ratio or 0) * 100, 1) if payout_ratio else None
+        ),
         "stability_score": round(estimated_stability, 3),
         "yield_assessment": yield_assessment,
         "above_portfolio_avg": above_avg,

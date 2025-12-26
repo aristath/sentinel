@@ -164,13 +164,15 @@ class RiskModelBuilder:
 
         symbols = list(corr_matrix.columns)
         for i, sym1 in enumerate(symbols):
-            for sym2 in symbols[i + 1:]:
+            for sym2 in symbols[i + 1 :]:
                 corr = corr_matrix.loc[sym1, sym2]
                 if abs(corr) >= threshold:
-                    pairs.append({
-                        "symbol1": sym1,
-                        "symbol2": sym2,
-                        "correlation": round(corr, 3),
-                    })
+                    pairs.append(
+                        {
+                            "symbol1": sym1,
+                            "symbol2": sym2,
+                            "correlation": round(corr, 3),
+                        }
+                    )
 
         return sorted(pairs, key=lambda x: abs(x["correlation"]), reverse=True)

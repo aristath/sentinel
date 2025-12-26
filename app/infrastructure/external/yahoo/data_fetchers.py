@@ -10,14 +10,14 @@ from typing import Optional
 
 import yfinance as yf
 
-from app.infrastructure.events import emit, SystemEvent
-from app.infrastructure.external.yahoo.symbol_converter import get_yahoo_symbol
+from app.config import settings
+from app.infrastructure.events import SystemEvent, emit
 from app.infrastructure.external.yahoo.models import (
     AnalystData,
     FundamentalData,
     HistoricalPrice,
 )
-from app.config import settings
+from app.infrastructure.external.yahoo.symbol_converter import get_yahoo_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,9 @@ def get_analyst_data(symbol: str, yahoo_symbol: str = None) -> Optional[AnalystD
 
             # Get price targets
             target_price = info.get("targetMeanPrice", 0) or 0
-            current_price = info.get("currentPrice") or info.get("regularMarketPrice", 0) or 0
+            current_price = (
+                info.get("currentPrice") or info.get("regularMarketPrice", 0) or 0
+            )
 
             # Calculate upside
             upside_pct = 0.0
@@ -89,7 +91,9 @@ def get_analyst_data(symbol: str, yahoo_symbol: str = None) -> Optional[AnalystD
         return None
 
 
-def get_fundamental_data(symbol: str, yahoo_symbol: str = None) -> Optional[FundamentalData]:
+def get_fundamental_data(
+    symbol: str, yahoo_symbol: str = None
+) -> Optional[FundamentalData]:
     """
     Get fundamental analysis data.
 
@@ -130,9 +134,7 @@ def get_fundamental_data(symbol: str, yahoo_symbol: str = None) -> Optional[Fund
 
 
 def get_historical_prices(
-    symbol: str,
-    yahoo_symbol: str = None,
-    period: str = "1y"
+    symbol: str, yahoo_symbol: str = None, period: str = "1y"
 ) -> list[HistoricalPrice]:
     """
     Get historical price data.
@@ -153,15 +155,17 @@ def get_historical_prices(
 
         result = []
         for date, row in hist.iterrows():
-            result.append(HistoricalPrice(
-                date=date.to_pydatetime(),
-                open=float(row["Open"]),
-                high=float(row["High"]),
-                low=float(row["Low"]),
-                close=float(row["Close"]),
-                volume=int(row["Volume"]),
-                adj_close=float(row.get("Adj Close", row["Close"])),
-            ))
+            result.append(
+                HistoricalPrice(
+                    date=date.to_pydatetime(),
+                    open=float(row["Open"]),
+                    high=float(row["High"]),
+                    low=float(row["Low"]),
+                    close=float(row["Close"]),
+                    volume=int(row["Volume"]),
+                    adj_close=float(row.get("Adj Close", row["Close"])),
+                )
+            )
 
         return result
     except Exception as e:
@@ -169,7 +173,9 @@ def get_historical_prices(
         return []
 
 
-def get_current_price(symbol: str, yahoo_symbol: str = None, max_retries: int = None) -> Optional[float]:
+def get_current_price(
+    symbol: str, yahoo_symbol: str = None, max_retries: int = None
+) -> Optional[float]:
     """
     Get current stock price with retry logic.
 
@@ -183,7 +189,7 @@ def get_current_price(symbol: str, yahoo_symbol: str = None, max_retries: int = 
     """
     if max_retries is None:
         max_retries = settings.price_fetch_max_retries
-    
+
     yf_symbol = get_yahoo_symbol(symbol, yahoo_symbol)
 
     for attempt in range(max_retries):
@@ -196,17 +202,27 @@ def get_current_price(symbol: str, yahoo_symbol: str = None, max_retries: int = 
                     return price
                 # If price is 0 or None, retry
                 if attempt < max_retries - 1:
-                    wait_time = settings.price_fetch_retry_delay_base * (2 ** attempt)  # Exponential backoff
-                    logger.warning(f"Price fetch returned invalid value for {symbol}, retrying in {wait_time}s...")
+                    wait_time = settings.price_fetch_retry_delay_base * (
+                        2**attempt
+                    )  # Exponential backoff
+                    logger.warning(
+                        f"Price fetch returned invalid value for {symbol}, retrying in {wait_time}s..."
+                    )
                     time.sleep(wait_time)
         except Exception as e:
             if attempt < max_retries - 1:
-                wait_time = settings.price_fetch_retry_delay_base * (2 ** attempt)  # Exponential backoff
-                logger.warning(f"Failed to get current price for {symbol} (attempt {attempt + 1}/{max_retries}): {e}. Retrying in {wait_time}s...")
+                wait_time = settings.price_fetch_retry_delay_base * (
+                    2**attempt
+                )  # Exponential backoff
+                logger.warning(
+                    f"Failed to get current price for {symbol} (attempt {attempt + 1}/{max_retries}): {e}. Retrying in {wait_time}s..."
+                )
                 time.sleep(wait_time)
             else:
-                logger.error(f"Failed to get current price for {symbol} after {max_retries} attempts: {e}")
-    
+                logger.error(
+                    f"Failed to get current price for {symbol} after {max_retries} attempts: {e}"
+                )
+
     return None
 
 
@@ -235,42 +251,70 @@ def get_stock_industry(symbol: str, yahoo_symbol: str = None) -> Optional[str]:
             industry_lower = industry.lower()
 
             # Technology
-            if any(term in industry_lower for term in [
-                "technology", "software", "semiconductor", "internet",
-                "computer", "electronic", "telecom"
-            ]):
+            if any(
+                term in industry_lower
+                for term in [
+                    "technology",
+                    "software",
+                    "semiconductor",
+                    "internet",
+                    "computer",
+                    "electronic",
+                    "telecom",
+                ]
+            ):
                 return "Technology"
 
             # Healthcare
-            if any(term in industry_lower for term in [
-                "health", "medical", "pharma", "biotech", "drug"
-            ]):
+            if any(
+                term in industry_lower
+                for term in ["health", "medical", "pharma", "biotech", "drug"]
+            ):
                 return "Healthcare"
 
             # Finance
-            if any(term in industry_lower for term in [
-                "bank", "financial", "insurance", "capital", "asset"
-            ]):
+            if any(
+                term in industry_lower
+                for term in ["bank", "financial", "insurance", "capital", "asset"]
+            ):
                 return "Finance"
 
             # Consumer
-            if any(term in industry_lower for term in [
-                "consumer", "retail", "food", "beverage", "apparel",
-                "luxury", "entertainment", "media"
-            ]):
+            if any(
+                term in industry_lower
+                for term in [
+                    "consumer",
+                    "retail",
+                    "food",
+                    "beverage",
+                    "apparel",
+                    "luxury",
+                    "entertainment",
+                    "media",
+                ]
+            ):
                 return "Consumer"
 
             # Industrial
-            if any(term in industry_lower for term in [
-                "industrial", "aerospace", "defense", "machinery",
-                "construction", "transport", "auto"
-            ]):
+            if any(
+                term in industry_lower
+                for term in [
+                    "industrial",
+                    "aerospace",
+                    "defense",
+                    "machinery",
+                    "construction",
+                    "transport",
+                    "auto",
+                ]
+            ):
                 return "Industrial"
 
             # Energy (map to Industrial for now)
-            if any(term in industry_lower for term in [
-                "energy", "oil", "gas", "utilities", "power"
-            ]):
+            if any(
+                term in industry_lower
+                for term in ["energy", "oil", "gas", "utilities", "power"]
+            ):
                 return "Energy"
 
         return industry  # Return original if no match
@@ -311,7 +355,7 @@ def get_batch_quotes(symbol_yahoo_map: dict[str, Optional[str]]) -> dict[str, fl
                 period="5d",
                 progress=False,
                 threads=True,
-                auto_adjust=True
+                auto_adjust=True,
             )
 
             if not data.empty:
@@ -336,4 +380,3 @@ def get_batch_quotes(symbol_yahoo_map: dict[str, Optional[str]]) -> dict[str, fl
         logger.error(f"Failed to get batch quotes: {e}")
 
     return result
-

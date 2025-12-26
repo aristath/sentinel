@@ -17,12 +17,12 @@ The planner works by:
 
 import logging
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Callable, Awaitable, Tuple
+from typing import Awaitable, Callable, Dict, List, Optional, Tuple
 
-from app.domain.scoring.models import PortfolioContext
+from app.domain.models import Position, Stock
 from app.domain.scoring.diversification import calculate_portfolio_score
 from app.domain.scoring.end_state import calculate_portfolio_end_state_score
-from app.domain.models import Stock, Position
+from app.domain.scoring.models import PortfolioContext
 from app.domain.value_objects.trade_side import TradeSide
 
 logger = logging.getLogger(__name__)
@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class HolisticStep:
     """A single step in a holistic plan."""
+
     step_number: int
     side: str  # "BUY" or "SELL"
     symbol: str
@@ -49,6 +50,7 @@ class HolisticStep:
 @dataclass
 class HolisticPlan:
     """A complete holistic plan with end-state scoring."""
+
     steps: List[HolisticStep]
     current_score: float
     end_state_score: float
@@ -63,6 +65,7 @@ class HolisticPlan:
 @dataclass
 class ActionCandidate:
     """A candidate action for sequence generation."""
+
     side: str
     symbol: str
     name: str
@@ -84,7 +87,7 @@ async def identify_opportunities_from_weights(
     current_prices: Dict[str, float],
     transaction_cost_fixed: float = 2.0,
     transaction_cost_percent: float = 0.002,
-    exchange_rate_service = None,
+    exchange_rate_service=None,
 ) -> Dict[str, List[ActionCandidate]]:
     """
     Identify opportunities based on optimizer target weights.
@@ -135,24 +138,28 @@ async def identify_opportunities_from_weights(
         current = current_weights.get(symbol, 0.0)
         gap = target - current
         if abs(gap) > 0.005:  # Ignore tiny gaps (<0.5%)
-            weight_gaps.append({
-                "symbol": symbol,
-                "current": current,
-                "target": target,
-                "gap": gap,
-                "gap_value": gap * total_value,
-            })
+            weight_gaps.append(
+                {
+                    "symbol": symbol,
+                    "current": current,
+                    "target": target,
+                    "gap": gap,
+                    "gap_value": gap * total_value,
+                }
+            )
 
     # Also check positions that aren't in target (should sell to 0)
     for symbol, current in current_weights.items():
         if symbol not in target_weights and current > 0.005:
-            weight_gaps.append({
-                "symbol": symbol,
-                "current": current,
-                "target": 0.0,
-                "gap": -current,
-                "gap_value": -current * total_value,
-            })
+            weight_gaps.append(
+                {
+                    "symbol": symbol,
+                    "current": current,
+                    "target": 0.0,
+                    "gap": -current,
+                    "gap_value": -current * total_value,
+                }
+            )
 
     # Sort by absolute gap (largest adjustments first)
     weight_gaps.sort(key=lambda x: abs(x["gap"]), reverse=True)
@@ -173,7 +180,9 @@ async def identify_opportunities_from_weights(
         # Check if trade is worthwhile (transaction cost check)
         trade_cost = transaction_cost_fixed + abs(gap_value) * transaction_cost_percent
         if abs(gap_value) < trade_cost * 2:  # Need at least 2x cost to be worthwhile
-            logger.debug(f"{symbol}: gap €{gap_value:.0f} too small (cost €{trade_cost:.2f})")
+            logger.debug(
+                f"{symbol}: gap €{gap_value:.0f} too small (cost €{trade_cost:.2f})"
+            )
             continue
 
         if gap > 0:
@@ -199,18 +208,20 @@ async def identify_opportunities_from_weights(
                 category = "rebalance_buys"
                 tags = ["rebalance", "optimizer_target"]
 
-            opportunities[category].append(ActionCandidate(
-                side=TradeSide.BUY,
-                symbol=symbol,
-                name=stock.name if stock else symbol,
-                quantity=quantity,
-                price=price,
-                value_eur=trade_value,
-                currency=currency,
-                priority=abs(gap) * 100,  # Priority based on gap size
-                reason=f"Optimizer target: {gap_info['target']:.1%} (current: {gap_info['current']:.1%})",
-                tags=tags,
-            ))
+            opportunities[category].append(
+                ActionCandidate(
+                    side=TradeSide.BUY,
+                    symbol=symbol,
+                    name=stock.name if stock else symbol,
+                    quantity=quantity,
+                    price=price,
+                    value_eur=trade_value,
+                    currency=currency,
+                    priority=abs(gap) * 100,  # Priority based on gap size
+                    reason=f"Optimizer target: {gap_info['target']:.1%} (current: {gap_info['current']:.1%})",
+                    tags=tags,
+                )
+            )
 
         else:
             # Overweight - SELL opportunity
@@ -241,27 +252,31 @@ async def identify_opportunities_from_weights(
 
             trade_value = quantity * price
 
-            opportunities["rebalance_sells"].append(ActionCandidate(
-                side=TradeSide.SELL,
-                symbol=symbol,
-                name=stock.name if stock else symbol,
-                quantity=quantity,
-                price=price,
-                value_eur=trade_value,
-                currency=position.currency,
-                priority=abs(gap) * 100,
-                reason=f"Optimizer target: {gap_info['target']:.1%} (current: {gap_info['current']:.1%})",
-                tags=["rebalance", "optimizer_target"],
-            ))
+            opportunities["rebalance_sells"].append(
+                ActionCandidate(
+                    side=TradeSide.SELL,
+                    symbol=symbol,
+                    name=stock.name if stock else symbol,
+                    quantity=quantity,
+                    price=price,
+                    value_eur=trade_value,
+                    currency=position.currency,
+                    priority=abs(gap) * 100,
+                    reason=f"Optimizer target: {gap_info['target']:.1%} (current: {gap_info['current']:.1%})",
+                    tags=["rebalance", "optimizer_target"],
+                )
+            )
 
     # Sort each category by priority
     for category in opportunities:
         opportunities[category].sort(key=lambda x: x.priority, reverse=True)
 
-    logger.info(f"Weight-based opportunities: "
-                f"rebalance_sells={len(opportunities['rebalance_sells'])}, "
-                f"rebalance_buys={len(opportunities['rebalance_buys'])}, "
-                f"averaging_down={len(opportunities['averaging_down'])}")
+    logger.info(
+        f"Weight-based opportunities: "
+        f"rebalance_sells={len(opportunities['rebalance_sells'])}, "
+        f"rebalance_buys={len(opportunities['rebalance_buys'])}, "
+        f"averaging_down={len(opportunities['averaging_down'])}"
+    )
 
     return opportunities
 
@@ -271,7 +286,7 @@ async def identify_opportunities(
     positions: List[Position],
     stocks: List[Stock],
     available_cash: float,
-    exchange_rate_service = None,
+    exchange_rate_service=None,
 ) -> Dict[str, List[ActionCandidate]]:
     """
     Identify all actionable opportunities in the portfolio.
@@ -293,18 +308,18 @@ async def identify_opportunities(
     Returns:
         Dict mapping category to list of ActionCandidate
     """
-    from app.repositories import SettingsRepository, TradeRepository
-    from app.infrastructure.external import yahoo_finance as yahoo
-    from app.domain.constants import BUY_COOLDOWN_DAYS
-    from app.config import settings as app_settings
-    from app.domain.planning.opportunities import (
-        identify_profit_taking_opportunities,
-        identify_rebalance_sell_opportunities,
-        identify_averaging_down_opportunities,
-        identify_rebalance_buy_opportunities,
-        identify_opportunity_buy_opportunities,
-    )
     from app.application.services.rebalancing_service import calculate_min_trade_amount
+    from app.config import settings as app_settings
+    from app.domain.constants import BUY_COOLDOWN_DAYS
+    from app.domain.planning.opportunities import (
+        identify_averaging_down_opportunities,
+        identify_opportunity_buy_opportunities,
+        identify_profit_taking_opportunities,
+        identify_rebalance_buy_opportunities,
+        identify_rebalance_sell_opportunities,
+    )
+    from app.infrastructure.external import yahoo_finance as yahoo
+    from app.repositories import SettingsRepository, TradeRepository
 
     settings_repo = SettingsRepository()
     trade_repo = TradeRepository()
@@ -335,7 +350,9 @@ async def identify_opportunities(
             for ind in industries.split(","):
                 ind = ind.strip()
                 if ind:
-                    ind_allocations[ind] = ind_allocations.get(ind, 0) + value / total_value
+                    ind_allocations[ind] = (
+                        ind_allocations.get(ind, 0) + value / total_value
+                    )
 
     # Identify profit-taking opportunities
     opportunities["profit_taking"] = await identify_profit_taking_opportunities(
@@ -344,42 +361,67 @@ async def identify_opportunities(
 
     # Identify rebalance sell opportunities
     opportunities["rebalance_sells"] = await identify_rebalance_sell_opportunities(
-        positions, stocks_by_symbol, portfolio_context, geo_allocations,
-        total_value, exchange_rate_service
+        positions,
+        stocks_by_symbol,
+        portfolio_context,
+        geo_allocations,
+        total_value,
+        exchange_rate_service,
     )
 
     # Calculate minimum worthwhile trade from transaction costs
-    transaction_cost_fixed = await settings_repo.get_float("transaction_cost_fixed", 2.0)
-    transaction_cost_percent = await settings_repo.get_float("transaction_cost_percent", 0.002)
-    base_trade_amount = calculate_min_trade_amount(transaction_cost_fixed, transaction_cost_percent)
-    yahoo_symbols = {s.symbol: s.yahoo_symbol for s in stocks if s.yahoo_symbol and s.allow_buy}
+    transaction_cost_fixed = await settings_repo.get_float(
+        "transaction_cost_fixed", 2.0
+    )
+    transaction_cost_percent = await settings_repo.get_float(
+        "transaction_cost_percent", 0.002
+    )
+    base_trade_amount = calculate_min_trade_amount(
+        transaction_cost_fixed, transaction_cost_percent
+    )
+    yahoo_symbols = {
+        s.symbol: s.yahoo_symbol for s in stocks if s.yahoo_symbol and s.allow_buy
+    }
     batch_prices = yahoo.get_batch_quotes(yahoo_symbols)
 
     # Filter stocks for buy opportunities (exclude recently bought and low quality)
     eligible_stocks = [
-        s for s in stocks
+        s
+        for s in stocks
         if s.allow_buy
         and s.symbol not in recently_bought
         and batch_prices.get(s.symbol, 0) > 0
-        and portfolio_context.stock_scores.get(s.symbol, 0.5) >= app_settings.min_stock_score
+        and portfolio_context.stock_scores.get(s.symbol, 0.5)
+        >= app_settings.min_stock_score
     ]
 
     # Identify averaging down opportunities
     opportunities["averaging_down"] = await identify_averaging_down_opportunities(
-        eligible_stocks, portfolio_context, batch_prices,
-        base_trade_amount, exchange_rate_service
+        eligible_stocks,
+        portfolio_context,
+        batch_prices,
+        base_trade_amount,
+        exchange_rate_service,
     )
 
     # Identify rebalance buy opportunities
     opportunities["rebalance_buys"] = await identify_rebalance_buy_opportunities(
-        eligible_stocks, portfolio_context, geo_allocations,
-        batch_prices, base_trade_amount, exchange_rate_service
+        eligible_stocks,
+        portfolio_context,
+        geo_allocations,
+        batch_prices,
+        base_trade_amount,
+        exchange_rate_service,
     )
 
     # Identify general opportunity buys
     opportunities["opportunity_buys"] = await identify_opportunity_buy_opportunities(
-        eligible_stocks, portfolio_context, batch_prices,
-        base_trade_amount, min_quality_score=0.7, exchange_rate_service=exchange_rate_service
+        eligible_stocks,
+        portfolio_context,
+        batch_prices,
+        base_trade_amount,
+        min_quality_score=0.7,
+        exchange_rate_service=exchange_rate_service,
     )
 
     # Sort each category by priority
@@ -387,12 +429,14 @@ async def identify_opportunities(
         opportunities[category].sort(key=lambda x: x.priority, reverse=True)
 
     # Log opportunities found
-    logger.info(f"Holistic planner identified opportunities: "
-                f"profit_taking={len(opportunities['profit_taking'])}, "
-                f"averaging_down={len(opportunities['averaging_down'])}, "
-                f"rebalance_sells={len(opportunities['rebalance_sells'])}, "
-                f"rebalance_buys={len(opportunities['rebalance_buys'])}, "
-                f"opportunity_buys={len(opportunities['opportunity_buys'])}")
+    logger.info(
+        f"Holistic planner identified opportunities: "
+        f"profit_taking={len(opportunities['profit_taking'])}, "
+        f"averaging_down={len(opportunities['averaging_down'])}, "
+        f"rebalance_sells={len(opportunities['rebalance_sells'])}, "
+        f"rebalance_buys={len(opportunities['rebalance_buys'])}, "
+        f"opportunity_buys={len(opportunities['opportunity_buys'])}"
+    )
 
     return opportunities
 
@@ -416,7 +460,7 @@ def _generate_patterns_at_depth(
     if available_cash > 0:
         direct_buys = []
         remaining_cash = available_cash
-        for candidate in (top_averaging + top_rebalance_buys + top_opportunity):
+        for candidate in top_averaging + top_rebalance_buys + top_opportunity:
             if candidate.value_eur <= remaining_cash and len(direct_buys) < max_steps:
                 direct_buys.append(candidate)
                 remaining_cash -= candidate.value_eur
@@ -425,11 +469,13 @@ def _generate_patterns_at_depth(
 
     # Pattern 2: Profit-taking + reinvest
     if top_profit_taking:
-        profit_sequence = list(top_profit_taking[:min(len(top_profit_taking), max_steps)])
+        profit_sequence = list(
+            top_profit_taking[: min(len(top_profit_taking), max_steps)]
+        )
         cash_from_sells = sum(c.value_eur for c in profit_sequence)
         total_cash = available_cash + cash_from_sells
 
-        for candidate in (top_averaging + top_rebalance_buys):
+        for candidate in top_averaging + top_rebalance_buys:
             if candidate.value_eur <= total_cash and len(profit_sequence) < max_steps:
                 profit_sequence.append(candidate)
                 total_cash -= candidate.value_eur
@@ -439,12 +485,17 @@ def _generate_patterns_at_depth(
 
     # Pattern 3: Rebalance (sell overweight + buy underweight)
     if top_rebalance_sells:
-        rebalance_sequence = list(top_rebalance_sells[:min(len(top_rebalance_sells), max_steps)])
+        rebalance_sequence = list(
+            top_rebalance_sells[: min(len(top_rebalance_sells), max_steps)]
+        )
         cash_from_sells = sum(c.value_eur for c in rebalance_sequence)
         total_cash = available_cash + cash_from_sells
 
         for candidate in top_rebalance_buys:
-            if candidate.value_eur <= total_cash and len(rebalance_sequence) < max_steps:
+            if (
+                candidate.value_eur <= total_cash
+                and len(rebalance_sequence) < max_steps
+            ):
                 rebalance_sequence.append(candidate)
                 total_cash -= candidate.value_eur
 
@@ -472,8 +523,11 @@ def _generate_patterns_at_depth(
     # Pattern 5: Single best action (for minimal intervention)
     if max_steps >= 1:
         all_candidates = (
-            top_profit_taking + top_averaging +
-            top_rebalance_sells + top_rebalance_buys + top_opportunity
+            top_profit_taking
+            + top_averaging
+            + top_rebalance_sells
+            + top_rebalance_buys
+            + top_opportunity
         )
         if all_candidates:
             best = max(all_candidates, key=lambda x: x.priority)
@@ -528,7 +582,9 @@ async def generate_action_sequences(
             unique_sequences.append(seq)
 
     # Log sequences generated
-    logger.info(f"Holistic planner generated {len(unique_sequences)} unique sequences (testing depths 1-5)")
+    logger.info(
+        f"Holistic planner generated {len(unique_sequences)} unique sequences (testing depths 1-5)"
+    )
     for i, seq in enumerate(unique_sequences[:5]):  # Log first 5
         symbols = [f"{c.side.value}:{c.symbol}" for c in seq]
         logger.info(f"  Sequence {i+1} (len={len(seq)}): {symbols}")
@@ -579,7 +635,9 @@ async def simulate_sequence(
         else:  # BUY
             if action.value_eur > current_cash:
                 continue  # Skip if can't afford
-            new_positions[action.symbol] = new_positions.get(action.symbol, 0) + action.value_eur
+            new_positions[action.symbol] = (
+                new_positions.get(action.symbol, 0) + action.value_eur
+            )
             new_geographies[action.symbol] = geography
             if industry:
                 new_industries[action.symbol] = industry
@@ -606,7 +664,7 @@ async def create_holistic_plan(
     available_cash: float,
     stocks: List[Stock],
     positions: List[Position],
-    exchange_rate_service = None,
+    exchange_rate_service=None,
     target_weights: Optional[Dict[str, float]] = None,
     current_prices: Optional[Dict[str, float]] = None,
     transaction_cost_fixed: float = 2.0,
@@ -635,7 +693,10 @@ async def create_holistic_plan(
     Returns:
         HolisticPlan with the best sequence and end-state analysis
     """
-    from app.domain.planning.narrative import generate_plan_narrative, generate_step_narrative
+    from app.domain.planning.narrative import (
+        generate_plan_narrative,
+        generate_step_narrative,
+    )
 
     # Calculate current portfolio score
     current_score = await calculate_portfolio_score(portfolio_context)
@@ -661,9 +722,7 @@ async def create_holistic_plan(
         )
 
     # Generate candidate sequences at all depths (1-5)
-    sequences = await generate_action_sequences(
-        opportunities, available_cash
-    )
+    sequences = await generate_action_sequences(opportunities, available_cash)
 
     if not sequences:
         # No actions to take
@@ -705,9 +764,13 @@ async def create_holistic_plan(
         invested_value = sum(end_context.positions.values())
         symbols = [f"{c.side.value}:{c.symbol}" for c in sequence]
         logger.info(f"Sequence {seq_idx+1} evaluation: {symbols}")
-        logger.info(f"  End-state score: {end_score:.3f}, Diversification: {div_score.total:.1f}")
+        logger.info(
+            f"  End-state score: {end_score:.3f}, Diversification: {div_score.total:.1f}"
+        )
         logger.info(f"  Breakdown: {breakdown}")
-        logger.info(f"  Cash: €{end_cash:.2f}, Invested: €{invested_value:.2f}, Total: €{end_context.total_value:.2f}")
+        logger.info(
+            f"  Cash: €{end_cash:.2f}, Invested: €{invested_value:.2f}, Total: €{end_context.total_value:.2f}"
+        )
 
         if end_score > best_end_score:
             best_end_score = end_score
@@ -733,21 +796,23 @@ async def create_holistic_plan(
     steps = []
     for i, action in enumerate(best_sequence):
         narrative = generate_step_narrative(action, portfolio_context, opportunities)
-        steps.append(HolisticStep(
-            step_number=i + 1,
-            side=action.side,
-            symbol=action.symbol,
-            name=action.name,
-            quantity=action.quantity,
-            estimated_price=action.price,
-            estimated_value=action.value_eur,
-            currency=action.currency,
-            reason=action.reason,
-            narrative=narrative,
-            is_windfall="windfall" in action.tags,
-            is_averaging_down="averaging_down" in action.tags,
-            contributes_to=action.tags,
-        ))
+        steps.append(
+            HolisticStep(
+                step_number=i + 1,
+                side=action.side,
+                symbol=action.symbol,
+                name=action.name,
+                quantity=action.quantity,
+                estimated_price=action.price,
+                estimated_value=action.value_eur,
+                currency=action.currency,
+                reason=action.reason,
+                narrative=narrative,
+                is_windfall="windfall" in action.tags,
+                is_averaging_down="averaging_down" in action.tags,
+                contributes_to=action.tags,
+            )
+        )
 
     # Calculate cash requirements
     cash_required = sum(s.estimated_value for s in steps if s.side == TradeSide.BUY)

@@ -3,14 +3,14 @@
 Convert CAGR, Sharpe, and Sortino ratios to normalized scores.
 """
 
-from typing import Optional
 import math
+from typing import Optional
 
 from app.domain.scoring.constants import (
-    OPTIMAL_CAGR,
+    BELL_CURVE_FLOOR,
     BELL_CURVE_SIGMA_LEFT,
     BELL_CURVE_SIGMA_RIGHT,
-    BELL_CURVE_FLOOR,
+    OPTIMAL_CAGR,
     SHARPE_EXCELLENT,
     SHARPE_GOOD,
     SHARPE_OK,
@@ -30,7 +30,7 @@ def score_cagr(cagr: float, target: float = OPTIMAL_CAGR) -> float:
         return BELL_CURVE_FLOOR
 
     sigma = BELL_CURVE_SIGMA_LEFT if cagr < target else BELL_CURVE_SIGMA_RIGHT
-    raw_score = math.exp(-((cagr - target) ** 2) / (2 * sigma ** 2))
+    raw_score = math.exp(-((cagr - target) ** 2) / (2 * sigma**2))
 
     return BELL_CURVE_FLOOR + raw_score * (1 - BELL_CURVE_FLOOR)
 
@@ -83,4 +83,3 @@ def score_sortino(sortino_ratio: Optional[float]) -> float:
         return sortino_ratio * 0.8
     else:
         return 0.0
-

@@ -1,6 +1,7 @@
 """Tests for TradeSide enum."""
 
 import pytest
+
 from app.domain.value_objects.trade_side import TradeSide
 
 
@@ -29,10 +30,10 @@ class TestTradeSide:
         """Test creating trade side from invalid string raises error."""
         with pytest.raises(ValueError, match="Invalid trade side"):
             TradeSide.from_string("INVALID")
-        
+
         with pytest.raises(ValueError, match="Invalid trade side"):
             TradeSide.from_string("")
-        
+
         with pytest.raises(ValueError, match="Invalid trade side"):
             TradeSide.from_string("PURCHASE")
 
@@ -53,4 +54,3 @@ class TestTradeSide:
         """Test checking if trade side is SELL."""
         assert TradeSide.BUY.is_sell() is False
         assert TradeSide.SELL.is_sell() is True
-

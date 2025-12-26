@@ -14,9 +14,9 @@ Usage:
 import asyncio
 import logging
 import sqlite3
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-import sys
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -24,8 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.config import settings
 
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -56,7 +55,8 @@ def migrate_prices_to_monthly(db_path: Path):
         migrated_count = 0
         for symbol in symbols:
             # Aggregate daily to monthly for this symbol
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT OR REPLACE INTO stock_price_monthly
                 (symbol, year_month, avg_close, avg_adj_close, min_price, max_price, source, created_at)
                 SELECT
@@ -71,7 +71,9 @@ def migrate_prices_to_monthly(db_path: Path):
                 FROM stock_price_history
                 WHERE symbol = ?
                 GROUP BY symbol, strftime('%Y-%m', date)
-            """, (symbol,))
+            """,
+                (symbol,),
+            )
             migrated_count += cursor.rowcount
 
         conn.commit()
@@ -98,18 +100,16 @@ def cleanup_old_daily_prices(db_path: Path, retention_days: int = 365):
 
         # Count records to be deleted
         cursor.execute(
-            "SELECT COUNT(*) FROM stock_price_history WHERE date < ?",
-            (cutoff,)
+            "SELECT COUNT(*) FROM stock_price_history WHERE date < ?", (cutoff,)
         )
         delete_count = cursor.fetchone()[0]
 
         if delete_count > 0:
-            cursor.execute(
-                "DELETE FROM stock_price_history WHERE date < ?",
-                (cutoff,)
-            )
+            cursor.execute("DELETE FROM stock_price_history WHERE date < ?", (cutoff,))
             conn.commit()
-            logger.info(f"Deleted {delete_count} old daily price records (before {cutoff})")
+            logger.info(
+                f"Deleted {delete_count} old daily price records (before {cutoff})"
+            )
         else:
             logger.info("No old daily prices to delete")
 
@@ -129,18 +129,16 @@ def cleanup_old_snapshots(db_path: Path, retention_days: int = 90):
 
         # Count records to be deleted
         cursor.execute(
-            "SELECT COUNT(*) FROM portfolio_snapshots WHERE date < ?",
-            (cutoff,)
+            "SELECT COUNT(*) FROM portfolio_snapshots WHERE date < ?", (cutoff,)
         )
         delete_count = cursor.fetchone()[0]
 
         if delete_count > 0:
-            cursor.execute(
-                "DELETE FROM portfolio_snapshots WHERE date < ?",
-                (cutoff,)
-            )
+            cursor.execute("DELETE FROM portfolio_snapshots WHERE date < ?", (cutoff,))
             conn.commit()
-            logger.info(f"Deleted {delete_count} old snapshot records (before {cutoff})")
+            logger.info(
+                f"Deleted {delete_count} old snapshot records (before {cutoff})"
+            )
         else:
             logger.info("No old snapshots to delete")
 
@@ -173,20 +171,28 @@ def show_stats(db_path: Path):
         cursor.execute("SELECT COUNT(*) as count FROM stock_price_history")
         daily_count = cursor.fetchone()["count"]
 
-        cursor.execute("SELECT COUNT(DISTINCT symbol) as count FROM stock_price_history")
+        cursor.execute(
+            "SELECT COUNT(DISTINCT symbol) as count FROM stock_price_history"
+        )
         daily_symbols = cursor.fetchone()["count"]
 
-        cursor.execute("SELECT MIN(date) as min, MAX(date) as max FROM stock_price_history")
+        cursor.execute(
+            "SELECT MIN(date) as min, MAX(date) as max FROM stock_price_history"
+        )
         daily_range = cursor.fetchone()
 
         # Monthly prices
         cursor.execute("SELECT COUNT(*) as count FROM stock_price_monthly")
         monthly_count = cursor.fetchone()["count"]
 
-        cursor.execute("SELECT COUNT(DISTINCT symbol) as count FROM stock_price_monthly")
+        cursor.execute(
+            "SELECT COUNT(DISTINCT symbol) as count FROM stock_price_monthly"
+        )
         monthly_symbols = cursor.fetchone()["count"]
 
-        cursor.execute("SELECT MIN(year_month) as min, MAX(year_month) as max FROM stock_price_monthly")
+        cursor.execute(
+            "SELECT MIN(year_month) as min, MAX(year_month) as max FROM stock_price_monthly"
+        )
         monthly_range = cursor.fetchone()
 
         # Snapshots
@@ -197,7 +203,9 @@ def show_stats(db_path: Path):
         if daily_range["min"]:
             logger.info(f"  Range: {daily_range['min']} to {daily_range['max']}")
 
-        logger.info(f"Monthly prices: {monthly_count} records, {monthly_symbols} symbols")
+        logger.info(
+            f"Monthly prices: {monthly_count} records, {monthly_symbols} symbols"
+        )
         if monthly_range["min"]:
             logger.info(f"  Range: {monthly_range['min']} to {monthly_range['max']}")
 
@@ -205,6 +213,7 @@ def show_stats(db_path: Path):
 
         # File size
         import os
+
         db_size = os.path.getsize(db_path) / (1024 * 1024)
         logger.info(f"Database size: {db_size:.2f} MB")
 

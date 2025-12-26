@@ -44,7 +44,7 @@ class DividendRepository:
                     1 if dividend.bonus_cleared else 0,
                     dividend.cleared_at,
                     now,
-                )
+                ),
             )
             dividend.id = cursor.lastrowid
             dividend.created_at = now
@@ -54,8 +54,7 @@ class DividendRepository:
     async def get_by_id(self, dividend_id: int) -> Optional[DividendRecord]:
         """Get dividend record by ID."""
         row = await self._db.fetchone(
-            "SELECT * FROM dividend_history WHERE id = ?",
-            (dividend_id,)
+            "SELECT * FROM dividend_history WHERE id = ?", (dividend_id,)
         )
         if not row:
             return None
@@ -64,8 +63,7 @@ class DividendRepository:
     async def get_by_cash_flow_id(self, cash_flow_id: int) -> Optional[DividendRecord]:
         """Get dividend record linked to a cash flow."""
         row = await self._db.fetchone(
-            "SELECT * FROM dividend_history WHERE cash_flow_id = ?",
-            (cash_flow_id,)
+            "SELECT * FROM dividend_history WHERE cash_flow_id = ?", (cash_flow_id,)
         )
         if not row:
             return None
@@ -74,8 +72,7 @@ class DividendRepository:
     async def exists_for_cash_flow(self, cash_flow_id: int) -> bool:
         """Check if a dividend record already exists for a cash flow."""
         row = await self._db.fetchone(
-            "SELECT 1 FROM dividend_history WHERE cash_flow_id = ?",
-            (cash_flow_id,)
+            "SELECT 1 FROM dividend_history WHERE cash_flow_id = ?", (cash_flow_id,)
         )
         return row is not None
 
@@ -83,7 +80,7 @@ class DividendRepository:
         """Get all dividend records for a symbol."""
         rows = await self._db.fetchall(
             "SELECT * FROM dividend_history WHERE symbol = ? ORDER BY payment_date DESC",
-            (symbol.upper(),)
+            (symbol.upper(),),
         )
         return [self._row_to_dividend(row) for row in rows]
 
@@ -92,7 +89,7 @@ class DividendRepository:
         if limit:
             rows = await self._db.fetchall(
                 "SELECT * FROM dividend_history ORDER BY payment_date DESC LIMIT ?",
-                (limit,)
+                (limit,),
             )
         else:
             rows = await self._db.fetchall(
@@ -129,7 +126,7 @@ class DividendRepository:
             FROM dividend_history
             WHERE symbol = ? AND bonus_cleared = 0 AND pending_bonus > 0
             """,
-            (symbol.upper(),)
+            (symbol.upper(),),
         )
         return row["total"] if row else 0.0
 
@@ -149,7 +146,7 @@ class DividendRepository:
                 pending_bonus = 0
             WHERE id = ?
             """,
-            (now, quantity, dividend_id)
+            (now, quantity, dividend_id),
         )
         await self._db.commit()
 
@@ -165,7 +162,7 @@ class DividendRepository:
             SET pending_bonus = ?
             WHERE id = ?
             """,
-            (bonus, dividend_id)
+            (bonus, dividend_id),
         )
         await self._db.commit()
 
@@ -185,7 +182,7 @@ class DividendRepository:
             SET bonus_cleared = 1, cleared_at = ?, pending_bonus = 0
             WHERE symbol = ? AND bonus_cleared = 0 AND pending_bonus > 0
             """,
-            (now, symbol.upper())
+            (now, symbol.upper()),
         )
         await self._db.commit()
         return cursor.rowcount
@@ -209,7 +206,7 @@ class DividendRepository:
             WHERE reinvested = 0 AND amount_eur >= ?
             ORDER BY payment_date ASC
             """,
-            (min_amount_eur,)
+            (min_amount_eur,),
         )
         return [self._row_to_dividend(row) for row in rows]
 

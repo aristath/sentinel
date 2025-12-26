@@ -4,43 +4,44 @@ This module provides dependency functions for all repositories and services,
 enabling proper dependency injection throughout the application.
 """
 
-from fastapi import Depends
 from typing import Annotated
 
-from app.infrastructure.database.manager import DatabaseManager, get_db_manager
-from app.infrastructure.external.tradernet import TradernetClient, get_tradernet_client
-from app.repositories import (
-    StockRepository,
-    PositionRepository,
-    TradeRepository,
-    ScoreRepository,
-    AllocationRepository,
-    CashFlowRepository,
-    PortfolioRepository,
-    SettingsRepository,
-    RecommendationRepository,
-    CalculationsRepository,
-)
-from app.domain.repositories.protocols import (
-    IStockRepository,
-    IPositionRepository,
-    ITradeRepository,
-    ISettingsRepository,
-    IAllocationRepository,
-)
-from app.application.services.portfolio_service import PortfolioService
-from app.application.services.scoring_service import ScoringService
-from app.application.services.rebalancing_service import RebalancingService
-from app.application.services.trade_execution_service import TradeExecutionService
-from app.application.services.trade_safety_service import TradeSafetyService
+from fastapi import Depends
+
 from app.application.services.currency_exchange_service import (
     CurrencyExchangeService,
 )
-from app.domain.services.settings_service import SettingsService
+from app.application.services.portfolio_service import PortfolioService
+from app.application.services.rebalancing_service import RebalancingService
+from app.application.services.scoring_service import ScoringService
+from app.application.services.trade_execution_service import TradeExecutionService
+from app.application.services.trade_safety_service import TradeSafetyService
+from app.domain.repositories.protocols import (
+    IAllocationRepository,
+    IPositionRepository,
+    ISettingsRepository,
+    IStockRepository,
+    ITradeRepository,
+)
 from app.domain.services.exchange_rate_service import ExchangeRateService
-
+from app.domain.services.settings_service import SettingsService
+from app.infrastructure.database.manager import DatabaseManager, get_db_manager
+from app.infrastructure.external.tradernet import TradernetClient, get_tradernet_client
+from app.repositories import (
+    AllocationRepository,
+    CalculationsRepository,
+    CashFlowRepository,
+    PortfolioRepository,
+    PositionRepository,
+    RecommendationRepository,
+    ScoreRepository,
+    SettingsRepository,
+    StockRepository,
+    TradeRepository,
+)
 
 # Repository Dependencies
+
 
 def get_stock_repository() -> IStockRepository:
     """Get StockRepository instance."""
@@ -94,6 +95,7 @@ def get_calculations_repository() -> CalculationsRepository:
 
 # Infrastructure Dependencies
 
+
 def get_database_manager() -> DatabaseManager:
     """Get DatabaseManager singleton instance."""
     return get_db_manager()
@@ -109,12 +111,20 @@ StockRepositoryDep = Annotated[IStockRepository, Depends(get_stock_repository)]
 PositionRepositoryDep = Annotated[IPositionRepository, Depends(get_position_repository)]
 TradeRepositoryDep = Annotated[ITradeRepository, Depends(get_trade_repository)]
 ScoreRepositoryDep = Annotated[ScoreRepository, Depends(get_score_repository)]
-AllocationRepositoryDep = Annotated[IAllocationRepository, Depends(get_allocation_repository)]
+AllocationRepositoryDep = Annotated[
+    IAllocationRepository, Depends(get_allocation_repository)
+]
 CashFlowRepositoryDep = Annotated[CashFlowRepository, Depends(get_cash_flow_repository)]
-PortfolioRepositoryDep = Annotated[PortfolioRepository, Depends(get_portfolio_repository)]
+PortfolioRepositoryDep = Annotated[
+    PortfolioRepository, Depends(get_portfolio_repository)
+]
 SettingsRepositoryDep = Annotated[ISettingsRepository, Depends(get_settings_repository)]
-RecommendationRepositoryDep = Annotated[RecommendationRepository, Depends(get_recommendation_repository)]
-CalculationsRepositoryDep = Annotated[CalculationsRepository, Depends(get_calculations_repository)]
+RecommendationRepositoryDep = Annotated[
+    RecommendationRepository, Depends(get_recommendation_repository)
+]
+CalculationsRepositoryDep = Annotated[
+    CalculationsRepository, Depends(get_calculations_repository)
+]
 
 # Infrastructure dependency type aliases
 DatabaseManagerDep = Annotated[DatabaseManager, Depends(get_database_manager)]
@@ -122,6 +132,7 @@ TradernetClientDep = Annotated[TradernetClient, Depends(get_tradernet)]
 
 
 # Application Service Dependencies
+
 
 def get_portfolio_service(
     portfolio_repo: PortfolioRepositoryDep,
@@ -180,7 +191,9 @@ def get_rebalancing_service(
     recommendation_repo: RecommendationRepositoryDep,
     db_manager: DatabaseManagerDep,
     tradernet_client: TradernetClientDep,
-    exchange_rate_service: Annotated[ExchangeRateService, Depends(get_exchange_rate_service)],
+    exchange_rate_service: Annotated[
+        ExchangeRateService, Depends(get_exchange_rate_service)
+    ],
 ) -> RebalancingService:
     """Get RebalancingService instance."""
     return RebalancingService(
@@ -201,8 +214,12 @@ def get_trade_execution_service(
     trade_repo: TradeRepositoryDep,
     position_repo: PositionRepositoryDep,
     tradernet_client: TradernetClientDep,
-    currency_exchange_service: Annotated[CurrencyExchangeService, Depends(get_currency_exchange_service_dep)],
-    exchange_rate_service: Annotated[ExchangeRateService, Depends(get_exchange_rate_service)],
+    currency_exchange_service: Annotated[
+        CurrencyExchangeService, Depends(get_currency_exchange_service_dep)
+    ],
+    exchange_rate_service: Annotated[
+        ExchangeRateService, Depends(get_exchange_rate_service)
+    ],
 ) -> TradeExecutionService:
     """Get TradeExecutionService instance."""
     return TradeExecutionService(
@@ -230,8 +247,13 @@ PortfolioServiceDep = Annotated[PortfolioService, Depends(get_portfolio_service)
 ScoringServiceDep = Annotated[ScoringService, Depends(get_scoring_service)]
 SettingsServiceDep = Annotated[SettingsService, Depends(get_settings_service)]
 RebalancingServiceDep = Annotated[RebalancingService, Depends(get_rebalancing_service)]
-TradeExecutionServiceDep = Annotated[TradeExecutionService, Depends(get_trade_execution_service)]
+TradeExecutionServiceDep = Annotated[
+    TradeExecutionService, Depends(get_trade_execution_service)
+]
 TradeSafetyServiceDep = Annotated[TradeSafetyService, Depends(get_trade_safety_service)]
-CurrencyExchangeServiceDep = Annotated[CurrencyExchangeService, Depends(get_currency_exchange_service_dep)]
-ExchangeRateServiceDep = Annotated[ExchangeRateService, Depends(get_exchange_rate_service)]
-
+CurrencyExchangeServiceDep = Annotated[
+    CurrencyExchangeService, Depends(get_currency_exchange_service_dep)
+]
+ExchangeRateServiceDep = Annotated[
+    ExchangeRateService, Depends(get_exchange_rate_service)
+]

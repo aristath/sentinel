@@ -1,22 +1,23 @@
 """Integration tests for error recovery paths."""
 
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
 from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.domain.models import Trade, Position
-from app.repositories import TradeRepository, PositionRepository
+import pytest
+
 from app.application.services.trade_execution_service import TradeExecutionService
+from app.domain.models import Position, Trade
+from app.repositories import PositionRepository, TradeRepository
 
 
 @pytest.mark.asyncio
 async def test_trade_execution_rollback_on_database_error(db):
     """Test that trade execution rolls back when database write fails."""
-    from app.repositories import TradeRepository
     from app.domain.models import Recommendation
+    from app.repositories import TradeRepository
 
     trade_repo = TradeRepository(db=db)
-    
+
     # Create a trade recommendation (what TradeExecutionService expects)
     trade_rec = Recommendation(
         symbol="AAPL",
@@ -28,25 +29,26 @@ async def test_trade_execution_rollback_on_database_error(db):
         reason="Test trade",
         geography="US",
     )
-    
+
     # Create mock client for trade execution
     mock_client = MagicMock()
     mock_client.is_connected = True
     mock_client.place_order.return_value = MagicMock(
-        order_id="order1",
-        price=150.0,
-        status="filled"
+        order_id="order1", price=150.0, status="filled"
     )
 
     position_repo = PositionRepository(db=db)
-    
+
     # Create mock currency exchange service and exchange rate service
-    from app.application.services.currency_exchange_service import CurrencyExchangeService
+    from app.application.services.currency_exchange_service import (
+        CurrencyExchangeService,
+    )
     from app.domain.services.exchange_rate_service import ExchangeRateService
+
     mock_currency_service = MagicMock(spec=CurrencyExchangeService)
     mock_exchange_rate_service = MagicMock(spec=ExchangeRateService)
     mock_exchange_rate_service.get_rate = AsyncMock(return_value=1.0)
-    
+
     service = TradeExecutionService(
         trade_repo=trade_repo,
         position_repo=position_repo,
@@ -57,6 +59,7 @@ async def test_trade_execution_rollback_on_database_error(db):
 
     # Mock repository create to fail
     original_create = trade_repo.create
+
     async def failing_create(trade):
         raise Exception("Database write failed")
 
@@ -83,7 +86,7 @@ async def test_trade_execution_handles_external_failure(db):
     from app.domain.models import Recommendation
 
     trade_repo = TradeRepository(db=db)
-    
+
     trade_rec = Recommendation(
         symbol="AAPL",
         name="Apple Inc.",
@@ -94,7 +97,7 @@ async def test_trade_execution_handles_external_failure(db):
         reason="Test trade",
         geography="US",
     )
-    
+
     position_repo = PositionRepository(db=db)
 
     # Create mock client that fails on order placement
@@ -103,12 +106,15 @@ async def test_trade_execution_handles_external_failure(db):
     mock_client.place_order.side_effect = Exception("API Error")
 
     # Create mock currency exchange service and exchange rate service
-    from app.application.services.currency_exchange_service import CurrencyExchangeService
+    from app.application.services.currency_exchange_service import (
+        CurrencyExchangeService,
+    )
     from app.domain.services.exchange_rate_service import ExchangeRateService
+
     mock_currency_service = MagicMock(spec=CurrencyExchangeService)
     mock_exchange_rate_service = MagicMock(spec=ExchangeRateService)
     mock_exchange_rate_service.get_rate = AsyncMock(return_value=1.0)
-    
+
     service = TradeExecutionService(
         trade_repo=trade_repo,
         position_repo=position_repo,
@@ -193,12 +199,14 @@ def test_price_fetch_retry_logic():
         mock = MagicMock()
         if call_count < 3:
             # Make info property raise an exception
-            type(mock).info = property(lambda self: (_ for _ in ()).throw(Exception("API Error")))
+            type(mock).info = property(
+                lambda self: (_ for _ in ()).throw(Exception("API Error"))
+            )
         else:
             mock.info = {"currentPrice": 150.0}
         return mock
 
-    with patch('yfinance.Ticker', side_effect=mock_ticker_factory):
+    with patch("yfinance.Ticker", side_effect=mock_ticker_factory):
         # Should succeed after retries (function is synchronous)
         price = yahoo.get_current_price("AAPL")
         assert price == 150.0
@@ -212,10 +220,12 @@ def test_price_fetch_fails_after_max_retries():
     # Mock yfinance to always fail
     def mock_ticker_factory(symbol):
         mock = MagicMock()
-        type(mock).info = property(lambda self: (_ for _ in ()).throw(Exception("API Error")))
+        type(mock).info = property(
+            lambda self: (_ for _ in ()).throw(Exception("API Error"))
+        )
         return mock
 
-    with patch('yfinance.Ticker', side_effect=mock_ticker_factory):
+    with patch("yfinance.Ticker", side_effect=mock_ticker_factory):
         # Should return None after max retries (function is synchronous)
         price = yahoo.get_current_price("AAPL")
         assert price is None
@@ -224,8 +234,8 @@ def test_price_fetch_fails_after_max_retries():
 @pytest.mark.asyncio
 async def test_allocation_target_upsert(db):
     """Test that allocation targets can be created and retrieved."""
-    from app.repositories import AllocationRepository
     from app.domain.models import AllocationTarget
+    from app.repositories import AllocationRepository
 
     allocation_repo = AllocationRepository(db=db)
 
@@ -243,20 +253,18 @@ async def test_allocation_target_upsert(db):
     us_target = next((t for t in targets if t.name == "US"), None)
     assert us_target is not None
     assert us_target.target_pct == 0.5
-    
+
     # Valid target should work
     valid_target = AllocationTarget(
         type="geography",
         name="ASIA",
         target_pct=0.3,  # Valid: 30%
     )
-    
+
     await allocation_repo.upsert(valid_target)
-    
+
     # Verify it was saved
     targets = await allocation_repo.get_by_type("geography")
     asia_target = next((t for t in targets if t.name == "ASIA"), None)
     assert asia_target is not None
     assert asia_target.target_pct == 0.3
-
-

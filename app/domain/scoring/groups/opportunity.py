@@ -9,19 +9,19 @@ Note: Technical indicators (RSI, Bollinger, EMA) moved to technicals.py
 """
 
 import logging
-from typing import Optional, List, Dict
+from typing import Dict, List, Optional
 
 import numpy as np
 
+from app.domain.constants import MAX_PRICE_VS_52W_HIGH
+from app.domain.responses import ScoreResult
 from app.domain.scoring.constants import (
-    DEFAULT_MARKET_AVG_PE,
     BELOW_HIGH_EXCELLENT,
     BELOW_HIGH_GOOD,
     BELOW_HIGH_OK,
+    DEFAULT_MARKET_AVG_PE,
     MIN_DAYS_FOR_OPPORTUNITY,
 )
-from app.domain.constants import MAX_PRICE_VS_52W_HIGH
-from app.domain.responses import ScoreResult
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ async def calculate_opportunity_score(
     symbol: str,
     daily_prices: List[Dict],
     fundamentals,
-    market_avg_pe: float = DEFAULT_MARKET_AVG_PE
+    market_avg_pe: float = DEFAULT_MARKET_AVG_PE,
 ) -> ScoreResult:
     """
     Calculate opportunity score (value/dip signals).
@@ -70,8 +70,8 @@ async def calculate_opportunity_score(
         ScoreResult with score and sub_scores
         sub_scores: {"below_52w_high": float, "pe_ratio": float}
     """
-    from app.repositories.calculations import CalculationsRepository
     from app.domain.scoring.caching import get_52_week_high
+    from app.repositories.calculations import CalculationsRepository
 
     if len(daily_prices) < MIN_DAYS_FOR_OPPORTUNITY:
         logger.warning(f"Insufficient daily data: {len(daily_prices)} days")
@@ -112,7 +112,4 @@ async def calculate_opportunity_score(
         "pe_ratio": round(pe_score, 3),
     }
 
-    return ScoreResult(
-        score=round(min(1.0, total), 3),
-        sub_scores=sub_components
-    )
+    return ScoreResult(score=round(min(1.0, total), 3), sub_scores=sub_components)

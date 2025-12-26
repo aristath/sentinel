@@ -4,7 +4,11 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.infrastructure.cache import cache
-from app.infrastructure.dependencies import SettingsRepositoryDep, CalculationsRepositoryDep, DatabaseManagerDep
+from app.infrastructure.dependencies import (
+    CalculationsRepositoryDep,
+    DatabaseManagerDep,
+    SettingsRepositoryDep,
+)
 
 router = APIRouter()
 
@@ -15,40 +19,40 @@ router = APIRouter()
 # uses fixed weights defined in app/domain/scoring/stock_scorer.py and sell.py.
 SETTING_DEFAULTS = {
     # Core trading constraints
-    "min_hold_days": 90,            # Minimum days before selling
-    "sell_cooldown_days": 180,      # Days between sells of same stock
-    "max_loss_threshold": -0.20,    # Don't sell if loss exceeds this (as decimal)
-    "min_stock_score": 0.5,         # Minimum score for stock to be recommended (0-1)
-    "target_annual_return": 0.11,   # Optimal CAGR for scoring (11%)
-    "market_avg_pe": 22.0,          # Reference P/E for valuation
+    "min_hold_days": 90,  # Minimum days before selling
+    "sell_cooldown_days": 180,  # Days between sells of same stock
+    "max_loss_threshold": -0.20,  # Don't sell if loss exceeds this (as decimal)
+    "min_stock_score": 0.5,  # Minimum score for stock to be recommended (0-1)
+    "target_annual_return": 0.11,  # Optimal CAGR for scoring (11%)
+    "market_avg_pe": 22.0,  # Reference P/E for valuation
     # Trading mode
-    "trading_mode": "research",             # "live" or "research" - blocks trades in research mode
+    "trading_mode": "research",  # "live" or "research" - blocks trades in research mode
     # Portfolio Optimizer settings
-    "optimizer_blend": 0.5,                 # 0.0 = pure Mean-Variance, 1.0 = pure HRP
-    "optimizer_target_return": 0.11,        # Target annual return for MV component
+    "optimizer_blend": 0.5,  # 0.0 = pure Mean-Variance, 1.0 = pure HRP
+    "optimizer_target_return": 0.11,  # Target annual return for MV component
     # Transaction costs (Freedom24) - replaces min_trade_size for smarter filtering
-    "transaction_cost_fixed": 2.0,          # Fixed cost per trade in EUR
-    "transaction_cost_percent": 0.002,      # Variable cost as fraction (0.2%)
+    "transaction_cost_fixed": 2.0,  # Fixed cost per trade in EUR
+    "transaction_cost_percent": 0.002,  # Variable cost as fraction (0.2%)
     # Cash management
-    "min_cash_reserve": 500.0,              # Minimum cash to keep (never fully deploy)
+    "min_cash_reserve": 500.0,  # Minimum cash to keep (never fully deploy)
     # LED Matrix settings
-    "ticker_speed": 50.0,           # Ticker scroll speed in ms per frame (lower = faster)
-    "led_brightness": 150.0,        # LED brightness (0-255)
+    "ticker_speed": 50.0,  # Ticker scroll speed in ms per frame (lower = faster)
+    "led_brightness": 150.0,  # LED brightness (0-255)
     # Ticker display options (1.0 = show, 0.0 = hide)
-    "ticker_show_value": 1.0,       # Show portfolio value
-    "ticker_show_cash": 1.0,        # Show cash balance
-    "ticker_show_actions": 1.0,     # Show next actions (BUY/SELL)
-    "ticker_show_amounts": 1.0,     # Show amounts for actions
-    "ticker_max_actions": 3.0,      # Max recommendations to show (buy + sell)
+    "ticker_show_value": 1.0,  # Show portfolio value
+    "ticker_show_cash": 1.0,  # Show cash balance
+    "ticker_show_actions": 1.0,  # Show next actions (BUY/SELL)
+    "ticker_show_amounts": 1.0,  # Show amounts for actions
+    "ticker_max_actions": 3.0,  # Max recommendations to show (buy + sell)
     # Job scheduling intervals
-    "job_portfolio_sync_minutes": 2.0,      # Portfolio sync interval
-    "job_trade_sync_minutes": 4.0,          # Trade sync interval
-    "job_price_sync_minutes": 7.0,          # Price sync interval
-    "job_score_refresh_minutes": 10.0,      # Score refresh interval
-    "job_rebalance_check_minutes": 15.0,    # Rebalance check interval
-    "job_cash_flow_sync_hour": 1.0,         # Cash flow sync hour (0-23)
-    "job_historical_sync_hour": 20.0,       # Historical sync hour (0-23)
-    "job_maintenance_hour": 3.0,            # Daily maintenance hour (0-23)
+    "job_portfolio_sync_minutes": 2.0,  # Portfolio sync interval
+    "job_trade_sync_minutes": 4.0,  # Trade sync interval
+    "job_price_sync_minutes": 7.0,  # Price sync interval
+    "job_score_refresh_minutes": 10.0,  # Score refresh interval
+    "job_rebalance_check_minutes": 15.0,  # Rebalance check interval
+    "job_cash_flow_sync_hour": 1.0,  # Cash flow sync hour (0-23)
+    "job_historical_sync_hour": 20.0,  # Historical sync hour (0-23)
+    "job_maintenance_hour": 3.0,  # Daily maintenance hour (0-23)
 }
 
 
@@ -56,13 +60,17 @@ class SettingUpdate(BaseModel):
     value: float
 
 
-async def get_setting(key: str, settings_repo: SettingsRepositoryDep, default: str = None) -> str | None:
+async def get_setting(
+    key: str, settings_repo: SettingsRepositoryDep, default: str = None
+) -> str | None:
     """Get a setting value from the database."""
     value = await settings_repo.get(key)
     return str(value) if value is not None else default
 
 
-async def get_settings_batch(keys: list[str], settings_repo: SettingsRepositoryDep) -> dict[str, str]:
+async def get_settings_batch(
+    keys: list[str], settings_repo: SettingsRepositoryDep
+) -> dict[str, str]:
     """Get multiple settings in a single database query (cached 3s)."""
     cache_key = "settings:all"
     cached = cache.get(cache_key)
@@ -79,7 +87,9 @@ async def get_settings_batch(keys: list[str], settings_repo: SettingsRepositoryD
     return {k: v for k, v in all_settings.items() if k in keys}
 
 
-async def set_setting(key: str, value: str, settings_repo: SettingsRepositoryDep) -> None:
+async def set_setting(
+    key: str, value: str, settings_repo: SettingsRepositoryDep
+) -> None:
     """Set a setting value in the database."""
     await settings_repo.set_float(key, float(value))
     # Invalidate settings cache
@@ -145,7 +155,9 @@ async def get_all_settings(settings_repo: SettingsRepositoryDep):
 
 
 @router.put("/{key}")
-async def update_setting_value(key: str, data: SettingUpdate, settings_repo: SettingsRepositoryDep):
+async def update_setting_value(
+    key: str, data: SettingUpdate, settings_repo: SettingsRepositoryDep
+):
     """Update a setting value."""
     if key not in SETTING_DEFAULTS:
         raise HTTPException(status_code=400, detail=f"Unknown setting: {key}")
@@ -154,7 +166,10 @@ async def update_setting_value(key: str, data: SettingUpdate, settings_repo: Set
     if key == "trading_mode":
         mode = str(data.value).lower()
         if mode not in ("live", "research"):
-            raise HTTPException(status_code=400, detail=f"Invalid trading mode: {mode}. Must be 'live' or 'research'")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid trading mode: {mode}. Must be 'live' or 'research'",
+            )
         await set_trading_mode(mode, settings_repo)
         return {key: mode}
 
@@ -163,10 +178,15 @@ async def update_setting_value(key: str, data: SettingUpdate, settings_repo: Set
     # Invalidate recommendation caches when recommendation-affecting settings change
     # Note: optimizer settings (optimizer_blend, optimizer_target_return) also affect recommendations
     recommendation_settings = {
-        "min_stock_score", "min_hold_days", "sell_cooldown_days",
-        "max_loss_threshold", "target_annual_return",
-        "optimizer_blend", "optimizer_target_return",
-        "transaction_cost_fixed", "transaction_cost_percent",
+        "min_stock_score",
+        "min_hold_days",
+        "sell_cooldown_days",
+        "max_loss_threshold",
+        "target_annual_return",
+        "optimizer_blend",
+        "optimizer_target_return",
+        "transaction_cost_fixed",
+        "transaction_cost_percent",
         "min_cash_reserve",
     }
     if key in recommendation_settings:
@@ -188,17 +208,21 @@ async def update_setting_value(key: str, data: SettingUpdate, settings_repo: Set
 async def restart_service():
     """Restart the arduino-trader systemd service."""
     import subprocess
+
     try:
         result = subprocess.run(
             ["sudo", "systemctl", "restart", "arduino-trader"],
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=10,
         )
         if result.returncode == 0:
             return {"status": "ok", "message": "Service restart initiated"}
         else:
-            return {"status": "error", "message": f"Failed to restart service: {result.stderr}"}
+            return {
+                "status": "error",
+                "message": f"Failed to restart service: {result.stderr}",
+            }
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -207,6 +231,7 @@ async def restart_service():
 async def restart_system():
     """Trigger system reboot."""
     import subprocess
+
     subprocess.Popen(["sudo", "reboot"])
     return {"status": "rebooting"}
 
@@ -238,7 +263,7 @@ async def get_cache_stats(
 
     return {
         "simple_cache": {
-            "entries": len(cache._cache) if hasattr(cache, '_cache') else 0,
+            "entries": len(cache._cache) if hasattr(cache, "_cache") else 0,
         },
         "calculations_db": {
             "entries": calc_count,

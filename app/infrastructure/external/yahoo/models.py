@@ -11,6 +11,7 @@ from typing import Optional
 @dataclass
 class AnalystData:
     """Analyst recommendation data."""
+
     symbol: str
     recommendation: str  # strongBuy, buy, hold, sell, strongSell
     target_price: float
@@ -23,6 +24,7 @@ class AnalystData:
 @dataclass
 class FundamentalData:
     """Fundamental analysis data."""
+
     symbol: str
     pe_ratio: Optional[float]
     forward_pe: Optional[float]
@@ -43,6 +45,7 @@ class FundamentalData:
 @dataclass
 class HistoricalPrice:
     """Historical price data."""
+
     date: datetime
     open: float
     high: float
@@ -50,4 +53,3 @@ class HistoricalPrice:
     close: float
     volume: int
     adj_close: float
-

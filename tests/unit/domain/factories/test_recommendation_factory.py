@@ -1,10 +1,11 @@
 """Tests for RecommendationFactory."""
 
 import pytest
+
 from app.domain.factories.recommendation_factory import RecommendationFactory
-from app.domain.value_objects.trade_side import TradeSide
 from app.domain.value_objects.currency import Currency
 from app.domain.value_objects.recommendation_status import RecommendationStatus
+from app.domain.value_objects.trade_side import TradeSide
 
 
 class TestRecommendationFactory:
@@ -26,7 +27,7 @@ class TestRecommendationFactory:
             current_portfolio_score=75.0,
             new_portfolio_score=77.5,
         )
-        
+
         assert data["symbol"] == "AAPL.US"
         assert data["name"] == "Apple Inc."
         assert data["side"] == TradeSide.BUY
@@ -55,7 +56,7 @@ class TestRecommendationFactory:
             industry="Technology",
             currency=Currency.USD,
         )
-        
+
         assert data["symbol"] == "MSFT.US"
         assert data["side"] == TradeSide.SELL
         assert data["quantity"] == 5
@@ -76,7 +77,7 @@ class TestRecommendationFactory:
             current_portfolio_score=70.0,
             new_portfolio_score=72.5,
         )
-        
+
         assert data["score_change"] == 2.5
 
     def test_create_buy_recommendation_without_scores(self):
@@ -90,7 +91,7 @@ class TestRecommendationFactory:
             reason="Test",
             geography="US",
         )
-        
+
         assert data["current_portfolio_score"] is None
         assert data["new_portfolio_score"] is None
         assert data["score_change"] is None
@@ -106,9 +107,8 @@ class TestRecommendationFactory:
             reason="Test",
             geography="US",
         )
-        
+
         assert data["industry"] is None
         assert data["currency"] == Currency.EUR  # Default
         assert data["priority"] is None
         assert data["amount"] == 1500.0  # Should match estimated_value
-

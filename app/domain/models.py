@@ -8,15 +8,16 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
-from app.domain.value_objects.currency import Currency
-from app.domain.value_objects.trade_side import TradeSide
-from app.domain.value_objects.recommendation_status import RecommendationStatus
 from app.domain.exceptions import ValidationError
+from app.domain.value_objects.currency import Currency
+from app.domain.value_objects.recommendation_status import RecommendationStatus
+from app.domain.value_objects.trade_side import TradeSide
 
 
 @dataclass
 class Stock:
     """Stock in the investment universe."""
+
     symbol: str
     name: str
     geography: str
@@ -28,27 +29,28 @@ class Stock:
     allow_buy: bool = True
     allow_sell: bool = False
     currency: Optional[Currency] = None
-    
+
     def __post_init__(self):
         """Validate stock data."""
         if not self.symbol or not self.symbol.strip():
             raise ValidationError("Symbol cannot be empty")
-        
+
         if not self.name or not self.name.strip():
             raise ValidationError("Name cannot be empty")
-        
+
         # Normalize symbol and geography (any geography is valid)
-        object.__setattr__(self, 'symbol', self.symbol.upper().strip())
-        object.__setattr__(self, 'geography', self.geography.upper().strip())
-        
+        object.__setattr__(self, "symbol", self.symbol.upper().strip())
+        object.__setattr__(self, "geography", self.geography.upper().strip())
+
         # Ensure min_lot is at least 1
         if self.min_lot < 1:
-            object.__setattr__(self, 'min_lot', 1)
+            object.__setattr__(self, "min_lot", 1)
 
 
 @dataclass
 class Position:
     """Current position in a stock."""
+
     symbol: str
     quantity: float
     avg_price: float
@@ -62,29 +64,30 @@ class Position:
     last_updated: Optional[str] = None
     first_bought_at: Optional[str] = None
     last_sold_at: Optional[str] = None
-    
+
     def __post_init__(self):
         """Validate position data."""
         if not self.symbol or not self.symbol.strip():
             raise ValidationError("Symbol cannot be empty")
-        
+
         if self.quantity < 0:
             raise ValidationError("Quantity must be non-negative")
-        
+
         if self.avg_price <= 0:
             raise ValidationError("Average price must be positive")
-        
+
         # Normalize symbol
-        object.__setattr__(self, 'symbol', self.symbol.upper().strip())
-        
+        object.__setattr__(self, "symbol", self.symbol.upper().strip())
+
         # Validate currency_rate is positive
         if self.currency_rate <= 0:
-            object.__setattr__(self, 'currency_rate', 1.0)
+            object.__setattr__(self, "currency_rate", 1.0)
 
 
 @dataclass
 class Trade:
     """Executed trade record."""
+
     symbol: str
     side: TradeSide  # BUY or SELL
     quantity: float
@@ -96,25 +99,26 @@ class Trade:
     value_eur: Optional[float] = None
     source: str = "tradernet"
     id: Optional[int] = None
-    
+
     def __post_init__(self):
         """Validate trade data."""
         if not self.symbol or not self.symbol.strip():
             raise ValidationError("Symbol cannot be empty")
-        
+
         if self.quantity <= 0:
             raise ValidationError("Quantity must be positive")
-        
+
         if self.price <= 0:
             raise ValidationError("Price must be positive")
-        
+
         # Normalize symbol
-        object.__setattr__(self, 'symbol', self.symbol.upper().strip())
+        object.__setattr__(self, "symbol", self.symbol.upper().strip())
 
 
 @dataclass
 class StockScore:
     """Calculated score for a stock."""
+
     symbol: str
 
     # Primary component scores (0-1 range)
@@ -152,6 +156,7 @@ class StockScore:
 @dataclass
 class AllocationTarget:
     """Target allocation for geography or industry."""
+
     type: str  # 'geography' or 'industry'
     name: str
     target_pct: float  # Weight from -1.0 to 1.0
@@ -160,6 +165,7 @@ class AllocationTarget:
 @dataclass
 class CashFlow:
     """Cash flow transaction (deposit, withdrawal, dividend, etc.)."""
+
     transaction_id: str
     type_doc_id: int
     date: str
@@ -179,6 +185,7 @@ class CashFlow:
 @dataclass
 class PortfolioSnapshot:
     """Daily portfolio summary."""
+
     date: str
     total_value: float
     cash_balance: float
@@ -193,6 +200,7 @@ class PortfolioSnapshot:
 @dataclass
 class DailyPrice:
     """Daily OHLC price data for a stock."""
+
     date: str
     close_price: float
     open_price: Optional[float] = None
@@ -205,6 +213,7 @@ class DailyPrice:
 @dataclass
 class MonthlyPrice:
     """Monthly aggregated price data for CAGR calculations."""
+
     year_month: str  # 'YYYY-MM' format
     avg_close: float
     avg_adj_close: Optional[float] = None
@@ -220,6 +229,7 @@ class MonthlyPrice:
 @dataclass
 class AllocationStatus:
     """Current allocation vs target."""
+
     category: str  # geography or industry
     name: str  # EU, ASIA, US or Technology, etc.
     target_pct: float
@@ -231,6 +241,7 @@ class AllocationStatus:
 @dataclass
 class PortfolioSummary:
     """Complete portfolio allocation summary."""
+
     total_value: float
     cash_balance: float
     geographic_allocations: list
@@ -240,9 +251,10 @@ class PortfolioSummary:
 @dataclass
 class Recommendation:
     """Unified trade recommendation model.
-    
+
     Replaces both TradeRecommendation and service-level Recommendation.
     """
+
     symbol: str
     name: str
     side: TradeSide  # BUY or SELL
@@ -260,40 +272,48 @@ class Recommendation:
     score_change: Optional[float] = None
     uuid: Optional[str] = None
     portfolio_hash: Optional[str] = None
-    
+
     def __post_init__(self):
         """Validate recommendation data and calculate score_change."""
         if not self.symbol or not self.symbol.strip():
             raise ValidationError("Symbol cannot be empty")
-        
+
         if not self.name or not self.name.strip():
             raise ValidationError("Name cannot be empty")
-        
+
         if self.quantity <= 0:
             raise ValidationError("Quantity must be positive")
-        
+
         if self.estimated_price <= 0:
             raise ValidationError("Estimated price must be positive")
-        
+
         if self.estimated_value <= 0:
             raise ValidationError("Estimated value must be positive")
-        
+
         if not self.reason or not self.reason.strip():
             raise ValidationError("Reason cannot be empty")
-        
+
         # Normalize symbol and geography
-        object.__setattr__(self, 'symbol', self.symbol.upper().strip())
-        object.__setattr__(self, 'geography', self.geography.upper())
-        
+        object.__setattr__(self, "symbol", self.symbol.upper().strip())
+        object.__setattr__(self, "geography", self.geography.upper())
+
         # Calculate score_change if both portfolio scores are provided
-        if self.current_portfolio_score is not None and self.new_portfolio_score is not None:
+        if (
+            self.current_portfolio_score is not None
+            and self.new_portfolio_score is not None
+        ):
             if self.score_change is None:
-                object.__setattr__(self, 'score_change', self.new_portfolio_score - self.current_portfolio_score)
+                object.__setattr__(
+                    self,
+                    "score_change",
+                    self.new_portfolio_score - self.current_portfolio_score,
+                )
 
 
 @dataclass
 class StockPriority:
     """Priority score for a stock candidate."""
+
     symbol: str
     name: str
     geography: str
@@ -316,6 +336,7 @@ class MultiStepRecommendation:
     Multi-step recommendations show a planned sequence of trades
     (e.g., SELL X then BUY Y) with portfolio score projections.
     """
+
     step: int  # 1-indexed step number
     side: str  # "BUY" or "SELL"
     symbol: str
@@ -340,6 +361,7 @@ class DividendRecord:
     If reinvestment wasn't possible (dividend too small), a pending_bonus
     is calculated which the optimizer uses to boost the stock's expected return.
     """
+
     symbol: str
     amount: float  # Original dividend amount
     currency: str
@@ -367,4 +389,4 @@ class DividendRecord:
             raise ValidationError("Dividend amount in EUR must be positive")
 
         # Normalize symbol
-        object.__setattr__(self, 'symbol', self.symbol.upper().strip())
+        object.__setattr__(self, "symbol", self.symbol.upper().strip())

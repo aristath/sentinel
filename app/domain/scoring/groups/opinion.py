@@ -9,16 +9,13 @@ Components:
 import logging
 from typing import Optional
 
-from app.infrastructure.external import yahoo_finance as yahoo
 from app.domain.responses import ScoreResult
+from app.infrastructure.external import yahoo_finance as yahoo
 
 logger = logging.getLogger(__name__)
 
 
-async def calculate_opinion_score(
-    symbol: str,
-    yahoo_symbol: str = None
-) -> ScoreResult:
+async def calculate_opinion_score(symbol: str, yahoo_symbol: str = None) -> ScoreResult:
     """
     Calculate opinion score from analyst recommendations and price targets.
 
@@ -63,8 +60,12 @@ async def calculate_opinion_score(
             target_score = max(0, min(1, target_score))
 
             # Cache the values
-            await calc_repo.set_metric(symbol, "ANALYST_RECOMMENDATION", recommendation_score, source='yahoo')
-            await calc_repo.set_metric(symbol, "PRICE_TARGET_UPSIDE", data.upside_pct, source='yahoo')
+            await calc_repo.set_metric(
+                symbol, "ANALYST_RECOMMENDATION", recommendation_score, source="yahoo"
+            )
+            await calc_repo.set_metric(
+                symbol, "PRICE_TARGET_UPSIDE", data.upside_pct, source="yahoo"
+            )
 
         except Exception as e:
             logger.error(f"Failed to calculate opinion score for {symbol}: {e}")
@@ -79,7 +80,4 @@ async def calculate_opinion_score(
         "price_target": round(target_score, 3),
     }
 
-    return ScoreResult(
-        score=round(total, 3),
-        sub_scores=sub_components
-    )
+    return ScoreResult(score=round(total, 3), sub_scores=sub_components)

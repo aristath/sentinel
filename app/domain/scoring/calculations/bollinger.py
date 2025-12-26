@@ -13,9 +13,7 @@ from app.domain.scoring.constants import BOLLINGER_LENGTH, BOLLINGER_STD
 
 
 def calculate_bollinger_bands(
-    closes: np.ndarray,
-    length: int = BOLLINGER_LENGTH,
-    std: float = BOLLINGER_STD
+    closes: np.ndarray, length: int = BOLLINGER_LENGTH, std: float = BOLLINGER_STD
 ) -> Optional[Tuple[float, float, float]]:
     """
     Calculate Bollinger Bands.
@@ -53,4 +51,3 @@ def calculate_bollinger_bands(
         return float(lower), float(middle), float(upper)
     except (KeyError, IndexError, ValueError):
         return None
-

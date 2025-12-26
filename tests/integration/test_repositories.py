@@ -1,13 +1,14 @@
 """Integration tests for repositories."""
 
-import pytest
 from datetime import datetime
 
+import pytest
+
 from app.domain.models import (
-    Stock,
-    Position,
-    PortfolioSnapshot,
     AllocationTarget,
+    PortfolioSnapshot,
+    Position,
+    Stock,
     StockScore,
     Trade,
 )
@@ -185,4 +186,3 @@ async def test_trade_repository_create(stock_repo, trade_repo):
     assert len(history) == 1
     assert history[0].symbol == "AAPL"
     assert history[0].side == "BUY"
-

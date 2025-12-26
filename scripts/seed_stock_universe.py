@@ -19,7 +19,11 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.infrastructure.database import init_databases, shutdown_databases, get_db_manager
+from app.infrastructure.database import (
+    get_db_manager,
+    init_databases,
+    shutdown_databases,
+)
 
 
 async def seed_stocks(json_path: Path):
@@ -68,7 +72,7 @@ async def seed_stocks(json_path: Path):
                         stock.get("currency"),
                         now,
                         now,
-                    )
+                    ),
                 )
                 inserted += 1
             except Exception as e:

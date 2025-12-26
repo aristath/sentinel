@@ -1,7 +1,9 @@
 """Tests for TradeFactory."""
 
-import pytest
 from datetime import datetime
+
+import pytest
+
 from app.domain.factories.trade_factory import TradeFactory
 from app.domain.models import Trade
 from app.domain.value_objects.currency import Currency
@@ -23,7 +25,7 @@ class TestTradeFactory:
             currency=Currency.USD,
             currency_rate=1.05,
         )
-        
+
         assert trade.symbol == "AAPL.US"
         assert trade.side == TradeSide.BUY
         assert trade.quantity == 10.0
@@ -49,7 +51,7 @@ class TestTradeFactory:
         )
         expected_eur = (10.0 * 150.0) / 1.05
         assert abs(trade.value_eur - expected_eur) < 0.01
-        
+
         # EUR trade (rate = 1.0)
         trade_eur = TradeFactory.create_from_execution(
             symbol="ASML.NL",
@@ -74,7 +76,7 @@ class TestTradeFactory:
             executed_at=datetime.now(),
             currency=Currency.EUR,
         )
-        
+
         assert trade.currency_rate is None
         assert trade.value_eur == 1000.0  # No conversion needed
 
@@ -90,7 +92,7 @@ class TestTradeFactory:
             currency="USD",  # String, will be converted
             currency_rate=1.05,
         )
-        
+
         assert trade.symbol == "MSFT.US"
         assert trade.side == TradeSide.BUY
         assert trade.quantity == 20.0
@@ -112,7 +114,6 @@ class TestTradeFactory:
             currency="HKD",
             currency_rate=8.5,
         )
-        
+
         assert trade.side == TradeSide.SELL
         assert trade.currency == Currency.HKD
-

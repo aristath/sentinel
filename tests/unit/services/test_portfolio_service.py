@@ -4,8 +4,10 @@ These tests ensure portfolio allocations are calculated correctly.
 Wrong allocations could cause the rebalancer to make incorrect decisions.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
 from app.application.services.portfolio_service import PortfolioService
 
 
@@ -44,7 +46,12 @@ class TestPortfolioServiceCalculations:
         portfolio_repo, position_repo, allocation_repo = mock_repos
 
         position_repo.get_with_stock_info.return_value = [
-            {"symbol": "TEST", "market_value_eur": 1000, "geography": "EU", "industry": "Tech"}
+            {
+                "symbol": "TEST",
+                "market_value_eur": 1000,
+                "geography": "EU",
+                "industry": "Tech",
+            }
         ]
 
         service = PortfolioService(portfolio_repo, position_repo, allocation_repo)
@@ -64,8 +71,18 @@ class TestPortfolioServiceCalculations:
         portfolio_repo, position_repo, allocation_repo = mock_repos
 
         position_repo.get_with_stock_info.return_value = [
-            {"symbol": "EU1", "market_value_eur": 600, "geography": "EU", "industry": "Tech"},
-            {"symbol": "US1", "market_value_eur": 400, "geography": "US", "industry": "Tech"},
+            {
+                "symbol": "EU1",
+                "market_value_eur": 600,
+                "geography": "EU",
+                "industry": "Tech",
+            },
+            {
+                "symbol": "US1",
+                "market_value_eur": 400,
+                "geography": "US",
+                "industry": "Tech",
+            },
         ]
 
         service = PortfolioService(portfolio_repo, position_repo, allocation_repo)
@@ -90,8 +107,12 @@ class TestPortfolioServiceCalculations:
         portfolio_repo, position_repo, allocation_repo = mock_repos
 
         position_repo.get_with_stock_info.return_value = [
-            {"symbol": "MULTI", "market_value_eur": 1000, "geography": "US",
-             "industry": "Technology, Defense"},
+            {
+                "symbol": "MULTI",
+                "market_value_eur": 1000,
+                "geography": "US",
+                "industry": "Technology, Defense",
+            },
         ]
 
         service = PortfolioService(portfolio_repo, position_repo, allocation_repo)
@@ -130,7 +151,12 @@ class TestPortfolioServiceCalculations:
         portfolio_repo, position_repo, allocation_repo = mock_repos
 
         position_repo.get_with_stock_info.return_value = [
-            {"symbol": "NO_GEO", "market_value_eur": 1000, "geography": None, "industry": "Tech"},
+            {
+                "symbol": "NO_GEO",
+                "market_value_eur": 1000,
+                "geography": None,
+                "industry": "Tech",
+            },
         ]
 
         service = PortfolioService(portfolio_repo, position_repo, allocation_repo)
@@ -149,7 +175,12 @@ class TestPortfolioServiceCalculations:
         portfolio_repo, position_repo, allocation_repo = mock_repos
 
         position_repo.get_with_stock_info.return_value = [
-            {"symbol": "NO_IND", "market_value_eur": 1000, "geography": "EU", "industry": ""},
+            {
+                "symbol": "NO_IND",
+                "market_value_eur": 1000,
+                "geography": "EU",
+                "industry": "",
+            },
         ]
 
         service = PortfolioService(portfolio_repo, position_repo, allocation_repo)
@@ -168,8 +199,14 @@ class TestPortfolioServiceCalculations:
         portfolio_repo, position_repo, allocation_repo = mock_repos
 
         position_repo.get_with_stock_info.return_value = [
-            {"symbol": "USD_STOCK", "market_value_eur": None, "quantity": 10,
-             "current_price": 50, "geography": "US", "industry": "Tech"},
+            {
+                "symbol": "USD_STOCK",
+                "market_value_eur": None,
+                "quantity": 10,
+                "current_price": 50,
+                "geography": "US",
+                "industry": "Tech",
+            },
         ]
 
         service = PortfolioService(portfolio_repo, position_repo, allocation_repo)
@@ -188,7 +225,12 @@ class TestPortfolioServiceCalculations:
 
         portfolio_repo.get_latest_cash_balance.return_value = 5000.50
         position_repo.get_with_stock_info.return_value = [
-            {"symbol": "TEST", "market_value_eur": 1000, "geography": "EU", "industry": "Tech"},
+            {
+                "symbol": "TEST",
+                "market_value_eur": 1000,
+                "geography": "EU",
+                "industry": "Tech",
+            },
         ]
 
         service = PortfolioService(portfolio_repo, position_repo, allocation_repo)
@@ -209,8 +251,18 @@ class TestPortfolioServiceCalculations:
         allocation_repo.get_all.return_value = {"geography:EU": 0.5}
 
         position_repo.get_with_stock_info.return_value = [
-            {"symbol": "EU1", "market_value_eur": 700, "geography": "EU", "industry": "Tech"},
-            {"symbol": "US1", "market_value_eur": 300, "geography": "US", "industry": "Tech"},
+            {
+                "symbol": "EU1",
+                "market_value_eur": 700,
+                "geography": "EU",
+                "industry": "Tech",
+            },
+            {
+                "symbol": "US1",
+                "market_value_eur": 300,
+                "geography": "US",
+                "industry": "Tech",
+            },
         ]
 
         service = PortfolioService(portfolio_repo, position_repo, allocation_repo)
@@ -233,8 +285,18 @@ class TestPortfolioServiceCalculations:
 
         # Values that could cause floating point issues
         position_repo.get_with_stock_info.return_value = [
-            {"symbol": "TEST1", "market_value_eur": 333.333333, "geography": "EU", "industry": "Tech"},
-            {"symbol": "TEST2", "market_value_eur": 666.666667, "geography": "EU", "industry": "Tech"},
+            {
+                "symbol": "TEST1",
+                "market_value_eur": 333.333333,
+                "geography": "EU",
+                "industry": "Tech",
+            },
+            {
+                "symbol": "TEST2",
+                "market_value_eur": 666.666667,
+                "geography": "EU",
+                "industry": "Tech",
+            },
         ]
 
         service = PortfolioService(portfolio_repo, position_repo, allocation_repo)

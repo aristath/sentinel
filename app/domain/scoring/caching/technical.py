@@ -10,27 +10,28 @@ from typing import Optional, Tuple
 
 import numpy as np
 
-from app.domain.scoring.constants import (
-    EMA_LENGTH,
-    RSI_LENGTH,
-    BOLLINGER_LENGTH,
-    BOLLINGER_STD,
-)
-
 # Import pure calculation functions
 from app.domain.scoring.calculations import (
-    calculate_ema,
-    calculate_rsi,
     calculate_bollinger_bands,
-    calculate_volatility,
-    calculate_sharpe_ratio,
+    calculate_ema,
     calculate_max_drawdown,
+    calculate_rsi,
+    calculate_sharpe_ratio,
+    calculate_volatility,
+)
+from app.domain.scoring.constants import (
+    BOLLINGER_LENGTH,
+    BOLLINGER_STD,
+    EMA_LENGTH,
+    RSI_LENGTH,
 )
 
 logger = logging.getLogger(__name__)
 
 
-async def get_ema(symbol: str, closes: np.ndarray, length: int = EMA_LENGTH) -> Optional[float]:
+async def get_ema(
+    symbol: str, closes: np.ndarray, length: int = EMA_LENGTH
+) -> Optional[float]:
     """
     Get EMA value from cache or calculate it.
 
@@ -60,7 +61,9 @@ async def get_ema(symbol: str, closes: np.ndarray, length: int = EMA_LENGTH) -> 
     return ema
 
 
-async def get_rsi(symbol: str, closes: np.ndarray, length: int = RSI_LENGTH) -> Optional[float]:
+async def get_rsi(
+    symbol: str, closes: np.ndarray, length: int = RSI_LENGTH
+) -> Optional[float]:
     """
     Get RSI value from cache or calculate it.
 
@@ -94,7 +97,7 @@ async def get_bollinger_bands(
     symbol: str,
     closes: np.ndarray,
     length: int = BOLLINGER_LENGTH,
-    std: float = BOLLINGER_STD
+    std: float = BOLLINGER_STD,
 ) -> Optional[Tuple[float, float, float]]:
     """
     Get Bollinger Bands from cache or calculate them.
@@ -121,21 +124,20 @@ async def get_bollinger_bands(
     bands = calculate_bollinger_bands(closes, length, std)
     if bands is not None:
         lower, middle, upper = bands
-        await calc_repo.set_metrics(symbol, {
-            "BB_LOWER": lower,
-            "BB_MIDDLE": middle,
-            "BB_UPPER": upper,
-        })
+        await calc_repo.set_metrics(
+            symbol,
+            {
+                "BB_LOWER": lower,
+                "BB_MIDDLE": middle,
+                "BB_UPPER": upper,
+            },
+        )
 
     return bands
 
 
-
-
 async def get_sharpe_ratio(
-    symbol: str,
-    closes: np.ndarray,
-    risk_free_rate: float = 0.0
+    symbol: str, closes: np.ndarray, risk_free_rate: float = 0.0
 ) -> Optional[float]:
     """
     Get Sharpe ratio from cache or calculate it.
@@ -236,8 +238,6 @@ def _calculate_52_week_high(highs: np.ndarray) -> float:
     return float(max(highs))
 
 
-
-
 async def get_52_week_low(symbol: str, lows: np.ndarray) -> float:
     """
     Get 52-week low price from cache or calculate it.
@@ -280,12 +280,7 @@ def _calculate_52_week_low(lows: np.ndarray) -> float:
     return float(min(lows))
 
 
-
-
-def calculate_distance_from_ma(
-    current_price: float,
-    ma_value: float
-) -> float:
+def calculate_distance_from_ma(current_price: float, ma_value: float) -> float:
     """
     Calculate percentage distance from moving average.
 

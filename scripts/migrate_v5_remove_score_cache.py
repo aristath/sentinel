@@ -17,7 +17,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from app.config import settings
-from app.infrastructure.database.manager import init_databases, DatabaseManager
+from app.infrastructure.database.manager import DatabaseManager, init_databases
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -74,4 +74,3 @@ async def migrate():
 
 if __name__ == "__main__":
     asyncio.run(migrate())
-

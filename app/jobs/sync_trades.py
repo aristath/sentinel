@@ -8,11 +8,15 @@ not just placed orders (which may be cancelled externally).
 import logging
 from datetime import datetime
 
-from app.infrastructure.external.tradernet import get_tradernet_client
-from app.infrastructure.locking import file_lock
-from app.infrastructure.hardware.display_service import set_processing, clear_processing, set_error
-from app.infrastructure.events import emit, SystemEvent
 from app.infrastructure.database.manager import get_db_manager
+from app.infrastructure.events import SystemEvent, emit
+from app.infrastructure.external.tradernet import get_tradernet_client
+from app.infrastructure.hardware.display_service import (
+    clear_processing,
+    set_error,
+    set_processing,
+)
+from app.infrastructure.locking import file_lock
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +93,9 @@ async def _sync_trades_internal():
 
                 side = trade.get("side", "").upper()
                 if side not in ("BUY", "SELL"):
-                    logger.warning(f"Invalid side '{side}' for trade {order_id}, skipping")
+                    logger.warning(
+                        f"Invalid side '{side}' for trade {order_id}, skipping"
+                    )
                     skipped += 1
                     continue
 
@@ -106,10 +112,12 @@ async def _sync_trades_internal():
                         INSERT INTO trades (symbol, side, quantity, price, executed_at, order_id, created_at)
                         VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
                         """,
-                        (symbol, side, quantity, price, executed_at, order_id)
+                        (symbol, side, quantity, price, executed_at, order_id),
                     )
                     inserted += 1
-                    logger.debug(f"Inserted trade: {side} {quantity} {symbol} @ {price}")
+                    logger.debug(
+                        f"Inserted trade: {side} {quantity} {symbol} @ {price}"
+                    )
                 except Exception as e:
                     logger.error(f"Failed to insert trade {order_id}: {e}")
                     skipped += 1

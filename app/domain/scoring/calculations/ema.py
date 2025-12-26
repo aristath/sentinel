@@ -35,4 +35,3 @@ def calculate_ema(closes: np.ndarray, length: int = EMA_LENGTH) -> Optional[floa
 
     # Fallback to SMA
     return float(np.mean(closes[-length:]))
-

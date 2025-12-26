@@ -1,6 +1,7 @@
 """Tests for Settings value object."""
 
 import pytest
+
 from app.domain.value_objects.settings import Settings, TradingSettings
 
 
@@ -92,20 +93,28 @@ class TestSettings:
 
     def test_settings_validation_optimizer_target_return(self):
         """Test that optimizer_target_return must be positive."""
-        with pytest.raises(ValueError, match="optimizer_target_return must be positive"):
+        with pytest.raises(
+            ValueError, match="optimizer_target_return must be positive"
+        ):
             Settings(optimizer_target_return=-0.1)
 
-        with pytest.raises(ValueError, match="optimizer_target_return must be positive"):
+        with pytest.raises(
+            ValueError, match="optimizer_target_return must be positive"
+        ):
             Settings(optimizer_target_return=0.0)
 
     def test_settings_validation_transaction_cost_fixed(self):
         """Test that transaction_cost_fixed must be non-negative."""
-        with pytest.raises(ValueError, match="transaction_cost_fixed must be non-negative"):
+        with pytest.raises(
+            ValueError, match="transaction_cost_fixed must be non-negative"
+        ):
             Settings(transaction_cost_fixed=-1.0)
 
     def test_settings_validation_transaction_cost_percent(self):
         """Test that transaction_cost_percent must be non-negative."""
-        with pytest.raises(ValueError, match="transaction_cost_percent must be non-negative"):
+        with pytest.raises(
+            ValueError, match="transaction_cost_percent must be non-negative"
+        ):
             Settings(transaction_cost_percent=-0.001)
 
     def test_settings_validation_min_cash_reserve(self):

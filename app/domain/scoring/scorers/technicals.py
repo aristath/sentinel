@@ -6,11 +6,11 @@ Convert RSI, Bollinger Bands, and EMA distance to normalized scores.
 from typing import Optional
 
 from app.domain.scoring.constants import (
-    RSI_OVERSOLD,
-    RSI_OVERBOUGHT,
-    EMA_VERY_BELOW,
     EMA_BELOW,
     EMA_VERY_ABOVE,
+    EMA_VERY_BELOW,
+    RSI_OVERBOUGHT,
+    RSI_OVERSOLD,
 )
 
 
@@ -76,4 +76,3 @@ def score_ema_distance(current_price: float, ema_value: float) -> float:
         return 0.7 + ((abs(pct_from_ema) - 0.05) / 0.05) * 0.3
     else:  # 10%+ below
         return 1.0
-

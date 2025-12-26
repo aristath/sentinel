@@ -27,10 +27,11 @@ class Priority(IntEnum):
 
     Lower number = higher priority (processed first).
     """
-    CRITICAL = 0      # Trade execution, order placement
-    HIGH = 10         # Portfolio sync, position updates
-    NORMAL = 50       # Score calculation, price updates
-    LOW = 100         # Historical data sync, maintenance
+
+    CRITICAL = 0  # Trade execution, order placement
+    HIGH = 10  # Portfolio sync, position updates
+    NORMAL = 50  # Score calculation, price updates
+    LOW = 100  # Historical data sync, maintenance
     BACKGROUND = 200  # Cleanup, aggregation
 
 
@@ -43,6 +44,7 @@ class QueuedOperation:
     1. Priority (lower = first)
     2. Timestamp (earlier = first)
     """
+
     priority: int
     timestamp: datetime = field(compare=True)
     operation_id: str = field(default_factory=lambda: str(uuid4()), compare=False)
@@ -156,7 +158,9 @@ class QueryQueue:
         )
 
         await self._queue.put(operation)
-        logger.debug(f"Enqueued: {name} (priority={priority}, queue_size={self._queue.qsize()})")
+        logger.debug(
+            f"Enqueued: {name} (priority={priority}, queue_size={self._queue.qsize()})"
+        )
 
         # Wait for result
         return await operation.result_future
@@ -200,8 +204,7 @@ class QueryQueue:
         """Process a single operation from the queue."""
         try:
             operation = await asyncio.wait_for(
-                self._queue.get(),
-                timeout=1.0  # Check running flag periodically
+                self._queue.get(), timeout=1.0  # Check running flag periodically
             )
         except asyncio.TimeoutError:
             return
@@ -229,7 +232,9 @@ class QueryQueue:
                 # All retries exhausted
                 self._failed_count += 1
                 operation.result_future.set_exception(e)
-                logger.error(f"Failed after {operation.max_retries} retries: {operation.name}: {e}")
+                logger.error(
+                    f"Failed after {operation.max_retries} retries: {operation.name}: {e}"
+                )
 
     @property
     def queue_size(self) -> int:
@@ -260,7 +265,9 @@ def get_query_queue() -> QueryQueue:
     """Get the global query queue instance."""
     global _query_queue
     if _query_queue is None:
-        raise RuntimeError("Query queue not initialized. Call init_query_queue() first.")
+        raise RuntimeError(
+            "Query queue not initialized. Call init_query_queue() first."
+        )
     return _query_queue
 
 

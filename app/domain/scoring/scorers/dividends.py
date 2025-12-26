@@ -27,7 +27,9 @@ def score_dividend_yield(dividend_yield: Optional[float]) -> float:
         return 1.0
     elif dividend_yield >= MID_DIVIDEND_THRESHOLD:  # 3-6% yield
         # Linear scale from 0.7 to 1.0
-        pct = (dividend_yield - MID_DIVIDEND_THRESHOLD) / (HIGH_DIVIDEND_THRESHOLD - MID_DIVIDEND_THRESHOLD)
+        pct = (dividend_yield - MID_DIVIDEND_THRESHOLD) / (
+            HIGH_DIVIDEND_THRESHOLD - MID_DIVIDEND_THRESHOLD
+        )
         return 0.7 + pct * 0.3
     elif dividend_yield >= 0.01:  # 1-3% yield
         # Linear scale from 0.4 to 0.7
@@ -50,7 +52,9 @@ def score_dividend_consistency(fundamentals) -> float:
         return 0.5
 
     # Payout ratio: 30-60% is ideal (sustainable but committed)
-    payout = fundamentals.payout_ratio if hasattr(fundamentals, 'payout_ratio') else None
+    payout = (
+        fundamentals.payout_ratio if hasattr(fundamentals, "payout_ratio") else None
+    )
     if payout is not None:
         if 0.3 <= payout <= 0.6:
             payout_score = 1.0
@@ -64,11 +68,10 @@ def score_dividend_consistency(fundamentals) -> float:
         payout_score = 0.5
 
     # 5-year dividend growth if available
-    div_growth = getattr(fundamentals, 'five_year_avg_dividend_yield', None)
+    div_growth = getattr(fundamentals, "five_year_avg_dividend_yield", None)
     if div_growth is not None:
         growth_score = min(1.0, 0.5 + div_growth * 5)
     else:
         growth_score = 0.5
 
-    return (payout_score * 0.5 + growth_score * 0.5)
-
+    return payout_score * 0.5 + growth_score * 0.5

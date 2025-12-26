@@ -14,14 +14,16 @@ import pandas as pd
 from pypfopt import EfficientFrontier, HRPOpt
 from pypfopt.exceptions import OptimizationError
 
+from app.application.services.optimization.constraints_manager import ConstraintsManager
+from app.application.services.optimization.expected_returns import (
+    ExpectedReturnsCalculator,
+)
+from app.application.services.optimization.risk_models import RiskModelBuilder
+from app.domain.models import Position, Stock
 from app.domain.scoring.constants import (
     OPTIMIZER_TARGET_RETURN,
     OPTIMIZER_WEIGHT_CUTOFF,
 )
-from app.domain.models import Stock, Position
-from app.application.services.optimization.expected_returns import ExpectedReturnsCalculator
-from app.application.services.optimization.risk_models import RiskModelBuilder
-from app.application.services.optimization.constraints_manager import ConstraintsManager
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +31,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class WeightChange:
     """Represents a change in target weight for a stock."""
+
     symbol: str
     current_weight: float
     target_weight: float
@@ -39,6 +42,7 @@ class WeightChange:
 @dataclass
 class OptimizationResult:
     """Result of portfolio optimization."""
+
     timestamp: datetime
     target_return: float
     achieved_expected_return: Optional[float]
@@ -144,7 +148,9 @@ class PortfolioOptimizer:
 
         # Filter to symbols in covariance matrix
         cov_symbols = list(cov_matrix.index)
-        expected_returns = {s: expected_returns[s] for s in cov_symbols if s in expected_returns}
+        expected_returns = {
+            s: expected_returns[s] for s in cov_symbols if s in expected_returns
+        }
         valid_symbols = list(expected_returns.keys())
 
         # Calculate weight bounds
@@ -155,12 +161,16 @@ class PortfolioOptimizer:
         )
 
         # Build sector constraints
-        geo_constraints, ind_constraints = self._constraints_manager.build_sector_constraints(
-            valid_stocks, geo_targets, ind_targets
+        geo_constraints, ind_constraints = (
+            self._constraints_manager.build_sector_constraints(
+                valid_stocks, geo_targets, ind_targets
+            )
         )
 
         # Get high correlations for reporting
-        high_correlations = self._risk_builder.get_correlations(returns_df, threshold=0.80)
+        high_correlations = self._risk_builder.get_correlations(
+            returns_df, threshold=0.80
+        )
 
         # Run optimization with fallback strategy
         mv_weights, fallback_used = await self._run_mean_variance(
@@ -188,12 +198,13 @@ class PortfolioOptimizer:
 
         # Apply weight cutoff (remove tiny allocations)
         target_weights = {
-            s: w for s, w in target_weights.items()
-            if w >= OPTIMIZER_WEIGHT_CUTOFF
+            s: w for s, w in target_weights.items() if w >= OPTIMIZER_WEIGHT_CUTOFF
         }
 
         # Normalize weights to sum to (1 - cash_reserve_fraction)
-        investable_fraction = 1.0 - (min_cash_reserve / portfolio_value) if portfolio_value > 0 else 0.9
+        investable_fraction = (
+            1.0 - (min_cash_reserve / portfolio_value) if portfolio_value > 0 else 0.9
+        )
         target_weights = self._normalize_weights(target_weights, investable_fraction)
 
         # Calculate weight changes
@@ -203,8 +214,7 @@ class PortfolioOptimizer:
 
         # Calculate achieved expected return
         achieved_return = sum(
-            expected_returns.get(s, 0) * w
-            for s, w in target_weights.items()
+            expected_returns.get(s, 0) * w for s, w in target_weights.items()
         )
 
         # Build constraints summary
@@ -259,7 +269,9 @@ class PortfolioOptimizer:
             ef = EfficientFrontier(mu, S, weight_bounds=weight_bounds)
             ef.efficient_return(target_return=target_return)
             cleaned = ef.clean_weights()
-            logger.info(f"MV optimization succeeded with target return {target_return:.1%}")
+            logger.info(
+                f"MV optimization succeeded with target return {target_return:.1%}"
+            )
             return dict(cleaned), None
 
         except OptimizationError as e:
@@ -382,12 +394,14 @@ class PortfolioOptimizer:
             change = target - current
 
             if abs(change) > 0.001:  # Ignore tiny changes
-                changes.append(WeightChange(
-                    symbol=symbol,
-                    current_weight=round(current, 4),
-                    target_weight=round(target, 4),
-                    change=round(change, 4),
-                ))
+                changes.append(
+                    WeightChange(
+                        symbol=symbol,
+                        current_weight=round(current, 4),
+                        target_weight=round(target, 4),
+                        change=round(change, 4),
+                    )
+                )
 
         # Sort by absolute change (largest first)
         changes.sort(key=lambda x: abs(x.change), reverse=True)

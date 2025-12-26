@@ -3,14 +3,14 @@
 Identifies underweight areas that should be increased for rebalancing.
 """
 
-from typing import List, Optional, Dict
+from typing import Dict, List, Optional
 
 from app.domain.models import Stock
-from app.domain.scoring.models import PortfolioContext
 from app.domain.planning.holistic_planner import ActionCandidate
-from app.domain.value_objects.trade_side import TradeSide
+from app.domain.scoring.models import PortfolioContext
 from app.domain.services.exchange_rate_service import ExchangeRateService
 from app.domain.services.trade_sizing_service import TradeSizingService
+from app.domain.value_objects.trade_side import TradeSide
 
 
 async def identify_rebalance_buy_opportunities(
@@ -57,7 +57,9 @@ async def identify_rebalance_buy_opportunities(
                 underweight = target - current
                 exchange_rate = 1.0
                 if stock.currency and stock.currency != "EUR" and exchange_rate_service:
-                    exchange_rate = await exchange_rate_service.get_rate(stock.currency or "EUR", "EUR")
+                    exchange_rate = await exchange_rate_service.get_rate(
+                        stock.currency or "EUR", "EUR"
+                    )
                 sized = TradeSizingService.calculate_buy_quantity(
                     target_value_eur=base_trade_amount,
                     price=price,
@@ -65,18 +67,19 @@ async def identify_rebalance_buy_opportunities(
                     exchange_rate=exchange_rate,
                 )
 
-                opportunities.append(ActionCandidate(
-                    side=TradeSide.BUY,
-                    symbol=stock.symbol,
-                    name=stock.name,
-                    quantity=sized.quantity,
-                    price=price,
-                    value_eur=sized.value_eur,
-                    currency=stock.currency or "EUR",
-                    priority=underweight * 2 + quality_score * 0.5,
-                    reason=f"Underweight {geo} by {underweight*100:.1f}%",
-                    tags=["rebalance", f"underweight_{geo.lower()}"],
-                ))
+                opportunities.append(
+                    ActionCandidate(
+                        side=TradeSide.BUY,
+                        symbol=stock.symbol,
+                        name=stock.name,
+                        quantity=sized.quantity,
+                        price=price,
+                        value_eur=sized.value_eur,
+                        currency=stock.currency or "EUR",
+                        priority=underweight * 2 + quality_score * 0.5,
+                        reason=f"Underweight {geo} by {underweight*100:.1f}%",
+                        tags=["rebalance", f"underweight_{geo.lower()}"],
+                    )
+                )
 
     return opportunities
-

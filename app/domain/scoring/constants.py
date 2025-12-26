@@ -15,14 +15,14 @@ OPTIMAL_CAGR = 0.11
 DEFAULT_TARGET_ANNUAL_RETURN = 0.11
 
 # Bell curve shape parameters (asymmetric Gaussian)
-BELL_CURVE_SIGMA_LEFT = 0.06   # Steeper rise (0% to peak)
+BELL_CURVE_SIGMA_LEFT = 0.06  # Steeper rise (0% to peak)
 BELL_CURVE_SIGMA_RIGHT = 0.10  # Gentler fall (peak to high growth)
-BELL_CURVE_FLOOR = 0.15        # Minimum score for any positive return
+BELL_CURVE_FLOOR = 0.15  # Minimum score for any positive return
 
 # Dividend thresholds for DRIP priority bonus
 HIGH_DIVIDEND_THRESHOLD = 0.06  # 6%+ yield gets max bonus (+0.10)
-MID_DIVIDEND_THRESHOLD = 0.03   # 3%+ yield gets mid bonus (+0.07)
-LOW_DIVIDEND_BONUS = 0.03       # Any dividend gets small bonus
+MID_DIVIDEND_THRESHOLD = 0.03  # 3%+ yield gets mid bonus (+0.07)
+LOW_DIVIDEND_BONUS = 0.03  # Any dividend gets small bonus
 MID_DIVIDEND_BONUS = 0.07
 HIGH_DIVIDEND_BONUS = 0.10
 
@@ -34,15 +34,15 @@ QUALITY_WEIGHT_SHARPE = 0.10
 QUALITY_WEIGHT_MAX_DRAWDOWN = 0.10
 
 # Sharpe ratio thresholds
-SHARPE_EXCELLENT = 2.0   # Score = 1.0
-SHARPE_GOOD = 1.0        # Score = 0.7
-SHARPE_OK = 0.5          # Score = 0.4
+SHARPE_EXCELLENT = 2.0  # Score = 1.0
+SHARPE_GOOD = 1.0  # Score = 0.7
+SHARPE_OK = 0.5  # Score = 0.4
 
 # Max drawdown thresholds (as positive percentages)
 DRAWDOWN_EXCELLENT = 0.10  # <10% drawdown = 1.0
-DRAWDOWN_GOOD = 0.20       # <20% drawdown = 0.8+
-DRAWDOWN_OK = 0.30         # <30% drawdown = 0.6+
-DRAWDOWN_POOR = 0.50       # <50% drawdown = 0.2+
+DRAWDOWN_GOOD = 0.20  # <20% drawdown = 0.8+
+DRAWDOWN_OK = 0.30  # <30% drawdown = 0.6+
+DRAWDOWN_POOR = 0.50  # <50% drawdown = 0.2+
 
 # =============================================================================
 # Opportunity Score Constants
@@ -53,16 +53,16 @@ DEFAULT_MARKET_AVG_PE = 22
 
 # 52-week high thresholds
 BELOW_HIGH_EXCELLENT = 0.30  # 30%+ below = 1.0
-BELOW_HIGH_GOOD = 0.20       # 20-30% below = 0.8-1.0
-BELOW_HIGH_OK = 0.10         # 10-20% below = 0.5-0.8
+BELOW_HIGH_GOOD = 0.20  # 20-30% below = 0.8-1.0
+BELOW_HIGH_OK = 0.10  # 10-20% below = 0.5-0.8
 
 # EMA distance thresholds
-EMA_VERY_BELOW = -0.10   # 10%+ below EMA = 1.0
-EMA_BELOW = -0.05        # 5-10% below = 0.7-1.0
-EMA_VERY_ABOVE = 0.10    # 10%+ above = 0.2
+EMA_VERY_BELOW = -0.10  # 10%+ below EMA = 1.0
+EMA_BELOW = -0.05  # 5-10% below = 0.7-1.0
+EMA_VERY_ABOVE = 0.10  # 10%+ above = 0.2
 
 # RSI thresholds
-RSI_OVERSOLD = 30    # Below = 1.0 (buy signal)
+RSI_OVERSOLD = 30  # Below = 1.0 (buy signal)
 RSI_OVERBOUGHT = 70  # Above = 0.0 (sell signal)
 
 # Opportunity score component weights (must sum to 1.0)
@@ -79,7 +79,7 @@ OPPORTUNITY_WEIGHT_BOLLINGER = 0.10
 # Final score weights for BUY decisions (must sum to 1.0)
 SCORE_WEIGHT_QUALITY = 0.35
 SCORE_WEIGHT_OPPORTUNITY = 0.35
-SCORE_WEIGHT_ANALYST = 0.05    # Reduced from 0.15 - tiebreaker only
+SCORE_WEIGHT_ANALYST = 0.05  # Reduced from 0.15 - tiebreaker only
 SCORE_WEIGHT_ALLOCATION_FIT = 0.25  # Increased from 0.15 - prioritize diversification
 
 # Without allocation fit, these 3 sum to 0.75, normalized to 1.0
@@ -95,22 +95,22 @@ ALLOCATION_WEIGHT_INDUSTRY = 0.30
 ALLOCATION_WEIGHT_AVERAGING_DOWN = 0.30
 
 # Averaging down boost for positions underwater
-MAX_COST_BASIS_BOOST = 0.40       # Max boost at 20% loss
+MAX_COST_BASIS_BOOST = 0.40  # Max boost at 20% loss
 COST_BASIS_BOOST_THRESHOLD = 0.20  # No boost beyond 20% loss
 
 # Concentration limits
 CONCENTRATION_HIGH = 0.10  # >10% = reduce enthusiasm
-CONCENTRATION_MED = 0.05   # 5-10% = slight reduction
+CONCENTRATION_MED = 0.05  # 5-10% = slight reduction
 
 # =============================================================================
 # Sell Score Constants
 # =============================================================================
 
 # Hard blocks (NEVER sell if any apply)
-DEFAULT_MIN_HOLD_DAYS = 90         # 3 months minimum hold
-DEFAULT_SELL_COOLDOWN_DAYS = 180   # 6 months between sells
-DEFAULT_MAX_LOSS_THRESHOLD = -0.20 # Never sell if down more than 20%
-DEFAULT_MIN_SELL_VALUE_EUR = 100   # Minimum sell value in EUR
+DEFAULT_MIN_HOLD_DAYS = 90  # 3 months minimum hold
+DEFAULT_SELL_COOLDOWN_DAYS = 180  # 6 months between sells
+DEFAULT_MAX_LOSS_THRESHOLD = -0.20  # Never sell if down more than 20%
+DEFAULT_MIN_SELL_VALUE_EUR = 100  # Minimum sell value in EUR
 
 # Sell quantity limits
 MIN_SELL_PCT = 0.10  # Minimum 10% of position
@@ -129,16 +129,16 @@ SELL_WEIGHT_DRAWDOWN = 0.15  # PyFolio-based drawdown analysis
 
 # Instability detection thresholds
 INSTABILITY_RATE_VERY_HOT = 0.50  # >50% annualized = 1.0
-INSTABILITY_RATE_HOT = 0.30       # >30% = 0.7
-INSTABILITY_RATE_WARM = 0.20      # >20% = 0.4
+INSTABILITY_RATE_HOT = 0.30  # >30% = 0.7
+INSTABILITY_RATE_WARM = 0.20  # >20% = 0.4
 
-VOLATILITY_SPIKE_HIGH = 2.0   # Vol doubled = 1.0
-VOLATILITY_SPIKE_MED = 1.5    # Vol up 50% = 0.7
-VOLATILITY_SPIKE_LOW = 1.2    # Vol up 20% = 0.4
+VOLATILITY_SPIKE_HIGH = 2.0  # Vol doubled = 1.0
+VOLATILITY_SPIKE_MED = 1.5  # Vol up 50% = 0.7
+VOLATILITY_SPIKE_LOW = 1.2  # Vol up 20% = 0.4
 
 VALUATION_STRETCH_HIGH = 0.30  # >30% above MA = 1.0
-VALUATION_STRETCH_MED = 0.20   # >20% = 0.7
-VALUATION_STRETCH_LOW = 0.10   # >10% = 0.4
+VALUATION_STRETCH_MED = 0.20  # >20% = 0.7
+VALUATION_STRETCH_LOW = 0.10  # >10% = 0.4
 
 # =============================================================================
 # Technical Indicator Parameters
@@ -181,16 +181,13 @@ METRIC_TTL = {
     "HIGH_52W": 86400,
     "LOW_52W": 86400,
     "DISTANCE_FROM_52W_HIGH": 86400,
-    
     # Daily (7 days) - Stable calculation, but recalculated daily
     "SHARPE": 604800,
     "SORTINO": 604800,
-    
     # Weekly (7 days) - Slow-changing historical metrics
     "CAGR_5Y": 604800,
     "CAGR_10Y": 604800,
     "CONSISTENCY_SCORE": 604800,
-    
     # Quarterly (30 days) - Fundamentals update with earnings
     "PE_RATIO": 2592000,
     "FORWARD_PE": 2592000,
@@ -201,17 +198,15 @@ METRIC_TTL = {
     "DIVIDEND_YIELD": 2592000,
     "PAYOUT_RATIO": 2592000,
     "DIVIDEND_CONSISTENCY": 2592000,
-    
     # On-demand (24 hours) - Analyst data fetched when needed
     "ANALYST_RECOMMENDATION": 86400,
     "PRICE_TARGET_UPSIDE": 86400,
-
     # Holistic planning metrics
-    "TOTAL_RETURN": 604800,        # 7 days - CAGR + dividend yield
-    "LONG_TERM_PROMISE": 604800,   # 7 days - Composite promise score
-    "STABILITY_SCORE": 86400,      # 24 hours - Volatility-based
-    "EXCESS_GAIN": 86400,          # 24 hours - Windfall detection
-    "WINDFALL_SCORE": 86400,       # 24 hours - Profit-taking signal
+    "TOTAL_RETURN": 604800,  # 7 days - CAGR + dividend yield
+    "LONG_TERM_PROMISE": 604800,  # 7 days - Composite promise score
+    "STABILITY_SCORE": 86400,  # 24 hours - Volatility-based
+    "EXCESS_GAIN": 86400,  # 24 hours - Windfall detection
+    "WINDFALL_SCORE": 86400,  # 24 hours - Profit-taking signal
 }
 
 # Default TTL for unknown metrics (24 hours)
@@ -222,14 +217,14 @@ DEFAULT_METRIC_TTL = 86400
 # =============================================================================
 
 # Windfall detection thresholds
-WINDFALL_EXCESS_HIGH = 0.50       # 50%+ above expected = high windfall
-WINDFALL_EXCESS_MEDIUM = 0.25    # 25-50% above expected = medium windfall
-WINDFALL_SELL_PCT_HIGH = 0.40    # Sell 40% on high windfall
+WINDFALL_EXCESS_HIGH = 0.50  # 50%+ above expected = high windfall
+WINDFALL_EXCESS_MEDIUM = 0.25  # 25-50% above expected = medium windfall
+WINDFALL_SELL_PCT_HIGH = 0.40  # Sell 40% on high windfall
 WINDFALL_SELL_PCT_MEDIUM = 0.20  # Sell 20% on medium windfall
 CONSISTENT_DOUBLE_SELL_PCT = 0.30  # Sell 30% on consistent doubler
 
 # Dividend cut threshold
-DIVIDEND_CUT_THRESHOLD = 0.20    # 20% YoY cut = "big cut"
+DIVIDEND_CUT_THRESHOLD = 0.20  # 20% YoY cut = "big cut"
 
 # =============================================================================
 # Portfolio Optimization Constants
@@ -239,21 +234,21 @@ DIVIDEND_CUT_THRESHOLD = 0.20    # 20% YoY cut = "big cut"
 OPTIMIZER_TARGET_RETURN = 0.11  # 11% annual target
 
 # Expected returns calculation weights
-EXPECTED_RETURNS_CAGR_WEIGHT = 0.70      # 70% historical CAGR
-EXPECTED_RETURNS_SCORE_WEIGHT = 0.30     # 30% score-adjusted
+EXPECTED_RETURNS_CAGR_WEIGHT = 0.70  # 70% historical CAGR
+EXPECTED_RETURNS_SCORE_WEIGHT = 0.30  # 30% score-adjusted
 
 # Covariance matrix parameters
-COVARIANCE_LOOKBACK_DAYS = 365   # 1 year of daily returns
-COVARIANCE_MIN_HISTORY = 60      # Minimum days needed for covariance
+COVARIANCE_LOOKBACK_DAYS = 365  # 1 year of daily returns
+COVARIANCE_MIN_HISTORY = 60  # Minimum days needed for covariance
 
 # Weight cutoffs
 OPTIMIZER_WEIGHT_CUTOFF = 0.005  # Ignore weights below 0.5%
-MAX_CONCENTRATION = 0.20         # Maximum 20% in any single stock
+MAX_CONCENTRATION = 0.20  # Maximum 20% in any single stock
 
 # Expected return bounds (clamp to reasonable range)
 EXPECTED_RETURN_MIN = -0.10  # -10% floor
-EXPECTED_RETURN_MAX = 0.30   # +30% ceiling
+EXPECTED_RETURN_MAX = 0.30  # +30% ceiling
 
 # Allocation tolerance bands for sector constraints
-GEO_ALLOCATION_TOLERANCE = 0.10   # +/- 10% from target
-IND_ALLOCATION_TOLERANCE = 0.15   # +/- 15% from target
+GEO_ALLOCATION_TOLERANCE = 0.10  # +/- 10% from target
+IND_ALLOCATION_TOLERANCE = 0.15  # +/- 15% from target

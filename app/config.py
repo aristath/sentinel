@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+
 from pydantic_settings import BaseSettings
 
 
@@ -35,11 +36,13 @@ class Settings(BaseSettings):
     # Note: min_trade_size removed - now calculated from transaction costs in DB settings
     max_trades_per_cycle: int = 5  # Maximum trades per rebalance cycle
     min_stock_score: float = 0.5  # Minimum score to consider buying a stock
-    
+
     # Price fetching / Retry configuration
     price_fetch_max_retries: int = 3  # Maximum retries for price fetching
-    price_fetch_retry_delay_base: float = 1.0  # Base delay in seconds for exponential backoff
-    
+    price_fetch_retry_delay_base: float = (
+        1.0  # Base delay in seconds for exponential backoff
+    )
+
     # Rate limiting
     rate_limit_max_requests: int = 60  # General API rate limit per window
     rate_limit_window_seconds: int = 60  # Rate limit window in seconds

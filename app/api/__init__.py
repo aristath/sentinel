@@ -1,5 +1,26 @@
 # API routers
-from app.api import portfolio, stocks, trades, status, allocation, cash_flows, charts
-from app.api import recommendations, multi_step_recommendations, optimizer
+from app.api import (
+    allocation,
+    cash_flows,
+    charts,
+    multi_step_recommendations,
+    optimizer,
+    portfolio,
+    recommendations,
+    status,
+    stocks,
+    trades,
+)
 
-__all__ = ["portfolio", "stocks", "trades", "status", "allocation", "cash_flows", "charts", "recommendations", "multi_step_recommendations", "optimizer"]
+__all__ = [
+    "portfolio",
+    "stocks",
+    "trades",
+    "status",
+    "allocation",
+    "cash_flows",
+    "charts",
+    "recommendations",
+    "multi_step_recommendations",
+    "optimizer",
+]

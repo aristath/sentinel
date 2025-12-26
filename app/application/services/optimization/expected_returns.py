@@ -12,11 +12,11 @@ import logging
 from typing import Dict, List, Optional
 
 from app.domain.scoring.constants import (
+    EXPECTED_RETURN_MAX,
+    EXPECTED_RETURN_MIN,
     EXPECTED_RETURNS_CAGR_WEIGHT,
     EXPECTED_RETURNS_SCORE_WEIGHT,
     OPTIMIZER_TARGET_RETURN,
-    EXPECTED_RETURN_MIN,
-    EXPECTED_RETURN_MAX,
 )
 from app.repositories.calculations import CalculationsRepository
 from app.repositories.score import ScoreRepository
@@ -114,8 +114,8 @@ class ExpectedReturnsCalculator:
 
         # Calculate base expected return
         base_return = (
-            total_return_cagr * EXPECTED_RETURNS_CAGR_WEIGHT +
-            target_return * score_factor * EXPECTED_RETURNS_SCORE_WEIGHT
+            total_return_cagr * EXPECTED_RETURNS_CAGR_WEIGHT
+            + target_return * score_factor * EXPECTED_RETURNS_SCORE_WEIGHT
         )
 
         # Apply user preference multiplier
@@ -148,7 +148,10 @@ class ExpectedReturnsCalculator:
 
         for symbol in symbols:
             metrics = await self._calc_repo.get_metrics(symbol, ["CAGR_5Y", "CAGR_10Y"])
-            if metrics.get("CAGR_5Y") is not None or metrics.get("CAGR_10Y") is not None:
+            if (
+                metrics.get("CAGR_5Y") is not None
+                or metrics.get("CAGR_10Y") is not None
+            ):
                 valid_symbols.append(symbol)
 
         logger.info(f"Found {len(valid_symbols)}/{len(symbols)} symbols with CAGR data")

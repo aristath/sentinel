@@ -13,15 +13,16 @@ class StockRepository:
 
     def __init__(self, db=None):
         """Initialize repository.
-        
+
         Args:
             db: Optional database connection for testing. If None, uses get_db_manager().config
                 Can be a Database instance or raw aiosqlite.Connection (will be wrapped)
         """
         if db is not None:
             # If it's a raw connection without fetchone/fetchall, wrap it
-            if not hasattr(db, 'fetchone') and hasattr(db, 'execute'):
+            if not hasattr(db, "fetchone") and hasattr(db, "execute"):
                 from app.repositories.base import DatabaseAdapter
+
                 self._db = DatabaseAdapter(db)
             else:
                 self._db = db
@@ -31,8 +32,7 @@ class StockRepository:
     async def get_by_symbol(self, symbol: str) -> Optional[Stock]:
         """Get stock by symbol."""
         row = await self._db.fetchone(
-            "SELECT * FROM stocks WHERE symbol = ?",
-            (symbol.upper(),)
+            "SELECT * FROM stocks WHERE symbol = ?", (symbol.upper(),)
         )
         if not row:
             return None
@@ -40,9 +40,7 @@ class StockRepository:
 
     async def get_all_active(self) -> List[Stock]:
         """Get all active stocks."""
-        rows = await self._db.fetchall(
-            "SELECT * FROM stocks WHERE active = 1"
-        )
+        rows = await self._db.fetchall("SELECT * FROM stocks WHERE active = 1")
         return [self._row_to_stock(row) for row in rows]
 
     async def get_all(self) -> List[Stock]:
@@ -76,7 +74,7 @@ class StockRepository:
                     stock.currency,
                     now,
                     now,
-                )
+                ),
             )
 
     async def update(self, symbol: str, **updates) -> None:
@@ -97,8 +95,7 @@ class StockRepository:
 
         async with transaction_context(self._db) as conn:
             await conn.execute(
-                f"UPDATE stocks SET {set_clause} WHERE symbol = ?",
-                values
+                f"UPDATE stocks SET {set_clause} WHERE symbol = ?", values
             )
 
     async def delete(self, symbol: str) -> None:
@@ -110,21 +107,15 @@ class StockRepository:
         db_manager = get_db_manager()
 
         # Fetch stocks from config.db
-        stock_rows = await self._db.fetchall(
-            "SELECT * FROM stocks WHERE active = 1"
-        )
+        stock_rows = await self._db.fetchall("SELECT * FROM stocks WHERE active = 1")
         stocks = {row["symbol"]: dict(row) for row in stock_rows}
 
         # Fetch scores from state.db
-        score_rows = await db_manager.state.fetchall(
-            "SELECT * FROM scores"
-        )
+        score_rows = await db_manager.state.fetchall("SELECT * FROM scores")
         scores = {row["symbol"]: dict(row) for row in score_rows}
 
         # Fetch positions from state.db
-        position_rows = await db_manager.state.fetchall(
-            "SELECT * FROM positions"
-        )
+        position_rows = await db_manager.state.fetchall("SELECT * FROM positions")
         positions = {row["symbol"]: dict(row) for row in position_rows}
 
         # Merge data
@@ -168,6 +159,8 @@ class StockRepository:
             min_lot=row["min_lot"] or 1,
             active=bool(row["active"]),
             allow_buy=bool(row["allow_buy"]) if row["allow_buy"] is not None else True,
-            allow_sell=bool(row["allow_sell"]) if row["allow_sell"] is not None else False,
+            allow_sell=(
+                bool(row["allow_sell"]) if row["allow_sell"] is not None else False
+            ),
             currency=row["currency"],
         )

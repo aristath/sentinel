@@ -5,17 +5,18 @@ sizes could lead to over-concentrated positions or wasted cash.
 """
 
 import pytest
+
+from app.domain.constants import (
+    MAX_CONVICTION_MULTIPLIER,
+    MAX_POSITION_SIZE_MULTIPLIER,
+    MIN_CONVICTION_MULTIPLIER,
+    MIN_VOLATILITY_MULTIPLIER,
+)
 from app.domain.models import StockPriority
 from app.domain.services.allocation_calculator import (
     calculate_position_size,
-    parse_industries,
     get_max_trades,
-)
-from app.domain.constants import (
-    MIN_CONVICTION_MULTIPLIER,
-    MAX_CONVICTION_MULTIPLIER,
-    MIN_VOLATILITY_MULTIPLIER,
-    MAX_POSITION_SIZE_MULTIPLIER,
+    parse_industries,
 )
 
 

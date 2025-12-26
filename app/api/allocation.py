@@ -2,22 +2,25 @@
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+
+from app.domain.models import AllocationTarget
 from app.infrastructure.dependencies import (
     AllocationRepositoryDep,
     PortfolioServiceDep,
 )
-from app.domain.models import AllocationTarget
 
 router = APIRouter()
 
 
 class GeographyTargets(BaseModel):
     """Dynamic geography allocation weights."""
+
     targets: dict[str, float]
 
 
 class IndustryTargets(BaseModel):
     """Dynamic industry allocation weights."""
+
     targets: dict[str, float]
 
 
@@ -46,7 +49,9 @@ async def get_allocation_targets(allocation_repo: AllocationRepositoryDep):
 
 
 @router.put("/targets/geography")
-async def update_geography_targets(targets: GeographyTargets, allocation_repo: AllocationRepositoryDep):
+async def update_geography_targets(
+    targets: GeographyTargets, allocation_repo: AllocationRepositoryDep
+):
     """Update geography allocation weights."""
     updates = targets.targets
 
@@ -56,8 +61,7 @@ async def update_geography_targets(targets: GeographyTargets, allocation_repo: A
     for name, weight in updates.items():
         if weight < -1 or weight > 1:
             raise HTTPException(
-                status_code=400,
-                detail=f"Weight for {name} must be between -1 and 1"
+                status_code=400, detail=f"Weight for {name} must be between -1 and 1"
             )
 
     for name, weight in updates.items():
@@ -78,7 +82,9 @@ async def update_geography_targets(targets: GeographyTargets, allocation_repo: A
 
 
 @router.put("/targets/industry")
-async def update_industry_targets(targets: IndustryTargets, allocation_repo: AllocationRepositoryDep):
+async def update_industry_targets(
+    targets: IndustryTargets, allocation_repo: AllocationRepositoryDep
+):
     """Update industry allocation weights."""
     updates = targets.targets
 
@@ -88,8 +94,7 @@ async def update_industry_targets(targets: IndustryTargets, allocation_repo: All
     for name, weight in updates.items():
         if weight < -1 or weight > 1:
             raise HTTPException(
-                status_code=400,
-                detail=f"Weight for {name} must be between -1 and 1"
+                status_code=400, detail=f"Weight for {name} must be between -1 and 1"
             )
 
     for name, weight in updates.items():
@@ -149,8 +154,10 @@ async def get_allocation_deviations(portfolio_service: PortfolioServiceDep):
         a.name: {
             "deviation": a.deviation,
             "need": max(0, -a.deviation),
-            "status": "underweight" if a.deviation < -0.02 else (
-                "overweight" if a.deviation > 0.02 else "balanced"
+            "status": (
+                "underweight"
+                if a.deviation < -0.02
+                else ("overweight" if a.deviation > 0.02 else "balanced")
             ),
         }
         for a in summary.geographic_allocations
@@ -160,8 +167,10 @@ async def get_allocation_deviations(portfolio_service: PortfolioServiceDep):
         a.name: {
             "deviation": a.deviation,
             "need": max(0, -a.deviation),
-            "status": "underweight" if a.deviation < -0.02 else (
-                "overweight" if a.deviation > 0.02 else "balanced"
+            "status": (
+                "underweight"
+                if a.deviation < -0.02
+                else ("overweight" if a.deviation > 0.02 else "balanced")
             ),
         }
         for a in summary.industry_allocations

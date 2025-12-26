@@ -4,14 +4,16 @@ Handles buy and sell recommendations, including generation, listing, and dismiss
 """
 
 import logging
+
 from fastapi import APIRouter, HTTPException
+
+from app.infrastructure.cache import cache
 from app.infrastructure.dependencies import (
     RebalancingServiceDep,
     RecommendationRepositoryDep,
-    TradeSafetyServiceDep,
     TradeExecutionServiceDep,
+    TradeSafetyServiceDep,
 )
-from app.infrastructure.cache import cache
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -101,12 +103,14 @@ async def dismiss_recommendation(
     Marks the recommendation as dismissed, preventing it from appearing again.
     """
     from app.infrastructure.cache_invalidation import get_cache_invalidation_service
-    
+
     try:
         # Check if recommendation exists
         rec = await recommendation_repo.get_by_uuid(uuid)
         if not rec:
-            raise HTTPException(status_code=404, detail=f"Recommendation {uuid} not found")
+            raise HTTPException(
+                status_code=404, detail=f"Recommendation {uuid} not found"
+            )
 
         # Mark as dismissed
         await recommendation_repo.mark_dismissed(uuid)
@@ -115,7 +119,11 @@ async def dismiss_recommendation(
         cache_service = get_cache_invalidation_service()
         cache_service.invalidate_recommendation_caches()
 
-        return {"status": "success", "uuid": uuid, "message": "Recommendation dismissed"}
+        return {
+            "status": "success",
+            "uuid": uuid,
+            "message": "Recommendation dismissed",
+        }
 
     except HTTPException:
         raise
@@ -197,12 +205,14 @@ async def dismiss_sell_recommendation(
     Marks the recommendation as dismissed, preventing it from appearing again.
     """
     from app.infrastructure.cache_invalidation import get_cache_invalidation_service
-    
+
     try:
         # Check if recommendation exists
         rec = await recommendation_repo.get_by_uuid(uuid)
         if not rec:
-            raise HTTPException(status_code=404, detail=f"Recommendation {uuid} not found")
+            raise HTTPException(
+                status_code=404, detail=f"Recommendation {uuid} not found"
+            )
 
         # Mark as dismissed
         await recommendation_repo.mark_dismissed(uuid)
@@ -211,7 +221,11 @@ async def dismiss_sell_recommendation(
         cache_service = get_cache_invalidation_service()
         cache_service.invalidate_recommendation_caches()
 
-        return {"status": "success", "uuid": uuid, "message": "Sell recommendation dismissed"}
+        return {
+            "status": "success",
+            "uuid": uuid,
+            "message": "Sell recommendation dismissed",
+        }
 
     except HTTPException:
         raise
@@ -291,21 +305,24 @@ async def execute_sell_recommendation(
 
     Gets the current sell recommendation and executes it via Tradernet.
     """
-    from app.infrastructure.external.tradernet_connection import ensure_tradernet_connected
-    from app.infrastructure.cache_invalidation import get_cache_invalidation_service
     from app.domain.value_objects.trade_side import TradeSide
+    from app.infrastructure.cache_invalidation import get_cache_invalidation_service
+    from app.infrastructure.external.tradernet_connection import (
+        ensure_tradernet_connected,
+    )
 
     symbol = symbol.upper()
 
     try:
-        recommendations = await rebalancing_service.calculate_sell_recommendations(limit=20)
+        recommendations = await rebalancing_service.calculate_sell_recommendations(
+            limit=20
+        )
 
         # Find the recommendation for the requested symbol
         rec = next((r for r in recommendations if r.symbol == symbol), None)
         if not rec:
             raise HTTPException(
-                status_code=404,
-                detail=f"No sell recommendation found for {symbol}"
+                status_code=404, detail=f"No sell recommendation found for {symbol}"
             )
 
         # Ensure connection
@@ -317,7 +334,7 @@ async def execute_sell_recommendation(
             side=TradeSide.SELL,
             quantity=rec.quantity,
             client=client,
-            raise_on_error=True
+            raise_on_error=True,
         )
 
         result = client.place_order(
@@ -356,4 +373,3 @@ async def execute_sell_recommendation(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-

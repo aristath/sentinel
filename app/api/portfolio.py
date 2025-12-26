@@ -1,12 +1,14 @@
 """Portfolio API endpoints."""
 
 import logging
+
 from fastapi import APIRouter, HTTPException
+
 from app.infrastructure.dependencies import (
-    PositionRepositoryDep,
-    StockRepositoryDep,
     PortfolioRepositoryDep,
     PortfolioServiceDep,
+    PositionRepositoryDep,
+    StockRepositoryDep,
 )
 from app.infrastructure.external.tradernet_connection import ensure_tradernet_connected
 
@@ -37,15 +39,21 @@ async def get_portfolio(
             "last_updated": position.last_updated,
         }
         if stock:
-            pos_dict.update({
-                "stock_name": stock.name,
-                "industry": stock.industry,
-                "geography": stock.geography,
-            })
+            pos_dict.update(
+                {
+                    "stock_name": stock.name,
+                    "industry": stock.industry,
+                    "geography": stock.geography,
+                }
+            )
         result.append(pos_dict)
 
     # Sort by market value
-    result.sort(key=lambda x: (x.get("quantity", 0) or 0) * (x.get("current_price") or x.get("avg_price") or 0), reverse=True)
+    result.sort(
+        key=lambda x: (x.get("quantity", 0) or 0)
+        * (x.get("current_price") or x.get("avg_price") or 0),
+        reverse=True,
+    )
     return result
 
 
@@ -107,7 +115,9 @@ async def get_transaction_history():
             "note": "Deposits are not available via API",
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get transaction history: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get transaction history: {str(e)}"
+        )
 
 
 @router.get("/cash-breakdown")
@@ -126,7 +136,9 @@ async def get_cash_breakdown():
         balances = client.get_cash_balances()
 
         # Collect currencies that need conversion
-        currencies_needed = {b.currency for b in balances if b.currency != "EUR" and b.amount > 0}
+        currencies_needed = {
+            b.currency for b in balances if b.currency != "EUR" and b.amount > 0
+        }
 
         # Fetch exchange rates in one call (like daily_sync)
         exchange_rates = {"EUR": 1.0}
@@ -134,8 +146,7 @@ async def get_cash_breakdown():
             try:
                 async with httpx.AsyncClient() as http_client:
                     response = await http_client.get(
-                        "https://api.exchangerate-api.com/v4/latest/EUR",
-                        timeout=15.0
+                        "https://api.exchangerate-api.com/v4/latest/EUR", timeout=15.0
                     )
                     if response.status_code == 200:
                         api_rates = response.json().get("rates", {})
@@ -161,40 +172,45 @@ async def get_cash_breakdown():
                 total_eur += b.amount / rate
 
         return {
-            "balances": [{"currency": b.currency, "amount": b.amount} for b in balances],
+            "balances": [
+                {"currency": b.currency, "amount": b.amount} for b in balances
+            ],
             "total_eur": round(total_eur, 2),
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get cash breakdown: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get cash breakdown: {str(e)}"
+        )
 
 
 @router.get("/analytics")
 async def get_portfolio_analytics(days: int = 365):
     """
     Get comprehensive portfolio performance analytics using PyFolio.
-    
+
     Args:
         days: Number of days to analyze (default 365)
-    
+
     Returns:
         Dict with returns, risk_metrics, attribution, drawdowns
     """
     try:
         from datetime import datetime, timedelta
+
         from app.domain.analytics import (
-            reconstruct_portfolio_values,
             calculate_portfolio_returns,
-            get_portfolio_metrics,
             get_performance_attribution,
+            get_portfolio_metrics,
+            reconstruct_portfolio_values,
         )
-        
+
         # Calculate date range
         end_date = datetime.now().strftime("%Y-%m-%d")
         start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
-        
+
         # Reconstruct portfolio history
         portfolio_values = await reconstruct_portfolio_values(start_date, end_date)
-        
+
         if portfolio_values.empty:
             return {
                 "error": "Insufficient data",
@@ -202,10 +218,10 @@ async def get_portfolio_analytics(days: int = 365):
                 "risk_metrics": {},
                 "attribution": {},
             }
-        
+
         # Calculate returns
         returns = calculate_portfolio_returns(portfolio_values)
-        
+
         if returns.empty:
             return {
                 "error": "Could not calculate returns",
@@ -213,29 +229,35 @@ async def get_portfolio_analytics(days: int = 365):
                 "risk_metrics": {},
                 "attribution": {},
             }
-        
+
         # Get portfolio metrics
         metrics = await get_portfolio_metrics(returns)
-        
+
         # Get performance attribution
         attribution = await get_performance_attribution(returns, start_date, end_date)
-        
+
         # Calculate daily/monthly/annual returns
         daily_returns = returns.tolist()
         returns_index = returns.index.strftime("%Y-%m-%d").tolist()
-        
+
         # Monthly returns
         monthly_returns = returns.resample("M").apply(lambda x: (1 + x).prod() - 1)
         monthly_returns_list = monthly_returns.tolist()
         monthly_index = monthly_returns.index.strftime("%Y-%m").tolist()
-        
+
         # Annual return
         annual_return = metrics.get("annual_return", 0.0)
-        
+
         return {
             "returns": {
-                "daily": [{"date": d, "return": r} for d, r in zip(returns_index, daily_returns)],
-                "monthly": [{"month": m, "return": r} for m, r in zip(monthly_index, monthly_returns_list)],
+                "daily": [
+                    {"date": d, "return": r}
+                    for d, r in zip(returns_index, daily_returns)
+                ],
+                "monthly": [
+                    {"month": m, "return": r}
+                    for m, r in zip(monthly_index, monthly_returns_list)
+                ],
                 "annual": annual_return,
             },
             "risk_metrics": {
@@ -257,4 +279,6 @@ async def get_portfolio_analytics(days: int = 365):
         }
     except Exception as e:
         logger.error(f"Error calculating portfolio analytics: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to calculate analytics: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to calculate analytics: {str(e)}"
+        )

@@ -1,7 +1,9 @@
 """Tests for SettingsService."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
 from app.domain.services.settings_service import SettingsService
 from app.domain.value_objects.settings import Settings
 from app.repositories import SettingsRepository

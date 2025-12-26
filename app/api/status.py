@@ -2,13 +2,15 @@
 
 import shutil
 from datetime import datetime
+
 from fastapi import APIRouter
+
 from app.config import settings
 from app.infrastructure.dependencies import (
     PortfolioRepositoryDep,
-    StockRepositoryDep,
     PositionRepositoryDep,
     SettingsRepositoryDep,
+    StockRepositoryDep,
 )
 
 router = APIRouter()
@@ -32,8 +34,7 @@ async def get_status(
     if positions:
         # Find most recent last_updated, format as "YYYY-MM-DD HH:MM"
         latest = max(
-            (p.last_updated for p in positions if p.last_updated),
-            default=None
+            (p.last_updated for p in positions if p.last_updated), default=None
         )
         if latest:
             # Parse ISO format and reformat to "YYYY-MM-DD HH:MM"
@@ -130,7 +131,9 @@ async def trigger_daily_maintenance():
 @router.get("/tradernet")
 async def get_tradernet_status():
     """Get Tradernet connection status."""
-    from app.infrastructure.external.tradernet_connection import ensure_tradernet_connected
+    from app.infrastructure.external.tradernet_connection import (
+        ensure_tradernet_connected,
+    )
 
     try:
         client = await ensure_tradernet_connected(raise_on_error=False)
@@ -141,7 +144,7 @@ async def get_tradernet_status():
             }
     except Exception:
         pass
-    
+
     return {
         "connected": False,
         "message": "Not connected",

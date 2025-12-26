@@ -8,7 +8,7 @@ Components:
 """
 
 import logging
-from typing import Optional, List, Dict
+from typing import Dict, List, Optional
 
 import numpy as np
 
@@ -19,13 +19,15 @@ logger = logging.getLogger(__name__)
 
 # Import scorers from dedicated module
 from app.domain.scoring.scorers.technicals import (
-    score_rsi,
     score_bollinger,
     score_ema_distance,
+    score_rsi,
 )
 
 
-async def calculate_technicals_score(symbol: str, daily_prices: List[Dict]) -> ScoreResult:
+async def calculate_technicals_score(
+    symbol: str, daily_prices: List[Dict]
+) -> ScoreResult:
     """
     Calculate technicals score.
 
@@ -37,13 +39,13 @@ async def calculate_technicals_score(symbol: str, daily_prices: List[Dict]) -> S
         ScoreResult with score and sub_scores
         sub_scores: {"rsi": float, "bollinger": float, "ema": float}
     """
-    from app.repositories.calculations import CalculationsRepository
     from app.domain.scoring.caching import (
-        get_rsi,
+        calculate_distance_from_ma,
         get_bollinger_bands,
         get_ema,
-        calculate_distance_from_ma,
+        get_rsi,
     )
+    from app.repositories.calculations import CalculationsRepository
 
     if len(daily_prices) < 20:
         sub_components = {"rsi": 0.5, "bollinger": 0.5, "ema": 0.5}
@@ -81,11 +83,7 @@ async def calculate_technicals_score(symbol: str, daily_prices: List[Dict]) -> S
     ema_score = score_ema_distance(current_price, ema_value)
 
     # 35% RSI, 35% Bollinger, 30% EMA
-    total = (
-        rsi_score * 0.35 +
-        bb_score * 0.35 +
-        ema_score * 0.30
-    )
+    total = rsi_score * 0.35 + bb_score * 0.35 + ema_score * 0.30
 
     sub_components = {
         "rsi": round(rsi_score, 3),
@@ -93,7 +91,4 @@ async def calculate_technicals_score(symbol: str, daily_prices: List[Dict]) -> S
         "ema": round(ema_score, 3),
     }
 
-    return ScoreResult(
-        score=round(min(1.0, total), 3),
-        sub_scores=sub_components
-    )
+    return ScoreResult(score=round(min(1.0, total), 3), sub_scores=sub_components)

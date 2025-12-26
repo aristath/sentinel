@@ -17,28 +17,28 @@ Raw metrics are cached in calculations.db with per-metric TTLs.
 
 import logging
 from datetime import datetime
-from typing import Optional, List, Dict
+from typing import Dict, List, Optional
 
 import numpy as np
 
-from app.domain.scoring.models import (
-    PortfolioContext,
-    CalculatedStockScore,
-    PrefetchedStockData,
-)
+from app.domain.scoring.calculations import calculate_volatility
 from app.domain.scoring.constants import (
-    DEFAULT_TARGET_ANNUAL_RETURN,
     DEFAULT_MARKET_AVG_PE,
+    DEFAULT_TARGET_ANNUAL_RETURN,
 )
-from app.domain.scoring.groups.long_term import calculate_long_term_score
-from app.domain.scoring.groups.fundamentals import calculate_fundamentals_score
-from app.domain.scoring.groups.opportunity import calculate_opportunity_score
+from app.domain.scoring.diversification import calculate_diversification_score
 from app.domain.scoring.groups.dividends import calculate_dividends_score
+from app.domain.scoring.groups.fundamentals import calculate_fundamentals_score
+from app.domain.scoring.groups.long_term import calculate_long_term_score
+from app.domain.scoring.groups.opinion import calculate_opinion_score
+from app.domain.scoring.groups.opportunity import calculate_opportunity_score
 from app.domain.scoring.groups.short_term import calculate_short_term_score
 from app.domain.scoring.groups.technicals import calculate_technicals_score
-from app.domain.scoring.groups.opinion import calculate_opinion_score
-from app.domain.scoring.diversification import calculate_diversification_score
-from app.domain.scoring.calculations import calculate_volatility
+from app.domain.scoring.models import (
+    CalculatedStockScore,
+    PortfolioContext,
+    PrefetchedStockData,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,14 +47,14 @@ logger = logging.getLogger(__name__)
 # now handles portfolio-level allocation decisions. Per-stock scoring uses
 # these fixed weights that balance quality, opportunity, and diversification.
 SCORE_WEIGHTS = {
-    "long_term": 0.20,       # CAGR, Sortino, Sharpe
-    "fundamentals": 0.15,    # Financial strength, Consistency
-    "opportunity": 0.15,     # 52W high distance, P/E ratio
-    "dividends": 0.12,       # Yield, Dividend consistency
-    "short_term": 0.10,      # Recent momentum, Drawdown
-    "technicals": 0.10,      # RSI, Bollinger, EMA
-    "opinion": 0.10,         # Analyst recommendations, Price targets
-    "diversification": 0.08, # Geography, Industry, Averaging down
+    "long_term": 0.20,  # CAGR, Sortino, Sharpe
+    "fundamentals": 0.15,  # Financial strength, Consistency
+    "opportunity": 0.15,  # 52W high distance, P/E ratio
+    "dividends": 0.12,  # Yield, Dividend consistency
+    "short_term": 0.10,  # Recent momentum, Drawdown
+    "technicals": 0.10,  # RSI, Bollinger, EMA
+    "opinion": 0.10,  # Analyst recommendations, Price targets
+    "diversification": 0.08,  # Geography, Industry, Averaging down
 }
 
 
@@ -182,7 +182,11 @@ async def calculate_stock_score(
         sub_scores["diversification"] = result.sub_scores
     else:
         scores["diversification"] = 0.5
-        sub_scores["diversification"] = {"geography": 0.5, "industry": 0.5, "averaging": 0.5}
+        sub_scores["diversification"] = {
+            "geography": 0.5,
+            "industry": 0.5,
+            "averaging": 0.5,
+        }
 
     # Normalize weights so they sum to 1.0 (allows relative weight system)
     weight_sum = sum(weights.get(group, SCORE_WEIGHTS[group]) for group in scores)
@@ -195,10 +199,7 @@ async def calculate_stock_score(
         normalized_weights = SCORE_WEIGHTS
 
     # Calculate weighted total
-    total_score = sum(
-        scores[group] * normalized_weights[group]
-        for group in scores
-    )
+    total_score = sum(scores[group] * normalized_weights[group] for group in scores)
 
     # Calculate volatility from daily prices
     volatility = None

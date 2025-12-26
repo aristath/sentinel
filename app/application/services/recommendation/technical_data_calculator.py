@@ -6,13 +6,13 @@ Calculates technical indicators (volatility, EMA distance) for portfolio positio
 import logging
 from typing import Dict, List
 
+import empyrical
 import numpy as np
 import pandas as pd
-import empyrical
 import pandas_ta as ta
 
-from app.infrastructure.database.manager import DatabaseManager
 from app.domain.scoring import TechnicalData
+from app.infrastructure.database.manager import DatabaseManager
 
 logger = logging.getLogger(__name__)
 
@@ -51,19 +51,21 @@ async def get_technical_data_for_positions(
                 result[symbol] = TechnicalData(
                     current_volatility=0.20,
                     historical_volatility=0.20,
-                    distance_from_ma_200=0.0
+                    distance_from_ma_200=0.0,
                 )
                 continue
 
-            closes = np.array([row['close_price'] for row in reversed(rows)])
+            closes = np.array([row["close_price"] for row in reversed(rows)])
             closes_series = pd.Series(closes)
 
             if np.any(closes <= 0):
-                logger.warning(f"Zero/negative prices detected for {symbol}, using fallback values")
+                logger.warning(
+                    f"Zero/negative prices detected for {symbol}, using fallback values"
+                )
                 result[symbol] = TechnicalData(
                     current_volatility=0.20,
                     historical_volatility=0.20,
-                    distance_from_ma_200=0.0
+                    distance_from_ma_200=0.0,
                 )
                 continue
 
@@ -85,19 +87,25 @@ async def get_technical_data_for_positions(
             # Distance from 200-day EMA using pandas-ta
             if len(closes) >= 200:
                 ema_200 = ta.ema(closes_series, length=200)
-                if ema_200 is not None and len(ema_200) > 0 and not pd.isna(ema_200.iloc[-1]):
+                if (
+                    ema_200 is not None
+                    and len(ema_200) > 0
+                    and not pd.isna(ema_200.iloc[-1])
+                ):
                     ema_value = float(ema_200.iloc[-1])
                 else:
                     ema_value = float(np.mean(closes[-200:]))
                 current_price = float(closes[-1])
-                distance = (current_price - ema_value) / ema_value if ema_value > 0 else 0.0
+                distance = (
+                    (current_price - ema_value) / ema_value if ema_value > 0 else 0.0
+                )
             else:
                 distance = 0.0
 
             result[symbol] = TechnicalData(
                 current_volatility=current_vol,
                 historical_volatility=historical_vol,
-                distance_from_ma_200=distance
+                distance_from_ma_200=distance,
             )
 
         except (ValueError, ZeroDivisionError) as e:
@@ -105,15 +113,17 @@ async def get_technical_data_for_positions(
             result[symbol] = TechnicalData(
                 current_volatility=0.20,
                 historical_volatility=0.20,
-                distance_from_ma_200=0.0
+                distance_from_ma_200=0.0,
             )
         except Exception as e:
-            logger.error(f"Unexpected error getting technical data for {symbol}: {e}", exc_info=True)
+            logger.error(
+                f"Unexpected error getting technical data for {symbol}: {e}",
+                exc_info=True,
+            )
             result[symbol] = TechnicalData(
                 current_volatility=0.20,
                 historical_volatility=0.20,
-                distance_from_ma_200=0.0
+                distance_from_ma_200=0.0,
             )
 
     return result
-

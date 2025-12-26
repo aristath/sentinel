@@ -11,7 +11,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
 
-from app.domain.constants import DAILY_LOSS_SELL_HALT, DAILY_LOSS_FULL_HALT
+from app.domain.constants import DAILY_LOSS_FULL_HALT, DAILY_LOSS_SELL_HALT
 from app.infrastructure.database.manager import get_db_manager
 
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ class DailyPnLTracker:
             ORDER BY date DESC
             LIMIT 1
             """,
-            (today,)
+            (today,),
         )
 
         if row:
@@ -56,7 +56,7 @@ class DailyPnLTracker:
             FROM portfolio_snapshots
             WHERE date = ?
             """,
-            (today,)
+            (today,),
         )
 
         return row["total_value"] if row else None
@@ -122,7 +122,10 @@ class DailyPnLTracker:
             return True, "P&L unknown"
 
         if pnl <= -DAILY_LOSS_FULL_HALT:
-            return False, f"Portfolio down {abs(pnl)*100:.1f}% today (full halt at {DAILY_LOSS_FULL_HALT*100:.0f}%)"
+            return (
+                False,
+                f"Portfolio down {abs(pnl)*100:.1f}% today (full halt at {DAILY_LOSS_FULL_HALT*100:.0f}%)",
+            )
 
         if pnl <= -DAILY_LOSS_SELL_HALT:
             # Moderate drawdown - buys still allowed (buy the dip)
@@ -145,7 +148,10 @@ class DailyPnLTracker:
             return True, "P&L unknown"
 
         if pnl <= -DAILY_LOSS_SELL_HALT:
-            return False, f"Sells blocked: portfolio down {abs(pnl)*100:.1f}% (halt at {DAILY_LOSS_SELL_HALT*100:.0f}%)"
+            return (
+                False,
+                f"Sells blocked: portfolio down {abs(pnl)*100:.1f}% (halt at {DAILY_LOSS_SELL_HALT*100:.0f}%)",
+            )
 
         return True, "Normal trading"
 
@@ -179,7 +185,9 @@ class DailyPnLTracker:
 
         if pnl <= -DAILY_LOSS_FULL_HALT:
             status = "halted"
-            reason = f"Trading halted: portfolio down {abs(pnl)*100:.1f}% (severe drawdown)"
+            reason = (
+                f"Trading halted: portfolio down {abs(pnl)*100:.1f}% (severe drawdown)"
+            )
         elif pnl <= -DAILY_LOSS_SELL_HALT:
             status = "dip_buying"
             reason = f"Dip buying mode: portfolio down {abs(pnl)*100:.1f}% (buys allowed, sells blocked)"

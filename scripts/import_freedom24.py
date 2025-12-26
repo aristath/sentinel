@@ -12,7 +12,6 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-
 # Default database path (relative to arduino-trader root)
 DEFAULT_DB_PATH = Path(__file__).parent.parent / "data" / "trader.db"
 
@@ -62,10 +61,13 @@ def import_trades(conn: sqlite3.Connection, data: dict, dry_run: bool = False) -
             continue
 
         # Check for duplicate
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT id FROM trades
             WHERE symbol = ? AND side = ? AND quantity = ? AND price = ? AND executed_at = ?
-        """, (symbol, operation, quantity, price, date))
+        """,
+            (symbol, operation, quantity, price, date),
+        )
 
         if cursor.fetchone():
             skipped += 1
@@ -75,10 +77,20 @@ def import_trades(conn: sqlite3.Connection, data: dict, dry_run: bool = False) -
         ensure_stock_exists(conn, symbol, trade, dry_run)
 
         if not dry_run:
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO trades (symbol, side, quantity, price, executed_at, order_id)
                 VALUES (?, ?, ?, ?, ?, ?)
-            """, (symbol, operation, quantity, price, date, order_id if order_id != "Grouped" else None))
+            """,
+                (
+                    symbol,
+                    operation,
+                    quantity,
+                    price,
+                    date,
+                    order_id if order_id != "Grouped" else None,
+                ),
+            )
 
         imported += 1
         print(f"  Imported trade: {operation} {quantity} {symbol} @ {price} on {date}")
@@ -90,7 +102,9 @@ def import_trades(conn: sqlite3.Connection, data: dict, dry_run: bool = False) -
     return imported
 
 
-def import_cash_flows(conn: sqlite3.Connection, data: dict, dry_run: bool = False) -> int:
+def import_cash_flows(
+    conn: sqlite3.Connection, data: dict, dry_run: bool = False
+) -> int:
     """Import cash flows from Freedom24 export."""
     cash_in_outs = data.get("cash_in_outs", [])
     imported = 0
@@ -122,37 +136,48 @@ def import_cash_flows(conn: sqlite3.Connection, data: dict, dry_run: bool = Fals
             amount_eur = amount
         elif currency == "USD":
             # Convert USD to EUR (approximate - use stored rate if available)
-            amount_eur = amount * 0.93  # Rough conversion, will be updated by actual rate
+            amount_eur = (
+                amount * 0.93
+            )  # Rough conversion, will be updated by actual rate
         else:
             amount_eur = amount
 
         # Check for duplicate using transaction_id
-        cursor.execute("SELECT id FROM cash_flows WHERE transaction_id = ?", (transaction_id,))
+        cursor.execute(
+            "SELECT id FROM cash_flows WHERE transaction_id = ?", (transaction_id,)
+        )
         if cursor.fetchone():
             skipped += 1
             continue
 
         if not dry_run:
             now = datetime.now().isoformat()
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO cash_flows
                 (transaction_id, type_doc_id, transaction_type, date, amount, currency, amount_eur,
                  status, description, params_json, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                transaction_id,
-                0,  # type_doc_id - not available in Freedom24 export
-                transaction_type,
-                date,
-                amount,
-                currency,
-                amount_eur,
-                "completed",
-                description,
-                details if isinstance(details, str) else json.dumps(details) if details else None,
-                now,
-                now
-            ))
+            """,
+                (
+                    transaction_id,
+                    0,  # type_doc_id - not available in Freedom24 export
+                    transaction_type,
+                    date,
+                    amount,
+                    currency,
+                    amount_eur,
+                    "completed",
+                    description,
+                    (
+                        details
+                        if isinstance(details, str)
+                        else json.dumps(details) if details else None
+                    ),
+                    now,
+                    now,
+                ),
+            )
 
         imported += 1
         type_str = transaction_type or "unknown"
@@ -165,7 +190,9 @@ def import_cash_flows(conn: sqlite3.Connection, data: dict, dry_run: bool = Fals
     return imported
 
 
-def ensure_stock_exists(conn: sqlite3.Connection, symbol: str, trade: dict, dry_run: bool = False) -> None:
+def ensure_stock_exists(
+    conn: sqlite3.Connection, symbol: str, trade: dict, dry_run: bool = False
+) -> None:
     """Ensure a stock exists in the stocks table, creating if needed."""
     cursor = conn.cursor()
     cursor.execute("SELECT symbol FROM stocks WHERE symbol = ?", (symbol,))
@@ -184,20 +211,25 @@ def ensure_stock_exists(conn: sqlite3.Connection, symbol: str, trade: dict, dry_
     industry = "Other"
 
     if not dry_run:
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO stocks (symbol, yahoo_symbol, name, industry, geography, active)
             VALUES (?, ?, ?, ?, ?, 1)
-        """, (symbol, yahoo_symbol, name, industry, geography))
+        """,
+            (symbol, yahoo_symbol, name, industry, geography),
+        )
         conn.commit()
 
     print(f"  Created stock: {symbol} ({geography})")
 
 
-def import_file(conn: sqlite3.Connection, filepath: str, dry_run: bool = False) -> tuple[int, int]:
+def import_file(
+    conn: sqlite3.Connection, filepath: str, dry_run: bool = False
+) -> tuple[int, int]:
     """Import a single Freedom24 export file."""
     print(f"\nImporting: {filepath}")
 
-    with open(filepath, 'r', encoding='utf-8') as f:
+    with open(filepath, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     # Get date range from export

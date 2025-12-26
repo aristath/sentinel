@@ -8,16 +8,16 @@ Components:
 """
 
 import logging
-from typing import Optional, Dict
+from typing import Dict, Optional
 
-from app.domain.scoring.models import PortfolioContext, PortfolioScore
+from app.domain.responses import ScoreResult
 from app.domain.scoring.constants import (
-    MAX_COST_BASIS_BOOST,
-    COST_BASIS_BOOST_THRESHOLD,
     CONCENTRATION_HIGH,
     CONCENTRATION_MED,
+    COST_BASIS_BOOST_THRESHOLD,
+    MAX_COST_BASIS_BOOST,
 )
-from app.domain.responses import ScoreResult
+from app.domain.scoring.models import PortfolioContext, PortfolioScore
 
 logger = logging.getLogger(__name__)
 
@@ -84,8 +84,7 @@ def calculate_diversification_score(
             averaging_down_score = 0.3
 
         # Cost basis bonus
-        if (portfolio_context.position_avg_prices and
-            portfolio_context.current_prices):
+        if portfolio_context.position_avg_prices and portfolio_context.current_prices:
             avg_price = portfolio_context.position_avg_prices.get(symbol)
             current_price = portfolio_context.current_prices.get(symbol)
 
@@ -96,7 +95,9 @@ def calculate_diversification_score(
                     loss_pct = abs(price_vs_avg)
                     if loss_pct <= COST_BASIS_BOOST_THRESHOLD:
                         cost_basis_boost = min(MAX_COST_BASIS_BOOST, loss_pct * 2)
-                        averaging_down_score = min(1.0, averaging_down_score + cost_basis_boost)
+                        averaging_down_score = min(
+                            1.0, averaging_down_score + cost_basis_boost
+                        )
 
         # Avoid over-concentration
         total_value = portfolio_context.total_value
@@ -111,9 +112,9 @@ def calculate_diversification_score(
 
     # Combined score
     total = (
-        geo_gap_score * WEIGHT_GEOGRAPHY +
-        industry_gap_score * WEIGHT_INDUSTRY +
-        averaging_down_score * WEIGHT_AVERAGING
+        geo_gap_score * WEIGHT_GEOGRAPHY
+        + industry_gap_score * WEIGHT_INDUSTRY
+        + averaging_down_score * WEIGHT_AVERAGING
     )
 
     sub_components = {
@@ -122,15 +123,11 @@ def calculate_diversification_score(
         "averaging": round(averaging_down_score, 3),
     }
 
-    return ScoreResult(
-        score=round(min(1.0, total), 3),
-        sub_scores=sub_components
-    )
+    return ScoreResult(score=round(min(1.0, total), 3), sub_scores=sub_components)
 
 
 async def calculate_portfolio_score(
-    portfolio_context: PortfolioContext,
-    portfolio_hash: Optional[str] = None
+    portfolio_context: PortfolioContext, portfolio_hash: Optional[str] = None
 ) -> PortfolioScore:
     """
     Calculate overall portfolio health score.
@@ -150,19 +147,21 @@ async def calculate_portfolio_score(
     # Check cache if portfolio_hash is provided
     if portfolio_hash:
         from app.infrastructure.recommendation_cache import get_recommendation_cache
-        
+
         rec_cache = get_recommendation_cache()
         cache_key = f"portfolio_score:{portfolio_hash}"
         cached = await rec_cache.get_analytics(cache_key)
         if cached:
-            logger.debug(f"Using cached portfolio score for hash {portfolio_hash[:8]}...")
+            logger.debug(
+                f"Using cached portfolio score for hash {portfolio_hash[:8]}..."
+            )
             return PortfolioScore(
                 diversification_score=cached["diversification_score"],
                 dividend_score=cached["dividend_score"],
                 quality_score=cached["quality_score"],
                 total=cached["total"],
             )
-    
+
     total_value = portfolio_context.total_value
     if total_value <= 0:
         score = PortfolioScore(
@@ -174,7 +173,7 @@ async def calculate_portfolio_score(
         # Cache the result if portfolio_hash provided
         if portfolio_hash:
             from app.infrastructure.recommendation_cache import get_recommendation_cache
-            
+
             rec_cache = get_recommendation_cache()
             cache_key = f"portfolio_score:{portfolio_hash}"
             await rec_cache.set_analytics(
@@ -185,7 +184,7 @@ async def calculate_portfolio_score(
                     "quality_score": score.quality_score,
                     "total": score.total,
                 },
-                ttl_hours=24
+                ttl_hours=24,
             )
         return score
 
@@ -205,7 +204,9 @@ async def calculate_portfolio_score(
             deviation = abs(current_pct - target_pct)
             geo_deviations.append(deviation)
 
-    avg_geo_deviation = sum(geo_deviations) / len(geo_deviations) if geo_deviations else 0.2
+    avg_geo_deviation = (
+        sum(geo_deviations) / len(geo_deviations) if geo_deviations else 0.2
+    )
     # Convert deviation to score: 0 deviation = 100, 0.3+ deviation = 0
     diversification_score = max(0, 100 * (1 - avg_geo_deviation / 0.3))
 
@@ -231,11 +232,7 @@ async def calculate_portfolio_score(
         quality_score = 50.0
 
     # Combined score
-    total = (
-        diversification_score * 0.40 +
-        dividend_score * 0.30 +
-        quality_score * 0.30
-    )
+    total = diversification_score * 0.40 + dividend_score * 0.30 + quality_score * 0.30
 
     score = PortfolioScore(
         diversification_score=round(diversification_score, 1),
@@ -243,11 +240,11 @@ async def calculate_portfolio_score(
         quality_score=round(quality_score, 1),
         total=round(total, 1),
     )
-    
+
     # Cache the result if portfolio_hash provided
     if portfolio_hash:
         from app.infrastructure.recommendation_cache import get_recommendation_cache
-        
+
         rec_cache = get_recommendation_cache()
         cache_key = f"portfolio_score:{portfolio_hash}"
         await rec_cache.set_analytics(
@@ -258,9 +255,9 @@ async def calculate_portfolio_score(
                 "quality_score": score.quality_score,
                 "total": score.total,
             },
-            ttl_hours=24
+            ttl_hours=24,
         )
-    
+
     return score
 
 
@@ -292,28 +289,34 @@ async def calculate_post_transaction_score(
     """
     # Round trade amount to nearest 10 EUR to increase cache hit rate
     rounded_amount = round(proposed_value / 10) * 10
-    
+
     # Check cache if portfolio_hash is provided
     if portfolio_hash:
         from app.infrastructure.recommendation_cache import get_recommendation_cache
-        
+
         rec_cache = get_recommendation_cache()
         cache_key = f"scenario:{portfolio_hash}:{symbol}:{rounded_amount}"
         cached = await rec_cache.get_analytics(cache_key)
         if cached:
-            logger.debug(f"Using cached scenario score for {symbol} with hash {portfolio_hash[:8]}...")
+            logger.debug(
+                f"Using cached scenario score for {symbol} with hash {portfolio_hash[:8]}..."
+            )
             return (
                 PortfolioScore(
-                    diversification_score=cached["new_portfolio_score"]["diversification_score"],
+                    diversification_score=cached["new_portfolio_score"][
+                        "diversification_score"
+                    ],
                     dividend_score=cached["new_portfolio_score"]["dividend_score"],
                     quality_score=cached["new_portfolio_score"]["quality_score"],
                     total=cached["new_portfolio_score"]["total"],
                 ),
                 cached["score_change"],
             )
-    
+
     # Calculate current portfolio score
-    current_score = await calculate_portfolio_score(portfolio_context, portfolio_hash=portfolio_hash)
+    current_score = await calculate_portfolio_score(
+        portfolio_context, portfolio_hash=portfolio_hash
+    )
 
     # Create modified context with proposed transaction
     new_positions = dict(portfolio_context.positions)
@@ -350,7 +353,7 @@ async def calculate_post_transaction_score(
     # Cache the scenario result if portfolio_hash provided
     if portfolio_hash:
         from app.infrastructure.recommendation_cache import get_recommendation_cache
-        
+
         rec_cache = get_recommendation_cache()
         cache_key = f"scenario:{portfolio_hash}:{symbol}:{rounded_amount}"
         await rec_cache.set_analytics(
@@ -364,7 +367,7 @@ async def calculate_post_transaction_score(
                 },
                 "score_change": score_change,
             },
-            ttl_hours=96
+            ttl_hours=96,
         )
-    
+
     return new_score, score_change

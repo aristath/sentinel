@@ -169,10 +169,10 @@ async def calculate_long_term_promise(
 
     # Calculate weighted total
     total = (
-        consistency_score * PROMISE_WEIGHT_CONSISTENCY +
-        financial_strength * PROMISE_WEIGHT_FINANCIALS +
-        dividend_consistency * PROMISE_WEIGHT_DIVIDEND_STABILITY +
-        sortino_score * PROMISE_WEIGHT_SORTINO
+        consistency_score * PROMISE_WEIGHT_CONSISTENCY
+        + financial_strength * PROMISE_WEIGHT_FINANCIALS
+        + dividend_consistency * PROMISE_WEIGHT_DIVIDEND_STABILITY
+        + sortino_score * PROMISE_WEIGHT_SORTINO
     )
 
     # Cache the result
@@ -270,9 +270,9 @@ async def calculate_stability_score(
 
     # Calculate weighted total
     total = (
-        volatility_score * STABILITY_WEIGHT_VOLATILITY +
-        drawdown_score * STABILITY_WEIGHT_DRAWDOWN +
-        sharpe_score * STABILITY_WEIGHT_SHARPE
+        volatility_score * STABILITY_WEIGHT_VOLATILITY
+        + drawdown_score * STABILITY_WEIGHT_DRAWDOWN
+        + sharpe_score * STABILITY_WEIGHT_SHARPE
     )
 
     # Cache the result
@@ -342,11 +342,11 @@ async def calculate_portfolio_end_state_score(
 
     # Calculate final end-state score
     end_state_score = (
-        weighted_total_return * WEIGHT_TOTAL_RETURN +
-        diversification_score * WEIGHT_DIVERSIFICATION +
-        weighted_promise * WEIGHT_LONG_TERM_PROMISE +
-        weighted_stability * WEIGHT_STABILITY +
-        opinion_score * WEIGHT_OPINION
+        weighted_total_return * WEIGHT_TOTAL_RETURN
+        + diversification_score * WEIGHT_DIVERSIFICATION
+        + weighted_promise * WEIGHT_LONG_TERM_PROMISE
+        + weighted_stability * WEIGHT_STABILITY
+        + opinion_score * WEIGHT_OPINION
     )
 
     detailed_breakdown = {

@@ -4,15 +4,15 @@ Calculates performance-adjusted allocation weights based on PyFolio attribution.
 """
 
 import logging
-from typing import Dict, Tuple, Optional
 from datetime import datetime, timedelta
+from typing import Dict, Optional, Tuple
 
-from app.domain.repositories.protocols import IAllocationRepository
 from app.domain.analytics import (
-    reconstruct_portfolio_values,
     calculate_portfolio_returns,
     get_performance_attribution,
+    reconstruct_portfolio_values,
 )
+from app.domain.repositories.protocols import IAllocationRepository
 from app.infrastructure.recommendation_cache import get_recommendation_cache
 
 logger = logging.getLogger(__name__)
@@ -55,18 +55,18 @@ async def get_performance_adjusted_weights(
 
         # Get performance attribution (EXPENSIVE - ~27 seconds)
         attribution = await get_performance_attribution(returns, start_date, end_date)
-        
+
         geo_attribution = attribution.get("geography", {})
         ind_attribution = attribution.get("industry", {})
-        
+
         # Adjust weights based on performance
         # If a geography/industry outperformed, increase its target slightly
         adjusted_geo: Dict[str, float] = {}
         adjusted_ind: Dict[str, float] = {}
-        
+
         # Get base allocation targets
         allocations = await allocation_repo.get_all()
-        
+
         base_geo_weights = {
             key.split(":", 1)[1]: val
             for key, val in allocations.items()
@@ -77,11 +77,19 @@ async def get_performance_adjusted_weights(
             for key, val in allocations.items()
             if key.startswith("industry:")
         }
-        
+
         # Calculate average return for comparison
-        avg_geo_return = sum(geo_attribution.values()) / len(geo_attribution) if geo_attribution else 0.0
-        avg_ind_return = sum(ind_attribution.values()) / len(ind_attribution) if ind_attribution else 0.0
-        
+        avg_geo_return = (
+            sum(geo_attribution.values()) / len(geo_attribution)
+            if geo_attribution
+            else 0.0
+        )
+        avg_ind_return = (
+            sum(ind_attribution.values()) / len(ind_attribution)
+            if ind_attribution
+            else 0.0
+        )
+
         # Adjust geography weights (max 3% adjustment - reduced influence)
         for geo, base_weight in base_geo_weights.items():
             perf_return = geo_attribution.get(geo, 0.0)
@@ -111,9 +119,7 @@ async def get_performance_adjusted_weights(
         # Cache the result (48h TTL)
         if portfolio_hash and (adjusted_geo or adjusted_ind):
             await rec_cache.set_analytics(
-                cache_key,
-                {"geo": adjusted_geo, "ind": adjusted_ind},
-                ttl_hours=48
+                cache_key, {"geo": adjusted_geo, "ind": adjusted_ind}, ttl_hours=48
             )
 
         return adjusted_geo, adjusted_ind
@@ -122,4 +128,3 @@ async def get_performance_adjusted_weights(
         logger.debug(f"Could not calculate performance-adjusted weights: {e}")
         # Return empty dicts on error (use base weights)
         return {}, {}
-

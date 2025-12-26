@@ -4,20 +4,20 @@ Orchestrates trade execution via Tradernet and records trades.
 """
 
 import logging
-from typing import List, Optional
 from datetime import datetime
+from typing import List, Optional
 
-from app.domain.repositories.protocols import ITradeRepository, IPositionRepository
-from app.domain.models import Recommendation, Trade
-from app.domain.value_objects.currency import Currency
-from app.infrastructure.external.tradernet import TradernetClient
-from app.infrastructure.events import emit, SystemEvent
-from app.infrastructure.hardware.display_service import set_processing, set_error
 from app.application.services.currency_exchange_service import (
     CurrencyExchangeService,
 )
-from app.domain.services.exchange_rate_service import ExchangeRateService
 from app.application.services.trade_execution.trade_recorder import record_trade
+from app.domain.models import Recommendation, Trade
+from app.domain.repositories.protocols import IPositionRepository, ITradeRepository
+from app.domain.services.exchange_rate_service import ExchangeRateService
+from app.domain.value_objects.currency import Currency
+from app.infrastructure.events import SystemEvent, emit
+from app.infrastructure.external.tradernet import TradernetClient
+from app.infrastructure.hardware.display_service import set_error, set_processing
 
 logger = logging.getLogger(__name__)
 
@@ -48,13 +48,13 @@ class TradeExecutionService:
         order_id: Optional[str] = None,
         currency: Optional[str] = None,
         estimated_price: Optional[float] = None,
-        source: str = "tradernet"
+        source: str = "tradernet",
     ) -> Optional[Trade]:
         """
         Record a trade in the database.
-        
+
         Handles duplicate order_id checking and creates Trade record.
-        
+
         Args:
             symbol: Stock symbol
             side: Trade side (BUY or SELL)
@@ -64,7 +64,7 @@ class TradeExecutionService:
             currency: Trade currency (optional)
             estimated_price: Estimated price to use if price <= 0 (optional)
             source: Trade source (default: "tradernet")
-            
+
         Returns:
             Trade object if recorded successfully, None if duplicate or error
         """
@@ -87,7 +87,7 @@ class TradeExecutionService:
         trades: List[Recommendation],
         currency_balances: Optional[dict[str, float]] = None,
         auto_convert_currency: bool = False,
-        source_currency: str = Currency.EUR
+        source_currency: str = Currency.EUR,
     ) -> List[dict]:
         """
         Execute a list of trade recommendations via Tradernet.
@@ -111,11 +111,16 @@ class TradeExecutionService:
                 raise ConnectionError("Failed to connect to Tradernet")
 
         # Use currency exchange service if auto-convert is enabled
-        currency_service = self._currency_exchange_service if auto_convert_currency else None
+        currency_service = (
+            self._currency_exchange_service if auto_convert_currency else None
+        )
 
         return await self._execute_trades_internal(
-            trades, client, currency_balances=currency_balances,
-            currency_service=currency_service, source_currency=source_currency
+            trades,
+            client,
+            currency_balances=currency_balances,
+            currency_service=currency_service,
+            source_currency=source_currency,
         )
 
     async def _execute_trades_internal(
@@ -124,7 +129,7 @@ class TradeExecutionService:
         client,
         currency_balances: Optional[dict[str, float]] = None,
         currency_service: Optional[CurrencyExchangeService] = None,
-        source_currency: str = Currency.EUR
+        source_currency: str = Currency.EUR,
     ) -> List[dict]:
         """Internal method to execute trades."""
         results = []
@@ -133,13 +138,24 @@ class TradeExecutionService:
 
         # Get recently bought symbols for cooldown safety check
         from app.domain.constants import BUY_COOLDOWN_DAYS
+
         recently_bought = set()
         try:
-            recently_bought = await self._trade_repo.get_recently_bought_symbols(BUY_COOLDOWN_DAYS)
+            recently_bought = await self._trade_repo.get_recently_bought_symbols(
+                BUY_COOLDOWN_DAYS
+            )
         except Exception as e:
             logger.error(f"SAFETY: Failed to get recently bought symbols: {e}")
             # If we can't check cooldown, refuse to execute any buys
-            return [{"symbol": t.symbol, "status": "failed", "error": "Cooldown check failed"} for t in trades if t.side.upper() == "BUY"]
+            return [
+                {
+                    "symbol": t.symbol,
+                    "status": "failed",
+                    "error": "Cooldown check failed",
+                }
+                for t in trades
+                if t.side.upper() == "BUY"
+            ]
 
         for trade in trades:
             try:
@@ -150,11 +166,13 @@ class TradeExecutionService:
                         logger.warning(
                             f"SAFETY BLOCK: {trade.symbol} in cooldown period, refusing to execute"
                         )
-                        results.append({
-                            "symbol": trade.symbol,
-                            "status": "blocked",
-                            "error": f"Cooldown active (bought within {BUY_COOLDOWN_DAYS} days)"
-                        })
+                        results.append(
+                            {
+                                "symbol": trade.symbol,
+                                "status": "blocked",
+                                "error": f"Cooldown active (bought within {BUY_COOLDOWN_DAYS} days)",
+                            }
+                        )
                         continue
 
                     required = trade.quantity * trade.estimated_price
@@ -163,7 +181,11 @@ class TradeExecutionService:
                     # If auto-convert is enabled and currency differs from source
                     if currency_service and trade_currency != source_currency:
                         # Check if we need to convert
-                        available = currency_balances.get(trade_currency, 0) if currency_balances else 0
+                        available = (
+                            currency_balances.get(trade_currency, 0)
+                            if currency_balances
+                            else 0
+                        )
 
                         if available < required:
                             # Only convert once per currency per batch
@@ -173,25 +195,31 @@ class TradeExecutionService:
                                     f"for {trade.symbol} (need {required:.2f} {trade_currency})"
                                 )
 
-                                set_processing(f"CONVERTING {source_currency} TO {trade_currency}...")
+                                set_processing(
+                                    f"CONVERTING {source_currency} TO {trade_currency}..."
+                                )
 
                                 # Ensure we have enough balance
                                 if currency_service.ensure_balance(
                                     trade_currency, required, source_currency
                                 ):
                                     converted_currencies.add(trade_currency)
-                                    logger.info(f"Currency conversion successful for {trade_currency}")
+                                    logger.info(
+                                        f"Currency conversion successful for {trade_currency}"
+                                    )
                                     set_processing("CURRENCY CONVERSION COMPLETE")
                                 else:
                                     logger.warning(
                                         f"Currency conversion failed for {trade.symbol}: "
                                         f"could not convert {source_currency} to {trade_currency}"
                                     )
-                                    results.append({
-                                        "symbol": trade.symbol,
-                                        "status": "skipped",
-                                        "error": f"Currency conversion failed ({source_currency} to {trade_currency})",
-                                    })
+                                    results.append(
+                                        {
+                                            "symbol": trade.symbol,
+                                            "status": "skipped",
+                                            "error": f"Currency conversion failed ({source_currency} to {trade_currency})",
+                                        }
+                                    )
                                     skipped_count += 1
                                     continue
 
@@ -204,11 +232,13 @@ class TradeExecutionService:
                                 f"Skipping {trade.symbol}: insufficient {trade_currency} balance "
                                 f"(need {required:.2f}, have {available:.2f})"
                             )
-                            results.append({
-                                "symbol": trade.symbol,
-                                "status": "skipped",
-                                "error": f"Insufficient {trade_currency} balance (need {required:.2f}, have {available:.2f})",
-                            })
+                            results.append(
+                                {
+                                    "symbol": trade.symbol,
+                                    "status": "skipped",
+                                    "error": f"Insufficient {trade_currency} balance (need {required:.2f}, have {available:.2f})",
+                                }
+                            )
                             skipped_count += 1
                             continue
 
@@ -216,12 +246,16 @@ class TradeExecutionService:
                 if trade.side.upper() == "SELL" and self._position_repo:
                     position = await self._position_repo.get_by_symbol(trade.symbol)
                     if not position:
-                        logger.warning(f"Skipping SELL {trade.symbol}: no position found")
-                        results.append({
-                            "symbol": trade.symbol,
-                            "status": "skipped",
-                            "error": "No position found for SELL order",
-                        })
+                        logger.warning(
+                            f"Skipping SELL {trade.symbol}: no position found"
+                        )
+                        results.append(
+                            {
+                                "symbol": trade.symbol,
+                                "status": "skipped",
+                                "error": "No position found for SELL order",
+                            }
+                        )
                         skipped_count += 1
                         continue
 
@@ -230,35 +264,47 @@ class TradeExecutionService:
                             f"Skipping SELL {trade.symbol}: quantity {trade.quantity} "
                             f"> position {position.quantity}"
                         )
-                        results.append({
-                            "symbol": trade.symbol,
-                            "status": "skipped",
-                            "error": f"SELL quantity ({trade.quantity}) exceeds position ({position.quantity})",
-                        })
+                        results.append(
+                            {
+                                "symbol": trade.symbol,
+                                "status": "skipped",
+                                "error": f"SELL quantity ({trade.quantity}) exceeds position ({position.quantity})",
+                            }
+                        )
                         skipped_count += 1
                         continue
 
                 # Check for pending orders for this symbol (applies to both BUY and SELL)
                 # Check both broker API and local database for recent orders
                 has_pending = client.has_pending_order_for_symbol(trade.symbol)
-                
+
                 # Also check database for recent SELL orders (catches orders just placed)
                 if not has_pending and trade.side.upper() == "SELL":
                     try:
-                        has_recent = await self._trade_repo.has_recent_sell_order(trade.symbol, hours=2)
+                        has_recent = await self._trade_repo.has_recent_sell_order(
+                            trade.symbol, hours=2
+                        )
                         if has_recent:
                             has_pending = True
-                            logger.info(f"Found recent SELL order in database for {trade.symbol}")
+                            logger.info(
+                                f"Found recent SELL order in database for {trade.symbol}"
+                            )
                     except Exception as e:
-                        logger.warning(f"Failed to check database for recent sell orders: {e}")
-                
+                        logger.warning(
+                            f"Failed to check database for recent sell orders: {e}"
+                        )
+
                 if has_pending:
-                    logger.warning(f"SAFETY BLOCK: {trade.symbol} has pending order, refusing to execute")
-                    results.append({
-                        "symbol": trade.symbol,
-                        "status": "blocked",
-                        "error": f"Pending order already exists for {trade.symbol}",
-                    })
+                    logger.warning(
+                        f"SAFETY BLOCK: {trade.symbol} has pending order, refusing to execute"
+                    )
+                    results.append(
+                        {
+                            "symbol": trade.symbol,
+                            "status": "blocked",
+                            "error": f"Pending order already exists for {trade.symbol}",
+                        }
+                    )
                     continue
 
                 # Show activity message for the trade
@@ -285,39 +331,47 @@ class TradeExecutionService:
                         order_id=result.order_id,
                         currency=trade.currency,
                         estimated_price=trade.estimated_price,
-                        source="tradernet"
+                        source="tradernet",
                     )
 
-                    results.append({
-                        "symbol": trade.symbol,
-                        "status": "success",
-                        "order_id": result.order_id,
-                        "side": trade.side,
-                    })
+                    results.append(
+                        {
+                            "symbol": trade.symbol,
+                            "status": "success",
+                            "order_id": result.order_id,
+                            "side": trade.side,
+                        }
+                    )
                 else:
                     error_msg = "ORDER PLACEMENT FAILED"
                     emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
                     set_error(error_msg)
-                    results.append({
-                        "symbol": trade.symbol,
-                        "status": "failed",
-                        "error": "Order placement returned None",
-                    })
+                    results.append(
+                        {
+                            "symbol": trade.symbol,
+                            "status": "failed",
+                            "error": "Order placement returned None",
+                        }
+                    )
 
             except Exception as e:
                 logger.error(f"Failed to execute trade for {trade.symbol}: {e}")
                 error_msg = "ORDER PLACEMENT FAILED"
                 emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
                 set_error(error_msg)
-                results.append({
-                    "symbol": trade.symbol,
-                    "status": "error",
-                    "error": str(e),
-                })
+                results.append(
+                    {
+                        "symbol": trade.symbol,
+                        "status": "error",
+                        "error": str(e),
+                    }
+                )
 
         # Show LED warning if trades were skipped due to insufficient currency balance
         if skipped_count > 0:
-            logger.warning(f"Skipped {skipped_count} trades due to insufficient currency balance")
+            logger.warning(
+                f"Skipped {skipped_count} trades due to insufficient currency balance"
+            )
             if skipped_count >= 2:
                 error_msg = "INSUFFICIENT FOREIGN CURRENCY BALANCE"
                 emit(SystemEvent.ERROR_OCCURRED, message=error_msg)

@@ -6,7 +6,7 @@ Used to identify when recommendations apply to the same portfolio state.
 """
 
 import hashlib
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 
 def generate_portfolio_hash(positions: List[Dict[str, Any]]) -> str:
@@ -25,19 +25,15 @@ def generate_portfolio_hash(positions: List[Dict[str, Any]]) -> str:
     """
     # Filter out positions with zero or no quantity
     active_positions = [
-        p for p in positions
-        if p.get('quantity', 0) and p.get('quantity', 0) > 0
+        p for p in positions if p.get("quantity", 0) and p.get("quantity", 0) > 0
     ]
 
     # Sort positions by symbol for deterministic ordering
-    sorted_positions = sorted(active_positions, key=lambda p: p['symbol'])
+    sorted_positions = sorted(active_positions, key=lambda p: p["symbol"])
 
     # Build canonical string: "SYMBOL:QUANTITY,SYMBOL:QUANTITY,..."
     # Round quantity to integer to avoid float precision issues
-    parts = [
-        f"{p['symbol'].upper()}:{int(p['quantity'])}"
-        for p in sorted_positions
-    ]
+    parts = [f"{p['symbol'].upper()}:{int(p['quantity'])}" for p in sorted_positions]
     canonical = ",".join(parts)
 
     # Generate hash and return first 8 characters
@@ -61,18 +57,20 @@ def generate_settings_hash(settings_dict: Dict[str, Any]) -> str:
     """
     # Settings that affect recommendation calculations
     # Note: min_trade_size and recommendation_depth removed (handled by optimizer now)
-    relevant_keys = sorted([
-        "min_stock_score",
-        "min_hold_days",
-        "sell_cooldown_days",
-        "max_loss_threshold",
-        "target_annual_return",
-        "optimizer_blend",
-        "optimizer_target_return",
-        "transaction_cost_fixed",
-        "transaction_cost_percent",
-        "min_cash_reserve",
-    ])
+    relevant_keys = sorted(
+        [
+            "min_stock_score",
+            "min_hold_days",
+            "sell_cooldown_days",
+            "max_loss_threshold",
+            "target_annual_return",
+            "optimizer_blend",
+            "optimizer_target_return",
+            "transaction_cost_fixed",
+            "transaction_cost_percent",
+            "min_cash_reserve",
+        ]
+    )
 
     # Build canonical string: "key:value,key:value,..."
     parts = [f"{k}:{settings_dict.get(k, '')}" for k in relevant_keys]

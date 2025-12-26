@@ -1,12 +1,14 @@
 """Tests for domain model validation."""
 
-import pytest
 from datetime import datetime
-from app.domain.models import Stock, Position, Trade, Recommendation
-from app.domain.value_objects.currency import Currency
-from app.domain.value_objects.trade_side import TradeSide
-from app.domain.value_objects.recommendation_status import RecommendationStatus
+
+import pytest
+
 from app.domain.exceptions import ValidationError
+from app.domain.models import Position, Recommendation, Stock, Trade
+from app.domain.value_objects.currency import Currency
+from app.domain.value_objects.recommendation_status import RecommendationStatus
+from app.domain.value_objects.trade_side import TradeSide
 
 
 class TestStockValidation:
@@ -31,7 +33,7 @@ class TestStockValidation:
         """Test that Stock validates min_lot is positive."""
         stock = Stock(symbol="AAPL.US", name="Test", geography="US", min_lot=0)
         assert stock.min_lot == 1  # Should default to 1
-        
+
         stock = Stock(symbol="AAPL.US", name="Test", geography="US", min_lot=-5)
         assert stock.min_lot == 1  # Should default to 1
 
@@ -60,7 +62,7 @@ class TestPositionValidation:
         """Test that Position validates avg_price is positive."""
         with pytest.raises(ValidationError, match="Average price must be positive"):
             Position(symbol="AAPL.US", quantity=10.0, avg_price=0.0)
-        
+
         with pytest.raises(ValidationError, match="Average price must be positive"):
             Position(symbol="AAPL.US", quantity=10.0, avg_price=-10.0)
 
@@ -89,7 +91,7 @@ class TestTradeValidation:
                 price=150.0,
                 executed_at=datetime.now(),
             )
-        
+
         with pytest.raises(ValidationError, match="Quantity must be positive"):
             Trade(
                 symbol="AAPL.US",
@@ -182,4 +184,3 @@ class TestRecommendationValidation:
         )
         assert rec.quantity == 10
         assert rec.estimated_price == 150.0
-

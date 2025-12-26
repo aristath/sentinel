@@ -3,12 +3,13 @@
 
 class DomainError(Exception):
     """Base exception for domain errors."""
+
     pass
 
 
 class StockNotFoundError(DomainError):
     """Raised when a stock is not found."""
-    
+
     def __init__(self, symbol: str):
         self.symbol = symbol
         super().__init__(f"Stock not found: {symbol}")
@@ -16,7 +17,7 @@ class StockNotFoundError(DomainError):
 
 class InsufficientFundsError(DomainError):
     """Raised when there are insufficient funds for a trade."""
-    
+
     def __init__(self, required: float, available: float):
         self.required = required
         self.available = available
@@ -27,7 +28,7 @@ class InsufficientFundsError(DomainError):
 
 class InvalidTradeError(DomainError):
     """Raised when a trade is invalid."""
-    
+
     def __init__(self, message: str):
         self.message = message
         super().__init__(f"Invalid trade: {message}")
@@ -35,7 +36,7 @@ class InvalidTradeError(DomainError):
 
 class CurrencyConversionError(DomainError):
     """Raised when currency conversion fails."""
-    
+
     def __init__(self, from_currency: str, to_currency: str, reason: str = ""):
         self.from_currency = from_currency
         self.to_currency = to_currency
@@ -48,8 +49,7 @@ class CurrencyConversionError(DomainError):
 
 class ValidationError(DomainError):
     """Raised when domain validation fails."""
-    
+
     def __init__(self, message: str):
         self.message = message
         super().__init__(f"Validation error: {message}")
-

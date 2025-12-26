@@ -7,17 +7,17 @@ import logging
 
 import pandas as pd
 
-from app.domain.analytics.reconstruction.positions import reconstruct_historical_positions
 from app.domain.analytics.reconstruction.cash import reconstruct_cash_balance
+from app.domain.analytics.reconstruction.positions import (
+    reconstruct_historical_positions,
+)
 from app.repositories import HistoryRepository
 
 logger = logging.getLogger(__name__)
 
 
 async def _batch_load_prices(
-    symbols: list[str],
-    start_date: str,
-    end_date: str
+    symbols: list[str], start_date: str, end_date: str
 ) -> dict[str, dict[str, float]]:
     """
     Batch-load all prices for given symbols and date range.
@@ -49,9 +49,7 @@ async def _batch_load_prices(
 
 
 async def reconstruct_portfolio_values(
-    start_date: str,
-    end_date: str,
-    initial_cash: float = 0.0
+    start_date: str, end_date: str, initial_cash: float = 0.0
 ) -> pd.Series:
     """
     Reconstruct daily portfolio values from positions + prices + cash.
@@ -85,23 +83,23 @@ async def reconstruct_portfolio_values(
     # For each date, calculate portfolio value
     for date in dates:
         date_str = date.strftime("%Y-%m-%d")
-        
+
         # Get positions on this date (latest position before or on date)
         date_positions = positions_df[positions_df["date"] <= date]
         if not date_positions.empty:
             latest_positions = date_positions.groupby("symbol").last()
-            
+
             # Calculate total position value
             total_position_value = 0.0
             for symbol, row in latest_positions.iterrows():
                 quantity = row["quantity"]
                 if quantity <= 0:
                     continue
-                
+
                 # Get price for this date (forward-fill if missing)
                 symbol_prices = all_prices.get(symbol, {})
                 price = None
-                
+
                 # Try exact date first
                 if date_str in symbol_prices:
                     price = symbol_prices[date_str]
@@ -110,17 +108,16 @@ async def reconstruct_portfolio_values(
                     for prev_date, prev_price in sorted(symbol_prices.items()):
                         if prev_date != "_last" and prev_date <= date_str:
                             price = prev_price
-                    
+
                     # If still no price, use last known price
                     if price is None and "_last" in symbol_prices:
                         price = symbol_prices["_last"]
-                
+
                 if price and price > 0:
                     total_position_value += quantity * price
-        
+
         # Portfolio value = positions + cash
         cash_value = cash_series[date] if date in cash_series.index else 0.0
         portfolio_values[date] = total_position_value + cash_value
-    
-    return portfolio_values
 
+    return portfolio_values

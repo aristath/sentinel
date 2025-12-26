@@ -5,14 +5,11 @@ Pure calculation functions for volatility metrics using empyrical.
 
 from typing import Optional
 
-import numpy as np
 import empyrical
+import numpy as np
 
 
-def calculate_volatility(
-    closes: np.ndarray,
-    annualize: bool = True
-) -> Optional[float]:
+def calculate_volatility(closes: np.ndarray, annualize: bool = True) -> Optional[float]:
     """
     Calculate annualized volatility using empyrical.
 
@@ -39,4 +36,3 @@ def calculate_volatility(
         return vol
     except Exception:
         return None
-

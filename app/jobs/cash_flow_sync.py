@@ -2,11 +2,15 @@
 
 import logging
 
-from app.infrastructure.external.tradernet import get_tradernet_client
-from app.infrastructure.locking import file_lock
-from app.infrastructure.events import emit, SystemEvent
-from app.infrastructure.hardware.display_service import set_processing, clear_processing, set_error
 from app.infrastructure.database.manager import get_db_manager
+from app.infrastructure.events import SystemEvent, emit
+from app.infrastructure.external.tradernet import get_tradernet_client
+from app.infrastructure.hardware.display_service import (
+    clear_processing,
+    set_error,
+    set_processing,
+)
+from app.infrastructure.locking import file_lock
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +75,9 @@ async def _sync_cash_flows_internal():
                 # Get amount in EUR (use exchange rate or default to same as amount)
                 amount = txn.get("amount", 0)
                 currency = txn.get("currency", "EUR")
-                amount_eur = txn.get("amount_eur") or amount  # Fallback to amount if no EUR conversion
+                amount_eur = (
+                    txn.get("amount_eur") or amount
+                )  # Fallback to amount if no EUR conversion
 
                 await db_manager.ledger.execute(
                     """
@@ -92,7 +98,7 @@ async def _sync_cash_flows_internal():
                         txn.get("status_c"),
                         txn.get("description"),
                         txn.get("params_json"),
-                    )
+                    ),
                 )
                 synced_count += 1
 

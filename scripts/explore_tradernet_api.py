@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Explore tradernet API to find all cash flow related endpoints."""
 
+import json
 import os
 import sys
-import json
 from pathlib import Path
+
 from dotenv import load_dotenv
 from tradernet import TraderNetAPI
 
@@ -34,19 +35,17 @@ print()
 print("1. getClientCpsHistory with limit=5000...")
 try:
     history = client.authorized_request(
-        "getClientCpsHistory",
-        {"limit": 5000},
-        version=2
+        "getClientCpsHistory", {"limit": 5000}, version=2
     )
     records = history if isinstance(history, list) else []
     print(f"   Found {len(records)} total records")
-    
+
     # Count all type_doc_ids
     type_counts = {}
     for record in records:
         type_id = record.get("type_doc_id")
         type_counts[type_id] = type_counts.get(type_id, 0) + 1
-    
+
     print(f"   Found {len(type_counts)} unique transaction types:")
     for type_id in sorted(type_counts.keys()):
         print(f"     Type {type_id}: {type_counts[type_id]} records")
@@ -64,7 +63,11 @@ try:
         print(f"   Keys: {list(report.keys())[:20]}")
         # Look for cash flow related fields
         report_str = json.dumps(report, default=str)
-        if "fee" in report_str.lower() or "commission" in report_str.lower() or "dividend" in report_str.lower():
+        if (
+            "fee" in report_str.lower()
+            or "commission" in report_str.lower()
+            or "dividend" in report_str.lower()
+        ):
             print("   Contains fee/commission/dividend data!")
     print()
 except Exception as e:
@@ -79,7 +82,9 @@ try:
     if isinstance(trades, list):
         print(f"   Found {len(trades)} trades")
         if trades:
-            print(f"   Sample trade keys: {list(trades[0].keys()) if isinstance(trades[0], dict) else 'N/A'}")
+            print(
+                f"   Sample trade keys: {list(trades[0].keys()) if isinstance(trades[0], dict) else 'N/A'}"
+            )
     elif isinstance(trades, dict):
         print(f"   Keys: {list(trades.keys())[:20]}")
     print()
@@ -95,7 +100,9 @@ try:
     if isinstance(actions, list):
         print(f"   Found {len(actions)} corporate actions")
         if actions:
-            print(f"   Sample action keys: {list(actions[0].keys()) if isinstance(actions[0], dict) else 'N/A'}")
+            print(
+                f"   Sample action keys: {list(actions[0].keys()) if isinstance(actions[0], dict) else 'N/A'}"
+            )
     elif isinstance(actions, dict):
         print(f"   Keys: {list(actions.keys())[:20]}")
     print()
@@ -114,7 +121,7 @@ try:
         print(f"   Cash accounts: {len(acc)}")
         for cash in acc[:3]:
             print(f"     {cash}")
-        
+
         # Look for transaction history in summary
         if "transactions" in str(summary).lower() or "history" in str(summary).lower():
             print("   Contains transaction/history data!")
@@ -140,7 +147,9 @@ for method in potential_methods:
         result = client.authorized_request(method, {}, version=2)
         print(f"   {method}: Found data! Type: {type(result)}")
         if isinstance(result, (list, dict)):
-            print(f"      Length/Keys: {len(result) if isinstance(result, list) else list(result.keys())[:5]}")
+            print(
+                f"      Length/Keys: {len(result) if isinstance(result, list) else list(result.keys())[:5]}"
+            )
     except Exception as e:
         # Silently skip methods that don't exist
         pass

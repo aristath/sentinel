@@ -1,11 +1,13 @@
 """Tests for unified Recommendation domain model."""
 
-import pytest
 from datetime import datetime
+
+import pytest
+
 from app.domain.models import Recommendation
-from app.domain.value_objects.trade_side import TradeSide
 from app.domain.value_objects.currency import Currency
 from app.domain.value_objects.recommendation_status import RecommendationStatus
+from app.domain.value_objects.trade_side import TradeSide
 
 
 class TestRecommendation:
@@ -26,7 +28,7 @@ class TestRecommendation:
             currency=Currency.USD,
             status=RecommendationStatus.PENDING,
         )
-        
+
         assert rec.symbol == "AAPL.US"
         assert rec.side == TradeSide.BUY
         assert rec.quantity == 10
@@ -49,7 +51,7 @@ class TestRecommendation:
             currency=Currency.USD,
             status=RecommendationStatus.PENDING,
         )
-        
+
         assert rec.side == TradeSide.SELL
         assert rec.status == RecommendationStatus.PENDING
 
@@ -65,7 +67,7 @@ class TestRecommendation:
             reason="Test",
             geography="US",
         )
-        
+
         assert rec.status == RecommendationStatus.PENDING
 
     def test_recommendation_status_transitions(self):
@@ -81,13 +83,13 @@ class TestRecommendation:
             geography="US",
             status=RecommendationStatus.PENDING,
         )
-        
+
         # Can transition to EXECUTED
         assert rec.status.can_transition_to(RecommendationStatus.EXECUTED) is True
-        
+
         # Can transition to DISMISSED
         assert rec.status.can_transition_to(RecommendationStatus.DISMISSED) is True
-        
+
         # Cannot stay PENDING
         assert rec.status.can_transition_to(RecommendationStatus.PENDING) is False
 
@@ -105,7 +107,7 @@ class TestRecommendation:
             current_portfolio_score=75.0,
             new_portfolio_score=77.5,
         )
-        
+
         assert rec.current_portfolio_score == 75.0
         assert rec.new_portfolio_score == 77.5
         assert rec.score_change == 2.5
@@ -124,6 +126,5 @@ class TestRecommendation:
             current_portfolio_score=70.0,
             new_portfolio_score=72.5,
         )
-        
-        assert rec.score_change == 2.5
 
+        assert rec.score_change == 2.5

@@ -1,6 +1,7 @@
 """Tests for RecommendationStatus enum."""
 
 import pytest
+
 from app.domain.value_objects.recommendation_status import RecommendationStatus
 
 
@@ -21,20 +22,33 @@ class TestRecommendationStatus:
 
     def test_status_from_string_valid(self):
         """Test creating status from valid string."""
-        assert RecommendationStatus.from_string("pending") == RecommendationStatus.PENDING
-        assert RecommendationStatus.from_string("executed") == RecommendationStatus.EXECUTED
-        assert RecommendationStatus.from_string("dismissed") == RecommendationStatus.DISMISSED
-        assert RecommendationStatus.from_string("PENDING") == RecommendationStatus.PENDING  # Case insensitive
-        assert RecommendationStatus.from_string("EXECUTED") == RecommendationStatus.EXECUTED
+        assert (
+            RecommendationStatus.from_string("pending") == RecommendationStatus.PENDING
+        )
+        assert (
+            RecommendationStatus.from_string("executed")
+            == RecommendationStatus.EXECUTED
+        )
+        assert (
+            RecommendationStatus.from_string("dismissed")
+            == RecommendationStatus.DISMISSED
+        )
+        assert (
+            RecommendationStatus.from_string("PENDING") == RecommendationStatus.PENDING
+        )  # Case insensitive
+        assert (
+            RecommendationStatus.from_string("EXECUTED")
+            == RecommendationStatus.EXECUTED
+        )
 
     def test_status_from_string_invalid(self):
         """Test creating status from invalid string raises error."""
         with pytest.raises(ValueError, match="Invalid recommendation status"):
             RecommendationStatus.from_string("INVALID")
-        
+
         with pytest.raises(ValueError, match="Invalid recommendation status"):
             RecommendationStatus.from_string("")
-        
+
         with pytest.raises(ValueError, match="Invalid recommendation status"):
             RecommendationStatus.from_string("cancelled")
 
@@ -50,11 +64,33 @@ class TestRecommendationStatus:
     def test_status_transitions(self):
         """Test that status transitions are valid."""
         # PENDING can transition to EXECUTED or DISMISSED
-        assert RecommendationStatus.PENDING.can_transition_to(RecommendationStatus.EXECUTED) is True
-        assert RecommendationStatus.PENDING.can_transition_to(RecommendationStatus.DISMISSED) is True
-        assert RecommendationStatus.PENDING.can_transition_to(RecommendationStatus.PENDING) is False
-        
-        # EXECUTED and DISMISSED are terminal states
-        assert RecommendationStatus.EXECUTED.can_transition_to(RecommendationStatus.PENDING) is False
-        assert RecommendationStatus.DISMISSED.can_transition_to(RecommendationStatus.PENDING) is False
+        assert (
+            RecommendationStatus.PENDING.can_transition_to(
+                RecommendationStatus.EXECUTED
+            )
+            is True
+        )
+        assert (
+            RecommendationStatus.PENDING.can_transition_to(
+                RecommendationStatus.DISMISSED
+            )
+            is True
+        )
+        assert (
+            RecommendationStatus.PENDING.can_transition_to(RecommendationStatus.PENDING)
+            is False
+        )
 
+        # EXECUTED and DISMISSED are terminal states
+        assert (
+            RecommendationStatus.EXECUTED.can_transition_to(
+                RecommendationStatus.PENDING
+            )
+            is False
+        )
+        assert (
+            RecommendationStatus.DISMISSED.can_transition_to(
+                RecommendationStatus.PENDING
+            )
+            is False
+        )

@@ -12,12 +12,12 @@ import logging
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
+from app.domain.models import Position, Stock
 from app.domain.scoring.constants import (
-    MAX_CONCENTRATION,
     GEO_ALLOCATION_TOLERANCE,
     IND_ALLOCATION_TOLERANCE,
+    MAX_CONCENTRATION,
 )
-from app.domain.models import Stock, Position
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class WeightBounds:
     """Weight bounds for a single stock."""
+
     symbol: str
     lower: float  # Minimum weight (0.0 to 1.0)
     upper: float  # Maximum weight (0.0 to 1.0)
@@ -34,11 +35,12 @@ class WeightBounds:
 @dataclass
 class SectorConstraint:
     """Constraint for a sector (geography or industry)."""
+
     name: str
     symbols: List[str]
     target: float  # Target weight
-    lower: float   # Lower bound
-    upper: float   # Upper bound
+    lower: float  # Lower bound
+    upper: float  # Upper bound
 
 
 class ConstraintsManager:
@@ -115,7 +117,9 @@ class ConstraintsManager:
                 else:
                     # Can sell down to min_lot worth
                     min_lot_value = stock.min_lot * current_price
-                    min_weight = min_lot_value / portfolio_value if portfolio_value > 0 else 0
+                    min_weight = (
+                        min_lot_value / portfolio_value if portfolio_value > 0 else 0
+                    )
                     lower = max(lower, min_weight)
 
             # Ensure lower <= upper
@@ -170,26 +174,30 @@ class ConstraintsManager:
         for geo, symbols in geo_groups.items():
             target = geo_targets.get(geo, 0.0)
             if target > 0:
-                geo_constraints.append(SectorConstraint(
-                    name=geo,
-                    symbols=symbols,
-                    target=target,
-                    lower=max(0.0, target - self.geo_tolerance),
-                    upper=min(1.0, target + self.geo_tolerance),
-                ))
+                geo_constraints.append(
+                    SectorConstraint(
+                        name=geo,
+                        symbols=symbols,
+                        target=target,
+                        lower=max(0.0, target - self.geo_tolerance),
+                        upper=min(1.0, target + self.geo_tolerance),
+                    )
+                )
 
         # Build industry constraints
         ind_constraints = []
         for ind, symbols in ind_groups.items():
             target = ind_targets.get(ind, 0.0)
             if target > 0:
-                ind_constraints.append(SectorConstraint(
-                    name=ind,
-                    symbols=symbols,
-                    target=target,
-                    lower=max(0.0, target - self.ind_tolerance),
-                    upper=min(1.0, target + self.ind_tolerance),
-                ))
+                ind_constraints.append(
+                    SectorConstraint(
+                        name=ind,
+                        symbols=symbols,
+                        target=target,
+                        lower=max(0.0, target - self.ind_tolerance),
+                        upper=min(1.0, target + self.ind_tolerance),
+                    )
+                )
 
         logger.info(
             f"Built {len(geo_constraints)} geography constraints, "

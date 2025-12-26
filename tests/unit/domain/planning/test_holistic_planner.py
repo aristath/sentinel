@@ -7,13 +7,14 @@ These tests ensure the holistic planner correctly:
 - Builds balanced rebalancing sequences
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from app.domain.planning.holistic_planner import (
-    HolisticStep,
-    HolisticPlan,
     ActionCandidate,
+    HolisticPlan,
+    HolisticStep,
     generate_action_sequences,
 )
 from app.domain.value_objects.trade_side import TradeSide
@@ -358,16 +359,24 @@ class TestGenerateActionSequences:
         # Should have a rebalance sequence
         rebalance_seq = None
         for seq in sequences:
-            has_sell = any(c.side == TradeSide.SELL and "rebalance" in c.tags for c in seq)
-            has_buy = any(c.side == TradeSide.BUY and "rebalance" in c.tags for c in seq)
+            has_sell = any(
+                c.side == TradeSide.SELL and "rebalance" in c.tags for c in seq
+            )
+            has_buy = any(
+                c.side == TradeSide.BUY and "rebalance" in c.tags for c in seq
+            )
             if has_sell and has_buy:
                 rebalance_seq = seq
                 break
 
         assert rebalance_seq is not None
         # Sell should come before buy
-        sell_idx = next(i for i, c in enumerate(rebalance_seq) if c.side == TradeSide.SELL)
-        buy_idx = next(i for i, c in enumerate(rebalance_seq) if c.side == TradeSide.BUY)
+        sell_idx = next(
+            i for i, c in enumerate(rebalance_seq) if c.side == TradeSide.SELL
+        )
+        buy_idx = next(
+            i for i, c in enumerate(rebalance_seq) if c.side == TradeSide.BUY
+        )
         assert sell_idx < buy_idx
 
     @pytest.mark.asyncio
@@ -428,4 +437,3 @@ class TestGenerateActionSequences:
                 break
 
         assert found_sequence
-

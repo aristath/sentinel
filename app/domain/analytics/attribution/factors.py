@@ -3,17 +3,15 @@
 Analyzes which factors contributed most to portfolio returns.
 """
 
+import empyrical
 import numpy as np
 import pandas as pd
 
 from app.domain.analytics.attribution.performance import get_performance_attribution
-import empyrical
 
 
 async def get_factor_attribution(
-    returns: pd.Series,
-    start_date: str,
-    end_date: str
+    returns: pd.Series, start_date: str, end_date: str
 ) -> dict[str, float]:
     """
     Analyze which factors contributed most to returns.
@@ -50,8 +48,11 @@ async def get_factor_attribution(
         ind_contribution = sum(ind_attribution.values()) / len(ind_attribution)
 
     return {
-        "geography_contribution": geo_contribution if np.isfinite(geo_contribution) else 0.0,
-        "industry_contribution": ind_contribution if np.isfinite(ind_contribution) else 0.0,
+        "geography_contribution": (
+            geo_contribution if np.isfinite(geo_contribution) else 0.0
+        ),
+        "industry_contribution": (
+            ind_contribution if np.isfinite(ind_contribution) else 0.0
+        ),
         "total_return": total_return,
     }
-

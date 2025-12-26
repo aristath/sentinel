@@ -1,26 +1,27 @@
 """Pytest configuration and fixtures."""
 
-import pytest
-import aiosqlite
-import tempfile
 import os
+import tempfile
+from datetime import datetime
 from pathlib import Path
 
-from datetime import datetime
+import aiosqlite
+import pytest
+
 from app.infrastructure.database.schemas import (
+    CACHE_SCHEMA,
+    CALCULATIONS_SCHEMA,
     CONFIG_SCHEMA,
+    HISTORY_SCHEMA,
     LEDGER_SCHEMA,
     STATE_SCHEMA,
-    CACHE_SCHEMA,
-    HISTORY_SCHEMA,
-    CALCULATIONS_SCHEMA,
 )
 from app.repositories import (
-    StockRepository,
-    PositionRepository,
-    PortfolioRepository,
     AllocationRepository,
+    PortfolioRepository,
+    PositionRepository,
     ScoreRepository,
+    StockRepository,
     TradeRepository,
 )
 
@@ -33,7 +34,7 @@ async def db():
     to simplify fixture management.
     """
     # Create temporary database file
-    fd, db_path = tempfile.mkstemp(suffix='.db')
+    fd, db_path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
 
     try:
@@ -99,10 +100,9 @@ def setup_test_environment(monkeypatch, tmp_path):
     lock_dir = tmp_path / "locks"
     lock_dir.mkdir()
     monkeypatch.setenv("LOCK_DIR", str(lock_dir))
-    
+
     # Ensure LOCK_DIR is updated in the module
     from app.infrastructure import locking
+
     locking.LOCK_DIR = lock_dir
     locking.LOCK_DIR.mkdir(parents=True, exist_ok=True)
-
-

@@ -68,4 +68,3 @@ def score_drawdown(max_drawdown: Optional[float]) -> float:
         return 0.2 + (DRAWDOWN_POOR - dd_pct) * 2
     else:
         return max(0.0, 0.2 - (dd_pct - DRAWDOWN_POOR))
-

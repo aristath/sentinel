@@ -1,18 +1,19 @@
 """Integration tests for external API failure handling."""
 
-import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
 from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
+from app.domain.models import Position, Stock
+from app.domain.services.exchange_rate_service import ExchangeRateService
 from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.external.tradernet import get_tradernet_client
-from app.domain.services.exchange_rate_service import ExchangeRateService
-from app.domain.models import Stock, Position
 from app.repositories import (
-    StockRepository,
-    PositionRepository,
     AllocationRepository,
     PortfolioRepository,
+    PositionRepository,
+    StockRepository,
 )
 
 
@@ -20,7 +21,7 @@ from app.repositories import (
 async def test_yahoo_finance_api_failure_handling():
     """Test handling of Yahoo Finance API failures."""
     # Mock yfinance to raise exception
-    with patch('yfinance.Ticker') as mock_ticker_class:
+    with patch("yfinance.Ticker") as mock_ticker_class:
         mock_ticker = MagicMock()
         mock_ticker.info.side_effect = Exception("Yahoo Finance API Error")
         mock_ticker_class.return_value = mock_ticker
@@ -34,7 +35,7 @@ async def test_yahoo_finance_api_failure_handling():
 async def test_yahoo_finance_timeout_handling():
     """Test handling of Yahoo Finance API timeouts."""
     # Mock yfinance to timeout
-    with patch('yfinance.Ticker') as mock_ticker_class:
+    with patch("yfinance.Ticker") as mock_ticker_class:
         mock_ticker = MagicMock()
         mock_ticker.info.side_effect = TimeoutError("Request timeout")
         mock_ticker_class.return_value = mock_ticker
@@ -47,7 +48,9 @@ async def test_yahoo_finance_timeout_handling():
 @pytest.mark.asyncio
 async def test_tradernet_api_connection_failure():
     """Test handling of Tradernet API connection failures."""
-    with patch('app.infrastructure.external.tradernet.get_tradernet_client') as mock_get_client:
+    with patch(
+        "app.infrastructure.external.tradernet.get_tradernet_client"
+    ) as mock_get_client:
         mock_client = MagicMock()
         mock_client.is_connected = False
         mock_client.connect.return_value = False
@@ -63,7 +66,9 @@ async def test_tradernet_api_connection_failure():
 @pytest.mark.asyncio
 async def test_tradernet_api_request_failure():
     """Test handling of Tradernet API request failures."""
-    with patch('app.infrastructure.external.tradernet.get_tradernet_client') as mock_get_client:
+    with patch(
+        "app.infrastructure.external.tradernet.get_tradernet_client"
+    ) as mock_get_client:
         mock_client = MagicMock()
         mock_client.is_connected = True
         mock_client.get_portfolio.side_effect = Exception("API Request Failed")
@@ -113,6 +118,7 @@ async def test_rebalancing_service_handles_price_fetch_failure(db):
 
     # Create repos that need db connection
     from app.repositories import TradeRepository
+
     trade_repo = TradeRepository(db=db)
 
     # Mock settings and recommendation repos
@@ -131,14 +137,17 @@ async def test_rebalancing_service_handles_price_fetch_failure(db):
     mock_tradernet_client = MagicMock()
 
     # Mock price fetch to fail
-    with patch('app.infrastructure.external.yahoo_finance.get_current_price') as mock_get_price:
+    with patch(
+        "app.infrastructure.external.yahoo_finance.get_current_price"
+    ) as mock_get_price:
         mock_get_price.return_value = None  # Price fetch failed
 
         # Create mock exchange rate service
         from app.domain.services.exchange_rate_service import ExchangeRateService
+
         mock_exchange_rate_service = MagicMock(spec=ExchangeRateService)
         mock_exchange_rate_service.get_rate = AsyncMock(return_value=1.0)
-        
+
         service = RebalancingService(
             stock_repo=stock_repo,
             position_repo=position_repo,
@@ -166,7 +175,7 @@ async def test_rebalancing_service_handles_price_fetch_failure(db):
 async def test_exchange_rate_cache_fallback(db):
     """Test that exchange rate cache falls back when API fails."""
     # Mock httpx to fail
-    with patch('httpx.AsyncClient') as mock_client:
+    with patch("httpx.AsyncClient") as mock_client:
         mock_instance = MagicMock()
         mock_instance.get = AsyncMock(side_effect=Exception("Exchange rate API failed"))
         mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
@@ -175,9 +184,10 @@ async def test_exchange_rate_cache_fallback(db):
 
         # Create a mock database manager that uses the db fixture
         from app.infrastructure.database.manager import DatabaseManager
+
         mock_db_manager = MagicMock(spec=DatabaseManager)
         mock_db_manager.cache = db  # Use the db fixture's cache connection
-        
+
         exchange_service = ExchangeRateService(mock_db_manager)
         rate = await exchange_service.get_rate("USD", "EUR")
 
@@ -224,7 +234,9 @@ async def test_portfolio_sync_handles_api_failure(db):
     from app.jobs.daily_sync import sync_portfolio
 
     # Mock tradernet client to fail
-    with patch('app.infrastructure.external.tradernet.get_tradernet_client') as mock_get_client:
+    with patch(
+        "app.infrastructure.external.tradernet.get_tradernet_client"
+    ) as mock_get_client:
         mock_client = MagicMock()
         mock_client.is_connected = False
         mock_client.connect.return_value = False
@@ -236,4 +248,3 @@ async def test_portfolio_sync_handles_api_failure(db):
         except Exception as e:
             # Should log error but not crash
             assert isinstance(e, Exception)
-

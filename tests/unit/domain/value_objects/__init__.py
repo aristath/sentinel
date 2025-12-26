@@ -1,2 +1,1 @@
 """Value objects unit tests."""
-

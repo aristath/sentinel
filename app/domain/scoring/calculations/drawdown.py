@@ -5,8 +5,8 @@ Pure calculation functions for drawdown metrics using empyrical.
 
 from typing import Optional
 
-import numpy as np
 import empyrical
+import numpy as np
 
 
 def calculate_max_drawdown(closes: np.ndarray) -> Optional[float]:
@@ -36,4 +36,3 @@ def calculate_max_drawdown(closes: np.ndarray) -> Optional[float]:
         return mdd
     except Exception:
         return None
-

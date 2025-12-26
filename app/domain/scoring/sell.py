@@ -15,38 +15,39 @@ Hard Blocks (NEVER sell if any apply):
 """
 
 import logging
-from typing import Optional, Dict, List
+from typing import Dict, List, Optional
 
-from app.domain.scoring.models import SellScore, TechnicalData
 from app.domain.scoring.constants import (
-    DEFAULT_MIN_HOLD_DAYS,
-    DEFAULT_SELL_COOLDOWN_DAYS,
     DEFAULT_MAX_LOSS_THRESHOLD,
+    DEFAULT_MIN_HOLD_DAYS,
     DEFAULT_MIN_SELL_VALUE_EUR,
+    DEFAULT_SELL_COOLDOWN_DAYS,
 )
+from app.domain.scoring.models import SellScore, TechnicalData
 
 # Fixed sell weights - no longer configurable via settings
 # The portfolio optimizer now handles sell decisions via target weight gaps.
 # These weights are used for sell score calculation when the heuristic path is used.
 SELL_WEIGHTS = {
-    "underperformance": 0.35,   # Return vs target
-    "time_held": 0.18,          # Position age
+    "underperformance": 0.35,  # Return vs target
+    "time_held": 0.18,  # Position age
     "portfolio_balance": 0.18,  # Overweight detection
-    "instability": 0.14,        # Bubble/volatility
-    "drawdown": 0.15,           # Current drawdown from PyFolio
+    "instability": 0.14,  # Bubble/volatility
+    "drawdown": 0.15,  # Current drawdown from PyFolio
 }
 
 logger = logging.getLogger(__name__)
 
 # Import helper functions from dedicated modules
 from app.domain.scoring.groups.sell import (
-    calculate_underperformance_score,
-    calculate_time_held_score,
-    calculate_portfolio_balance_score,
     calculate_instability_score,
+    calculate_portfolio_balance_score,
+    calculate_time_held_score,
+    calculate_underperformance_score,
     check_sell_eligibility,
     determine_sell_quantity,
 )
+
 
 async def calculate_sell_score(
     symbol: str,
@@ -64,7 +65,7 @@ async def calculate_sell_score(
     ind_allocations: Dict[str, float],
     technical_data: Optional[TechnicalData] = None,
     settings: Optional[Dict] = None,
-    weights: Optional[Dict[str, float]] = None
+    weights: Optional[Dict[str, float]] = None,
 ) -> SellScore:
     """
     Calculate complete sell score for a position.
@@ -108,10 +109,13 @@ async def calculate_sell_score(
 
     # Check eligibility (hard blocks)
     eligible, block_reason = check_sell_eligibility(
-        allow_sell, profit_pct, first_bought_at, last_sold_at,
+        allow_sell,
+        profit_pct,
+        first_bought_at,
+        last_sold_at,
         max_loss_threshold=max_loss_threshold,
         min_hold_days=min_hold_days,
-        sell_cooldown_days=sell_cooldown_days
+        sell_cooldown_days=sell_cooldown_days,
     )
 
     # Calculate time held
@@ -122,7 +126,9 @@ async def calculate_sell_score(
     # If blocked by time held, mark as ineligible
     if time_held_score == 0.0 and first_bought_at and days_held < min_hold_days:
         eligible = False
-        block_reason = block_reason or f"Held only {days_held} days (min {min_hold_days})"
+        block_reason = (
+            block_reason or f"Held only {days_held} days (min {min_hold_days})"
+        )
 
     if not eligible:
         return SellScore(
@@ -138,7 +144,7 @@ async def calculate_sell_score(
             suggested_sell_quantity=0,
             suggested_sell_value=0,
             profit_pct=profit_pct,
-            days_held=days_held
+            days_held=days_held,
         )
 
     # Calculate component scores
@@ -161,13 +167,16 @@ async def calculate_sell_score(
             suggested_sell_quantity=0,
             suggested_sell_value=0,
             profit_pct=profit_pct,
-            days_held=days_held
+            days_held=days_held,
         )
 
     portfolio_balance_score = calculate_portfolio_balance_score(
-        position_value, total_portfolio_value,
-        geography, industry,
-        geo_allocations, ind_allocations
+        position_value,
+        total_portfolio_value,
+        geography,
+        industry,
+        geo_allocations,
+        ind_allocations,
     )
 
     # Calculate instability score using technical data
@@ -186,8 +195,9 @@ async def calculate_sell_score(
     # Calculate drawdown score as a weighted component (not additive penalty)
     drawdown_score = 0.0
     try:
-        from app.domain.analytics import get_position_drawdown
         from datetime import datetime, timedelta
+
+        from app.domain.analytics import get_position_drawdown
 
         end_date = datetime.now().strftime("%Y-%m-%d")
         start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
@@ -216,23 +226,28 @@ async def calculate_sell_score(
         drawdown_score = 0.3  # Neutral on error
 
     # Normalize weights so they sum to 1.0 (allows relative weight system)
-    sell_groups = ["underperformance", "time_held", "portfolio_balance", "instability", "drawdown"]
+    sell_groups = [
+        "underperformance",
+        "time_held",
+        "portfolio_balance",
+        "instability",
+        "drawdown",
+    ]
     weight_sum = sum(weights.get(g, SELL_WEIGHTS[g]) for g in sell_groups)
     if weight_sum > 0:
         normalized_weights = {
-            g: weights.get(g, SELL_WEIGHTS[g]) / weight_sum
-            for g in sell_groups
+            g: weights.get(g, SELL_WEIGHTS[g]) / weight_sum for g in sell_groups
         }
     else:
         normalized_weights = SELL_WEIGHTS
 
     # Calculate total score with normalized weights
     total_score = (
-        (underperformance_score * normalized_weights["underperformance"]) +
-        (time_held_score * normalized_weights["time_held"]) +
-        (portfolio_balance_score * normalized_weights["portfolio_balance"]) +
-        (instability_score * normalized_weights["instability"]) +
-        (drawdown_score * normalized_weights["drawdown"])
+        (underperformance_score * normalized_weights["underperformance"])
+        + (time_held_score * normalized_weights["time_held"])
+        + (portfolio_balance_score * normalized_weights["portfolio_balance"])
+        + (instability_score * normalized_weights["instability"])
+        + (drawdown_score * normalized_weights["drawdown"])
     )
 
     # Determine sell quantity
@@ -254,19 +269,28 @@ async def calculate_sell_score(
         suggested_sell_quantity=sell_quantity,
         suggested_sell_value=round(sell_value, 2),
         profit_pct=round(profit_pct, 4),
-        days_held=days_held
+        days_held=days_held,
     )
 
 
 async def get_sell_settings() -> dict:
     """Load sell-related settings from database, with defaults fallback."""
     from app.repositories import SettingsRepository
+
     settings_repo = SettingsRepository()
     return {
-        "min_hold_days": await settings_repo.get_int("min_hold_days", DEFAULT_MIN_HOLD_DAYS),
-        "sell_cooldown_days": await settings_repo.get_int("sell_cooldown_days", DEFAULT_SELL_COOLDOWN_DAYS),
-        "max_loss_threshold": await settings_repo.get_float("max_loss_threshold", DEFAULT_MAX_LOSS_THRESHOLD),
-        "min_sell_value": await settings_repo.get_float("min_sell_value", DEFAULT_MIN_SELL_VALUE_EUR),
+        "min_hold_days": await settings_repo.get_int(
+            "min_hold_days", DEFAULT_MIN_HOLD_DAYS
+        ),
+        "sell_cooldown_days": await settings_repo.get_int(
+            "sell_cooldown_days", DEFAULT_SELL_COOLDOWN_DAYS
+        ),
+        "max_loss_threshold": await settings_repo.get_float(
+            "max_loss_threshold", DEFAULT_MAX_LOSS_THRESHOLD
+        ),
+        "min_sell_value": await settings_repo.get_float(
+            "min_sell_value", DEFAULT_MIN_SELL_VALUE_EUR
+        ),
     }
 
 
@@ -277,7 +301,7 @@ async def calculate_all_sell_scores(
     ind_allocations: Dict[str, float],
     technical_data: Optional[Dict[str, TechnicalData]] = None,
     settings: Optional[Dict] = None,
-    weights: Optional[Dict[str, float]] = None
+    weights: Optional[Dict[str, float]] = None,
 ) -> List[SellScore]:
     """
     Calculate sell scores for all positions.
@@ -302,24 +326,24 @@ async def calculate_all_sell_scores(
     technical_data = technical_data or {}
 
     for pos in positions:
-        symbol = pos['symbol']
+        symbol = pos["symbol"]
         score = await calculate_sell_score(
             symbol=symbol,
-            quantity=pos['quantity'],
-            avg_price=pos['avg_price'],
-            current_price=pos['current_price'] or pos['avg_price'],
-            min_lot=pos.get('min_lot', 1),
-            allow_sell=bool(pos.get('allow_sell', False)),
-            first_bought_at=pos.get('first_bought_at'),
-            last_sold_at=pos.get('last_sold_at'),
-            geography=pos.get('geography', ''),
-            industry=pos.get('industry', ''),
+            quantity=pos["quantity"],
+            avg_price=pos["avg_price"],
+            current_price=pos["current_price"] or pos["avg_price"],
+            min_lot=pos.get("min_lot", 1),
+            allow_sell=bool(pos.get("allow_sell", False)),
+            first_bought_at=pos.get("first_bought_at"),
+            last_sold_at=pos.get("last_sold_at"),
+            geography=pos.get("geography", ""),
+            industry=pos.get("industry", ""),
             total_portfolio_value=total_portfolio_value,
             geo_allocations=geo_allocations,
             ind_allocations=ind_allocations,
             technical_data=technical_data.get(symbol),
             settings=settings,
-            weights=weights
+            weights=weights,
         )
         scores.append(score)
 

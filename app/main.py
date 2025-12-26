@@ -1,24 +1,41 @@
 """FastAPI application entry point."""
 
 import logging
-from logging.handlers import RotatingFileHandler
 from contextlib import asynccontextmanager
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
+from app.api import (
+    allocation,
+    cash_flows,
+    charts,
+    multi_step_recommendations,
+    optimizer,
+    portfolio,
+    recommendations,
+)
+from app.api import settings as settings_api
+from app.api import (
+    status,
+    stocks,
+    trades,
+)
 from app.config import settings
-from app.infrastructure.database.manager import init_databases, get_db_manager, shutdown_databases
-from app.api import portfolio, stocks, trades, status, allocation, cash_flows, charts, settings as settings_api
-from app.api import recommendations, multi_step_recommendations, optimizer
-from app.jobs.scheduler import init_scheduler, start_scheduler, stop_scheduler
+from app.infrastructure.database.manager import (
+    get_db_manager,
+    init_databases,
+    shutdown_databases,
+)
+from app.infrastructure.events import SystemEvent, emit
 from app.infrastructure.external.tradernet import get_tradernet_client
-from app.infrastructure.events import emit, SystemEvent
 
 # Configure logging with correlation ID support and log rotation
 from app.infrastructure.logging_context import CorrelationIDFilter
+from app.jobs.scheduler import init_scheduler, start_scheduler, stop_scheduler
 
 # Log format with correlation ID
 log_format = logging.Formatter(
@@ -67,7 +84,9 @@ async def lifespan(app: FastAPI):
 
     # Validate required configuration
     if not settings.tradernet_api_key or not settings.tradernet_api_secret:
-        logger.error("Missing Tradernet API credentials. Please set TRADERNET_API_KEY and TRADERNET_API_SECRET in .env file")
+        logger.error(
+            "Missing Tradernet API credentials. Please set TRADERNET_API_KEY and TRADERNET_API_SECRET in .env file"
+        )
         raise ValueError("Missing required Tradernet API credentials")
 
     # Initialize database manager (creates all databases with schemas)
@@ -101,13 +120,17 @@ app = FastAPI(
 
 # Add rate limiting middleware (must be before other middleware)
 from app.infrastructure.rate_limit import RateLimitMiddleware
+
 app.add_middleware(RateLimitMiddleware)  # Uses values from config
 
 
 @app.middleware("http")
 async def request_context_middleware(request: Request, call_next):
     """Add correlation ID and LED indicators to requests."""
-    from app.infrastructure.logging_context import set_correlation_id, clear_correlation_id
+    from app.infrastructure.logging_context import (
+        clear_correlation_id,
+        set_correlation_id,
+    )
 
     # Set correlation ID for this request
     correlation_id = set_correlation_id()
@@ -131,8 +154,16 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 app.include_router(portfolio.router, prefix="/api/portfolio", tags=["Portfolio"])
 app.include_router(stocks.router, prefix="/api/stocks", tags=["Stocks"])
 app.include_router(trades.router, prefix="/api/trades", tags=["Trades"])
-app.include_router(recommendations.router, prefix="/api/trades/recommendations", tags=["Recommendations"])
-app.include_router(multi_step_recommendations.router, prefix="/api/trades/multi-step-recommendations", tags=["Multi-Step Recommendations"])
+app.include_router(
+    recommendations.router,
+    prefix="/api/trades/recommendations",
+    tags=["Recommendations"],
+)
+app.include_router(
+    multi_step_recommendations.router,
+    prefix="/api/trades/multi-step-recommendations",
+    tags=["Multi-Step Recommendations"],
+)
 app.include_router(status.router, prefix="/api/status", tags=["Status"])
 app.include_router(allocation.router, prefix="/api/allocation", tags=["Allocation"])
 app.include_router(cash_flows.router, prefix="/api/cash-flows", tags=["Cash Flows"])
@@ -179,6 +210,7 @@ async def health():
     # Check Tradernet
     try:
         from app.infrastructure.external.tradernet import get_tradernet_client
+
         client = get_tradernet_client()
         if client.is_connected:
             health_status["tradernet"] = "connected"
@@ -194,6 +226,7 @@ async def health():
     # Check Yahoo Finance (basic connectivity test)
     try:
         import yfinance as yf
+
         # Quick test with a known symbol
         ticker = yf.Ticker("AAPL")
         info = ticker.info
@@ -213,7 +246,7 @@ async def health():
         return health_status
     else:
         from fastapi.responses import JSONResponse
+
         return JSONResponse(
-            content=health_status,
-            status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE
+            content=health_status, status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE
         )

@@ -10,19 +10,19 @@ import logging
 
 import numpy as np
 
-from app.repositories.stock import StockRepository
-from app.repositories.history import HistoryRepository
-from app.repositories.calculations import CalculationsRepository
 from app.domain.scoring.caching import (
-    get_rsi,
-    get_ema,
-    get_bollinger_bands,
-    get_sharpe_ratio,
-    get_max_drawdown,
     get_52_week_high,
     get_52_week_low,
+    get_bollinger_bands,
+    get_ema,
+    get_max_drawdown,
+    get_rsi,
+    get_sharpe_ratio,
 )
 from app.domain.scoring.calculations import calculate_cagr
+from app.repositories.calculations import CalculationsRepository
+from app.repositories.history import HistoryRepository
+from app.repositories.stock import StockRepository
 
 logger = logging.getLogger(__name__)
 
@@ -124,14 +124,22 @@ async def calculate_all_metrics_for_symbol(symbol: str) -> int:
         # Calculate distance metrics
         if high_52w and closes:
             current_price = closes[-1]
-            distance_from_52w = (high_52w - current_price) / high_52w if high_52w > 0 else 0
-            await calc_repo.set_metric(symbol, "DISTANCE_FROM_52W_HIGH", distance_from_52w)
+            distance_from_52w = (
+                (high_52w - current_price) / high_52w if high_52w > 0 else 0
+            )
+            await calc_repo.set_metric(
+                symbol, "DISTANCE_FROM_52W_HIGH", distance_from_52w
+            )
             metrics_calculated += 1
 
         if ema_200 and closes:
             current_price = closes[-1]
-            distance_from_ema = (current_price - ema_200) / ema_200 if ema_200 > 0 else 0
-            await calc_repo.set_metric(symbol, "DISTANCE_FROM_EMA_200", distance_from_ema)
+            distance_from_ema = (
+                (current_price - ema_200) / ema_200 if ema_200 > 0 else 0
+            )
+            await calc_repo.set_metric(
+                symbol, "DISTANCE_FROM_EMA_200", distance_from_ema
+            )
             metrics_calculated += 1
 
         # Calculate Bollinger position
@@ -185,4 +193,3 @@ async def calculate_metrics_for_all_stocks() -> dict:
     )
 
     return stats
-

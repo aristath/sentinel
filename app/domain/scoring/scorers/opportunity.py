@@ -6,10 +6,10 @@ Convert 52-week high distance and P/E ratio to normalized scores.
 from typing import Optional
 
 from app.domain.scoring.constants import (
-    DEFAULT_MARKET_AVG_PE,
-    BELOW_HIGH_OK,
-    BELOW_HIGH_GOOD,
     BELOW_HIGH_EXCELLENT,
+    BELOW_HIGH_GOOD,
+    BELOW_HIGH_OK,
+    DEFAULT_MARKET_AVG_PE,
 )
 
 
@@ -46,7 +46,7 @@ def score_below_52w_high(current_price: float, high_52w: float) -> float:
 def score_pe_ratio(
     pe_ratio: Optional[float],
     forward_pe: Optional[float],
-    market_avg_pe: float = DEFAULT_MARKET_AVG_PE
+    market_avg_pe: float = DEFAULT_MARKET_AVG_PE,
 ) -> float:
     """
     Score based on P/E vs market average.
@@ -82,4 +82,3 @@ def score_pe_ratio(
         return 0.7 + ((abs(pct_diff) - 0.10) / 0.10) * 0.3  # 0.7-1.0
     else:  # 20%+ below
         return 1.0
-

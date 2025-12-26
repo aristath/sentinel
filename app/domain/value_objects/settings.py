@@ -14,6 +14,7 @@ class Settings:
     removed. The portfolio optimizer now handles allocation decisions. Transaction
     costs (transaction_cost_fixed, transaction_cost_percent) replace min_trade_size.
     """
+
     min_hold_days: int = 90
     sell_cooldown_days: int = 180
     max_loss_threshold: float = -0.20
@@ -59,7 +60,7 @@ class Settings:
 
         if self.min_cash_reserve < 0:
             raise ValueError("min_cash_reserve must be non-negative")
-    
+
     @classmethod
     def from_dict(cls, data: Dict[str, str]) -> "Settings":
         """Create Settings from dictionary (e.g., from repository).
@@ -70,6 +71,7 @@ class Settings:
         Returns:
             Settings instance with parsed values
         """
+
         def get_float(key: str, default: float) -> float:
             value = data.get(key)
             if value is None:
@@ -128,6 +130,7 @@ class TradingSettings:
 
     Used when only trading-related settings are needed.
     """
+
     min_hold_days: int
     sell_cooldown_days: int
     max_loss_threshold: float
@@ -155,4 +158,3 @@ class TradingSettings:
             transaction_cost_percent=settings.transaction_cost_percent,
             min_cash_reserve=settings.min_cash_reserve,
         )
-
