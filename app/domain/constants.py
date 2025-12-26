@@ -11,10 +11,10 @@ MAX_POSITION_SIZE_MULTIPLIER = 1.2
 # Risk Parity Position Sizing
 # Based on MOSEK Portfolio Cookbook principles - inverse volatility weighting
 TARGET_PORTFOLIO_VOLATILITY = 0.15  # 15% annual target volatility
-MIN_VOLATILITY_FOR_SIZING = 0.05    # Floor to prevent division issues
-MAX_VOL_WEIGHT = 2.0                # Max 2x base size for low-vol stocks
-MIN_VOL_WEIGHT = 0.5                # Min 0.5x base size for high-vol stocks
-DEFAULT_VOLATILITY = 0.20           # Default if volatility unknown
+MIN_VOLATILITY_FOR_SIZING = 0.05  # Floor to prevent division issues
+MAX_VOL_WEIGHT = 2.0  # Max 2x base size for low-vol stocks
+MIN_VOL_WEIGHT = 0.5  # Min 0.5x base size for high-vol stocks
+DEFAULT_VOLATILITY = 0.20  # Default if volatility unknown
 
 # Rebalancing Bands
 # Only rebalance when position deviates significantly from target
@@ -44,5 +44,3 @@ BUY_COOLDOWN_DAYS = 30
 GEO_EU = "EU"
 GEO_ASIA = "ASIA"
 GEO_US = "US"
-
-

@@ -3,16 +3,20 @@
 Fetches historical prices from Yahoo and stores in per-symbol databases.
 """
 
-import logging
 import asyncio
+import logging
 from datetime import datetime, timedelta
 
 from app.config import settings
-from app.services import yahoo
-from app.infrastructure.locking import file_lock
-from app.infrastructure.events import emit, SystemEvent
-from app.infrastructure.hardware.led_display import set_activity
 from app.infrastructure.database.manager import get_db_manager
+from app.infrastructure.events import SystemEvent, emit
+from app.infrastructure.external import yahoo_finance as yahoo
+from app.infrastructure.hardware.display_service import (
+    clear_processing,
+    set_error,
+    set_processing,
+)
+from app.infrastructure.locking import file_lock
 
 logger = logging.getLogger(__name__)
 
@@ -43,15 +47,19 @@ async def _sync_historical_data_internal():
         emit(SystemEvent.SYNC_COMPLETE)
     except Exception as e:
         logger.error(f"Historical data sync failed: {e}")
-        emit(SystemEvent.ERROR_OCCURRED, message="HISTORICAL DATA SYNC FAILED")
+        error_msg = "HISTORICAL DATA SYNC FAILED"
+        emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+        set_error(error_msg)
         raise
+    finally:
+        clear_processing()
 
 
 async def _sync_stock_price_history():
     """Fetch and store historical stock prices for all active stocks."""
     logger.info("Starting stock price history sync (using Yahoo Finance)")
 
-    set_activity("SYNCING HISTORICAL PRICES...", duration=300.0)
+    set_processing("SYNCING HISTORICAL PRICES...")
 
     db_manager = get_db_manager()
 
@@ -104,16 +112,16 @@ async def _sync_stock_price_history():
             logger.error(f"Failed to sync historical prices for {symbol}: {e}")
             continue
 
-    logger.info(f"Stock price history sync complete: {processed} processed, {errors} errors")
+    logger.info(
+        f"Stock price history sync complete: {processed} processed, {errors} errors"
+    )
 
 
 async def _fetch_and_store_prices(history_db, symbol: str, yahoo_symbol: str = None):
     """Fetch historical prices from Yahoo Finance and store in per-symbol database."""
     try:
         # Check if we have monthly data (indicates initial seeding was done)
-        cursor = await history_db.execute(
-            "SELECT COUNT(*) FROM monthly_prices"
-        )
+        cursor = await history_db.execute("SELECT COUNT(*) FROM monthly_prices")
         has_monthly = (await cursor.fetchone())[0] > 0
 
         # Initial seed: 10 years for CAGR calculations
@@ -126,16 +134,22 @@ async def _fetch_and_store_prices(history_db, symbol: str, yahoo_symbol: str = N
             logger.warning(f"No price data from Yahoo for {symbol}")
             return
 
-        logger.info(f"Fetched {len(ohlc_data)} price records for {symbol} ({period}) from Yahoo")
+        logger.info(
+            f"Fetched {len(ohlc_data)} price records for {symbol} ({period}) from Yahoo"
+        )
 
         async with history_db.transaction():
             for ohlc in ohlc_data:
-                date = ohlc.date.strftime("%Y-%m-%d") if hasattr(ohlc, 'date') else ohlc.get('date')
-                close = ohlc.close if hasattr(ohlc, 'close') else ohlc.get('close')
-                open_price = ohlc.open if hasattr(ohlc, 'open') else ohlc.get('open')
-                high = ohlc.high if hasattr(ohlc, 'high') else ohlc.get('high')
-                low = ohlc.low if hasattr(ohlc, 'low') else ohlc.get('low')
-                volume = ohlc.volume if hasattr(ohlc, 'volume') else ohlc.get('volume')
+                date = (
+                    ohlc.date.strftime("%Y-%m-%d")
+                    if hasattr(ohlc, "date")
+                    else ohlc.get("date")
+                )
+                close = ohlc.close if hasattr(ohlc, "close") else ohlc.get("close")
+                open_price = ohlc.open if hasattr(ohlc, "open") else ohlc.get("open")
+                high = ohlc.high if hasattr(ohlc, "high") else ohlc.get("high")
+                low = ohlc.low if hasattr(ohlc, "low") else ohlc.get("low")
+                volume = ohlc.volume if hasattr(ohlc, "volume") else ohlc.get("volume")
 
                 await history_db.execute(
                     """
@@ -143,7 +157,7 @@ async def _fetch_and_store_prices(history_db, symbol: str, yahoo_symbol: str = N
                     (date, open_price, high_price, low_price, close_price, volume, source, created_at)
                     VALUES (?, ?, ?, ?, ?, ?, 'yahoo', datetime('now'))
                     """,
-                    (date, open_price, high, low, close, volume)
+                    (date, open_price, high, low, close, volume),
                 )
 
             # Aggregate to monthly
@@ -158,7 +172,8 @@ async def _fetch_and_store_prices(history_db, symbol: str, yahoo_symbol: str = N
 
 async def _aggregate_to_monthly(history_db):
     """Aggregate daily prices to monthly averages for this symbol."""
-    await history_db.execute("""
+    await history_db.execute(
+        """
         INSERT OR REPLACE INTO monthly_prices
         (year_month, avg_close, avg_adj_close, source, created_at)
         SELECT
@@ -169,4 +184,5 @@ async def _aggregate_to_monthly(history_db):
             datetime('now')
         FROM daily_prices
         GROUP BY strftime('%Y-%m', date)
-    """)
+    """
+    )

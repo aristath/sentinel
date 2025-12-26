@@ -1,6 +1,9 @@
 /**
  * Settings Modal Component
  * Full-screen settings organized into cards
+ *
+ * Note: Score weight settings have been removed. The portfolio optimizer
+ * now handles allocation decisions. Per-stock scoring uses fixed weights.
  */
 class SettingsModal extends HTMLElement {
   connectedCallback() {
@@ -21,24 +24,115 @@ class SettingsModal extends HTMLElement {
           <div class="p-4 md:p-6 lg:p-8">
             <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 
-              <!-- Trading Parameters Card -->
+              <!-- Portfolio Optimizer Card -->
               <div class="bg-gray-800 border border-gray-700 rounded p-4">
-                <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wide mb-3">Trading Parameters</h3>
+                <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wide mb-3">Portfolio Optimizer</h3>
+                <p class="text-xs text-gray-500 mb-4">The optimizer calculates target portfolio weights using a blend of Mean-Variance and Hierarchical Risk Parity strategies.</p>
+
+                <div class="space-y-4">
+                  <!-- Optimizer Blend Slider -->
+                  <div>
+                    <div class="flex items-center justify-between mb-2">
+                      <span class="text-sm text-gray-300">Strategy Blend</span>
+                      <span class="text-sm text-gray-400 font-mono"
+                            x-text="($store.app.settings.optimizer_blend * 100).toFixed(0) + '%'"></span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="text-xs text-gray-500">MV</span>
+                      <input type="range" min="0" max="1" step="0.05"
+                             :value="$store.app.settings.optimizer_blend"
+                             @input="$store.app.updateSetting('optimizer_blend', parseFloat($event.target.value))"
+                             class="flex-1 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                      <span class="text-xs text-gray-500">HRP</span>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">0% = Goal-directed (Mean-Variance), 100% = Robust (HRP)</p>
+                  </div>
+
+                  <!-- Target Return -->
+                  <div class="grid grid-cols-[1fr_auto] gap-x-4 items-center">
+                    <div>
+                      <span class="text-sm text-gray-300">Target Return</span>
+                      <p class="text-xs text-gray-500">Annual return goal</p>
+                    </div>
+                    <div class="flex items-center gap-1">
+                      <input type="number"
+                             step="1"
+                             :value="($store.app.settings.optimizer_target_return * 100).toFixed(0)"
+                             @change="$store.app.updateSetting('optimizer_target_return', $event.target.value / 100)"
+                             class="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                      <span class="text-gray-400 text-sm">%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Transaction Costs Card -->
+              <div class="bg-gray-800 border border-gray-700 rounded p-4">
+                <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wide mb-3">Transaction Costs</h3>
+                <p class="text-xs text-gray-500 mb-4">Freedom24 fee structure. Used to calculate minimum worthwhile trade size.</p>
 
                 <div class="grid grid-cols-[1fr_auto] gap-x-4 gap-y-3 items-start">
-                  <!-- Min Trade Size -->
+                  <!-- Fixed Cost -->
                   <div>
-                    <span class="text-sm text-gray-300">Min Trade Size</span>
-                    <p class="text-xs text-gray-500">Minimum EUR for buy orders</p>
+                    <span class="text-sm text-gray-300">Fixed Cost</span>
+                    <p class="text-xs text-gray-500">Per trade</p>
                   </div>
                   <div class="flex items-center gap-1">
                     <span class="text-gray-400 text-sm">EUR</span>
                     <input type="number"
-                           :value="$store.app.settings.min_trade_size"
-                           @change="$store.app.updateSetting('min_trade_size', $event.target.value)"
-                           class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                           step="0.5"
+                           min="0"
+                           :value="$store.app.settings.transaction_cost_fixed"
+                           @change="$store.app.updateSetting('transaction_cost_fixed', $event.target.value)"
+                           class="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
                   </div>
 
+                  <!-- Variable Cost -->
+                  <div>
+                    <span class="text-sm text-gray-300">Variable Cost</span>
+                    <p class="text-xs text-gray-500">Percentage of trade</p>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <input type="number"
+                           step="0.01"
+                           min="0"
+                           :value="($store.app.settings.transaction_cost_percent * 100).toFixed(2)"
+                           @change="$store.app.updateSetting('transaction_cost_percent', $event.target.value / 100)"
+                           class="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                    <span class="text-gray-400 text-sm">%</span>
+                  </div>
+
+                  <!-- Min Cash Reserve -->
+                  <div>
+                    <span class="text-sm text-gray-300">Min Cash Reserve</span>
+                    <p class="text-xs text-gray-500">Never deploy below this</p>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <span class="text-gray-400 text-sm">EUR</span>
+                    <input type="number"
+                           step="50"
+                           min="0"
+                           :value="$store.app.settings.min_cash_reserve"
+                           @change="$store.app.updateSetting('min_cash_reserve', $event.target.value)"
+                           class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                  </div>
+                </div>
+
+                <!-- Calculated min trade amount -->
+                <div class="mt-4 pt-3 border-t border-gray-700/50">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs text-gray-500">Min worthwhile trade (1% cost):</span>
+                    <span class="text-sm text-gray-300 font-mono"
+                          x-text="'EUR ' + (($store.app.settings.transaction_cost_fixed || 2) / (0.01 - ($store.app.settings.transaction_cost_percent || 0.002))).toFixed(0)"></span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Trading Constraints Card -->
+              <div class="bg-gray-800 border border-gray-700 rounded p-4">
+                <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wide mb-3">Trading Constraints</h3>
+
+                <div class="grid grid-cols-[1fr_auto] gap-x-4 gap-y-3 items-start">
                   <!-- Min Hold Days -->
                   <div>
                     <span class="text-sm text-gray-300">Min Hold Days</span>
@@ -75,43 +169,14 @@ class SettingsModal extends HTMLElement {
                            step="1"
                            :value="($store.app.settings.max_loss_threshold * 100).toFixed(0)"
                            @change="$store.app.updateSetting('max_loss_threshold', $event.target.value / 100)"
-                           class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                           class="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
                     <span class="text-gray-400 text-sm">%</span>
-                  </div>
-
-                  <!-- Min Sell Value -->
-                  <div>
-                    <span class="text-sm text-gray-300">Min Sell Value</span>
-                    <p class="text-xs text-gray-500">Minimum EUR for sell orders</p>
-                  </div>
-                  <div class="flex items-center gap-1">
-                    <span class="text-gray-400 text-sm">EUR</span>
-                    <input type="number"
-                           :value="$store.app.settings.min_sell_value"
-                           @change="$store.app.updateSetting('min_sell_value', $event.target.value)"
-                           class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
-                  </div>
-
-                  <!-- Recommendation Depth -->
-                  <div>
-                    <span class="text-sm text-gray-300">Recommendation Depth</span>
-                    <p class="text-xs text-gray-500">Steps in multi-step plans (1-5)</p>
-                  </div>
-                  <div class="flex items-center gap-1">
-                    <input type="number"
-                           min="1"
-                           max="5"
-                           step="1"
-                           :value="$store.app.settings.recommendation_depth"
-                           @change="$store.app.updateSetting('recommendation_depth', $event.target.value)"
-                           class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
-                    <span class="text-gray-400 text-sm">steps</span>
                   </div>
 
                   <!-- Min Stock Score -->
                   <div>
                     <span class="text-sm text-gray-300">Min Stock Score</span>
-                    <p class="text-xs text-gray-500">Minimum score to consider buying (0-1)</p>
+                    <p class="text-xs text-gray-500">Minimum score to consider (0-1)</p>
                   </div>
                   <div class="flex items-center gap-1">
                     <input type="number"
@@ -120,7 +185,7 @@ class SettingsModal extends HTMLElement {
                            step="0.05"
                            :value="$store.app.settings.min_stock_score"
                            @change="$store.app.updateSetting('min_stock_score', $event.target.value)"
-                           class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                           class="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
                   </div>
                 </div>
               </div>
@@ -140,7 +205,7 @@ class SettingsModal extends HTMLElement {
                            step="1"
                            :value="($store.app.settings.target_annual_return * 100).toFixed(0)"
                            @change="$store.app.updateSetting('target_annual_return', $event.target.value / 100)"
-                           class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                           class="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
                     <span class="text-gray-400 text-sm">%</span>
                   </div>
 
@@ -154,99 +219,8 @@ class SettingsModal extends HTMLElement {
                            step="0.1"
                            :value="$store.app.settings.market_avg_pe"
                            @change="$store.app.updateSetting('market_avg_pe', $event.target.value)"
-                           class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                           class="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
                   </div>
-                </div>
-              </div>
-
-              <!-- Buy Score Weights Card -->
-              <div class="bg-gray-800 border border-gray-700 rounded p-4"
-                   x-data="{
-                     buyGroups: [
-                       { key: 'long_term', label: 'Long-term', desc: 'CAGR, Sortino, Sharpe' },
-                       { key: 'fundamentals', label: 'Fundamentals', desc: 'Financial strength' },
-                       { key: 'opportunity', label: 'Opportunity', desc: '52W high, P/E ratio' },
-                       { key: 'dividends', label: 'Dividends', desc: 'Yield, consistency' },
-                       { key: 'short_term', label: 'Short-term', desc: 'Momentum, drawdown' },
-                       { key: 'technicals', label: 'Technicals', desc: 'RSI, Bollinger, EMA' },
-                       { key: 'opinion', label: 'Opinion', desc: 'Analyst recs, targets' },
-                       { key: 'diversification', label: 'Diversification', desc: 'Geography, industry' }
-                     ],
-                     get buySum() {
-                       return this.buyGroups.reduce((sum, g) =>
-                         sum + ($store.app.settings['score_weight_' + g.key] || 0), 0);
-                     },
-                     buyPct(key) {
-                       const raw = $store.app.settings['score_weight_' + key] || 0;
-                       const sum = this.buySum;
-                       return sum > 0 ? ((raw / sum) * 100).toFixed(0) : '0';
-                     }
-                   }">
-                <div class="flex items-center justify-between mb-3">
-                  <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wide">Buy Score Weights</h3>
-                  <span class="text-xs text-gray-500 font-mono">Sum: <span x-text="buySum.toFixed(2)"></span></span>
-                </div>
-                <p class="text-xs text-gray-500 mb-3">Adjust importance of each factor for buy decisions.</p>
-
-                <div class="space-y-2">
-                  <template x-for="group in buyGroups" :key="group.key">
-                    <div class="grid grid-cols-[1fr_80px_40px] gap-2 items-center">
-                      <div>
-                        <span class="text-sm text-gray-300" x-text="group.label"></span>
-                        <p class="text-xs text-gray-500" x-text="group.desc"></p>
-                      </div>
-                      <input type="range" min="0" max="1" step="0.01"
-                             :value="$store.app.settings['score_weight_' + group.key]"
-                             @input="$store.app.updateSetting('score_weight_' + group.key, parseFloat($event.target.value))"
-                             class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500">
-                      <span class="text-sm text-gray-400 font-mono text-right"
-                            x-text="buyPct(group.key) + '%'"></span>
-                    </div>
-                  </template>
-                </div>
-              </div>
-
-              <!-- Sell Score Weights Card -->
-              <div class="bg-gray-800 border border-gray-700 rounded p-4"
-                   x-data="{
-                     sellGroups: [
-                       { key: 'underperformance', label: 'Underperformance', desc: 'Return vs target' },
-                       { key: 'time_held', label: 'Time Held', desc: 'Position age' },
-                       { key: 'portfolio_balance', label: 'Portfolio Balance', desc: 'Overweight detection' },
-                       { key: 'instability', label: 'Instability', desc: 'Bubble/volatility' },
-                       { key: 'drawdown', label: 'Drawdown', desc: 'Current drawdown' }
-                     ],
-                     get sellSum() {
-                       return this.sellGroups.reduce((sum, g) =>
-                         sum + ($store.app.settings['sell_weight_' + g.key] || 0), 0);
-                     },
-                     sellPct(key) {
-                       const raw = $store.app.settings['sell_weight_' + key] || 0;
-                       const sum = this.sellSum;
-                       return sum > 0 ? ((raw / sum) * 100).toFixed(0) : '0';
-                     }
-                   }">
-                <div class="flex items-center justify-between mb-3">
-                  <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wide">Sell Score Weights</h3>
-                  <span class="text-xs text-gray-500 font-mono">Sum: <span x-text="sellSum.toFixed(2)"></span></span>
-                </div>
-                <p class="text-xs text-gray-500 mb-3">Adjust importance of each factor for sell decisions.</p>
-
-                <div class="space-y-2">
-                  <template x-for="group in sellGroups" :key="group.key">
-                    <div class="grid grid-cols-[1fr_80px_40px] gap-2 items-center">
-                      <div>
-                        <span class="text-sm text-gray-300" x-text="group.label"></span>
-                        <p class="text-xs text-gray-500" x-text="group.desc"></p>
-                      </div>
-                      <input type="range" min="0" max="1" step="0.01"
-                             :value="$store.app.settings['sell_weight_' + group.key]"
-                             @input="$store.app.updateSetting('sell_weight_' + group.key, parseFloat($event.target.value))"
-                             class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-red-500">
-                      <span class="text-sm text-gray-400 font-mono text-right"
-                            x-text="sellPct(group.key) + '%'"></span>
-                    </div>
-                  </template>
                 </div>
               </div>
 
@@ -267,7 +241,7 @@ class SettingsModal extends HTMLElement {
                            step="1"
                            :value="$store.app.settings.ticker_speed"
                            @change="$store.app.updateSetting('ticker_speed', $event.target.value)"
-                           class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                           class="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
                     <span class="text-gray-400 text-sm">ms</span>
                   </div>
 
@@ -283,7 +257,7 @@ class SettingsModal extends HTMLElement {
                            step="10"
                            :value="$store.app.settings.led_brightness"
                            @change="$store.app.updateSetting('led_brightness', $event.target.value)"
-                           class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                           class="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
                   </div>
                 </div>
 

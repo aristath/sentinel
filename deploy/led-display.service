@@ -1,0 +1,25 @@
+[Unit]
+Description=Arduino Trader LED Display - Native Implementation
+After=network.target arduino-trader.service
+
+[Service]
+Type=simple
+User=arduino
+WorkingDirectory=/home/arduino/arduino-trader
+Environment=PATH=/home/arduino/arduino-trader/venv/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/arduino/arduino-trader/venv/bin/python /home/arduino/arduino-trader/scripts/led_display_native.py
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=led-display
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+

@@ -5,18 +5,22 @@ automatically recover from corruption when possible.
 
 Self-healing capabilities:
 - Runs PRAGMA integrity_check on all databases
-- Notifies Matrix on any issues found
+    - Logs issues found
 - Per-symbol databases can be rebuilt from Yahoo API
 - Core databases trigger alerts for manual intervention
 """
 
 import logging
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 from app.config import settings
-from app.infrastructure.events import emit, SystemEvent
-from app.infrastructure.hardware.led_display import set_activity
+from app.infrastructure.events import SystemEvent, emit
+from app.infrastructure.hardware.display_service import (
+    clear_processing,
+    set_error,
+    set_processing,
+)
 from app.infrastructure.locking import file_lock
 
 logger = logging.getLogger(__name__)
@@ -32,84 +36,105 @@ async def run_health_check():
         await _run_health_check_internal()
 
 
+async def _check_core_databases(issues: list) -> None:
+    """Check integrity of core databases."""
+    core_dbs = [
+        ("config.db", "Configuration database"),
+        ("ledger.db", "Ledger database"),
+        ("state.db", "State database"),
+        ("cache.db", "Cache database"),
+    ]
+
+    for db_file, description in core_dbs:
+        db_path = Path(settings.data_dir) / db_file
+        if db_path.exists():
+            result = await _check_database_integrity(db_path)
+            if result != "ok":
+                issues.append(
+                    {
+                        "database": db_file,
+                        "description": description,
+                        "error": result,
+                        "recoverable": db_file == "cache.db",
+                    }
+                )
+                logger.error(f"Integrity check failed for {db_file}: {result}")
+
+                if db_file == "cache.db":
+                    await _rebuild_cache_db(db_path)
+        else:
+            logger.warning(f"Database not found: {db_file}")
+
+
+async def _check_history_databases(issues: list) -> None:
+    """Check integrity of per-symbol history databases."""
+    history_dir = Path(settings.data_dir) / "history"
+    if not history_dir.exists():
+        return
+
+    for db_file in history_dir.glob("*.db"):
+        result = await _check_database_integrity(db_file)
+        if result != "ok":
+            symbol = db_file.stem
+            issues.append(
+                {
+                    "database": f"history/{db_file.name}",
+                    "description": f"History for {symbol}",
+                    "error": result,
+                    "recoverable": True,
+                }
+            )
+            logger.error(f"Integrity check failed for {db_file.name}: {result}")
+            await _rebuild_symbol_history(db_file, symbol)
+
+
+async def _check_legacy_database(issues: list) -> None:
+    """Check integrity of legacy database if it exists."""
+    legacy_db = Path(settings.database_path)
+    if not legacy_db.exists():
+        return
+
+    result = await _check_database_integrity(legacy_db)
+    if result != "ok":
+        issues.append(
+            {
+                "database": "trader.db (legacy)",
+                "description": "Legacy database",
+                "error": result,
+                "recoverable": False,
+            }
+        )
+        logger.error(f"Integrity check failed for legacy database: {result}")
+
+
 async def _run_health_check_internal():
     """Internal health check implementation."""
     logger.info("Starting database health check...")
 
-    set_activity("CHECKING DATABASE HEALTH...", duration=30.0)
+    set_processing("CHECKING DATABASE HEALTH...")
 
     issues = []
 
     try:
-        # Check core databases
-        core_dbs = [
-            ("config.db", "Configuration database"),
-            ("ledger.db", "Ledger database"),
-            ("state.db", "State database"),
-            ("cache.db", "Cache database"),
-        ]
+        await _check_core_databases(issues)
+        await _check_history_databases(issues)
+        await _check_legacy_database(issues)
 
-        for db_file, description in core_dbs:
-            db_path = Path(settings.data_dir) / db_file
-            if db_path.exists():
-                result = await _check_database_integrity(db_path)
-                if result != "ok":
-                    issues.append({
-                        "database": db_file,
-                        "description": description,
-                        "error": result,
-                        "recoverable": db_file == "cache.db",  # Only cache is rebuildable
-                    })
-                    logger.error(f"Integrity check failed for {db_file}: {result}")
-
-                    if db_file == "cache.db":
-                        # Cache can be safely rebuilt
-                        await _rebuild_cache_db(db_path)
-            else:
-                logger.warning(f"Database not found: {db_file}")
-
-        # Check per-symbol history databases
-        history_dir = Path(settings.data_dir) / "history"
-        if history_dir.exists():
-            for db_file in history_dir.glob("*.db"):
-                result = await _check_database_integrity(db_file)
-                if result != "ok":
-                    symbol = db_file.stem
-                    issues.append({
-                        "database": f"history/{db_file.name}",
-                        "description": f"History for {symbol}",
-                        "error": result,
-                        "recoverable": True,
-                    })
-                    logger.error(f"Integrity check failed for {db_file.name}: {result}")
-
-                    # Per-symbol databases can be rebuilt from Yahoo
-                    await _rebuild_symbol_history(db_file, symbol)
-
-        # Check legacy database if it exists
-        legacy_db = Path(settings.database_path)
-        if legacy_db.exists():
-            result = await _check_database_integrity(legacy_db)
-            if result != "ok":
-                issues.append({
-                    "database": "trader.db (legacy)",
-                    "description": "Legacy database",
-                    "error": result,
-                    "recoverable": False,
-                })
-                logger.error(f"Integrity check failed for legacy database: {result}")
-
-        # Report results
         if issues:
             await _report_issues(issues)
-            emit(SystemEvent.ERROR_OCCURRED, message=f"DB HEALTH: {len(issues)} ISSUE(S)")
+            error_msg = f"DB HEALTH: {len(issues)} ISSUE(S)"
+            emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+            set_error(error_msg)
         else:
             logger.info("Database health check passed: all databases healthy")
-            set_activity("DATABASE HEALTH OK", duration=5.0)
 
     except Exception as e:
         logger.error(f"Health check failed: {e}", exc_info=True)
-        emit(SystemEvent.ERROR_OCCURRED, message="HEALTH CHECK FAILED")
+        error_msg = "HEALTH CHECK FAILED"
+        emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+        set_error(error_msg)
+    finally:
+        clear_processing()
 
 
 async def _check_database_integrity(db_path: Path) -> str:
@@ -140,13 +165,16 @@ async def _rebuild_cache_db(db_path: Path):
 
     try:
         # Backup corrupted file
-        backup_path = db_path.with_suffix(f".corrupted.{datetime.now().strftime('%Y%m%d_%H%M%S')}.db")
+        backup_path = db_path.with_suffix(
+            f".corrupted.{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+        )
         db_path.rename(backup_path)
         logger.info(f"Backed up corrupted cache to: {backup_path}")
 
         # Create fresh cache database
-        from app.infrastructure.database.schemas import CACHE_SCHEMA
         import aiosqlite
+
+        from app.infrastructure.database.schemas import CACHE_SCHEMA
 
         async with aiosqlite.connect(str(db_path)) as db:
             await db.executescript(CACHE_SCHEMA)
@@ -171,13 +199,16 @@ async def _rebuild_symbol_history(db_path: Path, symbol: str):
 
     try:
         # Backup corrupted file
-        backup_path = db_path.with_suffix(f".corrupted.{datetime.now().strftime('%Y%m%d_%H%M%S')}.db")
+        backup_path = db_path.with_suffix(
+            f".corrupted.{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+        )
         db_path.rename(backup_path)
         logger.info(f"Backed up corrupted history to: {backup_path}")
 
         # Create fresh history database
-        from app.infrastructure.database.schemas import HISTORY_SCHEMA
         import aiosqlite
+
+        from app.infrastructure.database.schemas import HISTORY_SCHEMA
 
         async with aiosqlite.connect(str(db_path)) as db:
             await db.executescript(HISTORY_SCHEMA)
@@ -194,32 +225,26 @@ async def _rebuild_symbol_history(db_path: Path, symbol: str):
 
 async def _report_issues(issues: list):
     """
-    Report health check issues to Matrix and logs.
+    Report health check issues to logs.
 
     Args:
         issues: List of issue dicts with database, description, error, recoverable
     """
-    from app.services.matrix_notifier import notify_matrix
-
     # Build message
-    lines = ["**Database Health Check Issues**", ""]
+    lines = ["Database Health Check Issues", ""]
 
     for issue in issues:
         status = "RECOVERED" if issue["recoverable"] else "CRITICAL"
-        lines.append(f"- **{issue['database']}** ({status})")
+        lines.append(f"- {issue['database']} ({status})")
         lines.append(f"  {issue['description']}")
-        lines.append(f"  Error: `{issue['error']}`")
+        lines.append(f"  Error: {issue['error']}")
         lines.append("")
 
     if any(not issue["recoverable"] for issue in issues):
-        lines.append("**Action Required:** Non-recoverable issues detected!")
+        lines.append("Action Required: Non-recoverable issues detected!")
 
     message = "\n".join(lines)
-
-    try:
-        await notify_matrix(message)
-    except Exception as e:
-        logger.error(f"Failed to send Matrix notification: {e}")
+    logger.error(message)
 
 
 async def check_wal_status():
@@ -243,7 +268,9 @@ async def check_wal_status():
             wal_size_mb = wal_size / (1024 * 1024)
 
             if wal_size_mb > 10:  # WAL > 10MB
-                logger.warning(f"{db_file} WAL is {wal_size_mb:.1f}MB, running checkpoint...")
+                logger.warning(
+                    f"{db_file} WAL is {wal_size_mb:.1f}MB, running checkpoint..."
+                )
                 try:
                     async with aiosqlite.connect(str(db_path)) as db:
                         await db.execute("PRAGMA wal_checkpoint(TRUNCATE)")

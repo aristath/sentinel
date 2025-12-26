@@ -14,13 +14,14 @@ This calculator now simply:
 3. Sorts by final priority
 """
 
-from typing import Dict, List, Optional
 from dataclasses import dataclass
+from typing import Dict, List, Optional
 
 
 @dataclass
 class PriorityInput:
     """Input data for priority calculation."""
+
     symbol: str
     name: str
     geography: str
@@ -37,6 +38,7 @@ class PriorityInput:
 @dataclass
 class PriorityResult:
     """Result of priority calculation."""
+
     symbol: str
     name: str
     geography: str
@@ -130,7 +132,9 @@ class PriorityCalculator:
             List of PriorityResult sorted by combined_priority (highest first)
         """
         results = [
-            PriorityCalculator.calculate_priority(input_data, geo_weights, industry_weights)
+            PriorityCalculator.calculate_priority(
+                input_data, geo_weights, industry_weights
+            )
             for input_data in inputs
         ]
 
@@ -138,4 +142,3 @@ class PriorityCalculator:
         results.sort(key=lambda x: x.combined_priority, reverse=True)
 
         return results
-

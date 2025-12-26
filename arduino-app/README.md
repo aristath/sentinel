@@ -5,7 +5,7 @@ Displays portfolio information on the Arduino Uno Q's 8x13 LED matrix using a sc
 ## Display Layout
 
 The display uses native ArduinoGraphics Font_5x7 that scrolls right-to-left across the 8x13 matrix. The ticker shows:
-- Portfolio value (e.g., "EUR12,345")
+- Portfolio value (e.g., "Portfolio EUR12,345")
 - Cash balance (e.g., "CASH EUR675")
 - Trading recommendations (e.g., "BUY XIAO EUR855", "SELL ABC EUR200")
 
@@ -14,88 +14,70 @@ When no ticker text is available, the display remains blank.
 ## How It Works
 
 ```
-Trading API (FastAPI) → Python Script → Router Bridge → STM32 MCU → LED Matrix
+Trading API (FastAPI) → Native Python Script (systemd) → Serial Port → STM32 MCU → LED Matrix
 ```
 
-1. Python script fetches `/api/status/led/display` from the trading API
-2. Builds ticker text from portfolio data and recommendations
-3. Uses native ArduinoGraphics to scroll text on the LED matrix
-4. Sends text scrolling commands to STM32 via Router Bridge
-5. STM32 renders the scrolling text using native Font_5x7
+1. Native Python script (`scripts/led_display_native.py`) runs as a systemd service
+2. Polls `/api/status/display/text` from the trading API every 2 seconds
+3. Sends commands to MCU via serial port using simple text protocol:
+   - `TEXT:<text>\n` - Set display text
+   - `SPEED:<value>\n` - Set scroll speed
+   - `BRIGHTNESS:<value>\n` - Set brightness
+4. MCU receives commands and renders scrolling text using native Font_5x7
 
-## Display Modes
+## Display Priority System (3-Pool)
 
-- **normal**: Scrolling ticker with portfolio info (default)
-- **syncing**: Horizontal wave animation during data sync
-- **trade**: Expanding ring celebration animation when trades execute
-- **error**: Scrolling error message text
-- **activity**: Scrolling activity message (higher priority than ticker)
+The display uses a 3-pool priority system:
+
+1. **Error Pool** (highest priority): Error messages like "BACKUP FAILED", "ORDER PLACEMENT FAILED"
+2. **Processing Pool** (medium priority): Activity messages like "SYNCING...", "BUY AAPL €500"
+3. **Next Actions Pool** (lowest priority, default): Portfolio value, cash balance, recommendations
+
+The display automatically shows the highest priority non-empty text.
 
 ## Files
 
-- `python/main.py` - Fetches API data and generates LED frames
-- `sketch/sketch.ino` - STM32 sketch for LED matrix control
-- `app.yaml` - App configuration
-- `deploy/` - Auto-deployment scripts
+- `sketch/sketch.ino` - STM32 sketch for LED matrix control (uses serial communication)
+- `sketch/sketch.yaml` - Sketch configuration (Arduino CLI)
+- `deploy/auto-deploy.sh` - Auto-deployment script (handles sketch compilation)
+
+**Note**: The Python script (`scripts/led_display_native.py`) is in the main repository, not in `arduino-app/`.
 
 ---
 
 ## Setup on New Board
 
-### Quick Setup (Automated)
-
-SSH into the Arduino and run:
+The LED display is automatically set up by the main deployment script:
 
 ```bash
-# Download and run setup script
-curl -s https://raw.githubusercontent.com/aristath/autoTrader/main/arduino-app/deploy/setup.sh | bash
+# Run main setup script (installs both main app and LED display)
+sudo /home/arduino/repos/autoTrader/deploy/setup.sh
 ```
 
-Or manually:
+This will:
+1. Install the LED display systemd service
+2. Compile and upload the Arduino sketch to the MCU
+3. Start the LED display service
+
+### Manual Sketch Compilation
+
+If you need to compile and upload the sketch manually:
 
 ```bash
-# Clone repo
-mkdir -p /home/arduino/repos
-cd /home/arduino/repos
-git clone https://github.com/aristath/autoTrader.git
-
-# Run setup
-bash /home/arduino/repos/autoTrader/arduino-app/deploy/setup.sh
+/home/arduino/arduino-trader/scripts/compile_and_upload_sketch.sh
 ```
 
-### What Setup Does
-
-1. Creates required directories
-2. Clones the GitHub repo
-3. Copies deploy script to `/home/arduino/bin/`
-4. Syncs app files to `/home/arduino/ArduinoApps/trader-display/`
-5. Sets up cron job to check for updates every 5 minutes
-6. Starts the app
-
-### Manual Setup
-
-If you prefer to set up manually:
+### Service Management
 
 ```bash
-# 1. Create directories
-mkdir -p /home/arduino/repos /home/arduino/bin /home/arduino/logs
+# Check status
+sudo systemctl status led-display
 
-# 2. Clone repo
-cd /home/arduino/repos
-git clone https://github.com/aristath/autoTrader.git
+# View logs
+sudo journalctl -u led-display -f
 
-# 3. Copy deploy script
-cp /home/arduino/repos/autoTrader/arduino-app/deploy/auto-deploy.sh /home/arduino/bin/
-chmod +x /home/arduino/bin/auto-deploy.sh
-
-# 4. Sync app files
-rsync -av --delete /home/arduino/repos/autoTrader/arduino-app/ /home/arduino/ArduinoApps/trader-display/
-
-# 5. Set up cron (every 5 minutes)
-(crontab -l 2>/dev/null; echo "*/5 * * * * /home/arduino/bin/auto-deploy.sh") | crontab -
-
-# 6. Start app
-arduino-app-cli app restart user:trader-display
+# Restart
+sudo systemctl restart led-display
 ```
 
 ---
@@ -105,20 +87,22 @@ arduino-app-cli app restart user:trader-display
 Once set up, the board automatically:
 1. Checks GitHub for updates every 5 minutes
 2. If changes detected, pulls and syncs files
-3. Restarts the app
+3. If sketch files changed, compiles and uploads sketch automatically
+4. Restarts services as needed
 
 ### Development Workflow
 
 ```bash
-# Edit code locally
-vim arduino-app/python/main.py
+# Edit sketch locally
+vim arduino-app/sketch/sketch.ino
 
 # Commit and push
 git add .
-git commit -m "Update display"
+git commit -m "Update sketch"
 git push
 
 # Wait up to 5 minutes - Arduino deploys automatically
+# The sketch will be compiled and uploaded, LED display service restarted
 ```
 
 ### Check Deploy Logs
@@ -133,23 +117,10 @@ ssh arduino@<IP> "cat /home/arduino/logs/auto-deploy.log"
 ssh arduino@<IP> "/home/arduino/bin/auto-deploy.sh"
 ```
 
----
-
-## Commands
-
-```bash
-# View logs
-arduino-app-cli app logs user:trader-display
-
-# Restart
-arduino-app-cli app restart user:trader-display
-
-# Stop
-arduino-app-cli app stop user:trader-display
-```
-
 ## Requirements
 
-- Arduino Uno Q with Arduino App framework
+- Arduino Uno Q
+- Arduino CLI installed (automatically installed by setup script)
 - Arduino Trader API running on port 8000
+- Serial port `/dev/ttyACM0` available for MCU communication
 - Network access to GitHub (for auto-deploy)

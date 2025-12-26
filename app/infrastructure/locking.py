@@ -7,8 +7,8 @@ of critical operations like portfolio sync and rebalancing.
 import asyncio
 import fcntl
 import logging
-from pathlib import Path
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncIterator
 
 from app.config import settings
@@ -24,30 +24,30 @@ LOCK_DIR.mkdir(parents=True, exist_ok=True)
 async def file_lock(lock_name: str, timeout: float = 300.0) -> AsyncIterator[None]:
     """
     Acquire a file-based lock for critical operations.
-    
+
     Args:
         lock_name: Name of the lock (e.g., "portfolio_sync", "rebalance")
         timeout: Maximum time to wait for lock acquisition in seconds
-        
+
     Raises:
         TimeoutError: If lock cannot be acquired within timeout
-        
+
     Example:
         async with file_lock("portfolio_sync"):
             # Critical operation here
             await sync_portfolio()
     """
     lock_file = LOCK_DIR / f"{lock_name}.lock"
-    
+
     # Open lock file
     lock_fd = None
     try:
-        lock_fd = open(lock_file, 'w')
-        
+        lock_fd = open(lock_file, "w")
+
         # Try to acquire lock with timeout
         start_time = asyncio.get_event_loop().time()
         acquired = False
-        
+
         while not acquired:
             try:
                 fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -62,12 +62,13 @@ async def file_lock(lock_name: str, timeout: float = 300.0) -> AsyncIterator[Non
                         "Another operation may be in progress."
                     )
                 await asyncio.sleep(0.1)  # Wait 100ms before retry
-        
+
         # Write PID to lock file for debugging
         import os
+
         lock_fd.write(str(os.getpid()))
         lock_fd.flush()
-        
+
         try:
             yield
         finally:
@@ -86,4 +87,3 @@ async def file_lock(lock_name: str, timeout: float = 300.0) -> AsyncIterator[Non
                     lock_file.unlink()
             except Exception:
                 pass
-

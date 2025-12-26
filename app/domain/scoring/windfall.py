@@ -10,14 +10,14 @@ without selling consistent performers prematurely.
 """
 
 import logging
-from typing import Optional, Tuple, Dict
+from typing import Dict, Optional, Tuple
 
 from app.domain.scoring.constants import (
+    CONSISTENT_DOUBLE_SELL_PCT,
     WINDFALL_EXCESS_HIGH,
     WINDFALL_EXCESS_MEDIUM,
     WINDFALL_SELL_PCT_HIGH,
     WINDFALL_SELL_PCT_MEDIUM,
-    CONSISTENT_DOUBLE_SELL_PCT,
 )
 
 logger = logging.getLogger(__name__)
@@ -116,8 +116,14 @@ async def calculate_windfall_score(
         windfall_score = 1.0
     elif excess >= WINDFALL_EXCESS_MEDIUM:  # 25-50% excess
         # Linear interpolation from 0.5 to 1.0
-        windfall_score = 0.5 + ((excess - WINDFALL_EXCESS_MEDIUM) /
-                                (WINDFALL_EXCESS_HIGH - WINDFALL_EXCESS_MEDIUM)) * 0.5
+        windfall_score = (
+            0.5
+            + (
+                (excess - WINDFALL_EXCESS_MEDIUM)
+                / (WINDFALL_EXCESS_HIGH - WINDFALL_EXCESS_MEDIUM)
+            )
+            * 0.5
+        )
     elif excess > 0:  # 0-25% excess
         # Linear interpolation from 0.0 to 0.5
         windfall_score = (excess / WINDFALL_EXCESS_MEDIUM) * 0.5
@@ -173,13 +179,13 @@ def should_take_profits(
             return (
                 True,
                 0.50,
-                f"Windfall doubler: {current_gain*100:.0f}% gain with {excess*100:.0f}% excess"
+                f"Windfall doubler: {current_gain*100:.0f}% gain with {excess*100:.0f}% excess",
             )
         else:
             return (
                 True,
                 CONSISTENT_DOUBLE_SELL_PCT,
-                f"Consistent doubler: {current_gain*100:.0f}% gain, taking {CONSISTENT_DOUBLE_SELL_PCT*100:.0f}%"
+                f"Consistent doubler: {current_gain*100:.0f}% gain, taking {CONSISTENT_DOUBLE_SELL_PCT*100:.0f}%",
             )
 
     # Windfall rules
@@ -187,13 +193,13 @@ def should_take_profits(
         return (
             True,
             WINDFALL_SELL_PCT_HIGH,
-            f"High windfall: {excess*100:.0f}% above expected growth"
+            f"High windfall: {excess*100:.0f}% above expected growth",
         )
     elif excess >= WINDFALL_EXCESS_MEDIUM:  # 25-50% above expected
         return (
             True,
             WINDFALL_SELL_PCT_MEDIUM,
-            f"Medium windfall: {excess*100:.0f}% above expected growth"
+            f"Medium windfall: {excess*100:.0f}% above expected growth",
         )
 
     # No windfall - don't sell
@@ -240,7 +246,7 @@ async def get_windfall_recommendation(
     years_held = 1.0  # Default
     if first_bought_at:
         try:
-            bought_date = datetime.fromisoformat(first_bought_at.replace('Z', '+00:00'))
+            bought_date = datetime.fromisoformat(first_bought_at.replace("Z", "+00:00"))
             if bought_date.tzinfo:
                 bought_date = bought_date.replace(tzinfo=None)
             days_held = (datetime.now() - bought_date).days
@@ -273,5 +279,5 @@ async def get_windfall_recommendation(
             "take_profits": should_sell,
             "suggested_sell_pct": round(sell_pct * 100, 0) if should_sell else 0,
             "reason": reason,
-        }
+        },
     }

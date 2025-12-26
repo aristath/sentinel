@@ -14,10 +14,14 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from app.config import settings
-from app.infrastructure.locking import file_lock
-from app.infrastructure.hardware.led_display import set_activity
-from app.infrastructure.events import emit, SystemEvent
 from app.infrastructure.database.manager import get_db_manager
+from app.infrastructure.events import SystemEvent, emit
+from app.infrastructure.hardware.display_service import (
+    clear_processing,
+    set_error,
+    set_processing,
+)
+from app.infrastructure.locking import file_lock
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +41,7 @@ async def _create_backup_internal():
     logger.info("Starting database backup")
 
     emit(SystemEvent.BACKUP_START)
-    set_activity("BACKING UP DATABASE...", duration=60.0)
+    set_processing("BACKING UP DATABASE...")
 
     try:
         # Ensure backup directory exists
@@ -51,7 +55,9 @@ async def _create_backup_internal():
         for db_name in core_dbs:
             db_path = settings.data_dir / db_name
             if db_path.exists():
-                backup_path = backup_dir / f"{db_name.replace('.db', '')}_{timestamp}.db"
+                backup_path = (
+                    backup_dir / f"{db_name.replace('.db', '')}_{timestamp}.db"
+                )
                 _backup_database(db_path, backup_path)
 
         # Backup history databases
@@ -69,12 +75,15 @@ async def _create_backup_internal():
         await _cleanup_old_backups(backup_dir)
 
         emit(SystemEvent.BACKUP_COMPLETE)
-        set_activity("BACKUP COMPLETE", duration=5.0)
 
     except Exception as e:
         logger.error(f"Database backup failed: {e}")
-        emit(SystemEvent.ERROR_OCCURRED, message="BACKUP FAILED")
+        error_msg = "BACKUP FAILED"
+        emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+        set_error(error_msg)
         raise
+    finally:
+        clear_processing()
 
 
 def _backup_database(source_path: Path, dest_path: Path):
@@ -93,11 +102,9 @@ async def _cleanup_old_backups(backup_dir: Path):
     # Clean core database backups
     for prefix in ["config_", "ledger_", "state_", "cache_"]:
         backups = sorted(
-            backup_dir.glob(f"{prefix}*.db"),
-            key=os.path.getmtime,
-            reverse=True
+            backup_dir.glob(f"{prefix}*.db"), key=os.path.getmtime, reverse=True
         )
-        for old_backup in backups[settings.backup_retention_count:]:
+        for old_backup in backups[settings.backup_retention_count :]:
             try:
                 old_backup.unlink()
                 logger.info(f"Removed old backup: {old_backup.name}")
@@ -106,13 +113,18 @@ async def _cleanup_old_backups(backup_dir: Path):
 
     # Clean history backup directories
     history_dirs = sorted(
-        [d for d in backup_dir.iterdir() if d.is_dir() and d.name.startswith("history_")],
+        [
+            d
+            for d in backup_dir.iterdir()
+            if d.is_dir() and d.name.startswith("history_")
+        ],
         key=os.path.getmtime,
-        reverse=True
+        reverse=True,
     )
-    for old_dir in history_dirs[settings.backup_retention_count:]:
+    for old_dir in history_dirs[settings.backup_retention_count :]:
         try:
             import shutil
+
             shutil.rmtree(old_dir)
             logger.info(f"Removed old history backup: {old_dir.name}")
         except Exception as e:
@@ -134,7 +146,7 @@ async def _checkpoint_wal_internal():
     """Internal WAL checkpoint implementation."""
     logger.info("Running WAL checkpoint on all databases")
 
-    set_activity("CHECKPOINTING DATABASE...", duration=30.0)
+    set_processing("CHECKPOINTING DATABASE...")
 
     try:
         db_manager = get_db_manager()
@@ -151,7 +163,9 @@ async def _checkpoint_wal_internal():
                 result = await db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
                 row = await result.fetchone()
                 if row:
-                    logger.info(f"{db_name}: checkpoint complete - busy={row[0]}, log={row[1]}, checkpointed={row[2]}")
+                    logger.info(
+                        f"{db_name}: checkpoint complete - busy={row[0]}, log={row[1]}, checkpointed={row[2]}"
+                    )
             except Exception as e:
                 logger.warning(f"Checkpoint failed for {db_name}: {e}")
 
@@ -177,7 +191,7 @@ async def _integrity_check_internal():
     logger.info("Running database integrity check")
 
     emit(SystemEvent.INTEGRITY_CHECK_START)
-    set_activity("CHECKING DATABASE INTEGRITY...", duration=120.0)
+    set_processing("CHECKING DATABASE INTEGRITY...")
 
     try:
         db_manager = get_db_manager()
@@ -206,14 +220,19 @@ async def _integrity_check_internal():
 
         if all_ok:
             emit(SystemEvent.INTEGRITY_CHECK_COMPLETE)
-            set_activity("INTEGRITY CHECK PASSED", duration=5.0)
         else:
-            emit(SystemEvent.ERROR_OCCURRED, message="INTEGRITY CHECK FAILED")
+            error_msg = "INTEGRITY CHECK FAILED"
+            emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+            set_error(error_msg)
 
     except Exception as e:
         logger.error(f"Database integrity check failed: {e}")
-        emit(SystemEvent.ERROR_OCCURRED, message="INTEGRITY CHECK FAILED")
+        error_msg = "INTEGRITY CHECK FAILED"
+        emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+        set_error(error_msg)
         raise
+    finally:
+        clear_processing()
 
 
 async def cleanup_old_daily_prices():
@@ -232,11 +251,13 @@ async def _cleanup_old_daily_prices_internal():
     logger.info("Cleaning up old daily prices")
 
     emit(SystemEvent.CLEANUP_START)
-    set_activity("CLEANING OLD PRICES...", duration=60.0)
+    set_processing("CLEANING OLD PRICES...")
 
     try:
         db_manager = get_db_manager()
-        cutoff = (datetime.now() - timedelta(days=settings.daily_price_retention_days)).strftime("%Y-%m-%d")
+        cutoff = (
+            datetime.now() - timedelta(days=settings.daily_price_retention_days)
+        ).strftime("%Y-%m-%d")
 
         # Get all active symbols
         cursor = await db_manager.config.execute(
@@ -251,16 +272,14 @@ async def _cleanup_old_daily_prices_internal():
 
                 # Count records to be deleted
                 cursor = await history_db.execute(
-                    "SELECT COUNT(*) FROM daily_prices WHERE date < ?",
-                    (cutoff,)
+                    "SELECT COUNT(*) FROM daily_prices WHERE date < ?", (cutoff,)
                 )
                 row = await cursor.fetchone()
                 delete_count = row[0] if row else 0
 
                 if delete_count > 0:
                     await history_db.execute(
-                        "DELETE FROM daily_prices WHERE date < ?",
-                        (cutoff,)
+                        "DELETE FROM daily_prices WHERE date < ?", (cutoff,)
                     )
                     await history_db.commit()
                     total_deleted += delete_count
@@ -268,7 +287,9 @@ async def _cleanup_old_daily_prices_internal():
                 logger.warning(f"Cleanup failed for {symbol}: {e}")
 
         if total_deleted > 0:
-            logger.info(f"Deleted {total_deleted} old daily price records (before {cutoff})")
+            logger.info(
+                f"Deleted {total_deleted} old daily price records (before {cutoff})"
+            )
         else:
             logger.info("No old daily price records to clean up")
 
@@ -276,7 +297,9 @@ async def _cleanup_old_daily_prices_internal():
 
     except Exception as e:
         logger.error(f"Daily price cleanup failed: {e}")
-        emit(SystemEvent.ERROR_OCCURRED, message="CLEANUP FAILED")
+        error_msg = "CLEANUP FAILED"
+        emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+        set_error(error_msg)
         raise
 
 
@@ -295,7 +318,7 @@ async def _cleanup_expired_caches_internal():
     """Internal cache cleanup implementation."""
     logger.info("Cleaning up expired caches")
 
-    set_activity("CLEANING EXPIRED CACHES...", duration=30.0)
+    set_processing("CLEANING EXPIRED CACHES...")
 
     try:
         from app.infrastructure.recommendation_cache import get_recommendation_cache
@@ -338,27 +361,29 @@ async def _cleanup_old_snapshots_internal():
     """Internal snapshot cleanup implementation."""
     logger.info("Cleaning up old portfolio snapshots")
 
-    set_activity("CLEANING OLD SNAPSHOTS...", duration=30.0)
+    set_processing("CLEANING OLD SNAPSHOTS...")
 
     try:
         db_manager = get_db_manager()
-        cutoff = (datetime.now() - timedelta(days=settings.snapshot_retention_days)).strftime("%Y-%m-%d")
+        cutoff = (
+            datetime.now() - timedelta(days=settings.snapshot_retention_days)
+        ).strftime("%Y-%m-%d")
 
         # Count records to be deleted
         cursor = await db_manager.state.execute(
-            "SELECT COUNT(*) FROM portfolio_snapshots WHERE date < ?",
-            (cutoff,)
+            "SELECT COUNT(*) FROM portfolio_snapshots WHERE date < ?", (cutoff,)
         )
         row = await cursor.fetchone()
         delete_count = row[0] if row else 0
 
         if delete_count > 0:
             await db_manager.state.execute(
-                "DELETE FROM portfolio_snapshots WHERE date < ?",
-                (cutoff,)
+                "DELETE FROM portfolio_snapshots WHERE date < ?", (cutoff,)
             )
             await db_manager.state.commit()
-            logger.info(f"Deleted {delete_count} old portfolio snapshots (before {cutoff})")
+            logger.info(
+                f"Deleted {delete_count} old portfolio snapshots (before {cutoff})"
+            )
         else:
             logger.info("No old portfolio snapshots to clean up")
 
@@ -377,7 +402,7 @@ async def run_daily_maintenance():
     logger.info("Starting daily maintenance")
 
     emit(SystemEvent.MAINTENANCE_START)
-    set_activity("RUNNING MAINTENANCE...", duration=180.0)
+    set_processing("RUNNING MAINTENANCE...")
 
     try:
         # 1. Create backup first (before any cleanup)
@@ -393,12 +418,15 @@ async def run_daily_maintenance():
 
         logger.info("Daily maintenance complete")
         emit(SystemEvent.MAINTENANCE_COMPLETE)
-        set_activity("MAINTENANCE COMPLETE", duration=5.0)
 
     except Exception as e:
         logger.error(f"Daily maintenance failed: {e}")
-        emit(SystemEvent.ERROR_OCCURRED, message="MAINTENANCE FAILED")
+        error_msg = "MAINTENANCE FAILED"
+        emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+        set_error(error_msg)
         raise
+    finally:
+        clear_processing()
 
 
 async def run_weekly_maintenance():

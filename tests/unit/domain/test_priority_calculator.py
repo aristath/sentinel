@@ -19,7 +19,10 @@ class TestPriorityCalculator:
     def test_parse_industries(self):
         """Test industry string parsing."""
         assert PriorityCalculator.parse_industries("Technology") == ["Technology"]
-        assert PriorityCalculator.parse_industries("Industrial, Defense") == ["Industrial", "Defense"]
+        assert PriorityCalculator.parse_industries("Industrial, Defense") == [
+            "Industrial",
+            "Defense",
+        ]
         assert PriorityCalculator.parse_industries("") == []
         assert PriorityCalculator.parse_industries(None) == []
 
@@ -41,7 +44,9 @@ class TestPriorityCalculator:
         result = PriorityCalculator.calculate_priority(input_data)
 
         assert result.symbol == "AAPL"
-        assert result.combined_priority == pytest.approx(0.7, abs=0.01)  # score * multiplier
+        assert result.combined_priority == pytest.approx(
+            0.7, abs=0.01
+        )  # score * multiplier
         assert result.quality_score == 0.8
         assert result.opportunity_score == 0.6
         assert result.allocation_fit_score == 0.7
@@ -94,4 +99,3 @@ class TestPriorityCalculator:
         assert results[0].combined_priority > results[1].combined_priority
         assert results[0].combined_priority == pytest.approx(0.8, abs=0.01)
         assert results[1].combined_priority == pytest.approx(0.4, abs=0.01)
-

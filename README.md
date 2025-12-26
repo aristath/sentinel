@@ -20,10 +20,16 @@ Automated portfolio management system for Arduino Uno Q with monthly rebalancing
 ├─────────────────────────┬───────────────────────────────┤
 │      Linux (MPU)        │         MCU (STM32U585)       │
 │  ┌─────────────────┐    │    ┌─────────────────────┐    │
-│  │   FastAPI App   │────┼────│   LED Controller    │    │
+│  │   FastAPI App   │    │    │   LED Controller    │    │
 │  │   + SQLite DB   │    │    │   8x13 Matrix +     │    │
 │  │   + APScheduler │    │    │   4 RGB LEDs        │    │
-│  └─────────────────┘    │    └─────────────────────┘    │
+│  └────────┬────────┘    │    └──────────┬──────────┘    │
+│           │             │               │                │
+│           │             │               │                │
+│  ┌────────▼────────┐    │               │                │
+│  │ LED Display     │────┼───────────────┘                │
+│  │ (Native Python) │    │  Serial Port                   │
+│  └─────────────────┘    │                               │
 │          │              │                               │
 │          ▼              │                               │
 │  ┌─────────────────┐    │                               │
@@ -44,7 +50,8 @@ Automated portfolio management system for Arduino Uno Q with monthly rebalancing
 - **Frontend**: Alpine.js, Tailwind CSS (standalone CLI), Lightweight Charts
 - **APIs**: Freedom24/Tradernet, Yahoo Finance (yfinance)
 - **Scheduling**: APScheduler
-- **MCU**: Arduino sketch for STM32U585
+- **MCU**: Arduino sketch for STM32U585 (compiled with Arduino CLI)
+- **LED Display**: Native Python script (no Docker required)
 
 ## Quick Start
 
@@ -87,32 +94,40 @@ sudo ./setup.sh
 # Edit configuration
 nano /home/arduino/arduino-trader/.env
 
-# Restart service
-sudo systemctl restart arduino-trader
+# Restart services
+sudo systemctl restart arduino-trader led-display
 ```
 
-### LED Display App Setup
+### LED Display Setup
 
-The LED display uses Arduino's App framework to show portfolio status on the 8x12 LED matrix.
+The LED display runs as a native Python script (no Docker required) and communicates with the MCU via serial port.
 
+The setup script automatically:
+- Installs the LED display systemd service
+- Compiles and uploads the Arduino sketch to the MCU
+- Starts the LED display service
+
+The display shows:
+- **Error messages** (highest priority): "BACKUP FAILED", "ORDER PLACEMENT FAILED", etc.
+- **Processing messages** (medium priority): "SYNCING...", "BUY AAPL €500", etc.
+- **Next actions** (lowest priority, default): Portfolio value, cash balance, recommendations
+
+**Manual sketch compilation** (if needed):
 ```bash
-# On Arduino Uno Q, copy the app to ArduinoApps folder
-cp -r /home/arduino/arduino-trader/arduino-app /home/arduino/ArduinoApps/trader-display
-
-# Start the LED display app
-arduino-app-cli app start user:trader-display
-
-# Check logs
-arduino-app-cli app logs user:trader-display
-
-# Stop the app
-arduino-app-cli app stop user:trader-display
+/home/arduino/arduino-trader/scripts/compile_and_upload_sketch.sh
 ```
 
-The app automatically fetches portfolio data from the trading API every 30 seconds and displays:
-- **Idle mode**: Subtle wave animation
-- **Portfolio view**: Three vertical bars showing EU/Asia/US allocation percentages
-- **Error mode**: X pattern when API is unreachable
+**Service management**:
+```bash
+# Check status
+sudo systemctl status led-display
+
+# View logs
+sudo journalctl -u led-display -f
+
+# Restart
+sudo systemctl restart led-display
+```
 
 ### Cloudflare Tunnel Setup
 
@@ -210,15 +225,19 @@ DAILY_SYNC_HOUR=18
 ```bash
 # View status
 sudo systemctl status arduino-trader
+sudo systemctl status led-display
 
 # View logs
 sudo journalctl -u arduino-trader -f
+sudo journalctl -u led-display -f
 
 # Restart
 sudo systemctl restart arduino-trader
+sudo systemctl restart led-display
 
 # Stop
 sudo systemctl stop arduino-trader
+sudo systemctl stop led-display
 ```
 
 ## License

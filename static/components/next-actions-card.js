@@ -204,12 +204,6 @@ class NextActionsCard extends HTMLElement {
                     <div class="text-right flex-shrink-0 flex flex-col items-end gap-1">
                       <div class="text-sm font-mono font-bold text-green-400" x-text="'€' + rec.amount.toLocaleString()"></div>
                       <div class="text-xs text-gray-400" x-text="rec.quantity ? rec.quantity + ' @ €' + rec.current_price : ''"></div>
-                      <!-- Fund this button - shows when cash is insufficient -->
-                      <button x-show="rec.amount > ($store.app.allocation?.cash_balance || 0)"
-                              @click.stop="$store.app.openFundingModal(rec)"
-                              class="mt-1 px-2 py-0.5 text-xs bg-blue-900/50 text-blue-300 hover:bg-blue-800 rounded transition-colors">
-                        Fund this
-                      </button>
                       <!-- Dismiss button -->
                       <button
                         @click="if (rec.uuid) { $store.app.dismissRecommendation(rec.uuid); } else { $store.app.showMessage('Recommendation does not have UUID yet. Please refresh.', 'warning'); }"

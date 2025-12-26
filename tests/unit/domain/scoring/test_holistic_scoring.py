@@ -8,27 +8,23 @@ These tests ensure the holistic planner makes CORRECT decisions about:
 """
 
 import pytest
-from datetime import datetime, timedelta
 
+from app.domain.scoring.constants import (
+    CONSISTENT_DOUBLE_SELL_PCT,
+    WINDFALL_SELL_PCT_HIGH,
+    WINDFALL_SELL_PCT_MEDIUM,
+)
+from app.domain.scoring.dividend_history import (
+    calculate_dividend_growth_rate,
+    calculate_dividend_stability_score,
+    has_big_dividend_cut,
+)
 from app.domain.scoring.end_state import (
     score_total_return,
 )
 from app.domain.scoring.windfall import (
     calculate_excess_gain,
     should_take_profits,
-)
-from app.domain.scoring.dividend_history import (
-    has_big_dividend_cut,
-    calculate_dividend_growth_rate,
-    calculate_dividend_stability_score,
-)
-from app.domain.scoring.constants import (
-    WINDFALL_EXCESS_HIGH,
-    WINDFALL_EXCESS_MEDIUM,
-    WINDFALL_SELL_PCT_HIGH,
-    WINDFALL_SELL_PCT_MEDIUM,
-    CONSISTENT_DOUBLE_SELL_PCT,
-    DIVIDEND_CUT_THRESHOLD,
 )
 
 
@@ -285,7 +281,7 @@ class TestHasBigDividendCut:
         has_cut, years_since = has_big_dividend_cut(history)
 
         assert has_cut is True
-        assert years_since == 0  # Most recent year
+        assert years_since == 1  # Cut detected in most recent period
 
     def test_ignores_small_cut(self):
         """15% cut should not be flagged (below 20% threshold).

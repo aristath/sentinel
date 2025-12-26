@@ -1,0 +1,5 @@
+[bandit]
+exclude_dirs = venv,.venv,node_modules,build,dist,.eggs
+skips = B101,B601  # B101: assert_used, B601: shell_injection_subprocess (we use subprocess safely)
+tests = B201,B301,B401,B501,B601  # Focus on critical security issues
+

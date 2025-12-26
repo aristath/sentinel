@@ -2,8 +2,8 @@
 
 from typing import Optional
 
-from app.domain.value_objects.trade_side import TradeSide
 from app.domain.value_objects.currency import Currency
+from app.domain.value_objects.trade_side import TradeSide
 
 
 class RecommendationFactory:
@@ -27,7 +27,7 @@ class RecommendationFactory:
         amount: Optional[float] = None,
     ) -> dict:
         """Create buy recommendation data.
-        
+
         Args:
             symbol: Stock symbol
             name: Stock name
@@ -42,18 +42,18 @@ class RecommendationFactory:
             current_portfolio_score: Portfolio score before trade (optional)
             new_portfolio_score: Portfolio score after trade (optional)
             amount: Display amount (optional, defaults to estimated_value)
-            
+
         Returns:
             Dictionary with recommendation data ready for repository
         """
         if currency is None:
             currency = Currency.EUR
-        
+
         # Calculate score change if both scores provided
         score_change = None
         if current_portfolio_score is not None and new_portfolio_score is not None:
             score_change = new_portfolio_score - current_portfolio_score
-        
+
         return {
             "symbol": symbol.upper(),
             "name": name,
@@ -86,7 +86,7 @@ class RecommendationFactory:
         currency: Optional[Currency] = None,
     ) -> dict:
         """Create sell recommendation data.
-        
+
         Args:
             symbol: Stock symbol
             name: Stock name
@@ -97,13 +97,13 @@ class RecommendationFactory:
             geography: Stock geography (EU/US/ASIA)
             industry: Stock industry (optional)
             currency: Stock currency (optional, defaults to EUR)
-            
+
         Returns:
             Dictionary with recommendation data ready for repository
         """
         if currency is None:
             currency = Currency.EUR
-        
+
         return {
             "symbol": symbol.upper(),
             "name": name,
@@ -117,4 +117,3 @@ class RecommendationFactory:
             "industry": industry,
             "currency": currency,
         }
-

@@ -17,51 +17,45 @@ Raw metrics are cached in calculations.db with per-metric TTLs.
 
 import logging
 from datetime import datetime
-from typing import Optional, List, Dict
+from typing import Dict, List, Optional
 
 import numpy as np
 
+from app.domain.scoring.calculations import calculate_volatility
+from app.domain.scoring.constants import (
+    DEFAULT_MARKET_AVG_PE,
+    DEFAULT_TARGET_ANNUAL_RETURN,
+)
+from app.domain.scoring.diversification import calculate_diversification_score
+from app.domain.scoring.groups.dividends import calculate_dividends_score
+from app.domain.scoring.groups.fundamentals import calculate_fundamentals_score
+from app.domain.scoring.groups.long_term import calculate_long_term_score
+from app.domain.scoring.groups.opinion import calculate_opinion_score
+from app.domain.scoring.groups.opportunity import calculate_opportunity_score
+from app.domain.scoring.groups.short_term import calculate_short_term_score
+from app.domain.scoring.groups.technicals import calculate_technicals_score
 from app.domain.scoring.models import (
-    PortfolioContext,
     CalculatedStockScore,
+    PortfolioContext,
     PrefetchedStockData,
 )
-from app.domain.scoring.constants import (
-    DEFAULT_TARGET_ANNUAL_RETURN,
-    DEFAULT_MARKET_AVG_PE,
-)
-from app.domain.scoring.long_term import calculate_long_term_score
-from app.domain.scoring.fundamentals import calculate_fundamentals_score
-from app.domain.scoring.opportunity import calculate_opportunity_score
-from app.domain.scoring.dividends import calculate_dividends_score
-from app.domain.scoring.short_term import calculate_short_term_score
-from app.domain.scoring.technicals import calculate_technicals_score
-from app.domain.scoring.opinion import calculate_opinion_score
-from app.domain.scoring.diversification import calculate_diversification_score
-from app.domain.scoring.technical import calculate_volatility
 
 logger = logging.getLogger(__name__)
 
-# Default weights (can be overridden by settings)
-DEFAULT_WEIGHTS = {
-    "long_term": 0.20,
-    "fundamentals": 0.15,
-    "opportunity": 0.15,
-    "dividends": 0.12,
-    "short_term": 0.10,
-    "technicals": 0.10,
-    "opinion": 0.10,
-    "diversification": 0.08,
+# Fixed weights for stock scoring
+# These are no longer configurable via settings - the portfolio optimizer
+# now handles portfolio-level allocation decisions. Per-stock scoring uses
+# these fixed weights that balance quality, opportunity, and diversification.
+SCORE_WEIGHTS = {
+    "long_term": 0.20,  # CAGR, Sortino, Sharpe
+    "fundamentals": 0.15,  # Financial strength, Consistency
+    "opportunity": 0.15,  # 52W high distance, P/E ratio
+    "dividends": 0.12,  # Yield, Dividend consistency
+    "short_term": 0.10,  # Recent momentum, Drawdown
+    "technicals": 0.10,  # RSI, Bollinger, EMA
+    "opinion": 0.10,  # Analyst recommendations, Price targets
+    "diversification": 0.08,  # Geography, Industry, Averaging down
 }
-
-async def get_score_weights() -> Dict[str, float]:
-    """Get score weights from settings or use defaults."""
-    try:
-        from app.api.settings import get_buy_score_weights
-        return await get_buy_score_weights()
-    except Exception as e:
-        logger.warning(f"Failed to load score weights from settings: {e}")
-        return DEFAULT_WEIGHTS
 
 
 async def calculate_stock_score(
@@ -102,80 +96,81 @@ async def calculate_stock_score(
     Returns:
         CalculatedStockScore with all components
     """
+    # Always use fixed weights - the optimizer handles portfolio-level allocation
     if weights is None:
-        weights = DEFAULT_WEIGHTS
+        weights = SCORE_WEIGHTS
 
     scores = {}
     sub_scores = {}
 
     # 1. Long-term Performance
-    total, subs = await calculate_long_term_score(
+    result = await calculate_long_term_score(
         symbol=symbol,
         monthly_prices=monthly_prices,
         daily_prices=daily_prices,
         sortino_ratio=sortino_ratio,
         target_annual_return=target_annual_return,
     )
-    scores["long_term"] = total
-    sub_scores["long_term"] = subs
+    scores["long_term"] = result.score
+    sub_scores["long_term"] = result.sub_scores
 
     # 2. Fundamentals
-    total, subs = await calculate_fundamentals_score(
+    result = await calculate_fundamentals_score(
         symbol=symbol,
         monthly_prices=monthly_prices,
         fundamentals=fundamentals,
     )
-    scores["fundamentals"] = total
-    sub_scores["fundamentals"] = subs
+    scores["fundamentals"] = result.score
+    sub_scores["fundamentals"] = result.sub_scores
 
     # 3. Opportunity
-    total, subs = await calculate_opportunity_score(
+    result = await calculate_opportunity_score(
         symbol=symbol,
         daily_prices=daily_prices,
         fundamentals=fundamentals,
         market_avg_pe=market_avg_pe,
     )
-    scores["opportunity"] = total
-    sub_scores["opportunity"] = subs
+    scores["opportunity"] = result.score
+    sub_scores["opportunity"] = result.sub_scores
 
     # 4. Dividends
-    total, subs = await calculate_dividends_score(
+    result = await calculate_dividends_score(
         symbol=symbol,
         fundamentals=fundamentals,
     )
-    scores["dividends"] = total
-    sub_scores["dividends"] = subs
+    scores["dividends"] = result.score
+    sub_scores["dividends"] = result.sub_scores
 
     # 5. Short-term Performance
-    total, subs = await calculate_short_term_score(
+    result = await calculate_short_term_score(
         symbol=symbol,
         daily_prices=daily_prices,
         pyfolio_drawdown=pyfolio_drawdown,
     )
-    scores["short_term"] = total
-    sub_scores["short_term"] = subs
+    scores["short_term"] = result.score
+    sub_scores["short_term"] = result.sub_scores
 
     # 6. Technicals
-    total, subs = await calculate_technicals_score(
+    result = await calculate_technicals_score(
         symbol=symbol,
         daily_prices=daily_prices,
     )
-    scores["technicals"] = total
-    sub_scores["technicals"] = subs
+    scores["technicals"] = result.score
+    sub_scores["technicals"] = result.sub_scores
 
     # 7. Opinion
-    total, subs = await calculate_opinion_score(
+    result = await calculate_opinion_score(
         symbol=symbol,
         yahoo_symbol=yahoo_symbol,
     )
-    scores["opinion"] = total
-    sub_scores["opinion"] = subs
+    scores["opinion"] = result.score
+    sub_scores["opinion"] = result.sub_scores
 
     # 8. Diversification (DYNAMIC - never cached)
     if portfolio_context and geography:
         # Need quality and opportunity for averaging down calculation
         quality_approx = (scores["long_term"] + scores["fundamentals"]) / 2
-        total, subs = calculate_diversification_score(
+        result = calculate_diversification_score(
             symbol=symbol,
             geography=geography,
             industry=industry,
@@ -183,27 +178,28 @@ async def calculate_stock_score(
             opportunity_score=scores["opportunity"],
             portfolio_context=portfolio_context,
         )
-        scores["diversification"] = total
-        sub_scores["diversification"] = subs
+        scores["diversification"] = result.score
+        sub_scores["diversification"] = result.sub_scores
     else:
         scores["diversification"] = 0.5
-        sub_scores["diversification"] = {"geography": 0.5, "industry": 0.5, "averaging": 0.5}
+        sub_scores["diversification"] = {
+            "geography": 0.5,
+            "industry": 0.5,
+            "averaging": 0.5,
+        }
 
     # Normalize weights so they sum to 1.0 (allows relative weight system)
-    weight_sum = sum(weights.get(group, DEFAULT_WEIGHTS[group]) for group in scores)
+    weight_sum = sum(weights.get(group, SCORE_WEIGHTS[group]) for group in scores)
     if weight_sum > 0:
         normalized_weights = {
-            group: weights.get(group, DEFAULT_WEIGHTS[group]) / weight_sum
+            group: weights.get(group, SCORE_WEIGHTS[group]) / weight_sum
             for group in scores
         }
     else:
-        normalized_weights = DEFAULT_WEIGHTS
+        normalized_weights = SCORE_WEIGHTS
 
     # Calculate weighted total
-    total_score = sum(
-        scores[group] * normalized_weights[group]
-        for group in scores
-    )
+    total_score = sum(scores[group] * normalized_weights[group] for group in scores)
 
     # Calculate volatility from daily prices
     volatility = None

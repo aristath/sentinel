@@ -1,14 +1,12 @@
 """Integration tests for concurrent job execution and locking."""
 
-import pytest
 import asyncio
-from pathlib import Path
-import tempfile
-import os
 from datetime import datetime
 
-from app.infrastructure.locking import file_lock
+import pytest
+
 from app.domain.models import Position, Stock, Trade
+from app.infrastructure.locking import file_lock
 from app.repositories import PositionRepository, StockRepository, TradeRepository
 
 
@@ -34,8 +32,12 @@ async def test_file_lock_prevents_concurrent_execution():
     await asyncio.gather(operation1(), operation2())
 
     # Operations should not interleave
-    assert execution_order == ["start1", "end1", "start2", "end2"] or \
-           execution_order == ["start2", "end2", "start1", "end1"]
+    assert execution_order == [
+        "start1",
+        "end1",
+        "start2",
+        "end2",
+    ] or execution_order == ["start2", "end2", "start1", "end1"]
 
 
 @pytest.mark.asyncio
@@ -131,18 +133,17 @@ async def test_concurrent_trade_execution_atomicity(db):
 
     async def create_trade(symbol, side, quantity):
         async with file_lock("rebalance", timeout=5.0):
-            async with db.transaction():
-                trade = Trade(
-                    symbol=symbol,
-                    side=side,
-                    quantity=quantity,
-                    price=150.0,
-                    executed_at=datetime.now(),
-                    order_id=f"order_{symbol}",
-                )
-                await trade_repo.create(trade)
-                await asyncio.sleep(0.05)  # Simulate processing time
-                trades_created.append(symbol)
+            trade = Trade(
+                symbol=symbol,
+                side=side,
+                quantity=quantity,
+                price=150.0,
+                executed_at=datetime.now(),
+                order_id=f"order_{symbol}",
+            )
+            await trade_repo.create(trade)
+            await asyncio.sleep(0.05)  # Simulate processing time
+            trades_created.append(symbol)
 
     # Create multiple trades concurrently
     await asyncio.gather(
@@ -165,4 +166,3 @@ async def test_concurrent_trade_execution_atomicity(db):
 
 
 # Lock directory setup is handled in conftest.py
-

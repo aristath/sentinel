@@ -345,7 +345,7 @@ The system uses a **"drip execution"** strategy:
 
 Position sizes are calculated using multiple factors:
 
-- **Base size**: Configurable (default: min_trade_size)
+- **Base size**: Calculated from transaction costs (€2 fixed + 0.2% variable → ~€250 minimum)
 - **Conviction multiplier**: Based on stock score (0.8x - 1.2x)
 - **Priority multiplier**: Based on combined priority (0.8x - 1.0x)
 - **Volatility penalty**: Reduces size for high volatility

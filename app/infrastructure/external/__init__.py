@@ -1,2 +1,1 @@
-"""External API clients."""
-
+"""External service integrations (Yahoo Finance, Tradernet, etc.)."""

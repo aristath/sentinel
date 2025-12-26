@@ -113,12 +113,25 @@ DEFAULT_ALLOCATION_TARGETS = [
     ("industry", "Industrial", 0.20),
 ]
 
+# Default settings for new database installations
+# NOTE: min_trade_size and recommendation_depth replaced by optimizer-based settings
 DEFAULT_SETTINGS = [
-    ("min_cash_threshold", "400", "Minimum EUR cash to trigger rebalance"),
-    ("min_trade_size", "400", "Minimum EUR trade size (keeps commission at 0.5%)"),
+    ("min_cash_threshold", "500", "Minimum EUR cash reserve"),
     ("max_trades_per_cycle", "5", "Maximum trades per rebalance cycle"),
     ("min_stock_score", "0.5", "Minimum score to consider buying"),
-    ("recommendation_depth", "1", "Number of steps in multi-step recommendations (1-5)"),
+    ("min_hold_days", "90", "Minimum days before selling"),
+    ("sell_cooldown_days", "180", "Days between sells of same stock"),
+    ("max_loss_threshold", "-0.20", "Don't sell if loss exceeds this"),
+    ("target_annual_return", "0.11", "Target CAGR for scoring (11%)"),
+    # Optimizer settings
+    ("optimizer_blend", "0.5", "0.0 = pure Mean-Variance, 1.0 = pure HRP"),
+    ("optimizer_target_return", "0.11", "Target annual return for optimizer"),
+    # Transaction costs (Freedom24)
+    ("transaction_cost_fixed", "2.0", "Fixed cost per trade in EUR"),
+    ("transaction_cost_percent", "0.002", "Variable cost as fraction (0.2%)"),
+    # Cash management
+    ("min_cash_reserve", "500.0", "Minimum cash to keep (never fully deploy)"),
+    # Job scheduling
     ("job_portfolio_sync_minutes", "15", "Portfolio sync interval in minutes"),
     ("job_trade_sync_minutes", "5", "Trade sync interval in minutes"),
     ("job_price_sync_minutes", "5", "Price sync interval in minutes"),
@@ -149,7 +162,7 @@ async def init_config_schema(db):
                 """INSERT OR IGNORE INTO allocation_targets
                    (type, name, target_pct, created_at, updated_at)
                    VALUES (?, ?, ?, ?, ?)""",
-                (type_, name, target, now, now)
+                (type_, name, target, now, now),
             )
 
         # Insert default settings
@@ -158,7 +171,7 @@ async def init_config_schema(db):
                 """INSERT OR IGNORE INTO settings
                    (key, value, description, updated_at)
                    VALUES (?, ?, ?, ?)""",
-                (key, value, desc, now)
+                (key, value, desc, now),
             )
 
         # Create portfolio_hash indexes for new installs
@@ -173,20 +186,24 @@ async def init_config_schema(db):
         # Record schema version
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (3, now, "Initial config schema with portfolio_hash recommendations")
+            (3, now, "Initial config schema with portfolio_hash recommendations"),
         )
 
         await db.commit()
-        logger.info("Config database initialized with schema version 3 (includes portfolio_hash recommendations)")
+        logger.info(
+            "Config database initialized with schema version 3 (includes portfolio_hash recommendations)"
+        )
     elif current_version == 1:
         # Migration: Add recommendations table (version 1 -> 2)
         now = datetime.now().isoformat()
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (2, now, "Added recommendations table for storage and dismissal tracking")
+            (2, now, "Added recommendations table for storage and dismissal tracking"),
         )
         await db.commit()
-        logger.info("Config database migrated to schema version 2 (recommendations table)")
+        logger.info(
+            "Config database migrated to schema version 2 (recommendations table)"
+        )
         current_version = 2  # Continue to next migration
 
     if current_version == 2:
@@ -201,7 +218,8 @@ async def init_config_schema(db):
         if "portfolio_hash" not in columns:
             # SQLite doesn't support DROP CONSTRAINT, need table recreation
             # Create new table with correct schema
-            await db.execute("""
+            await db.execute(
+                """
                 CREATE TABLE IF NOT EXISTS recommendations_new (
                     uuid TEXT PRIMARY KEY,
                     symbol TEXT NOT NULL,
@@ -227,21 +245,26 @@ async def init_config_schema(db):
                     dismissed_at TEXT,
                     UNIQUE(symbol, side, reason, portfolio_hash)
                 )
-            """)
+            """
+            )
 
             # Copy data (old recommendations get empty hash, will be regenerated)
-            await db.execute("""
+            await db.execute(
+                """
                 INSERT OR IGNORE INTO recommendations_new
                 SELECT uuid, symbol, name, side, amount, quantity, estimated_price,
                        estimated_value, reason, geography, industry, currency, priority,
                        current_portfolio_score, new_portfolio_score, score_change,
                        status, '', created_at, updated_at, executed_at, dismissed_at
                 FROM recommendations
-            """)
+            """
+            )
 
             # Swap tables
             await db.execute("DROP TABLE recommendations")
-            await db.execute("ALTER TABLE recommendations_new RENAME TO recommendations")
+            await db.execute(
+                "ALTER TABLE recommendations_new RENAME TO recommendations"
+            )
 
             # Recreate indexes
             await db.execute(
@@ -263,7 +286,11 @@ async def init_config_schema(db):
 
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (3, now, "Added portfolio_hash, changed unique constraint to (symbol, side, reason, portfolio_hash)")
+            (
+                3,
+                now,
+                "Added portfolio_hash, changed unique constraint to (symbol, side, reason, portfolio_hash)",
+            ),
         )
         await db.commit()
         logger.info("Config database migrated to schema version 3 (portfolio_hash)")
@@ -315,6 +342,32 @@ CREATE TABLE IF NOT EXISTS cash_flows (
 CREATE INDEX IF NOT EXISTS idx_cash_flows_date ON cash_flows(date);
 CREATE INDEX IF NOT EXISTS idx_cash_flows_type ON cash_flows(transaction_type);
 
+-- Dividend history with DRIP tracking
+-- Tracks dividend payments and whether they were reinvested.
+-- pending_bonus: If dividend couldn't be reinvested (too small), store a bonus
+-- that the optimizer will apply to that stock's expected return.
+CREATE TABLE IF NOT EXISTS dividend_history (
+    id INTEGER PRIMARY KEY,
+    symbol TEXT NOT NULL,
+    cash_flow_id INTEGER,            -- Link to cash_flows table (optional)
+    amount REAL NOT NULL,            -- Original dividend amount
+    currency TEXT NOT NULL,
+    amount_eur REAL NOT NULL,        -- Converted amount in EUR
+    payment_date TEXT NOT NULL,
+    reinvested INTEGER DEFAULT 0,    -- 0 = not reinvested, 1 = reinvested
+    reinvested_at TEXT,              -- When reinvestment trade executed
+    reinvested_quantity INTEGER,     -- Shares bought with dividend
+    pending_bonus REAL DEFAULT 0,    -- Bonus to apply to expected return (0.0 to 1.0)
+    bonus_cleared INTEGER DEFAULT 0, -- 1 when bonus has been used
+    cleared_at TEXT,                 -- When bonus was cleared
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (cash_flow_id) REFERENCES cash_flows(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_dividend_history_symbol ON dividend_history(symbol);
+CREATE INDEX IF NOT EXISTS idx_dividend_history_date ON dividend_history(payment_date);
+CREATE INDEX IF NOT EXISTS idx_dividend_history_pending ON dividend_history(pending_bonus) WHERE pending_bonus > 0;
+
 -- Schema version tracking
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER PRIMARY KEY,
@@ -335,10 +388,26 @@ async def init_ledger_schema(db):
         now = datetime.now().isoformat()
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (1, now, "Initial ledger schema")
+            (2, now, "Initial ledger schema with dividend_history"),
         )
         await db.commit()
-        logger.info("Ledger database initialized with schema version 1")
+        logger.info(
+            "Ledger database initialized with schema version 2 (includes dividend_history)"
+        )
+    elif current_version == 1:
+        # Migration: Add dividend_history table (version 1 -> 2)
+        now = datetime.now().isoformat()
+        logger.info(
+            "Migrating ledger database to schema version 2 (dividend_history)..."
+        )
+
+        # Table is created by executescript above (CREATE IF NOT EXISTS)
+        await db.execute(
+            "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
+            (2, now, "Added dividend_history table for DRIP tracking"),
+        )
+        await db.commit()
+        logger.info("Ledger database migrated to schema version 2")
 
 
 # =============================================================================
@@ -433,7 +502,7 @@ async def init_state_schema(db):
         now = datetime.now().isoformat()
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (1, now, "Initial state schema")
+            (1, now, "Initial state schema"),
         )
         await db.commit()
         logger.info("State database initialized with schema version 1")
@@ -520,7 +589,7 @@ async def init_cache_schema(db):
         now = datetime.now().isoformat()
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (2, now, "Initial cache schema with recommendation and analytics cache")
+            (2, now, "Initial cache schema with recommendation and analytics cache"),
         )
         await db.commit()
         logger.info("Cache database initialized with schema version 2")
@@ -532,7 +601,7 @@ async def init_cache_schema(db):
         # Tables are created by executescript above (CREATE IF NOT EXISTS)
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (2, now, "Added recommendation_cache and analytics_cache tables")
+            (2, now, "Added recommendation_cache and analytics_cache tables"),
         )
         await db.commit()
         logger.info("Cache database migrated to schema version 2")
@@ -588,7 +657,7 @@ async def init_history_schema(db):
         now = datetime.now().isoformat()
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (1, now, "Initial history schema")
+            (1, now, "Initial history schema"),
         )
         await db.commit()
         logger.info("History database initialized with schema version 1")
@@ -634,7 +703,7 @@ async def init_calculations_schema(db):
         now = datetime.now().isoformat()
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (1, now, "Initial calculations schema")
+            (1, now, "Initial calculations schema"),
         )
         await db.commit()
         logger.info("Calculations database initialized with schema version 1")

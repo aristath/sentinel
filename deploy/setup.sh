@@ -98,16 +98,43 @@ echo "Step 7: Initializing database..."
 cd "$APP_DIR"
 python3 scripts/seed_stocks.py || echo "Database already initialized or script not found"
 
-# Step 8: Install systemd service
+# Step 8: Install systemd services
 echo ""
-echo "Step 8: Installing systemd service..."
+echo "Step 8: Installing systemd services..."
 cp "$REPO_DIR/deploy/arduino-trader.service" "$SERVICE_FILE"
+cp "$REPO_DIR/deploy/led-display.service" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable arduino-trader
+systemctl enable led-display
 
-# Step 9: Setup auto-deploy
+# Step 9: Install Arduino CLI and compile sketch
 echo ""
-echo "Step 9: Setting up auto-deployment..."
+echo "Step 9: Setting up Arduino sketch compilation..."
+if ! command -v arduino-cli &> /dev/null; then
+    echo "Installing Arduino CLI..."
+    curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh || echo "WARNING: Failed to install Arduino CLI"
+    if [ -f "$HOME/bin/arduino-cli" ]; then
+        export PATH="$HOME/bin:$PATH"
+    fi
+fi
+
+# Compile and upload sketch if arduino-cli is available
+if command -v arduino-cli &> /dev/null; then
+    echo "Compiling and uploading sketch..."
+    chmod +x "$REPO_DIR/scripts/compile_and_upload_sketch.sh"
+    if "$REPO_DIR/scripts/compile_and_upload_sketch.sh" 2>&1 | head -20; then
+        echo "Sketch compiled and uploaded successfully"
+    else
+        echo "WARNING: Sketch compilation/upload failed, but continuing setup"
+    fi
+else
+    echo "WARNING: Arduino CLI not available, skipping sketch compilation"
+    echo "You can compile and upload the sketch manually later"
+fi
+
+# Step 10: Setup auto-deploy
+echo ""
+echo "Step 10: Setting up auto-deployment..."
 cp "$REPO_DIR/arduino-app/deploy/auto-deploy.sh" "$BIN_DIR/"
 chmod +x "$BIN_DIR/auto-deploy.sh"
 chown arduino:arduino "$BIN_DIR/auto-deploy.sh"
@@ -117,10 +144,11 @@ CRON_JOB="*/5 * * * * $BIN_DIR/auto-deploy.sh"
 sudo -u arduino bash -c "(crontab -l 2>/dev/null | grep -v 'auto-deploy.sh'; echo '$CRON_JOB') | crontab -"
 echo "Cron job installed: $CRON_JOB"
 
-# Step 10: Start service
+# Step 11: Start services
 echo ""
-echo "Step 10: Starting service..."
+echo "Step 11: Starting services..."
 systemctl start arduino-trader
+systemctl start led-display
 
 # Check status
 echo ""
@@ -134,7 +162,7 @@ systemctl status arduino-trader --no-pager || true
 echo ""
 echo "Next steps:"
 echo "1. Edit /home/arduino/arduino-trader/.env with your Tradernet API credentials"
-echo "2. Restart service: sudo systemctl restart arduino-trader"
-echo "3. Run: ./arduino-app/deploy/setup.sh (as arduino user, not root)"
+echo "2. Restart services: sudo systemctl restart arduino-trader led-display"
+echo "3. Check LED display: sudo systemctl status led-display"
 echo "4. Access dashboard: http://localhost:8000"
 echo ""

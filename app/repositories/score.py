@@ -13,15 +13,16 @@ class ScoreRepository:
 
     def __init__(self, db=None):
         """Initialize repository.
-        
+
         Args:
             db: Optional database connection for testing. If None, uses get_db_manager().state
                 Can be a Database instance or raw aiosqlite.Connection (will be wrapped)
         """
         if db is not None:
             # If it's a raw connection without fetchone/fetchall, wrap it
-            if not hasattr(db, 'fetchone') and hasattr(db, 'execute'):
+            if not hasattr(db, "fetchone") and hasattr(db, "execute"):
                 from app.repositories.base import DatabaseAdapter
+
                 self._db = DatabaseAdapter(db)
             else:
                 self._db = db
@@ -31,8 +32,7 @@ class ScoreRepository:
     async def get_by_symbol(self, symbol: str) -> Optional[StockScore]:
         """Get score by symbol."""
         row = await self._db.fetchone(
-            "SELECT * FROM scores WHERE symbol = ?",
-            (symbol.upper(),)
+            "SELECT * FROM scores WHERE symbol = ?", (symbol.upper(),)
         )
         if not row:
             return None
@@ -52,7 +52,7 @@ class ScoreRepository:
             ORDER BY total_score DESC
             LIMIT ?
             """,
-            (limit,)
+            (limit,),
         )
         return [self._row_to_score(row) for row in rows]
 
@@ -94,16 +94,13 @@ class ScoreRepository:
                     score.sell_score,
                     score.history_years,
                     calculated_at,
-                )
+                ),
             )
 
     async def delete(self, symbol: str) -> None:
         """Delete score for a symbol."""
         async with transaction_context(self._db) as conn:
-            await conn.execute(
-                "DELETE FROM scores WHERE symbol = ?",
-                (symbol.upper(),)
-            )
+            await conn.execute("DELETE FROM scores WHERE symbol = ?", (symbol.upper(),))
 
     async def delete_all(self) -> None:
         """Delete all scores."""

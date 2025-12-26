@@ -13,6 +13,23 @@ pandas>=2.0.0
 numpy>=1.24.0
 empyrical-reloaded>=0.5.10
 pandas-ta>=0.3.14b
-pyfolio>=0.9.2
+pyfolio-reloaded>=0.9.8
+PyPortfolioOpt>=1.5.4
 pytest>=7.4.0
 pytest-asyncio>=0.21.0
+
+# Code quality tools
+black>=23.12.0
+flake8>=7.0.0
+isort>=5.13.0
+mypy>=1.8.0
+pre-commit>=3.6.0
+
+# Security tools (critical for financial applications)
+bandit>=1.7.5
+safety>=2.3.5
+
+# Additional code quality
+pydocstyle>=6.3.0
+coverage>=7.3.0
+vulture>=2.11

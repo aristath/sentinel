@@ -16,10 +16,10 @@ from app.infrastructure.database.manager import (
 from app.infrastructure.database.queue import (
     Priority,
     QueryQueue,
+    enqueue,
     get_query_queue,
     init_query_queue,
     shutdown_query_queue,
-    enqueue,
 )
 
 __all__ = [

@@ -15,8 +15,7 @@ class SettingsRepository:
     async def get(self, key: str) -> Optional[str]:
         """Get a setting value by key."""
         row = await self._db.fetchone(
-            "SELECT value FROM settings WHERE key = ?",
-            (key,)
+            "SELECT value FROM settings WHERE key = ?", (key,)
         )
         return row["value"] if row else None
 
@@ -35,7 +34,7 @@ class SettingsRepository:
                         description = excluded.description,
                         updated_at = excluded.updated_at
                     """,
-                    (key, value, description, now)
+                    (key, value, description, now),
                 )
             else:
                 await conn.execute(
@@ -46,7 +45,7 @@ class SettingsRepository:
                         value = excluded.value,
                         updated_at = excluded.updated_at
                     """,
-                    (key, value, now)
+                    (key, value, now),
                 )
 
     async def get_all(self) -> Dict[str, str]:
@@ -97,7 +96,4 @@ class SettingsRepository:
     async def delete(self, key: str) -> None:
         """Delete a setting."""
         async with self._db.transaction() as conn:
-            await conn.execute(
-                "DELETE FROM settings WHERE key = ?",
-                (key,)
-            )
+            await conn.execute("DELETE FROM settings WHERE key = ?", (key,))

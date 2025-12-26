@@ -3,12 +3,11 @@
 import logging
 from collections import defaultdict
 from datetime import datetime, timedelta
+
+from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
-
-from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +37,7 @@ def job_listener(event):
 
         failure_window = timedelta(hours=settings.job_failure_window_hours)
         cutoff = failure_time - failure_window
-        _job_failures[job_id] = [
-            ft for ft in _job_failures[job_id] if ft > cutoff
-        ]
+        _job_failures[job_id] = [ft for ft in _job_failures[job_id] if ft > cutoff]
 
         recent_failures = len(_job_failures[job_id])
         if recent_failures >= settings.job_failure_threshold:
@@ -65,15 +62,16 @@ async def init_scheduler() -> AsyncIOScheduler:
 
     scheduler.add_listener(job_listener, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
 
-    from app.jobs.daily_sync import sync_portfolio, sync_prices
-    from app.jobs.cash_rebalance import check_and_rebalance
-    from app.jobs.score_refresh import refresh_all_scores
     from app.jobs.cash_flow_sync import sync_cash_flows
+    from app.jobs.cash_rebalance import check_and_rebalance
+    from app.jobs.daily_sync import sync_portfolio, sync_prices
+    from app.jobs.health_check import run_health_check
     from app.jobs.historical_data_sync import sync_historical_data
     from app.jobs.maintenance import run_daily_maintenance, run_weekly_maintenance
-    from app.jobs.sync_trades import sync_trades
-    from app.jobs.health_check import run_health_check
     from app.jobs.metrics_calculation import calculate_metrics_for_all_stocks
+    from app.jobs.score_refresh import refresh_all_scores
+    from app.jobs.sync_trades import sync_trades
+    from app.jobs.ticker_text_generator import update_ticker_text
 
     # Get all job intervals from database in one query
     job_settings = await _get_all_job_settings()
@@ -152,7 +150,9 @@ async def init_scheduler() -> AsyncIOScheduler:
     # Metrics calculation (daily, after historical data sync)
     scheduler.add_job(
         calculate_metrics_for_all_stocks,
-        CronTrigger(hour=historical_hour, minute=30),  # 30 minutes after historical sync
+        CronTrigger(
+            hour=historical_hour, minute=30
+        ),  # 30 minutes after historical sync
         id="metrics_calculation",
         name="Metrics Calculation",
         replace_existing=True,
@@ -185,6 +185,15 @@ async def init_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 
+    # Ticker text generator (every 30 seconds to keep display updated)
+    scheduler.add_job(
+        update_ticker_text,
+        IntervalTrigger(seconds=30),
+        id="ticker_text_generator",
+        name="Ticker Text Generator",
+        replace_existing=True,
+    )
+
     logger.info(
         f"Scheduler initialized - portfolio:{portfolio_minutes}m, trade:{trade_minutes}m, "
         f"price:{price_minutes}m, score:{score_minutes}m, rebalance:{rebalance_minutes}m"
@@ -194,8 +203,6 @@ async def init_scheduler() -> AsyncIOScheduler:
 
 async def reschedule_all_jobs():
     """Reschedule all jobs with current settings from database."""
-    global scheduler
-
     if not scheduler:
         logger.warning("Scheduler not initialized, cannot reschedule")
         return
@@ -256,7 +263,6 @@ async def reschedule_all_jobs():
 
 def start_scheduler():
     """Start the scheduler."""
-    global scheduler
     if scheduler and not scheduler.running:
         scheduler.start()
         logger.info("Scheduler started")
@@ -264,7 +270,6 @@ def start_scheduler():
 
 def stop_scheduler():
     """Stop the scheduler."""
-    global scheduler
     if scheduler and scheduler.running:
         scheduler.shutdown()
         logger.info("Scheduler stopped")
@@ -272,14 +277,11 @@ def stop_scheduler():
 
 def get_scheduler() -> AsyncIOScheduler:
     """Get the scheduler instance."""
-    global scheduler
     return scheduler
 
 
 def get_job_health_status() -> dict:
     """Get health status of all scheduled jobs."""
-    global scheduler, _job_failures
-
     if not scheduler:
         return {}
 

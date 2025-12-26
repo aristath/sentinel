@@ -228,7 +228,9 @@ class RecommendationRepository:
                 (executed_at, uuid),
             )
 
-    async def mark_dismissed(self, uuid: str, dismissed_at: Optional[str] = None) -> None:
+    async def mark_dismissed(
+        self, uuid: str, dismissed_at: Optional[str] = None
+    ) -> None:
         """Mark recommendation as dismissed."""
         if dismissed_at is None:
             dismissed_at = datetime.now().isoformat()
@@ -277,4 +279,3 @@ class RecommendationRepository:
             (symbol.upper(), side.upper(), portfolio_hash),
         )
         return [dict(row) for row in rows]
-

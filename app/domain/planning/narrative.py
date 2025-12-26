@@ -11,13 +11,83 @@ making the holistic planner's decisions transparent and educational.
 """
 
 import logging
-from typing import Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List
 
 if TYPE_CHECKING:
     from app.domain.planning.holistic_planner import ActionCandidate, HolisticStep
     from app.domain.scoring.models import PortfolioContext
 
 logger = logging.getLogger(__name__)
+
+
+def _add_strategy_summary(
+    parts: list, windfall_sells: list, averaging_buys: list, sells: list, buys: list
+) -> None:
+    """Add strategy summary to narrative parts."""
+    if windfall_sells and averaging_buys:
+        parts.append(
+            "This plan takes profits from windfall gains and reinvests in quality stocks "
+            "that are temporarily down."
+        )
+    elif windfall_sells:
+        parts.append(
+            "This plan captures windfall profits from positions that have exceeded "
+            "their historical growth rates."
+        )
+    elif averaging_buys:
+        parts.append(
+            "This plan focuses on averaging down on quality positions that are "
+            "temporarily undervalued."
+        )
+    elif sells and buys:
+        parts.append(
+            "This plan rebalances the portfolio by trimming overweight positions "
+            "and adding to underweight areas."
+        )
+    elif buys:
+        parts.append(
+            "This plan deploys available cash into high-quality opportunities."
+        )
+    elif sells:
+        parts.append(
+            "This plan reduces risk by taking profits from selected positions."
+        )
+
+
+def _add_step_summary(parts: list, steps: list, sells: list, buys: list) -> None:
+    """Add step summary to narrative parts."""
+    parts.append(f"The plan consists of {len(steps)} action(s):")
+
+    if sells:
+        total_sell = sum(s.estimated_value for s in sells)
+        sell_symbols = [s.symbol for s in sells]
+        parts.append(f"• Sell €{total_sell:.0f} from {', '.join(sell_symbols)}")
+
+    if buys:
+        total_buy = sum(s.estimated_value for s in buys)
+        buy_symbols = [s.symbol for s in buys]
+        parts.append(f"• Buy €{total_buy:.0f} in {', '.join(buy_symbols)}")
+
+
+def _add_expected_outcome(
+    parts: list, improvement: float, current_score: float, end_score: float
+) -> None:
+    """Add expected outcome to narrative parts."""
+    if improvement > 0:
+        parts.append(
+            f"Expected portfolio improvement: +{improvement:.1f} points "
+            f"(from {current_score:.1f} to {end_score:.1f})."
+        )
+    elif improvement < 0:
+        parts.append(
+            f"Note: Short-term score may decrease by {abs(improvement):.1f} points, "
+            f"but this positions the portfolio for better long-term growth."
+        )
+    else:
+        parts.append(
+            f"This maintains the current portfolio score of {current_score:.1f} "
+            f"while improving diversification."
+        )
 
 
 def generate_step_narrative(
@@ -52,11 +122,23 @@ def generate_step_narrative(
     # Build the narrative based on action type and tags
     if side == TradeSide.SELL:
         narrative = _generate_sell_narrative(
-            symbol, name, action.value_eur, tags, reason, portfolio_context, all_opportunities
+            symbol,
+            name,
+            action.value_eur,
+            tags,
+            reason,
+            portfolio_context,
+            all_opportunities,
         )
     else:
         narrative = _generate_buy_narrative(
-            symbol, name, action.value_eur, tags, reason, portfolio_context, all_opportunities
+            symbol,
+            name,
+            action.value_eur,
+            tags,
+            reason,
+            portfolio_context,
+            all_opportunities,
         )
 
     return narrative
@@ -76,8 +158,12 @@ def _generate_sell_narrative(
 
     # Explain the primary reason
     if "windfall" in tags:
-        parts.append(f"This position has experienced windfall gains beyond normal growth. {reason}.")
-        parts.append("Taking profits locks in gains and frees capital for better opportunities.")
+        parts.append(
+            f"This position has experienced windfall gains beyond normal growth. {reason}."
+        )
+        parts.append(
+            "Taking profits locks in gains and frees capital for better opportunities."
+        )
 
     elif "profit_taking" in tags:
         parts.append(f"Reason: {reason}.")
@@ -93,7 +179,7 @@ def _generate_sell_narrative(
 
         if overweight_geo:
             parts.append(f"The portfolio is overweight in {overweight_geo} region.")
-            parts.append(f"Trimming this position improves geographic diversification.")
+            parts.append("Trimming this position improves geographic diversification.")
         else:
             parts.append(f"Reason: {reason}.")
 
@@ -102,9 +188,9 @@ def _generate_sell_narrative(
 
     # Add context about what the freed cash enables
     buy_opportunities = (
-        all_opportunities.get("averaging_down", []) +
-        all_opportunities.get("rebalance_buys", []) +
-        all_opportunities.get("opportunity_buys", [])
+        all_opportunities.get("averaging_down", [])
+        + all_opportunities.get("rebalance_buys", [])
+        + all_opportunities.get("opportunity_buys", [])
     )
 
     if buy_opportunities:
@@ -148,21 +234,31 @@ def _generate_buy_narrative(
 
         if underweight_geo:
             parts.append(f"The portfolio is underweight in {underweight_geo} region.")
-            parts.append(f"This purchase improves geographic diversification and reduces concentration risk.")
+            parts.append(
+                "This purchase improves geographic diversification and reduces concentration risk."
+            )
         else:
             parts.append(f"Reason: {reason}.")
 
     elif "quality" in tags or "opportunity" in tags:
         parts.append(f"{reason}.")
-        parts.append("High-quality stocks with good fundamentals tend to outperform over the long term.")
+        parts.append(
+            "High-quality stocks with good fundamentals tend to outperform over the long term."
+        )
 
     else:
         parts.append(f"Reason: {reason}.")
 
     # Add dividend context if relevant
-    dividend_yield = portfolio_context.stock_dividends.get(symbol, 0) if portfolio_context.stock_dividends else 0
+    dividend_yield = (
+        portfolio_context.stock_dividends.get(symbol, 0)
+        if portfolio_context.stock_dividends
+        else 0
+    )
     if dividend_yield and dividend_yield > 0.03:
-        parts.append(f"This stock also provides a {dividend_yield*100:.1f}% dividend yield for income.")
+        parts.append(
+            f"This stock also provides a {dividend_yield*100:.1f}% dividend yield for income."
+        )
 
     return " ".join(parts)
 
@@ -198,70 +294,10 @@ def generate_plan_narrative(
 
     improvement = end_score - current_score
 
-    # Build the narrative
     parts = []
-
-    # Opening - summarize the strategy
-    if windfall_sells and averaging_buys:
-        parts.append(
-            f"This plan takes profits from windfall gains and reinvests in quality stocks "
-            f"that are temporarily down."
-        )
-    elif windfall_sells:
-        parts.append(
-            f"This plan captures windfall profits from positions that have exceeded "
-            f"their historical growth rates."
-        )
-    elif averaging_buys:
-        parts.append(
-            f"This plan focuses on averaging down on quality positions that are "
-            f"temporarily undervalued."
-        )
-    elif sells and buys:
-        parts.append(
-            f"This plan rebalances the portfolio by trimming overweight positions "
-            f"and adding to underweight areas."
-        )
-    elif buys:
-        parts.append(
-            f"This plan deploys available cash into high-quality opportunities."
-        )
-    elif sells:
-        parts.append(
-            f"This plan reduces risk by taking profits from selected positions."
-        )
-
-    # Add step count
-    parts.append(f"The plan consists of {len(steps)} action(s):")
-
-    # Summarize sells
-    if sells:
-        total_sell = sum(s.estimated_value for s in sells)
-        sell_symbols = [s.symbol for s in sells]
-        parts.append(f"• Sell €{total_sell:.0f} from {', '.join(sell_symbols)}")
-
-    # Summarize buys
-    if buys:
-        total_buy = sum(s.estimated_value for s in buys)
-        buy_symbols = [s.symbol for s in buys]
-        parts.append(f"• Buy €{total_buy:.0f} in {', '.join(buy_symbols)}")
-
-    # Expected outcome
-    if improvement > 0:
-        parts.append(
-            f"Expected portfolio improvement: +{improvement:.1f} points "
-            f"(from {current_score:.1f} to {end_score:.1f})."
-        )
-    elif improvement < 0:
-        parts.append(
-            f"Note: Short-term score may decrease by {abs(improvement):.1f} points, "
-            f"but this positions the portfolio for better long-term growth."
-        )
-    else:
-        parts.append(
-            f"This maintains the current portfolio score of {current_score:.1f} "
-            f"while improving diversification."
-        )
+    _add_strategy_summary(parts, windfall_sells, averaging_buys, sells, buys)
+    _add_step_summary(parts, steps, sells, buys)
+    _add_expected_outcome(parts, improvement, current_score, end_score)
 
     return " ".join(parts)
 

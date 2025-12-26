@@ -2,11 +2,15 @@
 
 import logging
 
-from app.services.tradernet import get_tradernet_client
-from app.infrastructure.locking import file_lock
-from app.infrastructure.events import emit, SystemEvent
-from app.infrastructure.hardware.led_display import set_activity
 from app.infrastructure.database.manager import get_db_manager
+from app.infrastructure.events import SystemEvent, emit
+from app.infrastructure.external.tradernet import get_tradernet_client
+from app.infrastructure.hardware.display_service import (
+    clear_processing,
+    set_error,
+    set_processing,
+)
+from app.infrastructure.locking import file_lock
 
 logger = logging.getLogger(__name__)
 
@@ -31,14 +35,16 @@ async def _sync_cash_flows_internal():
     logger.info("Starting cash flow sync")
 
     emit(SystemEvent.CASH_FLOW_SYNC_START)
-    set_activity("SYNCING CASH FLOWS...", duration=30.0)
+    set_processing("SYNCING CASH FLOWS...")
 
     client = get_tradernet_client()
 
     if not client.is_connected:
         if not client.connect():
             logger.warning("Failed to connect to Tradernet, skipping cash flow sync")
-            emit(SystemEvent.ERROR_OCCURRED, message="BROKER CONNECTION FAILED")
+            error_msg = "BROKER CONNECTION FAILED"
+            emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+            set_error(error_msg)
             return
 
     try:
@@ -69,7 +75,9 @@ async def _sync_cash_flows_internal():
                 # Get amount in EUR (use exchange rate or default to same as amount)
                 amount = txn.get("amount", 0)
                 currency = txn.get("currency", "EUR")
-                amount_eur = txn.get("amount_eur") or amount  # Fallback to amount if no EUR conversion
+                amount_eur = (
+                    txn.get("amount_eur") or amount
+                )  # Fallback to amount if no EUR conversion
 
                 await db_manager.ledger.execute(
                     """
@@ -90,7 +98,7 @@ async def _sync_cash_flows_internal():
                         txn.get("status_c"),
                         txn.get("description"),
                         txn.get("params_json"),
-                    )
+                    ),
                 )
                 synced_count += 1
 
@@ -99,9 +107,11 @@ async def _sync_cash_flows_internal():
         )
 
         emit(SystemEvent.CASH_FLOW_SYNC_COMPLETE)
-        set_activity("CASH FLOW SYNC COMPLETE", duration=5.0)
 
     except Exception as e:
         logger.error(f"Cash flow sync failed: {e}", exc_info=True)
-        emit(SystemEvent.ERROR_OCCURRED, message="CASH FLOW SYNC FAILED")
-        return
+        error_msg = "CASH FLOW SYNC FAILED"
+        emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
+        set_error(error_msg)
+    finally:
+        clear_processing()

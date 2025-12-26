@@ -1,6 +1,7 @@
 """Tests for Currency enum."""
 
 import pytest
+
 from app.domain.value_objects.currency import Currency
 
 
@@ -43,10 +44,10 @@ class TestCurrency:
         """Test creating currency from invalid string raises error."""
         with pytest.raises(ValueError, match="Invalid currency"):
             Currency.from_string("INVALID")
-        
+
         with pytest.raises(ValueError, match="Invalid currency"):
             Currency.from_string("")
-        
+
         with pytest.raises(ValueError, match="Invalid currency"):
             Currency.from_string("JPY")  # Not supported
 
@@ -64,4 +65,3 @@ class TestCurrency:
     def test_default_currency(self):
         """Test that EUR is the default currency."""
         assert Currency.default() == Currency.EUR
-
