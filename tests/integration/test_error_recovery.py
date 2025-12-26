@@ -43,13 +43,17 @@ async def test_trade_execution_rollback_on_database_error(db):
     
     # Create mock currency exchange service
     from app.application.services.currency_exchange_service import CurrencyExchangeService
+    from app.domain.services.exchange_rate_service import ExchangeRateService
+    from app.infrastructure.database.manager import get_db_manager
     mock_currency_service = MagicMock(spec=CurrencyExchangeService)
+    exchange_rate_service = ExchangeRateService(get_db_manager())
     
     service = TradeExecutionService(
         trade_repo=trade_repo,
         position_repo=position_repo,
         tradernet_client=mock_client,
         currency_exchange_service=mock_currency_service,
+        exchange_rate_service=exchange_rate_service,
     )
 
     # Mock repository create to fail
@@ -101,13 +105,17 @@ async def test_trade_execution_handles_external_failure(db):
 
     # Create mock currency exchange service
     from app.application.services.currency_exchange_service import CurrencyExchangeService
+    from app.domain.services.exchange_rate_service import ExchangeRateService
+    from app.infrastructure.database.manager import get_db_manager
     mock_currency_service = MagicMock(spec=CurrencyExchangeService)
+    exchange_rate_service = ExchangeRateService(get_db_manager())
     
     service = TradeExecutionService(
         trade_repo=trade_repo,
         position_repo=position_repo,
         tradernet_client=mock_client,
         currency_exchange_service=mock_currency_service,
+        exchange_rate_service=exchange_rate_service,
     )
 
     # Should handle error gracefully, no trade should be recorded
