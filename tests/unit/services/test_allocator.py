@@ -6,7 +6,7 @@ sizes could lead to over-concentrated positions or wasted cash.
 
 import pytest
 from app.domain.models import StockPriority
-from app.services.allocator import (
+from app.domain.services.allocation_calculator import (
     calculate_position_size,
     parse_industries,
     get_max_trades,

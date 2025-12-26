@@ -9,7 +9,7 @@ from app.repositories import (
     AllocationRepository,
 )
 from app.domain.models import AllocationStatus, PortfolioSummary
-from app.services.allocator import parse_industries
+from app.domain.services.allocation_calculator import parse_industries
 
 
 class PortfolioService:

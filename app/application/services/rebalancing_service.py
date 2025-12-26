@@ -43,7 +43,7 @@ from app.domain.scoring import (
 )
 from app.domain.models import Recommendation, StockPriority
 from app.domain.value_objects.recommendation_status import RecommendationStatus
-from app.services.allocator import calculate_position_size, calculate_position_size_risk_parity, get_max_trades
+from app.domain.services.allocation_calculator import calculate_position_size, calculate_position_size_risk_parity, get_max_trades
 from app.domain.constants import (
     TARGET_PORTFOLIO_VOLATILITY,
     DEFAULT_VOLATILITY,
