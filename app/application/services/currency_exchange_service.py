@@ -191,6 +191,48 @@ class CurrencyExchangeService:
             logger.error(f"Failed to get rate {from_curr}/{to_curr}: {e}")
             return None
 
+    def _validate_exchange_request(
+        self, from_curr: str, to_curr: str, amount: float
+    ) -> bool:
+        """Validate exchange request parameters."""
+        if from_curr == to_curr:
+            logger.warning(f"Same currency exchange requested: {from_curr}")
+            return False
+
+        if amount <= 0:
+            logger.error(f"Invalid exchange amount: {amount}")
+            return False
+
+        if not self.client.is_connected:
+            if not self.client.connect():
+                logger.error("Failed to connect to Tradernet for exchange")
+                return False
+
+        return True
+
+    def _execute_multi_step_conversion(
+        self, path: list, amount: float
+    ) -> Optional[OrderResult]:
+        """Execute multi-step currency conversion."""
+        current_amount = amount
+        last_result = None
+
+        for step in path:
+            result = self._execute_step(step, current_amount)
+            if not result:
+                logger.error(
+                    f"Failed at step {step.from_currency} -> {step.to_currency}"
+                )
+                return None
+
+            rate = self.get_rate(step.from_currency, step.to_currency)
+            if rate:
+                current_amount = current_amount * rate
+
+            last_result = result
+
+        return last_result
+
     def exchange(
         self, from_currency: str, to_currency: str, amount: float
     ) -> Optional[OrderResult]:
@@ -207,18 +249,8 @@ class CurrencyExchangeService:
         from_curr = from_currency.upper()
         to_curr = to_currency.upper()
 
-        if from_curr == to_curr:
-            logger.warning(f"Same currency exchange requested: {from_curr}")
+        if not self._validate_exchange_request(from_curr, to_curr, amount):
             return None
-
-        if amount <= 0:
-            logger.error(f"Invalid exchange amount: {amount}")
-            return None
-
-        if not self.client.is_connected:
-            if not self.client.connect():
-                logger.error("Failed to connect to Tradernet for exchange")
-                return None
 
         try:
             path = self.get_conversion_path(from_curr, to_curr)
@@ -226,31 +258,9 @@ class CurrencyExchangeService:
             if len(path) == 0:
                 return None
             elif len(path) == 1:
-                # Direct conversion
-                step = path[0]
-                return self._execute_step(step, amount)
+                return self._execute_step(path[0], amount)
             else:
-                # Multi-step conversion (GBP <-> HKD via EUR)
-                current_amount = amount
-                last_result = None
-
-                for step in path:
-                    result = self._execute_step(step, current_amount)
-                    if not result:
-                        logger.error(
-                            f"Failed at step {step.from_currency} -> {step.to_currency}"
-                        )
-                        return None
-
-                    # Get the converted amount for next step
-                    rate = self.get_rate(step.from_currency, step.to_currency)
-                    if rate:
-                        current_amount = current_amount * rate
-
-                    last_result = result
-
-                return last_result
-
+                return self._execute_multi_step_conversion(path, amount)
         except Exception as e:
             logger.error(f"Failed to exchange {from_curr} -> {to_curr}: {e}")
             return None
