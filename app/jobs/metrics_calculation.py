@@ -7,11 +7,9 @@ by avoiding redundant calculations.
 """
 
 import logging
-from typing import List
 
 import numpy as np
 
-from app.infrastructure.database import get_db_manager
 from app.repositories.stock import StockRepository
 from app.repositories.history import HistoryRepository
 from app.repositories.calculations import CalculationsRepository

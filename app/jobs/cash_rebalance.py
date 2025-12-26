@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING
 
 from app.config import settings
 from app.infrastructure.external.tradernet import get_tradernet_client
-from app.application.services.trade_safety_service import TradeSafetyService
 from app.infrastructure.locking import file_lock
 from app.infrastructure.events import emit, SystemEvent
 from app.infrastructure.hardware.led_display import set_activity
@@ -24,12 +23,7 @@ from app.repositories import (
     SettingsRepository,
     RecommendationRepository,
 )
-from app.domain.scoring import (
-    calculate_all_sell_scores,
-    calculate_post_transaction_score,
-    PortfolioContext,
-    TechnicalData,
-)
+from app.domain.scoring import PortfolioContext
 from app.infrastructure.daily_pnl import get_daily_pnl_tracker
 
 if TYPE_CHECKING:
