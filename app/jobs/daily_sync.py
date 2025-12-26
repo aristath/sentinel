@@ -13,7 +13,6 @@ from app.infrastructure.database.manager import get_db_manager
 from app.domain.value_objects.currency import Currency
 from app.domain.events import PositionUpdatedEvent, get_event_bus
 from app.domain.models import Position
-from app.domain.services.exchange_rate_service import get_exchange_rate
 
 logger = logging.getLogger(__name__)
 
@@ -92,13 +91,31 @@ async def _sync_portfolio_internal():
                 if currency != Currency.EUR:
                     currencies_needed.add(str(currency))
 
+            # Fetch rates with simple HTTP call and fallback
             exchange_rates = {"EUR": 1.0}
-            for curr in currencies_needed:
+            if currencies_needed:
                 try:
-                    exchange_rates[curr] = await get_exchange_rate(curr, "EUR")
+                    import httpx
+                    async with httpx.AsyncClient() as client:
+                        response = await client.get(
+                            "https://api.exchangerate-api.com/v4/latest/EUR",
+                            timeout=10.0
+                        )
+                        if response.status_code == 200:
+                            api_rates = response.json().get("rates", {})
+                            for curr in currencies_needed:
+                                if curr in api_rates:
+                                    exchange_rates[curr] = api_rates[curr]
+                                    logger.info(f"Exchange rate {curr}/EUR: {api_rates[curr]}")
                 except Exception as e:
-                    logger.warning(f"Failed to get rate for {curr}: {e}, using fallback")
-                    exchange_rates[curr] = 8.33 if curr == "HKD" else 1.05  # Fallback
+                    logger.warning(f"Failed to fetch exchange rates: {e}")
+
+            # Apply fallbacks for any missing rates
+            fallback_rates = {"USD": 1.05, "HKD": 8.33, "GBP": 0.85}
+            for curr in currencies_needed:
+                if curr not in exchange_rates:
+                    exchange_rates[curr] = fallback_rates.get(curr, 1.0)
+                    logger.warning(f"Using fallback rate for {curr}: {exchange_rates[curr]}")
 
             # Insert current positions
             total_value = 0.0
