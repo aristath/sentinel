@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import HTTPException
 
 from app.repositories import TradeRepository, PositionRepository
-from app.services.tradernet import TradernetClient
+from app.infrastructure.external.tradernet import TradernetClient
 from app.domain.value_objects.trade_side import TradeSide
 from app.domain.constants import BUY_COOLDOWN_DAYS
 

@@ -13,7 +13,7 @@ from app.config import settings
 from app.infrastructure.database.manager import init_databases, get_db_manager, shutdown_databases
 from app.api import portfolio, stocks, trades, status, allocation, cash_flows, charts, settings as settings_api
 from app.jobs.scheduler import init_scheduler, start_scheduler, stop_scheduler
-from app.services.tradernet import get_tradernet_client
+from app.infrastructure.external.tradernet import get_tradernet_client
 from app.infrastructure.hardware.led_display import setup_event_subscriptions
 from app.infrastructure.events import emit, SystemEvent
 
@@ -178,7 +178,7 @@ async def health():
 
     # Check Tradernet
     try:
-        from app.services.tradernet import get_tradernet_client
+        from app.infrastructure.external.tradernet import get_tradernet_client
         client = get_tradernet_client()
         if client.is_connected:
             health_status["tradernet"] = "connected"

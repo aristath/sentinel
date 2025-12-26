@@ -2,7 +2,7 @@
 
 import logging
 
-from app.services.tradernet import get_tradernet_client
+from app.infrastructure.external.tradernet import get_tradernet_client
 from app.infrastructure.locking import file_lock
 from app.infrastructure.events import emit, SystemEvent
 from app.infrastructure.hardware.led_display import set_activity

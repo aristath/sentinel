@@ -7,7 +7,7 @@ import logging
 from dataclasses import dataclass
 from typing import Optional, List, Tuple
 
-from app.services.tradernet import TradernetClient, OrderResult, get_tradernet_client
+from app.infrastructure.external.tradernet import TradernetClient, OrderResult, get_tradernet_client
 
 logger = logging.getLogger(__name__)
 

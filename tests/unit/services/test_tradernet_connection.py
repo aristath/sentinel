@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, AsyncMock
 from fastapi import HTTPException
 
 from app.services.tradernet_connection import ensure_tradernet_connected
-from app.services.tradernet import TradernetClient
+from app.infrastructure.external.tradernet import TradernetClient
 
 
 @pytest.mark.asyncio

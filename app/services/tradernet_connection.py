@@ -2,7 +2,7 @@
 
 import logging
 from fastapi import HTTPException
-from app.services.tradernet import TradernetClient, get_tradernet_client
+from app.infrastructure.external.tradernet import TradernetClient, get_tradernet_client
 
 logger = logging.getLogger(__name__)
 

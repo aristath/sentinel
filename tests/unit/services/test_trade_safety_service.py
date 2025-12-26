@@ -6,7 +6,7 @@ from fastapi import HTTPException
 
 from app.application.services.trade_safety_service import TradeSafetyService
 from app.repositories import TradeRepository, PositionRepository
-from app.services.tradernet import TradernetClient
+from app.infrastructure.external.tradernet import TradernetClient
 from app.domain.value_objects.trade_side import TradeSide
 
 

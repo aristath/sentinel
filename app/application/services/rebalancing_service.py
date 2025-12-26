@@ -1278,7 +1278,7 @@ class RebalancingService:
         stocks = await self._stock_repo.get_all_active()
 
         # Get current cash balance
-        from app.services.tradernet import get_tradernet_client
+        from app.infrastructure.external.tradernet import get_tradernet_client
         client = get_tradernet_client()
         available_cash = client.get_total_cash_eur() if client.is_connected else 0.0
 
