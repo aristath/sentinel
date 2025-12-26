@@ -108,15 +108,15 @@ class StockRepository:
 
         # Fetch stocks from config.db
         stock_rows = await self._db.fetchall("SELECT * FROM stocks WHERE active = 1")
-        stocks = {row["symbol"]: dict(row) for row in stock_rows}
+        stocks = {row["symbol"]: {key: row[key] for key in row.keys()} for row in stock_rows}
 
         # Fetch scores from state.db
         score_rows = await db_manager.state.fetchall("SELECT * FROM scores")
-        scores = {row["symbol"]: dict(row) for row in score_rows}
+        scores = {row["symbol"]: {key: row[key] for key in row.keys()} for row in score_rows}
 
         # Fetch positions from state.db
         position_rows = await db_manager.state.fetchall("SELECT * FROM positions")
-        positions = {row["symbol"]: dict(row) for row in position_rows}
+        positions = {row["symbol"]: {key: row[key] for key in row.keys()} for row in position_rows}
 
         # Merge data
         result = []

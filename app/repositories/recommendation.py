@@ -25,7 +25,7 @@ class RecommendationRepository:
             """,
             (symbol.upper(), side.upper(), reason, portfolio_hash),
         )
-        return dict(row) if row else None
+        return {key: row[key] for key in row.keys()} if row else None
 
     async def create_or_update(
         self, recommendation_data: dict, portfolio_hash: str
@@ -178,7 +178,7 @@ class RecommendationRepository:
         row = await self._db.fetchone(
             "SELECT * FROM recommendations WHERE uuid = ?", (uuid,)
         )
-        return dict(row) if row else None
+        return {key: row[key] for key in row.keys()} if row else None
 
     async def get_pending(self, limit: int = 10) -> List[dict]:
         """Get pending recommendations (status='pending'), ordered by updated_at DESC."""
@@ -191,7 +191,7 @@ class RecommendationRepository:
             """,
             (limit,),
         )
-        return [dict(row) for row in rows]
+        return [{key: row[key] for key in row.keys()} for row in rows]
 
     async def get_pending_by_side(self, side: str, limit: int = 10) -> List[dict]:
         """Get pending recommendations by side (BUY or SELL), one per symbol."""
@@ -211,7 +211,7 @@ class RecommendationRepository:
             """,
             (side.upper(), side.upper(), limit),
         )
-        return [dict(row) for row in rows]
+        return [{key: row[key] for key in row.keys()} for row in rows]
 
     async def mark_executed(self, uuid: str, executed_at: Optional[str] = None) -> None:
         """Mark recommendation as executed."""
@@ -278,4 +278,4 @@ class RecommendationRepository:
             """,
             (symbol.upper(), side.upper(), portfolio_hash),
         )
-        return [dict(row) for row in rows]
+        return [{key: row[key] for key in row.keys()} for row in rows]

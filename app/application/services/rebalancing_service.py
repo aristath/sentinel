@@ -452,7 +452,8 @@ async def _process_stocks_for_candidates(
             filter_stats["no_score"] += 1
             continue
 
-        score_row = dict(score_row_raw)
+        # Convert aiosqlite.Row to dict properly
+        score_row = {key: score_row_raw[key] for key in score_row_raw.keys()}
         if (score_row.get("total_score") or 0.5) < settings.min_stock_score:
             filter_stats["low_score"] += 1
             continue

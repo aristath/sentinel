@@ -83,7 +83,7 @@ class ScoringService:
         rows = await history_db.fetchall(
             "SELECT date, close_price as close, high_price as high, low_price as low, open_price as open FROM daily_prices ORDER BY date DESC LIMIT 400"
         )
-        daily_prices = [dict(row) for row in rows]
+        daily_prices = [{key: row[key] for key in row.keys()} for row in rows]
 
         # Fetch monthly prices
         rows = await history_db.fetchall(
