@@ -4,9 +4,10 @@ These tests verify the dividend tracking which is CRITICAL
 for accurate DRIP (Dividend Reinvestment Plan) execution.
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from app.domain.models import DividendRecord
 from app.repositories.dividend import DividendRepository

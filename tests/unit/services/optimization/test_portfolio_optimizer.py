@@ -4,18 +4,19 @@ These tests are CRITICAL for the retirement fund as they verify
 the portfolio weight calculation and optimization logic.
 """
 
-import pytest
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
-import pandas as pd
+
 import numpy as np
+import pandas as pd
+import pytest
 
 from app.application.services.optimization.portfolio_optimizer import (
-    PortfolioOptimizer,
     OptimizationResult,
+    PortfolioOptimizer,
     WeightChange,
 )
-from app.domain.models import Stock, Position
+from app.domain.models import Position, Stock
 
 
 def create_optimizer() -> PortfolioOptimizer:

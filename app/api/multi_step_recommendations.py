@@ -357,76 +357,11 @@ async def execute_all_multi_step_recommendations(
 
         results = []
 
-        # Execute each step sequentially
         for idx, step in enumerate(steps, start=1):
-            try:
-                # Check for pending orders
-                has_pending = await safety_service.check_pending_orders(
-                    step["symbol"], step["side"], client
-                )
-
-                if has_pending:
-                    results.append(
-                        {
-                            "step": idx,
-                            "status": "blocked",
-                            "symbol": step["symbol"],
-                            "error": f"A pending order already exists for {step['symbol']}",
-                        }
-                    )
-                    logger.warning(
-                        f"Step {idx} blocked: pending order exists for {step['symbol']}"
-                    )
-                    continue
-
-                result = client.place_order(
-                    symbol=step["symbol"],
-                    side=step["side"],
-                    quantity=step["quantity"],
-                )
-
-                if result:
-                    # Record the trade
-                    await trade_execution_service.record_trade(
-                        symbol=step["symbol"],
-                        side=step["side"],
-                        quantity=step["quantity"],
-                        price=result.price,
-                        order_id=result.order_id,
-                    )
-
-                    results.append(
-                        {
-                            "step": idx,
-                            "status": "success",
-                            "order_id": result.order_id,
-                            "symbol": step["symbol"],
-                            "side": step["side"],
-                            "quantity": step["quantity"],
-                            "price": result.price,
-                            "estimated_value": step["estimated_value"],
-                        }
-                    )
-                else:
-                    results.append(
-                        {
-                            "step": idx,
-                            "status": "failed",
-                            "symbol": step["symbol"],
-                            "error": "Trade execution failed",
-                        }
-                    )
-
-            except Exception as e:
-                logger.error(f"Error executing step {idx}: {e}", exc_info=True)
-                results.append(
-                    {
-                        "step": idx,
-                        "status": "failed",
-                        "symbol": step["symbol"],
-                        "error": str(e),
-                    }
-                )
+            result = await _execute_single_step(
+                idx, step, client, safety_service, trade_execution_service
+            )
+            results.append(result)
 
         # Invalidate caches after execution
         cache_service = get_cache_invalidation_service()

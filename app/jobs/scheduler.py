@@ -9,7 +9,6 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-
 logger = logging.getLogger(__name__)
 
 # Global scheduler instance

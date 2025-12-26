@@ -4,17 +4,17 @@ These tests verify the covariance matrix calculation which is CRITICAL
 for portfolio optimization risk assessment.
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import date, timedelta
+from unittest.mock import AsyncMock, MagicMock, patch
 
-import pandas as pd
 import numpy as np
+import pandas as pd
+import pytest
 
 from app.application.services.optimization.risk_models import RiskModelBuilder
 from app.domain.scoring.constants import (
-    COVARIANCE_MIN_HISTORY,
     COVARIANCE_LOOKBACK_DAYS,
+    COVARIANCE_MIN_HISTORY,
 )
 
 

@@ -2,7 +2,6 @@
 
 from datetime import datetime
 
-
 from app.domain.factories.trade_factory import TradeFactory
 from app.domain.value_objects.currency import Currency
 from app.domain.value_objects.trade_side import TradeSide

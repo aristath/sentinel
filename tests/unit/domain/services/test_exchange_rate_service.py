@@ -4,14 +4,15 @@ These tests verify the currency conversion logic which is CRITICAL
 for accurate portfolio valuation and trade execution in multi-currency environments.
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from app.domain.services.exchange_rate_service import (
-    ExchangeRateService,
-    FALLBACK_RATES,
     EXCHANGE_RATE_TTL_SECONDS,
+    FALLBACK_RATES,
+    ExchangeRateService,
 )
 
 

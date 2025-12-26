@@ -2,7 +2,6 @@
 
 from datetime import datetime
 
-
 from app.domain.events import (
     DomainEvent,
     DomainEventBus,

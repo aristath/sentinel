@@ -4,21 +4,22 @@ These tests verify the profit-taking detection which is CRITICAL
 for identifying when to sell positions with unexpected gains.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.domain.scoring.windfall import (
-    calculate_excess_gain,
-    calculate_windfall_score,
-    should_take_profits,
-    get_windfall_recommendation,
-)
+import pytest
+
 from app.domain.scoring.constants import (
+    CONSISTENT_DOUBLE_SELL_PCT,
     WINDFALL_EXCESS_HIGH,
     WINDFALL_EXCESS_MEDIUM,
     WINDFALL_SELL_PCT_HIGH,
     WINDFALL_SELL_PCT_MEDIUM,
-    CONSISTENT_DOUBLE_SELL_PCT,
+)
+from app.domain.scoring.windfall import (
+    calculate_excess_gain,
+    calculate_windfall_score,
+    get_windfall_recommendation,
+    should_take_profits,
 )
 
 

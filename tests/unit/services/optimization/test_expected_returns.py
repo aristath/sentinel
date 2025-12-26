@@ -4,8 +4,9 @@ These tests verify the expected return calculation formula which is CRITICAL
 for portfolio optimization and affects all trade recommendations.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from app.application.services.optimization.expected_returns import (
     ExpectedReturnsCalculator,

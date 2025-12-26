@@ -7,6 +7,15 @@ Uses long-term value scoring with portfolio-aware allocation fit.
 import logging
 from typing import List
 
+from app.application.services.recommendation.performance_adjustment_calculator import (
+    get_performance_adjusted_weights,
+)
+from app.application.services.recommendation.portfolio_context_builder import (
+    build_portfolio_context,
+)
+from app.application.services.recommendation.technical_data_calculator import (
+    get_technical_data_for_positions,
+)
 from app.domain.constants import (
     BUY_COOLDOWN_DAYS,
     DEFAULT_VOLATILITY,
@@ -41,20 +50,11 @@ from app.domain.value_objects.trade_side import TradeSide
 from app.infrastructure.database.manager import DatabaseManager
 from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.external.tradernet import TradernetClient
+from app.infrastructure.recommendation_cache import get_recommendation_cache
 from app.repositories import (
     PortfolioRepository,
     RecommendationRepository,
 )
-from app.application.services.recommendation.performance_adjustment_calculator import (
-    get_performance_adjusted_weights,
-)
-from app.application.services.recommendation.portfolio_context_builder import (
-    build_portfolio_context,
-)
-from app.application.services.recommendation.technical_data_calculator import (
-    get_technical_data_for_positions,
-)
-from app.infrastructure.recommendation_cache import get_recommendation_cache
 
 # Constants for heuristic path (optimizer path uses settings directly)
 # These replace the removed min_trade_size and max_balance_worsening settings
