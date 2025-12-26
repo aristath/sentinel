@@ -354,6 +354,85 @@ async def refresh_stock_score(
     raise HTTPException(status_code=500, detail="Failed to calculate score")
 
 
+async def _validate_symbol_change(
+    old_symbol: str, new_symbol: str, stock_repo: StockRepositoryDep
+) -> None:
+    """Validate that new symbol doesn't already exist."""
+    if new_symbol != old_symbol:
+        existing = await stock_repo.get_by_symbol(new_symbol)
+        if existing:
+            raise HTTPException(
+                status_code=400, detail=f"Symbol {new_symbol} already exists"
+            )
+
+
+def _apply_string_update(updates: dict, field_name: str, value: str | None, transform=None) -> None:
+    """Apply a string field update with optional transformation."""
+    if value is not None:
+        updates[field_name] = transform(value) if transform else value
+
+
+def _apply_numeric_update(updates: dict, field_name: str, value: float | int | None, clamp=None) -> None:
+    """Apply a numeric field update with optional clamping."""
+    if value is not None:
+        if clamp:
+            updates[field_name] = clamp(value)
+        else:
+            updates[field_name] = value
+
+
+def _apply_boolean_update(updates: dict, field_name: str, value: bool | None) -> None:
+    """Apply a boolean field update."""
+    if value is not None:
+        updates[field_name] = value
+
+
+def _build_update_dict(update: StockUpdate, new_symbol: str | None) -> dict:
+    """Build dictionary of fields to update."""
+    updates = {}
+    
+    _apply_string_update(updates, "name", update.name)
+    _apply_string_update(updates, "yahoo_symbol", update.yahoo_symbol, lambda v: v if v else None)
+    _apply_string_update(updates, "geography", update.geography, str.upper)
+    _apply_string_update(updates, "industry", update.industry)
+    
+    _apply_numeric_update(
+        updates, 
+        "priority_multiplier", 
+        update.priority_multiplier, 
+        lambda v: max(0.1, min(3.0, v))
+    )
+    _apply_numeric_update(updates, "min_lot", update.min_lot, lambda v: max(1, v))
+    
+    _apply_boolean_update(updates, "active", update.active)
+    _apply_boolean_update(updates, "allow_buy", update.allow_buy)
+    _apply_boolean_update(updates, "allow_sell", update.allow_sell)
+    
+    if new_symbol:
+        updates["symbol"] = new_symbol
+    
+    return updates
+
+
+def _format_stock_response(stock, score) -> dict:
+    """Format stock data for API response."""
+    stock_data = {
+        "symbol": stock.symbol,
+        "yahoo_symbol": stock.yahoo_symbol,
+        "name": stock.name,
+        "industry": stock.industry,
+        "geography": stock.geography,
+        "priority_multiplier": stock.priority_multiplier,
+        "min_lot": stock.min_lot,
+        "active": stock.active,
+        "allow_buy": stock.allow_buy,
+        "allow_sell": stock.allow_sell,
+    }
+    if score:
+        stock_data["total_score"] = score.total_score
+    return stock_data
+
+
 @router.put("/{symbol}")
 async def update_stock(
     symbol: str,
@@ -362,7 +441,6 @@ async def update_stock(
     scoring_service: ScoringServiceDep,
 ):
     """Update stock details."""
-
     old_symbol = symbol.upper()
     stock = await stock_repo.get_by_symbol(old_symbol)
     if not stock:
@@ -371,36 +449,9 @@ async def update_stock(
     new_symbol = None
     if update.new_symbol is not None:
         new_symbol = update.new_symbol.upper()
-        if new_symbol != old_symbol:
-            existing = await stock_repo.get_by_symbol(new_symbol)
-            if existing:
-                raise HTTPException(
-                    status_code=400, detail=f"Symbol {new_symbol} already exists"
-                )
+        await _validate_symbol_change(old_symbol, new_symbol, stock_repo)
 
-    updates = {}
-    if update.name is not None:
-        updates["name"] = update.name
-    if update.yahoo_symbol is not None:
-        updates["yahoo_symbol"] = update.yahoo_symbol if update.yahoo_symbol else None
-    if update.geography is not None:
-        updates["geography"] = update.geography.upper()
-    if update.industry is not None:
-        updates["industry"] = update.industry
-    if update.priority_multiplier is not None:
-        updates["priority_multiplier"] = max(0.1, min(3.0, update.priority_multiplier))
-    if update.min_lot is not None:
-        updates["min_lot"] = max(1, update.min_lot)
-    if update.active is not None:
-        updates["active"] = update.active
-    if update.allow_buy is not None:
-        updates["allow_buy"] = update.allow_buy
-    if update.allow_sell is not None:
-        updates["allow_sell"] = update.allow_sell
-
-    if new_symbol and new_symbol != old_symbol:
-        updates["symbol"] = new_symbol
-
+    updates = _build_update_dict(update, new_symbol if new_symbol != old_symbol else None)
     if not updates:
         raise HTTPException(status_code=400, detail="No updates provided")
 
@@ -415,23 +466,7 @@ async def update_stock(
 
     cache.invalidate("stocks_with_scores")
 
-    stock_data = {
-        "symbol": updated_stock.symbol,
-        "yahoo_symbol": updated_stock.yahoo_symbol,
-        "name": updated_stock.name,
-        "industry": updated_stock.industry,
-        "geography": updated_stock.geography,
-        "priority_multiplier": updated_stock.priority_multiplier,
-        "min_lot": updated_stock.min_lot,
-        "active": updated_stock.active,
-        "allow_buy": updated_stock.allow_buy,
-        "allow_sell": updated_stock.allow_sell,
-    }
-
-    if score:
-        stock_data["total_score"] = score.total_score
-
-    return stock_data
+    return _format_stock_response(updated_stock, score)
 
 
 @router.delete("/{symbol}")
