@@ -114,7 +114,7 @@ DEFAULT_ALLOCATION_TARGETS = [
 ]
 
 # Default settings for new database installations
-# NOTE: min_trade_size and recommendation_depth removed - optimizer handles this now
+# NOTE: min_trade_size and recommendation_depth replaced by optimizer-based settings
 DEFAULT_SETTINGS = [
     ("min_cash_threshold", "500", "Minimum EUR cash reserve"),
     ("max_trades_per_cycle", "5", "Maximum trades per rebalance cycle"),
