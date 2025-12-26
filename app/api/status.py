@@ -188,6 +188,59 @@ async def get_database_stats():
         }
 
 
+def _calculate_data_dir_size(data_dir: Path) -> int:
+    """Calculate total size of data directory."""
+    data_size = 0
+    if data_dir.exists():
+        for f in data_dir.glob("**/*"):
+            if f.is_file():
+                try:
+                    data_size += f.stat().st_size
+                except (OSError, FileNotFoundError):
+                    pass
+    return data_size
+
+
+def _get_core_db_sizes(data_dir: Path) -> dict[str, float]:
+    """Get sizes of core databases."""
+    core_dbs = ["config.db", "ledger.db", "state.db", "cache.db"]
+    db_sizes = {}
+    for db_name in core_dbs:
+        db_path = data_dir / db_name
+        if db_path.exists():
+            db_sizes[db_name] = round(db_path.stat().st_size / (1024 * 1024), 2)
+    return db_sizes
+
+
+def _get_history_db_info(data_dir: Path) -> tuple[int, int]:
+    """Get count and total size of history databases."""
+    history_dir = data_dir / "history"
+    history_count = 0
+    history_size = 0
+    if history_dir.exists():
+        for f in history_dir.glob("*.db"):
+            history_count += 1
+            history_size += f.stat().st_size
+    return history_count, history_size
+
+
+def _get_backup_info(data_dir: Path) -> tuple[int, int]:
+    """Get count and total size of backup files."""
+    backup_dir = data_dir / "backups"
+    backup_size = 0
+    backup_count = 0
+    if backup_dir.exists():
+        for f in backup_dir.glob("*.db"):
+            backup_size += f.stat().st_size
+            backup_count += 1
+        for d in backup_dir.glob("history_*"):
+            if d.is_dir():
+                for f in d.glob("*.db"):
+                    backup_size += f.stat().st_size
+                backup_count += 1
+    return backup_count, backup_size
+
+
 @router.get("/disk")
 async def get_disk_usage():
     """
@@ -201,50 +254,12 @@ async def get_disk_usage():
     """
     try:
         data_dir = settings.data_dir
-
-        # System disk usage
         disk = shutil.disk_usage("/")
 
-        # Data directory size
-        data_size = 0
-        if data_dir.exists():
-            for f in data_dir.glob("**/*"):
-                if f.is_file():
-                    try:
-                        data_size += f.stat().st_size
-                    except (OSError, FileNotFoundError):
-                        pass
-
-        # Count databases
-        core_dbs = ["config.db", "ledger.db", "state.db", "cache.db"]
-        db_sizes = {}
-        for db_name in core_dbs:
-            db_path = data_dir / db_name
-            if db_path.exists():
-                db_sizes[db_name] = round(db_path.stat().st_size / (1024 * 1024), 2)
-
-        # Count history databases
-        history_dir = data_dir / "history"
-        history_count = 0
-        history_size = 0
-        if history_dir.exists():
-            for f in history_dir.glob("*.db"):
-                history_count += 1
-                history_size += f.stat().st_size
-
-        # Backup directory size
-        backup_dir = data_dir / "backups"
-        backup_size = 0
-        backup_count = 0
-        if backup_dir.exists():
-            for f in backup_dir.glob("*.db"):
-                backup_size += f.stat().st_size
-                backup_count += 1
-            for d in backup_dir.glob("history_*"):
-                if d.is_dir():
-                    for f in d.glob("*.db"):
-                        backup_size += f.stat().st_size
-                    backup_count += 1
+        data_size = _calculate_data_dir_size(data_dir)
+        db_sizes = _get_core_db_sizes(data_dir)
+        history_count, history_size = _get_history_db_info(data_dir)
+        backup_count, backup_size = _get_backup_info(data_dir)
 
         return {
             "status": "ok",
