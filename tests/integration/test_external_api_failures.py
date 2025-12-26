@@ -7,7 +7,6 @@ from datetime import datetime
 from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.external.tradernet import get_tradernet_client
 from app.domain.services.exchange_rate_service import ExchangeRateService
-from app.infrastructure.database.manager import DatabaseManager
 from app.domain.models import Stock, Position
 from app.repositories import (
     StockRepository,
@@ -135,6 +134,11 @@ async def test_rebalancing_service_handles_price_fetch_failure(db):
     with patch('app.infrastructure.external.yahoo_finance.get_current_price') as mock_get_price:
         mock_get_price.return_value = None  # Price fetch failed
 
+        # Create mock exchange rate service
+        from app.domain.services.exchange_rate_service import ExchangeRateService
+        mock_exchange_rate_service = MagicMock(spec=ExchangeRateService)
+        mock_exchange_rate_service.get_rate = AsyncMock(return_value=1.0)
+        
         service = RebalancingService(
             stock_repo=stock_repo,
             position_repo=position_repo,
@@ -145,6 +149,7 @@ async def test_rebalancing_service_handles_price_fetch_failure(db):
             recommendation_repo=mock_recommendation_repo,
             db_manager=mock_db_manager,
             tradernet_client=mock_tradernet_client,
+            exchange_rate_service=mock_exchange_rate_service,
         )
 
         # Should handle error gracefully (skip stocks with price fetch failures)
@@ -160,8 +165,6 @@ async def test_rebalancing_service_handles_price_fetch_failure(db):
 @pytest.mark.asyncio
 async def test_exchange_rate_cache_fallback(db):
     """Test that exchange rate cache falls back when API fails."""
-    from app.infrastructure.database.manager import DatabaseManager
-    
     # Mock httpx to fail
     with patch('httpx.AsyncClient') as mock_client:
         mock_instance = MagicMock()
@@ -170,9 +173,12 @@ async def test_exchange_rate_cache_fallback(db):
         mock_instance.__aexit__ = AsyncMock(return_value=None)
         mock_client.return_value = mock_instance
 
-        # Should use fallback rates
-        db_manager = DatabaseManager()
-        exchange_service = ExchangeRateService(db_manager)
+        # Create a mock database manager that uses the db fixture
+        from app.infrastructure.database.manager import DatabaseManager
+        mock_db_manager = MagicMock(spec=DatabaseManager)
+        mock_db_manager.cache = db  # Use the db fixture's cache connection
+        
+        exchange_service = ExchangeRateService(mock_db_manager)
         rate = await exchange_service.get_rate("USD", "EUR")
 
         # Should return a valid rate (from fallback)
