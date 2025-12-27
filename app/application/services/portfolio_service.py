@@ -4,7 +4,11 @@ Orchestrates portfolio operations using repositories and domain services.
 """
 
 from app.domain.models import AllocationStatus, PortfolioSummary
-from app.domain.repositories.protocols import IAllocationRepository, IPositionRepository
+from app.domain.repositories.protocols import (
+    IAllocationRepository,
+    IPositionRepository,
+    IStockRepository,
+)
 from app.domain.services.allocation_calculator import parse_industries
 from app.repositories import PortfolioRepository
 
@@ -17,10 +21,12 @@ class PortfolioService:
         portfolio_repo: PortfolioRepository,
         position_repo: IPositionRepository,
         allocation_repo: IAllocationRepository,
+        stock_repo: IStockRepository,
     ):
         self._portfolio_repo = portfolio_repo
         self._position_repo = position_repo
         self._allocation_repo = allocation_repo
+        self._stock_repo = stock_repo
 
     def _calculate_position_value(self, pos: dict) -> float:
         """Calculate EUR value for a position."""
@@ -84,7 +90,11 @@ class PortfolioService:
         return geo_allocations
 
     def _build_industry_allocations(
-        self, targets: dict, industry_values: dict[str, float], total_value: float
+        self,
+        targets: dict,
+        industry_values: dict[str, float],
+        total_value: float,
+        all_stock_industries: set[str] | None = None,
     ) -> list[AllocationStatus]:
         """Build industry allocation status list."""
         all_industries = set()
@@ -92,6 +102,9 @@ class PortfolioService:
             if key.startswith("industry:"):
                 all_industries.add(key.split(":", 1)[1])
         all_industries.update(industry_values.keys())
+        # Include all industries from stock universe
+        if all_stock_industries:
+            all_industries.update(all_stock_industries)
 
         industry_allocations = []
         for industry in sorted(all_industries):
@@ -124,11 +137,19 @@ class PortfolioService:
             positions
         )
 
+        # Get all industries from active stocks in the universe
+        all_stocks = await self._stock_repo.get_all_active()
+        all_stock_industries = set()
+        for stock in all_stocks:
+            if stock.industry:
+                industries = parse_industries(stock.industry)
+                all_stock_industries.update(industries)
+
         cash_balance = await self._portfolio_repo.get_latest_cash_balance()
 
         geo_allocations = self._build_geo_allocations(targets, geo_values, total_value)
         industry_allocations = self._build_industry_allocations(
-            targets, industry_values, total_value
+            targets, industry_values, total_value, all_stock_industries
         )
 
         return PortfolioSummary(

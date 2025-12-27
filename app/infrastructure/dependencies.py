@@ -150,12 +150,14 @@ def get_portfolio_service(
     portfolio_repo: PortfolioRepositoryDep,
     position_repo: PositionRepositoryDep,
     allocation_repo: AllocationRepositoryDep,
+    stock_repo: StockRepositoryDep,
 ) -> PortfolioService:
     """Get PortfolioService instance."""
     return PortfolioService(
         portfolio_repo=portfolio_repo,
         position_repo=position_repo,
         allocation_repo=allocation_repo,
+        stock_repo=stock_repo,
     )
 
 
