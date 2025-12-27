@@ -117,3 +117,4 @@ class RecommendationFactory:
             "industry": industry,
             "currency": currency,
         }
+

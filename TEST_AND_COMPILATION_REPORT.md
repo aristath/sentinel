@@ -146,3 +146,4 @@ The following functions intentionally take `db` parameters for backward compatib
 
 **Status:** ✅ Code compiles successfully, test infrastructure ready, minimal legacy code (intentionally kept for backward compatibility)
 
+

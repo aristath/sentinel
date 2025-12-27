@@ -197,3 +197,4 @@ class TestSettings:
         assert trading.transaction_cost_fixed == 3.0
         assert trading.transaction_cost_percent == 0.003
         assert trading.min_cash_reserve == 1000.0
+

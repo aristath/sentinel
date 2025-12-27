@@ -109,3 +109,4 @@ class TestRecommendationFactory:
         assert data["currency"] == Currency.EUR  # Default
         assert data["priority"] is None
         assert data["amount"] == 1500.0  # Should match estimated_value
+

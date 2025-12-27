@@ -148,3 +148,4 @@ class TestStockFactory:
         assert stock.industry == "Technology"
         assert stock.yahoo_symbol == "MSFT"
         assert stock.currency == Currency.USD
+

@@ -171,3 +171,4 @@ async def test_auto_commit_behavior(db, stock_repo, trade_repo):
     # After transaction commits, should have 2 trades
     history = await trade_repo.get_history(limit=10)
     assert len(history) == 2
+

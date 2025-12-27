@@ -14,3 +14,4 @@ class GeographicRadarCard extends HTMLElement {
 }
 
 customElements.define('geographic-radar-card', GeographicRadarCard);
+

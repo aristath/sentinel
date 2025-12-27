@@ -65,3 +65,4 @@ class TestCurrency:
     def test_default_currency(self):
         """Test that EUR is the default currency."""
         assert Currency.default() == Currency.EUR
+

@@ -178,3 +178,4 @@ class IAllocationRepository(Protocol):
     async def upsert(self, target: AllocationTarget) -> None:
         """Insert or update an allocation target."""
         ...
+

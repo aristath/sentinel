@@ -54,3 +54,4 @@ class TestTradeSide:
         """Test checking if trade side is SELL."""
         assert TradeSide.BUY.is_sell() is False
         assert TradeSide.SELL.is_sell() is True
+

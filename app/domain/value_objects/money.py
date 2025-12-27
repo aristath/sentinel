@@ -121,3 +121,4 @@ class Money:
     def __repr__(self) -> str:
         """Developer representation of money."""
         return f"Money(amount={self.amount}, currency={self.currency})"
+

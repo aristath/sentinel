@@ -64,3 +64,4 @@ class TradeSide(str, Enum):
             True if SELL, False otherwise
         """
         return self == TradeSide.SELL
+

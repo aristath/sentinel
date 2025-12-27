@@ -99,3 +99,4 @@ class TestPriorityCalculator:
         assert results[0].combined_priority > results[1].combined_priority
         assert results[0].combined_priority == pytest.approx(0.8, abs=0.01)
         assert results[1].combined_priority == pytest.approx(0.4, abs=0.01)
+

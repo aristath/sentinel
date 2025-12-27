@@ -186,3 +186,4 @@ async def test_trade_repository_create(stock_repo, trade_repo):
     assert len(history) == 1
     assert history[0].symbol == "AAPL"
     assert history[0].side == "BUY"
+

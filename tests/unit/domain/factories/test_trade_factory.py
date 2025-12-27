@@ -114,3 +114,4 @@ class TestTradeFactory:
 
         assert trade.side == TradeSide.SELL
         assert trade.currency == Currency.HKD
+

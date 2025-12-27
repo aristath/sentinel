@@ -234,3 +234,4 @@ New environment variables available (with defaults):
 - `JOB_FAILURE_THRESHOLD` (default: 5)
 - `JOB_FAILURE_WINDOW_HOURS` (default: 1)
 
+
