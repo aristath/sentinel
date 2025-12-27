@@ -877,8 +877,8 @@ class TestGetStockVolatility:
     async def test_returns_default_on_exception(self):
         """Test returning default volatility on exception."""
         from app.application.services.rebalancing_service import (
-            _get_stock_volatility,
             DEFAULT_VOLATILITY,
+            _get_stock_volatility,
         )
 
         with patch(
@@ -894,8 +894,8 @@ class TestGetStockVolatility:
     async def test_returns_default_when_volatility_missing(self):
         """Test returning default when volatility key missing."""
         from app.application.services.rebalancing_service import (
-            _get_stock_volatility,
             DEFAULT_VOLATILITY,
+            _get_stock_volatility,
         )
 
         mock_metrics = {"other_metric": 0.5}  # No volatility key

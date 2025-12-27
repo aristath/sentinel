@@ -90,8 +90,8 @@ async def get_led_display_state(settings_repo: SettingsRepositoryDep):
     """
     from app.infrastructure.hardware.display_service import (
         _error_text,
-        _processing_text,
         _next_actions_text,
+        _processing_text,
     )
 
     # Determine mode based on current state

@@ -43,4 +43,4 @@ jobs:
           python -c "from app.config import settings; print('Config loaded')"
           python -c "from app.domain.models import Stock, Position, Trade; print('Models loaded')"
           python -c "from app.repositories import StockRepository, PositionRepository; print('Repositories loaded')"
-          python -c "from app.api import router; print('API router loaded')"
+          python -c "from app.api.stocks import router; print('API router loaded')"
