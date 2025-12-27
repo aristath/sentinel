@@ -55,17 +55,18 @@ class StockRepository:
             await conn.execute(
                 """
                 INSERT INTO stocks
-                (symbol, yahoo_symbol, name, industry, geography,
+                (symbol, yahoo_symbol, name, industry, country, fullExchangeName,
                  priority_multiplier, min_lot, active, allow_buy, allow_sell,
                  currency, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     stock.symbol.upper(),
                     stock.yahoo_symbol,
                     stock.name,
                     stock.industry,
-                    stock.geography.upper(),
+                    stock.country,
+                    stock.fullExchangeName,
                     stock.priority_multiplier,
                     stock.min_lot,
                     1 if stock.active else 0,
@@ -161,7 +162,8 @@ class StockRepository:
             yahoo_symbol=row["yahoo_symbol"],
             name=row["name"],
             industry=row["industry"],
-            geography=row["geography"],
+            country=row.get("country"),
+            fullExchangeName=row.get("fullExchangeName"),
             priority_multiplier=row["priority_multiplier"] or 1.0,
             min_lot=row["min_lot"] or 1,
             active=bool(row["active"]),

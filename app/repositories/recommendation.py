@@ -143,7 +143,7 @@ class RecommendationRepository:
                 """
                 INSERT INTO recommendations
                 (uuid, symbol, name, side, amount, quantity, estimated_price,
-                 estimated_value, reason, geography, industry, currency, priority,
+                 estimated_value, reason, country, industry, currency, priority,
                  current_portfolio_score, new_portfolio_score, score_change,
                  status, portfolio_hash, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -158,7 +158,7 @@ class RecommendationRepository:
                     recommendation_data.get("estimated_price"),
                     recommendation_data.get("estimated_value"),
                     reason,
-                    recommendation_data.get("geography"),
+                    recommendation_data.get("country"),
                     recommendation_data.get("industry"),
                     recommendation_data.get("currency", "EUR"),
                     recommendation_data.get("priority"),

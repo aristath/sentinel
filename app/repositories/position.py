@@ -150,7 +150,7 @@ class PositionRepository:
 
         # Get stocks from config.db
         stock_rows = await self._manager.config.fetchall(
-            "SELECT symbol, name, geography, industry, min_lot, allow_sell, currency "
+            "SELECT symbol, name, country, fullExchangeName, industry, min_lot, allow_sell, currency "
             "FROM stocks WHERE active = 1"
         )
         stocks_by_symbol = {
@@ -164,7 +164,8 @@ class PositionRepository:
             stock = stocks_by_symbol.get(pos["symbol"], {})
             # Merge stock fields into position
             pos_dict["name"] = stock.get("name", pos["symbol"])
-            pos_dict["geography"] = stock.get("geography", "")
+            pos_dict["country"] = stock.get("country")
+            pos_dict["fullExchangeName"] = stock.get("fullExchangeName")
             pos_dict["industry"] = stock.get("industry")
             pos_dict["min_lot"] = stock.get("min_lot", 1)
             pos_dict["allow_sell"] = bool(stock.get("allow_sell", False))
