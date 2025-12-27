@@ -17,18 +17,35 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-# Mapping of geography to exchange calendar codes
+# Mapping of fullExchangeName to exchange calendar codes
+# Maps Yahoo Finance exchange names to exchange_calendars codes
 EXCHANGE_MAP = {
-    "EU": "XETR",  # Frankfurt/XETRA
-    "US": "XNYS",  # NYSE
-    "ASIA": "XHKG",  # Hong Kong
+    "NASDAQ": "XNAS",
+    "NYSE": "XNYS",
+    "XETR": "XETR",  # Frankfurt/XETRA
+    "XHKG": "XHKG",  # Hong Kong
+    "LSE": "XLON",  # London Stock Exchange
+    "TSE": "XTSE",  # Tokyo Stock Exchange
+    "ASX": "XASX",  # Australian Securities Exchange
+    # Add more mappings as needed
 }
 
-# Timezone info for each market
-MARKET_TIMEZONES = {
-    "EU": "Europe/Berlin",
-    "US": "America/New_York",
-    "ASIA": "Asia/Hong_Kong",
+# Fallback mapping for legacy geography codes (deprecated)
+LEGACY_GEOGRAPHY_MAP = {
+    "EU": "XETR",
+    "US": "XNYS",
+    "ASIA": "XHKG",
+}
+
+# Timezone info for common exchanges
+EXCHANGE_TIMEZONES = {
+    "XNAS": "America/New_York",
+    "XNYS": "America/New_York",
+    "XETR": "Europe/Berlin",
+    "XHKG": "Asia/Hong_Kong",
+    "XLON": "Europe/London",
+    "XTSE": "Asia/Tokyo",
+    "XASX": "Australia/Sydney",
 }
 
 
@@ -38,21 +55,26 @@ def _get_current_time() -> datetime:
 
 
 @lru_cache(maxsize=10)
-def get_calendar(geography: str) -> Any:
+def get_calendar(full_exchange_name: str) -> Any:
     """
-    Get the exchange calendar for a geography.
+    Get the exchange calendar for a fullExchangeName.
 
     Args:
-        geography: One of 'EU', 'US', 'ASIA'
+        full_exchange_name: Exchange name from Yahoo Finance (e.g., "NASDAQ", "NYSE", "XETR")
+                           or legacy geography code (EU, US, ASIA)
 
     Returns:
         Exchange calendar object
     """
-    exchange_code = EXCHANGE_MAP.get(geography, "XNYS")
+    # Try direct mapping first
+    exchange_code = EXCHANGE_MAP.get(full_exchange_name)
+    if not exchange_code:
+        # Fallback to legacy geography mapping
+        exchange_code = LEGACY_GEOGRAPHY_MAP.get(full_exchange_name, "XNYS")
     return xcals.get_calendar(exchange_code)
 
 
-def is_market_open(geography: str) -> bool:
+def is_market_open(full_exchange_name: str) -> bool:
     """
     Check if a market is currently open for trading.
 
@@ -64,13 +86,14 @@ def is_market_open(geography: str) -> bool:
     - Lunch breaks (for Asian markets)
 
     Args:
-        geography: One of 'EU', 'US', 'ASIA'
+        full_exchange_name: Exchange name from Yahoo Finance (e.g., "NASDAQ", "NYSE", "XETR")
+                           or legacy geography code (EU, US, ASIA)
 
     Returns:
         True if the market is currently open
     """
     try:
-        calendar = get_calendar(geography)
+        calendar = get_calendar(full_exchange_name)
         now = _get_current_time()
 
         # Convert to pandas Timestamp in market timezone
@@ -101,19 +124,19 @@ def is_market_open(geography: str) -> bool:
         return True
 
     except Exception as e:
-        logger.warning(f"Error checking market hours for {geography}: {e}")
+        logger.warning(f"Error checking market hours for {full_exchange_name}: {e}")
         # Default to closed on error
         return False
 
 
 def get_open_markets() -> list[str]:
     """
-    Get list of currently open market geographies.
+    Get list of currently open exchanges.
 
     Returns:
-        List of geography strings that are currently open
+        List of exchange names that are currently open
     """
-    return [geo for geo in EXCHANGE_MAP.keys() if is_market_open(geo)]
+    return [exch for exch in EXCHANGE_MAP.keys() if is_market_open(exch)]
 
 
 def get_market_status() -> dict[str, dict[str, Any]]:
@@ -121,7 +144,7 @@ def get_market_status() -> dict[str, dict[str, Any]]:
     Get detailed status for all markets.
 
     Returns:
-        Dict mapping geography to status dict containing:
+        Dict mapping exchange name to status dict containing:
         - open: bool
         - exchange: str (exchange code)
         - timezone: str
@@ -131,16 +154,16 @@ def get_market_status() -> dict[str, dict[str, Any]]:
     status = {}
     now = _get_current_time()
 
-    for geography, exchange_code in EXCHANGE_MAP.items():
+    for exchange_name, exchange_code in EXCHANGE_MAP.items():
         try:
-            calendar = get_calendar(geography)
+            calendar = get_calendar(exchange_name)
             market_tz = calendar.tz
-            timezone_str = MARKET_TIMEZONES.get(geography, str(market_tz))
+            timezone_str = EXCHANGE_TIMEZONES.get(exchange_code, str(market_tz))
 
             now_market = pd.Timestamp(now).tz_convert(market_tz)
             today_str = now_market.strftime("%Y-%m-%d")
 
-            is_open = is_market_open(geography)
+            is_open = is_market_open(exchange_name)
 
             market_info = {
                 "open": is_open,
@@ -200,14 +223,14 @@ def get_market_status() -> dict[str, dict[str, Any]]:
                 except Exception:
                     market_info["opens_at"] = "Unknown"
 
-            status[geography] = market_info
+            status[exchange_name] = market_info
 
         except Exception as e:
-            logger.warning(f"Error getting market status for {geography}: {e}")
-            status[geography] = {
+            logger.warning(f"Error getting market status for {exchange_name}: {e}")
+            status[exchange_name] = {
                 "open": False,
                 "exchange": exchange_code,
-                "timezone": MARKET_TIMEZONES.get(geography, "Unknown"),
+                "timezone": EXCHANGE_TIMEZONES.get(exchange_code, "Unknown"),
                 "error": str(e),
             }
 
@@ -219,30 +242,32 @@ def filter_stocks_by_open_markets(stocks: list) -> list:
     Filter stocks to only those whose markets are currently open.
 
     Args:
-        stocks: List of stock objects with 'geography' attribute
+        stocks: List of stock objects with 'fullExchangeName' attribute
 
     Returns:
         Filtered list of stocks with open markets
     """
     open_markets = get_open_markets()
-    return [s for s in stocks if getattr(s, "geography", None) in open_markets]
+    return [s for s in stocks if getattr(s, "fullExchangeName", None) in open_markets]
 
 
-def group_stocks_by_geography(stocks: list) -> dict[str, list]:
+def group_stocks_by_exchange(stocks: list) -> dict[str, list]:
     """
-    Group stocks by their geography.
+    Group stocks by their exchange.
 
     Args:
-        stocks: List of stock objects with 'geography' attribute
+        stocks: List of stock objects with 'fullExchangeName' attribute
 
     Returns:
-        Dict mapping geography to list of stocks
+        Dict mapping exchange name to list of stocks
     """
-    grouped: dict[str, list] = {"EU": [], "US": [], "ASIA": []}
+    grouped: dict[str, list] = {}
 
     for stock in stocks:
-        geography = getattr(stock, "geography", None)
-        if geography in grouped:
-            grouped[geography].append(stock)
+        exchange = getattr(stock, "fullExchangeName", None)
+        if exchange:
+            if exchange not in grouped:
+                grouped[exchange] = []
+            grouped[exchange].append(stock)
 
     return grouped
