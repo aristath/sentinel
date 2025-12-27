@@ -8,7 +8,7 @@ document.addEventListener('alpine:init', () => {
     // Data
     status: {},
     allocation: {
-      geographic: [],
+      geographic: [],  // TODO: Rename to country in API response
       industry: [],
       total_value: 0,
       cash_balance: 0
@@ -57,21 +57,21 @@ document.addEventListener('alpine:init', () => {
       sync: false,
       historical: false,
       execute: false,
-      geoSave: false,
+      countrySave: false,
       industrySave: false,
       stockSave: false,
       refreshData: false
     },
 
     // Edit Mode States
-    editingGeo: false,
-    geoTargets: {},
-    geographies: [],
+    editingCountry: false,
+    countryTargets: {},
+    countries: [],
     editingIndustry: false,
     industryTargets: {},
 
     // Add Stock Form
-    newStock: { symbol: '', name: '', geography: '', industry: '' },
+    newStock: { symbol: '', name: '', yahoo_symbol: '' },
     addingStock: false,
 
     // Fetch All Data
@@ -84,7 +84,7 @@ document.addEventListener('alpine:init', () => {
         this.fetchTrades(),
         this.fetchTradernet(),
         this.fetchMarkets(),
-        this.fetchGeographies(),
+        this.fetchCountries(),
         this.fetchRecommendations(),
         this.fetchSettings(),
         this.fetchSparklines(),
@@ -153,19 +153,16 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    async fetchGeographies() {
+    async fetchCountries() {
       try {
         const data = await API.fetchTargets();
-        this.geographies = Object.keys(data.geography || {});
-        this.geoTargets = {};
-        for (const [name, weight] of Object.entries(data.geography || {})) {
-          this.geoTargets[name] = weight;
-        }
-        if (!this.newStock.geography && this.geographies.length > 0) {
-          this.newStock.geography = this.geographies[0];
+        this.countries = Object.keys(data.country || {});
+        this.countryTargets = {};
+        for (const [name, weight] of Object.entries(data.country || {})) {
+          this.countryTargets[name] = weight;
         }
       } catch (e) {
-        console.error('Failed to fetch geographies:', e);
+        console.error('Failed to fetch countries:', e);
       }
     },
 
@@ -308,9 +305,9 @@ document.addEventListener('alpine:init', () => {
       return Array.from(set).sort();
     },
 
-    get activeGeographies() {
-      const geos = new Set(this.stocks.map(s => s.geography).filter(Boolean));
-      return Array.from(geos).sort();
+    get activeCountries() {
+      const countries = new Set(this.stocks.map(s => s.country).filter(Boolean));
+      return Array.from(countries).sort();
     },
 
     get activeIndustries() {
@@ -327,7 +324,7 @@ document.addEventListener('alpine:init', () => {
       let filtered = this.stocks;
 
       if (this.stockFilter !== 'all') {
-        filtered = filtered.filter(s => s.geography === this.stockFilter);
+        filtered = filtered.filter(s => s.country === this.stockFilter);
       }
 
       if (this.industryFilter !== 'all') {
@@ -448,40 +445,40 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    // Geographic Allocation
-    startEditGeo() {
-      this.geoTargets = {};
-      this.activeGeographies.forEach(geo => {
-        this.geoTargets[geo] = 0;
+    // Country Allocation
+    startEditCountry() {
+      this.countryTargets = {};
+      this.activeCountries.forEach(country => {
+        this.countryTargets[country] = 0;
       });
       if (this.allocation.geographic) {
-        this.allocation.geographic.forEach(g => {
-          this.geoTargets[g.name] = g.target_pct || 0;
+        this.allocation.geographic.forEach(c => {
+          this.countryTargets[c.name] = c.target_pct || 0;
         });
       }
-      this.editingGeo = true;
+      this.editingCountry = true;
     },
 
-    cancelEditGeo() {
-      this.editingGeo = false;
+    cancelEditCountry() {
+      this.editingCountry = false;
     },
 
-    adjustGeoSlider(changed, newValue) {
-      this.geoTargets[changed] = newValue;
+    adjustCountrySlider(changed, newValue) {
+      this.countryTargets[changed] = newValue;
     },
 
-    async saveGeoTargets() {
-      this.loading.geoSave = true;
+    async saveCountryTargets() {
+      this.loading.countrySave = true;
       try {
-        await API.saveGeoTargets({ ...this.geoTargets });
-        this.showMessage('Geographic weights updated', 'success');
-        this.editingGeo = false;
+        await API.saveCountryTargets({ ...this.countryTargets });
+        this.showMessage('Country weights updated', 'success');
+        this.editingCountry = false;
         await this.fetchAllocation();
         await this.fetchStocks();
       } catch (e) {
         this.showMessage('Failed to save weights', 'error');
       }
-      this.loading.geoSave = false;
+      this.loading.countrySave = false;
     },
 
     // Industry Allocation
@@ -522,7 +519,7 @@ document.addEventListener('alpine:init', () => {
 
     // Stock Management
     resetNewStock() {
-      this.newStock = { symbol: '', name: '', geography: 'EU', industry: '' };
+      this.newStock = { symbol: '', name: '', yahoo_symbol: '' };
     },
 
     async addStock() {
@@ -534,11 +531,10 @@ document.addEventListener('alpine:init', () => {
       try {
         const payload = {
           symbol: this.newStock.symbol.toUpperCase(),
-          name: this.newStock.name,
-          geography: this.newStock.geography
+          name: this.newStock.name
         };
-        if (this.newStock.industry) {
-          payload.industry = this.newStock.industry;
+        if (this.newStock.yahoo_symbol) {
+          payload.yahoo_symbol = this.newStock.yahoo_symbol;
         }
         await API.createStock(payload);
         this.showMessage('Stock added successfully', 'success');
@@ -568,7 +564,8 @@ document.addEventListener('alpine:init', () => {
         symbol: stock.symbol,
         yahoo_symbol: stock.yahoo_symbol || '',
         name: stock.name,
-        geography: stock.geography,
+        country: stock.country || '',
+        fullExchangeName: stock.fullExchangeName || '',
         industry: stock.industry || '',
         min_lot: stock.min_lot || 1,
         allow_buy: stock.allow_buy !== false,  // Default true
@@ -590,7 +587,6 @@ document.addEventListener('alpine:init', () => {
         const payload = {
           name: this.editingStock.name,
           yahoo_symbol: this.editingStock.yahoo_symbol || null,
-          geography: this.editingStock.geography,
           min_lot: parseInt(this.editingStock.min_lot) || 1,
           allow_buy: this.editingStock.allow_buy,
           allow_sell: this.editingStock.allow_sell

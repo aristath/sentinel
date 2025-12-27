@@ -42,17 +42,19 @@ class EditStockModal extends HTMLElement {
               </div>
 
               <div>
-                <label class="block text-sm text-gray-400 mb-1">Region</label>
-                <input type="text"
-                       x-model="$store.app.editingStock.geography"
-                       list="edit-geographies-list"
-                       placeholder="e.g., EU, US, ASIA"
-                       class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
-                <datalist id="edit-geographies-list">
-                  <template x-for="geo in ($store.app.geographies || [])" :key="geo">
-                    <option :value="geo"></option>
-                  </template>
-                </datalist>
+                <label class="block text-sm text-gray-400 mb-1">Country</label>
+                <div class="px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-300">
+                  <span x-text="$store.app.editingStock.country || 'Auto-detected from Yahoo Finance'"></span>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">Automatically detected from Yahoo Finance</p>
+              </div>
+
+              <div>
+                <label class="block text-sm text-gray-400 mb-1">Exchange</label>
+                <div class="px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-300">
+                  <span x-text="$store.app.editingStock.fullExchangeName || 'Auto-detected from Yahoo Finance'"></span>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">Automatically detected from Yahoo Finance</p>
               </div>
 
               <div>

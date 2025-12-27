@@ -57,7 +57,7 @@ const API = {
   // Allocation
   fetchAllocation: () => fetch('/api/trades/allocation').then(r => r.json()),
   fetchTargets: () => fetch('/api/allocation/targets').then(r => r.json()),
-  saveGeoTargets: (targets) => API._put('/api/allocation/targets/geography', { targets }),
+  saveCountryTargets: (targets) => API._put('/api/allocation/targets/country', { targets }),
   saveIndustryTargets: (targets) => API._put('/api/allocation/targets/industry', { targets }),
 
   // Stocks

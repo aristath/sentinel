@@ -23,10 +23,10 @@ class StockTable extends HTMLElement {
           <div class="flex gap-2">
             <select x-model="$store.app.stockFilter"
                     class="px-2 py-1.5 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
-              <option value="all">All Regions</option>
-              <option value="EU">EU</option>
-              <option value="ASIA">Asia</option>
-              <option value="US">US</option>
+              <option value="all">All Countries</option>
+              <template x-for="country in ($store.app.countries || [])" :key="country">
+                <option :value="country" x-text="country"></option>
+              </template>
             </select>
             <select x-model="$store.app.industryFilter"
                     class="px-2 py-1.5 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
@@ -68,10 +68,16 @@ class StockTable extends HTMLElement {
                   <span x-show="$store.app.sortBy === 'name'" class="ml-1"
                         x-text="$store.app.sortDesc ? '▼' : '▲'"></span>
                 </th>
-                <th @click="$store.app.sortStocks('geography')"
-                    class="py-2 px-2 cursor-pointer hover:text-gray-300 text-center">
-                  Region
-                  <span x-show="$store.app.sortBy === 'geography'" class="ml-1"
+                <th @click="$store.app.sortStocks('country')"
+                    class="py-2 px-2 cursor-pointer hover:text-gray-300">
+                  Country
+                  <span x-show="$store.app.sortBy === 'country'" class="ml-1"
+                        x-text="$store.app.sortDesc ? '▼' : '▲'"></span>
+                </th>
+                <th @click="$store.app.sortStocks('fullExchangeName')"
+                    class="py-2 px-2 cursor-pointer hover:text-gray-300">
+                  Exchange
+                  <span x-show="$store.app.sortBy === 'fullExchangeName'" class="ml-1"
                         x-text="$store.app.sortDesc ? '▼' : '▲'"></span>
                 </th>
                 <th @click="$store.app.sortStocks('industry')"
@@ -125,11 +131,8 @@ class StockTable extends HTMLElement {
                     </stock-sparkline>
                   </td>
                   <td class="py-1.5 px-2 text-gray-300 truncate max-w-32" x-text="stock.name"></td>
-                  <td class="py-1.5 px-2 text-center">
-                    <span class="px-1.5 py-0.5 rounded text-xs"
-                          :class="getGeoTagClass(stock.geography)"
-                          x-text="stock.geography"></span>
-                  </td>
+                  <td class="py-1.5 px-2 text-gray-400 truncate max-w-24" x-text="stock.country || '-'"></td>
+                  <td class="py-1.5 px-2 text-gray-500 truncate max-w-24" x-text="stock.fullExchangeName || '-'"></td>
                   <td class="py-1.5 px-2 text-gray-500 truncate max-w-24" x-text="stock.industry || '-'"></td>
                   <td class="py-1.5 px-2 text-right font-mono"
                       :class="stock.position_value ? 'text-green-400' : 'text-gray-600'"

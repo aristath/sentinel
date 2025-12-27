@@ -12,14 +12,14 @@ class AllocationRadar extends HTMLElement {
 
     let html = `<div x-data="allocationRadarComponent('${type}')" x-init="init()">`;
 
-    // Geographic Radar
+    // Country Radar
     if (type === 'geographic' || type === 'both') {
       html += `
-        <!-- Geographic Radar -->
+        <!-- Country Radar -->
         <div ${type === 'both' ? 'class="mb-4"' : ''}>
           <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs text-gray-500 font-medium">Geographic</h3>
-            <button @click="$store.app.startEditGeo()"
+            <h3 class="text-xs text-gray-500 font-medium">Country</h3>
+            <button @click="$store.app.startEditCountry()"
                     class="text-xs text-blue-400 hover:text-blue-300 transition-colors">
               Edit Weights
             </button>
@@ -52,10 +52,10 @@ class AllocationRadar extends HTMLElement {
 
     html += `
         <!-- Edit Mode Overlays -->
-        <div x-show="$store.app.editingGeo" x-transition
+        <div x-show="$store.app.editingCountry" x-transition
              class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div class="bg-gray-800 border border-gray-700 rounded-lg p-4 w-full max-w-md" @click.stop>
-            <h3 class="text-sm font-medium text-gray-200 mb-3">Edit Geographic Weights</h3>
+            <h3 class="text-sm font-medium text-gray-200 mb-3">Edit Country Weights</h3>
             <geo-chart></geo-chart>
           </div>
         </div>
@@ -83,37 +83,37 @@ function allocationRadarComponent(chartType) {
     previousGeoData: null,
     previousIndustryData: null,
 
-    // Computed properties for geographic data
+    // Computed properties for country data
     get geoLabels() {
-      return Array.from(this.$store.app.activeGeographies || []);
+      return Array.from(this.$store.app.activeCountries || []);
     },
 
     get geoCurrentData() {
-      const activeGeos = this.geoLabels;
+      const activeCountries = this.geoLabels;
       const allocation = this.$store.app.allocation?.geographic || [];
 
-      if (activeGeos.length === 0 || allocation.length === 0) {
+      if (activeCountries.length === 0 || allocation.length === 0) {
         return [];
       }
 
-      return activeGeos.map(geo => {
-        const item = allocation.find(a => a.name === geo);
+      return activeCountries.map(country => {
+        const item = allocation.find(a => a.name === country);
         return item ? item.current_pct * 100 : 0;
       });
     },
 
     get geoTargetData() {
-      const activeGeos = this.geoLabels;
+      const activeCountries = this.geoLabels;
       const allocation = this.$store.app.allocation?.geographic || [];
 
-      if (activeGeos.length === 0 || allocation.length === 0) {
+      if (activeCountries.length === 0 || allocation.length === 0) {
         return [];
       }
 
       const weights = {};
       allocation.forEach(a => { weights[a.name] = a.target_pct || 0; });
-      const targetPcts = this.getTargetPcts(weights, activeGeos);
-      return activeGeos.map(geo => (targetPcts[geo] || 0) * 100);
+      const targetPcts = this.getTargetPcts(weights, activeCountries);
+      return activeCountries.map(country => (targetPcts[country] || 0) * 100);
     },
 
     get geoMaxValue() {
@@ -165,7 +165,7 @@ function allocationRadarComponent(chartType) {
         this.$nextTick(() => this.updateCharts());
       }, { deep: false });
 
-      this.$watch('$store.app.activeGeographies', () => {
+      this.$watch('$store.app.activeCountries', () => {
         this.$nextTick(() => this.updateCharts());
       }, { deep: false });
 
