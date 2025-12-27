@@ -189,9 +189,17 @@ async def trigger_daily_maintenance():
 @router.post("/sync/recommendations")
 async def trigger_recommendation_sync():
     """Manually trigger recommendation generation and cache update."""
+    from app.infrastructure.cache import cache
+    from app.infrastructure.recommendation_cache import get_recommendation_cache
     from app.jobs.sync_cycle import _step_get_recommendation, _step_update_display
 
     try:
+        # Clear recommendation caches first
+        cache.invalidate_prefix("recommendations")
+        rec_cache = get_recommendation_cache()
+        await rec_cache.invalidate_all_recommendations()
+
+        # Generate fresh recommendations
         rec = await _step_get_recommendation()
         await _step_update_display()
         if rec:
