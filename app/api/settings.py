@@ -243,8 +243,14 @@ async def restart_system():
 @router.post("/reset-cache")
 async def reset_cache():
     """Clear all cached data including score cache."""
-    # Clear simple cache
+    from app.infrastructure.recommendation_cache import get_recommendation_cache
+
+    # Clear simple in-memory cache
     cache.clear()
+
+    # Clear SQLite recommendation cache
+    rec_cache = get_recommendation_cache()
+    await rec_cache.invalidate_all_recommendations()
 
     # Metrics expire naturally via TTL, no manual invalidation needed
 
