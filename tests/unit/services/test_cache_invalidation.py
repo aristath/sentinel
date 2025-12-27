@@ -25,44 +25,39 @@ def test_invalidate_trade_caches(cache_service, mock_cache):
     """Test invalidating trade-related caches."""
     cache_service.invalidate_trade_caches(include_depth=True)
 
-    # Check that all expected cache keys were invalidated
-    assert mock_cache.invalidate.call_count >= 10  # Multiple keys invalidated
+    # Should use prefix invalidation
+    mock_cache.invalidate_prefix.assert_called_once_with("recommendations:")
 
-    # Check specific keys
+    # Should also invalidate specific LED ticker cache keys
     invalidated_keys = [call[0][0] for call in mock_cache.invalidate.call_args_list]
-    assert "recommendations:diversification:default:holistic" in invalidated_keys
-    assert "recommendations" in invalidated_keys
     assert "recommendations:3" in invalidated_keys
-    assert "sell_recommendations" in invalidated_keys
+    assert "sell_recommendations:3" in invalidated_keys
 
 
 def test_invalidate_trade_caches_no_depth(cache_service, mock_cache):
     """Test invalidating trade caches without depth-specific keys."""
     cache_service.invalidate_trade_caches(include_depth=False)
 
-    # Should still invalidate main caches but not depth-specific
+    # Should still use prefix invalidation
+    mock_cache.invalidate_prefix.assert_called_once_with("recommendations:")
+
+    # Should still invalidate LED ticker caches
     invalidated_keys = [call[0][0] for call in mock_cache.invalidate.call_args_list]
-    assert "recommendations:diversification:default:holistic" in invalidated_keys
-    # Depth-specific keys should not be present when include_depth=False
-    depth_keys = [
-        k
-        for k in invalidated_keys
-        if k.startswith("recommendations:diversification:")
-        and k.endswith(":holistic")
-        and ":1:" in k
-    ]
-    assert len(depth_keys) == 0
+    assert "recommendations:3" in invalidated_keys
+    assert "sell_recommendations:3" in invalidated_keys
 
 
 def test_invalidate_recommendation_caches_defaults(cache_service, mock_cache):
     """Test invalidating recommendation caches with default parameters."""
     cache_service.invalidate_recommendation_caches()
 
+    # Should use prefix invalidation
+    mock_cache.invalidate_prefix.assert_called_once_with("recommendations:")
+
+    # Should invalidate default limit keys
     invalidated_keys = [call[0][0] for call in mock_cache.invalidate.call_args_list]
-    assert "recommendations" in invalidated_keys
     assert "recommendations:3" in invalidated_keys
-    assert "recommendations:10" in invalidated_keys
-    assert "recommendations:20" in invalidated_keys
+    assert "sell_recommendations:3" in invalidated_keys
 
 
 def test_invalidate_recommendation_caches_custom_limits(cache_service, mock_cache):
@@ -72,7 +67,8 @@ def test_invalidate_recommendation_caches_custom_limits(cache_service, mock_cach
     invalidated_keys = [call[0][0] for call in mock_cache.invalidate.call_args_list]
     assert "recommendations:5" in invalidated_keys
     assert "recommendations:15" in invalidated_keys
-    assert "recommendations:3" not in invalidated_keys  # Not in custom list
+    assert "sell_recommendations:5" in invalidated_keys
+    assert "sell_recommendations:15" in invalidated_keys
 
 
 def test_invalidate_portfolio_caches(cache_service, mock_cache):
@@ -92,7 +88,7 @@ def test_invalidate_all_trade_related(cache_service, mock_cache):
     assert mock_cache.invalidate.call_count > 0
     invalidated_keys = [call[0][0] for call in mock_cache.invalidate.call_args_list]
     assert "stocks_with_scores" in invalidated_keys
-    assert "recommendations" in invalidated_keys
+    assert "recommendations:3" in invalidated_keys
 
 
 def test_get_cache_invalidation_service():
