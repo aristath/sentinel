@@ -157,13 +157,16 @@ class StockRepository:
 
     def _row_to_stock(self, row) -> Stock:
         """Convert database row to Stock model."""
+        keys = row.keys()
         return Stock(
             symbol=row["symbol"],
             yahoo_symbol=row["yahoo_symbol"],
             name=row["name"],
             industry=row["industry"],
-            country=row.get("country"),
-            fullExchangeName=row.get("fullExchangeName"),
+            country=row["country"] if "country" in keys else None,
+            fullExchangeName=(
+                row["fullExchangeName"] if "fullExchangeName" in keys else None
+            ),
             priority_multiplier=row["priority_multiplier"] or 1.0,
             min_lot=row["min_lot"] or 1,
             active=bool(row["active"]),
@@ -172,5 +175,5 @@ class StockRepository:
                 bool(row["allow_sell"]) if row["allow_sell"] is not None else False
             ),
             currency=row["currency"],
-            last_synced=row["last_synced"] if "last_synced" in row.keys() else None,
+            last_synced=row["last_synced"] if "last_synced" in keys else None,
         )
