@@ -107,11 +107,6 @@ DEFAULT_ALLOCATION_TARGETS = [
     ("geography", "EU", 0.50),
     ("geography", "ASIA", 0.30),
     ("geography", "US", 0.20),
-    ("industry", "Technology", 0.20),
-    ("industry", "Healthcare", 0.20),
-    ("industry", "Finance", 0.20),
-    ("industry", "Consumer", 0.20),
-    ("industry", "Industrial", 0.20),
 ]
 
 # Default settings for new database installations
