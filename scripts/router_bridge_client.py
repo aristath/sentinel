@@ -79,36 +79,32 @@ class RouterBridgeClient:
             sock.sendall(packed)
 
             # Receive response (msgpack is self-describing, so we read until complete message)
-            # Use a buffer and try to unpack incrementally
+            # Router Bridge sends response as msgpack without length prefix
             response_data = b""
-            max_reads = 100  # Prevent infinite loop
-            read_count = 0
+            buffer_size = 4096
+            max_attempts = 100
+            response = None
 
-            while read_count < max_reads:
-                chunk = sock.recv(4096)
+            for attempt in range(max_attempts):
+                chunk = sock.recv(buffer_size)
                 if not chunk:
+                    if attempt == 0:
+                        raise RuntimeError("No response from Router Bridge")
                     break
                 response_data += chunk
-                read_count += 1
 
-                # Try to unpack - msgpack.unpackb will raise if incomplete
+                # Try to unpack - msgpack.unpackb will succeed when message is complete
                 try:
                     response = msgpack.unpackb(response_data, raw=False)
                     break  # Successfully unpacked
-                except msgpack.exceptions.ExtraData:
-                    # More data available, continue reading
-                    continue
-                except msgpack.exceptions.UnpackException:
+                except Exception:
                     # Partial data, continue reading
                     continue
             else:
                 raise RuntimeError("Could not read complete response from Router Bridge")
 
-            # Unpack response
-            if not response_data:
+            if response is None:
                 raise RuntimeError("No response from Router Bridge")
-
-            response = msgpack.unpackb(response_data, raw=False)
 
             # Router Bridge RPClite response format: [type, id, error, result]
             # type=2 for response, id=message_id, error=error object, result=return value
