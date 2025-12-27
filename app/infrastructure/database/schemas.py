@@ -27,7 +27,9 @@ CREATE TABLE IF NOT EXISTS stocks (
     yahoo_symbol TEXT,
     name TEXT NOT NULL,
     industry TEXT,
-    geography TEXT NOT NULL,
+    geography TEXT,              -- Deprecated: kept for backward compatibility during transition
+    country TEXT,                -- Country name from Yahoo Finance (e.g., "United States", "Germany")
+    fullExchangeName TEXT,       -- Exchange name from Yahoo Finance (e.g., "NASDAQ", "XETR")
     priority_multiplier REAL DEFAULT 1.0,
     min_lot INTEGER DEFAULT 1,
     active INTEGER DEFAULT 1,
@@ -41,11 +43,12 @@ CREATE TABLE IF NOT EXISTS stocks (
 
 CREATE INDEX IF NOT EXISTS idx_stocks_active ON stocks(active);
 CREATE INDEX IF NOT EXISTS idx_stocks_geography ON stocks(geography);
+CREATE INDEX IF NOT EXISTS idx_stocks_country ON stocks(country);
 
--- Allocation targets (geography and industry weightings)
+-- Allocation targets (country and industry weightings)
 CREATE TABLE IF NOT EXISTS allocation_targets (
     id INTEGER PRIMARY KEY,
-    type TEXT NOT NULL,      -- 'geography' or 'industry'
+    type TEXT NOT NULL,      -- 'country' or 'industry' (geography deprecated but supported during transition)
     name TEXT NOT NULL,
     target_pct REAL NOT NULL,
     created_at TEXT NOT NULL,
@@ -73,7 +76,7 @@ CREATE TABLE IF NOT EXISTS recommendations (
     estimated_price REAL,
     estimated_value REAL,
     reason TEXT NOT NULL,
-    geography TEXT,
+    country TEXT,                -- Country name from Yahoo Finance (replaces geography)
     industry TEXT,
     currency TEXT DEFAULT 'EUR',
     priority REAL,
@@ -181,9 +184,9 @@ async def init_config_schema(db):
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
             (
-                4,
+                5,
                 now,
-                "Initial config schema with portfolio_hash recommendations and last_synced",
+                "Initial config schema with portfolio_hash recommendations, last_synced, country and fullExchangeName",
             ),
         )
 
@@ -228,7 +231,7 @@ async def init_config_schema(db):
                     estimated_price REAL,
                     estimated_value REAL,
                     reason TEXT NOT NULL,
-                    geography TEXT,
+                    country TEXT,                -- Country name from Yahoo Finance (replaces geography)
                     industry TEXT,
                     currency TEXT DEFAULT 'EUR',
                     priority REAL,
@@ -251,7 +254,7 @@ async def init_config_schema(db):
                 """
                 INSERT OR IGNORE INTO recommendations_new
                 SELECT uuid, symbol, name, side, amount, quantity, estimated_price,
-                       estimated_value, reason, geography, industry, currency, priority,
+                       estimated_value, reason, geography as country, industry, currency, priority,
                        current_portfolio_score, new_portfolio_score, score_change,
                        status, '', created_at, updated_at, executed_at, dismissed_at
                 FROM recommendations
@@ -313,6 +316,52 @@ async def init_config_schema(db):
         )
         await db.commit()
         logger.info("Config database migrated to schema version 4 (last_synced)")
+        current_version = 4  # Continue to next migration
+
+    if current_version == 4:
+        # Migration: Add country and fullExchangeName columns to stocks, update recommendations (version 4 -> 5)
+        now = datetime.now().isoformat()
+        logger.info(
+            "Migrating config database to schema version 5 (country and fullExchangeName)..."
+        )
+
+        # Check if country column exists
+        cursor = await db.execute("PRAGMA table_info(stocks)")
+        columns = [row[1] for row in await cursor.fetchall()]
+
+        if "country" not in columns:
+            await db.execute("ALTER TABLE stocks ADD COLUMN country TEXT")
+            logger.info("Added country column to stocks table")
+
+        if "fullExchangeName" not in columns:
+            await db.execute("ALTER TABLE stocks ADD COLUMN fullExchangeName TEXT")
+            logger.info("Added fullExchangeName column to stocks table")
+
+        # Create index on country
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_stocks_country ON stocks(country)"
+        )
+
+        # Update recommendations table: add country column, keep geography for backward compatibility
+        cursor = await db.execute("PRAGMA table_info(recommendations)")
+        rec_columns = [row[1] for row in await cursor.fetchall()]
+
+        if "country" not in rec_columns:
+            await db.execute("ALTER TABLE recommendations ADD COLUMN country TEXT")
+            logger.info("Added country column to recommendations table")
+
+        await db.execute(
+            "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
+            (
+                5,
+                now,
+                "Added country and fullExchangeName columns to stocks, added country to recommendations",
+            ),
+        )
+        await db.commit()
+        logger.info(
+            "Config database migrated to schema version 5 (country and fullExchangeName)"
+        )
 
 
 # =============================================================================
