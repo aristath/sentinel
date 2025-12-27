@@ -181,7 +181,7 @@ async def _process_single_stock(symbol: str):
         metrics_count = await _calculate_metrics_for_symbol(symbol)
         logger.debug(f"Calculated {metrics_count} metrics for {symbol}")
 
-        # Step 4: Refresh score
+        # Step 5: Refresh score
         await _refresh_score_for_symbol(symbol)
 
         # Mark as synced
@@ -312,6 +312,60 @@ async def _detect_and_update_industry(symbol: str):
     except Exception as e:
         # Don't fail the entire pipeline if industry detection fails
         logger.warning(f"Failed to detect industry for {symbol}: {e}")
+
+
+async def _detect_and_update_country_and_exchange(symbol: str):
+    """
+    Detect and update country and exchange from Yahoo Finance for a stock.
+
+    This runs automatically during the daily pipeline to keep country
+    and exchange data up to date from Yahoo Finance.
+
+    Args:
+        symbol: The stock symbol to update
+    """
+    from app.infrastructure.database.manager import get_db_manager
+    from app.infrastructure.external import yahoo_finance as yahoo
+    from app.repositories import StockRepository
+
+    db_manager = get_db_manager()
+
+    # Get the stock's yahoo_symbol
+    cursor = await db_manager.config.execute(
+        "SELECT yahoo_symbol FROM stocks WHERE symbol = ?", (symbol,)
+    )
+    row = await cursor.fetchone()
+    if not row:
+        logger.warning(f"Stock {symbol} not found for country/exchange detection")
+        return
+
+    yahoo_symbol = row[0]
+
+    # Detect country and exchange from Yahoo Finance
+    try:
+        detected_country, detected_exchange = yahoo.get_stock_country_and_exchange(
+            symbol, yahoo_symbol
+        )
+        if detected_country or detected_exchange:
+            # Update the stock's country and fullExchangeName in the database
+            stock_repo = StockRepository()
+            updates = {}
+            if detected_country:
+                updates["country"] = detected_country
+            if detected_exchange:
+                updates["fullExchangeName"] = detected_exchange
+            if updates:
+                await stock_repo.update(symbol, **updates)
+                logger.info(
+                    f"Updated country/exchange for {symbol}: country={detected_country}, exchange={detected_exchange}"
+                )
+        else:
+            logger.debug(
+                f"No country/exchange detected for {symbol} from Yahoo Finance"
+            )
+    except Exception as e:
+        # Don't fail the entire pipeline if country/exchange detection fails
+        logger.warning(f"Failed to detect country/exchange for {symbol}: {e}")
 
 
 async def _calculate_metrics_for_symbol(symbol: str) -> int:
