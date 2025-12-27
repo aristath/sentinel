@@ -25,50 +25,32 @@ def test_invalidate_trade_caches(cache_service, mock_cache):
     """Test invalidating trade-related caches."""
     cache_service.invalidate_trade_caches(include_depth=True)
 
-    # Should use prefix invalidation
+    # Should use prefix invalidation for all recommendation keys
     mock_cache.invalidate_prefix.assert_called_once_with("recommendations:")
-
-    # Should also invalidate specific LED ticker cache keys
-    invalidated_keys = [call[0][0] for call in mock_cache.invalidate.call_args_list]
-    assert "recommendations:3" in invalidated_keys
-    assert "sell_recommendations:3" in invalidated_keys
 
 
 def test_invalidate_trade_caches_no_depth(cache_service, mock_cache):
-    """Test invalidating trade caches without depth-specific keys."""
+    """Test invalidating trade caches (include_depth param is kept for backward compat)."""
     cache_service.invalidate_trade_caches(include_depth=False)
 
     # Should still use prefix invalidation
     mock_cache.invalidate_prefix.assert_called_once_with("recommendations:")
-
-    # Should still invalidate LED ticker caches
-    invalidated_keys = [call[0][0] for call in mock_cache.invalidate.call_args_list]
-    assert "recommendations:3" in invalidated_keys
-    assert "sell_recommendations:3" in invalidated_keys
 
 
 def test_invalidate_recommendation_caches_defaults(cache_service, mock_cache):
     """Test invalidating recommendation caches with default parameters."""
     cache_service.invalidate_recommendation_caches()
 
-    # Should use prefix invalidation
+    # Should use prefix invalidation for all recommendation keys
     mock_cache.invalidate_prefix.assert_called_once_with("recommendations:")
-
-    # Should invalidate default limit keys
-    invalidated_keys = [call[0][0] for call in mock_cache.invalidate.call_args_list]
-    assert "recommendations:3" in invalidated_keys
-    assert "sell_recommendations:3" in invalidated_keys
 
 
 def test_invalidate_recommendation_caches_custom_limits(cache_service, mock_cache):
-    """Test invalidating recommendation caches with custom limits."""
+    """Test invalidating recommendation caches (limits param kept for backward compat)."""
     cache_service.invalidate_recommendation_caches(limits=[5, 15])
 
-    invalidated_keys = [call[0][0] for call in mock_cache.invalidate.call_args_list]
-    assert "recommendations:5" in invalidated_keys
-    assert "recommendations:15" in invalidated_keys
-    assert "sell_recommendations:5" in invalidated_keys
-    assert "sell_recommendations:15" in invalidated_keys
+    # Should still just use prefix invalidation (limits param is ignored)
+    mock_cache.invalidate_prefix.assert_called_once_with("recommendations:")
 
 
 def test_invalidate_portfolio_caches(cache_service, mock_cache):
@@ -84,11 +66,12 @@ def test_invalidate_all_trade_related(cache_service, mock_cache):
     """Test invalidating all trade-related caches."""
     cache_service.invalidate_all_trade_related()
 
-    # Should call both trade and portfolio invalidation
-    assert mock_cache.invalidate.call_count > 0
+    # Should call prefix invalidation for recommendations
+    mock_cache.invalidate_prefix.assert_called_with("recommendations:")
+
+    # Should also invalidate portfolio caches
     invalidated_keys = [call[0][0] for call in mock_cache.invalidate.call_args_list]
     assert "stocks_with_scores" in invalidated_keys
-    assert "recommendations:3" in invalidated_keys
 
 
 def test_get_cache_invalidation_service():

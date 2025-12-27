@@ -19,15 +19,11 @@ class CacheInvalidationService:
         Invalidate all caches related to trade execution.
 
         Args:
-            include_depth: If True, invalidate depth-specific recommendation caches
+            include_depth: Not used (kept for backward compatibility)
         """
-        # Invalidate unified recommendations (portfolio-aware cache keys)
-        # Use prefix invalidation to catch all portfolio-specific keys
+        # Invalidate all recommendations using prefix invalidation
+        # This catches all portfolio-specific keys: recommendations:{hash}
         self._cache.invalidate_prefix("recommendations:")
-
-        # Invalidate LED ticker caches (legacy format for compatibility)
-        self._cache.invalidate("recommendations:3")
-        self._cache.invalidate("sell_recommendations:3")
 
         logger.debug("Invalidated trade-related caches")
 
@@ -38,20 +34,14 @@ class CacheInvalidationService:
         Invalidate recommendation caches.
 
         Args:
-            limits: List of limit values to invalidate (default: [3])
+            limits: Not used (kept for backward compatibility)
             strategies: Not used (kept for backward compatibility)
         """
-        # Invalidate unified recommendations using prefix
+        # Invalidate all recommendations using prefix invalidation
+        # This catches all portfolio-specific keys: recommendations:{hash}
         self._cache.invalidate_prefix("recommendations:")
 
-        # Invalidate LED ticker caches (legacy format for compatibility)
-        if limits is None:
-            limits = [3]
-        for limit in limits:
-            self._cache.invalidate(f"recommendations:{limit}")
-            self._cache.invalidate(f"sell_recommendations:{limit}")
-
-        logger.debug(f"Invalidated recommendation caches (limits: {limits})")
+        logger.debug("Invalidated recommendation caches")
 
     def invalidate_portfolio_caches(self) -> None:
         """Invalidate all portfolio-related caches."""

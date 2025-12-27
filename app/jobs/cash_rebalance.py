@@ -478,66 +478,11 @@ async def _refresh_recommendation_cache():
                     else 0.0
                 ),
             }
-            # Cache to portfolio-hash-based key (for _get_next_holistic_action)
+            # Cache to portfolio-hash-based key (single source of truth)
             cache.set(cache_key, multi_step_data, ttl_seconds=900)
             logger.info(
-                f"Multi-step recommendation cache refreshed: {len(multi_step_steps)} steps (key: {cache_key})"
+                f"Recommendation cache refreshed: {len(multi_step_steps)} steps (key: {cache_key})"
             )
-
-            # Also cache to fixed keys for LED ticker display
-            # LED ticker looks for: recommendations:diversification:{depth}:holistic
-            # Use actual depth from holistic planner (it auto-determines optimal depth)
-            depth = len(multi_step_steps)
-            led_cache_key = f"recommendations:diversification:{depth}:holistic"
-            cache.set(led_cache_key, multi_step_data, ttl_seconds=900)
-            cache.set(
-                "recommendations:diversification:default:holistic",
-                multi_step_data,
-                ttl_seconds=900,
-            )
-            logger.info(f"LED ticker cache refreshed: {led_cache_key}")
-
-        # Extract buy/sell from unified recommendations for LED ticker compatibility
-        # Get unified recommendations (already cached above)
-        from app.domain.value_objects.trade_side import TradeSide
-
-        unified_steps = await rebalancing_service.get_recommendations()
-
-        if unified_steps:
-            # Extract buy steps
-            buy_steps = [step for step in unified_steps if step.side == TradeSide.BUY][
-                :3
-            ]
-            buy_recs = {
-                "recommendations": [
-                    {"symbol": step.symbol, "amount": step.estimated_value}
-                    for step in buy_steps
-                ]
-            }
-            cache.set("recommendations:3", buy_recs, ttl_seconds=900)
-
-            # Extract sell steps
-            sell_steps = [
-                step for step in unified_steps if step.side == TradeSide.SELL
-            ][:3]
-            sell_recs = {
-                "recommendations": [
-                    {"symbol": step.symbol, "amount": step.estimated_value}
-                    for step in sell_steps
-                ]
-            }
-            cache.set("sell_recommendations:3", sell_recs, ttl_seconds=900)
-
-            logger.info(
-                f"Recommendation cache refreshed: {len(buy_steps)} buy, {len(sell_steps)} sell"
-            )
-        else:
-            # No recommendations available
-            cache.set("recommendations:3", {"recommendations": []}, ttl_seconds=900)
-            cache.set(
-                "sell_recommendations:3", {"recommendations": []}, ttl_seconds=900
-            )
-            logger.info("No recommendations available for LED ticker cache")
 
     except Exception as e:
         logger.warning(f"Failed to refresh recommendation cache: {e}")

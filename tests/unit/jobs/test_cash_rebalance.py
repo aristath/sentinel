@@ -409,17 +409,11 @@ class TestRefreshRecommendationCache:
             mock_service.return_value.get_recommendations = AsyncMock(
                 return_value=[mock_step]
             )
-            mock_service.return_value.get_recommendations = AsyncMock(
-                return_value=[mock_rec]
-            )
-            mock_service.return_value.calculate_sell_recommendations = AsyncMock(
-                return_value=[]
-            )
 
             await _refresh_recommendation_cache()
 
-            # Should have set cache multiple times
-            assert mock_cache.set.call_count >= 1
+            # Should have set cache exactly once (primary key only)
+            assert mock_cache.set.call_count == 1
 
     @pytest.mark.asyncio
     async def test_handles_error_silently(self):

@@ -432,12 +432,6 @@ async def _get_holistic_recommendation():
     }
     cache.set(cache_key, multi_step_data, ttl_seconds=900)
 
-    # Also cache to fixed keys for LED ticker display
-    # LED ticker looks for: recommendations:diversification:{depth}:holistic
-    depth = len(steps)
-    led_cache_key = f"recommendations:diversification:{depth}:holistic"
-    cache.set(led_cache_key, multi_step_data, ttl_seconds=900)
-
     # Convert to Recommendation
     currency_val = step.currency
     if isinstance(currency_val, str):
@@ -531,18 +525,25 @@ async def _execute_trade_order(recommendation) -> dict[str, Any]:
 
 async def _generate_ticker_text() -> str:
     """Generate ticker text for the LED display."""
+    from app.domain.portfolio_hash import generate_recommendation_cache_key
+    from app.domain.services.settings_service import SettingsService
     from app.infrastructure.cache import cache
-    from app.repositories import PortfolioRepository, SettingsRepository
+    from app.repositories import (
+        PortfolioRepository,
+        PositionRepository,
+        SettingsRepository,
+    )
 
     try:
         settings_repo = SettingsRepository()
         portfolio_repo = PortfolioRepository()
+        position_repo = PositionRepository()
+        settings_service = SettingsService(settings_repo)
 
         show_value = await settings_repo.get_float("ticker_show_value", 1.0)
         show_cash = await settings_repo.get_float("ticker_show_cash", 1.0)
         show_actions = await settings_repo.get_float("ticker_show_actions", 1.0)
         show_amounts = await settings_repo.get_float("ticker_show_amounts", 1.0)
-        max_actions = int(await settings_repo.get_float("ticker_max_actions", 3.0))
 
         parts = []
 
@@ -558,23 +559,29 @@ async def _generate_ticker_text() -> str:
             if latest_snapshot and latest_snapshot.cash_balance:
                 parts.append(f"CASH EUR{int(latest_snapshot.cash_balance):,}")
 
-        # Recommendations
+        # Recommendations - read from primary cache (show ALL)
         if show_actions > 0:
-            # Try unified recommendations cache first
-            for depth in [5, 4, 3, 2, 1]:
-                cache_key = f"recommendations:diversification:{depth}:holistic"
-                cached = cache.get(cache_key)
-                if cached and cached.get("steps"):
-                    steps = cached["steps"][:max_actions]
-                    for step in steps:
-                        side = step.get("side", "").upper()
-                        symbol = step.get("symbol", "").split(".")[0]
-                        value = step.get("estimated_value", 0)
-                        if show_amounts > 0:
-                            parts.append(f"{side} {symbol} EUR{int(value)}")
-                        else:
-                            parts.append(f"{side} {symbol}")
-                    break
+            # Generate portfolio hash to read from primary cache
+            positions = await position_repo.get_all()
+            settings = await settings_service.get_settings()
+            position_dicts = [
+                {"symbol": p.symbol, "quantity": p.quantity} for p in positions
+            ]
+            portfolio_cache_key = generate_recommendation_cache_key(
+                position_dicts, settings.to_dict()
+            )
+            cache_key = f"recommendations:{portfolio_cache_key}"
+
+            cached = cache.get(cache_key)
+            if cached and cached.get("steps"):
+                for step in cached["steps"]:  # ALL recommendations, no limit
+                    side = step.get("side", "").upper()
+                    symbol = step.get("symbol", "").split(".")[0]
+                    value = step.get("estimated_value", 0)
+                    if show_amounts > 0:
+                        parts.append(f"{side} {symbol} EUR{int(value)}")
+                    else:
+                        parts.append(f"{side} {symbol}")
 
         return " | ".join(parts) if parts else ""
 
