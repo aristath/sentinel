@@ -267,7 +267,31 @@ async def _step_execute_trade(recommendation) -> dict[str, Any]:
 async def _step_update_display():
     """Step 8: Update the LED ticker display."""
     try:
-        ticker_text = await _generate_ticker_text()
+        from app.domain.services.ticker_content_service import TickerContentService
+        from app.infrastructure.external.tradernet import get_tradernet_client
+        from app.repositories import (
+            PortfolioRepository,
+            PositionRepository,
+            SettingsRepository,
+            StockRepository,
+        )
+
+        # Instantiate repositories and service
+        portfolio_repo = PortfolioRepository()
+        position_repo = PositionRepository()
+        stock_repo = StockRepository()
+        settings_repo = SettingsRepository()
+        tradernet_client = get_tradernet_client()
+
+        ticker_service = TickerContentService(
+            portfolio_repo=portfolio_repo,
+            position_repo=position_repo,
+            stock_repo=stock_repo,
+            settings_repo=settings_repo,
+            tradernet_client=tradernet_client,
+        )
+
+        ticker_text = await ticker_service.generate_ticker_text()
         set_next_actions(ticker_text)
         logger.debug(f"Ticker updated: {ticker_text[:50]}...")
     except Exception as e:
@@ -528,81 +552,3 @@ async def _execute_trade_order(recommendation) -> dict[str, Any]:
     else:
         error = results[0].get("error", "Unknown error") if results else "No result"
         return {"status": "error", "reason": error}
-
-
-async def _generate_ticker_text() -> str:
-    """Generate ticker text for the LED display."""
-    from app.domain.portfolio_hash import generate_recommendation_cache_key
-    from app.domain.services.settings_service import SettingsService
-    from app.infrastructure.cache import cache
-    from app.infrastructure.external.tradernet import get_tradernet_client
-    from app.repositories import (
-        PortfolioRepository,
-        PositionRepository,
-        SettingsRepository,
-        StockRepository,
-    )
-
-    try:
-        settings_repo = SettingsRepository()
-        portfolio_repo = PortfolioRepository()
-        position_repo = PositionRepository()
-        stock_repo = StockRepository()
-        settings_service = SettingsService(settings_repo)
-        client = get_tradernet_client()
-
-        show_value = await settings_repo.get_float("ticker_show_value", 1.0)
-        show_cash = await settings_repo.get_float("ticker_show_cash", 1.0)
-        show_actions = await settings_repo.get_float("ticker_show_actions", 1.0)
-        show_amounts = await settings_repo.get_float("ticker_show_amounts", 1.0)
-
-        parts = []
-
-        # Portfolio value
-        if show_value > 0:
-            latest_snapshot = await portfolio_repo.get_latest()
-            if latest_snapshot and latest_snapshot.total_value:
-                parts.append(f"Portfolio EUR{int(latest_snapshot.total_value):,}")
-
-        # Cash balance
-        if show_cash > 0:
-            latest_snapshot = await portfolio_repo.get_latest()
-            if latest_snapshot and latest_snapshot.cash_balance:
-                parts.append(f"CASH EUR{int(latest_snapshot.cash_balance):,}")
-
-        # Recommendations - read from primary cache (show ALL)
-        if show_actions > 0:
-            # Generate portfolio hash to read from primary cache
-            positions = await position_repo.get_all()
-            stocks = await stock_repo.get_all_active()
-            settings = await settings_service.get_settings()
-            position_dicts = [
-                {"symbol": p.symbol, "quantity": p.quantity} for p in positions
-            ]
-            stock_symbols = [s.symbol for s in stocks]
-            cash_balances = (
-                {b.currency: b.amount for b in client.get_cash_balances()}
-                if client.is_connected
-                else {}
-            )
-            portfolio_cache_key = generate_recommendation_cache_key(
-                position_dicts, settings.to_dict(), stock_symbols, cash_balances
-            )
-            cache_key = f"recommendations:{portfolio_cache_key}"
-
-            cached = cache.get(cache_key)
-            if cached and cached.get("steps"):
-                for step in cached["steps"]:  # ALL recommendations, no limit
-                    side = step.get("side", "").upper()
-                    symbol = step.get("symbol", "").split(".")[0]
-                    value = step.get("estimated_value", 0)
-                    if show_amounts > 0:
-                        parts.append(f"{side} {symbol} EUR{int(value)}")
-                    else:
-                        parts.append(f"{side} {symbol}")
-
-        return " | ".join(parts) if parts else ""
-
-    except Exception as e:
-        logger.error(f"Failed to generate ticker text: {e}")
-        return ""

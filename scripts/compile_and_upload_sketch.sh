@@ -9,8 +9,16 @@ REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 SKETCH_DIR="$REPO_DIR/arduino-app/sketch"
 SKETCH_FILE="$SKETCH_DIR/sketch.ino"
 FQBN="arduino:zephyr:unoq"
-SERIAL_PORT="/dev/ttyACM0"
 LOG_FILE="/home/arduino/logs/sketch-compile.log"
+
+# Detect serial port - try ttyHS1 first (Arduino Uno Q internal), then ttyACM0
+if [ -e "/dev/ttyHS1" ]; then
+    SERIAL_PORT="/dev/ttyHS1"
+elif [ -e "/dev/ttyACM0" ]; then
+    SERIAL_PORT="/dev/ttyACM0"
+else
+    SERIAL_PORT="/dev/ttyHS1"  # Default fallback
+fi
 
 # Ensure log directory exists
 mkdir -p "$(dirname "$LOG_FILE")"

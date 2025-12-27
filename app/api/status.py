@@ -8,6 +8,7 @@ from fastapi import APIRouter
 
 from app.config import settings
 from app.infrastructure.dependencies import (
+    DisplayStateManagerDep,
     PortfolioRepositoryDep,
     PositionRepositoryDep,
     SettingsRepositoryDep,
@@ -82,22 +83,23 @@ async def get_display_text(settings_repo: SettingsRepositoryDep):
 
 
 @router.get("/led/display")
-async def get_led_display_state(settings_repo: SettingsRepositoryDep):
+async def get_led_display_state(
+    settings_repo: SettingsRepositoryDep,
+    display_manager: DisplayStateManagerDep,
+):
     """Get LED display state for Arduino App Framework Docker app.
 
     Returns display mode, text, and RGB LED states in the format expected
     by the trader-display Arduino app.
     """
-    from app.infrastructure.hardware.display_service import (
-        _error_text,
-        _next_actions_text,
-        _processing_text,
-    )
+    error_text = display_manager.get_error_text()
+    processing_text = display_manager.get_processing_text()
+    next_actions_text = display_manager.get_next_actions_text()
 
     # Determine mode based on current state
-    if _error_text:
+    if error_text:
         mode = "error"
-    elif _processing_text:
+    elif processing_text:
         mode = "activity"
     else:
         mode = "normal"
@@ -106,12 +108,12 @@ async def get_led_display_state(settings_repo: SettingsRepositoryDep):
 
     return {
         "mode": mode,
-        "error_message": _error_text if _error_text else None,
+        "error_message": error_text if error_text else None,
         "trade_is_buy": True,
         "led3": [0, 0, 0],
         "led4": [0, 0, 0],
-        "ticker_text": _next_actions_text,
-        "activity_message": _processing_text if _processing_text else None,
+        "ticker_text": next_actions_text,
+        "activity_message": processing_text if processing_text else None,
         "ticker_speed": int(ticker_speed),
     }
 

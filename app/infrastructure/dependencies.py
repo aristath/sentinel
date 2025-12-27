@@ -23,8 +23,13 @@ from app.domain.repositories.protocols import (
 )
 from app.domain.services.exchange_rate_service import ExchangeRateService
 from app.domain.services.settings_service import SettingsService
+from app.domain.services.ticker_content_service import TickerContentService
 from app.infrastructure.database.manager import DatabaseManager, get_db_manager
 from app.infrastructure.external.tradernet import TradernetClient, get_tradernet_client
+from app.infrastructure.hardware.display_service import (
+    DisplayStateManager,
+    _display_state_manager,
+)
 from app.repositories import (
     AllocationRepository,
     CalculationsRepository,
@@ -105,6 +110,11 @@ def get_tradernet() -> TradernetClient:
     return get_tradernet_client()
 
 
+def get_display_state_manager() -> DisplayStateManager:
+    """Get DisplayStateManager singleton instance."""
+    return _display_state_manager
+
+
 # Type aliases for use in function signatures
 StockRepositoryDep = Annotated[IStockRepository, Depends(get_stock_repository)]
 PositionRepositoryDep = Annotated[IPositionRepository, Depends(get_position_repository)]
@@ -128,6 +138,9 @@ CalculationsRepositoryDep = Annotated[
 # Infrastructure dependency type aliases
 DatabaseManagerDep = Annotated[DatabaseManager, Depends(get_database_manager)]
 TradernetClientDep = Annotated[TradernetClient, Depends(get_tradernet)]
+DisplayStateManagerDep = Annotated[
+    DisplayStateManager, Depends(get_display_state_manager)
+]
 
 
 # Application Service Dependencies
@@ -171,6 +184,23 @@ def get_exchange_rate_service(
 ) -> ExchangeRateService:
     """Get ExchangeRateService instance."""
     return ExchangeRateService(db_manager=db_manager)
+
+
+def get_ticker_content_service(
+    portfolio_repo: PortfolioRepositoryDep,
+    position_repo: PositionRepositoryDep,
+    stock_repo: StockRepositoryDep,
+    settings_repo: SettingsRepositoryDep,
+    tradernet_client: TradernetClientDep,
+) -> TickerContentService:
+    """Get TickerContentService instance."""
+    return TickerContentService(
+        portfolio_repo=portfolio_repo,
+        position_repo=position_repo,
+        stock_repo=stock_repo,
+        settings_repo=settings_repo,
+        tradernet_client=tradernet_client,
+    )
 
 
 def get_currency_exchange_service_dep(
@@ -255,4 +285,7 @@ CurrencyExchangeServiceDep = Annotated[
 ]
 ExchangeRateServiceDep = Annotated[
     ExchangeRateService, Depends(get_exchange_rate_service)
+]
+TickerContentServiceDep = Annotated[
+    TickerContentService, Depends(get_ticker_content_service)
 ]
