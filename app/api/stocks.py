@@ -265,8 +265,7 @@ async def refresh_all_scores(
                     stock.symbol, stock.yahoo_symbol
                 )
                 if detected_industry:
-                    stock.industry = detected_industry
-                    await stock_repo.update(stock)
+                    await stock_repo.update(stock.symbol, industry=detected_industry)
 
         scores = await scoring_service.score_all_stocks()
 

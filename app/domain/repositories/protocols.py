@@ -5,7 +5,7 @@ Using protocols allows for better testability and dependency injection
 without requiring abstract base classes.
 """
 
-from typing import Dict, List, Optional, Protocol, Set
+from typing import Any, Dict, List, Optional, Protocol, Set
 
 from app.domain.models import AllocationTarget, Position, Stock, Trade
 
@@ -29,8 +29,8 @@ class IStockRepository(Protocol):
         """Create a new stock."""
         ...
 
-    async def update(self, stock: Stock) -> None:
-        """Update an existing stock."""
+    async def update(self, symbol: str, **updates: Any) -> None:
+        """Update an existing stock by symbol with field updates."""
         ...
 
     async def delete(self, symbol: str) -> None:

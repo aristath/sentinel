@@ -21,6 +21,8 @@ from app.domain.repositories.protocols import (
 from app.domain.services.allocation_calculator import get_max_trades
 from app.domain.services.exchange_rate_service import ExchangeRateService
 from app.domain.services.settings_service import SettingsService
+from app.domain.value_objects.currency import Currency
+from app.domain.value_objects.recommendation_status import RecommendationStatus
 from app.domain.value_objects.trade_side import TradeSide
 from app.infrastructure.database.manager import DatabaseManager
 from app.infrastructure.external import yahoo_finance as yahoo
@@ -126,12 +128,6 @@ class RebalancingService:
             return []
 
         # Convert MultiStepRecommendation to Recommendation format
-        from app.domain.value_objects.currency import Currency
-        from app.domain.value_objects.recommendation import (
-            Recommendation,
-            RecommendationStatus,
-        )
-
         recommendations = []
         for step in buy_steps[:max_trades]:  # Limit to max_trades
             currency_val = step.currency
@@ -140,11 +136,18 @@ class RebalancingService:
             else:
                 currency = currency_val
 
+            # Convert string side to TradeSide enum if needed
+            side_val = (
+                TradeSide.from_string(step.side)
+                if isinstance(step.side, str)
+                else step.side
+            )
+
             recommendations.append(
                 Recommendation(
                     symbol=step.symbol,
                     name=step.name,
-                    side=step.side,
+                    side=side_val,
                     quantity=step.quantity,
                     estimated_price=step.estimated_price,
                     estimated_value=step.estimated_value,
