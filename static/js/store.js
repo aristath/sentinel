@@ -17,6 +17,7 @@ document.addEventListener('alpine:init', () => {
     stocks: [],
     trades: [],
     tradernet: { connected: false },
+    markets: {},  // {EU: {open: bool, ...}, US: {...}, ASIA: {...}}
     recommendations: [],
     sellRecommendations: [],
     multiStepRecommendations: null,  // {depth: int, steps: [], total_score_improvement: float, final_available_cash: float}
@@ -87,6 +88,7 @@ document.addEventListener('alpine:init', () => {
         this.fetchStocks(),
         this.fetchTrades(),
         this.fetchTradernet(),
+        this.fetchMarkets(),
         this.fetchGeographies(),
         this.fetchRecommendations(),
         this.fetchSellRecommendations(),
@@ -146,6 +148,16 @@ document.addEventListener('alpine:init', () => {
         this.tradernet = await API.fetchTradernet();
       } catch (e) {
         console.error('Failed to fetch tradernet status:', e);
+      }
+    },
+
+    async fetchMarkets() {
+      try {
+        const response = await fetch('/api/status/markets');
+        const data = await response.json();
+        this.markets = data.markets || {};
+      } catch (e) {
+        console.error('Failed to fetch market status:', e);
       }
     },
 

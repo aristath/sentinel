@@ -11,11 +11,24 @@ class AppHeader extends HTMLElement {
           <p class="text-xs text-gray-500">Automated Portfolio Management</p>
         </div>
         <div class="flex items-center gap-4">
+          <!-- Market Status Indicators -->
+          <div class="flex items-center gap-2 text-xs">
+            <template x-for="(market, geo) in $store.app.markets" :key="geo">
+              <div class="flex items-center gap-1 px-2 py-1 rounded"
+                   :class="market.open ? 'bg-green-900/30 text-green-400' : 'bg-gray-800 text-gray-500'"
+                   :title="market.open ? geo + ' market open (closes ' + market.closes_at + ')' : geo + ' market closed (opens ' + market.opens_at + (market.opens_date ? ' on ' + market.opens_date : '') + ')'">
+                <span class="w-1.5 h-1.5 rounded-full"
+                      :class="market.open ? 'bg-green-500' : 'bg-gray-600'"></span>
+                <span x-text="geo"></span>
+              </div>
+            </template>
+          </div>
+          <!-- Tradernet Connection -->
           <div class="flex items-center gap-1.5"
                :class="$store.app.tradernet.connected ? 'text-green-400' : 'text-red-400'">
             <span class="w-2 h-2 rounded-full"
                   :class="$store.app.tradernet.connected ? 'bg-green-500' : 'bg-red-500'"></span>
-            <span class="text-xs" x-text="$store.app.tradernet.connected ? 'Tradernet Connected' : 'Tradernet Offline'"></span>
+            <span class="text-xs" x-text="$store.app.tradernet.connected ? 'Tradernet' : 'Offline'"></span>
           </div>
           <!-- Trading Mode Toggle -->
           <button @click="$store.app.toggleTradingMode()"
