@@ -404,11 +404,26 @@ async def _validate_symbol_change(
 
 
 def _apply_string_update(
-    updates: dict, field_name: str, value: str | None, transform=None
+    updates: dict,
+    field_name: str,
+    value: str | None,
+    transform=None,
+    allow_none: bool = False,
 ) -> None:
-    """Apply a string field update with optional transformation."""
+    """Apply a string field update with optional transformation.
+
+    Args:
+        updates: Dictionary to update
+        field_name: Name of the field
+        value: Value to set (can be None or empty string to clear)
+        transform: Optional transformation function
+        allow_none: If True, allow None values to be set (for clearing fields)
+    """
     if value is not None:
         updates[field_name] = transform(value) if transform else value
+    elif allow_none:
+        # Explicitly allow None to clear the field
+        updates[field_name] = None
 
 
 def _apply_numeric_update(
@@ -439,7 +454,18 @@ def _build_update_dict(
         updates, "yahoo_symbol", update.yahoo_symbol, lambda v: v if v else None
     )
     _apply_string_update(updates, "geography", update.geography, str.upper)
-    _apply_string_update(updates, "industry", update.industry)
+    # Handle industry: allow None/empty string to clear the field
+    # Check if industry was explicitly provided in the request (not just default None)
+    if hasattr(update, "model_fields_set") and "industry" in update.model_fields_set:
+        # Industry was explicitly provided in the request
+        if update.industry is None or (
+            isinstance(update.industry, str) and not update.industry.strip()
+        ):
+            # Empty string or None -> clear the field
+            updates["industry"] = None
+        else:
+            # Non-empty value -> set it (trimmed)
+            updates["industry"] = update.industry.strip()
 
     _apply_numeric_update(
         updates,
