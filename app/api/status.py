@@ -164,6 +164,24 @@ async def trigger_daily_maintenance():
         return {"status": "error", "message": str(e)}
 
 
+@router.post("/sync/recommendations")
+async def trigger_recommendation_sync():
+    """Manually trigger recommendation generation and cache update."""
+    from app.jobs.sync_cycle import _step_get_recommendation, _step_update_display
+
+    try:
+        rec = await _step_get_recommendation()
+        await _step_update_display()
+        if rec:
+            return {
+                "status": "success",
+                "recommendation": f"{rec.side} {rec.symbol} EUR{int(rec.estimated_value)}",
+            }
+        return {"status": "success", "message": "No recommendations generated"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 @router.get("/tradernet")
 async def get_tradernet_status():
     """Get Tradernet connection status."""
