@@ -10,14 +10,6 @@ from app.domain.value_objects.currency import Currency
 class StockFactory:
     """Factory for creating Stock domain objects."""
 
-    # Geography to currency mapping (with fallback to EUR for unknown)
-    GEOGRAPHY_CURRENCY_MAP = {
-        "EU": Currency.EUR,
-        "US": Currency.USD,
-        "ASIA": Currency.HKD,
-        "GREECE": Currency.EUR,  # Greek stocks trade in EUR
-    }
-
     @classmethod
     def create_from_api_request(cls, data: dict) -> Stock:
         """Create Stock from API request data.
@@ -26,12 +18,14 @@ class StockFactory:
             data: Dictionary with stock data from API request
                 - symbol: str (required)
                 - name: str (required)
-                - geography: str (required, must be EU/US/ASIA)
+                - country: str (optional, auto-detected from Yahoo Finance)
+                - fullExchangeName: str (optional, auto-detected from Yahoo Finance)
                 - industry: str (optional)
                 - min_lot: int (optional, defaults to 1)
                 - allow_buy: bool (optional, defaults to True)
                 - allow_sell: bool (optional, defaults to False)
                 - yahoo_symbol: str (optional)
+                - currency: Currency (optional, synced from Tradernet)
 
         Returns:
             Stock domain object
@@ -47,22 +41,21 @@ class StockFactory:
         if not name:
             raise ValidationError("Name cannot be empty")
 
-        geography = data.get("geography", "").strip().upper()
-        if not geography:
-            raise ValidationError("Geography cannot be empty")
-
-        # Set currency based on geography (fallback to EUR for unknown)
-        currency = cls.GEOGRAPHY_CURRENCY_MAP.get(geography, Currency.EUR)
-
         # Validate and set min_lot
         min_lot = data.get("min_lot", 1)
         if min_lot < 1:
             min_lot = 1
 
+        # Currency is synced from Tradernet, not inferred from geography
+        currency = data.get("currency")
+        if currency and isinstance(currency, str):
+            currency = Currency.from_string(currency)
+
         return Stock(
             symbol=symbol,
             name=name,
-            geography=geography,
+            country=data.get("country"),
+            fullExchangeName=data.get("fullExchangeName"),
             yahoo_symbol=data.get("yahoo_symbol"),
             industry=data.get("industry"),
             priority_multiplier=1.0,
@@ -99,30 +92,31 @@ class StockFactory:
             data: Dictionary with stock data from import
                 - symbol: str (required)
                 - name: str (required)
-                - geography: str (required)
+                - country: str (optional, auto-detected from Yahoo Finance)
+                - fullExchangeName: str (optional, auto-detected from Yahoo Finance)
                 - industry: str (optional)
                 - yahoo_symbol: str (optional)
-                - currency: str or Currency (optional, will be inferred from geography if not provided)
+                - currency: str or Currency (optional, synced from Tradernet)
                 - min_lot: int (optional, defaults to 1)
 
         Returns:
             Stock domain object
         """
-        # Normalize symbol and geography
+        # Normalize symbol
         symbol = data.get("symbol", "").strip().upper()
-        geography = data.get("geography", "").strip().upper()
 
         # Handle currency - can be string or Currency enum
         currency = data.get("currency")
         if currency is None:
-            currency = cls.GEOGRAPHY_CURRENCY_MAP.get(geography, Currency.EUR)
+            currency = None  # Will be synced from Tradernet
         elif isinstance(currency, str):
             currency = Currency.from_string(currency)
 
         return Stock(
             symbol=symbol,
             name=data.get("name", "").strip(),
-            geography=geography,
+            country=data.get("country"),
+            fullExchangeName=data.get("fullExchangeName"),
             yahoo_symbol=data.get("yahoo_symbol"),
             industry=data.get("industry"),
             priority_multiplier=data.get("priority_multiplier", 1.0),
