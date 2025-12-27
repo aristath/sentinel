@@ -123,17 +123,24 @@ function getDeviationClass(deviation) {
 }
 
 /**
- * Get Tailwind class for geography tag
- * @param {string} geography - Region code (EU, ASIA, US)
+ * Get Tailwind class for country tag
+ * @param {string} country - Country name (e.g., "United States", "Germany")
  * @returns {string} Tailwind class names
  */
-function getGeoTagClass(geography) {
-  const map = {
-    'EU': 'bg-blue-900/50 text-blue-400',
-    'ASIA': 'bg-red-900/50 text-red-400',
-    'US': 'bg-green-900/50 text-green-400'
-  };
-  return map[geography] || 'bg-gray-700 text-gray-400';
+function getGeoTagClass(country) {
+  // Use a simple color scheme - can be enhanced later with country-specific colors
+  if (!country) return 'bg-gray-700 text-gray-400';
+  // Generate a consistent color based on country name hash
+  const hash = country.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const colors = [
+    'bg-blue-900/50 text-blue-400',
+    'bg-red-900/50 text-red-400',
+    'bg-green-900/50 text-green-400',
+    'bg-yellow-900/50 text-yellow-400',
+    'bg-purple-900/50 text-purple-400',
+    'bg-cyan-900/50 text-cyan-400'
+  ];
+  return colors[hash % colors.length];
 }
 
 /**
