@@ -46,14 +46,8 @@ SETTING_DEFAULTS = {
     "ticker_show_actions": 1.0,  # Show next actions (BUY/SELL)
     "ticker_show_amounts": 1.0,  # Show amounts for actions
     "ticker_max_actions": 3.0,  # Max recommendations to show (buy + sell)
-    # Job scheduling intervals
-    "job_portfolio_sync_minutes": 2.0,  # Portfolio sync interval
-    "job_trade_sync_minutes": 4.0,  # Trade sync interval
-    "job_price_sync_minutes": 7.0,  # Price sync interval
-    "job_score_refresh_minutes": 10.0,  # Score refresh interval
-    "job_rebalance_check_minutes": 15.0,  # Rebalance check interval
-    "job_cash_flow_sync_hour": 1.0,  # Cash flow sync hour (0-23)
-    "job_historical_sync_hour": 20.0,  # Historical sync hour (0-23)
+    # Job scheduling intervals (simplified to 2 configurable settings)
+    "job_sync_cycle_minutes": 15.0,  # Unified sync cycle interval (trades, prices, recommendations)
     "job_maintenance_hour": 3.0,  # Daily maintenance hour (0-23)
 }
 

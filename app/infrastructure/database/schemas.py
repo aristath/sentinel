@@ -132,15 +132,9 @@ DEFAULT_SETTINGS = [
     ("transaction_cost_percent", "0.002", "Variable cost as fraction (0.2%)"),
     # Cash management
     ("min_cash_reserve", "500.0", "Minimum cash to keep (never fully deploy)"),
-    # Job scheduling
-    ("job_portfolio_sync_minutes", "15", "Portfolio sync interval in minutes"),
-    ("job_trade_sync_minutes", "5", "Trade sync interval in minutes"),
-    ("job_price_sync_minutes", "5", "Price sync interval in minutes"),
-    ("job_score_refresh_minutes", "30", "Score refresh interval in minutes"),
-    ("job_rebalance_check_minutes", "15", "Rebalance check interval in minutes"),
-    ("job_cash_flow_sync_hour", "18", "Cash flow sync hour (0-23)"),
-    ("job_historical_sync_hour", "22", "Historical sync hour (0-23)"),
-    ("job_maintenance_hour", "3", "Maintenance job hour (0-23)"),
+    # Job scheduling (simplified - only 2 configurable settings)
+    ("job_sync_cycle_minutes", "15", "Sync cycle interval in minutes (trades, prices, recommendations)"),
+    ("job_maintenance_hour", "3", "Daily maintenance hour (0-23)"),
     ("max_actions", "5", "Maximum automated actions per cycle"),
     ("dry_run", "false", "Disable actual trading (simulation mode)"),
 ]
