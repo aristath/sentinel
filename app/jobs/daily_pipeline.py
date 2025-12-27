@@ -397,7 +397,7 @@ async def _refresh_score_for_symbol(symbol: str):
 
     # Get stock metadata
     cursor = await db_manager.config.execute(
-        "SELECT yahoo_symbol, geography, industry FROM stocks WHERE symbol = ?",
+        "SELECT yahoo_symbol, country, industry FROM stocks WHERE symbol = ?",
         (symbol,),
     )
     row = await cursor.fetchone()
@@ -405,7 +405,7 @@ async def _refresh_score_for_symbol(symbol: str):
         logger.warning(f"Stock {symbol} not found in config")
         return
 
-    yahoo_symbol, geography, industry = row
+    yahoo_symbol, country, industry = row
 
     # Get price data from history database
     history_db = await db_manager.history(symbol)
@@ -464,7 +464,7 @@ async def _refresh_score_for_symbol(symbol: str):
         daily_prices=daily_prices,
         monthly_prices=monthly_prices,
         fundamentals=fundamentals,
-        geography=geography,
+        country=country,
         industry=industry,
         portfolio_context=portfolio_context,
         yahoo_symbol=yahoo_symbol,
@@ -520,11 +520,11 @@ async def _build_portfolio_context(db_manager):
 
     # Get stock metadata for scoring
     cursor = await db_manager.config.execute(
-        "SELECT symbol, geography, industry FROM stocks WHERE active = 1"
+        "SELECT symbol, country, industry FROM stocks WHERE active = 1"
     )
     stock_data = await cursor.fetchall()
 
-    stock_geographies = {row[0]: row[1] for row in stock_data if row[1]}
+    stock_countries = {row[0]: row[1] for row in stock_data if row[1]}
     stock_industries = {row[0]: row[2] for row in stock_data if row[2]}
 
     # Get scores for quality weighting
@@ -536,7 +536,7 @@ async def _build_portfolio_context(db_manager):
         industry_weights=industry_weights,
         positions=positions,
         total_value=total_value,
-        stock_geographies=stock_geographies,
+        stock_geographies=stock_countries,  # TODO: Update PortfolioContext to use stock_countries
         stock_industries=stock_industries,
         stock_scores=stock_scores,
     )

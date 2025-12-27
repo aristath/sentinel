@@ -53,7 +53,7 @@ async def build_portfolio_context(
 
     # Build stock metadata maps
     position_map = {p.symbol: p.market_value_eur or 0 for p in positions}
-    stock_geographies = {s.symbol: s.geography for s in stocks}
+    stock_countries = {s.symbol: s.country for s in stocks if s.country}
     stock_industries = {s.symbol: s.industry for s in stocks if s.industry}
     stock_scores: Dict[str, float] = {}
 
@@ -70,7 +70,7 @@ async def build_portfolio_context(
         industry_weights=industry_weights,
         positions=position_map,
         total_value=total_value if total_value > 0 else 1.0,
-        stock_geographies=stock_geographies,
+        stock_geographies=stock_countries,  # TODO: Update PortfolioContext to use stock_countries
         stock_industries=stock_industries,
         stock_scores=stock_scores,
     )

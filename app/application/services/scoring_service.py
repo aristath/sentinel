@@ -99,7 +99,7 @@ class ScoringService:
         self,
         symbol: str,
         yahoo_symbol: Optional[str] = None,
-        geography: Optional[str] = None,
+        country: Optional[str] = None,
         industry: Optional[str] = None,
     ) -> Optional[CalculatedStockScore]:
         """
@@ -108,7 +108,7 @@ class ScoringService:
         Args:
             symbol: Stock symbol
             yahoo_symbol: Optional Yahoo Finance symbol override
-            geography: Stock geography for allocation fit (optional)
+            country: Stock country for allocation fit (optional)
             industry: Stock industry for allocation fit (optional)
 
         Returns:
@@ -145,7 +145,7 @@ class ScoringService:
                 monthly_prices=monthly_prices,
                 fundamentals=fundamentals,
                 yahoo_symbol=yahoo_symbol_str,
-                geography=geography or "UNKNOWN",
+                country=country,
                 industry=industry or "UNKNOWN",
             )
             if score:
@@ -170,7 +170,7 @@ class ScoringService:
             score = await self.calculate_and_save_score(
                 stock.symbol,
                 yahoo_symbol=stock.yahoo_symbol,
-                geography=stock.geography,
+                country=stock.country,
                 industry=stock.industry,
             )
             if score:

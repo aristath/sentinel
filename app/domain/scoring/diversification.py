@@ -137,7 +137,7 @@ def _apply_concentration_penalty(
 
 def calculate_diversification_score(
     symbol: str,
-    geography: str,
+    country: str,
     industry: Optional[str],
     quality_score: float,
     opportunity_score: float,
@@ -148,7 +148,7 @@ def calculate_diversification_score(
 
     Args:
         symbol: Stock symbol
-        geography: Stock geography (EU, ASIA, US)
+        country: Stock country (e.g., "United States", "Germany")
         industry: Stock industry (comma-separated if multiple)
         quality_score: Pre-calculated quality score (0-1)
         opportunity_score: Pre-calculated opportunity score (0-1)
@@ -156,9 +156,9 @@ def calculate_diversification_score(
 
     Returns:
         ScoreResult with score and sub_scores
-        sub_scores: {"geography": float, "industry": float, "averaging": float}
+        sub_scores: {"country": float, "industry": float, "averaging": float}
     """
-    geo_gap_score = _calculate_geo_gap_score(geography, portfolio_context)
+    geo_gap_score = _calculate_geo_gap_score(country, portfolio_context)
     industry_gap_score = _calculate_industry_gap_score(industry, portfolio_context)
     averaging_down_score = _calculate_averaging_down_score(
         symbol, quality_score, opportunity_score, portfolio_context

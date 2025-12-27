@@ -43,7 +43,8 @@ async def get_portfolio(
                 {
                     "stock_name": stock.name,
                     "industry": stock.industry,
-                    "geography": stock.geography,
+                    "country": stock.country,
+                    "fullExchangeName": stock.fullExchangeName,
                 }
             )
         result.append(pos_dict)

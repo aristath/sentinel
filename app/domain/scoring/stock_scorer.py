@@ -63,7 +63,7 @@ async def calculate_stock_score(
     daily_prices: List[dict],
     monthly_prices: List[dict],
     fundamentals,
-    geography: Optional[str] = None,
+    country: Optional[str] = None,
     industry: Optional[str] = None,
     portfolio_context: Optional[PortfolioContext] = None,
     yahoo_symbol: Optional[str] = None,
@@ -167,12 +167,12 @@ async def calculate_stock_score(
     sub_scores["opinion"] = result.sub_scores
 
     # 8. Diversification (DYNAMIC - never cached)
-    if portfolio_context and geography:
+    if portfolio_context and country:
         # Need quality and opportunity for averaging down calculation
         quality_approx = (scores["long_term"] + scores["fundamentals"]) / 2
         result = calculate_diversification_score(
             symbol=symbol,
-            geography=geography,
+            country=country,
             industry=industry,
             quality_score=quality_approx,
             opportunity_score=scores["opportunity"],
@@ -220,7 +220,7 @@ async def calculate_stock_score(
 async def calculate_stock_score_from_prefetched(
     symbol: str,
     prefetched: PrefetchedStockData,
-    geography: Optional[str] = None,
+    country: Optional[str] = None,
     industry: Optional[str] = None,
     portfolio_context: Optional[PortfolioContext] = None,
     yahoo_symbol: Optional[str] = None,
@@ -250,7 +250,7 @@ async def calculate_stock_score_from_prefetched(
         daily_prices=prefetched.daily_prices,
         monthly_prices=prefetched.monthly_prices,
         fundamentals=prefetched.fundamentals,
-        geography=geography,
+        country=country,
         industry=industry,
         portfolio_context=portfolio_context,
         yahoo_symbol=yahoo_symbol,

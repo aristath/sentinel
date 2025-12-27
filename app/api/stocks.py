@@ -29,8 +29,7 @@ class StockCreate(BaseModel):
     symbol: str
     yahoo_symbol: Optional[str] = None
     name: str
-    geography: str
-    industry: Optional[str] = None
+    # country and fullExchangeName are auto-detected from Yahoo Finance
     min_lot: Optional[int] = 1
     allow_buy: Optional[bool] = True
     allow_sell: Optional[bool] = False
@@ -42,7 +41,7 @@ class StockUpdate(BaseModel):
     new_symbol: Optional[str] = None
     name: Optional[str] = None
     yahoo_symbol: Optional[str] = None
-    geography: Optional[str] = None
+    # country and fullExchangeName are auto-detected from Yahoo Finance - not user-editable
     # Industry is now automatically detected from Yahoo Finance - not user-editable
     priority_multiplier: Optional[float] = None
     min_lot: Optional[int] = None
@@ -75,7 +74,7 @@ async def get_stocks(
         stock_score = stock_dict.get("total_score") or 0
         volatility = stock_dict.get("volatility")
         multiplier = stock_dict.get("priority_multiplier") or 1.0
-        geo = stock_dict.get("geography") or ""
+        country = stock_dict.get("country")
         industry = stock_dict.get("industry") or ""
         quality_score = stock_dict.get("quality_score")
         opportunity_score = stock_dict.get("opportunity_score")
@@ -85,7 +84,7 @@ async def get_stocks(
             PriorityInput(
                 symbol=stock_dict["symbol"],
                 name=stock_dict["name"],
-                geography=geo,
+                geography=country or "",  # TODO: Update PriorityInput to use country
                 industry=industry,
                 stock_score=stock_score,
                 volatility=volatility,
@@ -134,7 +133,8 @@ async def get_stock(
         "yahoo_symbol": stock.yahoo_symbol,
         "name": stock.name,
         "industry": stock.industry,
-        "geography": stock.geography,
+        "country": stock.country,
+        "fullExchangeName": stock.fullExchangeName,
         "priority_multiplier": stock.priority_multiplier,
         "min_lot": stock.min_lot,
         "active": stock.active,
@@ -193,27 +193,28 @@ async def create_stock(
     if existing:
         raise HTTPException(status_code=400, detail="Stock already exists")
 
+    # Auto-detect country, exchange, and industry from Yahoo Finance
+    from app.infrastructure.external import yahoo_finance as yahoo
+
+    country, full_exchange_name = yahoo.get_stock_country_and_exchange(
+        stock_data.symbol, stock_data.yahoo_symbol
+    )
+    industry = yahoo.get_stock_industry(stock_data.symbol, stock_data.yahoo_symbol)
+
     # Use factory to create stock
     stock_dict = {
         "symbol": stock_data.symbol,
         "name": stock_data.name,
-        "geography": stock_data.geography,
-        "industry": stock_data.industry,
+        "country": country,
+        "fullExchangeName": full_exchange_name,
+        "industry": industry,
         "yahoo_symbol": stock_data.yahoo_symbol,
         "min_lot": stock_data.min_lot,
         "allow_buy": stock_data.allow_buy,
         "allow_sell": stock_data.allow_sell,
     }
 
-    # Detect industry if not provided
-    if not stock_data.industry:
-        from app.infrastructure.external import yahoo_finance as yahoo
-
-        industry = yahoo.get_stock_industry(stock_data.symbol, stock_data.yahoo_symbol)
-        new_stock = StockFactory.create_with_industry_detection(stock_dict, industry)
-    else:
-        industry = stock_data.industry
-        new_stock = StockFactory.create_from_api_request(stock_dict)
+    new_stock = StockFactory.create_from_api_request(stock_dict)
 
     await stock_repo.create(new_stock)
 
@@ -232,7 +233,8 @@ async def create_stock(
         "symbol": stock_data.symbol.upper(),
         "yahoo_symbol": stock_data.yahoo_symbol,
         "name": stock_data.name,
-        "geography": stock_data.geography.upper(),
+        "country": new_stock.country,
+        "fullExchangeName": new_stock.fullExchangeName,
         "industry": industry,
         "min_lot": new_stock.min_lot,
         "total_score": score.total_score if score else None,
@@ -337,7 +339,7 @@ async def refresh_stock_score(
     score = await scoring_service.calculate_and_save_score(
         symbol,
         stock.yahoo_symbol,
-        geography=stock.geography,
+        country=stock.country,
         industry=stock.industry,
     )
     if score:
@@ -453,7 +455,7 @@ def _build_update_dict(
     _apply_string_update(
         updates, "yahoo_symbol", update.yahoo_symbol, lambda v: v if v else None
     )
-    _apply_string_update(updates, "geography", update.geography, str.upper)
+    # country and fullExchangeName are automatically detected from Yahoo Finance - not user-editable
     # Industry is now automatically detected from Yahoo Finance - not user-editable
 
     _apply_numeric_update(
@@ -481,7 +483,8 @@ def _format_stock_response(stock, score) -> dict:
         "yahoo_symbol": stock.yahoo_symbol,
         "name": stock.name,
         "industry": stock.industry,
-        "geography": stock.geography,
+        "country": stock.country,
+        "fullExchangeName": stock.fullExchangeName,
         "priority_multiplier": stock.priority_multiplier,
         "min_lot": stock.min_lot,
         "active": stock.active,
