@@ -54,7 +54,9 @@ class TestSettingDefaults:
     def test_has_job_scheduling_settings(self):
         """Test that job scheduling settings are defined."""
         job_settings = [k for k in SETTING_DEFAULTS if k.startswith("job_")]
-        assert len(job_settings) >= 5  # Multiple job settings
+        assert len(job_settings) >= 2  # Simplified to sync_cycle and maintenance_hour
+        assert "job_sync_cycle_minutes" in SETTING_DEFAULTS
+        assert "job_maintenance_hour" in SETTING_DEFAULTS
 
 
 class TestGetSetting:
@@ -254,13 +256,13 @@ class TestGetJobSettings:
             "app.api.settings.get_settings_batch", new_callable=AsyncMock
         ) as mock_batch:
             mock_batch.return_value = {
-                "job_portfolio_sync_minutes": "5.0",
-                "job_price_sync_minutes": "10.0",
+                "job_sync_cycle_minutes": "15.0",
+                "job_maintenance_hour": "3.0",
             }
 
             result = await get_job_settings(mock_repo)
 
-        # Should have all job settings
+        # Should have all job settings (simplified to 2 settings)
         job_keys = [k for k in SETTING_DEFAULTS if k.startswith("job_")]
         assert all(k in result for k in job_keys)
 
@@ -276,10 +278,10 @@ class TestGetJobSettings:
 
             result = await get_job_settings(mock_repo)
 
-        # Should use defaults
+        # Should use defaults for sync cycle
         assert (
-            result["job_portfolio_sync_minutes"]
-            == SETTING_DEFAULTS["job_portfolio_sync_minutes"]
+            result["job_sync_cycle_minutes"]
+            == SETTING_DEFAULTS["job_sync_cycle_minutes"]
         )
 
 

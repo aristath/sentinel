@@ -45,6 +45,12 @@ async def _handle_buy_currency(
     """Handle currency validation and conversion for BUY orders."""
     required = trade.quantity * trade.estimated_price
     trade_currency = trade.currency or Currency.EUR
+    # Get string value for display (Currency enum -> "EUR")
+    currency_str = (
+        trade_currency.value
+        if hasattr(trade_currency, "value")
+        else str(trade_currency)
+    )
 
     if currency_service and trade_currency != source_currency:
         available = currency_balances.get(trade_currency, 0) if currency_balances else 0
@@ -52,39 +58,39 @@ async def _handle_buy_currency(
         if available < required:
             if trade_currency not in converted_currencies:
                 logger.info(
-                    f"Auto-converting {source_currency} to {trade_currency} "
-                    f"for {trade.symbol} (need {required:.2f} {trade_currency})"
+                    f"Auto-converting {source_currency} to {currency_str} "
+                    f"for {trade.symbol} (need {required:.2f} {currency_str})"
                 )
-                set_processing(f"CONVERTING {source_currency} TO {trade_currency}...")
+                set_processing(f"CONVERTING {source_currency} TO {currency_str}...")
 
                 if currency_service.ensure_balance(
                     trade_currency, required, source_currency
                 ):
                     converted_currencies.add(trade_currency)
-                    logger.info(f"Currency conversion successful for {trade_currency}")
+                    logger.info(f"Currency conversion successful for {currency_str}")
                     set_processing("CURRENCY CONVERSION COMPLETE")
                 else:
                     logger.warning(
                         f"Currency conversion failed for {trade.symbol}: "
-                        f"could not convert {source_currency} to {trade_currency}"
+                        f"could not convert {source_currency} to {currency_str}"
                     )
                     return {
                         "symbol": trade.symbol,
                         "status": "skipped",
-                        "error": f"Currency conversion failed ({source_currency} to {trade_currency})",
+                        "error": f"Currency conversion failed ({source_currency} to {currency_str})",
                     }
 
     elif currency_balances is not None:
         available = currency_balances.get(trade_currency, 0)
         if available < required:
             logger.warning(
-                f"Skipping {trade.symbol}: insufficient {trade_currency} balance "
+                f"Skipping {trade.symbol}: insufficient {currency_str} balance "
                 f"(need {required:.2f}, have {available:.2f})"
             )
             return {
                 "symbol": trade.symbol,
                 "status": "skipped",
-                "error": f"Insufficient {trade_currency} balance (need {required:.2f}, have {available:.2f})",
+                "error": f"Insufficient {currency_str} balance (need {required:.2f}, have {available:.2f})",
             }
 
     return None
