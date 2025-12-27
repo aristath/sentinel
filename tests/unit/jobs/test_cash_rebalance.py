@@ -340,15 +340,25 @@ class TestGetNextHolisticAction:
         mock_settings_obj = MagicMock()
         mock_settings_obj.to_dict.return_value = {}
 
+        mock_client = MagicMock()
+        mock_client.is_connected = True
+        mock_client.get_cash_balances.return_value = []
+
         with (
             patch("app.jobs.cash_rebalance.PositionRepository") as mock_pos_repo,
             patch("app.jobs.cash_rebalance.SettingsRepository"),
+            patch("app.jobs.cash_rebalance.StockRepository") as mock_stock_repo,
+            patch(
+                "app.jobs.cash_rebalance.get_tradernet_client",
+                return_value=mock_client,
+            ),
             patch(
                 "app.domain.services.settings_service.SettingsService"
             ) as mock_settings,
             patch("app.jobs.cash_rebalance.cache") as mock_cache,
         ):
             mock_pos_repo.return_value.get_all = AsyncMock(return_value=[])
+            mock_stock_repo.return_value.get_all_active = AsyncMock(return_value=[])
             mock_settings.return_value.get_settings = AsyncMock(
                 return_value=mock_settings_obj
             )
@@ -391,9 +401,18 @@ class TestRefreshRecommendationCache:
         mock_settings_obj = MagicMock()
         mock_settings_obj.to_dict.return_value = {}
 
+        mock_client = MagicMock()
+        mock_client.is_connected = True
+        mock_client.get_cash_balances.return_value = []
+
         with (
             patch("app.jobs.cash_rebalance.SettingsRepository"),
             patch("app.jobs.cash_rebalance.PositionRepository") as mock_pos_repo,
+            patch("app.jobs.cash_rebalance.StockRepository") as mock_stock_repo,
+            patch(
+                "app.jobs.cash_rebalance.get_tradernet_client",
+                return_value=mock_client,
+            ),
             patch(
                 "app.domain.services.settings_service.SettingsService"
             ) as mock_settings,
@@ -403,6 +422,7 @@ class TestRefreshRecommendationCache:
             patch("app.jobs.cash_rebalance.cache") as mock_cache,
         ):
             mock_pos_repo.return_value.get_all = AsyncMock(return_value=[])
+            mock_stock_repo.return_value.get_all_active = AsyncMock(return_value=[])
             mock_settings.return_value.get_settings = AsyncMock(
                 return_value=mock_settings_obj
             )

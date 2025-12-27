@@ -22,6 +22,7 @@ from app.repositories import (
     PositionRepository,
     RecommendationRepository,
     SettingsRepository,
+    StockRepository,
     TradeRepository,
 )
 
@@ -244,18 +245,24 @@ async def _check_and_rebalance_internal():
 
         position_repo = PositionRepository()
         trade_repo = TradeRepository()
+        stock_repo = StockRepository()
 
         logger.info("Step 2: Building portfolio context...")
         set_processing("BUILDING PORTFOLIO CONTEXT...")
 
         positions = await position_repo.get_all()
+        stocks = await stock_repo.get_all_active()
 
         from app.domain.portfolio_hash import generate_portfolio_hash
 
         position_hash_dicts = [
             {"symbol": p.symbol, "quantity": p.quantity} for p in positions
         ]
-        portfolio_hash = generate_portfolio_hash(position_hash_dicts)
+        stock_symbols = [s.symbol for s in stocks]
+        cash_balances = {b.currency: b.amount for b in client.get_cash_balances()}
+        portfolio_hash = generate_portfolio_hash(
+            position_hash_dicts, stock_symbols, cash_balances
+        )
 
         logger.info("Step 3: Getting recommendation from holistic planner...")
         set_processing("GETTING HOLISTIC RECOMMENDATION...")
@@ -309,14 +316,23 @@ async def _get_next_holistic_action() -> "Recommendation | None":
 
     position_repo = PositionRepository()
     settings_repo = SettingsRepository()
+    stock_repo = StockRepository()
     settings_service = SettingsService(settings_repo)
+    client = get_tradernet_client()
 
     # Generate portfolio-aware cache key
     positions = await position_repo.get_all()
+    stocks = await stock_repo.get_all_active()
     settings = await settings_service.get_settings()
     position_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
+    stock_symbols = [s.symbol for s in stocks]
+    cash_balances = (
+        {b.currency: b.amount for b in client.get_cash_balances()}
+        if client.is_connected
+        else {}
+    )
     portfolio_cache_key = generate_recommendation_cache_key(
-        position_dicts, settings.to_dict()
+        position_dicts, settings.to_dict(), stock_symbols, cash_balances
     )
     cache_key = f"recommendations:{portfolio_cache_key}"
 
@@ -352,15 +368,8 @@ async def _get_next_holistic_action() -> "Recommendation | None":
     # Cache miss - call planner directly
     logger.info("Cache miss, calling holistic planner directly...")
     from app.infrastructure.database.manager import get_db_manager
-    from app.infrastructure.dependencies import (
-        get_exchange_rate_service,
-        get_tradernet_client,
-    )
-    from app.repositories import (
-        AllocationRepository,
-        PortfolioRepository,
-        StockRepository,
-    )
+    from app.infrastructure.dependencies import get_exchange_rate_service
+    from app.repositories import AllocationRepository, PortfolioRepository
 
     stock_repo = StockRepository()
     position_repo = PositionRepository()
@@ -431,17 +440,26 @@ async def _refresh_recommendation_cache():
         # Create repos once and reuse
         settings_repo = SettingsRepository()
         position_repo = PositionRepository()
+        stock_repo = StockRepository()
         settings_service = SettingsService(settings_repo)
         rebalancing_service = RebalancingService(settings_repo=settings_repo)
+        client = get_tradernet_client()
 
         # Generate portfolio-aware cache key
         positions = await position_repo.get_all()
+        stocks = await stock_repo.get_all_active()
         settings = await settings_service.get_settings()
         position_dicts = [
             {"symbol": p.symbol, "quantity": p.quantity} for p in positions
         ]
+        stock_symbols = [s.symbol for s in stocks]
+        cash_balances = (
+            {b.currency: b.amount for b in client.get_cash_balances()}
+            if client.is_connected
+            else {}
+        )
         portfolio_cache_key = generate_recommendation_cache_key(
-            position_dicts, settings.to_dict()
+            position_dicts, settings.to_dict(), stock_symbols, cash_balances
         )
         cache_key = f"recommendations:{portfolio_cache_key}"
 

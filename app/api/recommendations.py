@@ -13,8 +13,10 @@ from app.infrastructure.dependencies import (
     PositionRepositoryDep,
     RebalancingServiceDep,
     SettingsServiceDep,
+    StockRepositoryDep,
     TradeExecutionServiceDep,
     TradeRepositoryDep,
+    TradernetClientDep,
     TradeSafetyServiceDep,
 )
 
@@ -94,6 +96,8 @@ async def get_recommendations(
     position_repo: PositionRepositoryDep,
     settings_service: SettingsServiceDep,
     rebalancing_service: RebalancingServiceDep,
+    stock_repo: StockRepositoryDep,
+    tradernet_client: TradernetClientDep,
 ):
     """
     Get recommendation sequence using the holistic planner.
@@ -110,9 +114,16 @@ async def get_recommendations(
     # Generate portfolio-aware cache key
     positions = await position_repo.get_all()
     settings = await settings_service.get_settings()
+    stocks = await stock_repo.get_all_active()
     position_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
+    stock_symbols = [s.symbol for s in stocks]
+    cash_balances = (
+        {b.currency: b.amount for b in tradernet_client.get_cash_balances()}
+        if tradernet_client.is_connected
+        else {}
+    )
     portfolio_cache_key = generate_recommendation_cache_key(
-        position_dicts, settings.to_dict()
+        position_dicts, settings.to_dict(), stock_symbols, cash_balances
     )
     cache_key = f"recommendations:{portfolio_cache_key}"
 
@@ -174,6 +185,8 @@ async def _regenerate_recommendations_cache(
     position_repo: PositionRepositoryDep,
     settings_service: SettingsServiceDep,
     rebalancing_service: RebalancingServiceDep,
+    stock_repo: StockRepositoryDep,
+    tradernet_client: TradernetClientDep,
 ) -> tuple:
     """
     Regenerate recommendations cache if missing.
@@ -188,9 +201,16 @@ async def _regenerate_recommendations_cache(
 
     positions = await position_repo.get_all()
     settings = await settings_service.get_settings()
+    stocks = await stock_repo.get_all_active()
     position_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
+    stock_symbols = [s.symbol for s in stocks]
+    cash_balances = (
+        {b.currency: b.amount for b in tradernet_client.get_cash_balances()}
+        if tradernet_client.is_connected
+        else {}
+    )
     portfolio_cache_key = generate_recommendation_cache_key(
-        position_dicts, settings.to_dict()
+        position_dicts, settings.to_dict(), stock_symbols, cash_balances
     )
     cache_key = f"recommendations:{portfolio_cache_key}"
 
@@ -244,6 +264,8 @@ async def execute_recommendation(
     safety_service: TradeSafetyServiceDep,
     trade_execution_service: TradeExecutionServiceDep,
     rebalancing_service: RebalancingServiceDep,
+    stock_repo: StockRepositoryDep,
+    tradernet_client: TradernetClientDep,
 ):
     """
     Execute the first step from the recommendation sequence.
@@ -264,11 +286,18 @@ async def execute_recommendation(
         # Generate portfolio-aware cache key
         positions = await position_repo.get_all()
         settings = await settings_service.get_settings()
+        stocks = await stock_repo.get_all_active()
         position_dicts = [
             {"symbol": p.symbol, "quantity": p.quantity} for p in positions
         ]
+        stock_symbols = [s.symbol for s in stocks]
+        cash_balances = (
+            {b.currency: b.amount for b in tradernet_client.get_cash_balances()}
+            if tradernet_client.is_connected
+            else {}
+        )
         portfolio_cache_key = generate_recommendation_cache_key(
-            position_dicts, settings.to_dict()
+            position_dicts, settings.to_dict(), stock_symbols, cash_balances
         )
         cache_key = f"recommendations:{portfolio_cache_key}"
 
@@ -277,7 +306,11 @@ async def execute_recommendation(
         # If cache miss, regenerate recommendations
         if not cached or not cached.get("steps"):
             cached, cache_key = await _regenerate_recommendations_cache(
-                position_repo, settings_service, rebalancing_service
+                position_repo,
+                settings_service,
+                rebalancing_service,
+                stock_repo,
+                tradernet_client,
             )
 
         steps = cached["steps"]

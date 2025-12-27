@@ -80,6 +80,14 @@ def mock_step():
 
 
 @pytest.fixture
+def mock_stock_repo():
+    """Mock stock repository."""
+    repo = AsyncMock()
+    repo.get_all_active.return_value = []
+    return repo
+
+
+@pytest.fixture
 def mock_tradernet_client():
     """Mock Tradernet client."""
     client = MagicMock()
@@ -87,6 +95,8 @@ def mock_tradernet_client():
     mock_result.order_id = "order-123"
     mock_result.price = 160.0
     client.place_order.return_value = mock_result
+    client.is_connected = True
+    client.get_cash_balances.return_value = []
     return client
 
 
@@ -99,6 +109,8 @@ class TestGetRecommendations:
         mock_position_repo,
         mock_settings_service,
         mock_rebalancing_service,
+        mock_stock_repo,
+        mock_tradernet_client,
         mock_step,
     ):
         """Test that GET /recommendations returns sequence from holistic planner."""
@@ -114,7 +126,11 @@ class TestGetRecommendations:
                 return_value="test-key",
             ):
                 result = await get_recommendations(
-                    mock_position_repo, mock_settings_service, mock_rebalancing_service
+                    mock_position_repo,
+                    mock_settings_service,
+                    mock_rebalancing_service,
+                    mock_stock_repo,
+                    mock_tradernet_client,
                 )
 
         assert result["depth"] == 1
@@ -124,7 +140,12 @@ class TestGetRecommendations:
 
     @pytest.mark.asyncio
     async def test_returns_empty_when_no_recommendations(
-        self, mock_position_repo, mock_settings_service, mock_rebalancing_service
+        self,
+        mock_position_repo,
+        mock_settings_service,
+        mock_rebalancing_service,
+        mock_stock_repo,
+        mock_tradernet_client,
     ):
         """Test that empty result is returned when no recommendations available."""
         from app.api.recommendations import get_recommendations
@@ -139,7 +160,11 @@ class TestGetRecommendations:
                 return_value="test-key",
             ):
                 result = await get_recommendations(
-                    mock_position_repo, mock_settings_service, mock_rebalancing_service
+                    mock_position_repo,
+                    mock_settings_service,
+                    mock_rebalancing_service,
+                    mock_stock_repo,
+                    mock_tradernet_client,
                 )
 
         assert result["depth"] == 0
@@ -149,7 +174,12 @@ class TestGetRecommendations:
 
     @pytest.mark.asyncio
     async def test_uses_recommendations_cache_key(
-        self, mock_position_repo, mock_settings_service, mock_rebalancing_service
+        self,
+        mock_position_repo,
+        mock_settings_service,
+        mock_rebalancing_service,
+        mock_stock_repo,
+        mock_tradernet_client,
     ):
         """Test that cache key uses 'recommendations:' prefix, not 'multi_step_recommendations:'."""
         from app.api.recommendations import get_recommendations
@@ -173,7 +203,11 @@ class TestGetRecommendations:
                 return_value="test-key",
             ):
                 await get_recommendations(
-                    mock_position_repo, mock_settings_service, mock_rebalancing_service
+                    mock_position_repo,
+                    mock_settings_service,
+                    mock_rebalancing_service,
+                    mock_stock_repo,
+                    mock_tradernet_client,
                 )
 
         # Verify cache key uses 'recommendations:' prefix
@@ -185,7 +219,12 @@ class TestGetRecommendations:
 
     @pytest.mark.asyncio
     async def test_returns_cached_data_when_available(
-        self, mock_position_repo, mock_settings_service, mock_rebalancing_service
+        self,
+        mock_position_repo,
+        mock_settings_service,
+        mock_rebalancing_service,
+        mock_stock_repo,
+        mock_tradernet_client,
     ):
         """Test that cached data is returned when available."""
         from app.api.recommendations import get_recommendations
@@ -206,7 +245,11 @@ class TestGetRecommendations:
                 return_value="test-key",
             ):
                 result = await get_recommendations(
-                    mock_position_repo, mock_settings_service, mock_rebalancing_service
+                    mock_position_repo,
+                    mock_settings_service,
+                    mock_rebalancing_service,
+                    mock_stock_repo,
+                    mock_tradernet_client,
                 )
 
         # Should not call rebalancing service when cache hit
@@ -219,6 +262,8 @@ class TestGetRecommendations:
         mock_position_repo,
         mock_settings_service,
         mock_rebalancing_service,
+        mock_stock_repo,
+        mock_tradernet_client,
         mock_step,
     ):
         """Test that result is cached with 5 minute TTL."""
@@ -234,7 +279,11 @@ class TestGetRecommendations:
                 return_value="test-key",
             ):
                 await get_recommendations(
-                    mock_position_repo, mock_settings_service, mock_rebalancing_service
+                    mock_position_repo,
+                    mock_settings_service,
+                    mock_rebalancing_service,
+                    mock_stock_repo,
+                    mock_tradernet_client,
                 )
 
         # Verify cache.set was called with correct TTL
@@ -245,7 +294,12 @@ class TestGetRecommendations:
 
     @pytest.mark.asyncio
     async def test_handles_multiple_steps(
-        self, mock_position_repo, mock_settings_service, mock_rebalancing_service
+        self,
+        mock_position_repo,
+        mock_settings_service,
+        mock_rebalancing_service,
+        mock_stock_repo,
+        mock_tradernet_client,
     ):
         """Test handling of multi-step recommendations."""
         from app.api.recommendations import get_recommendations
@@ -293,7 +347,11 @@ class TestGetRecommendations:
                 return_value="test-key",
             ):
                 result = await get_recommendations(
-                    mock_position_repo, mock_settings_service, mock_rebalancing_service
+                    mock_position_repo,
+                    mock_settings_service,
+                    mock_rebalancing_service,
+                    mock_stock_repo,
+                    mock_tradernet_client,
                 )
 
         assert result["depth"] == 2
@@ -303,7 +361,12 @@ class TestGetRecommendations:
 
     @pytest.mark.asyncio
     async def test_rounds_numeric_values(
-        self, mock_position_repo, mock_settings_service, mock_rebalancing_service
+        self,
+        mock_position_repo,
+        mock_settings_service,
+        mock_rebalancing_service,
+        mock_stock_repo,
+        mock_tradernet_client,
     ):
         """Test that numeric values are properly rounded."""
         from app.api.recommendations import get_recommendations
@@ -335,7 +398,11 @@ class TestGetRecommendations:
                 return_value="test-key",
             ):
                 result = await get_recommendations(
-                    mock_position_repo, mock_settings_service, mock_rebalancing_service
+                    mock_position_repo,
+                    mock_settings_service,
+                    mock_rebalancing_service,
+                    mock_stock_repo,
+                    mock_tradernet_client,
                 )
 
         step_result = result["steps"][0]
@@ -349,7 +416,12 @@ class TestGetRecommendations:
 
     @pytest.mark.asyncio
     async def test_handles_service_exception(
-        self, mock_position_repo, mock_settings_service, mock_rebalancing_service
+        self,
+        mock_position_repo,
+        mock_settings_service,
+        mock_rebalancing_service,
+        mock_stock_repo,
+        mock_tradernet_client,
     ):
         """Test that service exceptions are converted to HTTPException."""
         from app.api.recommendations import get_recommendations
@@ -370,6 +442,8 @@ class TestGetRecommendations:
                         mock_position_repo,
                         mock_settings_service,
                         mock_rebalancing_service,
+                        mock_stock_repo,
+                        mock_tradernet_client,
                     )
 
         assert exc_info.value.status_code == 500
@@ -377,7 +451,12 @@ class TestGetRecommendations:
 
     @pytest.mark.asyncio
     async def test_propagates_http_exception(
-        self, mock_position_repo, mock_settings_service, mock_rebalancing_service
+        self,
+        mock_position_repo,
+        mock_settings_service,
+        mock_rebalancing_service,
+        mock_stock_repo,
+        mock_tradernet_client,
     ):
         """Test that HTTPException is propagated without wrapping."""
         from app.api.recommendations import get_recommendations
@@ -397,6 +476,8 @@ class TestGetRecommendations:
                         mock_position_repo,
                         mock_settings_service,
                         mock_rebalancing_service,
+                        mock_stock_repo,
+                        mock_tradernet_client,
                     )
 
         assert exc_info.value is http_exc
@@ -407,6 +488,8 @@ class TestGetRecommendations:
         mock_position_repo,
         mock_settings_service,
         mock_rebalancing_service,
+        mock_stock_repo,
+        mock_tradernet_client,
         mock_step,
     ):
         """Test that cache key is generated from portfolio state."""
@@ -429,10 +512,14 @@ class TestGetRecommendations:
             ) as mock_hash:
                 mock_hash.return_value = "hash-123"
                 await get_recommendations(
-                    mock_position_repo, mock_settings_service, mock_rebalancing_service
+                    mock_position_repo,
+                    mock_settings_service,
+                    mock_rebalancing_service,
+                    mock_stock_repo,
+                    mock_tradernet_client,
                 )
 
-        # Verify hash was called with position data and settings
+        # Verify hash was called with position data, settings, stocks, and cash
         mock_hash.assert_called_once()
         call_args = mock_hash.call_args[0]
         positions_arg = call_args[0]
@@ -456,6 +543,7 @@ class TestExecuteRecommendation:
         mock_safety_service,
         mock_trade_execution_service,
         mock_rebalancing_service,
+        mock_stock_repo,
         mock_tradernet_client,
     ):
         """Test that execute endpoint always executes first step (no step_number parameter)."""
@@ -508,6 +596,8 @@ class TestExecuteRecommendation:
                             mock_safety_service,
                             mock_trade_execution_service,
                             mock_rebalancing_service,
+                            mock_stock_repo,
+                            mock_tradernet_client,
                         )
 
         # Should execute first step (step 1), not step 2
@@ -519,15 +609,7 @@ class TestExecuteRecommendation:
         assert mock_tradernet_client.place_order.call_count == 1
 
     @pytest.mark.asyncio
-    async def test_no_step_number_parameter(
-        self,
-        mock_trade_repo,
-        mock_position_repo,
-        mock_settings_service,
-        mock_safety_service,
-        mock_trade_execution_service,
-        mock_rebalancing_service,
-    ):
+    async def test_no_step_number_parameter(self):
         """Test that execute_recommendation function doesn't take step_number parameter."""
         import inspect
 
@@ -548,6 +630,7 @@ class TestExecuteRecommendation:
         mock_safety_service,
         mock_trade_execution_service,
         mock_rebalancing_service,
+        mock_stock_repo,
         mock_tradernet_client,
     ):
         """Test that execute uses 'recommendations:' cache key."""
@@ -590,6 +673,8 @@ class TestExecuteRecommendation:
                             mock_safety_service,
                             mock_trade_execution_service,
                             mock_rebalancing_service,
+                            mock_stock_repo,
+                            mock_tradernet_client,
                         )
 
         # Verify cache key uses 'recommendations:' prefix
@@ -608,6 +693,7 @@ class TestExecuteRecommendation:
         mock_safety_service,
         mock_trade_execution_service,
         mock_rebalancing_service,
+        mock_stock_repo,
         mock_tradernet_client,
     ):
         """Test that recommendations are regenerated when cache misses."""
@@ -656,6 +742,8 @@ class TestExecuteRecommendation:
                             mock_safety_service,
                             mock_trade_execution_service,
                             mock_rebalancing_service,
+                            mock_stock_repo,
+                            mock_tradernet_client,
                         )
 
         # Verify rebalancing service was called
@@ -671,6 +759,8 @@ class TestExecuteRecommendation:
         mock_safety_service,
         mock_trade_execution_service,
         mock_rebalancing_service,
+        mock_stock_repo,
+        mock_tradernet_client,
     ):
         """Test that 404 is raised when no recommendations available."""
         from app.api.recommendations import execute_recommendation
@@ -692,6 +782,8 @@ class TestExecuteRecommendation:
                         mock_safety_service,
                         mock_trade_execution_service,
                         mock_rebalancing_service,
+                        mock_stock_repo,
+                        mock_tradernet_client,
                     )
 
         assert exc_info.value.status_code == 404
@@ -706,6 +798,7 @@ class TestExecuteRecommendation:
         mock_safety_service,
         mock_trade_execution_service,
         mock_rebalancing_service,
+        mock_stock_repo,
         mock_tradernet_client,
     ):
         """Test that trade is validated before execution."""
@@ -748,6 +841,8 @@ class TestExecuteRecommendation:
                             mock_safety_service,
                             mock_trade_execution_service,
                             mock_rebalancing_service,
+                            mock_stock_repo,
+                            mock_tradernet_client,
                         )
 
         # Verify safety check was called
@@ -768,6 +863,7 @@ class TestExecuteRecommendation:
         mock_safety_service,
         mock_trade_execution_service,
         mock_rebalancing_service,
+        mock_stock_repo,
         mock_tradernet_client,
     ):
         """Test that trade is recorded after successful execution."""
@@ -810,6 +906,8 @@ class TestExecuteRecommendation:
                             mock_safety_service,
                             mock_trade_execution_service,
                             mock_rebalancing_service,
+                            mock_stock_repo,
+                            mock_tradernet_client,
                         )
 
         # Verify trade was recorded
@@ -830,6 +928,7 @@ class TestExecuteRecommendation:
         mock_safety_service,
         mock_trade_execution_service,
         mock_rebalancing_service,
+        mock_stock_repo,
         mock_tradernet_client,
     ):
         """Test that caches are invalidated after execution."""
@@ -875,6 +974,8 @@ class TestExecuteRecommendation:
                             mock_safety_service,
                             mock_trade_execution_service,
                             mock_rebalancing_service,
+                            mock_stock_repo,
+                            mock_tradernet_client,
                         )
 
         # Verify cache invalidation was called
@@ -889,6 +990,8 @@ class TestExecuteRecommendation:
         mock_safety_service,
         mock_trade_execution_service,
         mock_rebalancing_service,
+        mock_stock_repo,
+        mock_tradernet_client,
     ):
         """Test that 500 is raised when order placement fails."""
         from app.api.recommendations import execute_recommendation
@@ -909,6 +1012,8 @@ class TestExecuteRecommendation:
 
         mock_client = MagicMock()
         mock_client.place_order.return_value = None  # Failed order
+        mock_client.is_connected = True
+        mock_client.get_cash_balances.return_value = []
 
         with patch("app.api.recommendations.cache") as mock_cache:
             mock_cache.get.return_value = cached_data
@@ -930,6 +1035,8 @@ class TestExecuteRecommendation:
                             mock_safety_service,
                             mock_trade_execution_service,
                             mock_rebalancing_service,
+                            mock_stock_repo,
+                            mock_client,
                         )
 
         assert exc_info.value.status_code == 500
@@ -944,6 +1051,8 @@ class TestExecuteRecommendation:
         mock_safety_service,
         mock_trade_execution_service,
         mock_rebalancing_service,
+        mock_stock_repo,
+        mock_tradernet_client,
     ):
         """Test that exceptions during execution are handled."""
         from app.api.recommendations import execute_recommendation
@@ -982,6 +1091,8 @@ class TestExecuteRecommendation:
                             mock_safety_service,
                             mock_trade_execution_service,
                             mock_rebalancing_service,
+                            mock_stock_repo,
+                            mock_tradernet_client,
                         )
 
         assert exc_info.value.status_code == 500
@@ -996,6 +1107,7 @@ class TestExecuteRecommendation:
         mock_safety_service,
         mock_trade_execution_service,
         mock_rebalancing_service,
+        mock_stock_repo,
         mock_tradernet_client,
     ):
         """Test that HTTPException from safety check is propagated."""
@@ -1038,6 +1150,8 @@ class TestExecuteRecommendation:
                             mock_safety_service,
                             mock_trade_execution_service,
                             mock_rebalancing_service,
+                            mock_stock_repo,
+                            mock_tradernet_client,
                         )
 
         assert exc_info.value is http_exc
@@ -1198,7 +1312,12 @@ class TestRegenerateRecommendationsCache:
 
     @pytest.mark.asyncio
     async def test_regenerates_cache_successfully(
-        self, mock_position_repo, mock_settings_service, mock_rebalancing_service
+        self,
+        mock_position_repo,
+        mock_settings_service,
+        mock_rebalancing_service,
+        mock_stock_repo,
+        mock_tradernet_client,
     ):
         """Test successful cache regeneration."""
         from app.api.recommendations import _regenerate_recommendations_cache
@@ -1229,7 +1348,11 @@ class TestRegenerateRecommendationsCache:
                 return_value="test-key",
             ):
                 cached, cache_key = await _regenerate_recommendations_cache(
-                    mock_position_repo, mock_settings_service, mock_rebalancing_service
+                    mock_position_repo,
+                    mock_settings_service,
+                    mock_rebalancing_service,
+                    mock_stock_repo,
+                    mock_tradernet_client,
                 )
 
         assert cache_key == "recommendations:test-key"
@@ -1239,7 +1362,12 @@ class TestRegenerateRecommendationsCache:
 
     @pytest.mark.asyncio
     async def test_raises_404_when_no_recommendations(
-        self, mock_position_repo, mock_settings_service, mock_rebalancing_service
+        self,
+        mock_position_repo,
+        mock_settings_service,
+        mock_rebalancing_service,
+        mock_stock_repo,
+        mock_tradernet_client,
     ):
         """Test that 404 is raised when no recommendations available."""
         from app.api.recommendations import _regenerate_recommendations_cache
@@ -1257,6 +1385,8 @@ class TestRegenerateRecommendationsCache:
                         mock_position_repo,
                         mock_settings_service,
                         mock_rebalancing_service,
+                        mock_stock_repo,
+                        mock_tradernet_client,
                     )
 
         assert exc_info.value.status_code == 404
@@ -1264,7 +1394,12 @@ class TestRegenerateRecommendationsCache:
 
     @pytest.mark.asyncio
     async def test_caches_regenerated_data(
-        self, mock_position_repo, mock_settings_service, mock_rebalancing_service
+        self,
+        mock_position_repo,
+        mock_settings_service,
+        mock_rebalancing_service,
+        mock_stock_repo,
+        mock_tradernet_client,
     ):
         """Test that regenerated data is cached."""
         from app.api.recommendations import _regenerate_recommendations_cache
@@ -1295,7 +1430,11 @@ class TestRegenerateRecommendationsCache:
                 return_value="test-key",
             ):
                 await _regenerate_recommendations_cache(
-                    mock_position_repo, mock_settings_service, mock_rebalancing_service
+                    mock_position_repo,
+                    mock_settings_service,
+                    mock_rebalancing_service,
+                    mock_stock_repo,
+                    mock_tradernet_client,
                 )
 
         # Verify cache was set
