@@ -104,17 +104,26 @@ class EditStockModal extends HTMLElement {
             </div>
           </template>
 
-          <div class="flex justify-end gap-2 p-4 border-t border-gray-700">
-            <button @click="$store.app.closeEditStock()"
-                    class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded transition-colors">
-              Cancel
+          <div class="flex justify-between items-center p-4 border-t border-gray-700">
+            <button @click="$store.app.refreshStockData($store.app.editingStock?.originalSymbol)"
+                    :disabled="$store.app.loading.refreshData"
+                    class="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 text-white text-sm rounded transition-colors disabled:opacity-50"
+                    title="Sync historical data, recalculate metrics, and refresh score">
+              <span x-show="$store.app.loading.refreshData" class="inline-block animate-spin mr-1">&#9696;</span>
+              <span x-text="$store.app.loading.refreshData ? 'Refreshing...' : 'Refresh Data'"></span>
             </button>
-            <button @click="$store.app.saveStock()"
-                    :disabled="$store.app.loading.stockSave"
-                    class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded transition-colors disabled:opacity-50">
-              <span x-show="$store.app.loading.stockSave" class="inline-block animate-spin mr-1">&#9696;</span>
-              Save Changes
-            </button>
+            <div class="flex gap-2">
+              <button @click="$store.app.closeEditStock()"
+                      class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded transition-colors">
+                Cancel
+              </button>
+              <button @click="$store.app.saveStock()"
+                      :disabled="$store.app.loading.stockSave"
+                      class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded transition-colors disabled:opacity-50">
+                <span x-show="$store.app.loading.stockSave" class="inline-block animate-spin mr-1">&#9696;</span>
+                Save Changes
+              </button>
+            </div>
           </div>
         </div>
       </div>

@@ -65,7 +65,8 @@ document.addEventListener('alpine:init', () => {
       execute: false,
       geoSave: false,
       industrySave: false,
-      stockSave: false
+      stockSave: false,
+      refreshData: false
     },
 
     // Edit Mode States
@@ -474,6 +475,26 @@ document.addEventListener('alpine:init', () => {
       } catch (e) {
         this.showMessage('Failed to refresh score', 'error');
       }
+    },
+
+    async refreshStockData(symbol) {
+      if (!symbol) return;
+      this.loading.refreshData = true;
+      try {
+        const response = await fetch(`/api/stocks/${encodeURIComponent(symbol)}/refresh-data`, {
+          method: 'POST'
+        });
+        const data = await response.json();
+        if (response.ok) {
+          this.showMessage(`Data refresh completed for ${symbol}`, 'success');
+          await this.fetchStocks();
+        } else {
+          this.showMessage(data.detail || 'Data refresh failed', 'error');
+        }
+      } catch (e) {
+        this.showMessage('Failed to refresh data', 'error');
+      }
+      this.loading.refreshData = false;
     },
 
     async syncPrices() {
