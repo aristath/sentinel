@@ -57,17 +57,10 @@ class EditStockModal extends HTMLElement {
 
               <div>
                 <label class="block text-sm text-gray-400 mb-1">Industry</label>
-                <input type="text"
-                       x-model="$store.app.editingStock.industry"
-                       list="edit-industries-list"
-                       placeholder="e.g., Industrial, Defense"
-                       class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
-                <datalist id="edit-industries-list">
-                  <template x-for="ind in ($store.app.industries || [])" :key="ind">
-                    <option :value="ind"></option>
-                  </template>
-                </datalist>
-                <p class="text-xs text-gray-500 mt-1">Comma-separated for multiple industries</p>
+                <div class="px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-300">
+                  <span x-text="$store.app.editingStock.industry || 'Auto-detected from Yahoo Finance'"></span>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">Automatically detected from Yahoo Finance during daily pipeline</p>
               </div>
 
               <div>

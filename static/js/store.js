@@ -591,7 +591,6 @@ document.addEventListener('alpine:init', () => {
           name: this.editingStock.name,
           yahoo_symbol: this.editingStock.yahoo_symbol || null,
           geography: this.editingStock.geography,
-          industry: this.editingStock.industry || null,
           min_lot: parseInt(this.editingStock.min_lot) || 1,
           allow_buy: this.editingStock.allow_buy,
           allow_sell: this.editingStock.allow_sell
