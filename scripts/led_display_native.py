@@ -35,7 +35,7 @@ console_handler.setFormatter(
 )
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,  # Set to DEBUG to see text update logs
     handlers=[file_handler, console_handler],
 )
 
@@ -64,8 +64,14 @@ def connect_serial() -> bool:
             return True
 
         logger.info(f"Connecting to serial port {SERIAL_PORT} at {BAUD_RATE} baud...")
-        _serial_conn = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
-        time.sleep(2)  # Wait for serial connection to stabilize
+        # Set DTR to reset the MCU, then clear it to allow normal operation
+        _serial_conn = serial.Serial(
+            SERIAL_PORT, BAUD_RATE, timeout=1, dsrdtr=False, rtscts=False
+        )
+        _serial_conn.dtr = True  # Assert DTR to reset
+        time.sleep(0.1)
+        _serial_conn.dtr = False  # Release DTR
+        time.sleep(2)  # Wait for MCU to reset and Serial to initialize
         logger.info("Serial connection established")
         return True
     except SerialException as e:

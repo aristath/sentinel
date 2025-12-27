@@ -25,6 +25,7 @@ void setBrightness(int b) {
 void setup() {
   // Initialize serial communication
   Serial.begin(115200);
+  // Note: On Arduino Uno Q, Serial is always available, don't wait for it
 
   // Initialize LED matrix
   matrix.begin();
@@ -37,18 +38,31 @@ void loop() {
     String command = Serial.readStringUntil('\n');
     command.trim();
 
+    // Debug: Echo received command (first 50 chars) back to serial
+    // This helps verify the MCU is receiving data
+    if (command.length() > 0) {
+      Serial.print("RX: ");
+      Serial.println(command.substring(0, 50));
+    }
+
     if (command.startsWith("TEXT:")) {
       String text = command.substring(5);
       setText(text);
+      Serial.print("TEXT SET: ");
+      Serial.println(text.substring(0, 30));
     } else if (command.startsWith("SPEED:")) {
       int speed = command.substring(6).toInt();
       if (speed > 0) {
         setSpeed(speed);
+        Serial.print("SPEED SET: ");
+        Serial.println(speed);
       }
     } else if (command.startsWith("BRIGHTNESS:")) {
       int b = command.substring(11).toInt();
       if (b >= 0 && b <= 255) {
         setBrightness(b);
+        Serial.print("BRIGHTNESS SET: ");
+        Serial.println(b);
       }
     }
   }
