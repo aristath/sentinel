@@ -328,7 +328,7 @@ Return List[Recommendation]
 - `calculate_sell_recommendations()` uses sell-specific scoring - different logic
 - `get_multi_step_recommendations()` uses holistic planner - more comprehensive end-state scoring
 
-**The problem**: 
+**The problem**:
 - Post-transaction score only evaluates diversification impact
 - End-state score evaluates: total return, promise, stability, diversification, opinion (weighted across entire portfolio)
 - **End-state scoring is superior** - why use inferior scoring for single recommendations?
@@ -397,4 +397,3 @@ The confusion about "three competing implementations" likely refers to the **thr
 - ✅ Single buy/sell recommendations use their own scoring (intentional separation)
 
 **Status: ✅ Unified and working as designed**
-

@@ -318,7 +318,7 @@ async def _update_position_prices(quotes: dict[str, float]):
 
 async def _get_holistic_recommendation():
     """Get next recommendation from the holistic planner."""
-    from app.application.services.currency_exchange_service import ExchangeRateService
+    from app.application.services.currency_exchange_service import CurrencyExchangeService
     from app.application.services.rebalancing_service import RebalancingService
     from app.domain.models import Recommendation
     from app.domain.portfolio_hash import generate_recommendation_cache_key
@@ -388,7 +388,7 @@ async def _get_holistic_recommendation():
     recommendation_repo = RecommendationRepository()
     db_manager = get_db_manager()
     tradernet_client = TradernetClient.shared()
-    exchange_rate_service = ExchangeRateService()
+    exchange_rate_service = CurrencyExchangeService()
 
     rebalancing_service = RebalancingService(
         stock_repo=stock_repo,
