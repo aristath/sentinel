@@ -240,7 +240,9 @@ class TestRunOptimization:
                                         mock_settings_repo = AsyncMock()
                                         mock_settings_repo.get_json.side_effect = [
                                             {"US": 0.5, "EU": 0.3},  # geo_targets
-                                            {"Technology": 0.4},  # ind_targets
+                                            {
+                                                "Consumer Electronics": 0.4
+                                            },  # ind_targets
                                         ]
                                         mock_repo_class.return_value = (
                                             mock_settings_repo
@@ -534,7 +536,7 @@ class TestRunOptimization:
                                         # Setup mocks
                                         mock_settings_repo = AsyncMock()
                                         geo_targets = {"US": 0.5, "EU": 0.3}
-                                        ind_targets = {"Technology": 0.4}
+                                        ind_targets = {"Consumer Electronics": 0.4}
                                         mock_settings_repo.get_json.side_effect = [
                                             geo_targets,
                                             ind_targets,

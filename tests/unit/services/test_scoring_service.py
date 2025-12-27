@@ -357,7 +357,10 @@ class TestCalculateAndSaveScore:
             ),
         ):
             result = await service.calculate_and_save_score(
-                "TEST", yahoo_symbol="TEST.US", geography="US", industry="Tech"
+                "TEST",
+                yahoo_symbol="TEST.US",
+                geography="US",
+                industry="Consumer Electronics",
             )
 
         assert result is not None
@@ -637,13 +640,13 @@ class TestScoreAllStocks:
         mock_stock1.symbol = "STOCK1"
         mock_stock1.yahoo_symbol = "STOCK1.US"
         mock_stock1.geography = "US"
-        mock_stock1.industry = "Tech"
+        mock_stock1.industry = "Consumer Electronics"
 
         mock_stock2 = MagicMock()
         mock_stock2.symbol = "STOCK2"
         mock_stock2.yahoo_symbol = "STOCK2.US"
         mock_stock2.geography = "EU"
-        mock_stock2.industry = "Finance"
+        mock_stock2.industry = "Banks - Diversified"
 
         stock_repo.get_all_active.return_value = [mock_stock1, mock_stock2]
 
@@ -680,13 +683,13 @@ class TestScoreAllStocks:
             "STOCK1",
             yahoo_symbol="STOCK1.US",
             geography="US",
-            industry="Tech",
+            industry="Consumer Electronics",
         )
         service.calculate_and_save_score.assert_any_call(
             "STOCK2",
             yahoo_symbol="STOCK2.US",
             geography="EU",
-            industry="Finance",
+            industry="Banks - Diversified",
         )
 
     @pytest.mark.asyncio
@@ -715,19 +718,19 @@ class TestScoreAllStocks:
         mock_stock1.symbol = "STOCK1"
         mock_stock1.yahoo_symbol = "STOCK1.US"
         mock_stock1.geography = "US"
-        mock_stock1.industry = "Tech"
+        mock_stock1.industry = "Consumer Electronics"
 
         mock_stock2 = MagicMock()
         mock_stock2.symbol = "STOCK2"
         mock_stock2.yahoo_symbol = "STOCK2.US"
         mock_stock2.geography = "EU"
-        mock_stock2.industry = "Finance"
+        mock_stock2.industry = "Banks - Diversified"
 
         mock_stock3 = MagicMock()
         mock_stock3.symbol = "STOCK3"
         mock_stock3.yahoo_symbol = "STOCK3.US"
         mock_stock3.geography = "US"
-        mock_stock3.industry = "Healthcare"
+        mock_stock3.industry = "Drug Manufacturers"
 
         stock_repo.get_all_active.return_value = [
             mock_stock1,

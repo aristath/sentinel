@@ -77,7 +77,9 @@ class TestRefreshAllScoresInternal:
         mock_db = AsyncMock()
         mock_cursor = AsyncMock()
         # One stock with symbol, yahoo_symbol, geography, industry
-        mock_cursor.fetchall.return_value = [("TEST.US", "TEST", "US", "Technology")]
+        mock_cursor.fetchall.return_value = [
+            ("TEST.US", "TEST", "US", "Consumer Electronics")
+        ]
         mock_db.config.execute.return_value = mock_cursor
         mock_db.state = AsyncMock()
         mock_db.state.execute.return_value = mock_cursor
@@ -107,7 +109,9 @@ class TestRefreshAllScoresInternal:
 
         mock_db = AsyncMock()
         mock_cursor = AsyncMock()
-        mock_cursor.fetchall.return_value = [("TEST.US", "TEST", "US", "Technology")]
+        mock_cursor.fetchall.return_value = [
+            ("TEST.US", "TEST", "US", "Consumer Electronics")
+        ]
         mock_db.config.execute.return_value = mock_cursor
         mock_db.state = AsyncMock()
         mock_db.state.execute.return_value = mock_cursor
@@ -170,7 +174,7 @@ class TestBuildPortfolioContext:
         mock_targets_cursor.fetchall.return_value = [
             ("US", 0.5, "geography"),
             ("Europe", 0.3, "geography"),
-            ("Technology", 0.2, "industry"),
+            ("Consumer Electronics", 0.2, "industry"),
         ]
 
         # Mock stock data cursor

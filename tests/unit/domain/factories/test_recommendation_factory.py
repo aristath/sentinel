@@ -18,7 +18,7 @@ class TestRecommendationFactory:
             estimated_value=1500.0,
             reason="High priority score",
             geography="US",
-            industry="Technology",
+            industry="Consumer Electronics",
             currency=Currency.USD,
             priority=0.85,
             current_portfolio_score=75.0,
@@ -33,7 +33,7 @@ class TestRecommendationFactory:
         assert data["estimated_value"] == 1500.0
         assert data["reason"] == "High priority score"
         assert data["geography"] == "US"
-        assert data["industry"] == "Technology"
+        assert data["industry"] == "Consumer Electronics"
         assert data["currency"] == Currency.USD
         assert data["priority"] == 0.85
         assert data["current_portfolio_score"] == 75.0
@@ -50,7 +50,7 @@ class TestRecommendationFactory:
             estimated_value=1500.0,
             reason="Underperforming position",
             geography="US",
-            industry="Technology",
+            industry="Consumer Electronics",
             currency=Currency.USD,
         )
 

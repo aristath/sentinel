@@ -53,7 +53,7 @@ class TestGetStocks:
             "volatility": 0.2,
             "priority_multiplier": 1.0,
             "geography": "US",
-            "industry": "Technology",
+            "industry": "Consumer Electronics",
             "quality_score": 0.7,
             "opportunity_score": 0.6,
             "allocation_fit_score": 0.8,
@@ -88,7 +88,7 @@ class TestGetStock:
         mock_stock.symbol = "AAPL"
         mock_stock.yahoo_symbol = "AAPL"
         mock_stock.name = "Apple Inc."
-        mock_stock.industry = "Technology"
+        mock_stock.industry = "Consumer Electronics"
         mock_stock.geography = "US"
         mock_stock.priority_multiplier = 1.0
         mock_stock.min_lot = 1
@@ -137,7 +137,7 @@ class TestGetStock:
         mock_stock.symbol = "AAPL"
         mock_stock.yahoo_symbol = "AAPL"
         mock_stock.name = "Apple"
-        mock_stock.industry = "Tech"
+        mock_stock.industry = "Consumer Electronics"
         mock_stock.geography = "US"
         mock_stock.priority_multiplier = 1.0
         mock_stock.min_lot = 1
@@ -182,7 +182,7 @@ class TestGetStock:
         mock_stock.symbol = "AAPL"
         mock_stock.yahoo_symbol = "AAPL"
         mock_stock.name = "Apple"
-        mock_stock.industry = "Tech"
+        mock_stock.industry = "Consumer Electronics"
         mock_stock.geography = "US"
         mock_stock.priority_multiplier = 1.0
         mock_stock.min_lot = 1
@@ -259,7 +259,7 @@ class TestCreateStock:
             symbol="AAPL",
             name="Apple",
             geography="US",
-            industry="Technology",
+            industry="Consumer Electronics",
         )
 
         with (
@@ -331,7 +331,7 @@ class TestRefreshAllScores:
         mock_stock = MagicMock()
         mock_stock.symbol = "AAPL"
         mock_stock.yahoo_symbol = "AAPL"
-        mock_stock.industry = "Technology"
+        mock_stock.industry = "Consumer Electronics"
 
         mock_stock_repo = AsyncMock()
         mock_stock_repo.get_all_active.return_value = [mock_stock]
@@ -372,13 +372,13 @@ class TestRefreshAllScores:
             ) as mock_yahoo,
         ):
             mock_cache.return_value = AsyncMock()
-            mock_yahoo.return_value = "Technology"
+            mock_yahoo.return_value = "Consumer Electronics"
 
             await refresh_all_scores(mock_stock_repo, mock_scoring_service)
 
             # Production code calls update with symbol and industry kwargs
             mock_stock_repo.update.assert_called_once_with(
-                mock_stock.symbol, industry="Technology"
+                mock_stock.symbol, industry="Consumer Electronics"
             )
 
     @pytest.mark.asyncio
@@ -410,7 +410,7 @@ class TestRefreshStockScore:
         mock_stock = MagicMock()
         mock_stock.yahoo_symbol = "AAPL"
         mock_stock.geography = "US"
-        mock_stock.industry = "Technology"
+        mock_stock.industry = "Consumer Electronics"
 
         mock_stock_repo = AsyncMock()
         mock_stock_repo.get_by_symbol.return_value = mock_stock
@@ -468,7 +468,7 @@ class TestRefreshStockScore:
         mock_stock = MagicMock()
         mock_stock.yahoo_symbol = "AAPL"
         mock_stock.geography = "US"
-        mock_stock.industry = "Technology"
+        mock_stock.industry = "Consumer Electronics"
 
         mock_stock_repo = AsyncMock()
         mock_stock_repo.get_by_symbol.return_value = mock_stock
@@ -495,7 +495,7 @@ class TestUpdateStock:
         mock_stock.symbol = "AAPL"
         mock_stock.yahoo_symbol = "AAPL"
         mock_stock.name = "Apple"
-        mock_stock.industry = "Technology"
+        mock_stock.industry = "Consumer Electronics"
         mock_stock.geography = "US"
         mock_stock.priority_multiplier = 1.0
         mock_stock.min_lot = 1
@@ -561,7 +561,7 @@ class TestUpdateStock:
         mock_stock.symbol = "AAPL"
         mock_stock.yahoo_symbol = "AAPL"
         mock_stock.name = "Apple"
-        mock_stock.industry = "Tech"
+        mock_stock.industry = "Consumer Electronics"
         mock_stock.geography = "US"
         mock_stock.priority_multiplier = 1.0
         mock_stock.min_lot = 1
@@ -737,7 +737,7 @@ class TestHelperFunctions:
         mock_stock.symbol = "AAPL"
         mock_stock.yahoo_symbol = "AAPL"
         mock_stock.name = "Apple"
-        mock_stock.industry = "Tech"
+        mock_stock.industry = "Consumer Electronics"
         mock_stock.geography = "US"
         mock_stock.priority_multiplier = 1.0
         mock_stock.min_lot = 1
@@ -756,7 +756,7 @@ class TestHelperFunctions:
         mock_stock.symbol = "AAPL"
         mock_stock.yahoo_symbol = "AAPL"
         mock_stock.name = "Apple"
-        mock_stock.industry = "Tech"
+        mock_stock.industry = "Consumer Electronics"
         mock_stock.geography = "US"
         mock_stock.priority_multiplier = 1.0
         mock_stock.min_lot = 1

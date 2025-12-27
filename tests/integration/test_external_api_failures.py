@@ -96,7 +96,7 @@ async def test_rebalancing_service_handles_price_fetch_failure(db):
         symbol="AAPL",
         yahoo_symbol="AAPL",
         name="Apple Inc.",
-        industry="Technology",
+        industry="Consumer Electronics",
         geography="US",
         priority_multiplier=1.0,
         min_lot=1,

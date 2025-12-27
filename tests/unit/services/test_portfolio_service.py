@@ -50,7 +50,7 @@ class TestPortfolioServiceCalculations:
                 "symbol": "TEST",
                 "market_value_eur": 1000,
                 "geography": "EU",
-                "industry": "Tech",
+                "industry": "Consumer Electronics",
             }
         ]
 
@@ -75,13 +75,13 @@ class TestPortfolioServiceCalculations:
                 "symbol": "EU1",
                 "market_value_eur": 600,
                 "geography": "EU",
-                "industry": "Tech",
+                "industry": "Consumer Electronics",
             },
             {
                 "symbol": "US1",
                 "market_value_eur": 400,
                 "geography": "US",
-                "industry": "Tech",
+                "industry": "Consumer Electronics",
             },
         ]
 
@@ -121,9 +121,13 @@ class TestPortfolioServiceCalculations:
         ind_by_name = {i.name: i for i in summary.industry_allocations}
 
         # Each industry should get 50% of the value
-        assert ind_by_name["Technology"].current_value == pytest.approx(500, abs=1)
+        assert ind_by_name["Consumer Electronics"].current_value == pytest.approx(
+            500, abs=1
+        )
         assert ind_by_name["Defense"].current_value == pytest.approx(500, abs=1)
-        assert ind_by_name["Technology"].current_pct == pytest.approx(0.5, abs=0.01)
+        assert ind_by_name["Consumer Electronics"].current_pct == pytest.approx(
+            0.5, abs=0.01
+        )
         assert ind_by_name["Defense"].current_pct == pytest.approx(0.5, abs=0.01)
 
     @pytest.mark.asyncio
@@ -155,7 +159,7 @@ class TestPortfolioServiceCalculations:
                 "symbol": "NO_GEO",
                 "market_value_eur": 1000,
                 "geography": None,
-                "industry": "Tech",
+                "industry": "Consumer Electronics",
             },
         ]
 
@@ -205,7 +209,7 @@ class TestPortfolioServiceCalculations:
                 "quantity": 10,
                 "current_price": 50,
                 "geography": "US",
-                "industry": "Tech",
+                "industry": "Consumer Electronics",
             },
         ]
 
@@ -229,7 +233,7 @@ class TestPortfolioServiceCalculations:
                 "symbol": "TEST",
                 "market_value_eur": 1000,
                 "geography": "EU",
-                "industry": "Tech",
+                "industry": "Consumer Electronics",
             },
         ]
 
@@ -255,13 +259,13 @@ class TestPortfolioServiceCalculations:
                 "symbol": "EU1",
                 "market_value_eur": 700,
                 "geography": "EU",
-                "industry": "Tech",
+                "industry": "Consumer Electronics",
             },
             {
                 "symbol": "US1",
                 "market_value_eur": 300,
                 "geography": "US",
-                "industry": "Tech",
+                "industry": "Consumer Electronics",
             },
         ]
 
@@ -289,13 +293,13 @@ class TestPortfolioServiceCalculations:
                 "symbol": "TEST1",
                 "market_value_eur": 333.333333,
                 "geography": "EU",
-                "industry": "Tech",
+                "industry": "Consumer Electronics",
             },
             {
                 "symbol": "TEST2",
                 "market_value_eur": 666.666667,
                 "geography": "EU",
-                "industry": "Tech",
+                "industry": "Consumer Electronics",
             },
         ]
 

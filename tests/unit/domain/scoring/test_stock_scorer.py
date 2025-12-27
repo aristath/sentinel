@@ -861,7 +861,7 @@ class TestCalculateStockScore:
 
         portfolio_context = PortfolioContext(
             geo_weights={"US": 0.5},
-            industry_weights={"Technology": -0.3},
+            industry_weights={"Consumer Electronics": -0.3},
             positions={"MSFT.US": 5000},
             total_value=10000,
         )
@@ -913,7 +913,7 @@ class TestCalculateStockScore:
                 monthly_prices=[{"avg_adj_close": 100.0}] * 24,
                 fundamentals=MagicMock(),
                 geography="US",
-                industry="Technology",
+                industry="Consumer Electronics",
                 portfolio_context=portfolio_context,
             )
 
@@ -922,7 +922,7 @@ class TestCalculateStockScore:
         call_kwargs = mock_div.call_args[1]
         assert call_kwargs["symbol"] == "AAPL.US"
         assert call_kwargs["geography"] == "US"
-        assert call_kwargs["industry"] == "Technology"
+        assert call_kwargs["industry"] == "Consumer Electronics"
         assert call_kwargs["portfolio_context"] == portfolio_context
 
         # Verify diversification score is in result
@@ -1370,7 +1370,7 @@ class TestCalculateStockScoreFromPrefetched:
                 symbol="AAPL.US",
                 prefetched=prefetched,
                 geography="US",
-                industry="Technology",
+                industry="Consumer Electronics",
                 portfolio_context=portfolio_context,
                 yahoo_symbol="AAPL",
                 target_annual_return=0.15,

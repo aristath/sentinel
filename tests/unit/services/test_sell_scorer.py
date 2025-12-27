@@ -217,13 +217,13 @@ class TestCalculatePortfolioBalanceScore:
         become dangerously undiversified.
         """
         geo_allocations = {"EU": 0.60, "US": 0.20, "ASIA": 0.20}
-        ind_allocations = {"Technology": 0.30}
+        ind_allocations = {"Consumer Electronics": 0.30}
 
         score = calculate_portfolio_balance_score(
             position_value=1000,
             total_portfolio_value=10000,
             geography="EU",  # Already at 60%
-            industry="Technology",
+            industry="Consumer Electronics",
             geo_allocations=geo_allocations,
             ind_allocations=ind_allocations,
         )
@@ -238,13 +238,13 @@ class TestCalculatePortfolioBalanceScore:
         system would sell what it should be buying.
         """
         geo_allocations = {"EU": 0.60, "US": 0.10, "ASIA": 0.30}
-        ind_allocations = {"Technology": 0.20}
+        ind_allocations = {"Consumer Electronics": 0.20}
 
         score = calculate_portfolio_balance_score(
             position_value=500,
             total_portfolio_value=10000,
             geography="US",  # Only at 10%
-            industry="Technology",
+            industry="Consumer Electronics",
             geo_allocations=geo_allocations,
             ind_allocations=ind_allocations,
         )
@@ -258,13 +258,13 @@ class TestCalculatePortfolioBalanceScore:
         Bug caught: Single stock concentration risk.
         """
         geo_allocations = {"EU": 0.33, "US": 0.33, "ASIA": 0.34}
-        ind_allocations = {"Technology": 0.30}
+        ind_allocations = {"Consumer Electronics": 0.30}
 
         score = calculate_portfolio_balance_score(
             position_value=2000,  # 20% of portfolio
             total_portfolio_value=10000,
             geography="EU",
-            industry="Technology",
+            industry="Consumer Electronics",
             geo_allocations=geo_allocations,
             ind_allocations=ind_allocations,
         )
@@ -281,7 +281,7 @@ class TestCalculatePortfolioBalanceScore:
             position_value=1000,
             total_portfolio_value=0,
             geography="EU",
-            industry="Technology",
+            industry="Consumer Electronics",
             geo_allocations={},
             ind_allocations={},
         )
@@ -293,7 +293,7 @@ class TestCalculatePortfolioBalanceScore:
 
         Bug caught: Multi-industry parsing errors.
         """
-        ind_allocations = {"Technology": 0.40, "Defense": 0.20}
+        ind_allocations = {"Consumer Electronics": 0.40, "Defense": 0.20}
 
         score = calculate_portfolio_balance_score(
             position_value=1000,

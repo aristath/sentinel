@@ -62,7 +62,7 @@ class TestGetPortfolio:
         # Setup mock stock
         mock_stock = MagicMock()
         mock_stock.name = "Apple Inc."
-        mock_stock.industry = "Technology"
+        mock_stock.industry = "Consumer Electronics"
         mock_stock.geography = "US"
 
         mock_stock_repo.get_by_symbol.return_value = mock_stock
@@ -73,7 +73,7 @@ class TestGetPortfolio:
         assert result[0]["symbol"] == "AAPL"
         assert result[0]["quantity"] == 10
         assert result[0]["stock_name"] == "Apple Inc."
-        assert result[0]["industry"] == "Technology"
+        assert result[0]["industry"] == "Consumer Electronics"
 
     @pytest.mark.asyncio
     async def test_handles_position_without_stock(

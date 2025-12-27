@@ -15,9 +15,11 @@ class TestPriorityCalculator:
 
     def test_parse_industries(self):
         """Test industry string parsing."""
-        assert PriorityCalculator.parse_industries("Technology") == ["Technology"]
+        assert PriorityCalculator.parse_industries("Consumer Electronics") == [
+            "Consumer Electronics"
+        ]
         assert PriorityCalculator.parse_industries("Industrial, Defense") == [
-            "Industrial",
+            "Aerospace & Defense",
             "Defense",
         ]
         assert PriorityCalculator.parse_industries("") == []
@@ -29,7 +31,7 @@ class TestPriorityCalculator:
             symbol="AAPL",
             name="Apple Inc.",
             geography="US",
-            industry="Technology",
+            industry="Consumer Electronics",
             stock_score=0.7,  # Score already includes Quality, Opportunity, Analyst, Allocation Fit
             volatility=0.20,
             multiplier=1.0,
@@ -54,7 +56,7 @@ class TestPriorityCalculator:
             symbol="AAPL",
             name="Apple Inc.",
             geography="US",
-            industry="Technology",
+            industry="Consumer Electronics",
             stock_score=0.6,
             volatility=0.20,
             multiplier=2.0,  # Double the priority
@@ -72,7 +74,7 @@ class TestPriorityCalculator:
                 symbol="LOW",
                 name="Low Priority",
                 geography="US",
-                industry="Tech",
+                industry="Consumer Electronics",
                 stock_score=0.4,
                 volatility=0.30,
                 multiplier=1.0,
@@ -81,7 +83,7 @@ class TestPriorityCalculator:
                 symbol="HIGH",
                 name="High Priority",
                 geography="US",
-                industry="Tech",
+                industry="Consumer Electronics",
                 stock_score=0.8,
                 volatility=0.15,
                 multiplier=1.0,

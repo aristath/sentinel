@@ -120,7 +120,7 @@ async def test_concurrent_trade_execution_atomicity(db):
             symbol=symbol,
             yahoo_symbol=symbol,
             name=f"{symbol} Inc.",
-            industry="Technology",
+            industry="Consumer Electronics",
             geography="US",
             priority_multiplier=1.0,
             min_lot=1,

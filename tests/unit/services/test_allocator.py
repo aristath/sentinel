@@ -36,7 +36,7 @@ class TestCalculatePositionSize:
             symbol="TEST",
             name="Test Stock",
             geography="US",
-            industry="Technology",
+            industry="Consumer Electronics",
             stock_score=score,
             volatility=volatility,
             multiplier=1.0,
@@ -175,13 +175,13 @@ class TestParseIndustries:
 
     def test_single_industry(self):
         """Single industry should return list with one element."""
-        result = parse_industries("Technology")
-        assert result == ["Technology"]
+        result = parse_industries("Consumer Electronics")
+        assert result == ["Consumer Electronics"]
 
     def test_multiple_industries(self):
         """Comma-separated industries should be split and trimmed."""
         result = parse_industries("Industrial, Defense, Aerospace")
-        assert result == ["Industrial", "Defense", "Aerospace"]
+        assert result == ["Aerospace & Defense", "Defense", "Aerospace"]
 
     def test_extra_whitespace_is_trimmed(self):
         """Whitespace around industry names should be removed.
@@ -189,7 +189,7 @@ class TestParseIndustries:
         Bug caught: Whitespace causing mismatches in lookups.
         """
         result = parse_industries("  Technology  ,  Finance  ")
-        assert result == ["Technology", "Finance"]
+        assert result == ["Consumer Electronics", "Banks - Diversified"]
 
     def test_empty_string_returns_empty_list(self):
         """Empty string should return empty list.
@@ -213,13 +213,13 @@ class TestParseIndustries:
         Bug caught: Empty string in list causing issues.
         """
         result = parse_industries("Tech, Finance,")
-        assert result == ["Tech", "Finance"]
+        assert result == ["Consumer Electronics", "Banks - Diversified"]
         assert "" not in result
 
     def test_multiple_commas_ignored(self):
         """Multiple commas should not create empty elements."""
         result = parse_industries("Tech,,Finance")
-        assert result == ["Tech", "Finance"]
+        assert result == ["Consumer Electronics", "Banks - Diversified"]
         assert "" not in result
 
 

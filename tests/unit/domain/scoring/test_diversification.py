@@ -114,12 +114,12 @@ class TestCalculateIndustryGapScore:
 
         context = PortfolioContext(
             geo_weights={},
-            industry_weights={"Technology": 0.5},
+            industry_weights={"Consumer Electronics": 0.5},
             positions={},
             total_value=0,
         )
 
-        score = _calculate_industry_gap_score("Technology", context)
+        score = _calculate_industry_gap_score("Consumer Electronics", context)
 
         assert score > 0.5
 
@@ -129,7 +129,7 @@ class TestCalculateIndustryGapScore:
 
         context = PortfolioContext(
             geo_weights={},
-            industry_weights={"Technology": 0.5, "Healthcare": -0.5},
+            industry_weights={"Consumer Electronics": 0.5, "Drug Manufacturers": -0.5},
             positions={},
             total_value=0,
         )
@@ -313,7 +313,7 @@ class TestCalculateDiversificationScore:
 
         context = PortfolioContext(
             geo_weights={"US": 0.1},
-            industry_weights={"Technology": 0.1},
+            industry_weights={"Consumer Electronics": 0.1},
             positions={},
             total_value=10000,
         )
@@ -321,7 +321,7 @@ class TestCalculateDiversificationScore:
         result = calculate_diversification_score(
             symbol="AAPL.US",
             geography="US",
-            industry="Technology",
+            industry="Consumer Electronics",
             quality_score=0.7,
             opportunity_score=0.6,
             portfolio_context=context,
@@ -345,7 +345,7 @@ class TestCalculateDiversificationScore:
         result = calculate_diversification_score(
             symbol="AAPL.US",
             geography="US",
-            industry="Technology",
+            industry="Consumer Electronics",
             quality_score=0.7,
             opportunity_score=0.6,
             portfolio_context=context,
@@ -452,7 +452,7 @@ class TestCalculatePostTransactionScore:
         new_score, score_change = await calculate_post_transaction_score(
             symbol="SAP.EU",
             geography="EU",
-            industry="Technology",
+            industry="Consumer Electronics",
             proposed_value=2000,
             stock_quality=0.8,
             stock_dividend=0.02,
@@ -495,7 +495,7 @@ class TestCalculatePostTransactionScore:
             new_score, change = await calculate_post_transaction_score(
                 symbol="MSFT.US",
                 geography="US",
-                industry="Technology",
+                industry="Consumer Electronics",
                 proposed_value=500,
                 stock_quality=0.8,
                 stock_dividend=0.01,
