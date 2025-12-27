@@ -10,7 +10,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 # I2C configuration
-I2C_BUS = 1  # I2C bus number (typically 1 on Arduino Uno Q)
+I2C_BUS = 0  # I2C bus number (bus 0 on Arduino Uno Q)
 I2C_SLAVE_ADDR = 0x08  # MCU I2C slave address
 
 # Command codes (must match sketch.ino)
