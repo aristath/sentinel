@@ -10,6 +10,7 @@ from app.infrastructure.external.yahoo.data_fetchers import (
     get_current_price,
     get_fundamental_data,
     get_historical_prices,
+    get_stock_country_and_exchange,
     get_stock_industry,
 )
 from app.infrastructure.external.yahoo.models import (
@@ -30,6 +31,7 @@ __all__ = [
     "get_fundamental_data",
     "get_historical_prices",
     "get_current_price",
+    "get_stock_country_and_exchange",
     "get_stock_industry",
     "get_batch_quotes",
 ]
