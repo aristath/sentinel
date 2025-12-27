@@ -122,6 +122,18 @@ class TestSettings:
         with pytest.raises(ValueError, match="min_cash_reserve must be non-negative"):
             Settings(min_cash_reserve=-100.0)
 
+    def test_settings_validation_max_plan_depth(self):
+        """Test that max_plan_depth must be between 1 and 10."""
+        with pytest.raises(ValueError, match="max_plan_depth must be between 1 and 10"):
+            Settings(max_plan_depth=0)
+
+        with pytest.raises(ValueError, match="max_plan_depth must be between 1 and 10"):
+            Settings(max_plan_depth=11)
+
+        # Valid values should not raise
+        Settings(max_plan_depth=1)
+        Settings(max_plan_depth=10)
+
     def test_settings_from_dict(self):
         """Test creating settings from dictionary."""
         data = {
@@ -135,6 +147,7 @@ class TestSettings:
             "transaction_cost_fixed": "3.0",
             "transaction_cost_percent": "0.003",
             "min_cash_reserve": "1000.0",
+            "max_plan_depth": "7",
         }
 
         settings = Settings.from_dict(data)
@@ -149,6 +162,7 @@ class TestSettings:
         assert settings.transaction_cost_fixed == 3.0
         assert settings.transaction_cost_percent == 0.003
         assert settings.min_cash_reserve == 1000.0
+        assert settings.max_plan_depth == 7
 
     def test_settings_from_dict_with_missing_keys(self):
         """Test that from_dict uses defaults for missing keys."""
@@ -161,12 +175,14 @@ class TestSettings:
         assert settings.min_hold_days == 120
         assert settings.sell_cooldown_days == 180  # Default
         assert settings.optimizer_blend == 0.5  # Default
+        assert settings.max_plan_depth == 5  # Default
 
     def test_settings_to_dict(self):
         """Test converting settings to dictionary."""
         settings = Settings(
             min_hold_days=120,
             optimizer_blend=0.7,
+            max_plan_depth=8,
         )
 
         data = settings.to_dict()
@@ -175,6 +191,7 @@ class TestSettings:
         assert data["optimizer_blend"] == 0.7
         assert data["sell_cooldown_days"] == 180  # Default
         assert data["max_loss_threshold"] == -0.20  # Default
+        assert data["max_plan_depth"] == 8
 
     def test_trading_settings_subset(self):
         """Test TradingSettings provides trading-related settings."""

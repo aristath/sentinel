@@ -98,8 +98,9 @@ async def get_recommendations(
     """
     Get recommendation sequence using the holistic planner.
 
-    The holistic planner automatically tests all depths (1-5) and returns
-    the sequence with the best end-state score. Only the first step is executed.
+    The holistic planner automatically tests all depths (configurable via
+    max_plan_depth setting, default 1-5) and returns the sequence with the
+    best end-state score. Only the first step is executed.
 
     Returns:
         Recommendation sequence with portfolio state at each step.

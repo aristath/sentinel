@@ -677,9 +677,10 @@ def _generate_patterns_at_depth(
 async def generate_action_sequences(
     opportunities: Dict[str, List[ActionCandidate]],
     available_cash: float,
+    max_depth: int = 5,
 ) -> List[List[ActionCandidate]]:
     """
-    Generate candidate action sequences at ALL depths (1-5).
+    Generate candidate action sequences at all depths (1 to max_depth).
 
     Automatically tests sequences of varying lengths to find the optimal depth.
     Each depth generates 5 pattern variants:
@@ -692,14 +693,15 @@ async def generate_action_sequences(
     Args:
         opportunities: Categorized opportunities from identify_opportunities
         available_cash: Starting available cash
+        max_depth: Maximum sequence depth (default 5, configurable via settings)
 
     Returns:
         List of action sequences (each sequence is a list of ActionCandidate)
     """
     all_sequences = []
 
-    # Generate patterns at each depth (1 to 5)
-    for depth in range(1, 6):
+    # Generate patterns at each depth (1 to max_depth)
+    for depth in range(1, max_depth + 1):
         depth_sequences = _generate_patterns_at_depth(
             opportunities, available_cash, depth
         )
@@ -718,7 +720,7 @@ async def generate_action_sequences(
 
     # Log sequences generated
     logger.info(
-        f"Holistic planner generated {len(unique_sequences)} unique sequences (testing depths 1-5)"
+        f"Holistic planner generated {len(unique_sequences)} unique sequences (testing depths 1-{max_depth})"
     )
     for i, seq in enumerate(unique_sequences[:5]):  # Log first 5
         symbols = [
@@ -807,12 +809,13 @@ async def create_holistic_plan(
     current_prices: Optional[Dict[str, float]] = None,
     transaction_cost_fixed: float = 2.0,
     transaction_cost_percent: float = 0.002,
+    max_plan_depth: int = 5,
 ) -> HolisticPlan:
     """
     Create a holistic plan by evaluating action sequences and selecting the best.
 
     This is the main entry point for holistic planning. The planner automatically
-    tests sequences at all depths (1-5) and returns the optimal sequence.
+    tests sequences at all depths (1 to max_plan_depth) and returns the optimal sequence.
 
     If target_weights is provided (from optimizer), uses weight-based opportunity
     identification. Otherwise falls back to heuristic-based identification.
@@ -827,6 +830,7 @@ async def create_holistic_plan(
         current_prices: Current prices (required if target_weights provided)
         transaction_cost_fixed: Fixed transaction cost in EUR
         transaction_cost_percent: Variable transaction cost as fraction
+        max_plan_depth: Maximum sequence depth to test (default 5)
 
     Returns:
         HolisticPlan with the best sequence and end-state analysis
@@ -859,8 +863,10 @@ async def create_holistic_plan(
             portfolio_context, positions, stocks, available_cash, exchange_rate_service
         )
 
-    # Generate candidate sequences at all depths (1-5)
-    sequences = await generate_action_sequences(opportunities, available_cash)
+    # Generate candidate sequences at all depths (1 to max_plan_depth)
+    sequences = await generate_action_sequences(
+        opportunities, available_cash, max_depth=max_plan_depth
+    )
 
     if not sequences:
         # No actions to take

@@ -2,8 +2,9 @@
 Planning Domain - Holistic end-state optimized recommendation planning.
 
 This module provides the holistic planner for multi-step recommendations.
-The planner automatically tests sequences at all depths (1-5) and returns
-the sequence with the best end-state portfolio score.
+The planner automatically tests sequences at configurable depths (default 1-5,
+controlled via max_plan_depth setting) and returns the sequence with the
+best end-state portfolio score.
 """
 
 # Holistic planner - End-state optimized planning

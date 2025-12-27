@@ -214,6 +214,7 @@ class RebalancingService:
             "transaction_cost_percent", 0.002
         )
         min_cash = await self._settings_repo.get_float("min_cash_reserve", 500.0)
+        max_plan_depth = await self._settings_repo.get_int("max_plan_depth", 5)
 
         # Build portfolio context
         portfolio_context = await build_portfolio_context(
@@ -298,6 +299,7 @@ class RebalancingService:
             current_prices=current_prices,
             transaction_cost_fixed=transaction_fixed,
             transaction_cost_percent=transaction_pct,
+            max_plan_depth=max_plan_depth,
         )
 
         # Convert HolisticPlan to MultiStepRecommendation list

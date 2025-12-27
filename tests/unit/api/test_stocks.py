@@ -376,9 +376,10 @@ class TestRefreshAllScores:
 
             await refresh_all_scores(mock_stock_repo, mock_scoring_service)
 
-            # Production code modifies stock.industry in-place, then passes the stock object
-            assert mock_stock.industry == "Technology"
-            mock_stock_repo.update.assert_called_once_with(mock_stock)
+            # Production code calls update with symbol and industry kwargs
+            mock_stock_repo.update.assert_called_once_with(
+                mock_stock.symbol, industry="Technology"
+            )
 
     @pytest.mark.asyncio
     async def test_refresh_all_scores_error(self):

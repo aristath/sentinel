@@ -445,7 +445,7 @@ async def _refresh_recommendation_cache():
         )
         cache_key = f"recommendations:{portfolio_cache_key}"
 
-        # Get multi-step recommendations (holistic planner auto-tests depths 1-5)
+        # Get multi-step recommendations (holistic planner auto-tests depths per max_plan_depth setting)
         multi_step_steps = await rebalancing_service.get_recommendations()
         if multi_step_steps:
             multi_step_data = {
