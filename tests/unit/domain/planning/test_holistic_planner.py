@@ -7,15 +7,225 @@ These tests ensure the holistic planner correctly:
 - Builds balanced rebalancing sequences
 """
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from app.domain.planning.holistic_planner import (
     ActionCandidate,
     HolisticPlan,
     HolisticStep,
+    _calculate_weight_gaps,
+    _is_trade_worthwhile,
+    _process_buy_opportunity,
     generate_action_sequences,
 )
 from app.domain.value_objects.trade_side import TradeSide
+
+
+class TestCalculateWeightGaps:
+    """Test weight gap calculation."""
+
+    def test_calculates_underweight_gap(self):
+        """Test detecting underweight positions."""
+        target = {"AAPL": 0.30, "MSFT": 0.20}
+        current = {"AAPL": 0.20, "MSFT": 0.20}
+        total = 100000
+
+        gaps = _calculate_weight_gaps(target, current, total)
+
+        # AAPL is underweight by 10%
+        aapl_gap = next(g for g in gaps if g["symbol"] == "AAPL")
+        assert aapl_gap["gap"] == pytest.approx(0.10)
+        assert aapl_gap["gap_value"] == pytest.approx(10000.0)
+
+    def test_calculates_overweight_gap(self):
+        """Test detecting overweight positions."""
+        target = {"AAPL": 0.20}
+        current = {"AAPL": 0.35}
+        total = 100000
+
+        gaps = _calculate_weight_gaps(target, current, total)
+
+        aapl_gap = next(g for g in gaps if g["symbol"] == "AAPL")
+        assert aapl_gap["gap"] == pytest.approx(-0.15)
+        assert aapl_gap["gap_value"] == pytest.approx(-15000.0)
+
+    def test_includes_positions_not_in_target(self):
+        """Test detecting positions that should be sold (not in target)."""
+        target = {"AAPL": 0.50}
+        current = {"AAPL": 0.40, "MSFT": 0.10}
+        total = 100000
+
+        gaps = _calculate_weight_gaps(target, current, total)
+
+        # MSFT is not in target, should show negative gap
+        msft_gap = next((g for g in gaps if g["symbol"] == "MSFT"), None)
+        assert msft_gap is not None
+        assert msft_gap["target"] == 0.0
+        assert msft_gap["gap"] == pytest.approx(-0.10)
+
+    def test_ignores_tiny_gaps(self):
+        """Test that tiny gaps (<0.5%) are ignored."""
+        target = {"AAPL": 0.30}
+        current = {"AAPL": 0.302}  # 0.2% difference
+        total = 100000
+
+        gaps = _calculate_weight_gaps(target, current, total)
+
+        assert len(gaps) == 0
+
+    def test_sorts_by_absolute_gap_size(self):
+        """Test that gaps are sorted by absolute size, largest first."""
+        target = {"AAPL": 0.30, "MSFT": 0.20, "GOOG": 0.15}
+        current = {"AAPL": 0.20, "MSFT": 0.35, "GOOG": 0.10}
+        total = 100000
+
+        gaps = _calculate_weight_gaps(target, current, total)
+
+        # MSFT gap is -15%, AAPL is +10%, GOOG is +5%
+        # Sorted by absolute value: MSFT, AAPL, GOOG
+        assert gaps[0]["symbol"] == "MSFT"
+        assert gaps[1]["symbol"] == "AAPL"
+        assert gaps[2]["symbol"] == "GOOG"
+
+
+class TestIsTradeWorthwhile:
+    """Test trade worthiness check based on transaction costs."""
+
+    def test_worthwhile_large_trade(self):
+        """Test that large trades are worthwhile."""
+        # Gap of 5000, cost is 2 + 0.002*5000 = 12
+        # Trade is worthwhile if gap >= 2 * cost = 24
+        assert _is_trade_worthwhile(5000.0, 2.0, 0.002) is True
+
+    def test_not_worthwhile_small_trade(self):
+        """Test that small trades are not worthwhile."""
+        # Gap of 10, cost is 2 + 0.002*10 = 2.02
+        # Trade is worthwhile if gap >= 2 * cost = 4.04
+        # But gap is 10, so this should be True
+        # Actually, 10 >= 4.04, so True
+        # Let's use a smaller gap
+        # Gap of 3, cost is 2 + 0.002*3 = 2.006
+        # Worthwhile if 3 >= 4.01 -> False
+        assert _is_trade_worthwhile(3.0, 2.0, 0.002) is False
+
+    def test_borderline_trade(self):
+        """Test borderline case."""
+        # Find exact threshold: gap = 2 * (fixed + gap * percent)
+        # gap = 2 * fixed + 2 * gap * percent
+        # gap - 2 * gap * percent = 2 * fixed
+        # gap * (1 - 2 * percent) = 2 * fixed
+        # gap = 2 * fixed / (1 - 2 * percent)
+        # gap = 2 * 2 / (1 - 0.004) = 4 / 0.996 = 4.016
+        # So gap of 5 should be worthwhile, gap of 4 should not
+        assert _is_trade_worthwhile(5.0, 2.0, 0.002) is True
+        assert _is_trade_worthwhile(3.0, 2.0, 0.002) is False
+
+
+class TestProcessBuyOpportunity:
+    """Test buy opportunity processing."""
+
+    def test_adds_buy_opportunity(self):
+        """Test that valid buy opportunity is added."""
+        gap_info = {
+            "symbol": "AAPL",
+            "gap_value": 1500.0,
+            "gap": 0.10,
+            "target": 0.30,
+            "current": 0.20,
+        }
+        stock = MagicMock()
+        stock.allow_buy = True
+        stock.name = "Apple Inc"
+        stock.min_lot = 1
+
+        position = None
+        price = 150.0
+        opportunities = {
+            "rebalance_buys": [],
+            "averaging_down": [],
+        }
+
+        _process_buy_opportunity(gap_info, stock, position, price, opportunities)
+
+        assert len(opportunities["rebalance_buys"]) == 1
+        candidate = opportunities["rebalance_buys"][0]
+        assert candidate.symbol == "AAPL"
+        assert candidate.quantity == 10  # 1500 / 150
+
+    def test_skips_if_allow_buy_false(self):
+        """Test that stock with allow_buy=False is skipped."""
+        gap_info = {"symbol": "AAPL", "gap_value": 1500.0, "gap": 0.10, "target": 0.30, "current": 0.20}
+        stock = MagicMock()
+        stock.allow_buy = False
+
+        opportunities = {"rebalance_buys": [], "averaging_down": []}
+
+        _process_buy_opportunity(gap_info, stock, None, 150.0, opportunities)
+
+        assert len(opportunities["rebalance_buys"]) == 0
+        assert len(opportunities["averaging_down"]) == 0
+
+    def test_skips_if_stock_is_none(self):
+        """Test that None stock is skipped."""
+        gap_info = {"symbol": "AAPL", "gap_value": 1500.0, "gap": 0.10, "target": 0.30, "current": 0.20}
+        opportunities = {"rebalance_buys": [], "averaging_down": []}
+
+        _process_buy_opportunity(gap_info, None, None, 150.0, opportunities)
+
+        assert len(opportunities["rebalance_buys"]) == 0
+
+    def test_respects_min_lot(self):
+        """Test that min_lot is respected."""
+        gap_info = {"symbol": "AAPL", "gap_value": 50.0, "gap": 0.05, "target": 0.25, "current": 0.20}
+        stock = MagicMock()
+        stock.allow_buy = True
+        stock.name = "Apple"
+        stock.min_lot = 5
+
+        opportunities = {"rebalance_buys": [], "averaging_down": []}
+
+        _process_buy_opportunity(gap_info, stock, None, 150.0, opportunities)
+
+        # Should use min_lot of 5
+        assert len(opportunities["rebalance_buys"]) == 1
+        assert opportunities["rebalance_buys"][0].quantity == 5
+
+    def test_categorizes_as_averaging_down(self):
+        """Test that buying below avg_price is categorized as averaging_down."""
+        gap_info = {"symbol": "AAPL", "gap_value": 1500.0, "gap": 0.10, "target": 0.30, "current": 0.20}
+        stock = MagicMock()
+        stock.allow_buy = True
+        stock.name = "Apple"
+        stock.min_lot = 1
+
+        position = MagicMock()
+        position.avg_price = 200.0  # Current price below avg
+        position.currency = "USD"
+
+        opportunities = {"rebalance_buys": [], "averaging_down": []}
+
+        _process_buy_opportunity(gap_info, stock, position, 150.0, opportunities)
+
+        # Should be in averaging_down, not rebalance_buys
+        assert len(opportunities["averaging_down"]) == 1
+        assert len(opportunities["rebalance_buys"]) == 0
+        assert "averaging_down" in opportunities["averaging_down"][0].tags
+
+    def test_skips_zero_quantity(self):
+        """Test that zero quantity is skipped."""
+        gap_info = {"symbol": "AAPL", "gap_value": 1.0, "gap": 0.001, "target": 0.201, "current": 0.20}
+        stock = MagicMock()
+        stock.allow_buy = True
+        stock.name = "Apple"
+        stock.min_lot = None
+
+        opportunities = {"rebalance_buys": [], "averaging_down": []}
+
+        _process_buy_opportunity(gap_info, stock, None, 150.0, opportunities)
+
+        assert len(opportunities["rebalance_buys"]) == 0
 
 
 class TestActionCandidate:

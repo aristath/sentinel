@@ -834,3 +834,196 @@ class TestPrepareSellCacheData:
         assert len(result) == 1
         data = result[0]
         assert data["estimated_price"] == 140.0
+
+
+class TestGetStockVolatility:
+    """Test stock volatility retrieval."""
+
+    @pytest.mark.asyncio
+    async def test_returns_volatility_from_metrics(self):
+        """Test returning volatility from risk metrics."""
+        from app.application.services.rebalancing_service import _get_stock_volatility
+
+        mock_metrics = {"volatility": 0.25}
+
+        with patch(
+            "app.domain.analytics.get_position_risk_metrics",
+            new_callable=AsyncMock,
+            return_value=mock_metrics,
+        ):
+            result = await _get_stock_volatility("AAPL.US")
+
+        assert result == 0.25
+
+    @pytest.mark.asyncio
+    async def test_returns_default_on_exception(self):
+        """Test returning default volatility on exception."""
+        from app.application.services.rebalancing_service import (
+            _get_stock_volatility,
+            DEFAULT_VOLATILITY,
+        )
+
+        with patch(
+            "app.domain.analytics.get_position_risk_metrics",
+            new_callable=AsyncMock,
+            side_effect=Exception("Database error"),
+        ):
+            result = await _get_stock_volatility("AAPL.US")
+
+        assert result == DEFAULT_VOLATILITY
+
+    @pytest.mark.asyncio
+    async def test_returns_default_when_volatility_missing(self):
+        """Test returning default when volatility key missing."""
+        from app.application.services.rebalancing_service import (
+            _get_stock_volatility,
+            DEFAULT_VOLATILITY,
+        )
+
+        mock_metrics = {"other_metric": 0.5}  # No volatility key
+
+        with patch(
+            "app.domain.analytics.get_position_risk_metrics",
+            new_callable=AsyncMock,
+            return_value=mock_metrics,
+        ):
+            result = await _get_stock_volatility("AAPL.US")
+
+        assert result == DEFAULT_VOLATILITY
+
+
+class TestBuildAllocationMaps:
+    """Test allocation map building."""
+
+    def test_builds_geography_allocations(self):
+        """Test building geography allocation map."""
+        from app.application.services.rebalancing_service import _build_allocation_maps
+
+        position_dicts = [
+            {"geography": "US", "industry": "Tech", "market_value_eur": 5000},
+            {"geography": "US", "industry": "Finance", "market_value_eur": 3000},
+            {"geography": "EU", "industry": "Tech", "market_value_eur": 2000},
+        ]
+
+        geo, ind = _build_allocation_maps(position_dicts, 10000)
+
+        assert geo["US"] == pytest.approx(0.8)  # 8000/10000
+        assert geo["EU"] == pytest.approx(0.2)  # 2000/10000
+
+    def test_builds_industry_allocations(self):
+        """Test building industry allocation map."""
+        from app.application.services.rebalancing_service import _build_allocation_maps
+
+        position_dicts = [
+            {"geography": "US", "industry": "Tech", "market_value_eur": 6000},
+            {"geography": "EU", "industry": "Finance", "market_value_eur": 4000},
+        ]
+
+        geo, ind = _build_allocation_maps(position_dicts, 10000)
+
+        assert ind["Tech"] == pytest.approx(0.6)
+        assert ind["Finance"] == pytest.approx(0.4)
+
+    def test_handles_missing_geography(self):
+        """Test handling positions with missing geography."""
+        from app.application.services.rebalancing_service import _build_allocation_maps
+
+        position_dicts = [
+            {"geography": "US", "industry": "Tech", "market_value_eur": 5000},
+            {"geography": None, "industry": "Finance", "market_value_eur": 5000},
+        ]
+
+        geo, ind = _build_allocation_maps(position_dicts, 10000)
+
+        assert "US" in geo
+        assert geo["US"] == pytest.approx(0.5)
+        # None geography should not be in the map
+        assert None not in geo
+
+    def test_handles_missing_industry(self):
+        """Test handling positions with missing industry."""
+        from app.application.services.rebalancing_service import _build_allocation_maps
+
+        position_dicts = [
+            {"geography": "US", "industry": None, "market_value_eur": 5000},
+            {"geography": "EU", "industry": "Tech", "market_value_eur": 5000},
+        ]
+
+        geo, ind = _build_allocation_maps(position_dicts, 10000)
+
+        assert "Tech" in ind
+        assert ind["Tech"] == pytest.approx(0.5)
+        assert None not in ind
+
+    def test_handles_missing_market_value(self):
+        """Test handling positions with missing market value."""
+        from app.application.services.rebalancing_service import _build_allocation_maps
+
+        position_dicts = [
+            {"geography": "US", "industry": "Tech", "market_value_eur": None},
+            {"geography": "EU", "industry": "Finance", "market_value_eur": 10000},
+        ]
+
+        geo, ind = _build_allocation_maps(position_dicts, 10000)
+
+        assert geo["US"] == pytest.approx(0.0)
+        assert geo["EU"] == pytest.approx(1.0)
+
+
+class TestGetTargetAllocations:
+    """Test target allocation retrieval."""
+
+    @pytest.mark.asyncio
+    async def test_extracts_geography_allocations(self):
+        """Test extracting geography allocations from repo."""
+        from app.application.services.rebalancing_service import _get_target_allocations
+
+        mock_repo = AsyncMock()
+        mock_repo.get_all = AsyncMock(
+            return_value={
+                "geography:US": 0.35,
+                "geography:EU": 0.35,
+                "geography:OTHER": 0.30,
+                "industry:Tech": 0.5,
+            }
+        )
+
+        geo, ind = await _get_target_allocations(mock_repo)
+
+        assert geo["US"] == 0.35
+        assert geo["EU"] == 0.35
+        assert geo["OTHER"] == 0.30
+
+    @pytest.mark.asyncio
+    async def test_extracts_industry_allocations(self):
+        """Test extracting industry allocations from repo."""
+        from app.application.services.rebalancing_service import _get_target_allocations
+
+        mock_repo = AsyncMock()
+        mock_repo.get_all = AsyncMock(
+            return_value={
+                "geography:US": 0.5,
+                "industry:Tech": 0.4,
+                "industry:Finance": 0.3,
+                "industry:Energy": 0.3,
+            }
+        )
+
+        geo, ind = await _get_target_allocations(mock_repo)
+
+        assert ind["Tech"] == 0.4
+        assert ind["Finance"] == 0.3
+        assert ind["Energy"] == 0.3
+
+    @pytest.mark.asyncio
+    async def test_handles_empty_allocations(self):
+        """Test handling empty allocation repository."""
+        from app.application.services.rebalancing_service import _get_target_allocations
+
+        mock_repo = AsyncMock()
+        mock_repo.get_all = AsyncMock(return_value={})
+
+        geo, ind = await _get_target_allocations(mock_repo)
+
+        assert geo == {}
+        assert ind == {}
