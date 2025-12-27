@@ -343,14 +343,23 @@ async def _get_holistic_recommendation():
 
     position_repo = PositionRepository()
     settings_repo = SettingsRepository()
+    stock_repo = StockRepository()
     settings_service = SettingsService(settings_repo)
+    tradernet_client = TradernetClient.shared()
 
     # Check cache first
     positions = await position_repo.get_all()
+    stocks = await stock_repo.get_all_active()
     settings = await settings_service.get_settings()
     position_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
+    stock_symbols = [s.symbol for s in stocks]
+    cash_balances = (
+        {b.currency: b.amount for b in tradernet_client.get_cash_balances()}
+        if tradernet_client.is_connected
+        else {}
+    )
     portfolio_cache_key = generate_recommendation_cache_key(
-        position_dicts, settings.to_dict()
+        position_dicts, settings.to_dict(), stock_symbols, cash_balances
     )
     cache_key = f"recommendations:{portfolio_cache_key}"
 
@@ -382,14 +391,12 @@ async def _get_holistic_recommendation():
     # Cache miss - call planner
     logger.info("Cache miss, calling holistic planner...")
 
-    # Instantiate all required dependencies
-    stock_repo = StockRepository()
+    # Instantiate remaining required dependencies (stock_repo and tradernet_client already created)
     allocation_repo = AllocationRepository()
     portfolio_repo = PortfolioRepository()
     trade_repo = TradeRepository()
     recommendation_repo = RecommendationRepository()
     db_manager = get_db_manager()
-    tradernet_client = TradernetClient.shared()
     exchange_rate_service = CurrencyExchangeService(tradernet_client)
 
     rebalancing_service = RebalancingService(
@@ -528,17 +535,21 @@ async def _generate_ticker_text() -> str:
     from app.domain.portfolio_hash import generate_recommendation_cache_key
     from app.domain.services.settings_service import SettingsService
     from app.infrastructure.cache import cache
+    from app.infrastructure.external.tradernet import get_tradernet_client
     from app.repositories import (
         PortfolioRepository,
         PositionRepository,
         SettingsRepository,
+        StockRepository,
     )
 
     try:
         settings_repo = SettingsRepository()
         portfolio_repo = PortfolioRepository()
         position_repo = PositionRepository()
+        stock_repo = StockRepository()
         settings_service = SettingsService(settings_repo)
+        client = get_tradernet_client()
 
         show_value = await settings_repo.get_float("ticker_show_value", 1.0)
         show_cash = await settings_repo.get_float("ticker_show_cash", 1.0)
@@ -563,12 +574,19 @@ async def _generate_ticker_text() -> str:
         if show_actions > 0:
             # Generate portfolio hash to read from primary cache
             positions = await position_repo.get_all()
+            stocks = await stock_repo.get_all_active()
             settings = await settings_service.get_settings()
             position_dicts = [
                 {"symbol": p.symbol, "quantity": p.quantity} for p in positions
             ]
+            stock_symbols = [s.symbol for s in stocks]
+            cash_balances = (
+                {b.currency: b.amount for b in client.get_cash_balances()}
+                if client.is_connected
+                else {}
+            )
             portfolio_cache_key = generate_recommendation_cache_key(
-                position_dicts, settings.to_dict()
+                position_dicts, settings.to_dict(), stock_symbols, cash_balances
             )
             cache_key = f"recommendations:{portfolio_cache_key}"
 

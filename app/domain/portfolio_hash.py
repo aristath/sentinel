@@ -1,39 +1,74 @@
 """
 Portfolio Hash Generation
 
-Generates a deterministic hash from current portfolio positions.
+Generates a deterministic hash from current portfolio state.
 Used to identify when recommendations apply to the same portfolio state.
+
+The hash includes:
+- All positions (including zero quantities for stocks in universe)
+- Cash balances as pseudo-positions (CASH.EUR, CASH.USD, etc.)
+- The full stocks universe to detect when new stocks are added
 """
 
 import hashlib
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
-def generate_portfolio_hash(positions: List[Dict[str, Any]]) -> str:
+def generate_portfolio_hash(
+    positions: List[Dict[str, Any]],
+    stocks: Optional[List[str]] = None,
+    cash_balances: Optional[Dict[str, float]] = None,
+) -> str:
     """
-    Generate a deterministic hash from current portfolio positions.
+    Generate a deterministic hash from current portfolio state.
 
     Args:
         positions: List of position dicts with 'symbol' and 'quantity' keys
+        stocks: Optional list of all stock symbols in universe (to detect new stocks)
+        cash_balances: Optional dict of currency -> amount (e.g., {"EUR": 1500.0})
 
     Returns:
         8-character hex hash (first 8 chars of MD5)
 
     Example:
-        positions = [{"symbol": "AAPL", "quantity": 10}, {"symbol": "MSFT", "quantity": 5}]
-        hash = generate_portfolio_hash(positions)  # e.g., "a1b2c3d4"
+        positions = [{"symbol": "AAPL", "quantity": 10}]
+        stocks = ["AAPL", "MSFT", "GOOGL"]
+        cash = {"EUR": 1500.0, "USD": 200.0}
+        hash = generate_portfolio_hash(positions, stocks, cash)
     """
-    # Filter out positions with zero or no quantity
-    active_positions = [
-        p for p in positions if p.get("quantity", 0) and p.get("quantity", 0) > 0
-    ]
+    # Build a dict of symbol -> quantity from positions
+    # Use Union[int, float] to handle both stock quantities (int) and cash (float)
+    position_map: Dict[str, float | int] = {
+        p["symbol"].upper(): int(p.get("quantity", 0) or 0) for p in positions
+    }
 
-    # Sort positions by symbol for deterministic ordering
-    sorted_positions = sorted(active_positions, key=lambda p: p["symbol"])
+    # If stocks universe provided, ensure all stocks are included (with 0 if not held)
+    if stocks:
+        for symbol in stocks:
+            symbol_upper = symbol.upper()
+            if symbol_upper not in position_map:
+                position_map[symbol_upper] = 0
+
+    # Add cash balances as pseudo-positions (filter out zero balances)
+    if cash_balances:
+        for currency, amount in cash_balances.items():
+            if amount > 0:
+                # Round to 2 decimal places for stability
+                position_map[f"CASH.{currency.upper()}"] = round(amount, 2)
+
+    # Sort by symbol for deterministic ordering
+    sorted_symbols = sorted(position_map.keys())
 
     # Build canonical string: "SYMBOL:QUANTITY,SYMBOL:QUANTITY,..."
-    # Round quantity to integer to avoid float precision issues
-    parts = [f"{p['symbol'].upper()}:{int(p['quantity'])}" for p in sorted_positions]
+    parts = []
+    for symbol in sorted_symbols:
+        quantity = position_map[symbol]
+        # Use int for stock quantities, float for cash
+        if symbol.startswith("CASH."):
+            parts.append(f"{symbol}:{quantity}")
+        else:
+            parts.append(f"{symbol}:{int(quantity)}")
+
     canonical = ",".join(parts)
 
     # Generate hash and return first 8 characters
@@ -69,6 +104,7 @@ def generate_settings_hash(settings_dict: Dict[str, Any]) -> str:
             "transaction_cost_fixed",
             "transaction_cost_percent",
             "min_cash_reserve",
+            "max_plan_depth",
         ]
     )
 
@@ -82,26 +118,33 @@ def generate_settings_hash(settings_dict: Dict[str, Any]) -> str:
 
 
 def generate_recommendation_cache_key(
-    positions: List[Dict[str, Any]], settings_dict: Dict[str, Any]
+    positions: List[Dict[str, Any]],
+    settings_dict: Dict[str, Any],
+    stocks: Optional[List[str]] = None,
+    cash_balances: Optional[Dict[str, float]] = None,
 ) -> str:
     """
-    Generate a cache key from both portfolio positions and settings.
+    Generate a cache key from portfolio state and settings.
 
-    This ensures that cache is invalidated when either positions or
-    relevant settings change.
+    This ensures that cache is invalidated when positions, settings,
+    stocks universe, or cash balances change.
 
     Args:
         positions: List of position dicts with 'symbol' and 'quantity' keys
         settings_dict: Dictionary of settings values
+        stocks: Optional list of all stock symbols in universe
+        cash_balances: Optional dict of currency -> amount
 
     Returns:
-        16-character combined hash (portfolio_hash:settings_hash)
+        17-character combined hash (portfolio_hash:settings_hash)
 
     Example:
         positions = [{"symbol": "AAPL", "quantity": 10}]
-        settings = {"min_trade_size": 100}
-        key = generate_recommendation_cache_key(positions, settings)  # e.g., "a1b2c3d4:e5f6g7h8"
+        settings = {"min_stock_score": 0.5}
+        stocks = ["AAPL", "MSFT"]
+        cash = {"EUR": 1500.0}
+        key = generate_recommendation_cache_key(positions, settings, stocks, cash)
     """
-    portfolio_hash = generate_portfolio_hash(positions)
+    portfolio_hash = generate_portfolio_hash(positions, stocks, cash_balances)
     settings_hash = generate_settings_hash(settings_dict)
     return f"{portfolio_hash}:{settings_hash}"
