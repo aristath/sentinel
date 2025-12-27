@@ -12,7 +12,6 @@ from app.api import (
     allocation,
     cash_flows,
     charts,
-    multi_step_recommendations,
     optimizer,
     portfolio,
     recommendations,
@@ -153,11 +152,6 @@ app.include_router(
     recommendations.router,
     prefix="/api/trades/recommendations",
     tags=["Recommendations"],
-)
-app.include_router(
-    multi_step_recommendations.router,
-    prefix="/api/trades/multi-step-recommendations",
-    tags=["Multi-Step Recommendations"],
 )
 app.include_router(status.router, prefix="/api/status", tags=["Status"])
 app.include_router(allocation.router, prefix="/api/allocation", tags=["Allocation"])

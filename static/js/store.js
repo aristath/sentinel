@@ -18,10 +18,7 @@ document.addEventListener('alpine:init', () => {
     trades: [],
     tradernet: { connected: false },
     markets: {},  // {EU: {open: bool, ...}, US: {...}, ASIA: {...}}
-    recommendations: [],
-    sellRecommendations: [],
-    multiStepRecommendations: null,  // {depth: int, steps: [], total_score_improvement: float, final_available_cash: float}
-    allStrategyRecommendations: null,  // {diversification: {...}, sustainability: {...}, opportunity: {...}}
+    recommendations: null,  // Unified recommendations: {depth: int, steps: [], total_score_improvement: float, final_available_cash: float}
     optimizerStatus: null,  // {settings: {...}, last_run: {...}, status: 'ready'}
     // Default settings - will be overwritten by fetchSettings()
     settings: {
@@ -56,9 +53,6 @@ document.addEventListener('alpine:init', () => {
     // Loading States
     loading: {
       recommendations: false,
-      sellRecommendations: false,
-      multiStepRecommendations: false,
-      allStrategyRecommendations: false,
       scores: false,
       sync: false,
       historical: false,
@@ -92,9 +86,6 @@ document.addEventListener('alpine:init', () => {
         this.fetchMarkets(),
         this.fetchGeographies(),
         this.fetchRecommendations(),
-        this.fetchSellRecommendations(),
-        this.fetchMultiStepRecommendations(),
-        this.fetchAllStrategyRecommendations(),
         this.fetchSettings(),
         this.fetchSparklines(),
         this.fetchOptimizerStatus()
@@ -181,49 +172,28 @@ document.addEventListener('alpine:init', () => {
     async fetchRecommendations() {
       this.loading.recommendations = true;
       try {
+        // Unified recommendations endpoint - returns optimal sequence from holistic planner
         const data = await API.fetchRecommendations();
-        this.recommendations = data.recommendations || [];
+        this.recommendations = data;
       } catch (e) {
         console.error('Failed to fetch recommendations:', e);
+        this.recommendations = null;
       }
       this.loading.recommendations = false;
     },
 
-    async fetchSellRecommendations() {
-      this.loading.sellRecommendations = true;
+    async executeRecommendation() {
+      this.loading.execute = true;
       try {
-        const data = await API.fetchSellRecommendations();
-        this.sellRecommendations = data.recommendations || [];
+        const result = await API.executeRecommendation();
+        this.showMessage(`Executed: ${result.quantity} ${result.symbol} @ €${result.price}`, 'success');
+        // Refresh recommendations after execution
+        await this.fetchRecommendations();
+        await this.fetchAll();
       } catch (e) {
-        console.error('Failed to fetch sell recommendations:', e);
+        this.showMessage('Failed to execute trade', 'error');
       }
-      this.loading.sellRecommendations = false;
-    },
-
-    async fetchMultiStepRecommendations() {
-      this.loading.multiStepRecommendations = true;
-      try {
-        // Optimizer-driven multi-step recommendations (always fetched)
-        const data = await API.fetchMultiStepRecommendations();
-        this.multiStepRecommendations = data;
-      } catch (e) {
-        console.error('Failed to fetch multi-step recommendations:', e);
-        this.multiStepRecommendations = null;
-      }
-      this.loading.multiStepRecommendations = false;
-    },
-
-    async fetchAllStrategyRecommendations() {
-      this.loading.allStrategyRecommendations = true;
-      try {
-        // Optimizer-driven strategy recommendations (always fetched)
-        const data = await API.fetchAllStrategyRecommendations();
-        this.allStrategyRecommendations = data;
-      } catch (e) {
-        console.error('Failed to fetch all-strategy recommendations:', e);
-        this.allStrategyRecommendations = null;
-      }
-      this.loading.allStrategyRecommendations = false;
+      this.loading.execute = false;
     },
 
     async fetchSettings() {
@@ -294,25 +264,6 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    async dismissRecommendation(uuid) {
-      try {
-        await API.dismissRecommendation(uuid);
-        this.showMessage('Recommendation dismissed', 'success');
-        await this.fetchRecommendations();
-      } catch (e) {
-        this.showMessage('Failed to dismiss recommendation', 'error');
-      }
-    },
-
-    async dismissSellRecommendation(uuid) {
-      try {
-        await API.dismissSellRecommendation(uuid);
-        this.showMessage('Sell recommendation dismissed', 'success');
-        await this.fetchSellRecommendations();
-      } catch (e) {
-        this.showMessage('Failed to dismiss sell recommendation', 'error');
-      }
-    },
 
     // Deprecated - recommendations now execute automatically
     // async executeRecommendation(symbol) {
@@ -342,38 +293,6 @@ document.addEventListener('alpine:init', () => {
     //   this.executingSellSymbol = null;
     //   this.loading.execute = false;
     // },
-
-    async executeMultiStepStep(stepNumber) {
-      this.loading.execute = true;
-      this.executingStep = stepNumber;
-      try {
-        const result = await API.executeMultiStepStep(stepNumber);
-        this.showMessage(`Step ${stepNumber} executed: ${result.quantity} ${result.symbol} @ €${result.price}`, 'success');
-        await this.fetchAll();
-      } catch (e) {
-        this.showMessage(`Failed to execute step ${stepNumber}: ${e.message}`, 'error');
-      }
-      this.executingStep = null;
-      this.loading.execute = false;
-    },
-
-    async executeAllMultiStep() {
-      this.loading.execute = true;
-      try {
-        const result = await API.executeAllMultiStep();
-        const successCount = result.executed_steps;
-        const totalCount = result.total_steps;
-        if (successCount === totalCount) {
-          this.showMessage(`All ${totalCount} steps executed successfully`, 'success');
-        } else {
-          this.showMessage(`Executed ${successCount} of ${totalCount} steps`, 'warning');
-        }
-        await this.fetchAll();
-      } catch (e) {
-        this.showMessage(`Failed to execute plan: ${e.message}`, 'error');
-      }
-      this.loading.execute = false;
-    },
 
     // Computed Properties
     get industries() {

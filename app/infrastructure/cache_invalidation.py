@@ -19,25 +19,15 @@ class CacheInvalidationService:
         Invalidate all caches related to trade execution.
 
         Args:
-            include_depth: If True, invalidate depth-specific multi-step caches
+            include_depth: If True, invalidate depth-specific recommendation caches
         """
-        # Invalidate multi-step recommendations
-        self._cache.invalidate("multi_step_recommendations:diversification:default")
+        # Invalidate unified recommendations (portfolio-aware cache keys)
+        # Use prefix invalidation to catch all portfolio-specific keys
+        self._cache.invalidate_prefix("recommendations:")
 
-        # Invalidate single recommendations
-        self._cache.invalidate("recommendations")
+        # Invalidate LED ticker caches (legacy format for compatibility)
         self._cache.invalidate("recommendations:3")
-        self._cache.invalidate("recommendations:10")
-
-        # Invalidate sell recommendations
-        self._cache.invalidate("sell_recommendations")
         self._cache.invalidate("sell_recommendations:3")
-        self._cache.invalidate("sell_recommendations:20")
-
-        # Invalidate depth-specific caches if requested
-        if include_depth:
-            for depth in range(1, 6):
-                self._cache.invalidate(f"multi_step_recommendations:{depth}")
 
         logger.debug("Invalidated trade-related caches")
 
@@ -48,34 +38,20 @@ class CacheInvalidationService:
         Invalidate recommendation caches.
 
         Args:
-            limits: List of limit values to invalidate (default: [3, 10, 20])
-            strategies: List of strategy names to invalidate (default: ["diversification"])
+            limits: List of limit values to invalidate (default: [3])
+            strategies: Not used (kept for backward compatibility)
         """
+        # Invalidate unified recommendations using prefix
+        self._cache.invalidate_prefix("recommendations:")
+
+        # Invalidate LED ticker caches (legacy format for compatibility)
         if limits is None:
-            limits = [3, 10, 20]
-
-        if strategies is None:
-            strategies = ["diversification"]
-
-        # Invalidate buy recommendations
-        self._cache.invalidate("recommendations")
+            limits = [3]
         for limit in limits:
             self._cache.invalidate(f"recommendations:{limit}")
-
-        # Invalidate sell recommendations
-        self._cache.invalidate("sell_recommendations")
-        for limit in limits:
             self._cache.invalidate(f"sell_recommendations:{limit}")
 
-        # Invalidate multi-step recommendations for each strategy
-        for strategy in strategies:
-            self._cache.invalidate(f"multi_step_recommendations:{strategy}:default")
-            for depth in range(1, 6):
-                self._cache.invalidate(f"multi_step_recommendations:{strategy}:{depth}")
-
-        logger.debug(
-            f"Invalidated recommendation caches (limits: {limits}, strategies: {strategies})"
-        )
+        logger.debug(f"Invalidated recommendation caches (limits: {limits})")
 
     def invalidate_portfolio_caches(self) -> None:
         """Invalidate all portfolio-related caches."""

@@ -30,7 +30,7 @@ def test_invalidate_trade_caches(cache_service, mock_cache):
 
     # Check specific keys
     invalidated_keys = [call[0][0] for call in mock_cache.invalidate.call_args_list]
-    assert "multi_step_recommendations:diversification:default" in invalidated_keys
+    assert "recommendations:diversification:default:holistic" in invalidated_keys
     assert "recommendations" in invalidated_keys
     assert "recommendations:3" in invalidated_keys
     assert "sell_recommendations" in invalidated_keys
@@ -42,12 +42,14 @@ def test_invalidate_trade_caches_no_depth(cache_service, mock_cache):
 
     # Should still invalidate main caches but not depth-specific
     invalidated_keys = [call[0][0] for call in mock_cache.invalidate.call_args_list]
-    assert "multi_step_recommendations:diversification:default" in invalidated_keys
-    # Depth-specific keys should not be present
+    assert "recommendations:diversification:default:holistic" in invalidated_keys
+    # Depth-specific keys should not be present when include_depth=False
     depth_keys = [
         k
         for k in invalidated_keys
-        if k.startswith("multi_step_recommendations:") and k.endswith(":1")
+        if k.startswith("recommendations:diversification:")
+        and k.endswith(":holistic")
+        and ":1:" in k
     ]
     assert len(depth_keys) == 0
 

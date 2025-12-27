@@ -203,9 +203,7 @@ async def update_setting_value(
         await rec_cache.invalidate_all_recommendations()
 
         # Invalidate in-memory caches
-        cache.invalidate_prefix("recommendations")
-        cache.invalidate_prefix("sell_recommendations")
-        cache.invalidate_prefix("multi_step_recommendations")
+        cache.invalidate_prefix("recommendations")  # Unified recommendations cache
 
     return {key: data.value}
 

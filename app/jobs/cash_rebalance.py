@@ -318,7 +318,7 @@ async def _get_next_holistic_action() -> "Recommendation | None":
     portfolio_cache_key = generate_recommendation_cache_key(
         position_dicts, settings.to_dict()
     )
-    cache_key = f"multi_step_recommendations:{portfolio_cache_key}"
+    cache_key = f"recommendations:{portfolio_cache_key}"
 
     # Try cache first
     cached = cache.get(cache_key)
@@ -385,7 +385,7 @@ async def _get_next_holistic_action() -> "Recommendation | None":
         tradernet_client=tradernet_client,
         exchange_rate_service=exchange_rate_service,
     )
-    steps = await service.get_multi_step_recommendations()
+    steps = await service.get_recommendations()
 
     if not steps:
         logger.info("Holistic planner returned no recommendations")
@@ -443,10 +443,10 @@ async def _refresh_recommendation_cache():
         portfolio_cache_key = generate_recommendation_cache_key(
             position_dicts, settings.to_dict()
         )
-        cache_key = f"multi_step_recommendations:{portfolio_cache_key}"
+        cache_key = f"recommendations:{portfolio_cache_key}"
 
         # Get multi-step recommendations (holistic planner auto-tests depths 1-5)
-        multi_step_steps = await rebalancing_service.get_multi_step_recommendations()
+        multi_step_steps = await rebalancing_service.get_recommendations()
         if multi_step_steps:
             multi_step_data = {
                 "depth": len(multi_step_steps),
@@ -485,45 +485,59 @@ async def _refresh_recommendation_cache():
             )
 
             # Also cache to fixed keys for LED ticker display
-            # LED ticker looks for: multi_step_recommendations:diversification:{depth}:holistic
+            # LED ticker looks for: recommendations:diversification:{depth}:holistic
             # Use actual depth from holistic planner (it auto-determines optimal depth)
             depth = len(multi_step_steps)
-            led_cache_key = (
-                f"multi_step_recommendations:diversification:{depth}:holistic"
-            )
+            led_cache_key = f"recommendations:diversification:{depth}:holistic"
             cache.set(led_cache_key, multi_step_data, ttl_seconds=900)
             cache.set(
-                "multi_step_recommendations:diversification:default:holistic",
+                "recommendations:diversification:default:holistic",
                 multi_step_data,
                 ttl_seconds=900,
             )
             logger.info(f"LED ticker cache refreshed: {led_cache_key}")
 
-        # Always cache single recommendations (for fallback and depth=1)
-        buy_recommendations = await rebalancing_service.get_recommendations(limit=3)
-        buy_recs = {
-            "recommendations": [
-                {"symbol": r.symbol, "amount": r.estimated_value}
-                for r in buy_recommendations
-            ]
-        }
-        cache.set("recommendations:3", buy_recs, ttl_seconds=900)
+        # Extract buy/sell from unified recommendations for LED ticker compatibility
+        # Get unified recommendations (already cached above)
+        from app.domain.value_objects.trade_side import TradeSide
 
-        # Get sell recommendations
-        sell_recommendations = await rebalancing_service.calculate_sell_recommendations(
-            limit=3
-        )
-        sell_recs = {
-            "recommendations": [
-                {"symbol": r.symbol, "amount": r.estimated_value}
-                for r in sell_recommendations
-            ]
-        }
-        cache.set("sell_recommendations:3", sell_recs, ttl_seconds=900)
+        unified_steps = await rebalancing_service.get_recommendations()
 
-        logger.info(
-            f"Recommendation cache refreshed: {len(buy_recommendations)} buy, {len(sell_recommendations)} sell"
-        )
+        if unified_steps:
+            # Extract buy steps
+            buy_steps = [step for step in unified_steps if step.side == TradeSide.BUY][
+                :3
+            ]
+            buy_recs = {
+                "recommendations": [
+                    {"symbol": step.symbol, "amount": step.estimated_value}
+                    for step in buy_steps
+                ]
+            }
+            cache.set("recommendations:3", buy_recs, ttl_seconds=900)
+
+            # Extract sell steps
+            sell_steps = [
+                step for step in unified_steps if step.side == TradeSide.SELL
+            ][:3]
+            sell_recs = {
+                "recommendations": [
+                    {"symbol": step.symbol, "amount": step.estimated_value}
+                    for step in sell_steps
+                ]
+            }
+            cache.set("sell_recommendations:3", sell_recs, ttl_seconds=900)
+
+            logger.info(
+                f"Recommendation cache refreshed: {len(buy_steps)} buy, {len(sell_steps)} sell"
+            )
+        else:
+            # No recommendations available
+            cache.set("recommendations:3", {"recommendations": []}, ttl_seconds=900)
+            cache.set(
+                "sell_recommendations:3", {"recommendations": []}, ttl_seconds=900
+            )
+            logger.info("No recommendations available for LED ticker cache")
 
     except Exception as e:
         logger.warning(f"Failed to refresh recommendation cache: {e}")

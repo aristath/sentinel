@@ -70,21 +70,10 @@ const API = {
 
   // Trades
   fetchTrades: () => fetch('/api/trades').then(r => r.json()),
-  fetchRecommendations: () => fetch('/api/trades/recommendations?limit=10').then(r => r.json()),
-  dismissRecommendation: (uuid) => API._post(`/api/trades/recommendations/${uuid}/dismiss`),
-  fetchSellRecommendations: () => fetch('/api/trades/recommendations/sell').then(r => r.json()),
-  dismissSellRecommendation: (uuid) => API._post(`/api/trades/recommendations/sell/${uuid}/dismiss`),
-  // Deprecated - recommendations now execute automatically
-  // executeRecommendation: (symbol) => API._post(`/api/trades/recommendations/${symbol}/execute`),
-  // executeSellRecommendation: (symbol) => API._post(`/api/trades/sell-recommendations/${symbol}/execute`),
-  fetchMultiStepRecommendations: () => {
-    return fetch('/api/trades/multi-step-recommendations').then(r => r.json());
-  },
-  fetchAllStrategyRecommendations: () => {
-    return fetch('/api/trades/multi-step-recommendations/all').then(r => r.json());
-  },
-  executeMultiStepStep: (stepNumber) => API._post(`/api/trades/multi-step-recommendations/execute-step/${stepNumber}`),
-  executeAllMultiStep: () => API._post('/api/trades/multi-step-recommendations/execute-all'),
+  // Unified recommendations endpoint - returns optimal sequence from holistic planner
+  fetchRecommendations: () => fetch('/api/trades/recommendations').then(r => r.json()),
+  // Execute the first step of the current optimal sequence
+  executeRecommendation: () => API._post('/api/trades/recommendations/execute'),
 
   // Charts
   fetchStockChart: (symbol, range = '1Y', source = 'tradernet') => {

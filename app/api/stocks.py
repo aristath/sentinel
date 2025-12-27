@@ -253,9 +253,7 @@ async def refresh_all_scores(
     logger.info("Invalidated recommendation cache for score refresh")
 
     # Invalidate in-memory recommendation caches
-    cache.invalidate_prefix("recommendations")
-    cache.invalidate_prefix("sell_recommendations")
-    cache.invalidate_prefix("multi_step_recommendations")
+    cache.invalidate_prefix("recommendations")  # Unified recommendations cache
     logger.info("Invalidated in-memory recommendation caches")
 
     try:

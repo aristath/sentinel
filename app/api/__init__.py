@@ -3,7 +3,6 @@ from app.api import (
     allocation,
     cash_flows,
     charts,
-    multi_step_recommendations,
     optimizer,
     portfolio,
     recommendations,
@@ -21,6 +20,5 @@ __all__ = [
     "cash_flows",
     "charts",
     "recommendations",
-    "multi_step_recommendations",
     "optimizer",
 ]

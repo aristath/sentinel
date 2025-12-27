@@ -406,7 +406,7 @@ class TestRefreshRecommendationCache:
             mock_settings.return_value.get_settings = AsyncMock(
                 return_value=mock_settings_obj
             )
-            mock_service.return_value.get_multi_step_recommendations = AsyncMock(
+            mock_service.return_value.get_recommendations = AsyncMock(
                 return_value=[mock_step]
             )
             mock_service.return_value.get_recommendations = AsyncMock(

@@ -352,7 +352,7 @@ async def _get_holistic_recommendation():
     portfolio_cache_key = generate_recommendation_cache_key(
         position_dicts, settings.to_dict()
     )
-    cache_key = f"multi_step_recommendations:{portfolio_cache_key}"
+    cache_key = f"recommendations:{portfolio_cache_key}"
 
     cached = cache.get(cache_key)
     if cached and cached.get("steps"):
@@ -404,7 +404,7 @@ async def _get_holistic_recommendation():
         tradernet_client=tradernet_client,
         exchange_rate_service=exchange_rate_service,
     )
-    steps = await rebalancing_service.get_multi_step_recommendations()
+    steps = await rebalancing_service.get_recommendations()
 
     if not steps:
         return None
@@ -433,9 +433,9 @@ async def _get_holistic_recommendation():
     cache.set(cache_key, multi_step_data, ttl_seconds=900)
 
     # Also cache to fixed keys for LED ticker display
-    # LED ticker looks for: multi_step_recommendations:diversification:{depth}:holistic
+    # LED ticker looks for: recommendations:diversification:{depth}:holistic
     depth = len(steps)
-    led_cache_key = f"multi_step_recommendations:diversification:{depth}:holistic"
+    led_cache_key = f"recommendations:diversification:{depth}:holistic"
     cache.set(led_cache_key, multi_step_data, ttl_seconds=900)
 
     # Convert to Recommendation
@@ -560,11 +560,9 @@ async def _generate_ticker_text() -> str:
 
         # Recommendations
         if show_actions > 0:
-            # Try multi-step cache first
+            # Try unified recommendations cache first
             for depth in [5, 4, 3, 2, 1]:
-                cache_key = (
-                    f"multi_step_recommendations:diversification:{depth}:holistic"
-                )
+                cache_key = f"recommendations:diversification:{depth}:holistic"
                 cached = cache.get(cache_key)
                 if cached and cached.get("steps"):
                     steps = cached["steps"][:max_actions]
