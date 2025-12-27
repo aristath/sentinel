@@ -16,6 +16,21 @@ from app.repositories import (
 logger = logging.getLogger(__name__)
 
 
+def _has_cached_recommendations() -> bool:
+    """Check if recommendation cache has any data."""
+    # Check multi-step cache
+    for depth in [5, 4, 3, 2, 1]:
+        cache_key = f"multi_step_recommendations:diversification:{depth}:holistic"
+        if cache.get(cache_key):
+            return True
+
+    # Check single recommendation caches
+    if cache.get("recommendations:3") or cache.get("sell_recommendations:3"):
+        return True
+
+    return False
+
+
 async def _get_portfolio_value_part(portfolio_repo, show_value: float) -> str:
     """Get portfolio value part of ticker text."""
     if show_value <= 0:
@@ -150,6 +165,13 @@ async def generate_ticker_text() -> str:
 async def update_ticker_text():
     """Update the ticker text in the display service."""
     try:
+        # Warm cache if empty (first run after startup or TTL expiry)
+        if not _has_cached_recommendations():
+            from app.jobs.cash_rebalance import _refresh_recommendation_cache
+
+            logger.info("Recommendation cache empty, warming cache...")
+            await _refresh_recommendation_cache()
+
         text = await generate_ticker_text()
         set_next_actions(text)
 
