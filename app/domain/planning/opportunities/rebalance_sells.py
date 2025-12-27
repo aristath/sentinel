@@ -45,12 +45,13 @@ async def identify_rebalance_sell_opportunities(
         if position_value <= 0:
             continue
 
-        # Check for rebalance sells (overweight geography/industry)
-        geo = stock.geography
-        if geo in geo_allocations:
-            target = 0.33 + portfolio_context.geo_weights.get(geo, 0) * 0.15
-            if geo_allocations[geo] > target + 0.05:  # 5%+ overweight
-                overweight = geo_allocations[geo] - target
+        # Check for rebalance sells (overweight country/industry)
+        # TODO: Update to use country_weights and country_allocations when allocation system is updated
+        country = stock.country
+        if country and country in geo_allocations:
+            target = 0.33 + portfolio_context.geo_weights.get(country, 0) * 0.15
+            if geo_allocations[country] > target + 0.05:  # 5%+ overweight
+                overweight = geo_allocations[country] - target
                 sell_value_eur = min(position_value * 0.3, overweight * total_value)
 
                 # Calculate quantity
@@ -76,8 +77,8 @@ async def identify_rebalance_sell_opportunities(
                             value_eur=sell_value_eur,
                             currency=pos.currency or "EUR",
                             priority=overweight * 2,  # Proportional to overweight
-                            reason=f"Overweight {geo} by {overweight*100:.1f}%",
-                            tags=["rebalance", f"overweight_{geo.lower()}"],
+                            reason=f"Overweight {country} by {overweight*100:.1f}%",
+                            tags=["rebalance", f"overweight_{country.lower()}"],
                         )
                     )
 

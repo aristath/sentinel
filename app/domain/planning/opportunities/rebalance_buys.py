@@ -52,11 +52,12 @@ async def identify_rebalance_buy_opportunities(
             else 0.5
         )
 
-        # Check for rebalance buys (underweight geography/industry)
-        geo = stock.geography
-        if geo:
-            target = 0.33 + portfolio_context.geo_weights.get(geo, 0) * 0.15
-            current = geo_allocations.get(geo, 0)
+        # Check for rebalance buys (underweight country/industry)
+        # TODO: Update to use country_weights and country_allocations when allocation system is updated
+        country = stock.country
+        if country:
+            target = 0.33 + portfolio_context.geo_weights.get(country, 0) * 0.15
+            current = geo_allocations.get(country, 0)
             if current < target - 0.05:  # 5%+ underweight
                 underweight = target - current
                 exchange_rate = 1.0
@@ -81,8 +82,8 @@ async def identify_rebalance_buy_opportunities(
                         value_eur=sized.value_eur,
                         currency=stock.currency or "EUR",
                         priority=underweight * 2 + quality_score * 0.5,
-                        reason=f"Underweight {geo} by {underweight*100:.1f}%",
-                        tags=["rebalance", f"underweight_{geo.lower()}"],
+                        reason=f"Underweight {country} by {underweight*100:.1f}%",
+                        tags=["rebalance", f"underweight_{country.lower()}"],
                     )
                 )
 

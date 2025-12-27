@@ -756,7 +756,7 @@ async def simulate_sequence(
 
     for action in sequence:
         stock = stocks_by_symbol.get(action.symbol)
-        geography = stock.geography if stock else ""
+        country = stock.country if stock else None
         industry = stock.industry if stock else None
 
         new_positions = dict(current_context.positions)
@@ -778,7 +778,8 @@ async def simulate_sequence(
             new_positions[action.symbol] = (
                 new_positions.get(action.symbol, 0) + action.value_eur
             )
-            new_geographies[action.symbol] = geography
+            if country:
+                new_geographies[action.symbol] = country
             if industry:
                 new_industries[action.symbol] = industry
             current_cash -= action.value_eur

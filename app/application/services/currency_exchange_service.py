@@ -390,22 +390,5 @@ class CurrencyExchangeService:
         return sorted(currencies)
 
 
-# Helper function for geography -> currency mapping
-def get_stock_currency(geography: str) -> str:
-    """Get the trading currency for a stock based on its geography.
-
-    Args:
-        geography: Stock geography code (EU, US, ASIA, UK)
-
-    Returns:
-        Currency code (EUR, USD, HKD, GBP)
-    """
-    return {
-        "EU": "EUR",
-        "US": "USD",
-        "ASIA": "HKD",
-        "UK": "GBP",
-        "GREECE": "EUR",
-    }.get(
-        geography.upper(), "EUR"
-    )  # Default to EUR for unknown geographies
+# Note: Currency is now synced from Tradernet and stored in stocks.currency
+# No mapping function needed - currency comes directly from the stock's currency field

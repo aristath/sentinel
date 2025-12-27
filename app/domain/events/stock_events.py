@@ -29,6 +29,6 @@ class StockAddedEvent(DomainEvent):
         return self.stock.name
 
     @property
-    def geography(self) -> str:
-        """Stock geography."""
-        return self.stock.geography
+    def country(self) -> str | None:
+        """Stock country."""
+        return self.stock.country

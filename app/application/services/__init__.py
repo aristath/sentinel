@@ -1,9 +1,6 @@
 """Application services - orchestrate domain services and repositories."""
 
-from app.application.services.currency_exchange_service import (
-    CurrencyExchangeService,
-    get_stock_currency,
-)
+from app.application.services.currency_exchange_service import CurrencyExchangeService
 from app.application.services.portfolio_service import PortfolioService
 from app.application.services.rebalancing_service import RebalancingService
 from app.application.services.scoring_service import ScoringService
@@ -17,5 +14,4 @@ __all__ = [
     "TradeExecutionService",
     "TradeSafetyService",
     "CurrencyExchangeService",
-    "get_stock_currency",
 ]

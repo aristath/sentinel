@@ -152,7 +152,7 @@ class RebalancingService:
                     estimated_price=step.estimated_price,
                     estimated_value=step.estimated_value,
                     reason=step.reason,
-                    geography="",
+                    country=None,
                     currency=currency,
                     status=RecommendationStatus.PENDING,
                 )
