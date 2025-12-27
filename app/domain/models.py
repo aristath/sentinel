@@ -20,7 +20,8 @@ class Stock:
 
     symbol: str
     name: str
-    geography: str
+    country: Optional[str] = None
+    fullExchangeName: Optional[str] = None
     yahoo_symbol: Optional[str] = None
     industry: Optional[str] = None
     priority_multiplier: float = 1.0
@@ -39,9 +40,8 @@ class Stock:
         if not self.name or not self.name.strip():
             raise ValidationError("Name cannot be empty")
 
-        # Normalize symbol and geography (any geography is valid)
+        # Normalize symbol
         object.__setattr__(self, "symbol", self.symbol.upper().strip())
-        object.__setattr__(self, "geography", self.geography.upper().strip())
 
         # Ensure min_lot is at least 1
         if self.min_lot < 1:
@@ -156,9 +156,9 @@ class StockScore:
 
 @dataclass
 class AllocationTarget:
-    """Target allocation for geography or industry."""
+    """Target allocation for country or industry."""
 
-    type: str  # 'geography' or 'industry'
+    type: str  # 'country' or 'industry'
     name: str
     target_pct: float  # Weight from -1.0 to 1.0
 
@@ -231,8 +231,8 @@ class MonthlyPrice:
 class AllocationStatus:
     """Current allocation vs target."""
 
-    category: str  # geography or industry
-    name: str  # EU, ASIA, US or Technology, etc.
+    category: str  # country or industry
+    name: str  # Country name or Industry name
     target_pct: float
     current_pct: float
     current_value: float
@@ -263,7 +263,7 @@ class Recommendation:
     estimated_price: float
     estimated_value: float
     reason: str  # Why this trade is recommended
-    geography: str
+    country: Optional[str] = None
     currency: Currency = Currency.EUR  # Stock's native currency
     status: RecommendationStatus = RecommendationStatus.PENDING
     industry: Optional[str] = None
@@ -294,9 +294,8 @@ class Recommendation:
         if not self.reason or not self.reason.strip():
             raise ValidationError("Reason cannot be empty")
 
-        # Normalize symbol and geography
+        # Normalize symbol
         object.__setattr__(self, "symbol", self.symbol.upper().strip())
-        object.__setattr__(self, "geography", self.geography.upper())
 
         # Calculate score_change if both portfolio scores are provided
         if (
@@ -317,13 +316,13 @@ class StockPriority:
 
     symbol: str
     name: str
-    geography: str
     industry: str
     stock_score: float
     volatility: float  # Raw volatility (0.0-1.0)
     multiplier: float  # Manual priority multiplier
     min_lot: int  # Minimum lot size for trading
     combined_priority: float  # Enhanced priority score
+    country: Optional[str] = None
     # Score breakdown (for display)
     quality_score: Optional[float] = None
     opportunity_score: Optional[float] = None
