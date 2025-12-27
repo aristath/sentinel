@@ -20,7 +20,7 @@ class TestRecommendation:
             estimated_value=1500.0,
             reason="High priority score",
             geography="US",
-            industry="Technology",
+            industry="Consumer Electronics",
             currency=Currency.USD,
             status=RecommendationStatus.PENDING,
         )

@@ -27,7 +27,7 @@ def create_stock(
     allow_sell: bool = True,
     min_lot: int = 0,
     geography: str = "US",
-    industry: str = "Technology",
+    industry: str = "Consumer Electronics",
 ) -> Stock:
     """Create a mock Stock object for testing."""
     stock = MagicMock(spec=Stock)
@@ -354,11 +354,11 @@ class TestSectorConstraintsBuilding:
         """Test basic industry constraint building."""
         manager = ConstraintsManager()
         stocks = [
-            create_stock("AAPL", industry="Technology"),
-            create_stock("JPM", industry="Finance"),
+            create_stock("AAPL", industry="Consumer Electronics"),
+            create_stock("JPM", industry="Banks - Diversified"),
         ]
         geo_targets = {}
-        ind_targets = {"Technology": 0.70, "Finance": 0.30}
+        ind_targets = {"Consumer Electronics": 0.70, "Banks - Diversified": 0.30}
 
         geo_constraints, ind_constraints = manager.build_sector_constraints(
             stocks, geo_targets, ind_targets
@@ -369,7 +369,9 @@ class TestSectorConstraintsBuilding:
         assert len(ind_constraints) == 2
 
         # Find Technology constraint
-        tech_constraint = next(c for c in ind_constraints if c.name == "Technology")
+        tech_constraint = next(
+            c for c in ind_constraints if c.name == "Consumer Electronics"
+        )
         assert tech_constraint.target == 0.70
         assert tech_constraint.lower == pytest.approx(
             0.70 - IND_ALLOCATION_TOLERANCE, abs=0.001
@@ -407,11 +409,11 @@ class TestSectorConstraintsBuilding:
         """Test stocks with None industry are grouped as OTHER."""
         manager = ConstraintsManager()
         stocks = [
-            create_stock("AAPL", industry="Technology"),
+            create_stock("AAPL", industry="Consumer Electronics"),
             create_stock("UNKNOWN", industry=None),
         ]
         geo_targets = {}
-        ind_targets = {"Technology": 0.70, "OTHER": 0.30}
+        ind_targets = {"Consumer Electronics": 0.70, "OTHER": 0.30}
 
         geo_constraints, ind_constraints = manager.build_sector_constraints(
             stocks, geo_targets, ind_targets
@@ -420,7 +422,7 @@ class TestSectorConstraintsBuilding:
         # Should have constraints for Technology and OTHER
         assert len(ind_constraints) == 2
         names = {c.name for c in ind_constraints}
-        assert "Technology" in names
+        assert "Consumer Electronics" in names
         assert "OTHER" in names
 
         # UNKNOWN should be in OTHER
@@ -505,12 +507,12 @@ class TestSectorConstraintsBuilding:
         """Test multiple stocks in same sector are grouped correctly."""
         manager = ConstraintsManager()
         stocks = [
-            create_stock("AAPL", geography="US", industry="Technology"),
-            create_stock("GOOGL", geography="US", industry="Technology"),
-            create_stock("MSFT", geography="US", industry="Technology"),
+            create_stock("AAPL", geography="US", industry="Consumer Electronics"),
+            create_stock("GOOGL", geography="US", industry="Consumer Electronics"),
+            create_stock("MSFT", geography="US", industry="Consumer Electronics"),
         ]
         geo_targets = {"US": 1.0}
-        ind_targets = {"Technology": 1.0}
+        ind_targets = {"Consumer Electronics": 1.0}
 
         geo_constraints, ind_constraints = manager.build_sector_constraints(
             stocks, geo_targets, ind_targets
@@ -530,12 +532,12 @@ class TestSectorConstraintsBuilding:
         """Test building constraints with mixed sectors."""
         manager = ConstraintsManager()
         stocks = [
-            create_stock("AAPL", geography="US", industry="Technology"),
-            create_stock("SAP", geography="EU", industry="Technology"),
-            create_stock("JPM", geography="US", industry="Finance"),
+            create_stock("AAPL", geography="US", industry="Consumer Electronics"),
+            create_stock("SAP", geography="EU", industry="Consumer Electronics"),
+            create_stock("JPM", geography="US", industry="Banks - Diversified"),
         ]
         geo_targets = {"US": 0.60, "EU": 0.40}
-        ind_targets = {"Technology": 0.70, "Finance": 0.30}
+        ind_targets = {"Consumer Electronics": 0.70, "Banks - Diversified": 0.30}
 
         geo_constraints, ind_constraints = manager.build_sector_constraints(
             stocks, geo_targets, ind_targets
@@ -549,7 +551,9 @@ class TestSectorConstraintsBuilding:
         assert set(us_constraint.symbols) == {"AAPL", "JPM"}
 
         # Technology should have AAPL and SAP
-        tech_constraint = next(c for c in ind_constraints if c.name == "Technology")
+        tech_constraint = next(
+            c for c in ind_constraints if c.name == "Consumer Electronics"
+        )
         assert set(tech_constraint.symbols) == {"AAPL", "SAP"}
 
 
@@ -657,7 +661,7 @@ class TestConstraintSummary:
         ]
         ind_constraints = [
             SectorConstraint(
-                name="Technology",
+                name="Consumer Electronics",
                 symbols=["AAPL", "GOOGL"],
                 target=0.70,
                 lower=0.55,
@@ -675,7 +679,7 @@ class TestConstraintSummary:
         assert summary["geography_constraints"][0]["range"] == (0.50, 0.70)
 
         assert len(summary["industry_constraints"]) == 1
-        assert summary["industry_constraints"][0]["name"] == "Technology"
+        assert summary["industry_constraints"][0]["name"] == "Consumer Electronics"
         assert summary["industry_constraints"][0]["target"] == 0.70
         assert summary["industry_constraints"][0]["range"] == (0.55, 0.85)
 

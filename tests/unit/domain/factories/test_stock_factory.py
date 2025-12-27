@@ -16,7 +16,7 @@ class TestStockFactory:
             "symbol": "AAPL.US",
             "name": "Apple Inc.",
             "geography": "US",
-            "industry": "Technology",
+            "industry": "Consumer Electronics",
             "min_lot": 1,
             "allow_buy": True,
             "allow_sell": False,
@@ -27,7 +27,7 @@ class TestStockFactory:
         assert stock.symbol == "AAPL.US"
         assert stock.name == "Apple Inc."
         assert stock.geography == "US"
-        assert stock.industry == "Technology"
+        assert stock.industry == "Consumer Electronics"
         assert stock.min_lot == 1
         assert stock.allow_buy is True
         assert stock.allow_sell is False
@@ -123,11 +123,11 @@ class TestStockFactory:
             "symbol": "AAPL.US",
             "name": "Apple Inc.",
             "geography": "US",
-            "industry": "Technology",
+            "industry": "Consumer Electronics",
         }
 
         stock = StockFactory.create_from_api_request(data)
-        assert stock.industry == "Technology"
+        assert stock.industry == "Consumer Electronics"
 
     def test_create_from_import(self):
         """Test creating stock from import data."""
@@ -135,7 +135,7 @@ class TestStockFactory:
             "symbol": "MSFT.US",
             "name": "Microsoft Corporation",
             "geography": "US",
-            "industry": "Technology",
+            "industry": "Consumer Electronics",
             "yahoo_symbol": "MSFT",
             "currency": "USD",
         }
@@ -145,6 +145,6 @@ class TestStockFactory:
         assert stock.symbol == "MSFT.US"
         assert stock.name == "Microsoft Corporation"
         assert stock.geography == "US"
-        assert stock.industry == "Technology"
+        assert stock.industry == "Consumer Electronics"
         assert stock.yahoo_symbol == "MSFT"
         assert stock.currency == Currency.USD

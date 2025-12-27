@@ -304,7 +304,7 @@ class TestPositionRepositoryGetWithStockInfo:
             "symbol": "AAPL.US",
             "name": "Apple Inc",
             "geography": "US",
-            "industry": "Technology",
+            "industry": "Consumer Electronics",
             "min_lot": 1,
             "allow_sell": 1,
             "currency": "USD",

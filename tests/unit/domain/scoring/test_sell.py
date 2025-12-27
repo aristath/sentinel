@@ -246,10 +246,10 @@ class TestCalculateSellScore:
                 first_bought_at="2023-01-01",
                 last_sold_at=None,
                 geography="US",
-                industry="Technology",
+                industry="Consumer Electronics",
                 total_portfolio_value=100000,
                 geo_allocations={"US": 0.5},
-                ind_allocations={"Technology": 0.3},
+                ind_allocations={"Consumer Electronics": 0.3},
             )
 
         assert result.eligible is False
@@ -276,10 +276,10 @@ class TestCalculateSellScore:
                 first_bought_at="2022-01-01",  # Long time ago
                 last_sold_at=None,
                 geography="US",
-                industry="Technology",
+                industry="Consumer Electronics",
                 total_portfolio_value=100000,
                 geo_allocations={"US": 0.5},
-                ind_allocations={"Technology": 0.3},
+                ind_allocations={"Consumer Electronics": 0.3},
             )
 
         assert result.eligible is False
@@ -306,10 +306,10 @@ class TestCalculateSellScore:
                 first_bought_at="2022-01-01",
                 last_sold_at=None,
                 geography="US",
-                industry="Technology",
+                industry="Consumer Electronics",
                 total_portfolio_value=100000,
                 geo_allocations={"US": 0.5},
-                ind_allocations={"Technology": 0.3},
+                ind_allocations={"Consumer Electronics": 0.3},
             )
 
         assert result.total_score > 0
@@ -339,10 +339,10 @@ class TestCalculateSellScore:
                 first_bought_at="2022-01-01",
                 last_sold_at=None,
                 geography="US",
-                industry="Technology",
+                industry="Consumer Electronics",
                 total_portfolio_value=100000,
                 geo_allocations={"US": 0.5},
-                ind_allocations={"Technology": 0.3},
+                ind_allocations={"Consumer Electronics": 0.3},
                 technical_data=tech_data,
             )
 
@@ -389,7 +389,7 @@ class TestCalculateAllSellScores:
                 "first_bought_at": "2022-01-01",
                 "last_sold_at": None,
                 "geography": "US",
-                "industry": "Technology",
+                "industry": "Consumer Electronics",
             },
             {
                 "symbol": "MSFT.US",
@@ -401,7 +401,7 @@ class TestCalculateAllSellScores:
                 "first_bought_at": "2022-06-01",
                 "last_sold_at": None,
                 "geography": "US",
-                "industry": "Technology",
+                "industry": "Consumer Electronics",
             },
         ]
 
@@ -414,7 +414,7 @@ class TestCalculateAllSellScores:
                 positions=positions,
                 total_portfolio_value=50000,
                 geo_allocations={"US": 0.8},
-                ind_allocations={"Technology": 0.6},
+                ind_allocations={"Consumer Electronics": 0.6},
             )
 
         assert len(results) == 2

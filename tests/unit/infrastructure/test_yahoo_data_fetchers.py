@@ -344,7 +344,7 @@ class TestGetStockIndustry:
     """Test get_stock_industry function."""
 
     def test_returns_technology_industry(self):
-        """Test returning Technology for tech stocks."""
+        """Test returning actual industry name from Yahoo Finance."""
         mock_info = {"industry": "Consumer Electronics"}
 
         mock_ticker = MagicMock()
@@ -353,10 +353,10 @@ class TestGetStockIndustry:
         with patch("yfinance.Ticker", return_value=mock_ticker):
             result = get_stock_industry("AAPL.US")
 
-        assert result == "Technology"
+        assert result == "Consumer Electronics"
 
     def test_returns_healthcare_industry(self):
-        """Test returning Healthcare for health stocks."""
+        """Test returning actual industry name from Yahoo Finance."""
         mock_info = {"industry": "Drug Manufacturers"}
 
         mock_ticker = MagicMock()
@@ -365,10 +365,10 @@ class TestGetStockIndustry:
         with patch("yfinance.Ticker", return_value=mock_ticker):
             result = get_stock_industry("PFE.US")
 
-        assert result == "Healthcare"
+        assert result == "Drug Manufacturers"
 
     def test_returns_finance_industry(self):
-        """Test returning Finance for financial stocks."""
+        """Test returning actual industry name from Yahoo Finance."""
         mock_info = {"industry": "Banks - Diversified"}
 
         mock_ticker = MagicMock()
@@ -377,10 +377,10 @@ class TestGetStockIndustry:
         with patch("yfinance.Ticker", return_value=mock_ticker):
             result = get_stock_industry("JPM.US")
 
-        assert result == "Finance"
+        assert result == "Banks - Diversified"
 
     def test_returns_consumer_industry(self):
-        """Test returning Consumer for consumer stocks."""
+        """Test returning actual industry name from Yahoo Finance."""
         mock_info = {"industry": "Retail - Apparel"}
 
         mock_ticker = MagicMock()
@@ -389,10 +389,10 @@ class TestGetStockIndustry:
         with patch("yfinance.Ticker", return_value=mock_ticker):
             result = get_stock_industry("NKE.US")
 
-        assert result == "Consumer"
+        assert result == "Retail - Apparel"
 
     def test_returns_industrial_industry(self):
-        """Test returning Industrial for industrial stocks."""
+        """Test returning actual industry name from Yahoo Finance."""
         mock_info = {"industry": "Aerospace & Defense"}
 
         mock_ticker = MagicMock()
@@ -401,10 +401,10 @@ class TestGetStockIndustry:
         with patch("yfinance.Ticker", return_value=mock_ticker):
             result = get_stock_industry("BA.US")
 
-        assert result == "Industrial"
+        assert result == "Aerospace & Defense"
 
     def test_returns_energy_industry(self):
-        """Test returning Energy for energy stocks."""
+        """Test returning actual industry name from Yahoo Finance."""
         mock_info = {"industry": "Oil & Gas Integrated"}
 
         mock_ticker = MagicMock()
@@ -413,11 +413,11 @@ class TestGetStockIndustry:
         with patch("yfinance.Ticker", return_value=mock_ticker):
             result = get_stock_industry("XOM.US")
 
-        assert result == "Energy"
+        assert result == "Oil & Gas Integrated"
 
     def test_falls_back_to_sector(self):
         """Test falling back to sector when industry missing."""
-        mock_info = {"sector": "Technology"}
+        mock_info = {"sector": "Consumer Electronics"}
 
         mock_ticker = MagicMock()
         mock_ticker.info = mock_info
@@ -425,7 +425,7 @@ class TestGetStockIndustry:
         with patch("yfinance.Ticker", return_value=mock_ticker):
             result = get_stock_industry("AAPL.US")
 
-        assert result == "Technology"
+        assert result == "Consumer Electronics"
 
     def test_returns_original_if_no_match(self):
         """Test returning original industry if no category match."""
