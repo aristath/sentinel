@@ -43,7 +43,7 @@ class StockUpdate(BaseModel):
     name: Optional[str] = None
     yahoo_symbol: Optional[str] = None
     geography: Optional[str] = None
-    industry: Optional[str] = None
+    # Industry is now automatically detected from Yahoo Finance - not user-editable
     priority_multiplier: Optional[float] = None
     min_lot: Optional[int] = None
     active: Optional[bool] = None
@@ -454,18 +454,7 @@ def _build_update_dict(
         updates, "yahoo_symbol", update.yahoo_symbol, lambda v: v if v else None
     )
     _apply_string_update(updates, "geography", update.geography, str.upper)
-    # Handle industry: allow None/empty string to clear the field
-    # Check if industry was explicitly provided in the request (not just default None)
-    if hasattr(update, "model_fields_set") and "industry" in update.model_fields_set:
-        # Industry was explicitly provided in the request
-        if update.industry is None or (
-            isinstance(update.industry, str) and not update.industry.strip()
-        ):
-            # Empty string or None -> clear the field
-            updates["industry"] = None
-        else:
-            # Non-empty value -> set it (trimmed)
-            updates["industry"] = update.industry.strip()
+    # Industry is now automatically detected from Yahoo Finance - not user-editable
 
     _apply_numeric_update(
         updates,
