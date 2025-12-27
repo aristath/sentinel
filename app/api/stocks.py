@@ -285,13 +285,53 @@ async def refresh_all_scores(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/{symbol}/refresh-data")
+async def refresh_stock_data(
+    symbol: str,
+    stock_repo: StockRepositoryDep,
+):
+    """Trigger full data refresh for a stock.
+
+    Runs the complete data pipeline:
+    1. Sync historical prices from Yahoo
+    2. Calculate technical metrics (RSI, EMA, CAGR, etc.)
+    3. Refresh stock score
+
+    This bypasses the last_synced check and immediately processes the stock.
+    """
+    from app.jobs.daily_pipeline import refresh_single_stock
+
+    stock = await stock_repo.get_by_symbol(symbol)
+    if not stock:
+        raise HTTPException(status_code=404, detail="Stock not found")
+
+    # Invalidate recommendation cache so new data affects recommendations
+    recommendation_cache = get_recommendation_cache()
+    await recommendation_cache.invalidate_all_recommendations()
+
+    # Run the full pipeline
+    result = await refresh_single_stock(symbol.upper())
+
+    if result.get("status") == "success":
+        return {
+            "status": "success",
+            "symbol": symbol.upper(),
+            "message": f"Full data refresh completed for {symbol.upper()}",
+        }
+    else:
+        raise HTTPException(
+            status_code=500,
+            detail=result.get("reason", "Data refresh failed"),
+        )
+
+
 @router.post("/{symbol}/refresh")
 async def refresh_stock_score(
     symbol: str,
     stock_repo: StockRepositoryDep,
     scoring_service: ScoringServiceDep,
 ):
-    """Trigger score recalculation for a stock."""
+    """Trigger score recalculation for a stock (quick, no historical data sync)."""
     # Invalidate recommendation cache so new score affects recommendations immediately
     recommendation_cache = get_recommendation_cache()
     await recommendation_cache.invalidate_all_recommendations()

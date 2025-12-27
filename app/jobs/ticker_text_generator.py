@@ -162,15 +162,34 @@ async def generate_ticker_text() -> str:
         return ""
 
 
+_cache_warming_in_progress = False
+
+
 async def update_ticker_text():
     """Update the ticker text in the display service."""
+    global _cache_warming_in_progress
+
     try:
         # Warm cache if empty (first run after startup or TTL expiry)
-        if not _has_cached_recommendations():
+        # Run in background to avoid blocking ticker updates
+        if not _has_cached_recommendations() and not _cache_warming_in_progress:
+            import asyncio
+
             from app.jobs.cash_rebalance import _refresh_recommendation_cache
 
-            logger.info("Recommendation cache empty, warming cache...")
-            await _refresh_recommendation_cache()
+            async def _warm_cache():
+                global _cache_warming_in_progress
+                _cache_warming_in_progress = True
+                try:
+                    logger.info("Recommendation cache empty, warming cache...")
+                    await _refresh_recommendation_cache()
+                    logger.info("Cache warming complete")
+                except Exception as e:
+                    logger.warning(f"Cache warming failed: {e}")
+                finally:
+                    _cache_warming_in_progress = False
+
+            asyncio.create_task(_warm_cache())
 
         text = await generate_ticker_text()
         set_next_actions(text)

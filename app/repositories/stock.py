@@ -170,4 +170,5 @@ class StockRepository:
                 bool(row["allow_sell"]) if row["allow_sell"] is not None else False
             ),
             currency=row["currency"],
+            last_synced=row.get("last_synced"),
         )

@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS stocks (
     allow_buy INTEGER DEFAULT 1,
     allow_sell INTEGER DEFAULT 0,
     currency TEXT,
+    last_synced TEXT,           -- When stock data was last fully synced (daily pipeline)
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -186,12 +187,12 @@ async def init_config_schema(db):
         # Record schema version
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (3, now, "Initial config schema with portfolio_hash recommendations"),
+            (4, now, "Initial config schema with portfolio_hash recommendations and last_synced"),
         )
 
         await db.commit()
         logger.info(
-            "Config database initialized with schema version 3 (includes portfolio_hash recommendations)"
+            "Config database initialized with schema version 4 (includes portfolio_hash and last_synced)"
         )
     elif current_version == 1:
         # Migration: Add recommendations table (version 1 -> 2)
@@ -294,6 +295,27 @@ async def init_config_schema(db):
         )
         await db.commit()
         logger.info("Config database migrated to schema version 3 (portfolio_hash)")
+        current_version = 3  # Continue to next migration
+
+    if current_version == 3:
+        # Migration: Add last_synced column to stocks (version 3 -> 4)
+        now = datetime.now().isoformat()
+        logger.info("Migrating config database to schema version 4 (last_synced)...")
+
+        # Check if last_synced column exists
+        cursor = await db.execute("PRAGMA table_info(stocks)")
+        columns = [row[1] for row in await cursor.fetchall()]
+
+        if "last_synced" not in columns:
+            await db.execute("ALTER TABLE stocks ADD COLUMN last_synced TEXT")
+            logger.info("Added last_synced column to stocks table")
+
+        await db.execute(
+            "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
+            (4, now, "Added last_synced column to stocks for daily pipeline tracking"),
+        )
+        await db.commit()
+        logger.info("Config database migrated to schema version 4 (last_synced)")
 
 
 # =============================================================================

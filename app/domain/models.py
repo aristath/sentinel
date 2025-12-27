@@ -29,6 +29,7 @@ class Stock:
     allow_buy: bool = True
     allow_sell: bool = False
     currency: Optional[Currency] = None
+    last_synced: Optional[str] = None  # ISO datetime when stock data was last synced
 
     def __post_init__(self):
         """Validate stock data."""

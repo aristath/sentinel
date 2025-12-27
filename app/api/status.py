@@ -277,6 +277,36 @@ def _get_backup_info(data_dir: Path) -> tuple[int, int]:
     return backup_count, backup_size
 
 
+@router.get("/markets")
+async def get_markets_status():
+    """Get current market open/closed status for all geographies.
+
+    Returns status for EU, US, and ASIA markets including:
+    - Whether each market is currently open
+    - Exchange code (XETR, XNYS, XHKG)
+    - Timezone
+    - Next open/close time
+    """
+    from app.infrastructure.market_hours import get_market_status, get_open_markets
+
+    try:
+        status = get_market_status()
+        open_markets = get_open_markets()
+
+        return {
+            "status": "ok",
+            "open_markets": open_markets,
+            "markets": status,
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e),
+            "open_markets": [],
+            "markets": {},
+        }
+
+
 @router.get("/disk")
 async def get_disk_usage():
     """
