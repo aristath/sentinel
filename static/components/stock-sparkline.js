@@ -63,10 +63,10 @@ class StockSparkline extends HTMLElement {
     }
 
     // Render SVG
-    this.innerHTML = this.renderSVG(data, hasPosition);
+    this.innerHTML = this.renderSVG(data, hasPosition, symbol);
   }
 
-  renderSVG(data, hasPosition) {
+  renderSVG(data, hasPosition, symbol) {
     const width = 80;
     const height = 32;
     const padding = 1;
