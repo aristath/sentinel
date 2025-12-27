@@ -66,43 +66,59 @@ class RouterBridgeClient:
         try:
             sock.settimeout(timeout)
 
-            # Router Bridge RPC protocol: [message_id, function_name, args]
-            # Message ID is a 32-bit integer (we use 1 for simplicity)
-            message = [1, function_name, list(args)]
+            # Router Bridge RPClite protocol format: [type, id, method, params]
+            # type=1 for request, id=message_id, method=function_name, params=args as list
+            import random
+            message_id = random.randint(1, 999999)  # Use random ID to avoid conflicts
+            message = [1, message_id, function_name, list(args)]
 
-            # Pack message with msgpack
+            # Pack message with msgpack (no length prefix - msgpack is self-describing)
             packed = msgpack.packb(message, use_bin_type=True)
 
-            # Send length prefix (4 bytes, big-endian)
-            length = len(packed)
-            sock.sendall(struct.pack(">I", length))
-
-            # Send message
+            # Send message directly (no length prefix)
             sock.sendall(packed)
 
-            # Receive response length (4 bytes, big-endian)
-            length_bytes = sock.recv(4)
-            if len(length_bytes) != 4:
-                raise RuntimeError("Invalid response from Router Bridge (no length)")
-
-            response_length = struct.unpack(">I", length_bytes)[0]
-
-            # Receive response data
+            # Receive response (msgpack is self-describing, so we read until complete message)
+            # Use a buffer and try to unpack incrementally
             response_data = b""
-            while len(response_data) < response_length:
-                chunk = sock.recv(response_length - len(response_data))
+            max_reads = 100  # Prevent infinite loop
+            read_count = 0
+
+            while read_count < max_reads:
+                chunk = sock.recv(4096)
                 if not chunk:
-                    raise RuntimeError("Incomplete response from Router Bridge")
+                    break
                 response_data += chunk
+                read_count += 1
+
+                # Try to unpack - msgpack.unpackb will raise if incomplete
+                try:
+                    response = msgpack.unpackb(response_data, raw=False)
+                    break  # Successfully unpacked
+                except msgpack.exceptions.ExtraData:
+                    # More data available, continue reading
+                    continue
+                except msgpack.exceptions.UnpackException:
+                    # Partial data, continue reading
+                    continue
+            else:
+                raise RuntimeError("Could not read complete response from Router Bridge")
 
             # Unpack response
+            if not response_data:
+                raise RuntimeError("No response from Router Bridge")
+
             response = msgpack.unpackb(response_data, raw=False)
 
-            # Router Bridge response format: [message_id, error, result]
-            if len(response) != 3:
-                raise RuntimeError(f"Invalid response format: {response}")
+            # Router Bridge RPClite response format: [type, id, error, result]
+            # type=2 for response, id=message_id, error=error object, result=return value
+            if len(response) != 4:
+                raise RuntimeError(f"Invalid response format: expected 4 elements, got {len(response)}: {response}")
 
-            msg_id, error, result = response
+            resp_type, resp_id, error, result = response
+
+            if resp_id != message_id:
+                raise RuntimeError(f"Response ID mismatch: expected {message_id}, got {resp_id}")
 
             if error is not None:
                 raise RuntimeError(f"Router Bridge error: {error}")
