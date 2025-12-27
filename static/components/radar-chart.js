@@ -20,9 +20,10 @@ class RadarChart extends HTMLElement {
 
   connectedCallback() {
     // Create SVG container
+    // Expanded viewBox to include space for labels outside the chart
     this.innerHTML = `
       <div class="relative w-full" style="aspect-ratio: 1;">
-        <svg viewBox="0 0 400 400" class="w-full h-full" preserveAspectRatio="xMidYMid meet">
+        <svg viewBox="0 0 500 500" class="w-full h-full" preserveAspectRatio="xMidYMid meet">
           <!-- SVG content will be rendered here -->
         </svg>
       </div>
@@ -159,8 +160,9 @@ class RadarChart extends HTMLElement {
     const roundedMax = Math.ceil(paddedMax / 25) * 25;
 
     // Constants
-    const centerX = 200;
-    const centerY = 200;
+    // Center is now at 250, 250 to account for expanded viewBox (500x500)
+    const centerX = 250;
+    const centerY = 250;
     const radius = 180;
     const numPoints = this.labels.length;
 
@@ -354,7 +356,7 @@ class RadarChart extends HTMLElement {
     });
 
     // Draw legend at bottom
-    const legendY = 380;
+    const legendY = 480;
     const legendX = centerX;
     
     // Target legend item
