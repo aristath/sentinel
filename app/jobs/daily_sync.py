@@ -93,9 +93,9 @@ def _calculate_cash_balance_eur(cash_balances: list, exchange_rates: dict) -> fl
 
 
 async def _determine_geography(symbol: str, db_manager) -> Optional[str]:
-    """Determine geography for a symbol."""
+    """Determine country for a symbol (legacy function name, returns country)."""
     cursor = await db_manager.config.execute(
-        "SELECT geography FROM stocks WHERE symbol = ?", (symbol,)
+        "SELECT country FROM stocks WHERE symbol = ?", (symbol,)
     )
     row = await cursor.fetchone()
     if row:
