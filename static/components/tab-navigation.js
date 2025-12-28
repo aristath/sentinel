@@ -45,7 +45,7 @@ class TabNavigation extends HTMLElement {
                   x-transition:enter-start="opacity-0 scale-75"
                   x-transition:enter-end="opacity-100 scale-100"
                   class="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 text-xs font-bold text-white bg-blue-500 rounded-full animate-pulse"
-                  x-text="$store.app.recommendations.steps.length"
+                  x-text="$store.app.recommendations?.steps?.length || 0"
                   aria-label="Pending actions count"></span>
           </span>
         </button>

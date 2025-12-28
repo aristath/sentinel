@@ -72,7 +72,13 @@ class OptimizerStatusCard extends HTMLElement {
         </template>
 
         <!-- Expandable Details -->
-        <div x-show="expanded" x-collapse>
+        <div x-show="expanded"
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="transition ease-in duration-150"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0">
           <!-- Top Adjustments Table -->
           <template x-if="$store.app.optimizerStatus?.last_run?.top_adjustments?.length > 0">
             <div class="mt-3">
