@@ -568,7 +568,11 @@ class TestCalculateAndSaveScore:
 
     @pytest.mark.asyncio
     async def test_uses_default_country_and_industry(self, mock_services):
-        """Test that UNKNOWN is used when country/industry not provided."""
+        """Test defaults when country/industry not provided.
+
+        - country is passed as-is (None when not provided)
+        - industry defaults to "UNKNOWN" when not provided
+        """
         stock_repo, score_repo, db_manager = mock_services
 
         history_db = AsyncMock()
@@ -612,10 +616,12 @@ class TestCalculateAndSaveScore:
         ):
             await service.calculate_and_save_score("TEST")
 
-            # Verify calculate_stock_score was called with UNKNOWN defaults
+            # Verify calculate_stock_score was called with appropriate defaults
             mock_calc.assert_called_once()
             call_kwargs = mock_calc.call_args[1]
-            assert call_kwargs["country"] == "UNKNOWN"
+            # country is passed as-is (None when not provided)
+            assert call_kwargs["country"] is None
+            # industry defaults to "UNKNOWN" when not provided
             assert call_kwargs["industry"] == "UNKNOWN"
 
 
