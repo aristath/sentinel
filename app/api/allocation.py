@@ -1,6 +1,5 @@
 """Allocation target management API endpoints."""
 
-from collections import defaultdict
 from typing import Dict
 
 from fastapi import APIRouter, HTTPException
@@ -218,45 +217,19 @@ class IndustryGroup(BaseModel):
 
 @router.get("/groups/country")
 async def get_country_groups(grouping_repo: GroupingRepositoryDep):
-    """Get all country groups (custom from DB or fallback to hardcoded)."""
+    """Get all country groups (custom from DB only)."""
     all_db_groups = await grouping_repo.get_country_groups()
-    # Filter out empty groups (these are overrides that hide hardcoded groups)
+    # Filter out empty groups (these are overrides that hide deleted groups)
     groups = {k: v for k, v in all_db_groups.items() if v}
-    # Only show hardcoded fallback if there are NO groups in DB at all (not even empty overrides)
-    if not all_db_groups:
-        # Return hardcoded fallback groups so user can see and edit them
-        from collections import defaultdict
-
-        from app.application.services.optimization.constraints_manager import (
-            TERRITORY_MAPPING,
-        )
-
-        reverse_mapping = defaultdict(list)
-        for country, group in TERRITORY_MAPPING.items():
-            reverse_mapping[group].append(country)
-        groups = dict(reverse_mapping)
     return {"groups": groups}
 
 
 @router.get("/groups/industry")
 async def get_industry_groups(grouping_repo: GroupingRepositoryDep):
-    """Get all industry groups (custom from DB or fallback to hardcoded)."""
+    """Get all industry groups (custom from DB only)."""
     all_db_groups = await grouping_repo.get_industry_groups()
-    # Filter out empty groups (these are overrides that hide hardcoded groups)
+    # Filter out empty groups (these are overrides that hide deleted groups)
     groups = {k: v for k, v in all_db_groups.items() if v}
-    # Only show hardcoded fallback if there are NO groups in DB at all (not even empty overrides)
-    if not all_db_groups:
-        # Return hardcoded fallback groups so user can see and edit them
-        from collections import defaultdict
-
-        from app.application.services.optimization.constraints_manager import (
-            INDUSTRY_GROUP_MAPPING,
-        )
-
-        reverse_mapping = defaultdict(list)
-        for industry, group in INDUSTRY_GROUP_MAPPING.items():
-            reverse_mapping[group].append(industry)
-        groups = dict(reverse_mapping)
     return {"groups": groups}
 
 
@@ -296,57 +269,15 @@ async def update_industry_group(
 
 @router.delete("/groups/country/{group_name}")
 async def delete_country_group(group_name: str, grouping_repo: GroupingRepositoryDep):
-    """Delete a country group.
-
-    For hardcoded default groups, creates an empty override in DB to hide them.
-    For custom groups, deletes from DB.
-    """
-    # Check if it's a hardcoded group name
-    from app.application.services.optimization.constraints_manager import (
-        TERRITORY_MAPPING,
-    )
-
-    hardcoded_groups = set(TERRITORY_MAPPING.values())
-    is_hardcoded = group_name in hardcoded_groups
-
-    # Check if group exists in DB
-    db_groups = await grouping_repo.get_country_groups()
-    if group_name in db_groups:
-        # Custom group - delete from DB
-        await grouping_repo.delete_country_group(group_name)
-    elif is_hardcoded:
-        # Hardcoded group - create empty override to hide it
-        # Use a special marker: create group with a placeholder that we'll filter out
-        # Actually, just create it with empty list - the getter will return empty dict entry
-        await grouping_repo.set_country_group(group_name, [])
+    """Delete a country group."""
+    await grouping_repo.delete_country_group(group_name)
     return {"deleted": group_name}
 
 
 @router.delete("/groups/industry/{group_name}")
 async def delete_industry_group(group_name: str, grouping_repo: GroupingRepositoryDep):
-    """Delete an industry group.
-
-    For hardcoded default groups, creates an empty override in DB to hide them.
-    For custom groups, deletes from DB.
-    """
-    # Check if it's a hardcoded group name
-    from app.application.services.optimization.constraints_manager import (
-        INDUSTRY_GROUP_MAPPING,
-    )
-
-    hardcoded_groups = set(INDUSTRY_GROUP_MAPPING.values())
-    is_hardcoded = group_name in hardcoded_groups
-
-    # Check if group exists in DB
-    db_groups = await grouping_repo.get_industry_groups()
-    if group_name in db_groups:
-        # Custom group - delete from DB
-        await grouping_repo.delete_industry_group(group_name)
-    elif is_hardcoded:
-        # Hardcoded group - create empty override to hide it
-        # Use a special marker: create group with a placeholder that we'll filter out
-        # Actually, just create it with empty list - the getter will return empty dict entry
-        await grouping_repo.set_industry_group(group_name, [])
+    """Delete an industry group."""
+    await grouping_repo.delete_industry_group(group_name)
     return {"deleted": group_name}
 
 
@@ -372,36 +303,20 @@ async def get_group_allocation(
     """Get current allocation aggregated by groups (for UI display)."""
     summary = await portfolio_service.get_portfolio_summary()
 
-    # Get group mappings (custom or fallback to hardcoded)
-    from app.application.services.optimization.constraints_manager import (
-        INDUSTRY_GROUP_MAPPING,
-        TERRITORY_MAPPING,
-    )
-
+    # Get group mappings from custom groups only
     country_groups = await grouping_repo.get_country_groups()
     industry_groups = await grouping_repo.get_industry_groups()
 
     # Build reverse mappings (country -> group, industry -> group)
-    # Use custom groups if available, otherwise fallback to hardcoded mappings
     country_to_group: Dict[str, str] = {}
-    if country_groups:
-        # Use custom groups
-        for group_name, countries in country_groups.items():
-            for country in countries:
-                country_to_group[country] = group_name
-    else:
-        # Fallback to hardcoded territory mapping
-        country_to_group = TERRITORY_MAPPING.copy()
+    for group_name, countries in country_groups.items():
+        for country in countries:
+            country_to_group[country] = group_name
 
     industry_to_group: Dict[str, str] = {}
-    if industry_groups:
-        # Use custom groups
-        for group_name, industries in industry_groups.items():
-            for industry in industries:
-                industry_to_group[industry] = group_name
-    else:
-        # Fallback to hardcoded industry group mapping
-        industry_to_group = INDUSTRY_GROUP_MAPPING.copy()
+    for group_name, industries in industry_groups.items():
+        for industry in industries:
+            industry_to_group[industry] = group_name
 
     # Aggregate country allocations by group
     group_country_values: Dict[str, float] = {}
@@ -506,18 +421,13 @@ async def update_country_group_targets(
     if not group_targets:
         raise HTTPException(status_code=400, detail="No weights provided")
 
-    # Get country groups (custom or fallback to hardcoded)
-    from app.application.services.optimization.constraints_manager import (
-        TERRITORY_MAPPING,
-    )
-
+    # Get country groups from custom groups only
     country_groups = await grouping_repo.get_country_groups()
     if not country_groups:
-        # Fallback: build groups from hardcoded mapping
-        reverse_mapping = defaultdict(list)
-        for country, group in TERRITORY_MAPPING.items():
-            reverse_mapping[group].append(country)
-        country_groups = dict(reverse_mapping)
+        raise HTTPException(
+            status_code=400,
+            detail="No country groups defined. Please create groups first.",
+        )
 
     # Distribute group targets to individual countries
     # Strategy: distribute evenly among countries in each group
@@ -588,18 +498,13 @@ async def update_industry_group_targets(
     if not group_targets:
         raise HTTPException(status_code=400, detail="No weights provided")
 
-    # Get industry groups (custom or fallback to hardcoded)
-    from app.application.services.optimization.constraints_manager import (
-        INDUSTRY_GROUP_MAPPING,
-    )
-
+    # Get industry groups from custom groups only
     industry_groups = await grouping_repo.get_industry_groups()
     if not industry_groups:
-        # Fallback: build groups from hardcoded mapping
-        reverse_mapping = defaultdict(list)
-        for industry, group in INDUSTRY_GROUP_MAPPING.items():
-            reverse_mapping[group].append(industry)
-        industry_groups = dict(reverse_mapping)
+        raise HTTPException(
+            status_code=400,
+            detail="No industry groups defined. Please create groups first.",
+        )
 
     # Distribute group targets to individual industries
     # Strategy: distribute evenly among industries in each group
