@@ -303,7 +303,14 @@ async def get_database_stats():
 
 
 def _calculate_data_dir_size(data_dir: Path) -> int:
-    """Calculate total size of data directory."""
+    """Calculate total size of data directory.
+
+    Args:
+        data_dir: Path to data directory
+
+    Returns:
+        Total size in bytes
+    """
     data_size = 0
     if data_dir.exists():
         for f in data_dir.glob("**/*"):
@@ -316,7 +323,14 @@ def _calculate_data_dir_size(data_dir: Path) -> int:
 
 
 def _get_core_db_sizes(data_dir: Path) -> dict[str, float]:
-    """Get sizes of core databases."""
+    """Get sizes of core databases.
+
+    Args:
+        data_dir: Path to data directory
+
+    Returns:
+        Dictionary mapping database name to size in MB
+    """
     core_dbs = ["config.db", "ledger.db", "state.db", "cache.db"]
     db_sizes = {}
     for db_name in core_dbs:
@@ -327,7 +341,14 @@ def _get_core_db_sizes(data_dir: Path) -> dict[str, float]:
 
 
 def _get_history_db_info(data_dir: Path) -> tuple[int, int]:
-    """Get count and total size of history databases."""
+    """Get count and total size of history databases.
+
+    Args:
+        data_dir: Path to data directory
+
+    Returns:
+        Tuple of (count, total_size_bytes)
+    """
     history_dir = data_dir / "history"
     history_count = 0
     history_size = 0
@@ -339,7 +360,14 @@ def _get_history_db_info(data_dir: Path) -> tuple[int, int]:
 
 
 def _get_backup_info(data_dir: Path) -> tuple[int, int]:
-    """Get count and total size of backup files."""
+    """Get count and total size of backup files.
+
+    Args:
+        data_dir: Path to data directory
+
+    Returns:
+        Tuple of (count, total_size_bytes)
+    """
     backup_dir = data_dir / "backups"
     backup_size = 0
     backup_count = 0
