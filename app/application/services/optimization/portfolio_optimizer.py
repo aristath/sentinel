@@ -538,87 +538,135 @@ class PortfolioOptimizer:
         def _apply_sector_constraints(ef: EfficientFrontier) -> None:
             """Apply sector constraints to EfficientFrontier."""
             if country_mapper:
+                logger.debug(
+                    f"Applying country constraints: {len(country_lower)} sectors, "
+                    f"bounds={dict(zip(country_lower.keys(), zip(country_lower.values(), country_upper.values())))}"
+                )
                 ef.add_sector_constraints(country_mapper, country_lower, country_upper)
             if industry_mapper:
+                logger.debug(
+                    f"Applying industry constraints: {len(industry_lower)} sectors, "
+                    f"bounds={dict(zip(industry_lower.keys(), zip(industry_lower.values(), industry_upper.values())))}"
+                )
                 ef.add_sector_constraints(
                     industry_mapper, industry_lower, industry_upper
                 )
 
-        try:
-            # Strategy 1: Target return
-            ef = EfficientFrontier(mu, S, weight_bounds=weight_bounds)
-            _apply_sector_constraints(ef)
-            ef.efficient_return(target_return=target_return)
-            cleaned = ef.clean_weights()
-            logger.info(
-                f"MV optimization succeeded with target return {target_return:.1%}"
-            )
-            return dict(cleaned), None
+        # Progressive constraint relaxation strategy
+        # If constraints are too restrictive, try with relaxed constraints
+        # This aligns with "degrade gracefully" philosophy from CLAUDE.md
+        constraint_levels = [
+            ("full", country_constraints, ind_constraints),
+            ("relaxed_sectors", country_constraints, ind_constraints),
+            ("no_sectors", [], []),
+        ]
 
-        except OptimizationError as e:
-            logger.warning(
-                f"MV target return failed: {e}. "
-                f"Symbols={len(common_symbols)}, "
-                f"Country constraints={len(country_constraints)}, "
-                f"Industry constraints={len(ind_constraints)}"
-            )
-            if warnings:
-                logger.warning(f"Constraint validation issues: {'; '.join(warnings)}")
+        for level_name, country_cons, ind_cons in constraint_levels:
+            # Build mappers and bounds for this constraint level
+            country_map = {}
+            country_low = {}
+            country_up = {}
+            for constraint in country_cons:
+                for symbol in constraint.symbols:
+                    if symbol in common_symbols:
+                        country_map[symbol] = constraint.name
+                country_low[constraint.name] = constraint.lower
+                country_up[constraint.name] = constraint.upper
 
-            try:
-                # Strategy 2: Min Volatility (lower risk for retirement)
-                ef = EfficientFrontier(mu, S, weight_bounds=weight_bounds)
-                _apply_sector_constraints(ef)
-                ef.min_volatility()
-                cleaned = ef.clean_weights()
-                logger.info("MV optimization succeeded with min_volatility fallback")
-                return dict(cleaned), "min_volatility"
+            ind_map = {}
+            ind_low = {}
+            ind_up = {}
+            for constraint in ind_cons:
+                for symbol in constraint.symbols:
+                    if symbol in common_symbols:
+                        ind_map[symbol] = constraint.name
+                ind_low[constraint.name] = constraint.lower
+                ind_up[constraint.name] = constraint.upper
 
-            except OptimizationError as e2:
-                logger.warning(
-                    f"MV min_volatility failed: {e2}. "
-                    f"Trying next fallback strategy..."
+            # For relaxed_sectors, scale down minimums by 50%
+            if level_name == "relaxed_sectors":
+                for constraint in country_cons:
+                    constraint.lower = constraint.lower * 0.5
+                    constraint.lower = min(constraint.lower, constraint.upper)
+                for constraint in ind_cons:
+                    constraint.lower = constraint.lower * 0.5
+                    constraint.lower = min(constraint.lower, constraint.upper)
+                # Rebuild bounds after scaling
+                country_low = {c.name: c.lower for c in country_cons}
+                ind_low = {c.name: c.lower for c in ind_cons}
+                logger.info(
+                    "Trying MV optimization with relaxed sector constraints "
+                    "(50% of minimums)"
                 )
 
-                try:
-                    # Strategy 3: Efficient Risk (target 15% volatility)
-                    ef = EfficientFrontier(mu, S, weight_bounds=weight_bounds)
-                    _apply_sector_constraints(ef)
-                    ef.efficient_risk(target_volatility=TARGET_PORTFOLIO_VOLATILITY)
-                    cleaned = ef.clean_weights()
-                    logger.info(
-                        f"MV optimization succeeded with efficient_risk fallback "
-                        f"(target volatility {TARGET_PORTFOLIO_VOLATILITY:.1%})"
-                    )
-                    return dict(cleaned), "efficient_risk"
+            def _apply_constraints_for_level(ef: EfficientFrontier) -> None:
+                """Apply constraints for current level."""
+                if country_map:
+                    ef.add_sector_constraints(country_map, country_low, country_up)
+                if ind_map:
+                    ef.add_sector_constraints(ind_map, ind_low, ind_up)
 
-                except OptimizationError as e3:
-                    logger.warning(
-                        f"MV efficient_risk failed: {e3}. "
-                        f"Trying final fallback strategy..."
-                    )
+            try:
+                # Strategy 1: Target return
+                ef = EfficientFrontier(mu, S, weight_bounds=weight_bounds)
+                _apply_constraints_for_level(ef)
+                ef.efficient_return(target_return=target_return)
+                cleaned = ef.clean_weights()
+                logger.info(
+                    f"MV optimization succeeded with target return {target_return:.1%} "
+                    f"(constraint level: {level_name})"
+                )
+                return dict(cleaned), None
 
+            except OptimizationError as e:
+                logger.debug(
+                    f"MV target return failed at {level_name} level: {e}. "
+                    f"Trying fallback strategies..."
+                )
+
+                # Try all fallback strategies at this constraint level
+                strategies = [
+                    ("min_volatility", lambda ef: ef.min_volatility()),
+                    (
+                        "efficient_risk",
+                        lambda ef: ef.efficient_risk(
+                            target_volatility=TARGET_PORTFOLIO_VOLATILITY
+                        ),
+                    ),
+                    ("max_sharpe", lambda ef: ef.max_sharpe()),
+                ]
+
+                for strategy_name, strategy_func in strategies:
                     try:
-                        # Strategy 4: Max Sharpe (final MV fallback)
                         ef = EfficientFrontier(mu, S, weight_bounds=weight_bounds)
-                        _apply_sector_constraints(ef)
-                        ef.max_sharpe()
+                        _apply_constraints_for_level(ef)
+                        strategy_func(ef)
                         cleaned = ef.clean_weights()
                         logger.info(
-                            "MV optimization succeeded with max_sharpe fallback"
+                            f"MV optimization succeeded with {strategy_name} "
+                            f"(constraint level: {level_name})"
                         )
-                        return dict(cleaned), "max_sharpe"
+                        return dict(cleaned), strategy_name
+                    except OptimizationError:
+                        continue  # Try next strategy
 
-                    except OptimizationError as e4:
-                        logger.warning(
-                            f"MV max_sharpe failed: {e4}. "
-                            f"All MV strategies failed. Constraint summary: "
-                            f"country_min_sum={sum(c.lower for c in country_constraints):.2%}, "
-                            f"country_max_sum={sum(c.upper for c in country_constraints):.2%}, "
-                            f"ind_min_sum={sum(c.lower for c in ind_constraints):.2%}, "
-                            f"ind_max_sum={sum(c.upper for c in ind_constraints):.2%}"
-                        )
-                        return None, None
+                # All strategies failed at this constraint level, try next level
+                logger.debug(
+                    f"All MV strategies failed at {level_name} level, "
+                    f"trying next constraint level..."
+                )
+                continue
+
+        # All constraint levels and strategies failed
+        logger.warning(
+            f"All MV strategies failed at all constraint levels. "
+            f"Constraint summary: "
+            f"country_min_sum={sum(c.lower for c in country_constraints):.2%}, "
+            f"country_max_sum={sum(c.upper for c in country_constraints):.2%}, "
+            f"ind_min_sum={sum(c.lower for c in ind_constraints):.2%}, "
+            f"ind_max_sum={sum(c.upper for c in ind_constraints):.2%}"
+        )
+        return None, None
 
     def _run_hrp(
         self,
