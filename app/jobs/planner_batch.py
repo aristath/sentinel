@@ -8,7 +8,6 @@ from app.application.services.recommendation.portfolio_context_builder import (
 )
 from app.domain.planning.holistic_planner import create_holistic_plan_incremental
 from app.domain.services.exchange_rate_service import ExchangeRateService
-from app.domain.services.settings_service import SettingsService
 from app.infrastructure.external.tradernet import TradernetClient
 from app.repositories import (
     AllocationRepository,
@@ -36,7 +35,6 @@ async def process_planner_batch_job():
         stock_repo = StockRepository()
         settings_repo = SettingsRepository()
         allocation_repo = AllocationRepository()
-        settings_service = SettingsService(settings_repo)
         tradernet_client = TradernetClient()
         exchange_rate_service = ExchangeRateService(db_manager)
 
@@ -46,11 +44,13 @@ async def process_planner_batch_job():
         # Get current portfolio state
         positions = await position_repo.get_all()
         stocks = await stock_repo.get_all_active()
-        allocations = await allocation_repo.get_all()
 
         # Build portfolio context
         portfolio_context = await build_portfolio_context(
-            positions, stocks, allocations
+            position_repo=position_repo,
+            stock_repo=stock_repo,
+            allocation_repo=allocation_repo,
+            db_manager=db_manager,
         )
 
         # Get available cash
@@ -65,13 +65,10 @@ async def process_planner_batch_job():
         from app.application.services.optimization.portfolio_optimizer import (
             PortfolioOptimizer,
         )
+        from app.repositories import GroupingRepository
 
-        optimizer = PortfolioOptimizer(
-            position_repo=position_repo,
-            stock_repo=stock_repo,
-            allocation_repo=allocation_repo,
-            settings_service=settings_service,
-        )
+        grouping_repo = GroupingRepository()
+        optimizer = PortfolioOptimizer(grouping_repo=grouping_repo)
 
         target_weights: Optional[dict] = None
         current_prices: Optional[dict] = None

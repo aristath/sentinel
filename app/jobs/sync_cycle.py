@@ -391,13 +391,20 @@ async def _get_holistic_recommendation():
     )
     cache_key = f"recommendations:{portfolio_cache_key}"
 
-    # Check planner database first (incremental mode takes priority)
-    from app.domain.portfolio_hash import generate_portfolio_hash
-    from app.repositories.planner_repository import PlannerRepository
+    # Check if incremental mode is enabled
+    incremental_enabled = (
+        await settings_repo.get_float("incremental_planner_enabled", 1.0) == 1.0
+    )
 
-    planner_repo = PlannerRepository()
-    portfolio_hash = generate_portfolio_hash(position_dicts, stocks)
-    best_result = await planner_repo.get_best_result(portfolio_hash)
+    # Check planner database first (incremental mode takes priority)
+    best_result = None
+    if incremental_enabled:
+        from app.domain.portfolio_hash import generate_portfolio_hash
+        from app.repositories.planner_repository import PlannerRepository
+
+        planner_repo = PlannerRepository()
+        portfolio_hash = generate_portfolio_hash(position_dicts, stocks)
+        best_result = await planner_repo.get_best_result(portfolio_hash)
 
     if best_result:
         # We have a result from incremental planner - use it (ignore cache)
