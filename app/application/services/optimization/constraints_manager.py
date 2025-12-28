@@ -293,14 +293,30 @@ class ConstraintsManager:
             ind_targets_normalized = ind_targets
 
         # Build industry constraints
+        # First, count how many industries will have constraints
+        industries_with_targets = [
+            ind for ind in ind_groups.keys() if ind_targets_normalized.get(ind, 0.0) > 0
+        ]
+        num_industry_constraints = len(industries_with_targets)
+
+        # Adjust max concentration cap based on number of industries
+        # If only 1-2 industries, allow higher allocation (up to 70% for 1, 50% for 2)
+        # This prevents the "only 30% total" problem when few industries are constrained
+        if num_industry_constraints == 1:
+            effective_max_concentration = 0.70  # 70% for single industry
+        elif num_industry_constraints == 2:
+            effective_max_concentration = 0.50  # 50% each for 2 industries
+        else:
+            effective_max_concentration = MAX_SECTOR_CONCENTRATION  # 30% default
+
         ind_constraints = []
         for ind, symbols in ind_groups.items():
             target = ind_targets_normalized.get(ind, 0.0)
             if target > 0:
                 # Calculate tolerance-based bounds
                 tolerance_upper = min(1.0, target + self.ind_tolerance)
-                # Enforce hard limit: cap at MAX_SECTOR_CONCENTRATION
-                hard_upper = min(tolerance_upper, MAX_SECTOR_CONCENTRATION)
+                # Enforce hard limit: cap at effective_max_concentration
+                hard_upper = min(tolerance_upper, effective_max_concentration)
                 ind_constraints.append(
                     SectorConstraint(
                         name=ind,
@@ -311,10 +327,29 @@ class ConstraintsManager:
                     )
                 )
 
+        if num_industry_constraints <= 2:
+            logger.info(
+                f"Adjusted industry max concentration to {effective_max_concentration:.0%} "
+                f"(from {MAX_SECTOR_CONCENTRATION:.0%}) for {num_industry_constraints} "
+                f"industry constraint(s)"
+            )
+
         logger.info(
             f"Built {len(country_constraints)} country constraints, "
             f"{len(ind_constraints)} industry constraints"
         )
+
+        # Log constraint details for debugging
+        if ind_constraints:
+            ind_details = [
+                f"{c.name}: target={c.target:.2%}, range=[{c.lower:.2%}, {c.upper:.2%}]"
+                for c in ind_constraints
+            ]
+            logger.debug(f"Industry constraints: {', '.join(ind_details)}")
+            logger.debug(
+                f"Industry constraints sum: min={sum(c.lower for c in ind_constraints):.2%}, "
+                f"max={sum(c.upper for c in ind_constraints):.2%}"
+            )
 
         return country_constraints, ind_constraints
 
