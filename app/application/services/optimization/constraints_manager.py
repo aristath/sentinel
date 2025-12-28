@@ -96,6 +96,21 @@ class ConstraintsManager:
             lower = 0.0
             upper = self.max_concentration
 
+            # Apply user-defined portfolio targets (convert percentage to fraction)
+            if stock.min_portfolio_target is not None:
+                lower = stock.min_portfolio_target / 100.0
+                logger.debug(
+                    f"{symbol}: min_portfolio_target={stock.min_portfolio_target}%, "
+                    f"lower={lower:.2%}"
+                )
+
+            if stock.max_portfolio_target is not None:
+                upper = stock.max_portfolio_target / 100.0
+                logger.debug(
+                    f"{symbol}: max_portfolio_target={stock.max_portfolio_target}%, "
+                    f"upper={upper:.2%}"
+                )
+
             # Check allow_buy constraint
             if not stock.allow_buy:
                 # Can't buy more, so upper bound = current weight

@@ -28,6 +28,8 @@ def create_stock(
     min_lot: int = 0,
     country: str = "United States",
     industry: str = "Consumer Electronics",
+    min_portfolio_target: float | None = None,
+    max_portfolio_target: float | None = None,
 ) -> Stock:
     """Create a mock Stock object for testing."""
     stock = MagicMock(spec=Stock)
@@ -37,6 +39,8 @@ def create_stock(
     stock.min_lot = min_lot
     stock.country = country
     stock.industry = industry
+    stock.min_portfolio_target = min_portfolio_target
+    stock.max_portfolio_target = max_portfolio_target
     return stock
 
 
@@ -887,4 +891,184 @@ class TestEdgeCases:
         # min_lot check requires current_price > 0, so constraint won't apply
         lower, upper = bounds["AAPL"]
         assert lower == 0.0  # No min_lot constraint without price
+        assert upper == MAX_CONCENTRATION
+
+    def test_min_portfolio_target_applies_as_lower_bound(self):
+        """Test that min_portfolio_target is applied as lower bound (converted from percentage)."""
+        manager = ConstraintsManager()
+        stocks = [create_stock("AAPL", min_portfolio_target=5.0)]
+        positions = {}
+        portfolio_value = 10000
+        current_prices = {"AAPL": 150.0}
+
+        bounds = manager.calculate_weight_bounds(
+            stocks, positions, portfolio_value, current_prices
+        )
+
+        # 5% should become 0.05
+        lower, upper = bounds["AAPL"]
+        assert lower == 0.05
+        assert upper == MAX_CONCENTRATION
+
+    def test_max_portfolio_target_applies_as_upper_bound(self):
+        """Test that max_portfolio_target is applied as upper bound (converted from percentage)."""
+        manager = ConstraintsManager()
+        stocks = [create_stock("AAPL", max_portfolio_target=15.0)]
+        positions = {}
+        portfolio_value = 10000
+        current_prices = {"AAPL": 150.0}
+
+        bounds = manager.calculate_weight_bounds(
+            stocks, positions, portfolio_value, current_prices
+        )
+
+        # 15% should become 0.15
+        lower, upper = bounds["AAPL"]
+        assert lower == 0.0
+        assert upper == 0.15
+
+    def test_portfolio_targets_override_defaults(self):
+        """Test that portfolio targets override default bounds."""
+        manager = ConstraintsManager()
+        stocks = [
+            create_stock("AAPL", min_portfolio_target=5.0, max_portfolio_target=15.0)
+        ]
+        positions = {}
+        portfolio_value = 10000
+        current_prices = {"AAPL": 150.0}
+
+        bounds = manager.calculate_weight_bounds(
+            stocks, positions, portfolio_value, current_prices
+        )
+
+        lower, upper = bounds["AAPL"]
+        assert lower == 0.05  # 5%
+        assert upper == 0.15  # 15%
+
+    def test_portfolio_targets_interact_with_allow_buy(self):
+        """Test that allow_buy can further restrict upper bound set by max_portfolio_target."""
+        manager = ConstraintsManager()
+        stocks = [create_stock("AAPL", allow_buy=False, max_portfolio_target=15.0)]
+        # Current position: 10% of portfolio
+        positions = {"AAPL": create_position("AAPL", 10, 1000)}
+        portfolio_value = 10000
+        current_prices = {"AAPL": 100.0}
+
+        bounds = manager.calculate_weight_bounds(
+            stocks, positions, portfolio_value, current_prices
+        )
+
+        # allow_buy=False should restrict upper to current weight (10%), not max_portfolio_target (15%)
+        lower, upper = bounds["AAPL"]
+        assert lower == 0.0
+        assert upper == 0.10  # Current weight, not 0.15
+
+    def test_portfolio_targets_interact_with_allow_sell(self):
+        """Test that allow_sell can further restrict lower bound set by min_portfolio_target."""
+        manager = ConstraintsManager()
+        stocks = [create_stock("AAPL", allow_sell=False, min_portfolio_target=5.0)]
+        # Current position: 10% of portfolio
+        positions = {"AAPL": create_position("AAPL", 10, 1000)}
+        portfolio_value = 10000
+        current_prices = {"AAPL": 100.0}
+
+        bounds = manager.calculate_weight_bounds(
+            stocks, positions, portfolio_value, current_prices
+        )
+
+        # allow_sell=False should restrict lower to current weight (10%), not min_portfolio_target (5%)
+        lower, upper = bounds["AAPL"]
+        assert lower == 0.10  # Current weight, not 0.05
+        assert upper == MAX_CONCENTRATION
+
+    def test_portfolio_targets_interact_with_min_lot(self):
+        """Test that min_lot constraints work with portfolio targets."""
+        manager = ConstraintsManager()
+        stocks = [create_stock("AAPL", min_lot=5, min_portfolio_target=5.0)]
+        # Position at min_lot
+        positions = {"AAPL": create_position("AAPL", 5, 1000)}
+        portfolio_value = 10000
+        current_prices = {"AAPL": 200.0}
+
+        bounds = manager.calculate_weight_bounds(
+            stocks, positions, portfolio_value, current_prices
+        )
+
+        # min_lot constraint should take precedence (can't sell below current weight)
+        lower, upper = bounds["AAPL"]
+        assert lower == 0.10  # Current weight (10%), not min_portfolio_target (5%)
+        assert upper == MAX_CONCENTRATION
+
+    def test_none_portfolio_targets_dont_affect_bounds(self):
+        """Test that None portfolio targets don't affect bounds."""
+        manager = ConstraintsManager()
+        stocks = [
+            create_stock("AAPL", min_portfolio_target=None, max_portfolio_target=None)
+        ]
+        positions = {}
+        portfolio_value = 10000
+        current_prices = {"AAPL": 150.0}
+
+        bounds = manager.calculate_weight_bounds(
+            stocks, positions, portfolio_value, current_prices
+        )
+
+        # Should use defaults
+        lower, upper = bounds["AAPL"]
+        assert lower == 0.0
+        assert upper == MAX_CONCENTRATION
+
+    def test_portfolio_target_edge_case_min_zero(self):
+        """Test edge case: min_portfolio_target=0."""
+        manager = ConstraintsManager()
+        stocks = [
+            create_stock("AAPL", min_portfolio_target=0.0, max_portfolio_target=30.0)
+        ]
+        positions = {}
+        portfolio_value = 10000
+        current_prices = {"AAPL": 150.0}
+
+        bounds = manager.calculate_weight_bounds(
+            stocks, positions, portfolio_value, current_prices
+        )
+
+        lower, upper = bounds["AAPL"]
+        assert lower == 0.0
+        assert upper == 0.30  # 30%
+
+    def test_portfolio_target_edge_case_min_equals_max(self):
+        """Test edge case: min_portfolio_target equals max_portfolio_target."""
+        manager = ConstraintsManager()
+        stocks = [
+            create_stock("AAPL", min_portfolio_target=10.0, max_portfolio_target=10.0)
+        ]
+        positions = {}
+        portfolio_value = 10000
+        current_prices = {"AAPL": 150.0}
+
+        bounds = manager.calculate_weight_bounds(
+            stocks, positions, portfolio_value, current_prices
+        )
+
+        lower, upper = bounds["AAPL"]
+        assert lower == 0.10
+        assert upper == 0.10
+
+    def test_portfolio_target_constraint_conflict_resolution(self):
+        """Test constraint conflict when portfolio targets conflict with allow_buy/allow_sell."""
+        manager = ConstraintsManager()
+        # Stock with min_portfolio_target=15% but current weight is 5% and allow_sell=False
+        stocks = [create_stock("AAPL", allow_sell=False, min_portfolio_target=15.0)]
+        positions = {"AAPL": create_position("AAPL", 10, 500)}  # 5% of portfolio
+        portfolio_value = 10000
+        current_prices = {"AAPL": 50.0}
+
+        bounds = manager.calculate_weight_bounds(
+            stocks, positions, portfolio_value, current_prices
+        )
+
+        # Conflict: min_portfolio_target wants 15% but allow_sell=False keeps at 5%
+        # Should resolve to current weight
+        lower, upper = bounds["AAPL"]
+        assert lower == 0.05  # Current weight
         assert upper == MAX_CONCENTRATION
