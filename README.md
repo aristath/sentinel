@@ -28,7 +28,7 @@ Automated portfolio management system for Arduino Uno Q with monthly rebalancing
 │           │             │               │                │
 │  ┌────────▼────────┐    │               │                │
 │  │ LED Display     │────┼───────────────┘                │
-│  │ (Native Python) │    │  Serial Port                   │
+│  │ (Native Python) │    │  Router Bridge                 │
 │  └─────────────────┘    │                               │
 │          │              │                               │
 │          ▼              │                               │
@@ -100,7 +100,7 @@ sudo systemctl restart arduino-trader led-display
 
 ### LED Display Setup
 
-The LED display runs as a native Python script (no Docker required) and communicates with the MCU via serial port.
+The LED display runs as a native Python script (no Docker required) and communicates with the MCU via Router Bridge (msgpack RPC over Unix socket).
 
 The setup script automatically:
 - Installs the LED display systemd service
