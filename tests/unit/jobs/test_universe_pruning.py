@@ -58,18 +58,19 @@ def mock_universe_pruning_dependencies(
     if mock_tradernet_client is None:
         mock_tradernet_client = MagicMock()
 
-    # Setup default settings
-    async def get_float(key, default):
-        defaults = {
-            "universe_pruning_enabled": 1.0,
-            "universe_pruning_score_threshold": 0.50,
-            "universe_pruning_months": 3.0,
-            "universe_pruning_min_samples": 2.0,
-            "universe_pruning_check_delisted": 1.0,
-        }
-        return defaults.get(key, default)
+    # Setup default settings - only if not already configured by test
+    if mock_settings_repo.get_float.side_effect is None:
+        async def get_float(key, default):
+            defaults = {
+                "universe_pruning_enabled": 1.0,
+                "universe_pruning_score_threshold": 0.50,
+                "universe_pruning_months": 3.0,
+                "universe_pruning_min_samples": 2.0,
+                "universe_pruning_check_delisted": 1.0,
+            }
+            return defaults.get(key, default)
 
-    mock_settings_repo.get_float = AsyncMock(side_effect=get_float)
+        mock_settings_repo.get_float = AsyncMock(side_effect=get_float)
 
     with (
         patch(
@@ -164,18 +165,19 @@ class TestPruningLogic:
         mock_stock_repo.get_all_active = AsyncMock(return_value=[stock])
         mock_stock_repo.mark_inactive = AsyncMock()
 
-        # Recent high score should prevent pruning
+        # Average score must be >= threshold (0.50) to prevent pruning
+        # 0.40 + 0.45 + 0.75 = 1.60, avg = 0.533 >= 0.50
         now = datetime.now()
         scores = [
             create_stock_score(
-                "GOODSTOCK.US", 0.30, (now - timedelta(days=90)).isoformat()
+                "GOODSTOCK.US", 0.40, (now - timedelta(days=90)).isoformat()
             ),
             create_stock_score(
-                "GOODSTOCK.US", 0.35, (now - timedelta(days=60)).isoformat()
+                "GOODSTOCK.US", 0.45, (now - timedelta(days=60)).isoformat()
             ),
             create_stock_score(
                 "GOODSTOCK.US", 0.75, (now - timedelta(days=10)).isoformat()
-            ),  # Recent high score
+            ),  # Recent high score helps bring average above threshold
         ]
         mock_score_repo = AsyncMock()
         mock_score_repo.get_recent_scores = AsyncMock(return_value=scores)

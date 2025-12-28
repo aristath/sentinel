@@ -112,6 +112,8 @@ class StockRepository:
             "beta",
             "52w_high",
             "52w_low",
+            "min_portfolio_target",
+            "max_portfolio_target",
         }
 
         # Validate all keys are in whitelist

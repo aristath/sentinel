@@ -56,18 +56,27 @@ def mock_stock_discovery_dependencies(
     if mock_scoring_service is None:
         mock_scoring_service = AsyncMock()
 
-    # Default settings
-    async def get_float(key, default):
-        defaults = {
-            "stock_discovery_enabled": 1.0,
-            "stock_discovery_score_threshold": 0.75,
-            "stock_discovery_max_per_month": 2.0,
-            "stock_discovery_require_manual_review": 0.0,
-        }
-        return defaults.get(key, default)
+    # Default settings - only set if not already configured by test
+    if mock_settings_repo.get_float.side_effect is None:
+        async def get_float(key, default):
+            defaults = {
+                "stock_discovery_enabled": 1.0,
+                "stock_discovery_score_threshold": 0.75,
+                "stock_discovery_max_per_month": 2.0,
+                "stock_discovery_require_manual_review": 0.0,
+            }
+            return defaults.get(key, default)
 
-    mock_settings_repo.get_float = AsyncMock(side_effect=get_float)
-    mock_stock_repo.get_all_active = AsyncMock(return_value=[])
+        mock_settings_repo.get_float = AsyncMock(side_effect=get_float)
+
+    # Always set get_by_symbol to return None to allow stock creation
+    # Tests should explicitly set this if they need different behavior
+    mock_stock_repo.get_by_symbol = AsyncMock(return_value=None)
+
+    # Mock db_manager and tradernet_client
+    mock_db_manager = MagicMock()
+    mock_tradernet_client = MagicMock()
+    mock_score_repo = MagicMock()
 
     with (
         patch("app.jobs.stock_discovery.StockRepository", return_value=mock_stock_repo),
@@ -81,6 +90,16 @@ def mock_stock_discovery_dependencies(
         ),
         patch(
             "app.jobs.stock_discovery.ScoringService", return_value=mock_scoring_service
+        ),
+        patch(
+            "app.jobs.stock_discovery.ScoreRepository", return_value=mock_score_repo
+        ),
+        patch(
+            "app.jobs.stock_discovery.get_db_manager", return_value=mock_db_manager
+        ),
+        patch(
+            "app.jobs.stock_discovery.get_tradernet_client",
+            return_value=mock_tradernet_client,
         ),
     ):
         yield {

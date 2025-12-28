@@ -144,7 +144,8 @@ async def prune_universe() -> None:
                         f"Pruning stock {stock.symbol}: {reason} "
                         f"(threshold: {score_threshold}, samples: {len(scores)})"
                     )
-                    await stock_repo.delete(stock.symbol)
+                    # Mark as inactive rather than delete to preserve historical data
+                    await stock_repo.mark_inactive(stock.symbol)
                     pruned_count += 1
 
             except Exception as e:

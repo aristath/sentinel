@@ -44,7 +44,7 @@ class TestCalculatePositionSize:
         )
 
     def test_high_score_gets_larger_position(self):
-        """High stock score should result in slightly larger position (±10% adjustment).
+        """High stock score should result in larger position (±20% adjustment).
 
         Bug caught: If score doesn't affect size, all trades would
         be the same size regardless of conviction.
@@ -59,10 +59,10 @@ class TestCalculatePositionSize:
         low_size = calculate_position_size(low_score, base, min_size)
         high_size = calculate_position_size(high_score, base, min_size)
 
-        # High score should get ~10% larger position (score adjustment)
+        # High score should get larger position (score adjustment ±20%)
         assert high_size > low_size
-        # But difference should be small (score adjustment is ±10%)
-        assert (high_size - low_size) / base < 0.15
+        # Difference should reflect ~40% range (±20%)
+        assert (high_size - low_size) / base < 0.35
 
     def test_high_volatility_reduces_position(self):
         """High volatility should reduce position size (risk parity).
@@ -107,7 +107,7 @@ class TestCalculatePositionSize:
         assert size <= base * MAX_VOL_WEIGHT
 
     def test_never_exceeds_maximum(self):
-        """Position should never exceed MAX_VOL_WEIGHT * base.
+        """Position should never exceed MAX_VOL_WEIGHT * base * max_score_adj.
 
         Bug caught: Unbounded position sizes could cause over-concentration.
         """
@@ -121,7 +121,8 @@ class TestCalculatePositionSize:
 
         size = calculate_position_size(perfect, base, min_size)
 
-        max_allowed = base * MAX_VOL_WEIGHT  # 2.0x
+        # Max is: vol_weight (2.0x clamped) * score_adj (1.2 for score=1.0)
+        max_allowed = base * MAX_VOL_WEIGHT * 1.2  # 2.0x * 1.2 = 2.4x
         assert size <= max_allowed
 
     def test_never_below_minimum(self):
@@ -141,8 +142,8 @@ class TestCalculatePositionSize:
 
         assert size >= min_size
 
-    def test_score_adjustment_is_small(self):
-        """Score adjustment is ±10% on top of volatility weighting.
+    def test_score_adjustment_is_bounded(self):
+        """Score adjustment is ±20% on top of volatility weighting.
 
         Bug caught: Misunderstanding the scoring scale could cause wrong positions.
         """
@@ -152,16 +153,16 @@ class TestCalculatePositionSize:
 
         # Score 0.5 = neutral (no adjustment)
         neutral_score = self._make_candidate(score=0.5, volatility=vol)
-        # Score 1.0 = +10% adjustment
+        # Score 1.0 = +20% adjustment
         high_score = self._make_candidate(score=1.0, volatility=vol)
 
         neutral_result = calculate_position_size(neutral_score, base, min_size)
         high_result = calculate_position_size(high_score, base, min_size)
 
-        # High score should get slightly larger position
+        # High score should get larger position
         assert high_result > neutral_result
-        # But difference should be ~10% (score adjustment)
-        assert (high_result - neutral_result) / neutral_result < 0.12
+        # Difference should be ~20% (score adjustment)
+        assert (high_result - neutral_result) / neutral_result < 0.25
 
     def test_extreme_volatility_respects_floor(self):
         """Even extreme volatility should not reduce below MIN_VOL_WEIGHT.

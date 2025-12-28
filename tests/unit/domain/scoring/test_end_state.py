@@ -430,3 +430,202 @@ class TestCalculatePortfolioEndStateScore:
         assert "weight" in breakdown["total_return"]
         assert "contribution" in breakdown["total_return"]
         assert breakdown["total_return"]["weight"] == 0.35
+
+
+class TestCalculateTotalReturnScoreWithMetrics:
+    """Test total return score calculation with pre-fetched metrics dict."""
+
+    @pytest.mark.asyncio
+    async def test_uses_metrics_dict(self):
+        """Test that metrics dict is used instead of DB queries."""
+        from app.domain.scoring.end_state import calculate_total_return_score
+
+        metrics = {
+            "CAGR_5Y": 0.12,
+            "DIVIDEND_YIELD": 0.015,
+        }
+
+        score, subs = await calculate_total_return_score("AAPL.US", metrics=metrics)
+
+        assert "cagr" in subs
+        assert subs["cagr"] == 0.12
+        assert subs["dividend_yield"] == 0.015
+        assert subs["total_return"] == pytest.approx(0.135, abs=0.001)
+
+    @pytest.mark.asyncio
+    async def test_handles_missing_metrics(self):
+        """Test that missing metrics default to 0.0."""
+        from app.domain.scoring.end_state import calculate_total_return_score
+
+        metrics = {
+            "CAGR_5Y": None,  # Missing
+            "DIVIDEND_YIELD": 0.02,
+        }
+
+        score, subs = await calculate_total_return_score("AAPL.US", metrics=metrics)
+
+        assert subs["cagr"] == 0.0
+        assert subs["dividend_yield"] == 0.02
+        assert subs["total_return"] == 0.02
+
+
+class TestCalculateLongTermPromiseWithMetrics:
+    """Test long-term promise score calculation with pre-fetched metrics dict."""
+
+    @pytest.mark.asyncio
+    async def test_uses_metrics_dict(self):
+        """Test that metrics dict is used instead of DB queries."""
+        from app.domain.scoring.end_state import calculate_long_term_promise
+
+        metrics = {
+            "CONSISTENCY_SCORE": 0.8,
+            "FINANCIAL_STRENGTH": 0.7,
+            "DIVIDEND_CONSISTENCY": 0.6,
+            "SORTINO": 1.5,  # Will be converted to score
+        }
+
+        score, subs = await calculate_long_term_promise("AAPL.US", metrics=metrics)
+
+        assert subs["consistency"] == 0.8
+        assert subs["financial_strength"] == 0.7
+        assert subs["dividend_consistency"] == 0.6
+        assert "sortino" in subs
+        assert 0 <= score <= 1
+
+    @pytest.mark.asyncio
+    async def test_handles_missing_metrics(self):
+        """Test that missing metrics default appropriately."""
+        from app.domain.scoring.end_state import calculate_long_term_promise
+
+        metrics = {
+            "CONSISTENCY_SCORE": None,
+            "FINANCIAL_STRENGTH": 0.7,
+            "DIVIDEND_CONSISTENCY": None,
+            "SORTINO": None,
+        }
+
+        score, subs = await calculate_long_term_promise("AAPL.US", metrics=metrics)
+
+        assert subs["consistency"] == 0.5  # Default
+        assert subs["financial_strength"] == 0.7
+        assert subs["dividend_consistency"] == 0.5  # Default
+        assert subs["sortino"] == 0.5  # Default
+
+
+class TestCalculateStabilityScoreWithMetrics:
+    """Test stability score calculation with pre-fetched metrics dict."""
+
+    @pytest.mark.asyncio
+    async def test_uses_metrics_dict(self):
+        """Test that metrics dict is used instead of DB queries."""
+        from app.domain.scoring.end_state import calculate_stability_score
+
+        metrics = {
+            "VOLATILITY_ANNUAL": 0.20,
+            "MAX_DRAWDOWN": -0.15,
+            "SHARPE": 1.5,
+        }
+
+        score, subs = await calculate_stability_score("AAPL.US", metrics=metrics)
+
+        assert "volatility" in subs
+        assert "drawdown" in subs
+        assert "sharpe" in subs
+        assert 0 <= score <= 1
+
+    @pytest.mark.asyncio
+    async def test_handles_missing_metrics(self):
+        """Test that missing metrics default appropriately."""
+        from app.domain.scoring.end_state import calculate_stability_score
+
+        metrics = {
+            "VOLATILITY_ANNUAL": None,
+            "MAX_DRAWDOWN": None,
+            "SHARPE": None,
+        }
+
+        score, subs = await calculate_stability_score("AAPL.US", metrics=metrics)
+
+        assert subs["volatility"] == 0.5  # Default
+        assert subs["drawdown"] == 0.5  # Default
+        assert subs["sharpe"] == 0.5  # Default
+        assert 0 <= score <= 1
+
+
+class TestCalculatePortfolioEndStateScoreWithMetricsCache:
+    """Test portfolio end-state score calculation with metrics cache."""
+
+    @pytest.mark.asyncio
+    async def test_uses_metrics_cache(self):
+        """Test that metrics cache is used instead of individual DB queries."""
+        from app.domain.scoring.end_state import calculate_portfolio_end_state_score
+
+        metrics_cache = {
+            "AAPL.US": {
+                "CAGR_5Y": 0.12,
+                "DIVIDEND_YIELD": 0.015,
+                "CONSISTENCY_SCORE": 0.8,
+                "FINANCIAL_STRENGTH": 0.7,
+                "DIVIDEND_CONSISTENCY": 0.6,
+                "SORTINO": 1.5,
+                "VOLATILITY_ANNUAL": 0.20,
+                "MAX_DRAWDOWN": -0.15,
+                "SHARPE": 1.5,
+            },
+            "MSFT.US": {
+                "CAGR_5Y": 0.10,
+                "DIVIDEND_YIELD": 0.01,
+                "CONSISTENCY_SCORE": 0.7,
+                "FINANCIAL_STRENGTH": 0.8,
+                "DIVIDEND_CONSISTENCY": 0.5,
+                "SORTINO": 1.2,
+                "VOLATILITY_ANNUAL": 0.25,
+                "MAX_DRAWDOWN": -0.20,
+                "SHARPE": 1.2,
+            },
+        }
+
+        score, breakdown = await calculate_portfolio_end_state_score(
+            positions={"AAPL.US": 5000, "MSFT.US": 5000},
+            total_value=10000,
+            diversification_score=0.7,
+            metrics_cache=metrics_cache,
+        )
+
+        assert "total_return" in breakdown
+        assert "diversification" in breakdown
+        assert "long_term_promise" in breakdown
+        assert "stability" in breakdown
+        assert "end_state_score" in breakdown
+        assert 0 <= score <= 1
+
+    @pytest.mark.asyncio
+    async def test_handles_missing_symbols_in_cache(self):
+        """Test that missing symbols in cache use defaults."""
+        from app.domain.scoring.end_state import calculate_portfolio_end_state_score
+
+        metrics_cache = {
+            "AAPL.US": {
+                "CAGR_5Y": 0.12,
+                "DIVIDEND_YIELD": 0.015,
+                "CONSISTENCY_SCORE": 0.8,
+                "FINANCIAL_STRENGTH": 0.7,
+                "DIVIDEND_CONSISTENCY": 0.6,
+                "SORTINO": 1.5,
+                "VOLATILITY_ANNUAL": 0.20,
+                "MAX_DRAWDOWN": -0.15,
+                "SHARPE": 1.5,
+            },
+            # MSFT.US missing - should use defaults
+        }
+
+        score, breakdown = await calculate_portfolio_end_state_score(
+            positions={"AAPL.US": 5000, "MSFT.US": 5000},
+            total_value=10000,
+            diversification_score=0.7,
+            metrics_cache=metrics_cache,
+        )
+
+        # Should still complete successfully with defaults for MSFT
+        assert 0 <= score <= 1
+        assert "end_state_score" in breakdown

@@ -60,12 +60,8 @@ class TestRegimeBasedCashReserve:
 
             with (
                 patch(
-                    "app.application.services.rebalancing_service.PortfolioOptimizer",
+                    "app.application.services.optimization.PortfolioOptimizer",
                     return_value=mock_optimizer,
-                ),
-                patch(
-                    "app.application.services.rebalancing_service.SettingsRepository",
-                    return_value=mock_settings_repo,
                 ),
             ):
                 service = RebalancingService(
@@ -73,6 +69,12 @@ class TestRegimeBasedCashReserve:
                     position_repo=mock_position_repo,
                     tradernet_client=mock_tradernet_client,
                     allocation_repo=AsyncMock(),
+                    portfolio_repo=AsyncMock(),
+                    trade_repo=AsyncMock(),
+                    settings_repo=mock_settings_repo,
+                    recommendation_repo=AsyncMock(),
+                    db_manager=MagicMock(),
+                    exchange_rate_service=AsyncMock(),
                 )
 
                 # Call get_recommendations
@@ -134,12 +136,8 @@ class TestRegimeBasedCashReserve:
 
             with (
                 patch(
-                    "app.application.services.rebalancing_service.PortfolioOptimizer",
+                    "app.application.services.optimization.PortfolioOptimizer",
                     return_value=mock_optimizer,
-                ),
-                patch(
-                    "app.application.services.rebalancing_service.SettingsRepository",
-                    return_value=mock_settings_repo,
                 ),
             ):
                 service = RebalancingService(
@@ -147,6 +145,12 @@ class TestRegimeBasedCashReserve:
                     position_repo=mock_position_repo,
                     tradernet_client=mock_tradernet_client,
                     allocation_repo=AsyncMock(),
+                    portfolio_repo=AsyncMock(),
+                    trade_repo=AsyncMock(),
+                    settings_repo=mock_settings_repo,
+                    recommendation_repo=AsyncMock(),
+                    db_manager=MagicMock(),
+                    exchange_rate_service=AsyncMock(),
                 )
 
                 await service.get_recommendations()
@@ -211,12 +215,8 @@ class TestRegimeBasedCashReserve:
 
             with (
                 patch(
-                    "app.application.services.rebalancing_service.PortfolioOptimizer",
+                    "app.application.services.optimization.PortfolioOptimizer",
                     return_value=mock_optimizer,
-                ),
-                patch(
-                    "app.application.services.rebalancing_service.SettingsRepository",
-                    return_value=mock_settings_repo,
                 ),
             ):
                 service = RebalancingService(
@@ -224,6 +224,12 @@ class TestRegimeBasedCashReserve:
                     position_repo=mock_position_repo,
                     tradernet_client=mock_tradernet_client,
                     allocation_repo=AsyncMock(),
+                    portfolio_repo=AsyncMock(),
+                    trade_repo=AsyncMock(),
+                    settings_repo=mock_settings_repo,
+                    recommendation_repo=AsyncMock(),
+                    db_manager=MagicMock(),
+                    exchange_rate_service=AsyncMock(),
                 )
 
                 await service.get_recommendations()
@@ -277,12 +283,8 @@ class TestRegimeBasedCashReserve:
 
         with (
             patch(
-                "app.application.services.rebalancing_service.PortfolioOptimizer",
+                "app.application.services.optimization.PortfolioOptimizer",
                 return_value=mock_optimizer,
-            ),
-            patch(
-                "app.application.services.rebalancing_service.SettingsRepository",
-                return_value=mock_settings_repo,
             ),
         ):
             service = RebalancingService(
@@ -290,6 +292,12 @@ class TestRegimeBasedCashReserve:
                 position_repo=mock_position_repo,
                 tradernet_client=mock_tradernet_client,
                 allocation_repo=AsyncMock(),
+                portfolio_repo=AsyncMock(),
+                trade_repo=AsyncMock(),
+                settings_repo=mock_settings_repo,
+                recommendation_repo=AsyncMock(),
+                db_manager=MagicMock(),
+                exchange_rate_service=AsyncMock(),
             )
 
             await service.get_recommendations()

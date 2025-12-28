@@ -210,7 +210,9 @@ class TestGetAllocation:
         mock_service = AsyncMock()
         mock_service.get_portfolio_summary = AsyncMock(return_value=mock_summary)
 
-        result = await get_allocation(mock_service)
+        mock_alert_service = AsyncMock()
+
+        result = await get_allocation(mock_service, mock_alert_service)
 
         assert result["total_value"] == 10000.0
         assert result["cash_balance"] == 1000.0
