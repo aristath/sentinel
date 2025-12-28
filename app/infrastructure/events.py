@@ -76,6 +76,9 @@ class SystemEvent(Enum):
     DATABASE_ERROR = "database_error"
     BROKER_ERROR = "broker_error"
 
+    # LED Display events
+    DISPLAY_STATE_CHANGED = "display_state_changed"
+
 
 # Event listeners storage
 _listeners: dict[SystemEvent, list[Callable]] = {event: [] for event in SystemEvent}
