@@ -1,7 +1,9 @@
 """Cash flow sync job for periodic updates from Tradernet API."""
 
+import json
 import logging
 
+from app.domain.models import DividendRecord
 from app.infrastructure.database.manager import get_db_manager
 from app.infrastructure.events import SystemEvent, emit
 from app.infrastructure.external.tradernet import get_tradernet_client
@@ -11,6 +13,7 @@ from app.infrastructure.hardware.display_service import (
     set_processing,
 )
 from app.infrastructure.locking import file_lock
+from app.repositories import DividendRepository
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +69,8 @@ async def _sync_cash_flows_internal():
         existing_ids = {row[0] for row in await cursor.fetchall()}
 
         synced_count = 0
+        dividend_repo = DividendRepository()
+        
         async with db_manager.ledger.transaction():
             for txn in transactions:
                 txn_id = txn.get("transaction_id")
@@ -79,7 +84,13 @@ async def _sync_cash_flows_internal():
                     txn.get("amount_eur") or amount
                 )  # Fallback to amount if no EUR conversion
 
-                await db_manager.ledger.execute(
+                # Serialize params to JSON if it's a dict
+                params = txn.get("params")
+                params_json = txn.get("params_json")
+                if params and not params_json:
+                    params_json = json.dumps(params) if isinstance(params, dict) else str(params)
+
+                cursor = await db_manager.ledger.execute(
                     """
                     INSERT INTO cash_flows
                     (transaction_id, type_doc_id, transaction_type, date, amount, currency,
@@ -97,10 +108,61 @@ async def _sync_cash_flows_internal():
                         txn.get("status"),
                         txn.get("status_c"),
                         txn.get("description"),
-                        txn.get("params_json"),
+                        params_json,
                     ),
                 )
+                cash_flow_id = cursor.lastrowid
                 synced_count += 1
+
+                # Create dividend record if this is a dividend cash flow
+                transaction_type = (txn.get("type") or txn.get("transaction_type", "")).lower()
+                if transaction_type == "dividend":
+                    try:
+                        # Extract symbol from params
+                        symbol = None
+                        if params:
+                            symbol = params.get("ticker") or params.get("symbol")
+                        elif params_json:
+                            # Try to parse params_json
+                            try:
+                                parsed_params = json.loads(params_json) if isinstance(params_json, str) else params_json
+                                symbol = parsed_params.get("ticker") or parsed_params.get("symbol")
+                            except (json.JSONDecodeError, TypeError):
+                                pass
+
+                        if symbol:
+                            # Check if dividend record already exists for this cash flow
+                            existing = await dividend_repo.exists_for_cash_flow(cash_flow_id)
+                            if not existing:
+                                dividend = DividendRecord(
+                                    symbol=symbol,
+                                    cash_flow_id=cash_flow_id,
+                                    amount=amount,
+                                    currency=currency,
+                                    amount_eur=amount_eur,
+                                    payment_date=txn.get("date", ""),
+                                    reinvested=False,
+                                )
+                                await dividend_repo.create(dividend)
+                                logger.info(
+                                    f"Created dividend record for {symbol}: {amount_eur:.2f} EUR "
+                                    f"(cash_flow_id={cash_flow_id})"
+                                )
+                            else:
+                                logger.debug(
+                                    f"Dividend record already exists for cash_flow_id={cash_flow_id}, skipping"
+                                )
+                        else:
+                            logger.warning(
+                                f"Could not extract symbol from dividend cash flow "
+                                f"(transaction_id={txn_id}, cash_flow_id={cash_flow_id})"
+                            )
+                    except Exception as e:
+                        logger.error(
+                            f"Error creating dividend record for cash_flow_id={cash_flow_id}: {e}",
+                            exc_info=True,
+                        )
+                        # Don't fail the entire sync if dividend record creation fails
 
         logger.info(
             f"Cash flow sync complete: {synced_count}/{len(transactions)} transactions synced"
