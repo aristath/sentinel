@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS stocks (
 
 CREATE INDEX IF NOT EXISTS idx_stocks_active ON stocks(active);
 CREATE INDEX IF NOT EXISTS idx_stocks_country ON stocks(country);
+CREATE INDEX IF NOT EXISTS idx_stocks_isin ON stocks(isin);
 
 -- Allocation targets (country and industry weightings)
 CREATE TABLE IF NOT EXISTS allocation_targets (
