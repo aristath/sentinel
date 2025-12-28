@@ -218,15 +218,39 @@ class IndustryGroup(BaseModel):
 
 @router.get("/groups/country")
 async def get_country_groups(grouping_repo: GroupingRepositoryDep):
-    """Get all country groups."""
+    """Get all country groups (custom from DB or fallback to hardcoded)."""
     groups = await grouping_repo.get_country_groups()
+    if not groups:
+        # Return hardcoded fallback groups so user can see and edit them
+        from collections import defaultdict
+
+        from app.application.services.optimization.constraints_manager import (
+            TERRITORY_MAPPING,
+        )
+
+        reverse_mapping = defaultdict(list)
+        for country, group in TERRITORY_MAPPING.items():
+            reverse_mapping[group].append(country)
+        groups = dict(reverse_mapping)
     return {"groups": groups}
 
 
 @router.get("/groups/industry")
 async def get_industry_groups(grouping_repo: GroupingRepositoryDep):
-    """Get all industry groups."""
+    """Get all industry groups (custom from DB or fallback to hardcoded)."""
     groups = await grouping_repo.get_industry_groups()
+    if not groups:
+        # Return hardcoded fallback groups so user can see and edit them
+        from collections import defaultdict
+
+        from app.application.services.optimization.constraints_manager import (
+            INDUSTRY_GROUP_MAPPING,
+        )
+
+        reverse_mapping = defaultdict(list)
+        for industry, group in INDUSTRY_GROUP_MAPPING.items():
+            reverse_mapping[group].append(industry)
+        groups = dict(reverse_mapping)
     return {"groups": groups}
 
 
