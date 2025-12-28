@@ -248,7 +248,9 @@ def main_loop():
     # Connect to SSE stream
     try:
         logger.info(f"Connecting to SSE endpoint: {SSE_ENDPOINT}")
-        response = _session.get(SSE_ENDPOINT, stream=True, timeout=10)
+        # Use tuple timeout: (connect_timeout, read_timeout)
+        # Read timeout of 30s allows for heartbeats every 5s with margin
+        response = _session.get(SSE_ENDPOINT, stream=True, timeout=(10, 30))
 
         if response.status_code != 200:
             logger.error(f"SSE endpoint returned status {response.status_code}")
@@ -256,26 +258,26 @@ def main_loop():
 
         logger.info("SSE connection established")
 
-        # Process SSE stream
+        # Process SSE stream using iter_lines for better SSE handling
         buffer = ""
-        for chunk in response.iter_content(chunk_size=1024, decode_unicode=True):
-            if not chunk:
+        for line in response.iter_lines(decode_unicode=True):
+            if line is None:
                 continue
 
-            buffer += chunk
-
-            # Process complete SSE events (separated by \n\n)
-            while "\n\n" in buffer:
-                event_block, buffer = buffer.split("\n\n", 1)
-                lines = event_block.split("\n")
-
-                # Find data line
-                for line in lines:
-                    data = parse_sse_event(line)
+            # SSE events are separated by empty lines
+            if line == "":
+                # End of event block, process accumulated buffer
+                if buffer:
+                    data = parse_sse_event(buffer)
                     if data is not None:
-                        # Process display data
                         _process_display_data(data)
-                        break  # Process one event at a time
+                    buffer = ""
+            else:
+                # Accumulate lines (in case of multi-line events)
+                if buffer:
+                    buffer += "\n" + line
+                else:
+                    buffer = line
 
     except requests.exceptions.ConnectionError as e:
         logger.error(f"Failed to connect to SSE endpoint: {e}")
