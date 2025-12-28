@@ -75,6 +75,28 @@ class EditStockModal extends HTMLElement {
                 <p class="text-xs text-gray-500 mt-1">Minimum shares per trade (e.g., 100 for Japanese stocks)</p>
               </div>
 
+              <div>
+                <label class="block text-sm text-gray-400 mb-1">Min Portfolio Target (%)</label>
+                <input type="number"
+                       x-model="$store.app.editingStock.min_portfolio_target"
+                       min="0"
+                       max="20"
+                       step="0.1"
+                       class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
+                <p class="text-xs text-gray-500 mt-1">Minimum target portfolio allocation (0-20%). Used by optimizer to set lower bound.</p>
+              </div>
+
+              <div>
+                <label class="block text-sm text-gray-400 mb-1">Max Portfolio Target (%)</label>
+                <input type="number"
+                       x-model="$store.app.editingStock.max_portfolio_target"
+                       min="0"
+                       max="30"
+                       step="0.1"
+                       class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
+                <p class="text-xs text-gray-500 mt-1">Maximum target portfolio allocation (0-30%). Used by optimizer to set upper bound.</p>
+              </div>
+
               <div class="border-t border-gray-700 pt-4 mt-4 space-y-3">
                 <label class="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox"
