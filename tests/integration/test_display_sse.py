@@ -62,7 +62,9 @@ class TestSSEEndpoint:
             response = client.get("/api/status/led/display/stream")
 
             assert response.status_code == 200
-            assert response.headers["content-type"] == "text/event-stream; charset=utf-8"
+            assert (
+                response.headers["content-type"] == "text/event-stream; charset=utf-8"
+            )
             assert "cache-control" in response.headers
             assert "no-cache" in response.headers["cache-control"].lower()
 
@@ -95,7 +97,9 @@ class TestSSEEndpoint:
             assert b"data:" in content
 
     @pytest.mark.asyncio
-    async def test_sse_event_format(self, app, mock_settings_repo, mock_display_manager):
+    async def test_sse_event_format(
+        self, app, mock_settings_repo, mock_display_manager
+    ):
         """Test that events are formatted as SSE (data: {json}\\n\\n)."""
         with (
             patch(
@@ -225,4 +229,3 @@ class TestSSEEndpoint:
             # Should have received initial state
             assert len(content) > 0
             assert b"data:" in content
-

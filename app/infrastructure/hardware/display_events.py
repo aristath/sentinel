@@ -134,4 +134,3 @@ def _on_display_state_changed(event: SystemEvent, **data: Any) -> None:
 
 # Subscribe to display state changed events
 subscribe(SystemEvent.DISPLAY_STATE_CHANGED, _on_display_state_changed)
-
