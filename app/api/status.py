@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
 
 from app.config import settings
 from app.infrastructure.dependencies import (

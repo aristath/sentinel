@@ -3,9 +3,7 @@
 These tests validate that DisplayStateManager emits events when state changes.
 """
 
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 from app.infrastructure.events import SystemEvent
 from app.infrastructure.hardware.display_service import DisplayStateManager
@@ -82,4 +80,3 @@ class TestDisplayStateManagerEventEmission:
             # Check that keyword args contain ticker_speed or it's in the payload
             # The actual implementation will determine the exact format
             assert len(call_args.kwargs) >= 0  # At minimum, event is emitted
-

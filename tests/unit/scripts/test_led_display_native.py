@@ -3,10 +3,6 @@
 These tests validate the SSE client implementation in the native Python script.
 """
 
-from unittest.mock import MagicMock, Mock, patch
-
-import pytest
-
 
 class TestSSEClientConnection:
     """Test SSE connection establishment."""
@@ -107,4 +103,3 @@ class TestSSEReconnection:
         # Should exit on stream interruption (no fallback per user request)
         # For now, placeholder
         pass
-
