@@ -25,6 +25,7 @@ from app.domain.value_objects.currency import Currency
 from app.domain.value_objects.recommendation_status import RecommendationStatus
 from app.domain.value_objects.trade_side import TradeSide
 from app.infrastructure.database.manager import DatabaseManager
+from app.domain.analytics.market_regime import detect_market_regime
 from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.external.tradernet import TradernetClient
 from app.repositories import PortfolioRepository, RecommendationRepository
@@ -215,6 +216,32 @@ class RebalancingService:
         )
         min_cash = await self._settings_repo.get_float("min_cash_reserve", 500.0)
         max_plan_depth = await self._settings_repo.get_int("max_plan_depth", 5)
+
+        # Adjust cash reserve based on market regime (if enabled)
+        regime_enabled = await self._settings_repo.get_float(
+            "market_regime_detection_enabled", 1.0
+        )
+        if regime_enabled == 1.0:
+            try:
+                regime = await detect_market_regime(self._tradernet_client)
+                if regime == "bull":
+                    min_cash = await self._settings_repo.get_float(
+                        "market_regime_bull_cash_reserve", 400.0
+                    )
+                    logger.info(f"Bull market detected: using cash reserve {min_cash}")
+                elif regime == "bear":
+                    min_cash = await self._settings_repo.get_float(
+                        "market_regime_bear_cash_reserve", 600.0
+                    )
+                    logger.info(f"Bear market detected: using cash reserve {min_cash}")
+                elif regime == "sideways":
+                    min_cash = await self._settings_repo.get_float(
+                        "market_regime_sideways_cash_reserve", 500.0
+                    )
+                    logger.info(f"Sideways market detected: using cash reserve {min_cash}")
+            except Exception as e:
+                logger.warning(f"Failed to detect market regime, using default cash reserve: {e}")
+                # min_cash already set to default above
 
         # Build portfolio context
         portfolio_context = await build_portfolio_context(
