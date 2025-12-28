@@ -146,6 +146,10 @@ class TestProcessSingleStock:
                 new_callable=AsyncMock,
             ),
             patch(
+                "app.jobs.daily_pipeline._detect_and_update_industry",
+                new_callable=AsyncMock,
+            ),
+            patch(
                 "app.jobs.daily_pipeline._calculate_metrics_for_symbol",
                 new_callable=AsyncMock,
                 side_effect=mock_calculate_metrics,
@@ -186,6 +190,10 @@ class TestProcessSingleStock:
             ),
             patch(
                 "app.jobs.daily_pipeline._detect_and_update_country_and_exchange",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "app.jobs.daily_pipeline._detect_and_update_industry",
                 new_callable=AsyncMock,
             ),
             patch(
@@ -276,6 +284,10 @@ class TestDisplayUpdates:
                 new_callable=AsyncMock,
             ),
             patch(
+                "app.jobs.daily_pipeline._detect_and_update_industry",
+                new_callable=AsyncMock,
+            ),
+            patch(
                 "app.jobs.daily_pipeline._calculate_metrics_for_symbol",
                 new_callable=AsyncMock,
                 return_value=5,
@@ -317,6 +329,10 @@ class TestDisplayUpdates:
             ),
             patch(
                 "app.jobs.daily_pipeline._detect_and_update_country_and_exchange",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "app.jobs.daily_pipeline._detect_and_update_industry",
                 new_callable=AsyncMock,
             ),
             patch(
@@ -370,6 +386,10 @@ class TestForceRefresh:
             ),
             patch(
                 "app.jobs.daily_pipeline._detect_and_update_country_and_exchange",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "app.jobs.daily_pipeline._detect_and_update_industry",
                 new_callable=AsyncMock,
             ),
             patch(
