@@ -5,6 +5,15 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, HTTPException
 
+from app.api.models import (
+    AttributionData,
+    CashBreakdownResponse,
+    PeriodInfo,
+    PortfolioAnalyticsErrorResponse,
+    PortfolioAnalyticsResponse,
+    ReturnsData,
+    RiskMetrics,
+)
 from app.infrastructure.dependencies import (
     ExchangeRateServiceDep,
     PortfolioRepositoryDep,
@@ -189,7 +198,7 @@ async def get_transaction_history():
         )
 
 
-@router.get("/cash-breakdown")
+@router.get("/cash-breakdown", response_model=CashBreakdownResponse)
 async def get_cash_breakdown(
     exchange_rate_service: ExchangeRateServiceDep,
 ):
@@ -253,23 +262,23 @@ async def get_portfolio_analytics(days: int = 365):
         )
 
         if portfolio_values.empty:
-            return {
-                "error": "Insufficient data",
-                "returns": {},
-                "risk_metrics": {},
-                "attribution": {},
-            }
+            return PortfolioAnalyticsErrorResponse(
+                error="Insufficient data",
+                returns={},
+                risk_metrics={},
+                attribution={},
+            )
 
         # Calculate returns
         returns = calculate_portfolio_returns(portfolio_values)
 
         if returns.empty:
-            return {
-                "error": "Could not calculate returns",
-                "returns": {},
-                "risk_metrics": {},
-                "attribution": {},
-            }
+            return PortfolioAnalyticsErrorResponse(
+                error="Could not calculate returns",
+                returns={},
+                risk_metrics={},
+                attribution={},
+            )
 
         # Get portfolio metrics
         metrics = await get_portfolio_metrics(returns)
@@ -279,20 +288,27 @@ async def get_portfolio_analytics(days: int = 365):
             returns, start_date_str, end_date_str
         )
 
-        # Format response
-        return {
-            "returns": _format_returns_data(returns, metrics),
-            "risk_metrics": _format_risk_metrics(metrics),
-            "attribution": {
-                "country": attribution.get("country", {}),
-                "industry": attribution.get("industry", {}),
-            },
-            "period": {
-                "start_date": start_date_str,
-                "end_date": end_date_str,
-                "days": days,
-            },
-        }
+        # Format response using helper functions
+        returns_data = _format_returns_data(returns, metrics)
+        risk_metrics_data = _format_risk_metrics(metrics)
+
+        # Convert dict responses to Pydantic models using model_validate
+        # This handles the 'return' field alias properly
+        returns_model = ReturnsData.model_validate(returns_data)
+
+        return PortfolioAnalyticsResponse(
+            returns=returns_model,
+            risk_metrics=RiskMetrics(**risk_metrics_data),
+            attribution=AttributionData(
+                country=attribution.get("country", {}),
+                industry=attribution.get("industry", {}),
+            ),
+            period=PeriodInfo(
+                start_date=start_date_str,
+                end_date=end_date_str,
+                days=days,
+            ),
+        )
     except Exception as e:
         logger.error(f"Error calculating portfolio analytics: {e}")
         raise HTTPException(

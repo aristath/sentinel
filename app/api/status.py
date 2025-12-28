@@ -8,6 +8,12 @@ from pathlib import Path
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
+from app.api.models import (
+    DatabaseStatsResponse,
+    DiskUsageResponse,
+    MarketsStatusResponse,
+    StatusResponse,
+)
 from app.config import settings
 from app.infrastructure.dependencies import (
     DisplayStateManagerDep,
@@ -20,7 +26,7 @@ from app.infrastructure.dependencies import (
 router = APIRouter()
 
 
-@router.get("")
+@router.get("", response_model=StatusResponse)
 async def get_status(
     portfolio_repo: PortfolioRepositoryDep,
     stock_repo: StockRepositoryDep,
@@ -284,7 +290,7 @@ async def get_job_status():
         }
 
 
-@router.get("/database/stats")
+@router.get("/database/stats", response_model=DatabaseStatsResponse)
 async def get_database_stats():
     """Get database statistics including historical data counts and freshness."""
     from app.api.errors import error_response, success_response
@@ -378,7 +384,7 @@ def _get_backup_info(data_dir: Path) -> tuple[int, int]:
     return backup_count, backup_size
 
 
-@router.get("/markets")
+@router.get("/markets", response_model=MarketsStatusResponse)
 async def get_markets_status():
     """Get current market open/closed status for all geographies.
 
@@ -408,7 +414,7 @@ async def get_markets_status():
         }
 
 
-@router.get("/disk")
+@router.get("/disk", response_model=DiskUsageResponse)
 async def get_disk_usage():
     """
     Get disk usage information for monitoring.
