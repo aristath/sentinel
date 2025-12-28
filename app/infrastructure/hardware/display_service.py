@@ -114,8 +114,7 @@ def _sync_module_vars() -> None:
 _sync_module_vars()
 
 
-# Backward compatibility: module-level functions delegate to singleton and sync vars
-# These will be deprecated in favor of using the DisplayStateManager directly
+# Module-level functions delegate to singleton and sync vars
 def set_error(text: str) -> None:
     """Set error message (highest priority, persists until cleared)."""
     _display_state_manager.set_error(text)

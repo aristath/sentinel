@@ -46,7 +46,6 @@ async def identify_rebalance_sell_opportunities(
             continue
 
         # Check for rebalance sells (overweight country/industry)
-        # TODO: Update to use country_weights and country_allocations when allocation system is updated
         country = stock.country
         if country and country in geo_allocations:
             target = 0.33 + portfolio_context.country_weights.get(country, 0) * 0.15

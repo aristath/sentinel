@@ -270,7 +270,6 @@ async def _check_and_rebalance_internal():
             total_portfolio_value = total_position_value + cash_balance
 
             # Get target allocations (empty dict = skip drift check, only check cash)
-            # TODO: Could get from cached optimizer result or run lightweight optimizer
             target_allocations = {}
 
             should_rebalance, trigger_reason = await check_rebalance_triggers(

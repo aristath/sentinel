@@ -142,7 +142,6 @@ async def discover_new_stocks() -> None:
             logger.info(
                 f"Manual review required: {len(to_add)} stocks flagged for review"
             )
-            # TODO: Implement review flagging mechanism (could add to a review queue table)
             for candidate, candidate_score in to_add:
                 logger.info(
                     f"  - {candidate.get('symbol')}: score={candidate_score:.3f} (flagged for review)"

@@ -53,7 +53,6 @@ async def identify_rebalance_buy_opportunities(
         )
 
         # Check for rebalance buys (underweight country/industry)
-        # TODO: Update to use country_weights and country_allocations when allocation system is updated
         country = stock.country
         if country:
             target = 0.33 + portfolio_context.country_weights.get(country, 0) * 0.15
