@@ -26,30 +26,52 @@
     <!-- Status Bar -->
     <status-bar></status-bar>
 
-    <!-- Portfolio Summary -->
-    <summary-cards></summary-cards>
+    <!-- Tab Navigation -->
+    <tab-navigation></tab-navigation>
 
-    <!-- Optimizer Status -->
-    <optimizer-status-card></optimizer-status-card>
+    <!-- Tab Content -->
+    <div x-data>
+      <!-- Next Actions Tab (Default) -->
+      <div x-show="$store.app.activeTab === 'next-actions'"
+           x-transition:enter="transition ease-out duration-200"
+           x-transition:enter-start="opacity-0"
+           x-transition:enter-end="opacity-100"
+           x-transition:leave="transition ease-in duration-150"
+           x-transition:leave-start="opacity-100"
+           x-transition:leave-end="opacity-0">
+        <next-actions-card></next-actions-card>
+      </div>
 
-    <!-- Radar Charts Row -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <geographic-radar-card></geographic-radar-card>
-      <industry-radar-card></industry-radar-card>
+      <!-- Portfolio Details Tab -->
+      <div x-show="$store.app.activeTab === 'portfolio'"
+           x-transition:enter="transition ease-out duration-200"
+           x-transition:enter-start="opacity-0"
+           x-transition:enter-end="opacity-100"
+           x-transition:leave="transition ease-in duration-150"
+           x-transition:leave-start="opacity-100"
+           x-transition:leave-end="opacity-0"
+           class="space-y-4">
+        <!-- Portfolio Summary -->
+        <summary-cards></summary-cards>
+
+        <!-- Optimizer Status -->
+        <optimizer-status-card></optimizer-status-card>
+
+        <!-- Radar Charts Row -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <geographic-radar-card></geographic-radar-card>
+          <industry-radar-card></industry-radar-card>
+        </div>
+
+        <!-- Stock Universe -->
+        <div class="mt-4">
+          <stock-table></stock-table>
+        </div>
+
+        <!-- Recent Trades -->
+        <trades-table></trades-table>
+      </div>
     </div>
-
-    <!-- Next Actions Row -->
-    <div class="w-full">
-      <next-actions-card></next-actions-card>
-    </div>
-
-    <!-- Stock Universe -->
-    <div class="mt-4">
-      <stock-table></stock-table>
-    </div>
-
-    <!-- Recent Trades -->
-    <trades-table></trades-table>
   </div>
 
   <!-- Modals -->
@@ -61,6 +83,7 @@
   <!-- Load Components -->
   <script src="/static/components/app-header.js"></script>
   <script src="/static/components/status-bar.js"></script>
+  <script src="/static/components/tab-navigation.js"></script>
   <script src="/static/components/summary-cards.js"></script>
   <script src="/static/components/geo-chart.js"></script>
   <script src="/static/components/industry-chart.js"></script>

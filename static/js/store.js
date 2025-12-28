@@ -31,6 +31,9 @@ document.addEventListener('alpine:init', () => {
     tradingMode: 'research',  // 'live' or 'research'
     sparklines: {},  // {symbol: [{time, value}, ...]}
 
+    // UI State - Tabs
+    activeTab: 'next-actions',  // 'next-actions' or 'portfolio'
+
     // UI State - Filters
     stockFilter: 'all',
     industryFilter: 'all',
