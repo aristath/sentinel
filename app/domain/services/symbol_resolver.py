@@ -272,3 +272,69 @@ class SymbolResolver:
                 logger.warning(f"Failed to cache ISIN for {tradernet_symbol}: {e}")
 
         return info
+
+    async def resolve_to_isin(self, identifier: str) -> Optional[str]:
+        """Resolve any identifier (symbol or ISIN) to canonical ISIN.
+
+        This is a simplified method for when you just need the ISIN
+        and don't need full SymbolInfo.
+
+        Args:
+            identifier: Stock identifier (Tradernet symbol, Yahoo symbol, or ISIN)
+
+        Returns:
+            ISIN string if resolvable, None otherwise
+        """
+        identifier = identifier.strip().upper()
+
+        # If already an ISIN, return it directly
+        if is_isin(identifier):
+            return identifier
+
+        # Try to resolve via full resolution
+        info = await self.resolve(identifier)
+        return info.isin
+
+    async def get_symbol_for_display(self, isin_or_symbol: str) -> str:
+        """Get display symbol (Tradernet format) for an ISIN.
+
+        Looks up the database to find the Tradernet symbol associated
+        with the given ISIN. Falls back to the input if not found.
+
+        Args:
+            isin_or_symbol: ISIN or symbol to look up
+
+        Returns:
+            Tradernet symbol for display, or original input if not found
+        """
+        if not self._stock_repo:
+            return isin_or_symbol
+
+        identifier = isin_or_symbol.strip().upper()
+
+        if is_isin(identifier):
+            # Look up by ISIN to get symbol
+            stock = await self._stock_repo.get_by_isin(identifier)
+            if stock:
+                return stock.symbol
+            return identifier
+        else:
+            # Already a symbol, return as-is
+            return identifier
+
+    async def get_isin_for_symbol(self, symbol: str) -> Optional[str]:
+        """Get ISIN for a given symbol from database.
+
+        Args:
+            symbol: Tradernet or Yahoo symbol
+
+        Returns:
+            ISIN if found in database, None otherwise
+        """
+        if not self._stock_repo:
+            return None
+
+        stock = await self._stock_repo.get_by_symbol(symbol.upper())
+        if stock and stock.isin:
+            return stock.isin
+        return None

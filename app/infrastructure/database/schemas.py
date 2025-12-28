@@ -409,6 +409,7 @@ LEDGER_SCHEMA = """
 CREATE TABLE IF NOT EXISTS trades (
     id INTEGER PRIMARY KEY,
     symbol TEXT NOT NULL,
+    isin TEXT,                   -- ISIN for broker-agnostic identification
     side TEXT NOT NULL,          -- 'BUY' or 'SELL'
     quantity REAL NOT NULL,
     price REAL NOT NULL,
@@ -422,6 +423,7 @@ CREATE TABLE IF NOT EXISTS trades (
 );
 
 CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol);
+CREATE INDEX IF NOT EXISTS idx_trades_isin ON trades(isin);
 CREATE INDEX IF NOT EXISTS idx_trades_executed_at ON trades(executed_at);
 CREATE INDEX IF NOT EXISTS idx_trades_order_id ON trades(order_id);
 CREATE INDEX IF NOT EXISTS idx_trades_symbol_side ON trades(symbol, side);
@@ -492,12 +494,10 @@ async def init_ledger_schema(db):
         now = datetime.now().isoformat()
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (2, now, "Initial ledger schema with dividend_history"),
+            (3, now, "Initial ledger schema with ISIN column"),
         )
         await db.commit()
-        logger.info(
-            "Ledger database initialized with schema version 2 (includes dividend_history)"
-        )
+        logger.info("Ledger database initialized with schema version 3")
     elif current_version == 1:
         # Migration: Add dividend_history table (version 1 -> 2)
         now = datetime.now().isoformat()
@@ -512,6 +512,29 @@ async def init_ledger_schema(db):
         )
         await db.commit()
         logger.info("Ledger database migrated to schema version 2")
+        current_version = 2  # Continue to next migration
+
+    if current_version == 2:
+        # Migration: Add ISIN column to trades (version 2 -> 3)
+        now = datetime.now().isoformat()
+        logger.info("Migrating ledger database to schema version 3 (ISIN)...")
+
+        cursor = await db.execute("PRAGMA table_info(trades)")
+        columns = [row[1] for row in await cursor.fetchall()]
+
+        if "isin" not in columns:
+            await db.execute("ALTER TABLE trades ADD COLUMN isin TEXT")
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_trades_isin ON trades(isin)"
+            )
+            logger.info("Added isin column to trades table")
+
+        await db.execute(
+            "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
+            (3, now, "Added ISIN column to trades"),
+        )
+        await db.commit()
+        logger.info("Ledger database migrated to schema version 3")
 
 
 # =============================================================================
@@ -522,6 +545,7 @@ STATE_SCHEMA = """
 -- Current positions (derived from ledger, can be rebuilt)
 CREATE TABLE IF NOT EXISTS positions (
     symbol TEXT PRIMARY KEY,
+    isin TEXT,                   -- ISIN for broker-agnostic identification
     quantity REAL NOT NULL,
     avg_price REAL NOT NULL,
     current_price REAL,
@@ -535,6 +559,8 @@ CREATE TABLE IF NOT EXISTS positions (
     first_bought_at TEXT,
     last_sold_at TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_positions_isin ON positions(isin);
 
 -- Stock scores (cached calculations)
 CREATE TABLE IF NOT EXISTS scores (
@@ -606,10 +632,31 @@ async def init_state_schema(db):
         now = datetime.now().isoformat()
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (1, now, "Initial state schema"),
+            (2, now, "Initial state schema with ISIN column"),
         )
         await db.commit()
-        logger.info("State database initialized with schema version 1")
+        logger.info("State database initialized with schema version 2")
+    elif current_version == 1:
+        # Migration: Add ISIN column to positions (version 1 -> 2)
+        now = datetime.now().isoformat()
+        logger.info("Migrating state database to schema version 2 (ISIN)...")
+
+        cursor = await db.execute("PRAGMA table_info(positions)")
+        columns = [row[1] for row in await cursor.fetchall()]
+
+        if "isin" not in columns:
+            await db.execute("ALTER TABLE positions ADD COLUMN isin TEXT")
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_positions_isin ON positions(isin)"
+            )
+            logger.info("Added isin column to positions table")
+
+        await db.execute(
+            "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
+            (2, now, "Added ISIN column to positions"),
+        )
+        await db.commit()
+        logger.info("State database migrated to schema version 2")
 
 
 # =============================================================================
@@ -775,6 +822,7 @@ CALCULATIONS_SCHEMA = """
 -- Pre-computed raw metrics for all stocks
 CREATE TABLE IF NOT EXISTS calculated_metrics (
     symbol TEXT NOT NULL,
+    isin TEXT,                      -- ISIN for broker-agnostic identification
     metric TEXT NOT NULL,           -- e.g., 'RSI_14', 'EMA_200', 'BB_LOWER', 'CAGR_5Y', 'SHARPE'
     value REAL NOT NULL,
     calculated_at TEXT NOT NULL,    -- ISO datetime
@@ -784,6 +832,7 @@ CREATE TABLE IF NOT EXISTS calculated_metrics (
 );
 
 CREATE INDEX IF NOT EXISTS idx_calculations_symbol ON calculated_metrics(symbol);
+CREATE INDEX IF NOT EXISTS idx_calculations_isin ON calculated_metrics(isin);
 CREATE INDEX IF NOT EXISTS idx_calculations_metric ON calculated_metrics(metric);
 CREATE INDEX IF NOT EXISTS idx_calculations_expires ON calculated_metrics(expires_at);
 
@@ -791,6 +840,7 @@ CREATE INDEX IF NOT EXISTS idx_calculations_expires ON calculated_metrics(expire
 -- Moved from state.db as these are calculated values, not state
 CREATE TABLE IF NOT EXISTS scores (
     symbol TEXT PRIMARY KEY,
+    isin TEXT,                      -- ISIN for broker-agnostic identification
 
     -- Component scores (0-1 range)
     quality_score REAL,
@@ -821,6 +871,7 @@ CREATE TABLE IF NOT EXISTS scores (
 );
 
 CREATE INDEX IF NOT EXISTS idx_scores_total ON scores(total_score);
+CREATE INDEX IF NOT EXISTS idx_scores_isin ON scores(isin);
 
 -- Schema version tracking
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -842,10 +893,10 @@ async def init_calculations_schema(db):
         now = datetime.now().isoformat()
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (2, now, "Initial calculations schema with scores table"),
+            (3, now, "Initial calculations schema with ISIN columns"),
         )
         await db.commit()
-        logger.info("Calculations database initialized with schema version 2")
+        logger.info("Calculations database initialized with schema version 3")
     elif current_version == 1:
         # Migration: Add scores table (version 1 -> 2)
         now = datetime.now().isoformat()
@@ -858,6 +909,39 @@ async def init_calculations_schema(db):
         )
         await db.commit()
         logger.info("Calculations database migrated to schema version 2")
+        current_version = 2  # Continue to next migration
+
+    if current_version == 2:
+        # Migration: Add ISIN columns (version 2 -> 3)
+        now = datetime.now().isoformat()
+        logger.info("Migrating calculations database to schema version 3 (ISIN)...")
+
+        # Add isin column to calculated_metrics
+        cursor = await db.execute("PRAGMA table_info(calculated_metrics)")
+        columns = [row[1] for row in await cursor.fetchall()]
+        if "isin" not in columns:
+            await db.execute("ALTER TABLE calculated_metrics ADD COLUMN isin TEXT")
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_calculations_isin ON calculated_metrics(isin)"
+            )
+            logger.info("Added isin column to calculated_metrics table")
+
+        # Add isin column to scores
+        cursor = await db.execute("PRAGMA table_info(scores)")
+        columns = [row[1] for row in await cursor.fetchall()]
+        if "isin" not in columns:
+            await db.execute("ALTER TABLE scores ADD COLUMN isin TEXT")
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_scores_isin ON scores(isin)"
+            )
+            logger.info("Added isin column to scores table")
+
+        await db.execute(
+            "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
+            (3, now, "Added ISIN columns to calculated_metrics and scores"),
+        )
+        await db.commit()
+        logger.info("Calculations database migrated to schema version 3")
 
 
 # =============================================================================
@@ -870,6 +954,7 @@ RECOMMENDATIONS_SCHEMA = """
 CREATE TABLE IF NOT EXISTS recommendations (
     uuid TEXT PRIMARY KEY,
     symbol TEXT NOT NULL,
+    isin TEXT,                       -- ISIN for broker-agnostic identification
     name TEXT NOT NULL,
     side TEXT NOT NULL,  -- 'BUY' or 'SELL'
     amount REAL,  -- Display only, not part of uniqueness
@@ -894,6 +979,7 @@ CREATE TABLE IF NOT EXISTS recommendations (
 );
 
 CREATE INDEX IF NOT EXISTS idx_recommendations_symbol ON recommendations(symbol);
+CREATE INDEX IF NOT EXISTS idx_recommendations_isin ON recommendations(isin);
 CREATE INDEX IF NOT EXISTS idx_recommendations_status ON recommendations(status);
 CREATE INDEX IF NOT EXISTS idx_recommendations_created_at ON recommendations(created_at);
 CREATE INDEX IF NOT EXISTS idx_recommendations_portfolio_hash ON recommendations(portfolio_hash);
@@ -920,10 +1006,31 @@ async def init_recommendations_schema(db):
         now = datetime.now().isoformat()
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (1, now, "Initial recommendations schema"),
+            (2, now, "Initial recommendations schema with ISIN column"),
         )
         await db.commit()
-        logger.info("Recommendations database initialized with schema version 1")
+        logger.info("Recommendations database initialized with schema version 2")
+    elif current_version == 1:
+        # Migration: Add ISIN column (version 1 -> 2)
+        now = datetime.now().isoformat()
+        logger.info("Migrating recommendations database to schema version 2 (ISIN)...")
+
+        cursor = await db.execute("PRAGMA table_info(recommendations)")
+        columns = [row[1] for row in await cursor.fetchall()]
+
+        if "isin" not in columns:
+            await db.execute("ALTER TABLE recommendations ADD COLUMN isin TEXT")
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_recommendations_isin ON recommendations(isin)"
+            )
+            logger.info("Added isin column to recommendations table")
+
+        await db.execute(
+            "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
+            (2, now, "Added ISIN column to recommendations"),
+        )
+        await db.commit()
+        logger.info("Recommendations database migrated to schema version 2")
 
 
 # =============================================================================
@@ -938,6 +1045,7 @@ DIVIDENDS_SCHEMA = """
 CREATE TABLE IF NOT EXISTS dividend_history (
     id INTEGER PRIMARY KEY,
     symbol TEXT NOT NULL,
+    isin TEXT,                       -- ISIN for broker-agnostic identification
     cash_flow_id INTEGER,            -- Link to cash_flows table in ledger.db (optional)
     amount REAL NOT NULL,            -- Original dividend amount
     currency TEXT NOT NULL,
@@ -953,6 +1061,7 @@ CREATE TABLE IF NOT EXISTS dividend_history (
 );
 
 CREATE INDEX IF NOT EXISTS idx_dividend_history_symbol ON dividend_history(symbol);
+CREATE INDEX IF NOT EXISTS idx_dividend_history_isin ON dividend_history(isin);
 CREATE INDEX IF NOT EXISTS idx_dividend_history_date ON dividend_history(payment_date);
 CREATE INDEX IF NOT EXISTS idx_dividend_history_pending ON dividend_history(pending_bonus)
     WHERE pending_bonus > 0;
@@ -977,10 +1086,31 @@ async def init_dividends_schema(db):
         now = datetime.now().isoformat()
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (1, now, "Initial dividends schema"),
+            (2, now, "Initial dividends schema with ISIN column"),
         )
         await db.commit()
-        logger.info("Dividends database initialized with schema version 1")
+        logger.info("Dividends database initialized with schema version 2")
+    elif current_version == 1:
+        # Migration: Add ISIN column (version 1 -> 2)
+        now = datetime.now().isoformat()
+        logger.info("Migrating dividends database to schema version 2 (ISIN)...")
+
+        cursor = await db.execute("PRAGMA table_info(dividend_history)")
+        columns = [row[1] for row in await cursor.fetchall()]
+
+        if "isin" not in columns:
+            await db.execute("ALTER TABLE dividend_history ADD COLUMN isin TEXT")
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_dividend_history_isin ON dividend_history(isin)"
+            )
+            logger.info("Added isin column to dividend_history table")
+
+        await db.execute(
+            "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
+            (2, now, "Added ISIN column to dividend_history"),
+        )
+        await db.commit()
+        logger.info("Dividends database migrated to schema version 2")
 
 
 # =============================================================================

@@ -84,6 +84,27 @@ class DividendRepository:
         )
         return [self._row_to_dividend(row) for row in rows]
 
+    async def get_by_isin(self, isin: str) -> List[DividendRecord]:
+        """Get all dividend records for an ISIN."""
+        rows = await self._db.fetchall(
+            "SELECT * FROM dividend_history WHERE isin = ? ORDER BY payment_date DESC",
+            (isin.upper(),),
+        )
+        return [self._row_to_dividend(row) for row in rows]
+
+    async def get_by_identifier(self, identifier: str) -> List[DividendRecord]:
+        """Get dividend records by symbol or ISIN."""
+        identifier = identifier.strip().upper()
+
+        # Check if it looks like an ISIN (12 chars, country code + alphanumeric)
+        if len(identifier) == 12 and identifier[:2].isalpha():
+            records = await self.get_by_isin(identifier)
+            if records:
+                return records
+
+        # Try symbol lookup
+        return await self.get_by_symbol(identifier)
+
     async def get_all(self, limit: Optional[int] = None) -> List[DividendRecord]:
         """Get all dividend records, optionally limited."""
         if limit:
@@ -253,9 +274,11 @@ class DividendRepository:
 
     def _row_to_dividend(self, row) -> DividendRecord:
         """Convert database row to DividendRecord model."""
+        keys = row.keys()
         return DividendRecord(
             id=row["id"],
             symbol=row["symbol"],
+            isin=row["isin"] if "isin" in keys else None,
             cash_flow_id=row["cash_flow_id"],
             amount=row["amount"],
             currency=row["currency"],

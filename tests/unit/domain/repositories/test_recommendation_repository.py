@@ -94,7 +94,7 @@ class TestRecommendationRepositoryFindExisting:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_row = create_mock_row(
@@ -122,7 +122,7 @@ class TestRecommendationRepositoryFindExisting:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_config.fetchone.return_value = None
@@ -142,7 +142,7 @@ class TestRecommendationRepositoryFindExisting:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_config.fetchone.return_value = None
@@ -164,7 +164,7 @@ class TestRecommendationRepositoryCreateOrUpdate:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             # No existing recommendation
@@ -213,7 +213,7 @@ class TestRecommendationRepositoryCreateOrUpdate:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_config.fetchone.return_value = None
@@ -244,7 +244,7 @@ class TestRecommendationRepositoryCreateOrUpdate:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             # Existing pending recommendation
@@ -289,7 +289,7 @@ class TestRecommendationRepositoryCreateOrUpdate:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             # Existing dismissed recommendation
@@ -322,7 +322,7 @@ class TestRecommendationRepositoryCreateOrUpdate:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             # Existing executed recommendation
@@ -371,7 +371,7 @@ class TestRecommendationRepositoryGetByUuid:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_row = create_mock_row(
@@ -392,7 +392,7 @@ class TestRecommendationRepositoryGetByUuid:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_config.fetchone.return_value = None
@@ -412,7 +412,7 @@ class TestRecommendationRepositoryGetPending:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_rows = [
@@ -443,7 +443,7 @@ class TestRecommendationRepositoryGetPending:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_config.fetchall.return_value = []
@@ -460,7 +460,7 @@ class TestRecommendationRepositoryGetPending:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_config.fetchall.return_value = []
@@ -480,7 +480,7 @@ class TestRecommendationRepositoryGetPendingBySide:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_rows = [
@@ -509,7 +509,7 @@ class TestRecommendationRepositoryGetPendingBySide:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_config.fetchall.return_value = []
@@ -528,7 +528,7 @@ class TestRecommendationRepositoryGetPendingBySide:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_config.fetchall.return_value = []
@@ -550,7 +550,7 @@ class TestRecommendationRepositoryMarkExecuted:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_conn = AsyncMock()
@@ -574,7 +574,7 @@ class TestRecommendationRepositoryMarkExecuted:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_conn = AsyncMock()
@@ -602,7 +602,7 @@ class TestRecommendationRepositoryMarkDismissed:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_conn = AsyncMock()
@@ -626,7 +626,7 @@ class TestRecommendationRepositoryMarkDismissed:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_conn = AsyncMock()
@@ -654,7 +654,7 @@ class TestRecommendationRepositoryIsDismissed:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_row = {"status": "dismissed"}
@@ -671,7 +671,7 @@ class TestRecommendationRepositoryIsDismissed:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_row = {"status": "pending"}
@@ -688,7 +688,7 @@ class TestRecommendationRepositoryIsDismissed:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_config.fetchone.return_value = None
@@ -705,7 +705,7 @@ class TestRecommendationRepositoryIsDismissed:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_config.fetchone.return_value = None
@@ -728,7 +728,7 @@ class TestRecommendationRepositoryFindMatchingForExecution:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_rows = [
@@ -768,7 +768,7 @@ class TestRecommendationRepositoryFindMatchingForExecution:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_config.fetchall.return_value = []
@@ -787,7 +787,7 @@ class TestRecommendationRepositoryFindMatchingForExecution:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_config.fetchall.return_value = []
@@ -803,7 +803,7 @@ class TestRecommendationRepositoryFindMatchingForExecution:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_config.fetchall.return_value = []
@@ -825,7 +825,7 @@ class TestRecommendationRepositoryEdgeCases:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_config.fetchone.return_value = None
@@ -853,7 +853,7 @@ class TestRecommendationRepositoryEdgeCases:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_config.fetchone.return_value = None
@@ -893,7 +893,7 @@ class TestRecommendationRepositoryEdgeCases:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             # First call - no existing, second call - no existing
@@ -924,7 +924,7 @@ class TestRecommendationRepositoryEdgeCases:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_rows = [
@@ -959,7 +959,7 @@ class TestRecommendationRepositoryEdgeCases:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_config.fetchall.return_value = []
@@ -977,7 +977,7 @@ class TestRecommendationRepositoryEdgeCases:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_config.fetchone.return_value = None
@@ -1008,7 +1008,7 @@ class TestRecommendationRepositoryEdgeCases:
         with patch("app.repositories.recommendation.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_config = AsyncMock()
-            mock_db.config = mock_config
+            mock_db.recommendations = mock_config
             mock_get_db.return_value = mock_db
 
             mock_config.fetchone.return_value = None

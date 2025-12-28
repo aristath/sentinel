@@ -82,6 +82,7 @@ class Position:
     symbol: str
     quantity: float
     avg_price: float
+    isin: Optional[str] = None  # ISIN for broker-agnostic identification
     currency: Currency = Currency.EUR
     currency_rate: float = 1.0
     current_price: Optional[float] = None
@@ -121,6 +122,7 @@ class Trade:
     quantity: float
     price: float
     executed_at: datetime
+    isin: Optional[str] = None  # ISIN for broker-agnostic identification
     order_id: Optional[str] = None
     currency: Optional[Currency] = None
     currency_rate: Optional[float] = None
@@ -148,6 +150,7 @@ class StockScore:
     """Calculated score for a stock."""
 
     symbol: str
+    isin: Optional[str] = None  # ISIN for broker-agnostic identification
 
     # Primary component scores (0-1 range)
     quality_score: Optional[float] = None
@@ -290,6 +293,7 @@ class Recommendation:
     estimated_price: float
     estimated_value: float
     reason: str  # Why this trade is recommended
+    isin: Optional[str] = None  # ISIN for broker-agnostic identification
     country: Optional[str] = None
     currency: Currency = Currency.EUR  # Stock's native currency
     status: RecommendationStatus = RecommendationStatus.PENDING
@@ -394,6 +398,7 @@ class DividendRecord:
     currency: str
     amount_eur: float  # Converted to EUR
     payment_date: str  # ISO date string
+    isin: Optional[str] = None  # ISIN for broker-agnostic identification
     id: Optional[int] = None
     cash_flow_id: Optional[int] = None  # Link to cash_flows table
     reinvested: bool = False

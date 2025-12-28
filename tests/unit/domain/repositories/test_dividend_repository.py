@@ -15,6 +15,7 @@ from app.repositories.dividend import DividendRepository
 def create_mock_dividend(
     id: int = 1,
     symbol: str = "AAPL",
+    isin: str | None = None,
     cash_flow_id: int = 100,
     amount: float = 10.0,
     currency: str = "USD",
@@ -32,6 +33,7 @@ def create_mock_dividend(
     return {
         "id": id,
         "symbol": symbol,
+        "isin": isin,
         "cash_flow_id": cash_flow_id,
         "amount": amount,
         "currency": currency,
@@ -56,7 +58,7 @@ class TestDividendRepositoryCreate:
         with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = MagicMock()
-            mock_db.ledger = mock_ledger
+            mock_db.dividends = mock_ledger
             mock_get_db.return_value = mock_db
 
             # Setup transaction mock as an async context manager
@@ -97,7 +99,7 @@ class TestDividendRepositoryQuery:
         with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
-            mock_db.ledger = mock_ledger
+            mock_db.dividends = mock_ledger
             mock_get_db.return_value = mock_db
 
             mock_row = create_mock_dividend(id=1, symbol="AAPL")
@@ -116,7 +118,7 @@ class TestDividendRepositoryQuery:
         with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
-            mock_db.ledger = mock_ledger
+            mock_db.dividends = mock_ledger
             mock_get_db.return_value = mock_db
 
             mock_ledger.fetchone.return_value = None
@@ -132,7 +134,7 @@ class TestDividendRepositoryQuery:
         with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
-            mock_db.ledger = mock_ledger
+            mock_db.dividends = mock_ledger
             mock_get_db.return_value = mock_db
 
             mock_row = create_mock_dividend(id=1, cash_flow_id=100)
@@ -150,7 +152,7 @@ class TestDividendRepositoryQuery:
         with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
-            mock_db.ledger = mock_ledger
+            mock_db.dividends = mock_ledger
             mock_get_db.return_value = mock_db
 
             mock_ledger.fetchone.return_value = {"1": 1}  # Row exists
@@ -166,7 +168,7 @@ class TestDividendRepositoryQuery:
         with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
-            mock_db.ledger = mock_ledger
+            mock_db.dividends = mock_ledger
             mock_get_db.return_value = mock_db
 
             mock_ledger.fetchone.return_value = None
@@ -182,7 +184,7 @@ class TestDividendRepositoryQuery:
         with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
-            mock_db.ledger = mock_ledger
+            mock_db.dividends = mock_ledger
             mock_get_db.return_value = mock_db
 
             mock_rows = [
@@ -203,7 +205,7 @@ class TestDividendRepositoryQuery:
         with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
-            mock_db.ledger = mock_ledger
+            mock_db.dividends = mock_ledger
             mock_get_db.return_value = mock_db
 
             mock_rows = [create_mock_dividend(id=i) for i in range(5)]
@@ -221,7 +223,7 @@ class TestDividendRepositoryQuery:
         with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
-            mock_db.ledger = mock_ledger
+            mock_db.dividends = mock_ledger
             mock_get_db.return_value = mock_db
 
             mock_rows = [create_mock_dividend(id=i) for i in range(10)]
@@ -242,7 +244,7 @@ class TestDividendRepositoryPendingBonus:
         with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
-            mock_db.ledger = mock_ledger
+            mock_db.dividends = mock_ledger
             mock_get_db.return_value = mock_db
 
             mock_rows = [
@@ -262,7 +264,7 @@ class TestDividendRepositoryPendingBonus:
         with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
-            mock_db.ledger = mock_ledger
+            mock_db.dividends = mock_ledger
             mock_get_db.return_value = mock_db
 
             mock_ledger.fetchone.return_value = {"total": 5.0}
@@ -278,7 +280,7 @@ class TestDividendRepositoryPendingBonus:
         with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
-            mock_db.ledger = mock_ledger
+            mock_db.dividends = mock_ledger
             mock_get_db.return_value = mock_db
 
             mock_ledger.fetchone.return_value = {"total": 0}
@@ -294,7 +296,7 @@ class TestDividendRepositoryPendingBonus:
         with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
-            mock_db.ledger = mock_ledger
+            mock_db.dividends = mock_ledger
             mock_get_db.return_value = mock_db
 
             repo = DividendRepository()
@@ -312,7 +314,7 @@ class TestDividendRepositoryPendingBonus:
         with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
-            mock_db.ledger = mock_ledger
+            mock_db.dividends = mock_ledger
             mock_get_db.return_value = mock_db
 
             mock_cursor = MagicMock()
@@ -335,7 +337,7 @@ class TestDividendRepositoryReinvestment:
         with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
-            mock_db.ledger = mock_ledger
+            mock_db.dividends = mock_ledger
             mock_get_db.return_value = mock_db
 
             repo = DividendRepository()
@@ -356,7 +358,7 @@ class TestDividendRepositoryReinvestment:
         with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
-            mock_db.ledger = mock_ledger
+            mock_db.dividends = mock_ledger
             mock_get_db.return_value = mock_db
 
             mock_rows = [
@@ -377,7 +379,7 @@ class TestDividendRepositoryReinvestment:
         with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
-            mock_db.ledger = mock_ledger
+            mock_db.dividends = mock_ledger
             mock_get_db.return_value = mock_db
 
             mock_ledger.fetchone.return_value = {"total": 1500.0}
@@ -393,7 +395,7 @@ class TestDividendRepositoryReinvestment:
         with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
-            mock_db.ledger = mock_ledger
+            mock_db.dividends = mock_ledger
             mock_get_db.return_value = mock_db
 
             mock_ledger.fetchone.return_value = None
@@ -409,7 +411,7 @@ class TestDividendRepositoryReinvestment:
         with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
-            mock_db.ledger = mock_ledger
+            mock_db.dividends = mock_ledger
             mock_get_db.return_value = mock_db
 
             mock_ledger.fetchone.return_value = {"reinvested": 750.0, "total": 1000.0}
@@ -425,7 +427,7 @@ class TestDividendRepositoryReinvestment:
         with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
-            mock_db.ledger = mock_ledger
+            mock_db.dividends = mock_ledger
             mock_get_db.return_value = mock_db
 
             mock_ledger.fetchone.return_value = {"reinvested": 0, "total": 0}
@@ -445,7 +447,7 @@ class TestDividendRepositoryStatistics:
         with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
-            mock_db.ledger = mock_ledger
+            mock_db.dividends = mock_ledger
             mock_get_db.return_value = mock_db
 
             mock_rows = [

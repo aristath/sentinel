@@ -38,6 +38,28 @@ class ScoreRepository:
             return None
         return self._row_to_score(row)
 
+    async def get_by_isin(self, isin: str) -> Optional[StockScore]:
+        """Get score by ISIN."""
+        row = await self._db.fetchone(
+            "SELECT * FROM scores WHERE isin = ?", (isin.upper(),)
+        )
+        if not row:
+            return None
+        return self._row_to_score(row)
+
+    async def get_by_identifier(self, identifier: str) -> Optional[StockScore]:
+        """Get score by symbol or ISIN."""
+        identifier = identifier.strip().upper()
+
+        # Check if it looks like an ISIN (12 chars, country code + alphanumeric)
+        if len(identifier) == 12 and identifier[:2].isalpha():
+            score = await self.get_by_isin(identifier)
+            if score:
+                return score
+
+        # Try symbol lookup
+        return await self.get_by_symbol(identifier)
+
     async def get_all(self) -> List[StockScore]:
         """Get all scores."""
         rows = await self._db.fetchall("SELECT * FROM scores")
@@ -158,6 +180,7 @@ class ScoreRepository:
 
         return StockScore(
             symbol=row["symbol"],
+            isin=safe_get("isin"),
             quality_score=safe_get("quality_score"),
             opportunity_score=safe_get("opportunity_score"),
             analyst_score=safe_get("analyst_score"),

@@ -197,6 +197,32 @@ class TradeRepository:
         )
         return [self._row_to_trade(row) for row in rows]
 
+    async def get_by_isin(self, isin: str, limit: int = 100) -> List[Trade]:
+        """Get trades for a specific ISIN."""
+        rows = await self._db.fetchall(
+            """
+            SELECT * FROM trades
+            WHERE isin = ?
+            ORDER BY executed_at DESC
+            LIMIT ?
+            """,
+            (isin.upper(), limit),
+        )
+        return [self._row_to_trade(row) for row in rows]
+
+    async def get_by_identifier(self, identifier: str, limit: int = 100) -> List[Trade]:
+        """Get trades by symbol or ISIN."""
+        identifier = identifier.strip().upper()
+
+        # Check if it looks like an ISIN (12 chars, country code + alphanumeric)
+        if len(identifier) == 12 and identifier[:2].isalpha():
+            trades = await self.get_by_isin(identifier, limit)
+            if trades:
+                return trades
+
+        # Try symbol lookup
+        return await self.get_by_symbol(identifier, limit)
+
     async def get_recently_bought_symbols(self, days: int = 30) -> Set[str]:
         """Get symbols that were bought in the last N days."""
         cutoff = (datetime.now() - timedelta(days=days)).isoformat()
@@ -344,6 +370,7 @@ class TradeRepository:
         else:
             executed_at = datetime.now()
 
+        keys = row.keys()
         return Trade(
             id=row["id"],
             symbol=row["symbol"],
@@ -351,11 +378,10 @@ class TradeRepository:
             quantity=row["quantity"],
             price=row["price"],
             executed_at=executed_at,
+            isin=row["isin"] if "isin" in keys else None,
             order_id=row["order_id"],
-            currency=row["currency"] if "currency" in row.keys() else None,
-            currency_rate=(
-                row["currency_rate"] if "currency_rate" in row.keys() else None
-            ),
-            value_eur=row["value_eur"] if "value_eur" in row.keys() else None,
-            source=row["source"] if "source" in row.keys() else "tradernet",
+            currency=row["currency"] if "currency" in keys else None,
+            currency_rate=row["currency_rate"] if "currency_rate" in keys else None,
+            value_eur=row["value_eur"] if "value_eur" in keys else None,
+            source=row["source"] if "source" in keys else "tradernet",
         )

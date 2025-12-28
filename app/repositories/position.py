@@ -40,6 +40,28 @@ class PositionRepository:
             return None
         return self._row_to_position(row)
 
+    async def get_by_isin(self, isin: str) -> Optional[Position]:
+        """Get position by ISIN."""
+        row = await self._db.fetchone(
+            "SELECT * FROM positions WHERE isin = ?", (isin.upper(),)
+        )
+        if not row:
+            return None
+        return self._row_to_position(row)
+
+    async def get_by_identifier(self, identifier: str) -> Optional[Position]:
+        """Get position by symbol or ISIN."""
+        identifier = identifier.strip().upper()
+
+        # Check if it looks like an ISIN (12 chars, country code + alphanumeric)
+        if len(identifier) == 12 and identifier[:2].isalpha():
+            position = await self.get_by_isin(identifier)
+            if position:
+                return position
+
+        # Try symbol lookup
+        return await self.get_by_symbol(identifier)
+
     async def get_all(self) -> List[Position]:
         """Get all positions."""
         rows = await self._db.fetchall("SELECT * FROM positions")
@@ -184,28 +206,24 @@ class PositionRepository:
 
     def _row_to_position(self, row) -> Position:
         """Convert database row to Position model."""
+        keys = row.keys()
         return Position(
             symbol=row["symbol"],
             quantity=row["quantity"],
             avg_price=row["avg_price"],
+            isin=row["isin"] if "isin" in keys else None,
             current_price=row["current_price"],
             currency=row["currency"] or Currency.EUR,
             currency_rate=row["currency_rate"] or 1.0,
             market_value_eur=row["market_value_eur"],
-            cost_basis_eur=(
-                row["cost_basis_eur"] if "cost_basis_eur" in row.keys() else None
-            ),
-            unrealized_pnl=(
-                row["unrealized_pnl"] if "unrealized_pnl" in row.keys() else None
-            ),
+            cost_basis_eur=row["cost_basis_eur"] if "cost_basis_eur" in keys else None,
+            unrealized_pnl=row["unrealized_pnl"] if "unrealized_pnl" in keys else None,
             unrealized_pnl_pct=(
-                row["unrealized_pnl_pct"]
-                if "unrealized_pnl_pct" in row.keys()
-                else None
+                row["unrealized_pnl_pct"] if "unrealized_pnl_pct" in keys else None
             ),
             last_updated=row["last_updated"],
             first_bought_at=(
-                row["first_bought_at"] if "first_bought_at" in row.keys() else None
+                row["first_bought_at"] if "first_bought_at" in keys else None
             ),
-            last_sold_at=row["last_sold_at"] if "last_sold_at" in row.keys() else None,
+            last_sold_at=row["last_sold_at"] if "last_sold_at" in keys else None,
         )

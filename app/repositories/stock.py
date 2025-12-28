@@ -38,6 +38,38 @@ class StockRepository:
             return None
         return self._row_to_stock(row)
 
+    async def get_by_isin(self, isin: str) -> Optional[Stock]:
+        """Get stock by ISIN."""
+        row = await self._db.fetchone(
+            "SELECT * FROM stocks WHERE isin = ?", (isin.upper(),)
+        )
+        if not row:
+            return None
+        return self._row_to_stock(row)
+
+    async def get_by_identifier(self, identifier: str) -> Optional[Stock]:
+        """Get stock by symbol or ISIN.
+
+        Checks if identifier looks like an ISIN (12 chars, starts with 2 letters)
+        and queries accordingly.
+
+        Args:
+            identifier: Stock symbol or ISIN
+
+        Returns:
+            Stock if found, None otherwise
+        """
+        identifier = identifier.strip().upper()
+
+        # Check if it looks like an ISIN (12 chars, country code + alphanumeric)
+        if len(identifier) == 12 and identifier[:2].isalpha():
+            stock = await self.get_by_isin(identifier)
+            if stock:
+                return stock
+
+        # Try symbol lookup
+        return await self.get_by_symbol(identifier)
+
     async def get_all_active(self) -> List[Stock]:
         """Get all active stocks."""
         rows = await self._db.fetchall("SELECT * FROM stocks WHERE active = 1")
