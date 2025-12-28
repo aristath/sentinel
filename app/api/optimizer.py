@@ -119,13 +119,10 @@ async def run_optimization() -> Dict[str, Any]:
     portfolio_value += cash_balance
 
     # Get allocation targets from allocation_repo (reads from allocation_targets table)
+    # Note: targets are already stored as fractions (0-1), not percentages (0-100)
     allocation_repo = AllocationRepository()
-    country_targets_pct = await allocation_repo.get_country_targets()
-    ind_targets_pct = await allocation_repo.get_industry_targets()
-
-    # Convert percentages (0-100) to fractions (0-1)
-    country_targets = {name: pct / 100.0 for name, pct in country_targets_pct.items()}
-    ind_targets = {name: pct / 100.0 for name, pct in ind_targets_pct.items()}
+    country_targets = await allocation_repo.get_country_targets()
+    ind_targets = await allocation_repo.get_industry_targets()
 
     # Get pending dividend bonuses (DRIP fallback)
     dividend_repo = DividendRepository()
