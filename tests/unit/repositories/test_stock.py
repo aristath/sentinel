@@ -193,6 +193,55 @@ class TestStockRepositoryCreate:
 
         mock_db.execute.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_create_with_portfolio_targets(self):
+        """Test creating a stock with min/max portfolio targets."""
+        from app.repositories.stock import StockRepository
+
+        mock_db = AsyncMock()
+        mock_db.transaction = MagicMock()
+        mock_db.transaction.return_value.__aenter__ = AsyncMock(return_value=mock_db)
+        mock_db.transaction.return_value.__aexit__ = AsyncMock(return_value=None)
+
+        repo = StockRepository(db=mock_db)
+
+        stock = Stock(
+            symbol="AAPL.US",
+            name="Apple Inc",
+            min_portfolio_target=5.0,
+            max_portfolio_target=15.0,
+        )
+
+        await repo.create(stock)
+
+        mock_db.execute.assert_called_once()
+        # Check that portfolio targets are in the INSERT statement
+        call_args = mock_db.execute.call_args[0]
+        assert 5.0 in call_args[1]  # min_portfolio_target
+        assert 15.0 in call_args[1]  # max_portfolio_target
+
+    @pytest.mark.asyncio
+    async def test_create_with_null_portfolio_targets(self):
+        """Test creating a stock with NULL portfolio targets."""
+        from app.repositories.stock import StockRepository
+
+        mock_db = AsyncMock()
+        mock_db.transaction = MagicMock()
+        mock_db.transaction.return_value.__aenter__ = AsyncMock(return_value=mock_db)
+        mock_db.transaction.return_value.__aexit__ = AsyncMock(return_value=None)
+
+        repo = StockRepository(db=mock_db)
+
+        stock = Stock(symbol="AAPL.US", name="Apple Inc")
+
+        await repo.create(stock)
+
+        mock_db.execute.assert_called_once()
+        # Check that None values are in the INSERT statement
+        call_args = mock_db.execute.call_args[0]
+        assert None in call_args[1]  # min_portfolio_target should be None
+        # max_portfolio_target should also be None
+
 
 class TestStockRepositoryUpdate:
     """Test stock update operations."""
@@ -246,6 +295,48 @@ class TestStockRepositoryUpdate:
         assert 1 in call_args  # active=True
         assert 0 in call_args  # allow_buy=False
 
+    @pytest.mark.asyncio
+    async def test_update_with_portfolio_targets(self):
+        """Test updating stock with min/max portfolio targets."""
+        from app.repositories.stock import StockRepository
+
+        mock_db = AsyncMock()
+        mock_db.transaction = MagicMock()
+        mock_db.transaction.return_value.__aenter__ = AsyncMock(return_value=mock_db)
+        mock_db.transaction.return_value.__aexit__ = AsyncMock(return_value=None)
+
+        repo = StockRepository(db=mock_db)
+
+        await repo.update(
+            "AAPL.US", min_portfolio_target=5.0, max_portfolio_target=15.0
+        )
+
+        mock_db.execute.assert_called_once()
+        call_args = mock_db.execute.call_args[0]
+        assert "min_portfolio_target" in call_args[0]
+        assert "max_portfolio_target" in call_args[0]
+
+    @pytest.mark.asyncio
+    async def test_update_clearing_portfolio_targets(self):
+        """Test updating stock to clear portfolio targets (set to None)."""
+        from app.repositories.stock import StockRepository
+
+        mock_db = AsyncMock()
+        mock_db.transaction = MagicMock()
+        mock_db.transaction.return_value.__aenter__ = AsyncMock(return_value=mock_db)
+        mock_db.transaction.return_value.__aexit__ = AsyncMock(return_value=None)
+
+        repo = StockRepository(db=mock_db)
+
+        await repo.update(
+            "AAPL.US", min_portfolio_target=None, max_portfolio_target=None
+        )
+
+        mock_db.execute.assert_called_once()
+        call_args = mock_db.execute.call_args[0]
+        assert "min_portfolio_target" in call_args[0]
+        assert "max_portfolio_target" in call_args[0]
+
 
 class TestStockRepositoryDelete:
     """Test stock delete operations."""
@@ -289,6 +380,8 @@ class TestStockRepositoryGetWithScores:
             "allow_buy": 1,
             "allow_sell": 0,
             "currency": "USD",
+            "min_portfolio_target": 5.0,
+            "max_portfolio_target": 15.0,
         }[key]
         mock_stock_row.keys = lambda: [
             "symbol",
@@ -297,6 +390,8 @@ class TestStockRepositoryGetWithScores:
             "industry",
             "country",
             "priority_multiplier",
+            "min_portfolio_target",
+            "max_portfolio_target",
             "min_lot",
             "active",
             "allow_buy",
@@ -435,3 +530,97 @@ class TestRowToStock:
         assert result.min_lot == 1
         assert result.allow_buy is True  # Default
         assert result.allow_sell is False  # Default
+
+    def test_row_to_stock_maps_portfolio_targets(self):
+        """Test that _row_to_stock maps portfolio target columns correctly."""
+        from app.repositories.stock import StockRepository
+
+        mock_db = AsyncMock()
+        repo = StockRepository(db=mock_db)
+
+        row = {
+            "symbol": "AAPL.US",
+            "yahoo_symbol": "AAPL",
+            "name": "Apple Inc",
+            "industry": "Consumer Electronics",
+            "country": "United States",
+            "priority_multiplier": 1.0,
+            "min_lot": 1,
+            "active": 1,
+            "allow_buy": 1,
+            "allow_sell": 0,
+            "currency": "USD",
+            "min_portfolio_target": 5.0,
+            "max_portfolio_target": 15.0,
+        }
+
+        row_mock = MagicMock()
+        row_mock.__getitem__ = lambda self, key: row[key]
+        row_mock.keys = lambda: row.keys()
+
+        result = repo._row_to_stock(row_mock)
+
+        assert result.min_portfolio_target == 5.0
+        assert result.max_portfolio_target == 15.0
+
+    def test_row_to_stock_handles_null_portfolio_targets(self):
+        """Test that _row_to_stock handles NULL portfolio targets."""
+        from app.repositories.stock import StockRepository
+
+        mock_db = AsyncMock()
+        repo = StockRepository(db=mock_db)
+
+        row = {
+            "symbol": "AAPL.US",
+            "yahoo_symbol": "AAPL",
+            "name": "Apple Inc",
+            "industry": "Consumer Electronics",
+            "country": "United States",
+            "priority_multiplier": 1.0,
+            "min_lot": 1,
+            "active": 1,
+            "allow_buy": 1,
+            "allow_sell": 0,
+            "currency": "USD",
+            "min_portfolio_target": None,
+            "max_portfolio_target": None,
+        }
+
+        row_mock = MagicMock()
+        row_mock.__getitem__ = lambda self, key: row[key]
+        row_mock.keys = lambda: row.keys()
+
+        result = repo._row_to_stock(row_mock)
+
+        assert result.min_portfolio_target is None
+        assert result.max_portfolio_target is None
+
+    def test_row_to_stock_handles_missing_portfolio_target_columns(self):
+        """Test that _row_to_stock handles missing portfolio target columns (old schema)."""
+        from app.repositories.stock import StockRepository
+
+        mock_db = AsyncMock()
+        repo = StockRepository(db=mock_db)
+
+        row = {
+            "symbol": "AAPL.US",
+            "yahoo_symbol": "AAPL",
+            "name": "Apple Inc",
+            "industry": "Consumer Electronics",
+            "country": "United States",
+            "priority_multiplier": 1.0,
+            "min_lot": 1,
+            "active": 1,
+            "allow_buy": 1,
+            "allow_sell": 0,
+            "currency": "USD",
+        }
+
+        row_mock = MagicMock()
+        row_mock.__getitem__ = lambda self, key: row[key]
+        row_mock.keys = lambda: row.keys()
+
+        result = repo._row_to_stock(row_mock)
+
+        assert result.min_portfolio_target is None
+        assert result.max_portfolio_target is None

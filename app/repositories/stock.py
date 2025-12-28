@@ -57,8 +57,9 @@ class StockRepository:
                 INSERT INTO stocks
                 (symbol, yahoo_symbol, name, industry, country, fullExchangeName,
                  priority_multiplier, min_lot, active, allow_buy, allow_sell,
-                 currency, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 currency, min_portfolio_target, max_portfolio_target,
+                 created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     stock.symbol.upper(),
@@ -73,6 +74,8 @@ class StockRepository:
                     1 if stock.allow_buy else 0,
                     1 if stock.allow_sell else 0,
                     stock.currency,
+                    stock.min_portfolio_target,
+                    stock.max_portfolio_target,
                     now,
                     now,
                 ),
@@ -176,4 +179,16 @@ class StockRepository:
             ),
             currency=row["currency"],
             last_synced=row["last_synced"] if "last_synced" in keys else None,
+            min_portfolio_target=(
+                row["min_portfolio_target"]
+                if "min_portfolio_target" in keys
+                and row["min_portfolio_target"] is not None
+                else None
+            ),
+            max_portfolio_target=(
+                row["max_portfolio_target"]
+                if "max_portfolio_target" in keys
+                and row["max_portfolio_target"] is not None
+                else None
+            ),
         )
