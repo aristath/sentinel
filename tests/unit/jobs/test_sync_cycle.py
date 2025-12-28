@@ -352,11 +352,20 @@ class TestStepUpdateDisplay:
             nonlocal set_next_actions_called
             set_next_actions_called = True
 
+        mock_ticker_service = MagicMock()
+        mock_ticker_service.generate_ticker_text = AsyncMock(
+            return_value="Portfolio EUR10,000 | BUY AAPL EUR500"
+        )
+
         with (
+            patch("app.repositories.PortfolioRepository"),
+            patch("app.repositories.PositionRepository"),
+            patch("app.repositories.StockRepository"),
+            patch("app.repositories.SettingsRepository"),
+            patch("app.infrastructure.external.tradernet.get_tradernet_client"),
             patch(
-                "app.jobs.sync_cycle._generate_ticker_text",
-                new_callable=AsyncMock,
-                return_value="Portfolio EUR10,000 | BUY AAPL EUR500",
+                "app.domain.services.ticker_content_service.TickerContentService",
+                return_value=mock_ticker_service,
             ),
             patch(
                 "app.jobs.sync_cycle.set_next_actions",
