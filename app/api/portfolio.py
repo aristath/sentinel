@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 
 from app.infrastructure.dependencies import (
+    ExchangeRateServiceDep,
     PortfolioRepositoryDep,
     PortfolioServiceDep,
     PositionRepositoryDep,
@@ -122,51 +123,10 @@ async def get_transaction_history():
         )
 
 
-async def _fetch_exchange_rates(currencies_needed: set[str]) -> dict[str, float]:
-    """Fetch exchange rates from API with fallbacks."""
-    import httpx
-
-    exchange_rates = {"EUR": 1.0}
-    if not currencies_needed:
-        return exchange_rates
-
-    # Try to fetch from API
-    try:
-        async with httpx.AsyncClient() as http_client:
-            response = await http_client.get(
-                "https://api.exchangerate-api.com/v4/latest/EUR", timeout=15.0
-            )
-            if response.status_code == 200:
-                api_rates = response.json().get("rates", {})
-                for curr in currencies_needed:
-                    if curr in api_rates:
-                        exchange_rates[curr] = api_rates[curr]
-    except Exception:
-        pass  # Use fallbacks
-
-    # Apply fallbacks for any missing rates
-    fallback_rates = {"USD": 1.05, "HKD": 9.16, "GBP": 0.85}
-    for curr in currencies_needed:
-        if curr not in exchange_rates:
-            exchange_rates[curr] = fallback_rates.get(curr, 1.0)
-
-    return exchange_rates
-
-
-def _calculate_total_eur(balances: list, exchange_rates: dict[str, float]) -> float:
-    """Calculate total EUR value of all balances."""
-    total_eur = 0.0
-    for b in balances:
-        if b.currency == "EUR":
-            total_eur += b.amount
-        elif b.amount > 0:
-            rate = exchange_rates.get(b.currency, 1.0)
-            total_eur += b.amount / rate
-    return total_eur
-
-
 @router.get("/cash-breakdown")
-async def get_cash_breakdown():
+async def get_cash_breakdown(
+    exchange_rate_service: ExchangeRateServiceDep,
+):
     """Get cash balance breakdown by currency."""
     try:
         client = await ensure_tradernet_connected(raise_on_error=False)
@@ -177,11 +137,13 @@ async def get_cash_breakdown():
 
     try:
         balances = client.get_cash_balances()
-        currencies_needed = {
-            b.currency for b in balances if b.currency != "EUR" and b.amount > 0
-        }
-        exchange_rates = await _fetch_exchange_rates(currencies_needed)
-        total_eur = _calculate_total_eur(balances, exchange_rates)
+
+        # Convert all balances to EUR using ExchangeRateService
+        amounts_by_currency = {b.currency: b.amount for b in balances}
+        amounts_in_eur = await exchange_rate_service.batch_convert_to_eur(
+            amounts_by_currency
+        )
+        total_eur = sum(amounts_in_eur.values())
 
         return {
             "balances": [
