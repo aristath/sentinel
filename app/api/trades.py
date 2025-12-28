@@ -23,7 +23,9 @@ router = APIRouter()
 
 
 class TradeRequest(BaseModel):
-    symbol: str = Field(..., min_length=1, description="Stock symbol")
+    symbol: str = Field(
+        ..., min_length=1, description="Stock symbol or ISIN"
+    )  # Can be symbol or ISIN
     side: TradeSide = Field(..., description="Trade side: BUY or SELL")
     quantity: float = Field(
         ..., gt=0, description="Quantity to trade (must be positive)"
@@ -32,7 +34,7 @@ class TradeRequest(BaseModel):
     @field_validator("symbol")
     @classmethod
     def validate_symbol(cls, v: str) -> str:
-        """Validate and normalize symbol."""
+        """Validate and normalize symbol/identifier."""
         return v.upper().strip()
 
     @field_validator("quantity")
@@ -73,16 +75,22 @@ async def execute_trade(
     safety_service: TradeSafetyServiceDep,
     trade_execution_service: TradeExecutionServiceDep,
 ):
-    """Execute a manual trade."""
-    # Check stock exists
-    stock = await stock_repo.get_by_symbol(trade.symbol)
+    """Execute a manual trade.
+
+    The symbol field can be either a Tradernet symbol or ISIN.
+    """
+    # Check stock exists and resolve identifier to symbol
+    stock = await stock_repo.get_by_identifier(trade.symbol)
     if not stock:
         raise HTTPException(status_code=404, detail="Stock not found")
+
+    # Use the resolved symbol for trading
+    symbol = stock.symbol
 
     # Ensure connection
     client = await ensure_tradernet_connected()
     await safety_service.validate_trade(
-        symbol=trade.symbol,
+        symbol=symbol,
         side=trade.side,
         quantity=trade.quantity,
         client=client,
@@ -90,7 +98,7 @@ async def execute_trade(
     )
 
     result = client.place_order(
-        symbol=trade.symbol,
+        symbol=symbol,
         side=trade.side,
         quantity=trade.quantity,
     )
@@ -98,7 +106,7 @@ async def execute_trade(
     if result:
         # Record trade using service
         await trade_execution_service.record_trade(
-            symbol=trade.symbol,
+            symbol=symbol,
             side=trade.side,
             quantity=trade.quantity,
             price=result.price,
@@ -112,7 +120,7 @@ async def execute_trade(
         return {
             "status": "success",
             "order_id": result.order_id,
-            "symbol": trade.symbol,
+            "symbol": symbol,
             "side": trade.side,
             "quantity": trade.quantity,
             "price": result.price,

@@ -106,19 +106,24 @@ async def get_stocks(
     return stock_dicts
 
 
-@router.get("/{symbol}")
+@router.get("/{identifier}")
 async def get_stock(
-    symbol: str,
+    identifier: str,
     stock_repo: StockRepositoryDep,
     position_repo: PositionRepositoryDep,
     score_repo: ScoreRepositoryDep,
 ):
-    """Get detailed stock info with score breakdown."""
+    """Get detailed stock info with score breakdown.
 
-    stock = await stock_repo.get_by_symbol(symbol)
+    Args:
+        identifier: Stock symbol (e.g., AAPL.US) or ISIN (e.g., US0378331005)
+    """
+    stock = await stock_repo.get_by_identifier(identifier)
     if not stock:
         raise HTTPException(status_code=404, detail="Stock not found")
 
+    # Use the resolved symbol for other lookups
+    symbol = stock.symbol
     score = await score_repo.get_by_symbol(symbol)
     position = await position_repo.get_by_symbol(symbol)
 
@@ -185,7 +190,7 @@ async def create_stock(
 ):
     """Add a new stock to the universe."""
 
-    existing = await stock_repo.get_by_symbol(stock_data.symbol.upper())
+    existing = await stock_repo.get_by_identifier(stock_data.symbol.upper())
     if existing:
         raise HTTPException(status_code=400, detail="Stock already exists")
 
@@ -277,9 +282,9 @@ async def refresh_all_scores(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/{symbol}/refresh-data")
+@router.post("/{identifier}/refresh-data")
 async def refresh_stock_data(
-    symbol: str,
+    identifier: str,
     stock_repo: StockRepositoryDep,
 ):
     """Trigger full data refresh for a stock.
@@ -290,25 +295,30 @@ async def refresh_stock_data(
     3. Refresh stock score
 
     This bypasses the last_synced check and immediately processes the stock.
+
+    Args:
+        identifier: Stock symbol (e.g., AAPL.US) or ISIN (e.g., US0378331005)
     """
     from app.jobs.daily_pipeline import refresh_single_stock
 
-    stock = await stock_repo.get_by_symbol(symbol)
+    stock = await stock_repo.get_by_identifier(identifier)
     if not stock:
         raise HTTPException(status_code=404, detail="Stock not found")
+
+    symbol = stock.symbol
 
     # Invalidate recommendation cache so new data affects recommendations
     recommendation_cache = get_recommendation_cache()
     await recommendation_cache.invalidate_all_recommendations()
 
     # Run the full pipeline
-    result = await refresh_single_stock(symbol.upper())
+    result = await refresh_single_stock(symbol)
 
     if result.get("status") == "success":
         return {
             "status": "success",
-            "symbol": symbol.upper(),
-            "message": f"Full data refresh completed for {symbol.upper()}",
+            "symbol": symbol,
+            "message": f"Full data refresh completed for {symbol}",
         }
     else:
         raise HTTPException(
@@ -317,21 +327,26 @@ async def refresh_stock_data(
         )
 
 
-@router.post("/{symbol}/refresh")
+@router.post("/{identifier}/refresh")
 async def refresh_stock_score(
-    symbol: str,
+    identifier: str,
     stock_repo: StockRepositoryDep,
     scoring_service: ScoringServiceDep,
 ):
-    """Trigger score recalculation for a stock (quick, no historical data sync)."""
+    """Trigger score recalculation for a stock (quick, no historical data sync).
+
+    Args:
+        identifier: Stock symbol (e.g., AAPL.US) or ISIN (e.g., US0378331005)
+    """
     # Invalidate recommendation cache so new score affects recommendations immediately
     recommendation_cache = get_recommendation_cache()
     await recommendation_cache.invalidate_all_recommendations()
 
-    stock = await stock_repo.get_by_symbol(symbol)
+    stock = await stock_repo.get_by_identifier(identifier)
     if not stock:
         raise HTTPException(status_code=404, detail="Stock not found")
 
+    symbol = stock.symbol
     score = await scoring_service.calculate_and_save_score(
         symbol,
         stock.yahoo_symbol,
@@ -394,7 +409,7 @@ async def _validate_symbol_change(
 ) -> None:
     """Validate that new symbol doesn't already exist."""
     if new_symbol != old_symbol:
-        existing = await stock_repo.get_by_symbol(new_symbol)
+        existing = await stock_repo.get_by_identifier(new_symbol)
         if existing:
             raise HTTPException(
                 status_code=400, detail=f"Symbol {new_symbol} already exists"
@@ -514,18 +529,23 @@ def _format_stock_response(stock, score) -> dict:
     return stock_data
 
 
-@router.put("/{symbol}")
+@router.put("/{identifier}")
 async def update_stock(
-    symbol: str,
+    identifier: str,
     update: StockUpdate,
     stock_repo: StockRepositoryDep,
     scoring_service: ScoringServiceDep,
 ):
-    """Update stock details."""
-    old_symbol = symbol.upper()
-    stock = await stock_repo.get_by_symbol(old_symbol)
+    """Update stock details.
+
+    Args:
+        identifier: Stock symbol (e.g., AAPL.US) or ISIN (e.g., US0378331005)
+    """
+    stock = await stock_repo.get_by_identifier(identifier)
     if not stock:
         raise HTTPException(status_code=404, detail="Stock not found")
+
+    old_symbol = stock.symbol
 
     new_symbol = None
     if update.new_symbol is not None:
@@ -541,7 +561,7 @@ async def update_stock(
     await stock_repo.update(old_symbol, **updates)
 
     final_symbol = new_symbol if new_symbol and new_symbol != old_symbol else old_symbol
-    updated_stock = await stock_repo.get_by_symbol(final_symbol)
+    updated_stock = await stock_repo.get_by_identifier(final_symbol)
     if not updated_stock:
         raise HTTPException(status_code=404, detail="Stock not found after update")
 
@@ -554,24 +574,32 @@ async def update_stock(
     return _format_stock_response(updated_stock, score)
 
 
-@router.delete("/{symbol}")
+@router.delete("/{identifier}")
 async def delete_stock(
-    symbol: str,
+    identifier: str,
     stock_repo: StockRepositoryDep,
 ):
-    """Remove a stock from the universe (soft delete by setting active=0)."""
+    """Remove a stock from the universe (soft delete by setting active=0).
 
-    logger.info(f"DELETE /api/stocks/{symbol} - Attempting to delete stock")
+    Args:
+        identifier: Stock symbol (e.g., AAPL.US) or ISIN (e.g., US0378331005)
+    """
+    logger.info(f"DELETE /api/stocks/{identifier} - Attempting to delete stock")
 
-    stock = await stock_repo.get_by_symbol(symbol.upper())
+    stock = await stock_repo.get_by_identifier(identifier)
     if not stock:
-        logger.warning(f"DELETE /api/stocks/{symbol} - Stock not found")
+        logger.warning(f"DELETE /api/stocks/{identifier} - Stock not found")
         raise HTTPException(status_code=404, detail="Stock not found")
 
-    logger.info(f"DELETE /api/stocks/{symbol} - Soft deleting stock (setting active=0)")
-    await stock_repo.delete(symbol.upper())
+    symbol = stock.symbol
+    logger.info(
+        f"DELETE /api/stocks/{identifier} - Soft deleting stock {symbol} (setting active=0)"
+    )
+    await stock_repo.delete(symbol)
 
     cache.invalidate("stocks_with_scores")
 
-    logger.info(f"DELETE /api/stocks/{symbol} - Stock successfully deleted")
-    return {"message": f"Stock {symbol.upper()} removed from universe"}
+    logger.info(
+        f"DELETE /api/stocks/{identifier} - Stock {symbol} successfully deleted"
+    )
+    return {"message": f"Stock {symbol} removed from universe"}

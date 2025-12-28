@@ -258,9 +258,9 @@ def _combine_and_filter_data(
     return result
 
 
-@router.get("/stocks/{symbol}")
+@router.get("/stocks/{identifier}")
 async def get_stock_chart(
-    symbol: str,
+    identifier: str,
     db_manager: DatabaseManagerDep,
     range: str = Query("1Y", description="Time range: 1M, 3M, 6M, 1Y, all"),
     source: str = Query("tradernet", description="Data source: tradernet or yahoo"),
@@ -270,8 +270,15 @@ async def get_stock_chart(
 
     Returns array of {time: 'YYYY-MM-DD', value: number} using close prices.
     Checks cache first, then fetches from API if missing.
+
+    Args:
+        identifier: Stock symbol (e.g., AAPL.US) or ISIN (e.g., US0378331005)
     """
     try:
+        # Resolve identifier to symbol for history database lookup
+        # Note: For now, we use the identifier directly. In Phase 2.6, history files
+        # will be renamed from symbol to ISIN, and this logic will be updated.
+        symbol = identifier.upper()
         start_date = _parse_date_range(range)
         cached_data = await _get_cached_stock_prices(symbol, start_date, db_manager)
 
