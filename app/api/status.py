@@ -110,8 +110,8 @@ async def get_led_display_state(
         "mode": mode,
         "error_message": error_text if error_text else None,
         "trade_is_buy": True,
-        "led3": [255, 255, 255],  # OFF for active-low LEDs (255 = OFF, 0 = ON)
-        "led4": [255, 255, 255],  # OFF for active-low LEDs (255 = OFF, 0 = ON)
+        "led3": [0, 0, 0],
+        "led4": [0, 0, 0],
         "ticker_text": next_actions_text,
         "activity_message": processing_text if processing_text else None,
         "ticker_speed": int(ticker_speed),
