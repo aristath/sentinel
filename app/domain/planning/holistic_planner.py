@@ -872,6 +872,40 @@ async def create_holistic_plan(
         opportunities, available_cash, max_depth=max_plan_depth
     )
 
+    # Filter infeasible sequences
+    positions_by_symbol = {p.symbol: p for p in positions}
+    feasible_sequences = []
+
+    for sequence in sequences:
+        is_feasible = True
+        running_cash = available_cash
+
+        for action in sequence:
+            if action.side == TradeSide.BUY:
+                # Check if we have enough cash
+                if action.value_eur > running_cash:
+                    is_feasible = False
+                    break
+                running_cash -= action.value_eur
+            elif action.side == TradeSide.SELL:
+                # Check if we have the position to sell
+                position = positions_by_symbol.get(action.symbol)
+                if not position or position.quantity < action.quantity:
+                    is_feasible = False
+                    break
+                running_cash += action.value_eur
+
+        if is_feasible:
+            feasible_sequences.append(sequence)
+
+    if len(feasible_sequences) < len(sequences):
+        logger.info(
+            f"Filtered {len(sequences) - len(feasible_sequences)} infeasible sequences "
+            f"({len(feasible_sequences)} remaining)"
+        )
+
+    sequences = feasible_sequences
+
     if not sequences:
         # No actions to take
         return HolisticPlan(
