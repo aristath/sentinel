@@ -220,6 +220,8 @@ class IndustryGroup(BaseModel):
 async def get_country_groups(grouping_repo: GroupingRepositoryDep):
     """Get all country groups (custom from DB or fallback to hardcoded)."""
     groups = await grouping_repo.get_country_groups()
+    # Filter out empty groups (these are overrides that hide hardcoded groups)
+    groups = {k: v for k, v in groups.items() if v}
     if not groups:
         # Return hardcoded fallback groups so user can see and edit them
         from collections import defaultdict
@@ -239,6 +241,8 @@ async def get_country_groups(grouping_repo: GroupingRepositoryDep):
 async def get_industry_groups(grouping_repo: GroupingRepositoryDep):
     """Get all industry groups (custom from DB or fallback to hardcoded)."""
     groups = await grouping_repo.get_industry_groups()
+    # Filter out empty groups (these are overrides that hide hardcoded groups)
+    groups = {k: v for k, v in groups.items() if v}
     if not groups:
         # Return hardcoded fallback groups so user can see and edit them
         from collections import defaultdict
