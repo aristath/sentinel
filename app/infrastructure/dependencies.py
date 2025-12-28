@@ -13,6 +13,7 @@ from app.application.services.currency_exchange_service import CurrencyExchangeS
 from app.application.services.portfolio_service import PortfolioService
 from app.application.services.rebalancing_service import RebalancingService
 from app.application.services.scoring_service import ScoringService
+from app.application.services.stock_setup_service import StockSetupService
 from app.application.services.trade_execution_service import TradeExecutionService
 from app.application.services.trade_safety_service import TradeSafetyService
 from app.domain.repositories.protocols import (
@@ -306,3 +307,25 @@ def get_concentration_alert_service(
 ConcentrationAlertServiceDep = Annotated[
     ConcentrationAlertService, Depends(get_concentration_alert_service)
 ]
+
+
+def get_stock_setup_service(
+    stock_repo: StockRepositoryDep,
+    scoring_service: ScoringServiceDep,
+    tradernet_client: TradernetClientDep,
+    db_manager: DatabaseManagerDep,
+) -> StockSetupService:
+    """Get StockSetupService instance."""
+    from app.repositories import StockRepository
+
+    # StockRepositoryDep is IStockRepository, but StockSetupService needs StockRepository
+    # We can safely cast since get_stock_repository() returns StockRepository
+    return StockSetupService(
+        stock_repo=stock_repo,  # type: ignore[arg-type]
+        scoring_service=scoring_service,
+        tradernet_client=tradernet_client,
+        db_manager=db_manager,
+    )
+
+
+StockSetupServiceDep = Annotated[StockSetupService, Depends(get_stock_setup_service)]

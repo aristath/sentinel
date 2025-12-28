@@ -46,7 +46,7 @@ API_URL = "http://localhost:8000"
 SSE_ENDPOINT = f"{API_URL}/api/status/led/display/stream"
 DISPLAY_TEXT_ENDPOINT = f"{API_URL}/api/status/display/text"
 DEFAULT_TICKER_SPEED = 50  # ms per scroll step
-POLL_INTERVAL_SECONDS = 20  # Poll API every 20 seconds as fallback
+POLL_INTERVAL_SECONDS = 9.9  # Poll API every 9.9 seconds as fallback
 
 # Try to import Router Bridge client
 try:
@@ -230,7 +230,7 @@ def _poll_display_text():
 
     This runs in a background thread and ensures the display always has content
     even when the SSE stream doesn't provide updates. Fetches ticker content
-    every 20 seconds and updates the display if content is available.
+    every 9.9 seconds and updates the display if content is available.
     """
     global _last_text, _last_text_speed, _polling_active
 

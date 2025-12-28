@@ -265,6 +265,32 @@ class TradernetClient:
             logger.error(f"Failed to get raw quotes: {e}")
             return {}
 
+    def find_symbol(self, symbol: str, exchange: Optional[str] = None) -> dict:
+        """
+        Search for stock symbols/instruments by symbol or ISIN.
+
+        This method accepts both Tradernet symbols and ISINs.
+        Useful for resolving ISINs to Tradernet symbols.
+
+        Args:
+            symbol: Symbol name or ISIN to search for (e.g., "AAPL", "US0378331005")
+            exchange: Optional exchange filter (refbook name)
+
+        Returns:
+            Dict with 'found' key containing list of matching instruments.
+            Each instrument has: 't' (symbol), 'nm' (name), 'x_curr' (currency),
+            'isin', 'mkt' (market), 'codesub' (exchange code), etc.
+        """
+        if not self.is_connected or self._client is None:
+            raise ConnectionError("Not connected to Tradernet")
+
+        try:
+            with led_api_call():
+                return self._client.find_symbol(symbol, exchange=exchange)
+        except Exception as e:
+            logger.error(f"Failed to find symbol {symbol}: {e}")
+            return {}
+
     def get_pending_orders(self) -> list[dict]:
         """
         Get all pending/active orders from Tradernet.
