@@ -10,6 +10,8 @@ No queue = no stale messages. Highest priority text always shows immediately.
 
 from threading import Lock
 
+from app.infrastructure.events import SystemEvent, emit
+
 
 class DisplayStateManager:
     """Thread-safe display state manager with 3-pool priority system.
@@ -37,26 +39,31 @@ class DisplayStateManager:
         """Set error message (highest priority, persists until cleared)."""
         with self._lock:
             self._error_text = text
+        emit(SystemEvent.DISPLAY_STATE_CHANGED)
 
     def clear_error(self) -> None:
         """Clear error message (falls back to processing or next_actions)."""
         with self._lock:
             self._error_text = ""
+        emit(SystemEvent.DISPLAY_STATE_CHANGED)
 
     def set_processing(self, text: str) -> None:
         """Set processing/activity message (medium priority)."""
         with self._lock:
             self._processing_text = text
+        emit(SystemEvent.DISPLAY_STATE_CHANGED)
 
     def clear_processing(self) -> None:
         """Clear processing message (falls back to next_actions)."""
         with self._lock:
             self._processing_text = ""
+        emit(SystemEvent.DISPLAY_STATE_CHANGED)
 
     def set_next_actions(self, text: str) -> None:
         """Set next actions/recommendations text (lowest priority, default)."""
         with self._lock:
             self._next_actions_text = text
+        emit(SystemEvent.DISPLAY_STATE_CHANGED)
 
     def get_current_text(self) -> str:
         """Get text to display (error > processing > next_actions)."""
@@ -119,24 +126,28 @@ def clear_error() -> None:
     """Clear error message (falls back to processing or next_actions)."""
     _display_state_manager.clear_error()
     _sync_module_vars()
+    # Event already emitted by _display_state_manager.clear_error()
 
 
 def set_processing(text: str) -> None:
     """Set processing/activity message (medium priority)."""
     _display_state_manager.set_processing(text)
     _sync_module_vars()
+    # Event already emitted by _display_state_manager.set_processing()
 
 
 def clear_processing() -> None:
     """Clear processing message (falls back to next_actions)."""
     _display_state_manager.clear_processing()
     _sync_module_vars()
+    # Event already emitted by _display_state_manager.clear_processing()
 
 
 def set_next_actions(text: str) -> None:
     """Set next actions/recommendations text (lowest priority, default)."""
     _display_state_manager.set_next_actions(text)
     _sync_module_vars()
+    # Event already emitted by _display_state_manager.set_next_actions()
 
 
 def get_current_text() -> str:

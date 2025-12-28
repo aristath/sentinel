@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Native LED Display Script for Arduino Uno Q.
 
-Polls the FastAPI application for display text and sends it to the MCU via Router Bridge.
+Connects to FastAPI SSE endpoint for real-time display updates and sends them to the MCU via Router Bridge.
 Runs as a systemd service, using native arduino-router service (no Docker required).
 """
 
+import json
 import logging
 import sys
-import time
 from pathlib import Path
 from typing import Optional
 
@@ -41,8 +41,7 @@ logger = logging.getLogger(__name__)
 
 # Configuration
 API_URL = "http://localhost:8000"
-POLL_INTERVAL = 1.0  # Poll every 1 second (optimized)
-API_RETRY_DELAY = 5.0  # Retry API connection after 5 seconds
+SSE_ENDPOINT = f"{API_URL}/api/status/led/display/stream"
 DEFAULT_TICKER_SPEED = 50  # ms per scroll step
 
 # Try to import Router Bridge client
@@ -146,24 +145,26 @@ def set_rgb4(r: int, g: int, b: int) -> bool:
         return False
 
 
-def fetch_display_data() -> Optional[dict]:
-    """Fetch display state from API. Returns None on error."""
+def parse_sse_event(line: str) -> Optional[dict]:
+    """Parse SSE event line (data: {json}).
+
+    Args:
+        line: SSE event line starting with "data:"
+
+    Returns:
+        Parsed JSON data, or None if invalid
+    """
+    if not line.startswith("data:"):
+        return None
+
     try:
-        # Fetch full display state which includes ticker_text and ticker_speed
-        response = _session.get(f"{API_URL}/api/status/led/display", timeout=10)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            logger.warning(f"API returned status {response.status_code}")
+        json_str = line[5:].strip()  # Remove "data:" prefix
+        if not json_str:
             return None
-    except requests.exceptions.ConnectionError:
-        logger.warning("API connection failed, will retry")
-        return None
-    except requests.exceptions.Timeout:
-        logger.warning("API request timed out")
-        return None
-    except Exception as e:
-        logger.error(f"Unexpected error fetching display data: {e}")
+
+        return json.loads(json_str)
+    except json.JSONDecodeError as e:
+        logger.debug(f"Failed to parse SSE event: {e}")
         return None
 
 
@@ -214,11 +215,11 @@ def _process_display_data(data: dict) -> None:
 
 
 def main_loop():
-    """Main loop - fetch display text from API, update MCU via Router Bridge."""
+    """Main loop - connect to SSE stream, receive events, update MCU via Router Bridge."""
     global _last_text
 
-    logger.info("Starting LED display native script (Router Bridge mode)")
-    logger.info(f"API URL: {API_URL}")
+    logger.info("Starting LED display native script (SSE mode)")
+    logger.info(f"SSE endpoint: {SSE_ENDPOINT}")
 
     if not ROUTER_BRIDGE_AVAILABLE:
         logger.error("Router Bridge client not available. Exiting.")
@@ -244,37 +245,50 @@ def main_loop():
         _last_led4 = (0, 0, 0)
         logger.info("Initialized RGB LEDs to OFF")
 
-    consecutive_errors = 0
-    max_consecutive_errors = 10
+    # Connect to SSE stream
+    try:
+        logger.info(f"Connecting to SSE endpoint: {SSE_ENDPOINT}")
+        response = _session.get(SSE_ENDPOINT, stream=True, timeout=10)
 
-    while True:
-        try:
-            # Fetch data from API
-            data = fetch_display_data()
+        if response.status_code != 200:
+            logger.error(f"SSE endpoint returned status {response.status_code}")
+            sys.exit(1)
 
-            if data is None:
-                # API unavailable - show error on display
-                if _last_text != "API OFFLINE":
-                    set_text("API OFFLINE", speed=DEFAULT_TICKER_SPEED)
-                    _last_text = "API OFFLINE"
-                consecutive_errors += 1
-                if consecutive_errors >= max_consecutive_errors:
-                    logger.error("Too many consecutive API errors, exiting")
-                    sys.exit(1)
-                time.sleep(API_RETRY_DELAY)
+        logger.info("SSE connection established")
+
+        # Process SSE stream
+        buffer = ""
+        for chunk in response.iter_content(chunk_size=1024, decode_unicode=True):
+            if not chunk:
                 continue
 
-            consecutive_errors = 0
-            _process_display_data(data)
+            buffer += chunk
 
-            time.sleep(POLL_INTERVAL)
+            # Process complete SSE events (separated by \n\n)
+            while "\n\n" in buffer:
+                event_block, buffer = buffer.split("\n\n", 1)
+                lines = event_block.split("\n")
 
-        except KeyboardInterrupt:
-            logger.info("Received interrupt signal, shutting down...")
-            break
-        except Exception as e:
-            logger.error(f"Unexpected error in main loop: {e}", exc_info=True)
-            time.sleep(POLL_INTERVAL)
+                # Find data line
+                for line in lines:
+                    data = parse_sse_event(line)
+                    if data is not None:
+                        # Process display data
+                        _process_display_data(data)
+                        break  # Process one event at a time
+
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"Failed to connect to SSE endpoint: {e}")
+        logger.error("Make sure the FastAPI server is running")
+        sys.exit(1)
+    except requests.exceptions.Timeout as e:
+        logger.error(f"SSE connection timed out: {e}")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        logger.info("Received interrupt signal, shutting down...")
+    except Exception as e:
+        logger.error(f"Unexpected error in main loop: {e}", exc_info=True)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

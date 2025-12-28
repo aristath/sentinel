@@ -1,10 +1,13 @@
 """APScheduler setup for background jobs.
 
-Simplified scheduler with 4 consolidated jobs:
+Scheduler with 7 jobs:
 1. sync_cycle - Every 15 minutes, handles trading operations
 2. daily_pipeline - Hourly, processes per-symbol data
-3. daily_maintenance - Daily at 3am, backup and cleanup
+3. daily_maintenance - Daily at configured hour, backup and cleanup
 4. weekly_maintenance - Weekly on Sunday, integrity checks
+5. dividend_reinvestment - Daily, automatic dividend reinvestment
+6. universe_pruning - Monthly (1st), removes low-quality stocks
+7. stock_discovery - Monthly (15th), discovers new high-quality stocks
 """
 
 import logging
@@ -207,11 +210,13 @@ async def reschedule_all_jobs():
         "universe_pruning",
         trigger=CronTrigger(day=1, hour=maintenance_hour, minute=0),
     )
+    # Stock discovery schedule is fixed (15th at 2am), no reschedule needed
 
     logger.info(
         f"Jobs rescheduled - sync_cycle:{sync_cycle_minutes}m, "
         f"maintenance:{maintenance_hour}:00, dividend_reinvestment:{maintenance_hour}:30, "
-        f"universe_pruning:1st of month {maintenance_hour}:00"
+        f"universe_pruning:1st of month {maintenance_hour}:00, "
+        f"stock_discovery:15th of month 02:00"
     )
 
 

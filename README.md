@@ -221,7 +221,7 @@ DAILY_SYNC_HOUR=18
 ### Status
 - `GET /api/status` - System health and status
 - `GET /api/status/display/text` - LED display text (for native script)
-- `GET /api/status/led/display` - LED display state (for Arduino App)
+- `GET /api/status/led/display/stream` - LED display state SSE stream (for Arduino App)
 - `GET /api/status/tradernet` - Tradernet connection status
 - `GET /api/status/jobs` - Background job health monitoring
 - `GET /api/status/database/stats` - Database statistics

@@ -14,16 +14,17 @@ When no ticker text is available, the display remains blank.
 ## How It Works
 
 ```
-Trading API (FastAPI) → Native Python Script (systemd) → Router Bridge → STM32 MCU → LED Matrix
+Trading API (FastAPI) → SSE Stream → Native Python Script (systemd) → Router Bridge → STM32 MCU → LED Matrix
 ```
 
 1. Native Python script (`scripts/led_display_native.py`) runs as a systemd service
-2. Polls `/api/status/display/text` from the trading API every 1 second
-3. Calls MCU functions via Router Bridge (msgpack RPC over Unix socket):
+2. Connects to `/api/status/led/display/stream` SSE endpoint for real-time updates
+3. Receives display state events via Server-Sent Events (SSE) when state changes
+4. Calls MCU functions via Router Bridge (msgpack RPC over Unix socket):
    - `scrollText(text, speed)` - Scroll text across LED matrix
    - `setRGB3(r, g, b)` - Set RGB LED 3 color
    - `setRGB4(r, g, b)` - Set RGB LED 4 color
-4. MCU receives commands via Router Bridge and renders scrolling text using native Font_5x7
+5. MCU receives commands via Router Bridge and renders scrolling text using native Font_5x7
 
 ## Display Priority System (3-Pool)
 
@@ -124,3 +125,5 @@ ssh arduino@<IP> "/home/arduino/bin/auto-deploy.sh"
 - Arduino Trader API running on port 8000
 - `arduino-router` service running (provides Router Bridge communication)
 - Network access to GitHub (for auto-deploy)
+
+**Note**: The display uses Server-Sent Events (SSE) for real-time updates. The native script connects to the SSE endpoint and receives events immediately when display state changes, eliminating polling delays.

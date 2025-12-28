@@ -1,5 +1,6 @@
 """System status API endpoints."""
 
+import json
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -82,40 +83,60 @@ async def get_display_text(settings_repo: SettingsRepositoryDep):
     }
 
 
-@router.get("/led/display")
-async def get_led_display_state(
+@router.get("/led/display/stream")
+async def stream_display_state(
     settings_repo: SettingsRepositoryDep,
     display_manager: DisplayStateManagerDep,
 ):
-    """Get LED display state for Arduino App Framework Docker app.
+    """Stream LED display state changes via Server-Sent Events (SSE).
 
-    Returns display mode, text, and RGB LED states in the format expected
-    by the trader-display Arduino app.
+    Real-time streaming of display state updates. Initial state is sent
+    immediately on connection, then updates are streamed as state changes.
     """
-    error_text = display_manager.get_error_text()
-    processing_text = display_manager.get_processing_text()
-    next_actions_text = display_manager.get_next_actions_text()
+    from app.infrastructure.hardware import display_events
 
-    # Determine mode based on current state
-    if error_text:
-        mode = "error"
-    elif processing_text:
-        mode = "activity"
-    else:
-        mode = "normal"
+    async def event_generator():
+        """Generate SSE events from display state changes."""
+        try:
+            # Get initial ticker speed
+            ticker_speed = int(await settings_repo.get_float("ticker_speed", 50.0))
 
-    ticker_speed = await settings_repo.get_float("ticker_speed", 50.0)
+            # Subscribe to display events
+            async for state_data in display_events.subscribe_display_events(
+                ticker_speed=ticker_speed
+            ):
+                # Update ticker_speed from settings for each event
+                # (in case it changed)
+                try:
+                    ticker_speed = int(
+                        await settings_repo.get_float("ticker_speed", 50.0)
+                    )
+                    state_data["ticker_speed"] = ticker_speed
+                except Exception:
+                    pass  # Keep previous value if settings unavailable
 
-    return {
-        "mode": mode,
-        "error_message": error_text if error_text else None,
-        "trade_is_buy": True,
-        "led3": [0, 0, 0],
-        "led4": [0, 0, 0],
-        "ticker_text": next_actions_text,
-        "activity_message": processing_text if processing_text else None,
-        "ticker_speed": int(ticker_speed),
-    }
+                # Format as SSE event: data: {json}\n\n
+                event_data = json.dumps(state_data)
+                yield f"data: {event_data}\n\n"
+
+        except Exception as e:
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.error(f"SSE stream error: {e}", exc_info=True)
+            # Send error event and close
+            error_data = json.dumps({"error": "Stream closed"})
+            yield f"data: {error_data}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable buffering for nginx
+        },
+    )
 
 
 @router.post("/sync/portfolio")
