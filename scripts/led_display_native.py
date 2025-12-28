@@ -204,6 +204,11 @@ def _process_display_data(data: dict) -> None:
     else:
         display_text = ""
 
+    # Skip updating display if text is empty (preserve current display like "READY")
+    # Only update if we have actual content to display
+    if not display_text:
+        return
+
     # Update text only if changed (optimization)
     if display_text != _last_text or ticker_speed != _last_text_speed:
         logger.info(f"Updating display text: {display_text[:50]}...")
