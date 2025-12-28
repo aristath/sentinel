@@ -306,20 +306,27 @@ class TestCreateStock:
             patch("app.api.stocks.StockFactory") as mock_factory,
             patch(
                 "app.infrastructure.external.yahoo_finance.get_stock_industry"
-            ) as mock_yahoo,
+            ) as mock_yahoo_industry,
+            patch(
+                "app.infrastructure.external.yahoo_finance.get_stock_country_and_exchange"
+            ) as mock_yahoo_country,
         ):
             mock_stock = MagicMock()
             mock_stock.min_lot = 1
-            mock_factory.create_with_industry_detection.return_value = mock_stock
+            mock_stock.country = "United States"
+            mock_stock.fullExchangeName = "NASDAQ"
+            mock_factory.create_from_api_request.return_value = mock_stock
             mock_event_bus.return_value = MagicMock()
-            mock_yahoo.return_value = "Consumer Electronics"
+            mock_yahoo_industry.return_value = "Consumer Electronics"
+            mock_yahoo_country.return_value = ("United States", "NASDAQ")
 
             result = await create_stock(
                 stock_data, mock_stock_repo, mock_score_repo, mock_scoring_service
             )
 
             assert result["symbol"] == "AAPL"
-            mock_factory.create_with_industry_detection.assert_called_once()
+            mock_yahoo_industry.assert_called_once()
+            mock_factory.create_from_api_request.assert_called_once()
 
 
 class TestRefreshAllScores:
