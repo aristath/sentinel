@@ -49,6 +49,25 @@ SETTING_DEFAULTS = {
     # Job scheduling intervals (simplified to 2 configurable settings)
     "job_sync_cycle_minutes": 15.0,  # Unified sync cycle interval (trades, prices, recommendations)
     "job_maintenance_hour": 3.0,  # Daily maintenance hour (0-23)
+    # Universe Pruning settings
+    "universe_pruning_enabled": 1.0,  # 1.0 = enabled, 0.0 = disabled
+    "universe_pruning_score_threshold": 0.50,  # Minimum average score to keep stock (0-1)
+    "universe_pruning_months": 3.0,  # Number of months to look back for scores
+    "universe_pruning_min_samples": 2.0,  # Minimum number of score samples required
+    "universe_pruning_check_delisted": 1.0,  # 1.0 = check for delisted stocks, 0.0 = skip
+    # Event-Driven Rebalancing settings
+    "event_driven_rebalancing_enabled": 1.0,  # 1.0 = enabled, 0.0 = disabled
+    "rebalance_position_drift_threshold": 0.05,  # Position drift threshold (0.05 = 5%)
+    "rebalance_cash_threshold_multiplier": 2.0,  # Cash threshold = multiplier × min_trade_size
+    # Stock Discovery settings
+    "stock_discovery_enabled": 1.0,  # 1.0 = enabled, 0.0 = disabled
+    "stock_discovery_score_threshold": 0.75,  # Minimum score to add stock (0-1)
+    "stock_discovery_max_per_month": 2.0,  # Maximum stocks to add per month
+    "stock_discovery_require_manual_review": 0.0,  # 1.0 = require review, 0.0 = auto-add
+    "stock_discovery_geographies": "EU,US,ASIA",  # Comma-separated geography list
+    "stock_discovery_exchanges": "usa,europe",  # Comma-separated exchange list
+    "stock_discovery_min_volume": 1000000.0,  # Minimum daily volume for liquidity
+    "stock_discovery_fetch_limit": 50.0,  # Maximum candidates to fetch from API
 }
 
 
@@ -142,18 +161,20 @@ async def get_all_settings(settings_repo: SettingsRepositoryDep):
     keys = list(SETTING_DEFAULTS.keys())
     db_values = await get_settings_batch(keys, settings_repo)
 
+    # String settings that should be returned as strings
+    string_settings = {"trading_mode", "stock_discovery_geographies", "stock_discovery_exchanges"}
+
     result: dict[str, Any] = {}
     for key, default in SETTING_DEFAULTS.items():
         if key in db_values:
-            # trading_mode is a string, all others are floats
-            if key == "trading_mode":
+            if key in string_settings:
                 result[key] = str(db_values[key])
             else:
                 val = db_values[key]
                 result[key] = float(val) if isinstance(val, (int, float, str)) else 0.0
         else:
-            if key == "trading_mode":
-                result[key] = str(default) if default is not None else "research"
+            if key in string_settings:
+                result[key] = str(default) if default is not None else ""
             else:
                 default_val = default if isinstance(default, (int, float)) else 0.0
                 result[key] = float(default_val)
@@ -168,7 +189,7 @@ async def update_setting_value(
     if key not in SETTING_DEFAULTS:
         raise HTTPException(status_code=400, detail=f"Unknown setting: {key}")
 
-    # Special handling for trading_mode (string, not float)
+    # Special handling for string settings
     if key == "trading_mode":
         mode = str(data.value).lower()
         if mode not in ("live", "research"):
@@ -178,6 +199,11 @@ async def update_setting_value(
             )
         await set_trading_mode(mode, settings_repo)
         return {key: mode}
+    elif key in ("stock_discovery_geographies", "stock_discovery_exchanges"):
+        # Store as string for comma-separated lists
+        await settings_repo.set(key, str(data.value))
+        cache.invalidate("settings:all")
+        return {key: str(data.value)}
 
     await set_setting(key, str(data.value), settings_repo)
 
