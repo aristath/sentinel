@@ -130,6 +130,10 @@ async def _execute_trade(
         get_tradernet_client,
     )
 
+    # Note: Direct DB access here is a known architecture violation.
+    # get_exchange_rate_service() requires db_manager for initialization.
+    # A future refactoring could make ExchangeRateService work without requiring db_manager.
+    # See ARCHITECTURE.md for details.
     db_manager = get_db_manager()
     tradernet_client = get_tradernet_client()
     exchange_rate_service = get_exchange_rate_service(db_manager)
@@ -419,6 +423,9 @@ async def _get_next_holistic_action() -> "Recommendation | None":
     trade_repo = TradeRepository()
     settings_repo = SettingsRepository()
     recommendation_repo = RecommendationRepository()
+    # Note: Direct DB access here is a known architecture violation.
+    # get_exchange_rate_service() requires db_manager for initialization.
+    # See ARCHITECTURE.md for details.
     db_manager = get_db_manager()
     tradernet_client = get_tradernet_client()
     exchange_rate_service = get_exchange_rate_service(db_manager)
