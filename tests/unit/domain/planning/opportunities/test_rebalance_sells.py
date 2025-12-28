@@ -169,7 +169,7 @@ class TestIdentifyRebalanceSellOpportunities:
     ):
         """Test skipping when country is balanced."""
         stocks_by_symbol = {"AAPL.US": sample_stock}
-        geo_allocations = {"US": 0.35}  # Near target of 33%
+        geo_allocations = {"United States": 0.35}  # Near target of 33%
 
         opportunities = await identify_rebalance_sell_opportunities(
             positions=[sample_position],
@@ -222,7 +222,7 @@ class TestIdentifyRebalanceSellOpportunities:
 
         assert len(opportunities) == 1
         assert "rebalance" in opportunities[0].tags
-        assert "overweight_us" in opportunities[0].tags
+        assert "overweight_united states" in opportunities[0].tags
 
     @pytest.mark.asyncio
     async def test_priority_proportional_to_overweight(
@@ -230,7 +230,7 @@ class TestIdentifyRebalanceSellOpportunities:
     ):
         """Test that priority is proportional to overweight amount."""
         stocks_by_symbol = {"AAPL.US": sample_stock}
-        geo_allocations = {"US": 0.90}  # Very overweight
+        geo_allocations = {"United States": 0.90}  # Very overweight
 
         opportunities = await identify_rebalance_sell_opportunities(
             positions=[sample_position],
