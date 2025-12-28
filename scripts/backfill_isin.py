@@ -67,21 +67,27 @@ async def backfill_isin():
         for stock in stocks_without_isin:
             try:
                 logger.info(f"Fetching ISIN for {stock.symbol}...")
-                quotes = tradernet.get_quotes_raw([stock.symbol])
+                response = tradernet.get_quotes_raw([stock.symbol])
 
-                if quotes and len(quotes) > 0:
-                    quote_data = quotes[0] if isinstance(quotes, list) else quotes
-                    isin = quote_data.get("issue_nb")
-                    if isin and is_isin(isin):
-                        # Update stock with ISIN
-                        await stock_repo.update(stock.symbol, isin=isin)
-                        logger.info(f"  {stock.symbol} -> {isin}")
-                        success_count += 1
+                # Response format: {'result': {'q': [quote_data, ...]}}
+                if response and isinstance(response, dict):
+                    quotes_list = response.get("result", {}).get("q", [])
+                    if quotes_list and len(quotes_list) > 0:
+                        quote_data = quotes_list[0]
+                        isin = quote_data.get("issue_nb")
+                        if isin and is_isin(isin):
+                            # Update stock with ISIN
+                            await stock_repo.update(stock.symbol, isin=isin)
+                            logger.info(f"  {stock.symbol} -> {isin}")
+                            success_count += 1
+                        else:
+                            logger.warning(f"  {stock.symbol}: No valid ISIN in response")
+                            failure_count += 1
                     else:
-                        logger.warning(f"  {stock.symbol}: No valid ISIN in response")
+                        logger.warning(f"  {stock.symbol}: No quote data returned")
                         failure_count += 1
                 else:
-                    logger.warning(f"  {stock.symbol}: No quote data returned")
+                    logger.warning(f"  {stock.symbol}: Invalid response format")
                     failure_count += 1
 
             except Exception as e:

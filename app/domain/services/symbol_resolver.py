@@ -227,18 +227,24 @@ class SymbolResolver:
             return None
 
         try:
-            quotes = self._tradernet.get_quotes_raw([tradernet_symbol])
-            if quotes and len(quotes) > 0:
-                # quotes is a list of dicts, find our symbol
-                quote_data = quotes[0] if isinstance(quotes, list) else quotes
-                isin = quote_data.get("issue_nb")
-                if isin and is_isin(isin):
-                    logger.info(f"Fetched ISIN for {tradernet_symbol}: {isin}")
-                    return isin
+            response = self._tradernet.get_quotes_raw([tradernet_symbol])
+            # Response format: {'result': {'q': [quote_data, ...]}}
+            if response and isinstance(response, dict):
+                quotes_list = response.get("result", {}).get("q", [])
+                if quotes_list and len(quotes_list) > 0:
+                    quote_data = quotes_list[0]
+                    isin = quote_data.get("issue_nb")
+                    if isin and is_isin(isin):
+                        logger.info(f"Fetched ISIN for {tradernet_symbol}: {isin}")
+                        return isin
+                    else:
+                        logger.debug(
+                            f"No valid ISIN in quote data for {tradernet_symbol}"
+                        )
                 else:
-                    logger.debug(f"No valid ISIN in quote data for {tradernet_symbol}")
+                    logger.warning(f"No quote data returned for {tradernet_symbol}")
             else:
-                logger.warning(f"No quote data returned for {tradernet_symbol}")
+                logger.warning(f"Invalid response format for {tradernet_symbol}")
         except Exception as e:
             logger.error(f"Failed to fetch quote data for {tradernet_symbol}: {e}")
 
