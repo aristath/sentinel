@@ -128,8 +128,23 @@ class TickerContentService:
                         else:
                             parts.append(f"{side} {symbol}")
 
-            return " | ".join(parts) if parts else ""
+            if parts:
+                return " | ".join(parts)
+
+            # Fallback to system status when no content available
+            # Check if Tradernet is connected as a simple health indicator
+            if self._tradernet_client.is_connected:
+                return "SYSTEM ONLINE"
+            else:
+                return "READY"
 
         except Exception as e:
             logger.error(f"Failed to generate ticker text: {e}")
-            return ""
+            # Return system status even on error
+            try:
+                if self._tradernet_client.is_connected:
+                    return "SYSTEM ONLINE"
+                else:
+                    return "READY"
+            except Exception:
+                return "READY"

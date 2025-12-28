@@ -151,7 +151,9 @@ class MarketsStatusResponse(BaseModel):
 
     status: str
     open_markets: List[str]
-    markets: List[Dict[str, Any]]  # Market status is a list of dicts
+    markets: Dict[
+        str, Dict[str, Any]
+    ]  # Market status is a dict mapping market name to status info
 
 
 class DiskUsageResponse(BaseModel):

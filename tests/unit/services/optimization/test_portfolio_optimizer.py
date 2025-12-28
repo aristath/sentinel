@@ -354,6 +354,7 @@ class TestPortfolioOptimizerIntegration:
             MagicMock(spec=Stock, symbol="MSFT", active=True),
         ]
 
+        # Use a low target return to ensure feasibility with random data
         result = await optimizer.optimize(
             stocks=stocks,
             positions={},
@@ -361,7 +362,7 @@ class TestPortfolioOptimizerIntegration:
             current_prices={"AAPL": 150, "GOOGL": 2800, "MSFT": 330},
             cash_balance=10000,
             blend=0.5,
-            target_return=0.11,
+            target_return=0.05,  # Low target to ensure achievability
             min_cash_reserve=500,
         )
 
@@ -418,6 +419,7 @@ class TestPortfolioOptimizerIntegration:
         portfolio_value = 10000
         min_cash_reserve = 1000  # 10% reserve
 
+        # Use a low target return to ensure feasibility with random data
         result = await optimizer.optimize(
             stocks=stocks,
             positions={},
@@ -425,6 +427,7 @@ class TestPortfolioOptimizerIntegration:
             current_prices={"AAPL": 150, "GOOGL": 2800},
             cash_balance=2000,
             min_cash_reserve=min_cash_reserve,
+            target_return=0.05,  # Low target to ensure achievability
         )
 
         assert result.success is True
@@ -592,7 +595,10 @@ class TestPortfolioOptimizerSectorConstraints:
         }
         target_return = 0.11
 
-        with patch("pypfopt.EfficientFrontier") as mock_ef_class:
+        # Patch in the module where it's used, not where it's defined
+        with patch(
+            "app.application.services.optimization.portfolio_optimizer.EfficientFrontier"
+        ) as mock_ef_class:
             mock_ef = MagicMock()
             mock_ef_class.return_value = mock_ef
             mock_ef.efficient_return.return_value = None
@@ -679,7 +685,10 @@ class TestPortfolioOptimizerSectorConstraints:
         }
         target_return = 0.11
 
-        with patch("pypfopt.EfficientFrontier") as mock_ef_class:
+        # Patch in the module where it's used, not where it's defined
+        with patch(
+            "app.application.services.optimization.portfolio_optimizer.EfficientFrontier"
+        ) as mock_ef_class:
             mock_ef = MagicMock()
             mock_ef_class.return_value = mock_ef
             mock_ef.efficient_return.return_value = None
@@ -750,7 +759,9 @@ class TestPortfolioOptimizerSectorConstraints:
         bounds = {"AAPL": (0.0, 1.0)}
         target_return = 0.11
 
-        with patch("pypfopt.EfficientFrontier") as mock_ef_class:
+        with patch(
+            "app.application.services.optimization.portfolio_optimizer.EfficientFrontier"
+        ) as mock_ef_class:
             mock_ef = MagicMock()
             mock_ef_class.return_value = mock_ef
 
@@ -818,7 +829,9 @@ class TestPortfolioOptimizerSectorConstraints:
         }
         target_return = 0.11
 
-        with patch("pypfopt.EfficientFrontier") as mock_ef_class:
+        with patch(
+            "app.application.services.optimization.portfolio_optimizer.EfficientFrontier"
+        ) as mock_ef_class:
             mock_ef = MagicMock()
             mock_ef_class.return_value = mock_ef
             mock_ef.efficient_return.return_value = None
@@ -889,7 +902,9 @@ class TestPortfolioOptimizerSectorConstraints:
         bounds = {"AAPL": (0.0, 0.6), "SAP": (0.0, 0.4)}
         target_return = 0.11
 
-        with patch("pypfopt.EfficientFrontier") as mock_ef_class:
+        with patch(
+            "app.application.services.optimization.portfolio_optimizer.EfficientFrontier"
+        ) as mock_ef_class:
             mock_ef = MagicMock()
             mock_ef_class.return_value = mock_ef
             mock_ef.efficient_return.return_value = None
@@ -942,7 +957,9 @@ class TestPortfolioOptimizerRetirementFallbacks:
         country_constraints = []
         ind_constraints = []
 
-        with patch("pypfopt.EfficientFrontier") as mock_ef_class:
+        with patch(
+            "app.application.services.optimization.portfolio_optimizer.EfficientFrontier"
+        ) as mock_ef_class:
             mock_ef = MagicMock()
             mock_ef_class.return_value = mock_ef
 
@@ -983,7 +1000,9 @@ class TestPortfolioOptimizerRetirementFallbacks:
         country_constraints = []
         ind_constraints = []
 
-        with patch("pypfopt.EfficientFrontier") as mock_ef_class:
+        with patch(
+            "app.application.services.optimization.portfolio_optimizer.EfficientFrontier"
+        ) as mock_ef_class:
             mock_ef = MagicMock()
             mock_ef_class.return_value = mock_ef
 
@@ -1029,7 +1048,9 @@ class TestPortfolioOptimizerRetirementFallbacks:
         country_constraints = []
         ind_constraints = []
 
-        with patch("pypfopt.EfficientFrontier") as mock_ef_class:
+        with patch(
+            "app.application.services.optimization.portfolio_optimizer.EfficientFrontier"
+        ) as mock_ef_class:
             mock_ef = MagicMock()
             mock_ef_class.return_value = mock_ef
 
@@ -1074,7 +1095,9 @@ class TestPortfolioOptimizerRetirementFallbacks:
         country_constraints = []
         ind_constraints = []
 
-        with patch("pypfopt.EfficientFrontier") as mock_ef_class:
+        with patch(
+            "app.application.services.optimization.portfolio_optimizer.EfficientFrontier"
+        ) as mock_ef_class:
             mock_ef = MagicMock()
             mock_ef_class.return_value = mock_ef
 

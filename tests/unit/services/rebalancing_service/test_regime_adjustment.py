@@ -54,26 +54,49 @@ class TestRegimeBasedCashReserve:
         ) as mock_detect_regime:
             mock_detect_regime.return_value = "bull"
 
-            # Mock optimizer
+            # Mock optimizer with proper return value
             mock_optimizer = MagicMock()
-            mock_optimizer.optimize = AsyncMock()
+            mock_optimization_result = MagicMock()
+            mock_optimization_result.success = True
+            mock_optimization_result.achieved_expected_return = 0.10
+            mock_optimization_result.fallback_used = None
+            mock_optimization_result.target_weights = {}
+            mock_optimization_result.weight_changes = []
+            mock_optimizer.optimize = AsyncMock(return_value=mock_optimization_result)
+
+            # Mock DividendRepository to avoid database access
+            mock_dividend_repo = AsyncMock()
+            mock_dividend_repo.get_pending_dividends = AsyncMock(return_value={})
 
             with (
                 patch(
                     "app.application.services.optimization.PortfolioOptimizer",
                     return_value=mock_optimizer,
                 ),
+                patch(
+                    "app.repositories.DividendRepository",
+                    return_value=mock_dividend_repo,
+                ),
             ):
+                # Create properly mocked allocation repo
+                mock_allocation_repo = AsyncMock()
+                mock_allocation_repo.get_all = AsyncMock(return_value={})
+
+                # Create properly mocked db_manager
+                mock_db_manager = MagicMock()
+                mock_db_manager.state = MagicMock()
+                mock_db_manager.state.fetchall = AsyncMock(return_value=[])
+
                 service = RebalancingService(
                     stock_repo=mock_stock_repo,
                     position_repo=mock_position_repo,
                     tradernet_client=mock_tradernet_client,
-                    allocation_repo=AsyncMock(),
+                    allocation_repo=mock_allocation_repo,
                     portfolio_repo=AsyncMock(),
                     trade_repo=AsyncMock(),
                     settings_repo=mock_settings_repo,
                     recommendation_repo=AsyncMock(),
-                    db_manager=MagicMock(),
+                    db_manager=mock_db_manager,
                     exchange_rate_service=AsyncMock(),
                 )
 
@@ -131,25 +154,49 @@ class TestRegimeBasedCashReserve:
         ) as mock_detect_regime:
             mock_detect_regime.return_value = "bear"
 
+            # Mock optimizer with proper return value
             mock_optimizer = MagicMock()
-            mock_optimizer.optimize = AsyncMock()
+            mock_optimization_result = MagicMock()
+            mock_optimization_result.success = True
+            mock_optimization_result.achieved_expected_return = 0.10
+            mock_optimization_result.fallback_used = None
+            mock_optimization_result.target_weights = {}
+            mock_optimization_result.weight_changes = []
+            mock_optimizer.optimize = AsyncMock(return_value=mock_optimization_result)
+
+            # Mock DividendRepository to avoid database access
+            mock_dividend_repo = AsyncMock()
+            mock_dividend_repo.get_pending_dividends = AsyncMock(return_value={})
 
             with (
                 patch(
                     "app.application.services.optimization.PortfolioOptimizer",
                     return_value=mock_optimizer,
                 ),
+                patch(
+                    "app.repositories.DividendRepository",
+                    return_value=mock_dividend_repo,
+                ),
             ):
+                # Create properly mocked allocation repo
+                mock_allocation_repo = AsyncMock()
+                mock_allocation_repo.get_all = AsyncMock(return_value={})
+
+                # Create properly mocked db_manager
+                mock_db_manager = MagicMock()
+                mock_db_manager.state = MagicMock()
+                mock_db_manager.state.fetchall = AsyncMock(return_value=[])
+
                 service = RebalancingService(
                     stock_repo=mock_stock_repo,
                     position_repo=mock_position_repo,
                     tradernet_client=mock_tradernet_client,
-                    allocation_repo=AsyncMock(),
+                    allocation_repo=mock_allocation_repo,
                     portfolio_repo=AsyncMock(),
                     trade_repo=AsyncMock(),
                     settings_repo=mock_settings_repo,
                     recommendation_repo=AsyncMock(),
-                    db_manager=MagicMock(),
+                    db_manager=mock_db_manager,
                     exchange_rate_service=AsyncMock(),
                 )
 
@@ -210,25 +257,49 @@ class TestRegimeBasedCashReserve:
         ) as mock_detect_regime:
             mock_detect_regime.return_value = "sideways"
 
+            # Mock optimizer with proper return value
             mock_optimizer = MagicMock()
-            mock_optimizer.optimize = AsyncMock()
+            mock_optimization_result = MagicMock()
+            mock_optimization_result.success = True
+            mock_optimization_result.achieved_expected_return = 0.10
+            mock_optimization_result.fallback_used = None
+            mock_optimization_result.target_weights = {}
+            mock_optimization_result.weight_changes = []
+            mock_optimizer.optimize = AsyncMock(return_value=mock_optimization_result)
+
+            # Mock DividendRepository to avoid database access
+            mock_dividend_repo = AsyncMock()
+            mock_dividend_repo.get_pending_dividends = AsyncMock(return_value={})
 
             with (
                 patch(
                     "app.application.services.optimization.PortfolioOptimizer",
                     return_value=mock_optimizer,
                 ),
+                patch(
+                    "app.repositories.DividendRepository",
+                    return_value=mock_dividend_repo,
+                ),
             ):
+                # Create properly mocked allocation repo
+                mock_allocation_repo = AsyncMock()
+                mock_allocation_repo.get_all = AsyncMock(return_value={})
+
+                # Create properly mocked db_manager
+                mock_db_manager = MagicMock()
+                mock_db_manager.state = MagicMock()
+                mock_db_manager.state.fetchall = AsyncMock(return_value=[])
+
                 service = RebalancingService(
                     stock_repo=mock_stock_repo,
                     position_repo=mock_position_repo,
                     tradernet_client=mock_tradernet_client,
-                    allocation_repo=AsyncMock(),
+                    allocation_repo=mock_allocation_repo,
                     portfolio_repo=AsyncMock(),
                     trade_repo=AsyncMock(),
                     settings_repo=mock_settings_repo,
                     recommendation_repo=AsyncMock(),
-                    db_manager=MagicMock(),
+                    db_manager=mock_db_manager,
                     exchange_rate_service=AsyncMock(),
                 )
 
@@ -281,22 +352,39 @@ class TestRegimeBasedCashReserve:
         mock_optimizer = MagicMock()
         mock_optimizer.optimize = AsyncMock()
 
+        # Mock DividendRepository to avoid database access
+        mock_dividend_repo = AsyncMock()
+        mock_dividend_repo.get_pending_dividends = AsyncMock(return_value={})
+
         with (
             patch(
                 "app.application.services.optimization.PortfolioOptimizer",
                 return_value=mock_optimizer,
             ),
+            patch(
+                "app.repositories.DividendRepository",
+                return_value=mock_dividend_repo,
+            ),
         ):
+            # Create properly mocked allocation repo
+            mock_allocation_repo = AsyncMock()
+            mock_allocation_repo.get_all = AsyncMock(return_value={})
+
+            # Create properly mocked db_manager
+            mock_db_manager = MagicMock()
+            mock_db_manager.state = MagicMock()
+            mock_db_manager.state.fetchall = AsyncMock(return_value=[])
+
             service = RebalancingService(
                 stock_repo=mock_stock_repo,
                 position_repo=mock_position_repo,
                 tradernet_client=mock_tradernet_client,
-                allocation_repo=AsyncMock(),
+                allocation_repo=mock_allocation_repo,
                 portfolio_repo=AsyncMock(),
                 trade_repo=AsyncMock(),
                 settings_repo=mock_settings_repo,
                 recommendation_repo=AsyncMock(),
-                db_manager=MagicMock(),
+                db_manager=mock_db_manager,
                 exchange_rate_service=AsyncMock(),
             )
 
