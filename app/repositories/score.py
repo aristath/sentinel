@@ -107,6 +107,40 @@ class ScoreRepository:
         async with transaction_context(self._db) as conn:
             await conn.execute("DELETE FROM scores")
 
+    async def get_recent_scores(
+        self, symbol: str, months: float
+    ) -> List[StockScore]:
+        """
+        Get recent scores for a symbol within the specified time window.
+
+        Note: Currently, the scores table only stores the latest score per symbol.
+        This method returns the current score if it's within the time window.
+        For proper historical tracking, we would need a score_history table.
+
+        Args:
+            symbol: Stock symbol
+            months: Number of months to look back
+
+        Returns:
+            List of StockScore objects (currently 0 or 1 score)
+        """
+        from datetime import datetime, timedelta
+
+        cutoff_date = (datetime.now() - timedelta(days=months * 30)).isoformat()
+
+        row = await self._db.fetchone(
+            """
+            SELECT * FROM scores
+            WHERE symbol = ? AND calculated_at >= ?
+            ORDER BY calculated_at DESC
+            """,
+            (symbol.upper(), cutoff_date),
+        )
+
+        if row:
+            return [self._row_to_score(row)]
+        return []
+
     def _row_to_score(self, row) -> StockScore:
         """Convert database row to StockScore model."""
         calculated_at = None
