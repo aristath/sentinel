@@ -9,8 +9,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
-from app.api.portfolio import _calculate_total_eur, _fetch_exchange_rates
-
 
 @pytest.fixture
 def mock_position_repo():
@@ -315,104 +313,6 @@ class TestGetTransactionHistory:
         assert exc_info.value.status_code == 500
 
 
-class TestFetchExchangeRates:
-    """Test exchange rate fetching."""
-
-    @pytest.mark.asyncio
-    async def test_returns_eur_rate(self):
-        """Test that EUR rate is always 1.0."""
-        result = await _fetch_exchange_rates(set())
-        assert result["EUR"] == 1.0
-
-    @pytest.mark.asyncio
-    async def test_fetches_rates_from_api(self):
-        """Test fetching rates from API."""
-
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"rates": {"USD": 1.10, "GBP": 0.86}}
-
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_instance = AsyncMock()
-            mock_instance.get.return_value = mock_response
-            mock_instance.__aenter__.return_value = mock_instance
-            mock_instance.__aexit__.return_value = None
-            mock_client.return_value = mock_instance
-
-            result = await _fetch_exchange_rates({"USD", "GBP"})
-
-        assert result["USD"] == 1.10
-        assert result["GBP"] == 0.86
-
-    @pytest.mark.asyncio
-    async def test_uses_fallback_on_api_failure(self):
-        """Test fallback rates when API fails."""
-        with patch("httpx.AsyncClient") as mock_client:
-            mock_instance = AsyncMock()
-            mock_instance.get.side_effect = Exception("Network error")
-            mock_instance.__aenter__.return_value = mock_instance
-            mock_instance.__aexit__.return_value = None
-            mock_client.return_value = mock_instance
-
-            result = await _fetch_exchange_rates({"USD"})
-
-        # Should use fallback rate
-        assert result["USD"] == 1.05
-
-
-class TestCalculateTotalEur:
-    """Test EUR total calculation."""
-
-    def test_calculates_eur_balance(self):
-        """Test calculation of EUR balance."""
-        mock_balance = MagicMock()
-        mock_balance.currency = "EUR"
-        mock_balance.amount = 1000.0
-
-        result = _calculate_total_eur([mock_balance], {"EUR": 1.0})
-
-        assert result == 1000.0
-
-    def test_converts_usd_to_eur(self):
-        """Test conversion of USD to EUR."""
-        mock_balance = MagicMock()
-        mock_balance.currency = "USD"
-        mock_balance.amount = 1050.0  # $1050
-
-        # Rate is 1.05 USD per EUR
-        result = _calculate_total_eur([mock_balance], {"USD": 1.05})
-
-        assert result == 1000.0  # 1050 / 1.05 = 1000 EUR
-
-    def test_handles_multiple_currencies(self):
-        """Test handling of multiple currencies."""
-        eur_balance = MagicMock()
-        eur_balance.currency = "EUR"
-        eur_balance.amount = 500.0
-
-        usd_balance = MagicMock()
-        usd_balance.currency = "USD"
-        usd_balance.amount = 525.0  # $525
-
-        balances = [eur_balance, usd_balance]
-        rates = {"EUR": 1.0, "USD": 1.05}
-
-        result = _calculate_total_eur(balances, rates)
-
-        # 500 EUR + (525 / 1.05) EUR = 500 + 500 = 1000 EUR
-        assert result == 1000.0
-
-    def test_ignores_zero_balance(self):
-        """Test that zero balances are handled correctly."""
-        mock_balance = MagicMock()
-        mock_balance.currency = "USD"
-        mock_balance.amount = 0.0
-
-        result = _calculate_total_eur([mock_balance], {"USD": 1.05})
-
-        assert result == 0.0
-
-
 class TestGetCashBreakdown:
     """Test the GET /portfolio/cash-breakdown endpoint."""
 
@@ -427,31 +327,38 @@ class TestGetCashBreakdown:
         mock_balance.amount = 5000.0
         mock_client.get_cash_balances.return_value = [mock_balance]
 
+        mock_exchange_rate_service = AsyncMock()
+        mock_exchange_rate_service.batch_convert_to_eur = AsyncMock(
+            return_value={"EUR": 5000.0}
+        )
+
         with patch(
             "app.api.portfolio.ensure_tradernet_connected",
             new_callable=AsyncMock,
             return_value=mock_client,
         ):
-            result = await get_cash_breakdown()
+            result = await get_cash_breakdown(mock_exchange_rate_service)
 
-        assert len(result["balances"]) == 1
-        assert result["balances"][0]["currency"] == "EUR"
-        assert result["total_eur"] == 5000.0
+        assert len(result.balances) == 1
+        assert result.balances[0].currency == "EUR"
+        assert result.total_eur == 5000.0
 
     @pytest.mark.asyncio
     async def test_handles_no_connection(self):
         """Test handling when Tradernet is not connected."""
         from app.api.portfolio import get_cash_breakdown
 
+        mock_exchange_rate_service = AsyncMock()
+
         with patch(
             "app.api.portfolio.ensure_tradernet_connected",
             new_callable=AsyncMock,
             return_value=None,
         ):
-            result = await get_cash_breakdown()
+            result = await get_cash_breakdown(mock_exchange_rate_service)
 
-        assert result["balances"] == []
-        assert result["total_eur"] == 0
+        assert result.balances == []
+        assert result.total_eur == 0
 
     @pytest.mark.asyncio
     async def test_handles_api_error(self):
@@ -461,13 +368,15 @@ class TestGetCashBreakdown:
         mock_client = MagicMock()
         mock_client.get_cash_balances.side_effect = Exception("API error")
 
+        mock_exchange_rate_service = AsyncMock()
+
         with patch(
             "app.api.portfolio.ensure_tradernet_connected",
             new_callable=AsyncMock,
             return_value=mock_client,
         ):
             with pytest.raises(HTTPException) as exc_info:
-                await get_cash_breakdown()
+                await get_cash_breakdown(mock_exchange_rate_service)
 
         assert exc_info.value.status_code == 500
 
@@ -513,10 +422,11 @@ class TestGetPortfolioAnalytics:
                     ):
                         result = await get_portfolio_analytics(days=365)
 
-        assert "returns" in result
-        assert "risk_metrics" in result
-        assert "attribution" in result
-        assert "period" in result
+        # Result is a Pydantic model
+        assert hasattr(result, "returns")
+        assert hasattr(result, "risk_metrics")
+        assert hasattr(result, "attribution")
+        assert hasattr(result, "period")
 
     @pytest.mark.asyncio
     async def test_handles_insufficient_data(self):
@@ -532,8 +442,9 @@ class TestGetPortfolioAnalytics:
         ):
             result = await get_portfolio_analytics(days=365)
 
-        assert "error" in result
-        assert result["error"] == "Insufficient data"
+        # Result is a Pydantic model
+        assert hasattr(result, "error")
+        assert result.error == "Insufficient data"
 
     @pytest.mark.asyncio
     async def test_handles_analytics_error(self):
