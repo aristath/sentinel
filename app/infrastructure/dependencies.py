@@ -316,8 +316,6 @@ def get_stock_setup_service(
     db_manager: DatabaseManagerDep,
 ) -> StockSetupService:
     """Get StockSetupService instance."""
-    from app.repositories import StockRepository
-
     # StockRepositoryDep is IStockRepository, but StockSetupService needs StockRepository
     # We can safely cast since get_stock_repository() returns StockRepository
     return StockSetupService(

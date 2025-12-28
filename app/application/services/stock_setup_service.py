@@ -155,35 +155,25 @@ class StockSetupService:
             raise ValueError(f"Could not determine stock name for: {identifier}")
 
         # Step 4: Create stock
-        stock_dict = {
-            "symbol": tradernet_symbol,
-            "name": name,
-            "country": country,
-            "fullExchangeName": full_exchange_name,
-            "industry": industry,
-            "yahoo_symbol": yahoo_symbol,
-            "min_lot": min_lot,
-            "allow_buy": allow_buy,
-            "allow_sell": allow_sell,
-            "currency": currency,
-        }
-
         # Create stock using factory, but we need to handle ISIN separately
         # since factory doesn't support it directly. Create Stock directly instead.
+        # Type assertions: we've validated all required fields above
+        assert tradernet_symbol is not None, "tradernet_symbol must be set"
+        assert name is not None, "name must be set"
         stock = Stock(
-            symbol=str(stock_dict["symbol"]),
-            name=str(stock_dict["name"]),
-            country=stock_dict.get("country"),
-            fullExchangeName=stock_dict.get("fullExchangeName"),
-            yahoo_symbol=stock_dict.get("yahoo_symbol"),
+            symbol=tradernet_symbol,
+            name=name,
+            country=country,
+            fullExchangeName=full_exchange_name,
+            yahoo_symbol=yahoo_symbol,
             isin=isin,
-            industry=stock_dict.get("industry"),
+            industry=industry,
             priority_multiplier=1.0,
-            min_lot=int(stock_dict.get("min_lot", 1)),
+            min_lot=min_lot,
             active=True,
-            allow_buy=bool(stock_dict.get("allow_buy", True)),
-            allow_sell=bool(stock_dict.get("allow_sell", False)),
-            currency=stock_dict.get("currency"),
+            allow_buy=allow_buy,
+            allow_sell=allow_sell,
+            currency=currency,
         )
 
         await self._stock_repo.create(stock)
