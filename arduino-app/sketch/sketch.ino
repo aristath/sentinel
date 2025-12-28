@@ -12,7 +12,7 @@ ArduinoLEDMatrix matrix;
 // RGB LED pins use LED_BUILTIN offsets (from official unoq-pin-toggle example)
 // LED3: LED_BUILTIN (R), LED_BUILTIN+1 (G), LED_BUILTIN+2 (B)
 // LED4: LED_BUILTIN+3 (R), LED_BUILTIN+4 (G), LED_BUILTIN+5 (B)
-// Active-low: HIGH = OFF, LOW = ON
+// Active-low: For analogWrite, 0 = ON (full brightness), 255 = OFF
 
 // Draw frame to LED matrix
 void draw(std::vector<uint8_t> frame) {
@@ -22,18 +22,20 @@ void draw(std::vector<uint8_t> frame) {
   matrix.draw(frame.data());
 }
 
-// Set RGB LED 3 color (active-low, digital only)
+// Set RGB LED 3 color (active-low, PWM)
+// For active-low LEDs: 0 = ON (full brightness), 255 = OFF
 void setRGB3(uint8_t r, uint8_t g, uint8_t b) {
-  digitalWrite(LED_BUILTIN, r > 0 ? LOW : HIGH);
-  digitalWrite(LED_BUILTIN + 1, g > 0 ? LOW : HIGH);
-  digitalWrite(LED_BUILTIN + 2, b > 0 ? LOW : HIGH);
+  analogWrite(LED_BUILTIN, 255 - r);      // Invert: 0->255, 255->0
+  analogWrite(LED_BUILTIN + 1, 255 - g);
+  analogWrite(LED_BUILTIN + 2, 255 - b);
 }
 
-// Set RGB LED 4 color (active-low, digital only)
+// Set RGB LED 4 color (active-low, PWM)
+// For active-low LEDs: 0 = ON (full brightness), 255 = OFF
 void setRGB4(uint8_t r, uint8_t g, uint8_t b) {
-  digitalWrite(LED_BUILTIN + 3, r > 0 ? LOW : HIGH);
-  digitalWrite(LED_BUILTIN + 4, g > 0 ? LOW : HIGH);
-  digitalWrite(LED_BUILTIN + 5, b > 0 ? LOW : HIGH);
+  analogWrite(LED_BUILTIN + 3, 255 - r);  // Invert: 0->255, 255->0
+  analogWrite(LED_BUILTIN + 4, 255 - g);
+  analogWrite(LED_BUILTIN + 5, 255 - b);
 }
 
 // Scroll text across LED matrix using native ArduinoGraphics
@@ -69,9 +71,9 @@ void setup() {
   pinMode(LED_BUILTIN + 4, OUTPUT);
   pinMode(LED_BUILTIN + 5, OUTPUT);
 
-  // Start with LEDs off (active-low: HIGH = OFF)
-  setRGB3(0, 0, 0);
-  setRGB4(0, 0, 0);
+  // Start with LEDs off (active-low: 255 = OFF)
+  setRGB3(255, 255, 255);
+  setRGB4(255, 255, 255);
 
   // Setup Router Bridge
   Bridge.begin();
