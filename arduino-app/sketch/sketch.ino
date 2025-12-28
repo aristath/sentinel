@@ -3,6 +3,7 @@
 // Uses Router Bridge for communication with Linux MPU
 
 #include <Arduino_RouterBridge.h>
+#include <ArduinoGraphics.h>  // Must be before Arduino_LED_Matrix for text support
 #include <Arduino_LED_Matrix.h>
 #include <vector>
 
