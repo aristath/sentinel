@@ -5,50 +5,7 @@
 class JobFooter extends HTMLElement {
   connectedCallback() {
     this.innerHTML = `
-      <footer class="mt-8 pt-4 border-t border-gray-800" x-data="{
-        loading: {},
-        messages: {},
-        jobs: [
-          { id: 'sync-cycle', name: 'Sync Cycle', api: 'triggerSyncCycle' },
-          { id: 'daily-pipeline', name: 'Daily Pipeline', api: 'triggerDailyPipeline' },
-          { id: 'daily-maintenance', name: 'Daily Maintenance', api: 'triggerDailyMaintenance' },
-          { id: 'weekly-maintenance', name: 'Weekly Maintenance', api: 'triggerWeeklyMaintenance' },
-          { id: 'dividend-reinvestment', name: 'Dividend Reinvestment', api: 'triggerDividendReinvestment' },
-          { id: 'universe-pruning', name: 'Universe Pruning', api: 'triggerUniversePruning' },
-          { id: 'stock-discovery', name: 'Stock Discovery', api: 'triggerStockDiscovery' }
-        ],
-        async triggerJob(job) {
-          if (this.loading[job.id]) return;
-
-          this.loading[job.id] = true;
-          this.messages[job.id] = null;
-
-          try {
-            const result = await window.API[job.api]();
-            this.messages[job.id] = {
-              type: result.status === 'success' ? 'success' : 'error',
-              text: result.message || result.status
-            };
-
-            // Clear message after 5 seconds
-            setTimeout(() => {
-              this.messages[job.id] = null;
-            }, 5000);
-          } catch (error) {
-            this.messages[job.id] = {
-              type: 'error',
-              text: error.message || 'Failed to trigger job'
-            };
-
-            // Clear message after 5 seconds
-            setTimeout(() => {
-              this.messages[job.id] = null;
-            }, 5000);
-          } finally {
-            this.loading[job.id] = false;
-          }
-        }
-      }">
+      <footer class="mt-8 pt-4 border-t border-gray-800" x-data="jobFooterComponent()">
         <div class="mb-2">
           <h3 class="text-xs text-gray-400 uppercase tracking-wide mb-3">Manual Job Triggers</h3>
         </div>
@@ -75,7 +32,62 @@ class JobFooter extends HTMLElement {
         </div>
       </footer>
     `;
+
+    // Ensure Alpine processes the component
+    if (window.Alpine) {
+      window.Alpine.initTree(this);
+    }
   }
+}
+
+/**
+ * Alpine.js component for job footer
+ */
+function jobFooterComponent() {
+  return {
+    loading: {},
+    messages: {},
+    jobs: [
+      { id: 'sync-cycle', name: 'Sync Cycle', api: 'triggerSyncCycle' },
+      { id: 'daily-pipeline', name: 'Daily Pipeline', api: 'triggerDailyPipeline' },
+      { id: 'daily-maintenance', name: 'Daily Maintenance', api: 'triggerDailyMaintenance' },
+      { id: 'weekly-maintenance', name: 'Weekly Maintenance', api: 'triggerWeeklyMaintenance' },
+      { id: 'dividend-reinvestment', name: 'Dividend Reinvestment', api: 'triggerDividendReinvestment' },
+      { id: 'universe-pruning', name: 'Universe Pruning', api: 'triggerUniversePruning' },
+      { id: 'stock-discovery', name: 'Stock Discovery', api: 'triggerStockDiscovery' }
+    ],
+    async triggerJob(job) {
+      if (this.loading[job.id]) return;
+
+      this.loading[job.id] = true;
+      this.messages[job.id] = null;
+
+      try {
+        const result = await window.API[job.api]();
+        this.messages[job.id] = {
+          type: result.status === 'success' ? 'success' : 'error',
+          text: result.message || result.status
+        };
+
+        // Clear message after 5 seconds
+        setTimeout(() => {
+          this.messages[job.id] = null;
+        }, 5000);
+      } catch (error) {
+        this.messages[job.id] = {
+          type: 'error',
+          text: error.message || 'Failed to trigger job'
+        };
+
+        // Clear message after 5 seconds
+        setTimeout(() => {
+          this.messages[job.id] = null;
+        }, 5000);
+      } finally {
+        this.loading[job.id] = false;
+      }
+    }
+  };
 }
 
 customElements.define('job-footer', JobFooter);
