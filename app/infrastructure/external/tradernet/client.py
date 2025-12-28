@@ -1,9 +1,6 @@
-"""Tradernet (Freedom24) API client service."""
+"""Tradernet API client implementation."""
 
-import asyncio
 import logging
-from contextlib import contextmanager
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -11,668 +8,36 @@ from tradernet import TraderNetAPI
 
 from app.config import settings
 from app.domain.services.exchange_rate_service import ExchangeRateService
-from app.infrastructure.events import SystemEvent, emit
-
-# Alias for backward compatibility
-Tradernet = TraderNetAPI
+from app.domain.value_objects.currency import Currency
+from app.infrastructure.external.tradernet.models import (
+    OHLC,
+    CashBalance,
+    OrderResult,
+    Position,
+    Quote,
+)
+from app.infrastructure.external.tradernet.parsers import (
+    create_order_result,
+    create_research_mode_order,
+    get_trading_mode,
+    parse_candles_format,
+    parse_candles_list,
+    parse_hloc_format,
+    parse_price_data_string,
+)
+from app.infrastructure.external.tradernet.transactions import (
+    get_corporate_action_transactions,
+    get_cps_history_transactions,
+    get_trade_fee_transactions,
+    parse_withdrawal_record,
+)
+from app.infrastructure.external.tradernet.utils import (
+    get_exchange_rate_sync,
+    led_api_call,
+    set_exchange_rate_service,
+)
 
 logger = logging.getLogger(__name__)
-
-
-@contextmanager
-def _led_api_call():
-    """Context manager to emit events during API calls for LED indication."""
-    emit(SystemEvent.API_CALL_START)
-    try:
-        yield
-    finally:
-        emit(SystemEvent.API_CALL_END)
-
-
-# Global ExchangeRateService instance (set by TradernetClient)
-_exchange_rate_service: Optional[ExchangeRateService] = None
-
-
-def _get_exchange_rate_sync(from_currency: str, to_currency: str = "EUR") -> float:
-    """Get exchange rate synchronously using ExchangeRateService.
-
-    This is a sync wrapper around async ExchangeRateService.get_rate().
-    Uses asyncio.run() to call the async method from sync code.
-    Falls back to hardcoded rates if service unavailable or if called from async context.
-    """
-    global _exchange_rate_service
-
-    # Fallback rates
-    fallback_rates = {
-        ("HKD", "EUR"): 8.5,
-        ("USD", "EUR"): 1.05,
-        ("GBP", "EUR"): 0.85,
-    }
-
-    if _exchange_rate_service is None:
-        return fallback_rates.get((from_currency, to_currency), 1.0)
-
-    try:
-        # Try to get the current event loop
-        try:
-            asyncio.get_running_loop()
-            # If we're in an async context, we can't use asyncio.run()
-            # Fall back to hardcoded rates
-            logger.debug(
-                f"Called _get_exchange_rate_sync from async context, using fallback rate for {from_currency}/{to_currency}"
-            )
-            return fallback_rates.get((from_currency, to_currency), 1.0)
-        except RuntimeError:
-            # No running loop, safe to use asyncio.run()
-            pass
-
-        # Use asyncio.run() to call async method from sync context
-        return asyncio.run(_exchange_rate_service.get_rate(from_currency, to_currency))
-    except Exception as e:
-        logger.warning(
-            f"Failed to get exchange rate {from_currency}/{to_currency}: {e}"
-        )
-        return fallback_rates.get((from_currency, to_currency), 1.0)
-
-
-# Backward compatibility - deprecated, use _get_exchange_rate_sync() instead
-def get_exchange_rate(from_currency: str, to_currency: Optional[str] = None) -> float:
-    """Get exchange rate from currency to target currency (deprecated).
-
-    This function is kept for backward compatibility but will be removed.
-    Use ExchangeRateService directly in async code, or _get_exchange_rate_sync() in sync code.
-    """
-    from app.domain.value_objects.currency import Currency
-
-    if to_currency is None:
-        to_currency = Currency.EUR
-
-    return _get_exchange_rate_sync(from_currency, to_currency)
-
-
-@dataclass
-class Position:
-    """Portfolio position."""
-
-    symbol: str
-    name: str
-    quantity: float
-    avg_price: float
-    current_price: float
-    market_value: float
-    market_value_eur: float  # Market value converted to EUR
-    unrealized_pnl: float
-    currency: str
-    currency_rate: float  # Exchange rate to EUR (1.0 for EUR positions)
-
-
-@dataclass
-class CashBalance:
-    """Cash balance in a currency."""
-
-    currency: str
-    amount: float
-
-
-@dataclass
-class Quote:
-    """Stock quote data."""
-
-    symbol: str
-    price: float
-    change: float
-    change_pct: float
-    volume: int
-    timestamp: datetime
-
-
-@dataclass
-class OHLC:
-    """OHLC candle data."""
-
-    timestamp: datetime
-    open: float
-    high: float
-    low: float
-    close: float
-    volume: int
-
-
-@dataclass
-class OrderResult:
-    """Order execution result."""
-
-    order_id: str
-    symbol: str
-    side: str
-    quantity: float
-    price: float
-    status: str
-
-
-def _parse_price_data_string(data, symbol: str):
-    """Parse price data if it's a JSON string."""
-    if isinstance(data, str):
-        import json
-
-        try:
-            return json.loads(data)
-        except json.JSONDecodeError:
-            logger.warning(
-                f"Received non-JSON string response for {symbol}: {data[:100]}"
-            )
-            return []
-    return data
-
-
-def _parse_hloc_format(data: dict, symbol: str, start: datetime) -> list[OHLC]:
-    """Parse hloc format: {'hloc': {'SYMBOL': [[high, low, open, close], ...]}}."""
-    hloc_data = data.get("hloc", {})
-    if not hloc_data or not isinstance(hloc_data, dict):
-        return []
-
-    symbol_data = hloc_data.get(symbol, [])
-    if not symbol_data or not isinstance(symbol_data, list):
-        return []
-
-    result = []
-    current_date = start
-    for candle_array in symbol_data:
-        if isinstance(candle_array, list) and len(candle_array) >= 4:
-            if len(candle_array) == 4:
-                high = float(candle_array[0])
-                low = float(candle_array[1])
-                open_price = float(candle_array[2])
-                close = float(candle_array[3])
-            else:
-                high = float(candle_array[0]) if len(candle_array) > 0 else 0
-                low = float(candle_array[1]) if len(candle_array) > 1 else 0
-                open_price = float(candle_array[2]) if len(candle_array) > 2 else 0
-                close = float(candle_array[3]) if len(candle_array) > 3 else 0
-
-            result.append(
-                OHLC(
-                    timestamp=current_date,
-                    open=open_price,
-                    high=high,
-                    low=low,
-                    close=close,
-                    volume=0,
-                )
-            )
-            current_date += timedelta(days=1)
-
-    return result
-
-
-def _parse_candles_format(data: dict) -> list[OHLC]:
-    """Parse candles format from dict."""
-    candles = data.get("candles", [])
-    result = []
-    for candle in candles:
-        if isinstance(candle, dict):
-            result.append(
-                OHLC(
-                    timestamp=datetime.fromtimestamp(candle.get("t", 0)),
-                    open=float(candle.get("o", 0)),
-                    high=float(candle.get("h", 0)),
-                    low=float(candle.get("l", 0)),
-                    close=float(candle.get("c", 0)),
-                    volume=int(candle.get("v", 0)),
-                )
-            )
-    return result
-
-
-def _parse_candles_list(data: list) -> list[OHLC]:
-    """Parse direct list of candles."""
-    result = []
-    for candle in data:
-        if isinstance(candle, dict):
-            result.append(
-                OHLC(
-                    timestamp=datetime.fromtimestamp(candle.get("t", 0)),
-                    open=float(candle.get("o", 0)),
-                    high=float(candle.get("h", 0)),
-                    low=float(candle.get("l", 0)),
-                    close=float(candle.get("c", 0)),
-                    volume=int(candle.get("v", 0)),
-                )
-            )
-    return result
-
-
-def _get_trading_mode() -> str:
-    """Get trading mode from cache."""
-    from app.infrastructure.cache import cache
-
-    trading_mode = "research"
-    try:
-        cached_settings = cache.get("settings:all")
-        if cached_settings and "trading_mode" in cached_settings:
-            trading_mode = cached_settings["trading_mode"]
-    except Exception:
-        pass
-    return trading_mode
-
-
-def _create_research_mode_order(
-    symbol: str, side: str, quantity: float, client
-) -> OrderResult:
-    """Create a mock order result for research mode."""
-    try:
-        quote = client.get_quote(symbol)
-        mock_price = quote.price if quote else 0.0
-    except Exception:
-        mock_price = 0.0
-
-    return OrderResult(
-        order_id=f"RESEARCH_{symbol}_{datetime.now().timestamp()}",
-        symbol=symbol,
-        side=side.upper(),
-        quantity=quantity,
-        price=mock_price,
-        status="submitted",
-    )
-
-
-def _create_order_result(
-    result, symbol: str, side: str, quantity: float
-) -> OrderResult:
-    """Create OrderResult from API response."""
-    if isinstance(result, dict):
-        return OrderResult(
-            order_id=str(result.get("order_id", result.get("orderId", ""))),
-            symbol=symbol,
-            side=side.upper(),
-            quantity=quantity,
-            price=float(result.get("price", 0)),
-            status=result.get("status", "submitted"),
-        )
-    return OrderResult(
-        order_id=str(result) if result else "",
-        symbol=symbol,
-        side=side.upper(),
-        quantity=quantity,
-        price=0,
-        status="submitted",
-    )
-
-
-def _parse_cps_history_params(params_str) -> dict:
-    """Parse params JSON string from CPS history record."""
-    import json as json_lib
-
-    try:
-        return json_lib.loads(params_str) if isinstance(params_str, str) else params_str
-    except (json_lib.JSONDecodeError, TypeError):
-        return {}
-
-
-def _extract_amount_and_currency(params: dict, type_doc_id: int) -> tuple[float, str]:
-    """Extract amount and currency from params based on transaction type."""
-    amount = 0.0
-    currency = "EUR"
-
-    try:
-        if "totalMoneyOut" in params:
-            amount = float(params.get("totalMoneyOut", 0))
-            currency = params.get("currency", "EUR")
-        elif "totalMoneyIn" in params:
-            amount = float(params.get("totalMoneyIn", 0))
-            currency = params.get("currency", "EUR")
-        elif "structured_product_trade_sum" in params:
-            amount = float(params.get("structured_product_trade_sum", 0))
-            currency = params.get("structured_product_currency", "USD")
-        elif "amount" in params:
-            amount = float(params.get("amount", 0))
-            currency = params.get("currency", "EUR")
-        elif "sum" in params:
-            amount = float(params.get("sum", 0))
-            currency = params.get("currency", "EUR")
-    except (ValueError, TypeError):
-        pass
-
-    return amount, currency
-
-
-def _convert_amount_to_eur(amount: float, currency: str) -> float:
-    """Convert amount to EUR using exchange rate."""
-    if currency == "EUR" or amount == 0:
-        return amount
-
-    try:
-        rate = _get_exchange_rate_sync(currency, "EUR")
-        if rate > 0:
-            return amount / rate
-    except Exception as e:
-        logger.debug(f"Failed to convert {amount} {currency} to EUR: {e}")
-
-    return amount
-
-
-def _create_transaction_id(record: dict, type_doc_id) -> str:
-    """Create unique transaction ID from record."""
-    import hashlib
-    import json as json_lib
-
-    transaction_id = (
-        record.get("id") or record.get("transaction_id") or record.get("doc_id")
-    )
-
-    if not transaction_id:
-        unique_str = f"{type_doc_id}_{record.get('date_crt', '')}_{record.get('status_c', '')}_{json_lib.dumps(record.get('params', {}), sort_keys=True)}"
-        transaction_id = (
-            f"{type_doc_id}_{hashlib.md5(unique_str.encode()).hexdigest()[:8]}"
-        )
-
-    return str(transaction_id)
-
-
-def _extract_withdrawal_fee(
-    params: dict, transaction_id: str, date: str, currency: str, status: str, status_c
-) -> Optional[dict]:
-    """Extract withdrawal fee as separate transaction."""
-    if "total_commission" not in params:
-        return None
-
-    withdrawal_fee = params.get("total_commission", 0)
-    if not withdrawal_fee or float(withdrawal_fee) <= 0:
-        return None
-
-    fee_currency = params.get("commission_currency", currency)
-    fee_amount_eur = _convert_amount_to_eur(float(withdrawal_fee), fee_currency)
-
-    return {
-        "transaction_id": f"{transaction_id}_fee",
-        "type_doc_id": "withdrawal_fee",
-        "transaction_type": "withdrawal_fee",
-        "date": date,
-        "amount": float(withdrawal_fee),
-        "currency": fee_currency,
-        "amount_eur": round(fee_amount_eur, 2),
-        "status": status,
-        "status_c": status_c,
-        "description": f"Withdrawal fee for {params.get('totalMoneyOut', 0)} {currency} withdrawal",
-        "params": {"withdrawal_id": transaction_id, **params},
-    }
-
-
-def _extract_structured_product_fee(
-    params: dict, transaction_id: str, date: str, currency: str, status: str, status_c
-) -> Optional[dict]:
-    """Extract structured product commission as separate transaction."""
-    if "structured_product_trade_commission" not in params:
-        return None
-
-    sp_commission = params.get("structured_product_trade_commission", 0)
-    if not sp_commission or float(sp_commission) <= 0:
-        return None
-
-    sp_comm_eur = _convert_amount_to_eur(float(sp_commission), currency)
-
-    return {
-        "transaction_id": f"{transaction_id}_fee",
-        "type_doc_id": "structured_product_fee",
-        "transaction_type": "structured_product_fee",
-        "date": date,
-        "amount": float(sp_commission),
-        "currency": currency,
-        "amount_eur": round(sp_comm_eur, 2),
-        "status": status,
-        "status_c": status_c,
-        "description": "Structured product commission",
-        "params": {"product_id": transaction_id, **params},
-    }
-
-
-def _process_cps_history_record(record: dict, type_mapping: dict) -> list[dict]:
-    """Process a single CPS history record and return transactions."""
-    transactions: list[dict] = []
-
-    try:
-        params = _parse_cps_history_params(record.get("params", "{}"))
-        type_doc_id = record.get("type_doc_id")
-        if type_doc_id is None:
-            return transactions
-
-        status_c = record.get("status_c")
-        transaction_type = type_mapping.get(type_doc_id, f"type_{type_doc_id}")
-
-        amount, currency = _extract_amount_and_currency(params, type_doc_id)
-        amount_eur = _convert_amount_to_eur(amount, currency)
-
-        transaction_id = _create_transaction_id(record, type_doc_id)
-
-        date_crt = record.get("date_crt", "")
-        date = (
-            date_crt[:10]
-            if len(date_crt) >= 10
-            else date_crt or datetime.now().strftime("%Y-%m-%d")
-        )
-
-        description = record.get("name", "") or record.get("description", "")
-
-        status_map: dict[int, str] = {
-            1: "pending",
-            2: "processing",
-            3: "completed",
-            4: "cancelled",
-            5: "rejected",
-        }
-        status = status_map.get(status_c or 0, f"status_{status_c}")
-
-        transactions.append(
-            {
-                "transaction_id": transaction_id,
-                "type_doc_id": type_doc_id,
-                "transaction_type": transaction_type,
-                "date": date,
-                "amount": amount,
-                "currency": currency or "EUR",
-                "amount_eur": round(amount_eur, 2),
-                "status": status,
-                "status_c": status_c,
-                "description": description,
-                "params": params,
-            }
-        )
-
-        fee_transaction = _extract_withdrawal_fee(
-            params, transaction_id, date, currency, status, status_c
-        )
-        if fee_transaction:
-            transactions.append(fee_transaction)
-
-        sp_fee_transaction = _extract_structured_product_fee(
-            params, transaction_id, date, currency, status, status_c
-        )
-        if sp_fee_transaction:
-            transactions.append(sp_fee_transaction)
-
-    except Exception as e:
-        logger.error(f"Failed to process transaction record: {e}")
-
-    return transactions
-
-
-def _process_corporate_action(action: dict) -> Optional[dict]:
-    """Process a single corporate action and return transaction dict."""
-    action_type = action.get("type", "").lower()
-
-    if action_type not in ["dividend", "coupon", "maturity", "partial_maturity"]:
-        return None
-
-    amount_per_one = float(action.get("amount_per_one", 0))
-    executed_count = int(action.get("executed_count", 0))
-    amount = amount_per_one * executed_count
-
-    if amount == 0:
-        return None
-
-    currency = action.get("currency", "USD")
-    pay_date = action.get("pay_date", action.get("ex_date", ""))
-    date = pay_date[:10] if len(pay_date) >= 10 else pay_date
-
-    amount_eur = _convert_amount_to_eur(amount, currency)
-
-    action_id = action.get("id") or action.get("corporate_action_id", "")
-    transaction_id = f"corp_action_{action_type}_{action_id}"
-
-    ticker = action.get("ticker", "")
-    description = f"{action_type.title()}: {ticker} ({executed_count} shares × {amount_per_one} {currency})"
-
-    return {
-        "transaction_id": transaction_id,
-        "type_doc_id": f"corp_{action_type}",
-        "transaction_type": action_type,
-        "date": date,
-        "amount": amount,
-        "currency": currency,
-        "amount_eur": round(amount_eur, 2),
-        "status": "completed",
-        "status_c": None,
-        "description": description,
-        "params": action,
-    }
-
-
-def _process_trade_fee(trade: dict) -> Optional[dict]:
-    """Process a single trade fee and return transaction dict."""
-    commission_str = trade.get("commission", "0")
-    try:
-        commission = float(commission_str) if commission_str else 0.0
-    except (ValueError, TypeError):
-        commission = 0.0
-
-    if commission == 0:
-        return None
-
-    currency = trade.get("commission_currency", trade.get("curr_c", "EUR"))
-    trade_date = trade.get("date", "")
-    date = trade_date[:10] if len(trade_date) >= 10 else trade_date
-
-    amount_eur = _convert_amount_to_eur(commission, currency)
-
-    trade_id = trade.get("id") or trade.get("order_id", "")
-    transaction_id = f"trade_fee_{trade_id}"
-
-    instr_name = trade.get("instr_nm", "")
-    description = f"Trading fee: {instr_name}"
-
-    return {
-        "transaction_id": transaction_id,
-        "type_doc_id": "trade_fee",
-        "transaction_type": "trading_fee",
-        "date": date,
-        "amount": commission,
-        "currency": currency,
-        "amount_eur": round(amount_eur, 2),
-        "status": "completed",
-        "status_c": None,
-        "description": description,
-        "params": trade,
-    }
-
-
-def _get_cps_history_transactions(client, limit: int) -> list[dict]:
-    """Get transactions from CPS history."""
-    try:
-        with _led_api_call():
-            history = client.authorized_request(
-                "getClientCpsHistory", {"limit": limit}, version=2
-            )
-
-        records = history if isinstance(history, list) else []
-        type_mapping = {337: "withdrawal", 297: "structured_product_purchase"}
-
-        transactions = []
-        for record in records:
-            transactions.extend(_process_cps_history_record(record, type_mapping))
-        return transactions
-    except Exception as e:
-        logger.warning(f"Failed to get CPS history: {e}")
-        return []
-
-
-def _get_corporate_action_transactions(client) -> list[dict]:
-    """Get transactions from corporate actions."""
-    try:
-        with _led_api_call():
-            corporate_actions = client.corporate_actions()
-
-        executed_actions = [
-            a
-            for a in corporate_actions
-            if isinstance(a, dict) and a.get("executed", False)
-        ]
-
-        transactions = []
-        for action in executed_actions:
-            transaction = _process_corporate_action(action)
-            if transaction:
-                transactions.append(transaction)
-        return transactions
-    except Exception as e:
-        logger.warning(f"Failed to get corporate actions: {e}")
-        return []
-
-
-def _parse_withdrawal_record(record: dict) -> Optional[dict]:
-    """Parse a withdrawal record and return withdrawal dict."""
-    import json as json_lib
-
-    if record.get("type_doc_id") != 337:
-        return None
-
-    if record.get("status_c") != 3:
-        return None
-
-    params_str = record.get("params", "{}")
-    try:
-        params = (
-            json_lib.loads(params_str) if isinstance(params_str, str) else params_str
-        )
-    except json_lib.JSONDecodeError:
-        return None
-
-    currency = params.get("currency", "EUR")
-    amount = float(params.get("totalMoneyOut", 0))
-
-    if currency != "EUR" and amount > 0:
-        rate = _get_exchange_rate_sync(currency, "EUR")
-        if rate > 0:
-            amount = amount / rate
-
-    date_crt = record.get("date_crt", "")
-    date = date_crt[:10] if len(date_crt) >= 10 else date_crt
-
-    return {
-        "date": date,
-        "amount": amount,
-        "amount_eur": round(amount, 2),
-        "currency": currency,
-        "description": record.get("name", ""),
-    }
-
-
-def _get_trade_fee_transactions(client) -> list[dict]:
-    """Get transactions from trade fees."""
-    try:
-        with _led_api_call():
-            trades_data = client.get_trades_history()
-
-        trade_list = trades_data.get("trades", {}).get("trade", [])
-
-        transactions = []
-        for trade in trade_list:
-            transaction = _process_trade_fee(trade)
-            if transaction:
-                transactions.append(transaction)
-        return transactions
-    except Exception as e:
-        logger.warning(f"Failed to get trades history: {e}")
-        return []
 
 
 class TradernetClient:
@@ -690,9 +55,8 @@ class TradernetClient:
         self._exchange_rate_service = exchange_rate_service
 
         # Set global service for sync helper functions
-        global _exchange_rate_service
         if exchange_rate_service is not None:
-            _exchange_rate_service = exchange_rate_service
+            set_exchange_rate_service(exchange_rate_service)
 
     def connect(self) -> bool:
         """Connect to Tradernet API."""
@@ -701,7 +65,7 @@ class TradernetClient:
             return False
 
         try:
-            client = Tradernet(
+            client = TraderNetAPI(
                 settings.tradernet_api_key, settings.tradernet_api_secret
             )
             # Test connection by fetching user info
@@ -723,6 +87,8 @@ class TradernetClient:
     @classmethod
     def shared(cls) -> "TradernetClient":
         """Get the shared singleton instance."""
+        from app.infrastructure.external.tradernet.client import get_tradernet_client
+
         return get_tradernet_client()
 
     def get_account_summary(self) -> dict:
@@ -731,7 +97,7 @@ class TradernetClient:
             raise ConnectionError("Not connected to Tradernet")
 
         try:
-            with _led_api_call():
+            with led_api_call():
                 return self._client.account_summary()
         except Exception as e:
             logger.error(f"Failed to get account summary: {e}")
@@ -743,15 +109,13 @@ class TradernetClient:
             raise ConnectionError("Not connected to Tradernet")
 
         try:
-            with _led_api_call():
+            with led_api_call():
                 summary = self._client.account_summary()
             positions = []
 
             # Parse positions from result.ps.pos
             ps_data = summary.get("result", {}).get("ps", {})
             pos_data = ps_data.get("pos", [])
-
-            from app.domain.value_objects.currency import Currency
 
             for item in pos_data:
                 avg_price = float(item.get("bal_price_a", 0))
@@ -763,7 +127,7 @@ class TradernetClient:
                 currency = item.get("curr", Currency.EUR)
 
                 # Get real-time exchange rate instead of API's currval
-                currency_rate = _get_exchange_rate_sync(currency, Currency.EUR)
+                currency_rate = get_exchange_rate_sync(currency, Currency.EUR)
 
                 # Convert market_value to default currency (EUR)
                 if currency == Currency.EUR:
@@ -778,7 +142,6 @@ class TradernetClient:
                 positions.append(
                     Position(
                         symbol=item.get("i", ""),
-                        name=item.get("name", item.get("name2", "")),
                         quantity=quantity,
                         avg_price=avg_price,
                         current_price=current_price,
@@ -801,7 +164,7 @@ class TradernetClient:
             raise ConnectionError("Not connected to Tradernet")
 
         try:
-            with _led_api_call():
+            with led_api_call():
                 summary = self._client.account_summary()
             balances = []
 
@@ -837,15 +200,13 @@ class TradernetClient:
             raise ConnectionError("Not connected to Tradernet")
 
         try:
-            with _led_api_call():
+            with led_api_call():
                 summary = self._client.account_summary()
             total = 0.0
 
             # Parse cash from result.ps.acc
             ps_data = summary.get("result", {}).get("ps", {})
             acc_data = ps_data.get("acc", [])
-
-            from app.domain.value_objects.currency import Currency
 
             for item in acc_data:
                 amount = float(item.get("s", 0))
@@ -855,7 +216,7 @@ class TradernetClient:
                     total += amount
                 elif amount > 0:
                     # Convert to EUR using real-time exchange rate
-                    rate = _get_exchange_rate_sync(currency, Currency.EUR)
+                    rate = get_exchange_rate_sync(currency, Currency.EUR)
                     total += amount / rate
 
             return total
@@ -869,7 +230,7 @@ class TradernetClient:
             raise ConnectionError("Not connected to Tradernet")
 
         try:
-            with _led_api_call():
+            with led_api_call():
                 quotes = self._client.get_quotes([symbol])
             if quotes and len(quotes) > 0:
                 # quotes can be list or dict depending on API response
@@ -898,7 +259,7 @@ class TradernetClient:
             raise ConnectionError("Not connected to Tradernet")
 
         try:
-            with _led_api_call():
+            with led_api_call():
                 return self._client.get_quotes(symbols)
         except Exception as e:
             logger.error(f"Failed to get raw quotes: {e}")
@@ -914,7 +275,7 @@ class TradernetClient:
             raise ConnectionError("Not connected to Tradernet")
 
         try:
-            with _led_api_call():
+            with led_api_call():
                 response = self._client.get_placed(active=True)
 
             orders_data = response.get("result", {}).get("orders", {})
@@ -1006,7 +367,7 @@ class TradernetClient:
                 end = datetime.now()
 
         try:
-            with _led_api_call():
+            with led_api_call():
                 data = self._client.get_candles(symbol, start=start, end=end)
             result = []
 
@@ -1015,13 +376,13 @@ class TradernetClient:
                 f"get_candles response for {symbol}: type={type(data)}, value={str(data)[:200] if data else 'None'}"
             )
 
-            data = _parse_price_data_string(data, symbol)
+            data = parse_price_data_string(data, symbol)
             if isinstance(data, dict):
-                result = _parse_hloc_format(
-                    data, symbol, start
-                ) or _parse_candles_format(data)
+                result = parse_hloc_format(data, symbol, start) or parse_candles_format(
+                    data
+                )
             elif isinstance(data, list):
-                result = _parse_candles_list(data)
+                result = parse_candles_list(data)
 
             return result
         except Exception as e:
@@ -1043,7 +404,7 @@ class TradernetClient:
             raise ConnectionError("Not connected to Tradernet")
 
         try:
-            with _led_api_call():
+            with led_api_call():
                 info = self._client.security_info(symbol)
             return info
         except Exception as e:
@@ -1074,9 +435,9 @@ class TradernetClient:
         if not self.is_connected or self._client is None:
             raise ConnectionError("Not connected to Tradernet")
 
-        trading_mode = _get_trading_mode()
+        trading_mode = get_trading_mode()
         if trading_mode == "research":
-            return _create_research_mode_order(symbol, side, quantity, self)
+            return create_research_mode_order(symbol, side, quantity, self)
 
         try:
             # Convert quantity to int as Tradernet API expects int
@@ -1088,7 +449,7 @@ class TradernetClient:
             else:
                 raise ValueError(f"Invalid side: {side}")
 
-            return _create_order_result(result, symbol, side, quantity)
+            return create_order_result(result, symbol, side, quantity)
         except Exception as e:
             logger.error(f"Failed to place order: {e}")
             return None
@@ -1159,7 +520,7 @@ class TradernetClient:
             raise ConnectionError("Not connected to Tradernet")
 
         try:
-            with _led_api_call():
+            with led_api_call():
                 trades_data = self._client.get_trades_history()
 
             trade_list = trades_data.get("trades", {}).get("trade", [])
@@ -1193,7 +554,7 @@ class TradernetClient:
             raise ConnectionError("Not connected to Tradernet")
 
         try:
-            with _led_api_call():
+            with led_api_call():
                 # Get client history - only withdrawals (337) are returned
                 history = self._client.authorized_request(
                     "getClientCpsHistory", {"limit": 500}, version=2
@@ -1206,7 +567,7 @@ class TradernetClient:
             records = history if isinstance(history, list) else []
 
             for record in records:
-                withdrawal = _parse_withdrawal_record(record)
+                withdrawal = parse_withdrawal_record(record)
                 if withdrawal:
                     total_withdrawals += withdrawal["amount_eur"]
                     withdrawals.append(withdrawal)
@@ -1249,15 +610,15 @@ class TradernetClient:
             - description: Transaction description
             - params: Full params dictionary
         """
-        if not self.is_connected:
+        if not self.is_connected or self._client is None:
             raise ConnectionError("Not connected to Tradernet")
 
         all_transactions = []
 
         try:
-            all_transactions.extend(_get_cps_history_transactions(self._client, limit))
-            all_transactions.extend(_get_corporate_action_transactions(self._client))
-            all_transactions.extend(_get_trade_fee_transactions(self._client))
+            all_transactions.extend(get_cps_history_transactions(self._client, limit))
+            all_transactions.extend(get_corporate_action_transactions(self._client))
+            all_transactions.extend(get_trade_fee_transactions(self._client))
             return all_transactions
         except Exception as e:
             logger.error(f"Failed to get all cash flows: {e}")
@@ -1286,7 +647,7 @@ class TradernetClient:
             raise ConnectionError("Not connected to Tradernet")
 
         try:
-            with _led_api_call():
+            with led_api_call():
                 # Call underlying SDK method if available
                 # Note: This may need to be adjusted based on actual SDK method signature
                 if hasattr(self._client, "get_most_traded"):
@@ -1337,6 +698,5 @@ def get_tradernet_client(
     elif exchange_rate_service is not None and _client._exchange_rate_service is None:
         # Update existing client with service if not already set
         _client._exchange_rate_service = exchange_rate_service
-        global _exchange_rate_service
-        _exchange_rate_service = exchange_rate_service
+        set_exchange_rate_service(exchange_rate_service)
     return _client
