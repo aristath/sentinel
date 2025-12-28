@@ -87,6 +87,7 @@ async def init_scheduler() -> AsyncIOScheduler:
     from app.jobs.display_updater import update_display_periodic
     from app.jobs.dividend_reinvestment import auto_reinvest_dividends
     from app.jobs.maintenance import run_daily_maintenance, run_weekly_maintenance
+    from app.jobs.planner_batch import process_planner_batch_job
     from app.jobs.stock_discovery import discover_new_stocks
     from app.jobs.sync_cycle import run_sync_cycle
     from app.jobs.universe_pruning import prune_universe
@@ -95,6 +96,14 @@ async def init_scheduler() -> AsyncIOScheduler:
     job_settings = await _get_job_settings()
     sync_cycle_minutes = job_settings["sync_cycle_minutes"]
     maintenance_hour = job_settings["maintenance_hour"]
+
+    # Get planner batch interval from settings
+    from app.repositories import SettingsRepository
+
+    settings_repo = SettingsRepository()
+    planner_batch_interval = int(
+        await settings_repo.get_float("planner_batch_interval_seconds", 10.0)
+    )
 
     # Job 1: Sync Cycle - every 15 minutes (configurable)
     # Handles: trades, cash flows, portfolio, prices (market-aware),
@@ -179,12 +188,23 @@ async def init_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 
+    # Job 9: Planner Batch - every N seconds (configurable, default 10)
+    # Processes next batch of sequences for holistic planner
+    scheduler.add_job(
+        process_planner_batch_job,
+        IntervalTrigger(seconds=planner_batch_interval),
+        id="planner_batch",
+        name="Planner Batch",
+        replace_existing=True,
+    )
+
     logger.info(
-        f"Scheduler initialized with 8 jobs - "
+        f"Scheduler initialized with 9 jobs - "
         f"sync_cycle:{sync_cycle_minutes}m, daily_pipeline:1h, "
         f"maintenance:{maintenance_hour}:00, dividend_reinvestment:{maintenance_hour}:30, "
         f"universe_pruning:1st of month {maintenance_hour}:00, "
-        f"stock_discovery:15th of month 02:00, display_updater:9.9s"
+        f"stock_discovery:15th of month 02:00, display_updater:9.9s, "
+        f"planner_batch:{planner_batch_interval}s"
     )
     return scheduler
 

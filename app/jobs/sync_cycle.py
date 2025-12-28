@@ -416,8 +416,74 @@ async def _get_holistic_recommendation():
             status=RecommendationStatus.PENDING,
         )
 
-    # Cache miss - call planner
-    logger.info("Cache miss, calling holistic planner...")
+    # Cache miss - try to get best result from database (incremental mode)
+    logger.info("Cache miss, checking planner database for best result...")
+
+    from app.domain.portfolio_hash import generate_portfolio_hash
+    from app.repositories.planner_repository import PlannerRepository
+
+    planner_repo = PlannerRepository()
+    portfolio_hash = generate_portfolio_hash(position_dicts, stocks)
+
+    best_result = await planner_repo.get_best_result(portfolio_hash)
+
+    if best_result:
+        # Get best sequence from database
+        best_sequence = await planner_repo.get_best_sequence_from_hash(
+            portfolio_hash, best_result["best_sequence_hash"]
+        )
+
+        if best_sequence and len(best_sequence) > 0:
+            # Use first step from best sequence
+            step_action = best_sequence[0]
+            logger.info(
+                f"Using best result from database: {step_action.side} {step_action.symbol}"
+            )
+
+            # Cache the result
+            multi_step_data = {
+                "depth": len(best_sequence),
+                "steps": [
+                    {
+                        "step": i + 1,
+                        "side": action.side,
+                        "symbol": action.symbol,
+                        "name": action.name,
+                        "quantity": action.quantity,
+                        "estimated_price": action.price,
+                        "estimated_value": action.value_eur,
+                        "currency": action.currency,
+                        "reason": action.reason,
+                    }
+                    for i, action in enumerate(best_sequence)
+                ],
+            }
+            cache.set(cache_key, multi_step_data, ttl_seconds=900)
+
+            # Convert to Recommendation
+            currency_val = step_action.currency
+            if isinstance(currency_val, str):
+                currency = Currency.from_string(currency_val)
+            else:
+                currency = Currency.from_string("EUR")
+
+            side = TradeSide.BUY if step_action.side == "BUY" else TradeSide.SELL
+
+            return Recommendation(
+                symbol=step_action.symbol,
+                name=step_action.name,
+                side=side,
+                quantity=step_action.quantity,
+                estimated_price=step_action.price,
+                estimated_value=step_action.value_eur,
+                reason=step_action.reason,
+                country=None,
+                currency=currency,
+                status=RecommendationStatus.PENDING,
+            )
+
+    # No result in database yet - call planner (fallback to full mode)
+    logger.info("No result in database, calling holistic planner (full mode)...")
 
     # Instantiate remaining required dependencies (stock_repo and tradernet_client already created)
     allocation_repo = AllocationRepository()
