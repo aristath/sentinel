@@ -141,6 +141,10 @@ class StockRepository:
         """Soft delete a stock (set active=False)."""
         await self.update(symbol, active=False)
 
+    async def mark_inactive(self, symbol: str) -> None:
+        """Mark a stock as inactive (alias for delete/soft-delete)."""
+        await self.update(symbol, active=False)
+
     async def get_with_scores(self) -> List[dict]:
         """Get all active stocks with their scores and positions.
 

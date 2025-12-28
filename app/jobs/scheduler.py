@@ -1,6 +1,6 @@
 """APScheduler setup for background jobs.
 
-Scheduler with 7 jobs:
+Scheduler with 8 jobs:
 1. sync_cycle - Every 15 minutes, handles trading operations
 2. daily_pipeline - Hourly, processes per-symbol data
 3. daily_maintenance - Daily at configured hour, backup and cleanup
@@ -8,6 +8,7 @@ Scheduler with 7 jobs:
 5. dividend_reinvestment - Daily, automatic dividend reinvestment
 6. universe_pruning - Monthly (1st), removes low-quality stocks
 7. stock_discovery - Monthly (15th), discovers new high-quality stocks
+8. display_updater - Every 20 seconds, updates LED display
 """
 
 import logging
@@ -83,6 +84,7 @@ async def init_scheduler() -> AsyncIOScheduler:
 
     # Import job functions
     from app.jobs.daily_pipeline import run_daily_pipeline
+    from app.jobs.display_updater import update_display_periodic
     from app.jobs.dividend_reinvestment import auto_reinvest_dividends
     from app.jobs.maintenance import run_daily_maintenance, run_weekly_maintenance
     from app.jobs.stock_discovery import discover_new_stocks
@@ -167,12 +169,22 @@ async def init_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 
+    # Job 8: Display Updater - every 20 seconds
+    # Handles: periodic LED display updates to ensure display is never blank
+    scheduler.add_job(
+        update_display_periodic,
+        IntervalTrigger(seconds=20),
+        id="display_updater",
+        name="Display Updater",
+        replace_existing=True,
+    )
+
     logger.info(
-        f"Scheduler initialized with 7 jobs - "
+        f"Scheduler initialized with 8 jobs - "
         f"sync_cycle:{sync_cycle_minutes}m, daily_pipeline:1h, "
         f"maintenance:{maintenance_hour}:00, dividend_reinvestment:{maintenance_hour}:30, "
         f"universe_pruning:1st of month {maintenance_hour}:00, "
-        f"stock_discovery:15th of month 02:00"
+        f"stock_discovery:15th of month 02:00, display_updater:20s"
     )
     return scheduler
 
@@ -211,12 +223,13 @@ async def reschedule_all_jobs():
         trigger=CronTrigger(day=1, hour=maintenance_hour, minute=0),
     )
     # Stock discovery schedule is fixed (15th at 2am), no reschedule needed
+    # Display updater schedule is fixed (20s), no reschedule needed
 
     logger.info(
         f"Jobs rescheduled - sync_cycle:{sync_cycle_minutes}m, "
         f"maintenance:{maintenance_hour}:00, dividend_reinvestment:{maintenance_hour}:30, "
         f"universe_pruning:1st of month {maintenance_hour}:00, "
-        f"stock_discovery:15th of month 02:00"
+        f"stock_discovery:15th of month 02:00, display_updater:20s"
     )
 
 
