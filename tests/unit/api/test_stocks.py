@@ -97,7 +97,7 @@ class TestGetStock:
         mock_stock.allow_sell = True
 
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_symbol.return_value = mock_stock
+        mock_stock_repo.get_by_identifier.return_value = mock_stock
 
         mock_position_repo = AsyncMock()
         mock_position_repo.get_by_symbol.return_value = None
@@ -117,7 +117,7 @@ class TestGetStock:
     async def test_get_stock_not_found(self):
         """Test getting a stock that doesn't exist."""
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_symbol.return_value = None
+        mock_stock_repo.get_by_identifier.return_value = None
 
         mock_position_repo = AsyncMock()
         mock_score_repo = AsyncMock()
@@ -160,7 +160,7 @@ class TestGetStock:
         mock_score.fundamental_score = 0.8
 
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_symbol.return_value = mock_stock
+        mock_stock_repo.get_by_identifier.return_value = mock_stock
 
         mock_position_repo = AsyncMock()
         mock_position_repo.get_by_symbol.return_value = None
@@ -199,7 +199,7 @@ class TestGetStock:
         mock_position.market_value_eur = 1500.0
 
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_symbol.return_value = mock_stock
+        mock_stock_repo.get_by_identifier.return_value = mock_stock
 
         mock_position_repo = AsyncMock()
         mock_position_repo.get_by_symbol.return_value = mock_position
@@ -223,7 +223,7 @@ class TestCreateStock:
     async def test_create_stock_already_exists(self):
         """Test creating a stock that already exists."""
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_symbol.return_value = MagicMock()  # Stock exists
+        mock_stock_repo.get_by_identifier.return_value = MagicMock()  # Stock exists
 
         mock_score_repo = AsyncMock()
         mock_scoring_service = AsyncMock()
@@ -246,7 +246,7 @@ class TestCreateStock:
     async def test_create_stock_with_industry(self):
         """Test creating a stock with industry provided."""
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_symbol.return_value = None  # Stock doesn't exist
+        mock_stock_repo.get_by_identifier.return_value = None  # Stock doesn't exist
 
         mock_score_repo = AsyncMock()
 
@@ -284,7 +284,7 @@ class TestCreateStock:
     async def test_create_stock_detects_industry(self):
         """Test creating a stock without industry triggers detection."""
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_symbol.return_value = None
+        mock_stock_repo.get_by_identifier.return_value = None
 
         mock_score_repo = AsyncMock()
 
@@ -415,12 +415,13 @@ class TestRefreshStockScore:
     async def test_refresh_stock_score_success(self):
         """Test refreshing a single stock score."""
         mock_stock = MagicMock()
+        mock_stock.symbol = "AAPL"
         mock_stock.yahoo_symbol = "AAPL"
         mock_stock.country = "United States"
         mock_stock.industry = "Consumer Electronics"
 
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_symbol.return_value = mock_stock
+        mock_stock_repo.get_by_identifier.return_value = mock_stock
 
         mock_score = MagicMock()
         mock_score.total_score = 0.8
@@ -455,7 +456,7 @@ class TestRefreshStockScore:
     async def test_refresh_stock_score_not_found(self):
         """Test refreshing score for non-existent stock."""
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_symbol.return_value = None
+        mock_stock_repo.get_by_identifier.return_value = None
 
         mock_scoring_service = AsyncMock()
 
@@ -473,12 +474,13 @@ class TestRefreshStockScore:
     async def test_refresh_stock_score_failed(self):
         """Test when score calculation fails."""
         mock_stock = MagicMock()
+        mock_stock.symbol = "AAPL"
         mock_stock.yahoo_symbol = "AAPL"
         mock_stock.country = "United States"
         mock_stock.industry = "Consumer Electronics"
 
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_symbol.return_value = mock_stock
+        mock_stock_repo.get_by_identifier.return_value = mock_stock
 
         mock_scoring_service = AsyncMock()
         mock_scoring_service.calculate_and_save_score.return_value = None  # Failed
@@ -511,7 +513,7 @@ class TestUpdateStock:
         mock_stock.allow_sell = False
 
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_symbol.return_value = mock_stock
+        mock_stock_repo.get_by_identifier.return_value = mock_stock
 
         mock_score = MagicMock()
         mock_score.total_score = 0.8
@@ -532,7 +534,7 @@ class TestUpdateStock:
     async def test_update_stock_not_found(self):
         """Test updating a stock that doesn't exist."""
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_symbol.return_value = None
+        mock_stock_repo.get_by_identifier.return_value = None
 
         mock_scoring_service = AsyncMock()
 
@@ -549,7 +551,7 @@ class TestUpdateStock:
         mock_stock = MagicMock()
 
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_symbol.return_value = mock_stock
+        mock_stock_repo.get_by_identifier.return_value = mock_stock
 
         mock_scoring_service = AsyncMock()
 
@@ -578,7 +580,7 @@ class TestUpdateStock:
 
         mock_stock_repo = AsyncMock()
         # First call finds AAPL, second check for new symbol returns None (doesn't exist)
-        mock_stock_repo.get_by_symbol.side_effect = [mock_stock, None, mock_stock]
+        mock_stock_repo.get_by_identifier.side_effect = [mock_stock, None, mock_stock]
 
         mock_score = MagicMock()
         mock_score.total_score = 0.8
@@ -610,7 +612,7 @@ class TestUpdateStock:
         mock_stock.allow_sell = False
 
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_symbol.return_value = mock_stock
+        mock_stock_repo.get_by_identifier.return_value = mock_stock
 
         mock_score = MagicMock()
         mock_score.total_score = 0.8
@@ -637,7 +639,7 @@ class TestUpdateStock:
         mock_stock = MagicMock()
         mock_stock.symbol = "AAPL"
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_symbol.return_value = mock_stock
+        mock_stock_repo.get_by_identifier.return_value = mock_stock
         mock_scoring_service = AsyncMock()
 
         update = StockUpdate(min_portfolio_target=25.0)  # Over limit
@@ -655,7 +657,7 @@ class TestUpdateStock:
         mock_stock = MagicMock()
         mock_stock.symbol = "AAPL"
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_symbol.return_value = mock_stock
+        mock_stock_repo.get_by_identifier.return_value = mock_stock
         mock_scoring_service = AsyncMock()
 
         update = StockUpdate(max_portfolio_target=35.0)  # Over limit
@@ -673,7 +675,7 @@ class TestUpdateStock:
         mock_stock = MagicMock()
         mock_stock.symbol = "AAPL"
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_symbol.return_value = mock_stock
+        mock_stock_repo.get_by_identifier.return_value = mock_stock
         mock_scoring_service = AsyncMock()
 
         update = StockUpdate(min_portfolio_target=15.0, max_portfolio_target=5.0)
@@ -712,7 +714,7 @@ class TestGetStockResponse:
         mock_stock.max_portfolio_target = 15.0
 
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_symbol.return_value = mock_stock
+        mock_stock_repo.get_by_identifier.return_value = mock_stock
 
         mock_position_repo = AsyncMock()
         mock_position_repo.get_by_symbol.return_value = None
@@ -778,7 +780,7 @@ class TestDeleteStock:
         mock_stock.symbol = "AAPL"
 
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_symbol.return_value = mock_stock
+        mock_stock_repo.get_by_identifier.return_value = mock_stock
 
         with patch("app.api.stocks.cache"):
             result = await delete_stock("AAPL", mock_stock_repo)
@@ -790,7 +792,7 @@ class TestDeleteStock:
     async def test_delete_stock_not_found(self):
         """Test deleting a stock that doesn't exist."""
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_symbol.return_value = None
+        mock_stock_repo.get_by_identifier.return_value = None
 
         with pytest.raises(HTTPException) as exc_info:
             await delete_stock("INVALID", mock_stock_repo)
@@ -808,22 +810,22 @@ class TestValidateSymbolChange:
 
         # Should not raise
         await _validate_symbol_change("AAPL", "AAPL", mock_stock_repo)
-        mock_stock_repo.get_by_symbol.assert_not_called()
+        mock_stock_repo.get_by_identifier.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_validate_new_symbol_available(self):
         """Test that new symbol is available."""
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_symbol.return_value = None
+        mock_stock_repo.get_by_identifier.return_value = None
 
         await _validate_symbol_change("AAPL", "AAPL2", mock_stock_repo)
-        mock_stock_repo.get_by_symbol.assert_called_once_with("AAPL2")
+        mock_stock_repo.get_by_identifier.assert_called_once_with("AAPL2")
 
     @pytest.mark.asyncio
     async def test_validate_new_symbol_taken(self):
         """Test that taken symbol raises error."""
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_symbol.return_value = MagicMock()  # Symbol exists
+        mock_stock_repo.get_by_identifier.return_value = MagicMock()  # Symbol exists
 
         with pytest.raises(HTTPException) as exc_info:
             await _validate_symbol_change("AAPL", "GOOGL", mock_stock_repo)

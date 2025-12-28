@@ -17,6 +17,14 @@ class IStockRepository(Protocol):
         """Get stock by symbol."""
         ...
 
+    async def get_by_isin(self, isin: str) -> Optional[Stock]:
+        """Get stock by ISIN."""
+        ...
+
+    async def get_by_identifier(self, identifier: str) -> Optional[Stock]:
+        """Get stock by symbol or ISIN."""
+        ...
+
     async def get_all_active(self) -> List[Stock]:
         """Get all active stocks."""
         ...
