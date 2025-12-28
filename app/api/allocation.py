@@ -218,18 +218,14 @@ class IndustryGroup(BaseModel):
 @router.get("/groups/country")
 async def get_country_groups(grouping_repo: GroupingRepositoryDep):
     """Get all country groups (custom from DB only)."""
-    all_db_groups = await grouping_repo.get_country_groups()
-    # Filter out empty groups (these are overrides that hide deleted groups)
-    groups = {k: v for k, v in all_db_groups.items() if v}
+    groups = await grouping_repo.get_country_groups()
     return {"groups": groups}
 
 
 @router.get("/groups/industry")
 async def get_industry_groups(grouping_repo: GroupingRepositoryDep):
     """Get all industry groups (custom from DB only)."""
-    all_db_groups = await grouping_repo.get_industry_groups()
-    # Filter out empty groups (these are overrides that hide deleted groups)
-    groups = {k: v for k, v in all_db_groups.items() if v}
+    groups = await grouping_repo.get_industry_groups()
     return {"groups": groups}
 
 
