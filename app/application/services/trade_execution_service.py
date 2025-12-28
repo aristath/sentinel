@@ -9,12 +9,17 @@ from typing import List, Optional
 from app.application.services.currency_exchange_service import CurrencyExchangeService
 from app.application.services.trade_execution.trade_recorder import record_trade
 from app.domain.models import Recommendation, Trade
-from app.domain.repositories.protocols import IPositionRepository, ITradeRepository
+from app.domain.repositories.protocols import (
+    IPositionRepository,
+    IStockRepository,
+    ITradeRepository,
+)
 from app.domain.services.exchange_rate_service import ExchangeRateService
 from app.domain.value_objects.currency import Currency
 from app.infrastructure.events import SystemEvent, emit
 from app.infrastructure.external.tradernet import TradernetClient
 from app.infrastructure.hardware.display_service import set_error, set_processing
+from app.infrastructure.market_hours import is_market_open
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +174,39 @@ def _create_cooldown_failed_results(trades) -> List[dict]:
     ]
 
 
+async def _check_market_hours(trade, stock_repo) -> Optional[dict]:
+    """Check if the stock's market is currently open."""
+    try:
+        stock = await stock_repo.get_by_symbol(trade.symbol)
+        if not stock:
+            logger.warning(
+                f"Stock {trade.symbol} not found, cannot check market hours. Allowing trade."
+            )
+            return None
+
+        exchange = getattr(stock, "fullExchangeName", None)
+        if not exchange:
+            logger.warning(f"Stock {trade.symbol} has no exchange set. Allowing trade.")
+            return None
+
+        if not is_market_open(exchange):
+            logger.info(
+                f"Market closed for {trade.symbol} (exchange: {exchange}). Blocking trade."
+            )
+            return {
+                "symbol": trade.symbol,
+                "status": "blocked",
+                "error": f"Market closed for {exchange}",
+                "exchange": exchange,
+            }
+
+        return None
+    except Exception as e:
+        logger.warning(f"Failed to check market hours for {trade.symbol}: {e}")
+        # On error, allow trade (fail open) - better than blocking all trades
+        return None
+
+
 async def _validate_trade_before_execution(
     trade,
     recently_bought: set,
@@ -180,8 +218,14 @@ async def _validate_trade_before_execution(
     position_repo,
     client,
     trade_repo,
+    stock_repo,
 ) -> tuple[Optional[dict], int]:
     """Validate trade before execution and return blocking result if any."""
+    # Check market hours first (applies to both BUY and SELL)
+    market_hours_result = await _check_market_hours(trade, stock_repo)
+    if market_hours_result:
+        return market_hours_result, 0
+
     if trade.side.upper() == "BUY":
         cooldown_result = await _check_buy_cooldown(
             trade, recently_bought, cooldown_days
@@ -245,6 +289,7 @@ async def _process_single_trade(
     position_repo,
     client,
     trade_repo,
+    stock_repo,
     service,
 ) -> tuple[Optional[dict], int]:
     """Process a single trade and return result and skipped count."""
@@ -260,6 +305,7 @@ async def _process_single_trade(
             position_repo,
             client,
             trade_repo,
+            stock_repo,
         )
         if validation_result:
             return validation_result, skipped
@@ -290,6 +336,7 @@ async def _process_trades(
     position_repo,
     client,
     trade_repo,
+    stock_repo,
     service,
 ) -> tuple[List[dict], int]:
     """Process all trades and return results and skipped count."""
@@ -308,6 +355,7 @@ async def _process_trades(
             position_repo,
             client,
             trade_repo,
+            stock_repo,
             service,
         )
         if result:
@@ -369,12 +417,14 @@ class TradeExecutionService:
         self,
         trade_repo: ITradeRepository,
         position_repo: IPositionRepository,
+        stock_repo: IStockRepository,
         tradernet_client: TradernetClient,
         currency_exchange_service: CurrencyExchangeService,
         exchange_rate_service: ExchangeRateService,
     ):
         self._trade_repo = trade_repo
         self._position_repo = position_repo
+        self._stock_repo = stock_repo
         self._tradernet_client = tradernet_client
         self._currency_exchange_service = currency_exchange_service
         self._exchange_rate_service = exchange_rate_service
@@ -497,6 +547,7 @@ class TradeExecutionService:
             self._position_repo,
             client,
             self._trade_repo,
+            self._stock_repo,
             self,
         )
 

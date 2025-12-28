@@ -512,9 +512,13 @@ async def _execute_trade_order(recommendation) -> dict[str, Any]:
     exchange_rate_service = get_exchange_rate_service(db_manager)
     currency_exchange_service = get_currency_exchange_service_dep(tradernet_client)
 
+    from app.repositories import StockRepository
+
+    stock_repo = StockRepository()
     trade_execution = TradeExecutionService(
         trade_repo,
         position_repo,
+        stock_repo,
         tradernet_client,
         currency_exchange_service,
         exchange_rate_service,

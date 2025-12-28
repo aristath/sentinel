@@ -6,9 +6,14 @@ from typing import Optional
 from fastapi import HTTPException
 
 from app.domain.constants import BUY_COOLDOWN_DAYS
-from app.domain.repositories.protocols import IPositionRepository, ITradeRepository
+from app.domain.repositories.protocols import (
+    IPositionRepository,
+    IStockRepository,
+    ITradeRepository,
+)
 from app.domain.value_objects.trade_side import TradeSide
 from app.infrastructure.external.tradernet import TradernetClient
+from app.infrastructure.market_hours import is_market_open
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +25,11 @@ class TradeSafetyService:
         self,
         trade_repo: ITradeRepository,
         position_repo: IPositionRepository,
+        stock_repo: IStockRepository,
     ):
         self._trade_repo = trade_repo
         self._position_repo = position_repo
+        self._stock_repo = stock_repo
 
     async def check_pending_orders(
         self, symbol: str, side: str, client: TradernetClient, hours: int = 2
@@ -146,6 +153,13 @@ class TradeSafetyService:
         Raises:
             HTTPException: If raise_on_error=True and validation fails
         """
+        # Check market hours first (applies to both BUY and SELL)
+        market_hours_error = await self.check_market_hours(symbol)
+        if market_hours_error:
+            if raise_on_error:
+                raise HTTPException(status_code=400, detail=market_hours_error)
+            return False, market_hours_error
+
         # Check cooldown for BUY orders
         is_cooldown, cooldown_error = await self.check_cooldown(symbol, side)
         if is_cooldown:
@@ -172,3 +186,38 @@ class TradeSafetyService:
                 return False, validation_error
 
         return True, None
+
+    async def check_market_hours(self, symbol: str) -> Optional[str]:
+        """
+        Check if the stock's market is currently open.
+
+        Args:
+            symbol: Stock symbol to check
+
+        Returns:
+            Error message if market is closed, None if open or check failed
+        """
+        try:
+            stock = await self._stock_repo.get_by_symbol(symbol)
+            if not stock:
+                logger.warning(
+                    f"Stock {symbol} not found, cannot check market hours. Allowing trade."
+                )
+                return None
+
+            exchange = getattr(stock, "fullExchangeName", None)
+            if not exchange:
+                logger.warning(f"Stock {symbol} has no exchange set. Allowing trade.")
+                return None
+
+            if not is_market_open(exchange):
+                logger.info(
+                    f"Market closed for {symbol} (exchange: {exchange}). Blocking trade."
+                )
+                return f"Market closed for {exchange}"
+
+            return None
+        except Exception as e:
+            logger.warning(f"Failed to check market hours for {symbol}: {e}")
+            # On error, allow trade (fail open) - better than blocking all trades
+            return None

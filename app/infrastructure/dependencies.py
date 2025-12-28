@@ -264,9 +264,11 @@ def get_trade_execution_service(
     ],
 ) -> TradeExecutionService:
     """Get TradeExecutionService instance."""
+    stock_repo = get_stock_repository()
     return TradeExecutionService(
         trade_repo=trade_repo,
         position_repo=position_repo,
+        stock_repo=stock_repo,
         tradernet_client=tradernet_client,
         currency_exchange_service=currency_exchange_service,
         exchange_rate_service=exchange_rate_service,
@@ -276,11 +278,13 @@ def get_trade_execution_service(
 def get_trade_safety_service(
     trade_repo: TradeRepositoryDep,
     position_repo: PositionRepositoryDep,
+    stock_repo: StockRepositoryDep,
 ) -> TradeSafetyService:
     """Get TradeSafetyService instance."""
     return TradeSafetyService(
         trade_repo=trade_repo,
         position_repo=position_repo,
+        stock_repo=stock_repo,
     )
 
 

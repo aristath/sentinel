@@ -140,9 +140,13 @@ async def _execute_trade(
     from app.infrastructure.dependencies import get_currency_exchange_service_dep
 
     currency_exchange_service = get_currency_exchange_service_dep(tradernet_client)
+    from app.repositories import StockRepository
+
+    stock_repo = StockRepository()
     trade_execution = TradeExecutionService(
         trade_repo,
         position_repo,
+        stock_repo,
         tradernet_client,
         currency_exchange_service,
         exchange_rate_service,

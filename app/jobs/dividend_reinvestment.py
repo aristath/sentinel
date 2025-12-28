@@ -144,6 +144,7 @@ async def auto_reinvest_dividends() -> None:
         trade_execution_service = TradeExecutionService(
             trade_repo=trade_repo,
             position_repo=position_repo,
+            stock_repo=stock_repo,
             tradernet_client=client,
             currency_exchange_service=currency_exchange_service,
             exchange_rate_service=exchange_rate_service,
