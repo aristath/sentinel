@@ -358,7 +358,7 @@ class TestCalculateStockScore:
                 fundamentals=MagicMock(),
                 country="United States",
                 portfolio_context=PortfolioContext(
-                    geo_weights={},
+                    country_weights={},
                     industry_weights={},
                     positions={},
                     total_value=10000,
@@ -860,7 +860,7 @@ class TestCalculateStockScore:
         }
 
         portfolio_context = PortfolioContext(
-            geo_weights={"US": 0.5},
+            country_weights={"US": 0.5},
             industry_weights={"Consumer Electronics": -0.3},
             positions={"MSFT.US": 5000},
             total_value=10000,
@@ -994,7 +994,7 @@ class TestCalculateStockScore:
         mock_result.sub_scores = {"test": 0.7}
 
         portfolio_context = PortfolioContext(
-            geo_weights={},
+            country_weights={},
             industry_weights={},
             positions={},
             total_value=10000,
@@ -1308,7 +1308,7 @@ class TestCalculateStockScoreFromPrefetched:
         )
 
         portfolio_context = PortfolioContext(
-            geo_weights={},
+            country_weights={},
             industry_weights={},
             positions={},
             total_value=10000,
