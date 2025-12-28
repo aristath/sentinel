@@ -83,23 +83,29 @@ class RouterBridgeClient:
             unpacker = msgpack.Unpacker(raw=False)
             response = None
             max_attempts = 100
+            total_data = b""
 
             for attempt in range(max_attempts):
                 try:
                     chunk = sock.recv(4096)
                     if not chunk:
                         if attempt == 0:
+                            logger.error("No data received from Router Bridge")
                             raise RuntimeError("No response from Router Bridge")
                         break
+                    total_data += chunk
+                    logger.debug(f"Received {len(chunk)} bytes (total: {len(total_data)})")
                     unpacker.feed(chunk)
                     # Try to extract a complete message
                     for msg in unpacker:
                         response = msg
+                        logger.debug(f"Unpacked response: {response}")
                         break
                     if response is not None:
                         break
                 except socket.timeout:
                     if attempt == 0:
+                        logger.error(f"No response after {timeout}s timeout")
                         raise RuntimeError("No response from Router Bridge (timeout)")
                     break
                 except Exception as e:
@@ -107,6 +113,7 @@ class RouterBridgeClient:
                     continue
 
             if response is None:
+                logger.error(f"Could not read complete response. Received {len(total_data)} bytes total")
                 raise RuntimeError("Could not read complete response from Router Bridge")
 
             # Router Bridge RPClite response format: [type, id, error, result]
