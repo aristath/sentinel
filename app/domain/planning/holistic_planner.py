@@ -928,6 +928,19 @@ async def create_holistic_plan(
         f"Pre-fetched metrics for {len(metrics_cache)} symbols ({len(required_metrics)} metrics each)"
     )
 
+    # Sort sequences by priority (estimated from action priorities)
+    def _get_sequence_priority(sequence: List[ActionCandidate]) -> float:
+        """Calculate estimated priority for a sequence."""
+        return sum(c.priority for c in sequence)
+
+    sequence_results_sorted = sorted(
+        sequence_results, key=lambda x: _get_sequence_priority(x[0]), reverse=True
+    )
+
+    logger.info(
+        f"Sorted {len(sequence_results_sorted)} sequences by priority (highest first)"
+    )
+
     # Define async helper to evaluate a single sequence
     async def _evaluate_sequence(
         seq_idx: int,
@@ -964,25 +977,57 @@ async def create_holistic_plan(
 
         return (seq_idx, sequence, end_score, breakdown)
 
-    # Evaluate all sequences in parallel
-    evaluation_tasks = [
-        _evaluate_sequence(seq_idx, sequence, end_context, end_cash)
-        for seq_idx, (sequence, end_context, end_cash) in enumerate(sequence_results)
-    ]
+    # Evaluate sequences in batches with early termination
+    # Always evaluate at least first 10 sequences to ensure quality
+    min_sequences_to_evaluate = min(10, len(sequence_results_sorted))
+    batch_size = 5  # Evaluate 5 sequences at a time
+    plateau_threshold = 5  # Stop if no improvement in 5 consecutive sequences
 
-    evaluation_results = await asyncio.gather(*evaluation_tasks)
-
-    # Find the best sequence
     best_sequence = None
     best_end_score = 0.0
     best_breakdown = {}
+    plateau_count = 0
+    evaluated_count = 0
 
-    for seq_idx, sequence, end_score, breakdown in evaluation_results:
-        if end_score > best_end_score:
-            best_end_score = end_score
-            best_sequence = sequence
-            best_breakdown = breakdown
-            logger.info(f"Sequence {seq_idx+1} -> NEW BEST (score: {end_score:.3f})")
+    for batch_start in range(0, len(sequence_results_sorted), batch_size):
+        batch_end = min(batch_start + batch_size, len(sequence_results_sorted))
+        batch = sequence_results_sorted[batch_start:batch_end]
+
+        # Evaluate batch in parallel
+        evaluation_tasks = [
+            _evaluate_sequence(
+                batch_start + i, sequence, end_context, end_cash
+            )
+            for i, (sequence, end_context, end_cash) in enumerate(batch)
+        ]
+
+        batch_results = await asyncio.gather(*evaluation_tasks)
+
+        # Process batch results
+        for seq_idx, sequence, end_score, breakdown in batch_results:
+            evaluated_count += 1
+
+            if end_score > best_end_score:
+                best_end_score = end_score
+                best_sequence = sequence
+                best_breakdown = breakdown
+                plateau_count = 0
+                logger.info(
+                    f"Sequence {seq_idx+1} -> NEW BEST (score: {end_score:.3f})"
+                )
+            else:
+                plateau_count += 1
+
+        # Early termination check (but always evaluate at least min_sequences_to_evaluate)
+        if (
+            evaluated_count >= min_sequences_to_evaluate
+            and plateau_count >= plateau_threshold
+        ):
+            logger.info(
+                f"Early termination: No improvement in {plateau_count} consecutive sequences "
+                f"(evaluated {evaluated_count}/{len(sequence_results_sorted)})"
+            )
+            break
 
     if not best_sequence:
         return HolisticPlan(
