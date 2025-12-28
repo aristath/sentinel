@@ -142,6 +142,10 @@ class TestProcessSingleStock:
                 side_effect=mock_sync_historical,
             ),
             patch(
+                "app.jobs.daily_pipeline._detect_and_update_country_and_exchange",
+                new_callable=AsyncMock,
+            ),
+            patch(
                 "app.jobs.daily_pipeline._calculate_metrics_for_symbol",
                 new_callable=AsyncMock,
                 side_effect=mock_calculate_metrics,
@@ -178,6 +182,10 @@ class TestProcessSingleStock:
         with (
             patch(
                 "app.jobs.daily_pipeline._sync_historical_for_symbol",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "app.jobs.daily_pipeline._detect_and_update_country_and_exchange",
                 new_callable=AsyncMock,
             ),
             patch(
@@ -264,6 +272,10 @@ class TestDisplayUpdates:
                 new_callable=AsyncMock,
             ),
             patch(
+                "app.jobs.daily_pipeline._detect_and_update_country_and_exchange",
+                new_callable=AsyncMock,
+            ),
+            patch(
                 "app.jobs.daily_pipeline._calculate_metrics_for_symbol",
                 new_callable=AsyncMock,
                 return_value=5,
@@ -301,6 +313,10 @@ class TestDisplayUpdates:
         with (
             patch(
                 "app.jobs.daily_pipeline._sync_historical_for_symbol",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "app.jobs.daily_pipeline._detect_and_update_country_and_exchange",
                 new_callable=AsyncMock,
             ),
             patch(
@@ -351,6 +367,10 @@ class TestForceRefresh:
                 "app.jobs.daily_pipeline._sync_historical_for_symbol",
                 new_callable=AsyncMock,
                 side_effect=mock_sync_historical,
+            ),
+            patch(
+                "app.jobs.daily_pipeline._detect_and_update_country_and_exchange",
+                new_callable=AsyncMock,
             ),
             patch(
                 "app.jobs.daily_pipeline._calculate_metrics_for_symbol",
