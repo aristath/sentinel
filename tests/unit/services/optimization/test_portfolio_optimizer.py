@@ -921,3 +921,178 @@ class TestPortfolioOptimizerSectorConstraints:
             assert country_upper["United States"] == 0.6
             assert country_lower["Germany"] == 0.2
             assert country_upper["Germany"] == 0.4
+
+
+class TestPortfolioOptimizerRetirementFallbacks:
+    """Test retirement-appropriate fallback strategies."""
+
+    @pytest.mark.asyncio
+    async def test_fallback_to_min_volatility_when_efficient_return_fails(self):
+        """Test that min_volatility() is used as fallback when efficient_return fails."""
+        from unittest.mock import patch
+
+        from pypfopt.exceptions import OptimizationError
+
+        optimizer = create_optimizer()
+
+        expected_returns = {"AAPL": 0.10}
+        cov_matrix = pd.DataFrame(np.array([[0.04]]), index=["AAPL"], columns=["AAPL"])
+        bounds = {"AAPL": (0.0, 1.0)}
+        target_return = 0.11
+        country_constraints = []
+        ind_constraints = []
+
+        with patch("pypfopt.EfficientFrontier") as mock_ef_class:
+            mock_ef = MagicMock()
+            mock_ef_class.return_value = mock_ef
+
+            # efficient_return fails
+            mock_ef.efficient_return.side_effect = OptimizationError("Failed")
+            # min_volatility succeeds
+            mock_ef.min_volatility.return_value = None
+            mock_ef.clean_weights.return_value = {"AAPL": 0.5}
+
+            weights, fallback = await optimizer._run_mean_variance(
+                expected_returns=expected_returns,
+                cov_matrix=cov_matrix,
+                bounds=bounds,
+                target_return=target_return,
+                country_constraints=country_constraints,
+                ind_constraints=ind_constraints,
+            )
+
+            # Verify min_volatility was called
+            mock_ef.min_volatility.assert_called_once()
+            # Verify fallback is reported
+            assert fallback == "min_volatility"
+            assert weights == {"AAPL": 0.5}
+
+    @pytest.mark.asyncio
+    async def test_fallback_to_efficient_risk_when_min_volatility_fails(self):
+        """Test that efficient_risk() is used as fallback when min_volatility fails."""
+        from unittest.mock import patch
+
+        from pypfopt.exceptions import OptimizationError
+
+        optimizer = create_optimizer()
+
+        expected_returns = {"AAPL": 0.10}
+        cov_matrix = pd.DataFrame(np.array([[0.04]]), index=["AAPL"], columns=["AAPL"])
+        bounds = {"AAPL": (0.0, 1.0)}
+        target_return = 0.11
+        country_constraints = []
+        ind_constraints = []
+
+        with patch("pypfopt.EfficientFrontier") as mock_ef_class:
+            mock_ef = MagicMock()
+            mock_ef_class.return_value = mock_ef
+
+            # efficient_return fails
+            mock_ef.efficient_return.side_effect = OptimizationError("Failed")
+            # min_volatility fails
+            mock_ef.min_volatility.side_effect = OptimizationError("Failed")
+            # efficient_risk succeeds
+            mock_ef.efficient_risk.return_value = None
+            mock_ef.clean_weights.return_value = {"AAPL": 0.5}
+
+            weights, fallback = await optimizer._run_mean_variance(
+                expected_returns=expected_returns,
+                cov_matrix=cov_matrix,
+                bounds=bounds,
+                target_return=target_return,
+                country_constraints=country_constraints,
+                ind_constraints=ind_constraints,
+            )
+
+            # Verify efficient_risk was called with target volatility
+            mock_ef.efficient_risk.assert_called_once()
+            # Check that target_volatility=0.15 was passed
+            call_args = mock_ef.efficient_risk.call_args
+            assert call_args.kwargs["target_volatility"] == 0.15
+            # Verify fallback is reported
+            assert fallback == "efficient_risk"
+            assert weights == {"AAPL": 0.5}
+
+    @pytest.mark.asyncio
+    async def test_fallback_to_max_sharpe_when_efficient_risk_fails(self):
+        """Test that max_sharpe() is used as fallback when efficient_risk fails."""
+        from unittest.mock import patch
+
+        from pypfopt.exceptions import OptimizationError
+
+        optimizer = create_optimizer()
+
+        expected_returns = {"AAPL": 0.10}
+        cov_matrix = pd.DataFrame(np.array([[0.04]]), index=["AAPL"], columns=["AAPL"])
+        bounds = {"AAPL": (0.0, 1.0)}
+        target_return = 0.11
+        country_constraints = []
+        ind_constraints = []
+
+        with patch("pypfopt.EfficientFrontier") as mock_ef_class:
+            mock_ef = MagicMock()
+            mock_ef_class.return_value = mock_ef
+
+            # efficient_return fails
+            mock_ef.efficient_return.side_effect = OptimizationError("Failed")
+            # min_volatility fails
+            mock_ef.min_volatility.side_effect = OptimizationError("Failed")
+            # efficient_risk fails
+            mock_ef.efficient_risk.side_effect = OptimizationError("Failed")
+            # max_sharpe succeeds
+            mock_ef.max_sharpe.return_value = None
+            mock_ef.clean_weights.return_value = {"AAPL": 0.5}
+
+            weights, fallback = await optimizer._run_mean_variance(
+                expected_returns=expected_returns,
+                cov_matrix=cov_matrix,
+                bounds=bounds,
+                target_return=target_return,
+                country_constraints=country_constraints,
+                ind_constraints=ind_constraints,
+            )
+
+            # Verify max_sharpe was called
+            mock_ef.max_sharpe.assert_called_once()
+            # Verify fallback is reported
+            assert fallback == "max_sharpe"
+            assert weights == {"AAPL": 0.5}
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_all_fallbacks_fail(self):
+        """Test that returns None when all MV methods fail (will use pure HRP)."""
+        from unittest.mock import patch
+
+        from pypfopt.exceptions import OptimizationError
+
+        optimizer = create_optimizer()
+
+        expected_returns = {"AAPL": 0.10}
+        cov_matrix = pd.DataFrame(np.array([[0.04]]), index=["AAPL"], columns=["AAPL"])
+        bounds = {"AAPL": (0.0, 1.0)}
+        target_return = 0.11
+        country_constraints = []
+        ind_constraints = []
+
+        with patch("pypfopt.EfficientFrontier") as mock_ef_class:
+            mock_ef = MagicMock()
+            mock_ef_class.return_value = mock_ef
+
+            # All methods fail
+            mock_ef.efficient_return.side_effect = OptimizationError("Failed")
+            mock_ef.min_volatility.side_effect = OptimizationError("Failed")
+            mock_ef.efficient_risk.side_effect = OptimizationError("Failed")
+            mock_ef.max_sharpe.side_effect = OptimizationError("Failed")
+
+            weights, fallback = await optimizer._run_mean_variance(
+                expected_returns=expected_returns,
+                cov_matrix=cov_matrix,
+                bounds=bounds,
+                target_return=target_return,
+                country_constraints=country_constraints,
+                ind_constraints=ind_constraints,
+            )
+
+            # Should return None (will use pure HRP)
+            assert weights is None
+            assert fallback is None
