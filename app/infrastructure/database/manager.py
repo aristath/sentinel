@@ -173,6 +173,7 @@ class DatabaseManager:
         self.dividends = Database(data_dir / "dividends.db")
         self.rates = Database(data_dir / "rates.db")
         self.snapshots = Database(data_dir / "snapshots.db")
+        self.planner = Database(data_dir / "planner.db")
 
         # Per-stock history databases (lazy loaded, keyed by ISIN)
         self._history: dict[str, Database] = {}
@@ -378,6 +379,7 @@ async def init_databases(data_dir: Path) -> DatabaseManager:
         init_config_schema,
         init_dividends_schema,
         init_ledger_schema,
+        init_planner_schema,
         init_rates_schema,
         init_recommendations_schema,
         init_snapshots_schema,
@@ -398,6 +400,7 @@ async def init_databases(data_dir: Path) -> DatabaseManager:
     await init_dividends_schema(_db_manager.dividends)
     await init_rates_schema(_db_manager.rates)
     await init_snapshots_schema(_db_manager.snapshots)
+    await init_planner_schema(_db_manager.planner)
 
     logger.info(f"Database manager initialized with data directory: {data_dir}")
 
