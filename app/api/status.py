@@ -623,3 +623,67 @@ async def get_error_logs(
             "message": str(e),
             "logs": [],
         }
+
+
+@router.post("/locks/clear")
+async def clear_stuck_locks(lock_name: Optional[str] = Query(None)):
+    """Clear stuck lock files.
+
+    Args:
+        lock_name: Optional specific lock name to clear (e.g., "portfolio_sync").
+                   If not provided, clears all lock files.
+
+    Returns:
+        Dict with status and cleared locks
+    """
+    from app.config import settings
+
+    lock_dir = settings.data_dir / "locks"
+    cleared = []
+
+    try:
+        if not lock_dir.exists():
+            return {
+                "status": "ok",
+                "message": "No lock directory found",
+                "cleared": [],
+            }
+
+        if lock_name:
+            # Clear specific lock
+            lock_file = lock_dir / f"{lock_name}.lock"
+            if lock_file.exists():
+                try:
+                    lock_file.unlink()
+                    cleared.append(lock_name)
+                    logger.info(f"Cleared lock: {lock_name}")
+                except Exception as e:
+                    logger.error(f"Failed to clear lock {lock_name}: {e}")
+                    return {
+                        "status": "error",
+                        "message": f"Failed to clear lock {lock_name}: {e}",
+                        "cleared": [],
+                    }
+        else:
+            # Clear all locks
+            for lock_file in lock_dir.glob("*.lock"):
+                try:
+                    lock_name_only = lock_file.stem
+                    lock_file.unlink()
+                    cleared.append(lock_name_only)
+                    logger.info(f"Cleared lock: {lock_name_only}")
+                except Exception as e:
+                    logger.warning(f"Failed to clear lock {lock_file.name}: {e}")
+
+        return {
+            "status": "ok",
+            "message": f"Cleared {len(cleared)} lock(s)",
+            "cleared": cleared,
+        }
+    except Exception as e:
+        logger.error(f"Failed to clear locks: {e}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "cleared": cleared,
+        }
