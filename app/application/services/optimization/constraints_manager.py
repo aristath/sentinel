@@ -323,21 +323,63 @@ class ConstraintsManager:
         Returns:
             Tuple of (country_constraints, industry_constraints)
         """
-        # Group stocks by country
-        country_groups: Dict[str, List[str]] = {}
+        # Group stocks by territory (EU/US/ASIA/OTHER) instead of individual countries
+        # This reduces constraint complexity and improves optimizer feasibility
+        territory_groups: Dict[str, List[str]] = {}
+
         for stock in stocks:
             country = stock.country or "OTHER"
-            if country not in country_groups:
-                country_groups[country] = []
-            country_groups[country].append(stock.symbol)
+            # Map country to territory
+            territory = TERRITORY_MAPPING.get(country, "OTHER")
 
-        # Group stocks by industry
-        ind_groups: Dict[str, List[str]] = {}
+            if territory not in territory_groups:
+                territory_groups[territory] = []
+            territory_groups[territory].append(stock.symbol)
+
+        # Aggregate country targets to territory targets
+        territory_targets: Dict[str, float] = {}
+        for country, target in country_targets.items():
+            territory = TERRITORY_MAPPING.get(country, "OTHER")
+            territory_targets[territory] = (
+                territory_targets.get(territory, 0.0) + target
+            )
+
+        logger.info(
+            f"Grouped {len(country_targets)} country targets into {len(territory_targets)} territories: "
+            f"{', '.join(f'{t}={v:.1%}' for t, v in sorted(territory_targets.items()) if v > 0)}"
+        )
+
+        # Group stocks by industry group instead of individual industries
+        # This reduces constraint complexity
+        industry_group_groups: Dict[str, List[str]] = {}
+
         for stock in stocks:
-            ind = stock.industry or "OTHER"
-            if ind not in ind_groups:
-                ind_groups[ind] = []
-            ind_groups[ind].append(stock.symbol)
+            industry = stock.industry or "OTHER"
+            # Map industry to industry group
+            industry_group = INDUSTRY_GROUP_MAPPING.get(industry, "OTHER")
+
+            if industry_group not in industry_group_groups:
+                industry_group_groups[industry_group] = []
+            industry_group_groups[industry_group].append(stock.symbol)
+
+        # Aggregate industry targets to industry group targets
+        industry_group_targets: Dict[str, float] = {}
+        for industry, target in ind_targets.items():
+            industry_group = INDUSTRY_GROUP_MAPPING.get(industry, "OTHER")
+            industry_group_targets[industry_group] = (
+                industry_group_targets.get(industry_group, 0.0) + target
+            )
+
+        logger.info(
+            f"Grouped {len(ind_targets)} industry targets into {len(industry_group_targets)} groups: "
+            f"{', '.join(f'{g}={v:.1%}' for g, v in sorted(industry_group_targets.items()) if v > 0)}"
+        )
+
+        # Use territory groups and industry group groups for constraints
+        country_groups = territory_groups
+        ind_groups = industry_group_groups
+        country_targets = territory_targets
+        ind_targets = industry_group_targets
 
         # Normalize country targets to sum to 100% (if they sum to more)
         # Only normalize targets for countries that actually have stocks
