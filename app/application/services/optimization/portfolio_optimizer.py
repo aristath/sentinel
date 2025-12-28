@@ -471,7 +471,7 @@ class PortfolioOptimizer:
                 f"locked={locked_count}"
             )
 
-        # Scale down sector constraint minimums if combined with individual stock minimums > 100%
+        # Scale down constraints if combined minimums exceed feasibility threshold
         # This is critical - individual stock bounds can add significant minimum requirements
         if bounds and (country_constraints or ind_constraints):
             total_stock_min = sum(lower for lower, _ in bounds.values())
@@ -479,32 +479,60 @@ class PortfolioOptimizer:
             ind_min_sum = sum(c.lower for c in ind_constraints)
             total_all_min = total_stock_min + country_min_sum + ind_min_sum
 
-            if total_all_min > 1.0:
+            # Target: total minimums = 85% (leaves 15% slack for optimizer)
+            # This is more conservative than 90% to handle complex constraint interactions
+            target_total_min = 0.85
+
+            if total_all_min > target_total_min:
                 logger.warning(
                     f"Total minimum bounds (stocks={total_stock_min:.2%} + "
                     f"country={country_min_sum:.2%} + industry={ind_min_sum:.2%} = "
-                    f"{total_all_min:.2%}) exceed 100%, scaling down sector constraints"
+                    f"{total_all_min:.2%}) exceed {target_total_min:.0%}, scaling down constraints"
                 )
-                # Scale sector constraints to leave room for individual stock minimums
-                # Target: sector minimums + stock minimums = 90% (leaves 10% slack for optimizer)
-                # Lower target improves feasibility when constraints are complex
-                target_sector_min = max(0.0, 0.90 - total_stock_min)
-                current_sector_min = country_min_sum + ind_min_sum
 
-                if current_sector_min > 0 and target_sector_min < current_sector_min:
-                    scale_factor = target_sector_min / current_sector_min
-                    for constraint in country_constraints:
-                        constraint.lower = constraint.lower * scale_factor
-                        constraint.lower = min(constraint.lower, constraint.upper)
-                    for constraint in ind_constraints:
-                        constraint.lower = constraint.lower * scale_factor
-                        constraint.lower = min(constraint.lower, constraint.upper)
+                # Strategy: Scale down proportionally, but prioritize individual stock bounds
+                # If stock minimums are very high (>70%), scale them down first
+                # Otherwise, scale sector constraints
+                if total_stock_min > 0.70:
+                    # Stock minimums are too high - scale them down
+                    stock_scale_factor = (
+                        target_total_min - country_min_sum - ind_min_sum
+                    ) / total_stock_min
+                    if stock_scale_factor > 0 and stock_scale_factor < 1.0:
+                        logger.warning(
+                            f"Individual stock minimum bounds ({total_stock_min:.2%}) are too high, "
+                            f"scaling down by {stock_scale_factor:.2%}"
+                        )
+                        # Scale individual stock bounds (modify bounds dict)
+                        for symbol in bounds:
+                            lower, upper = bounds[symbol]
+                            new_lower = lower * stock_scale_factor
+                            bounds[symbol] = (new_lower, upper)
+                        total_stock_min = sum(lower for lower, _ in bounds.values())
+                        total_all_min = total_stock_min + country_min_sum + ind_min_sum
 
-                    logger.info(
-                        f"Scaled sector minimums by {scale_factor:.2%} to "
-                        f"{target_sector_min:.2%} (leaving {total_stock_min:.2%} for stocks, "
-                        f"total={target_sector_min + total_stock_min:.2%})"
-                    )
+                # Scale sector constraints to reach target
+                if total_all_min > target_total_min:
+                    target_sector_min = max(0.0, target_total_min - total_stock_min)
+                    current_sector_min = country_min_sum + ind_min_sum
+
+                    if (
+                        current_sector_min > 0
+                        and target_sector_min < current_sector_min
+                    ):
+                        scale_factor = target_sector_min / current_sector_min
+                        for constraint in country_constraints:
+                            constraint.lower = constraint.lower * scale_factor
+                            constraint.lower = min(constraint.lower, constraint.upper)
+                        for constraint in ind_constraints:
+                            constraint.lower = constraint.lower * scale_factor
+                            constraint.lower = min(constraint.lower, constraint.upper)
+
+                        logger.info(
+                            f"Scaled sector minimums by {scale_factor:.2%} to "
+                            f"{target_sector_min:.2%} (stocks={total_stock_min:.2%}, "
+                            f"total={target_sector_min + total_stock_min:.2%})"
+                        )
 
         def _apply_sector_constraints(ef: EfficientFrontier) -> None:
             """Apply sector constraints to EfficientFrontier."""
