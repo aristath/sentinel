@@ -453,7 +453,7 @@ class PortfolioOptimizer:
 
         overlapping_symbols = country_symbols & ind_symbols
         if overlapping_symbols:
-            logger.debug(
+            logger.info(
                 f"{len(overlapping_symbols)} symbols appear in both country and industry constraints: "
                 f"{', '.join(sorted(overlapping_symbols)[:10])}"
             )
@@ -465,7 +465,7 @@ class PortfolioOptimizer:
             locked_count = sum(
                 1 for lower, upper in bounds.values() if lower == upper and lower > 0
             )
-            logger.debug(
+            logger.info(
                 f"Individual stock bounds: {len(bounds)} stocks, "
                 f"min_sum={total_stock_min:.2%}, max_sum={total_stock_max:.2%}, "
                 f"locked={locked_count}"
