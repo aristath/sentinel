@@ -1,6 +1,7 @@
 """Portfolio API endpoints."""
 
 import logging
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, HTTPException
 
@@ -15,6 +16,71 @@ from app.infrastructure.external.tradernet_connection import ensure_tradernet_co
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _calculate_date_range(days: int) -> tuple[datetime, datetime]:
+    """Calculate start and end dates for analytics period.
+
+    Args:
+        days: Number of days to analyze
+
+    Returns:
+        Tuple of (start_date, end_date)
+    """
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=days)
+    return start_date, end_date
+
+
+def _format_returns_data(returns, metrics: dict) -> dict:
+    """Format returns data for API response.
+
+    Args:
+        returns: Pandas Series of returns
+        metrics: Dictionary of portfolio metrics
+
+    Returns:
+        Formatted returns dictionary
+    """
+    daily_returns = returns.tolist()
+    returns_index = returns.index.strftime("%Y-%m-%d").tolist()
+
+    # Monthly returns
+    monthly_returns = returns.resample("M").apply(lambda x: (1 + x).prod() - 1)
+    monthly_returns_list = monthly_returns.tolist()
+    monthly_index = monthly_returns.index.strftime("%Y-%m").tolist()
+
+    # Annual return
+    annual_return = metrics.get("annual_return", 0.0)
+
+    return {
+        "daily": [
+            {"date": d, "return": r} for d, r in zip(returns_index, daily_returns)
+        ],
+        "monthly": [
+            {"month": m, "return": r}
+            for m, r in zip(monthly_index, monthly_returns_list)
+        ],
+        "annual": annual_return,
+    }
+
+
+def _format_risk_metrics(metrics: dict) -> dict:
+    """Format risk metrics for API response.
+
+    Args:
+        metrics: Dictionary of portfolio metrics
+
+    Returns:
+        Formatted risk metrics dictionary
+    """
+    return {
+        "sharpe_ratio": metrics.get("sharpe_ratio", 0.0),
+        "sortino_ratio": metrics.get("sortino_ratio", 0.0),
+        "calmar_ratio": metrics.get("calmar_ratio", 0.0),
+        "volatility": metrics.get("volatility", 0.0),
+        "max_drawdown": metrics.get("max_drawdown", 0.0),
+    }
 
 
 @router.get("")
@@ -169,8 +235,6 @@ async def get_portfolio_analytics(days: int = 365):
         Dict with returns, risk_metrics, attribution, drawdowns
     """
     try:
-        from datetime import datetime, timedelta
-
         from app.domain.analytics import (
             calculate_portfolio_returns,
             get_performance_attribution,
@@ -179,11 +243,14 @@ async def get_portfolio_analytics(days: int = 365):
         )
 
         # Calculate date range
-        end_date = datetime.now().strftime("%Y-%m-%d")
-        start_date = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+        start_date, end_date = _calculate_date_range(days)
+        start_date_str = start_date.strftime("%Y-%m-%d")
+        end_date_str = end_date.strftime("%Y-%m-%d")
 
         # Reconstruct portfolio history
-        portfolio_values = await reconstruct_portfolio_values(start_date, end_date)
+        portfolio_values = await reconstruct_portfolio_values(
+            start_date_str, end_date_str
+        )
 
         if portfolio_values.empty:
             return {
@@ -208,46 +275,21 @@ async def get_portfolio_analytics(days: int = 365):
         metrics = await get_portfolio_metrics(returns)
 
         # Get performance attribution
-        attribution = await get_performance_attribution(returns, start_date, end_date)
+        attribution = await get_performance_attribution(
+            returns, start_date_str, end_date_str
+        )
 
-        # Calculate daily/monthly/annual returns
-        daily_returns = returns.tolist()
-        returns_index = returns.index.strftime("%Y-%m-%d").tolist()
-
-        # Monthly returns
-        monthly_returns = returns.resample("M").apply(lambda x: (1 + x).prod() - 1)
-        monthly_returns_list = monthly_returns.tolist()
-        monthly_index = monthly_returns.index.strftime("%Y-%m").tolist()
-
-        # Annual return
-        annual_return = metrics.get("annual_return", 0.0)
-
+        # Format response
         return {
-            "returns": {
-                "daily": [
-                    {"date": d, "return": r}
-                    for d, r in zip(returns_index, daily_returns)
-                ],
-                "monthly": [
-                    {"month": m, "return": r}
-                    for m, r in zip(monthly_index, monthly_returns_list)
-                ],
-                "annual": annual_return,
-            },
-            "risk_metrics": {
-                "sharpe_ratio": metrics.get("sharpe_ratio", 0.0),
-                "sortino_ratio": metrics.get("sortino_ratio", 0.0),
-                "calmar_ratio": metrics.get("calmar_ratio", 0.0),
-                "volatility": metrics.get("volatility", 0.0),
-                "max_drawdown": metrics.get("max_drawdown", 0.0),
-            },
+            "returns": _format_returns_data(returns, metrics),
+            "risk_metrics": _format_risk_metrics(metrics),
             "attribution": {
                 "country": attribution.get("country", {}),
                 "industry": attribution.get("industry", {}),
             },
             "period": {
-                "start_date": start_date,
-                "end_date": end_date,
+                "start_date": start_date_str,
+                "end_date": end_date_str,
                 "days": days,
             },
         }
