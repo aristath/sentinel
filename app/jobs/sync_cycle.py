@@ -483,18 +483,13 @@ async def _get_holistic_recommendation():
             status=RecommendationStatus.PENDING,
         )
 
-    # Cache miss and no database result - try to get best result from database (incremental mode)
-    logger.info("No cache or database result, checking planner database...")
+    # No cache and no database result - fallback to full planner mode
+    logger.info("No cache or database result, falling back to full planner mode...")
 
-    from app.domain.portfolio_hash import generate_portfolio_hash
-    from app.repositories.planner_repository import PlannerRepository
-
-    planner_repo = PlannerRepository()
-    portfolio_hash = generate_portfolio_hash(position_dicts, stocks)
-
-    best_result = await planner_repo.get_best_result(portfolio_hash)
-
-    if best_result:
+    # best_result already checked above, if we get here it's None
+    if False:  # This block already handled above
+        pass
+    else:
         # Get best sequence from database
         best_sequence = await planner_repo.get_best_sequence_from_hash(
             portfolio_hash, best_result["best_sequence_hash"]
