@@ -55,11 +55,17 @@ async def _calculate_cash_balance_eur(
     cash_balances: list, exchange_rate_service: ExchangeRateService
 ) -> float:
     """Calculate total cash balance in EUR using ExchangeRateService."""
+    logger.info(f"Calculating cash balance for {len(cash_balances)} currencies...")
     amounts_by_currency = {cb.currency: cb.amount for cb in cash_balances}
+    logger.info(f"Amounts by currency: {amounts_by_currency}")
+    logger.info("Calling exchange_rate_service.batch_convert_to_eur()...")
     amounts_in_eur = await exchange_rate_service.batch_convert_to_eur(
         amounts_by_currency
     )
-    return sum(amounts_in_eur.values())
+    logger.info(f"Converted amounts: {amounts_in_eur}")
+    total = sum(amounts_in_eur.values())
+    logger.info(f"Total cash balance: {total:.2f} EUR")
+    return total
 
 
 async def _determine_country(symbol: str, db_manager) -> Optional[str]:
