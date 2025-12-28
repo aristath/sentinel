@@ -153,11 +153,23 @@ async def init_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 
+    # Job 7: Stock Discovery - monthly on 15th of month at 2am
+    # Handles: automatic discovery and addition of high-quality stocks
+    # Note: discover_new_stocks checks stock_discovery_enabled internally
+    scheduler.add_job(
+        discover_new_stocks,
+        CronTrigger(day=15, hour=2, minute=0),
+        id="stock_discovery",
+        name="Stock Discovery",
+        replace_existing=True,
+    )
+
     logger.info(
-        f"Scheduler initialized with 6 jobs - "
+        f"Scheduler initialized with 7 jobs - "
         f"sync_cycle:{sync_cycle_minutes}m, daily_pipeline:1h, "
         f"maintenance:{maintenance_hour}:00, dividend_reinvestment:{maintenance_hour}:30, "
-        f"universe_pruning:1st of month {maintenance_hour}:00"
+        f"universe_pruning:1st of month {maintenance_hour}:00, "
+        f"stock_discovery:15th of month 02:00"
     )
     return scheduler
 
