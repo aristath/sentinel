@@ -334,21 +334,20 @@ class ConstraintsManager:
         country_targets = territory_targets
         ind_targets = industry_group_targets
 
-        # Normalize country targets to sum to 100% (if they sum to more)
-        # Only normalize targets for countries that actually have stocks
-        country_targets_for_active_countries = {
+        # Normalize country group targets to sum to 100%
+        # Note: Individual targets are already normalized by the repository,
+        # but after grouping, group targets may not sum to 100% if some
+        # countries are not in any group (they go to "OTHER").
+        # Only normalize targets for groups that actually have stocks
+        country_targets_for_active_groups = {
             country: country_targets.get(country, 0.0)
             for country in country_groups.keys()
             if country_targets.get(country, 0.0) > 0
         }
-        country_sum = sum(country_targets_for_active_countries.values())
-        if country_sum > 1.0:
-            logger.warning(
-                f"Country targets sum to {country_sum:.2%} > 100%, normalizing to 100%"
-            )
+        country_sum = sum(country_targets_for_active_groups.values())
+        if country_sum > 0:
             country_targets_normalized = {
-                k: v / country_sum
-                for k, v in country_targets_for_active_countries.items()
+                k: v / country_sum for k, v in country_targets_for_active_groups.items()
             }
             # Merge back with original targets (keep zero targets as zero)
             country_targets_normalized = {
@@ -401,20 +400,20 @@ class ConstraintsManager:
                 f"Country constraints sum: min={country_min_sum:.2%}, max={country_max_sum_final:.2%}"
             )
 
-        # Normalize industry targets to sum to 100% (if they sum to more)
-        # Only normalize targets for industries that actually have stocks
-        ind_targets_for_active_industries = {
+        # Normalize industry group targets to sum to 100%
+        # Note: Individual targets are already normalized by the repository,
+        # but after grouping, group targets may not sum to 100% if some
+        # industries are not in any group (they go to "OTHER").
+        # Only normalize targets for groups that actually have stocks
+        ind_targets_for_active_groups = {
             ind: ind_targets.get(ind, 0.0)
             for ind in ind_groups.keys()
             if ind_targets.get(ind, 0.0) > 0
         }
-        ind_sum = sum(ind_targets_for_active_industries.values())
-        if ind_sum > 1.0:
-            logger.warning(
-                f"Industry targets sum to {ind_sum:.2%} > 100%, normalizing to 100%"
-            )
+        ind_sum = sum(ind_targets_for_active_groups.values())
+        if ind_sum > 0:
             ind_targets_normalized = {
-                k: v / ind_sum for k, v in ind_targets_for_active_industries.items()
+                k: v / ind_sum for k, v in ind_targets_for_active_groups.items()
             }
             # Merge back with original targets (keep zero targets as zero)
             ind_targets_normalized = {

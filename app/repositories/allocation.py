@@ -51,14 +51,34 @@ class AllocationRepository:
         ]
 
     async def get_country_targets(self) -> Dict[str, float]:
-        """Get country allocation targets."""
+        """Get country allocation targets, normalized to sum to 100%.
+
+        User-defined weights are stored as preferences (don't need to sum to 100%).
+        This method normalizes them proportionally so they sum to 100%.
+        """
         targets = await self.get_by_type("country")
-        return {t.name: t.target_pct for t in targets}
+        weights = {t.name: t.target_pct for t in targets}
+
+        # Normalize weights to sum to 100% (proportional scaling)
+        total = sum(weights.values())
+        if total > 0:
+            return {name: weight / total for name, weight in weights.items()}
+        return weights
 
     async def get_industry_targets(self) -> Dict[str, float]:
-        """Get industry allocation targets."""
+        """Get industry allocation targets, normalized to sum to 100%.
+
+        User-defined weights are stored as preferences (don't need to sum to 100%).
+        This method normalizes them proportionally so they sum to 100%.
+        """
         targets = await self.get_by_type("industry")
-        return {t.name: t.target_pct for t in targets}
+        weights = {t.name: t.target_pct for t in targets}
+
+        # Normalize weights to sum to 100% (proportional scaling)
+        total = sum(weights.values())
+        if total > 0:
+            return {name: weight / total for name, weight in weights.items()}
+        return weights
 
     async def upsert(self, target: AllocationTarget) -> None:
         """Insert or update an allocation target."""
