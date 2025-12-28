@@ -4,8 +4,6 @@ These tests validate portfolio-level scoring for holistic planning,
 including total return, long-term promise, and stability calculations.
 """
 
-from unittest.mock import AsyncMock, patch
-
 import pytest
 
 
@@ -327,6 +325,7 @@ class TestCalculatePortfolioEndStateScore:
             positions={},
             total_value=0,
             diversification_score=0.5,
+            metrics_cache={},  # Empty cache for empty portfolio
         )
 
         assert score == 0.5

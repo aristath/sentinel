@@ -6,12 +6,43 @@ import pytest
 from app.infrastructure.database.schemas import init_config_schema
 
 
+class ConnectionWrapper:
+    """Wrapper to add fetchone/fetchall methods to aiosqlite.Connection."""
+
+    def __init__(self, conn: aiosqlite.Connection):
+        self._conn = conn
+
+    async def execute(self, sql: str, params: tuple = ()) -> aiosqlite.Cursor:
+        """Execute a SQL statement."""
+        return await self._conn.execute(sql, params)
+
+    async def commit(self):
+        """Commit transaction."""
+        await self._conn.commit()
+
+    async def fetchone(self, sql: str, params: tuple = ()):
+        """Execute and fetch one row."""
+        cursor = await self._conn.execute(sql, params)
+        return await cursor.fetchone()
+
+    async def fetchall(self, sql: str, params: tuple = ()):
+        """Execute and fetch all rows."""
+        cursor = await self._conn.execute(sql, params)
+        return await cursor.fetchall()
+
+    async def executescript(self, sql: str):
+        """Execute multiple SQL statements."""
+        await self._conn.executescript(sql)
+        await self._conn.commit()
+
+
 @pytest.mark.asyncio
 async def test_schema_migration_v5_to_v6_adds_portfolio_target_columns():
     """Test that migration from version 5 to 6 adds min/max portfolio target columns."""
     # Create a database with version 5 schema
-    async with aiosqlite.connect(":memory:") as db:
-        db.row_factory = aiosqlite.Row
+    async with aiosqlite.connect(":memory:") as conn:
+        conn.row_factory = aiosqlite.Row
+        db = ConnectionWrapper(conn)
 
         # Create stocks table with version 5 schema (without portfolio target columns)
         await db.execute(
@@ -90,8 +121,9 @@ async def test_schema_migration_v5_to_v6_adds_portfolio_target_columns():
 @pytest.mark.asyncio
 async def test_new_installation_includes_portfolio_target_columns():
     """Test that new installations include portfolio target columns in initial schema."""
-    async with aiosqlite.connect(":memory:") as db:
-        db.row_factory = aiosqlite.Row
+    async with aiosqlite.connect(":memory:") as conn:
+        conn.row_factory = aiosqlite.Row
+        db = ConnectionWrapper(conn)
 
         # Run init on fresh database (version 0)
         await init_config_schema(db)
@@ -113,8 +145,9 @@ async def test_new_installation_includes_portfolio_target_columns():
 @pytest.mark.asyncio
 async def test_portfolio_target_columns_are_nullable():
     """Test that portfolio target columns allow NULL values."""
-    async with aiosqlite.connect(":memory:") as db:
-        db.row_factory = aiosqlite.Row
+    async with aiosqlite.connect(":memory:") as conn:
+        conn.row_factory = aiosqlite.Row
+        db = ConnectionWrapper(conn)
 
         await init_config_schema(db)
 

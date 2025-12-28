@@ -922,7 +922,7 @@ async def create_holistic_plan(
 
     # Pre-fetch all metrics for all symbols that will be evaluated
     # First, collect all symbols from all sequence end states by simulating them
-    all_symbols = set()
+    all_symbols: set[str] = set()
     sequence_results = []  # Store (sequence, end_context, end_cash) tuples
 
     for sequence in sequences:
@@ -1029,9 +1029,7 @@ async def create_holistic_plan(
 
         # Evaluate batch in parallel
         evaluation_tasks = [
-            _evaluate_sequence(
-                batch_start + i, sequence, end_context, end_cash
-            )
+            _evaluate_sequence(batch_start + i, sequence, end_context, end_cash)
             for i, (sequence, end_context, end_cash) in enumerate(batch)
         ]
 
