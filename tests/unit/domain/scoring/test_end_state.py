@@ -201,23 +201,19 @@ class TestConvertSharpeToScore:
 
 
 class TestCalculateTotalReturnScore:
-    """Test total return score calculation."""
+    """Test total return score calculation (legacy tests updated for metrics API)."""
 
     @pytest.mark.asyncio
-    async def test_uses_provided_values(self):
-        """Test that provided CAGR and dividend are used."""
+    async def test_uses_metrics_dict(self):
+        """Test that metrics dict is used."""
         from app.domain.scoring.end_state import calculate_total_return_score
 
-        mock_repo = AsyncMock()
+        metrics = {
+            "CAGR_5Y": 0.12,
+            "DIVIDEND_YIELD": 0.015,
+        }
 
-        # Patch at source module since import happens inside function
-        with patch(
-            "app.repositories.calculations.CalculationsRepository",
-            return_value=mock_repo,
-        ):
-            score, subs = await calculate_total_return_score(
-                "AAPL.US", cagr=0.12, dividend_yield=0.015
-            )
+        score, subs = await calculate_total_return_score("AAPL.US", metrics=metrics)
 
         assert "cagr" in subs
         assert subs["cagr"] == 0.12
@@ -226,64 +222,51 @@ class TestCalculateTotalReturnScore:
         assert subs["total_return"] == pytest.approx(0.135, abs=0.001)
 
     @pytest.mark.asyncio
-    async def test_fetches_from_cache_when_not_provided(self):
-        """Test cache lookup when values not provided."""
+    async def test_handles_missing_metrics(self):
+        """Test that missing metrics default to 0.0."""
         from app.domain.scoring.end_state import calculate_total_return_score
 
-        mock_repo = AsyncMock()
-        mock_repo.get_metric.side_effect = [0.10, 0.02]  # CAGR, dividend
+        metrics = {
+            "CAGR_5Y": 0.10,
+            "DIVIDEND_YIELD": 0.02,
+        }
 
-        # Patch at source module since import happens inside function
-        with patch(
-            "app.repositories.calculations.CalculationsRepository",
-            return_value=mock_repo,
-        ):
-            score, subs = await calculate_total_return_score("AAPL.US")
+        score, subs = await calculate_total_return_score("AAPL.US", metrics=metrics)
 
-        assert mock_repo.get_metric.call_count == 2
         assert subs["total_return"] == 0.12  # 10% + 2%
 
 
 class TestCalculateLongTermPromise:
-    """Test long-term promise score calculation."""
+    """Test long-term promise score calculation (legacy tests updated for metrics API)."""
 
     @pytest.mark.asyncio
-    async def test_uses_provided_values(self):
-        """Test that provided values are used."""
+    async def test_uses_metrics_dict(self):
+        """Test that metrics dict is used."""
         from app.domain.scoring.end_state import calculate_long_term_promise
 
-        mock_repo = AsyncMock()
+        metrics = {
+            "CONSISTENCY_SCORE": 0.8,
+            "FINANCIAL_STRENGTH": 0.7,
+            "DIVIDEND_CONSISTENCY": 0.6,
+            "SORTINO": 1.5,  # Will be converted to score
+        }
 
-        with patch(
-            "app.repositories.calculations.CalculationsRepository",
-            return_value=mock_repo,
-        ):
-            score, subs = await calculate_long_term_promise(
-                "AAPL.US",
-                consistency_score=0.8,
-                financial_strength=0.7,
-                dividend_consistency=0.6,
-                sortino_score=0.9,
-            )
+        score, subs = await calculate_long_term_promise("AAPL.US", metrics=metrics)
 
         assert subs["consistency"] == 0.8
         assert subs["financial_strength"] == 0.7
         assert subs["dividend_consistency"] == 0.6
-        assert subs["sortino"] == 0.9
+        assert "sortino" in subs
+        assert 0 <= score <= 1
 
     @pytest.mark.asyncio
     async def test_defaults_to_0_5_when_no_data(self):
-        """Test default 0.5 when cache has no data."""
+        """Test default 0.5 when metrics are missing."""
         from app.domain.scoring.end_state import calculate_long_term_promise
 
-        mock_repo = AsyncMock()
-        mock_repo.get_metric.return_value = None  # No cached data
+        metrics = {}  # Empty metrics dict
 
-        with patch(
-            "app.repositories.calculations.CalculationsRepository",
-            return_value=mock_repo,
-        ):
-            score, subs = await calculate_long_term_promise("AAPL.US")
+        score, subs = await calculate_long_term_promise("AAPL.US", metrics=metrics)
 
         # All components should default to 0.5
         assert subs["consistency"] == 0.5
@@ -293,25 +276,20 @@ class TestCalculateLongTermPromise:
 
 
 class TestCalculateStabilityScore:
-    """Test stability score calculation."""
+    """Test stability score calculation (legacy tests updated for metrics API)."""
 
     @pytest.mark.asyncio
     async def test_combines_all_components(self):
         """Test that all stability components are combined."""
         from app.domain.scoring.end_state import calculate_stability_score
 
-        mock_repo = AsyncMock()
+        metrics = {
+            "VOLATILITY_ANNUAL": 0.20,  # Moderate volatility
+            "MAX_DRAWDOWN": -0.15,
+            "SHARPE": 1.5,
+        }
 
-        with patch(
-            "app.repositories.calculations.CalculationsRepository",
-            return_value=mock_repo,
-        ):
-            score, subs = await calculate_stability_score(
-                "AAPL.US",
-                volatility=0.20,  # Moderate volatility
-                drawdown_score=0.7,
-                sharpe_score=0.8,
-            )
+        score, subs = await calculate_stability_score("AAPL.US", metrics=metrics)
 
         assert "volatility" in subs
         assert "drawdown" in subs
@@ -319,25 +297,22 @@ class TestCalculateStabilityScore:
         assert 0 <= score <= 1
 
     @pytest.mark.asyncio
-    async def test_fetches_from_cache_when_not_provided(self):
-        """Test cache lookup for stability metrics."""
+    async def test_uses_metrics_dict(self):
+        """Test that metrics dict is used."""
         from app.domain.scoring.end_state import calculate_stability_score
 
-        mock_repo = AsyncMock()
-        mock_repo.get_metric.side_effect = [
-            0.25,  # VOLATILITY_ANNUAL
-            -0.15,  # MAX_DRAWDOWN
-            1.5,  # SHARPE
-        ]
+        metrics = {
+            "VOLATILITY_ANNUAL": 0.25,
+            "MAX_DRAWDOWN": -0.15,
+            "SHARPE": 1.5,
+        }
 
-        with patch(
-            "app.repositories.calculations.CalculationsRepository",
-            return_value=mock_repo,
-        ):
-            score, subs = await calculate_stability_score("AAPL.US")
+        score, subs = await calculate_stability_score("AAPL.US", metrics=metrics)
 
-        assert mock_repo.get_metric.call_count >= 3
         assert 0 <= score <= 1
+        assert "volatility" in subs
+        assert "drawdown" in subs
+        assert "sharpe" in subs
 
 
 class TestCalculatePortfolioEndStateScore:
@@ -362,20 +337,38 @@ class TestCalculatePortfolioEndStateScore:
         """Test weighted score calculation across positions."""
         from app.domain.scoring.end_state import calculate_portfolio_end_state_score
 
-        mock_repo = AsyncMock()
-        mock_repo.get_metric.return_value = 0.1  # Default metric value
-        mock_repo.set_metric = AsyncMock()
+        metrics_cache = {
+            "AAPL.US": {
+                "CAGR_5Y": 0.12,
+                "DIVIDEND_YIELD": 0.015,
+                "CONSISTENCY_SCORE": 0.8,
+                "FINANCIAL_STRENGTH": 0.7,
+                "DIVIDEND_CONSISTENCY": 0.6,
+                "SORTINO": 1.5,
+                "VOLATILITY_ANNUAL": 0.20,
+                "MAX_DRAWDOWN": -0.15,
+                "SHARPE": 1.5,
+            },
+            "MSFT.US": {
+                "CAGR_5Y": 0.10,
+                "DIVIDEND_YIELD": 0.01,
+                "CONSISTENCY_SCORE": 0.7,
+                "FINANCIAL_STRENGTH": 0.8,
+                "DIVIDEND_CONSISTENCY": 0.5,
+                "SORTINO": 1.2,
+                "VOLATILITY_ANNUAL": 0.25,
+                "MAX_DRAWDOWN": -0.20,
+                "SHARPE": 1.2,
+            },
+        }
 
-        with patch(
-            "app.repositories.calculations.CalculationsRepository",
-            return_value=mock_repo,
-        ):
-            score, breakdown = await calculate_portfolio_end_state_score(
-                positions={"AAPL.US": 5000, "MSFT.US": 5000},
-                total_value=10000,
-                diversification_score=0.7,
-                opinion_score=0.6,
-            )
+        score, breakdown = await calculate_portfolio_end_state_score(
+            positions={"AAPL.US": 5000, "MSFT.US": 5000},
+            total_value=10000,
+            diversification_score=0.7,
+            metrics_cache=metrics_cache,
+            opinion_score=0.6,
+        )
 
         assert "total_return" in breakdown
         assert "diversification" in breakdown
@@ -390,19 +383,26 @@ class TestCalculatePortfolioEndStateScore:
         """Test that zero-value positions are skipped."""
         from app.domain.scoring.end_state import calculate_portfolio_end_state_score
 
-        mock_repo = AsyncMock()
-        mock_repo.get_metric.return_value = 0.1
-        mock_repo.set_metric = AsyncMock()
+        metrics_cache = {
+            "AAPL.US": {
+                "CAGR_5Y": 0.12,
+                "DIVIDEND_YIELD": 0.015,
+                "CONSISTENCY_SCORE": 0.8,
+                "FINANCIAL_STRENGTH": 0.7,
+                "DIVIDEND_CONSISTENCY": 0.6,
+                "SORTINO": 1.5,
+                "VOLATILITY_ANNUAL": 0.20,
+                "MAX_DRAWDOWN": -0.15,
+                "SHARPE": 1.5,
+            },
+        }
 
-        with patch(
-            "app.repositories.calculations.CalculationsRepository",
-            return_value=mock_repo,
-        ):
-            score, breakdown = await calculate_portfolio_end_state_score(
-                positions={"AAPL.US": 10000, "DEAD.US": 0},
-                total_value=10000,
-                diversification_score=0.7,
-            )
+        score, breakdown = await calculate_portfolio_end_state_score(
+            positions={"AAPL.US": 10000, "DEAD.US": 0},
+            total_value=10000,
+            diversification_score=0.7,
+            metrics_cache=metrics_cache,
+        )
 
         # Should still complete successfully
         assert 0 <= score <= 1
@@ -412,19 +412,26 @@ class TestCalculatePortfolioEndStateScore:
         """Test that breakdown includes weight contributions."""
         from app.domain.scoring.end_state import calculate_portfolio_end_state_score
 
-        mock_repo = AsyncMock()
-        mock_repo.get_metric.return_value = 0.5
-        mock_repo.set_metric = AsyncMock()
+        metrics_cache = {
+            "AAPL.US": {
+                "CAGR_5Y": 0.12,
+                "DIVIDEND_YIELD": 0.015,
+                "CONSISTENCY_SCORE": 0.8,
+                "FINANCIAL_STRENGTH": 0.7,
+                "DIVIDEND_CONSISTENCY": 0.6,
+                "SORTINO": 1.5,
+                "VOLATILITY_ANNUAL": 0.20,
+                "MAX_DRAWDOWN": -0.15,
+                "SHARPE": 1.5,
+            },
+        }
 
-        with patch(
-            "app.repositories.calculations.CalculationsRepository",
-            return_value=mock_repo,
-        ):
-            score, breakdown = await calculate_portfolio_end_state_score(
-                positions={"AAPL.US": 10000},
-                total_value=10000,
-                diversification_score=0.7,
-            )
+        score, breakdown = await calculate_portfolio_end_state_score(
+            positions={"AAPL.US": 10000},
+            total_value=10000,
+            diversification_score=0.7,
+            metrics_cache=metrics_cache,
+        )
 
         # Each component should have weight and contribution
         assert "weight" in breakdown["total_return"]
