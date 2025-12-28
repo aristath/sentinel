@@ -18,6 +18,8 @@ from app.domain.scoring.constants import (
     GEO_ALLOCATION_TOLERANCE,
     IND_ALLOCATION_TOLERANCE,
     MAX_CONCENTRATION,
+    MAX_COUNTRY_CONCENTRATION,
+    MAX_SECTOR_CONCENTRATION,
 )
 
 
@@ -351,8 +353,9 @@ class TestSectorConstraintsBuilding:
         assert us_constraint.lower == pytest.approx(
             0.60 - GEO_ALLOCATION_TOLERANCE, abs=0.001
         )
+        # Upper is capped at MAX_COUNTRY_CONCENTRATION (0.35)
         assert us_constraint.upper == pytest.approx(
-            0.60 + GEO_ALLOCATION_TOLERANCE, abs=0.001
+            MAX_COUNTRY_CONCENTRATION, abs=0.001
         )
         assert "AAPL" in us_constraint.symbols
 
@@ -374,7 +377,7 @@ class TestSectorConstraintsBuilding:
         assert len(country_constraints) == 0
         assert len(ind_constraints) == 2
 
-        # Find Technology constraint
+        # Find Consumer Electronics constraint
         tech_constraint = next(
             c for c in ind_constraints if c.name == "Consumer Electronics"
         )
@@ -382,8 +385,9 @@ class TestSectorConstraintsBuilding:
         assert tech_constraint.lower == pytest.approx(
             0.70 - IND_ALLOCATION_TOLERANCE, abs=0.001
         )
+        # Upper is capped at MAX_SECTOR_CONCENTRATION (0.30)
         assert tech_constraint.upper == pytest.approx(
-            0.70 + IND_ALLOCATION_TOLERANCE, abs=0.001
+            MAX_SECTOR_CONCENTRATION, abs=0.001
         )
         assert "AAPL" in tech_constraint.symbols
 
@@ -473,11 +477,11 @@ class TestSectorConstraintsBuilding:
         assert len(country_constraints) == 1
         assert country_constraints[0].name == "United States"
 
-    def test_bounds_clamped_to_zero_and_one(self):
-        """Test constraint bounds are clamped to [0, 1]."""
+    def test_bounds_clamped_to_hard_caps(self):
+        """Test constraint bounds are clamped to hard caps."""
         manager = ConstraintsManager(geo_tolerance=0.30)
         stocks = [create_stock("AAPL", country="United States")]
-        # High target that would exceed 1.0 with tolerance
+        # High target that would exceed hard cap with tolerance
         country_targets = {"United States": 0.95}
         ind_targets = {}
 
@@ -488,8 +492,10 @@ class TestSectorConstraintsBuilding:
         us_constraint = country_constraints[0]
         # Lower: 0.95 - 0.30 = 0.65
         assert us_constraint.lower == pytest.approx(0.65, abs=0.001)
-        # Upper: min(1.0, 0.95 + 0.30) = 1.0
-        assert us_constraint.upper == 1.0
+        # Upper: min(min(1.0, 0.95 + 0.30), MAX_COUNTRY_CONCENTRATION) = 0.35
+        assert us_constraint.upper == pytest.approx(
+            MAX_COUNTRY_CONCENTRATION, abs=0.001
+        )
 
     def test_lower_bound_not_negative(self):
         """Test lower bound doesn't go negative."""
@@ -506,8 +512,10 @@ class TestSectorConstraintsBuilding:
         us_constraint = country_constraints[0]
         # Lower: max(0.0, 0.10 - 0.30) = 0.0
         assert us_constraint.lower == 0.0
-        # Upper: 0.10 + 0.30 = 0.40
-        assert us_constraint.upper == pytest.approx(0.40, abs=0.001)
+        # Upper: min(0.10 + 0.30, MAX_COUNTRY_CONCENTRATION) = 0.35
+        assert us_constraint.upper == pytest.approx(
+            MAX_COUNTRY_CONCENTRATION, abs=0.001
+        )
 
     def test_multiple_stocks_same_sector(self):
         """Test multiple stocks in same sector are grouped correctly."""
@@ -1059,9 +1067,12 @@ class TestEdgeCases:
         assert upper == 0.10
 
     def test_portfolio_target_constraint_conflict_resolution(self):
-        """Test constraint conflict when portfolio targets conflict with allow_buy/allow_sell."""
+        """Test constraint behavior when portfolio targets interact with allow_buy/allow_sell."""
         manager = ConstraintsManager()
         # Stock with min_portfolio_target=15% but current weight is 5% and allow_sell=False
+        # allow_sell=False means can't go below current weight
+        # min_portfolio_target=15% means should be at least 15%
+        # Since current is 5% and can't sell, the optimizer can BUY more to reach 15%
         stocks = [create_stock("AAPL", allow_sell=False, min_portfolio_target=15.0)]
         positions = {"AAPL": create_position("AAPL", 10, 500)}  # 5% of portfolio
         portfolio_value = 10000
@@ -1071,8 +1082,8 @@ class TestEdgeCases:
             stocks, positions, portfolio_value, current_prices
         )
 
-        # Conflict: min_portfolio_target wants 15% but allow_sell=False keeps at 5%
-        # Should resolve to current weight
+        # lower = max(0.15 from target, 0.05 from allow_sell) = 0.15
+        # This is not a conflict - optimizer can buy more to reach 15%
         lower, upper = bounds["AAPL"]
-        assert lower == 0.05  # Current weight
+        assert lower == 0.15  # min_portfolio_target takes precedence
         assert upper == MAX_CONCENTRATION
