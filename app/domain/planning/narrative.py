@@ -11,7 +11,7 @@ making the holistic planner's decisions transparent and educational.
 """
 
 import logging
-from typing import TYPE_CHECKING, Dict, List
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 if TYPE_CHECKING:
     from app.domain.planning.holistic_planner import ActionCandidate, HolisticStep
@@ -121,6 +121,13 @@ def generate_step_narrative(
 
     # Build the narrative based on action type and tags
     if side == TradeSide.SELL:
+        # Calculate percentage of position being sold
+        # Get current position value from portfolio context
+        current_position_value = portfolio_context.positions.get(symbol, 0)
+        sell_percentage = None
+        if current_position_value > 0 and action.value_eur > 0:
+            sell_percentage = (action.value_eur / current_position_value) * 100
+
         narrative = _generate_sell_narrative(
             symbol,
             name,
@@ -129,6 +136,7 @@ def generate_step_narrative(
             reason,
             portfolio_context,
             all_opportunities,
+            sell_percentage=sell_percentage,
         )
     else:
         narrative = _generate_buy_narrative(
@@ -152,9 +160,13 @@ def _generate_sell_narrative(
     reason: str,
     portfolio_context: "PortfolioContext",
     all_opportunities: Dict,
+    sell_percentage: Optional[float] = None,
 ) -> str:
     """Generate narrative for a sell action."""
-    parts = [f"Sell €{value:.0f} of {name} ({symbol})"]
+    if sell_percentage is not None:
+        parts = [f"Sell {sell_percentage:.0f}% / €{value:.0f} of {name} ({symbol})"]
+    else:
+        parts = [f"Sell €{value:.0f} of {name} ({symbol})"]
 
     # Explain the primary reason
     if "windfall" in tags:
