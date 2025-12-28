@@ -67,10 +67,11 @@ class RouterBridgeClient:
             sock.settimeout(timeout)
 
             # Router Bridge RPClite protocol format: [type, id, method, params]
-            # type=1 for request, id=message_id, method=function_name, params=args as list
+            # type=0 (CALL_MSG) for request, id=message_id, method=function_name, params=args as list
+            # Based on RPClite: CALL_MSG=0, RESP_MSG=1, NOTIFY_MSG=2
             import random
             message_id = random.randint(1, 999999)  # Use random ID to avoid conflicts
-            message = [1, message_id, function_name, list(args)]
+            message = [0, message_id, function_name, list(args)]
 
             # Pack message with msgpack (no length prefix - msgpack is self-describing)
             packed = msgpack.packb(message, use_bin_type=True)
@@ -117,7 +118,7 @@ class RouterBridgeClient:
                 raise RuntimeError("Could not read complete response from Router Bridge")
 
             # Router Bridge RPClite response format: [type, id, error, result]
-            # type=2 for response, id=message_id, error=error object, result=return value
+            # type=1 (RESP_MSG) for response, id=message_id, error=error object, result=return value
             if len(response) != 4:
                 raise RuntimeError(f"Invalid response format: expected 4 elements, got {len(response)}: {response}")
 
