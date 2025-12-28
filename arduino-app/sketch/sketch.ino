@@ -3,8 +3,7 @@
 // Uses Router Bridge for communication with Linux MPU
 
 #include <Arduino_RouterBridge.h>
-#include "ArduinoGraphics.h"
-#include "Arduino_LED_Matrix.h"
+#include <Arduino_LED_Matrix.h>
 #include <vector>
 
 ArduinoLEDMatrix matrix;
@@ -14,7 +13,7 @@ ArduinoLEDMatrix matrix;
 // LED4: LED_BUILTIN+3 (R), LED_BUILTIN+4 (G), LED_BUILTIN+5 (B)
 // Active-low: HIGH = OFF, LOW = ON
 
-// Draw frame to LED matrix
+// Draw frame to LED matrix (104 bytes = 8 rows x 13 cols grayscale)
 void draw(std::vector<uint8_t> frame) {
   if (frame.empty() || frame.size() != 104) {
     return;
@@ -36,12 +35,14 @@ void setRGB4(uint8_t r, uint8_t g, uint8_t b) {
   digitalWrite(LED_BUILTIN + 5, b > 0 ? LOW : HIGH);
 }
 
-// Scroll text across LED matrix using native ArduinoGraphics
+#ifdef MATRIX_WITH_ARDUINOGRAPHICS
+// Scroll text across LED matrix using ArduinoGraphics
 // text: String to scroll, speed: ms per scroll step (lower = faster)
+// NOTE: This is BLOCKING - will not return until text finishes scrolling
 void scrollText(String text, int speed) {
   matrix.textScrollSpeed(speed);
   matrix.textFont(Font_5x7);
-  matrix.beginText(13, 1, 0xFFFFFF);  // Start at X=13 (matrix width) to scroll in from right
+  matrix.beginText(13, 1, 0xFFFFFF);  // Start at right edge
   matrix.print(text);
   matrix.endText(SCROLL_LEFT);
 }
@@ -53,13 +54,36 @@ void printText(String text, int x, int y) {
   matrix.print(text);
   matrix.endText();
 }
+#else
+// Fallback when ArduinoGraphics is not available
+void scrollText(String text, int speed) {
+  // Simple placeholder - just clear the display
+  matrix.clear();
+}
+
+void printText(String text, int x, int y) {
+  matrix.clear();
+}
+#endif
 
 void setup() {
+  // Initialize Router Bridge FIRST (before anything else)
+  if (!Bridge.begin()) {
+    // Bridge failed - halt
+    while (true) { delay(1000); }
+  }
+
+  // Initialize Monitor for debug output
+  if (!Monitor.begin()) {
+    // Monitor failed - continue anyway
+  }
+
+  Monitor.println("Bridge initialized");
+
   // Initialize LED matrix
   matrix.begin();
-  Serial.begin(115200);
-  matrix.setGrayscaleBits(8);  // For 0-255 brightness values
   matrix.clear();
+  Monitor.println("Matrix initialized");
 
   // Initialize RGB LED 3 & 4 pins
   pinMode(LED_BUILTIN, OUTPUT);
@@ -72,16 +96,30 @@ void setup() {
   // Start with LEDs off (active-low: HIGH = OFF)
   setRGB3(0, 0, 0);
   setRGB4(0, 0, 0);
+  Monitor.println("LEDs initialized");
 
-  // Setup Router Bridge
-  Bridge.begin();
-  Bridge.provide("draw", draw);
-  Bridge.provide("setRGB3", setRGB3);
-  Bridge.provide("setRGB4", setRGB4);
-  Bridge.provide("scrollText", scrollText);
-  Bridge.provide("printText", printText);
+  // Register RPC methods with Router Bridge
+  if (!Bridge.provide("draw", draw)) {
+    Monitor.println("Error: failed to provide draw");
+  }
+  if (!Bridge.provide("setRGB3", setRGB3)) {
+    Monitor.println("Error: failed to provide setRGB3");
+  }
+  if (!Bridge.provide("setRGB4", setRGB4)) {
+    Monitor.println("Error: failed to provide setRGB4");
+  }
+  if (!Bridge.provide("scrollText", scrollText)) {
+    Monitor.println("Error: failed to provide scrollText");
+  }
+  if (!Bridge.provide("printText", printText)) {
+    Monitor.println("Error: failed to provide printText");
+  }
+
+  Monitor.println("RPC methods registered");
+  Monitor.println("Setup complete - ready for commands");
 }
 
 void loop() {
+  // Main loop - Router Bridge handles RPC in background thread
   delay(100);
 }
