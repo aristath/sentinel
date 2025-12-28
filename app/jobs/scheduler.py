@@ -80,8 +80,10 @@ async def init_scheduler() -> AsyncIOScheduler:
 
     # Import job functions
     from app.jobs.daily_pipeline import run_daily_pipeline
+    from app.jobs.dividend_reinvestment import auto_reinvest_dividends
     from app.jobs.maintenance import run_daily_maintenance, run_weekly_maintenance
     from app.jobs.sync_cycle import run_sync_cycle
+    from app.jobs.universe_pruning import prune_universe
 
     # Get settings
     job_settings = await _get_job_settings()
@@ -130,10 +132,31 @@ async def init_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 
+    # Job 5: Dividend Reinvestment - daily, 30 minutes after daily maintenance
+    # Handles: automatic reinvestment of dividends
+    scheduler.add_job(
+        auto_reinvest_dividends,
+        CronTrigger(hour=maintenance_hour, minute=30),
+        id="dividend_reinvestment",
+        name="Dividend Reinvestment",
+        replace_existing=True,
+    )
+
+    # Job 6: Universe Pruning - monthly on first day of month
+    # Handles: automatic removal of low-quality stocks
+    scheduler.add_job(
+        prune_universe,
+        CronTrigger(day=1, hour=maintenance_hour, minute=0),
+        id="universe_pruning",
+        name="Universe Pruning",
+        replace_existing=True,
+    )
+
     logger.info(
-        f"Scheduler initialized with 4 jobs - "
+        f"Scheduler initialized with 6 jobs - "
         f"sync_cycle:{sync_cycle_minutes}m, daily_pipeline:1h, "
-        f"maintenance:{maintenance_hour}:00"
+        f"maintenance:{maintenance_hour}:00, dividend_reinvestment:{maintenance_hour}:30, "
+        f"universe_pruning:1st of month {maintenance_hour}:00"
     )
     return scheduler
 
@@ -163,10 +186,19 @@ async def reschedule_all_jobs():
         "weekly_maintenance",
         trigger=CronTrigger(day_of_week=6, hour=(maintenance_hour + 1) % 24, minute=0),
     )
+    scheduler.reschedule_job(
+        "dividend_reinvestment",
+        trigger=CronTrigger(hour=maintenance_hour, minute=30),
+    )
+    scheduler.reschedule_job(
+        "universe_pruning",
+        trigger=CronTrigger(day=1, hour=maintenance_hour, minute=0),
+    )
 
     logger.info(
         f"Jobs rescheduled - sync_cycle:{sync_cycle_minutes}m, "
-        f"maintenance:{maintenance_hour}:00"
+        f"maintenance:{maintenance_hour}:00, dividend_reinvestment:{maintenance_hour}:30, "
+        f"universe_pruning:1st of month {maintenance_hour}:00"
     )
 
 
