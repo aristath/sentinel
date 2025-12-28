@@ -78,33 +78,36 @@ class RouterBridgeClient:
             # Send message directly (no length prefix)
             sock.sendall(packed)
 
-            # Receive response (msgpack is self-describing, so we read until complete message)
+            # Receive response using Unpacker for proper streaming
             # Router Bridge sends response as msgpack without length prefix
-            response_data = b""
-            buffer_size = 4096
-            max_attempts = 100
+            unpacker = msgpack.Unpacker(raw=False)
             response = None
+            max_attempts = 100
 
             for attempt in range(max_attempts):
-                chunk = sock.recv(buffer_size)
-                if not chunk:
-                    if attempt == 0:
-                        raise RuntimeError("No response from Router Bridge")
-                    break
-                response_data += chunk
-
-                # Try to unpack - msgpack.unpackb will succeed when message is complete
                 try:
-                    response = msgpack.unpackb(response_data, raw=False)
-                    break  # Successfully unpacked
-                except Exception:
-                    # Partial data, continue reading
+                    chunk = sock.recv(4096)
+                    if not chunk:
+                        if attempt == 0:
+                            raise RuntimeError("No response from Router Bridge")
+                        break
+                    unpacker.feed(chunk)
+                    # Try to extract a complete message
+                    for msg in unpacker:
+                        response = msg
+                        break
+                    if response is not None:
+                        break
+                except socket.timeout:
+                    if attempt == 0:
+                        raise RuntimeError("No response from Router Bridge (timeout)")
+                    break
+                except Exception as e:
+                    logger.debug(f"Error reading response (attempt {attempt}): {e}")
                     continue
-            else:
-                raise RuntimeError("Could not read complete response from Router Bridge")
 
             if response is None:
-                raise RuntimeError("No response from Router Bridge")
+                raise RuntimeError("Could not read complete response from Router Bridge")
 
             # Router Bridge RPClite response format: [type, id, error, result]
             # type=2 for response, id=message_id, error=error object, result=return value
