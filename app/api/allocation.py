@@ -261,19 +261,11 @@ async def update_country_group(
     """Create or update a country group."""
     if not group.group_name or not group.group_name.strip():
         raise HTTPException(status_code=400, detail="Group name is required")
-    # Allow empty country_names for new groups (user can add countries after creation)
     # Filter out empty strings and duplicates
+    # Allow empty groups to be created (user can add countries after creation)
     country_names = list(
         dict.fromkeys([c for c in group.country_names if c and c.strip()])
     )
-    # Filter out empty strings and duplicates
-    country_names = list(
-        dict.fromkeys([c for c in group.country_names if c and c.strip()])
-    )
-    if not country_names:
-        raise HTTPException(
-            status_code=400, detail="At least one valid country is required"
-        )
 
     await grouping_repo.set_country_group(group.group_name.strip(), country_names)
     return {"group_name": group.group_name.strip(), "country_names": country_names}
