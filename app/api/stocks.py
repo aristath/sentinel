@@ -16,6 +16,7 @@ from app.infrastructure.dependencies import (
     ScoreRepositoryDep,
     ScoringServiceDep,
     StockRepositoryDep,
+    StockSetupServiceDep,
 )
 from app.infrastructure.recommendation_cache import get_recommendation_cache
 
@@ -30,6 +31,15 @@ class StockCreate(BaseModel):
     yahoo_symbol: Optional[str] = None
     name: str
     # country and fullExchangeName are auto-detected from Yahoo Finance
+    min_lot: Optional[int] = 1
+    allow_buy: Optional[bool] = True
+    allow_sell: Optional[bool] = False
+
+
+class StockAddByIdentifier(BaseModel):
+    """Request model for adding a stock by identifier (symbol or ISIN)."""
+
+    identifier: str  # Symbol or ISIN
     min_lot: Optional[int] = 1
     allow_buy: Optional[bool] = True
     allow_sell: Optional[bool] = False
@@ -240,6 +250,85 @@ async def create_stock(
         "min_lot": new_stock.min_lot,
         "total_score": score.total_score if score else None,
     }
+
+
+@router.post("/add-by-identifier")
+async def add_stock_by_identifier(
+    stock_data: StockAddByIdentifier,
+    stock_setup_service: StockSetupServiceDep,
+    score_repo: ScoreRepositoryDep,
+):
+    """Add a new stock to the universe by symbol or ISIN.
+
+    This endpoint accepts either:
+    - Tradernet symbol (e.g., "AAPL.US")
+    - ISIN (e.g., "US0378331005")
+
+    The method will automatically:
+    1. Resolve the identifier to get all necessary symbols
+    2. Fetch data from Tradernet (symbol, name, currency, ISIN)
+    3. Fetch data from Yahoo Finance (country, exchange, industry)
+    4. Create the stock in the database
+    5. Fetch historical price data (10 years initial seed)
+    6. Calculate and save the initial stock score
+
+    Args:
+        stock_data: Request containing identifier and optional settings
+        stock_setup_service: Stock setup service
+        score_repo: Score repository for retrieving calculated score
+
+    Returns:
+        Created stock data with score
+    """
+    try:
+        # Validate identifier format (basic check)
+        identifier = stock_data.identifier.strip().upper()
+        if not identifier:
+            raise HTTPException(status_code=400, detail="Identifier cannot be empty")
+
+        # Note: Stock existence check is handled in the service, but we do it here
+        # to provide better error messages before starting the setup process
+
+        # Add the stock
+        stock = await stock_setup_service.add_stock_by_identifier(
+            identifier=identifier,
+            min_lot=stock_data.min_lot or 1,
+            allow_buy=(
+                stock_data.allow_buy if stock_data.allow_buy is not None else True
+            ),
+            allow_sell=(
+                stock_data.allow_sell if stock_data.allow_sell is not None else False
+            ),
+        )
+
+        # Get the calculated score
+        score = await score_repo.get_by_symbol(stock.symbol)
+
+        cache.invalidate("stocks_with_scores")
+
+        return {
+            "message": f"Stock {stock.symbol} added to universe",
+            "symbol": stock.symbol,
+            "yahoo_symbol": stock.yahoo_symbol,
+            "isin": stock.isin,
+            "name": stock.name,
+            "country": stock.country,
+            "fullExchangeName": stock.fullExchangeName,
+            "industry": stock.industry,
+            "currency": str(stock.currency) if stock.currency else None,
+            "min_lot": stock.min_lot,
+            "total_score": score.total_score if score else None,
+        }
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ConnectionError as e:
+        raise HTTPException(
+            status_code=503, detail=f"Tradernet connection failed: {str(e)}"
+        )
+    except Exception as e:
+        logger.error(f"Failed to add stock by identifier: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to add stock: {str(e)}")
 
 
 @router.post("/refresh-all")

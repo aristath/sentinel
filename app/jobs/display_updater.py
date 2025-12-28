@@ -1,6 +1,6 @@
 """Periodic LED display updater job.
 
-This job runs every 20 seconds to ensure the LED display always shows content,
+This job runs every 9.9 seconds to ensure the LED display always shows content,
 even when no other events trigger display updates. It fetches current ticker
 content and updates the display state, which triggers the DISPLAY_STATE_CHANGED
 event that broadcasts to SSE subscribers.
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 async def update_display_periodic():
     """Periodically update LED display with current ticker content.
 
-    This function runs every 20 seconds to ensure the display always shows
+    This function runs every 9.9 seconds to ensure the display always shows
     something, even when no other events occur. It generates ticker content
     using TickerContentService and updates the display state, which triggers
     the DISPLAY_STATE_CHANGED event that broadcasts to SSE subscribers.

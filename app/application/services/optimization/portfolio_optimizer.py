@@ -267,6 +267,97 @@ class PortfolioOptimizer:
             success=True,
         )
 
+    def _validate_constraints(
+        self,
+        common_symbols: List[str],
+        bounds: Dict[str, Tuple[float, float]],
+        country_constraints: List,
+        ind_constraints: List,
+    ) -> Tuple[bool, List[str]]:
+        """
+        Validate that constraints are feasible.
+
+        Returns:
+            Tuple of (is_feasible, list_of_warnings)
+        """
+        warnings = []
+        is_feasible = True
+
+        # Check individual stock bounds
+        locked_stocks = []
+        for symbol in common_symbols:
+            if symbol in bounds:
+                lower, upper = bounds[symbol]
+                if lower > upper:
+                    warnings.append(
+                        f"{symbol}: invalid bounds (lower={lower:.2%} > upper={upper:.2%})"
+                    )
+                    is_feasible = False
+                elif lower == upper:
+                    locked_stocks.append(symbol)
+
+        if locked_stocks:
+            logger.debug(f"Locked stocks (can't change): {len(locked_stocks)}")
+
+        # Check country constraints
+        country_min_sum = sum(c.lower for c in country_constraints)
+        country_max_sum = sum(c.upper for c in country_constraints)
+
+        if country_constraints:
+            if country_min_sum > 1.0:
+                warnings.append(
+                    f"Country constraints minimum sum ({country_min_sum:.2%}) > 100%"
+                )
+                is_feasible = False
+            if country_max_sum < 0.5:
+                warnings.append(
+                    f"Country constraints maximum sum ({country_max_sum:.2%}) < 50%"
+                )
+                # Not necessarily infeasible, but might be too restrictive
+
+            logger.debug(
+                f"Country constraints: {len(country_constraints)} sectors, "
+                f"min_sum={country_min_sum:.2%}, max_sum={country_max_sum:.2%}"
+            )
+
+        # Check industry constraints
+        ind_min_sum = sum(c.lower for c in ind_constraints)
+        ind_max_sum = sum(c.upper for c in ind_constraints)
+
+        if ind_constraints:
+            if ind_min_sum > 1.0:
+                warnings.append(
+                    f"Industry constraints minimum sum ({ind_min_sum:.2%}) > 100%"
+                )
+                is_feasible = False
+            if ind_max_sum < 0.5:
+                warnings.append(
+                    f"Industry constraints maximum sum ({ind_max_sum:.2%}) < 50%"
+                )
+                # Not necessarily infeasible, but might be too restrictive
+
+            logger.debug(
+                f"Industry constraints: {len(ind_constraints)} sectors, "
+                f"min_sum={ind_min_sum:.2%}, max_sum={ind_max_sum:.2%}"
+            )
+
+        # Check if any symbols are missing from sector constraints
+        country_symbols = set()
+        for constraint in country_constraints:
+            country_symbols.update(constraint.symbols)
+
+        ind_symbols = set()
+        for constraint in ind_constraints:
+            ind_symbols.update(constraint.symbols)
+
+        unconstrained_symbols = set(common_symbols) - country_symbols - ind_symbols
+        if unconstrained_symbols and (country_constraints or ind_constraints):
+            logger.debug(
+                f"{len(unconstrained_symbols)} symbols not in any sector constraint"
+            )
+
+        return is_feasible, warnings
+
     async def _run_mean_variance(
         self,
         expected_returns: Dict[str, float],
@@ -328,6 +419,14 @@ class PortfolioOptimizer:
             industry_lower[constraint.name] = constraint.lower
             industry_upper[constraint.name] = constraint.upper
 
+        # Validate constraints before attempting optimization
+        is_feasible, warnings = self._validate_constraints(
+            common_symbols, bounds, country_constraints, ind_constraints
+        )
+
+        if warnings:
+            logger.warning(f"Constraint validation warnings: {'; '.join(warnings)}")
+
         def _apply_sector_constraints(ef: EfficientFrontier) -> None:
             """Apply sector constraints to EfficientFrontier."""
             if country_mapper:
@@ -349,7 +448,14 @@ class PortfolioOptimizer:
             return dict(cleaned), None
 
         except OptimizationError as e:
-            logger.warning(f"MV target return failed: {e}")
+            logger.warning(
+                f"MV target return failed: {e}. "
+                f"Symbols={len(common_symbols)}, "
+                f"Country constraints={len(country_constraints)}, "
+                f"Industry constraints={len(ind_constraints)}"
+            )
+            if warnings:
+                logger.warning(f"Constraint validation issues: {'; '.join(warnings)}")
 
             try:
                 # Strategy 2: Min Volatility (lower risk for retirement)
@@ -361,7 +467,10 @@ class PortfolioOptimizer:
                 return dict(cleaned), "min_volatility"
 
             except OptimizationError as e2:
-                logger.warning(f"MV min_volatility failed: {e2}")
+                logger.warning(
+                    f"MV min_volatility failed: {e2}. "
+                    f"Trying next fallback strategy..."
+                )
 
                 try:
                     # Strategy 3: Efficient Risk (target 15% volatility)
@@ -376,7 +485,10 @@ class PortfolioOptimizer:
                     return dict(cleaned), "efficient_risk"
 
                 except OptimizationError as e3:
-                    logger.warning(f"MV efficient_risk failed: {e3}")
+                    logger.warning(
+                        f"MV efficient_risk failed: {e3}. "
+                        f"Trying final fallback strategy..."
+                    )
 
                     try:
                         # Strategy 4: Max Sharpe (final MV fallback)
@@ -390,7 +502,14 @@ class PortfolioOptimizer:
                         return dict(cleaned), "max_sharpe"
 
                     except OptimizationError as e4:
-                        logger.warning(f"MV max_sharpe failed: {e4}")
+                        logger.warning(
+                            f"MV max_sharpe failed: {e4}. "
+                            f"All MV strategies failed. Constraint summary: "
+                            f"country_min_sum={sum(c.lower for c in country_constraints):.2%}, "
+                            f"country_max_sum={sum(c.upper for c in country_constraints):.2%}, "
+                            f"ind_min_sum={sum(c.lower for c in ind_constraints):.2%}, "
+                            f"ind_max_sum={sum(c.upper for c in ind_constraints):.2%}"
+                        )
                         return None, None
 
     def _run_hrp(

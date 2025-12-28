@@ -8,7 +8,7 @@ Scheduler with 8 jobs:
 5. dividend_reinvestment - Daily, automatic dividend reinvestment
 6. universe_pruning - Monthly (1st), removes low-quality stocks
 7. stock_discovery - Monthly (15th), discovers new high-quality stocks
-8. display_updater - Every 20 seconds, updates LED display
+8. display_updater - Every 9.9 seconds, updates LED display
 """
 
 import logging
@@ -169,11 +169,11 @@ async def init_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 
-    # Job 8: Display Updater - every 20 seconds
+    # Job 8: Display Updater - every 9.9 seconds
     # Handles: periodic LED display updates to ensure display is never blank
     scheduler.add_job(
         update_display_periodic,
-        IntervalTrigger(seconds=20),
+        IntervalTrigger(seconds=9.9),
         id="display_updater",
         name="Display Updater",
         replace_existing=True,
@@ -184,7 +184,7 @@ async def init_scheduler() -> AsyncIOScheduler:
         f"sync_cycle:{sync_cycle_minutes}m, daily_pipeline:1h, "
         f"maintenance:{maintenance_hour}:00, dividend_reinvestment:{maintenance_hour}:30, "
         f"universe_pruning:1st of month {maintenance_hour}:00, "
-        f"stock_discovery:15th of month 02:00, display_updater:20s"
+        f"stock_discovery:15th of month 02:00, display_updater:9.9s"
     )
     return scheduler
 
@@ -223,13 +223,13 @@ async def reschedule_all_jobs():
         trigger=CronTrigger(day=1, hour=maintenance_hour, minute=0),
     )
     # Stock discovery schedule is fixed (15th at 2am), no reschedule needed
-    # Display updater schedule is fixed (20s), no reschedule needed
+    # Display updater schedule is fixed (9.9s), no reschedule needed
 
     logger.info(
         f"Jobs rescheduled - sync_cycle:{sync_cycle_minutes}m, "
         f"maintenance:{maintenance_hour}:00, dividend_reinvestment:{maintenance_hour}:30, "
         f"universe_pruning:1st of month {maintenance_hour}:00, "
-        f"stock_discovery:15th of month 02:00, display_updater:20s"
+        f"stock_discovery:15th of month 02:00, display_updater:9.9s"
     )
 
 
