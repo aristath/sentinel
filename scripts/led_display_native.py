@@ -73,7 +73,6 @@ _last_text = ""
 _last_text_speed = 0
 _last_led3 = None
 _last_led4 = None
-# Note: For active-low RGB LEDs, 255 = OFF, 0 = ON (full brightness)
 
 
 def set_text(text: str, speed: int = DEFAULT_TICKER_SPEED) -> bool:
@@ -180,8 +179,8 @@ def _process_display_data(data: dict) -> None:
     mode = data.get("mode", "normal")
     error_message = data.get("error_message")
     activity_message = data.get("activity_message")
-    led3 = data.get("led3", [255, 255, 255])  # Default OFF for active-low LEDs
-    led4 = data.get("led4", [255, 255, 255])  # Default OFF for active-low LEDs
+    led3 = data.get("led3", [0, 0, 0])
+    led4 = data.get("led4", [0, 0, 0])
 
     # Update RGB LEDs (only if changed - optimization)
     led3_tuple = tuple(led3)
@@ -237,12 +236,12 @@ def main_loop():
         logger.error("Make sure the MCU sketch is uploaded with Router Bridge functions")
         sys.exit(1)
 
-    # Initialize LEDs to OFF (255 = OFF for active-low LEDs)
+    # Initialize LEDs to OFF
     if ROUTER_BRIDGE_AVAILABLE:
-        set_rgb3(255, 255, 255)
-        set_rgb4(255, 255, 255)
-        _last_led3 = (255, 255, 255)
-        _last_led4 = (255, 255, 255)
+        set_rgb3(0, 0, 0)
+        set_rgb4(0, 0, 0)
+        _last_led3 = (0, 0, 0)
+        _last_led4 = (0, 0, 0)
         logger.info("Initialized RGB LEDs to OFF")
 
     consecutive_errors = 0
