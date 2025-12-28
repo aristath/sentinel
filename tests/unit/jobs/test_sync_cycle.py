@@ -363,9 +363,7 @@ class TestStepUpdateDisplay:
             patch("app.repositories.StockRepository"),
             patch("app.repositories.SettingsRepository"),
             patch("app.repositories.AllocationRepository"),
-            patch(
-                "app.infrastructure.external.tradernet.get_tradernet_client"
-            ),
+            patch("app.infrastructure.external.tradernet.get_tradernet_client"),
             patch(
                 "app.domain.services.ticker_content_service.TickerContentService",
                 return_value=mock_ticker_service,

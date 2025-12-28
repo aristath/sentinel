@@ -60,6 +60,7 @@ def mock_universe_pruning_dependencies(
 
     # Setup default settings - only if not already configured by test
     if mock_settings_repo.get_float.side_effect is None:
+
         async def get_float(key, default):
             defaults = {
                 "universe_pruning_enabled": 1.0,

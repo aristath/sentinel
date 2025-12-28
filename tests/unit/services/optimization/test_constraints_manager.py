@@ -1087,3 +1087,243 @@ class TestEdgeCases:
         lower, upper = bounds["AAPL"]
         assert lower == 0.15  # min_portfolio_target takes precedence
         assert upper == MAX_CONCENTRATION
+
+
+class TestTargetNormalization:
+    """Test normalization of industry/country targets that sum to > 100%."""
+
+    def test_industry_targets_normalized_when_sum_exceeds_100(self):
+        """Test industry targets are normalized when they sum to > 100%."""
+        manager = ConstraintsManager()
+        stocks = [
+            create_stock("AAPL", industry="Technology"),
+            create_stock("GOOGL", industry="Technology"),
+            create_stock("MSFT", industry="Software"),
+        ]
+        # Targets sum to 150% - should be normalized to 100%
+        ind_targets = {"Technology": 0.8, "Software": 0.7}
+        country_targets = {}
+
+        country_constraints, ind_constraints = manager.build_sector_constraints(
+            stocks, country_targets, ind_targets
+        )
+
+        # Should have 2 industry constraints
+        assert len(ind_constraints) == 2
+
+        # Check normalized targets (0.8 + 0.7 = 1.5, so normalize: 0.8/1.5 = 0.533, 0.7/1.5 = 0.467)
+        tech_constraint = next(c for c in ind_constraints if c.name == "Technology")
+        software_constraint = next(c for c in ind_constraints if c.name == "Software")
+
+        assert tech_constraint.target == pytest.approx(0.8 / 1.5, abs=0.001)
+        assert software_constraint.target == pytest.approx(0.7 / 1.5, abs=0.001)
+
+    def test_country_targets_normalized_when_sum_exceeds_100(self):
+        """Test country targets are normalized when they sum to > 100%."""
+        manager = ConstraintsManager()
+        stocks = [
+            create_stock("AAPL", country="United States"),
+            create_stock("SAP", country="Germany"),
+        ]
+        # Targets sum to 120% - should be normalized to 100%
+        country_targets = {"United States": 0.8, "Germany": 0.4}
+        ind_targets = {}
+
+        country_constraints, ind_constraints = manager.build_sector_constraints(
+            stocks, country_targets, ind_targets
+        )
+
+        # Should have 2 country constraints
+        assert len(country_constraints) == 2
+
+        # Check normalized targets (0.8 + 0.4 = 1.2, so normalize: 0.8/1.2 = 0.667, 0.4/1.2 = 0.333)
+        us_constraint = next(
+            c for c in country_constraints if c.name == "United States"
+        )
+        de_constraint = next(c for c in country_constraints if c.name == "Germany")
+
+        assert us_constraint.target == pytest.approx(0.8 / 1.2, abs=0.001)
+        assert de_constraint.target == pytest.approx(0.4 / 1.2, abs=0.001)
+
+    def test_targets_not_normalized_when_sum_equals_100(self):
+        """Test targets are not normalized when they sum to exactly 100%."""
+        manager = ConstraintsManager()
+        stocks = [
+            create_stock("AAPL", industry="Technology"),
+            create_stock("GOOGL", industry="Software"),
+        ]
+        ind_targets = {"Technology": 0.6, "Software": 0.4}  # Sums to 100%
+        country_targets = {}
+
+        country_constraints, ind_constraints = manager.build_sector_constraints(
+            stocks, country_targets, ind_targets
+        )
+
+        tech_constraint = next(c for c in ind_constraints if c.name == "Technology")
+        software_constraint = next(c for c in ind_constraints if c.name == "Software")
+
+        # Should not be normalized
+        assert tech_constraint.target == pytest.approx(0.6, abs=0.001)
+        assert software_constraint.target == pytest.approx(0.4, abs=0.001)
+
+    def test_normalization_only_applies_to_active_industries(self):
+        """Test normalization only considers industries that have stocks."""
+        manager = ConstraintsManager()
+        stocks = [
+            create_stock("AAPL", industry="Technology"),
+        ]
+        # Technology has stock, Energy doesn't
+        # Only Technology should be normalized (0.8 / 0.8 = 1.0)
+        ind_targets = {"Technology": 0.8, "Energy": 0.9}  # Energy has no stocks
+        country_targets = {}
+
+        country_constraints, ind_constraints = manager.build_sector_constraints(
+            stocks, country_targets, ind_targets
+        )
+
+        # Should only have Technology constraint (Energy has no stocks)
+        assert len(ind_constraints) == 1
+        assert ind_constraints[0].name == "Technology"
+        # Should be normalized to 1.0 (only active industry)
+        assert ind_constraints[0].target == pytest.approx(1.0, abs=0.001)
+
+
+class TestIndustryConcentrationCapAdjustment:
+    """Test industry concentration cap adjustment for few industries."""
+
+    def test_single_industry_gets_70_percent_cap(self):
+        """Test single industry constraint gets 70% max concentration."""
+        manager = ConstraintsManager()
+        stocks = [create_stock("AAPL", industry="Technology")]
+        ind_targets = {"Technology": 0.8}
+        country_targets = {}
+
+        country_constraints, ind_constraints = manager.build_sector_constraints(
+            stocks, country_targets, ind_targets
+        )
+
+        assert len(ind_constraints) == 1
+        tech_constraint = ind_constraints[0]
+
+        # With target=0.8 and tolerance=0.15, upper would be min(1.0, 0.8+0.15) = 0.95
+        # But should be capped at 70% for single industry
+        assert tech_constraint.upper == pytest.approx(0.70, abs=0.001)
+
+    def test_two_industries_get_50_percent_cap_each(self):
+        """Test two industry constraints each get 50% max concentration."""
+        manager = ConstraintsManager()
+        stocks = [
+            create_stock("AAPL", industry="Technology"),
+            create_stock("GOOGL", industry="Software"),
+        ]
+        ind_targets = {"Technology": 0.6, "Software": 0.4}
+        country_targets = {}
+
+        country_constraints, ind_constraints = manager.build_sector_constraints(
+            stocks, country_targets, ind_targets
+        )
+
+        assert len(ind_constraints) == 2
+        tech_constraint = next(c for c in ind_constraints if c.name == "Technology")
+        software_constraint = next(c for c in ind_constraints if c.name == "Software")
+
+        # Each should be capped at 50%
+        assert tech_constraint.upper == pytest.approx(0.50, abs=0.001)
+        assert software_constraint.upper == pytest.approx(0.50, abs=0.001)
+
+    def test_three_plus_industries_get_default_30_percent_cap(self):
+        """Test three or more industries get default 30% max concentration."""
+        manager = ConstraintsManager()
+        stocks = [
+            create_stock("AAPL", industry="Technology"),
+            create_stock("GOOGL", industry="Software"),
+            create_stock("MSFT", industry="Cloud"),
+        ]
+        ind_targets = {"Technology": 0.4, "Software": 0.3, "Cloud": 0.3}
+        country_targets = {}
+
+        country_constraints, ind_constraints = manager.build_sector_constraints(
+            stocks, country_targets, ind_targets
+        )
+
+        assert len(ind_constraints) == 3
+        for constraint in ind_constraints:
+            # Each should be capped at default 30%
+            assert constraint.upper == pytest.approx(
+                MAX_SECTOR_CONCENTRATION, abs=0.001
+            )
+
+    def test_industry_cap_adjustment_allows_higher_total_allocation(self):
+        """Test that cap adjustment allows higher total allocation for few industries."""
+        manager = ConstraintsManager()
+        stocks = [
+            create_stock("AAPL", industry="Technology"),
+            create_stock("GOOGL", industry="Software"),
+        ]
+        ind_targets = {"Technology": 0.5, "Software": 0.5}
+        country_targets = {}
+
+        country_constraints, ind_constraints = manager.build_sector_constraints(
+            stocks, country_targets, ind_targets
+        )
+
+        # With 2 industries at 50% each, total max should be 100%
+        total_max = sum(c.upper for c in ind_constraints)
+        assert total_max == pytest.approx(1.0, abs=0.001)
+
+
+class TestMinLotInfeasibleBounds:
+    """Test min_lot constraint handling when it would create infeasible bounds."""
+
+    def test_min_lot_ignored_when_exceeds_upper_bound(self):
+        """Test min_lot constraint is ignored when it would exceed upper bound."""
+        manager = ConstraintsManager()
+        stocks = [
+            create_stock("BYD", min_lot=500, max_portfolio_target=20.0)
+        ]  # 20% max
+        # Position: 1000 shares at 33.42 EUR = 33,420 EUR
+        # Portfolio: 19,043 EUR
+        # Current weight: 33,420 / 19,043 = 175% (impossible, but for test)
+        # Min lot value: 500 * 33.42 = 16,710 EUR
+        # Min lot weight: 16,710 / 19,043 = 87.75%
+        # Upper bound: 20% (from max_portfolio_target)
+        # Since 87.75% > 20%, min_lot should be ignored
+        positions = {"BYD": create_position("BYD", 1000, 33420)}
+        portfolio_value = 19043
+        current_prices = {"BYD": 33.42}
+
+        bounds = manager.calculate_weight_bounds(
+            stocks, positions, portfolio_value, current_prices
+        )
+
+        lower, upper = bounds["BYD"]
+        # Upper should be 20% (max_portfolio_target)
+        assert upper == pytest.approx(0.20, abs=0.001)
+        # Lower should NOT be 87.75% (min_lot ignored), should be 0% or current weight
+        # Since min_lot is ignored, lower should be 0% (no min_portfolio_target set)
+        assert lower == pytest.approx(0.0, abs=0.001)
+
+    def test_min_lot_applied_when_within_bounds(self):
+        """Test min_lot constraint is applied when it's within bounds."""
+        manager = ConstraintsManager()
+        stocks = [create_stock("AAPL", min_lot=10, max_portfolio_target=30.0)]
+        # Position: 100 shares at 150 EUR = 15,000 EUR
+        # Portfolio: 100,000 EUR
+        # Current weight: 15%
+        # Min lot value: 10 * 150 = 1,500 EUR
+        # Min lot weight: 1,500 / 100,000 = 1.5%
+        # Upper bound: 30%
+        # Since 1.5% < 30%, min_lot should be applied
+        positions = {"AAPL": create_position("AAPL", 100, 15000)}
+        portfolio_value = 100000
+        current_prices = {"AAPL": 150.0}
+
+        bounds = manager.calculate_weight_bounds(
+            stocks, positions, portfolio_value, current_prices
+        )
+
+        lower, upper = bounds["AAPL"]
+        # Lower should be 1.5% (min_lot constraint)
+        assert lower == pytest.approx(0.015, abs=0.001)
+        # Upper should be 30% (max_portfolio_target)
+        assert upper == pytest.approx(0.30, abs=0.001)
