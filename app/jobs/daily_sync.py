@@ -236,14 +236,22 @@ async def _sync_portfolio_internal():
 
     try:
         # Get positions and cash balances from Tradernet
+        logger.info("Calling client.get_portfolio()...")
         positions = client.get_portfolio()
+        logger.info(f"get_portfolio() returned {len(positions)} positions")
+
+        logger.info("Calling client.get_cash_balances()...")
         cash_balances = client.get_cash_balances()
+        logger.info(f"get_cash_balances() returned {len(cash_balances)} balances")
 
         db_manager = get_db_manager()
         exchange_rate_service = get_exchange_rate_service(db_manager)
+        logger.info("Got db_manager and exchange_rate_service")
 
+        logger.info("Starting database transaction...")
         async with db_manager.state.transaction():
             # Save Yahoo-derived prices before clearing (for price continuity)
+            logger.info("Querying existing positions for price continuity...")
             cursor = await db_manager.state.execute(
                 "SELECT symbol, current_price, market_value_eur FROM positions"
             )
@@ -254,8 +262,10 @@ async def _sync_portfolio_internal():
                 }
                 for row in await cursor.fetchall()
             }
+            logger.info(f"Saved price data for {len(saved_price_data)} positions")
 
             # Derive first_bought_at and last_sold_at from trades table
+            logger.info("Querying trades table for buy/sell dates...")
             cursor = await db_manager.ledger.execute(
                 """
                 SELECT
@@ -270,9 +280,12 @@ async def _sync_portfolio_internal():
                 row[0]: {"first_bought_at": row[1], "last_sold_at": row[2]}
                 for row in await cursor.fetchall()
             }
+            logger.info(f"Found trade dates for {len(trade_dates)} symbols")
 
             # Clear existing positions
+            logger.info("Clearing existing positions...")
             await db_manager.state.execute("DELETE FROM positions")
+            logger.info("Positions cleared")
 
             cash_balance = await _calculate_cash_balance_eur(
                 cash_balances, exchange_rate_service
