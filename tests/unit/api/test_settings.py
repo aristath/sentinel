@@ -429,11 +429,18 @@ class TestCacheManagement:
         """Test cache reset endpoint."""
         from app.api.settings import reset_cache
 
+        mock_rec_cache = AsyncMock()
+
         with patch("app.api.settings.cache") as mock_cache:
-            result = await reset_cache()
+            with patch(
+                "app.api.settings.get_recommendation_cache",
+                return_value=mock_rec_cache,
+            ):
+                result = await reset_cache()
 
         assert result["status"] == "ok"
         mock_cache.clear.assert_called_once()
+        mock_rec_cache.invalidate_all_recommendations.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_get_cache_stats(self):
