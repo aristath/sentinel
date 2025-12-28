@@ -1298,6 +1298,82 @@ class TestIndustryConcentrationCapAdjustment:
         assert total_max == pytest.approx(1.0, abs=0.001)
 
 
+class TestIndustryMinimumBoundScaling:
+    """Test scaling down industry minimum bounds when they're too restrictive."""
+
+    def test_industry_minimum_bounds_scaled_when_sum_exceeds_100(self):
+        """Test industry minimum bounds are scaled down when they sum to > 100%."""
+        manager = ConstraintsManager(ind_tolerance=0.15)
+        stocks = [
+            create_stock("AAPL", industry="Technology"),
+            create_stock("GOOGL", industry="Software"),
+        ]
+        # High targets with tolerance create minimums that sum > 100%
+        ind_targets = {"Technology": 0.6, "Software": 0.5}  # Targets sum to 110%
+        country_targets = {}
+
+        country_constraints, ind_constraints = manager.build_sector_constraints(
+            stocks, country_targets, ind_targets
+        )
+
+        # Should have 2 industry constraints
+        assert len(ind_constraints) == 2
+
+        # Check that minimums were scaled down
+        ind_min_sum = sum(c.lower for c in ind_constraints)
+        assert ind_min_sum <= 1.0  # Should be <= 100%
+
+    def test_industry_minimum_bounds_scaled_when_combined_with_country_exceeds_70(self):
+        """Test industry minimums are scaled when combined with country minimums > 70%."""
+        manager = ConstraintsManager(geo_tolerance=0.10, ind_tolerance=0.15)
+        stocks = [
+            create_stock("AAPL", country="United States", industry="Technology"),
+            create_stock("SAP", country="Germany", industry="Software"),
+        ]
+        # Country targets: 0.4 each = 0.8 total, with tolerance: min = 0.3 each = 0.6 total
+        # Industry targets: 0.35 and 0.5 = 0.85 total, with tolerance: min = 0.2 and 0.35 = 0.55 total
+        # Combined: 0.6 + 0.55 = 1.15 > 70%, so industry should be scaled
+        country_targets = {"United States": 0.4, "Germany": 0.4}
+        ind_targets = {"Technology": 0.35, "Software": 0.5}
+
+        country_constraints, ind_constraints = manager.build_sector_constraints(
+            stocks, country_targets, ind_targets
+        )
+
+        # Check that industry minimums were scaled down
+        country_min_sum = sum(c.lower for c in country_constraints)
+        ind_min_sum = sum(c.lower for c in ind_constraints)
+        total_min_sum = country_min_sum + ind_min_sum
+
+        # Total should be <= 70%
+        assert total_min_sum <= 0.70
+
+    def test_industry_minimum_bounds_not_scaled_when_combined_below_70(self):
+        """Test industry minimums are NOT scaled when combined total is <= 70%."""
+        manager = ConstraintsManager(geo_tolerance=0.10, ind_tolerance=0.15)
+        stocks = [
+            create_stock("AAPL", country="United States", industry="Technology"),
+        ]
+        # Low targets that won't exceed 70% threshold
+        country_targets = {"United States": 0.3}
+        ind_targets = {"Technology": 0.3}
+        # Country min: 0.3 - 0.1 = 0.2
+        # Industry min: 0.3 - 0.15 = 0.15
+        # Total: 0.35 < 70%, so no scaling
+
+        country_constraints, ind_constraints = manager.build_sector_constraints(
+            stocks, country_targets, ind_targets
+        )
+
+        # Check original minimums are preserved (not scaled)
+        country_min_sum = sum(c.lower for c in country_constraints)
+        ind_min_sum = sum(c.lower for c in ind_constraints)
+
+        # Should match expected values (0.2 and 0.15)
+        assert country_min_sum == pytest.approx(0.2, abs=0.01)
+        assert ind_min_sum == pytest.approx(0.15, abs=0.01)
+
+
 class TestMinLotInfeasibleBounds:
     """Test min_lot constraint handling when it would create infeasible bounds."""
 
