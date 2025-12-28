@@ -229,7 +229,7 @@ def main_loop():
 
     # Test Router Bridge connection
     try:
-        bridge_call("scrollText", "TEST", 50, timeout=2)
+        bridge_call("scrollText", "READY", 50, timeout=2)
         logger.info("Router Bridge connection test successful")
     except Exception as e:
         logger.error(f"Router Bridge connection test failed: {e}")
