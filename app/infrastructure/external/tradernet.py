@@ -1247,6 +1247,56 @@ class TradernetClient:
             logger.error(f"Failed to get all cash flows: {e}")
             return []
 
+    def get_most_traded(
+        self,
+        instrument_type: str = "stock",
+        exchange: Optional[str] = None,
+        gainers: bool = False,
+        limit: int = 50,
+    ) -> list[dict]:
+        """
+        Get most traded or fastest-growing securities.
+
+        Args:
+            instrument_type: Type of instrument ("stock", "etf", etc.)
+            exchange: Exchange filter (e.g., "usa", "europe", "asia")
+            gainers: If True, get fastest-growing; if False, get most traded
+            limit: Maximum number of results
+
+        Returns:
+            List of security dictionaries with symbol, exchange, volume, name, country
+        """
+        if not self.is_connected or self._client is None:
+            raise ConnectionError("Not connected to Tradernet")
+
+        try:
+            with _led_api_call():
+                # Call underlying SDK method if available
+                # Note: This may need to be adjusted based on actual SDK method signature
+                if hasattr(self._client, "get_most_traded"):
+                    result = self._client.get_most_traded(
+                        instrument_type=instrument_type,
+                        exchange=exchange,
+                        gainers=gainers,
+                        limit=limit,
+                    )
+                else:
+                    # Fallback: return empty list if method not available
+                    logger.warning("get_most_traded not available in Tradernet SDK")
+                    return []
+
+            # Normalize response to expected format
+            if isinstance(result, list):
+                return result
+            elif isinstance(result, dict) and "result" in result:
+                return result["result"] if isinstance(result["result"], list) else []
+            else:
+                logger.warning(f"Unexpected get_most_traded response format: {type(result)}")
+                return []
+        except Exception as e:
+            logger.error(f"Failed to get most traded securities: {e}")
+            return []
+
 
 # Singleton instance
 _client: Optional[TradernetClient] = None
