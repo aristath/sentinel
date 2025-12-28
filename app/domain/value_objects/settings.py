@@ -192,6 +192,7 @@ class Settings:
             "max_opportunities_per_category": self.max_opportunities_per_category,
             "enable_combinatorial_generation": self.enable_combinatorial_generation,
             "priority_threshold_for_combinations": self.priority_threshold_for_combinations,
+            "incremental_planner_enabled": self.incremental_planner_enabled,
             "planner_batch_interval_seconds": self.planner_batch_interval_seconds,
             "planner_batch_size": self.planner_batch_size,
         }
