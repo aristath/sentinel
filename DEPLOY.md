@@ -311,7 +311,7 @@ The display automatically shows the highest priority non-empty text. Text scroll
 When the sketch (`.ino` file) changes, the auto-deploy script automatically:
 1. Stops the LED display service
 2. Compiles the sketch using Arduino CLI
-3. Uploads to the MCU via serial port
+3. Uploads to the MCU via serial port (upload only - runtime uses Router Bridge)
 4. Restarts the LED display service
 
 Manual compilation:
