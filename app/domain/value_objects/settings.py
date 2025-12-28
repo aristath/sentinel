@@ -40,6 +40,9 @@ class Settings:
         0.3  # Min priority for combinations (0.0-1.0)
     )
     # Incremental planner settings
+    incremental_planner_enabled: float = (
+        1.0  # Enable incremental planner mode (1.0 = enabled, 0.0 = disabled)
+    )
     planner_batch_interval_seconds: float = (
         10.0  # Interval for batch processing in seconds (1-300)
     )
@@ -161,6 +164,7 @@ class Settings:
             priority_threshold_for_combinations=get_float(
                 "priority_threshold_for_combinations", 0.3
             ),
+            incremental_planner_enabled=get_float("incremental_planner_enabled", 1.0),
             planner_batch_interval_seconds=get_float(
                 "planner_batch_interval_seconds", 10.0
             ),

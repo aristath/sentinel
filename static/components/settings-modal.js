@@ -265,6 +265,34 @@ class SettingsModal extends HTMLElement {
                            @change="$store.app.updateSetting('priority_threshold_for_combinations', Math.max(0, Math.min(1, parseFloat($event.target.value) || 0.3)))"
                            class="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
                   </div>
+                </div>
+
+                <!-- Info note -->
+                <div class="mt-4 pt-3 border-t border-gray-700/50">
+                  <p class="text-xs text-gray-500">Higher values explore more scenarios but may be slower. Early filtering prevents performance issues.</p>
+                </div>
+              </div>
+
+              <!-- Incremental Planner Card -->
+              <div class="bg-gray-800 border border-gray-700 rounded p-4">
+                <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wide mb-3">Incremental Planner</h3>
+                <p class="text-xs text-gray-500 mb-4">Processes sequences continuously in batches, exploring thousands of scenarios over time. When enabled, the planner runs every N seconds and accumulates results in the database.</p>
+
+                <div class="grid grid-cols-[1fr_auto] gap-x-4 gap-y-3 items-start">
+                  <!-- Enable Incremental Mode -->
+                  <div>
+                    <span class="text-sm text-gray-300">Incremental Mode</span>
+                    <p class="text-xs text-gray-500">Enable continuous batch processing</p>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <label class="flex items-center gap-3 cursor-pointer">
+                      <input type="checkbox"
+                             :checked="$store.app.settings.incremental_planner_enabled == 1"
+                             @change="$store.app.updateSetting('incremental_planner_enabled', $event.target.checked ? 1 : 0)"
+                             class="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-800">
+                      <span class="text-sm text-gray-300" x-text="$store.app.settings.incremental_planner_enabled == 1 ? 'Enabled' : 'Disabled'"></span>
+                    </label>
+                  </div>
 
                   <!-- Batch Interval -->
                   <div>
@@ -301,7 +329,7 @@ class SettingsModal extends HTMLElement {
 
                 <!-- Info note -->
                 <div class="mt-4 pt-3 border-t border-gray-700/50">
-                  <p class="text-xs text-gray-500">Higher values explore more scenarios but may be slower. Early filtering prevents performance issues. Incremental planner processes sequences continuously in batches.</p>
+                  <p class="text-xs text-gray-500">When disabled, the planner uses full mode (processes all sequences in one run every 15 minutes). When enabled, sequences are processed continuously in batches, allowing exploration of thousands of scenarios over time.</p>
                 </div>
               </div>
 

@@ -97,10 +97,13 @@ async def init_scheduler() -> AsyncIOScheduler:
     sync_cycle_minutes = job_settings["sync_cycle_minutes"]
     maintenance_hour = job_settings["maintenance_hour"]
 
-    # Get planner batch interval from settings
+    # Get planner batch settings from settings
     from app.repositories import SettingsRepository
 
     settings_repo = SettingsRepository()
+    incremental_enabled = (
+        await settings_repo.get_float("incremental_planner_enabled", 1.0) == 1.0
+    )
     planner_batch_interval = int(
         await settings_repo.get_float("planner_batch_interval_seconds", 10.0)
     )
@@ -189,14 +192,21 @@ async def init_scheduler() -> AsyncIOScheduler:
     )
 
     # Job 9: Planner Batch - every N seconds (configurable, default 10)
-    # Processes next batch of sequences for holistic planner
-    scheduler.add_job(
-        process_planner_batch_job,
-        IntervalTrigger(seconds=planner_batch_interval),
-        id="planner_batch",
-        name="Planner Batch",
-        replace_existing=True,
-    )
+    # Processes next batch of sequences for holistic planner (only if incremental mode enabled)
+    if incremental_enabled:
+        scheduler.add_job(
+            process_planner_batch_job,
+            IntervalTrigger(seconds=planner_batch_interval),
+            id="planner_batch",
+            name="Planner Batch",
+            replace_existing=True,
+        )
+    else:
+        # Remove job if it exists and incremental mode is disabled
+        try:
+            scheduler.remove_job("planner_batch")
+        except Exception:
+            pass  # Job doesn't exist, that's fine
 
     logger.info(
         f"Scheduler initialized with 9 jobs - "

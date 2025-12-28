@@ -43,6 +43,7 @@ SETTING_DEFAULTS = {
     "enable_combinatorial_generation": 1.0,  # Enable combinatorial generation (1.0 = enabled, 0.0 = disabled)
     "priority_threshold_for_combinations": 0.3,  # Min priority for combinations (0.0-1.0)
     # Incremental Planner settings
+    "incremental_planner_enabled": 1.0,  # Enable incremental planner mode (1.0 = enabled, 0.0 = disabled)
     "planner_batch_interval_seconds": 10.0,  # Interval for batch processing in seconds (1-300)
     "planner_batch_size": 100.0,  # Sequences per batch (10-1000)
     # LED Matrix settings
@@ -272,6 +273,21 @@ async def update_setting_value(
             )
         await set_setting(key, str(data.value), settings_repo)
         return {key: data.value}
+    elif key == "incremental_planner_enabled":
+        # Validate boolean-like (0.0 or 1.0)
+        if data.value not in (0.0, 1.0):
+            raise HTTPException(
+                status_code=400,
+                detail=f"{key} must be 0.0 (disabled) or 1.0 (enabled)",
+            )
+        await set_setting(key, str(data.value), settings_repo)
+        # Invalidate cache when toggling incremental mode
+        from app.infrastructure.recommendation_cache import get_recommendation_cache
+
+        rec_cache = get_recommendation_cache()
+        await rec_cache.invalidate_all_recommendations()
+        cache.invalidate_prefix("recommendations")
+        return {key: data.value}
     elif key == "planner_batch_interval_seconds":
         # Validate range (1-300)
         if data.value < 1 or data.value > 300:
@@ -324,6 +340,7 @@ async def update_setting_value(
         "max_opportunities_per_category",
         "enable_combinatorial_generation",
         "priority_threshold_for_combinations",
+        "incremental_planner_enabled",
         "planner_batch_interval_seconds",
         "planner_batch_size",
     }
