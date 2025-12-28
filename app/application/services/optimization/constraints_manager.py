@@ -479,12 +479,23 @@ class ConstraintsManager:
         num_industry_constraints = len(industries_with_targets)
 
         # Adjust max concentration cap based on number of industries
+        # When using industry groups (instead of individual industries), allow higher caps
+        # because groups are larger and more flexible
         # If only 1-2 industries, allow higher allocation (up to 70% for 1, 50% for 2)
-        # This prevents the "only 30% total" problem when few industries are constrained
+        # For 3-4 groups, allow up to 40% per group (more flexible than 30%)
+        # For 5+ groups, use default 30%
         if num_industry_constraints == 1:
             effective_max_concentration = 0.70  # 70% for single industry
         elif num_industry_constraints == 2:
             effective_max_concentration = 0.50  # 50% each for 2 industries
+        elif num_industry_constraints <= 4:
+            # For grouped industries (3-4 groups), allow 40% per group
+            # This accommodates groups like "OTHER" that may have high targets
+            effective_max_concentration = 0.40
+            logger.info(
+                f"Using 40% max concentration cap for {num_industry_constraints} "
+                f"industry groups (more flexible than 30% for grouped industries)"
+            )
         else:
             effective_max_concentration = MAX_SECTOR_CONCENTRATION  # 30% default
 
