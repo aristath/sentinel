@@ -1,6 +1,7 @@
 """Portfolio allocation and rebalancing logic."""
 
 import logging
+from typing import Optional
 
 from app.config import settings
 from app.domain.constants import (
@@ -8,7 +9,9 @@ from app.domain.constants import (
     MAX_VOL_WEIGHT,
     MIN_VOL_WEIGHT,
     MIN_VOLATILITY_FOR_SIZING,
-    REBALANCE_BAND_PCT,
+    REBALANCE_BAND_HIGH_PRIORITY,
+    REBALANCE_BAND_MEDIUM,
+    REBALANCE_BAND_SMALL,
     TARGET_PORTFOLIO_VOLATILITY,
 )
 from app.domain.models import StockPriority
@@ -17,7 +20,10 @@ logger = logging.getLogger(__name__)
 
 
 def is_outside_rebalance_band(
-    current_weight: float, target_weight: float, band_pct: float = REBALANCE_BAND_PCT
+    current_weight: float,
+    target_weight: float,
+    band_pct: Optional[float] = None,
+    position_size_pct: Optional[float] = None,
 ) -> bool:
     """
     Check if a position has drifted enough from target to warrant rebalancing.
@@ -25,14 +31,44 @@ def is_outside_rebalance_band(
     Based on MOSEK Portfolio Cookbook principles: avoid frequent small trades
     by only rebalancing when positions drift significantly from targets.
 
+    Uses tiered rebalancing bands based on position size:
+    - High-priority positions (>10%): 5% band (tighter control)
+    - Medium positions (5-10%): 7% band (current default)
+    - Small positions (<5%): 10% band (allow more drift)
+
     Args:
         current_weight: Current allocation weight (0.0 to 1.0)
         target_weight: Target allocation weight (0.0 to 1.0)
-        band_pct: Deviation threshold (default from constants)
+        band_pct: Explicit deviation threshold (overrides tiered calculation)
+        position_size_pct: Position size as percentage of portfolio (for tiered bands)
 
     Returns:
         True if position is outside the band and should be considered for rebalancing
     """
+    # Use explicit band if provided
+    if band_pct is not None:
+        deviation = abs(current_weight - target_weight)
+        return deviation > band_pct
+
+    # Calculate tiered band based on position size
+    if position_size_pct is not None:
+        if position_size_pct > 0.10:  # >10% of portfolio
+            band_pct = REBALANCE_BAND_HIGH_PRIORITY  # 5%
+        elif position_size_pct >= 0.05:  # 5-10% of portfolio
+            band_pct = REBALANCE_BAND_MEDIUM  # 7%
+        else:  # <5% of portfolio
+            band_pct = REBALANCE_BAND_SMALL  # 10%
+    else:
+        # Fallback to default if position size not provided
+        # Use larger of current or target weight as proxy for position size
+        position_size_pct = max(current_weight, target_weight)
+        if position_size_pct > 0.10:
+            band_pct = REBALANCE_BAND_HIGH_PRIORITY
+        elif position_size_pct >= 0.05:
+            band_pct = REBALANCE_BAND_MEDIUM
+        else:
+            band_pct = REBALANCE_BAND_SMALL
+
     deviation = abs(current_weight - target_weight)
     return deviation > band_pct
 
