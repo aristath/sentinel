@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS stocks (
     allow_sell INTEGER DEFAULT 0,
     currency TEXT,
     last_synced TEXT,           -- When stock data was last fully synced (daily pipeline)
+    min_portfolio_target REAL,  -- Minimum target portfolio allocation percentage (0-20)
+    max_portfolio_target REAL,  -- Maximum target portfolio allocation percentage (0-30)
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -182,9 +184,9 @@ async def init_config_schema(db):
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
             (
-                5,
+                6,
                 now,
-                "Initial config schema with portfolio_hash recommendations, last_synced, country and fullExchangeName",
+                "Initial config schema with portfolio_hash recommendations, last_synced, country, fullExchangeName, and portfolio targets",
             ),
         )
 
@@ -360,6 +362,37 @@ async def init_config_schema(db):
         logger.info(
             "Config database migrated to schema version 5 (country and fullExchangeName)"
         )
+        current_version = 5  # Continue to next migration
+
+    if current_version == 5:
+        # Migration: Add min_portfolio_target and max_portfolio_target columns to stocks (version 5 -> 6)
+        now = datetime.now().isoformat()
+        logger.info(
+            "Migrating config database to schema version 6 (portfolio targets)..."
+        )
+
+        # Check if min_portfolio_target column exists
+        cursor = await db.execute("PRAGMA table_info(stocks)")
+        columns = [row[1] for row in await cursor.fetchall()]
+
+        if "min_portfolio_target" not in columns:
+            await db.execute("ALTER TABLE stocks ADD COLUMN min_portfolio_target REAL")
+            logger.info("Added min_portfolio_target column to stocks table")
+
+        if "max_portfolio_target" not in columns:
+            await db.execute("ALTER TABLE stocks ADD COLUMN max_portfolio_target REAL")
+            logger.info("Added max_portfolio_target column to stocks table")
+
+        await db.execute(
+            "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
+            (
+                6,
+                now,
+                "Added min_portfolio_target and max_portfolio_target columns to stocks",
+            ),
+        )
+        await db.commit()
+        logger.info("Config database migrated to schema version 6 (portfolio targets)")
 
 
 # =============================================================================
