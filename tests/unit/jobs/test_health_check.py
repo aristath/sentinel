@@ -176,7 +176,6 @@ class TestRunHealthCheckInternal:
         with (
             patch("app.jobs.health_check._check_core_databases"),
             patch("app.jobs.health_check._check_history_databases"),
-            patch("app.jobs.health_check._check_legacy_database"),
             patch("app.jobs.health_check.set_processing"),
             patch("app.jobs.health_check.clear_processing"),
         ):
@@ -200,7 +199,6 @@ class TestRunHealthCheckInternal:
         with (
             patch("app.jobs.health_check._check_core_databases", side_effect=add_issue),
             patch("app.jobs.health_check._check_history_databases"),
-            patch("app.jobs.health_check._check_legacy_database"),
             patch("app.jobs.health_check._report_issues") as mock_report,
             patch("app.jobs.health_check.set_processing"),
             patch("app.jobs.health_check.set_error"),
@@ -332,48 +330,6 @@ class TestCheckWalStatus:
 
             # Should run without error even with no WAL files
             await check_wal_status()
-
-
-class TestCheckLegacyDatabase:
-    """Test legacy database checking."""
-
-    @pytest.mark.asyncio
-    async def test_skips_when_no_legacy_db(self, tmp_path):
-        """Test skipping when legacy database doesn't exist."""
-        from app.jobs.health_check import _check_legacy_database
-
-        issues = []
-
-        with patch("app.jobs.health_check.settings") as mock_settings:
-            mock_settings.database_path = tmp_path / "trader.db"
-
-            await _check_legacy_database(issues)
-
-        assert len(issues) == 0
-
-    @pytest.mark.asyncio
-    async def test_reports_corrupted_legacy_db(self, tmp_path):
-        """Test reporting corrupted legacy database."""
-        from app.jobs.health_check import _check_legacy_database
-
-        # Create legacy database
-        legacy_db = tmp_path / "trader.db"
-        legacy_db.write_bytes(b"test")
-
-        issues = []
-
-        with (
-            patch("app.jobs.health_check.settings") as mock_settings,
-            patch("app.jobs.health_check._check_database_integrity") as mock_check,
-        ):
-            mock_settings.database_path = legacy_db
-            mock_check.return_value = "database corrupted"
-
-            await _check_legacy_database(issues)
-
-        assert len(issues) == 1
-        assert issues[0]["database"] == "trader.db (legacy)"
-        assert issues[0]["recoverable"] is False
 
 
 class TestRebuildCacheDb:

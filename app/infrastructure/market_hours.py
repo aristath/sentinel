@@ -30,13 +30,6 @@ EXCHANGE_MAP = {
     # Add more mappings as needed
 }
 
-# Fallback mapping for legacy geography codes (deprecated)
-LEGACY_GEOGRAPHY_MAP = {
-    "EU": "XETR",
-    "US": "XNYS",
-    "ASIA": "XHKG",
-}
-
 # Timezone info for common exchanges
 EXCHANGE_TIMEZONES = {
     "XNAS": "America/New_York",
@@ -61,16 +54,11 @@ def get_calendar(full_exchange_name: str) -> Any:
 
     Args:
         full_exchange_name: Exchange name from Yahoo Finance (e.g., "NASDAQ", "NYSE", "XETR")
-                           or legacy geography code (EU, US, ASIA)
 
     Returns:
         Exchange calendar object
     """
-    # Try direct mapping first
-    exchange_code = EXCHANGE_MAP.get(full_exchange_name)
-    if not exchange_code:
-        # Fallback to legacy geography mapping
-        exchange_code = LEGACY_GEOGRAPHY_MAP.get(full_exchange_name, "XNYS")
+    exchange_code = EXCHANGE_MAP.get(full_exchange_name, "XNYS")
     return xcals.get_calendar(exchange_code)
 
 
@@ -87,7 +75,6 @@ def is_market_open(full_exchange_name: str) -> bool:
 
     Args:
         full_exchange_name: Exchange name from Yahoo Finance (e.g., "NASDAQ", "NYSE", "XETR")
-                           or legacy geography code (EU, US, ASIA)
 
     Returns:
         True if the market is currently open

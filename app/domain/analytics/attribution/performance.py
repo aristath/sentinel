@@ -91,9 +91,7 @@ async def _calculate_position_values(
             continue
 
         info = stock_info.get(symbol, {})
-        country = info.get("country") or info.get(
-            "geography", "UNKNOWN"
-        )  # Support legacy geography
+        country = info.get("country", "UNKNOWN")
         industry = info.get("industry")
 
         try:

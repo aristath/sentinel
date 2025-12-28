@@ -88,25 +88,6 @@ async def _check_history_databases(issues: list) -> None:
             await _rebuild_symbol_history(db_file, symbol)
 
 
-async def _check_legacy_database(issues: list) -> None:
-    """Check integrity of legacy database if it exists."""
-    legacy_db = Path(settings.database_path)
-    if not legacy_db.exists():
-        return
-
-    result = await _check_database_integrity(legacy_db)
-    if result != "ok":
-        issues.append(
-            {
-                "database": "trader.db (legacy)",
-                "description": "Legacy database",
-                "error": result,
-                "recoverable": False,
-            }
-        )
-        logger.error(f"Integrity check failed for legacy database: {result}")
-
-
 async def _run_health_check_internal():
     """Internal health check implementation."""
     logger.info("Starting database health check...")
@@ -118,7 +99,6 @@ async def _run_health_check_internal():
     try:
         await _check_core_databases(issues)
         await _check_history_databases(issues)
-        await _check_legacy_database(issues)
 
         if issues:
             await _report_issues(issues)
