@@ -99,6 +99,7 @@ class PortfolioOptimizer:
         ind_targets: Optional[Dict[str, float]] = None,
         min_cash_reserve: float = 500.0,
         dividend_bonuses: Optional[Dict[str, float]] = None,
+        regime: Optional[str] = None,
     ) -> OptimizationResult:
         """
         Optimize portfolio allocation.
@@ -115,6 +116,7 @@ class PortfolioOptimizer:
             ind_targets: Industry allocation targets
             min_cash_reserve: Minimum cash to keep (not allocated)
             dividend_bonuses: Pending dividend bonuses per symbol
+            regime: Market regime ("bull", "bear", "sideways") for expected returns adjustment
 
         Returns:
             OptimizationResult with target weights and diagnostics
@@ -130,11 +132,12 @@ class PortfolioOptimizer:
         if not symbols:
             return self._error_result(timestamp, blend, "No active stocks")
 
-        # Calculate expected returns
+        # Calculate expected returns (with regime adjustment)
         expected_returns = await self._returns_calc.calculate_expected_returns(
             symbols,
             target_return=target_return,
             dividend_bonuses=dividend_bonuses,
+            regime=regime,
         )
 
         if not expected_returns:

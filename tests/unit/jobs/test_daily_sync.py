@@ -260,11 +260,14 @@ class TestSyncPortfolioInternal:
         mock_db.config = AsyncMock()
         mock_db.config.execute.return_value = mock_cursor
 
+        mock_exchange_service = AsyncMock()
+        mock_exchange_service.batch_convert_to_eur.return_value = {"EUR": 1000.0}
+
         with (
             patch("app.jobs.daily_sync.get_tradernet_client") as mock_get_client,
             patch("app.jobs.daily_sync.get_db_manager") as mock_get_db,
             patch("app.jobs.daily_sync.get_event_bus") as mock_get_bus,
-            patch("app.jobs.daily_sync._fetch_exchange_rates") as mock_rates,
+            patch("app.jobs.daily_sync.get_exchange_rate_service") as mock_get_exchange,
             patch("app.jobs.daily_sync.sync_stock_currencies"),
             patch("app.jobs.daily_sync._sync_prices_internal"),
             patch("app.jobs.daily_sync.set_processing"),
@@ -278,7 +281,7 @@ class TestSyncPortfolioInternal:
             mock_get_client.return_value = mock_client
             mock_get_db.return_value = mock_db
             mock_get_bus.return_value = MagicMock()
-            mock_rates.return_value = {"EUR": 1.0}
+            mock_get_exchange.return_value = mock_exchange_service
 
             await _sync_portfolio_internal()
 
@@ -294,26 +297,20 @@ class TestSyncPricesInternal:
         """Test that sync is skipped when no stocks."""
         from app.jobs.daily_sync import _sync_prices_internal
 
-        mock_cursor = AsyncMock()
-        mock_cursor.fetchall.return_value = []
-
-        mock_config = AsyncMock()
-        mock_config.execute.return_value = mock_cursor
-
-        mock_db = MagicMock()
-        mock_db.config = mock_config
+        mock_stock_repo = AsyncMock()
+        mock_stock_repo.get_all_active.return_value = []
 
         with (
-            patch("app.jobs.daily_sync.get_db_manager") as mock_get_db,
+            patch("app.jobs.daily_sync.StockRepository") as mock_stock_class,
             patch("app.jobs.daily_sync.set_processing"),
             patch("app.jobs.daily_sync.emit"),
         ):
-            mock_get_db.return_value = mock_db
+            mock_stock_class.return_value = mock_stock_repo
 
             await _sync_prices_internal()
 
-            # Should not have called yahoo
-            mock_db.state.execute.assert_not_called()
+            # Should have called get_all_active
+            mock_stock_repo.get_all_active.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_syncs_prices_from_yahoo(self):
@@ -324,27 +321,31 @@ class TestSyncPricesInternal:
         async def mock_transaction():
             yield
 
-        mock_cursor = AsyncMock()
-        mock_cursor.fetchall.return_value = [("AAPL.US", "AAPL")]
-        mock_cursor.rowcount = 1
+        mock_stock = MagicMock()
+        mock_stock.symbol = "AAPL.US"
+        mock_stock.yahoo_symbol = "AAPL"
 
-        mock_config = AsyncMock()
-        mock_config.execute.return_value = mock_cursor
+        mock_stock_repo = AsyncMock()
+        mock_stock_repo.get_all_active.return_value = [mock_stock]
+
+        mock_cursor = AsyncMock()
+        mock_cursor.rowcount = 1
 
         mock_state = AsyncMock()
         mock_state.execute.return_value = mock_cursor
         mock_state.transaction = mock_transaction
 
         mock_db = MagicMock()
-        mock_db.config = mock_config
         mock_db.state = mock_state
 
         with (
+            patch("app.jobs.daily_sync.StockRepository") as mock_stock_class,
             patch("app.jobs.daily_sync.get_db_manager") as mock_get_db,
             patch("app.jobs.daily_sync.yahoo.get_batch_quotes") as mock_yahoo,
             patch("app.jobs.daily_sync.set_processing"),
             patch("app.jobs.daily_sync.emit"),
         ):
+            mock_stock_class.return_value = mock_stock_repo
             mock_get_db.return_value = mock_db
             mock_yahoo.return_value = {"AAPL.US": 175.0}
 
@@ -357,23 +358,21 @@ class TestSyncPricesInternal:
         """Test handling price sync error."""
         from app.jobs.daily_sync import _sync_prices_internal
 
-        mock_cursor = AsyncMock()
-        mock_cursor.fetchall.return_value = [("AAPL.US", "AAPL")]
+        mock_stock = MagicMock()
+        mock_stock.symbol = "AAPL.US"
+        mock_stock.yahoo_symbol = "AAPL"
 
-        mock_config = AsyncMock()
-        mock_config.execute.return_value = mock_cursor
-
-        mock_db = MagicMock()
-        mock_db.config = mock_config
+        mock_stock_repo = AsyncMock()
+        mock_stock_repo.get_all_active.return_value = [mock_stock]
 
         with (
-            patch("app.jobs.daily_sync.get_db_manager") as mock_get_db,
+            patch("app.jobs.daily_sync.StockRepository") as mock_stock_class,
             patch("app.jobs.daily_sync.yahoo.get_batch_quotes") as mock_yahoo,
             patch("app.jobs.daily_sync.set_processing"),
             patch("app.jobs.daily_sync.set_error") as mock_set_error,
             patch("app.jobs.daily_sync.emit"),
         ):
-            mock_get_db.return_value = mock_db
+            mock_stock_class.return_value = mock_stock_repo
             mock_yahoo.side_effect = Exception("Yahoo error")
 
             with pytest.raises(Exception, match="Yahoo error"):

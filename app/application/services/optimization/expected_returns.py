@@ -2,8 +2,9 @@
 Expected Returns Calculator.
 
 Calculates expected returns for each stock by blending:
-- Historical CAGR (70%)
-- Score-adjusted target return (30%)
+- Historical CAGR (70% default, 80% in bull, 70% in sideways)
+- Score-adjusted target return (30% default, 20% in bull, 30% in sideways)
+- Market regime adjustment (bear: reduce by 20-30%)
 - User preference multiplier (priority_multiplier)
 - Pending dividend bonus (DRIP fallback)
 """
@@ -43,6 +44,7 @@ class ExpectedReturnsCalculator:
         symbols: List[str],
         target_return: float = OPTIMIZER_TARGET_RETURN,
         dividend_bonuses: Optional[Dict[str, float]] = None,
+        regime: Optional[str] = None,
     ) -> Dict[str, float]:
         """
         Calculate expected returns for a list of symbols.
@@ -51,6 +53,7 @@ class ExpectedReturnsCalculator:
             symbols: List of stock symbols
             target_return: Target annual return (default 11%)
             dividend_bonuses: Optional dict of pending dividend bonuses per symbol
+            regime: Market regime ("bull", "bear", "sideways", or None for default)
 
         Returns:
             Dict mapping symbol to expected annual return (as decimal, e.g., 0.11 = 11%)
@@ -64,13 +67,17 @@ class ExpectedReturnsCalculator:
                     symbol,
                     target_return,
                     dividend_bonuses.get(symbol, 0.0),
+                    regime=regime,
                 )
                 if exp_return is not None:
                     expected_returns[symbol] = exp_return
             except Exception as e:
                 logger.warning(f"Error calculating expected return for {symbol}: {e}")
 
-        logger.info(f"Calculated expected returns for {len(expected_returns)} symbols")
+        logger.info(
+            f"Calculated expected returns for {len(expected_returns)} symbols "
+            f"(regime: {regime or 'default'})"
+        )
         return expected_returns
 
     async def _calculate_single(
@@ -78,12 +85,22 @@ class ExpectedReturnsCalculator:
         symbol: str,
         target_return: float,
         dividend_bonus: float,
+        regime: Optional[str] = None,
     ) -> Optional[float]:
         """
         Calculate expected return for a single symbol.
 
-        Formula:
+        Formula (default/sideways):
             base_return = (cagr * 0.70) + (target * score_factor * 0.30)
+
+        Formula (bull):
+            base_return = (cagr * 0.80) + (target * score_factor * 0.20)
+
+        Formula (bear):
+            base_return = (cagr * 0.70) + (target * score_factor * 0.30)
+            base_return = base_return * 0.75  # Reduce by 25% (20-30% range)
+
+        Then:
             adjusted = base_return * priority_multiplier
             final = adjusted + dividend_bonus
             return clamp(final, -0.10, 0.30)
@@ -115,11 +132,31 @@ class ExpectedReturnsCalculator:
         else:
             score_factor = stock_score / 0.5
 
+        # Adjust weights based on market regime
+        if regime == "bull":
+            # Bull market: 80% CAGR, 20% score-adjusted (more optimistic)
+            cagr_weight = 0.80
+            score_weight = 0.20
+            regime_reduction = 1.0  # No reduction
+        elif regime == "bear":
+            # Bear market: 70% CAGR, 30% score-adjusted, then reduce by 25%
+            cagr_weight = EXPECTED_RETURNS_CAGR_WEIGHT  # 0.70
+            score_weight = EXPECTED_RETURNS_SCORE_WEIGHT  # 0.30
+            regime_reduction = 0.75  # Reduce by 25% (middle of 20-30% range)
+        else:
+            # Sideways or default: 70% CAGR, 30% score-adjusted
+            cagr_weight = EXPECTED_RETURNS_CAGR_WEIGHT  # 0.70
+            score_weight = EXPECTED_RETURNS_SCORE_WEIGHT  # 0.30
+            regime_reduction = 1.0  # No reduction
+
         # Calculate base expected return
         base_return = (
-            total_return_cagr * EXPECTED_RETURNS_CAGR_WEIGHT
-            + target_return * score_factor * EXPECTED_RETURNS_SCORE_WEIGHT
+            total_return_cagr * cagr_weight
+            + target_return * score_factor * score_weight
         )
+
+        # Apply regime reduction (for bear markets)
+        base_return = base_return * regime_reduction
 
         # Apply user preference multiplier
         stock = await self._stock_repo.get_by_symbol(symbol)
@@ -135,6 +172,7 @@ class ExpectedReturnsCalculator:
         logger.debug(
             f"{symbol}: CAGR={cagr:.2%}, div={dividend_yield:.2%}, "
             f"score={stock_score:.2f}, mult={multiplier:.2f}, "
+            f"regime={regime or 'default'}, reduction={regime_reduction:.2f}, "
             f"bonus={dividend_bonus:.2%}, expected={clamped:.2%}"
         )
 

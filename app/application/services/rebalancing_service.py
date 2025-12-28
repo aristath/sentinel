@@ -250,6 +250,7 @@ class RebalancingService:
         regime_enabled = await self._settings_repo.get_float(
             "market_regime_detection_enabled", 1.0
         )
+        regime: Optional[str] = None
         if regime_enabled == 1.0:
             try:
                 regime = await detect_market_regime(self._tradernet_client)
@@ -310,6 +311,8 @@ class RebalancingService:
         dividend_repo = DividendRepository()
         dividend_bonuses = await dividend_repo.get_pending_bonuses()
 
+        # Regime already detected above for cash reserves, reuse for expected returns
+
         # Run portfolio optimizer
         optimizer = PortfolioOptimizer()
         optimization_result = await optimizer.optimize(
@@ -323,6 +326,7 @@ class RebalancingService:
             country_targets=country_targets,
             ind_targets=ind_targets,
             min_cash_reserve=min_cash,
+            regime=regime,
             dividend_bonuses=dividend_bonuses,
         )
 
