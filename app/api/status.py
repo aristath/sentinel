@@ -2,6 +2,7 @@
 
 import json
 import shutil
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 from fastapi import APIRouter
@@ -97,7 +98,7 @@ async def stream_display_state(
     """
     from app.infrastructure.hardware import display_events
 
-    async def event_generator():
+    async def event_generator() -> AsyncIterator[str]:
         """Generate SSE events from display state changes."""
         try:
             # Get initial ticker speed
