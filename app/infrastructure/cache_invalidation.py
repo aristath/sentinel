@@ -1,7 +1,6 @@
 """Cache invalidation service - centralizes cache invalidation patterns."""
 
 import logging
-from typing import List, Optional
 
 from app.infrastructure.cache import SimpleCache
 
@@ -14,12 +13,9 @@ class CacheInvalidationService:
     def __init__(self, cache: SimpleCache):
         self._cache = cache
 
-    def invalidate_trade_caches(self, include_depth: bool = True) -> None:
+    def invalidate_trade_caches(self) -> None:
         """
         Invalidate all caches related to trade execution.
-
-        Args:
-            include_depth: Not used (kept for backward compatibility)
         """
         # Invalidate all recommendations using prefix invalidation
         # This catches all portfolio-specific keys: recommendations:{hash}
@@ -27,15 +23,9 @@ class CacheInvalidationService:
 
         logger.debug("Invalidated trade-related caches")
 
-    def invalidate_recommendation_caches(
-        self, limits: Optional[List[int]] = None, strategies: Optional[List[str]] = None
-    ) -> None:
+    def invalidate_recommendation_caches(self) -> None:
         """
         Invalidate recommendation caches.
-
-        Args:
-            limits: Not used (kept for backward compatibility)
-            strategies: Not used (kept for backward compatibility)
         """
         # Invalidate all recommendations using prefix invalidation
         # This catches all portfolio-specific keys: recommendations:{hash}
@@ -51,13 +41,13 @@ class CacheInvalidationService:
 
     def invalidate_all_trade_related(self) -> None:
         """Invalidate all trade and recommendation related caches."""
-        self.invalidate_trade_caches(include_depth=True)
+        self.invalidate_trade_caches()
         self.invalidate_portfolio_caches()
         logger.debug("Invalidated all trade-related caches")
 
 
 def get_cache_invalidation_service(
-    cache: Optional[SimpleCache] = None,
+    cache: SimpleCache | None = None,
 ) -> CacheInvalidationService:
     """
     Get or create a CacheInvalidationService instance.

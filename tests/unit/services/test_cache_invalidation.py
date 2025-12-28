@@ -23,33 +23,17 @@ def cache_service(mock_cache):
 
 def test_invalidate_trade_caches(cache_service, mock_cache):
     """Test invalidating trade-related caches."""
-    cache_service.invalidate_trade_caches(include_depth=True)
+    cache_service.invalidate_trade_caches()
 
     # Should use prefix invalidation for all recommendation keys
     mock_cache.invalidate_prefix.assert_called_once_with("recommendations:")
 
 
-def test_invalidate_trade_caches_no_depth(cache_service, mock_cache):
-    """Test invalidating trade caches (include_depth param is kept for backward compat)."""
-    cache_service.invalidate_trade_caches(include_depth=False)
-
-    # Should still use prefix invalidation
-    mock_cache.invalidate_prefix.assert_called_once_with("recommendations:")
-
-
-def test_invalidate_recommendation_caches_defaults(cache_service, mock_cache):
-    """Test invalidating recommendation caches with default parameters."""
+def test_invalidate_recommendation_caches(cache_service, mock_cache):
+    """Test invalidating recommendation caches."""
     cache_service.invalidate_recommendation_caches()
 
     # Should use prefix invalidation for all recommendation keys
-    mock_cache.invalidate_prefix.assert_called_once_with("recommendations:")
-
-
-def test_invalidate_recommendation_caches_custom_limits(cache_service, mock_cache):
-    """Test invalidating recommendation caches (limits param kept for backward compat)."""
-    cache_service.invalidate_recommendation_caches(limits=[5, 15])
-
-    # Should still just use prefix invalidation (limits param is ignored)
     mock_cache.invalidate_prefix.assert_called_once_with("recommendations:")
 
 
