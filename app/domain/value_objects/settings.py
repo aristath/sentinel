@@ -39,6 +39,11 @@ class Settings:
     priority_threshold_for_combinations: float = (
         0.3  # Min priority for combinations (0.0-1.0)
     )
+    # Incremental planner settings
+    planner_batch_interval_seconds: float = (
+        10.0  # Interval for batch processing in seconds (1-300)
+    )
+    planner_batch_size: float = 100.0  # Sequences per batch (10-1000)
 
     def _validate_non_negative(self, value: float, field_name: str) -> None:
         """Validate that a value is non-negative."""
@@ -97,6 +102,15 @@ class Settings:
             0.0,
             1.0,
         )
+        self._validate_range(
+            self.planner_batch_interval_seconds,
+            "planner_batch_interval_seconds",
+            1.0,
+            300.0,
+        )
+        self._validate_range(
+            self.planner_batch_size, "planner_batch_size", 10.0, 1000.0
+        )
 
     @classmethod
     def from_dict(cls, data: Dict[str, str]) -> "Settings":
@@ -147,6 +161,10 @@ class Settings:
             priority_threshold_for_combinations=get_float(
                 "priority_threshold_for_combinations", 0.3
             ),
+            planner_batch_interval_seconds=get_float(
+                "planner_batch_interval_seconds", 10.0
+            ),
+            planner_batch_size=get_float("planner_batch_size", 100.0),
         )
 
     def to_dict(self) -> Dict[str, Union[float, int]]:
@@ -170,6 +188,8 @@ class Settings:
             "max_opportunities_per_category": self.max_opportunities_per_category,
             "enable_combinatorial_generation": self.enable_combinatorial_generation,
             "priority_threshold_for_combinations": self.priority_threshold_for_combinations,
+            "planner_batch_interval_seconds": self.planner_batch_interval_seconds,
+            "planner_batch_size": self.planner_batch_size,
         }
 
 

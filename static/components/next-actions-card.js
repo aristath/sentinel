@@ -49,6 +49,10 @@ class NextActionsCard extends HTMLElement {
         <!-- RECOMMENDATIONS SEQUENCE -->
         <template x-if="$store.app.recommendations && $store.app.recommendations.steps && $store.app.recommendations.steps.length > 0">
           <div class="mb-3">
+            <!-- Evaluation count -->
+            <div class="text-sm text-gray-400 mb-2" x-show="$store.app.recommendations.evaluated_count !== undefined">
+              <span x-text="'Scenarios evaluated: ' + ($store.app.recommendations.evaluated_count || 0).toLocaleString()"></span>
+            </div>
             <div class="text-sm text-gray-300 mb-4 flex items-center justify-between">
               <div class="flex items-center gap-3">
                 <span class="font-semibold" x-text="'Optimal Sequence (' + $store.app.recommendations.steps.length + ' step' + ($store.app.recommendations.steps.length > 1 ? 's' : '') + ')'"></span>

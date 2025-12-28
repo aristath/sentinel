@@ -42,6 +42,9 @@ SETTING_DEFAULTS = {
     "max_opportunities_per_category": 5.0,  # Max opportunities per category to consider (1-20)
     "enable_combinatorial_generation": 1.0,  # Enable combinatorial generation (1.0 = enabled, 0.0 = disabled)
     "priority_threshold_for_combinations": 0.3,  # Min priority for combinations (0.0-1.0)
+    # Incremental Planner settings
+    "planner_batch_interval_seconds": 10.0,  # Interval for batch processing in seconds (1-300)
+    "planner_batch_size": 100.0,  # Sequences per batch (10-1000)
     # LED Matrix settings
     "ticker_speed": 50.0,  # Ticker scroll speed in ms per frame (lower = faster)
     "led_brightness": 150.0,  # LED brightness (0-255)
@@ -269,6 +272,33 @@ async def update_setting_value(
             )
         await set_setting(key, str(data.value), settings_repo)
         return {key: data.value}
+    elif key == "planner_batch_interval_seconds":
+        # Validate range (1-300)
+        if data.value < 1 or data.value > 300:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{key} must be between 1 and 300",
+            )
+        await set_setting(key, str(data.value), settings_repo)
+        # Reschedule job if scheduler is running
+        from app.jobs.scheduler import scheduler
+
+        if scheduler:
+            from apscheduler.triggers.interval import IntervalTrigger
+
+            scheduler.reschedule_job(
+                "planner_batch", trigger=IntervalTrigger(seconds=int(data.value))
+            )
+        return {key: data.value}
+    elif key == "planner_batch_size":
+        # Validate range (10-1000)
+        if data.value < 10 or data.value > 1000:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{key} must be between 10 and 1000",
+            )
+        await set_setting(key, str(int(data.value)), settings_repo)
+        return {key: int(data.value)}
 
     await set_setting(key, str(data.value), settings_repo)
 
@@ -289,6 +319,8 @@ async def update_setting_value(
         "max_opportunities_per_category",
         "enable_combinatorial_generation",
         "priority_threshold_for_combinations",
+        "planner_batch_interval_seconds",
+        "planner_batch_size",
     }
     if key in recommendation_settings:
         from app.infrastructure.recommendation_cache import get_recommendation_cache

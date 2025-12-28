@@ -265,11 +265,43 @@ class SettingsModal extends HTMLElement {
                            @change="$store.app.updateSetting('priority_threshold_for_combinations', Math.max(0, Math.min(1, parseFloat($event.target.value) || 0.3)))"
                            class="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
                   </div>
+
+                  <!-- Batch Interval -->
+                  <div>
+                    <span class="text-sm text-gray-300">Batch Interval</span>
+                    <p class="text-xs text-gray-500">How often to process batches (1-300 seconds)</p>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <input type="number"
+                           min="1"
+                           max="300"
+                           step="1"
+                           :value="$store.app.settings.planner_batch_interval_seconds"
+                           @change="$store.app.updateSetting('planner_batch_interval_seconds', Math.max(1, Math.min(300, parseInt($event.target.value) || 10)))"
+                           class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                    <span class="text-gray-400 text-sm">sec</span>
+                  </div>
+
+                  <!-- Batch Size -->
+                  <div>
+                    <span class="text-sm text-gray-300">Batch Size</span>
+                    <p class="text-xs text-gray-500">Sequences per batch (10-1000)</p>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <input type="number"
+                           min="10"
+                           max="1000"
+                           step="10"
+                           :value="$store.app.settings.planner_batch_size"
+                           @change="$store.app.updateSetting('planner_batch_size', Math.max(10, Math.min(1000, parseInt($event.target.value) || 100)))"
+                           class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                    <span class="text-gray-400 text-sm">seq</span>
+                  </div>
                 </div>
 
                 <!-- Info note -->
                 <div class="mt-4 pt-3 border-t border-gray-700/50">
-                  <p class="text-xs text-gray-500">Higher values explore more scenarios but may be slower. Early filtering prevents performance issues.</p>
+                  <p class="text-xs text-gray-500">Higher values explore more scenarios but may be slower. Early filtering prevents performance issues. Incremental planner processes sequences continuously in batches.</p>
                 </div>
               </div>
 

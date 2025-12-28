@@ -131,17 +131,42 @@ async def get_recommendations(
 
     cached = cache.get(cache_key)
     if cached is not None:
+        # Add evaluation count to cached result
+        from app.domain.portfolio_hash import generate_portfolio_hash
+        from app.repositories.planner_repository import PlannerRepository
+
+        portfolio_hash = generate_portfolio_hash(position_dicts, stocks)
+        planner_repo = PlannerRepository()
+        evaluated_count = await planner_repo.get_evaluation_count(portfolio_hash)
+        cached["evaluated_count"] = evaluated_count
         return cached
 
     try:
         steps = await rebalancing_service.get_recommendations()
 
+        # Get evaluation count
+        from app.domain.portfolio_hash import generate_portfolio_hash
+        from app.repositories.planner_repository import PlannerRepository
+
+        portfolio_hash = generate_portfolio_hash(position_dicts, stocks)
+        planner_repo = PlannerRepository()
+        evaluated_count = await planner_repo.get_evaluation_count(portfolio_hash)
+
         if not steps:
+            # Get evaluation count even if no steps
+            from app.domain.portfolio_hash import generate_portfolio_hash
+            from app.repositories.planner_repository import PlannerRepository
+
+            portfolio_hash = generate_portfolio_hash(position_dicts, stocks)
+            planner_repo = PlannerRepository()
+            evaluated_count = await planner_repo.get_evaluation_count(portfolio_hash)
+
             return {
                 "depth": 0,
                 "steps": [],
                 "total_score_improvement": 0.0,
                 "final_available_cash": 0.0,
+                "evaluated_count": evaluated_count,
             }
 
         # Calculate totals
@@ -171,6 +196,7 @@ async def get_recommendations(
             ],
             "total_score_improvement": round(total_score_improvement, 2),
             "final_available_cash": round(final_available_cash, 2),
+            "evaluated_count": evaluated_count,
         }
 
         # Cache for 5 minutes
