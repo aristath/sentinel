@@ -8,6 +8,7 @@ from typing import Annotated
 
 from fastapi import Depends
 
+from app.application.services.concentration_alerts import ConcentrationAlertService
 from app.application.services.currency_exchange_service import CurrencyExchangeService
 from app.application.services.portfolio_service import PortfolioService
 from app.application.services.rebalancing_service import RebalancingService
@@ -292,4 +293,16 @@ ExchangeRateServiceDep = Annotated[
 ]
 TickerContentServiceDep = Annotated[
     TickerContentService, Depends(get_ticker_content_service)
+]
+
+
+def get_concentration_alert_service(
+    position_repo: PositionRepositoryDep,
+) -> ConcentrationAlertService:
+    """Get ConcentrationAlertService instance."""
+    return ConcentrationAlertService(position_repo=position_repo)
+
+
+ConcentrationAlertServiceDep = Annotated[
+    ConcentrationAlertService, Depends(get_concentration_alert_service)
 ]
