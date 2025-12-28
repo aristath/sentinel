@@ -200,6 +200,79 @@ class SettingsModal extends HTMLElement {
                 </div>
               </div>
 
+              <!-- Holistic Planner Card -->
+              <div class="bg-gray-800 border border-gray-700 rounded p-4">
+                <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wide mb-3">Holistic Planner</h3>
+                <p class="text-xs text-gray-500 mb-4">Controls how the planner generates and evaluates action sequences. More opportunities and combinatorial generation explore more scenarios but may be slower.</p>
+
+                <div class="grid grid-cols-[1fr_auto] gap-x-4 gap-y-3 items-start">
+                  <!-- Max Plan Depth -->
+                  <div>
+                    <span class="text-sm text-gray-300">Max Plan Depth</span>
+                    <p class="text-xs text-gray-500">Maximum sequence length (1-10)</p>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <input type="number"
+                           min="1"
+                           max="10"
+                           step="1"
+                           :value="$store.app.settings.max_plan_depth"
+                           @change="$store.app.updateSetting('max_plan_depth', Math.max(1, Math.min(10, parseInt($event.target.value) || 5)))"
+                           class="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                  </div>
+
+                  <!-- Max Opportunities Per Category -->
+                  <div>
+                    <span class="text-sm text-gray-300">Max Opportunities/Category</span>
+                    <p class="text-xs text-gray-500">How many opportunities to consider (1-20)</p>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <input type="number"
+                           min="1"
+                           max="20"
+                           step="1"
+                           :value="$store.app.settings.max_opportunities_per_category"
+                           @change="$store.app.updateSetting('max_opportunities_per_category', Math.max(1, Math.min(20, parseInt($event.target.value) || 5)))"
+                           class="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                  </div>
+
+                  <!-- Enable Combinatorial -->
+                  <div>
+                    <span class="text-sm text-gray-300">Combinatorial Generation</span>
+                    <p class="text-xs text-gray-500">Explore all valid combinations</p>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <label class="flex items-center gap-3 cursor-pointer">
+                      <input type="checkbox"
+                             :checked="$store.app.settings.enable_combinatorial_generation == 1"
+                             @change="$store.app.updateSetting('enable_combinatorial_generation', $event.target.checked ? 1 : 0)"
+                             class="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-800">
+                      <span class="text-sm text-gray-300" x-text="$store.app.settings.enable_combinatorial_generation == 1 ? 'Enabled' : 'Disabled'"></span>
+                    </label>
+                  </div>
+
+                  <!-- Priority Threshold -->
+                  <div>
+                    <span class="text-sm text-gray-300">Priority Threshold</span>
+                    <p class="text-xs text-gray-500">Min priority for combinations (0.0-1.0)</p>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <input type="number"
+                           min="0"
+                           max="1"
+                           step="0.05"
+                           :value="$store.app.settings.priority_threshold_for_combinations"
+                           @change="$store.app.updateSetting('priority_threshold_for_combinations', Math.max(0, Math.min(1, parseFloat($event.target.value) || 0.3)))"
+                           class="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                  </div>
+                </div>
+
+                <!-- Info note -->
+                <div class="mt-4 pt-3 border-t border-gray-700/50">
+                  <p class="text-xs text-gray-500">Higher values explore more scenarios but may be slower. Early filtering prevents performance issues.</p>
+                </div>
+              </div>
+
               <!-- Trading Constraints Card -->
               <div class="bg-gray-800 border border-gray-700 rounded p-4">
                 <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wide mb-3">Trading Constraints</h3>

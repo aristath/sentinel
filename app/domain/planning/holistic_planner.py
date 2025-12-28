@@ -6,18 +6,28 @@ This planner differs from the standard goal planner by:
 2. Scoring the END STATE of the portfolio after all actions
 3. Using windfall detection for smart profit-taking
 4. Generating narratives explaining the "why" behind each action
+5. Exploring multiple pattern types and combinatorial combinations
 
 The planner works by:
 1. Identifying opportunities (buys, sells, profit-taking, averaging down)
-2. Generating candidate action sequences (1-5 steps)
-3. Simulating each sequence to get the end state
-4. Scoring end states using holistic scoring
-5. Selecting the sequence with the best end-state score
+2. Generating candidate action sequences using 10+ pattern types plus combinatorial generation
+3. Early filtering by priority threshold and allow_sell/allow_buy flags
+4. Simulating each sequence to get the end state
+5. Scoring end states using holistic scoring
+6. Selecting the sequence with the best end-state score
+
+Pattern types include:
+- Direct buys, profit-taking + reinvest, rebalance, averaging down, single best
+- Multi-sell, mixed strategy, opportunity-first, deep rebalance, cash generation
+- Combinatorial combinations (if enabled)
+
+All sequences enforce rigid ordering: sells first, then buys.
 """
 
 import asyncio
 import logging
 from dataclasses import dataclass, field
+from itertools import combinations
 from typing import Dict, List, Optional, Tuple
 
 from app.domain.models import Position, Stock
@@ -624,19 +634,258 @@ def _generate_single_best_pattern(
     return None
 
 
+def _generate_multi_sell_pattern(
+    top_profit_taking: list,
+    top_rebalance_sells: list,
+    top_averaging: list,
+    top_rebalance_buys: list,
+    top_opportunity: list,
+    available_cash: float,
+    max_steps: int,
+) -> Optional[List[ActionCandidate]]:
+    """Generate pattern: Combine profit-taking + rebalance sells → multiple buys."""
+    all_sells = top_profit_taking + top_rebalance_sells
+    if not all_sells:
+        return None
+
+    # Take up to max_steps sells (prioritize profit-taking, then rebalance)
+    sell_sequence = []
+    for candidate in all_sells[:max_steps]:
+        sell_sequence.append(candidate)
+        if len(sell_sequence) >= max_steps:
+            break
+
+    cash_from_sells = sum(c.value_eur for c in sell_sequence)
+    total_cash = available_cash + cash_from_sells
+
+    # Add buys with remaining steps
+    all_buys = top_averaging + top_rebalance_buys + top_opportunity
+    for candidate in all_buys:
+        if candidate.value_eur <= total_cash and len(sell_sequence) < max_steps:
+            sell_sequence.append(candidate)
+            total_cash -= candidate.value_eur
+
+    return sell_sequence if len(sell_sequence) > 0 else None
+
+
+def _generate_mixed_strategy_pattern(
+    top_profit_taking: list,
+    top_rebalance_sells: list,
+    top_averaging: list,
+    top_rebalance_buys: list,
+    top_opportunity: list,
+    available_cash: float,
+    max_steps: int,
+) -> Optional[List[ActionCandidate]]:
+    """Generate pattern: Any combination of sells → any combination of buys (flexible)."""
+    all_sells = top_profit_taking + top_rebalance_sells
+    all_buys = top_averaging + top_rebalance_buys + top_opportunity
+
+    if not all_sells and not all_buys:
+        return None
+
+    sequence: List[ActionCandidate] = []
+    total_cash = available_cash
+
+    # Add sells first (up to half of max_steps)
+    max_sells = max(1, max_steps // 2)
+    for candidate in all_sells[:max_sells]:
+        if len(sequence) < max_steps:
+            sequence.append(candidate)
+            total_cash += candidate.value_eur
+
+    # Add buys with remaining steps and cash
+    for candidate in all_buys:
+        if candidate.value_eur <= total_cash and len(sequence) < max_steps:
+            sequence.append(candidate)
+            total_cash -= candidate.value_eur
+
+    return sequence if len(sequence) > 0 else None
+
+
+def _generate_opportunity_first_pattern(
+    top_opportunity: list,
+    top_averaging: list,
+    top_rebalance_buys: list,
+    available_cash: float,
+    max_steps: int,
+) -> Optional[List[ActionCandidate]]:
+    """Generate pattern: Focus on high-quality opportunity buys."""
+    if not top_opportunity:
+        return None
+
+    sequence: List[ActionCandidate] = []
+    remaining_cash = available_cash
+
+    # Prioritize opportunity buys
+    for candidate in top_opportunity:
+        if candidate.value_eur <= remaining_cash and len(sequence) < max_steps:
+            sequence.append(candidate)
+            remaining_cash -= candidate.value_eur
+
+    # Fill remaining with averaging down or rebalance buys
+    for candidate in top_averaging + top_rebalance_buys:
+        if candidate.value_eur <= remaining_cash and len(sequence) < max_steps:
+            sequence.append(candidate)
+            remaining_cash -= candidate.value_eur
+
+    return sequence if sequence else None
+
+
+def _generate_deep_rebalance_pattern(
+    top_rebalance_sells: list,
+    top_rebalance_buys: list,
+    available_cash: float,
+    max_steps: int,
+) -> Optional[List[ActionCandidate]]:
+    """Generate pattern: Multiple rebalance sells → multiple rebalance buys."""
+    if not top_rebalance_sells or not top_rebalance_buys:
+        return None
+
+    sequence: List[ActionCandidate] = []
+    total_cash = available_cash
+
+    # Add multiple rebalance sells (up to half of max_steps)
+    max_sells = max(1, max_steps // 2)
+    for candidate in top_rebalance_sells[:max_sells]:
+        if len(sequence) < max_steps:
+            sequence.append(candidate)
+            total_cash += candidate.value_eur
+
+    # Add multiple rebalance buys
+    for candidate in top_rebalance_buys:
+        if candidate.value_eur <= total_cash and len(sequence) < max_steps:
+            sequence.append(candidate)
+            total_cash -= candidate.value_eur
+
+    return sequence if len(sequence) > 0 else None
+
+
+def _generate_cash_generation_pattern(
+    top_profit_taking: list,
+    top_rebalance_sells: list,
+    top_averaging: list,
+    top_rebalance_buys: list,
+    top_opportunity: list,
+    available_cash: float,
+    max_steps: int,
+) -> Optional[List[ActionCandidate]]:
+    """Generate pattern: Multiple sells → strategic buys."""
+    all_sells = top_profit_taking + top_rebalance_sells
+    if not all_sells:
+        return None
+
+    sequence = []
+    total_cash = available_cash
+
+    # Generate cash from multiple sells
+    for candidate in all_sells[:max_steps]:
+        sequence.append(candidate)
+        total_cash += candidate.value_eur
+        if len(sequence) >= max_steps:
+            break
+
+    # Strategic buys: prioritize opportunity, then averaging, then rebalance
+    strategic_buys = top_opportunity + top_averaging + top_rebalance_buys
+    for candidate in strategic_buys:
+        if candidate.value_eur <= total_cash and len(sequence) < max_steps:
+            sequence.append(candidate)
+            total_cash -= candidate.value_eur
+
+    return sequence if len(sequence) > 0 else None
+
+
+def _generate_combinations(
+    sells: List[ActionCandidate],
+    buys: List[ActionCandidate],
+    max_sells: int = 3,
+    max_buys: int = 3,
+    priority_threshold: float = 0.3,
+    max_steps: int = 5,
+    max_combinations: int = 50,
+) -> List[List[ActionCandidate]]:
+    """Generate valid combinations with smart pruning.
+
+    IMPORTANT: All sequences must have sells first, then buys.
+    Ordering is rigid and enforced.
+
+    Args:
+        sells: List of sell opportunities
+        buys: List of buy opportunities
+        max_sells: Maximum number of sells per combination
+        max_buys: Maximum number of buys per combination
+        priority_threshold: Minimum priority to include in combinations
+        max_steps: Maximum total steps in sequence
+        max_combinations: Maximum number of combinations to generate (safety limit)
+
+    Returns:
+        List of action sequences (sells first, then buys)
+    """
+    sequences: List[List[ActionCandidate]] = []
+
+    # Filter by priority threshold
+    filtered_sells = [s for s in sells if s.priority >= priority_threshold]
+    filtered_buys = [b for b in buys if b.priority >= priority_threshold]
+
+    # Limit the number of candidates to avoid combinatorial explosion
+    max_candidates = 8
+    filtered_sells = filtered_sells[:max_candidates]
+    filtered_buys = filtered_buys[:max_candidates]
+
+    # Generate combinations of sells (1 to max_sells)
+    for num_sells in range(1, min(max_sells + 1, len(filtered_sells) + 1)):
+        if len(sequences) >= max_combinations:
+            break
+        for sell_combo in combinations(filtered_sells, num_sells):
+            if len(sequences) >= max_combinations:
+                break
+            remaining_steps = max_steps - len(sell_combo)
+            if remaining_steps <= 0:
+                continue
+
+            # Generate combinations of buys (1 to min(max_buys, remaining_steps))
+            max_buys_for_combo = min(max_buys, remaining_steps, len(filtered_buys))
+            for num_buys in range(1, max_buys_for_combo + 1):
+                if len(sequences) >= max_combinations:
+                    break
+                for buy_combo in combinations(filtered_buys, num_buys):
+                    if len(sequences) >= max_combinations:
+                        break
+                    # Create sequence: sells first, then buys (rigid ordering)
+                    sequence = list(sell_combo) + list(buy_combo)
+                    if len(sequence) <= max_steps:
+                        sequences.append(sequence)
+
+    return sequences
+
+
 def _generate_patterns_at_depth(
     opportunities: Dict[str, List[ActionCandidate]],
     available_cash: float,
     max_steps: int,
+    max_opportunities_per_category: int = 5,
+    enable_combinatorial: bool = True,
+    priority_threshold: float = 0.3,
 ) -> List[List[ActionCandidate]]:
     """Generate sequence patterns capped at a specific depth."""
     sequences = []
 
-    top_profit_taking = opportunities.get("profit_taking", [])[:2]
-    top_averaging = opportunities.get("averaging_down", [])[:2]
-    top_rebalance_sells = opportunities.get("rebalance_sells", [])[:2]
-    top_rebalance_buys = opportunities.get("rebalance_buys", [])[:3]
-    top_opportunity = opportunities.get("opportunity_buys", [])[:2]
+    # Expand opportunity selection - consider more opportunities per category
+    top_profit_taking = opportunities.get("profit_taking", [])[
+        :max_opportunities_per_category
+    ]
+    top_averaging = opportunities.get("averaging_down", [])[
+        :max_opportunities_per_category
+    ]
+    top_rebalance_sells = opportunities.get("rebalance_sells", [])[
+        :max_opportunities_per_category
+    ]
+    top_rebalance_buys = opportunities.get("rebalance_buys", [])[
+        :max_opportunities_per_category
+    ]
+    top_opportunity = opportunities.get("opportunity_buys", [])[
+        :max_opportunities_per_category
+    ]
 
     pattern1 = _generate_direct_buy_pattern(
         top_averaging, top_rebalance_buys, top_opportunity, available_cash, max_steps
@@ -674,6 +923,79 @@ def _generate_patterns_at_depth(
     if pattern5:
         sequences.append(pattern5)
 
+    # New pattern types
+    pattern6 = _generate_multi_sell_pattern(
+        top_profit_taking,
+        top_rebalance_sells,
+        top_averaging,
+        top_rebalance_buys,
+        top_opportunity,
+        available_cash,
+        max_steps,
+    )
+    if pattern6:
+        sequences.append(pattern6)
+
+    pattern7 = _generate_mixed_strategy_pattern(
+        top_profit_taking,
+        top_rebalance_sells,
+        top_averaging,
+        top_rebalance_buys,
+        top_opportunity,
+        available_cash,
+        max_steps,
+    )
+    if pattern7:
+        sequences.append(pattern7)
+
+    pattern8 = _generate_opportunity_first_pattern(
+        top_opportunity,
+        top_averaging,
+        top_rebalance_buys,
+        available_cash,
+        max_steps,
+    )
+    if pattern8:
+        sequences.append(pattern8)
+
+    pattern9 = _generate_deep_rebalance_pattern(
+        top_rebalance_sells,
+        top_rebalance_buys,
+        available_cash,
+        max_steps,
+    )
+    if pattern9:
+        sequences.append(pattern9)
+
+    pattern10 = _generate_cash_generation_pattern(
+        top_profit_taking,
+        top_rebalance_sells,
+        top_averaging,
+        top_rebalance_buys,
+        top_opportunity,
+        available_cash,
+        max_steps,
+    )
+    if pattern10:
+        sequences.append(pattern10)
+
+    # Combinatorial generation (if enabled)
+    if enable_combinatorial:
+        all_sells = top_profit_taking + top_rebalance_sells
+        all_buys = top_averaging + top_rebalance_buys + top_opportunity
+
+        if all_sells or all_buys:
+            combo_sequences = _generate_combinations(
+                sells=all_sells,
+                buys=all_buys,
+                max_sells=min(3, max_steps // 2),
+                max_buys=min(3, max_steps),
+                priority_threshold=priority_threshold,
+                max_steps=max_steps,
+                max_combinations=20,  # Limit combinatorial sequences per depth
+            )
+            sequences.extend(combo_sequences)
+
     return sequences
 
 
@@ -681,22 +1003,34 @@ async def generate_action_sequences(
     opportunities: Dict[str, List[ActionCandidate]],
     available_cash: float,
     max_depth: int = 5,
+    max_opportunities_per_category: int = 5,
+    enable_combinatorial: bool = True,
+    priority_threshold: float = 0.3,
 ) -> List[List[ActionCandidate]]:
     """
     Generate candidate action sequences at all depths (1 to max_depth).
 
     Automatically tests sequences of varying lengths to find the optimal depth.
-    Each depth generates 5 pattern variants:
+    Each depth generates multiple pattern variants (original 5 + 5 new patterns):
     1. Direct buys (if cash available)
     2. Profit-taking + reinvest
     3. Rebalance (sell overweight, buy underweight)
     4. Averaging down focus
     5. Single best action
+    6. Multi-sell pattern
+    7. Mixed strategy pattern
+    8. Opportunity-first pattern
+    9. Deep rebalance pattern
+    10. Cash generation pattern
+    Plus combinatorial generation (if enabled)
 
     Args:
         opportunities: Categorized opportunities from identify_opportunities
         available_cash: Starting available cash
         max_depth: Maximum sequence depth (default 5, configurable via settings)
+        max_opportunities_per_category: Max opportunities per category to consider (default 5)
+        enable_combinatorial: Enable combinatorial generation (default True)
+        priority_threshold: Minimum priority for combinations (default 0.3)
 
     Returns:
         List of action sequences (each sequence is a list of ActionCandidate)
@@ -706,7 +1040,12 @@ async def generate_action_sequences(
     # Generate patterns at each depth (1 to max_depth)
     for depth in range(1, max_depth + 1):
         depth_sequences = _generate_patterns_at_depth(
-            opportunities, available_cash, depth
+            opportunities,
+            available_cash,
+            depth,
+            max_opportunities_per_category=max_opportunities_per_category,
+            enable_combinatorial=enable_combinatorial,
+            priority_threshold=priority_threshold,
         )
         all_sequences.extend(depth_sequences)
 
@@ -723,7 +1062,10 @@ async def generate_action_sequences(
 
     # Log sequences generated
     logger.info(
-        f"Holistic planner generated {len(unique_sequences)} unique sequences (testing depths 1-{max_depth})"
+        f"Holistic planner generated {len(unique_sequences)} unique sequences "
+        f"(testing depths 1-{max_depth}, "
+        f"max_opportunities={max_opportunities_per_category}, "
+        f"combinatorial={'enabled' if enable_combinatorial else 'disabled'})"
     )
     for i, seq in enumerate(unique_sequences[:5]):  # Log first 5
         symbols = [
@@ -814,6 +1156,9 @@ async def create_holistic_plan(
     transaction_cost_fixed: float = 2.0,
     transaction_cost_percent: float = 0.002,
     max_plan_depth: int = 5,
+    max_opportunities_per_category: int = 5,
+    enable_combinatorial: bool = True,
+    priority_threshold: float = 0.3,
 ) -> HolisticPlan:
     """
     Create a holistic plan by evaluating action sequences and selecting the best.
@@ -835,6 +1180,9 @@ async def create_holistic_plan(
         transaction_cost_fixed: Fixed transaction cost in EUR
         transaction_cost_percent: Variable transaction cost as fraction
         max_plan_depth: Maximum sequence depth to test (default 5)
+        max_opportunities_per_category: Max opportunities per category (default 5)
+        enable_combinatorial: Enable combinatorial generation (default True)
+        priority_threshold: Minimum priority for combinations (default 0.3)
 
     Returns:
         HolisticPlan with the best sequence and end-state analysis
@@ -869,28 +1217,62 @@ async def create_holistic_plan(
 
     # Generate candidate sequences at all depths (1 to max_plan_depth)
     sequences = await generate_action_sequences(
-        opportunities, available_cash, max_depth=max_plan_depth
+        opportunities,
+        available_cash,
+        max_depth=max_plan_depth,
+        max_opportunities_per_category=max_opportunities_per_category,
+        enable_combinatorial=enable_combinatorial,
+        priority_threshold=priority_threshold,
     )
 
-    # Filter infeasible sequences
+    # Early filtering: Filter by priority threshold and invalid steps before simulation
+    stocks_by_symbol = {s.symbol: s for s in stocks}
     positions_by_symbol = {p.symbol: p for p in positions}
     feasible_sequences = []
+    filtered_by_priority = 0
+    filtered_by_flags = 0
+    filtered_by_cash = 0
+    filtered_by_position = 0
+
+    def _get_sequence_priority(sequence: List[ActionCandidate]) -> float:
+        """Calculate estimated priority for a sequence."""
+        return sum(c.priority for c in sequence)
 
     for sequence in sequences:
+        # Quick priority check - filter low-priority sequences early
+        # Check if average priority per action meets threshold
+        if sequence:
+            avg_priority = _get_sequence_priority(sequence) / len(sequence)
+            if avg_priority < priority_threshold:
+                filtered_by_priority += 1
+                continue
+
         is_feasible = True
         running_cash = available_cash
 
         for action in sequence:
+            # Check allow_sell/allow_buy flags
+            stock = stocks_by_symbol.get(action.symbol)
             if action.side == TradeSide.BUY:
+                if not stock or not stock.allow_buy:
+                    filtered_by_flags += 1
+                    is_feasible = False
+                    break
                 # Check if we have enough cash
                 if action.value_eur > running_cash:
+                    filtered_by_cash += 1
                     is_feasible = False
                     break
                 running_cash -= action.value_eur
             elif action.side == TradeSide.SELL:
+                if not stock or not stock.allow_sell:
+                    filtered_by_flags += 1
+                    is_feasible = False
+                    break
                 # Check if we have the position to sell
                 position = positions_by_symbol.get(action.symbol)
                 if not position or position.quantity < action.quantity:
+                    filtered_by_position += 1
                     is_feasible = False
                     break
                 running_cash += action.value_eur
@@ -900,8 +1282,9 @@ async def create_holistic_plan(
 
     if len(feasible_sequences) < len(sequences):
         logger.info(
-            f"Filtered {len(sequences) - len(feasible_sequences)} infeasible sequences "
-            f"({len(feasible_sequences)} remaining)"
+            f"Early filtering: {len(sequences)} -> {len(feasible_sequences)} sequences "
+            f"(priority: {filtered_by_priority}, flags: {filtered_by_flags}, "
+            f"cash: {filtered_by_cash}, position: {filtered_by_position})"
         )
 
     sequences = feasible_sequences
@@ -963,10 +1346,6 @@ async def create_holistic_plan(
     )
 
     # Sort sequences by priority (estimated from action priorities)
-    def _get_sequence_priority(sequence: List[ActionCandidate]) -> float:
-        """Calculate estimated priority for a sequence."""
-        return sum(c.priority for c in sequence)
-
     sequence_results_sorted = sorted(
         sequence_results, key=lambda x: _get_sequence_priority(x[0]), reverse=True
     )

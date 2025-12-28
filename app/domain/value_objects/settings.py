@@ -30,6 +30,15 @@ class Settings:
     min_cash_reserve: float = 500.0
     # Planner settings
     max_plan_depth: int = 5  # Maximum depth for holistic planner sequences (1-10)
+    max_opportunities_per_category: int = (
+        5  # Max opportunities per category to consider (1-20)
+    )
+    enable_combinatorial_generation: float = (
+        1.0  # Enable combinatorial generation (0.0 or 1.0)
+    )
+    priority_threshold_for_combinations: float = (
+        0.3  # Min priority for combinations (0.0-1.0)
+    )
 
     def _validate_non_negative(self, value: float, field_name: str) -> None:
         """Validate that a value is non-negative."""
@@ -70,6 +79,24 @@ class Settings:
         )
         self._validate_non_negative(self.min_cash_reserve, "min_cash_reserve")
         self._validate_range(self.max_plan_depth, "max_plan_depth", 1, 10)
+        self._validate_range(
+            self.max_opportunities_per_category,
+            "max_opportunities_per_category",
+            1,
+            20,
+        )
+        self._validate_range(
+            self.enable_combinatorial_generation,
+            "enable_combinatorial_generation",
+            0.0,
+            1.0,
+        )
+        self._validate_range(
+            self.priority_threshold_for_combinations,
+            "priority_threshold_for_combinations",
+            0.0,
+            1.0,
+        )
 
     @classmethod
     def from_dict(cls, data: Dict[str, str]) -> "Settings":
@@ -113,6 +140,13 @@ class Settings:
             transaction_cost_percent=get_float("transaction_cost_percent", 0.002),
             min_cash_reserve=get_float("min_cash_reserve", 500.0),
             max_plan_depth=get_int("max_plan_depth", 5),
+            max_opportunities_per_category=get_int("max_opportunities_per_category", 5),
+            enable_combinatorial_generation=get_float(
+                "enable_combinatorial_generation", 1.0
+            ),
+            priority_threshold_for_combinations=get_float(
+                "priority_threshold_for_combinations", 0.3
+            ),
         )
 
     def to_dict(self) -> Dict[str, Union[float, int]]:
@@ -133,6 +167,9 @@ class Settings:
             "transaction_cost_percent": self.transaction_cost_percent,
             "min_cash_reserve": self.min_cash_reserve,
             "max_plan_depth": self.max_plan_depth,
+            "max_opportunities_per_category": self.max_opportunities_per_category,
+            "enable_combinatorial_generation": self.enable_combinatorial_generation,
+            "priority_threshold_for_combinations": self.priority_threshold_for_combinations,
         }
 
 

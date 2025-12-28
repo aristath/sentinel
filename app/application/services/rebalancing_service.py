@@ -216,6 +216,16 @@ class RebalancingService:
         )
         min_cash = await self._settings_repo.get_float("min_cash_reserve", 500.0)
         max_plan_depth = await self._settings_repo.get_int("max_plan_depth", 5)
+        max_opportunities_per_category = await self._settings_repo.get_int(
+            "max_opportunities_per_category", 5
+        )
+        enable_combinatorial = (
+            await self._settings_repo.get_float("enable_combinatorial_generation", 1.0)
+            == 1.0
+        )
+        priority_threshold = await self._settings_repo.get_float(
+            "priority_threshold_for_combinations", 0.3
+        )
 
         # Get positions and stocks (needed for portfolio value calculation)
         positions = await self._position_repo.get_all()
@@ -363,6 +373,9 @@ class RebalancingService:
             transaction_cost_fixed=transaction_fixed,
             transaction_cost_percent=transaction_pct,
             max_plan_depth=max_plan_depth,
+            max_opportunities_per_category=max_opportunities_per_category,
+            enable_combinatorial=enable_combinatorial,
+            priority_threshold=priority_threshold,
         )
 
         # Convert HolisticPlan to MultiStepRecommendation list
