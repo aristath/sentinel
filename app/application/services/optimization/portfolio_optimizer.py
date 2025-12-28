@@ -182,10 +182,15 @@ class PortfolioOptimizer:
 
         # Run HRP
         hrp_weights = self._run_hrp(returns_df, valid_symbols)
+        if hrp_weights:
+            # Clamp HRP weights to bounds (HRP doesn't support bounds natively)
+            hrp_weights = self._clamp_weights_to_bounds(hrp_weights, bounds)
 
         # Blend weights
         if mv_weights and hrp_weights:
             target_weights = self._blend_weights(mv_weights, hrp_weights, blend)
+            # Clamp blended weights to bounds (blending can violate bounds)
+            target_weights = self._clamp_weights_to_bounds(target_weights, bounds)
         elif mv_weights:
             target_weights = mv_weights
             logger.warning("Using pure MV weights (HRP failed)")
@@ -206,6 +211,9 @@ class PortfolioOptimizer:
             1.0 - (min_cash_reserve / portfolio_value) if portfolio_value > 0 else 0.9
         )
         target_weights = self._normalize_weights(target_weights, investable_fraction)
+        # Clamp weights to bounds (respect portfolio targets)
+        # Normalization can push weights above max_portfolio_target bounds
+        target_weights = self._clamp_weights_to_bounds(target_weights, bounds)
 
         # Calculate weight changes
         weight_changes = self._calculate_weight_changes(
@@ -351,6 +359,21 @@ class PortfolioOptimizer:
 
         logger.debug(f"Blended {len(all_symbols)} weights with blend={blend}")
         return blended
+
+    def _clamp_weights_to_bounds(
+        self,
+        weights: Dict[str, float],
+        bounds: Dict[str, Tuple[float, float]],
+    ) -> Dict[str, float]:
+        """Clamp weights to their bounds (respects portfolio targets)."""
+        clamped = {}
+        for symbol, weight in weights.items():
+            if symbol in bounds:
+                lower, upper = bounds[symbol]
+                clamped[symbol] = max(lower, min(upper, weight))
+            else:
+                clamped[symbol] = weight
+        return clamped
 
     def _normalize_weights(
         self,

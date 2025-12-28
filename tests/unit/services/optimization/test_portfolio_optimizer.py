@@ -432,3 +432,113 @@ class TestPortfolioOptimizerIntegration:
         total_weight = sum(result.target_weights.values())
         expected_investable = 1.0 - (min_cash_reserve / portfolio_value)
         assert total_weight == pytest.approx(expected_investable, rel=0.01)
+
+
+class TestPortfolioOptimizerBoundsClamping:
+    """Test bounds clamping functionality for portfolio targets."""
+
+    def test_clamp_weights_to_bounds_respects_max(self):
+        """Test that weights above max_portfolio_target are clamped."""
+        optimizer = create_optimizer()
+        weights = {"AAPL": 0.10, "GOOGL": 0.05}  # AAPL exceeds max
+        bounds = {
+            "AAPL": (0.0, 0.03),  # Max 3%
+            "GOOGL": (0.0, 0.10),  # Max 10%
+        }
+
+        result = optimizer._clamp_weights_to_bounds(weights, bounds)
+
+        # AAPL should be clamped to 3%
+        assert result["AAPL"] == 0.03
+        # GOOGL within bounds, unchanged
+        assert result["GOOGL"] == 0.05
+
+    def test_clamp_weights_to_bounds_respects_min(self):
+        """Test that weights below min_portfolio_target are clamped."""
+        optimizer = create_optimizer()
+        weights = {"AAPL": 0.01, "GOOGL": 0.05}  # AAPL below min
+        bounds = {
+            "AAPL": (0.05, 0.20),  # Min 5%
+            "GOOGL": (0.0, 0.10),  # Min 0%
+        }
+
+        result = optimizer._clamp_weights_to_bounds(weights, bounds)
+
+        # AAPL should be clamped to 5%
+        assert result["AAPL"] == 0.05
+        # GOOGL within bounds, unchanged
+        assert result["GOOGL"] == 0.05
+
+    def test_clamp_weights_to_bounds_within_bounds_unchanged(self):
+        """Test that weights within bounds are not changed."""
+        optimizer = create_optimizer()
+        weights = {"AAPL": 0.05, "GOOGL": 0.08}
+        bounds = {
+            "AAPL": (0.03, 0.10),  # 5% is within bounds
+            "GOOGL": (0.05, 0.15),  # 8% is within bounds
+        }
+
+        result = optimizer._clamp_weights_to_bounds(weights, bounds)
+
+        # Both should be unchanged
+        assert result["AAPL"] == 0.05
+        assert result["GOOGL"] == 0.08
+
+    def test_clamp_weights_to_bounds_handles_missing_symbols(self):
+        """Test that symbols not in bounds dict are left unchanged."""
+        optimizer = create_optimizer()
+        weights = {"AAPL": 0.10, "GOOGL": 0.05, "MSFT": 0.15}
+        bounds = {
+            "AAPL": (0.0, 0.05),  # Will be clamped
+            "GOOGL": (0.0, 0.10),  # Within bounds
+            # MSFT not in bounds
+        }
+
+        result = optimizer._clamp_weights_to_bounds(weights, bounds)
+
+        # AAPL clamped to 5%
+        assert result["AAPL"] == 0.05
+        # GOOGL unchanged
+        assert result["GOOGL"] == 0.05
+        # MSFT unchanged (not in bounds)
+        assert result["MSFT"] == 0.15
+
+    def test_clamp_weights_to_bounds_edge_cases(self):
+        """Test edge cases for bounds clamping."""
+        optimizer = create_optimizer()
+        weights = {"AAPL": 0.0, "GOOGL": 0.20}
+        bounds = {
+            "AAPL": (0.0, 0.10),  # 0% is at lower bound
+            "GOOGL": (0.0, 0.15),  # 20% exceeds upper bound
+        }
+
+        result = optimizer._clamp_weights_to_bounds(weights, bounds)
+
+        # AAPL at lower bound, unchanged
+        assert result["AAPL"] == 0.0
+        # GOOGL clamped to upper bound
+        assert result["GOOGL"] == 0.15
+
+    def test_clamp_weights_after_normalization(self):
+        """Test that normalization followed by clamping respects bounds."""
+        optimizer = create_optimizer()
+        # Weights that sum to 0.6, will be normalized to 0.9 (investable fraction)
+        # This will scale AAPL from 0.4 to 0.6, which exceeds max of 0.5
+        weights = {"AAPL": 0.4, "GOOGL": 0.2}  # Sum = 0.6
+        bounds = {
+            "AAPL": (0.0, 0.5),  # Max 50%
+            "GOOGL": (0.0, 0.6),  # Max 60%
+        }
+        investable_fraction = 0.9
+
+        # Normalize first
+        normalized = optimizer._normalize_weights(weights, investable_fraction)
+        # Then clamp
+        result = optimizer._clamp_weights_to_bounds(normalized, bounds)
+
+        # AAPL should be clamped to 0.5 (was 0.6 after normalization)
+        assert result["AAPL"] == 0.5
+        # GOOGL should be within bounds
+        assert result["GOOGL"] <= 0.6
+        # Total may be less than investable_fraction after clamping (acceptable)
+        assert sum(result.values()) <= investable_fraction
