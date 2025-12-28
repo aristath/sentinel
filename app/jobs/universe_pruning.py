@@ -5,7 +5,6 @@ based on consistently low scores over a configurable time period.
 """
 
 import logging
-from datetime import datetime, timedelta
 
 from app.infrastructure.external.tradernet import get_tradernet_client
 from app.repositories import ScoreRepository, SettingsRepository, StockRepository
@@ -44,10 +43,12 @@ async def prune_universe() -> None:
             "universe_pruning_score_threshold", 0.50
         )
         months = await settings_repo.get_float("universe_pruning_months", 3.0)
-        min_samples = int(await settings_repo.get_float("universe_pruning_min_samples", 2.0))
-        check_delisted = await settings_repo.get_float(
-            "universe_pruning_check_delisted", 1.0
-        ) == 1.0
+        min_samples = int(
+            await settings_repo.get_float("universe_pruning_min_samples", 2.0)
+        )
+        check_delisted = (
+            await settings_repo.get_float("universe_pruning_check_delisted", 1.0) == 1.0
+        )
 
         logger.info(
             f"Pruning criteria: threshold={score_threshold}, months={months}, "
@@ -87,7 +88,9 @@ async def prune_universe() -> None:
                     continue
 
                 # Calculate average score
-                total_scores = [s.total_score for s in scores if s.total_score is not None]
+                total_scores = [
+                    s.total_score for s in scores if s.total_score is not None
+                ]
                 if not total_scores:
                     logger.debug(
                         f"Stock {stock.symbol}: no valid scores found, skipping"
@@ -119,7 +122,7 @@ async def prune_universe() -> None:
                         else:
                             # Try to get a quote - if it fails, might be delisted
                             quote = client.get_quote(stock.symbol)
-                            if quote is None or "price" not in quote:
+                            if quote is None or not hasattr(quote, "price"):
                                 logger.info(
                                     f"Stock {stock.symbol}: quote not available, "
                                     f"possibly delisted"
@@ -134,7 +137,9 @@ async def prune_universe() -> None:
 
                 # Prune if criteria met (low score, or delisted if check enabled)
                 if is_delisted or avg_score < score_threshold:
-                    reason = "delisted" if is_delisted else f"low score ({avg_score:.3f})"
+                    reason = (
+                        "delisted" if is_delisted else f"low score ({avg_score:.3f})"
+                    )
                     logger.info(
                         f"Pruning stock {stock.symbol}: {reason} "
                         f"(threshold: {score_threshold}, samples: {len(scores)})"
@@ -156,4 +161,3 @@ async def prune_universe() -> None:
 
     except Exception as e:
         logger.error(f"Error in universe pruning job: {e}", exc_info=True)
-

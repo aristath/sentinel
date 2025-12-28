@@ -5,16 +5,14 @@ based on conservative criteria and user-configurable settings.
 """
 
 import logging
-from typing import List, Optional
 
+from app.application.services.scoring_service import ScoringService
 from app.domain.models import Stock
 from app.domain.services.stock_discovery import StockDiscoveryService
 from app.domain.value_objects.currency import Currency
-from app.infrastructure.external.tradernet import get_tradernet_client
-from app.repositories import SettingsRepository, StockRepository
-from app.application.services.scoring_service import ScoringService
 from app.infrastructure.database.manager import get_db_manager
-from app.repositories import ScoreRepository
+from app.infrastructure.external.tradernet import get_tradernet_client
+from app.repositories import ScoreRepository, SettingsRepository, StockRepository
 
 logger = logging.getLogger(__name__)
 
@@ -105,10 +103,12 @@ async def discover_new_stocks() -> None:
                     industry=candidate.get("industry"),
                 )
 
-                if score and score.overall_score is not None:
-                    scored_candidates.append((candidate, score.overall_score))
+                if score and score.total_score is not None:
+                    scored_candidates.append((candidate, score.total_score))
                 else:
-                    logger.warning(f"Failed to score {symbol}: score calculation returned None")
+                    logger.warning(
+                        f"Failed to score {symbol}: score calculation returned None"
+                    )
             except Exception as e:
                 logger.warning(f"Failed to score {symbol}: {e}")
                 continue
@@ -128,7 +128,9 @@ async def discover_new_stocks() -> None:
             logger.info(f"No candidates above score threshold {score_threshold}")
             return
 
-        logger.info(f"{len(above_threshold)} candidates above threshold {score_threshold}")
+        logger.info(
+            f"{len(above_threshold)} candidates above threshold {score_threshold}"
+        )
 
         # Sort by score (best first)
         above_threshold.sort(key=lambda x: x[1], reverse=True)
@@ -141,15 +143,15 @@ async def discover_new_stocks() -> None:
                 f"Manual review required: {len(to_add)} stocks flagged for review"
             )
             # TODO: Implement review flagging mechanism (could add to a review queue table)
-            for candidate, score in to_add:
+            for candidate, candidate_score in to_add:
                 logger.info(
-                    f"  - {candidate.get('symbol')}: score={score:.3f} (flagged for review)"
+                    f"  - {candidate.get('symbol')}: score={candidate_score:.3f} (flagged for review)"
                 )
             return
 
         # Add stocks to universe
         added_count = 0
-        for candidate, score in to_add:
+        for candidate, candidate_score in to_add:
             symbol = candidate.get("symbol", "").upper()
             name = candidate.get("name", symbol)
             country = candidate.get("country")
@@ -187,4 +189,3 @@ async def discover_new_stocks() -> None:
 
     except Exception as e:
         logger.error(f"Stock discovery failed: {e}", exc_info=True)
-

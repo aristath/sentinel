@@ -169,7 +169,11 @@ async def get_all_settings(settings_repo: SettingsRepositoryDep):
     db_values = await get_settings_batch(keys, settings_repo)
 
     # String settings that should be returned as strings
-    string_settings = {"trading_mode", "stock_discovery_geographies", "stock_discovery_exchanges"}
+    string_settings = {
+        "trading_mode",
+        "stock_discovery_geographies",
+        "stock_discovery_exchanges",
+    }
 
     result: dict[str, Any] = {}
     for key, default in SETTING_DEFAULTS.items():

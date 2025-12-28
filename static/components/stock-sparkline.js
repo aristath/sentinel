@@ -89,7 +89,7 @@ class StockSparkline extends HTMLElement {
     });
 
     // Create path for line
-    const pathData = points.map((p, i) => 
+    const pathData = points.map((p, i) =>
       i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`
     ).join(' ');
 
@@ -106,29 +106,29 @@ class StockSparkline extends HTMLElement {
       // Create segments with baseline intersections
       const segments = [];
       let currentSegment = { points: [], type: points[0].value >= baselineValue ? 'above' : 'below' };
-      
+
       points.forEach((p, i) => {
         const isAbove = p.value >= baselineValue;
         const segmentType = isAbove ? 'above' : 'below';
-        
+
         if (segmentType !== currentSegment.type && i > 0) {
           // Calculate intersection with baseline
           const prevPoint = points[i - 1];
           const t = (baselineValue - prevPoint.value) / (p.value - prevPoint.value);
           const intersectX = prevPoint.x + t * (p.x - prevPoint.x);
           const intersectY = baselineY;
-          
+
           // Add intersection point to current segment
           currentSegment.points.push({ x: intersectX, y: intersectY, value: baselineValue });
-          
+
           // Close current segment and start new one
           segments.push(currentSegment);
           currentSegment = { points: [{ x: intersectX, y: intersectY, value: baselineValue }], type: segmentType };
         }
-        
+
         currentSegment.points.push(p);
       });
-      
+
       // Add last segment
       if (currentSegment.points.length > 0) {
         segments.push(currentSegment);
@@ -137,19 +137,19 @@ class StockSparkline extends HTMLElement {
       // Build SVG paths
       const paths = segments.map(seg => {
         if (seg.points.length === 0) return null;
-        
-        const pathData = seg.points.map((p, i) => 
+
+        const pathData = seg.points.map((p, i) =>
           i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`
         ).join(' ');
-        
+
         // For area: connect line to baseline (not bottom of chart)
         const firstX = seg.points[0].x;
         const lastX = seg.points[seg.points.length - 1].x;
         const areaPath = `${pathData} L ${lastX} ${baselineY} L ${firstX} ${baselineY} Z`;
-        
+
         const lineColor = seg.type === 'above' ? '#10b981' : '#ef4444';
         const gradientId = seg.type === 'above' ? `gradient-above-${symbol}` : `gradient-below-${symbol}`;
-        
+
         return { pathData, areaPath, lineColor, gradientId, type: seg.type };
       }).filter(p => p !== null);
 
@@ -189,14 +189,14 @@ class StockSparkline extends HTMLElement {
       return `
         <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
           <!-- Area fill -->
-          <path d="${areaPath}" 
-                fill="url(#gradient-${symbol})" 
+          <path d="${areaPath}"
+                fill="url(#gradient-${symbol})"
                 opacity="0.4"/>
           <!-- Line -->
-          <path d="${pathData}" 
-                stroke="#3b82f6" 
-                stroke-width="1" 
-                fill="none" 
+          <path d="${pathData}"
+                stroke="#3b82f6"
+                stroke-width="1"
+                fill="none"
                 vector-effect="non-scaling-stroke"/>
           <!-- Gradient -->
           <defs>
@@ -212,4 +212,3 @@ class StockSparkline extends HTMLElement {
 }
 
 customElements.define('stock-sparkline', StockSparkline);
-

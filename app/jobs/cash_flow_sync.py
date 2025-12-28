@@ -70,7 +70,7 @@ async def _sync_cash_flows_internal():
 
         synced_count = 0
         dividend_repo = DividendRepository()
-        
+
         async with db_manager.ledger.transaction():
             for txn in transactions:
                 txn_id = txn.get("transaction_id")
@@ -88,7 +88,9 @@ async def _sync_cash_flows_internal():
                 params = txn.get("params")
                 params_json = txn.get("params_json")
                 if params and not params_json:
-                    params_json = json.dumps(params) if isinstance(params, dict) else str(params)
+                    params_json = (
+                        json.dumps(params) if isinstance(params, dict) else str(params)
+                    )
 
                 cursor = await db_manager.ledger.execute(
                     """
@@ -115,7 +117,9 @@ async def _sync_cash_flows_internal():
                 synced_count += 1
 
                 # Create dividend record if this is a dividend cash flow
-                transaction_type = (txn.get("type") or txn.get("transaction_type", "")).lower()
+                transaction_type = (
+                    txn.get("type") or txn.get("transaction_type", "")
+                ).lower()
                 if transaction_type == "dividend":
                     try:
                         # Extract symbol from params
@@ -125,14 +129,22 @@ async def _sync_cash_flows_internal():
                         elif params_json:
                             # Try to parse params_json
                             try:
-                                parsed_params = json.loads(params_json) if isinstance(params_json, str) else params_json
-                                symbol = parsed_params.get("ticker") or parsed_params.get("symbol")
+                                parsed_params = (
+                                    json.loads(params_json)
+                                    if isinstance(params_json, str)
+                                    else params_json
+                                )
+                                symbol = parsed_params.get(
+                                    "ticker"
+                                ) or parsed_params.get("symbol")
                             except (json.JSONDecodeError, TypeError):
                                 pass
 
                         if symbol:
                             # Check if dividend record already exists for this cash flow
-                            existing = await dividend_repo.exists_for_cash_flow(cash_flow_id)
+                            existing = await dividend_repo.exists_for_cash_flow(
+                                cash_flow_id
+                            )
                             if not existing:
                                 dividend = DividendRecord(
                                     symbol=symbol,

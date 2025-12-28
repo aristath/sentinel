@@ -4,15 +4,14 @@ These tests validate the stock discovery logic for finding new investment opport
 CRITICAL: Tests catch real bugs that would cause poor stock selection or API abuse.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.domain.models import Stock
-from app.domain.value_objects.currency import Currency
 
-
-def create_mock_security(symbol: str, exchange: str = "usa", volume: float = 5000000.0) -> dict:
+def create_mock_security(
+    symbol: str, exchange: str = "usa", volume: float = 5000000.0
+) -> dict:
     """Helper to create mock security data from Tradernet API."""
     return {
         "symbol": symbol,
@@ -42,6 +41,7 @@ class TestFilteringLogic:
         ]
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "stock_discovery_enabled": 1.0,
@@ -85,6 +85,7 @@ class TestFilteringLogic:
         ]
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "stock_discovery_enabled": 1.0,
@@ -128,6 +129,7 @@ class TestFilteringLogic:
         ]
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "stock_discovery_enabled": 1.0,
@@ -171,6 +173,7 @@ class TestFilteringLogic:
         ]
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "stock_discovery_enabled": 1.0,
@@ -193,7 +196,9 @@ class TestFilteringLogic:
         )
 
         existing_symbols = ["AAPL", "MSFT"]
-        candidates = await service.discover_candidates(existing_symbols=existing_symbols)
+        candidates = await service.discover_candidates(
+            existing_symbols=existing_symbols
+        )
 
         # Should exclude AAPL and MSFT
         assert len(candidates) == 1
@@ -209,14 +214,14 @@ class TestFilteringLogic:
 
         # Generate many mock securities
         many_securities = [
-            create_mock_security(f"STOCK{i}", "usa", 10000000.0)
-            for i in range(100)
+            create_mock_security(f"STOCK{i}", "usa", 10000000.0) for i in range(100)
         ]
 
         mock_client = MagicMock()
         mock_client.get_most_traded.return_value = many_securities
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "stock_discovery_enabled": 1.0,
@@ -261,6 +266,7 @@ class TestEdgeCases:
         ]
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "stock_discovery_enabled": 1.0,
@@ -303,6 +309,7 @@ class TestEdgeCases:
         ]
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "stock_discovery_enabled": 1.0,
@@ -343,6 +350,7 @@ class TestEdgeCases:
         ]
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "stock_discovery_enabled": 1.0,
@@ -383,6 +391,7 @@ class TestEdgeCases:
         ]
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "stock_discovery_enabled": 1.0,
@@ -405,7 +414,9 @@ class TestEdgeCases:
         )
 
         existing_symbols = ["AAPL", "MSFT"]
-        candidates = await service.discover_candidates(existing_symbols=existing_symbols)
+        candidates = await service.discover_candidates(
+            existing_symbols=existing_symbols
+        )
 
         # Should return empty (all candidates already in universe)
         assert len(candidates) == 0
@@ -429,6 +440,7 @@ class TestSettingsIntegration:
         ]
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "stock_discovery_enabled": 1.0,
@@ -471,6 +483,7 @@ class TestSettingsIntegration:
         ]
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "stock_discovery_enabled": 1.0,
@@ -514,6 +527,7 @@ class TestErrorHandling:
         mock_client.get_most_traded.side_effect = Exception("API error")
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "stock_discovery_enabled": 1.0,
@@ -538,6 +552,7 @@ class TestErrorHandling:
         # Should not raise exception, return empty list
         candidates = await service.discover_candidates(existing_symbols=[])
         assert candidates == []
+        assert candidates == []
 
     @pytest.mark.asyncio
     async def test_uses_custom_exchange_list(self):
@@ -554,6 +569,7 @@ class TestErrorHandling:
         ]
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "stock_discovery_enabled": 1.0,
@@ -596,6 +612,7 @@ class TestErrorHandling:
         ]
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "stock_discovery_enabled": 1.0,
@@ -635,6 +652,7 @@ class TestErrorHandling:
         mock_client.get_most_traded.return_value = None  # Invalid response
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "stock_discovery_enabled": 1.0,
@@ -659,4 +677,3 @@ class TestErrorHandling:
         # Should not raise exception, return empty list
         candidates = await service.discover_candidates(existing_symbols=[])
         assert candidates == []
-

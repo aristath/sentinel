@@ -24,7 +24,9 @@ def create_ohlc(timestamp: datetime, close: float) -> OHLC:
     )
 
 
-def create_historical_data(days: int, start_price: float, trend: float = 0.0) -> list[OHLC]:
+def create_historical_data(
+    days: int, start_price: float, trend: float = 0.0
+) -> list[OHLC]:
     """Helper to create historical OHLC data."""
     data = []
     base_date = datetime.now() - timedelta(days=days)
@@ -100,12 +102,14 @@ class TestRegimeCache:
         )
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "market_regime_detection_enabled": 1.0,
                 "market_regime_bull_threshold": 0.05,
                 "market_regime_bear_threshold": -0.05,
             }.get(key, default)
+
         mock_settings_repo.get_float = AsyncMock(side_effect=get_float)
 
         mock_cache = AsyncMock()
@@ -126,7 +130,7 @@ class TestRegimeCache:
                 return_value=mock_client,
             ),
         ):
-            regime = await detect_market_regime(client=mock_client, use_cache=True)
+            await detect_market_regime(client=mock_client, use_cache=True)
 
         # Verify regime was cached
         mock_cache.set_analytics.assert_called_once()
@@ -165,12 +169,14 @@ class TestRegimeCache:
         )
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "market_regime_detection_enabled": 1.0,
                 "market_regime_bull_threshold": 0.05,
                 "market_regime_bear_threshold": -0.05,
             }.get(key, default)
+
         mock_settings_repo.get_float = AsyncMock(side_effect=get_float)
 
         mock_cache = AsyncMock()
@@ -225,12 +231,14 @@ class TestRegimeCache:
         )
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "market_regime_detection_enabled": 1.0,
                 "market_regime_bull_threshold": 0.05,
                 "market_regime_bear_threshold": -0.05,
             }.get(key, default)
+
         mock_settings_repo.get_float = AsyncMock(side_effect=get_float)
 
         # Mock cache to raise exception
@@ -255,4 +263,3 @@ class TestRegimeCache:
             # Should not raise exception, should proceed with detection
             regime = await detect_market_regime(client=mock_client, use_cache=True)
             assert regime in ("bull", "bear", "sideways")
-

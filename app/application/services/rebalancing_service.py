@@ -10,6 +10,7 @@ from typing import Dict, List, Optional
 from app.application.services.recommendation.portfolio_context_builder import (
     build_portfolio_context,
 )
+from app.domain.analytics.market_regime import detect_market_regime
 from app.domain.models import MultiStepRecommendation, Recommendation
 from app.domain.repositories.protocols import (
     IAllocationRepository,
@@ -25,7 +26,6 @@ from app.domain.value_objects.currency import Currency
 from app.domain.value_objects.recommendation_status import RecommendationStatus
 from app.domain.value_objects.trade_side import TradeSide
 from app.infrastructure.database.manager import DatabaseManager
-from app.domain.analytics.market_regime import detect_market_regime
 from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.external.tradernet import TradernetClient
 from app.repositories import PortfolioRepository, RecommendationRepository
@@ -238,9 +238,13 @@ class RebalancingService:
                     min_cash = await self._settings_repo.get_float(
                         "market_regime_sideways_cash_reserve", 500.0
                     )
-                    logger.info(f"Sideways market detected: using cash reserve {min_cash}")
+                    logger.info(
+                        f"Sideways market detected: using cash reserve {min_cash}"
+                    )
             except Exception as e:
-                logger.warning(f"Failed to detect market regime, using default cash reserve: {e}")
+                logger.warning(
+                    f"Failed to detect market regime, using default cash reserve: {e}"
+                )
                 # min_cash already set to default above
 
         # Build portfolio context

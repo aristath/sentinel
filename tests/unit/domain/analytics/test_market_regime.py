@@ -24,7 +24,9 @@ def create_ohlc(timestamp: datetime, close: float) -> OHLC:
     )
 
 
-def create_historical_data(days: int, start_price: float, trend: float = 0.0) -> list[OHLC]:
+def create_historical_data(
+    days: int, start_price: float, trend: float = 0.0
+) -> list[OHLC]:
     """Helper to create historical OHLC data."""
     data = []
     base_date = datetime.now() - timedelta(days=days)
@@ -69,17 +71,25 @@ class TestRegimeClassification:
         )
 
         mock_settings_repo = MagicMock()
+
         async def get_float(key, default):
             return {
                 "market_regime_detection_enabled": 1.0,
                 "market_regime_bull_threshold": 0.05,  # 5%
                 "market_regime_bear_threshold": -0.05,  # -5%
             }.get(key, default)
+
         mock_settings_repo.get_float = MagicMock(side_effect=get_float)
 
         with (
-            patch("app.domain.analytics.market_regime.SettingsRepository", return_value=mock_settings_repo),
-            patch("app.domain.analytics.market_regime.get_tradernet_client", return_value=mock_client),
+            patch(
+                "app.domain.analytics.market_regime.SettingsRepository",
+                return_value=mock_settings_repo,
+            ),
+            patch(
+                "app.domain.analytics.market_regime.get_tradernet_client",
+                return_value=mock_client,
+            ),
         ):
             regime = await detect_market_regime()
 
@@ -116,17 +126,25 @@ class TestRegimeClassification:
         )
 
         mock_settings_repo = MagicMock()
+
         async def get_float(key, default):
             return {
                 "market_regime_detection_enabled": 1.0,
                 "market_regime_bull_threshold": 0.05,
                 "market_regime_bear_threshold": -0.05,
             }.get(key, default)
+
         mock_settings_repo.get_float = MagicMock(side_effect=get_float)
 
         with (
-            patch("app.domain.analytics.market_regime.SettingsRepository", return_value=mock_settings_repo),
-            patch("app.domain.analytics.market_regime.get_tradernet_client", return_value=mock_client),
+            patch(
+                "app.domain.analytics.market_regime.SettingsRepository",
+                return_value=mock_settings_repo,
+            ),
+            patch(
+                "app.domain.analytics.market_regime.get_tradernet_client",
+                return_value=mock_client,
+            ),
         ):
             regime = await detect_market_regime()
 
@@ -163,17 +181,25 @@ class TestRegimeClassification:
         )
 
         mock_settings_repo = MagicMock()
+
         async def get_float(key, default):
             return {
                 "market_regime_detection_enabled": 1.0,
                 "market_regime_bull_threshold": 0.05,
                 "market_regime_bear_threshold": -0.05,
             }.get(key, default)
+
         mock_settings_repo.get_float = MagicMock(side_effect=get_float)
 
         with (
-            patch("app.domain.analytics.market_regime.SettingsRepository", return_value=mock_settings_repo),
-            patch("app.domain.analytics.market_regime.get_tradernet_client", return_value=mock_client),
+            patch(
+                "app.domain.analytics.market_regime.SettingsRepository",
+                return_value=mock_settings_repo,
+            ),
+            patch(
+                "app.domain.analytics.market_regime.get_tradernet_client",
+                return_value=mock_client,
+            ),
         ):
             regime = await detect_market_regime()
 
@@ -210,17 +236,25 @@ class TestRegimeClassification:
         )
 
         mock_settings_repo = MagicMock()
+
         async def get_float(key, default):
             return {
                 "market_regime_detection_enabled": 1.0,
                 "market_regime_bull_threshold": 0.05,  # Exactly 5%
                 "market_regime_bear_threshold": -0.05,
             }.get(key, default)
+
         mock_settings_repo.get_float = MagicMock(side_effect=get_float)
 
         with (
-            patch("app.domain.analytics.market_regime.SettingsRepository", return_value=mock_settings_repo),
-            patch("app.domain.analytics.market_regime.get_tradernet_client", return_value=mock_client),
+            patch(
+                "app.domain.analytics.market_regime.SettingsRepository",
+                return_value=mock_settings_repo,
+            ),
+            patch(
+                "app.domain.analytics.market_regime.get_tradernet_client",
+                return_value=mock_client,
+            ),
         ):
             regime = await detect_market_regime()
 
@@ -314,20 +348,27 @@ class TestErrorHandling:
         mock_client.get_historical_prices.side_effect = Exception("API error")
 
         mock_settings_repo = MagicMock()
+
         async def get_float(key, default):
             return {
                 "market_regime_detection_enabled": 1.0,
                 "market_regime_bull_threshold": 0.05,
                 "market_regime_bear_threshold": -0.05,
             }.get(key, default)
+
         mock_settings_repo.get_float = MagicMock(side_effect=get_float)
 
         with (
-            patch("app.domain.analytics.market_regime.SettingsRepository", return_value=mock_settings_repo),
-            patch("app.domain.analytics.market_regime.get_tradernet_client", return_value=mock_client),
+            patch(
+                "app.domain.analytics.market_regime.SettingsRepository",
+                return_value=mock_settings_repo,
+            ),
+            patch(
+                "app.domain.analytics.market_regime.get_tradernet_client",
+                return_value=mock_client,
+            ),
         ):
             # Should not raise exception, return default regime
             regime = await detect_market_regime()
             # Should return "sideways" as safe default
             assert regime in ("bull", "bear", "sideways")
-

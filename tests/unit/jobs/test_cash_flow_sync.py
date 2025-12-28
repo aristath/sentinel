@@ -287,7 +287,9 @@ class TestDividendRecordCreation:
         mock_client.get_all_cash_flows.return_value = [dividend_cash_flow]
 
         with (
-            patch("app.jobs.cash_flow_sync.get_tradernet_client", return_value=mock_client),
+            patch(
+                "app.jobs.cash_flow_sync.get_tradernet_client", return_value=mock_client
+            ),
             patch("app.jobs.cash_flow_sync.get_db_manager", return_value=mock_db),
             patch("app.jobs.cash_flow_sync.set_processing"),
             patch("app.jobs.cash_flow_sync.clear_processing"),
@@ -298,7 +300,7 @@ class TestDividendRecordCreation:
         # Verify dividend record was created
         dividend_repo = DividendRepository()
         dividends = await dividend_repo.get_by_symbol("AAPL.US")
-        
+
         # Note: This test will fail if dividend record creation is not implemented
         # That's expected in RED phase - we'll implement it in Task 1.4
         assert len(dividends) > 0, "Dividend record should be created from cash flow"
@@ -349,7 +351,9 @@ class TestDividendRecordCreation:
         mock_client.get_all_cash_flows.return_value = [dividend_cash_flow]
 
         with (
-            patch("app.jobs.cash_flow_sync.get_tradernet_client", return_value=mock_client),
+            patch(
+                "app.jobs.cash_flow_sync.get_tradernet_client", return_value=mock_client
+            ),
             patch("app.jobs.cash_flow_sync.get_db_manager", return_value=mock_db),
             patch("app.jobs.cash_flow_sync.set_processing"),
             patch("app.jobs.cash_flow_sync.clear_processing"),
@@ -394,7 +398,9 @@ class TestDividendRecordCreation:
         # Second sync: transaction already exists
         mock_cursor2 = AsyncMock()
         mock_cursor2 = AsyncMock()
-        mock_cursor2.fetchall.return_value = [("corp_action_dividend_789",)]  # Already exists
+        mock_cursor2.fetchall.return_value = [
+            ("corp_action_dividend_789",)
+        ]  # Already exists
 
         @asynccontextmanager
         async def mock_transaction():
@@ -420,7 +426,9 @@ class TestDividendRecordCreation:
 
         # First sync
         with (
-            patch("app.jobs.cash_flow_sync.get_tradernet_client", return_value=mock_client),
+            patch(
+                "app.jobs.cash_flow_sync.get_tradernet_client", return_value=mock_client
+            ),
             patch("app.jobs.cash_flow_sync.get_db_manager", return_value=mock_db1),
             patch("app.jobs.cash_flow_sync.set_processing"),
             patch("app.jobs.cash_flow_sync.clear_processing"),
@@ -430,7 +438,9 @@ class TestDividendRecordCreation:
 
         # Second sync (should skip existing)
         with (
-            patch("app.jobs.cash_flow_sync.get_tradernet_client", return_value=mock_client),
+            patch(
+                "app.jobs.cash_flow_sync.get_tradernet_client", return_value=mock_client
+            ),
             patch("app.jobs.cash_flow_sync.get_db_manager", return_value=mock_db2),
             patch("app.jobs.cash_flow_sync.set_processing"),
             patch("app.jobs.cash_flow_sync.clear_processing"),

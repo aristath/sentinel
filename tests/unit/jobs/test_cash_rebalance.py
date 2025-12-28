@@ -484,7 +484,6 @@ class TestEventDrivenRebalancing:
         Bug caught: Rebalancing runs unnecessarily, causing excessive trading.
         """
         from app.domain.models import Position
-        from app.domain.services.rebalancing_triggers import check_rebalance_triggers
         from app.domain.value_objects.currency import Currency
         from app.jobs.cash_rebalance import _check_and_rebalance_internal
 
@@ -500,8 +499,7 @@ class TestEventDrivenRebalancing:
                 cost_basis_eur=15000.0,
             )
         ]
-        target_allocations = {"AAPL": 0.20}  # 20% target, current is 20% (no drift)
-        total_portfolio_value = 75000.0  # AAPL = 15000, cash = 60000
+        # Note: AAPL is 20% target, current is 20% (no drift). Portfolio = 75000
         cash_balance = 100.0  # Below threshold
 
         mock_client = MagicMock()
@@ -578,7 +576,7 @@ class TestEventDrivenRebalancing:
                 cost_basis_eur=15000.0,
             )
         ]
-        target_allocations = {"AAPL": 0.20}
+        # Note: Target allocation for AAPL is 20%
 
         mock_client = MagicMock()
         mock_client.is_connected = True
@@ -604,7 +602,9 @@ class TestEventDrivenRebalancing:
             patch("app.jobs.cash_rebalance.PositionRepository") as mock_pos_repo,
             patch("app.jobs.cash_rebalance.TradeRepository") as mock_trade_repo,
             patch("app.jobs.cash_rebalance.StockRepository") as mock_stock_repo,
-            patch("app.jobs.cash_rebalance._get_next_holistic_action") as mock_get_action,
+            patch(
+                "app.jobs.cash_rebalance._get_next_holistic_action"
+            ) as mock_get_action,
             patch("app.jobs.cash_rebalance._validate_next_action") as mock_validate,
             patch("app.jobs.cash_rebalance._execute_trade"),
             patch("app.jobs.cash_rebalance._refresh_recommendation_cache"),
@@ -615,14 +615,19 @@ class TestEventDrivenRebalancing:
                 "app.domain.services.rebalancing_triggers.check_rebalance_triggers"
             ) as mock_check_triggers,
         ):
-            mock_pnl.return_value = ({"status": "ok", "can_buy": True, "can_sell": True}, True)
+            mock_pnl.return_value = (
+                {"status": "ok", "can_buy": True, "can_sell": True},
+                True,
+            )
             mock_get_client.return_value = mock_client
             mock_service.return_value.get_settings.return_value = mock_settings
             mock_pos_repo.return_value.get_all = AsyncMock(return_value=positions)
             mock_stock_repo.return_value.get_all_active = AsyncMock(return_value=[])
             mock_get_action.return_value = mock_action
             mock_validate.return_value = True
-            mock_trade_repo.return_value.has_recent_sell_order = AsyncMock(return_value=False)
+            mock_trade_repo.return_value.has_recent_sell_order = AsyncMock(
+                return_value=False
+            )
 
             # Mock trigger check: triggers met
             mock_check_triggers.return_value = (True, "position drift detected")
@@ -688,7 +693,9 @@ class TestEventDrivenRebalancing:
             patch("app.jobs.cash_rebalance.PositionRepository") as mock_pos_repo,
             patch("app.jobs.cash_rebalance.TradeRepository") as mock_trade_repo,
             patch("app.jobs.cash_rebalance.StockRepository") as mock_stock_repo,
-            patch("app.jobs.cash_rebalance._get_next_holistic_action") as mock_get_action,
+            patch(
+                "app.jobs.cash_rebalance._get_next_holistic_action"
+            ) as mock_get_action,
             patch("app.jobs.cash_rebalance._validate_next_action") as mock_validate,
             patch("app.jobs.cash_rebalance._execute_trade"),
             patch("app.jobs.cash_rebalance._refresh_recommendation_cache"),
@@ -699,14 +706,19 @@ class TestEventDrivenRebalancing:
                 "app.domain.services.rebalancing_triggers.check_rebalance_triggers"
             ) as mock_check_triggers,
         ):
-            mock_pnl.return_value = ({"status": "ok", "can_buy": True, "can_sell": True}, True)
+            mock_pnl.return_value = (
+                {"status": "ok", "can_buy": True, "can_sell": True},
+                True,
+            )
             mock_get_client.return_value = mock_client
             mock_service.return_value.get_settings.return_value = mock_settings
             mock_pos_repo.return_value.get_all = AsyncMock(return_value=positions)
             mock_stock_repo.return_value.get_all_active = AsyncMock(return_value=[])
             mock_get_action.return_value = mock_action
             mock_validate.return_value = True
-            mock_trade_repo.return_value.has_recent_sell_order = AsyncMock(return_value=False)
+            mock_trade_repo.return_value.has_recent_sell_order = AsyncMock(
+                return_value=False
+            )
 
             # Mock settings: event-driven DISABLED
             async def get_float(key, default):
@@ -769,7 +781,9 @@ class TestEventDrivenRebalancing:
             patch("app.jobs.cash_rebalance.PositionRepository") as mock_pos_repo,
             patch("app.jobs.cash_rebalance.TradeRepository") as mock_trade_repo,
             patch("app.jobs.cash_rebalance.StockRepository") as mock_stock_repo,
-            patch("app.jobs.cash_rebalance._get_next_holistic_action") as mock_get_action,
+            patch(
+                "app.jobs.cash_rebalance._get_next_holistic_action"
+            ) as mock_get_action,
             patch("app.jobs.cash_rebalance._validate_next_action") as mock_validate,
             patch("app.jobs.cash_rebalance._execute_trade"),
             patch("app.jobs.cash_rebalance._refresh_recommendation_cache"),
@@ -780,14 +794,19 @@ class TestEventDrivenRebalancing:
                 "app.domain.services.rebalancing_triggers.check_rebalance_triggers"
             ) as mock_check_triggers,
         ):
-            mock_pnl.return_value = ({"status": "ok", "can_buy": True, "can_sell": True}, True)
+            mock_pnl.return_value = (
+                {"status": "ok", "can_buy": True, "can_sell": True},
+                True,
+            )
             mock_get_client.return_value = mock_client
             mock_service.return_value.get_settings.return_value = mock_settings
             mock_pos_repo.return_value.get_all = AsyncMock(return_value=positions)
             mock_stock_repo.return_value.get_all_active = AsyncMock(return_value=[])
             mock_get_action.return_value = mock_action
             mock_validate.return_value = True
-            mock_trade_repo.return_value.has_recent_sell_order = AsyncMock(return_value=False)
+            mock_trade_repo.return_value.has_recent_sell_order = AsyncMock(
+                return_value=False
+            )
 
             # Mock settings: event-driven enabled
             async def get_float(key, default):

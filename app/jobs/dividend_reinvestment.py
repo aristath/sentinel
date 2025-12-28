@@ -119,19 +119,20 @@ async def auto_reinvest_dividends() -> None:
                 )
                 # Set pending bonus for each small dividend
                 for dividend in symbol_dividends:
-                    await dividend_repo.set_pending_bonus(
-                        dividend.id, dividend.amount_eur
-                    )
+                    if dividend.id is not None:
+                        await dividend_repo.set_pending_bonus(
+                            dividend.id, dividend.amount_eur
+                        )
                 continue
 
             # Get current stock price
             try:
                 quote = client.get_quote(symbol)
-                if not quote or "price" not in quote:
+                if not quote or not hasattr(quote, "price"):
                     logger.warning(f"Could not get price for {symbol}, skipping")
                     continue
 
-                price = quote["price"]
+                price = quote.price
                 if price <= 0:
                     logger.warning(f"Invalid price {price} for {symbol}, skipping")
                     continue
@@ -179,7 +180,9 @@ async def auto_reinvest_dividends() -> None:
             )
 
             recommendations.append(recommendation)
-            dividends_to_mark[symbol] = [d.id for d in symbol_dividends]
+            dividends_to_mark[symbol] = [
+                d.id for d in symbol_dividends if d.id is not None
+            ]
 
         # Execute trades if any
         if recommendations:

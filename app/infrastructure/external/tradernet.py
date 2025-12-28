@@ -1274,12 +1274,14 @@ class TradernetClient:
                 # Call underlying SDK method if available
                 # Note: This may need to be adjusted based on actual SDK method signature
                 if hasattr(self._client, "get_most_traded"):
-                    result = self._client.get_most_traded(
-                        instrument_type=instrument_type,
-                        exchange=exchange,
-                        gainers=gainers,
-                        limit=limit,
-                    )
+                    kwargs: dict = {
+                        "instrument_type": instrument_type,
+                        "gainers": gainers,
+                        "limit": limit,
+                    }
+                    if exchange is not None:
+                        kwargs["exchange"] = exchange
+                    result = self._client.get_most_traded(**kwargs)
                 else:
                     # Fallback: return empty list if method not available
                     logger.warning("get_most_traded not available in Tradernet SDK")
@@ -1291,7 +1293,9 @@ class TradernetClient:
             elif isinstance(result, dict) and "result" in result:
                 return result["result"] if isinstance(result["result"], list) else []
             else:
-                logger.warning(f"Unexpected get_most_traded response format: {type(result)}")
+                logger.warning(
+                    f"Unexpected get_most_traded response format: {type(result)}"
+                )
                 return []
         except Exception as e:
             logger.error(f"Failed to get most traded securities: {e}")

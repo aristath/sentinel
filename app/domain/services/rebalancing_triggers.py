@@ -8,8 +8,7 @@ from typing import Dict, List, Optional
 
 from app.domain.models import Position
 from app.domain.repositories.protocols import ISettingsRepository
-from app.infrastructure.external.tradernet import TradernetClient, get_tradernet_client
-from app.repositories import PositionRepository, SettingsRepository
+from app.repositories import SettingsRepository
 
 logger = logging.getLogger(__name__)
 
@@ -177,4 +176,3 @@ async def _check_cash_accumulation(
         )
 
     return False, "cash below threshold"
-

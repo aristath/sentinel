@@ -41,10 +41,10 @@ def _calculate_200_day_ma(historical_data: list) -> Optional[float]:
 
     # Sort by timestamp (oldest first)
     sorted_data = sorted(historical_data, key=lambda x: x.timestamp)
-    
+
     # Get last 200 days
     last_200 = sorted_data[-MA_PERIOD:]
-    
+
     # Calculate average of close prices
     total = sum(candle.close for candle in last_200)
     return total / MA_PERIOD
@@ -64,7 +64,7 @@ def _calculate_distance_from_ma(current_price: float, ma: float) -> Optional[flo
     """
     if ma == 0.0 or ma is None:
         return None
-    
+
     return (current_price - ma) / ma
 
 
@@ -94,7 +94,9 @@ async def detect_market_regime(
         settings_repo = SettingsRepository()
         enabled = await settings_repo.get_float("market_regime_detection_enabled", 1.0)
         if enabled == 0.0:
-            logger.info("Market regime detection is disabled, returning sideways as default")
+            logger.info(
+                "Market regime detection is disabled, returning sideways as default"
+            )
             return "sideways"
 
         # Check cache first (if enabled)
@@ -105,30 +107,44 @@ async def detect_market_regime(
                 logger.debug(f"Market regime cache HIT: {cached_regime}")
                 return cached_regime
 
-        bull_threshold = await settings_repo.get_float("market_regime_bull_threshold", 0.05)
-        bear_threshold = await settings_repo.get_float("market_regime_bear_threshold", -0.05)
+        bull_threshold = await settings_repo.get_float(
+            "market_regime_bull_threshold", 0.05
+        )
+        bear_threshold = await settings_repo.get_float(
+            "market_regime_bear_threshold", -0.05
+        )
 
         # Ensure client is connected
         if not client.is_connected:
             if not client.connect():
-                logger.warning("Failed to connect to Tradernet for regime detection, returning sideways")
+                logger.warning(
+                    "Failed to connect to Tradernet for regime detection, returning sideways"
+                )
                 return "sideways"
 
         # Get historical data for SPY (200+ days needed)
         end_date = datetime.now()
         start_date = end_date - timedelta(days=MA_PERIOD + 50)  # Extra buffer
 
-        spy_data = client.get_historical_prices(SPY_SYMBOL, start=start_date, end=end_date)
-        qqq_data = client.get_historical_prices(QQQ_SYMBOL, start=start_date, end=end_date)
+        spy_data = client.get_historical_prices(
+            SPY_SYMBOL, start=start_date, end=end_date
+        )
+        qqq_data = client.get_historical_prices(
+            QQQ_SYMBOL, start=start_date, end=end_date
+        )
 
         if not spy_data or len(spy_data) < MA_PERIOD:
-            logger.warning(f"Insufficient SPY data for regime detection ({len(spy_data) if spy_data else 0} days)")
+            logger.warning(
+                f"Insufficient SPY data for regime detection ({len(spy_data) if spy_data else 0} days)"
+            )
             return "sideways"
 
-        if not qqq_data or len(qqq_data) < MA_PERIOD:
-            logger.warning(f"Insufficient QQQ data for regime detection ({len(qqq_data) if qqq_data else 0} days)")
+        qqq_available = bool(qqq_data and len(qqq_data) >= MA_PERIOD)
+        if not qqq_available:
+            logger.warning(
+                f"Insufficient QQQ data for regime detection ({len(qqq_data) if qqq_data else 0} days)"
+            )
             # Use only SPY if QQQ is unavailable
-            qqq_data = None
 
         # Calculate 200-day MAs
         spy_ma = _calculate_200_day_ma(spy_data)
@@ -136,7 +152,7 @@ async def detect_market_regime(
             logger.warning("Failed to calculate SPY 200-day MA")
             return "sideways"
 
-        qqq_ma = _calculate_200_day_ma(qqq_data) if qqq_data else None
+        qqq_ma = _calculate_200_day_ma(qqq_data) if qqq_available else None
 
         # Get current prices
         spy_quote = client.get_quote(SPY_SYMBOL)
@@ -192,4 +208,3 @@ async def detect_market_regime(
     except Exception as e:
         logger.error(f"Failed to detect market regime: {e}", exc_info=True)
         return "sideways"  # Safe default
-

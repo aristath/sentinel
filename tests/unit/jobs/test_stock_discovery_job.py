@@ -5,16 +5,16 @@ CRITICAL: Tests catch real bugs that would cause poor stock selection or limit v
 """
 
 from contextlib import contextmanager
-from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.domain.models import CalculatedStockScore
-from app.domain.value_objects.currency import Currency
+from app.domain.scoring.models import CalculatedStockScore
 
 
-def create_candidate(symbol: str, exchange: str = "usa", volume: float = 5000000.0) -> dict:
+def create_candidate(
+    symbol: str, exchange: str = "usa", volume: float = 5000000.0
+) -> dict:
     """Helper to create mock candidate from discovery service."""
     return {
         "symbol": symbol,
@@ -25,11 +25,15 @@ def create_candidate(symbol: str, exchange: str = "usa", volume: float = 5000000
     }
 
 
-def create_mock_score(symbol: str, overall_score: float) -> CalculatedStockScore:
+def create_mock_score(symbol: str, total_score: float) -> CalculatedStockScore:
     """Helper to create mock CalculatedStockScore."""
+    from datetime import datetime
+
     return CalculatedStockScore(
         symbol=symbol,
-        overall_score=overall_score,
+        total_score=total_score,
+        volatility=0.2,
+        calculated_at=datetime.now(),
         group_scores={},
         sub_scores={},
     )
@@ -67,9 +71,17 @@ def mock_stock_discovery_dependencies(
 
     with (
         patch("app.jobs.stock_discovery.StockRepository", return_value=mock_stock_repo),
-        patch("app.jobs.stock_discovery.SettingsRepository", return_value=mock_settings_repo),
-        patch("app.jobs.stock_discovery.StockDiscoveryService", return_value=mock_discovery_service),
-        patch("app.jobs.stock_discovery.ScoringService", return_value=mock_scoring_service),
+        patch(
+            "app.jobs.stock_discovery.SettingsRepository",
+            return_value=mock_settings_repo,
+        ),
+        patch(
+            "app.jobs.stock_discovery.StockDiscoveryService",
+            return_value=mock_discovery_service,
+        ),
+        patch(
+            "app.jobs.stock_discovery.ScoringService", return_value=mock_scoring_service
+        ),
     ):
         yield {
             "stock_repo": mock_stock_repo,
@@ -245,6 +257,7 @@ class TestMonthlyLimit:
         mock_scoring_service.calculate_and_save_score = AsyncMock(side_effect=scores)
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "stock_discovery_enabled": 1.0,
@@ -252,6 +265,7 @@ class TestMonthlyLimit:
                 "stock_discovery_max_per_month": 2.0,  # Limit to 2
                 "stock_discovery_require_manual_review": 0.0,
             }.get(key, default)
+
         mock_settings_repo.get_float = AsyncMock(side_effect=get_float)
 
         with mock_stock_discovery_dependencies(
@@ -295,6 +309,7 @@ class TestMonthlyLimit:
         mock_scoring_service.calculate_and_save_score = AsyncMock(side_effect=scores)
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "stock_discovery_enabled": 1.0,
@@ -302,6 +317,7 @@ class TestMonthlyLimit:
                 "stock_discovery_max_per_month": 2.0,  # Limit to 2
                 "stock_discovery_require_manual_review": 0.0,
             }.get(key, default)
+
         mock_settings_repo.get_float = AsyncMock(side_effect=get_float)
 
         with mock_stock_discovery_dependencies(
@@ -313,7 +329,9 @@ class TestMonthlyLimit:
             await discover_new_stocks()
 
         # Verify best stocks were added (HIGH and MED, not LOW)
-        create_calls = [call[0][0].symbol for call in mock_stock_repo.create.call_args_list]
+        create_calls = [
+            call[0][0].symbol for call in mock_stock_repo.create.call_args_list
+        ]
         assert "HIGH" in create_calls
         assert "MED" in create_calls
         assert "LOW" not in create_calls
@@ -344,6 +362,7 @@ class TestManualReview:
         mock_scoring_service.calculate_and_save_score = AsyncMock(return_value=score)
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "stock_discovery_enabled": 1.0,
@@ -351,6 +370,7 @@ class TestManualReview:
                 "stock_discovery_max_per_month": 2.0,
                 "stock_discovery_require_manual_review": 0.0,  # Auto-add
             }.get(key, default)
+
         mock_settings_repo.get_float = AsyncMock(side_effect=get_float)
 
         with mock_stock_discovery_dependencies(
@@ -581,10 +601,12 @@ class TestErrorHandling:
         mock_scoring_service = AsyncMock()
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "stock_discovery_enabled": 0.0,  # Disabled
             }.get(key, default)
+
         mock_settings_repo.get_float = AsyncMock(side_effect=get_float)
 
         with mock_stock_discovery_dependencies(
@@ -597,4 +619,3 @@ class TestErrorHandling:
 
         # Verify discovery service was NOT called
         mock_discovery_service.discover_candidates.assert_not_called()
-

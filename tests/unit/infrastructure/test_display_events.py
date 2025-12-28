@@ -4,11 +4,9 @@ These tests validate the SSE event broadcasting system for real-time LED display
 """
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
-from app.infrastructure.events import SystemEvent
 
 
 @pytest.fixture
@@ -189,4 +187,3 @@ class TestDisplayEventsCleanup:
         # Subscriber should be removed
         final_count = len(display_events_module._subscribers)
         assert final_count == initial_count
-

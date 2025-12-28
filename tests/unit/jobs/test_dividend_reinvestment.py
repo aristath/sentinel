@@ -6,6 +6,7 @@ CRITICAL: Tests catch real bugs that would cause financial losses or inefficienc
 
 from contextlib import contextmanager
 from datetime import datetime
+from typing import Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -17,8 +18,8 @@ from app.domain.value_objects.currency import Currency
 def create_dividend(
     symbol: str,
     amount_eur: float,
-    dividend_id: int = None,
-    cash_flow_id: int = None,
+    dividend_id: Optional[int] = None,
+    cash_flow_id: Optional[int] = None,
 ) -> DividendRecord:
     """Helper to create dividend record."""
     return DividendRecord(
@@ -33,7 +34,7 @@ def create_dividend(
     )
 
 
-def create_stock(symbol: str, name: str = None, min_lot: int = 1) -> Stock:
+def create_stock(symbol: str, name: Optional[str] = None, min_lot: int = 1) -> Stock:
     """Helper to create stock."""
     return Stock(
         symbol=symbol,

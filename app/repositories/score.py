@@ -107,9 +107,7 @@ class ScoreRepository:
         async with transaction_context(self._db) as conn:
             await conn.execute("DELETE FROM scores")
 
-    async def get_recent_scores(
-        self, symbol: str, months: float
-    ) -> List[StockScore]:
+    async def get_recent_scores(self, symbol: str, months: float) -> List[StockScore]:
         """
         Get recent scores for a symbol within the specified time window.
 

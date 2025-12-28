@@ -54,7 +54,9 @@ class StockDiscoveryService:
             )
 
             # Get geography and exchange filters
-            geographies_str = await self._settings_repo.get("stock_discovery_geographies")
+            geographies_str = await self._settings_repo.get(
+                "stock_discovery_geographies"
+            )
             if geographies_str is None:
                 geographies_str = "EU,US,ASIA"
             geographies = [
@@ -64,7 +66,9 @@ class StockDiscoveryService:
             exchanges_str = await self._settings_repo.get("stock_discovery_exchanges")
             if exchanges_str is None:
                 exchanges_str = "usa,europe"
-            exchanges = [e.strip().lower() for e in exchanges_str.split(",") if e.strip()]
+            exchanges = [
+                e.strip().lower() for e in exchanges_str.split(",") if e.strip()
+            ]
 
             # Convert existing symbols to set for fast lookup
             existing_set = {s.upper() for s in existing_symbols}
@@ -127,7 +131,9 @@ class StockDiscoveryService:
                         break
 
                 except Exception as e:
-                    logger.warning(f"Failed to fetch securities from exchange {exchange}: {e}")
+                    logger.warning(
+                        f"Failed to fetch securities from exchange {exchange}: {e}"
+                    )
                     continue
 
             logger.info(f"Discovered {len(candidates)} candidate stocks")
@@ -155,20 +161,59 @@ class StockDiscoveryService:
 
         # EU geography (common EU countries)
         eu_countries = {
-            "DE", "FR", "IT", "ES", "NL", "BE", "AT", "SE", "DK", "FI",
-            "IE", "PT", "PL", "CZ", "GR", "HU", "RO", "BG", "HR", "SK",
-            "SI", "LT", "LV", "EE", "LU", "MT", "CY",
+            "DE",
+            "FR",
+            "IT",
+            "ES",
+            "NL",
+            "BE",
+            "AT",
+            "SE",
+            "DK",
+            "FI",
+            "IE",
+            "PT",
+            "PL",
+            "CZ",
+            "GR",
+            "HU",
+            "RO",
+            "BG",
+            "HR",
+            "SK",
+            "SI",
+            "LT",
+            "LV",
+            "EE",
+            "LU",
+            "MT",
+            "CY",
         }
         if country_upper in eu_countries:
             return "EU"
 
         # ASIA geography (common Asian countries)
         asia_countries = {
-            "CN", "JP", "KR", "IN", "SG", "HK", "TW", "MY", "TH", "VN",
-            "ID", "PH", "PK", "BD", "LK", "MM", "KH", "LA",
+            "CN",
+            "JP",
+            "KR",
+            "IN",
+            "SG",
+            "HK",
+            "TW",
+            "MY",
+            "TH",
+            "VN",
+            "ID",
+            "PH",
+            "PK",
+            "BD",
+            "LK",
+            "MM",
+            "KH",
+            "LA",
         }
         if country_upper in asia_countries:
             return "ASIA"
 
         return None
-

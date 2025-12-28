@@ -8,8 +8,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.domain.models import Position, Stock
-
 
 class TestRegimeBasedCashReserve:
     """Test regime-based cash reserve adjustment."""
@@ -30,6 +28,7 @@ class TestRegimeBasedCashReserve:
         mock_position_repo.get_all = AsyncMock(return_value=[])
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "market_regime_detection_enabled": 1.0,  # Enabled
@@ -40,6 +39,7 @@ class TestRegimeBasedCashReserve:
                 "optimizer_target_return": 0.11,
                 "min_cash_reserve": 500.0,  # Default (should be overridden)
             }.get(key, default)
+
         mock_settings_repo.get_float = AsyncMock(side_effect=get_float)
 
         mock_tradernet_client = MagicMock()
@@ -81,7 +81,9 @@ class TestRegimeBasedCashReserve:
                 call_args = mock_optimizer.optimize.call_args
                 assert call_args is not None
                 min_cash_reserve = call_args.kwargs.get("min_cash_reserve")
-                assert min_cash_reserve == 400.0, f"Expected 400.0, got {min_cash_reserve}"
+                assert (
+                    min_cash_reserve == 400.0
+                ), f"Expected 400.0, got {min_cash_reserve}"
 
     @pytest.mark.asyncio
     async def test_bear_market_uses_bear_cash_reserve(self):
@@ -98,6 +100,7 @@ class TestRegimeBasedCashReserve:
         mock_position_repo.get_all = AsyncMock(return_value=[])
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "market_regime_detection_enabled": 1.0,
@@ -108,6 +111,7 @@ class TestRegimeBasedCashReserve:
                 "optimizer_target_return": 0.11,
                 "min_cash_reserve": 500.0,
             }.get(key, default)
+
         mock_settings_repo.get_float = AsyncMock(side_effect=get_float)
 
         mock_tradernet_client = MagicMock()
@@ -145,7 +149,9 @@ class TestRegimeBasedCashReserve:
                 call_args = mock_optimizer.optimize.call_args
                 assert call_args is not None
                 min_cash_reserve = call_args.kwargs.get("min_cash_reserve")
-                assert min_cash_reserve == 600.0, f"Expected 600.0, got {min_cash_reserve}"
+                assert (
+                    min_cash_reserve == 600.0
+                ), f"Expected 600.0, got {min_cash_reserve}"
 
     @pytest.mark.asyncio
     async def test_sideways_market_uses_sideways_cash_reserve(self):
@@ -162,6 +168,7 @@ class TestRegimeBasedCashReserve:
         mock_position_repo.get_all = AsyncMock(return_value=[])
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "market_regime_detection_enabled": 1.0,
@@ -172,6 +179,7 @@ class TestRegimeBasedCashReserve:
                 "optimizer_target_return": 0.11,
                 "min_cash_reserve": 500.0,
             }.get(key, default)
+
         mock_settings_repo.get_float = AsyncMock(side_effect=get_float)
 
         mock_tradernet_client = MagicMock()
@@ -209,7 +217,9 @@ class TestRegimeBasedCashReserve:
                 call_args = mock_optimizer.optimize.call_args
                 assert call_args is not None
                 min_cash_reserve = call_args.kwargs.get("min_cash_reserve")
-                assert min_cash_reserve == 500.0, f"Expected 500.0, got {min_cash_reserve}"
+                assert (
+                    min_cash_reserve == 500.0
+                ), f"Expected 500.0, got {min_cash_reserve}"
 
     @pytest.mark.asyncio
     async def test_disabled_regime_detection_uses_default_cash_reserve(self):
@@ -226,6 +236,7 @@ class TestRegimeBasedCashReserve:
         mock_position_repo.get_all = AsyncMock(return_value=[])
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "market_regime_detection_enabled": 0.0,  # Disabled
@@ -236,6 +247,7 @@ class TestRegimeBasedCashReserve:
                 "optimizer_target_return": 0.11,
                 "min_cash_reserve": 550.0,  # Default (should be used)
             }.get(key, default)
+
         mock_settings_repo.get_float = AsyncMock(side_effect=get_float)
 
         mock_tradernet_client = MagicMock()
@@ -264,16 +276,9 @@ class TestRegimeBasedCashReserve:
 
             await service.get_recommendations()
 
-            # Verify regime detection was NOT called
-            with patch(
-                "app.application.services.rebalancing_service.detect_market_regime",
-                new_callable=AsyncMock,
-            ) as mock_detect_regime:
-                # Should not be called when disabled
-                pass
-
             call_args = mock_optimizer.optimize.call_args
             assert call_args is not None
             min_cash_reserve = call_args.kwargs.get("min_cash_reserve")
-            assert min_cash_reserve == 550.0, f"Expected 550.0 (default), got {min_cash_reserve}"
-
+            assert (
+                min_cash_reserve == 550.0
+            ), f"Expected 550.0 (default), got {min_cash_reserve}"

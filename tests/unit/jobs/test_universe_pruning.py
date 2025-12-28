@@ -6,6 +6,7 @@ CRITICAL: Tests catch real bugs that would cause poor portfolio quality.
 
 from contextlib import contextmanager
 from datetime import datetime, timedelta
+from typing import Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -25,7 +26,9 @@ def create_stock(symbol: str, active: bool = True) -> Stock:
     )
 
 
-def create_stock_score(symbol: str, total_score: float, calculated_at: str = None) -> StockScore:
+def create_stock_score(
+    symbol: str, total_score: float, calculated_at: Optional[str] = None
+) -> StockScore:
     """Helper to create stock score."""
     if calculated_at is None:
         calculated_at = datetime.now().isoformat()
@@ -69,10 +72,20 @@ def mock_universe_pruning_dependencies(
     mock_settings_repo.get_float = AsyncMock(side_effect=get_float)
 
     with (
-        patch("app.jobs.universe_pruning.StockRepository", return_value=mock_stock_repo),
-        patch("app.jobs.universe_pruning.ScoreRepository", return_value=mock_score_repo),
-        patch("app.jobs.universe_pruning.SettingsRepository", return_value=mock_settings_repo),
-        patch("app.jobs.universe_pruning.get_tradernet_client", return_value=mock_tradernet_client),
+        patch(
+            "app.jobs.universe_pruning.StockRepository", return_value=mock_stock_repo
+        ),
+        patch(
+            "app.jobs.universe_pruning.ScoreRepository", return_value=mock_score_repo
+        ),
+        patch(
+            "app.jobs.universe_pruning.SettingsRepository",
+            return_value=mock_settings_repo,
+        ),
+        patch(
+            "app.jobs.universe_pruning.get_tradernet_client",
+            return_value=mock_tradernet_client,
+        ),
     ):
         yield {
             "stock_repo": mock_stock_repo,
@@ -102,14 +115,21 @@ class TestPruningLogic:
         # Scores below threshold for required period
         now = datetime.now()
         scores = [
-            create_stock_score("LOWQUAL.US", 0.30, (now - timedelta(days=90)).isoformat()),
-            create_stock_score("LOWQUAL.US", 0.35, (now - timedelta(days=60)).isoformat()),
-            create_stock_score("LOWQUAL.US", 0.40, (now - timedelta(days=30)).isoformat()),
+            create_stock_score(
+                "LOWQUAL.US", 0.30, (now - timedelta(days=90)).isoformat()
+            ),
+            create_stock_score(
+                "LOWQUAL.US", 0.35, (now - timedelta(days=60)).isoformat()
+            ),
+            create_stock_score(
+                "LOWQUAL.US", 0.40, (now - timedelta(days=30)).isoformat()
+            ),
         ]
         mock_score_repo = AsyncMock()
         mock_score_repo.get_recent_scores = AsyncMock(return_value=scores)
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "universe_pruning_enabled": 1.0,
@@ -117,6 +137,7 @@ class TestPruningLogic:
                 "universe_pruning_months": 3.0,
                 "universe_pruning_min_samples": 2.0,
             }.get(key, default)
+
         mock_settings_repo.get_float = AsyncMock(side_effect=get_float)
 
         with mock_universe_pruning_dependencies(
@@ -146,9 +167,15 @@ class TestPruningLogic:
         # Recent high score should prevent pruning
         now = datetime.now()
         scores = [
-            create_stock_score("GOODSTOCK.US", 0.30, (now - timedelta(days=90)).isoformat()),
-            create_stock_score("GOODSTOCK.US", 0.35, (now - timedelta(days=60)).isoformat()),
-            create_stock_score("GOODSTOCK.US", 0.75, (now - timedelta(days=10)).isoformat()),  # Recent high score
+            create_stock_score(
+                "GOODSTOCK.US", 0.30, (now - timedelta(days=90)).isoformat()
+            ),
+            create_stock_score(
+                "GOODSTOCK.US", 0.35, (now - timedelta(days=60)).isoformat()
+            ),
+            create_stock_score(
+                "GOODSTOCK.US", 0.75, (now - timedelta(days=10)).isoformat()
+            ),  # Recent high score
         ]
         mock_score_repo = AsyncMock()
         mock_score_repo.get_recent_scores = AsyncMock(return_value=scores)
@@ -178,12 +205,15 @@ class TestPruningLogic:
         # Only 1 score (below min_samples=2)
         now = datetime.now()
         scores = [
-            create_stock_score("INSUFFICIENT.US", 0.30, (now - timedelta(days=30)).isoformat()),
+            create_stock_score(
+                "INSUFFICIENT.US", 0.30, (now - timedelta(days=30)).isoformat()
+            ),
         ]
         mock_score_repo = AsyncMock()
         mock_score_repo.get_recent_scores = AsyncMock(return_value=scores)
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "universe_pruning_enabled": 1.0,
@@ -191,6 +221,7 @@ class TestPruningLogic:
                 "universe_pruning_months": 3.0,
                 "universe_pruning_min_samples": 2.0,  # Requires 2 samples
             }.get(key, default)
+
         mock_settings_repo.get_float = AsyncMock(side_effect=get_float)
 
         with mock_universe_pruning_dependencies(
@@ -219,13 +250,18 @@ class TestPruningLogic:
         # Scores within 3 months window
         now = datetime.now()
         scores = [
-            create_stock_score("TIMEWINDOW.US", 0.30, (now - timedelta(days=80)).isoformat()),
-            create_stock_score("TIMEWINDOW.US", 0.35, (now - timedelta(days=50)).isoformat()),
+            create_stock_score(
+                "TIMEWINDOW.US", 0.30, (now - timedelta(days=80)).isoformat()
+            ),
+            create_stock_score(
+                "TIMEWINDOW.US", 0.35, (now - timedelta(days=50)).isoformat()
+            ),
         ]
         mock_score_repo = AsyncMock()
         mock_score_repo.get_recent_scores = AsyncMock(return_value=scores)
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "universe_pruning_enabled": 1.0,
@@ -233,6 +269,7 @@ class TestPruningLogic:
                 "universe_pruning_months": 3.0,  # 3 months window
                 "universe_pruning_min_samples": 2.0,
             }.get(key, default)
+
         mock_settings_repo.get_float = AsyncMock(side_effect=get_float)
 
         with mock_universe_pruning_dependencies(
@@ -266,8 +303,12 @@ class TestBoundaryConditions:
         # Scores exactly at threshold (0.50)
         now = datetime.now()
         scores = [
-            create_stock_score("THRESHOLD.US", 0.50, (now - timedelta(days=60)).isoformat()),
-            create_stock_score("THRESHOLD.US", 0.50, (now - timedelta(days=30)).isoformat()),
+            create_stock_score(
+                "THRESHOLD.US", 0.50, (now - timedelta(days=60)).isoformat()
+            ),
+            create_stock_score(
+                "THRESHOLD.US", 0.50, (now - timedelta(days=30)).isoformat()
+            ),
         ]
         mock_score_repo = AsyncMock()
         mock_score_repo.get_recent_scores = AsyncMock(return_value=scores)
@@ -329,6 +370,7 @@ class TestSettingsIntegration:
         mock_score_repo.get_recent_scores = AsyncMock(return_value=[])
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "universe_pruning_enabled": 0.0,  # Disabled
@@ -336,6 +378,7 @@ class TestSettingsIntegration:
                 "universe_pruning_months": 3.0,
                 "universe_pruning_min_samples": 2.0,
             }.get(key, default)
+
         mock_settings_repo.get_float = AsyncMock(side_effect=get_float)
 
         with mock_universe_pruning_dependencies(
@@ -364,13 +407,18 @@ class TestSettingsIntegration:
         # Scores above default (0.50) but below custom threshold (0.70)
         now = datetime.now()
         scores = [
-            create_stock_score("CUSTOM.US", 0.60, (now - timedelta(days=60)).isoformat()),
-            create_stock_score("CUSTOM.US", 0.65, (now - timedelta(days=30)).isoformat()),
+            create_stock_score(
+                "CUSTOM.US", 0.60, (now - timedelta(days=60)).isoformat()
+            ),
+            create_stock_score(
+                "CUSTOM.US", 0.65, (now - timedelta(days=30)).isoformat()
+            ),
         ]
         mock_score_repo = AsyncMock()
         mock_score_repo.get_recent_scores = AsyncMock(return_value=scores)
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "universe_pruning_enabled": 1.0,
@@ -378,6 +426,7 @@ class TestSettingsIntegration:
                 "universe_pruning_months": 3.0,
                 "universe_pruning_min_samples": 2.0,
             }.get(key, default)
+
         mock_settings_repo.get_float = AsyncMock(side_effect=get_float)
 
         with mock_universe_pruning_dependencies(
@@ -409,8 +458,12 @@ class TestStateVerification:
 
         now = datetime.now()
         scores = [
-            create_stock_score("DBTEST.US", 0.30, (now - timedelta(days=60)).isoformat()),
-            create_stock_score("DBTEST.US", 0.35, (now - timedelta(days=30)).isoformat()),
+            create_stock_score(
+                "DBTEST.US", 0.30, (now - timedelta(days=60)).isoformat()
+            ),
+            create_stock_score(
+                "DBTEST.US", 0.35, (now - timedelta(days=30)).isoformat()
+            ),
         ]
         mock_score_repo = AsyncMock()
         mock_score_repo.get_recent_scores = AsyncMock(return_value=scores)
@@ -440,8 +493,12 @@ class TestStateVerification:
 
         now = datetime.now()
         scores = [
-            create_stock_score("NODELETE.US", 0.30, (now - timedelta(days=60)).isoformat()),
-            create_stock_score("NODELETE.US", 0.35, (now - timedelta(days=30)).isoformat()),
+            create_stock_score(
+                "NODELETE.US", 0.30, (now - timedelta(days=60)).isoformat()
+            ),
+            create_stock_score(
+                "NODELETE.US", 0.35, (now - timedelta(days=30)).isoformat()
+            ),
         ]
         mock_score_repo = AsyncMock()
         mock_score_repo.get_recent_scores = AsyncMock(return_value=scores)
@@ -473,7 +530,9 @@ class TestErrorHandling:
         mock_stock_repo.get_all_active = AsyncMock(return_value=[stock])
 
         mock_score_repo = AsyncMock()
-        mock_score_repo.get_recent_scores = AsyncMock(side_effect=Exception("Database error"))
+        mock_score_repo.get_recent_scores = AsyncMock(
+            side_effect=Exception("Database error")
+        )
 
         with mock_universe_pruning_dependencies(
             mock_stock_repo=mock_stock_repo,
@@ -506,12 +565,18 @@ class TestErrorHandling:
             # Good stock with low scores (should be pruned)
             now = datetime.now()
             return [
-                create_stock_score("GOODSTOCK.US", 0.30, (now - timedelta(days=60)).isoformat()),
-                create_stock_score("GOODSTOCK.US", 0.35, (now - timedelta(days=30)).isoformat()),
+                create_stock_score(
+                    "GOODSTOCK.US", 0.30, (now - timedelta(days=60)).isoformat()
+                ),
+                create_stock_score(
+                    "GOODSTOCK.US", 0.35, (now - timedelta(days=30)).isoformat()
+                ),
             ]
 
         mock_score_repo = AsyncMock()
-        mock_score_repo.get_recent_scores = AsyncMock(side_effect=get_scores_side_effect)
+        mock_score_repo.get_recent_scores = AsyncMock(
+            side_effect=get_scores_side_effect
+        )
 
         with mock_universe_pruning_dependencies(
             mock_stock_repo=mock_stock_repo,
@@ -521,4 +586,3 @@ class TestErrorHandling:
 
         # Verify GOODSTOCK was pruned despite BADSCORE error
         mock_stock_repo.mark_inactive.assert_called_once_with("GOODSTOCK.US")
-

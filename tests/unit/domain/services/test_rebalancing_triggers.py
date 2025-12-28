@@ -5,7 +5,7 @@ CRITICAL: Tests catch real bugs that would cause unnecessary trading or missed o
 """
 
 from contextlib import contextmanager
-from datetime import datetime
+from typing import Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -14,7 +14,12 @@ from app.domain.models import Position, Stock
 from app.domain.value_objects.currency import Currency
 
 
-def create_position(symbol: str, quantity: float, avg_price: float, current_price: float = None) -> Position:
+def create_position(
+    symbol: str,
+    quantity: float,
+    avg_price: float,
+    current_price: Optional[float] = None,
+) -> Position:
     """Helper to create position."""
     if current_price is None:
         current_price = avg_price
@@ -75,9 +80,18 @@ def mock_rebalancing_triggers_dependencies(
     mock_settings_repo.get_float = AsyncMock(side_effect=get_float)
 
     with (
-        patch("app.domain.services.rebalancing_triggers.SettingsRepository", return_value=mock_settings_repo),
-        patch("app.domain.services.rebalancing_triggers.PositionRepository", return_value=mock_position_repo),
-        patch("app.domain.services.rebalancing_triggers.get_tradernet_client", return_value=mock_tradernet_client),
+        patch(
+            "app.domain.services.rebalancing_triggers.SettingsRepository",
+            return_value=mock_settings_repo,
+        ),
+        patch(
+            "app.domain.services.rebalancing_triggers.PositionRepository",
+            return_value=mock_position_repo,
+        ),
+        patch(
+            "app.domain.services.rebalancing_triggers.get_tradernet_client",
+            return_value=mock_tradernet_client,
+        ),
     ):
         yield {
             "settings_repo": mock_settings_repo,
@@ -102,17 +116,21 @@ class TestPositionDriftDetection:
             create_position("AAPL", quantity=100, avg_price=150.0, current_price=165.0),
         ]
         target_allocations = {"AAPL": 0.20}  # 20% target
-        total_portfolio_value = 10000.0  # AAPL value = 16500, but portfolio = 10000 (drift)
+        total_portfolio_value = (
+            10000.0  # AAPL value = 16500, but portfolio = 10000 (drift)
+        )
 
         mock_position_repo = AsyncMock()
         mock_position_repo.get_all = AsyncMock(return_value=positions)
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "event_driven_rebalancing_enabled": 1.0,
                 "rebalance_position_drift_threshold": 0.05,  # 5%
             }.get(key, default)
+
         mock_settings_repo.get_float = AsyncMock(side_effect=get_float)
 
         # Mock portfolio context
@@ -211,6 +229,7 @@ class TestCashAccumulationDetection:
         cash_balance = 500.0  # Above threshold (2.0 × 250 = 500)
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "event_driven_rebalancing_enabled": 1.0,
@@ -218,6 +237,7 @@ class TestCashAccumulationDetection:
                 "transaction_cost_fixed": 2.0,
                 "transaction_cost_percent": 0.002,
             }.get(key, default)
+
         mock_settings_repo.get_float = AsyncMock(side_effect=get_float)
 
         with mock_rebalancing_triggers_dependencies(
@@ -345,11 +365,13 @@ class TestSettingsIntegration:
         total_portfolio_value = 10000.0
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "event_driven_rebalancing_enabled": 0.0,  # Disabled
                 "rebalance_position_drift_threshold": 0.05,
             }.get(key, default)
+
         mock_settings_repo.get_float = AsyncMock(side_effect=get_float)
 
         with mock_rebalancing_triggers_dependencies(
@@ -384,11 +406,13 @@ class TestSettingsIntegration:
         mock_position_repo.get_all = AsyncMock(return_value=positions)
 
         mock_settings_repo = AsyncMock()
+
         async def get_float(key, default):
             return {
                 "event_driven_rebalancing_enabled": 1.0,
                 "rebalance_position_drift_threshold": 0.02,  # Custom 2% threshold
             }.get(key, default)
+
         mock_settings_repo.get_float = AsyncMock(side_effect=get_float)
 
         with mock_rebalancing_triggers_dependencies(
@@ -465,4 +489,3 @@ class TestEdgeCases:
 
         # Zero cash should not trigger (below threshold)
         assert should_rebalance is False
-
