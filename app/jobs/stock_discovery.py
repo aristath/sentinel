@@ -9,6 +9,7 @@ import logging
 from app.application.services.scoring_service import ScoringService
 from app.domain.models import Stock
 from app.domain.services.stock_discovery import StockDiscoveryService
+from app.domain.services.symbol_resolver import SymbolResolver
 from app.domain.value_objects.currency import Currency
 from app.infrastructure.database.manager import get_db_manager
 from app.infrastructure.external.tradernet import get_tradernet_client
@@ -81,12 +82,16 @@ async def discover_new_stocks() -> None:
 
         logger.info(f"Found {len(candidates)} candidate stocks")
 
-        # Initialize scoring service
+        # Initialize scoring service and symbol resolver
         score_repo = ScoreRepository()
         scoring_service = ScoringService(
             stock_repo=stock_repo,
             score_repo=score_repo,
             db_manager=db_manager,
+        )
+        symbol_resolver = SymbolResolver(
+            tradernet_client=tradernet_client,
+            stock_repo=stock_repo,
         )
 
         # Score candidates and collect results
@@ -97,10 +102,16 @@ async def discover_new_stocks() -> None:
                 continue
 
             try:
-                # Score the candidate
+                # Resolve symbol to get ISIN for Yahoo Finance lookups
+                symbol_info = await symbol_resolver.resolve(symbol)
+                if symbol_info.isin:
+                    logger.info(f"Resolved {symbol} -> ISIN: {symbol_info.isin}")
+                    candidate["isin"] = symbol_info.isin
+
+                # Score the candidate using ISIN for Yahoo lookups if available
                 score = await scoring_service.calculate_and_save_score(
                     symbol=symbol,
-                    yahoo_symbol=candidate.get("yahoo_symbol"),
+                    yahoo_symbol=symbol_info.yahoo_symbol,
                     country=candidate.get("country"),
                     industry=candidate.get("industry"),
                 )
@@ -157,6 +168,7 @@ async def discover_new_stocks() -> None:
             name = candidate.get("name", symbol)
             country = candidate.get("country")
             industry = candidate.get("industry")
+            isin = candidate.get("isin")  # ISIN resolved earlier
 
             try:
                 # Check if stock already exists (shouldn't, but be safe)
@@ -165,12 +177,13 @@ async def discover_new_stocks() -> None:
                     logger.warning(f"Stock {symbol} already exists, skipping")
                     continue
 
-                # Create stock object
+                # Create stock object with ISIN for Yahoo Finance lookups
                 stock = Stock(
                     symbol=symbol,
                     name=name,
                     country=country,
                     industry=industry,
+                    isin=isin,  # Store ISIN for future Yahoo lookups
                     currency=Currency.EUR,  # Default, will be updated during sync
                     active=True,
                     allow_buy=True,
@@ -181,6 +194,7 @@ async def discover_new_stocks() -> None:
                 await stock_repo.create(stock)
                 logger.info(
                     f"Added stock {symbol} ({name}) with score {candidate_score:.3f}"
+                    + (f", ISIN: {isin}" if isin else "")
                 )
                 added_count += 1
 
