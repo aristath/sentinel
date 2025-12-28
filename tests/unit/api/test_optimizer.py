@@ -591,20 +591,20 @@ class TestRunOptimization:
                                             )
 
                                             # Setup allocation_repo mock
-                                            # Returns percentages, will be converted to fractions
+                                            # Returns fractions (0-1), already in correct format
                                             mock_allocation_repo = AsyncMock()
                                             mock_allocation_repo.get_country_targets.return_value = {
-                                                "United States": 50.0,  # 50% -> 0.5
-                                                "Germany": 30.0,  # 30% -> 0.3
+                                                "United States": 0.5,  # Already 0.5 (50%)
+                                                "Germany": 0.3,  # Already 0.3 (30%)
                                             }
                                             mock_allocation_repo.get_industry_targets.return_value = {
-                                                "Consumer Electronics": 40.0,  # 40% -> 0.4
+                                                "Consumer Electronics": 0.4,  # Already 0.4 (40%)
                                             }
                                             mock_allocation_repo_class.return_value = (
                                                 mock_allocation_repo
                                             )
 
-                                            # Expected converted values
+                                            # Expected values (already fractions, not converted)
                                             country_targets = {
                                                 "United States": 0.5,
                                                 "Germany": 0.3,
@@ -675,6 +675,7 @@ class TestRunOptimization:
                                             assert call_kwargs["cash_balance"] == 5000.0
                                             assert call_kwargs["blend"] == 0.5
                                             assert call_kwargs["target_return"] == 0.11
+                                            # Verify targets are passed as-is (already fractions, not divided by 100)
                                             assert (
                                                 call_kwargs["country_targets"]
                                                 == country_targets
@@ -1353,14 +1354,14 @@ class TestOptimizerUsesAllocationRepo:
                                             )
 
                                             # Setup allocation_repo mock
-                                            # Returns percentages (0-100)
+                                            # Returns fractions (0-1), already in correct format
                                             mock_allocation_repo = AsyncMock()
                                             mock_allocation_repo.get_country_targets.return_value = {
-                                                "United States": 50.0,  # 50%
-                                                "Germany": 30.0,  # 30%
+                                                "United States": 0.5,  # Already 0.5 (50%)
+                                                "Germany": 0.3,  # Already 0.3 (30%)
                                             }
                                             mock_allocation_repo.get_industry_targets.return_value = {
-                                                "Technology": 40.0,  # 40%
+                                                "Technology": 0.4,  # Already 0.4 (40%)
                                             }
                                             mock_allocation_repo_class.return_value = (
                                                 mock_allocation_repo
@@ -1419,25 +1420,29 @@ class TestOptimizerUsesAllocationRepo:
                                             # Verify settings_repo.get_json was NOT called for targets
                                             mock_settings_repo.get_json.assert_not_called()
 
-                                            # Verify optimizer was called with converted fractions (0-1)
+                                            # Verify optimizer was called with targets as-is (already fractions)
                                             call_kwargs = (
                                                 mock_optimizer.optimize.call_args.kwargs
                                             )
-                                            # 50% -> 0.5, 30% -> 0.3
+                                            # Targets are already 0.5, 0.3 (not divided by 100)
                                             assert call_kwargs["country_targets"] == {
                                                 "United States": 0.5,
                                                 "Germany": 0.3,
                                             }
-                                            # 40% -> 0.4
+                                            # Target is already 0.4 (not divided by 100)
                                             assert call_kwargs["ind_targets"] == {
                                                 "Technology": 0.4
                                             }
 
     @pytest.mark.asyncio
-    async def test_converts_percentage_to_fraction(
+    async def test_targets_not_divided_by_100_when_already_fractions(
         self, mock_settings, sample_optimization_result
     ):
-        """Test that target_pct is converted from percentage (0-100) to fraction (0-1)."""
+        """Test that targets are NOT divided by 100 when they're already stored as fractions (0-1).
+
+        This test prevents regression of the bug where targets stored as 0.5 (50%) were
+        incorrectly divided by 100, becoming 0.005 (0.5%), causing constraint issues.
+        """
         mock_stock = MagicMock()
         mock_stock.symbol = "AAPL"
         mock_stock.yahoo_symbol = "AAPL"
@@ -1478,15 +1483,16 @@ class TestOptimizerUsesAllocationRepo:
                                                 mock_service
                                             )
 
-                                            # Setup allocation_repo to return percentages
+                                            # Setup allocation_repo to return fractions (0-1), not percentages
+                                            # These are the actual values stored in the database
                                             mock_allocation_repo = AsyncMock()
                                             mock_allocation_repo.get_country_targets.return_value = {
-                                                "United States": 50.0,  # 50% should become 0.5
-                                                "Japan": 20.0,  # 20% should become 0.2
+                                                "United States": 0.5,  # Already 0.5 (50%), should NOT be divided
+                                                "Japan": 0.2,  # Already 0.2 (20%), should NOT be divided
                                             }
                                             mock_allocation_repo.get_industry_targets.return_value = {
-                                                "Technology": 40.0,  # 40% should become 0.4
-                                                "Finance": 15.0,  # 15% should become 0.15
+                                                "Technology": 0.4,  # Already 0.4 (40%), should NOT be divided
+                                                "Finance": 0.15,  # Already 0.15 (15%), should NOT be divided
                                             }
                                             mock_allocation_repo_class.return_value = (
                                                 mock_allocation_repo
@@ -1538,7 +1544,7 @@ class TestOptimizerUsesAllocationRepo:
 
                                             await run_optimization()
 
-                                            # Verify conversion: percentages divided by 100
+                                            # Verify targets are NOT divided by 100 (they're already fractions)
                                             call_kwargs = (
                                                 mock_optimizer.optimize.call_args.kwargs
                                             )
@@ -1547,21 +1553,21 @@ class TestOptimizerUsesAllocationRepo:
                                             ]
                                             ind_targets = call_kwargs["ind_targets"]
 
-                                            # Verify country targets converted correctly
+                                            # Verify country targets are passed as-is (not divided)
                                             assert (
                                                 country_targets["United States"] == 0.5
-                                            )  # 50 / 100
+                                            )  # 0.5, NOT 0.005
                                             assert (
                                                 country_targets["Japan"] == 0.2
-                                            )  # 20 / 100
+                                            )  # 0.2, NOT 0.002
 
-                                            # Verify industry targets converted correctly
+                                            # Verify industry targets are passed as-is (not divided)
                                             assert (
                                                 ind_targets["Technology"] == 0.4
-                                            )  # 40 / 100
+                                            )  # 0.4, NOT 0.004
                                             assert (
                                                 ind_targets["Finance"] == 0.15
-                                            )  # 15 / 100
+                                            )  # 0.15, NOT 0.0015
 
     @pytest.mark.asyncio
     async def test_uses_allocation_repo_and_converts_percentages(
@@ -1610,7 +1616,7 @@ class TestOptimizerUsesAllocationRepo:
 
                                             mock_allocation_repo = AsyncMock()
                                             mock_allocation_repo.get_country_targets.return_value = {
-                                                "United States": 50.0,
+                                                "United States": 0.5,  # Already fraction
                                             }
                                             mock_allocation_repo.get_industry_targets.return_value = (
                                                 {}
@@ -1672,7 +1678,7 @@ class TestOptimizerUsesAllocationRepo:
                                             # Verify parameter name is country_targets
                                             assert "country_targets" in call_kwargs
                                             assert "geo_targets" not in call_kwargs
-                                            # Verify the value was converted from percentage
+                                            # Verify the value is passed as-is (already fraction, not divided)
                                             assert call_kwargs["country_targets"] == {
                                                 "United States": 0.5
                                             }

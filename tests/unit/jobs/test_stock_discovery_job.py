@@ -58,6 +58,7 @@ def mock_stock_discovery_dependencies(
 
     # Default settings - only set if not already configured by test
     if mock_settings_repo.get_float.side_effect is None:
+
         async def get_float(key, default):
             defaults = {
                 "stock_discovery_enabled": 1.0,
@@ -91,12 +92,8 @@ def mock_stock_discovery_dependencies(
         patch(
             "app.jobs.stock_discovery.ScoringService", return_value=mock_scoring_service
         ),
-        patch(
-            "app.jobs.stock_discovery.ScoreRepository", return_value=mock_score_repo
-        ),
-        patch(
-            "app.jobs.stock_discovery.get_db_manager", return_value=mock_db_manager
-        ),
+        patch("app.jobs.stock_discovery.ScoreRepository", return_value=mock_score_repo),
+        patch("app.jobs.stock_discovery.get_db_manager", return_value=mock_db_manager),
         patch(
             "app.jobs.stock_discovery.get_tradernet_client",
             return_value=mock_tradernet_client,
