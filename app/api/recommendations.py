@@ -261,6 +261,9 @@ async def stream_recommendation_updates():
 
     async def event_generator() -> AsyncIterator[str]:
         """Generate SSE events from recommendation invalidation changes."""
+        import asyncio
+
+        logger.info("SSE stream connection established")
         try:
             # Subscribe to recommendation events
             async for (
@@ -270,11 +273,16 @@ async def stream_recommendation_updates():
                 event_data = json.dumps(invalidation_data)
                 yield f"data: {event_data}\n\n"
 
+        except asyncio.CancelledError:
+            logger.info("SSE stream connection cancelled")
+            raise
         except Exception as e:
             logger.error(f"SSE stream error: {e}", exc_info=True)
             # Send error event and close
-            error_data = json.dumps({"error": "Stream closed"})
+            error_data = json.dumps({"error": "Stream closed", "message": str(e)})
             yield f"data: {error_data}\n\n"
+        finally:
+            logger.info("SSE stream connection closed")
 
     return StreamingResponse(
         event_generator(),

@@ -77,9 +77,14 @@ async def subscribe_recommendation_events() -> AsyncGenerator[Dict[str, Any], No
 
     try:
         # Get initial state and send it
+        import time
+
         initial_invalidation = await get_current_invalidation()
         if initial_invalidation:
             yield initial_invalidation
+        else:
+            # Send connection confirmation if no cached invalidation
+            yield {"connected": True, "timestamp": time.time()}
 
         # Listen for events
         heartbeat_counter = 0
@@ -91,6 +96,8 @@ async def subscribe_recommendation_events() -> AsyncGenerator[Dict[str, Any], No
                 heartbeat_counter = 0  # Reset on actual event
             except asyncio.TimeoutError:
                 # Send heartbeat every 5 seconds to keep connection alive
+                import time
+
                 heartbeat_counter += 1
                 # Re-send current invalidation as heartbeat
                 heartbeat_invalidation = await get_current_invalidation()
@@ -98,6 +105,9 @@ async def subscribe_recommendation_events() -> AsyncGenerator[Dict[str, Any], No
                     heartbeat_invalidation = heartbeat_invalidation.copy()
                     heartbeat_invalidation["heartbeat"] = heartbeat_counter
                     yield heartbeat_invalidation
+                else:
+                    # Send minimal heartbeat if no cached invalidation
+                    yield {"heartbeat": heartbeat_counter, "timestamp": time.time()}
     finally:
         # Remove from subscribers on exit
         async with _subscribers_lock:
