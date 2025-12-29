@@ -1211,6 +1211,154 @@ def _select_diverse_opportunities(
     return selected[:max_count]
 
 
+def _generate_enhanced_combinations(
+    sells: List[ActionCandidate],
+    buys: List[ActionCandidate],
+    max_sells: int = 3,
+    max_buys: int = 3,
+    priority_threshold: float = 0.3,
+    max_steps: int = 5,
+    max_combinations: int = 50,
+    max_candidates: int = 12,
+    stocks_by_symbol: Optional[Dict[str, Stock]] = None,
+) -> List[List[ActionCandidate]]:
+    """
+    Generate combinations with priority-based sampling and diversity constraints.
+
+    Uses weighted sampling based on priority and ensures diversity across
+    countries/industries to avoid over-concentration.
+
+    Args:
+        sells: List of sell opportunities
+        buys: List of buy opportunities
+        max_sells: Maximum number of sells per combination
+        max_buys: Maximum number of buys per combination
+        priority_threshold: Minimum priority to include in combinations
+        max_steps: Maximum total steps in sequence
+        max_combinations: Maximum number of combinations to generate
+        max_candidates: Maximum candidates to consider
+        stocks_by_symbol: Optional dict mapping symbol to Stock for diversity
+
+    Returns:
+        List of action sequences (sells first, then buys)
+    """
+    import random
+
+    sequences: List[List[ActionCandidate]] = []
+
+    # Filter by priority threshold
+    filtered_sells = [s for s in sells if s.priority >= priority_threshold]
+    filtered_buys = [b for b in buys if b.priority >= priority_threshold]
+
+    # Limit candidates but prioritize by score
+    filtered_sells.sort(key=lambda x: x.priority, reverse=True)
+    filtered_buys.sort(key=lambda x: x.priority, reverse=True)
+    filtered_sells = filtered_sells[:max_candidates]
+    filtered_buys = filtered_buys[:max_candidates]
+
+    # Calculate priority weights for sampling
+    def _get_priority_weights(candidates: List[ActionCandidate]) -> List[float]:
+        """Get normalized priority weights for weighted sampling."""
+        if not candidates:
+            return []
+        priorities = [c.priority for c in candidates]
+        min_priority = min(priorities)
+        max_priority = max(priorities)
+        if max_priority == min_priority:
+            return [1.0] * len(candidates)
+        # Normalize to 0-1, then square to emphasize high priorities
+        weights = [
+            ((p - min_priority) / (max_priority - min_priority)) ** 2
+            for p in priorities
+        ]
+        # Add small base weight to ensure all candidates have some chance
+        weights = [w + 0.1 for w in weights]
+        total = sum(weights)
+        return [w / total for w in weights]
+
+    def _is_diverse_sequence(
+        sequence: List[ActionCandidate], existing_sequences: List[List[ActionCandidate]]
+    ) -> bool:
+        """Check if sequence adds diversity to existing sequences."""
+        if not stocks_by_symbol or not existing_sequences:
+            return True
+
+        # Get countries/industries in new sequence
+        new_countries = set()
+        new_industries = set()
+        for action in sequence:
+            stock = stocks_by_symbol.get(action.symbol)
+            if stock:
+                if stock.country:
+                    new_countries.add(stock.country)
+                if stock.industry:
+                    industries = [i.strip() for i in stock.industry.split(",")]
+                    new_industries.update(industries)
+
+        # Check if this adds new diversity
+        for existing_seq in existing_sequences[-10:]:  # Check last 10 sequences
+            existing_countries = set()
+            existing_industries = set()
+            for action in existing_seq:
+                stock = stocks_by_symbol.get(action.symbol)
+                if stock:
+                    if stock.country:
+                        existing_countries.add(stock.country)
+                    if stock.industry:
+                        industries = [i.strip() for i in stock.industry.split(",")]
+                        existing_industries.update(industries)
+
+            # If too similar, not diverse
+            country_overlap = len(new_countries & existing_countries) / max(
+                len(new_countries | existing_countries), 1
+            )
+            industry_overlap = len(new_industries & existing_industries) / max(
+                len(new_industries | existing_industries), 1
+            )
+            if country_overlap > 0.8 and industry_overlap > 0.8:
+                return False
+
+        return True
+
+    # Generate combinations with priority-based sampling
+    sell_weights = _get_priority_weights(filtered_sells)
+    buy_weights = _get_priority_weights(filtered_buys)
+
+    attempts = 0
+    max_attempts = max_combinations * 3  # Allow more attempts to find diverse sequences
+
+    while len(sequences) < max_combinations and attempts < max_attempts:
+        attempts += 1
+
+        # Sample number of sells and buys
+        num_sells = random.randint(1, min(max_sells, len(filtered_sells)))
+        num_buys = random.randint(1, min(max_buys, len(filtered_buys)))
+
+        if num_sells + num_buys > max_steps:
+            continue
+
+        # Weighted sampling of sells
+        sell_combo = random.choices(filtered_sells, weights=sell_weights, k=num_sells)
+        # Remove duplicates
+        sell_combo = list(dict.fromkeys(sell_combo))  # Preserves order
+
+        # Weighted sampling of buys
+        buy_combo = random.choices(filtered_buys, weights=buy_weights, k=num_buys)
+        # Remove duplicates
+        buy_combo = list(dict.fromkeys(buy_combo))  # Preserves order
+
+        # Create sequence: sells first, then buys
+        sequence = sell_combo + buy_combo
+
+        # Check diversity constraint
+        if not _is_diverse_sequence(sequence, sequences):
+            continue
+
+        sequences.append(sequence)
+
+    return sequences
+
+
 def _generate_combinations(
     sells: List[ActionCandidate],
     buys: List[ActionCandidate],
@@ -1454,16 +1602,31 @@ def _generate_patterns_at_depth(
         all_buys = top_averaging + top_rebalance_buys + top_opportunity
 
         if all_sells or all_buys:
-            combo_sequences = _generate_combinations(
-                sells=all_sells,
-                buys=all_buys,
-                max_sells=min(combinatorial_max_sells, max_steps // 2),
-                max_buys=min(combinatorial_max_buys, max_steps),
-                priority_threshold=priority_threshold,
-                max_steps=max_steps,
-                max_combinations=combinatorial_max_combinations_per_depth,
-                max_candidates=combinatorial_max_candidates,
-            )
+            # Check if enhanced combinatorial is enabled
+            enable_enhanced_combinatorial = True  # Will be retrieved from settings
+            if enable_enhanced_combinatorial:
+                combo_sequences = _generate_enhanced_combinations(
+                    sells=all_sells,
+                    buys=all_buys,
+                    max_sells=min(combinatorial_max_sells, max_steps // 2),
+                    max_buys=min(combinatorial_max_buys, max_steps),
+                    priority_threshold=priority_threshold,
+                    max_steps=max_steps,
+                    max_combinations=combinatorial_max_combinations_per_depth,
+                    max_candidates=combinatorial_max_candidates,
+                    stocks_by_symbol=stocks_by_symbol,
+                )
+            else:
+                combo_sequences = _generate_combinations(
+                    sells=all_sells,
+                    buys=all_buys,
+                    max_sells=min(combinatorial_max_sells, max_steps // 2),
+                    max_buys=min(combinatorial_max_buys, max_steps),
+                    priority_threshold=priority_threshold,
+                    max_steps=max_steps,
+                    max_combinations=combinatorial_max_combinations_per_depth,
+                    max_candidates=combinatorial_max_candidates,
+                )
             sequences.extend(combo_sequences)
 
     return sequences
