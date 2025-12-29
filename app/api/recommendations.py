@@ -4,9 +4,12 @@ Handles all recommendations via the holistic planner. The app always executes
 the first step from the sequence, then recalculates for the next execution.
 """
 
+import json
 import logging
+from typing import AsyncIterator
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 
 from app.infrastructure.cache import cache
 from app.infrastructure.dependencies import (
@@ -244,6 +247,44 @@ async def get_recommendations(
     except Exception as e:
         logger.error(f"Error generating recommendations: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/stream")
+async def stream_recommendation_updates():
+    """Stream recommendation update notifications via Server-Sent Events (SSE).
+
+    Real-time streaming of recommendation invalidation events. When recommendations
+    are invalidated (due to trades, settings changes, etc.), clients are notified
+    to refresh their recommendations.
+    """
+    from app.infrastructure import recommendation_events
+
+    async def event_generator() -> AsyncIterator[str]:
+        """Generate SSE events from recommendation invalidation changes."""
+        try:
+            # Subscribe to recommendation events
+            async for (
+                invalidation_data
+            ) in recommendation_events.subscribe_recommendation_events():
+                # Format as SSE event: data: {json}\n\n
+                event_data = json.dumps(invalidation_data)
+                yield f"data: {event_data}\n\n"
+
+        except Exception as e:
+            logger.error(f"SSE stream error: {e}", exc_info=True)
+            # Send error event and close
+            error_data = json.dumps({"error": "Stream closed"})
+            yield f"data: {error_data}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 async def _regenerate_recommendations_cache(

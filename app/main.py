@@ -21,8 +21,8 @@ from app.api import settings as settings_api
 from app.api import status, stocks, trades
 from app.config import settings
 
-# Import planner_events to register event subscriptions
-from app.infrastructure import planner_events  # noqa: F401
+# Import event modules to register event subscriptions
+from app.infrastructure import planner_events, recommendation_events  # noqa: F401
 from app.infrastructure.database.manager import (
     get_db_manager,
     init_databases,
