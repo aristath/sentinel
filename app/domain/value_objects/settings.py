@@ -144,6 +144,9 @@ class Settings:
         self._validate_range(
             self.planner_batch_size, "planner_batch_size", 10.0, 1000.0
         )
+        self._validate_range(
+            self.planner_batch_size_api, "planner_batch_size_api", 5.0, 100.0
+        )
 
     @classmethod
     def from_dict(cls, data: Dict[str, str]) -> "Settings":
@@ -204,9 +207,10 @@ class Settings:
             ),
             incremental_planner_enabled=get_float("incremental_planner_enabled", 1.0),
             planner_batch_interval_seconds=get_float(
-                "planner_batch_interval_seconds", 10.0
+                "planner_batch_interval_seconds", 30.0
             ),
             planner_batch_size=get_float("planner_batch_size", 100.0),
+            planner_batch_size_api=get_float("planner_batch_size_api", 5.0),
         )
 
     def to_dict(self) -> Dict[str, Union[float, int]]:
@@ -237,6 +241,7 @@ class Settings:
             "incremental_planner_enabled": self.incremental_planner_enabled,
             "planner_batch_interval_seconds": self.planner_batch_interval_seconds,
             "planner_batch_size": self.planner_batch_size,
+            "planner_batch_size_api": self.planner_batch_size_api,
         }
 
 

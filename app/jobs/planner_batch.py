@@ -75,9 +75,11 @@ async def process_planner_batch_job(
             portfolio_hash = generate_portfolio_hash(position_dicts, stocks)
 
         # Get settings
-        # Use small batch size (5) for API-driven mode, otherwise use configured size
+        # Use small batch size for API-driven mode, otherwise use configured size
         if max_depth > 0:
-            batch_size = 5
+            batch_size = int(
+                await settings_repo.get_float("planner_batch_size_api", 5.0)
+            )
         else:
             batch_size = int(await settings_repo.get_float("planner_batch_size", 100.0))
 

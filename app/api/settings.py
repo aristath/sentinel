@@ -500,6 +500,15 @@ async def update_setting_value(
             )
         await set_setting(key, str(int(data.value)), settings_repo)
         return {key: int(data.value)}
+    elif key == "planner_batch_size_api":
+        # Validate range (5-100)
+        if data.value < 5 or data.value > 100:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{key} must be between 5 and 100",
+            )
+        await set_setting(key, str(int(data.value)), settings_repo)
+        return {key: int(data.value)}
 
     await set_setting(key, str(data.value), settings_repo)
 
@@ -541,6 +550,7 @@ async def update_setting_value(
         "incremental_planner_enabled",
         "planner_batch_interval_seconds",
         "planner_batch_size",
+        "planner_batch_size_api",
     }
     if key in recommendation_settings:
         from app.infrastructure.recommendation_cache import get_recommendation_cache
