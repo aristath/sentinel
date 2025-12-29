@@ -52,9 +52,11 @@ async def _execute_single_step(
                 "error": f"A pending order already exists for {step['symbol']}",
             }
 
+        # Ensure side is a string (should already be from MultiStepRecommendation)
+        side_str = step["side"] if isinstance(step["side"], str) else str(step["side"])
         result = client.place_order(
             symbol=step["symbol"],
-            side=step["side"],
+            side=side_str,
             quantity=step["quantity"],
         )
 
@@ -459,9 +461,11 @@ async def execute_recommendation(
         )
 
         # Execute the trade
+        # Ensure side is a string (should already be from MultiStepRecommendation)
+        side_str = step["side"] if isinstance(step["side"], str) else str(step["side"])
         result = client.place_order(
             symbol=step["symbol"],
-            side=step["side"],
+            side=side_str,
             quantity=step["quantity"],
         )
 

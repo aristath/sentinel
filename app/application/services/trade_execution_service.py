@@ -515,7 +515,7 @@ async def _execute_single_trade(trade, client) -> Optional[dict]:
 
     result = client.place_order(
         symbol=trade.symbol,
-        side=trade.side,
+        side=trade.side.value,
         quantity=trade.quantity,
     )
 

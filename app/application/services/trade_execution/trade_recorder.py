@@ -111,8 +111,10 @@ async def record_trade(
         if await _check_duplicate_order(order_id, trade_repo):
             return None
 
-        if order_id is None:
-            logger.warning("Cannot record trade without order_id")
+        if not order_id or not order_id.strip():
+            logger.warning(
+                f"Cannot record trade without valid order_id (got: {order_id!r})"
+            )
             return None
 
         trade_side = TradeSide.from_string(side)

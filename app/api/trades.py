@@ -99,7 +99,7 @@ async def execute_trade(
 
     result = client.place_order(
         symbol=symbol,
-        side=trade.side,
+        side=trade.side.value,
         quantity=trade.quantity,
     )
 
