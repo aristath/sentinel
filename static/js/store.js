@@ -68,8 +68,9 @@ document.addEventListener('alpine:init', () => {
       refreshData: false
     },
 
-    // SSE connection for planner status
+    // SSE connections
     plannerStatusEventSource: null,
+    recommendationEventSource: null,
 
     // Edit Mode States
     editingCountry: false,
@@ -255,6 +256,42 @@ document.addEventListener('alpine:init', () => {
       if (this.plannerStatusEventSource) {
         this.plannerStatusEventSource.close();
         this.plannerStatusEventSource = null;
+      }
+    },
+
+    startRecommendationStream() {
+      // Close existing connection if any
+      if (this.recommendationEventSource) {
+        this.recommendationEventSource.close();
+        this.recommendationEventSource = null;
+      }
+
+      // Connect to SSE stream for recommendation updates
+      const eventSource = new EventSource('/api/trades/recommendations/stream');
+      this.recommendationEventSource = eventSource;
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          // When recommendations are invalidated, refresh them
+          if (data.invalidated) {
+            this.fetchRecommendations();
+          }
+        } catch (e) {
+          console.error('Failed to parse recommendation event:', e);
+        }
+      };
+
+      eventSource.onerror = (error) => {
+        console.error('Recommendation SSE stream error:', error);
+        // EventSource will automatically reconnect on error
+      };
+    },
+
+    stopRecommendationStream() {
+      if (this.recommendationEventSource) {
+        this.recommendationEventSource.close();
+        this.recommendationEventSource = null;
       }
     },
 
