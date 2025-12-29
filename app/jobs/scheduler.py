@@ -1,7 +1,8 @@
 """APScheduler setup for background jobs.
 
-Scheduler with 8 jobs:
-1. sync_cycle - Every 15 minutes, handles trading operations
+Scheduler with 9 jobs:
+1. sync_cycle - Every 5 minutes, handles data synchronization
+1.5. event_based_trading - Continuously, handles trade execution after planning completion
 2. daily_pipeline - Hourly, processes per-symbol data
 3. daily_maintenance - Daily at configured hour, backup and cleanup
 4. weekly_maintenance - Weekly on Sunday, integrity checks
@@ -9,6 +10,7 @@ Scheduler with 8 jobs:
 6. universe_pruning - Monthly (1st), removes low-quality stocks
 7. stock_discovery - Monthly (15th), discovers new high-quality stocks
 8. display_updater - Every 9.9 seconds, updates LED display
+9. planner_batch - Every N seconds, processes planner sequences incrementally
 """
 
 import logging
@@ -37,7 +39,7 @@ async def _get_job_settings() -> dict[str, int]:
 
     return {
         "sync_cycle_minutes": int(
-            await settings_repo.get_float("job_sync_cycle_minutes", 15.0)
+            await settings_repo.get_float("job_sync_cycle_minutes", 5.0)
         ),
         "maintenance_hour": int(
             await settings_repo.get_float("job_maintenance_hour", 3.0)
@@ -86,6 +88,7 @@ async def init_scheduler() -> AsyncIOScheduler:
     from app.jobs.daily_pipeline import run_daily_pipeline
     from app.jobs.display_updater import update_display_periodic
     from app.jobs.dividend_reinvestment import auto_reinvest_dividends
+    from app.jobs.event_based_trading import run_event_based_trading_loop
     from app.jobs.maintenance import run_daily_maintenance, run_weekly_maintenance
     from app.jobs.planner_batch import process_planner_batch_job
     from app.jobs.stock_discovery import discover_new_stocks
@@ -108,15 +111,26 @@ async def init_scheduler() -> AsyncIOScheduler:
         await settings_repo.get_float("planner_batch_interval_seconds", 10.0)
     )
 
-    # Job 1: Sync Cycle - every 15 minutes (configurable)
-    # Handles: trades, cash flows, portfolio, prices (market-aware),
-    #          recommendations (holistic), trade execution (market-aware), display
+    # Job 1: Sync Cycle - every 5 minutes (configurable, default 5.0)
+    # Handles: trades, cash flows, portfolio, prices (market-aware), display
+    # Note: Trade execution is handled by event-based trading loop
     scheduler.add_job(
         run_sync_cycle,
         IntervalTrigger(minutes=sync_cycle_minutes),
         id="sync_cycle",
         name="Sync Cycle",
         replace_existing=True,
+    )
+
+    # Job 1.5: Event-Based Trading - runs continuously
+    # Handles: waiting for planning completion, trade execution, portfolio monitoring
+    scheduler.add_job(
+        run_event_based_trading_loop,
+        trigger=None,  # Run immediately and continuously
+        id="event_based_trading",
+        name="Event-Based Trading",
+        replace_existing=True,
+        max_instances=1,  # Only one instance at a time
     )
 
     # Job 2: Daily Pipeline - hourly
