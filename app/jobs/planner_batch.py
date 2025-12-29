@@ -97,17 +97,17 @@ async def process_planner_batch_job(
             if tradernet_client.is_connected
             else []
         )
-        logger.debug(
+        logger.info(
             f"Tradernet connected: {tradernet_client.is_connected}, "
             f"cash_balances count: {len(cash_balances) if cash_balances else 0}"
         )
         if cash_balances:
             amounts_by_currency = {b.currency: b.amount for b in cash_balances}
-            logger.debug(f"Cash amounts by currency: {amounts_by_currency}")
+            logger.info(f"Cash amounts by currency: {amounts_by_currency}")
             amounts_in_eur = await exchange_rate_service.batch_convert_to_eur(
                 amounts_by_currency
             )
-            logger.debug(f"Cash amounts in EUR: {amounts_in_eur}")
+            logger.info(f"Cash amounts in EUR: {amounts_in_eur}")
             available_cash = sum(amounts_in_eur.values())
         else:
             available_cash = 0.0
