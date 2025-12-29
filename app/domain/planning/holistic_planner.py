@@ -1691,16 +1691,24 @@ def _generate_enhanced_combinations(
             random.randint(1, min(max_buys, len(filtered_buys))) if filtered_buys else 0
         )
 
-        if num_sells + num_buys > max_steps:
+        if num_sells + num_buys > max_steps or (num_sells == 0 and num_buys == 0):
             continue
 
-        # Weighted sampling of sells
-        sell_combo = random.choices(filtered_sells, weights=sell_weights, k=num_sells)
+        # Weighted sampling of sells (only if we have sells)
+        sell_combo = (
+            random.choices(filtered_sells, weights=sell_weights, k=num_sells)
+            if num_sells > 0
+            else []
+        )
         # Remove duplicates
         sell_combo = list(dict.fromkeys(sell_combo))  # Preserves order
 
-        # Weighted sampling of buys
-        buy_combo = random.choices(filtered_buys, weights=buy_weights, k=num_buys)
+        # Weighted sampling of buys (only if we have buys)
+        buy_combo = (
+            random.choices(filtered_buys, weights=buy_weights, k=num_buys)
+            if num_buys > 0
+            else []
+        )
         # Remove duplicates
         buy_combo = list(dict.fromkeys(buy_combo))  # Preserves order
 
