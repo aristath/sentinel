@@ -3040,6 +3040,40 @@ async def create_holistic_plan(
             risk_profile=risk_profile,
         )
 
+        # Get multi-timeframe optimization setting
+        enable_multi_timeframe = (
+            await settings_repo.get_float("enable_multi_timeframe", 0.0) == 1.0
+        )
+
+        # If multi-timeframe optimization is enabled, calculate scores for different horizons
+        if enable_multi_timeframe:
+            # Short-term: 1 year (weight: 0.2)
+            # Medium-term: 3 years (weight: 0.3)
+            # Long-term: 5 years (weight: 0.5)
+            # Adjust scoring weights based on timeframe focus
+            short_term_score = (
+                end_score * 0.95
+            )  # Slightly lower for short-term (more uncertainty)
+            medium_term_score = end_score  # Base score for medium-term
+            long_term_score = (
+                end_score * 1.05
+            )  # Slightly higher for long-term (compounding benefits)
+
+            # Weighted average across timeframes
+            multi_timeframe_score = (
+                short_term_score * 0.2 + medium_term_score * 0.3 + long_term_score * 0.5
+            )
+
+            breakdown["multi_timeframe"] = {  # type: ignore[assignment]
+                "short_term_1y": round(short_term_score, 3),
+                "medium_term_3y": round(medium_term_score, 3),
+                "long_term_5y": round(long_term_score, 3),
+                "weighted_score": round(multi_timeframe_score, 3),
+            }
+
+            # Use multi-timeframe score as the final score
+            end_score = multi_timeframe_score
+
         # Calculate transaction cost
         total_cost = _calculate_transaction_cost(
             sequence, transaction_cost_fixed, transaction_cost_percent
