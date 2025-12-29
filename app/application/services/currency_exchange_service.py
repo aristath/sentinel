@@ -71,14 +71,20 @@ class CurrencyExchangeService:
     # Format: (from_currency, to_currency) -> (symbol, action)
     DIRECT_PAIRS = {
         # EUR <-> USD (ITS_MONEY market)
-        ("EUR", "USD"): ("EURUSD_T0.ITS", "BUY"),
-        ("USD", "EUR"): ("EURUSD_T0.ITS", "SELL"),
+        # To convert EUR to USD: SELL EURUSD (sell EUR, receive USD)
+        # To convert USD to EUR: BUY EURUSD (buy EUR, pay USD)
+        ("EUR", "USD"): ("EURUSD_T0.ITS", "SELL"),
+        ("USD", "EUR"): ("EURUSD_T0.ITS", "BUY"),
         # EUR <-> GBP (ITS_MONEY market)
-        ("EUR", "GBP"): ("EURGBP_T0.ITS", "BUY"),
-        ("GBP", "EUR"): ("EURGBP_T0.ITS", "SELL"),
+        # To convert EUR to GBP: SELL EURGBP (sell EUR, receive GBP)
+        # To convert GBP to EUR: BUY EURGBP (buy EUR, pay GBP)
+        ("EUR", "GBP"): ("EURGBP_T0.ITS", "SELL"),
+        ("GBP", "EUR"): ("EURGBP_T0.ITS", "BUY"),
         # GBP <-> USD (ITS_MONEY market)
-        ("GBP", "USD"): ("GBPUSD_T0.ITS", "BUY"),
-        ("USD", "GBP"): ("GBPUSD_T0.ITS", "SELL"),
+        # To convert GBP to USD: SELL GBPUSD (sell GBP, receive USD)
+        # To convert USD to GBP: BUY GBPUSD (buy GBP, pay USD)
+        ("GBP", "USD"): ("GBPUSD_T0.ITS", "SELL"),
+        ("USD", "GBP"): ("GBPUSD_T0.ITS", "BUY"),
         # HKD <-> EUR (MONEY market, EXANTE)
         ("EUR", "HKD"): ("HKD/EUR", "BUY"),
         ("HKD", "EUR"): ("HKD/EUR", "SELL"),
