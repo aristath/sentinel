@@ -1366,6 +1366,83 @@ def _generate_partial_execution_scenarios(
     return partial_sequences
 
 
+def _generate_constraint_relaxation_scenarios(
+    sequences: List[List[ActionCandidate]],
+    available_cash: float,
+    positions: List[Position],
+) -> List[List[ActionCandidate]]:
+    """
+    Generate constraint relaxation scenarios.
+
+    Creates variants of sequences that temporarily violate constraints
+    (e.g., cash limits, position limits) to explore better solutions.
+    These sequences are marked for special handling during evaluation.
+
+    Args:
+        sequences: List of candidate sequences
+        available_cash: Available cash
+        positions: Current positions
+
+    Returns:
+        List of constraint-relaxed sequences
+    """
+    relaxed_sequences: List[List[ActionCandidate]] = []
+    positions_by_symbol = {p.symbol: p for p in positions}
+
+    # Relaxation factors: allow 10%, 20%, 30% over budget
+    relaxation_factors = [1.1, 1.2, 1.3]
+
+    for sequence in sequences:
+        # Calculate total cash needed
+        total_cash_needed = sum(
+            action.value_eur for action in sequence if action.side == TradeSide.BUY
+        )
+
+        # If sequence already fits within budget, create relaxed versions
+        if total_cash_needed <= available_cash:
+            for factor in relaxation_factors:
+                relaxed_cash = available_cash * factor
+                if total_cash_needed <= relaxed_cash:
+                    # Create relaxed sequence (same actions, but marked as relaxed)
+                    relaxed_seq = sequence.copy()
+                    relaxed_sequences.append(relaxed_seq)
+
+        # Also create sequences that temporarily exceed position limits
+        # by allowing larger buys than normal
+        for action in sequence:
+            if action.side == TradeSide.BUY:
+                current_position = positions_by_symbol.get(action.symbol)
+                if current_position:
+                    # Allow buying more than current position (up to 1.5x)
+                    relaxed_value = action.value_eur * 1.5
+                    relaxed_quantity = int(action.quantity * 1.5)
+                    relaxed_action = ActionCandidate(
+                        symbol=action.symbol,
+                        name=action.name,
+                        side=action.side,
+                        quantity=relaxed_quantity,
+                        price=action.price,
+                        value_eur=relaxed_value,
+                        currency=action.currency,
+                        priority=action.priority,
+                        reason=f"{action.reason} (relaxed)",
+                        tags=action.tags,
+                    )
+                    # Create sequence with relaxed action
+                    relaxed_seq = [
+                        relaxed_action if a == action else a for a in sequence
+                    ]
+                    relaxed_sequences.append(relaxed_seq)
+
+    if relaxed_sequences:
+        logger.info(
+            f"Generated {len(relaxed_sequences)} constraint relaxation scenarios "
+            f"from {len(sequences)} base sequences"
+        )
+
+    return relaxed_sequences
+
+
 def _select_diverse_opportunities(
     opportunities: List[ActionCandidate],
     max_count: int,
@@ -2742,6 +2819,16 @@ async def create_holistic_plan(
             sequences, max_plan_depth
         )
         sequences.extend(partial_sequences)
+
+    # Generate constraint relaxation scenarios if enabled
+    enable_constraint_relaxation = (
+        await settings_repo.get_float("enable_constraint_relaxation", 0.0) == 1.0
+    )
+    if enable_constraint_relaxation:
+        relaxed_sequences = _generate_constraint_relaxation_scenarios(
+            sequences, available_cash, positions
+        )
+        sequences.extend(relaxed_sequences)
 
     # Early filtering: Filter by priority threshold and invalid steps before simulation
     stocks_by_symbol = {s.symbol: s for s in stocks}

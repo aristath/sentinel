@@ -58,6 +58,7 @@ SETTING_DEFAULTS = {
     "enable_market_regime_scenarios": 0.0,  # Enable market regime-aware scenario generation (1.0 = enabled, 0.0 = disabled)
     "enable_correlation_aware": 0.0,  # Enable correlation-aware sequence filtering (1.0 = enabled, 0.0 = disabled)
     "enable_partial_execution": 0.0,  # Enable partial execution scenarios (first N actions only) (1.0 = enabled, 0.0 = disabled)
+    "enable_constraint_relaxation": 0.0,  # Enable constraint relaxation scenarios (1.0 = enabled, 0.0 = disabled)
     # Incremental Planner settings
     "incremental_planner_enabled": 1.0,  # Enable incremental planner mode (1.0 = enabled, 0.0 = disabled)
     "planner_batch_interval_seconds": 10.0,  # Interval for batch processing in seconds (1-300)
@@ -418,6 +419,15 @@ async def update_setting_value(
             )
         await set_setting(key, str(data.value), settings_repo)
         return {key: data.value}
+    elif key == "enable_constraint_relaxation":
+        # Validate boolean-like (0.0 or 1.0)
+        if data.value not in (0.0, 1.0):
+            raise HTTPException(
+                status_code=400,
+                detail=f"{key} must be 0.0 (disabled) or 1.0 (enabled)",
+            )
+        await set_setting(key, str(data.value), settings_repo)
+        return {key: data.value}
     elif key == "incremental_planner_enabled":
         # Validate boolean-like (0.0 or 1.0)
         if data.value not in (0.0, 1.0):
@@ -499,6 +509,7 @@ async def update_setting_value(
         "enable_market_regime_scenarios",
         "enable_correlation_aware",
         "enable_partial_execution",
+        "enable_constraint_relaxation",
         "incremental_planner_enabled",
         "planner_batch_interval_seconds",
         "planner_batch_size",

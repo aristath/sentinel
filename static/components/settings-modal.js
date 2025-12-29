@@ -413,6 +413,18 @@ class SettingsModal extends HTMLElement {
                     </label>
                     <p class="text-xs text-gray-500 mt-1 ml-7">Generate variants of sequences with only first N actions (1, 2, 3...) to evaluate interrupted or partially feasible sequences.</p>
                   </div>
+
+                  <!-- Enable Constraint Relaxation -->
+                  <div>
+                    <label class="flex items-center gap-3 cursor-pointer">
+                      <input type="checkbox"
+                             :checked="($store.app.settings.enable_constraint_relaxation || 0) == 1"
+                             @change="$store.app.updateSetting('enable_constraint_relaxation', $event.target.checked ? 1 : 0)"
+                             class="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-800">
+                      <span class="text-sm text-gray-300">Enable Constraint Relaxation</span>
+                    </label>
+                    <p class="text-xs text-gray-500 mt-1 ml-7">Generate variants with relaxed cash/position limits (10-30% over budget, 1.5x position size) to explore better solutions.</p>
+                  </div>
                 </div>
 
                 <!-- Info note -->
