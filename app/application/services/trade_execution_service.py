@@ -19,7 +19,7 @@ from app.domain.value_objects.currency import Currency
 from app.infrastructure.events import SystemEvent, emit
 from app.infrastructure.external.tradernet import TradernetClient
 from app.infrastructure.hardware.display_service import set_error, set_processing
-from app.infrastructure.market_hours import is_market_open
+from app.infrastructure.market_hours import is_market_open, should_check_market_hours
 
 logger = logging.getLogger(__name__)
 
@@ -175,7 +175,7 @@ def _create_cooldown_failed_results(trades) -> List[dict]:
 
 
 async def _check_market_hours(trade, stock_repo) -> Optional[dict]:
-    """Check if the stock's market is currently open."""
+    """Check if the stock's market is currently open (if required for this trade)."""
     try:
         stock = await stock_repo.get_by_symbol(trade.symbol)
         if not stock:
@@ -187,6 +187,11 @@ async def _check_market_hours(trade, stock_repo) -> Optional[dict]:
         exchange = getattr(stock, "fullExchangeName", None)
         if not exchange:
             logger.warning(f"Stock {trade.symbol} has no exchange set. Allowing trade.")
+            return None
+
+        # Check if market hours validation is required for this trade
+        if not should_check_market_hours(exchange, trade.side):
+            # Market hours check not required (e.g., BUY order on flexible hours market)
             return None
 
         if not is_market_open(exchange):
