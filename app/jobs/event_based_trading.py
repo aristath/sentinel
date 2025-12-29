@@ -280,7 +280,7 @@ async def _wait_for_planning_completion():
     import httpx
 
     base_url = "http://localhost:8000"
-    url = f"{base_url}/api/jobs/planner-batch"
+    url = f"{base_url}/api/status/jobs/planner-batch"
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:

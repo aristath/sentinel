@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 async def _trigger_next_batch_via_api(portfolio_hash: str, next_depth: int):
     """Trigger next batch via API endpoint."""
     base_url = "http://localhost:8000"
-    url = f"{base_url}/api/jobs/planner-batch"
+    url = f"{base_url}/api/status/jobs/planner-batch"
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
