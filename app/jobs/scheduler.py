@@ -124,9 +124,11 @@ async def init_scheduler() -> AsyncIOScheduler:
 
     # Job 1.5: Event-Based Trading - runs continuously
     # Handles: waiting for planning completion, trade execution, portfolio monitoring
+    # Uses very short interval (1 second) - function has while True loop so it runs continuously
+    # If it crashes, scheduler will restart it after 1 second
     scheduler.add_job(
         run_event_based_trading_loop,
-        trigger=None,  # Run immediately and continuously
+        IntervalTrigger(seconds=1),
         id="event_based_trading",
         name="Event-Based Trading",
         replace_existing=True,
