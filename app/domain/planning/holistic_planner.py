@@ -2684,6 +2684,15 @@ async def create_holistic_plan(
     )
     sequences.extend(adaptive_patterns)
 
+    # Filter sequences for correlation if enabled
+    enable_correlation_aware = (
+        await settings_repo.get_float("enable_correlation_aware", 0.0) == 1.0
+    )
+    if enable_correlation_aware:
+        sequences = await _filter_correlation_aware_sequences(
+            sequences, stocks, max_plan_depth
+        )
+
     # Early filtering: Filter by priority threshold and invalid steps before simulation
     stocks_by_symbol = {s.symbol: s for s in stocks}
     positions_by_symbol = {p.symbol: p for p in positions}

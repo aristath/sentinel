@@ -26,13 +26,22 @@ class NextActionsCard extends HTMLElement {
               <div class="text-gray-300 font-mono font-semibold" x-text="formatCurrency($store.app.allocation.cash_balance)"></div>
             </div>
           </div>
-          <button @click="$store.app.fetchRecommendations()"
-                  class="p-2 text-gray-400 hover:text-gray-200 rounded hover:bg-gray-700 transition-colors"
-                  :disabled="$store.app.loading.recommendations"
-                  title="Refresh recommendations">
-            <span x-show="$store.app.loading.recommendations" class="inline-block animate-spin">&#9696;</span>
-            <span x-show="!$store.app.loading.recommendations">&#8635;</span>
-          </button>
+          <div class="flex items-center gap-2">
+            <button @click="$store.app.fetchRecommendations()"
+                    class="p-2 text-gray-400 hover:text-gray-200 rounded hover:bg-gray-700 transition-colors"
+                    :disabled="$store.app.loading.recommendations"
+                    title="Refresh recommendations">
+              <span x-show="$store.app.loading.recommendations" class="inline-block animate-spin">&#9696;</span>
+              <span x-show="!$store.app.loading.recommendations">&#8635;</span>
+            </button>
+            <button @click="if (confirm('This will delete existing sequences and regenerate them with current settings. Existing evaluations will be preserved. Continue?')) { $store.app.regenerateSequences() }"
+                    class="p-2 text-gray-400 hover:text-gray-200 rounded hover:bg-gray-700 transition-colors"
+                    :disabled="$store.app.settings.incremental_planner_enabled != 1"
+                    x-show="$store.app.settings.incremental_planner_enabled == 1"
+                    title="Regenerate sequences">
+              <span>&#8634;</span>
+            </button>
+          </div>
         </div>
 
         <!-- Content area -->
