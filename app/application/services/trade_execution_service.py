@@ -226,7 +226,7 @@ async def _validate_trade_before_execution(
     stock_repo,
 ) -> tuple[Optional[dict], int]:
     """Validate trade before execution and return blocking result if any."""
-    # Check market hours first (applies to both BUY and SELL)
+    # Check market hours first (if required for this trade)
     market_hours_result = await _check_market_hours(trade, stock_repo)
     if market_hours_result:
         return market_hours_result, 0
