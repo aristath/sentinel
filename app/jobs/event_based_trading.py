@@ -456,8 +456,8 @@ async def _can_execute_trade(
         return True, None
 
     # Check if market hours validation is required for this trade
-    # TradeSide is a str enum, so str() returns the value directly
-    if not should_check_market_hours(exchange, str(recommendation.side)):
+    # TradeSide is a str enum, use .value to get the actual string value
+    if not should_check_market_hours(exchange, recommendation.side.value):
         # Market hours check not required (e.g., BUY on flexible hours market)
         # Can execute anytime
         return True, None

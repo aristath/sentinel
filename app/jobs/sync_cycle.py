@@ -223,7 +223,7 @@ async def _step_execute_trade(recommendation) -> dict[str, Any]:
         if not exchange:
             logger.warning(f"Stock {recommendation.symbol} has no exchange set")
             # Allow trade anyway - exchange might not be set
-        elif should_check_market_hours(exchange, recommendation.side):
+        elif should_check_market_hours(exchange, recommendation.side.value):
             # Market hours check is required for this trade
             if not is_market_open(exchange):
                 return {
@@ -623,9 +623,10 @@ async def _execute_trade_order(recommendation) -> dict[str, Any]:
     exchange_rate_service = get_exchange_rate_service(db_manager)
     currency_exchange_service = get_currency_exchange_service_dep(tradernet_client)
 
-    from app.repositories import StockRepository
+    from app.repositories import SettingsRepository, StockRepository
 
     stock_repo = StockRepository()
+    settings_repo = SettingsRepository()
     trade_execution = TradeExecutionService(
         trade_repo,
         position_repo,
@@ -633,6 +634,7 @@ async def _execute_trade_order(recommendation) -> dict[str, Any]:
         tradernet_client,
         currency_exchange_service,
         exchange_rate_service,
+        settings_repo=settings_repo,
     )
 
     # Get currency balances for buy orders

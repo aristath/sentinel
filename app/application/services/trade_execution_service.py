@@ -12,11 +12,13 @@ from app.application.services.trade_execution.trade_recorder import record_trade
 from app.domain.models import Recommendation, Trade
 from app.domain.repositories.protocols import (
     IPositionRepository,
+    ISettingsRepository,
     IStockRepository,
     ITradeRepository,
 )
 from app.domain.scoring.constants import DEFAULT_MIN_HOLD_DAYS
 from app.domain.services.exchange_rate_service import ExchangeRateService
+from app.domain.services.settings_service import SettingsService
 from app.domain.value_objects.currency import Currency
 from app.infrastructure.events import SystemEvent, emit
 from app.infrastructure.external.tradernet import TradernetClient
@@ -25,6 +27,62 @@ from app.infrastructure.market_hours import is_market_open, should_check_market_
 from app.repositories.base import safe_parse_datetime_string
 
 logger = logging.getLogger(__name__)
+
+
+async def _calculate_commission_in_trade_currency(
+    trade_value: float,
+    trade_currency,
+    transaction_cost_fixed: float,
+    transaction_cost_percent: float,
+    exchange_rate_service: ExchangeRateService,
+) -> float:
+    """Calculate total commission in trade currency.
+
+    Commission structure: fixed EUR fee (converted to trade currency) + percentage of trade value.
+
+    Args:
+        trade_value: Trade value in trade currency
+        trade_currency: Trade currency (Currency enum or string)
+        transaction_cost_fixed: Fixed commission in EUR (default 2.0)
+        transaction_cost_percent: Variable commission as fraction (default 0.002 = 0.2%)
+        exchange_rate_service: Service to get exchange rates for currency conversion
+
+    Returns:
+        Total commission in trade currency
+    """
+    # Get currency string
+    currency_str = (
+        trade_currency.value
+        if hasattr(trade_currency, "value")
+        else str(trade_currency)
+    )
+
+    # Calculate variable commission (percentage of trade value in trade currency)
+    variable_commission = trade_value * transaction_cost_percent
+
+    # Convert fixed EUR commission to trade currency if needed
+    if currency_str == "EUR":
+        fixed_commission = transaction_cost_fixed
+    else:
+        try:
+            # Use convert method which handles the rate conversion correctly
+            # convert() divides by rate: amount_in_to = amount / rate
+            fixed_commission = await exchange_rate_service.convert(
+                transaction_cost_fixed, "EUR", currency_str
+            )
+            if fixed_commission <= 0:
+                logger.warning(
+                    f"Invalid conversion result for commission EUR->{currency_str}, using fixed EUR amount"
+                )
+                fixed_commission = transaction_cost_fixed
+        except Exception as e:
+            logger.warning(
+                f"Error converting commission EUR to {currency_str}: {e}, using fixed EUR amount"
+            )
+            fixed_commission = transaction_cost_fixed
+
+    total_commission = fixed_commission + variable_commission
+    return total_commission
 
 
 async def _check_buy_cooldown(
@@ -49,9 +107,12 @@ async def _handle_buy_currency(
     currency_service: Optional[CurrencyExchangeService],
     source_currency: str,
     converted_currencies: set,
+    transaction_cost_fixed: float,
+    transaction_cost_percent: float,
+    exchange_rate_service: ExchangeRateService,
 ) -> Optional[dict]:
     """Handle currency validation and conversion for BUY orders."""
-    required = trade.quantity * trade.estimated_price
+    trade_value = trade.quantity * trade.estimated_price
     trade_currency = trade.currency or Currency.EUR
     # Get string value for display (Currency enum -> "EUR")
     currency_str = (
@@ -60,6 +121,18 @@ async def _handle_buy_currency(
         else str(trade_currency)
     )
 
+    # Calculate commission in trade currency
+    commission = await _calculate_commission_in_trade_currency(
+        trade_value,
+        trade_currency,
+        transaction_cost_fixed,
+        transaction_cost_percent,
+        exchange_rate_service,
+    )
+
+    # Total required = trade value + commission
+    required = trade_value + commission
+
     if currency_service and trade_currency != source_currency:
         available = currency_balances.get(trade_currency, 0) if currency_balances else 0
 
@@ -67,7 +140,8 @@ async def _handle_buy_currency(
             if trade_currency not in converted_currencies:
                 logger.info(
                     f"Auto-converting {source_currency} to {currency_str} "
-                    f"for {trade.symbol} (need {required:.2f} {currency_str})"
+                    f"for {trade.symbol} (need {required:.2f} {currency_str}: "
+                    f"{trade_value:.2f} trade + {commission:.2f} commission)"
                 )
                 set_processing(f"CONVERTING {source_currency} TO {currency_str}...")
 
@@ -80,7 +154,8 @@ async def _handle_buy_currency(
                 else:
                     logger.warning(
                         f"Currency conversion failed for {trade.symbol}: "
-                        f"could not convert {source_currency} to {currency_str}"
+                        f"could not convert {source_currency} to {currency_str} "
+                        f"(need {required:.2f} {currency_str})"
                     )
                     return {
                         "symbol": trade.symbol,
@@ -93,7 +168,8 @@ async def _handle_buy_currency(
         if available < required:
             logger.warning(
                 f"Skipping {trade.symbol}: insufficient {currency_str} balance "
-                f"(need {required:.2f}, have {available:.2f})"
+                f"(need {required:.2f} {currency_str}: {trade_value:.2f} trade + {commission:.2f} commission, "
+                f"have {available:.2f})"
             )
             return {
                 "symbol": trade.symbol,
@@ -220,7 +296,7 @@ async def _check_market_hours(trade, stock_repo) -> Optional[dict]:
             return None
 
         # Check if market hours validation is required for this trade
-        if not should_check_market_hours(exchange, trade.side):
+        if not should_check_market_hours(exchange, trade.side.value):
             # Market hours check not required (e.g., BUY order on flexible hours market)
             return None
 
@@ -254,6 +330,9 @@ async def _validate_trade_before_execution(
     client,
     trade_repo,
     stock_repo,
+    transaction_cost_fixed: float,
+    transaction_cost_percent: float,
+    exchange_rate_service: ExchangeRateService,
 ) -> tuple[Optional[dict], int]:
     """Validate trade before execution and return blocking result if any."""
     # Check market hours first (if required for this trade)
@@ -274,6 +353,9 @@ async def _validate_trade_before_execution(
             currency_service,
             source_currency,
             converted_currencies,
+            transaction_cost_fixed,
+            transaction_cost_percent,
+            exchange_rate_service,
         )
         if currency_result:
             return currency_result, 1
@@ -326,6 +408,9 @@ async def _process_single_trade(
     trade_repo,
     stock_repo,
     service,
+    transaction_cost_fixed: float,
+    transaction_cost_percent: float,
+    exchange_rate_service: ExchangeRateService,
 ) -> tuple[Optional[dict], int]:
     """Process a single trade and return result and skipped count."""
     try:
@@ -341,6 +426,9 @@ async def _process_single_trade(
             client,
             trade_repo,
             stock_repo,
+            transaction_cost_fixed,
+            transaction_cost_percent,
+            exchange_rate_service,
         )
         if validation_result:
             return validation_result, skipped
@@ -373,6 +461,9 @@ async def _process_trades(
     trade_repo,
     stock_repo,
     service,
+    transaction_cost_fixed: float,
+    transaction_cost_percent: float,
+    exchange_rate_service: ExchangeRateService,
 ) -> tuple[List[dict], int]:
     """Process all trades and return results and skipped count."""
     results = []
@@ -392,6 +483,9 @@ async def _process_trades(
             trade_repo,
             stock_repo,
             service,
+            transaction_cost_fixed,
+            transaction_cost_percent,
+            exchange_rate_service,
         )
         if result:
             results.append(result)
@@ -456,6 +550,7 @@ class TradeExecutionService:
         tradernet_client: TradernetClient,
         currency_exchange_service: CurrencyExchangeService,
         exchange_rate_service: ExchangeRateService,
+        settings_repo: Optional[ISettingsRepository] = None,
     ):
         self._trade_repo = trade_repo
         self._position_repo = position_repo
@@ -463,6 +558,7 @@ class TradeExecutionService:
         self._tradernet_client = tradernet_client
         self._currency_exchange_service = currency_exchange_service
         self._exchange_rate_service = exchange_rate_service
+        self._settings_repo = settings_repo
 
     async def record_trade(
         self,
@@ -563,6 +659,21 @@ class TradeExecutionService:
             set()
         )  # Track which currencies we've converted to
 
+        # Get transaction cost settings
+        if self._settings_repo:
+            settings_service = SettingsService(self._settings_repo)
+            settings = await settings_service.get_settings()
+            transaction_cost_fixed = settings.transaction_cost_fixed
+            transaction_cost_percent = settings.transaction_cost_percent
+        else:
+            # Use defaults if settings repository not available
+            transaction_cost_fixed = 2.0
+            transaction_cost_percent = 0.002
+            logger.warning(
+                "Settings repository not available, using default transaction costs "
+                f"(fixed={transaction_cost_fixed}, percent={transaction_cost_percent})"
+            )
+
         from app.domain.constants import BUY_COOLDOWN_DAYS
 
         recently_bought = await _get_recently_bought_symbols(
@@ -584,6 +695,9 @@ class TradeExecutionService:
             self._trade_repo,
             self._stock_repo,
             self,
+            transaction_cost_fixed,
+            transaction_cost_percent,
+            self._exchange_rate_service,
         )
 
         _handle_skipped_trades_warning(skipped_count)
