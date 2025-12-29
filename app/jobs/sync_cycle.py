@@ -31,6 +31,9 @@ from app.infrastructure.market_hours import (
 
 logger = logging.getLogger(__name__)
 
+# Flag to track if frequent portfolio updates are active
+_frequent_portfolio_updates_active = False
+
 
 async def run_sync_cycle():
     """
@@ -44,7 +47,12 @@ async def run_sync_cycle():
 
 async def _run_sync_cycle_internal():
     """Internal sync cycle implementation."""
+    global _frequent_portfolio_updates_active
+
     logger.info("Starting sync cycle...")
+
+    # Stop frequent portfolio updates at the start of sync cycle
+    _stop_frequent_portfolio_updates()
 
     emit(SystemEvent.SYNC_START)
 
@@ -92,6 +100,8 @@ async def _run_sync_cycle_internal():
                 # Re-sync portfolio after trade
                 set_processing("SYNCING PORTFOLIO...")
                 await _step_sync_portfolio()
+                # Start frequent portfolio updates to allow time for new recommendations
+                _start_frequent_portfolio_updates()
             elif result.get("status") == "skipped":
                 logger.info(f"Trade skipped: {result.get('reason')}")
         else:
@@ -695,3 +705,88 @@ async def _execute_trade_order(recommendation) -> dict[str, Any]:
     else:
         error = results[0].get("error", "Unknown error") if results else "No result"
         return {"status": "error", "reason": error}
+
+
+async def _frequent_portfolio_update():
+    """
+    Frequent portfolio update job - runs every 30 seconds after trade execution.
+
+    This allows time for new recommendations to be generated based on the updated
+    portfolio hash before the next sync cycle runs.
+    """
+    global _frequent_portfolio_updates_active
+
+    if not _frequent_portfolio_updates_active:
+        logger.debug("Frequent portfolio updates not active, skipping")
+        return
+
+    logger.debug("Running frequent portfolio update...")
+
+    try:
+        # Sync portfolio to update positions and generate new portfolio hash
+        await _step_sync_portfolio()
+
+        # Invalidate recommendation caches so new recommendations can be generated
+        from app.infrastructure.cache_invalidation import get_cache_invalidation_service
+
+        cache_service = get_cache_invalidation_service()
+        cache_service.invalidate_recommendation_caches()
+
+        logger.debug(
+            "Frequent portfolio update complete, recommendation caches invalidated"
+        )
+    except Exception as e:
+        logger.warning(f"Frequent portfolio update failed: {e}")
+
+
+def _start_frequent_portfolio_updates():
+    """Start frequent portfolio updates (every 30 seconds) after trade execution."""
+    global _frequent_portfolio_updates_active
+
+    if _frequent_portfolio_updates_active:
+        logger.debug("Frequent portfolio updates already active")
+        return
+
+    from apscheduler.triggers.interval import IntervalTrigger
+
+    from app.jobs.scheduler import get_scheduler
+
+    scheduler = get_scheduler()
+    if not scheduler:
+        logger.warning(
+            "Scheduler not available, cannot start frequent portfolio updates"
+        )
+        return
+
+    _frequent_portfolio_updates_active = True
+
+    # Add job to run every 30 seconds
+    scheduler.add_job(
+        _frequent_portfolio_update,
+        IntervalTrigger(seconds=30),
+        id="frequent_portfolio_update",
+        name="Frequent Portfolio Update",
+        replace_existing=True,
+    )
+
+    logger.info("Started frequent portfolio updates (every 30 seconds)")
+
+
+def _stop_frequent_portfolio_updates():
+    """Stop frequent portfolio updates (called at start of sync cycle)."""
+    global _frequent_portfolio_updates_active
+
+    if not _frequent_portfolio_updates_active:
+        return
+
+    from app.jobs.scheduler import get_scheduler
+
+    scheduler = get_scheduler()
+    if scheduler:
+        try:
+            scheduler.remove_job("frequent_portfolio_update")
+            logger.info("Stopped frequent portfolio updates")
+        except Exception:
+            pass  # Job doesn't exist, that's fine
+
+    _frequent_portfolio_updates_active = False
