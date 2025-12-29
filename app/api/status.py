@@ -329,6 +329,18 @@ async def trigger_universe_pruning():
         return {"status": "error", "message": str(e)}
 
 
+@router.post("/jobs/planner-batch")
+async def trigger_planner_batch(portfolio_hash: Optional[str] = None, depth: int = 0):
+    """Manually trigger planner batch processing."""
+    from app.jobs.planner_batch import process_planner_batch_job
+
+    try:
+        await process_planner_batch_job(max_depth=depth, portfolio_hash=portfolio_hash)
+        return {"status": "success", "message": "Planner batch processed"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 @router.post("/jobs/stock-discovery")
 async def trigger_stock_discovery():
     """Manually trigger stock discovery (addition of high-quality stocks)."""

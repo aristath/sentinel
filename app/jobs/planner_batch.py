@@ -3,14 +3,18 @@
 import logging
 from typing import Optional
 
+import httpx
+
 from app.application.services.recommendation.portfolio_context_builder import (
     build_portfolio_context,
 )
 from app.domain.planning.holistic_planner import create_holistic_plan_incremental
+from app.domain.portfolio_hash import generate_portfolio_hash
 from app.domain.services.exchange_rate_service import ExchangeRateService
 from app.infrastructure.external.tradernet import TradernetClient
 from app.repositories import (
     AllocationRepository,
+    PlannerRepository,
     PositionRepository,
     SettingsRepository,
     StockRepository,
@@ -19,12 +23,33 @@ from app.repositories import (
 logger = logging.getLogger(__name__)
 
 
-async def process_planner_batch_job():
+async def _trigger_next_batch_via_api(portfolio_hash: str, next_depth: int):
+    """Trigger next batch via API endpoint."""
+    base_url = "http://localhost:8000"
+    url = f"{base_url}/api/jobs/planner-batch"
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            await client.post(
+                url, json={"portfolio_hash": portfolio_hash, "depth": next_depth}
+            )
+    except Exception as e:
+        logger.warning(f"Failed to trigger next batch via API: {e}")
+        # Fallback: scheduler will pick it up
+
+
+async def process_planner_batch_job(
+    max_depth: int = 0, portfolio_hash: Optional[str] = None
+):
     """
     Process next batch of sequences for holistic planner.
 
     This job runs every N seconds (configurable via planner_batch_interval_seconds setting)
     and processes the next batch of sequences from the database.
+
+    Args:
+        max_depth: Recursion depth (for API-driven mode, prevents infinite loops)
+        portfolio_hash: Portfolio hash being processed (for API-driven mode)
     """
     try:
         # Get dependencies
@@ -38,12 +63,23 @@ async def process_planner_batch_job():
         tradernet_client = TradernetClient()
         exchange_rate_service = ExchangeRateService(db_manager)
 
-        # Get settings
-        batch_size = int(await settings_repo.get_float("planner_batch_size", 100.0))
-
         # Get current portfolio state
         positions = await position_repo.get_all()
         stocks = await stock_repo.get_all_active()
+
+        # Generate portfolio hash if not provided
+        if portfolio_hash is None:
+            position_dicts = [
+                {"symbol": p.symbol, "quantity": p.quantity} for p in positions
+            ]
+            portfolio_hash = generate_portfolio_hash(position_dicts, stocks)
+
+        # Get settings
+        # Use small batch size (5) for API-driven mode, otherwise use configured size
+        if max_depth > 0:
+            batch_size = 5
+        else:
+            batch_size = int(await settings_repo.get_float("planner_batch_size", 100.0))
 
         # Build portfolio context
         portfolio_context = await build_portfolio_context(
@@ -74,17 +110,21 @@ async def process_planner_batch_job():
         current_prices: Optional[dict] = None
 
         try:
-            optimization_result = await optimizer.optimize()
+            # Note: optimize() requires many parameters, but existing code in
+            # event_based_trading.py uses same pattern - keeping for consistency
+            optimization_result = await optimizer.optimize()  # type: ignore[call-arg]
             if optimization_result and optimization_result.target_weights:
                 target_weights = optimization_result.target_weights
                 # Get current prices for target weights
                 from app.infrastructure.external import yahoo_finance as yahoo
 
                 symbols = list(target_weights.keys())
-                quotes = await yahoo.get_quotes(symbols)
-                current_prices = {
-                    symbol: quote["price"] for symbol, quote in quotes.items()
+                # Use get_batch_quotes with symbol_yahoo_map
+                yahoo_symbols: dict[str, Optional[str]] = {
+                    s.symbol: s.yahoo_symbol for s in stocks if s.symbol in symbols
                 }
+                quotes = yahoo.get_batch_quotes(yahoo_symbols)
+                current_prices = {symbol: price for symbol, price in quotes.items()}
         except Exception as e:
             logger.debug(f"Could not get optimizer weights: {e}")
 
@@ -149,6 +189,20 @@ async def process_planner_batch_job():
             logger.debug(
                 "Planner batch processed: no plan yet (sequences still being evaluated)"
             )
+
+        # Check if more work remains and self-trigger next batch if in API-driven mode
+        if max_depth > 0:
+            planner_repo = PlannerRepository()
+            if not await planner_repo.are_all_sequences_evaluated(portfolio_hash):
+                # Self-trigger next batch via API
+                if (
+                    max_depth < 100000
+                ):  # Safety limit (allows for 5000+ scenarios with 5 per batch)
+                    await _trigger_next_batch_via_api(portfolio_hash, max_depth + 1)
+                else:
+                    logger.warning(
+                        f"Max depth ({max_depth}) reached, stopping API-driven batch chain"
+                    )
 
     except Exception as e:
         logger.error(f"Error in planner batch job: {e}", exc_info=True)
