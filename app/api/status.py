@@ -125,6 +125,41 @@ async def get_display_text(settings_repo: SettingsRepositoryDep):
     }
 
 
+@router.get("/led/display")
+async def get_led_display_state(
+    settings_repo: SettingsRepositoryDep,
+    display_manager: DisplayStateManagerDep,
+):
+    """Get LED display state for Arduino App Framework Docker app.
+
+    Returns display mode, text, and RGB LED states in the format expected
+    by the trader-display Arduino app.
+    """
+    error_text = display_manager.get_error_text()
+    processing_text = display_manager.get_processing_text()
+    next_actions_text = display_manager.get_next_actions_text()
+
+    # Determine mode based on current state
+    if error_text:
+        mode = "error"
+    elif processing_text:
+        mode = "activity"
+    else:
+        mode = "normal"
+
+    ticker_speed = int(await settings_repo.get_float("ticker_speed", 50.0))
+
+    return {
+        "mode": mode,
+        "error_message": error_text if error_text else None,
+        "activity_message": processing_text if processing_text else None,
+        "ticker_text": next_actions_text,
+        "ticker_speed": ticker_speed,
+        "led3": [0, 0, 0],
+        "led4": [0, 0, 0],
+    }
+
+
 @router.get("/led/display/stream")
 async def stream_display_state(
     settings_repo: SettingsRepositoryDep,
