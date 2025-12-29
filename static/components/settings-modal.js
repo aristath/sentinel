@@ -343,7 +343,7 @@ class SettingsModal extends HTMLElement {
                            min="10"
                            max="500"
                            step="10"
-                           :value="$store.app.settings.combinatorial_max_combinations_per_depth"
+                           :value="$store.app.settings.combinatorial_max_combinations_per_depth || 50"
                            @change="$store.app.updateSetting('combinatorial_max_combinations_per_depth', Math.max(10, Math.min(500, parseInt($event.target.value) || 50)))"
                            class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
                   </div>
@@ -358,7 +358,7 @@ class SettingsModal extends HTMLElement {
                            min="1"
                            max="10"
                            step="1"
-                           :value="$store.app.settings.combinatorial_max_sells"
+                           :value="$store.app.settings.combinatorial_max_sells || 4"
                            @change="$store.app.updateSetting('combinatorial_max_sells', Math.max(1, Math.min(10, parseInt($event.target.value) || 4)))"
                            class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
                   </div>
@@ -373,7 +373,7 @@ class SettingsModal extends HTMLElement {
                            min="1"
                            max="10"
                            step="1"
-                           :value="$store.app.settings.combinatorial_max_buys"
+                           :value="$store.app.settings.combinatorial_max_buys || 4"
                            @change="$store.app.updateSetting('combinatorial_max_buys', Math.max(1, Math.min(10, parseInt($event.target.value) || 4)))"
                            class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
                   </div>
@@ -388,7 +388,7 @@ class SettingsModal extends HTMLElement {
                            min="5"
                            max="30"
                            step="1"
-                           :value="$store.app.settings.combinatorial_max_candidates"
+                           :value="$store.app.settings.combinatorial_max_candidates || 12"
                            @change="$store.app.updateSetting('combinatorial_max_candidates', Math.max(5, Math.min(30, parseInt($event.target.value) || 12)))"
                            class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
                   </div>
@@ -404,12 +404,6 @@ class SettingsModal extends HTMLElement {
                     x-text="$store.app.settings.incremental_planner_enabled != 1 ? 'Enable Incremental Planner First' : 'Regenerate Sequences'">
                   </button>
                   <p class="text-xs text-gray-500 mt-2">Deletes sequences and regenerates with current combinatorial settings. Existing evaluations are preserved and reused.</p>
-                </div>
-              </div>
-
-                <!-- Info note -->
-                <div class="mt-4 pt-3 border-t border-gray-700/50">
-                  <p class="text-xs text-gray-500">When disabled, the planner uses full mode (processes all sequences in one run every 15 minutes). When enabled, sequences are processed continuously in batches, allowing exploration of thousands of scenarios over time.</p>
                 </div>
               </div>
 
