@@ -18,7 +18,7 @@
   <script src="/static/js/api.js"></script>
   <script src="/static/js/store.js"></script>
 </head>
-<body x-data x-init="$store.app.fetchAll(); setInterval(() => $store.app.fetchAll(), 60000)">
+<body x-data x-init="setTimeout(() => { $store.app.fetchAll(); $store.app.startRecommendationStream(); }, 0)">
   <div class="max-w-7xl mx-auto px-4 py-4 space-y-4">
     <!-- Header -->
     <app-header></app-header>
