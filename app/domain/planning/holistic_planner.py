@@ -1674,12 +1674,22 @@ def _generate_enhanced_combinations(
     attempts = 0
     max_attempts = max_combinations * 3  # Allow more attempts to find diverse sequences
 
+    # Early return if no opportunities available
+    if not filtered_sells and not filtered_buys:
+        return sequences
+
     while len(sequences) < max_combinations and attempts < max_attempts:
         attempts += 1
 
-        # Sample number of sells and buys
-        num_sells = random.randint(1, min(max_sells, len(filtered_sells)))
-        num_buys = random.randint(1, min(max_buys, len(filtered_buys)))
+        # Sample number of sells and buys (only if opportunities exist)
+        num_sells = (
+            random.randint(1, min(max_sells, len(filtered_sells)))
+            if filtered_sells
+            else 0
+        )
+        num_buys = (
+            random.randint(1, min(max_buys, len(filtered_buys))) if filtered_buys else 0
+        )
 
         if num_sells + num_buys > max_steps:
             continue
