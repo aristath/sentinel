@@ -7,7 +7,7 @@ This job runs every 15 minutes and performs these steps:
 4. Sync prices (market-aware - only for open markets)
 5. Check trading conditions (P&L guardrails)
 6. Get recommendation (holistic - all markets)
-7. Execute trade (market-aware - only if stock's market is open)
+7. Execute trade (market-aware - BUY orders on flexible hours markets can execute when closed, SELL orders and strict hours markets require market to be open)
 8. Update display
 """
 
