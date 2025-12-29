@@ -1700,8 +1700,14 @@ def _generate_enhanced_combinations(
             if num_sells > 0
             else []
         )
-        # Remove duplicates
-        sell_combo = list(dict.fromkeys(sell_combo))  # Preserves order
+        # Remove duplicates by symbol (preserves order)
+        seen_symbols = set()
+        unique_sell_combo = []
+        for s in sell_combo:
+            if s.symbol not in seen_symbols:
+                seen_symbols.add(s.symbol)
+                unique_sell_combo.append(s)
+        sell_combo = unique_sell_combo
 
         # Weighted sampling of buys (only if we have buys)
         buy_combo = (
@@ -1709,8 +1715,14 @@ def _generate_enhanced_combinations(
             if num_buys > 0
             else []
         )
-        # Remove duplicates
-        buy_combo = list(dict.fromkeys(buy_combo))  # Preserves order
+        # Remove duplicates by symbol (preserves order)
+        seen_symbols = set()
+        unique_buy_combo = []
+        for b in buy_combo:
+            if b.symbol not in seen_symbols:
+                seen_symbols.add(b.symbol)
+                unique_buy_combo.append(b)
+        buy_combo = unique_buy_combo
 
         # Create sequence: sells first, then buys
         sequence = sell_combo + buy_combo
