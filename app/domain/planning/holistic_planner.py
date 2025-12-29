@@ -2351,6 +2351,9 @@ async def process_planner_incremental(
         filtered_cash = 0
         filtered_position = 0
 
+        # Log available cash for debugging
+        logger.info(f"Available cash for feasibility check: {available_cash:.2f} EUR")
+
         def _get_sequence_priority(sequence: List[ActionCandidate]) -> float:
             """Calculate estimated priority for a sequence."""
             return sum(c.priority for c in sequence)
@@ -2394,6 +2397,12 @@ async def process_planner_incremental(
                     if action.value_eur > running_cash:
                         is_feasible = False
                         filtered_cash += 1
+                        # Log first few cash failures for debugging
+                        if filtered_cash <= 3:
+                            logger.debug(
+                                f"Cash check failed: need {action.value_eur:.2f} EUR, "
+                                f"have {running_cash:.2f} EUR for {action.symbol}"
+                            )
                         break
                     running_cash -= action.value_eur
                 elif side_str == "SELL":
