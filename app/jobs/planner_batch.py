@@ -91,12 +91,34 @@ async def process_planner_batch_job(
             db_manager=db_manager,
         )
 
+        # Ensure Tradernet is connected before getting cash balances
+        if not tradernet_client.is_connected:
+            logger.debug("Tradernet not connected, attempting to connect...")
+            if not tradernet_client.connect():
+                logger.warning(
+                    "Failed to connect to Tradernet, using fallback cash calculation"
+                )
+                # Fallback: try to get cash from portfolio snapshot
+                from app.repositories import PortfolioRepository
+
+                portfolio_repo = PortfolioRepository()
+                latest_snapshot = await portfolio_repo.get_latest()
+                if latest_snapshot:
+                    available_cash = latest_snapshot.cash_balance
+                    logger.info(
+                        f"Using cash balance from portfolio snapshot: {available_cash:.2f} EUR"
+                    )
+                else:
+                    available_cash = 0.0
+                    logger.warning("No portfolio snapshot available, using 0.0 EUR")
+            else:
+                logger.debug("Successfully connected to Tradernet")
+
         # Get available cash (convert all currencies to EUR)
-        cash_balances = (
-            tradernet_client.get_cash_balances()
-            if tradernet_client.is_connected
-            else []
-        )
+        if tradernet_client.is_connected:
+            cash_balances = tradernet_client.get_cash_balances()
+        else:
+            cash_balances = []
         logger.info(
             f"Tradernet connected: {tradernet_client.is_connected}, "
             f"cash_balances count: {len(cash_balances) if cash_balances else 0}"
