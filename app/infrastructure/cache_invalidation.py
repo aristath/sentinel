@@ -23,6 +23,14 @@ class CacheInvalidationService:
 
         logger.debug("Invalidated trade-related caches")
 
+        # Emit event for recommendation updates
+        try:
+            from app.infrastructure.events import SystemEvent, emit
+
+            emit(SystemEvent.RECOMMENDATIONS_INVALIDATED)
+        except Exception as e:
+            logger.debug(f"Could not emit recommendations invalidated event: {e}")
+
     def invalidate_recommendation_caches(self) -> None:
         """
         Invalidate recommendation caches.
@@ -32,6 +40,14 @@ class CacheInvalidationService:
         self._cache.invalidate_prefix("recommendations:")
 
         logger.debug("Invalidated recommendation caches")
+
+        # Emit event for recommendation updates
+        try:
+            from app.infrastructure.events import SystemEvent, emit
+
+            emit(SystemEvent.RECOMMENDATIONS_INVALIDATED)
+        except Exception as e:
+            logger.debug(f"Could not emit recommendations invalidated event: {e}")
 
     def invalidate_portfolio_caches(self) -> None:
         """Invalidate all portfolio-related caches."""

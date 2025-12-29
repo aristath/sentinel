@@ -194,6 +194,13 @@ class RecommendationCache:
             logger.info(
                 f"Invalidated {total} cache entries for portfolio hash {portfolio_hash[:8]}..."
             )
+            # Emit event for recommendation updates
+            try:
+                from app.infrastructure.events import SystemEvent, emit
+
+                emit(SystemEvent.RECOMMENDATIONS_INVALIDATED)
+            except Exception as e:
+                logger.debug(f"Could not emit recommendations invalidated event: {e}")
         return total
 
     async def invalidate_all_recommendations(self) -> int:
@@ -214,6 +221,13 @@ class RecommendationCache:
 
         if count > 0:
             logger.info(f"Invalidated {count} recommendation cache entries")
+            # Emit event for recommendation updates
+            try:
+                from app.infrastructure.events import SystemEvent, emit
+
+                emit(SystemEvent.RECOMMENDATIONS_INVALIDATED)
+            except Exception as e:
+                logger.debug(f"Could not emit recommendations invalidated event: {e}")
         return count
 
     async def cleanup_expired(self) -> int:
