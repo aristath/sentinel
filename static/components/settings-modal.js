@@ -401,6 +401,18 @@ class SettingsModal extends HTMLElement {
                     </label>
                     <p class="text-xs text-gray-500 mt-1 ml-7">Filter out sequences that would create highly correlated positions (correlation > 0.7) to improve diversification.</p>
                   </div>
+
+                  <!-- Enable Partial Execution -->
+                  <div>
+                    <label class="flex items-center gap-3 cursor-pointer">
+                      <input type="checkbox"
+                             :checked="($store.app.settings.enable_partial_execution || 0) == 1"
+                             @change="$store.app.updateSetting('enable_partial_execution', $event.target.checked ? 1 : 0)"
+                             class="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-800">
+                      <span class="text-sm text-gray-300">Enable Partial Execution Scenarios</span>
+                    </label>
+                    <p class="text-xs text-gray-500 mt-1 ml-7">Generate variants of sequences with only first N actions (1, 2, 3...) to evaluate interrupted or partially feasible sequences.</p>
+                  </div>
                 </div>
 
                 <!-- Info note -->

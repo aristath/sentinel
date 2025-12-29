@@ -1326,6 +1326,46 @@ async def _filter_correlation_aware_sequences(
     return filtered
 
 
+def _generate_partial_execution_scenarios(
+    sequences: List[List[ActionCandidate]],
+    max_steps: int,
+) -> List[List[ActionCandidate]]:
+    """
+    Generate partial execution scenarios (execute only first N actions).
+
+    Creates variants of sequences where only the first 1, 2, 3... actions
+    are executed. This allows the planner to evaluate sequences that might
+    be interrupted or where only initial steps are feasible.
+
+    Args:
+        sequences: List of full sequences
+        max_steps: Maximum sequence length
+
+    Returns:
+        List of partial execution sequences
+    """
+    partial_sequences: List[List[ActionCandidate]] = []
+
+    # For each sequence, create partial versions (first 1, first 2, first 3, etc.)
+    for sequence in sequences:
+        if len(sequence) <= 1:
+            continue  # Skip sequences with only 1 action (no partial variants)
+
+        # Create partial sequences: first 1, first 2, first 3, ... up to len-1
+        for partial_length in range(1, min(len(sequence), max_steps)):
+            partial_seq = sequence[:partial_length]
+            if partial_seq:
+                partial_sequences.append(partial_seq)
+
+    if partial_sequences:
+        logger.info(
+            f"Generated {len(partial_sequences)} partial execution scenarios "
+            f"from {len(sequences)} full sequences"
+        )
+
+    return partial_sequences
+
+
 def _select_diverse_opportunities(
     opportunities: List[ActionCandidate],
     max_count: int,
@@ -2692,6 +2732,16 @@ async def create_holistic_plan(
         sequences = await _filter_correlation_aware_sequences(
             sequences, stocks, max_plan_depth
         )
+
+    # Generate partial execution scenarios if enabled
+    enable_partial_execution = (
+        await settings_repo.get_float("enable_partial_execution", 0.0) == 1.0
+    )
+    if enable_partial_execution:
+        partial_sequences = _generate_partial_execution_scenarios(
+            sequences, max_plan_depth
+        )
+        sequences.extend(partial_sequences)
 
     # Early filtering: Filter by priority threshold and invalid steps before simulation
     stocks_by_symbol = {s.symbol: s for s in stocks}
