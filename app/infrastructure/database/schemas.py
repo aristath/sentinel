@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS stocks (
 
 CREATE INDEX IF NOT EXISTS idx_stocks_active ON stocks(active);
 CREATE INDEX IF NOT EXISTS idx_stocks_country ON stocks(country);
-CREATE INDEX IF NOT EXISTS idx_stocks_isin ON stocks(isin);
+-- Note: idx_stocks_isin is created in migration or init_config_schema for new databases
 
 -- Allocation targets (country and industry weightings)
 CREATE TABLE IF NOT EXISTS allocation_targets (
@@ -213,19 +213,22 @@ async def init_config_schema(db):
             "ON recommendations(symbol, side, reason, portfolio_hash)"
         )
 
+        # Create isin index for new installs
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_stocks_isin ON stocks(isin)")
+
         # Record schema version
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
             (
-                7,
+                8,
                 now,
-                "Initial config schema with portfolio_hash recommendations, last_synced, country, fullExchangeName, portfolio targets, and custom grouping",
+                "Initial config schema with portfolio_hash recommendations, last_synced, country, fullExchangeName, portfolio targets, custom grouping, and isin",
             ),
         )
 
         await db.commit()
         logger.info(
-            "Config database initialized with schema version 7 (includes portfolio_hash, last_synced, portfolio targets, and custom grouping)"
+            "Config database initialized with schema version 8 (includes portfolio_hash, last_synced, portfolio targets, custom grouping, and isin)"
         )
     elif current_version == 1:
         # Migration: Add recommendations table (version 1 -> 2)
@@ -495,6 +498,34 @@ async def init_config_schema(db):
         )
         await db.commit()
         logger.info("Config database migrated to schema version 7 (custom grouping)")
+        current_version = 7
+
+    if current_version == 7:
+        # Migration: Add isin column to stocks table (version 7 -> 8)
+        now = datetime.now().isoformat()
+        logger.info("Migrating config database to schema version 8 (isin column)...")
+
+        # Check if isin column exists
+        cursor = await db.execute("PRAGMA table_info(stocks)")
+        columns = [row[1] for row in await cursor.fetchall()]
+
+        if "isin" not in columns:
+            await db.execute("ALTER TABLE stocks ADD COLUMN isin TEXT")
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_stocks_isin ON stocks(isin)"
+            )
+            logger.info("Added isin column to stocks table")
+
+        await db.execute(
+            "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
+            (
+                8,
+                now,
+                "Added isin column to stocks for ISIN-based symbol resolution",
+            ),
+        )
+        await db.commit()
+        logger.info("Config database migrated to schema version 8 (isin column)")
 
 
 # =============================================================================

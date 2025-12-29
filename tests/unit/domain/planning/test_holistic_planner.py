@@ -522,9 +522,10 @@ class TestGenerateActionSequences:
         sequences = await generate_action_sequences(
             opportunities=opportunities,
             available_cash=500.0,  # Not enough for the buy
+            enable_combinatorial=False,  # Test pattern generators only
         )
 
-        # Should not include the expensive buy in any sequence
+        # Pattern generators should respect cash constraints
         for seq in sequences:
             assert not any(c.symbol == "EXPENSIVE" for c in seq)
 

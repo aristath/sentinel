@@ -113,9 +113,9 @@ async def test_schema_migration_v5_to_v6_adds_portfolio_target_columns():
         assert row["min_portfolio_target"] is None
         assert row["max_portfolio_target"] is None
 
-        # Check that schema version was updated to 6
+        # Check that schema version was updated to 8 (includes isin migration)
         version_row = await db.fetchone("SELECT MAX(version) as v FROM schema_version")
-        assert version_row["v"] == 6
+        assert version_row["v"] == 8
 
 
 @pytest.mark.asyncio
@@ -137,9 +137,9 @@ async def test_new_installation_includes_portfolio_target_columns():
         assert columns["min_portfolio_target"] == "REAL"
         assert columns["max_portfolio_target"] == "REAL"
 
-        # Check that schema version is 6
+        # Check that schema version is 8
         version_row = await db.fetchone("SELECT MAX(version) as v FROM schema_version")
-        assert version_row["v"] == 6
+        assert version_row["v"] == 8
 
 
 @pytest.mark.asyncio

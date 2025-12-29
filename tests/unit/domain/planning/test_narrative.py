@@ -401,6 +401,7 @@ class TestGenerateStepNarrative:
 
         context = MagicMock()
         context.stock_dividends = {}
+        context.positions = {"AAPL.US": 5000.0}  # Current position value
 
         narrative = generate_step_narrative(action, context, {})
 

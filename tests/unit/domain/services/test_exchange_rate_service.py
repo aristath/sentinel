@@ -60,14 +60,14 @@ class TestExchangeRateServiceCaching:
 
         assert rate == 1.05
         # DB should not be called
-        mock_db.cache.fetchone.assert_not_called()
+        mock_db.rates.fetchone.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_memory_cache_expires(self):
         """Test that expired memory cache is not used."""
         mock_db = MagicMock()
-        mock_db.cache = AsyncMock()
-        mock_db.cache.fetchone.return_value = None
+        mock_db.rates = AsyncMock()
+        mock_db.rates.fetchone.return_value = None
 
         service = ExchangeRateService(db_manager=mock_db, ttl_seconds=60)
 
@@ -88,11 +88,11 @@ class TestExchangeRateServiceCaching:
     async def test_uses_db_cache_when_memory_empty(self):
         """Test that DB cache is checked when memory cache is empty."""
         mock_db = MagicMock()
-        mock_db.cache = AsyncMock()
+        mock_db.rates = AsyncMock()
 
         # Setup DB cache to return a valid rate
         future_expiry = (datetime.now() + timedelta(hours=1)).isoformat()
-        mock_db.cache.fetchone.return_value = {
+        mock_db.rates.fetchone.return_value = {
             "rate": 1.06,
             "expires_at": future_expiry,
         }
@@ -102,17 +102,17 @@ class TestExchangeRateServiceCaching:
         rate = await service.get_rate("USD", "EUR")
 
         assert rate == 1.06
-        mock_db.cache.fetchone.assert_called_once()
+        mock_db.rates.fetchone.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_db_cache_expires(self):
         """Test that expired DB cache is not used."""
         mock_db = MagicMock()
-        mock_db.cache = AsyncMock()
+        mock_db.rates = AsyncMock()
 
         # Setup DB cache with expired entry
         past_expiry = (datetime.now() - timedelta(hours=1)).isoformat()
-        mock_db.cache.fetchone.return_value = {"rate": 1.06, "expires_at": past_expiry}
+        mock_db.rates.fetchone.return_value = {"rate": 1.06, "expires_at": past_expiry}
 
         service = ExchangeRateService(db_manager=mock_db)
 
@@ -229,8 +229,8 @@ class TestExchangeRateServiceFallback:
     async def test_uses_fallback_when_api_fails(self):
         """Test that fallback rate is used when API fails."""
         mock_db = MagicMock()
-        mock_db.cache = AsyncMock()
-        mock_db.cache.fetchone.return_value = None
+        mock_db.rates = AsyncMock()
+        mock_db.rates.fetchone.return_value = None
 
         service = ExchangeRateService(db_manager=mock_db)
 
@@ -248,7 +248,7 @@ class TestExchangeRateServiceAPI:
     async def test_fetch_rate_from_api_success(self):
         """Test successful API rate fetch."""
         mock_db = MagicMock()
-        mock_db.cache = AsyncMock()
+        mock_db.rates = AsyncMock()
         service = ExchangeRateService(db_manager=mock_db)
 
         mock_response = MagicMock()
@@ -303,7 +303,7 @@ class TestExchangeRateServiceAPI:
     async def test_fetch_rate_caches_all_rates(self):
         """Test that API response caches all supported rates."""
         mock_db = MagicMock()
-        mock_db.cache = AsyncMock()
+        mock_db.rates = AsyncMock()
         service = ExchangeRateService(db_manager=mock_db)
 
         mock_response = MagicMock()
@@ -318,6 +318,11 @@ class TestExchangeRateServiceAPI:
             mock_client_instance.get.return_value = mock_response
 
             await service._fetch_rate_from_api("USD", "EUR")
+
+            # Wait for background task to complete
+            import asyncio
+
+            await asyncio.sleep(0.1)
 
             # Should have cached supported currencies
             assert "USD_EUR" in service._memory_cache
@@ -334,7 +339,7 @@ class TestExchangeRateServiceRefresh:
     async def test_refresh_rates_updates_cache(self):
         """Test that refresh_rates updates the cache."""
         mock_db = MagicMock()
-        mock_db.cache = AsyncMock()
+        mock_db.rates = AsyncMock()
         service = ExchangeRateService(db_manager=mock_db)
 
         with patch.object(service, "_fetch_rate_from_api", return_value=1.10):
@@ -349,7 +354,7 @@ class TestExchangeRateServiceRefresh:
     async def test_refresh_rates_default_currencies(self):
         """Test that refresh_rates uses default currencies when none specified."""
         mock_db = MagicMock()
-        mock_db.cache = AsyncMock()
+        mock_db.rates = AsyncMock()
         service = ExchangeRateService(db_manager=mock_db)
 
         call_count = 0
@@ -369,7 +374,7 @@ class TestExchangeRateServiceRefresh:
     async def test_refresh_rates_skips_eur(self):
         """Test that refresh_rates skips EUR (base currency)."""
         mock_db = MagicMock()
-        mock_db.cache = AsyncMock()
+        mock_db.rates = AsyncMock()
         service = ExchangeRateService(db_manager=mock_db)
 
         with patch.object(
@@ -389,17 +394,17 @@ class TestExchangeRateServiceDBOperations:
     async def test_store_in_db_cache(self):
         """Test storing rate in DB cache."""
         mock_db = MagicMock()
-        mock_db.cache = AsyncMock()
+        mock_db.rates = AsyncMock()
 
         service = ExchangeRateService(db_manager=mock_db)
 
         await service._store_in_db_cache("USD", "EUR", 1.05)
 
-        mock_db.cache.execute.assert_called_once()
-        mock_db.cache.commit.assert_called_once()
+        mock_db.rates.execute.assert_called_once()
+        mock_db.rates.commit.assert_called_once()
 
         # Verify the SQL and parameters
-        call_args = mock_db.cache.execute.call_args
+        call_args = mock_db.rates.execute.call_args
         assert "INSERT OR REPLACE INTO exchange_rates" in call_args[0][0]
         params = call_args[0][1]
         assert params[0] == "USD"
@@ -410,8 +415,8 @@ class TestExchangeRateServiceDBOperations:
     async def test_store_in_db_cache_handles_error(self):
         """Test that DB cache errors are handled gracefully."""
         mock_db = MagicMock()
-        mock_db.cache = AsyncMock()
-        mock_db.cache.execute.side_effect = Exception("DB error")
+        mock_db.rates = AsyncMock()
+        mock_db.rates.execute.side_effect = Exception("DB error")
 
         service = ExchangeRateService(db_manager=mock_db)
 
@@ -422,8 +427,8 @@ class TestExchangeRateServiceDBOperations:
     async def test_get_from_db_cache_handles_error(self):
         """Test that DB cache lookup errors are handled gracefully."""
         mock_db = MagicMock()
-        mock_db.cache = AsyncMock()
-        mock_db.cache.fetchone.side_effect = Exception("DB error")
+        mock_db.rates = AsyncMock()
+        mock_db.rates.fetchone.side_effect = Exception("DB error")
 
         service = ExchangeRateService(db_manager=mock_db)
 
@@ -453,7 +458,7 @@ class TestExchangeRateServiceTTL:
     async def test_ttl_affects_cache_expiry(self):
         """Test that TTL affects cache expiry time."""
         mock_db = MagicMock()
-        mock_db.cache = AsyncMock()
+        mock_db.rates = AsyncMock()
 
         # Short TTL
         service = ExchangeRateService(db_manager=mock_db, ttl_seconds=1)
@@ -473,7 +478,7 @@ class TestExchangeRateServiceTTL:
         with patch.object(
             service, "_fetch_rate_from_api", return_value=1.08
         ) as mock_fetch:
-            mock_db.cache.fetchone.return_value = None
+            mock_db.rates.fetchone.return_value = None
             rate = await service.get_rate("USD", "EUR")
 
             # Should have fetched fresh rate
