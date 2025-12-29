@@ -1682,13 +1682,16 @@ def _generate_enhanced_combinations(
         attempts += 1
 
         # Sample number of sells and buys (only if opportunities exist)
+        # Double-check length to avoid randrange errors
         num_sells = (
             random.randint(1, min(max_sells, len(filtered_sells)))
-            if filtered_sells
+            if filtered_sells and len(filtered_sells) > 0
             else 0
         )
         num_buys = (
-            random.randint(1, min(max_buys, len(filtered_buys))) if filtered_buys else 0
+            random.randint(1, min(max_buys, len(filtered_buys)))
+            if filtered_buys and len(filtered_buys) > 0
+            else 0
         )
 
         if num_sells + num_buys > max_steps or (num_sells == 0 and num_buys == 0):
