@@ -389,6 +389,18 @@ class SettingsModal extends HTMLElement {
                     </label>
                     <p class="text-xs text-gray-500 mt-1 ml-7">Generate patterns based on market conditions (bull/bear/sideways). Bull: growth focus, Bear: defensive, Sideways: balanced.</p>
                   </div>
+
+                  <!-- Enable Correlation Aware -->
+                  <div>
+                    <label class="flex items-center gap-3 cursor-pointer">
+                      <input type="checkbox"
+                             :checked="($store.app.settings.enable_correlation_aware || 0) == 1"
+                             @change="$store.app.updateSetting('enable_correlation_aware', $event.target.checked ? 1 : 0)"
+                             class="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-800">
+                      <span class="text-sm text-gray-300">Enable Correlation-Aware Filtering</span>
+                    </label>
+                    <p class="text-xs text-gray-500 mt-1 ml-7">Filter out sequences that would create highly correlated positions (correlation > 0.7) to improve diversification.</p>
+                  </div>
                 </div>
 
                 <!-- Info note -->
