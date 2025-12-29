@@ -64,8 +64,9 @@ SETTING_DEFAULTS = {
     "enable_multi_timeframe": 0.0,  # Enable multi-timeframe optimization (short/medium/long-term) (1.0 = enabled, 0.0 = disabled)
     # Incremental Planner settings
     "incremental_planner_enabled": 1.0,  # Enable incremental planner mode (1.0 = enabled, 0.0 = disabled)
-    "planner_batch_interval_seconds": 10.0,  # Interval for batch processing in seconds (1-300)
-    "planner_batch_size": 100.0,  # Sequences per batch (10-1000)
+    "planner_batch_interval_seconds": 30.0,  # Interval for batch processing in seconds (1-300) - fallback for scheduler
+    "planner_batch_size": 100.0,  # Sequences per batch (10-1000) - for scheduled mode
+    "planner_batch_size_api": 5.0,  # Small batch size for API-driven mode (5-100)
     # LED Matrix settings
     "ticker_speed": 50.0,  # Ticker scroll speed in ms per frame (lower = faster)
     "led_brightness": 150.0,  # LED brightness (0-255)

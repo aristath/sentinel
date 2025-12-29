@@ -53,9 +53,12 @@ class Settings:
         1.0  # Enable incremental planner mode (1.0 = enabled, 0.0 = disabled)
     )
     planner_batch_interval_seconds: float = (
-        10.0  # Interval for batch processing in seconds (1-300)
+        30.0  # Interval for batch processing in seconds (1-300) - fallback for scheduler
     )
-    planner_batch_size: float = 100.0  # Sequences per batch (10-1000)
+    planner_batch_size: float = (
+        100.0  # Sequences per batch (10-1000) - for scheduled mode
+    )
+    planner_batch_size_api: float = 5.0  # Small batch size for API-driven mode (5-100)
 
     def _validate_non_negative(self, value: float, field_name: str) -> None:
         """Validate that a value is non-negative."""
