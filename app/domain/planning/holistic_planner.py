@@ -2529,93 +2529,115 @@ async def process_planner_incremental(
     best_score_in_batch = 0.0
 
     for seq_data in next_sequences:
-        # Deserialize sequence
-        sequence_data = json.loads(seq_data["sequence_json"])
-        sequence = [
-            ActionCandidate(
-                side=c["side"],
-                symbol=c["symbol"],
-                name=c["name"],
-                quantity=c["quantity"],
-                price=c["price"],
-                value_eur=c["value_eur"],
-                currency=c["currency"],
-                priority=c["priority"],
-                reason=c["reason"],
-                tags=c["tags"],
-            )
-            for c in sequence_data
-        ]
-
         sequence_hash = seq_data["sequence_hash"]
 
-        # Check if evaluation already exists (from previous generation)
-        if await repo.has_evaluation(sequence_hash, portfolio_hash):
-            logger.debug(
-                f"Evaluation already exists for sequence {sequence_hash[:8]}, skipping expensive evaluation"
+        try:
+            # Deserialize sequence
+            sequence_data = json.loads(seq_data["sequence_json"])
+            sequence = [
+                ActionCandidate(
+                    side=c["side"],
+                    symbol=c["symbol"],
+                    name=c["name"],
+                    quantity=c["quantity"],
+                    price=c["price"],
+                    value_eur=c["value_eur"],
+                    currency=c["currency"],
+                    priority=c["priority"],
+                    reason=c["reason"],
+                    tags=c["tags"],
+                )
+                for c in sequence_data
+            ]
+
+            # Check if evaluation already exists (from previous generation)
+            if await repo.has_evaluation(sequence_hash, portfolio_hash):
+                logger.debug(
+                    f"Evaluation already exists for sequence {sequence_hash[:8]}, skipping expensive evaluation"
+                )
+                # Get existing evaluation to update best result
+                db = await repo._get_db()
+                eval_row = await db.fetchone(
+                    """SELECT end_score FROM evaluations
+                       WHERE sequence_hash = ? AND portfolio_hash = ?""",
+                    (sequence_hash, portfolio_hash),
+                )
+                if eval_row:
+                    end_score = eval_row["end_score"]
+                    # Mark sequence as completed
+                    evaluated_at = datetime.now().isoformat()
+                    await repo.mark_sequence_completed(
+                        sequence_hash, portfolio_hash, evaluated_at
+                    )
+                    # Update best if better
+                    if end_score > best_score_in_batch:
+                        best_score_in_batch = end_score
+                        best_in_batch = sequence_hash
+                continue
+
+            # Simulate sequence
+            end_context, end_cash = await simulate_sequence(
+                sequence, portfolio_context, available_cash, stocks
             )
-            # Get existing evaluation to update best result
-            db = await repo._get_db()
-            eval_row = await db.fetchone(
-                """SELECT end_score FROM evaluations
-                   WHERE sequence_hash = ? AND portfolio_hash = ?""",
-                (sequence_hash, portfolio_hash),
+
+            # Fetch metrics for symbols in end_context if not cached
+            for symbol in end_context.positions.keys():
+                if symbol not in metrics_cache:
+                    metrics = await calc_repo.get_metrics(symbol, required_metrics)
+                    metrics_cache[symbol] = {
+                        k: (v if v is not None else 0.0) for k, v in metrics.items()
+                    }
+
+            # Evaluate sequence
+            div_score = await calculate_portfolio_score(end_context)
+            end_score, breakdown = await calculate_portfolio_end_state_score(
+                positions=end_context.positions,
+                total_value=end_context.total_value,
+                diversification_score=div_score.total / 100,
+                metrics_cache=metrics_cache,
             )
-            if eval_row:
-                end_score = eval_row["end_score"]
-                # Mark sequence as completed
+
+            # Insert evaluation
+            await repo.insert_evaluation(
+                sequence_hash=sequence_hash,
+                portfolio_hash=portfolio_hash,
+                end_score=end_score,
+                breakdown=breakdown,
+                end_cash=end_cash,
+                end_context_positions=end_context.positions,
+                div_score=div_score.total,
+                total_value=end_context.total_value,
+            )
+
+            # Mark sequence as completed
+            evaluated_at = datetime.now().isoformat()
+            await repo.mark_sequence_completed(
+                sequence_hash, portfolio_hash, evaluated_at
+            )
+
+            # Update best if better
+            if end_score > best_score_in_batch:
+                best_score_in_batch = end_score
+                best_in_batch = sequence_hash
+
+        except Exception as e:
+            # If evaluation fails, mark sequence as completed anyway so it doesn't block planning
+            # This allows trades to proceed even if some scenarios fail
+            logger.warning(
+                f"Failed to evaluate sequence {sequence_hash[:8]}: {e}. "
+                f"Marking as examined to prevent blocking planning."
+            )
+            try:
                 evaluated_at = datetime.now().isoformat()
                 await repo.mark_sequence_completed(
                     sequence_hash, portfolio_hash, evaluated_at
                 )
-                # Update best if better
-                if end_score > best_score_in_batch:
-                    best_score_in_batch = end_score
-                    best_in_batch = sequence_hash
+            except Exception as mark_error:
+                logger.error(
+                    f"Failed to mark sequence {sequence_hash[:8]} as completed: {mark_error}"
+                )
+            # Continue processing other sequences
             continue
-
-        # Simulate sequence
-        end_context, end_cash = await simulate_sequence(
-            sequence, portfolio_context, available_cash, stocks
-        )
-
-        # Fetch metrics for symbols in end_context if not cached
-        for symbol in end_context.positions.keys():
-            if symbol not in metrics_cache:
-                metrics = await calc_repo.get_metrics(symbol, required_metrics)
-                metrics_cache[symbol] = {
-                    k: (v if v is not None else 0.0) for k, v in metrics.items()
-                }
-
-        # Evaluate sequence
-        div_score = await calculate_portfolio_score(end_context)
-        end_score, breakdown = await calculate_portfolio_end_state_score(
-            positions=end_context.positions,
-            total_value=end_context.total_value,
-            diversification_score=div_score.total / 100,
-            metrics_cache=metrics_cache,
-        )
-
-        # Insert evaluation
-        await repo.insert_evaluation(
-            sequence_hash=sequence_hash,
-            portfolio_hash=portfolio_hash,
-            end_score=end_score,
-            breakdown=breakdown,
-            end_cash=end_cash,
-            end_context_positions=end_context.positions,
-            div_score=div_score.total,
-            total_value=end_context.total_value,
-        )
-
-        # Mark sequence as completed
-        evaluated_at = datetime.now().isoformat()
-        await repo.mark_sequence_completed(sequence_hash, portfolio_hash, evaluated_at)
-
-        # Update best if better
-        if end_score > best_score_in_batch:
-            best_score_in_batch = end_score
-            best_in_batch = sequence_hash
 
     # Update best result if better found
     if best_in_batch:
