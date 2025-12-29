@@ -21,6 +21,7 @@ document.addEventListener('alpine:init', () => {
     markets: {},  // {EU: {open: bool, ...}, US: {...}, ASIA: {...}}
     recommendations: null,  // Unified recommendations: {depth: int, steps: [], total_score_improvement: float, final_available_cash: float}
     optimizerStatus: null,  // {settings: {...}, last_run: {...}, status: 'ready'}
+    plannerStatus: null,  // {has_sequences: bool, total_sequences: int, evaluated_count: int, is_planning: bool, is_finished: bool, progress_percentage: float}
     // Default settings - will be overwritten by fetchSettings()
     settings: {
       optimizer_blend: 0.5,
@@ -66,6 +67,9 @@ document.addEventListener('alpine:init', () => {
       stockSave: false,
       refreshData: false
     },
+
+    // SSE connection for planner status
+    plannerStatusEventSource: null,
 
     // Edit Mode States
     editingCountry: false,
@@ -219,6 +223,39 @@ document.addEventListener('alpine:init', () => {
         this.recommendations = null;
       }
       this.loading.recommendations = false;
+    },
+
+    startPlannerStatusStream() {
+      // Close existing connection if any
+      if (this.plannerStatusEventSource) {
+        this.plannerStatusEventSource.close();
+        this.plannerStatusEventSource = null;
+      }
+
+      // Connect to SSE stream for planner status updates
+      const eventSource = new EventSource('/api/planner/status/stream');
+      this.plannerStatusEventSource = eventSource;
+
+      eventSource.onmessage = (event) => {
+        try {
+          const status = JSON.parse(event.data);
+          this.plannerStatus = status;
+        } catch (e) {
+          console.error('Failed to parse planner status event:', e);
+        }
+      };
+
+      eventSource.onerror = (error) => {
+        console.error('Planner status SSE stream error:', error);
+        // EventSource will automatically reconnect on error
+      };
+    },
+
+    stopPlannerStatusStream() {
+      if (this.plannerStatusEventSource) {
+        this.plannerStatusEventSource.close();
+        this.plannerStatusEventSource = null;
+      }
     },
 
     async executeRecommendation() {

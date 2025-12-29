@@ -7,6 +7,11 @@
  */
 class NextActionsCard extends HTMLElement {
   connectedCallback() {
+    // Start planner status stream when component is connected
+    if (window.Alpine && window.Alpine.store) {
+      window.Alpine.store('app').startPlannerStatusStream();
+    }
+
     this.innerHTML = `
       <div class="bg-gray-800 border-2 border-blue-500/30 rounded-lg p-6 shadow-lg">
         <div class="flex items-center justify-between mb-4">
@@ -46,6 +51,48 @@ class NextActionsCard extends HTMLElement {
 
         <!-- Content area -->
         <div>
+
+        <!-- PLANNER STATUS -->
+        <template x-if="$store.app.plannerStatus">
+          <div class="mb-4 bg-gray-900 rounded-lg p-4 border-2 border-blue-500/30">
+            <!-- Status Badge -->
+            <div class="flex items-center gap-2 mb-3">
+              <span x-show="$store.app.plannerStatus.is_planning" class="inline-block animate-spin text-blue-400">&#9696;</span>
+              <span x-show="!$store.app.plannerStatus.is_planning && !$store.app.plannerStatus.is_finished && $store.app.plannerStatus.has_sequences" class="text-gray-400">&#9632;</span>
+              <span x-show="$store.app.plannerStatus.is_finished" class="text-green-400">&#10004;</span>
+              <span class="font-semibold text-sm"
+                    :class="$store.app.plannerStatus.is_planning ? 'text-blue-400' : ($store.app.plannerStatus.is_finished ? 'text-green-400' : 'text-gray-400')"
+                    x-text="$store.app.plannerStatus.is_planning ? 'Planning...' : ($store.app.plannerStatus.is_finished ? 'Planning Complete' : ($store.app.plannerStatus.has_sequences ? 'Waiting...' : 'Generating Scenarios...'))">
+              </span>
+            </div>
+
+            <!-- Progress Bar -->
+            <template x-if="$store.app.plannerStatus.has_sequences">
+              <div class="mb-2">
+                <div class="w-full bg-gray-700 rounded-full h-2 mb-2">
+                  <div class="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                       :style="'width: ' + Math.min($store.app.plannerStatus.progress_percentage || 0, 100) + '%'">
+                  </div>
+                </div>
+                <div class="text-xs text-gray-400 text-center">
+                  <span x-text="($store.app.plannerStatus.evaluated_count || 0).toLocaleString()"></span>
+                  <span> / </span>
+                  <span x-text="($store.app.plannerStatus.total_sequences || 0).toLocaleString()"></span>
+                  <span> scenarios evaluated (</span>
+                  <span x-text="Math.round($store.app.plannerStatus.progress_percentage || 0)"></span>
+                  <span>%)</span>
+                </div>
+              </div>
+            </template>
+
+            <!-- Detailed Stats -->
+            <template x-if="!$store.app.plannerStatus.has_sequences">
+              <div class="text-sm text-gray-400 text-center">
+                Generating scenarios...
+              </div>
+            </template>
+          </div>
+        </template>
 
         <!-- Empty state - only shown when no recommendations -->
         <template x-if="!$store.app.loading.recommendations && (!$store.app.recommendations || !$store.app.recommendations.steps || $store.app.recommendations.steps.length === 0)">
@@ -115,6 +162,13 @@ class NextActionsCard extends HTMLElement {
         </div><!-- End scrollable content -->
       </div>
     `;
+  }
+
+  disconnectedCallback() {
+    // Stop planner status stream when component is disconnected
+    if (window.Alpine && window.Alpine.store) {
+      window.Alpine.store('app').stopPlannerStatusStream();
+    }
   }
 }
 
