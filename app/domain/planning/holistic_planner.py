@@ -2343,6 +2343,14 @@ async def process_planner_incremental(
         positions_by_symbol = {p.symbol: p for p in positions}
         feasible_sequences = []
 
+        # Track filtering reasons for debugging
+        filtered_duplicates = 0
+        filtered_priority = 0
+        filtered_no_stock = 0
+        filtered_allow_flag = 0
+        filtered_cash = 0
+        filtered_position = 0
+
         def _get_sequence_priority(sequence: List[ActionCandidate]) -> float:
             """Calculate estimated priority for a sequence."""
             return sum(c.priority for c in sequence)
@@ -2354,18 +2362,13 @@ async def process_planner_incremental(
             # Filter out sequences with duplicate symbols (same symbol shouldn't appear twice)
             symbols_in_seq = [c.symbol for c in sequence]
             if len(symbols_in_seq) != len(set(symbols_in_seq)):
-                side_strs = [
-                    c.side.value if hasattr(c.side, "value") else str(c.side)
-                    for c in sequence
-                ]
-                logger.debug(
-                    f"Skipping sequence with duplicate symbols: {[f'{s}:{c.symbol}' for s, c in zip(side_strs, sequence)]}"
-                )
+                filtered_duplicates += 1
                 continue
 
             if sequence:
                 avg_priority = _get_sequence_priority(sequence) / len(sequence)
                 if avg_priority < priority_threshold:
+                    filtered_priority += 1
                     continue
 
             is_feasible = True
@@ -2380,25 +2383,46 @@ async def process_planner_incremental(
                     else str(action.side)
                 )
                 if side_str == "BUY":
-                    if not stock or not stock.allow_buy:
+                    if not stock:
                         is_feasible = False
+                        filtered_no_stock += 1
+                        break
+                    if not stock.allow_buy:
+                        is_feasible = False
+                        filtered_allow_flag += 1
                         break
                     if action.value_eur > running_cash:
                         is_feasible = False
+                        filtered_cash += 1
                         break
                     running_cash -= action.value_eur
                 elif side_str == "SELL":
-                    if not stock or not stock.allow_sell:
+                    if not stock:
                         is_feasible = False
+                        filtered_no_stock += 1
+                        break
+                    if not stock.allow_sell:
+                        is_feasible = False
+                        filtered_allow_flag += 1
                         break
                     position = positions_by_symbol.get(action.symbol)
                     if not position or position.quantity < action.quantity:
                         is_feasible = False
+                        filtered_position += 1
                         break
                     running_cash += action.value_eur
 
             if is_feasible:
                 feasible_sequences.append(sequence)
+
+        # Log filtering breakdown
+        logger.info(
+            f"Feasibility filtering: {len(all_sequences)} total, "
+            f"{filtered_duplicates} duplicates, {filtered_priority} low priority, "
+            f"{filtered_no_stock} no stock, {filtered_allow_flag} allow flag, "
+            f"{filtered_cash} cash, {filtered_position} position, "
+            f"{len(feasible_sequences)} feasible"
+        )
 
         # Insert sequences into database
         logger.info(
