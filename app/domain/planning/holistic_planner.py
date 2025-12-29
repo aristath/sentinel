@@ -1103,12 +1103,24 @@ async def generate_action_sequences(
         )
         all_sequences.extend(depth_sequences)
 
-    # Remove duplicates and empty sequences
+    # Remove duplicates and empty sequences, and filter sequences with duplicate symbols
     unique_sequences = []
     seen = set()
     for seq in all_sequences:
         if not seq:
             continue
+
+        # Filter out sequences with duplicate symbols (same symbol shouldn't appear twice)
+        symbols_in_seq = [c.symbol for c in seq]
+        if len(symbols_in_seq) != len(set(symbols_in_seq)):
+            side_str = (
+                c.side.value if hasattr(c.side, "value") else str(c.side) for c in seq
+            )
+            logger.debug(
+                f"Skipping sequence with duplicate symbols: {[f'{s}:{c.symbol}' for s, c in zip(side_str, seq)]}"
+            )
+            continue
+
         key = tuple((c.symbol, c.side) for c in seq)
         if key not in seen:
             seen.add(key)
@@ -1337,6 +1349,21 @@ async def process_planner_incremental(
             return sum(c.priority for c in sequence)
 
         for sequence in all_sequences:
+            if not sequence:
+                continue
+
+            # Filter out sequences with duplicate symbols (same symbol shouldn't appear twice)
+            symbols_in_seq = [c.symbol for c in sequence]
+            if len(symbols_in_seq) != len(set(symbols_in_seq)):
+                side_strs = [
+                    c.side.value if hasattr(c.side, "value") else str(c.side)
+                    for c in sequence
+                ]
+                logger.debug(
+                    f"Skipping sequence with duplicate symbols: {[f'{s}:{c.symbol}' for s, c in zip(side_strs, sequence)]}"
+                )
+                continue
+
             if sequence:
                 avg_priority = _get_sequence_priority(sequence) / len(sequence)
                 if avg_priority < priority_threshold:
@@ -1779,6 +1806,21 @@ async def create_holistic_plan(
         return sum(c.priority for c in sequence)
 
     for sequence in sequences:
+        if not sequence:
+            continue
+
+        # Filter out sequences with duplicate symbols (same symbol shouldn't appear twice)
+        symbols_in_seq = [c.symbol for c in sequence]
+        if len(symbols_in_seq) != len(set(symbols_in_seq)):
+            side_strs = [
+                c.side.value if hasattr(c.side, "value") else str(c.side)
+                for c in sequence
+            ]
+            logger.debug(
+                f"Skipping sequence with duplicate symbols: {[f'{s}:{c.symbol}' for s, c in zip(side_strs, sequence)]}"
+            )
+            continue
+
         # Quick priority check - filter low-priority sequences early
         # Check if average priority per action meets threshold
         if sequence:
