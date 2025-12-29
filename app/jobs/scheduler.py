@@ -122,18 +122,9 @@ async def init_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 
-    # Job 1.5: Event-Based Trading - runs continuously
+    # Event-Based Trading - started as background task (see below)
     # Handles: waiting for planning completion, trade execution, portfolio monitoring
-    # Uses very short interval (1 second) - function has while True loop so it runs continuously
-    # If it crashes, scheduler will restart it after 1 second
-    scheduler.add_job(
-        run_event_based_trading_loop,
-        IntervalTrigger(seconds=1),
-        id="event_based_trading",
-        name="Event-Based Trading",
-        replace_existing=True,
-        max_instances=1,  # Only one instance at a time
-    )
+    # Not added as a scheduled job because it has a while True loop and runs continuously
 
     # Job 2: Daily Pipeline - hourly
     # Handles: historical data sync, metrics calculation, score refresh
@@ -224,13 +215,20 @@ async def init_scheduler() -> AsyncIOScheduler:
         except Exception:
             pass  # Job doesn't exist, that's fine
 
+    # Start event-based trading loop as background task (not a scheduled job)
+    # since it has a while True loop and runs continuously
+    import asyncio
+
+    asyncio.create_task(run_event_based_trading_loop())
+    logger.info("Started event-based trading loop as background task")
+
     logger.info(
-        f"Scheduler initialized with 9 jobs - "
+        f"Scheduler initialized with 8 scheduled jobs + 1 background task - "
         f"sync_cycle:{sync_cycle_minutes}m, daily_pipeline:1h, "
         f"maintenance:{maintenance_hour}:00, dividend_reinvestment:{maintenance_hour}:30, "
         f"universe_pruning:1st of month {maintenance_hour}:00, "
         f"stock_discovery:15th of month 02:00, display_updater:9.9s, "
-        f"planner_batch:{planner_batch_interval}s"
+        f"planner_batch:{planner_batch_interval}s, event_based_trading:background"
     )
     return scheduler
 
