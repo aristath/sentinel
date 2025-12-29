@@ -20,6 +20,7 @@ from app.domain.repositories.protocols import (
     IStockRepository,
     ITradeRepository,
 )
+from app.domain.scoring.models import PortfolioContext
 from app.domain.services.allocation_calculator import get_max_trades
 from app.domain.services.exchange_rate_service import ExchangeRateService
 from app.domain.services.settings_service import SettingsService
@@ -423,10 +424,16 @@ class RebalancingService:
                             narrative = generate_step_narrative(
                                 action, portfolio_context, {}
                             )
+                            # Convert side to string if it's a TradeSide enum
+                            side_str = (
+                                action.side.value
+                                if hasattr(action.side, "value")
+                                else str(action.side)
+                            )
                             steps.append(
                                 HolisticStep(
                                     step_number=i + 1,
-                                    side=action.side,
+                                    side=side_str,
                                     symbol=action.symbol,
                                     name=action.name,
                                     quantity=action.quantity,
@@ -489,15 +496,71 @@ class RebalancingService:
         if not plan.steps:
             return []
 
+        from app.domain.scoring.diversification import calculate_portfolio_score
+
         recommendations = []
         running_cash = available_cash
+        current_context = portfolio_context
+        current_score_value = plan.current_score
+
+        # Simulate each step and calculate intermediate scores
         for step in plan.steps:
             cash_before = running_cash
-            if step.side == TradeSide.SELL:
+            score_before = current_score_value
+
+            # Simulate this single step
+            stocks_by_symbol = {s.symbol: s for s in stocks}
+            stock = stocks_by_symbol.get(step.symbol)
+            country = stock.country if stock else None
+            industry = stock.industry if stock else None
+
+            new_positions = dict(current_context.positions)
+            new_geographies = dict(current_context.stock_countries or {})
+            new_industries = dict(current_context.stock_industries or {})
+
+            if step.side == "SELL":
+                current_value = new_positions.get(step.symbol, 0)
+                new_positions[step.symbol] = max(
+                    0, current_value - step.estimated_value
+                )
+                if new_positions[step.symbol] <= 0:
+                    new_positions.pop(step.symbol, None)
                 running_cash += step.estimated_value
-            else:
+                new_total = current_context.total_value
+            else:  # BUY
+                if step.estimated_value > running_cash:
+                    # Skip if can't afford (shouldn't happen, but handle gracefully)
+                    continue
+                new_positions[step.symbol] = (
+                    new_positions.get(step.symbol, 0) + step.estimated_value
+                )
+                if country:
+                    new_geographies[step.symbol] = country
+                if industry:
+                    new_industries[step.symbol] = industry
                 running_cash -= step.estimated_value
+                new_total = current_context.total_value
+
             running_cash = max(0, running_cash)
+
+            # Update context for next iteration
+            current_context = PortfolioContext(
+                country_weights=current_context.country_weights,
+                industry_weights=current_context.industry_weights,
+                positions=new_positions,
+                total_value=new_total,
+                stock_countries=new_geographies,
+                stock_industries=new_industries,
+                stock_scores=current_context.stock_scores,
+                stock_dividends=current_context.stock_dividends,
+            )
+
+            # Calculate portfolio score after this step
+            portfolio_score_after_step = await calculate_portfolio_score(
+                current_context
+            )
+            score_after = portfolio_score_after_step.total
+            score_change = score_after - score_before
 
             recommendations.append(
                 MultiStepRecommendation(
@@ -510,13 +573,16 @@ class RebalancingService:
                     estimated_value=step.estimated_value,
                     currency=step.currency,
                     reason=step.narrative,
-                    portfolio_score_before=plan.current_score,
-                    portfolio_score_after=plan.end_state_score,
-                    score_change=plan.improvement,
+                    portfolio_score_before=score_before,
+                    portfolio_score_after=score_after,
+                    score_change=score_change,
                     available_cash_before=cash_before,
                     available_cash_after=running_cash,
                 )
             )
+
+            # Update current_score_value for next iteration
+            current_score_value = score_after
 
         logger.info(
             f"Holistic planner generated {len(recommendations)} recommendations"
