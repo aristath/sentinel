@@ -29,7 +29,7 @@ Automated portfolio management system for Arduino Uno Q with monthly rebalancing
 │           │             │               │                │
 │  ┌────────▼────────┐    │               │                │
 │  │ LED Display     │────┼───────────────┘                │
-│  │ (Native Python) │    │  Router Bridge                 │
+│  │ (Docker App)    │    │  Router Bridge                 │
 │  └─────────────────┘    │                               │
 │          │              │                               │
 │          ▼              │                               │
@@ -52,7 +52,7 @@ Automated portfolio management system for Arduino Uno Q with monthly rebalancing
 - **APIs**: Freedom24/Tradernet, Yahoo Finance (yfinance)
 - **Scheduling**: APScheduler
 - **MCU**: Arduino sketch for STM32U585 (compiled with Arduino CLI)
-- **LED Display**: Native Python script (no Docker required)
+- **LED Display**: Docker app via Arduino App Framework
 
 ## Quick Start
 
@@ -95,40 +95,33 @@ sudo ./setup.sh
 # Edit configuration
 nano /home/arduino/arduino-trader/.env
 
-# Restart services
-sudo systemctl restart arduino-trader led-display
+# Restart service
+sudo systemctl restart arduino-trader
 ```
 
 ### LED Display Setup
 
-The LED display runs as a native Python script (no Docker required) and communicates with the MCU via Router Bridge (msgpack RPC over Unix socket).
+The LED display runs as a Docker app via Arduino App Framework and communicates with the MCU via Router Bridge (msgpack RPC over Unix socket).
 
 The setup script automatically:
-- Installs the LED display systemd service
+- Deploys the Docker LED display app via Arduino App Framework
 - Compiles and uploads the Arduino sketch to the MCU
-- Starts the LED display service
+- The Docker app automatically starts when the board boots
 
 The display shows:
 - **Error messages** (highest priority): "BACKUP FAILED", "ORDER PLACEMENT FAILED", etc.
 - **Processing messages** (medium priority): "SYNCING...", "BUY AAPL €500", etc.
 - **Next actions** (lowest priority, default): Portfolio value, cash balance, recommendations
 
+The Docker app polls `/api/status/led/display` every 2 seconds and updates the display with the highest priority text.
+
 **Manual sketch compilation** (if needed):
 ```bash
 /home/arduino/arduino-trader/scripts/compile_and_upload_sketch.sh
 ```
 
-**Service management**:
-```bash
-# Check status
-sudo systemctl status led-display
-
-# View logs
-sudo journalctl -u led-display -f
-
-# Restart
-sudo systemctl restart led-display
-```
+**Docker app management**:
+The Docker app is automatically managed by Arduino App Framework. It starts on boot and restarts if it crashes.
 
 ### Cloudflare Tunnel Setup
 
@@ -221,8 +214,9 @@ DAILY_SYNC_HOUR=18
 
 ### Status
 - `GET /api/status` - System health and status
-- `GET /api/status/display/text` - LED display text (for native script)
-- `GET /api/status/led/display/stream` - LED display state SSE stream (for Arduino App)
+- `GET /api/status/display/text` - LED display text (legacy endpoint)
+- `GET /api/status/led/display` - LED display state (for Docker app)
+- `GET /api/status/led/display/stream` - LED display state SSE stream
 - `GET /api/status/tradernet` - Tradernet connection status
 - `GET /api/status/jobs` - Background job health monitoring
 - `GET /api/status/database/stats` - Database statistics
@@ -261,18 +255,21 @@ DAILY_SYNC_HOUR=18
 - **Growth (35%)**: Revenue/earnings growth
 - **Profitability (25%)**: Margins
 
-## LED Display Modes
+## LED Display Priority System
 
-| Mode | Description |
-|------|-------------|
-| Idle | Subtle wave animation |
-| Health | Geographic allocation bars |
-| Trading | Flash animation during trades |
-| Error | Blinking X pattern |
+The display uses a 3-pool priority system:
+
+| Priority | Type | Examples |
+|----------|------|----------|
+| Highest | Error messages | "BACKUP FAILED", "ORDER PLACEMENT FAILED" |
+| Medium | Processing messages | "SYNCING...", "BUY AAPL €500" |
+| Lowest | Next actions | Portfolio value, cash balance, recommendations |
+
+The display automatically shows the highest priority non-empty text, scrolling right-to-left using native Font_5x7.
 
 ### RGB LEDs
-- **LED 1**: System status (green=OK, blue=syncing, red=error)
-- **LEDs 2-4**: EU/Asia/US allocation indicators
+- **LED 3**: Sync indicator (controlled by API)
+- **LED 4**: Processing indicator (controlled by API)
 
 ## Service Management
 
@@ -282,16 +279,18 @@ sudo systemctl status arduino-trader
 sudo systemctl status led-display
 
 # View logs
+sudo systemctl status arduino-trader
 sudo journalctl -u arduino-trader -f
-sudo journalctl -u led-display -f
 
 # Restart
 sudo systemctl restart arduino-trader
-sudo systemctl restart led-display
 
 # Stop
 sudo systemctl stop arduino-trader
-sudo systemctl stop led-display
+
+# LED Display (Docker app)
+# The LED display runs as a Docker app managed by Arduino App Framework
+# Check Docker containers or Arduino App Framework status for LED display
 ```
 
 ## License

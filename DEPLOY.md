@@ -132,25 +132,23 @@ PrivateTmp=true
 WantedBy=multi-user.target
 ```
 
-### 5. Setup LED Display Service
+### 5. Setup LED Display (Docker App)
 
-The setup script automatically installs the LED display service. Manual setup:
+The LED display runs as a Docker app via Arduino App Framework. The setup script automatically:
+- Compiles and uploads the Arduino sketch to the MCU
+- Deploys the Docker app via Arduino App Framework
+
+The Docker app automatically starts when the board boots and polls `/api/status/led/display` every 2 seconds.
+
+**Manual sketch compilation** (if needed):
 
 ```bash
-# Install LED display service
-sudo cp /home/arduino/repos/autoTrader/deploy/led-display.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable led-display
-
 # Install Arduino CLI (if not already installed)
 curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
 
 # Compile and upload sketch
 chmod +x /home/arduino/repos/autoTrader/scripts/compile_and_upload_sketch.sh
 /home/arduino/repos/autoTrader/scripts/compile_and_upload_sketch.sh
-
-# Start LED display service
-sudo systemctl start led-display
 ```
 
 ### 6. Setup Auto-Deployment
