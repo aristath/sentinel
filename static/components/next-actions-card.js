@@ -162,11 +162,19 @@ class NextActionsCard extends HTMLElement {
         </div><!-- End scrollable content -->
       </div>
     `;
+
+    // Start planner status stream after Alpine initializes
+    // Use setTimeout to ensure Alpine store is ready
+    setTimeout(() => {
+      if (window.Alpine && window.Alpine.store && window.Alpine.store('app')) {
+        window.Alpine.store('app').startPlannerStatusStream();
+      }
+    }, 0);
   }
 
   disconnectedCallback() {
     // Stop planner status stream when component is disconnected
-    if (window.Alpine && window.Alpine.store) {
+    if (window.Alpine && window.Alpine.store && window.Alpine.store('app')) {
       window.Alpine.store('app').stopPlannerStatusStream();
     }
   }
