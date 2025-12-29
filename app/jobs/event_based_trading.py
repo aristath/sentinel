@@ -401,7 +401,12 @@ async def _can_execute_trade(
         return True, None
 
     # Check if market hours validation is required for this trade
-    if not should_check_market_hours(exchange, recommendation.side.value):
+    side_str = (
+        recommendation.side.value
+        if hasattr(recommendation.side, "value")
+        else str(recommendation.side)
+    )
+    if not should_check_market_hours(exchange, side_str):
         # Market hours check not required (e.g., BUY on flexible hours market)
         # Can execute anytime
         return True, None
