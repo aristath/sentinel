@@ -55,6 +55,7 @@ SETTING_DEFAULTS = {
     "enable_multi_objective": 0.0,  # Enable multi-objective optimization with Pareto frontier (1.0 = enabled, 0.0 = disabled)
     "enable_stochastic_scenarios": 0.0,  # Enable stochastic price scenarios for uncertainty evaluation (1.0 = enabled, 0.0 = disabled)
     "risk_profile": "balanced",  # Risk profile: "conservative", "balanced", or "aggressive"
+    "enable_market_regime_scenarios": 0.0,  # Enable market regime-aware scenario generation (1.0 = enabled, 0.0 = disabled)
     # Incremental Planner settings
     "incremental_planner_enabled": 1.0,  # Enable incremental planner mode (1.0 = enabled, 0.0 = disabled)
     "planner_batch_interval_seconds": 10.0,  # Interval for batch processing in seconds (1-300)
@@ -388,6 +389,15 @@ async def update_setting_value(
         await settings_repo.set(key, profile)
         cache.invalidate("settings:all")
         return {key: profile}
+    elif key == "enable_market_regime_scenarios":
+        # Validate boolean-like (0.0 or 1.0)
+        if data.value not in (0.0, 1.0):
+            raise HTTPException(
+                status_code=400,
+                detail=f"{key} must be 0.0 (disabled) or 1.0 (enabled)",
+            )
+        await set_setting(key, str(data.value), settings_repo)
+        return {key: data.value}
     elif key == "incremental_planner_enabled":
         # Validate boolean-like (0.0 or 1.0)
         if data.value not in (0.0, 1.0):
@@ -466,6 +476,7 @@ async def update_setting_value(
         "enable_multi_objective",
         "enable_stochastic_scenarios",
         "risk_profile",
+        "enable_market_regime_scenarios",
         "incremental_planner_enabled",
         "planner_batch_interval_seconds",
         "planner_batch_size",
