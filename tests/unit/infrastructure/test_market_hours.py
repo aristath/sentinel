@@ -291,6 +291,84 @@ class TestFilterStocksByOpenMarkets:
             assert filtered[0].symbol == "AAPL.US"
 
 
+class TestRequiresStrictMarketHours:
+    """Test strict market hours exchange identification."""
+
+    def test_identifies_strict_market_hours_exchanges(self):
+        """Test that strict market hours exchanges are identified correctly."""
+        from app.infrastructure.market_hours import requires_strict_market_hours
+
+        # Asian exchanges requiring strict market hours
+        assert requires_strict_market_hours("HKSE") is True
+        assert requires_strict_market_hours("XHKG") is True
+        assert requires_strict_market_hours("Shenzhen") is True
+        assert requires_strict_market_hours("XSHG") is True
+        assert requires_strict_market_hours("TSE") is True
+        assert requires_strict_market_hours("XTSE") is True
+        assert requires_strict_market_hours("ASX") is True
+        assert requires_strict_market_hours("XASX") is True
+
+    def test_identifies_flexible_hours_exchanges(self):
+        """Test that flexible hours exchanges are identified correctly."""
+        from app.infrastructure.market_hours import requires_strict_market_hours
+
+        # US and EU exchanges with flexible hours
+        assert requires_strict_market_hours("NYSE") is False
+        assert requires_strict_market_hours("NASDAQ") is False
+        assert requires_strict_market_hours("NasdaqGS") is False
+        assert requires_strict_market_hours("XETR") is False
+        assert requires_strict_market_hours("XETRA") is False
+        assert requires_strict_market_hours("LSE") is False
+        assert requires_strict_market_hours("Amsterdam") is False
+        assert requires_strict_market_hours("Paris") is False
+
+
+class TestShouldCheckMarketHours:
+    """Test market hours check requirement logic."""
+
+    def test_sell_orders_always_require_check(self):
+        """Test that SELL orders always require market hours check."""
+        from app.infrastructure.market_hours import should_check_market_hours
+
+        # SELL orders should always check, regardless of exchange
+        assert should_check_market_hours("NYSE", "SELL") is True
+        assert should_check_market_hours("XETR", "SELL") is True
+        assert should_check_market_hours("XHKG", "SELL") is True
+        assert should_check_market_hours("XSHG", "SELL") is True
+
+    def test_buy_orders_flexible_hours_markets(self):
+        """Test that BUY orders on flexible hours markets don't require check."""
+        from app.infrastructure.market_hours import should_check_market_hours
+
+        # BUY orders on flexible hours markets don't require check
+        assert should_check_market_hours("NYSE", "BUY") is False
+        assert should_check_market_hours("NASDAQ", "BUY") is False
+        assert should_check_market_hours("XETR", "BUY") is False
+        assert should_check_market_hours("LSE", "BUY") is False
+
+    def test_buy_orders_strict_hours_markets(self):
+        """Test that BUY orders on strict hours markets require check."""
+        from app.infrastructure.market_hours import should_check_market_hours
+
+        # BUY orders on strict hours markets require check
+        assert should_check_market_hours("HKSE", "BUY") is True
+        assert should_check_market_hours("XHKG", "BUY") is True
+        assert should_check_market_hours("Shenzhen", "BUY") is True
+        assert should_check_market_hours("XSHG", "BUY") is True
+        assert should_check_market_hours("TSE", "BUY") is True
+        assert should_check_market_hours("XTSE", "BUY") is True
+        assert should_check_market_hours("ASX", "BUY") is True
+        assert should_check_market_hours("XASX", "BUY") is True
+
+    def test_unknown_side_defaults_to_check(self):
+        """Test that unknown side defaults to requiring check (safe default)."""
+        from app.infrastructure.market_hours import should_check_market_hours
+
+        # Unknown side should default to checking (safe default)
+        assert should_check_market_hours("NYSE", "UNKNOWN") is True
+        assert should_check_market_hours("XHKG", "UNKNOWN") is True
+
+
 class TestGroupStocksByExchange:
     """Test grouping stocks by exchange."""
 

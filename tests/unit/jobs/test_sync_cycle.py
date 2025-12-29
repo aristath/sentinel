@@ -237,15 +237,15 @@ class TestStepExecuteTrade:
     """Test the market-aware trade execution step."""
 
     @pytest.mark.asyncio
-    async def test_skips_trade_when_market_closed(self):
-        """Test that trade is skipped when stock's market is closed."""
+    async def test_skips_buy_order_when_strict_market_closed(self):
+        """Test that BUY order is skipped when strict market hours exchange is closed."""
         from app.jobs.sync_cycle import _step_execute_trade
 
         recommendation = MagicMock()
         recommendation.symbol = "9988.HK"
         recommendation.side = "BUY"
 
-        # Mock stock with ASIA exchange
+        # Mock stock with strict market hours exchange (ASIA)
         mock_stock = MagicMock()
         mock_stock.fullExchangeName = "XHKG"
 
@@ -257,8 +257,98 @@ class TestStepExecuteTrade:
 
         with (
             patch(
+                "app.jobs.sync_cycle.should_check_market_hours",
+                return_value=True,  # Strict market hours exchange requires check
+            ),
+            patch(
                 "app.jobs.sync_cycle.is_market_open",
-                return_value=False,  # ASIA market closed
+                return_value=False,  # Market closed
+            ),
+            patch(
+                "app.jobs.sync_cycle._get_stock_by_symbol",
+                new_callable=AsyncMock,
+                return_value=mock_stock,
+            ),
+            patch(
+                "app.jobs.sync_cycle._execute_trade_order",
+                new_callable=AsyncMock,
+                side_effect=mock_execute,
+            ),
+        ):
+            result = await _step_execute_trade(recommendation)
+
+        assert execute_called is False
+        assert result["status"] == "skipped"
+        assert "market closed" in result["reason"].lower()
+
+    @pytest.mark.asyncio
+    async def test_allows_buy_order_when_flexible_market_closed(self):
+        """Test that BUY order is allowed when flexible hours market is closed."""
+        from app.jobs.sync_cycle import _step_execute_trade
+
+        recommendation = MagicMock()
+        recommendation.symbol = "AAPL.US"
+        recommendation.side = "BUY"
+
+        # Mock stock with flexible hours exchange (US)
+        mock_stock = MagicMock()
+        mock_stock.fullExchangeName = "NYSE"
+
+        execute_called = False
+
+        async def mock_execute():
+            nonlocal execute_called
+            execute_called = True
+            return {"status": "success"}
+
+        with (
+            patch(
+                "app.jobs.sync_cycle.should_check_market_hours",
+                return_value=False,  # Flexible hours market doesn't require check for BUY
+            ),
+            patch(
+                "app.jobs.sync_cycle._get_stock_by_symbol",
+                new_callable=AsyncMock,
+                return_value=mock_stock,
+            ),
+            patch(
+                "app.jobs.sync_cycle._execute_trade_order",
+                new_callable=AsyncMock,
+                side_effect=mock_execute,
+            ),
+        ):
+            result = await _step_execute_trade(recommendation)
+
+        assert execute_called is True
+        assert result["status"] == "success"
+
+    @pytest.mark.asyncio
+    async def test_skips_sell_order_when_market_closed(self):
+        """Test that SELL order is skipped when market is closed (all markets)."""
+        from app.jobs.sync_cycle import _step_execute_trade
+
+        recommendation = MagicMock()
+        recommendation.symbol = "AAPL.US"
+        recommendation.side = "SELL"
+
+        # Mock stock with flexible hours exchange (US)
+        mock_stock = MagicMock()
+        mock_stock.fullExchangeName = "NYSE"
+
+        execute_called = False
+
+        async def mock_execute():
+            nonlocal execute_called
+            execute_called = True
+
+        with (
+            patch(
+                "app.jobs.sync_cycle.should_check_market_hours",
+                return_value=True,  # SELL orders always require check
+            ),
+            patch(
+                "app.jobs.sync_cycle.is_market_open",
+                return_value=False,  # Market closed
             ),
             patch(
                 "app.jobs.sync_cycle._get_stock_by_symbol",
@@ -293,8 +383,8 @@ class TestStepExecuteTrade:
 
         with (
             patch(
-                "app.jobs.sync_cycle.is_market_open",
-                return_value=True,  # US market open
+                "app.jobs.sync_cycle.should_check_market_hours",
+                return_value=False,  # BUY on flexible hours market doesn't require check
             ),
             patch(
                 "app.jobs.sync_cycle._get_stock_by_symbol",
