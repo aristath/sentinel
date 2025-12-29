@@ -30,6 +30,6 @@ def calculate_rsi(closes: np.ndarray, length: int = RSI_LENGTH) -> Optional[floa
     rsi = ta.rsi(series, length=length)
 
     if rsi is not None and len(rsi) > 0 and not pd.isna(rsi.iloc[-1]):
-        return float(rsi.iloc[-1])
+        return float(rsi.iloc[-1].item())
 
     return None

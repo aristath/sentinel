@@ -57,7 +57,9 @@ async def get_position_drawdown(
         drawdown = (cumulative - running_max) / running_max
 
         max_drawdown = float(drawdown.min()) if not drawdown.empty else 0.0
-        current_drawdown = float(drawdown.iloc[-1]) if not drawdown.empty else 0.0
+        current_drawdown = (
+            float(drawdown.iloc[-1].item()) if not drawdown.empty else 0.0
+        )
 
         # Calculate days in current drawdown
         days_in_drawdown = None

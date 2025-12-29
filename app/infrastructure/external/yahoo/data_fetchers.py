@@ -328,7 +328,7 @@ def get_batch_quotes(symbol_yahoo_map: dict[str, Optional[str]]) -> dict[str, fl
                     # Get last non-NaN value
                     close_series = data["Close"].dropna()
                     if len(close_series) > 0:
-                        result[orig_sym] = float(close_series.iloc[-1])
+                        result[orig_sym] = float(close_series.iloc[-1].item())
                 else:
                     for yf_sym in yf_symbols:
                         orig_sym = symbol_map[yf_sym]
@@ -336,7 +336,7 @@ def get_batch_quotes(symbol_yahoo_map: dict[str, Optional[str]]) -> dict[str, fl
                             # Get last non-NaN value for this symbol
                             close_series = data["Close"][yf_sym].dropna()
                             if len(close_series) > 0:
-                                result[orig_sym] = float(close_series.iloc[-1])
+                                result[orig_sym] = float(close_series.iloc[-1].item())
 
     except Exception as e:
         logger.error(f"Failed to get batch quotes: {e}")

@@ -31,7 +31,7 @@ def calculate_ema(closes: np.ndarray, length: int = EMA_LENGTH) -> Optional[floa
     ema = ta.ema(series, length=length)
 
     if ema is not None and len(ema) > 0 and not pd.isna(ema.iloc[-1]):
-        return float(ema.iloc[-1])
+        return float(ema.iloc[-1].item())
 
     # Fallback to SMA
     return float(np.mean(closes[-length:]))

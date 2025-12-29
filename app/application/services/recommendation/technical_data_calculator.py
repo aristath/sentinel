@@ -54,7 +54,7 @@ def _calculate_ema_distance(closes: np.ndarray, closes_series: pd.Series) -> flo
 
     ema_200 = ta.ema(closes_series, length=200)
     if ema_200 is not None and len(ema_200) > 0 and not pd.isna(ema_200.iloc[-1]):
-        ema_value = float(ema_200.iloc[-1])
+        ema_value = float(ema_200.iloc[-1].item())
     else:
         ema_value = float(np.mean(closes[-200:]))
 
