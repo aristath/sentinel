@@ -17,6 +17,7 @@ from app.domain.repositories.protocols import (
 from app.domain.services.settings_service import SettingsService
 from app.infrastructure.cache import cache
 from app.infrastructure.external.tradernet import TradernetClient
+from app.infrastructure.market_hours import format_market_status_for_display
 
 logger = logging.getLogger(__name__)
 
@@ -82,15 +83,16 @@ class TickerContentService:
             if show_value > 0:
                 latest_snapshot = await self._portfolio_repo.get_latest()
                 if latest_snapshot and latest_snapshot.total_value:
-                    parts.append(f"Portfolio EUR{int(latest_snapshot.total_value):,}")
+                    parts.append(f"PORTFOLIO €{int(latest_snapshot.total_value):,}")
 
             # Cash balance
             if show_cash > 0:
                 latest_snapshot = await self._portfolio_repo.get_latest()
                 if latest_snapshot and latest_snapshot.cash_balance:
-                    parts.append(f"CASH EUR{int(latest_snapshot.cash_balance):,}")
+                    parts.append(f"CASH €{int(latest_snapshot.cash_balance):,}")
 
             # Recommendations - read from primary cache (show ALL)
+            has_recommendations = False
             if show_actions > 0:
                 # Generate portfolio hash to read from primary cache
                 positions = await self._position_repo.get_all()
@@ -119,17 +121,26 @@ class TickerContentService:
 
                 cached = cache.get(cache_key)
                 if cached and cached.get("steps"):
+                    has_recommendations = True
                     for step in cached["steps"]:  # ALL recommendations, no limit
                         side = step.get("side", "").upper()
                         symbol = step.get("symbol", "").split(".")[0]
                         value = step.get("estimated_value", 0)
                         if show_amounts > 0:
-                            parts.append(f"{side} {symbol} EUR{int(value)}")
+                            parts.append(f"{side} {symbol} €{int(value)}")
                         else:
                             parts.append(f"{side} {symbol}")
 
+            # Add market status (always append)
+            # Include "NO PENDING OPPORTUNITIES" only if no recommendations exist
+            market_status_text = await format_market_status_for_display(
+                has_recommendations
+            )
+            if market_status_text:
+                parts.append(market_status_text)
+
             if parts:
-                return " | ".join(parts)
+                return " * ".join(parts)
 
             # Fallback to system status when no content available
             # Check if Tradernet is connected as a simple health indicator
