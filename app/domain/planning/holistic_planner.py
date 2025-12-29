@@ -836,6 +836,121 @@ def _generate_cash_generation_pattern(
     return sequence if len(sequence) > 0 else None
 
 
+def _select_diverse_opportunities(
+    opportunities: List[ActionCandidate],
+    max_count: int,
+    stocks_by_symbol: Optional[Dict[str, Stock]] = None,
+    diversity_weight: float = 0.3,
+) -> List[ActionCandidate]:
+    """
+    Select diverse opportunities using clustering.
+
+    Clusters opportunities by country, industry, or symbol prefix to ensure
+    diversity. Selects top opportunities from each cluster, balancing priority
+    and diversity.
+
+    Args:
+        opportunities: List of opportunities to select from (already sorted by priority)
+        max_count: Maximum number of opportunities to return
+        stocks_by_symbol: Optional dict mapping symbol to Stock for country/industry info
+        diversity_weight: Weight for diversity vs priority (0.0 = pure priority, 1.0 = pure diversity)
+
+    Returns:
+        List of diverse opportunities
+    """
+    if not opportunities or max_count <= 0:
+        return []
+
+    if len(opportunities) <= max_count:
+        return opportunities[:max_count]
+
+    # Cluster opportunities by country, industry, or symbol prefix
+    clusters: Dict[str, List[ActionCandidate]] = {}
+
+    for opp in opportunities:
+        cluster_key = "OTHER"
+        if stocks_by_symbol:
+            stock = stocks_by_symbol.get(opp.symbol)
+            if stock:
+                # Prefer country, then industry, then symbol prefix
+                if stock.country:
+                    cluster_key = f"COUNTRY:{stock.country}"
+                elif stock.industry:
+                    cluster_key = f"INDUSTRY:{stock.industry}"
+                else:
+                    # Use symbol prefix (first 3 chars) as fallback
+                    cluster_key = f"SYMBOL:{opp.symbol[:3]}"
+            else:
+                cluster_key = f"SYMBOL:{opp.symbol[:3]}"
+        else:
+            # No stock info, use symbol prefix
+            cluster_key = f"SYMBOL:{opp.symbol[:3]}"
+
+        if cluster_key not in clusters:
+            clusters[cluster_key] = []
+        clusters[cluster_key].append(opp)
+
+    # Select from each cluster
+    selected: List[ActionCandidate] = []
+    opportunities_per_cluster = (
+        max(1, max_count // len(clusters)) if clusters else max_count
+    )
+
+    # Sort clusters by total priority (sum of priorities in cluster)
+    sorted_clusters = sorted(
+        clusters.items(), key=lambda x: sum(c.priority for c in x[1]), reverse=True
+    )
+
+    for cluster_key, cluster_opps in sorted_clusters:
+        # Take top opportunities from this cluster
+        cluster_selected = cluster_opps[:opportunities_per_cluster]
+        selected.extend(cluster_selected)
+
+        if len(selected) >= max_count:
+            break
+
+    # If we still need more, fill from remaining opportunities sorted by priority
+    if len(selected) < max_count:
+        remaining = [opp for opp in opportunities if opp not in selected]
+        remaining.sort(key=lambda x: x.priority, reverse=True)
+        selected.extend(remaining[: max_count - len(selected)])
+
+    # Balance priority and diversity: sort by weighted score
+    # Score = (1 - diversity_weight) * priority + diversity_weight * diversity_bonus
+    def _get_cluster_key(opp: ActionCandidate) -> str:
+        """Get cluster key for an opportunity."""
+        if stocks_by_symbol:
+            stock = stocks_by_symbol.get(opp.symbol)
+            if stock:
+                if stock.country:
+                    return f"COUNTRY:{stock.country}"
+                elif stock.industry:
+                    return f"INDUSTRY:{stock.industry}"
+        return f"SYMBOL:{opp.symbol[:3]}"
+
+    def _diversity_score(opp: ActionCandidate) -> float:
+        """Calculate diversity-weighted score for an opportunity."""
+        opp_cluster = _get_cluster_key(opp)
+
+        # Count how many other selected opportunities are in same cluster
+        same_cluster_count = sum(
+            1
+            for other in selected
+            if other != opp and _get_cluster_key(other) == opp_cluster
+        )
+        diversity_bonus = 1.0 / (1.0 + same_cluster_count * 0.5)
+
+        priority_score = opp.priority / 100.0 if opp.priority > 0 else 0.0
+        return (
+            1.0 - diversity_weight
+        ) * priority_score + diversity_weight * diversity_bonus
+
+    # Re-sort by diversity-weighted score
+    selected.sort(key=_diversity_score, reverse=True)
+
+    return selected[:max_count]
+
+
 def _generate_combinations(
     sells: List[ActionCandidate],
     buys: List[ActionCandidate],
@@ -911,26 +1026,58 @@ def _generate_patterns_at_depth(
     combinatorial_max_sells: int = 4,
     combinatorial_max_buys: int = 4,
     combinatorial_max_candidates: int = 12,
+    enable_diverse_selection: bool = True,
+    diversity_weight: float = 0.3,
+    stocks_by_symbol: Optional[Dict[str, Stock]] = None,
 ) -> List[List[ActionCandidate]]:
     """Generate sequence patterns capped at a specific depth."""
     sequences = []
 
-    # Expand opportunity selection - consider more opportunities per category
-    top_profit_taking = opportunities.get("profit_taking", [])[
-        :max_opportunities_per_category
-    ]
-    top_averaging = opportunities.get("averaging_down", [])[
-        :max_opportunities_per_category
-    ]
-    top_rebalance_sells = opportunities.get("rebalance_sells", [])[
-        :max_opportunities_per_category
-    ]
-    top_rebalance_buys = opportunities.get("rebalance_buys", [])[
-        :max_opportunities_per_category
-    ]
-    top_opportunity = opportunities.get("opportunity_buys", [])[
-        :max_opportunities_per_category
-    ]
+    # Select opportunities (diverse or top N)
+    all_profit_taking = opportunities.get("profit_taking", [])
+    all_averaging = opportunities.get("averaging_down", [])
+    all_rebalance_sells = opportunities.get("rebalance_sells", [])
+    all_rebalance_buys = opportunities.get("rebalance_buys", [])
+    all_opportunity = opportunities.get("opportunity_buys", [])
+
+    if enable_diverse_selection:
+        top_profit_taking = _select_diverse_opportunities(
+            all_profit_taking,
+            max_opportunities_per_category,
+            stocks_by_symbol,
+            diversity_weight,
+        )
+        top_averaging = _select_diverse_opportunities(
+            all_averaging,
+            max_opportunities_per_category,
+            stocks_by_symbol,
+            diversity_weight,
+        )
+        top_rebalance_sells = _select_diverse_opportunities(
+            all_rebalance_sells,
+            max_opportunities_per_category,
+            stocks_by_symbol,
+            diversity_weight,
+        )
+        top_rebalance_buys = _select_diverse_opportunities(
+            all_rebalance_buys,
+            max_opportunities_per_category,
+            stocks_by_symbol,
+            diversity_weight,
+        )
+        top_opportunity = _select_diverse_opportunities(
+            all_opportunity,
+            max_opportunities_per_category,
+            stocks_by_symbol,
+            diversity_weight,
+        )
+    else:
+        # Simple top N selection
+        top_profit_taking = all_profit_taking[:max_opportunities_per_category]
+        top_averaging = all_averaging[:max_opportunities_per_category]
+        top_rebalance_sells = all_rebalance_sells[:max_opportunities_per_category]
+        top_rebalance_buys = all_rebalance_buys[:max_opportunities_per_category]
+        top_opportunity = all_opportunity[:max_opportunities_per_category]
 
     pattern1 = _generate_direct_buy_pattern(
         top_averaging, top_rebalance_buys, top_opportunity, available_cash, max_steps
@@ -1056,6 +1203,9 @@ async def generate_action_sequences(
     combinatorial_max_sells: int = 4,
     combinatorial_max_buys: int = 4,
     combinatorial_max_candidates: int = 12,
+    enable_diverse_selection: bool = True,
+    diversity_weight: float = 0.3,
+    stocks: Optional[List[Stock]] = None,
 ) -> List[List[ActionCandidate]]:
     """
     Generate candidate action sequences at all depths (1 to max_depth).
@@ -1087,6 +1237,11 @@ async def generate_action_sequences(
     """
     all_sequences = []
 
+    # Build stocks_by_symbol dict for diverse selection
+    stocks_by_symbol: Optional[Dict[str, Stock]] = None
+    if stocks and enable_diverse_selection:
+        stocks_by_symbol = {s.symbol: s for s in stocks}
+
     # Generate patterns at each depth (1 to max_depth)
     for depth in range(1, max_depth + 1):
         depth_sequences = _generate_patterns_at_depth(
@@ -1100,6 +1255,9 @@ async def generate_action_sequences(
             combinatorial_max_sells=combinatorial_max_sells,
             combinatorial_max_buys=combinatorial_max_buys,
             combinatorial_max_candidates=combinatorial_max_candidates,
+            enable_diverse_selection=enable_diverse_selection,
+            diversity_weight=diversity_weight,
+            stocks_by_symbol=stocks_by_symbol,
         )
         all_sequences.extend(depth_sequences)
 
@@ -1788,6 +1946,13 @@ async def create_holistic_plan(
             portfolio_context, positions, stocks, available_cash, exchange_rate_service
         )
 
+    # Get diverse selection settings
+    enable_diverse_selection = (
+        await settings_repo.get_float("enable_diverse_selection", 1.0) == 1.0
+    )
+    diversity_weight = await settings_repo.get_float("diversity_weight", 0.3)
+    diversity_weight = max(0.0, min(1.0, diversity_weight))  # Clamp to 0-1
+
     # Generate candidate sequences at all depths (1 to max_plan_depth)
     sequences = await generate_action_sequences(
         opportunities,
@@ -1796,6 +1961,9 @@ async def create_holistic_plan(
         max_opportunities_per_category=max_opportunities_per_category,
         enable_combinatorial=enable_combinatorial,
         priority_threshold=priority_threshold,
+        enable_diverse_selection=enable_diverse_selection,
+        diversity_weight=diversity_weight,
+        stocks=stocks,
     )
 
     # Early filtering: Filter by priority threshold and invalid steps before simulation
