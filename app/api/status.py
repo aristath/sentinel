@@ -9,6 +9,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from app.api.models import (
     DatabaseStatsResponse,
@@ -28,6 +29,13 @@ from app.infrastructure.dependencies import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+class PlannerBatchRequest(BaseModel):
+    """Request model for planner batch processing."""
+
+    portfolio_hash: Optional[str] = None
+    depth: int = 0
 
 
 @router.get("", response_model=StatusResponse)
@@ -365,12 +373,20 @@ async def trigger_universe_pruning():
 
 
 @router.post("/jobs/planner-batch")
-async def trigger_planner_batch(portfolio_hash: Optional[str] = None, depth: int = 0):
-    """Manually trigger planner batch processing."""
+async def trigger_planner_batch(request: PlannerBatchRequest):
+    """
+    Manually trigger planner batch processing.
+
+    Accepts JSON body with portfolio_hash and depth parameters.
+    This endpoint is used by the event-based trading loop to trigger
+    API-driven batch processing (depth > 0) which self-triggers subsequent batches.
+    """
     from app.jobs.planner_batch import process_planner_batch_job
 
     try:
-        await process_planner_batch_job(max_depth=depth, portfolio_hash=portfolio_hash)
+        await process_planner_batch_job(
+            max_depth=request.depth, portfolio_hash=request.portfolio_hash
+        )
         return {"status": "success", "message": "Planner batch processed"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
