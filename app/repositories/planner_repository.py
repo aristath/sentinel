@@ -365,6 +365,29 @@ class PlannerRepository:
 
         return row["count"] if row else 0
 
+    async def are_all_sequences_evaluated(self, portfolio_hash: str) -> bool:
+        """
+        Check if all sequences for portfolio_hash have been evaluated.
+
+        Args:
+            portfolio_hash: Portfolio hash
+
+        Returns:
+            True if all sequences are evaluated, False otherwise
+        """
+        db = await self._get_db()
+
+        row = await db.fetchone(
+            """SELECT COUNT(*) as total, SUM(completed) as completed
+               FROM sequences WHERE portfolio_hash = ?""",
+            (portfolio_hash,),
+        )
+
+        if not row or row["total"] == 0:
+            return False
+
+        return row["completed"] == row["total"]
+
     async def get_best_sequence_from_hash(
         self, portfolio_hash: str, sequence_hash: str
     ) -> Optional[List[ActionCandidate]]:
