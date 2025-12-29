@@ -35,34 +35,28 @@ async def set_current_status(status: Dict[str, Any]) -> None:
 
 
 def _broadcast_to_queues(status_data: Dict[str, Any]) -> None:
+    """Broadcast status data to all subscriber queues (thread-safe).
+
+    This function can be called from sync context (event handlers).
+    Uses put_nowait which is thread-safe for asyncio.Queue.
+
+    Args:
+        status_data: Planner status dictionary to broadcast
     """
-    Broadcast status update to all subscriber queues.
+    # Get all current subscribers
+    # Note: We can't use async lock from sync context, so we access directly
+    # This is safe because we're only reading and put_nowait is thread-safe
+    queues = list(_subscribers)
 
-    This is called from the synchronous event handler context.
-    Uses asyncio.run_coroutine_threadsafe to safely queue items.
-    """
-
-    async def _do_broadcast():
-        async with _subscribers_lock:
-            for queue in list(_subscribers):
-                try:
-                    queue.put_nowait(status_data)
-                except asyncio.QueueFull:
-                    logger.debug("Queue full, dropping subscriber")
-                    _subscribers.discard(queue)
-                except Exception as e:
-                    logger.debug(f"Error broadcasting to queue: {e}")
-                    # Note: Can't safely remove from sync context, will be cleaned up on next iteration
-
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            asyncio.create_task(_do_broadcast())
-        else:
-            asyncio.run(_do_broadcast())
-    except RuntimeError:
-        # No event loop, skip broadcast
-        pass
+    # Put data in all queues (put_nowait is thread-safe)
+    for queue in queues:
+        try:
+            queue.put_nowait(status_data)
+        except asyncio.QueueFull:
+            logger.warning("Subscriber queue full, dropping event")
+        except Exception as e:
+            logger.debug(f"Failed to send event to subscriber: {e}")
+            # Note: Can't safely remove from sync context, will be cleaned up on next iteration
 
 
 async def subscribe_planner_events() -> AsyncGenerator[Dict[str, Any], None]:
@@ -115,9 +109,14 @@ def _on_planner_batch_complete(event: SystemEvent, **data: Any) -> None:
     # Extract status from event data if provided
     if "status" in data:
         status = data["status"]
-        # Update cache
-        asyncio.create_task(set_current_status(status))
-        # Broadcast to subscribers
+        # Update cache (async, but fire-and-forget from sync context)
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.create_task(set_current_status(status))
+        except RuntimeError:
+            pass
+        # Broadcast to subscribers (sync, thread-safe)
         _broadcast_to_queues(status)
 
 
@@ -126,9 +125,14 @@ def _on_planner_sequences_generated(event: SystemEvent, **data: Any) -> None:
     # Extract status from event data if provided
     if "status" in data:
         status = data["status"]
-        # Update cache
-        asyncio.create_task(set_current_status(status))
-        # Broadcast to subscribers
+        # Update cache (async, but fire-and-forget from sync context)
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.create_task(set_current_status(status))
+        except RuntimeError:
+            pass
+        # Broadcast to subscribers (sync, thread-safe)
         _broadcast_to_queues(status)
 
 
