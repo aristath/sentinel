@@ -202,8 +202,14 @@ async def get_recommendations(
             }
 
         # Calculate totals
-        total_score_improvement = steps[0].score_change if steps else 0.0
-        final_available_cash = steps[-1].available_cash_after
+        # Total improvement is the difference between initial and final portfolio scores
+        if steps:
+            total_score_improvement = (
+                steps[-1].portfolio_score_after - steps[0].portfolio_score_before
+            )
+        else:
+            total_score_improvement = 0.0
+        final_available_cash = steps[-1].available_cash_after if steps else 0.0
 
         result = {
             "depth": len(steps),
@@ -285,7 +291,13 @@ async def _regenerate_recommendations_cache(
         )
 
     # Rebuild cached format
-    total_score_improvement = steps_data[0].score_change if steps_data else 0.0
+    # Total improvement is the difference between initial and final portfolio scores
+    if steps_data:
+        total_score_improvement = (
+            steps_data[-1].portfolio_score_after - steps_data[0].portfolio_score_before
+        )
+    else:
+        total_score_improvement = 0.0
     final_available_cash = steps_data[-1].available_cash_after if steps_data else 0.0
 
     cached = {
