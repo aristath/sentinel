@@ -348,6 +348,18 @@ class SettingsModal extends HTMLElement {
                     </label>
                     <p class="text-xs text-gray-500 mt-1 ml-7">Use Pareto frontier to balance score, diversification, risk, and cost simultaneously</p>
                   </div>
+
+                  <!-- Enable Stochastic Scenarios -->
+                  <div>
+                    <label class="flex items-center gap-3 cursor-pointer">
+                      <input type="checkbox"
+                             :checked="($store.app.settings.enable_stochastic_scenarios || 0) == 1"
+                             @change="$store.app.updateSetting('enable_stochastic_scenarios', $event.target.checked ? 1 : 0)"
+                             class="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-800">
+                      <span class="text-sm text-gray-300">Enable Stochastic Price Scenarios</span>
+                    </label>
+                    <p class="text-xs text-gray-500 mt-1 ml-7">Evaluate sequences under price variations (±10%, ±5%) to account for uncertainty. Uses conservative scoring (60% worst-case, 40% average).</p>
+                  </div>
                 </div>
 
                 <!-- Info note -->
