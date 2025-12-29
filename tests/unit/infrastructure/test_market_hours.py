@@ -11,6 +11,8 @@ from datetime import datetime
 from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
+import pytest
+
 
 class TestGetCalendar:
     """Test getting exchange calendars."""
@@ -29,7 +31,7 @@ class TestGetCalendar:
 
         calendar = get_calendar("NASDAQ")
         assert calendar is not None
-        assert calendar.name == "XNYS"  # NASDAQ uses same calendar as NYSE
+        assert calendar.name == "XNAS"  # NASDAQ uses XNAS calendar
 
     def test_returns_default_for_unknown(self):
         """Test returning default calendar for unknown exchange."""
@@ -131,64 +133,92 @@ class TestIsMarketOpen:
 class TestGetOpenMarkets:
     """Test getting list of open markets."""
 
-    def test_returns_empty_list_on_weekend(self):
+    @pytest.mark.asyncio
+    async def test_returns_empty_list_on_weekend(self):
         """Test returning empty list when all markets closed."""
         from app.infrastructure.market_hours import get_open_markets
 
         # Saturday
-        with patch("app.infrastructure.market_hours._get_current_time") as mock_time:
+        with (
+            patch("app.infrastructure.market_hours._get_current_time") as mock_time,
+            patch(
+                "app.infrastructure.market_hours.get_exchanges_from_database"
+            ) as mock_db,
+        ):
             mock_time.return_value = datetime(
                 2024, 1, 13, 12, 0, tzinfo=ZoneInfo("UTC")
             )
-            open_markets = get_open_markets()
+            mock_db.return_value = ["NYSE", "XETR", "XHKG"]
+            open_markets = await get_open_markets()
             assert open_markets == []
 
-    def test_returns_open_markets(self):
+    @pytest.mark.asyncio
+    async def test_returns_open_markets(self):
         """Test returning list of open markets."""
         from app.infrastructure.market_hours import get_open_markets
 
         # Tuesday at 15:00 UTC - US and EU should be open
-        with patch("app.infrastructure.market_hours._get_current_time") as mock_time:
+        with (
+            patch("app.infrastructure.market_hours._get_current_time") as mock_time,
+            patch(
+                "app.infrastructure.market_hours.get_exchanges_from_database"
+            ) as mock_db,
+        ):
             mock_time.return_value = datetime(
                 2024, 1, 16, 15, 0, tzinfo=ZoneInfo("UTC")
             )
-            open_markets = get_open_markets()
-            assert "NYSE" in open_markets or "NASDAQ" in open_markets
+            mock_db.return_value = ["NYSE", "XETR", "XHKG"]
+            open_markets = await get_open_markets()
+            assert "NYSE" in open_markets or "NasdaqGS" in open_markets
             # EU might be closed by 16:00 CET, check if it's in overlap
 
 
 class TestGetMarketStatus:
     """Test getting detailed market status."""
 
-    def test_returns_status_for_all_markets(self):
+    @pytest.mark.asyncio
+    async def test_returns_status_for_all_markets(self):
         """Test returning status dict for all markets."""
         from app.infrastructure.market_hours import get_market_status
 
-        with patch("app.infrastructure.market_hours._get_current_time") as mock_time:
+        with (
+            patch("app.infrastructure.market_hours._get_current_time") as mock_time,
+            patch(
+                "app.infrastructure.market_hours.get_exchanges_from_database"
+            ) as mock_db,
+        ):
             mock_time.return_value = datetime(
                 2024, 1, 16, 15, 0, tzinfo=ZoneInfo("UTC")
             )
-            status = get_market_status()
+            mock_db.return_value = ["NYSE", "XETR", "XHKG"]
+            status = await get_market_status()
 
             # Check for exchange names in status
-            assert "NYSE" in status or "NASDAQ" in status
-            assert "XETR" in status
-            assert "XHKG" in status
+            assert "NYSE" in status or "NasdaqGS" in status
+            assert "XETR" in status or "XETRA" in status
+            assert "XHKG" in status or "HKSE" in status
 
             for market in status.values():
                 assert "open" in market
                 assert "exchange" in market
                 assert "timezone" in market
 
-    def test_includes_next_event_time(self):
+    @pytest.mark.asyncio
+    async def test_includes_next_event_time(self):
         """Test that status includes next open/close time."""
         from app.infrastructure.market_hours import get_market_status
 
-        with patch("app.infrastructure.market_hours._get_current_time") as mock_time:
+        with (
+            patch("app.infrastructure.market_hours._get_current_time") as mock_time,
+            patch(
+                "app.infrastructure.market_hours.get_exchanges_from_database"
+            ) as mock_db,
+        ):
             mock_time.return_value = datetime(
                 2024, 1, 16, 15, 0, tzinfo=ZoneInfo("UTC")
             )
-            status = get_market_status()
+            mock_db.return_value = ["NYSE", "XETR"]
+            status = await get_market_status()
 
             for market in status.values():
                 if market["open"]:
@@ -200,7 +230,8 @@ class TestGetMarketStatus:
 class TestFilterStocksByOpenMarkets:
     """Test filtering stocks by open markets."""
 
-    def test_filters_stocks_to_open_markets_only(self):
+    @pytest.mark.asyncio
+    async def test_filters_stocks_to_open_markets_only(self):
         """Test filtering stocks to only those with open markets."""
         from app.infrastructure.market_hours import filter_stocks_by_open_markets
 
@@ -220,14 +251,21 @@ class TestFilterStocksByOpenMarkets:
         stocks = [stock_eu, stock_us, stock_asia]
 
         # Saturday - all markets closed
-        with patch("app.infrastructure.market_hours._get_current_time") as mock_time:
+        with (
+            patch("app.infrastructure.market_hours._get_current_time") as mock_time,
+            patch(
+                "app.infrastructure.market_hours.get_exchanges_from_database"
+            ) as mock_db,
+        ):
             mock_time.return_value = datetime(
                 2024, 1, 13, 12, 0, tzinfo=ZoneInfo("UTC")
             )
-            filtered = filter_stocks_by_open_markets(stocks)
+            mock_db.return_value = ["XETR", "NYSE", "XHKG"]
+            filtered = await filter_stocks_by_open_markets(stocks)
             assert len(filtered) == 0
 
-    def test_returns_all_stocks_when_all_markets_open(self):
+    @pytest.mark.asyncio
+    async def test_returns_all_stocks_when_all_markets_open(self):
         """Test returning all stocks when their markets are open."""
         from app.infrastructure.market_hours import filter_stocks_by_open_markets
 
@@ -238,11 +276,17 @@ class TestFilterStocksByOpenMarkets:
         stocks = [stock_us]
 
         # Tuesday at 15:00 UTC - US market open
-        with patch("app.infrastructure.market_hours._get_current_time") as mock_time:
+        with (
+            patch("app.infrastructure.market_hours._get_current_time") as mock_time,
+            patch(
+                "app.infrastructure.market_hours.get_exchanges_from_database"
+            ) as mock_db,
+        ):
             mock_time.return_value = datetime(
                 2024, 1, 16, 15, 0, tzinfo=ZoneInfo("UTC")
             )
-            filtered = filter_stocks_by_open_markets(stocks)
+            mock_db.return_value = ["NYSE"]
+            filtered = await filter_stocks_by_open_markets(stocks)
             assert len(filtered) == 1
             assert filtered[0].symbol == "AAPL.US"
 

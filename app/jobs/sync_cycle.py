@@ -157,7 +157,7 @@ async def _step_sync_prices():
             logger.info("No active stocks to sync prices for")
             return
 
-        open_markets = get_open_markets()
+        open_markets = await get_open_markets()
         if not open_markets:
             logger.info("All markets are closed, skipping price sync")
             return

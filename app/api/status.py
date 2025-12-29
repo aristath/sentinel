@@ -450,19 +450,19 @@ def _get_backup_info(data_dir: Path) -> tuple[int, int]:
 
 @router.get("/markets", response_model=MarketsStatusResponse)
 async def get_markets_status():
-    """Get current market open/closed status for all geographies.
+    """Get current market open/closed status for markets where we have stocks.
 
-    Returns status for EU, US, and ASIA markets including:
+    Returns status for all markets where stocks exist in our universe including:
     - Whether each market is currently open
-    - Exchange code (XETR, XNYS, XHKG)
+    - Exchange code (e.g., XNYS, XAMS, ASEX)
     - Timezone
     - Next open/close time
     """
     from app.infrastructure.market_hours import get_market_status, get_open_markets
 
     try:
-        status = get_market_status()
-        open_markets = get_open_markets()
+        status = await get_market_status()
+        open_markets = await get_open_markets()
 
         return {
             "status": "ok",

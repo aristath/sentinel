@@ -9,7 +9,7 @@ including holidays, early closes, and lunch breaks.
 import logging
 from datetime import datetime
 from functools import lru_cache
-from typing import Any
+from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
 import exchange_calendars as xcals
@@ -17,36 +17,106 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-# Mapping of fullExchangeName to exchange calendar codes
-# Maps Yahoo Finance exchange names to exchange_calendars codes
-EXCHANGE_MAP = {
+# Mapping of database fullExchangeName to exchange_calendars codes
+# Maps Yahoo Finance exchange names (as stored in database) to exchange_calendars codes
+EXCHANGE_NAME_TO_CODE = {
+    "Amsterdam": "XAMS",
+    "Athens": "ASEX",
+    "Copenhagen": "XCSE",
+    "HKSE": "XHKG",
+    "LSE": "XLON",  # Direct match
+    "Milan": "XMIL",
+    "NasdaqCM": "XNAS",  # Use XNAS (same calendar as NasdaqGS)
+    "NasdaqGS": "XNAS",
+    "NYSE": "XNYS",  # Direct match
+    "Paris": "XPAR",
+    "Shenzhen": "XSHG",
+    "XETRA": "XETR",
+    # Legacy mappings for backwards compatibility
     "NASDAQ": "XNAS",
-    "NYSE": "XNYS",
-    "XETR": "XETR",  # Frankfurt/XETRA
-    "XHKG": "XHKG",  # Hong Kong
-    "LSE": "XLON",  # London Stock Exchange
-    "TSE": "XTSE",  # Tokyo Stock Exchange
-    "ASX": "XASX",  # Australian Securities Exchange
-    "Athens": "ASEX",  # Athens Stock Exchange (ATHEX)
-    # Add more mappings as needed
+    "XETR": "XETR",
+    "XHKG": "XHKG",
+    "TSE": "XTSE",
+    "ASX": "XASX",
 }
 
-# Timezone info for common exchanges
-EXCHANGE_TIMEZONES = {
-    "XNAS": "America/New_York",
-    "XNYS": "America/New_York",
-    "XETR": "Europe/Berlin",
-    "XHKG": "Asia/Hong_Kong",
-    "XLON": "Europe/London",
-    "XTSE": "Asia/Tokyo",
-    "XASX": "Australia/Sydney",
-    "ASEX": "Europe/Athens",
-}
+# Cache of available exchange_calendars codes
+_AVAILABLE_CALENDARS: Optional[set[str]] = None
+
+
+def _get_available_calendars() -> set[str]:
+    """Get set of all available exchange_calendars codes (cached)."""
+    global _AVAILABLE_CALENDARS
+    if _AVAILABLE_CALENDARS is None:
+        _AVAILABLE_CALENDARS = set(xcals.get_calendar_names())
+    return _AVAILABLE_CALENDARS
+
+
+def validate_exchange_code(code: str) -> bool:
+    """Check if an exchange code exists in exchange_calendars.
+
+    Args:
+        code: Exchange calendar code to validate
+
+    Returns:
+        True if code exists, False otherwise
+    """
+    return code in _get_available_calendars()
 
 
 def _get_current_time() -> datetime:
     """Get current UTC time. Extracted for testing."""
     return datetime.now(ZoneInfo("UTC"))
+
+
+async def get_exchanges_from_database() -> list[str]:
+    """
+    Get distinct exchange names from the stocks table in the database.
+
+    Returns:
+        List of unique fullExchangeName values from active stocks
+    """
+    try:
+        from app.infrastructure.database import get_db_manager
+
+        db_manager = get_db_manager()
+        rows = await db_manager.config.fetchall(
+            "SELECT DISTINCT fullExchangeName FROM stocks "
+            "WHERE fullExchangeName IS NOT NULL AND active = 1 "
+            "ORDER BY fullExchangeName"
+        )
+        return [row["fullExchangeName"] for row in rows if row["fullExchangeName"]]
+    except Exception as e:
+        logger.warning(f"Failed to get exchanges from database: {e}")
+        return []
+
+
+def _get_exchange_code(full_exchange_name: str) -> str:
+    """
+    Get exchange_calendars code for a database exchange name.
+
+    Args:
+        full_exchange_name: Exchange name from database (e.g., "NYSE", "Athens", "XETRA")
+
+    Returns:
+        Exchange calendar code (defaults to "XNYS" if not found)
+    """
+    # First check if it's already a valid calendar code
+    if validate_exchange_code(full_exchange_name):
+        return full_exchange_name
+
+    # Look up in mapping
+    exchange_code = EXCHANGE_NAME_TO_CODE.get(full_exchange_name, "XNYS")
+
+    # Validate the mapped code exists
+    if not validate_exchange_code(exchange_code):
+        logger.warning(
+            f"Exchange code {exchange_code} for {full_exchange_name} not found in exchange_calendars. "
+            f"Using default XNYS."
+        )
+        return "XNYS"
+
+    return exchange_code
 
 
 @lru_cache(maxsize=10)
@@ -55,12 +125,12 @@ def get_calendar(full_exchange_name: str) -> Any:
     Get the exchange calendar for a fullExchangeName.
 
     Args:
-        full_exchange_name: Exchange name from Yahoo Finance (e.g., "NASDAQ", "NYSE", "XETR")
+        full_exchange_name: Exchange name from database (e.g., "NYSE", "Athens", "XETRA")
 
     Returns:
         Exchange calendar object
     """
-    exchange_code = EXCHANGE_MAP.get(full_exchange_name, "XNYS")
+    exchange_code = _get_exchange_code(full_exchange_name)
     return xcals.get_calendar(exchange_code)
 
 
@@ -118,19 +188,20 @@ def is_market_open(full_exchange_name: str) -> bool:
         return False
 
 
-def get_open_markets() -> list[str]:
+async def get_open_markets() -> list[str]:
     """
-    Get list of currently open exchanges.
+    Get list of currently open exchanges (only those where we have stocks).
 
     Returns:
         List of exchange names that are currently open
     """
-    return [exch for exch in EXCHANGE_MAP.keys() if is_market_open(exch)]
+    exchanges = await get_exchanges_from_database()
+    return [exch for exch in exchanges if is_market_open(exch)]
 
 
-def get_market_status() -> dict[str, dict[str, Any]]:
+async def get_market_status() -> dict[str, dict[str, Any]]:
     """
-    Get detailed status for all markets.
+    Get detailed status for all markets where we have stocks.
 
     Returns:
         Dict mapping exchange name to status dict containing:
@@ -143,11 +214,16 @@ def get_market_status() -> dict[str, dict[str, Any]]:
     status = {}
     now = _get_current_time()
 
-    for exchange_name, exchange_code in EXCHANGE_MAP.items():
+    # Get exchanges from database (only where we have stocks)
+    exchange_names = await get_exchanges_from_database()
+
+    for exchange_name in exchange_names:
         try:
             calendar = get_calendar(exchange_name)
+            exchange_code = _get_exchange_code(exchange_name)
             market_tz = calendar.tz
-            timezone_str = EXCHANGE_TIMEZONES.get(exchange_code, str(market_tz))
+            # Get timezone from calendar object (no hardcoded dict needed)
+            timezone_str = str(market_tz)
 
             now_market = pd.Timestamp(now).tz_convert(market_tz)
             today_str = now_market.strftime("%Y-%m-%d")
@@ -216,17 +292,18 @@ def get_market_status() -> dict[str, dict[str, Any]]:
 
         except Exception as e:
             logger.warning(f"Error getting market status for {exchange_name}: {e}")
+            exchange_code = _get_exchange_code(exchange_name)
             status[exchange_name] = {
                 "open": False,
                 "exchange": exchange_code,
-                "timezone": EXCHANGE_TIMEZONES.get(exchange_code, "Unknown"),
+                "timezone": "Unknown",
                 "error": str(e),
             }
 
     return status
 
 
-def filter_stocks_by_open_markets(stocks: list) -> list:
+async def filter_stocks_by_open_markets(stocks: list) -> list:
     """
     Filter stocks to only those whose markets are currently open.
 
@@ -236,7 +313,7 @@ def filter_stocks_by_open_markets(stocks: list) -> list:
     Returns:
         Filtered list of stocks with open markets
     """
-    open_markets = get_open_markets()
+    open_markets = await get_open_markets()
     return [s for s in stocks if getattr(s, "fullExchangeName", None) in open_markets]
 
 
