@@ -1,8 +1,11 @@
 """Planner API endpoints for sequence regeneration."""
 
+import json
 import logging
+from typing import Any, AsyncIterator, Dict
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 
 from app.domain.portfolio_hash import generate_portfolio_hash
 from app.infrastructure.dependencies import PositionRepositoryDep, StockRepositoryDep
@@ -62,3 +65,143 @@ async def regenerate_sequences(
     except Exception as e:
         logger.error(f"Error regenerating sequences: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+async def _get_planner_status_internal(
+    position_repo: PositionRepositoryDep,
+    stock_repo: StockRepositoryDep,
+) -> Dict[str, Any]:
+    """
+    Internal function to get planner status.
+
+    Returns:
+        Planner status dictionary
+    """
+    # Get current portfolio state
+    positions = await position_repo.get_all()
+    stocks = await stock_repo.get_all_active()
+
+    # Generate portfolio hash
+    position_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
+    portfolio_hash = generate_portfolio_hash(position_dicts, stocks)
+
+    planner_repo = PlannerRepository()
+
+    # Get sequence statistics
+    has_sequences = await planner_repo.has_sequences(portfolio_hash)
+    total_sequences = await planner_repo.get_total_sequence_count(portfolio_hash)
+    evaluated_count = await planner_repo.get_evaluation_count(portfolio_hash)
+    is_finished = await planner_repo.are_all_sequences_evaluated(portfolio_hash)
+
+    # Calculate progress percentage
+    if total_sequences > 0:
+        progress_percentage = (evaluated_count / total_sequences) * 100.0
+    else:
+        progress_percentage = 0.0
+
+    # Check if planning is currently running
+    # Planning is considered active if:
+    # 1. Sequences exist
+    # 2. Not all sequences are evaluated
+    # 3. Scheduler is running and has planner_batch job scheduled
+    is_planning = False
+    if has_sequences and not is_finished:
+        try:
+            from app.jobs.scheduler import get_scheduler
+
+            scheduler = get_scheduler()
+            if scheduler and scheduler.running:
+                # Check if planner_batch job exists in scheduler
+                jobs = scheduler.get_jobs()
+                planner_job = next(
+                    (job for job in jobs if job.id == "planner_batch"), None
+                )
+                if planner_job:
+                    is_planning = True
+        except Exception as e:
+            logger.debug(f"Could not check scheduler status: {e}")
+            # If we can't check scheduler, assume planning is active if there's work to do
+            is_planning = True
+
+    return {
+        "has_sequences": has_sequences,
+        "total_sequences": total_sequences,
+        "evaluated_count": evaluated_count,
+        "is_planning": is_planning,
+        "is_finished": is_finished,
+        "portfolio_hash": portfolio_hash[:8],
+        "progress_percentage": round(progress_percentage, 1),
+    }
+
+
+@router.get("/status")
+async def get_planner_status(
+    position_repo: PositionRepositoryDep,
+    stock_repo: StockRepositoryDep,
+):
+    """
+    Get planner status including sequence generation and evaluation progress.
+
+    Returns:
+        Planner status with:
+        - has_sequences: Whether sequences have been generated
+        - total_sequences: Total sequences generated
+        - evaluated_count: Number of evaluated sequences
+        - is_planning: Whether planning is currently running
+        - is_finished: Whether all sequences have been evaluated
+        - portfolio_hash: Portfolio hash being processed
+        - progress_percentage: Percentage of sequences evaluated (0-100)
+    """
+    try:
+        return await _get_planner_status_internal(position_repo, stock_repo)
+    except Exception as e:
+        logger.error(f"Error getting planner status: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/status/stream")
+async def stream_planner_status(
+    position_repo: PositionRepositoryDep,
+    stock_repo: StockRepositoryDep,
+):
+    """Stream planner status updates via Server-Sent Events (SSE).
+
+    Real-time streaming of planner status updates. Initial status is sent
+    immediately on connection, then updates are streamed as batches complete.
+    """
+    from app.infrastructure import planner_events
+
+    async def event_generator() -> AsyncIterator[str]:
+        """Generate SSE events from planner status changes."""
+        try:
+            # Get initial status and send it
+            initial_status = await _get_planner_status_internal(
+                position_repo, stock_repo
+            )
+            # Cache it
+            await planner_events.set_current_status(initial_status)
+            # Format as SSE event: data: {json}\n\n
+            event_data = json.dumps(initial_status)
+            yield f"data: {event_data}\n\n"
+
+            # Subscribe to planner events
+            async for status_data in planner_events.subscribe_planner_events():
+                # Format as SSE event: data: {json}\n\n
+                event_data = json.dumps(status_data)
+                yield f"data: {event_data}\n\n"
+
+        except Exception as e:
+            logger.error(f"SSE stream error: {e}", exc_info=True)
+            # Send error event and close
+            error_data = json.dumps({"error": "Stream closed"})
+            yield f"data: {error_data}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

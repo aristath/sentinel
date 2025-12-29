@@ -2398,6 +2398,36 @@ async def process_planner_incremental(
         await repo.ensure_sequences_generated(portfolio_hash, feasible_sequences)
         logger.info(f"Generated {len(feasible_sequences)} sequences")
 
+        # Emit planner sequences generated event
+        try:
+            from app.infrastructure.events import SystemEvent, emit
+
+            total_sequences = await repo.get_total_sequence_count(portfolio_hash)
+            evaluated_count = await repo.get_evaluation_count(portfolio_hash)
+            is_finished = await repo.are_all_sequences_evaluated(portfolio_hash)
+
+            if total_sequences > 0:
+                progress_percentage = (evaluated_count / total_sequences) * 100.0
+            else:
+                progress_percentage = 0.0
+
+            # Check if planning is active
+            is_planning = total_sequences > 0 and not is_finished
+
+            status = {
+                "has_sequences": total_sequences > 0,
+                "total_sequences": total_sequences,
+                "evaluated_count": evaluated_count,
+                "is_planning": is_planning,
+                "is_finished": is_finished,
+                "portfolio_hash": portfolio_hash[:8],
+                "progress_percentage": round(progress_percentage, 1),
+            }
+
+            emit(SystemEvent.PLANNER_SEQUENCES_GENERATED, status=status)
+        except Exception as e:
+            logger.debug(f"Could not emit planner sequences generated event: {e}")
+
     # Get next batch of sequences
     next_sequences = await repo.get_next_sequences(portfolio_hash, limit=batch_size)
 

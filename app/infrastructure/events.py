@@ -79,6 +79,10 @@ class SystemEvent(Enum):
     # LED Display events
     DISPLAY_STATE_CHANGED = "display_state_changed"
 
+    # Planner events
+    PLANNER_BATCH_COMPLETE = "planner_batch_complete"
+    PLANNER_SEQUENCES_GENERATED = "planner_sequences_generated"
+
 
 # Event listeners storage
 _listeners: dict[SystemEvent, list[Callable]] = {event: [] for event in SystemEvent}

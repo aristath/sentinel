@@ -192,6 +192,41 @@ async def process_planner_batch_job(
                 "Planner batch processed: no plan yet (sequences still being evaluated)"
             )
 
+        # Emit planner batch complete event with current status
+        try:
+            from app.infrastructure.events import SystemEvent, emit
+
+            # Get current status to emit
+            planner_repo = PlannerRepository()
+            has_sequences = await planner_repo.has_sequences(portfolio_hash)
+            total_sequences = await planner_repo.get_total_sequence_count(
+                portfolio_hash
+            )
+            evaluated_count = await planner_repo.get_evaluation_count(portfolio_hash)
+            is_finished = await planner_repo.are_all_sequences_evaluated(portfolio_hash)
+
+            if total_sequences > 0:
+                progress_percentage = (evaluated_count / total_sequences) * 100.0
+            else:
+                progress_percentage = 0.0
+
+            # Check if planning is active
+            is_planning = has_sequences and not is_finished
+
+            status = {
+                "has_sequences": has_sequences,
+                "total_sequences": total_sequences,
+                "evaluated_count": evaluated_count,
+                "is_planning": is_planning,
+                "is_finished": is_finished,
+                "portfolio_hash": portfolio_hash[:8],
+                "progress_percentage": round(progress_percentage, 1),
+            }
+
+            emit(SystemEvent.PLANNER_BATCH_COMPLETE, status=status)
+        except Exception as e:
+            logger.debug(f"Could not emit planner status event: {e}")
+
         # Check if more work remains and self-trigger next batch if in API-driven mode
         if max_depth > 0:
             planner_repo = PlannerRepository()
