@@ -42,6 +42,11 @@ SETTING_DEFAULTS = {
     "max_opportunities_per_category": 5.0,  # Max opportunities per category to consider (1-20)
     "enable_combinatorial_generation": 1.0,  # Enable combinatorial generation (1.0 = enabled, 0.0 = disabled)
     "priority_threshold_for_combinations": 0.3,  # Min priority for combinations (0.0-1.0)
+    # Combinatorial generation settings
+    "combinatorial_max_combinations_per_depth": 50.0,  # Max combinatorial sequences per depth (10-500)
+    "combinatorial_max_sells": 4.0,  # Max sells in combinations (1-10)
+    "combinatorial_max_buys": 4.0,  # Max buys in combinations (1-10)
+    "combinatorial_max_candidates": 12.0,  # Max candidates considered for combinations (5-30)
     # Incremental Planner settings
     "incremental_planner_enabled": 1.0,  # Enable incremental planner mode (1.0 = enabled, 0.0 = disabled)
     "planner_batch_interval_seconds": 10.0,  # Interval for batch processing in seconds (1-300)
@@ -273,6 +278,42 @@ async def update_setting_value(
             )
         await set_setting(key, str(data.value), settings_repo)
         return {key: data.value}
+    elif key == "combinatorial_max_combinations_per_depth":
+        # Validate range (10-500)
+        if data.value < 10 or data.value > 500:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{key} must be between 10 and 500",
+            )
+        await set_setting(key, str(int(data.value)), settings_repo)
+        return {key: int(data.value)}
+    elif key == "combinatorial_max_sells":
+        # Validate range (1-10)
+        if data.value < 1 or data.value > 10:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{key} must be between 1 and 10",
+            )
+        await set_setting(key, str(int(data.value)), settings_repo)
+        return {key: int(data.value)}
+    elif key == "combinatorial_max_buys":
+        # Validate range (1-10)
+        if data.value < 1 or data.value > 10:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{key} must be between 1 and 10",
+            )
+        await set_setting(key, str(int(data.value)), settings_repo)
+        return {key: int(data.value)}
+    elif key == "combinatorial_max_candidates":
+        # Validate range (5-30)
+        if data.value < 5 or data.value > 30:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{key} must be between 5 and 30",
+            )
+        await set_setting(key, str(int(data.value)), settings_repo)
+        return {key: int(data.value)}
     elif key == "incremental_planner_enabled":
         # Validate boolean-like (0.0 or 1.0)
         if data.value not in (0.0, 1.0):
@@ -340,6 +381,10 @@ async def update_setting_value(
         "max_opportunities_per_category",
         "enable_combinatorial_generation",
         "priority_threshold_for_combinations",
+        "combinatorial_max_combinations_per_depth",
+        "combinatorial_max_sells",
+        "combinatorial_max_buys",
+        "combinatorial_max_candidates",
         "incremental_planner_enabled",
         "planner_batch_interval_seconds",
         "planner_batch_size",

@@ -39,6 +39,15 @@ class Settings:
     priority_threshold_for_combinations: float = (
         0.3  # Min priority for combinations (0.0-1.0)
     )
+    # Combinatorial generation settings
+    combinatorial_max_combinations_per_depth: float = (
+        50.0  # Max combinatorial sequences per depth (10-500)
+    )
+    combinatorial_max_sells: float = 4.0  # Max sells in combinations (1-10)
+    combinatorial_max_buys: float = 4.0  # Max buys in combinations (1-10)
+    combinatorial_max_candidates: float = (
+        12.0  # Max candidates considered for combinations (5-30)
+    )
     # Incremental planner settings
     incremental_planner_enabled: float = (
         1.0  # Enable incremental planner mode (1.0 = enabled, 0.0 = disabled)
@@ -106,6 +115,24 @@ class Settings:
             1.0,
         )
         self._validate_range(
+            self.combinatorial_max_combinations_per_depth,
+            "combinatorial_max_combinations_per_depth",
+            10.0,
+            500.0,
+        )
+        self._validate_range(
+            self.combinatorial_max_sells, "combinatorial_max_sells", 1.0, 10.0
+        )
+        self._validate_range(
+            self.combinatorial_max_buys, "combinatorial_max_buys", 1.0, 10.0
+        )
+        self._validate_range(
+            self.combinatorial_max_candidates,
+            "combinatorial_max_candidates",
+            5.0,
+            30.0,
+        )
+        self._validate_range(
             self.planner_batch_interval_seconds,
             "planner_batch_interval_seconds",
             1.0,
@@ -164,6 +191,14 @@ class Settings:
             priority_threshold_for_combinations=get_float(
                 "priority_threshold_for_combinations", 0.3
             ),
+            combinatorial_max_combinations_per_depth=get_float(
+                "combinatorial_max_combinations_per_depth", 50.0
+            ),
+            combinatorial_max_sells=get_float("combinatorial_max_sells", 4.0),
+            combinatorial_max_buys=get_float("combinatorial_max_buys", 4.0),
+            combinatorial_max_candidates=get_float(
+                "combinatorial_max_candidates", 12.0
+            ),
             incremental_planner_enabled=get_float("incremental_planner_enabled", 1.0),
             planner_batch_interval_seconds=get_float(
                 "planner_batch_interval_seconds", 10.0
@@ -192,6 +227,10 @@ class Settings:
             "max_opportunities_per_category": self.max_opportunities_per_category,
             "enable_combinatorial_generation": self.enable_combinatorial_generation,
             "priority_threshold_for_combinations": self.priority_threshold_for_combinations,
+            "combinatorial_max_combinations_per_depth": self.combinatorial_max_combinations_per_depth,
+            "combinatorial_max_sells": self.combinatorial_max_sells,
+            "combinatorial_max_buys": self.combinatorial_max_buys,
+            "combinatorial_max_candidates": self.combinatorial_max_candidates,
             "incremental_planner_enabled": self.incremental_planner_enabled,
             "planner_batch_interval_seconds": self.planner_batch_interval_seconds,
             "planner_batch_size": self.planner_batch_size,

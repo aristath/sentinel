@@ -827,6 +827,7 @@ def _generate_combinations(
     priority_threshold: float = 0.3,
     max_steps: int = 5,
     max_combinations: int = 50,
+    max_candidates: int = 12,
 ) -> List[List[ActionCandidate]]:
     """Generate valid combinations with smart pruning.
 
@@ -852,7 +853,6 @@ def _generate_combinations(
     filtered_buys = [b for b in buys if b.priority >= priority_threshold]
 
     # Limit the number of candidates to avoid combinatorial explosion
-    max_candidates = 8
     filtered_sells = filtered_sells[:max_candidates]
     filtered_buys = filtered_buys[:max_candidates]
 
@@ -890,6 +890,10 @@ def _generate_patterns_at_depth(
     max_opportunities_per_category: int = 5,
     enable_combinatorial: bool = True,
     priority_threshold: float = 0.3,
+    combinatorial_max_combinations_per_depth: int = 50,
+    combinatorial_max_sells: int = 4,
+    combinatorial_max_buys: int = 4,
+    combinatorial_max_candidates: int = 12,
 ) -> List[List[ActionCandidate]]:
     """Generate sequence patterns capped at a specific depth."""
     sequences = []
@@ -1012,11 +1016,12 @@ def _generate_patterns_at_depth(
             combo_sequences = _generate_combinations(
                 sells=all_sells,
                 buys=all_buys,
-                max_sells=min(3, max_steps // 2),
-                max_buys=min(3, max_steps),
+                max_sells=min(combinatorial_max_sells, max_steps // 2),
+                max_buys=min(combinatorial_max_buys, max_steps),
                 priority_threshold=priority_threshold,
                 max_steps=max_steps,
-                max_combinations=20,  # Limit combinatorial sequences per depth
+                max_combinations=combinatorial_max_combinations_per_depth,
+                max_candidates=combinatorial_max_candidates,
             )
             sequences.extend(combo_sequences)
 
@@ -1030,6 +1035,10 @@ async def generate_action_sequences(
     max_opportunities_per_category: int = 5,
     enable_combinatorial: bool = True,
     priority_threshold: float = 0.3,
+    combinatorial_max_combinations_per_depth: int = 50,
+    combinatorial_max_sells: int = 4,
+    combinatorial_max_buys: int = 4,
+    combinatorial_max_candidates: int = 12,
 ) -> List[List[ActionCandidate]]:
     """
     Generate candidate action sequences at all depths (1 to max_depth).
@@ -1070,6 +1079,10 @@ async def generate_action_sequences(
             max_opportunities_per_category=max_opportunities_per_category,
             enable_combinatorial=enable_combinatorial,
             priority_threshold=priority_threshold,
+            combinatorial_max_combinations_per_depth=combinatorial_max_combinations_per_depth,
+            combinatorial_max_sells=combinatorial_max_sells,
+            combinatorial_max_buys=combinatorial_max_buys,
+            combinatorial_max_candidates=combinatorial_max_candidates,
         )
         all_sequences.extend(depth_sequences)
 
@@ -1183,6 +1196,10 @@ async def process_planner_incremental(
     max_opportunities_per_category: int = 5,
     enable_combinatorial: bool = True,
     priority_threshold: float = 0.3,
+    combinatorial_max_combinations_per_depth: int = 50,
+    combinatorial_max_sells: int = 4,
+    combinatorial_max_buys: int = 4,
+    combinatorial_max_candidates: int = 12,
     batch_size: int = 100,
 ) -> Optional[HolisticPlan]:
     """
@@ -1278,6 +1295,10 @@ async def process_planner_incremental(
             max_opportunities_per_category=max_opportunities_per_category,
             enable_combinatorial=enable_combinatorial,
             priority_threshold=priority_threshold,
+            combinatorial_max_combinations_per_depth=combinatorial_max_combinations_per_depth,
+            combinatorial_max_sells=combinatorial_max_sells,
+            combinatorial_max_buys=combinatorial_max_buys,
+            combinatorial_max_candidates=combinatorial_max_candidates,
         )
 
         # Filter sequences (same logic as in create_holistic_plan)
@@ -1560,6 +1581,10 @@ async def create_holistic_plan_incremental(
     max_opportunities_per_category: int = 5,
     enable_combinatorial: bool = True,
     priority_threshold: float = 0.3,
+    combinatorial_max_combinations_per_depth: int = 50,
+    combinatorial_max_sells: int = 4,
+    combinatorial_max_buys: int = 4,
+    combinatorial_max_candidates: int = 12,
     batch_size: int = 100,
 ) -> Optional[HolisticPlan]:
     """
@@ -1588,6 +1613,10 @@ async def create_holistic_plan_incremental(
         max_opportunities_per_category=max_opportunities_per_category,
         enable_combinatorial=enable_combinatorial,
         priority_threshold=priority_threshold,
+        combinatorial_max_combinations_per_depth=combinatorial_max_combinations_per_depth,
+        combinatorial_max_sells=combinatorial_max_sells,
+        combinatorial_max_buys=combinatorial_max_buys,
+        combinatorial_max_candidates=combinatorial_max_candidates,
         batch_size=batch_size,
     )
 
@@ -1606,6 +1635,10 @@ async def create_holistic_plan(
     max_opportunities_per_category: int = 5,
     enable_combinatorial: bool = True,
     priority_threshold: float = 0.3,
+    combinatorial_max_combinations_per_depth: int = 50,
+    combinatorial_max_sells: int = 4,
+    combinatorial_max_buys: int = 4,
+    combinatorial_max_candidates: int = 12,
 ) -> HolisticPlan:
     """
     Create a holistic plan by evaluating action sequences and selecting the best.

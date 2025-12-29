@@ -323,6 +323,79 @@ class SettingsModal extends HTMLElement {
                            :value="$store.app.settings.planner_batch_size"
                            @change="$store.app.updateSetting('planner_batch_size', Math.max(10, Math.min(1000, parseInt($event.target.value) || 100)))"
                            class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Combinatorial Generation Card -->
+              <div class="bg-gray-800 border border-gray-700 rounded p-4">
+                <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wide mb-3">Combinatorial Generation</h3>
+                <p class="text-xs text-gray-500 mb-4">Controls how many combinatorial sequences are generated. Higher values explore more scenarios but require more computation time.</p>
+
+                <div class="grid grid-cols-[1fr_auto] gap-x-4 gap-y-3 items-start">
+                  <!-- Max Combinations Per Depth -->
+                  <div>
+                    <span class="text-sm text-gray-300">Max Combinations Per Depth</span>
+                    <p class="text-xs text-gray-500">Sequences per depth level (10-500)</p>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <input type="number"
+                           min="10"
+                           max="500"
+                           step="10"
+                           :value="$store.app.settings.combinatorial_max_combinations_per_depth"
+                           @change="$store.app.updateSetting('combinatorial_max_combinations_per_depth', Math.max(10, Math.min(500, parseInt($event.target.value) || 50)))"
+                           class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                  </div>
+
+                  <!-- Max Sells -->
+                  <div>
+                    <span class="text-sm text-gray-300">Max Sells in Combinations</span>
+                    <p class="text-xs text-gray-500">Maximum sells per sequence (1-10)</p>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <input type="number"
+                           min="1"
+                           max="10"
+                           step="1"
+                           :value="$store.app.settings.combinatorial_max_sells"
+                           @change="$store.app.updateSetting('combinatorial_max_sells', Math.max(1, Math.min(10, parseInt($event.target.value) || 4)))"
+                           class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                  </div>
+
+                  <!-- Max Buys -->
+                  <div>
+                    <span class="text-sm text-gray-300">Max Buys in Combinations</span>
+                    <p class="text-xs text-gray-500">Maximum buys per sequence (1-10)</p>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <input type="number"
+                           min="1"
+                           max="10"
+                           step="1"
+                           :value="$store.app.settings.combinatorial_max_buys"
+                           @change="$store.app.updateSetting('combinatorial_max_buys', Math.max(1, Math.min(10, parseInt($event.target.value) || 4)))"
+                           class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                  </div>
+
+                  <!-- Max Candidates -->
+                  <div>
+                    <span class="text-sm text-gray-300">Max Candidates</span>
+                    <p class="text-xs text-gray-500">Candidates considered for combinations (5-30)</p>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <input type="number"
+                           min="5"
+                           max="30"
+                           step="1"
+                           :value="$store.app.settings.combinatorial_max_candidates"
+                           @change="$store.app.updateSetting('combinatorial_max_candidates', Math.max(5, Math.min(30, parseInt($event.target.value) || 12)))"
+                           class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                  </div>
+                </div>
+              </div>
+                           @change="$store.app.updateSetting('planner_batch_size', Math.max(10, Math.min(1000, parseInt($event.target.value) || 100)))"
+                           class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
                     <span class="text-gray-400 text-sm">seq</span>
                   </div>
                 </div>

@@ -99,6 +99,20 @@ async def process_planner_batch_job():
         priority_threshold = await settings_repo.get_float(
             "priority_threshold_for_combinations", 0.3
         )
+        combinatorial_max_combinations_per_depth = int(
+            await settings_repo.get_float(
+                "combinatorial_max_combinations_per_depth", 50.0
+            )
+        )
+        combinatorial_max_sells = int(
+            await settings_repo.get_float("combinatorial_max_sells", 4.0)
+        )
+        combinatorial_max_buys = int(
+            await settings_repo.get_float("combinatorial_max_buys", 4.0)
+        )
+        combinatorial_max_candidates = int(
+            await settings_repo.get_float("combinatorial_max_candidates", 12.0)
+        )
 
         # Process batch
         plan = await create_holistic_plan_incremental(
@@ -119,6 +133,10 @@ async def process_planner_batch_job():
             max_opportunities_per_category=max_opportunities_per_category,
             enable_combinatorial=enable_combinatorial,
             priority_threshold=priority_threshold,
+            combinatorial_max_combinations_per_depth=combinatorial_max_combinations_per_depth,
+            combinatorial_max_sells=combinatorial_max_sells,
+            combinatorial_max_buys=combinatorial_max_buys,
+            combinatorial_max_candidates=combinatorial_max_candidates,
             batch_size=batch_size,
         )
 

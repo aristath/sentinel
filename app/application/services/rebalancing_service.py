@@ -227,6 +227,18 @@ class RebalancingService:
         priority_threshold = await self._settings_repo.get_float(
             "priority_threshold_for_combinations", 0.3
         )
+        combinatorial_max_combinations_per_depth = await self._settings_repo.get_int(
+            "combinatorial_max_combinations_per_depth", 50
+        )
+        combinatorial_max_sells = await self._settings_repo.get_int(
+            "combinatorial_max_sells", 4
+        )
+        combinatorial_max_buys = await self._settings_repo.get_int(
+            "combinatorial_max_buys", 4
+        )
+        combinatorial_max_candidates = await self._settings_repo.get_int(
+            "combinatorial_max_candidates", 12
+        )
 
         # Get positions and stocks (needed for portfolio value calculation)
         positions = await self._position_repo.get_all()
@@ -490,6 +502,10 @@ class RebalancingService:
                 max_opportunities_per_category=max_opportunities_per_category,
                 enable_combinatorial=enable_combinatorial,
                 priority_threshold=priority_threshold,
+                combinatorial_max_combinations_per_depth=combinatorial_max_combinations_per_depth,
+                combinatorial_max_sells=combinatorial_max_sells,
+                combinatorial_max_buys=combinatorial_max_buys,
+                combinatorial_max_candidates=combinatorial_max_candidates,
             )
 
         # Convert HolisticPlan to MultiStepRecommendation list
