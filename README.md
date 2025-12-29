@@ -276,7 +276,7 @@ The display automatically shows the highest priority non-empty text, scrolling r
 ```bash
 # View status
 sudo systemctl status arduino-trader
-sudo systemctl status led-display
+# LED display runs as Docker app (check Docker containers or Arduino App Framework)
 
 # View logs
 sudo systemctl status arduino-trader

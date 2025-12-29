@@ -247,7 +247,7 @@ Both services are configured to start automatically:
 | Service | Auto-start | Command |
 |---------|------------|---------|
 | arduino-trader | systemd enabled | `sudo systemctl enable arduino-trader` |
-| led-display | systemd enabled | `sudo systemctl enable led-display` |
+| LED display | Docker app | Managed by Arduino App Framework |
 | auto-deploy | cron job | Runs every 5 minutes |
 
 ## Troubleshooting
@@ -260,17 +260,14 @@ journalctl -u arduino-trader -n 50
 
 ### LED display not working
 ```bash
-# Check service status
-sudo systemctl status led-display
+# Check Docker app status (Arduino App Framework)
+# The Docker app polls /api/status/led/display every 2 seconds
 
-# View logs
-sudo journalctl -u led-display -f
+# Check if API endpoint is responding
+curl http://localhost:8000/api/status/led/display
 
-# Check serial port
-ls -l /dev/ttyACM0
-
-# Restart service
-sudo systemctl restart led-display
+# Check Router Bridge connection
+# Verify arduino-router service is running
 
 # Recompile and upload sketch if needed
 /home/arduino/arduino-trader/scripts/compile_and_upload_sketch.sh
@@ -288,7 +285,7 @@ tail -50 /home/arduino/logs/auto-deploy.log
 
 ### Reset everything
 ```bash
-sudo systemctl stop arduino-trader led-display
+sudo systemctl stop arduino-trader
 rm -rf /home/arduino/arduino-trader
 # Then run setup again
 sudo /home/arduino/repos/autoTrader/deploy/setup.sh
