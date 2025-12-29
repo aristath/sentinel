@@ -47,6 +47,12 @@ SETTING_DEFAULTS = {
     "combinatorial_max_sells": 4.0,  # Max sells in combinations (1-10)
     "combinatorial_max_buys": 4.0,  # Max buys in combinations (1-10)
     "combinatorial_max_candidates": 12.0,  # Max candidates considered for combinations (5-30)
+    # Enhanced scenario exploration settings
+    "beam_width": 10.0,  # Beam search width - number of top sequences to maintain (1-50)
+    "enable_diverse_selection": 1.0,  # Enable diverse opportunity selection (1.0 = enabled, 0.0 = disabled)
+    "diversity_weight": 0.3,  # Weight for diversity vs priority in selection (0.0-1.0)
+    "cost_penalty_factor": 0.1,  # Transaction cost penalty factor for scoring (0.0-1.0)
+    "enable_multi_objective": 0.0,  # Enable multi-objective optimization with Pareto frontier (1.0 = enabled, 0.0 = disabled)
     # Incremental Planner settings
     "incremental_planner_enabled": 1.0,  # Enable incremental planner mode (1.0 = enabled, 0.0 = disabled)
     "planner_batch_interval_seconds": 10.0,  # Interval for batch processing in seconds (1-300)
@@ -314,6 +320,51 @@ async def update_setting_value(
             )
         await set_setting(key, str(int(data.value)), settings_repo)
         return {key: int(data.value)}
+    elif key == "beam_width":
+        # Validate range (1-50)
+        if data.value < 1 or data.value > 50:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{key} must be between 1 and 50",
+            )
+        await set_setting(key, str(int(data.value)), settings_repo)
+        return {key: int(data.value)}
+    elif key == "enable_diverse_selection":
+        # Validate boolean-like (0.0 or 1.0)
+        if data.value not in (0.0, 1.0):
+            raise HTTPException(
+                status_code=400,
+                detail=f"{key} must be 0.0 (disabled) or 1.0 (enabled)",
+            )
+        await set_setting(key, str(data.value), settings_repo)
+        return {key: data.value}
+    elif key == "diversity_weight":
+        # Validate range (0.0-1.0)
+        if data.value < 0.0 or data.value > 1.0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{key} must be between 0.0 and 1.0",
+            )
+        await set_setting(key, str(data.value), settings_repo)
+        return {key: data.value}
+    elif key == "cost_penalty_factor":
+        # Validate range (0.0-1.0)
+        if data.value < 0.0 or data.value > 1.0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{key} must be between 0.0 and 1.0",
+            )
+        await set_setting(key, str(data.value), settings_repo)
+        return {key: data.value}
+    elif key == "enable_multi_objective":
+        # Validate boolean-like (0.0 or 1.0)
+        if data.value not in (0.0, 1.0):
+            raise HTTPException(
+                status_code=400,
+                detail=f"{key} must be 0.0 (disabled) or 1.0 (enabled)",
+            )
+        await set_setting(key, str(data.value), settings_repo)
+        return {key: data.value}
     elif key == "incremental_planner_enabled":
         # Validate boolean-like (0.0 or 1.0)
         if data.value not in (0.0, 1.0):
@@ -385,6 +436,11 @@ async def update_setting_value(
         "combinatorial_max_sells",
         "combinatorial_max_buys",
         "combinatorial_max_candidates",
+        "beam_width",
+        "enable_diverse_selection",
+        "diversity_weight",
+        "cost_penalty_factor",
+        "enable_multi_objective",
         "incremental_planner_enabled",
         "planner_batch_interval_seconds",
         "planner_batch_size",
