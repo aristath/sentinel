@@ -59,6 +59,9 @@ SETTING_DEFAULTS = {
     "enable_correlation_aware": 0.0,  # Enable correlation-aware sequence filtering (1.0 = enabled, 0.0 = disabled)
     "enable_partial_execution": 0.0,  # Enable partial execution scenarios (first N actions only) (1.0 = enabled, 0.0 = disabled)
     "enable_constraint_relaxation": 0.0,  # Enable constraint relaxation scenarios (1.0 = enabled, 0.0 = disabled)
+    "enable_monte_carlo_paths": 0.0,  # Enable Monte Carlo price path evaluation (1.0 = enabled, 0.0 = disabled)
+    "monte_carlo_path_count": 100,  # Number of Monte Carlo paths to simulate (10-500)
+    "enable_multi_timeframe": 0.0,  # Enable multi-timeframe optimization (short/medium/long-term) (1.0 = enabled, 0.0 = disabled)
     # Incremental Planner settings
     "incremental_planner_enabled": 1.0,  # Enable incremental planner mode (1.0 = enabled, 0.0 = disabled)
     "planner_batch_interval_seconds": 10.0,  # Interval for batch processing in seconds (1-300)
@@ -428,6 +431,27 @@ async def update_setting_value(
             )
         await set_setting(key, str(data.value), settings_repo)
         return {key: data.value}
+    elif key == "enable_monte_carlo_paths":
+        # Validate boolean-like (0.0 or 1.0)
+        if data.value not in (0.0, 1.0):
+            raise HTTPException(
+                status_code=400,
+                detail=f"{key} must be 0.0 (disabled) or 1.0 (enabled)",
+            )
+        await set_setting(key, str(data.value), settings_repo)
+        return {key: data.value}
+    elif key == "monte_carlo_path_count":
+        # Validate integer (10-500)
+        if not isinstance(data.value, (int, float)):
+            raise HTTPException(status_code=400, detail=f"{key} must be a number")
+        count = int(data.value)
+        if count < 10 or count > 500:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{key} must be between 10 and 500",
+            )
+        await set_setting(key, str(count), settings_repo)
+        return {key: count}
     elif key == "incremental_planner_enabled":
         # Validate boolean-like (0.0 or 1.0)
         if data.value not in (0.0, 1.0):
@@ -510,6 +534,9 @@ async def update_setting_value(
         "enable_correlation_aware",
         "enable_partial_execution",
         "enable_constraint_relaxation",
+        "enable_monte_carlo_paths",
+        "monte_carlo_path_count",
+        "enable_multi_timeframe",
         "incremental_planner_enabled",
         "planner_batch_interval_seconds",
         "planner_batch_size",

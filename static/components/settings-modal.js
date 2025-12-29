@@ -425,6 +425,49 @@ class SettingsModal extends HTMLElement {
                     </label>
                     <p class="text-xs text-gray-500 mt-1 ml-7">Generate variants with relaxed cash/position limits (10-30% over budget, 1.5x position size) to explore better solutions.</p>
                   </div>
+
+                  <!-- Enable Monte Carlo Paths -->
+                  <div>
+                    <label class="flex items-center gap-3 cursor-pointer">
+                      <input type="checkbox"
+                             :checked="($store.app.settings.enable_monte_carlo_paths || 0) == 1"
+                             @change="$store.app.updateSetting('enable_monte_carlo_paths', $event.target.checked ? 1 : 0)"
+                             class="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-800">
+                      <span class="text-sm text-gray-300">Enable Monte Carlo Price Paths</span>
+                    </label>
+                    <p class="text-xs text-gray-500 mt-1 ml-7">Evaluate sequences under 100+ random price paths using historical volatility (geometric Brownian motion). More robust than fixed scenarios.</p>
+                  </div>
+
+                  <!-- Monte Carlo Path Count -->
+                  <div x-show="($store.app.settings.enable_monte_carlo_paths || 0) == 1">
+                    <div class="flex items-center justify-between mb-2">
+                      <span class="text-sm text-gray-300">Monte Carlo Path Count</span>
+                      <span class="text-sm text-gray-400 font-mono"
+                            x-text="$store.app.settings.monte_carlo_path_count || 100"></span>
+                    </div>
+                    <input type="range"
+                           :value="$store.app.settings.monte_carlo_path_count || 100"
+                           @input="$store.app.updateSetting('monte_carlo_path_count', parseInt($event.target.value))"
+                           min="10" max="500" step="10"
+                           class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                    <div class="flex justify-between text-xs text-gray-500 mt-1">
+                      <span>10</span>
+                      <span>500</span>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">Number of random price paths to simulate. More paths = more robust but slower.</p>
+                  </div>
+
+                  <!-- Enable Multi-Timeframe -->
+                  <div>
+                    <label class="flex items-center gap-3 cursor-pointer">
+                      <input type="checkbox"
+                             :checked="($store.app.settings.enable_multi_timeframe || 0) == 1"
+                             @change="$store.app.updateSetting('enable_multi_timeframe', $event.target.checked ? 1 : 0)"
+                             class="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-800">
+                      <span class="text-sm text-gray-300">Enable Multi-Timeframe Optimization</span>
+                    </label>
+                    <p class="text-xs text-gray-500 mt-1 ml-7">Optimize sequences for multiple timeframes simultaneously: short-term (1y, 20%), medium-term (3y, 30%), long-term (5y, 50%).</p>
+                  </div>
                 </div>
 
                 <!-- Info note -->
