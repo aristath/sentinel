@@ -224,14 +224,16 @@ class TradeRepository:
         return await self.get_by_symbol(identifier, limit)
 
     async def get_recently_bought_symbols(self, days: int = 30) -> Set[str]:
-        """Get symbols that were bought in the last N days (excluding RESEARCH trades)."""
+        """Get symbols that were bought in the last N days (excluding RESEARCH trades and failed orders)."""
         cutoff = (datetime.now() - timedelta(days=days)).isoformat()
         rows = await self._db.fetchall(
             """
             SELECT DISTINCT symbol FROM trades
             WHERE UPPER(side) = 'BUY'
               AND executed_at >= ?
-              AND (order_id IS NULL OR order_id NOT LIKE 'RESEARCH_%')
+              AND order_id IS NOT NULL
+              AND order_id != ''
+              AND order_id NOT LIKE 'RESEARCH_%'
             """,
             (cutoff,),
         )
