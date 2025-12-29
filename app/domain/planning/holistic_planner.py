@@ -3505,9 +3505,9 @@ async def create_holistic_plan(
             )
         # Get best sequence from beam (first one has highest score)
         best_sequence, best_end_score, best_breakdown = beam[0]
-    logger.info(
-        f"Selected best sequence from beam of {len(beam)} (score: {best_end_score:.3f})"
-    )
+        logger.info(
+            f"Selected best sequence from beam of {len(beam)} (score: {best_end_score:.3f})"
+        )
 
     # Convert sequence to HolisticSteps
     steps = []
