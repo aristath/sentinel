@@ -380,3 +380,42 @@ def group_stocks_by_exchange(stocks: list) -> dict[str, list]:
             grouped[exchange].append(stock)
 
     return grouped
+
+
+async def format_market_status_for_display(has_recommendations: bool = False) -> str:
+    """
+    Format market status for LED display ticker.
+
+    Args:
+        has_recommendations: Whether there are pending recommendations
+
+    Returns:
+        Formatted string like "XNYS OPEN, XETR OPEN, NO PENDING OPPORTUNITIES"
+        or "XNYS OPEN, XETR OPEN" (if recommendations exist)
+        or "ALL MARKETS CLOSED"
+    """
+    try:
+        market_status = await get_market_status()
+        open_markets = []
+
+        for exchange_name, status in market_status.items():
+            if status.get("open", False):
+                exchange_code = status.get("exchange", "")
+                if exchange_code:
+                    open_markets.append(exchange_code)
+
+        if open_markets:
+            # Format: "XNYS OPEN, XETR OPEN"
+            market_text = ", ".join(f"{code} OPEN" for code in sorted(open_markets))
+            if not has_recommendations:
+                return f"{market_text}, NO PENDING OPPORTUNITIES"
+            else:
+                return market_text
+        else:
+            if not has_recommendations:
+                return "ALL MARKETS CLOSED, NO PENDING OPPORTUNITIES"
+            else:
+                return "ALL MARKETS CLOSED"
+    except Exception as e:
+        logger.warning(f"Failed to format market status: {e}")
+        return "ALL MARKETS CLOSED"
