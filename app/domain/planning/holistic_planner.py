@@ -1717,6 +1717,7 @@ async def create_holistic_plan(
     combinatorial_max_sells: int = 4,
     combinatorial_max_buys: int = 4,
     combinatorial_max_candidates: int = 12,
+    beam_width: int = 10,
 ) -> HolisticPlan:
     """
     Create a holistic plan by evaluating action sequences and selecting the best.
@@ -1760,6 +1761,11 @@ async def create_holistic_plan(
     trade_repo = TradeRepository()
     sell_cooldown_days = await settings_repo.get_int("sell_cooldown_days", 180)
     recently_sold = await trade_repo.get_recently_sold_symbols(sell_cooldown_days)
+
+    # Get beam_width from settings if not provided
+    if beam_width is None or beam_width <= 0:
+        beam_width = await settings_repo.get_int("beam_width", 10)
+        beam_width = max(1, min(50, beam_width))  # Clamp to 1-50
 
     # Identify opportunities (weight-based if optimizer provided, else heuristic)
     if target_weights and current_prices:
@@ -1972,17 +1978,37 @@ async def create_holistic_plan(
 
         return (seq_idx, sequence, end_score, breakdown)
 
-    # Evaluate sequences in batches with early termination
+    # Evaluate sequences in batches with beam search and early termination
     # Always evaluate at least first 10 sequences to ensure quality
     min_sequences_to_evaluate = min(10, len(sequence_results_sorted))
     batch_size = 5  # Evaluate 5 sequences at a time
     plateau_threshold = 5  # Stop if no improvement in 5 consecutive sequences
 
-    best_sequence = None
+    # Beam search: maintain top K sequences instead of just the best one
+    beam: List[Tuple[List[ActionCandidate], float, Dict]] = (
+        []
+    )  # (sequence, score, breakdown)
     best_end_score = 0.0
-    best_breakdown = {}
     plateau_count = 0
     evaluated_count = 0
+
+    def _update_beam(
+        sequence: List[ActionCandidate], score: float, breakdown: Dict
+    ) -> None:
+        """Update beam with new sequence, keeping only top K."""
+        nonlocal best_end_score
+
+        # Add to beam
+        beam.append((sequence, score, breakdown))
+
+        # Sort by score descending and keep only top K
+        beam.sort(key=lambda x: x[1], reverse=True)
+        if len(beam) > beam_width:
+            beam[:] = beam[:beam_width]
+
+        # Update best score
+        if score > best_end_score:
+            best_end_score = score
 
     for batch_start in range(0, len(sequence_results_sorted), batch_size):
         batch_end = min(batch_start + batch_size, len(sequence_results_sorted))
@@ -1997,32 +2023,40 @@ async def create_holistic_plan(
         batch_results = await asyncio.gather(*evaluation_tasks)
 
         # Process batch results
+        beam_updated = False
         for seq_idx, sequence, end_score, breakdown in batch_results:
             evaluated_count += 1
 
-            if end_score > best_end_score:
-                best_end_score = end_score
-                best_sequence = sequence
-                best_breakdown = breakdown
-                plateau_count = 0
-                logger.info(
-                    f"Sequence {seq_idx+1} -> NEW BEST (score: {end_score:.3f})"
-                )
+            # Check if this sequence would improve the beam
+            if len(beam) < beam_width or end_score > beam[-1][1]:
+                _update_beam(sequence, end_score, breakdown)
+                beam_updated = True
+                if end_score > best_end_score:
+                    plateau_count = 0
+                    logger.info(
+                        f"Sequence {seq_idx+1} -> NEW BEST (score: {end_score:.3f}, beam size: {len(beam)})"
+                    )
+                else:
+                    logger.debug(
+                        f"Sequence {seq_idx+1} added to beam (score: {end_score:.3f}, beam size: {len(beam)})"
+                    )
             else:
                 plateau_count += 1
 
-        # Early termination check (but always evaluate at least min_sequences_to_evaluate)
+        # Early termination check: beam has converged if no improvement in beam
         if (
             evaluated_count >= min_sequences_to_evaluate
+            and not beam_updated
             and plateau_count >= plateau_threshold
         ):
             logger.info(
-                f"Early termination: No improvement in {plateau_count} consecutive sequences "
-                f"(evaluated {evaluated_count}/{len(sequence_results_sorted)})"
+                f"Early termination: Beam converged (no improvement in {plateau_count} consecutive sequences, "
+                f"evaluated {evaluated_count}/{len(sequence_results_sorted)}, beam size: {len(beam)})"
             )
             break
 
-    if not best_sequence:
+    # Select best sequence from beam
+    if not beam:
         return HolisticPlan(
             steps=[],
             current_score=current_score.total,
@@ -2034,6 +2068,12 @@ async def create_holistic_plan(
             cash_generated=0.0,
             feasible=True,
         )
+
+    # Get best sequence from beam (first one has highest score)
+    best_sequence, best_end_score, best_breakdown = beam[0]
+    logger.info(
+        f"Selected best sequence from beam of {len(beam)} (score: {best_end_score:.3f})"
+    )
 
     # Convert sequence to HolisticSteps
     steps = []

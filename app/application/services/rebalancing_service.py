@@ -239,6 +239,7 @@ class RebalancingService:
         combinatorial_max_candidates = await self._settings_repo.get_int(
             "combinatorial_max_candidates", 12
         )
+        beam_width = await self._settings_repo.get_int("beam_width", 10)
 
         # Get positions and stocks (needed for portfolio value calculation)
         positions = await self._position_repo.get_all()
@@ -506,6 +507,7 @@ class RebalancingService:
                 combinatorial_max_sells=combinatorial_max_sells,
                 combinatorial_max_buys=combinatorial_max_buys,
                 combinatorial_max_candidates=combinatorial_max_candidates,
+                beam_width=beam_width,
             )
 
         # Convert HolisticPlan to MultiStepRecommendation list
