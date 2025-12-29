@@ -14,14 +14,14 @@ When no ticker text is available, the display remains blank.
 ## How It Works
 
 ```
-Trading API (FastAPI) → SSE Stream → Native Python Script (systemd) → Router Bridge → STM32 MCU → LED Matrix
+Trading API (FastAPI) → /api/status/led/display → Docker Python App → Router Bridge → STM32 MCU → LED Matrix
 ```
 
-1. Native Python script (`scripts/led_display_native.py`) runs as a systemd service
-2. Connects to `/api/status/led/display/stream` SSE endpoint for real-time updates
-3. Receives display state events via Server-Sent Events (SSE) when state changes
+1. Docker Python app (`arduino-app/python/main.py`) runs via Arduino App Framework
+2. Polls `/api/status/led/display` endpoint every 2 seconds
+3. Receives display state with priority: error_message > activity_message > ticker_text
 4. Calls MCU functions via Router Bridge (msgpack RPC over Unix socket):
-   - `scrollText(text, speed)` - Scroll text across LED matrix
+   - `scrollText(text, speed)` - Scroll text across LED matrix using native Font_5x7
    - `setRGB3(r, g, b)` - Set RGB LED 3 color
    - `setRGB4(r, g, b)` - Set RGB LED 4 color
 5. MCU receives commands via Router Bridge and renders scrolling text using native Font_5x7
@@ -38,11 +38,11 @@ The display automatically shows the highest priority non-empty text.
 
 ## Files
 
+- `python/main.py` - Docker Python app for LED display (Arduino App Framework)
+- `app.yaml` - Arduino App configuration
 - `sketch/sketch.ino` - STM32 sketch for LED matrix control (uses Router Bridge)
 - `sketch/sketch.yaml` - Sketch configuration (Arduino CLI)
 - `deploy/auto-deploy.sh` - Auto-deployment script (handles sketch compilation)
-
-**Note**: The Python script (`scripts/led_display_native.py`) is in the main repository, not in `arduino-app/`.
 
 ---
 
@@ -56,9 +56,9 @@ sudo /home/arduino/repos/autoTrader/deploy/setup.sh
 ```
 
 This will:
-1. Install the LED display systemd service
+1. Deploy the Docker LED display app via Arduino App Framework
 2. Compile and upload the Arduino sketch to the MCU
-3. Start the LED display service
+3. The Docker app automatically starts via Arduino App Framework
 
 ### Manual Sketch Compilation
 
@@ -68,18 +68,11 @@ If you need to compile and upload the sketch manually:
 /home/arduino/arduino-trader/scripts/compile_and_upload_sketch.sh
 ```
 
-### Service Management
+### Docker App Management
 
-```bash
-# Check status
-sudo systemctl status led-display
+The LED display runs as a Docker app managed by Arduino App Framework. The app automatically starts when the board boots and restarts if it crashes.
 
-# View logs
-sudo journalctl -u led-display -f
-
-# Restart
-sudo systemctl restart led-display
-```
+To check the app status, use the Arduino App Framework tools or check Docker containers.
 
 ---
 
@@ -126,4 +119,4 @@ ssh arduino@<IP> "/home/arduino/bin/auto-deploy.sh"
 - `arduino-router` service running (provides Router Bridge communication)
 - Network access to GitHub (for auto-deploy)
 
-**Note**: The display uses Server-Sent Events (SSE) for real-time updates. The native script connects to the SSE endpoint and receives events immediately when display state changes, eliminating polling delays.
+**Note**: The display uses polling (every 2 seconds) to fetch display state from `/api/status/led/display`. The Docker app runs continuously and updates the display whenever the API state changes.
