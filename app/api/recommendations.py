@@ -147,18 +147,17 @@ async def get_recommendations(
         best_result = await planner_repo.get_best_result(portfolio_hash)
 
         if best_result:
-            # We have a database result - invalidate cache and get fresh data
+            # We have a database result - invalidate cache and use database result
             cache.invalidate(cache_key)
             logger.info("Incremental mode: invalidating cache, using database result")
         else:
-            # No database result yet - check cache but add evaluation count
-            cached = cache.get(cache_key)
-            if cached is not None:
-                evaluated_count = await planner_repo.get_evaluation_count(
-                    portfolio_hash
-                )
-                cached["evaluated_count"] = evaluated_count
-                return cached
+            # No database result yet for this portfolio hash
+            # Don't use stale cache - generate fresh recommendations instead
+            logger.info(
+                f"Incremental mode: No database result for portfolio hash {portfolio_hash}, "
+                "generating fresh recommendations"
+            )
+            cache.invalidate(cache_key)  # Invalidate any stale cache
     else:
         # Incremental mode disabled - use cache normally
         cached = cache.get(cache_key)
