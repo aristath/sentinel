@@ -2401,6 +2401,10 @@ async def process_planner_incremental(
                 feasible_sequences.append(sequence)
 
         # Insert sequences into database
+        logger.info(
+            f"Feasibility check: {len(all_sequences)} total sequences, "
+            f"{len(feasible_sequences)} feasible sequences"
+        )
         await repo.ensure_sequences_generated(portfolio_hash, feasible_sequences)
         logger.info(f"Generated {len(feasible_sequences)} sequences")
 
