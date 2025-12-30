@@ -903,7 +903,9 @@ def _build_update_dict(
     updates: dict[str, str | float | int | bool | None] = {}
 
     _apply_string_update(updates, "name", update.name)
-    # yahoo_symbol is not user-editable - it's determined by the stock identifier
+    _apply_string_update(
+        updates, "yahoo_symbol", update.yahoo_symbol, lambda v: v if v else None
+    )
     # country and fullExchangeName are automatically detected from Yahoo Finance - not user-editable
     # Industry is now automatically detected from Yahoo Finance - not user-editable
 

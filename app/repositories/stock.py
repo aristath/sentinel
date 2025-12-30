@@ -150,6 +150,7 @@ class StockRepository:
             "isin",
             "min_lot",
             "priority_multiplier",
+            "yahoo_symbol",
         }
 
         # Validate all keys are in whitelist
