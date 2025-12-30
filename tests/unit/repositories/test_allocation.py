@@ -33,17 +33,17 @@ class TestAllocationRepository:
     async def test_get_all_returns_dict(self, repo, mock_db):
         """Test getting all allocation targets as dict."""
         mock_db.fetchall.return_value = [
-            {"type": "country", "name": "United States", "target_pct": 0.4},
-            {"type": "country", "name": "Germany", "target_pct": 0.3},
-            {"type": "industry", "name": "tech", "target_pct": 0.25},
+            {"type": "country_group", "name": "US", "target_pct": 0.4},
+            {"type": "country_group", "name": "EU", "target_pct": 0.3},
+            {"type": "industry_group", "name": "Technology", "target_pct": 0.25},
         ]
 
         result = await repo.get_all()
 
         assert result == {
-            "country:United States": 0.4,
-            "country:Germany": 0.3,
-            "industry:tech": 0.25,
+            "country_group:US": 0.4,
+            "country_group:EU": 0.3,
+            "industry_group:Technology": 0.25,
         }
 
     @pytest.mark.asyncio
@@ -56,62 +56,62 @@ class TestAllocationRepository:
         assert result == {}
 
     @pytest.mark.asyncio
-    async def test_get_by_type_geography(self, repo, mock_db):
-        """Test getting geography targets."""
+    async def test_get_by_type_country_group(self, repo, mock_db):
+        """Test getting country group targets."""
         mock_db.fetchall.return_value = [
-            {"type": "country", "name": "United States", "target_pct": 0.4},
-            {"type": "country", "name": "Germany", "target_pct": 0.3},
+            {"type": "country_group", "name": "US", "target_pct": 0.4},
+            {"type": "country_group", "name": "EU", "target_pct": 0.3},
         ]
 
-        result = await repo.get_by_type("country")
+        result = await repo.get_by_type("country_group")
 
         assert len(result) == 2
         assert all(isinstance(t, AllocationTarget) for t in result)
-        assert result[0].name == "United States"
+        assert result[0].name == "US"
         assert result[0].target_pct == 0.4
 
     @pytest.mark.asyncio
-    async def test_get_by_type_industry(self, repo, mock_db):
-        """Test getting industry targets."""
+    async def test_get_by_type_industry_group(self, repo, mock_db):
+        """Test getting industry group targets."""
         mock_db.fetchall.return_value = [
-            {"type": "industry", "name": "tech", "target_pct": 0.25},
+            {"type": "industry_group", "name": "Technology", "target_pct": 0.25},
         ]
 
-        result = await repo.get_by_type("industry")
+        result = await repo.get_by_type("industry_group")
 
         assert len(result) == 1
-        assert result[0].name == "tech"
+        assert result[0].name == "Technology"
 
     @pytest.mark.asyncio
-    async def test_get_country_targets(self, repo, mock_db):
-        """Test getting country targets as dict."""
+    async def test_get_country_group_targets(self, repo, mock_db):
+        """Test getting country group targets as dict."""
         mock_db.fetchall.return_value = [
-            {"type": "country", "name": "United States", "target_pct": 0.4},
-            {"type": "country", "name": "Germany", "target_pct": 0.3},
+            {"type": "country_group", "name": "US", "target_pct": 0.4},
+            {"type": "country_group", "name": "EU", "target_pct": 0.3},
         ]
 
-        result = await repo.get_country_targets()
+        result = await repo.get_country_group_targets()
 
-        assert result == {"United States": 0.4, "Germany": 0.3}
+        assert result == {"US": 0.4, "EU": 0.3}
 
     @pytest.mark.asyncio
-    async def test_get_industry_targets(self, repo, mock_db):
-        """Test getting industry targets as dict."""
+    async def test_get_industry_group_targets(self, repo, mock_db):
+        """Test getting industry group targets as dict."""
         mock_db.fetchall.return_value = [
-            {"type": "industry", "name": "tech", "target_pct": 0.25},
-            {"type": "industry", "name": "finance", "target_pct": 0.15},
+            {"type": "industry_group", "name": "Technology", "target_pct": 0.25},
+            {"type": "industry_group", "name": "Finance", "target_pct": 0.15},
         ]
 
-        result = await repo.get_industry_targets()
+        result = await repo.get_industry_group_targets()
 
-        assert result == {"tech": 0.25, "finance": 0.15}
+        assert result == {"Technology": 0.25, "Finance": 0.15}
 
     @pytest.mark.asyncio
     async def test_upsert_target(self, repo, mock_db):
         """Test upserting an allocation target."""
         target = AllocationTarget(
-            type="country",
-            name="United States",
+            type="country_group",
+            name="US",
             target_pct=0.45,
         )
 
@@ -148,12 +148,12 @@ class TestAllocationRepository:
 
             mock_txn.return_value = MockContext()
 
-            await repo.delete("country", "United States")
+            await repo.delete("country_group", "US")
 
             mock_conn.execute.assert_called_once()
             call_args = mock_conn.execute.call_args
             assert "DELETE" in call_args[0][0]
-            assert ("country", "United States") == call_args[0][1]
+            assert ("country_group", "US") == call_args[0][1]
 
     def test_init_with_raw_connection(self):
         """Test initializing with raw aiosqlite connection."""
