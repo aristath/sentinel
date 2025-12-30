@@ -78,11 +78,14 @@ To check the app status, use the Arduino App Framework tools or check Docker con
 
 ## Auto-Deployment
 
+The system uses Python-based deployment infrastructure for reliable automatic updates:
+
 Once set up, the board automatically:
-1. Checks GitHub for updates every 5 minutes
-2. If changes detected, pulls and syncs files
+1. Checks GitHub for updates every 5 minutes (configurable)
+2. If changes detected, pulls and syncs files using staged deployment
 3. If sketch files changed, compiles and uploads sketch automatically
-4. Restarts services as needed
+4. Restarts services and verifies health checks
+5. File-based locking prevents concurrent deployments
 
 ### Development Workflow
 
@@ -99,16 +102,21 @@ git push
 # The sketch will be compiled and uploaded, LED display service restarted
 ```
 
-### Check Deploy Logs
+### Check Deployment Status
 
 ```bash
-ssh arduino@<IP> "cat /home/arduino/logs/auto-deploy.log"
+# Via API (recommended)
+ssh arduino@<IP> "curl http://localhost:8000/api/status/deploy/status"
+
+# Check application logs
+ssh arduino@<IP> "sudo journalctl -u arduino-trader -f"
 ```
 
 ### Force Immediate Deploy
 
 ```bash
-ssh arduino@<IP> "/home/arduino/bin/auto-deploy.sh"
+# Via API (recommended)
+ssh arduino@<IP> "curl -X POST http://localhost:8000/api/status/deploy/trigger"
 ```
 
 ## Requirements

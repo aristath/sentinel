@@ -599,7 +599,7 @@ After setup:
 │   ├── venv/                  # Python virtual environment
 │   └── .env                   # Configuration (API keys)
 ├── bin/
-│   └── auto-deploy.sh         # Auto-deployment script
+│   └── auto-deploy.sh         # Legacy auto-deployment script (no longer used)
 └── logs/
     └── auto-deploy.log        # Deployment logs
 ```
@@ -622,15 +622,24 @@ sudo systemctl stop arduino-trader
 
 ### Auto-Deployment
 
-The system automatically:
-1. Checks GitHub for updates every 5 minutes (configurable)
-2. If changes detected, pulls and syncs files
-3. If sketch files changed, compiles and uploads sketch automatically
-4. Restarts services as needed
+The system uses Python-based deployment infrastructure for reliable automatic updates:
+
+1. **Checks GitHub for updates** every 5 minutes (configurable via Settings UI)
+2. **If changes detected**, pulls and syncs files using staged deployment
+3. **If sketch files changed**, compiles and uploads sketch automatically
+4. **Restarts services** and verifies health checks
+5. **File-based locking** prevents concurrent deployments
+
+**Features:**
+- Retry logic for network operations (Git fetch/pull)
+- Staged deployment with atomic swaps (space-efficient)
+- Health checks after service restart
+- Better error handling and logging
+- Deployment status API endpoints
 
 **Sudo Configuration Required:**
 
-The auto-deploy script needs passwordless sudo access:
+The deployment system needs passwordless sudo access for service management:
 
 ```bash
 sudo tee /etc/sudoers.d/arduino-trader << 'EOF'
@@ -644,6 +653,11 @@ EOF
 sudo chmod 440 /etc/sudoers.d/arduino-trader
 sudo visudo -c
 ```
+
+**Deployment Status API:**
+
+- `GET /api/status/deploy/status` - Get current deployment status (commits, service status, staging info)
+- `POST /api/status/deploy/trigger` - Manually trigger deployment check
 
 ### Cloudflare Tunnel (Optional)
 
@@ -818,11 +832,14 @@ curl http://localhost:8000/api/status/led/display
 # Check scheduler job status
 curl http://localhost:8000/api/status/jobs
 
-# Check logs
-tail -50 /home/arduino/logs/auto-deploy.log
+# Check deployment status
+curl http://localhost:8000/api/status/deploy/status
 
-# Run manually
-/home/arduino/bin/auto-deploy.sh
+# Check application logs (deployment logs are in main app logs now)
+sudo journalctl -u arduino-trader -f
+
+# Manually trigger deployment via API
+curl -X POST http://localhost:8000/api/status/deploy/trigger
 
 # Verify interval setting
 # Check Settings > System > Job Scheduling > Auto-Deploy in UI
