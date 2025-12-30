@@ -627,9 +627,15 @@ class RebalancingService:
             logger.info(
                 "Using full planner mode (incremental disabled or no database result)"
             )
+            # Reserve min_cash_reserve - planner should only use cash above the reserve
+            planner_available_cash = max(0.0, available_cash - min_cash)
+            if planner_available_cash < available_cash:
+                logger.info(
+                    f"Reserving €{min_cash:.2f} from available cash, planner can use €{planner_available_cash:.2f}"
+                )
             plan = await create_holistic_plan(
                 portfolio_context=portfolio_context,
-                available_cash=available_cash,
+                available_cash=planner_available_cash,
                 stocks=stocks,
                 positions=positions,
                 exchange_rate_service=self._exchange_rate_service,
