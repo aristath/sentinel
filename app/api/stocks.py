@@ -413,6 +413,11 @@ async def get_universe_suggestions(
                         )
                         continue
 
+                logger.info(
+                    f"Pruning suggestions complete: {len(stocks_to_prune)} stock(s) "
+                    f"suggested for pruning out of {len(stocks)} checked"
+                )
+
         logger.info(
             f"Universe suggestions: {len(candidates_to_add)} candidates to add, "
             f"{len(stocks_to_prune)} stocks to prune"
