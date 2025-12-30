@@ -78,9 +78,9 @@ class StockDiscoveryService:
             for exchange in exchanges:
                 try:
                     securities = self._tradernet_client.get_most_traded(
-                        instrument_type="stock",
+                        instrument_type="stocks",  # Note: API expects "stocks" (plural), not "stock"
                         exchange=exchange,
-                        gainers=False,
+                        gainers=False,  # False = most traded, True = fastest-growing
                         limit=fetch_limit,
                     )
 
