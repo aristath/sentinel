@@ -1,6 +1,6 @@
 """APScheduler setup for background jobs.
 
-Scheduler with 10 jobs:
+Scheduler with 9 jobs:
 1. sync_cycle - Every 5 minutes, handles data synchronization
 1.5. event_based_trading - Continuously, handles trade execution after planning completion
 2. daily_pipeline - Hourly, processes per-symbol data
@@ -9,9 +9,8 @@ Scheduler with 10 jobs:
 5. dividend_reinvestment - Daily, automatic dividend reinvestment
 6. universe_pruning - Monthly (1st), removes low-quality stocks
 7. stock_discovery - Monthly (15th), discovers new high-quality stocks
-8. display_updater - Every 9.9 seconds, updates LED display
-9. planner_batch - Every N seconds, processes planner sequences incrementally
-10. auto_deploy - Every N minutes (configurable), checks for updates and deploys changes
+8. planner_batch - Every N seconds, processes planner sequences incrementally
+9. auto_deploy - Every N minutes (configurable), checks for updates and deploys changes
 """
 
 import logging
@@ -91,7 +90,6 @@ async def init_scheduler() -> AsyncIOScheduler:
     # Import job functions
     from app.jobs.auto_deploy import run_auto_deploy
     from app.jobs.daily_pipeline import run_daily_pipeline
-    from app.jobs.display_updater import update_display_periodic
     from app.jobs.dividend_reinvestment import auto_reinvest_dividends
     from app.jobs.event_based_trading import run_event_based_trading_loop
     from app.jobs.maintenance import run_daily_maintenance, run_weekly_maintenance
@@ -194,17 +192,7 @@ async def init_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 
-    # Job 8: Display Updater - every 9.9 seconds
-    # Handles: periodic LED display updates to ensure display is never blank
-    scheduler.add_job(
-        update_display_periodic,
-        IntervalTrigger(seconds=9.9),
-        id="display_updater",
-        name="Display Updater",
-        replace_existing=True,
-    )
-
-    # Job 9: Planner Batch - every 30 minutes (fallback only)
+    # Job 8: Planner Batch - every 30 minutes (fallback only)
     # Processes next batch of sequences for holistic planner (only if incremental mode enabled)
     # This is a fallback mechanism - normal processing is handled by API-driven batches
     # triggered by the event-based trading loop. The scheduled job will skip if API-driven
@@ -257,7 +245,7 @@ async def init_scheduler() -> AsyncIOScheduler:
         f"sync_cycle:{sync_cycle_minutes}m, daily_pipeline:1h, "
         f"maintenance:{maintenance_hour}:00, dividend_reinvestment:{maintenance_hour}:30, "
         f"universe_pruning:1st of month {maintenance_hour}:00, "
-        f"stock_discovery:15th of month 02:00, display_updater:9.9s, "
+        f"stock_discovery:15th of month 02:00, "
         f"planner_batch:{planner_batch_interval//60}m (fallback), "
         f"auto_deploy:{auto_deploy_minutes}m, event_based_trading:background"
     )
@@ -310,7 +298,7 @@ async def reschedule_all_jobs():
         f"Jobs rescheduled - sync_cycle:{sync_cycle_minutes}m, "
         f"maintenance:{maintenance_hour}:00, dividend_reinvestment:{maintenance_hour}:30, "
         f"universe_pruning:1st of month {maintenance_hour}:00, "
-        f"stock_discovery:15th of month 02:00, display_updater:9.9s, "
+        f"stock_discovery:15th of month 02:00, "
         f"auto_deploy:{auto_deploy_minutes}m"
     )
 

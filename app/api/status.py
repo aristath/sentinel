@@ -1,14 +1,11 @@
 """System status API endpoints."""
 
-import json
 import logging
 import shutil
-from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Query
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.api.models import (
@@ -115,24 +112,6 @@ async def get_status(
     }
 
 
-@router.get("/display/text")
-async def get_display_text(settings_repo: SettingsRepositoryDep):
-    """Get current text and display settings for Arduino LED matrix.
-
-    Returns the highest priority text (error > processing > next_actions) plus settings.
-    Called every 2 seconds by native LED display script.
-    """
-    from app.infrastructure.hardware.display_service import get_current_text
-
-    speed = await settings_repo.get_float("ticker_speed", 50.0)
-    brightness = int(await settings_repo.get_float("led_brightness", 150))
-    return {
-        "text": get_current_text(),
-        "speed": int(speed),
-        "brightness": brightness,
-    }
-
-
 @router.get("/led/display")
 async def get_led_display_state(
     settings_repo: SettingsRepositoryDep,
@@ -166,68 +145,6 @@ async def get_led_display_state(
         "led3": [0, 0, 0],
         "led4": [0, 0, 0],
     }
-
-
-@router.get("/led/display/stream")
-async def stream_display_state(
-    settings_repo: SettingsRepositoryDep,
-    display_manager: DisplayStateManagerDep,
-):
-    """Stream LED display state changes via Server-Sent Events (SSE).
-
-    Real-time streaming of display state updates. Initial state is sent
-    immediately on connection, then updates are streamed as state changes.
-    """
-    from app.infrastructure.hardware import display_events
-
-    async def event_generator() -> AsyncIterator[str]:
-        """Generate SSE events from display state changes."""
-        try:
-            # Get initial ticker speed
-            ticker_speed = int(await settings_repo.get_float("ticker_speed", 50.0))
-
-            # Subscribe to display events
-            async for state_data in display_events.subscribe_display_events(
-                ticker_speed=ticker_speed
-            ):
-                # Update ticker_speed from settings for each event
-                # (in case it changed)
-                try:
-                    ticker_speed = int(
-                        await settings_repo.get_float("ticker_speed", 50.0)
-                    )
-                    state_data["ticker_speed"] = ticker_speed
-                except Exception as e:
-                    import logging
-
-                    logger = logging.getLogger(__name__)
-                    logger.debug(
-                        f"Failed to update ticker_speed from settings, keeping previous value: {e}"
-                    )
-                    # Keep previous value if settings unavailable
-
-                # Format as SSE event: data: {json}\n\n
-                event_data = json.dumps(state_data)
-                yield f"data: {event_data}\n\n"
-
-        except Exception as e:
-            import logging
-
-            logger = logging.getLogger(__name__)
-            logger.error(f"SSE stream error: {e}", exc_info=True)
-            # Send error event and close
-            error_data = json.dumps({"error": "Stream closed"})
-            yield f"data: {error_data}\n\n"
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",  # Disable buffering for nginx
-        },
-    )
 
 
 @router.post("/sync/portfolio")

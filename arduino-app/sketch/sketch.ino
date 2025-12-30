@@ -5,7 +5,6 @@
 #include <Arduino_RouterBridge.h>
 #include "ArduinoGraphics.h"
 #include "Arduino_LED_Matrix.h"
-#include <vector>
 
 ArduinoLEDMatrix matrix;
 
@@ -13,14 +12,6 @@ ArduinoLEDMatrix matrix;
 // LED3: LED_BUILTIN (R), LED_BUILTIN+1 (G), LED_BUILTIN+2 (B)
 // LED4: LED_BUILTIN+3 (R), LED_BUILTIN+4 (G), LED_BUILTIN+5 (B)
 // Active-low: HIGH = OFF, LOW = ON
-
-// Draw frame to LED matrix
-void draw(std::vector<uint8_t> frame) {
-  if (frame.empty() || frame.size() != 104) {
-    return;
-  }
-  matrix.draw(frame.data());
-}
 
 // Set RGB LED 3 color (active-low, digital only)
 void setRGB3(uint8_t r, uint8_t g, uint8_t b) {
@@ -47,14 +38,6 @@ void scrollText(String text, int speed) {
   matrix.endText(SCROLL_LEFT);
 }
 
-// Display static text at position
-void printText(String text, int x, int y) {
-  matrix.textFont(Font_5x7);
-  matrix.beginText(x, y, 0xFFFFFF);
-  matrix.print(text);
-  matrix.endText();
-}
-
 void setup() {
   // Initialize LED matrix
   matrix.begin();
@@ -77,11 +60,9 @@ void setup() {
 
   // Setup Router Bridge
   Bridge.begin();
-  Bridge.provide("draw", draw);
   Bridge.provide("setRGB3", setRGB3);
   Bridge.provide("setRGB4", setRGB4);
   Bridge.provide("scrollText", scrollText);
-  Bridge.provide("printText", printText);
 }
 
 void loop() {
