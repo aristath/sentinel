@@ -387,6 +387,31 @@ class NegativeBalanceRebalancer:
                 bypass_frequency_limit=True,
             )
 
+            # Mark emergency recommendations as executed for successful trades
+            for i, result in enumerate(results):
+                if result.get("status") == "success" and i < len(sell_recommendations):
+                    rec = sell_recommendations[i]
+                    try:
+                        matching_recs = (
+                            await self._recommendation_repo.find_matching_for_execution(
+                                symbol=rec.symbol,
+                                side=rec.side.value,
+                                portfolio_hash=emergency_portfolio_hash,
+                            )
+                        )
+                        for matching_rec in matching_recs:
+                            await self._recommendation_repo.mark_executed(
+                                matching_rec["uuid"]
+                            )
+                            logger.info(
+                                f"Marked emergency recommendation {matching_rec['uuid']} "
+                                f"as executed for {rec.symbol}"
+                            )
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to mark emergency recommendation as executed: {e}"
+                        )
+
             successful = sum(1 for r in results if r.get("status") == "success")
             logger.info(
                 f"Emergency sales completed: {successful}/{len(results)} successful"
