@@ -1,0 +1,226 @@
+"""Staged file deployment with atomic swaps."""
+
+import logging
+import shutil
+import subprocess
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+
+class DeploymentError(Exception):
+    """Raised when deployment operations fail."""
+
+
+class FileDeployer:
+    """Space-efficient staged deployment with atomic swaps.
+
+    Uses a single staging directory that is reused. On success, staging becomes
+    the new deployment. On failure, staging is deleted.
+    """
+
+    def __init__(
+        self,
+        repo_dir: Path,
+        deploy_dir: Path,
+        staging_dir: Path,
+        venv_dir: Path,
+    ):
+        """Initialize file deployer.
+
+        Args:
+            repo_dir: Path to Git repository
+            deploy_dir: Path to current deployment directory
+            staging_dir: Path to staging directory (reused)
+            venv_dir: Path to virtual environment
+        """
+        self.repo_dir = repo_dir
+        self.deploy_dir = deploy_dir
+        self.staging_dir = staging_dir
+        self.venv_dir = venv_dir
+
+    def _cleanup_staging(self) -> None:
+        """Remove staging directory if it exists."""
+        if self.staging_dir.exists():
+            try:
+                logger.debug(f"Cleaning up staging directory: {self.staging_dir}")
+                shutil.rmtree(self.staging_dir)
+            except Exception as e:
+                logger.warning(f"Failed to clean up staging directory: {e}")
+
+    async def deploy_to_staging(self, requirements_changed: bool = False) -> None:
+        """Deploy code to staging directory.
+
+        Args:
+            requirements_changed: Whether requirements.txt changed
+
+        Raises:
+            DeploymentError: If deployment fails
+        """
+        try:
+            # Clean up any existing staging directory
+            self._cleanup_staging()
+
+            # Create staging directory
+            self.staging_dir.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Deploying to staging: {self.staging_dir}")
+
+            # Files/directories to copy (excluding venv, data, .git, node_modules)
+            items_to_copy = [
+                "app",
+                "static",
+                "scripts",
+                "deploy",
+                "requirements.txt",
+            ]
+
+            for item in items_to_copy:
+                src = self.repo_dir / item
+                if not src.exists():
+                    logger.debug(f"Skipping {item} (not found in repo)")
+                    continue
+
+                dst = self.staging_dir / item
+                try:
+                    if src.is_dir():
+                        shutil.copytree(src, dst, dirs_exist_ok=True)
+                    else:
+                        shutil.copy2(src, dst)
+                    logger.debug(f"Copied {item} to staging")
+                except Exception as e:
+                    raise DeploymentError(f"Failed to copy {item}: {e}") from e
+
+            # Clean up __pycache__ directories
+            logger.debug("Cleaning up __pycache__ directories...")
+            for pycache_dir in self.staging_dir.rglob("__pycache__"):
+                shutil.rmtree(pycache_dir, ignore_errors=True)
+            for pyc_file in self.staging_dir.rglob("*.pyc"):
+                pyc_file.unlink(missing_ok=True)
+
+            # Update dependencies if requirements changed
+            if requirements_changed:
+                await self._update_dependencies()
+
+            logger.info("Staging deployment complete")
+
+        except DeploymentError:
+            raise
+        except Exception as e:
+            self._cleanup_staging()
+            raise DeploymentError(f"Error deploying to staging: {e}") from e
+
+    async def _update_dependencies(self) -> None:
+        """Update Python dependencies in staging.
+
+        Raises:
+            DeploymentError: If dependency update fails
+        """
+        if not self.venv_dir.exists():
+            logger.warning(f"Virtual environment not found: {self.venv_dir}")
+            raise DeploymentError(f"Virtual environment not found: {self.venv_dir}")
+
+        requirements_file = self.staging_dir / "requirements.txt"
+        if not requirements_file.exists():
+            logger.warning("requirements.txt not found in staging")
+            raise DeploymentError("requirements.txt not found in staging")
+
+        try:
+            # Use venv Python to install requirements
+            venv_python = self.venv_dir / "bin" / "python"
+            if not venv_python.exists():
+                raise DeploymentError(f"Python not found in venv: {venv_python}")
+
+            logger.info("Updating Python dependencies...")
+            result = subprocess.run(
+                [
+                    str(venv_python),
+                    "-m",
+                    "pip",
+                    "install",
+                    "-r",
+                    str(requirements_file),
+                ],
+                capture_output=True,
+                text=True,
+                timeout=300,  # 5 minutes max
+            )
+
+            if result.returncode != 0:
+                error_msg = result.stderr or result.stdout
+                raise DeploymentError(f"Failed to install dependencies: {error_msg}")
+
+            logger.info("Dependencies updated successfully")
+
+        except subprocess.TimeoutExpired:
+            raise DeploymentError(
+                "Dependency update timed out after 5 minutes"
+            ) from None
+        except DeploymentError:
+            raise
+        except Exception as e:
+            raise DeploymentError(f"Error updating dependencies: {e}") from e
+
+    def verify_staging(self) -> None:
+        """Verify staging directory is valid.
+
+        Raises:
+            DeploymentError: If staging is invalid
+        """
+        # Check that essential directories exist
+        required_dirs = ["app"]
+        for dir_name in required_dirs:
+            if not (self.staging_dir / dir_name).exists():
+                raise DeploymentError(
+                    f"Required directory missing in staging: {dir_name}"
+                )
+
+        # Check that main.py exists
+        if not (self.staging_dir / "app" / "main.py").exists():
+            raise DeploymentError("app/main.py missing in staging")
+
+        logger.debug("Staging verification passed")
+
+    async def atomic_swap(self) -> None:
+        """Atomically swap staging to deployment.
+
+        This moves staging to the deployment directory. The staging directory
+        becomes the new deployment directory.
+
+        Raises:
+            DeploymentError: If swap fails
+        """
+        try:
+            # Remove current deployment directory
+            if self.deploy_dir.exists():
+                logger.info(f"Removing current deployment: {self.deploy_dir}")
+                shutil.rmtree(self.deploy_dir)
+
+            # Move staging to deployment
+            logger.info(f"Moving staging to deployment: {self.deploy_dir}")
+            shutil.move(str(self.staging_dir), str(self.deploy_dir))
+
+            logger.info("Atomic swap completed successfully")
+
+        except Exception as e:
+            # Clean up staging on failure
+            self._cleanup_staging()
+            raise DeploymentError(f"Error during atomic swap: {e}") from e
+
+    def get_staging_size_mb(self) -> float:
+        """Get size of staging directory in MB.
+
+        Returns:
+            Size in MB
+        """
+        if not self.staging_dir.exists():
+            return 0.0
+
+        total_size = 0
+        for file_path in self.staging_dir.rglob("*"):
+            if file_path.is_file():
+                try:
+                    total_size += file_path.stat().st_size
+                except (OSError, FileNotFoundError):
+                    pass
+
+        return total_size / (1024 * 1024)
