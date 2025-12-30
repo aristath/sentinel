@@ -430,11 +430,11 @@ class TestStepUpdateDisplay:
         """Test that ticker text is updated."""
         from app.jobs.sync_cycle import _step_update_display
 
-        set_next_actions_called = False
+        set_text_called = False
 
-        def mock_set_next_actions(text):
-            nonlocal set_next_actions_called
-            set_next_actions_called = True
+        def mock_set_text(text):
+            nonlocal set_text_called
+            set_text_called = True
 
         mock_ticker_service = MagicMock()
         mock_ticker_service.generate_ticker_text = AsyncMock(
@@ -453,10 +453,10 @@ class TestStepUpdateDisplay:
                 return_value=mock_ticker_service,
             ),
             patch(
-                "app.jobs.sync_cycle.set_next_actions",
-                side_effect=mock_set_next_actions,
+                "app.infrastructure.hardware.display_service.set_text",
+                side_effect=mock_set_text,
             ),
         ):
             await _step_update_display()
 
-        assert set_next_actions_called is True
+        assert set_text_called is True

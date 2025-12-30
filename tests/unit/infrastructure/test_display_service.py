@@ -12,71 +12,59 @@ from app.infrastructure.hardware.display_service import DisplayStateManager
 class TestDisplayStateManagerEventEmission:
     """Test that DisplayStateManager emits events on state changes."""
 
-    def test_set_error_emits_event(self):
-        """Test that set_error() emits DISPLAY_STATE_CHANGED event."""
+    def test_set_text_emits_event(self):
+        """Test that set_text() emits DISPLAY_STATE_CHANGED event."""
         manager = DisplayStateManager()
 
         with patch("app.infrastructure.hardware.display_service.emit") as mock_emit:
-            manager.set_error("TEST ERROR")
+            manager.set_text("TEST MESSAGE")
 
             mock_emit.assert_called_once()
             call_args = mock_emit.call_args
             assert call_args[0][0] == SystemEvent.DISPLAY_STATE_CHANGED
 
-    def test_clear_error_emits_event(self):
-        """Test that clear_error() emits DISPLAY_STATE_CHANGED event."""
+    def test_get_current_text_returns_latest(self):
+        """Test that get_current_text() returns the latest message."""
         manager = DisplayStateManager()
-        manager.set_error("TEST ERROR")
+
+        manager.set_text("FIRST MESSAGE")
+        assert manager.get_current_text() == "FIRST MESSAGE"
+
+        manager.set_text("SECOND MESSAGE")
+        assert manager.get_current_text() == "SECOND MESSAGE"
+
+    def test_set_led3_emits_event(self):
+        """Test that set_led3() emits DISPLAY_STATE_CHANGED event."""
+        manager = DisplayStateManager()
 
         with patch("app.infrastructure.hardware.display_service.emit") as mock_emit:
-            manager.clear_error()
+            manager.set_led3(0, 0, 255)
 
             mock_emit.assert_called_once()
             call_args = mock_emit.call_args
             assert call_args[0][0] == SystemEvent.DISPLAY_STATE_CHANGED
 
-    def test_set_processing_emits_event(self):
-        """Test that set_processing() emits DISPLAY_STATE_CHANGED event."""
+    def test_set_led4_emits_event(self):
+        """Test that set_led4() emits DISPLAY_STATE_CHANGED event."""
         manager = DisplayStateManager()
 
         with patch("app.infrastructure.hardware.display_service.emit") as mock_emit:
-            manager.set_processing("PROCESSING...")
+            manager.set_led4(0, 255, 0)
 
             mock_emit.assert_called_once()
             call_args = mock_emit.call_args
             assert call_args[0][0] == SystemEvent.DISPLAY_STATE_CHANGED
 
-    def test_clear_processing_emits_event(self):
-        """Test that clear_processing() emits DISPLAY_STATE_CHANGED event."""
-        manager = DisplayStateManager()
-        manager.set_processing("PROCESSING...")
-
-        with patch("app.infrastructure.hardware.display_service.emit") as mock_emit:
-            manager.clear_processing()
-
-            mock_emit.assert_called_once()
-            call_args = mock_emit.call_args
-            assert call_args[0][0] == SystemEvent.DISPLAY_STATE_CHANGED
-
-    def test_set_next_actions_emits_event(self):
-        """Test that set_next_actions() emits DISPLAY_STATE_CHANGED event."""
+    def test_get_led3_returns_value(self):
+        """Test that get_led3() returns the LED color."""
         manager = DisplayStateManager()
 
-        with patch("app.infrastructure.hardware.display_service.emit") as mock_emit:
-            manager.set_next_actions("BUY AAPL EUR500")
+        manager.set_led3(255, 0, 0)
+        assert manager.get_led3() == [255, 0, 0]
 
-            mock_emit.assert_called_once()
-            call_args = mock_emit.call_args
-            assert call_args[0][0] == SystemEvent.DISPLAY_STATE_CHANGED
-
-    def test_event_payload_contains_ticker_speed(self):
-        """Test that event payload includes ticker_speed parameter."""
+    def test_get_led4_returns_value(self):
+        """Test that get_led4() returns the LED color."""
         manager = DisplayStateManager()
 
-        with patch("app.infrastructure.hardware.display_service.emit") as mock_emit:
-            manager.set_error("TEST ERROR")
-
-            call_args = mock_emit.call_args
-            # Check that keyword args contain ticker_speed or it's in the payload
-            # The actual implementation will determine the exact format
-            assert len(call_args.kwargs) >= 0  # At minimum, event is emitted
+        manager.set_led4(0, 255, 0)
+        assert manager.get_led4() == [0, 255, 0]
