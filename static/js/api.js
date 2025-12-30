@@ -118,9 +118,6 @@ const API = {
   // Planner
   regenerateSequences: () => API._post('/api/planner/regenerate-sequences'),
 
-  // Optimizer
-  fetchOptimizerStatus: () => fetch('/api/optimizer').then(r => r.json()),
-  runOptimizer: () => API._post('/api/optimizer/run'),
 };
 
 // Make available globally

@@ -20,7 +20,6 @@ document.addEventListener('alpine:init', () => {
     tradernet: { connected: false },
     markets: {},  // {EU: {open: bool, ...}, US: {...}, ASIA: {...}}
     recommendations: null,  // Unified recommendations: {depth: int, steps: [], total_score_improvement: float, final_available_cash: float}
-    optimizerStatus: null,  // {settings: {...}, last_run: {...}, status: 'ready'}
     plannerStatus: null,  // {has_sequences: bool, total_sequences: int, evaluated_count: int, is_planning: bool, is_finished: bool, progress_percentage: float}
     // Default settings - will be overwritten by fetchSettings()
     settings: {
@@ -116,8 +115,7 @@ document.addEventListener('alpine:init', () => {
         this.fetchCountries(),
         this.fetchRecommendations(),
         this.fetchSettings(),
-        this.fetchSparklines(),
-        this.fetchOptimizerStatus()
+        this.fetchSparklines()
       ]);
     },
 
@@ -349,27 +347,6 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    async fetchOptimizerStatus() {
-      try {
-        this.optimizerStatus = await API.fetchOptimizerStatus();
-      } catch (e) {
-        console.error('Failed to fetch optimizer status:', e);
-      }
-    },
-
-    async runOptimizer() {
-      try {
-        const result = await API.runOptimizer();
-        if (result.success) {
-          this.showMessage('Optimization complete', 'success');
-          await this.fetchOptimizerStatus();
-        } else {
-          this.showMessage(`Optimization failed: ${result.result?.error || 'Unknown error'}`, 'error');
-        }
-      } catch (e) {
-        this.showMessage('Failed to run optimizer', 'error');
-      }
-    },
 
     async updateSetting(key, value) {
       const numValue = parseFloat(value);
