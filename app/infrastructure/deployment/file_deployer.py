@@ -186,9 +186,21 @@ class FileDeployer:
         Preserves venv, data, .env and other important directories.
         Only replaces code files from staging.
 
+        Safety measures:
+        1. Creates backups of data and .env before deployment
+        2. Validates staging doesn't contain preserved items
+        3. Skips preserved items when copying from staging
+        4. Verifies preserved items exist after deployment, restores from backup if missing
+
         Raises:
             DeploymentError: If swap fails
         """
+        # Critical items that must be backed up and preserved
+        critical_items = ["data", ".env"]
+        preserve_items = ["venv", "data", ".env", ".git"]
+        preserved = {}
+        backups = {}
+
         try:
             if not self.deploy_dir.exists():
                 # First deployment - just move staging
@@ -197,10 +209,48 @@ class FileDeployer:
                 logger.info("Atomic swap completed successfully")
                 return
 
-            # Preserve important directories/files
-            preserve_items = ["venv", "data", ".env", ".git"]
-            preserved = {}
+            # Step 1: Create backups of critical items before deployment
+            logger.info("Creating backups of critical items (data, .env)...")
+            for critical_item in critical_items:
+                item_path = self.deploy_dir / critical_item
+                if item_path.exists():
+                    backup_path = self.deploy_dir.parent / f".{critical_item}.backup"
+                    # Remove old backup if exists
+                    if backup_path.exists():
+                        if backup_path.is_dir():
+                            shutil.rmtree(backup_path)
+                        else:
+                            backup_path.unlink()
 
+                    try:
+                        if item_path.is_dir():
+                            shutil.copytree(str(item_path), str(backup_path))
+                        else:
+                            shutil.copy2(str(item_path), str(backup_path))
+                        backups[critical_item] = backup_path
+                        logger.info(
+                            f"Created backup of {critical_item} at {backup_path}"
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to create backup of {critical_item}: {e}")
+                        raise DeploymentError(
+                            f"Failed to create backup of {critical_item}: {e}"
+                        ) from e
+
+            # Step 2: Validate staging doesn't contain preserved items
+            logger.info(
+                "Validating staging directory doesn't contain preserved items..."
+            )
+            for preserved_item in preserve_items:
+                staging_item = self.staging_dir / preserved_item
+                if staging_item.exists():
+                    raise DeploymentError(
+                        f"Staging directory contains preserved item '{preserved_item}'. "
+                        "This should never happen - staging should only contain code files."
+                    )
+            logger.debug("Staging validation passed - no preserved items found")
+
+            # Step 3: Preserve important directories/files
             logger.info(f"Preserving important directories in {self.deploy_dir}...")
             for preserved_item in preserve_items:
                 item_path = self.deploy_dir / preserved_item
@@ -214,46 +264,135 @@ class FileDeployer:
                             else temp_path.unlink()
                         )
 
-                    if item_path.is_dir():
-                        shutil.move(str(item_path), str(temp_path))
-                    else:
-                        shutil.copy2(str(item_path), str(temp_path))
-                    preserved[preserved_item] = temp_path
-                    logger.debug(f"Preserved {preserved_item}")
+                    try:
+                        if item_path.is_dir():
+                            shutil.move(str(item_path), str(temp_path))
+                        else:
+                            shutil.copy2(str(item_path), str(temp_path))
+                        preserved[preserved_item] = temp_path
+                        logger.info(f"Preserved {preserved_item} to {temp_path}")
+                    except Exception as e:
+                        logger.error(f"Failed to preserve {preserved_item}: {e}")
+                        # Rollback: restore any already preserved items
+                        for (
+                            already_preserved_name,
+                            already_temp_path,
+                        ) in preserved.items():
+                            try:
+                                restore_dst = self.deploy_dir / already_preserved_name
+                                if already_temp_path.is_dir():
+                                    shutil.move(
+                                        str(already_temp_path), str(restore_dst)
+                                    )
+                                else:
+                                    shutil.copy2(
+                                        str(already_temp_path), str(restore_dst)
+                                    )
+                                    already_temp_path.unlink()
+                            except Exception:
+                                pass
+                        raise DeploymentError(
+                            f"Failed to preserve {preserved_item}: {e}"
+                        ) from e
 
-            # Remove old code files (but keep preserved items)
+            # Step 4: Remove old code files (but keep preserved items)
             logger.info(f"Removing old code files from {self.deploy_dir}...")
             for item_path in self.deploy_dir.iterdir():
                 item: Path = item_path
                 if item.name not in preserve_items:
-                    if item.is_dir():
-                        shutil.rmtree(item)
-                    else:
-                        item.unlink()
+                    try:
+                        if item.is_dir():
+                            shutil.rmtree(item)
+                        else:
+                            item.unlink()
+                    except Exception as e:
+                        logger.warning(f"Failed to remove {item.name}: {e}")
 
-            # Copy new code files from staging
+            # Step 5: Copy new code files from staging (skip preserved items)
             logger.info("Copying new code files from staging...")
             for staging_item_path in self.staging_dir.iterdir():
-                staging_item: Path = staging_item_path
-                dst = self.deploy_dir / staging_item.name
-                if staging_item.is_dir():
-                    shutil.copytree(staging_item, dst, dirs_exist_ok=True)
-                else:
-                    shutil.copy2(staging_item, dst)
+                staging_path: Path = staging_item_path
+                # Skip preserved items - they should never be in staging, but double-check
+                if staging_path.name in preserve_items:
+                    logger.warning(
+                        f"Skipping preserved item '{staging_path.name}' in staging "
+                        "(this should not happen)"
+                    )
+                    continue
 
-            # Restore preserved items
+                dst = self.deploy_dir / staging_path.name
+                try:
+                    if staging_path.is_dir():
+                        shutil.copytree(staging_path, dst, dirs_exist_ok=True)
+                    else:
+                        shutil.copy2(staging_path, dst)
+                    logger.debug(f"Copied {staging_path.name} from staging")
+                except Exception as e:
+                    logger.error(f"Failed to copy {staging_path.name}: {e}")
+                    raise DeploymentError(
+                        f"Failed to copy {staging_path.name} from staging: {e}"
+                    ) from e
+
+            # Step 6: Restore preserved items
             logger.info("Restoring preserved directories...")
             for preserved_item_name, temp_path in preserved.items():
                 dst = self.deploy_dir / preserved_item_name
-                if temp_path.is_dir():
-                    shutil.move(str(temp_path), str(dst))
+                try:
+                    if temp_path.is_dir():
+                        shutil.move(str(temp_path), str(dst))
+                    else:
+                        shutil.copy2(str(temp_path), str(dst))
+                        temp_path.unlink()
+                    logger.info(f"Restored {preserved_item_name}")
+                except Exception as e:
+                    logger.error(f"Failed to restore {preserved_item_name}: {e}")
+                    raise DeploymentError(
+                        f"Failed to restore {preserved_item_name}: {e}"
+                    ) from e
+
+            # Step 7: Verify critical items exist after deployment, restore from backup if missing
+            logger.info("Verifying critical items exist after deployment...")
+            for critical_item in critical_items:
+                item_path = self.deploy_dir / critical_item
+                if not item_path.exists():
+                    logger.error(
+                        f"CRITICAL: {critical_item} is missing after deployment! "
+                        "Restoring from backup..."
+                    )
+                    if critical_item not in backups:
+                        raise DeploymentError(
+                            f"CRITICAL: {critical_item} is missing and no backup exists!"
+                        )
+
+                    backup_path = backups[critical_item]
+                    try:
+                        if backup_path.is_dir():
+                            shutil.copytree(str(backup_path), str(item_path))
+                        else:
+                            shutil.copy2(str(backup_path), str(item_path))
+                        logger.info(f"Restored {critical_item} from backup")
+                    except Exception as e:
+                        raise DeploymentError(
+                            f"CRITICAL: Failed to restore {critical_item} from backup: {e}"
+                        ) from e
                 else:
-                    shutil.copy2(str(temp_path), str(dst))
-                    temp_path.unlink()
-                logger.debug(f"Restored {preserved_item_name}")
+                    logger.debug(f"Verified {critical_item} exists after deployment")
 
             # Clean up staging
             self._cleanup_staging()
+
+            # Clean up backups (they're no longer needed)
+            logger.info("Cleaning up backup files...")
+            for backup_path in backups.values():
+                try:
+                    if backup_path.exists():
+                        if backup_path.is_dir():
+                            shutil.rmtree(backup_path)
+                        else:
+                            backup_path.unlink()
+                        logger.debug(f"Removed backup {backup_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to remove backup {backup_path}: {e}")
 
             # Ensure venv exists after swap
             if not self.venv_dir.exists():
@@ -264,6 +403,9 @@ class FileDeployer:
 
             logger.info("Atomic swap completed successfully")
 
+        except DeploymentError:
+            # Re-raise deployment errors
+            raise
         except Exception as e:
             # Clean up staging and any preserved items on failure
             self._cleanup_staging()
@@ -275,6 +417,28 @@ class FileDeployer:
                         temp_path.unlink()
                 except Exception:
                     pass
+
+            # Try to restore critical items from backup if deployment failed
+            logger.error(
+                "Deployment failed - attempting to restore critical items from backup..."
+            )
+            for critical_item in critical_items:
+                backup_path = self.deploy_dir.parent / f".{critical_item}.backup"
+                if backup_path.exists():
+                    item_path = self.deploy_dir / critical_item
+                    if not item_path.exists():
+                        try:
+                            logger.info(f"Restoring {critical_item} from backup...")
+                            if backup_path.is_dir():
+                                shutil.copytree(str(backup_path), str(item_path))
+                            else:
+                                shutil.copy2(str(backup_path), str(item_path))
+                            logger.info(f"Restored {critical_item} from backup")
+                        except Exception as restore_error:
+                            logger.error(
+                                f"Failed to restore {critical_item} from backup: {restore_error}"
+                            )
+
             raise DeploymentError(f"Error during atomic swap: {e}") from e
 
     def get_staging_size_mb(self) -> float:

@@ -173,66 +173,134 @@ async def trigger_historical_sync():
 
 @router.post("/sync/rebuild-universe")
 async def rebuild_universe_from_portfolio():
-    """Rebuild universe from portfolio and populate all histories.
+    """Rebuild universe from portfolio and populate all databases.
 
-    This endpoint:
+    This endpoint performs a complete rebuild:
     1. Gets all stocks from current portfolio positions
     2. Checks if they exist in the universe
     3. Adds missing stocks with full data (ISIN, Yahoo symbols, etc.)
-    4. Triggers historical data sync for all stocks
+    4. Syncs historical data for all stocks in universe
+    5. Refreshes scores and metrics for all stocks
 
     Returns:
-        Status with counts of stocks added and synced
+        Status with detailed counts of operations performed
     """
     from app.infrastructure.dependencies import get_stock_repository
     from app.infrastructure.external.tradernet import get_tradernet_client
     from app.jobs.daily_sync import _ensure_portfolio_stocks_in_universe
     from app.jobs.historical_data_sync import sync_historical_data
+    from app.jobs.stocks_data_sync import run_stocks_data_sync
+
+    result = {
+        "status": "success",
+        "message": "",
+        "portfolio_positions": 0,
+        "stocks_in_universe_before": 0,
+        "stocks_in_universe_after": 0,
+        "stocks_added": 0,
+        "historical_synced": False,
+        "scores_refreshed": False,
+        "errors": [],
+    }
 
     try:
+        logger.info("Starting universe rebuild from portfolio...")
+
+        # Step 1: Connect to Tradernet
         client = get_tradernet_client()
         if not client.is_connected:
             if not client.connect():
-                return {
-                    "status": "error",
-                    "message": "Failed to connect to Tradernet",
-                }
+                result["status"] = "error"
+                result["message"] = "Failed to connect to Tradernet"
+                result["errors"].append("Tradernet connection failed")
+                return result
 
-        # Get portfolio positions
+        # Step 2: Get portfolio positions
+        logger.info("Fetching portfolio positions from Tradernet...")
         positions = client.get_portfolio()
         if not positions:
-            return {
-                "status": "success",
-                "message": "No positions in portfolio",
-                "portfolio_positions": 0,
-                "stocks_in_universe": 0,
-            }
+            result["message"] = "No positions in portfolio"
+            return result
 
-        # Get count before adding
+        result["portfolio_positions"] = len(positions)
+        logger.info(f"Found {len(positions)} portfolio positions")
+
+        # Step 3: Get stock counts before adding
         stock_repo = get_stock_repository()
         stocks_before = await stock_repo.get_all_active()
+        result["stocks_in_universe_before"] = len(stocks_before)
+        logger.info(f"Universe has {len(stocks_before)} stocks before rebuild")
 
-        # Ensure all portfolio stocks are in universe
-        await _ensure_portfolio_stocks_in_universe(positions, client, stock_repo)
+        # Step 4: Ensure all portfolio stocks are in universe
+        logger.info("Adding missing portfolio stocks to universe...")
+        try:
+            await _ensure_portfolio_stocks_in_universe(positions, client, stock_repo)
+        except Exception as e:
+            error_msg = f"Failed to add portfolio stocks: {e}"
+            logger.error(error_msg, exc_info=True)
+            result["errors"].append(error_msg)
+            # Continue - some stocks might have been added
 
-        # Get count after adding
+        # Step 5: Get stock counts after adding
         stocks_after = await stock_repo.get_all_active()
-        added_count = len(stocks_after) - len(stocks_before)
+        result["stocks_in_universe_after"] = len(stocks_after)
+        result["stocks_added"] = len(stocks_after) - len(stocks_before)
+        logger.info(
+            f"Universe now has {len(stocks_after)} stocks "
+            f"({result['stocks_added']} added)"
+        )
 
-        # Trigger historical data sync for all stocks
-        logger.info("Triggering historical data sync for all stocks...")
-        await sync_historical_data()
+        # Step 6: Sync historical data for all stocks
+        logger.info("Syncing historical data for all stocks in universe...")
+        try:
+            await sync_historical_data()
+            result["historical_synced"] = True
+            logger.info("Historical data sync completed")
+        except Exception as e:
+            error_msg = f"Historical data sync failed: {e}"
+            logger.error(error_msg, exc_info=True)
+            result["errors"].append(error_msg)
+            # Continue - historical sync failure shouldn't block the process
 
-        return {
-            "status": "success",
-            "message": "Universe rebuilt from portfolio and histories populated",
-            "portfolio_positions": len(positions),
-            "stocks_in_universe": len(stocks_after),
-            "added": added_count,
-        }
+        # Step 7: Refresh scores and metrics for all stocks
+        logger.info("Refreshing scores and metrics for all stocks...")
+        try:
+            await run_stocks_data_sync()
+            result["scores_refreshed"] = True
+            logger.info("Scores and metrics refresh completed")
+        except Exception as e:
+            error_msg = f"Scores/metrics refresh failed: {e}"
+            logger.error(error_msg, exc_info=True)
+            result["errors"].append(error_msg)
+            # Continue - score refresh failure shouldn't block the process
+
+        # Build success message
+        if result["errors"]:
+            result["message"] = (
+                f"Universe rebuild completed with {len(result['errors'])} error(s). "
+                f"Added {result['stocks_added']} stocks, "
+                f"synced historical data: {result['historical_synced']}, "
+                f"refreshed scores: {result['scores_refreshed']}"
+            )
+            result["status"] = "partial_success"
+        else:
+            result["message"] = (
+                f"Universe rebuild completed successfully. "
+                f"Added {result['stocks_added']} stocks, "
+                f"synced historical data for all stocks, "
+                f"refreshed scores and metrics for all stocks."
+            )
+
+        logger.info(f"Universe rebuild completed: {result['message']}")
+        return result
+
     except Exception as e:
-        logger.error(f"Failed to rebuild universe from portfolio: {e}", exc_info=True)
-        return {"status": "error", "message": str(e)}
+        error_msg = f"Failed to rebuild universe from portfolio: {e}"
+        logger.error(error_msg, exc_info=True)
+        result["status"] = "error"
+        result["message"] = error_msg
+        result["errors"].append(error_msg)
+        return result
 
 
 @router.post("/sync/stocks-data")
