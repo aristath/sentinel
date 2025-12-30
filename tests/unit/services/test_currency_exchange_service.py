@@ -177,7 +177,7 @@ class TestCurrencyExchangeService:
         assert path[0].from_currency == "EUR"
         assert path[0].to_currency == "USD"
         assert path[0].symbol == "EURUSD_T0.ITS"
-        assert path[0].action == "BUY"
+        assert path[0].action == "SELL"
 
     def test_get_conversion_path_same_currency(self):
         """Test getting path for same currency returns empty."""
@@ -472,7 +472,7 @@ class TestDirectPairs:
 
         symbol, action = CurrencyExchangeService.DIRECT_PAIRS[("EUR", "USD")]
         assert symbol == "EURUSD_T0.ITS"
-        assert action == "BUY"
+        assert action == "SELL"
 
     def test_eur_gbp_pair(self):
         """Test EUR/GBP pair configuration."""
