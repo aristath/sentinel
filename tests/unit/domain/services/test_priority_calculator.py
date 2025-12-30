@@ -1,305 +1,277 @@
 """Tests for priority calculator service.
 
 These tests validate priority calculations for stock recommendations,
-including stock scores, allocation fit, and diversification scores.
+including stock score multiplication and sorting.
 """
 
 import pytest
 
-from app.domain.models import StockPriority
+from app.domain.services.priority_calculator import (
+    PriorityCalculator,
+    PriorityInput,
+    PriorityResult,
+)
 
 
-class TestPriorityCalculator:
-    """Test PriorityCalculator class."""
+class TestParseIndustries:
+    """Test parse_industries method."""
 
-    def test_calculate_priority_combines_scores_correctly(self):
-        """Test that priority calculation combines stock score and allocation fit correctly."""
-        from app.domain.services.priority_calculator import PriorityCalculator
+    def test_parses_single_industry(self):
+        """Test parsing a single industry string."""
+        result = PriorityCalculator.parse_industries("Technology")
+        assert result == ["Technology"]
 
-        stock_priority = StockPriority(
+    def test_parses_multiple_industries(self):
+        """Test parsing a comma-separated string of industries."""
+        result = PriorityCalculator.parse_industries("Industrial, Defense, Aerospace")
+        assert result == ["Industrial", "Defense", "Aerospace"]
+
+    def test_handles_leading_trailing_spaces(self):
+        """Test handling of spaces around commas and industry names."""
+        result = PriorityCalculator.parse_industries("  Tech , Finance ")
+        assert result == ["Tech", "Finance"]
+
+    def test_handles_empty_string(self):
+        """Test handling of an empty input string."""
+        result = PriorityCalculator.parse_industries("")
+        assert result == []
+
+    def test_handles_none_input(self):
+        """Test handling of None input."""
+        result = PriorityCalculator.parse_industries(None)
+        assert result == []
+
+    def test_handles_string_with_only_spaces(self):
+        """Test handling of a string containing only spaces."""
+        result = PriorityCalculator.parse_industries("   ,  ")
+        assert result == []
+
+
+class TestCalculatePriority:
+    """Test calculate_priority method."""
+
+    def test_calculates_priority_with_multiplier(self):
+        """Test that priority is calculated as stock_score * multiplier."""
+        input_data = PriorityInput(
             symbol="AAPL",
             name="Apple",
-            stock_score=0.8,
+            stock_score=0.75,
+            multiplier=1.5,
+        )
+
+        result = PriorityCalculator.calculate_priority(input_data)
+
+        assert isinstance(result, PriorityResult)
+        assert result.symbol == "AAPL"
+        assert result.name == "Apple"
+        assert result.stock_score == 0.75
+        assert result.multiplier == 1.5
+        assert result.combined_priority == pytest.approx(0.75 * 1.5, abs=0.0001)
+        assert result.combined_priority == pytest.approx(1.125, abs=0.0001)
+
+    def test_rounds_combined_priority_to_4_decimal_places(self):
+        """Test that combined_priority is rounded to 4 decimal places."""
+        input_data = PriorityInput(
+            symbol="AAPL",
+            name="Apple",
+            stock_score=0.333333,
+            multiplier=1.5,
+        )
+
+        result = PriorityCalculator.calculate_priority(input_data)
+
+        # Should be rounded to 4 decimal places
+        combined = 0.333333 * 1.5  # = 0.4999995
+        assert result.combined_priority == pytest.approx(0.5000, abs=0.0001)
+
+    def test_preserves_optional_fields(self):
+        """Test that optional fields are preserved in the result."""
+        input_data = PriorityInput(
+            symbol="AAPL",
+            name="Apple",
+            stock_score=0.75,
             multiplier=1.0,
+            country="US",
+            industry="Technology",
             volatility=0.15,
+            quality_score=0.8,
+            opportunity_score=0.7,
+            allocation_fit_score=0.6,
         )
 
-        allocation_fit_score = 0.7
-        diversification_score = 0.6
+        result = PriorityCalculator.calculate_priority(input_data)
 
-        priority = PriorityCalculator.calculate_priority(
-            stock_priority, allocation_fit_score, diversification_score
-        )
+        assert result.country == "US"
+        assert result.industry == "Technology"
+        assert result.volatility == 0.15
+        assert result.quality_score == 0.8
+        assert result.opportunity_score == 0.7
+        assert result.allocation_fit_score == 0.6
 
-        # Priority should be a weighted combination
-        assert isinstance(priority, float)
-        assert 0.0 <= priority <= 1.0
-
-    def test_calculate_priority_uses_multiplier(self):
-        """Test that stock priority multiplier affects the calculation."""
-        from app.domain.services.priority_calculator import PriorityCalculator
-
-        stock_priority_high = StockPriority(
+    def test_handles_none_optional_fields(self):
+        """Test handling when optional fields are None."""
+        input_data = PriorityInput(
             symbol="AAPL",
             name="Apple",
-            stock_score=0.5,
-            multiplier=2.0,  # High multiplier
-            volatility=0.15,
-        )
-
-        stock_priority_low = StockPriority(
-            symbol="MSFT",
-            name="Microsoft",
-            stock_score=0.5,
-            multiplier=0.5,  # Low multiplier
-            volatility=0.15,
-        )
-
-        allocation_fit = 0.5
-        diversification = 0.5
-
-        priority_high = PriorityCalculator.calculate_priority(
-            stock_priority_high, allocation_fit, diversification
-        )
-        priority_low = PriorityCalculator.calculate_priority(
-            stock_priority_low, allocation_fit, diversification
-        )
-
-        # Higher multiplier should result in higher priority
-        assert priority_high > priority_low
-
-    def test_calculate_priority_handles_zero_allocation_fit(self):
-        """Test handling when allocation fit score is zero."""
-        from app.domain.services.priority_calculator import PriorityCalculator
-
-        stock_priority = StockPriority(
-            symbol="AAPL",
-            name="Apple",
-            stock_score=0.8,
+            stock_score=0.75,
             multiplier=1.0,
-            volatility=0.15,
         )
 
-        priority = PriorityCalculator.calculate_priority(
-            stock_priority, allocation_fit_score=0.0, diversification_score=0.5
-        )
+        result = PriorityCalculator.calculate_priority(input_data)
 
-        assert isinstance(priority, float)
-        assert priority >= 0.0
+        assert result.country is None
+        assert result.industry is None
+        assert result.volatility is None
+        assert result.quality_score is None
+        assert result.opportunity_score is None
+        assert result.allocation_fit_score is None
 
-    def test_calculate_priority_handles_zero_diversification(self):
-        """Test handling when diversification score is zero."""
-        from app.domain.services.priority_calculator import PriorityCalculator
-
-        stock_priority = StockPriority(
-            symbol="AAPL",
-            name="Apple",
-            stock_score=0.8,
-            multiplier=1.0,
-            volatility=0.15,
-        )
-
-        priority = PriorityCalculator.calculate_priority(
-            stock_priority, allocation_fit_score=0.5, diversification_score=0.0
-        )
-
-        assert isinstance(priority, float)
-        assert priority >= 0.0
-
-    def test_calculate_priority_handles_maximum_scores(self):
-        """Test handling when all scores are at maximum (1.0)."""
-        from app.domain.services.priority_calculator import PriorityCalculator
-
-        stock_priority = StockPriority(
-            symbol="AAPL",
-            name="Apple",
-            stock_score=1.0,
-            multiplier=1.0,
-            volatility=0.15,
-        )
-
-        priority = PriorityCalculator.calculate_priority(
-            stock_priority, allocation_fit_score=1.0, diversification_score=1.0
-        )
-
-        assert isinstance(priority, float)
-        assert 0.0 <= priority <= 1.0
-
-    def test_calculate_priority_handles_minimum_scores(self):
-        """Test handling when all scores are at minimum (0.0)."""
-        from app.domain.services.priority_calculator import PriorityCalculator
-
-        stock_priority = StockPriority(
+    def test_handles_zero_stock_score(self):
+        """Test handling when stock_score is zero."""
+        input_data = PriorityInput(
             symbol="AAPL",
             name="Apple",
             stock_score=0.0,
-            multiplier=1.0,
-            volatility=0.15,
+            multiplier=1.5,
         )
 
-        priority = PriorityCalculator.calculate_priority(
-            stock_priority, allocation_fit_score=0.0, diversification_score=0.0
+        result = PriorityCalculator.calculate_priority(input_data)
+
+        assert result.combined_priority == 0.0
+
+    def test_handles_zero_multiplier(self):
+        """Test handling when multiplier is zero."""
+        input_data = PriorityInput(
+            symbol="AAPL",
+            name="Apple",
+            stock_score=0.75,
+            multiplier=0.0,
         )
 
-        assert isinstance(priority, float)
-        assert priority >= 0.0
+        result = PriorityCalculator.calculate_priority(input_data)
 
-    def test_calculate_allocation_fit_score_calculates_correctly(self):
-        """Test that allocation fit score is calculated correctly."""
-        from app.domain.services.priority_calculator import PriorityCalculator
+        assert result.combined_priority == 0.0
 
-        # Mock scenario: target allocation is 10%, current is 5%
-        target_allocation = 0.10
-        current_allocation = 0.05
-
-        score = PriorityCalculator.calculate_allocation_fit_score(
-            target_allocation, current_allocation
+    def test_handles_maximum_values(self):
+        """Test handling when stock_score and multiplier are at maximum."""
+        input_data = PriorityInput(
+            symbol="AAPL",
+            name="Apple",
+            stock_score=1.0,
+            multiplier=2.0,  # Maximum reasonable multiplier
         )
 
-        assert isinstance(score, float)
-        assert 0.0 <= score <= 1.0
-        # Underweight position (current < target) should have positive score
-        assert score > 0.0
+        result = PriorityCalculator.calculate_priority(input_data)
 
-    def test_calculate_allocation_fit_score_handles_overweight(self):
-        """Test handling when position is overweight (current > target)."""
-        from app.domain.services.priority_calculator import PriorityCalculator
+        assert result.combined_priority == 2.0
 
-        target_allocation = 0.05
-        current_allocation = 0.10  # Overweight
 
-        score = PriorityCalculator.calculate_allocation_fit_score(
-            target_allocation, current_allocation
-        )
+class TestCalculatePriorities:
+    """Test calculate_priorities method."""
 
-        assert isinstance(score, float)
-        # Overweight positions should have lower scores
-        assert score >= 0.0
+    def test_calculates_priorities_for_multiple_stocks(self):
+        """Test that priorities are calculated for multiple stocks."""
+        inputs = [
+            PriorityInput(
+                symbol="AAPL",
+                name="Apple",
+                stock_score=0.8,
+                multiplier=1.0,
+            ),
+            PriorityInput(
+                symbol="MSFT",
+                name="Microsoft",
+                stock_score=0.7,
+                multiplier=1.0,
+            ),
+        ]
 
-    def test_calculate_allocation_fit_score_handles_at_target(self):
-        """Test handling when position is at target allocation."""
-        from app.domain.services.priority_calculator import PriorityCalculator
+        results = PriorityCalculator.calculate_priorities(inputs)
 
-        target_allocation = 0.10
-        current_allocation = 0.10
+        assert len(results) == 2
+        assert all(isinstance(r, PriorityResult) for r in results)
+        assert results[0].symbol == "AAPL"  # Higher score first
+        assert results[1].symbol == "MSFT"
 
-        score = PriorityCalculator.calculate_allocation_fit_score(
-            target_allocation, current_allocation
-        )
+    def test_sorts_by_combined_priority_descending(self):
+        """Test that results are sorted by combined_priority in descending order."""
+        inputs = [
+            PriorityInput(
+                symbol="LOW",
+                name="Low Priority",
+                stock_score=0.5,
+                multiplier=1.0,  # combined = 0.5
+            ),
+            PriorityInput(
+                symbol="HIGH",
+                name="High Priority",
+                stock_score=0.8,
+                multiplier=1.5,  # combined = 1.2
+            ),
+            PriorityInput(
+                symbol="MED",
+                name="Medium Priority",
+                stock_score=0.6,
+                multiplier=1.0,  # combined = 0.6
+            ),
+        ]
 
-        assert isinstance(score, float)
-        assert score >= 0.0
+        results = PriorityCalculator.calculate_priorities(inputs)
 
-    def test_calculate_allocation_fit_score_handles_zero_target(self):
-        """Test handling when target allocation is zero."""
-        from app.domain.services.priority_calculator import PriorityCalculator
+        assert len(results) == 3
+        assert results[0].symbol == "HIGH"  # Highest priority first
+        assert results[1].symbol == "MED"
+        assert results[2].symbol == "LOW"
 
-        target_allocation = 0.0
-        current_allocation = 0.05
+    def test_handles_empty_input_list(self):
+        """Test handling when input list is empty."""
+        results = PriorityCalculator.calculate_priorities([])
 
-        score = PriorityCalculator.calculate_allocation_fit_score(
-            target_allocation, current_allocation
-        )
+        assert results == []
 
-        assert isinstance(score, float)
-        assert score >= 0.0
+    def test_handles_single_input(self):
+        """Test handling when input list has only one item."""
+        inputs = [
+            PriorityInput(
+                symbol="AAPL",
+                name="Apple",
+                stock_score=0.75,
+                multiplier=1.0,
+            )
+        ]
 
-    def test_calculate_allocation_fit_score_handles_zero_current(self):
-        """Test handling when current allocation is zero."""
-        from app.domain.services.priority_calculator import PriorityCalculator
+        results = PriorityCalculator.calculate_priorities(inputs)
 
-        target_allocation = 0.10
-        current_allocation = 0.0
+        assert len(results) == 1
+        assert results[0].symbol == "AAPL"
+        assert results[0].combined_priority == pytest.approx(0.75, abs=0.0001)
 
-        score = PriorityCalculator.calculate_allocation_fit_score(
-            target_allocation, current_allocation
-        )
+    def test_preserves_all_input_fields(self):
+        """Test that all input fields are preserved in results."""
+        inputs = [
+            PriorityInput(
+                symbol="AAPL",
+                name="Apple",
+                stock_score=0.75,
+                multiplier=1.5,
+                country="US",
+                industry="Technology",
+                volatility=0.15,
+                quality_score=0.8,
+                opportunity_score=0.7,
+                allocation_fit_score=0.6,
+            )
+        ]
 
-        assert isinstance(score, float)
-        # Zero current with positive target should have high score
-        assert score > 0.0
+        results = PriorityCalculator.calculate_priorities(inputs)
 
-    def test_calculate_diversification_score_calculates_correctly(self):
-        """Test that diversification score is calculated correctly."""
-        from app.domain.services.priority_calculator import PriorityCalculator
-
-        # Mock scenario with country/industry weights
-        country_weights = {"US": 0.6, "EU": 0.3, "ASIA": 0.1}
-        industry_weights = {"Tech": 0.5, "Finance": 0.3, "Healthcare": 0.2}
-        stock_country = "ASIA"  # Underweight country
-        stock_industry = "Healthcare"  # Underweight industry
-
-        score = PriorityCalculator.calculate_diversification_score(
-            country_weights, industry_weights, stock_country, stock_industry
-        )
-
-        assert isinstance(score, float)
-        assert 0.0 <= score <= 1.0
-        # Underweight regions/industries should have positive diversification score
-        assert score > 0.0
-
-    def test_calculate_diversification_score_handles_overweight_regions(self):
-        """Test handling when stock is in overweight regions."""
-        from app.domain.services.priority_calculator import PriorityCalculator
-
-        country_weights = {"US": 0.8, "EU": 0.2}  # US is overweight
-        industry_weights = {"Tech": 0.7, "Finance": 0.3}  # Tech is overweight
-        stock_country = "US"
-        stock_industry = "Tech"
-
-        score = PriorityCalculator.calculate_diversification_score(
-            country_weights, industry_weights, stock_country, stock_industry
-        )
-
-        assert isinstance(score, float)
-        # Overweight regions should have lower diversification scores
-        assert score >= 0.0
-
-    def test_calculate_diversification_score_handles_missing_country(self):
-        """Test handling when stock country is not in weights."""
-        from app.domain.services.priority_calculator import PriorityCalculator
-
-        country_weights = {"US": 0.6, "EU": 0.4}
-        industry_weights = {"Tech": 1.0}
-        stock_country = "ASIA"  # Not in weights
-        stock_industry = "Tech"
-
-        score = PriorityCalculator.calculate_diversification_score(
-            country_weights, industry_weights, stock_country, stock_industry
-        )
-
-        assert isinstance(score, float)
-        assert score >= 0.0
-
-    def test_calculate_diversification_score_handles_missing_industry(self):
-        """Test handling when stock industry is not in weights."""
-        from app.domain.services.priority_calculator import PriorityCalculator
-
-        country_weights = {"US": 1.0}
-        industry_weights = {"Tech": 0.6, "Finance": 0.4}
-        stock_country = "US"
-        stock_industry = "Healthcare"  # Not in weights
-
-        score = PriorityCalculator.calculate_diversification_score(
-            country_weights, industry_weights, stock_country, stock_industry
-        )
-
-        assert isinstance(score, float)
-        assert score >= 0.0
-
-    def test_calculate_diversification_score_handles_empty_weights(self):
-        """Test handling when weights dictionaries are empty."""
-        from app.domain.services.priority_calculator import PriorityCalculator
-
-        country_weights = {}
-        industry_weights = {}
-        stock_country = "US"
-        stock_industry = "Tech"
-
-        score = PriorityCalculator.calculate_diversification_score(
-            country_weights, industry_weights, stock_country, stock_industry
-        )
-
-        assert isinstance(score, float)
-        assert score >= 0.0
-
+        assert len(results) == 1
+        result = results[0]
+        assert result.symbol == "AAPL"
+        assert result.name == "Apple"
+        assert result.country == "US"
+        assert result.industry == "Technology"
+        assert result.volatility == 0.15
+        assert result.quality_score == 0.8
+        assert result.opportunity_score == 0.7
+        assert result.allocation_fit_score == 0.6
