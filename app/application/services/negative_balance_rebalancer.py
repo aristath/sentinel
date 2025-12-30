@@ -4,7 +4,7 @@ Automatically addresses negative cash balances and ensures minimum currency rese
 """
 
 import logging
-from typing import Dict, List, Set
+from typing import Dict, List, Optional, Set
 
 from app.application.services.currency_exchange_service import CurrencyExchangeService
 from app.application.services.trade_execution_service import TradeExecutionService
@@ -15,7 +15,11 @@ from app.domain.value_objects.trade_side import TradeSide
 from app.infrastructure.events import SystemEvent, emit
 from app.infrastructure.external.tradernet import TradernetClient
 from app.infrastructure.market_hours import get_open_markets, is_market_open
-from app.repositories import PositionRepository, StockRepository
+from app.repositories import (
+    PositionRepository,
+    RecommendationRepository,
+    StockRepository,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +38,7 @@ class NegativeBalanceRebalancer:
         stock_repo: StockRepository,
         position_repo: PositionRepository,
         exchange_rate_service: ExchangeRateService,
+        recommendation_repo: Optional[RecommendationRepository] = None,
     ):
         """Initialize the rebalancer.
 
@@ -44,6 +49,7 @@ class NegativeBalanceRebalancer:
             stock_repo: Repository for stock data
             position_repo: Repository for position data
             exchange_rate_service: Service for exchange rate conversions
+            recommendation_repo: Repository for storing recommendations (optional)
         """
         self._client = tradernet_client
         self._currency_service = currency_exchange_service
@@ -51,6 +57,7 @@ class NegativeBalanceRebalancer:
         self._stock_repo = stock_repo
         self._position_repo = position_repo
         self._exchange_rate_service = exchange_rate_service
+        self._recommendation_repo = recommendation_repo or RecommendationRepository()
 
     async def get_trading_currencies(self) -> Set[str]:
         """Get currencies from active stocks in the universe.
@@ -342,6 +349,35 @@ class NegativeBalanceRebalancer:
                 f"Executing {len(sell_recommendations)} emergency sales to cover "
                 f"negative balances (bypassing cooldown and min-hold checks)"
             )
+
+            # Store emergency recommendations in database for UI visibility
+            # Use special portfolio_hash prefix to mark them as emergency
+            emergency_portfolio_hash = "EMERGENCY:negative_balance_rebalancing"
+            for rec in sell_recommendations:
+                try:
+                    await self._recommendation_repo.create_or_update(
+                        {
+                            "symbol": rec.symbol,
+                            "name": rec.name,
+                            "side": rec.side.value,
+                            "quantity": rec.quantity,
+                            "estimated_price": rec.estimated_price,
+                            "estimated_value": rec.estimated_value,
+                            "reason": rec.reason,
+                            "currency": (
+                                rec.currency.value
+                                if hasattr(rec.currency, "value")
+                                else str(rec.currency)
+                            ),
+                            "priority": 999.0,  # High priority for emergency
+                            "current_portfolio_score": 0.0,
+                            "new_portfolio_score": 0.0,
+                            "score_change": 0.0,
+                        },
+                        emergency_portfolio_hash,
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to store emergency recommendation: {e}")
 
             # Execute with bypass flags (emergency rebalancing)
             results = await self._trade_execution_service.execute_trades(

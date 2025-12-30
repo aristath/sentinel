@@ -194,6 +194,16 @@ async def get_recommendations(
             return cached
 
     try:
+        # Fetch emergency rebalancing recommendations first
+        from app.repositories import RecommendationRepository
+
+        recommendation_repo = RecommendationRepository()
+        emergency_recommendations = (
+            await recommendation_repo.get_pending_by_portfolio_hash(
+                "EMERGENCY:negative_balance_rebalancing"
+            )
+        )
+
         steps = await rebalancing_service.get_recommendations()
 
         # Get evaluation count
@@ -204,7 +214,31 @@ async def get_recommendations(
         planner_repo = PlannerRepository()
         evaluated_count = await planner_repo.get_evaluation_count(portfolio_hash)
 
-        if not steps:
+        # Prepend emergency recommendations to the steps list
+        emergency_steps_dicts = []
+        if emergency_recommendations:
+            for idx, rec in enumerate(emergency_recommendations, start=1):
+                emergency_steps_dicts.append(
+                    {
+                        "step": idx,
+                        "side": rec["side"],
+                        "symbol": rec["symbol"],
+                        "name": rec["name"],
+                        "quantity": rec["quantity"],
+                        "estimated_price": round(rec["estimated_price"], 2),
+                        "estimated_value": round(rec["estimated_value"], 2),
+                        "currency": rec.get("currency", "EUR"),
+                        "reason": rec["reason"],
+                        "portfolio_score_before": 0.0,
+                        "portfolio_score_after": 0.0,
+                        "score_change": 0.0,
+                        "available_cash_before": 0.0,
+                        "available_cash_after": 0.0,
+                        "is_emergency": True,  # Flag for UI
+                    }
+                )
+
+        if not steps and not emergency_steps_dicts:
             # Get evaluation count even if no steps
             from app.domain.portfolio_hash import generate_portfolio_hash
             from app.repositories.planner_repository import PlannerRepository
@@ -221,37 +255,58 @@ async def get_recommendations(
                 "evaluated_count": evaluated_count,
             }
 
+        # Build steps list: emergency first, then normal steps
+        all_steps = []
+
+        # Add emergency steps first
+        if emergency_steps_dicts:
+            all_steps.extend(emergency_steps_dicts)
+
+        # Add normal steps with adjusted step numbers
+        if steps:
+            step_offset = len(emergency_steps_dicts)
+            for step in steps:
+                all_steps.append(
+                    {
+                        "step": step.step + step_offset,
+                        "side": step.side,
+                        "symbol": step.symbol,
+                        "name": step.name,
+                        "quantity": step.quantity,
+                        "estimated_price": round(step.estimated_price, 2),
+                        "estimated_value": round(step.estimated_value, 2),
+                        "currency": step.currency,
+                        "reason": step.reason,
+                        "portfolio_score_before": round(step.portfolio_score_before, 1),
+                        "portfolio_score_after": round(step.portfolio_score_after, 1),
+                        "score_change": round(step.score_change, 2),
+                        "available_cash_before": round(step.available_cash_before, 2),
+                        "available_cash_after": round(step.available_cash_after, 2),
+                        "is_emergency": False,
+                    }
+                )
+
         # Calculate totals
         # Total improvement is the difference between initial and final portfolio scores
-        if steps:
-            total_score_improvement = (
-                steps[-1].portfolio_score_after - steps[0].portfolio_score_before
-            )
+        if all_steps:
+            # Only calculate from normal steps (non-emergency)
+            normal_steps = [s for s in all_steps if not s.get("is_emergency", False)]
+            if normal_steps:
+                total_score_improvement = (
+                    normal_steps[-1]["portfolio_score_after"]
+                    - normal_steps[0]["portfolio_score_before"]
+                )
+                final_available_cash = normal_steps[-1]["available_cash_after"]
+            else:
+                total_score_improvement = 0.0
+                final_available_cash = 0.0
         else:
             total_score_improvement = 0.0
-        final_available_cash = steps[-1].available_cash_after if steps else 0.0
+            final_available_cash = 0.0
 
         result = {
-            "depth": len(steps),
-            "steps": [
-                {
-                    "step": step.step,
-                    "side": step.side,
-                    "symbol": step.symbol,
-                    "name": step.name,
-                    "quantity": step.quantity,
-                    "estimated_price": round(step.estimated_price, 2),
-                    "estimated_value": round(step.estimated_value, 2),
-                    "currency": step.currency,
-                    "reason": step.reason,
-                    "portfolio_score_before": round(step.portfolio_score_before, 1),
-                    "portfolio_score_after": round(step.portfolio_score_after, 1),
-                    "score_change": round(step.score_change, 2),
-                    "available_cash_before": round(step.available_cash_before, 2),
-                    "available_cash_after": round(step.available_cash_after, 2),
-                }
-                for step in steps
-            ],
+            "depth": len(all_steps),
+            "steps": all_steps,
             "total_score_improvement": round(total_score_improvement, 2),
             "final_available_cash": round(final_available_cash, 2),
             "evaluated_count": evaluated_count,

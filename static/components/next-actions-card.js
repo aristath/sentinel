@@ -122,11 +122,14 @@ class NextActionsCard extends HTMLElement {
             <div class="space-y-3">
               <template x-for="(step, index) in $store.app.recommendations.steps" :key="'step-' + step.step">
                 <div class="bg-gray-900 rounded-lg p-4 border-2 transition-all hover:shadow-md"
-                     :class="step.side === 'SELL' ? 'border-red-900/50 hover:border-red-700/50' : 'border-green-900/50 hover:border-green-700/50'">
+                     :class="step.is_emergency ? 'border-orange-500/50 hover:border-orange-400/50' : (step.side === 'SELL' ? 'border-red-900/50 hover:border-red-700/50' : 'border-green-900/50 hover:border-green-700/50')">
                   <div class="flex items-start justify-between gap-4">
                     <div class="flex-1 min-w-0">
                       <div class="flex items-center gap-2 flex-wrap mb-2">
                         <span class="text-sm font-mono bg-gray-700 text-gray-300 px-2 py-1 rounded" x-text="'Step ' + step.step"></span>
+                        <span x-show="step.is_emergency" class="text-xs font-bold bg-orange-500/20 text-orange-300 px-2 py-1 rounded border border-orange-500/50">
+                          🚨 EMERGENCY
+                        </span>
                         <span class="text-sm font-mono px-2 py-1 rounded font-semibold"
                               :class="step.side === 'SELL' ? 'bg-red-900/50 text-red-300' : 'bg-green-900/50 text-green-300'"
                               x-text="step.side"></span>
@@ -135,7 +138,9 @@ class NextActionsCard extends HTMLElement {
                               x-text="step.symbol"></span>
                       </div>
                       <div class="text-base text-gray-200 font-medium mb-1" x-text="step.name"></div>
-                      <div class="text-sm text-gray-400 mb-2" x-text="step.reason"></div>
+                      <div class="text-sm mb-2"
+                           :class="step.is_emergency ? 'text-orange-300 font-semibold' : 'text-gray-400'"
+                           x-text="step.reason"></div>
                       <div class="text-sm text-gray-500 flex items-center gap-4 flex-wrap">
                         <span x-text="'Score: ' + step.portfolio_score_before.toFixed(1) + ' → ' + step.portfolio_score_after.toFixed(1)"></span>
                         <span class="text-green-400 font-medium" x-show="step.score_change > 0" x-text="'+' + step.score_change.toFixed(1)"></span>

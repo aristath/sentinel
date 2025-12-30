@@ -279,3 +279,16 @@ class RecommendationRepository:
             (symbol.upper(), side.upper(), portfolio_hash),
         )
         return [{key: row[key] for key in row.keys()} for row in rows]
+
+    async def get_pending_by_portfolio_hash(self, portfolio_hash: str) -> List[dict]:
+        """Get pending recommendations by portfolio_hash (e.g., for emergency rebalancing)."""
+        rows = await self._db.fetchall(
+            """
+            SELECT * FROM recommendations
+            WHERE status = 'pending'
+              AND portfolio_hash = ?
+            ORDER BY updated_at DESC
+            """,
+            (portfolio_hash,),
+        )
+        return [{key: row[key] for key in row.keys()} for row in rows]
