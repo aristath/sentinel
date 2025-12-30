@@ -322,7 +322,7 @@ class TestInitScheduler:
         scheduler_module.scheduler = None
 
         mock_settings_repo = MagicMock()
-        mock_settings_repo.get_float = AsyncMock(side_effect=[30.0, 3.0])
+        mock_settings_repo.get_float = AsyncMock(side_effect=[30.0, 3.0, 5.0, 1.0])
 
         with (
             patch(
@@ -383,7 +383,7 @@ class TestInitScheduler:
         scheduler_module.scheduler = None
 
         mock_settings_repo = MagicMock()
-        mock_settings_repo.get_float = AsyncMock(side_effect=[15.0, 4.0])
+        mock_settings_repo.get_float = AsyncMock(side_effect=[15.0, 4.0, 5.0, 1.0])
 
         with (
             patch(
@@ -507,7 +507,7 @@ class TestInitScheduler:
 
         mock_settings_repo = MagicMock()
         # Maintenance at 23:00 means weekly should be at 0:00 (next day)
-        mock_settings_repo.get_float = AsyncMock(side_effect=[15.0, 23.0])
+        mock_settings_repo.get_float = AsyncMock(side_effect=[15.0, 23.0, 5.0, 1.0])
 
         with (
             patch(
@@ -935,7 +935,7 @@ class TestEdgeCases:
 
         mock_settings_repo = MagicMock()
         # Return 0 for interval (edge case)
-        mock_settings_repo.get_float = AsyncMock(side_effect=[0.0, 3.0])
+        mock_settings_repo.get_float = AsyncMock(side_effect=[0.0, 3.0, 5.0, 1.0])
 
         with (
             patch(
