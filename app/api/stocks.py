@@ -228,7 +228,15 @@ async def get_universe_suggestions(
                 db_manager = get_db_manager()
                 scored_candidates = []
                 
-                for candidate in candidates:
+                # Limit to first 20 candidates to avoid timeout
+                # Users can refresh to see more candidates
+                candidates_to_process = candidates[:20]
+                logger.info(
+                    f"Processing {len(candidates_to_process)} of {len(candidates)} candidates "
+                    f"to avoid timeout"
+                )
+                
+                for candidate in candidates_to_process:
                     symbol = candidate.get("symbol", "").upper()
                     if not symbol:
                         continue
