@@ -52,10 +52,10 @@ CREATE INDEX IF NOT EXISTS idx_stocks_active ON stocks(active);
 CREATE INDEX IF NOT EXISTS idx_stocks_country ON stocks(country);
 -- Note: idx_stocks_isin is created in migration or init_config_schema for new databases
 
--- Allocation targets (country and industry weightings)
+-- Allocation targets (group-based weightings)
 CREATE TABLE IF NOT EXISTS allocation_targets (
     id INTEGER PRIMARY KEY,
-    type TEXT NOT NULL,      -- 'country' or 'industry'
+    type TEXT NOT NULL,      -- 'country_group' or 'industry_group'
     name TEXT NOT NULL,
     target_pct REAL NOT NULL,
     created_at TEXT NOT NULL,
@@ -139,11 +139,9 @@ CREATE TABLE IF NOT EXISTS schema_version (
 );
 """
 
-DEFAULT_ALLOCATION_TARGETS = [
-    ("country", "Germany", 0.50),
-    ("country", "Japan", 0.30),
-    ("country", "United States", 0.20),
-]
+# Default allocation targets removed - use group-based allocations instead
+# Users should set up country_groups and industry_groups first, then set group targets
+DEFAULT_ALLOCATION_TARGETS: list[tuple[str, str, float]] = []
 
 # Default settings for new database installations
 # NOTE: min_trade_size and recommendation_depth replaced by optimizer-based settings
