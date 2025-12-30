@@ -310,8 +310,10 @@ async def get_stock_chart(
                 fetched_data = await _fetch_from_yahoo(symbol, range, db_manager)
 
         return _combine_and_filter_data(cached_data, fetched_data, start_date)
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Failed to get stock chart data for {symbol}: {e}")
+        logger.error(f"Failed to get stock chart data for ISIN {isin}: {e}")
         raise HTTPException(
             status_code=500, detail=f"Failed to get stock chart data: {str(e)}"
         )

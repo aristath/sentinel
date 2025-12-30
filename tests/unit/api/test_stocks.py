@@ -87,13 +87,14 @@ class TestGetStocks:
 
 
 class TestGetStock:
-    """Tests for GET /stocks/{symbol} endpoint."""
+    """Tests for GET /stocks/{isin} endpoint."""
 
     @pytest.mark.asyncio
     async def test_get_stock_found(self):
         """Test getting a stock that exists."""
         mock_stock = MagicMock()
-        mock_stock.symbol = "AAPL"
+        mock_stock.symbol = "AAPL.US"
+        mock_stock.isin = "US0378331005"
         mock_stock.yahoo_symbol = "AAPL"
         mock_stock.name = "Apple Inc."
         mock_stock.industry = "Consumer Electronics"
@@ -105,7 +106,7 @@ class TestGetStock:
         mock_stock.allow_sell = True
 
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_identifier.return_value = mock_stock
+        mock_stock_repo.get_by_isin.return_value = mock_stock
 
         mock_position_repo = AsyncMock()
         mock_position_repo.get_by_symbol.return_value = None
@@ -113,36 +114,40 @@ class TestGetStock:
         mock_score_repo = AsyncMock()
         mock_score_repo.get_by_symbol.return_value = None
 
-        result = await get_stock(
-            "AAPL", mock_stock_repo, mock_position_repo, mock_score_repo
-        )
+        with patch("app.api.stocks.is_isin", return_value=True):
+            result = await get_stock(
+                "US0378331005", mock_stock_repo, mock_position_repo, mock_score_repo
+            )
 
-        assert result["symbol"] == "AAPL"
-        assert result["name"] == "Apple Inc."
-        assert result["position"] is None
+            assert result["symbol"] == "AAPL.US"
+            assert result["isin"] == "US0378331005"
+            assert result["name"] == "Apple Inc."
+            assert result["position"] is None
 
     @pytest.mark.asyncio
     async def test_get_stock_not_found(self):
         """Test getting a stock that doesn't exist."""
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_identifier.return_value = None
+        mock_stock_repo.get_by_isin.return_value = None
 
         mock_position_repo = AsyncMock()
         mock_score_repo = AsyncMock()
 
-        with pytest.raises(HTTPException) as exc_info:
-            await get_stock(
-                "INVALID", mock_stock_repo, mock_position_repo, mock_score_repo
-            )
+        with patch("app.api.stocks.is_isin", return_value=True):
+            with pytest.raises(HTTPException) as exc_info:
+                await get_stock(
+                    "US9999999999", mock_stock_repo, mock_position_repo, mock_score_repo
+                )
 
-        assert exc_info.value.status_code == 404
-        assert "not found" in exc_info.value.detail.lower()
+            assert exc_info.value.status_code == 404
+            assert "not found" in exc_info.value.detail.lower()
 
     @pytest.mark.asyncio
     async def test_get_stock_with_score(self):
         """Test getting a stock with score data."""
         mock_stock = MagicMock()
-        mock_stock.symbol = "AAPL"
+        mock_stock.symbol = "AAPL.US"
+        mock_stock.isin = "US0378331005"
         mock_stock.yahoo_symbol = "AAPL"
         mock_stock.name = "Apple"
         mock_stock.industry = "Consumer Electronics"
@@ -168,7 +173,7 @@ class TestGetStock:
         mock_score.fundamental_score = 0.8
 
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_identifier.return_value = mock_stock
+        mock_stock_repo.get_by_isin.return_value = mock_stock
 
         mock_position_repo = AsyncMock()
         mock_position_repo.get_by_symbol.return_value = None
@@ -176,18 +181,20 @@ class TestGetStock:
         mock_score_repo = AsyncMock()
         mock_score_repo.get_by_symbol.return_value = mock_score
 
-        result = await get_stock(
-            "AAPL", mock_stock_repo, mock_position_repo, mock_score_repo
-        )
+        with patch("app.api.stocks.is_isin", return_value=True):
+            result = await get_stock(
+                "US0378331005", mock_stock_repo, mock_position_repo, mock_score_repo
+            )
 
-        assert result["total_score"] == 0.75
-        assert result["quality_score"] == 0.8
+            assert result["total_score"] == 0.75
+            assert result["quality_score"] == 0.8
 
     @pytest.mark.asyncio
     async def test_get_stock_with_position(self):
         """Test getting a stock with position data."""
         mock_stock = MagicMock()
-        mock_stock.symbol = "AAPL"
+        mock_stock.symbol = "AAPL.US"
+        mock_stock.isin = "US0378331005"
         mock_stock.yahoo_symbol = "AAPL"
         mock_stock.name = "Apple"
         mock_stock.industry = "Consumer Electronics"
@@ -199,7 +206,7 @@ class TestGetStock:
         mock_stock.allow_sell = False
 
         mock_position = MagicMock()
-        mock_position.symbol = "AAPL"
+        mock_position.symbol = "AAPL.US"
         mock_position.quantity = 10
         mock_position.avg_price = 150.0
         mock_position.current_price = 175.0
@@ -207,7 +214,7 @@ class TestGetStock:
         mock_position.market_value_eur = 1500.0
 
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_identifier.return_value = mock_stock
+        mock_stock_repo.get_by_isin.return_value = mock_stock
 
         mock_position_repo = AsyncMock()
         mock_position_repo.get_by_symbol.return_value = mock_position
@@ -215,13 +222,14 @@ class TestGetStock:
         mock_score_repo = AsyncMock()
         mock_score_repo.get_by_symbol.return_value = None
 
-        result = await get_stock(
-            "AAPL", mock_stock_repo, mock_position_repo, mock_score_repo
-        )
+        with patch("app.api.stocks.is_isin", return_value=True):
+            result = await get_stock(
+                "US0378331005", mock_stock_repo, mock_position_repo, mock_score_repo
+            )
 
-        assert result["position"] is not None
-        assert result["position"]["quantity"] == 10
-        assert result["position"]["avg_price"] == 150.0
+            assert result["position"] is not None
+            assert result["position"]["quantity"] == 10
+            assert result["position"]["avg_price"] == 150.0
 
 
 class TestCreateStock:
@@ -231,7 +239,7 @@ class TestCreateStock:
     async def test_create_stock_already_exists(self):
         """Test creating a stock that already exists."""
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_identifier.return_value = MagicMock()  # Stock exists
+        mock_stock_repo.get_by_symbol.return_value = MagicMock()  # Stock exists
 
         mock_score_repo = AsyncMock()
         mock_scoring_service = AsyncMock()
@@ -254,7 +262,7 @@ class TestCreateStock:
     async def test_create_stock_with_industry(self):
         """Test creating a stock with industry provided."""
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_identifier.return_value = None  # Stock doesn't exist
+        mock_stock_repo.get_by_symbol.return_value = None  # Stock doesn't exist
 
         mock_score_repo = AsyncMock()
 
@@ -292,7 +300,7 @@ class TestCreateStock:
     async def test_create_stock_detects_industry(self):
         """Test creating a stock without industry triggers detection."""
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_identifier.return_value = None
+        mock_stock_repo.get_by_symbol.return_value = None
 
         mock_score_repo = AsyncMock()
 
@@ -417,19 +425,20 @@ class TestRefreshAllScores:
 
 
 class TestRefreshStockScore:
-    """Tests for POST /stocks/{symbol}/refresh endpoint."""
+    """Tests for POST /stocks/{isin}/refresh endpoint."""
 
     @pytest.mark.asyncio
     async def test_refresh_stock_score_success(self):
         """Test refreshing a single stock score."""
         mock_stock = MagicMock()
-        mock_stock.symbol = "AAPL"
+        mock_stock.symbol = "AAPL.US"
+        mock_stock.isin = "US0378331005"
         mock_stock.yahoo_symbol = "AAPL"
         mock_stock.country = "United States"
         mock_stock.industry = "Consumer Electronics"
 
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_identifier.return_value = mock_stock
+        mock_stock_repo.get_by_isin.return_value = mock_stock
 
         mock_score = MagicMock()
         mock_score.total_score = 0.8
@@ -452,64 +461,69 @@ class TestRefreshStockScore:
 
         with patch("app.api.stocks.get_recommendation_cache") as mock_cache:
             mock_cache.return_value = AsyncMock()
+            with patch("app.api.stocks.is_isin", return_value=True):
+                result = await refresh_stock_score(
+                    "US0378331005", mock_stock_repo, mock_scoring_service
+                )
 
-            result = await refresh_stock_score(
-                "AAPL", mock_stock_repo, mock_scoring_service
-            )
-
-            assert result["symbol"] == "AAPL"
-            assert result["total_score"] == 0.8
+                assert result["symbol"] == "AAPL.US"
+                assert result["isin"] == "US0378331005"
+                assert result["total_score"] == 0.8
 
     @pytest.mark.asyncio
     async def test_refresh_stock_score_not_found(self):
         """Test refreshing score for non-existent stock."""
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_identifier.return_value = None
+        mock_stock_repo.get_by_isin.return_value = None
 
         mock_scoring_service = AsyncMock()
 
         with patch("app.api.stocks.get_recommendation_cache") as mock_cache:
             mock_cache.return_value = AsyncMock()
+            with patch("app.api.stocks.is_isin", return_value=True):
+                with pytest.raises(HTTPException) as exc_info:
+                    await refresh_stock_score(
+                        "US9999999999", mock_stock_repo, mock_scoring_service
+                    )
 
-            with pytest.raises(HTTPException) as exc_info:
-                await refresh_stock_score(
-                    "INVALID", mock_stock_repo, mock_scoring_service
-                )
-
-            assert exc_info.value.status_code == 404
+                assert exc_info.value.status_code == 404
 
     @pytest.mark.asyncio
     async def test_refresh_stock_score_failed(self):
         """Test when score calculation fails."""
         mock_stock = MagicMock()
-        mock_stock.symbol = "AAPL"
+        mock_stock.symbol = "AAPL.US"
+        mock_stock.isin = "US0378331005"
         mock_stock.yahoo_symbol = "AAPL"
         mock_stock.country = "United States"
         mock_stock.industry = "Consumer Electronics"
 
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_identifier.return_value = mock_stock
+        mock_stock_repo.get_by_isin.return_value = mock_stock
 
         mock_scoring_service = AsyncMock()
         mock_scoring_service.calculate_and_save_score.return_value = None  # Failed
 
         with patch("app.api.stocks.get_recommendation_cache") as mock_cache:
             mock_cache.return_value = AsyncMock()
+            with patch("app.api.stocks.is_isin", return_value=True):
+                with pytest.raises(HTTPException) as exc_info:
+                    await refresh_stock_score(
+                        "US0378331005", mock_stock_repo, mock_scoring_service
+                    )
 
-            with pytest.raises(HTTPException) as exc_info:
-                await refresh_stock_score("AAPL", mock_stock_repo, mock_scoring_service)
-
-            assert exc_info.value.status_code == 500
+                assert exc_info.value.status_code == 500
 
 
 class TestUpdateStock:
-    """Tests for PUT /stocks/{symbol} endpoint."""
+    """Tests for PUT /stocks/{isin} endpoint."""
 
     @pytest.mark.asyncio
     async def test_update_stock_success(self):
         """Test updating a stock successfully."""
         mock_stock = MagicMock()
-        mock_stock.symbol = "AAPL"
+        mock_stock.symbol = "AAPL.US"
+        mock_stock.isin = "US0378331005"
         mock_stock.yahoo_symbol = "AAPL"
         mock_stock.name = "Apple"
         mock_stock.industry = "Consumer Electronics"
@@ -521,7 +535,8 @@ class TestUpdateStock:
         mock_stock.allow_sell = False
 
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_identifier.return_value = mock_stock
+        mock_stock_repo.get_by_isin.return_value = mock_stock
+        mock_stock_repo.get_by_symbol.return_value = mock_stock
 
         mock_score = MagicMock()
         mock_score.total_score = 0.8
@@ -531,51 +546,62 @@ class TestUpdateStock:
         update = StockUpdate(name="Apple Inc.")
 
         with patch("app.api.stocks.cache"):
-            result = await update_stock(
-                "AAPL", update, mock_stock_repo, mock_scoring_service
-            )
+            with patch("app.api.stocks.is_isin", return_value=True):
+                result = await update_stock(
+                    "US0378331005", update, mock_stock_repo, mock_scoring_service
+                )
 
-            assert result["symbol"] == "AAPL"
-            mock_stock_repo.update.assert_called_once()
+                assert result["symbol"] == "AAPL.US"
+                assert result["isin"] == "US0378331005"
+                mock_stock_repo.update.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_update_stock_not_found(self):
         """Test updating a stock that doesn't exist."""
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_identifier.return_value = None
+        mock_stock_repo.get_by_isin.return_value = None
 
         mock_scoring_service = AsyncMock()
 
         update = StockUpdate(name="New Name")
 
-        with pytest.raises(HTTPException) as exc_info:
-            await update_stock("INVALID", update, mock_stock_repo, mock_scoring_service)
+        with patch("app.api.stocks.is_isin", return_value=True):
+            with pytest.raises(HTTPException) as exc_info:
+                await update_stock(
+                    "US9999999999", update, mock_stock_repo, mock_scoring_service
+                )
 
-        assert exc_info.value.status_code == 404
+            assert exc_info.value.status_code == 404
 
     @pytest.mark.asyncio
     async def test_update_stock_no_updates(self):
         """Test updating with no changes."""
         mock_stock = MagicMock()
+        mock_stock.symbol = "AAPL.US"
+        mock_stock.isin = "US0378331005"
 
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_identifier.return_value = mock_stock
+        mock_stock_repo.get_by_isin.return_value = mock_stock
 
         mock_scoring_service = AsyncMock()
 
         update = StockUpdate()  # Empty update
 
-        with pytest.raises(HTTPException) as exc_info:
-            await update_stock("AAPL", update, mock_stock_repo, mock_scoring_service)
+        with patch("app.api.stocks.is_isin", return_value=True):
+            with pytest.raises(HTTPException) as exc_info:
+                await update_stock(
+                    "US0378331005", update, mock_stock_repo, mock_scoring_service
+                )
 
-        assert exc_info.value.status_code == 400
-        assert "No updates" in exc_info.value.detail
+            assert exc_info.value.status_code == 400
+            assert "No updates" in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_update_stock_symbol_change(self):
         """Test changing a stock's symbol."""
         mock_stock = MagicMock()
-        mock_stock.symbol = "AAPL"
+        mock_stock.symbol = "AAPL.US"
+        mock_stock.isin = "US0378331005"
         mock_stock.yahoo_symbol = "AAPL"
         mock_stock.name = "Apple"
         mock_stock.industry = "Consumer Electronics"
@@ -587,28 +613,35 @@ class TestUpdateStock:
         mock_stock.allow_sell = False
 
         mock_stock_repo = AsyncMock()
-        # First call finds AAPL, second check for new symbol returns None (doesn't exist)
-        mock_stock_repo.get_by_identifier.side_effect = [mock_stock, None, mock_stock]
+        # First call finds stock by ISIN, second check for new symbol returns None (doesn't exist)
+        mock_stock_repo.get_by_isin.return_value = mock_stock
+        mock_stock_repo.get_by_symbol.return_value = None  # New symbol doesn't exist
+        mock_stock_repo.get_by_symbol.side_effect = [
+            None,
+            mock_stock,
+        ]  # After update, get by new symbol
 
         mock_score = MagicMock()
         mock_score.total_score = 0.8
         mock_scoring_service = AsyncMock()
         mock_scoring_service.calculate_and_save_score.return_value = mock_score
 
-        update = StockUpdate(new_symbol="AAPL2")
+        update = StockUpdate(new_symbol="AAPL2.US")
 
         with patch("app.api.stocks.cache"):
-            result = await update_stock(
-                "AAPL", update, mock_stock_repo, mock_scoring_service
-            )
+            with patch("app.api.stocks.is_isin", return_value=True):
+                result = await update_stock(
+                    "US0378331005", update, mock_stock_repo, mock_scoring_service
+                )
 
-            assert "symbol" in result
+                assert "symbol" in result
 
     @pytest.mark.asyncio
     async def test_update_stock_with_portfolio_targets(self):
         """Test updating stock with min/max portfolio targets."""
         mock_stock = MagicMock()
-        mock_stock.symbol = "AAPL"
+        mock_stock.symbol = "AAPL.US"
+        mock_stock.isin = "US0378331005"
         mock_stock.yahoo_symbol = "AAPL"
         mock_stock.name = "Apple"
         mock_stock.industry = "Consumer Electronics"
@@ -620,7 +653,8 @@ class TestUpdateStock:
         mock_stock.allow_sell = False
 
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_identifier.return_value = mock_stock
+        mock_stock_repo.get_by_isin.return_value = mock_stock
+        mock_stock_repo.get_by_symbol.return_value = mock_stock
 
         mock_score = MagicMock()
         mock_score.total_score = 0.8
@@ -630,85 +664,100 @@ class TestUpdateStock:
         update = StockUpdate(min_portfolio_target=5.0, max_portfolio_target=15.0)
 
         with patch("app.api.stocks.cache"):
-            result = await update_stock(
-                "AAPL", update, mock_stock_repo, mock_scoring_service
-            )
+            with patch("app.api.stocks.is_isin", return_value=True):
+                result = await update_stock(
+                    "US0378331005", update, mock_stock_repo, mock_scoring_service
+                )
 
-            assert result["symbol"] == "AAPL"
-            mock_stock_repo.update.assert_called_once()
-            # Check that portfolio targets are in the update call
-            call_kwargs = mock_stock_repo.update.call_args[1]
-            assert call_kwargs["min_portfolio_target"] == 5.0
-            assert call_kwargs["max_portfolio_target"] == 15.0
+                assert result["symbol"] == "AAPL.US"
+                assert result["isin"] == "US0378331005"
+                mock_stock_repo.update.assert_called_once()
+                # Check that portfolio targets are in the update call
+                call_kwargs = mock_stock_repo.update.call_args[1]
+                assert call_kwargs["min_portfolio_target"] == 5.0
+                assert call_kwargs["max_portfolio_target"] == 15.0
 
     @pytest.mark.asyncio
     async def test_update_stock_portfolio_target_validation_min_clamped(self):
         """Test that min_portfolio_target is clamped to 0-20 range."""
         mock_stock = MagicMock()
-        mock_stock.symbol = "AAPL"
+        mock_stock.symbol = "AAPL.US"
+        mock_stock.isin = "US0378331005"
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_identifier.return_value = mock_stock
+        mock_stock_repo.get_by_isin.return_value = mock_stock
+        mock_stock_repo.get_by_symbol.return_value = mock_stock
         mock_scoring_service = AsyncMock()
 
         update = StockUpdate(min_portfolio_target=25.0)  # Over limit
 
         with patch("app.api.stocks.cache"):
-            await update_stock("AAPL", update, mock_stock_repo, mock_scoring_service)
+            with patch("app.api.stocks.is_isin", return_value=True):
+                await update_stock(
+                    "US0378331005", update, mock_stock_repo, mock_scoring_service
+                )
 
-            # Should be clamped to 20
-            call_kwargs = mock_stock_repo.update.call_args[1]
-            assert call_kwargs["min_portfolio_target"] == 20.0
+                # Should be clamped to 20
+                call_kwargs = mock_stock_repo.update.call_args[1]
+                assert call_kwargs["min_portfolio_target"] == 20.0
 
     @pytest.mark.asyncio
     async def test_update_stock_portfolio_target_validation_max_clamped(self):
         """Test that max_portfolio_target is clamped to 0-30 range."""
         mock_stock = MagicMock()
-        mock_stock.symbol = "AAPL"
+        mock_stock.symbol = "AAPL.US"
+        mock_stock.isin = "US0378331005"
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_identifier.return_value = mock_stock
+        mock_stock_repo.get_by_isin.return_value = mock_stock
+        mock_stock_repo.get_by_symbol.return_value = mock_stock
         mock_scoring_service = AsyncMock()
 
         update = StockUpdate(max_portfolio_target=35.0)  # Over limit
 
         with patch("app.api.stocks.cache"):
-            await update_stock("AAPL", update, mock_stock_repo, mock_scoring_service)
+            with patch("app.api.stocks.is_isin", return_value=True):
+                await update_stock(
+                    "US0378331005", update, mock_stock_repo, mock_scoring_service
+                )
 
-            # Should be clamped to 30
-            call_kwargs = mock_stock_repo.update.call_args[1]
-            assert call_kwargs["max_portfolio_target"] == 30.0
+                # Should be clamped to 30
+                call_kwargs = mock_stock_repo.update.call_args[1]
+                assert call_kwargs["max_portfolio_target"] == 30.0
 
     @pytest.mark.asyncio
     async def test_update_stock_portfolio_target_max_less_than_min(self):
         """Test that max < min is rejected."""
         mock_stock = MagicMock()
-        mock_stock.symbol = "AAPL"
+        mock_stock.symbol = "AAPL.US"
+        mock_stock.isin = "US0378331005"
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_identifier.return_value = mock_stock
+        mock_stock_repo.get_by_isin.return_value = mock_stock
         mock_scoring_service = AsyncMock()
 
         update = StockUpdate(min_portfolio_target=15.0, max_portfolio_target=5.0)
 
         with patch("app.api.stocks.cache"):
-            with pytest.raises(HTTPException) as exc_info:
-                await update_stock(
-                    "AAPL", update, mock_stock_repo, mock_scoring_service
-                )
+            with patch("app.api.stocks.is_isin", return_value=True):
+                with pytest.raises(HTTPException) as exc_info:
+                    await update_stock(
+                        "US0378331005", update, mock_stock_repo, mock_scoring_service
+                    )
 
-            assert exc_info.value.status_code == 400
-            assert (
-                "max" in exc_info.value.detail.lower()
-                or "min" in exc_info.value.detail.lower()
-            )
+                assert exc_info.value.status_code == 400
+                assert (
+                    "max" in exc_info.value.detail.lower()
+                    or "min" in exc_info.value.detail.lower()
+                )
 
 
 class TestGetStockResponse:
-    """Tests for GET /stocks/{symbol} response format."""
+    """Tests for GET /stocks/{isin} response format."""
 
     @pytest.mark.asyncio
     async def test_get_stock_includes_portfolio_targets(self):
         """Test that get_stock response includes portfolio targets."""
         mock_stock = MagicMock()
-        mock_stock.symbol = "AAPL"
+        mock_stock.symbol = "AAPL.US"
+        mock_stock.isin = "US0378331005"
         mock_stock.yahoo_symbol = "AAPL"
         mock_stock.name = "Apple Inc."
         mock_stock.industry = "Consumer Electronics"
@@ -722,7 +771,7 @@ class TestGetStockResponse:
         mock_stock.max_portfolio_target = 15.0
 
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_identifier.return_value = mock_stock
+        mock_stock_repo.get_by_isin.return_value = mock_stock
 
         mock_position_repo = AsyncMock()
         mock_position_repo.get_by_symbol.return_value = None
@@ -730,12 +779,13 @@ class TestGetStockResponse:
         mock_score_repo = AsyncMock()
         mock_score_repo.get_by_symbol.return_value = None
 
-        result = await get_stock(
-            "AAPL", mock_stock_repo, mock_position_repo, mock_score_repo
-        )
+        with patch("app.api.stocks.is_isin", return_value=True):
+            result = await get_stock(
+                "US0378331005", mock_stock_repo, mock_position_repo, mock_score_repo
+            )
 
-        assert result["min_portfolio_target"] == 5.0
-        assert result["max_portfolio_target"] == 15.0
+            assert result["min_portfolio_target"] == 5.0
+            assert result["max_portfolio_target"] == 15.0
 
 
 class TestGetStocksResponse:
@@ -783,33 +833,36 @@ class TestGetStocksResponse:
 
 
 class TestDeleteStock:
-    """Tests for DELETE /stocks/{symbol} endpoint."""
+    """Tests for DELETE /stocks/{isin} endpoint."""
 
     @pytest.mark.asyncio
     async def test_delete_stock_success(self):
         """Test deleting a stock successfully."""
         mock_stock = MagicMock()
-        mock_stock.symbol = "AAPL"
+        mock_stock.symbol = "AAPL.US"
+        mock_stock.isin = "US0378331005"
 
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_identifier.return_value = mock_stock
+        mock_stock_repo.get_by_isin.return_value = mock_stock
 
         with patch("app.api.stocks.cache"):
-            result = await delete_stock("AAPL", mock_stock_repo)
+            with patch("app.api.stocks.is_isin", return_value=True):
+                result = await delete_stock("US0378331005", mock_stock_repo)
 
-            assert "removed" in result["message"].lower()
-            mock_stock_repo.delete.assert_called_once_with("AAPL")
+                assert "removed" in result["message"].lower()
+                mock_stock_repo.delete.assert_called_once_with("AAPL.US")
 
     @pytest.mark.asyncio
     async def test_delete_stock_not_found(self):
         """Test deleting a stock that doesn't exist."""
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_identifier.return_value = None
+        mock_stock_repo.get_by_isin.return_value = None
 
-        with pytest.raises(HTTPException) as exc_info:
-            await delete_stock("INVALID", mock_stock_repo)
+        with patch("app.api.stocks.is_isin", return_value=True):
+            with pytest.raises(HTTPException) as exc_info:
+                await delete_stock("US9999999999", mock_stock_repo)
 
-        assert exc_info.value.status_code == 404
+            assert exc_info.value.status_code == 404
 
 
 class TestValidateSymbolChange:
@@ -821,26 +874,26 @@ class TestValidateSymbolChange:
         mock_stock_repo = AsyncMock()
 
         # Should not raise
-        await _validate_symbol_change("AAPL", "AAPL", mock_stock_repo)
-        mock_stock_repo.get_by_identifier.assert_not_called()
+        await _validate_symbol_change("AAPL.US", "AAPL.US", mock_stock_repo)
+        mock_stock_repo.get_by_symbol.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_validate_new_symbol_available(self):
         """Test that new symbol is available."""
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_identifier.return_value = None
+        mock_stock_repo.get_by_symbol.return_value = None
 
-        await _validate_symbol_change("AAPL", "AAPL2", mock_stock_repo)
-        mock_stock_repo.get_by_identifier.assert_called_once_with("AAPL2")
+        await _validate_symbol_change("AAPL.US", "AAPL2.US", mock_stock_repo)
+        mock_stock_repo.get_by_symbol.assert_called_once_with("AAPL2.US")
 
     @pytest.mark.asyncio
     async def test_validate_new_symbol_taken(self):
         """Test that taken symbol raises error."""
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_identifier.return_value = MagicMock()  # Symbol exists
+        mock_stock_repo.get_by_symbol.return_value = MagicMock()  # Symbol exists
 
         with pytest.raises(HTTPException) as exc_info:
-            await _validate_symbol_change("AAPL", "GOOGL", mock_stock_repo)
+            await _validate_symbol_change("AAPL.US", "GOOGL.US", mock_stock_repo)
 
         assert exc_info.value.status_code == 400
 

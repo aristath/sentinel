@@ -277,14 +277,14 @@ Many settings are stored in the database and can be configured via the Settings 
 ### Stocks
 
 - `GET /api/stocks` - Stock universe with scores and priorities
-- `GET /api/stocks/{identifier}` - Get single stock details (by symbol or ISIN)
+- `GET /api/stocks/{isin}` - Get single stock details by ISIN (e.g., US0378331005)
 - `POST /api/stocks` - Add new stock to universe
 - `POST /api/stocks/add-by-identifier` - Add stock by symbol or ISIN
-- `PUT /api/stocks/{identifier}` - Update stock settings
-- `DELETE /api/stocks/{identifier}` - Remove stock from universe
+- `PUT /api/stocks/{isin}` - Update stock settings (ISIN required)
+- `DELETE /api/stocks/{isin}` - Remove stock from universe (ISIN required)
 - `POST /api/stocks/refresh-all` - Recalculate all stock scores
-- `POST /api/stocks/{identifier}/refresh` - Refresh single stock score
-- `POST /api/stocks/{identifier}/refresh-data` - Refresh stock data from APIs
+- `POST /api/stocks/{isin}/refresh` - Refresh single stock score (ISIN required)
+- `POST /api/stocks/{isin}/refresh-data` - Refresh stock data from APIs (ISIN required)
 
 ### Trades
 
@@ -330,7 +330,7 @@ Many settings are stored in the database and can be configured via the Settings 
 ### Charts
 
 - `GET /api/charts/sparklines` - Stock price sparklines
-- `GET /api/charts/stocks/{identifier}` - Historical price chart data
+- `GET /api/charts/stocks/{isin}` - Historical price chart data (ISIN required, e.g., US0378331005)
 
 ### Optimizer
 

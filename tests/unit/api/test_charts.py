@@ -532,9 +532,16 @@ class TestStockChart:
 
         mock_db_manager = MagicMock()
         mock_history_db = AsyncMock()
+        mock_stock_repo = AsyncMock()
 
         # db_manager.history() is an async method that returns a db connection
         mock_db_manager.history = AsyncMock(return_value=mock_history_db)
+
+        # Mock stock lookup by ISIN
+        mock_stock = MagicMock()
+        mock_stock.symbol = "AAPL.US"
+        mock_stock.isin = "US0378331005"
+        mock_stock_repo.get_by_isin.return_value = mock_stock
 
         # Use recent dates that will pass the date filter for "1M" range
         today = datetime.now()
@@ -546,12 +553,15 @@ class TestStockChart:
             {"date": yesterday.strftime("%Y-%m-%d"), "close_price": 105.0},
         ]
 
-        result = await get_stock_chart("AAPL", mock_db_manager, range="1M")
+        with patch("app.api.charts.is_isin", return_value=True):
+            result = await get_stock_chart(
+                "US0378331005", mock_db_manager, mock_stock_repo, range="1M"
+            )
 
-        # Cached data covers the range, so should return it
-        assert len(result) == 2
-        assert result[0]["value"] == 100.0
-        assert result[1]["value"] == 105.0
+            # Cached data covers the range, so should return it
+            assert len(result) == 2
+            assert result[0]["value"] == 100.0
+            assert result[1]["value"] == 105.0
 
     @pytest.mark.asyncio
     async def test_returns_empty_when_no_data(self):
@@ -560,7 +570,14 @@ class TestStockChart:
 
         mock_db_manager = MagicMock()
         mock_history_db = AsyncMock()
+        mock_stock_repo = AsyncMock()
         mock_db_manager.history = AsyncMock(return_value=mock_history_db)
+
+        # Mock stock lookup by ISIN
+        mock_stock = MagicMock()
+        mock_stock.symbol = "AAPL.US"
+        mock_stock.isin = "US0378331005"
+        mock_stock_repo.get_by_isin.return_value = mock_stock
 
         # No cached data
         mock_history_db.fetchall.return_value = []
@@ -577,9 +594,14 @@ class TestStockChart:
                 "app.api.charts.yahoo.get_historical_prices",
                 return_value=[],
             ):
-                result = await get_stock_chart(
-                    "AAPL", mock_db_manager, range="1Y", source="tradernet"
-                )
+                with patch("app.api.charts.is_isin", return_value=True):
+                    result = await get_stock_chart(
+                        "US0378331005",
+                        mock_db_manager,
+                        mock_stock_repo,
+                        range="1Y",
+                        source="tradernet",
+                    )
 
         assert result == []
 
@@ -591,10 +613,20 @@ class TestStockChart:
         from app.api.charts import get_stock_chart
 
         mock_db_manager = MagicMock()
+        mock_stock_repo = AsyncMock()
         mock_db_manager.history = AsyncMock(side_effect=Exception("Database error"))
 
-        with pytest.raises(HTTPException) as exc_info:
-            await get_stock_chart("AAPL", mock_db_manager, range="1Y")
+        # Mock stock lookup by ISIN
+        mock_stock = MagicMock()
+        mock_stock.symbol = "AAPL.US"
+        mock_stock.isin = "US0378331005"
+        mock_stock_repo.get_by_isin.return_value = mock_stock
 
-        assert exc_info.value.status_code == 500
-        assert "Database error" in str(exc_info.value.detail)
+        with patch("app.api.charts.is_isin", return_value=True):
+            with pytest.raises(HTTPException) as exc_info:
+                await get_stock_chart(
+                    "US0378331005", mock_db_manager, mock_stock_repo, range="1Y"
+                )
+
+            assert exc_info.value.status_code == 500
+            assert "Database error" in str(exc_info.value.detail)
