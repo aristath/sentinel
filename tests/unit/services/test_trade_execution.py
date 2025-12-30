@@ -32,6 +32,9 @@ class TestTradeValidation:
         repo.has_recent_sell_order = AsyncMock(return_value=False)
         repo.exists = AsyncMock(return_value=False)
         repo.get_recently_bought_symbols = AsyncMock(return_value=set())
+        # Mock database for pending order check
+        repo._db = AsyncMock()
+        repo._db.fetchone = AsyncMock(return_value=None)  # No recent orders
         return repo
 
     @pytest.fixture
@@ -498,8 +501,11 @@ class TestTradeValidation:
         position.quantity = 20
         mock_position_repo.get_by_symbol.return_value = position
 
-        # Recent sell order exists in database
-        mock_trade_repo.has_recent_sell_order.return_value = True
+        # Recent sell order exists in database (mocked via _db.fetchone)
+        # The _check_pending_orders function checks the database for recent orders
+        mock_trade_repo._db.fetchone = AsyncMock(
+            return_value={"1": 1}
+        )  # Return a row to indicate recent order
 
         service = TradeExecutionService(
             trade_repo=mock_trade_repo,
