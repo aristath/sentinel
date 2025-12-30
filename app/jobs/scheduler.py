@@ -160,8 +160,12 @@ async def init_scheduler() -> AsyncIOScheduler:
 
     # Job 1: Sync Cycle - every 5 minutes (configurable, default 5.0)
     # Handles: trades, cash flows, portfolio, prices (market-aware), display
-    # Note: Trade execution is handled by event-based trading loop
-    # Note: Calls emergency_rebalance internally when negative balances detected
+    #
+    # JOB RELATIONSHIPS:
+    # - Trade execution is handled by event_based_trading (not sync_cycle)
+    # - Calls emergency_rebalance internally when negative balances detected
+    # - Updates LED display via display_updater_service
+    # - Can dynamically start/stop frequent_portfolio_update job (every 30s) after trades
     scheduler.add_job(
         run_sync_cycle,
         IntervalTrigger(minutes=sync_cycle_minutes),
@@ -188,13 +192,25 @@ async def init_scheduler() -> AsyncIOScheduler:
     # Event-Based Trading - started as background task (see below)
     # Handles: waiting for planning completion, trade execution, portfolio monitoring
     # Not added as a scheduled job because it has a while True loop and runs continuously
-    # Triggers API-driven planner_batch chains for faster processing
+    #
+    # JOB RELATIONSHIPS:
+    # - Triggers API-driven planner_batch chains via HTTP POST to /api/status/jobs/planner-batch
+    # - Waits for all sequences to be evaluated before executing trades
+    # - Monitors portfolio hash changes and restarts planning cycle when detected
+    # - Calls emergency_rebalance after trade execution if negative balances detected
 
     # Job 8: Planner Batch - every 30 minutes (fallback only)
     # Processes next batch of sequences for holistic planner (only if incremental mode enabled)
-    # This is a fallback mechanism - normal processing is handled by API-driven batches
-    # triggered by the event-based trading loop. The scheduled job will skip if API-driven
-    # batches are active (sequences exist but not all evaluated).
+    #
+    # JOB RELATIONSHIPS:
+    # - Has TWO modes:
+    #   1. API-driven mode: Triggered by event_based_trading via HTTP POST
+    #      - Uses small batches (5 sequences) for faster processing
+    #      - Self-triggers next batch via API until all sequences evaluated
+    #   2. Scheduled fallback mode: Runs every 30 minutes (this job)
+    #      - Uses larger batches (50 sequences)
+    #      - Skips if API-driven batches are active (sequences exist but not all evaluated)
+    # - Normal processing is API-driven; scheduled job is safety net
     if incremental_enabled:
         scheduler.add_job(
             process_planner_batch_job,
@@ -216,6 +232,10 @@ async def init_scheduler() -> AsyncIOScheduler:
 
     # Job 3: Daily Maintenance - daily at configured hour
     # Handles: backup, cleanup, WAL checkpoint
+    #
+    # JOB RELATIONSHIPS:
+    # - Runs in sequence: backup -> cleanup -> WAL checkpoint
+    # - Cleanup includes: expired prices, snapshots, caches
     scheduler.add_job(
         run_daily_maintenance,
         CronTrigger(hour=maintenance_hour, minute=0),
@@ -226,6 +246,10 @@ async def init_scheduler() -> AsyncIOScheduler:
 
     # Job 4: Weekly Maintenance - Sunday, 1 hour after daily maintenance
     # Handles: integrity checks, old backup cleanup
+    #
+    # JOB RELATIONSHIPS:
+    # - Runs after daily_maintenance (1 hour later on Sunday)
+    # - Checks all database files for corruption
     scheduler.add_job(
         run_weekly_maintenance,
         CronTrigger(day_of_week=6, hour=(maintenance_hour + 1) % 24, minute=0),
@@ -240,6 +264,11 @@ async def init_scheduler() -> AsyncIOScheduler:
 
     # Job 5: Dividend Reinvestment - daily, 30 minutes after daily maintenance
     # Handles: automatic reinvestment of dividends
+    #
+    # JOB RELATIONSHIPS:
+    # - Runs after daily_maintenance (30 minutes later)
+    # - Uses holistic planner to find best opportunities for low-yield dividends
+    # - High-yield dividends (>=3%) are reinvested in same stock
     scheduler.add_job(
         auto_reinvest_dividends,
         CronTrigger(hour=maintenance_hour, minute=30),
