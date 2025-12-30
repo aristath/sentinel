@@ -25,7 +25,7 @@ class RecommendationCache:
 
     Note: This class directly calls get_db_manager() which is a known architecture
     violation. As infrastructure code, this is more acceptable than domain violations,
-    but ideally this would use dependency injection. See ARCHITECTURE.md for details.
+    but ideally this would use dependency injection. See README.md Architecture section for details.
     """
 
     def __init__(self):

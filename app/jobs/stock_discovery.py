@@ -39,7 +39,7 @@ async def discover_new_stocks() -> None:
         settings_repo = SettingsRepository()
         stock_repo = StockRepository()
         # Note: Direct DB access here is a known architecture violation.
-        # This job needs to coordinate multiple operations. See ARCHITECTURE.md for details.
+        # This job needs to coordinate multiple operations. See README.md Architecture section for details.
         db_manager = get_db_manager()
 
         # Check if discovery is enabled

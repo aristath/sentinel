@@ -171,7 +171,7 @@ class PositionRepository:
         Returns list of dicts with position and stock fields merged.
 
         Note: This method accesses both state.db (positions) and config.db (stocks),
-        which is a known architecture violation. See ARCHITECTURE.md for details.
+        which is a known architecture violation. See README.md Architecture section for details.
         A future refactoring could inject StockRepository as a dependency.
         """
         # Get positions from state.db

@@ -438,7 +438,7 @@ async def _sync_prices_internal():
     try:
         # Note: Direct DB access here is a known architecture violation.
         # This could use StockRepository.get_all_active() but needs yahoo_symbol field.
-        # See ARCHITECTURE.md for details.
+        # See README.md Architecture section for details.
         stock_repo = StockRepository()
         stocks = await stock_repo.get_all_active()
 
@@ -460,7 +460,7 @@ async def _sync_prices_internal():
         now = datetime.now().isoformat()
 
         # Note: Direct DB access here is a known architecture violation.
-        # This job needs to update positions directly. See ARCHITECTURE.md for details.
+        # This job needs to update positions directly. See README.md Architecture section for details.
         db_manager = get_db_manager()
         async with db_manager.state.transaction():
             for symbol, price in quotes.items():
@@ -526,7 +526,7 @@ async def sync_stock_currencies():
 
         updated = 0
         # Note: Direct DB access here is a known architecture violation.
-        # This job needs to update stock currency directly. See ARCHITECTURE.md for details.
+        # This job needs to update stock currency directly. See README.md Architecture section for details.
         db_manager = get_db_manager()
         async with db_manager.config.transaction():
             for q in q_list:

@@ -184,7 +184,7 @@ class StockRepository:
 
         Note: This method directly accesses multiple databases (config.db and state.db)
         which violates the repository pattern. This is a known architecture violation
-        documented in ARCHITECTURE.md. A future refactoring could:
+        documented in README.md Architecture section. A future refactoring could:
         1. Create a composite repository/service that orchestrates multiple repositories
         2. Inject ScoreRepository and PositionRepository as dependencies
         3. Move this logic to an application service layer

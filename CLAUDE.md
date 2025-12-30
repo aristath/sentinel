@@ -35,7 +35,7 @@ This is an autonomous portfolio management system that manages my retirement fun
 - **Dependency injection**: FastAPI `Depends()` for dependencies
 
 ### When Touching Existing Violations
-The codebase has documented violations in `ARCHITECTURE.md`. Before fixing or extending them, ask.
+The codebase has documented violations in the README.md Architecture section. Before fixing or extending them, ask.
 
 ## Code Style
 
