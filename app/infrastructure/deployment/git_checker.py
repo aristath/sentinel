@@ -259,7 +259,11 @@ class GitChecker:
                     timeout=10,
                 )
                 if reset_result.returncode != 0:
-                    error_msg = reset_result.stderr.decode() if reset_result.stderr else "Unknown error"
+                    error_msg = (
+                        reset_result.stderr.decode()
+                        if reset_result.stderr
+                        else "Unknown error"
+                    )
                     logger.warning(f"Git reset failed: {error_msg}")
 
                 # Clean untracked files
@@ -270,7 +274,11 @@ class GitChecker:
                     timeout=10,
                 )
                 if clean_result.returncode != 0:
-                    error_msg = clean_result.stderr.decode() if clean_result.stderr else "Unknown error"
+                    error_msg = (
+                        clean_result.stderr.decode()
+                        if clean_result.stderr
+                        else "Unknown error"
+                    )
                     logger.warning(f"Git clean failed: {error_msg}")
 
                 # Pull changes
