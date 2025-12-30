@@ -441,14 +441,13 @@ class TestStockRepositoryGetWithScores:
         mock_db.fetchall = AsyncMock(return_value=[mock_stock_row])
 
         mock_state_db = AsyncMock()
-        mock_state_db.fetchall = AsyncMock(
-            side_effect=[
-                [mock_score_row],  # scores
-                [mock_position_row],  # positions
-            ]
-        )
+        mock_state_db.fetchall = AsyncMock(return_value=[mock_position_row])
+
+        mock_calculations_db = AsyncMock()
+        mock_calculations_db.fetchall = AsyncMock(return_value=[mock_score_row])
 
         mock_db_manager = MagicMock()
+        mock_db_manager.calculations = mock_calculations_db
         mock_db_manager.state = mock_state_db
 
         repo = StockRepository(db=mock_db)
