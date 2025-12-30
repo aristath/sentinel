@@ -201,13 +201,20 @@ async def _create_portfolio_snapshot(
     db_manager,
 ) -> None:
     """Create daily portfolio snapshot."""
+    from app.application.services.turnover_tracker import TurnoverTracker
+
     today = datetime.now().strftime("%Y-%m-%d")
+
+    # Calculate annual turnover
+    turnover_tracker = TurnoverTracker(db_manager)
+    annual_turnover = await turnover_tracker.calculate_annual_turnover(end_date=today)
+
     await db_manager.state.execute(
         """
         INSERT OR REPLACE INTO portfolio_snapshots
         (date, total_value, cash_balance, invested_value, unrealized_pnl,
-         geo_eu_pct, geo_asia_pct, geo_us_pct, position_count, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+         geo_eu_pct, geo_asia_pct, geo_us_pct, position_count, annual_turnover, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
         """,
         (
             today,
@@ -219,6 +226,7 @@ async def _create_portfolio_snapshot(
             geo_values["ASIA"] / total_value if total_value else 0,
             geo_values["US"] / total_value if total_value else 0,
             position_count,
+            annual_turnover,
         ),
     )
 

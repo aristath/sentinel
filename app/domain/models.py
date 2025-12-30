@@ -226,6 +226,7 @@ class PortfolioSnapshot:
     geo_asia_pct: Optional[float] = None
     geo_us_pct: Optional[float] = None
     position_count: Optional[int] = None
+    annual_turnover: Optional[float] = None
 
 
 @dataclass

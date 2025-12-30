@@ -1316,6 +1316,7 @@ CREATE TABLE IF NOT EXISTS portfolio_snapshots (
     geo_asia_pct REAL,
     geo_us_pct REAL,
     position_count INTEGER,
+    annual_turnover REAL,
     created_at TEXT NOT NULL
 );
 
@@ -1345,6 +1346,36 @@ async def init_snapshots_schema(db):
         )
         await db.commit()
         logger.info("Snapshots database initialized with schema version 1")
+        current_version = 1
+
+    # Migration: Add annual_turnover column (version 1 -> 2)
+    if current_version == 1:
+        try:
+            # Check if column already exists
+            cursor = await db.execute("PRAGMA table_info(portfolio_snapshots)")
+            columns = await cursor.fetchall()
+            column_names = [col[1] for col in columns]
+
+            if "annual_turnover" not in column_names:
+                await db.execute(
+                    "ALTER TABLE portfolio_snapshots ADD COLUMN annual_turnover REAL"
+                )
+                logger.info("Added annual_turnover column to portfolio_snapshots")
+
+            now = datetime.now().isoformat()
+            await db.execute(
+                "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
+                (
+                    2,
+                    now,
+                    "Added annual_turnover column for portfolio turnover tracking",
+                ),
+            )
+            await db.commit()
+            logger.info("Snapshots database migrated to schema version 2")
+        except Exception as e:
+            logger.error(f"Failed to migrate snapshots schema to version 2: {e}")
+            await db.rollback()
 
 
 # =============================================================================

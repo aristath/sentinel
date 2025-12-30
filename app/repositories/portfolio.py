@@ -90,8 +90,8 @@ class PortfolioRepository:
                 INSERT OR REPLACE INTO portfolio_snapshots
                 (date, total_value, cash_balance, invested_value,
                  unrealized_pnl, geo_eu_pct, geo_asia_pct, geo_us_pct,
-                 position_count, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 position_count, annual_turnover, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     snapshot.date,
@@ -103,6 +103,7 @@ class PortfolioRepository:
                     snapshot.geo_asia_pct,
                     snapshot.geo_us_pct,
                     snapshot.position_count,
+                    snapshot.annual_turnover,
                     now,
                 ),
             )
@@ -162,4 +163,5 @@ class PortfolioRepository:
             geo_asia_pct=safe_get("geo_asia_pct"),
             geo_us_pct=safe_get("geo_us_pct"),
             position_count=safe_get("position_count"),
+            annual_turnover=safe_get("annual_turnover"),
         )
