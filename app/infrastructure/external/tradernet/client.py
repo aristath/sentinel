@@ -707,7 +707,44 @@ class TradernetClient:
                 return result
             elif isinstance(result, dict):
                 # Try common response keys
-                if "result" in result:
+                if "tickers" in result:
+                    # API returns tickers as a list of symbol strings
+                    tickers = result["tickers"]
+                    if isinstance(tickers, list):
+                        logger.debug(
+                            f"get_most_traded returned dict with 'tickers' key: {len(tickers)} items"
+                        )
+                        # Convert ticker strings to dict format expected by discovery service
+                        # Each ticker is a string like "FRHC.US", "TSLA.US", etc.
+                        securities = []
+                        for ticker in tickers:
+                            if isinstance(ticker, str):
+                                # Parse ticker format: "SYMBOL.EXCHANGE" or just "SYMBOL"
+                                parts = ticker.split(".")
+                                symbol = parts[0].upper()
+                                exchange = (
+                                    parts[1].lower() if len(parts) > 1 else "unknown"
+                                )
+                                securities.append(
+                                    {
+                                        "symbol": symbol,
+                                        "exchange": exchange,
+                                        "ticker": ticker,
+                                    }
+                                )
+                            elif isinstance(ticker, dict):
+                                # Already in dict format
+                                securities.append(ticker)
+                        logger.debug(
+                            f"Converted {len(tickers)} tickers to {len(securities)} securities"
+                        )
+                        return securities
+                    else:
+                        logger.warning(
+                            f"get_most_traded 'tickers' key is not a list: {type(tickers)}"
+                        )
+                        return []
+                elif "result" in result:
                     data = result["result"]
                     if isinstance(data, list):
                         logger.debug(
