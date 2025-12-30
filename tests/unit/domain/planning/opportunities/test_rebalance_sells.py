@@ -46,10 +46,13 @@ class TestIdentifyRebalanceSellOpportunities:
     def portfolio_context(self):
         """Create a portfolio context."""
         return PortfolioContext(
-            country_weights={"United States": 0.0},  # Neutral weight
+            country_weights={
+                "OTHER": 0.0
+            },  # Neutral weight (country maps to OTHER group if no mapping)
             industry_weights={},
             positions={"AAPL.US": 16000},
             total_value=20000,
+            country_to_group={},  # Empty mapping means countries default to OTHER
         )
 
     @pytest.mark.asyncio
@@ -58,9 +61,9 @@ class TestIdentifyRebalanceSellOpportunities:
     ):
         """Test identifying overweight country position."""
         stocks_by_symbol = {"AAPL.US": sample_stock}
-        country_allocations = {
-            "United States": 0.80
-        }  # 80% in United States, target is ~33%
+        # country_allocations uses group names, not country names
+        # Since country_to_group is empty, "United States" maps to "OTHER"
+        country_allocations = {"OTHER": 0.80}  # 80% in OTHER group, target is 0%
 
         opportunities = await identify_rebalance_sell_opportunities(
             positions=[sample_position],
@@ -87,13 +90,14 @@ class TestIdentifyRebalanceSellOpportunities:
             country="United States",
         )
         portfolio_context = PortfolioContext(
-            country_weights={"United States": 0.0},
+            country_weights={"OTHER": 0.0},
             industry_weights={},
             positions={},
             total_value=20000,
+            country_to_group={},
         )
         stocks_by_symbol = {"AAPL.US": stock}
-        country_allocations = {"United States": 0.80}
+        country_allocations = {"OTHER": 0.80}
 
         opportunities = await identify_rebalance_sell_opportunities(
             positions=[sample_position],
@@ -117,7 +121,7 @@ class TestIdentifyRebalanceSellOpportunities:
             currency="USD",
         )
         stocks_by_symbol = {"AAPL.US": sample_stock}
-        country_allocations = {"United States": 0.80}
+        country_allocations = {"OTHER": 0.80}
 
         opportunities = await identify_rebalance_sell_opportunities(
             positions=[position],
@@ -151,7 +155,7 @@ class TestIdentifyRebalanceSellOpportunities:
     ):
         """Test skipping when country not in allocations."""
         stocks_by_symbol = {"AAPL.US": sample_stock}
-        country_allocations = {"Germany": 0.50}  # No United States in allocations
+        country_allocations = {"EU": 0.50}  # No OTHER in allocations
 
         opportunities = await identify_rebalance_sell_opportunities(
             positions=[sample_position],
@@ -169,7 +173,9 @@ class TestIdentifyRebalanceSellOpportunities:
     ):
         """Test skipping when country is balanced."""
         stocks_by_symbol = {"AAPL.US": sample_stock}
-        country_allocations = {"United States": 0.35}  # Near target of 33%
+        country_allocations = {
+            "OTHER": 0.35
+        }  # Near target of 0.33 (but portfolio_context has 0.0, so this is still overweight by 0.35)
 
         opportunities = await identify_rebalance_sell_opportunities(
             positions=[sample_position],
@@ -187,7 +193,7 @@ class TestIdentifyRebalanceSellOpportunities:
     ):
         """Test using exchange rate service for non-EUR positions."""
         stocks_by_symbol = {"AAPL.US": sample_stock}
-        country_allocations = {"United States": 0.80}
+        country_allocations = {"OTHER": 0.80}
 
         mock_exchange_service = AsyncMock()
         mock_exchange_service.get_rate.return_value = 1.1
@@ -210,7 +216,7 @@ class TestIdentifyRebalanceSellOpportunities:
     ):
         """Test that opportunities include appropriate tags."""
         stocks_by_symbol = {"AAPL.US": sample_stock}
-        country_allocations = {"United States": 0.80}
+        country_allocations = {"OTHER": 0.80}
 
         opportunities = await identify_rebalance_sell_opportunities(
             positions=[sample_position],
@@ -230,7 +236,7 @@ class TestIdentifyRebalanceSellOpportunities:
     ):
         """Test that priority is proportional to overweight amount."""
         stocks_by_symbol = {"AAPL.US": sample_stock}
-        country_allocations = {"United States": 0.90}  # Very overweight
+        country_allocations = {"OTHER": 0.90}  # Very overweight
 
         opportunities = await identify_rebalance_sell_opportunities(
             positions=[sample_position],
