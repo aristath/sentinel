@@ -155,15 +155,6 @@ class StockDiscoveryService:
                         if len(candidates) >= fetch_limit:
                             break
 
-                    if len(candidates) >= fetch_limit:
-                        break
-
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to fetch securities from exchange {exchange}: {e}"
-                    )
-                    continue
-
             logger.info(f"Discovered {len(candidates)} candidate stocks")
             return candidates[:fetch_limit]  # Ensure we don't exceed limit
 
