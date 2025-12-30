@@ -45,45 +45,53 @@ async def identify_rebalance_sell_opportunities(
         if position_value <= 0:
             continue
 
-        # Check for rebalance sells (overweight country/industry)
+        # Check for rebalance sells (overweight group)
+        # Map individual country to group
         country = stock.country
-        if country and country in country_allocations:
-            target = 0.33 + portfolio_context.country_weights.get(country, 0) * 0.15
-            if country_allocations[country] > target + 0.05:  # 5%+ overweight
-                overweight = country_allocations[country] - target
-                sell_value_eur = min(position_value * 0.3, overweight * total_value)
+        if country:
+            country_to_group = portfolio_context.country_to_group or {}
+            group = country_to_group.get(country, "OTHER")
 
-                # Calculate quantity
-                exchange_rate = 1.0
-                if pos.currency and pos.currency != "EUR":
-                    if exchange_rate_service:
-                        exchange_rate = await exchange_rate_service.get_rate(
-                            pos.currency, "EUR"
-                        )
-                    else:
-                        exchange_rate = 1.0  # Fallback if service not provided
-                sell_value_native = sell_value_eur * exchange_rate
-                sell_qty = int(sell_value_native / (pos.current_price or pos.avg_price))
+            if group in country_allocations:
+                # target_pct is already a percentage (0-1), no conversion needed
+                target = portfolio_context.country_weights.get(group, 0)
+                if country_allocations[group] > target + 0.05:  # 5%+ overweight
+                    overweight = country_allocations[group] - target
+                    sell_value_eur = min(position_value * 0.3, overweight * total_value)
 
-                if sell_qty > 0:
-                    # Apply priority multiplier inversely: higher multiplier = lower sell priority
-                    base_priority = overweight * 2
-                    multiplier = stock.priority_multiplier if stock else 1.0
-                    final_priority = base_priority / multiplier
-
-                    opportunities.append(
-                        ActionCandidate(
-                            side=TradeSide.SELL,
-                            symbol=pos.symbol,
-                            name=stock.name,
-                            quantity=sell_qty,
-                            price=pos.current_price or pos.avg_price,
-                            value_eur=sell_value_eur,
-                            currency=pos.currency or "EUR",
-                            priority=final_priority,
-                            reason=f"Overweight {country} by {overweight*100:.1f}%",
-                            tags=["rebalance", f"overweight_{country.lower()}"],
-                        )
+                    # Calculate quantity
+                    exchange_rate = 1.0
+                    if pos.currency and pos.currency != "EUR":
+                        if exchange_rate_service:
+                            exchange_rate = await exchange_rate_service.get_rate(
+                                pos.currency, "EUR"
+                            )
+                        else:
+                            exchange_rate = 1.0  # Fallback if service not provided
+                    sell_value_native = sell_value_eur * exchange_rate
+                    sell_qty = int(
+                        sell_value_native / (pos.current_price or pos.avg_price)
                     )
+
+                    if sell_qty > 0:
+                        # Apply priority multiplier inversely: higher multiplier = lower sell priority
+                        base_priority = overweight * 2
+                        multiplier = stock.priority_multiplier if stock else 1.0
+                        final_priority = base_priority / multiplier
+
+                        opportunities.append(
+                            ActionCandidate(
+                                side=TradeSide.SELL,
+                                symbol=pos.symbol,
+                                name=stock.name,
+                                quantity=sell_qty,
+                                price=pos.current_price or pos.avg_price,
+                                value_eur=sell_value_eur,
+                                currency=pos.currency or "EUR",
+                                priority=final_priority,
+                                reason=f"Overweight {group} by {overweight*100:.1f}%",
+                                tags=["rebalance", f"overweight_{group.lower()}"],
+                            )
+                        )
 
     return opportunities

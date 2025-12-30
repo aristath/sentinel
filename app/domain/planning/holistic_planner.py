@@ -563,19 +563,25 @@ async def identify_opportunities(
     sell_cooldown_days = await settings_repo.get_int("sell_cooldown_days", 180)
     recently_sold = await trade_repo.get_recently_sold_symbols(sell_cooldown_days)
 
-    # Calculate current country/industry allocations
-    country_allocations: dict[str, float] = {}
-    ind_allocations: dict[str, float] = {}
+    # Calculate current country/industry allocations by group (not individual)
+    country_to_group = portfolio_context.country_to_group or {}
+    industry_to_group = portfolio_context.industry_to_group or {}
+
+    country_allocations: dict[str, float] = {}  # group -> allocation
+    ind_allocations: dict[str, float] = {}  # group -> allocation
     for symbol, value in portfolio_context.positions.items():
+        # Map country to group
         country = (
             portfolio_context.stock_countries.get(symbol, "OTHER")
             if portfolio_context.stock_countries
             else "OTHER"
         )
-        country_allocations[country] = (
-            country_allocations.get(country, 0) + value / total_value
+        group = country_to_group.get(country, "OTHER")
+        country_allocations[group] = (
+            country_allocations.get(group, 0) + value / total_value
         )
 
+        # Map industries to groups
         industries = (
             portfolio_context.stock_industries.get(symbol)
             if portfolio_context.stock_industries
@@ -585,8 +591,9 @@ async def identify_opportunities(
             for ind in industries.split(","):
                 ind = ind.strip()
                 if ind:
-                    ind_allocations[ind] = (
-                        ind_allocations.get(ind, 0) + value / total_value
+                    group = industry_to_group.get(ind, "OTHER")
+                    ind_allocations[group] = (
+                        ind_allocations.get(group, 0) + value / total_value
                     )
 
     # Get eligibility settings for sell checks

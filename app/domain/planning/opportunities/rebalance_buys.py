@@ -52,11 +52,16 @@ async def identify_rebalance_buy_opportunities(
             else 0.5
         )
 
-        # Check for rebalance buys (underweight country/industry)
+        # Check for rebalance buys (underweight group)
+        # Map individual country to group
         country = stock.country
         if country:
-            target = 0.33 + portfolio_context.country_weights.get(country, 0) * 0.15
-            current = country_allocations.get(country, 0)
+            country_to_group = portfolio_context.country_to_group or {}
+            group = country_to_group.get(country, "OTHER")
+
+            # target_pct is already a percentage (0-1), no conversion needed
+            target = portfolio_context.country_weights.get(group, 0)
+            current = country_allocations.get(group, 0)
             if current < target - 0.05:  # 5%+ underweight
                 underweight = target - current
                 exchange_rate = 1.0
@@ -86,8 +91,8 @@ async def identify_rebalance_buy_opportunities(
                         value_eur=sized.value_eur,
                         currency=stock.currency or "EUR",
                         priority=final_priority,
-                        reason=f"Underweight {country} by {underweight*100:.1f}%",
-                        tags=["rebalance", f"underweight_{country.lower()}"],
+                        reason=f"Underweight {group} by {underweight*100:.1f}%",
+                        tags=["rebalance", f"underweight_{group.lower()}"],
                     )
                 )
 
