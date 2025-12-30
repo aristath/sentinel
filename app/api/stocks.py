@@ -219,7 +219,15 @@ async def get_universe_suggestions(
                 )
 
                 # Score candidates and collect results
+                # First, fetch historical data for candidates (needed for scoring)
+                from app.infrastructure.database.manager import get_db_manager
+                from app.infrastructure.external import yahoo_finance as yahoo
+                from app.config import settings
+                import asyncio
+
+                db_manager = get_db_manager()
                 scored_candidates = []
+                
                 for candidate in candidates:
                     symbol = candidate.get("symbol", "").upper()
                     if not symbol:
@@ -232,6 +240,75 @@ async def get_universe_suggestions(
                             candidate["isin"] = symbol_info.isin
                         # Store yahoo_symbol for display
                         candidate["yahoo_symbol"] = symbol_info.yahoo_symbol
+
+                        # Fetch historical data for this candidate (required for scoring)
+                        # Get history database for this symbol (creates if doesn't exist)
+                        history_db = await db_manager.history(symbol)
+                        
+                        # Check if we already have sufficient data
+                        cursor = await history_db.execute(
+                            "SELECT COUNT(*) FROM daily_prices"
+                        )
+                        row = await cursor.fetchone()
+                        daily_count = row[0] if row else 0
+                        
+                        if daily_count < 50:
+                            # Fetch 10 years of data for initial scoring
+                            logger.info(
+                                f"Fetching historical data for candidate {symbol} "
+                                f"({symbol_info.yahoo_symbol})"
+                            )
+                            ohlc_data = yahoo.get_historical_prices(
+                                symbol, symbol_info.yahoo_symbol, period="10y"
+                            )
+                            
+                            if ohlc_data:
+                                async with history_db.transaction():
+                                    for ohlc in ohlc_data:
+                                        date = ohlc.date.strftime("%Y-%m-%d")
+                                        await history_db.execute(
+                                            """
+                                            INSERT OR REPLACE INTO daily_prices
+                                            (date, open_price, high_price, low_price, close_price, volume,
+                                             source, created_at)
+                                            VALUES (?, ?, ?, ?, ?, ?, 'yahoo', datetime('now'))
+                                            """,
+                                            (
+                                                date,
+                                                ohlc.open,
+                                                ohlc.high,
+                                                ohlc.low,
+                                                ohlc.close,
+                                                ohlc.volume,
+                                            ),
+                                        )
+                                    
+                                    # Aggregate to monthly
+                                    await history_db.execute(
+                                        """
+                                        INSERT OR REPLACE INTO monthly_prices
+                                        (year_month, avg_close, avg_adj_close, source, created_at)
+                                        SELECT
+                                            strftime('%Y-%m', date) as year_month,
+                                            AVG(close_price) as avg_close,
+                                            AVG(close_price) as avg_adj_close,
+                                            'calculated',
+                                            datetime('now')
+                                        FROM daily_prices
+                                        GROUP BY strftime('%Y-%m', date)
+                                        """
+                                    )
+                                
+                                logger.info(
+                                    f"Fetched {len(ohlc_data)} price records for {symbol}"
+                                )
+                                # Rate limit delay
+                                await asyncio.sleep(settings.external_api_rate_limit_delay)
+                            else:
+                                logger.warning(
+                                    f"No historical data available for {symbol}, skipping"
+                                )
+                                continue
 
                         # Score the candidate
                         score = await scoring_service.calculate_and_save_score(
