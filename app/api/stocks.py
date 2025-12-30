@@ -982,42 +982,60 @@ async def update_stock(
     Args:
         isin: Stock ISIN (e.g., US0378331005)
     """
-    # Validate ISIN format
-    isin = isin.strip().upper()
-    if not is_isin(isin):
-        raise HTTPException(status_code=400, detail="Invalid ISIN format")
+    try:
+        # Validate ISIN format
+        isin = isin.strip().upper()
+        if not is_isin(isin):
+            raise HTTPException(status_code=400, detail="Invalid ISIN format")
 
-    stock = await stock_repo.get_by_isin(isin)
-    if not stock:
-        raise HTTPException(status_code=404, detail="Stock not found")
+        stock = await stock_repo.get_by_isin(isin)
+        if not stock:
+            raise HTTPException(status_code=404, detail="Stock not found")
 
-    old_symbol = stock.symbol
+        old_symbol = stock.symbol
 
-    new_symbol = None
-    if update.new_symbol is not None:
-        new_symbol = update.new_symbol.upper()
-        await _validate_symbol_change(old_symbol, new_symbol, stock_repo)
+        new_symbol = None
+        if update.new_symbol is not None:
+            new_symbol = update.new_symbol.upper()
+            await _validate_symbol_change(old_symbol, new_symbol, stock_repo)
 
-    updates = _build_update_dict(
-        update, new_symbol if new_symbol != old_symbol else None
-    )
-    if not updates:
-        raise HTTPException(status_code=400, detail="No updates provided")
+        updates = _build_update_dict(
+            update, new_symbol if new_symbol != old_symbol else None
+        )
+        if not updates:
+            raise HTTPException(status_code=400, detail="No updates provided")
 
-    await stock_repo.update(old_symbol, **updates)
+        await stock_repo.update(old_symbol, **updates)
 
-    final_symbol = new_symbol if new_symbol and new_symbol != old_symbol else old_symbol
-    updated_stock = await stock_repo.get_by_symbol(final_symbol)
-    if not updated_stock:
-        raise HTTPException(status_code=404, detail="Stock not found after update")
+        final_symbol = (
+            new_symbol if new_symbol and new_symbol != old_symbol else old_symbol
+        )
+        updated_stock = await stock_repo.get_by_symbol(final_symbol)
+        if not updated_stock:
+            raise HTTPException(status_code=404, detail="Stock not found after update")
 
-    score = await scoring_service.calculate_and_save_score(
-        final_symbol, updated_stock.yahoo_symbol
-    )
+        try:
+            score = await scoring_service.calculate_and_save_score(
+                final_symbol,
+                updated_stock.yahoo_symbol,
+                country=updated_stock.country,
+                industry=updated_stock.industry,
+            )
+        except Exception as e:
+            logger.error(
+                f"Failed to calculate score for {final_symbol}: {e}", exc_info=True
+            )
+            # Continue without score rather than failing the update
+            score = None
 
-    cache.invalidate("stocks_with_scores")
+        cache.invalidate("stocks_with_scores")
 
-    return _format_stock_response(updated_stock, score)
+        return _format_stock_response(updated_stock, score)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update stock {isin}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to update stock: {str(e)}")
 
 
 @router.delete("/{isin}")
