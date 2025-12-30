@@ -49,7 +49,7 @@ class TabNavigation extends HTMLElement {
                 class="px-3 md:px-4 py-2 text-sm font-medium transition-colors relative"
                 :class="$store.app.activeTab === 'next-actions'
                   ? 'text-blue-400 border-b-2 border-blue-400'
-                  : 'text-gray-400 hover:text-gray-200'"
+                  : 'text-gray-300 hover:text-gray-100'"
                 aria-label="Next Actions tab">
           <span class="flex items-center gap-2">
             <span class="hidden sm:inline">Next Actions</span>
@@ -67,7 +67,7 @@ class TabNavigation extends HTMLElement {
                 class="px-3 md:px-4 py-2 text-sm font-medium transition-colors relative"
                 :class="$store.app.activeTab === 'diversification'
                   ? 'text-blue-400 border-b-2 border-blue-400'
-                  : 'text-gray-400 hover:text-gray-200'"
+                  : 'text-gray-300 hover:text-gray-100'"
                 aria-label="Diversification tab">
           <span class="hidden sm:inline">Diversification</span>
           <span class="sm:hidden">Diversify</span>
@@ -76,7 +76,7 @@ class TabNavigation extends HTMLElement {
                 class="px-3 md:px-4 py-2 text-sm font-medium transition-colors relative"
                 :class="$store.app.activeTab === 'stock-universe'
                   ? 'text-blue-400 border-b-2 border-blue-400'
-                  : 'text-gray-400 hover:text-gray-200'"
+                  : 'text-gray-300 hover:text-gray-100'"
                 aria-label="Stock Universe tab">
           <span class="hidden sm:inline">Stock Universe</span>
           <span class="sm:hidden">Stocks</span>
@@ -85,7 +85,7 @@ class TabNavigation extends HTMLElement {
                 class="px-3 md:px-4 py-2 text-sm font-medium transition-colors relative"
                 :class="$store.app.activeTab === 'recent-trades'
                   ? 'text-blue-400 border-b-2 border-blue-400'
-                  : 'text-gray-400 hover:text-gray-200'"
+                  : 'text-gray-300 hover:text-gray-100'"
                 aria-label="Recent Trades tab">
           <span class="hidden sm:inline">Recent Trades</span>
           <span class="sm:hidden">Trades</span>
@@ -94,13 +94,13 @@ class TabNavigation extends HTMLElement {
                 class="px-3 md:px-4 py-2 text-sm font-medium transition-colors relative"
                 :class="$store.app.activeTab === 'logs'
                   ? 'text-blue-400 border-b-2 border-blue-400'
-                  : 'text-gray-400 hover:text-gray-200'"
+                  : 'text-gray-300 hover:text-gray-100'"
                 aria-label="Logs tab">
           <span class="hidden sm:inline">Logs</span>
           <span class="sm:hidden">Logs</span>
         </button>
-        <div class="ml-auto text-xs text-gray-500 hidden lg:flex items-center gap-1">
-          <span class="text-gray-600">Press</span>
+        <div class="ml-auto text-xs text-gray-300 hidden lg:flex items-center gap-1">
+          <span class="text-gray-300">Press</span>
           <kbd class="px-1.5 py-0.5 bg-gray-700 rounded text-gray-300 font-mono">1-5</kbd>
         </div>
       </div>

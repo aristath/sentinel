@@ -17,30 +17,30 @@ class NextActionsCard extends HTMLElement {
         <div class="flex items-center justify-between mb-4">
           <div class="flex-1">
             <h2 class="text-lg font-bold text-blue-400 uppercase tracking-wide mb-1">Next Actions</h2>
-            <p class="text-xs text-gray-500">Automated portfolio management recommendations</p>
+            <p class="text-xs text-gray-300">Automated portfolio management recommendations</p>
           </div>
           <!-- Quick Metrics Summary -->
           <div class="hidden md:flex items-center gap-4 mr-4 text-xs">
             <div class="text-right">
-              <div class="text-gray-500">Total Value</div>
+              <div class="text-gray-300">Total Value</div>
               <div class="text-green-400 font-mono font-semibold" x-text="formatCurrency($store.app.allocation.total_value)"></div>
             </div>
             <div class="w-px h-8 bg-gray-700"></div>
             <div class="text-right">
-              <div class="text-gray-500">Cash</div>
+              <div class="text-gray-300">Cash</div>
               <div class="text-gray-300 font-mono font-semibold" x-text="formatCurrency($store.app.allocation.cash_balance)"></div>
             </div>
           </div>
           <div class="flex items-center gap-2">
             <button @click="$store.app.fetchRecommendations()"
-                    class="p-2 text-gray-400 hover:text-gray-200 rounded hover:bg-gray-700 transition-colors"
+                    class="p-2 text-gray-300 hover:text-gray-200 rounded hover:bg-gray-700 transition-colors"
                     :disabled="$store.app.loading.recommendations"
                     title="Refresh recommendations">
               <span x-show="$store.app.loading.recommendations" class="inline-block animate-spin">&#9696;</span>
               <span x-show="!$store.app.loading.recommendations">&#8635;</span>
             </button>
             <button @click="if (confirm('This will delete existing sequences and regenerate them with current settings. Existing evaluations will be preserved. Continue?')) { $store.app.regenerateSequences() }"
-                    class="p-2 text-gray-400 hover:text-gray-200 rounded hover:bg-gray-700 transition-colors"
+                    class="p-2 text-gray-300 hover:text-gray-200 rounded hover:bg-gray-700 transition-colors"
                     :disabled="$store.app.settings.incremental_planner_enabled != 1"
                     x-show="$store.app.settings.incremental_planner_enabled == 1"
                     title="Regenerate sequences">
@@ -58,10 +58,10 @@ class NextActionsCard extends HTMLElement {
             <!-- Status Badge -->
             <div class="flex items-center gap-2 mb-3">
               <span x-show="$store.app.plannerStatus.is_planning" class="inline-block animate-spin text-blue-400">&#9696;</span>
-              <span x-show="!$store.app.plannerStatus.is_planning && !$store.app.plannerStatus.is_finished && $store.app.plannerStatus.has_sequences" class="text-gray-400">&#9632;</span>
+              <span x-show="!$store.app.plannerStatus.is_planning && !$store.app.plannerStatus.is_finished && $store.app.plannerStatus.has_sequences" class="text-gray-300">&#9632;</span>
               <span x-show="$store.app.plannerStatus.is_finished" class="text-green-400">&#10004;</span>
               <span class="font-semibold text-sm"
-                    :class="$store.app.plannerStatus.is_planning ? 'text-blue-400' : ($store.app.plannerStatus.is_finished ? 'text-green-400' : 'text-gray-400')"
+                    :class="$store.app.plannerStatus.is_planning ? 'text-blue-400' : ($store.app.plannerStatus.is_finished ? 'text-green-400' : 'text-gray-300')"
                     x-text="$store.app.plannerStatus.is_planning ? 'Planning...' : ($store.app.plannerStatus.is_finished ? 'Planning Complete' : ($store.app.plannerStatus.has_sequences ? 'Waiting...' : 'Generating Scenarios...'))">
               </span>
             </div>
@@ -74,7 +74,7 @@ class NextActionsCard extends HTMLElement {
                        :style="'width: ' + Math.min($store.app.plannerStatus.progress_percentage || 0, 100) + '%'">
                   </div>
                 </div>
-                <div class="text-xs text-gray-400 text-center">
+                <div class="text-xs text-gray-300 text-center">
                   <span x-text="($store.app.plannerStatus.evaluated_count || 0).toLocaleString()"></span>
                   <span> / </span>
                   <span x-text="($store.app.plannerStatus.total_sequences || 0).toLocaleString()"></span>
@@ -87,7 +87,7 @@ class NextActionsCard extends HTMLElement {
 
             <!-- Detailed Stats -->
             <template x-if="!$store.app.plannerStatus.has_sequences">
-              <div class="text-sm text-gray-400 text-center">
+              <div class="text-sm text-gray-300 text-center">
                 Generating scenarios...
               </div>
             </template>
@@ -96,9 +96,9 @@ class NextActionsCard extends HTMLElement {
 
         <!-- Empty state - only shown when no recommendations -->
         <template x-if="!$store.app.loading.recommendations && (!$store.app.recommendations || !$store.app.recommendations.steps || $store.app.recommendations.steps.length === 0)">
-          <div class="text-gray-400 text-base py-8 text-center">
+          <div class="text-gray-300 text-base py-8 text-center">
             <div class="text-lg font-semibold mb-2">No recommendations pending</div>
-            <div class="text-sm text-gray-500">Portfolio is optimally balanced</div>
+            <div class="text-sm text-gray-300">Portfolio is optimally balanced</div>
           </div>
         </template>
 
@@ -106,7 +106,7 @@ class NextActionsCard extends HTMLElement {
         <template x-if="$store.app.recommendations && $store.app.recommendations.steps && $store.app.recommendations.steps.length > 0">
           <div class="mb-3">
             <!-- Evaluation count -->
-            <div class="text-sm text-gray-400 mb-2" x-show="$store.app.recommendations.evaluated_count !== undefined">
+            <div class="text-sm text-gray-300 mb-2" x-show="$store.app.recommendations.evaluated_count !== undefined">
               <span x-text="'Scenarios evaluated: ' + ($store.app.recommendations.evaluated_count || 0).toLocaleString()"></span>
             </div>
             <div class="text-sm text-gray-300 mb-4 flex items-center justify-between">
@@ -115,7 +115,7 @@ class NextActionsCard extends HTMLElement {
                 <span class="text-green-400 font-medium" x-show="$store.app.recommendations.total_score_improvement > 0" x-text="'+' + $store.app.recommendations.total_score_improvement.toFixed(1) + ' score'"></span>
                 <span class="text-red-400 font-medium" x-show="$store.app.recommendations.total_score_improvement < 0" x-text="$store.app.recommendations.total_score_improvement.toFixed(1) + ' score'"></span>
               </div>
-              <div class="text-xs text-gray-500 italic">
+              <div class="text-xs text-gray-300 italic">
                 Trades execute automatically every <span x-text="Math.round($store.app.settings.job_sync_cycle_minutes || 15)"></span> minutes
               </div>
             </div>
@@ -139,9 +139,9 @@ class NextActionsCard extends HTMLElement {
                       </div>
                       <div class="text-base text-gray-200 font-medium mb-1" x-text="step.name"></div>
                       <div class="text-sm mb-2"
-                           :class="step.is_emergency ? 'text-orange-300 font-semibold' : 'text-gray-400'"
+                           :class="step.is_emergency ? 'text-orange-300 font-semibold' : 'text-gray-300'"
                            x-text="step.reason"></div>
-                      <div class="text-sm text-gray-500 flex items-center gap-4 flex-wrap">
+                      <div class="text-sm text-gray-300 flex items-center gap-4 flex-wrap">
                         <span x-text="'Score: ' + step.portfolio_score_before.toFixed(1) + ' → ' + step.portfolio_score_after.toFixed(1)"></span>
                         <span class="text-green-400 font-medium" x-show="step.score_change > 0" x-text="'+' + step.score_change.toFixed(1)"></span>
                         <span class="text-red-400 font-medium" x-show="step.score_change < 0" x-text="step.score_change.toFixed(1)"></span>
@@ -151,14 +151,14 @@ class NextActionsCard extends HTMLElement {
                       <div class="text-lg font-mono font-bold"
                            :class="step.side === 'SELL' ? 'text-red-400' : 'text-green-400'"
                            x-text="(step.side === 'SELL' ? '-' : '+') + '€' + step.estimated_value.toLocaleString()"></div>
-                      <div class="text-sm text-gray-400" x-text="step.quantity + ' @ €' + step.estimated_price"></div>
-                      <div class="text-xs text-gray-500" x-text="'Cash: €' + step.available_cash_before.toLocaleString() + ' → €' + step.available_cash_after.toLocaleString()"></div>
+                      <div class="text-sm text-gray-300" x-text="step.quantity + ' @ €' + step.estimated_price"></div>
+                      <div class="text-xs text-gray-300" x-text="'Cash: €' + step.available_cash_before.toLocaleString() + ' → €' + step.available_cash_after.toLocaleString()"></div>
                     </div>
                   </div>
                 </div>
               </template>
             </div>
-            <div class="mt-4 text-sm text-gray-400 text-center" x-show="$store.app.recommendations.final_available_cash">
+            <div class="mt-4 text-sm text-gray-300 text-center" x-show="$store.app.recommendations.final_available_cash">
               Final cash: <span class="font-semibold text-gray-300" x-text="'€' + $store.app.recommendations.final_available_cash.toLocaleString()"></span>
             </div>
           </div>

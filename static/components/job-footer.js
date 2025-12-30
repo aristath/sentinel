@@ -58,7 +58,7 @@ class JobFooter extends HTMLElement {
     this.innerHTML = `
       <footer class="mt-8 pt-4 border-t border-gray-800" x-data="jobFooterComponent()">
         <div class="mb-2">
-          <h3 class="text-xs text-gray-400 uppercase tracking-wide mb-3">Manual Job Triggers</h3>
+          <h3 class="text-xs text-gray-300 uppercase tracking-wide mb-3">Manual Job Triggers</h3>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2">

@@ -18,19 +18,19 @@ class ConcentrationAlerts extends HTMLElement {
                   <div class="text-sm font-semibold"
                        :class="alert.severity === 'critical' ? 'text-red-300' : 'text-yellow-300'"
                        x-text="getAlertTitle(alert)"></div>
-                  <div class="text-xs text-gray-400 mt-0.5"
+                  <div class="text-xs text-gray-300 mt-0.5"
                        x-text="getAlertMessage(alert)"></div>
                 </div>
                 <div class="flex-shrink-0 text-right">
                   <div class="text-sm font-mono font-bold"
                        :class="alert.severity === 'critical' ? 'text-red-400' : 'text-yellow-400'"
                        x-text="(alert.current_pct * 100).toFixed(1) + '%'"></div>
-                  <div class="text-xs text-gray-500"
+                  <div class="text-xs text-gray-300"
                        x-text="'Limit: ' + (alert.limit_pct * 100).toFixed(0) + '%'"></div>
                 </div>
               </div>
               <button @click="dismissedAlerts.push(alert.type + ':' + alert.name)"
-                      class="ml-3 text-gray-400 hover:text-gray-200 transition-colors"
+                      class="ml-3 text-gray-300 hover:text-gray-200 transition-colors"
                       title="Dismiss alert">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M18 6L6 18M6 6l12 12"/>

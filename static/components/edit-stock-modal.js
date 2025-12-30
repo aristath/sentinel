@@ -18,83 +18,83 @@ class EditStockModal extends HTMLElement {
           <template x-if="$store.app.editingStock">
             <div class="p-4 space-y-4">
               <div>
-                <label class="block text-sm text-gray-400 mb-1">Symbol (Tradernet)</label>
+                <label class="block text-sm text-gray-300 mb-1">Symbol (Tradernet)</label>
                 <input type="text"
                        x-model="$store.app.editingStock.symbol"
                        class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
-                <p class="text-xs text-gray-500 mt-1">Tradernet ticker symbol (e.g., ASML.NL, RHM.DE)</p>
+                <p class="text-xs text-gray-300 mt-1">Tradernet ticker symbol (e.g., ASML.NL, RHM.DE)</p>
               </div>
 
               <div>
-                <label class="block text-sm text-gray-400 mb-1">Yahoo Symbol (override)</label>
+                <label class="block text-sm text-gray-300 mb-1">Yahoo Symbol (override)</label>
                 <input type="text"
                        x-model="$store.app.editingStock.yahoo_symbol"
                        placeholder="Leave empty to use convention"
                        class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
-                <p class="text-xs text-gray-500 mt-1">e.g., 1810.HK for Xiaomi, 300750.SZ for CATL</p>
+                <p class="text-xs text-gray-300 mt-1">e.g., 1810.HK for Xiaomi, 300750.SZ for CATL</p>
               </div>
 
               <div>
-                <label class="block text-sm text-gray-400 mb-1">Name</label>
+                <label class="block text-sm text-gray-300 mb-1">Name</label>
                 <input type="text"
                        x-model="$store.app.editingStock.name"
                        class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
               </div>
 
               <div>
-                <label class="block text-sm text-gray-400 mb-1">Country</label>
+                <label class="block text-sm text-gray-300 mb-1">Country</label>
                 <div class="px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-300">
                   <span x-text="$store.app.editingStock.country || 'Auto-detected from Yahoo Finance'"></span>
                 </div>
-                <p class="text-xs text-gray-500 mt-1">Automatically detected from Yahoo Finance</p>
+                <p class="text-xs text-gray-300 mt-1">Automatically detected from Yahoo Finance</p>
               </div>
 
               <div>
-                <label class="block text-sm text-gray-400 mb-1">Exchange</label>
+                <label class="block text-sm text-gray-300 mb-1">Exchange</label>
                 <div class="px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-300">
                   <span x-text="$store.app.editingStock.fullExchangeName || 'Auto-detected from Yahoo Finance'"></span>
                 </div>
-                <p class="text-xs text-gray-500 mt-1">Automatically detected from Yahoo Finance</p>
+                <p class="text-xs text-gray-300 mt-1">Automatically detected from Yahoo Finance</p>
               </div>
 
               <div>
-                <label class="block text-sm text-gray-400 mb-1">Industry</label>
+                <label class="block text-sm text-gray-300 mb-1">Industry</label>
                 <div class="px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-300">
                   <span x-text="$store.app.editingStock.industry || 'Auto-detected from Yahoo Finance'"></span>
                 </div>
-                <p class="text-xs text-gray-500 mt-1">Automatically detected from Yahoo Finance during daily pipeline</p>
+                <p class="text-xs text-gray-300 mt-1">Automatically detected from Yahoo Finance during daily pipeline</p>
               </div>
 
               <div>
-                <label class="block text-sm text-gray-400 mb-1">Min Lot Size</label>
+                <label class="block text-sm text-gray-300 mb-1">Min Lot Size</label>
                 <input type="number"
                        x-model="$store.app.editingStock.min_lot"
                        min="1"
                        step="1"
                        class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
-                <p class="text-xs text-gray-500 mt-1">Minimum shares per trade (e.g., 100 for Japanese stocks)</p>
+                <p class="text-xs text-gray-300 mt-1">Minimum shares per trade (e.g., 100 for Japanese stocks)</p>
               </div>
 
               <div>
-                <label class="block text-sm text-gray-400 mb-1">Min Portfolio Target (%)</label>
+                <label class="block text-sm text-gray-300 mb-1">Min Portfolio Target (%)</label>
                 <input type="number"
                        x-model="$store.app.editingStock.min_portfolio_target"
                        min="0"
                        max="20"
                        step="0.1"
                        class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
-                <p class="text-xs text-gray-500 mt-1">Minimum target portfolio allocation (0-20%). Used by optimizer to set lower bound.</p>
+                <p class="text-xs text-gray-300 mt-1">Minimum target portfolio allocation (0-20%). Used by optimizer to set lower bound.</p>
               </div>
 
               <div>
-                <label class="block text-sm text-gray-400 mb-1">Max Portfolio Target (%)</label>
+                <label class="block text-sm text-gray-300 mb-1">Max Portfolio Target (%)</label>
                 <input type="number"
                        x-model="$store.app.editingStock.max_portfolio_target"
                        min="0"
                        max="30"
                        step="0.1"
                        class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
-                <p class="text-xs text-gray-500 mt-1">Maximum target portfolio allocation (0-30%). Used by optimizer to set upper bound.</p>
+                <p class="text-xs text-gray-300 mt-1">Maximum target portfolio allocation (0-30%). Used by optimizer to set upper bound.</p>
               </div>
 
               <div class="border-t border-gray-700 pt-4 mt-4 space-y-3">
@@ -104,7 +104,7 @@ class EditStockModal extends HTMLElement {
                          class="w-4 h-4 rounded border-gray-600 bg-gray-900 text-green-600 focus:ring-green-500 focus:ring-offset-gray-800">
                   <div>
                     <span class="text-sm text-gray-300">Allow BUY</span>
-                    <p class="text-xs text-gray-500">Include in buy recommendations</p>
+                    <p class="text-xs text-gray-300">Include in buy recommendations</p>
                   </div>
                 </label>
 
@@ -114,7 +114,7 @@ class EditStockModal extends HTMLElement {
                          class="w-4 h-4 rounded border-gray-600 bg-gray-900 text-red-600 focus:ring-red-500 focus:ring-offset-gray-800">
                   <div>
                     <span class="text-sm text-gray-300">Allow SELL</span>
-                    <p class="text-xs text-gray-500">Include in sell recommendations</p>
+                    <p class="text-xs text-gray-300">Include in sell recommendations</p>
                   </div>
                 </label>
               </div>

@@ -9,7 +9,7 @@ class GeoChart extends HTMLElement {
     this.innerHTML = `
       <div x-data="geoChartComponent()">
         <div class="flex items-center justify-between mb-2">
-          <h3 class="text-xs text-gray-500 font-medium">Country Groups</h3>
+          <h3 class="text-xs text-gray-300 font-medium">Country Groups</h3>
           <button x-show="!$store.app.editingCountry"
                   @click="$store.app.startEditCountry()"
                   class="text-xs text-blue-400 hover:text-blue-300 transition-colors">
@@ -27,7 +27,7 @@ class GeoChart extends HTMLElement {
                   <span class="text-gray-300" x-text="country.name"></span>
                 </span>
                 <span class="flex items-center gap-2">
-                  <span class="font-mono text-gray-400" x-text="(country.current_pct * 100).toFixed(1) + '%'"></span>
+                  <span class="font-mono text-gray-300" x-text="(country.current_pct * 100).toFixed(1) + '%'"></span>
                   <span class="text-xs px-1.5 py-0.5 rounded font-mono"
                         :class="getDeviationBadgeClass(getDeviation(country.name, country.current_pct))"
                         x-text="formatDeviation(getDeviation(country.name, country.current_pct))"></span>
@@ -48,7 +48,7 @@ class GeoChart extends HTMLElement {
         <!-- Edit Mode - Weight sliders for active countries -->
         <div x-show="$store.app.editingCountry" x-transition class="space-y-3">
           <!-- Weight Scale Legend -->
-          <div class="flex justify-between text-xs text-gray-500">
+          <div class="flex justify-between text-xs text-gray-300">
             <span class="text-red-400">-1 Avoid</span>
             <span class="text-gray-400">0 Neutral</span>
             <span class="text-green-400">+1 Prioritize</span>
@@ -155,7 +155,7 @@ function geoChartComponent() {
 
     // Badge class for deviation value - using colors that exist in CSS
     getDeviationBadgeClass(deviation) {
-      if (Math.abs(deviation) < 0.02) return 'bg-gray-700 text-gray-400'; // At target
+      if (Math.abs(deviation) < 0.02) return 'bg-gray-700 text-gray-300'; // At target
       return deviation > 0
         ? 'bg-red-900 text-red-400'    // Overweight
         : 'bg-blue-900 text-blue-400'; // Underweight
@@ -191,7 +191,7 @@ function geoChartComponent() {
     getWeightBadgeClass(weight) {
       if (weight > 0.1) return 'bg-green-900/50 text-green-400';
       if (weight < -0.1) return 'bg-red-900/50 text-red-400';
-      return 'bg-gray-700 text-gray-400';
+      return 'bg-gray-700 text-gray-300';
     }
   };
 }

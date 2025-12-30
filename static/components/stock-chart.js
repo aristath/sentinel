@@ -159,7 +159,7 @@ class StockChartModal extends HTMLElement {
           <div class="flex items-center justify-between p-4 border-b border-gray-700">
             <div>
               <h2 class="text-lg font-semibold text-gray-100" x-text="symbol || 'Stock Chart'"></h2>
-              <p class="text-xs text-gray-400" x-show="stockName" x-text="stockName"></p>
+              <p class="text-xs text-gray-300" x-show="stockName" x-text="stockName"></p>
             </div>
             <button @click="$store.app.showStockChart = false; closeChart()"
                     class="text-gray-400 hover:text-gray-200 text-2xl leading-none">&times;</button>
@@ -183,7 +183,7 @@ class StockChartModal extends HTMLElement {
             </div>
 
             <!-- Loading state -->
-            <div x-show="loading" class="flex items-center justify-center h-96 text-gray-500 text-sm">
+            <div x-show="loading" class="flex items-center justify-center h-96 text-gray-300 text-sm">
               <span class="animate-spin">&#9696;</span>
               <span class="ml-2">Loading chart data...</span>
             </div>
@@ -196,7 +196,7 @@ class StockChartModal extends HTMLElement {
 
             <!-- Empty state -->
             <div x-show="!loading && !error && (!chartData || chartData.length === 0)"
-                 class="flex items-center justify-center h-96 text-gray-500 text-sm">
+                 class="flex items-center justify-center h-96 text-gray-300 text-sm">
               No data available for this stock
             </div>
           </div>

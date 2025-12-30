@@ -7,7 +7,7 @@ class StockTable extends HTMLElement {
     this.innerHTML = `
       <div class="bg-gray-800 border border-gray-700 rounded p-3" x-data="stockTableComponent()">
         <div class="flex items-center justify-between mb-3">
-          <h2 class="text-xs text-gray-400 uppercase tracking-wide">Stock Universe</h2>
+          <h2 class="text-xs text-gray-300 uppercase tracking-wide">Stock Universe</h2>
           <button @click="$store.app.showAddStockModal = true"
                   class="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white text-xs rounded transition-colors">
             + Add Stock
@@ -46,14 +46,14 @@ class StockTable extends HTMLElement {
         </div>
 
         <!-- Results count -->
-        <div class="text-xs text-gray-500 mb-2" x-show="$store.app.stocks.length > 0">
+        <div class="text-xs text-gray-300 mb-2" x-show="$store.app.stocks.length > 0">
           <span x-text="$store.app.filteredStocks.length"></span> of
           <span x-text="$store.app.stocks.length"></span> stocks
         </div>
 
         <div class="overflow-x-auto">
           <table class="w-full text-xs">
-            <thead class="text-gray-500 uppercase text-left border-b border-gray-700">
+            <thead class="text-gray-300 uppercase text-left border-b border-gray-700">
               <tr>
                 <th @click="$store.app.sortStocks('symbol')"
                     class="py-2 px-2 cursor-pointer hover:text-gray-300 sticky left-0 bg-gray-800 z-10">
@@ -132,9 +132,9 @@ class StockTable extends HTMLElement {
                     </stock-sparkline>
                   </td>
                   <td class="py-1.5 px-2 text-gray-300 truncate max-w-32" x-text="stock.name"></td>
-                  <td class="py-1.5 px-2 text-gray-400 truncate max-w-24" x-text="stock.country || '-'"></td>
-                  <td class="py-1.5 px-2 text-gray-500 truncate max-w-24" x-text="stock.fullExchangeName || '-'"></td>
-                  <td class="py-1.5 px-2 text-gray-500 truncate max-w-24" x-text="stock.industry || '-'"></td>
+                  <td class="py-1.5 px-2 text-gray-300 truncate max-w-24" x-text="stock.country || '-'"></td>
+                  <td class="py-1.5 px-2 text-gray-300 truncate max-w-24" x-text="stock.fullExchangeName || '-'"></td>
+                  <td class="py-1.5 px-2 text-gray-300 truncate max-w-24" x-text="stock.industry || '-'"></td>
                   <td class="py-1.5 px-2 text-right font-mono"
                       :class="getPositionAlertClass(stock.symbol)">
                     <div class="flex items-center justify-end gap-2">
@@ -172,7 +172,7 @@ class StockTable extends HTMLElement {
                             class="w-2.5 h-2.5 rounded-full bg-red-500"
                             title="Sell enabled"></span>
                       <span x-show="!stock.allow_buy && !stock.allow_sell"
-                            class="text-gray-600">-</span>
+                            class="text-gray-400">-</span>
                     </div>
                   </td>
                   <td class="py-1.5 px-2 text-right">
@@ -183,7 +183,7 @@ class StockTable extends HTMLElement {
                   <td class="py-1.5 px-2 text-center" @click.stop>
                     <div class="flex justify-center gap-1">
                       <button @click="$store.app.openEditStock(stock)"
-                              class="p-1 text-gray-400 hover:text-blue-400 transition-colors"
+                              class="p-1 text-gray-300 hover:text-blue-400 transition-colors"
                               title="Edit stock">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -191,7 +191,7 @@ class StockTable extends HTMLElement {
                         </svg>
                       </button>
                       <button @click="$store.app.refreshSingleScore(stock.symbol)"
-                              class="p-1 text-gray-400 hover:text-green-400 transition-colors"
+                              class="p-1 text-gray-300 hover:text-green-400 transition-colors"
                               title="Refresh score">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                           <path d="M21 2v6h-6"/>
@@ -201,7 +201,7 @@ class StockTable extends HTMLElement {
                         </svg>
                       </button>
                       <button @click="$store.app.removeStock(stock.symbol)"
-                              class="p-1 text-gray-400 hover:text-red-400 transition-colors"
+                              class="p-1 text-gray-300 hover:text-red-400 transition-colors"
                               title="Remove from universe">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                           <path d="M3 6h18"/>
@@ -219,11 +219,11 @@ class StockTable extends HTMLElement {
 
         <!-- Empty states -->
         <div x-show="$store.app.filteredStocks.length === 0 && $store.app.stocks.length > 0"
-             class="text-center py-6 text-gray-500 text-sm">
+             class="text-center py-6 text-gray-300 text-sm">
           No stocks match your filters
         </div>
         <div x-show="$store.app.stocks.length === 0"
-             class="text-center py-6 text-gray-500 text-sm">
+             class="text-center py-6 text-gray-300 text-sm">
           No stocks in universe
         </div>
       </div>
@@ -260,7 +260,7 @@ function getPositionAlertClass(symbol) {
   if (!alert) {
     // Default: check if stock has position value
     const stock = (window.Alpine?.store('app')?.stocks || []).find(s => s.symbol === symbol);
-    return stock?.position_value ? 'text-green-400' : 'text-gray-600';
+    return stock?.position_value ? 'text-green-400' : 'text-gray-400';
   }
   // Highlight row with border color based on severity
   return alert.severity === 'critical'

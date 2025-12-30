@@ -69,7 +69,7 @@ class GroupingManager extends HTMLElement {
             <div class="space-y-4">
               <!-- Current Assignment -->
               <div x-show="getCurrentGroup()">
-                <p class="text-sm text-gray-400 mb-2">Current group:</p>
+                <p class="text-sm text-gray-300 mb-2">Current group:</p>
                 <div class="flex items-center gap-2">
                   <span class="px-3 py-1.5 rounded text-sm font-medium"
                         :style="'background-color: ' + getGroupColor(getCurrentGroup()) + '; color: ' + getContrastColor(getGroupColor(getCurrentGroup()))"
@@ -83,7 +83,7 @@ class GroupingManager extends HTMLElement {
 
               <!-- Assign to Existing Group -->
               <div>
-                <p class="text-sm text-gray-400 mb-2">Assign to existing group:</p>
+                <p class="text-sm text-gray-300 mb-2">Assign to existing group:</p>
                 <div class="space-y-2 max-h-48 overflow-y-auto">
                   <template x-for="groupName in getExistingGroups()" :key="groupName">
                     <button
@@ -95,7 +95,7 @@ class GroupingManager extends HTMLElement {
                       <span class="text-sm text-gray-300" x-text="groupName"></span>
                     </button>
                   </template>
-                  <p x-show="getExistingGroups().length === 0" class="text-xs text-gray-500 px-3 py-2">
+                  <p x-show="getExistingGroups().length === 0" class="text-xs text-gray-300 px-3 py-2">
                     No groups exist yet. Create one below.
                   </p>
                 </div>
@@ -103,7 +103,7 @@ class GroupingManager extends HTMLElement {
 
               <!-- Create New Group -->
               <div class="pt-4 border-t border-gray-700">
-                <p class="text-sm text-gray-400 mb-2">Create new group:</p>
+                <p class="text-sm text-gray-300 mb-2">Create new group:</p>
                 <div class="flex gap-2">
                   <input
                     type="text"

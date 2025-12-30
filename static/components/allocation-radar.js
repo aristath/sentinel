@@ -18,7 +18,7 @@ class AllocationRadar extends HTMLElement {
         <!-- Country Radar -->
         <div ${type === 'both' ? 'class="mb-4"' : ''}>
           <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs text-gray-500 font-medium">Country Groups</h3>
+            <h3 class="text-xs text-gray-300 font-medium">Country Groups</h3>
             <button @click="$store.app.startEditCountry()"
                     class="text-xs text-blue-400 hover:text-blue-300 transition-colors">
               Edit Weights
@@ -37,7 +37,7 @@ class AllocationRadar extends HTMLElement {
         <!-- Industry Radar -->
         <div>
           <div class="flex items-center justify-between mb-2">
-            <h3 class="text-xs text-gray-500 font-medium">Industry Groups</h3>
+            <h3 class="text-xs text-gray-300 font-medium">Industry Groups</h3>
             <button @click="$store.app.startEditIndustry()"
                     class="text-xs text-blue-400 hover:text-blue-300 transition-colors">
               Edit Weights

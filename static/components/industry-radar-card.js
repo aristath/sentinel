@@ -7,7 +7,7 @@ class IndustryRadarCard extends HTMLElement {
     this.innerHTML = `
       <div class="bg-gray-800 border border-gray-700 rounded p-3" x-data>
         <div class="flex items-center justify-between mb-3">
-          <h2 class="text-xs text-gray-400 uppercase tracking-wide">Industry Allocation</h2>
+          <h2 class="text-xs text-gray-300 uppercase tracking-wide">Industry Allocation</h2>
           <template x-if="getIndustryAlerts().length > 0">
             <span class="text-xs px-2 py-0.5 rounded font-medium"
                   :class="getIndustryAlerts().some(a => a.severity === 'critical') ? 'bg-red-900/50 text-red-400' : 'bg-yellow-900/50 text-yellow-400'"

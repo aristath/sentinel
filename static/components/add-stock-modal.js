@@ -17,12 +17,12 @@ class AddStockModal extends HTMLElement {
 
           <div class="p-4 space-y-4">
             <div>
-              <label class="block text-sm text-gray-400 mb-1">Identifier *</label>
+              <label class="block text-sm text-gray-300 mb-1">Identifier *</label>
               <input type="text"
                      x-model="$store.app.newStock.identifier"
                      placeholder="e.g., AAPL.US or US0378331005"
                      class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
-              <p class="text-xs text-gray-500 mt-1">Enter Tradernet symbol (e.g., AAPL.US) or ISIN (e.g., US0378331005)</p>
+              <p class="text-xs text-gray-300 mt-1">Enter Tradernet symbol (e.g., AAPL.US) or ISIN (e.g., US0378331005)</p>
             </div>
 
             <div class="bg-blue-900/20 border border-blue-700/50 rounded p-3">

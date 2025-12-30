@@ -7,7 +7,7 @@ class QuickActions extends HTMLElement {
     this.innerHTML = `
       <div class="bg-gray-800 border border-gray-700 rounded p-3" x-data>
         <div class="flex items-center justify-between mb-3">
-          <h2 class="text-xs text-gray-400 uppercase tracking-wide">Quick Actions</h2>
+          <h2 class="text-xs text-gray-300 uppercase tracking-wide">Quick Actions</h2>
         </div>
 
         <div class="flex flex-col gap-2">

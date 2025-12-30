@@ -11,14 +11,14 @@ class OptimizerStatusCard extends HTMLElement {
           <div class="flex items-center gap-2">
             <h3 class="text-sm font-semibold text-gray-100 uppercase tracking-wide">Portfolio Optimizer</h3>
             <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
-                  :class="$store.app.optimizerStatus?.last_run?.success ? 'bg-green-900 text-green-300' : 'bg-gray-700 text-gray-400'">
+                  :class="$store.app.optimizerStatus?.last_run?.success ? 'bg-green-900 text-green-300' : 'bg-gray-700 text-gray-300'">
               <span class="w-1.5 h-1.5 rounded-full mr-1.5"
                     :class="$store.app.optimizerStatus?.last_run?.success ? 'bg-green-400' : 'bg-gray-500'"></span>
               <span x-text="$store.app.optimizerStatus?.last_run?.success ? 'Active' : 'Ready'"></span>
             </span>
           </div>
           <button @click="expanded = !expanded"
-                  class="text-gray-400 hover:text-gray-200 text-xs">
+                  class="text-gray-300 hover:text-gray-100 text-xs">
             <span x-show="!expanded">Show Details</span>
             <span x-show="expanded">Hide Details</span>
           </button>
@@ -28,20 +28,20 @@ class OptimizerStatusCard extends HTMLElement {
         <div class="grid grid-cols-2 gap-4 mb-3">
           <!-- Achieved Return -->
           <div class="text-center">
-            <p class="text-xs text-gray-500 mb-1">Expected Return</p>
+            <p class="text-xs text-gray-300 mb-1">Expected Return</p>
             <template x-if="$store.app.optimizerStatus?.last_run?.achieved_return_pct">
               <p class="text-lg font-mono"
                  :class="$store.app.optimizerStatus.last_run.achieved_return_pct >= ($store.app.settings?.optimizer_target_return || 0.11) * 100 ? 'text-green-400' : 'text-yellow-400'"
                  x-text="$store.app.optimizerStatus.last_run.achieved_return_pct.toFixed(1) + '%'"></p>
             </template>
             <template x-if="!$store.app.optimizerStatus?.last_run?.achieved_return_pct">
-              <p class="text-lg font-mono text-gray-500">--</p>
+              <p class="text-lg font-mono text-gray-400">--</p>
             </template>
           </div>
 
           <!-- Stocks Optimized -->
           <div class="text-center">
-            <p class="text-xs text-gray-500 mb-1">Stocks Optimized</p>
+            <p class="text-xs text-gray-300 mb-1">Stocks Optimized</p>
             <p class="text-lg font-mono text-gray-300"
                x-text="$store.app.optimizerStatus?.last_run?.total_stocks_optimized || '--'"></p>
           </div>
@@ -50,7 +50,7 @@ class OptimizerStatusCard extends HTMLElement {
         <!-- Next Action -->
         <template x-if="$store.app.optimizerStatus?.last_run?.next_action">
           <div class="bg-gray-900/50 rounded p-2 mb-3">
-            <p class="text-xs text-gray-500 mb-1">Next Recommended Action</p>
+            <p class="text-xs text-gray-300 mb-1">Next Recommended Action</p>
             <p class="text-sm font-medium text-gray-100"
                x-text="$store.app.optimizerStatus.last_run.next_action"></p>
           </div>
@@ -67,14 +67,14 @@ class OptimizerStatusCard extends HTMLElement {
           <!-- Top Adjustments Table -->
           <template x-if="$store.app.optimizerStatus?.last_run?.top_adjustments?.length > 0">
             <div class="mt-3">
-              <p class="text-xs text-gray-500 mb-2 uppercase tracking-wide">Top Weight Adjustments</p>
+              <p class="text-xs text-gray-300 mb-2 uppercase tracking-wide">Top Weight Adjustments</p>
               <div class="space-y-1">
                 <template x-for="adj in $store.app.optimizerStatus.last_run.top_adjustments" :key="adj.symbol">
                   <div class="flex items-center justify-between text-xs bg-gray-900/50 rounded px-2 py-1.5">
                     <span class="font-mono text-gray-200" x-text="adj.symbol"></span>
                     <div class="flex items-center gap-2">
-                      <span class="text-gray-500" x-text="adj.current_pct.toFixed(1) + '%'"></span>
-                      <span class="text-gray-600">&rarr;</span>
+                      <span class="text-gray-400" x-text="adj.current_pct.toFixed(1) + '%'"></span>
+                      <span class="text-gray-400">&rarr;</span>
                       <span class="text-gray-300" x-text="adj.target_pct.toFixed(1) + '%'"></span>
                       <span class="font-medium w-16 text-right"
                             :class="adj.direction === 'buy' ? 'text-green-400' : 'text-red-400'"
@@ -90,22 +90,22 @@ class OptimizerStatusCard extends HTMLElement {
           <div class="mt-3 pt-3 border-t border-gray-700/50">
             <div class="grid grid-cols-2 gap-4 text-xs">
               <div>
-                <span class="text-gray-500">Fallback Used:</span>
+                <span class="text-gray-300">Fallback Used:</span>
                 <span class="text-gray-300 ml-1"
                       x-text="$store.app.optimizerStatus?.last_run?.fallback_used || 'None'"></span>
               </div>
               <div>
-                <span class="text-gray-500">Min Trade:</span>
+                <span class="text-gray-300">Min Trade:</span>
                 <span class="text-gray-300 ml-1"
                       x-text="$store.app.optimizerStatus?.settings?.min_trade_amount ? '€' + $store.app.optimizerStatus.settings.min_trade_amount : '--'"></span>
               </div>
               <div>
-                <span class="text-gray-500">Cash Reserve:</span>
+                <span class="text-gray-300">Cash Reserve:</span>
                 <span class="text-gray-300 ml-1"
                       x-text="$store.app.optimizerStatus?.settings?.min_cash_reserve ? '€' + $store.app.optimizerStatus.settings.min_cash_reserve : '--'"></span>
               </div>
               <div>
-                <span class="text-gray-500">Settings:</span>
+                <span class="text-gray-300">Settings:</span>
                 <span class="text-gray-300 ml-1 text-xs">
                   <button @click="$store.app.showSettingsModal = true" class="text-blue-400 hover:text-blue-300">Edit in Settings</button>
                 </span>
@@ -124,7 +124,7 @@ class OptimizerStatusCard extends HTMLElement {
 
         <!-- Collapsed State: No Data Message -->
         <template x-if="!$store.app.optimizerStatus?.last_run && !expanded">
-          <p class="text-xs text-gray-500 text-center">
+          <p class="text-xs text-gray-300 text-center">
             No optimization results yet. Click "Show Details" to run manually.
           </p>
         </template>

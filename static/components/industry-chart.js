@@ -9,7 +9,7 @@ class IndustryChart extends HTMLElement {
     this.innerHTML = `
       <div class="pt-4 mt-2 border-t border-gray-700" x-data="industryChartComponent()">
         <div class="flex items-center justify-between mb-2">
-          <h3 class="text-xs text-gray-500 font-medium">Industry Groups</h3>
+          <h3 class="text-xs text-gray-300 font-medium">Industry Groups</h3>
           <button x-show="!$store.app.editingIndustry"
                   @click="$store.app.startEditIndustry()"
                   class="text-xs text-purple-400 hover:text-purple-300 transition-colors">
@@ -24,7 +24,7 @@ class IndustryChart extends HTMLElement {
               <div class="flex items-center justify-between text-sm mb-1">
                 <span class="text-gray-300 truncate" x-text="ind.name"></span>
                 <span class="flex items-center gap-2 flex-shrink-0 ml-2">
-                  <span class="font-mono text-gray-400 text-xs" x-text="(ind.current_pct * 100).toFixed(1) + '%'"></span>
+                  <span class="font-mono text-gray-300 text-xs" x-text="(ind.current_pct * 100).toFixed(1) + '%'"></span>
                   <span class="text-xs px-1.5 py-0.5 rounded font-mono"
                         :class="getDeviationBadgeClass(getDeviation(ind.name, ind.current_pct))"
                         x-text="formatDeviation(getDeviation(ind.name, ind.current_pct))"></span>
@@ -45,7 +45,7 @@ class IndustryChart extends HTMLElement {
         <!-- Edit Mode - Weight sliders for active industries -->
         <div x-show="$store.app.editingIndustry" x-transition class="space-y-3">
           <!-- Weight Scale Legend -->
-          <div class="flex justify-between text-xs text-gray-500">
+          <div class="flex justify-between text-xs text-gray-300">
             <span class="text-red-400">-1 Avoid</span>
             <span class="text-gray-400">0 Neutral</span>
             <span class="text-green-400">+1 Prioritize</span>
@@ -133,7 +133,7 @@ function industryChartComponent() {
 
     // Badge class for deviation value - using colors that exist in CSS
     getDeviationBadgeClass(deviation) {
-      if (Math.abs(deviation) < 0.02) return 'bg-gray-700 text-gray-400'; // At target
+      if (Math.abs(deviation) < 0.02) return 'bg-gray-700 text-gray-300'; // At target
       return deviation > 0
         ? 'bg-red-900 text-red-400'    // Overweight
         : 'bg-blue-900 text-blue-400'; // Underweight
@@ -169,7 +169,7 @@ function industryChartComponent() {
     getWeightBadgeClass(weight) {
       if (weight > 0.1) return 'bg-green-900/50 text-green-400';
       if (weight < -0.1) return 'bg-red-900/50 text-red-400';
-      return 'bg-gray-700 text-gray-400';
+      return 'bg-gray-700 text-gray-300';
     }
   };
 }

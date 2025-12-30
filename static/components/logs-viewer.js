@@ -16,7 +16,7 @@ class LogsViewer extends HTMLElement {
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <!-- Log File Selector -->
             <div>
-              <label class="block text-xs text-gray-400 mb-1">Log File</label>
+              <label class="block text-xs text-gray-300 mb-1">Log File</label>
               <select @change="$store.app.logs.selectedLogFile = $event.target.value; $store.app.fetchLogs()"
                       :value="$store.app.logs.selectedLogFile"
                       class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500">
@@ -31,7 +31,7 @@ class LogsViewer extends HTMLElement {
 
             <!-- Level Filter -->
             <div>
-              <label class="block text-xs text-gray-400 mb-1">Level</label>
+              <label class="block text-xs text-gray-300 mb-1">Level</label>
               <select @change="$store.app.logs.filterLevel = $event.target.value === 'all' ? null : $event.target.value; $store.app.fetchLogs()"
                       :value="$store.app.logs.filterLevel || 'all'"
                       class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-blue-500">
@@ -46,7 +46,7 @@ class LogsViewer extends HTMLElement {
 
             <!-- Search -->
             <div>
-              <label class="block text-xs text-gray-400 mb-1">Search</label>
+              <label class="block text-xs text-gray-300 mb-1">Search</label>
               <input type="text"
                      @input.debounce.300ms="$store.app.logs.searchQuery = $event.target.value; $store.app.fetchLogs()"
                      :value="$store.app.logs.searchQuery"
@@ -56,7 +56,7 @@ class LogsViewer extends HTMLElement {
 
             <!-- Line Count -->
             <div>
-              <label class="block text-xs text-gray-400 mb-1">Lines</label>
+              <label class="block text-xs text-gray-300 mb-1">Lines</label>
               <input type="number"
                      min="50"
                      max="1000"
@@ -95,11 +95,11 @@ class LogsViewer extends HTMLElement {
           <div class="mt-4 flex items-center gap-2">
             <button @click="$store.app.fetchLogs()"
                     :disabled="$store.app.logs.loading"
-                    class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed text-white text-xs rounded transition-colors">
+                    class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed text-white text-xs rounded transition-colors">
               <span x-show="$store.app.logs.loading" class="inline-block animate-spin mr-1">&#9696;</span>
               <span x-text="$store.app.logs.loading ? 'Loading...' : 'Refresh'"></span>
             </button>
-            <span class="text-xs text-gray-500">
+            <span class="text-xs text-gray-300">
               <span x-show="$store.app.logs.lastRefresh">
                 Last refresh: <span x-text="new Date($store.app.logs.lastRefresh).toLocaleTimeString()"></span>
               </span>
@@ -108,12 +108,12 @@ class LogsViewer extends HTMLElement {
         </div>
 
         <!-- Status Bar -->
-        <div class="bg-gray-800 border border-gray-700 rounded px-4 py-2 flex items-center justify-between text-xs text-gray-400">
+        <div class="bg-gray-800 border border-gray-700 rounded px-4 py-2 flex items-center justify-between text-xs text-gray-300">
           <div class="flex items-center gap-4">
-            <span>Total lines: <span class="text-gray-300" x-text="$store.app.logs.totalLines || 0"></span></span>
-            <span>Displayed: <span class="text-gray-300" x-text="$store.app.logs.returnedLines || 0"></span></span>
-            <span x-show="$store.app.logs.logPath" class="text-gray-500">
-              Path: <span class="text-gray-400 font-mono text-xs" x-text="$store.app.logs.logPath"></span>
+            <span>Total lines: <span class="text-gray-200" x-text="$store.app.logs.totalLines || 0"></span></span>
+            <span>Displayed: <span class="text-gray-200" x-text="$store.app.logs.returnedLines || 0"></span></span>
+            <span x-show="$store.app.logs.logPath" class="text-gray-300">
+              Path: <span class="text-gray-200 font-mono text-xs" x-text="$store.app.logs.logPath"></span>
             </span>
           </div>
         </div>
@@ -130,10 +130,10 @@ class LogsViewer extends HTMLElement {
                  }
                ">
             <template x-if="$store.app.logs.entries.length === 0 && !$store.app.logs.loading">
-              <div class="text-gray-500 text-center py-8">No log entries found</div>
+              <div class="text-gray-300 text-center py-8">No log entries found</div>
             </template>
             <template x-if="$store.app.logs.loading && $store.app.logs.entries.length === 0">
-              <div class="text-gray-500 text-center py-8">Loading logs...</div>
+              <div class="text-gray-300 text-center py-8">Loading logs...</div>
             </template>
             <template x-for="(line, index) in $store.app.logs.entries" :key="index">
               <div class="whitespace-pre-wrap break-words mb-1"
@@ -141,7 +141,7 @@ class LogsViewer extends HTMLElement {
                      'text-red-400': line.includes(' - ERROR - ') || line.includes(' - CRITICAL - '),
                      'text-yellow-400': line.includes(' - WARNING - '),
                      'text-blue-400': line.includes(' - INFO - '),
-                     'text-gray-500': line.includes(' - DEBUG - '),
+                     'text-gray-400': line.includes(' - DEBUG - '),
                      'text-gray-300': !line.includes(' - ERROR - ') && !line.includes(' - WARNING - ') && !line.includes(' - INFO - ') && !line.includes(' - DEBUG - ') && !line.includes(' - CRITICAL - ')
                    }"
                    x-text="line">
