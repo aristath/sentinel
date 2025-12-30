@@ -545,7 +545,7 @@ class TestGetGroupAllocation:
 
     @pytest.mark.asyncio
     async def test_returns_group_allocations(
-        self, mock_portfolio_service, mock_grouping_repo
+        self, mock_portfolio_service, mock_grouping_repo, mock_allocation_repo
     ):
         """Test that allocations aggregated by groups are returned."""
         from app.api.allocation import get_group_allocation
@@ -581,14 +581,22 @@ class TestGetGroupAllocation:
         }
         mock_grouping_repo.get_industry_groups.return_value = {}
 
-        result = await get_group_allocation(mock_portfolio_service, mock_grouping_repo)
+        # Setup group targets (the function uses saved group targets, not aggregated individual)
+        mock_allocation_repo.get_country_group_targets.return_value = {
+            "US": 0.5,  # Group target for US group
+        }
+        mock_allocation_repo.get_industry_group_targets.return_value = {}
+
+        result = await get_group_allocation(
+            mock_portfolio_service, mock_grouping_repo, mock_allocation_repo
+        )
 
         assert result["total_value"] == 10000.0
         assert len(result["country"]) > 0
         # US group should aggregate both countries
         us_group = next((g for g in result["country"] if g["name"] == "US"), None)
         assert us_group is not None
-        assert us_group["target_pct"] == 0.5  # 0.3 + 0.2
+        assert us_group["target_pct"] == 0.5  # From saved group target
         assert us_group["current_pct"] == 0.5  # (3500 + 1500) / 10000
 
     @pytest.mark.asyncio

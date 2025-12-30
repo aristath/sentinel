@@ -540,7 +540,7 @@ async def create_stock(
 ):
     """Add a new stock to the universe."""
 
-    existing = await stock_repo.get_by_identifier(stock_data.symbol.upper())
+    existing = await stock_repo.get_by_symbol(stock_data.symbol.upper())
     if existing:
         raise HTTPException(status_code=400, detail="Stock already exists")
 
@@ -582,6 +582,7 @@ async def create_stock(
     return {
         "message": f"Stock {stock_data.symbol.upper()} added to universe",
         "symbol": stock_data.symbol.upper(),
+        "isin": new_stock.isin,
         "yahoo_symbol": stock_data.yahoo_symbol,
         "name": stock_data.name,
         "country": new_stock.country,
@@ -952,6 +953,7 @@ def _format_stock_response(stock, score) -> dict:
     """Format stock data for API response."""
     stock_data = {
         "symbol": stock.symbol,
+        "isin": stock.isin,
         "yahoo_symbol": stock.yahoo_symbol,
         "name": stock.name,
         "industry": stock.industry,

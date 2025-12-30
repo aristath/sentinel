@@ -740,17 +740,19 @@ document.addEventListener('alpine:init', () => {
         const errorMessage = e.message || 'Failed to add stock';
         this.showMessage(errorMessage, 'error');
       }
-      this.addingFromSuggestion[symbol] = false;
+      this.addingFromSuggestion[isin] = false;
     },
 
-    async pruneStockFromSuggestion(symbol) {
-      this.pruningFromSuggestion[symbol] = true;
+    async pruneStockFromSuggestion(isin) {
+      this.pruningFromSuggestion[isin] = true;
       try {
-        await API.pruneStockFromSuggestion(symbol);
-        this.showMessage(`${symbol} pruned from universe`, 'success');
+        await API.pruneStockFromSuggestion(isin);
+        const stock = this.universeSuggestions.stocksToPrune.find(s => s.isin === isin);
+        const displaySymbol = stock ? stock.symbol : isin;
+        this.showMessage(`${displaySymbol} pruned from universe`, 'success');
         // Remove from prune list
         this.universeSuggestions.stocksToPrune = this.universeSuggestions.stocksToPrune.filter(
-          s => s.symbol !== symbol
+          s => s.isin !== isin
         );
         // Refresh stocks list
         await this.fetchStocks();
