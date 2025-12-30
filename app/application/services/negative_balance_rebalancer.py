@@ -334,11 +334,12 @@ class NegativeBalanceRebalancer:
                 f"negative balances (bypassing cooldown and min-hold checks)"
             )
 
-            # Execute with bypass flags
+            # Execute with bypass flags (emergency rebalancing)
             results = await self._trade_execution_service.execute_trades(
                 sell_recommendations,
                 bypass_cooldown=True,
                 bypass_min_hold=True,
+                bypass_frequency_limit=True,
             )
 
             successful = sum(1 for r in results if r.get("status") == "success")

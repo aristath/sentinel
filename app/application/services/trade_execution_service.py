@@ -659,6 +659,7 @@ class TradeExecutionService:
         source_currency: str = Currency.EUR,
         bypass_cooldown: bool = False,
         bypass_min_hold: bool = False,
+        bypass_frequency_limit: bool = False,
     ) -> List[dict]:
         """
         Execute a list of trade recommendations via Tradernet.
@@ -670,12 +671,13 @@ class TradeExecutionService:
             source_currency: Currency to convert from when auto_convert is enabled (default: EUR)
             bypass_cooldown: If True, bypass buy cooldown checks (for emergency rebalancing)
             bypass_min_hold: If True, bypass minimum hold time checks (for emergency rebalancing)
+            bypass_frequency_limit: If True, bypass trade frequency limit checks (for emergency rebalancing)
 
         Returns:
             List of execution results with status for each trade
         """
-        # Check trade frequency limits
-        if self._settings_repo:
+        # Check trade frequency limits (unless bypassed for emergency rebalancing)
+        if self._settings_repo and not bypass_frequency_limit:
             from app.application.services.trade_frequency_service import (
                 TradeFrequencyService,
             )
