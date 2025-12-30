@@ -10,6 +10,7 @@ from app.application.services.currency_exchange_service import CurrencyExchangeS
 from app.application.services.trade_execution_service import TradeExecutionService
 from app.domain.models import Recommendation
 from app.domain.services.exchange_rate_service import ExchangeRateService
+from app.domain.value_objects.currency import Currency
 from app.domain.value_objects.trade_side import TradeSide
 from app.infrastructure.events import SystemEvent, emit
 from app.infrastructure.external.tradernet import TradernetClient
@@ -255,8 +256,17 @@ class NegativeBalanceRebalancer:
             logger.warning("No sellable positions available in open markets")
             return
 
-        # Calculate total cash needed across all currencies
-        total_needed_eur = sum(remaining_shortfalls.values())  # Approximate
+        # Calculate total cash needed in EUR (convert all shortfalls to EUR)
+        total_needed_eur = 0.0
+        for currency, shortfall in remaining_shortfalls.items():
+            try:
+                rate = await self._exchange_rate_service.get_rate(currency, "EUR")
+                if rate > 0:
+                    total_needed_eur += shortfall / rate
+                else:
+                    total_needed_eur += shortfall  # Fallback: assume 1:1
+            except Exception:
+                total_needed_eur += shortfall  # Fallback: assume 1:1
 
         # Select positions to sell (simple: sell from largest positions first)
         sell_recommendations: List[Recommendation] = []
@@ -299,6 +309,12 @@ class NegativeBalanceRebalancer:
             )
 
             if sell_quantity > 0:
+                # Convert currency string to Currency enum
+                try:
+                    currency_enum = Currency(currency.upper())
+                except (ValueError, AttributeError):
+                    currency_enum = Currency.EUR  # Fallback to EUR
+
                 recommendation = Recommendation(
                     symbol=symbol,
                     name=name,
@@ -307,7 +323,7 @@ class NegativeBalanceRebalancer:
                     estimated_price=current_price,
                     estimated_value=sell_value_in_currency,
                     reason="Emergency rebalancing: negative cash balance",
-                    currency=currency,
+                    currency=currency_enum,
                 )
                 sell_recommendations.append(recommendation)
                 total_sell_value += sell_value_eur
