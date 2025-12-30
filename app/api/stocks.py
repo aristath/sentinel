@@ -802,6 +802,8 @@ async def get_universe_suggestions(
                         symbol_info = await symbol_resolver.resolve(symbol)
                         if symbol_info.isin:
                             candidate["isin"] = symbol_info.isin
+                        # Store yahoo_symbol for display
+                        candidate["yahoo_symbol"] = symbol_info.yahoo_symbol
 
                         # Score the candidate
                         score = await scoring_service.calculate_and_save_score(
