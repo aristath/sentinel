@@ -4,10 +4,6 @@ These tests validate allocation and rebalancing calculations including
 rebalance band checks, position sizing, and trade limits.
 """
 
-from unittest.mock import patch
-
-import pytest
-
 from app.domain.models import StockPriority
 
 
@@ -37,7 +33,6 @@ class TestIsOutsideRebalanceBand:
     def test_uses_high_priority_band_for_large_positions(self):
         """Test that high priority band (5%) is used for positions >10%."""
         from app.domain.services.allocation_calculator import is_outside_rebalance_band
-        from app.domain.constants import REBALANCE_BAND_HIGH_PRIORITY
 
         # Position > 10%, deviation = 0.06 > 0.05 (high priority band)
         result = is_outside_rebalance_band(
@@ -152,7 +147,7 @@ class TestCalculatePositionSize:
 
         # Should be adjusted by inverse volatility
         assert result > 0
-        assert result >= min_size
+        assert result >= 100.0  # min_size parameter
 
     def test_uses_default_volatility_when_none(self):
         """Test that default volatility is used when volatility is None."""
@@ -168,7 +163,7 @@ class TestCalculatePositionSize:
 
         # Should still return a valid size using default volatility
         assert result > 0
-        assert result >= min_size
+        assert result >= 100.0  # min_size parameter
 
     def test_applies_min_size_constraint(self):
         """Test that minimum size constraint is applied."""
@@ -234,8 +229,8 @@ class TestGetMaxTrades:
 
     def test_respects_max_trades_per_cycle_setting(self):
         """Test that result is capped by max_trades_per_cycle setting."""
-        from app.domain.services.allocation_calculator import get_max_trades
         from app.config import settings
+        from app.domain.services.allocation_calculator import get_max_trades
 
         # Enough cash for 100 trades, but should be capped by setting
         result = get_max_trades(cash=50000.0, min_trade_amount=250.0)

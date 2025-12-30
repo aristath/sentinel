@@ -202,24 +202,29 @@ class FileDeployer:
             preserved = {}
 
             logger.info(f"Preserving important directories in {self.deploy_dir}...")
-            for item in preserve_items:
-                item_path = self.deploy_dir / item
+            for preserved_item in preserve_items:
+                item_path = self.deploy_dir / preserved_item
                 if item_path.exists():
                     # Create temp location for preserved item
-                    temp_path = self.deploy_dir.parent / f".{item}.preserve"
+                    temp_path = self.deploy_dir.parent / f".{preserved_item}.preserve"
                     if temp_path.exists():
-                        shutil.rmtree(temp_path) if temp_path.is_dir() else temp_path.unlink()
+                        (
+                            shutil.rmtree(temp_path)
+                            if temp_path.is_dir()
+                            else temp_path.unlink()
+                        )
 
                     if item_path.is_dir():
                         shutil.move(str(item_path), str(temp_path))
                     else:
                         shutil.copy2(str(item_path), str(temp_path))
-                    preserved[item] = temp_path
-                    logger.debug(f"Preserved {item}")
+                    preserved[preserved_item] = temp_path
+                    logger.debug(f"Preserved {preserved_item}")
 
             # Remove old code files (but keep preserved items)
             logger.info(f"Removing old code files from {self.deploy_dir}...")
-            for item in self.deploy_dir.iterdir():
+            for item_path in self.deploy_dir.iterdir():
+                item: Path = item_path
                 if item.name not in preserve_items:
                     if item.is_dir():
                         shutil.rmtree(item)
@@ -227,18 +232,19 @@ class FileDeployer:
                         item.unlink()
 
             # Copy new code files from staging
-            logger.info(f"Copying new code files from staging...")
-            for item in self.staging_dir.iterdir():
-                dst = self.deploy_dir / item.name
-                if item.is_dir():
-                    shutil.copytree(item, dst, dirs_exist_ok=True)
+            logger.info("Copying new code files from staging...")
+            for staging_item_path in self.staging_dir.iterdir():
+                staging_item: Path = staging_item_path
+                dst = self.deploy_dir / staging_item.name
+                if staging_item.is_dir():
+                    shutil.copytree(staging_item, dst, dirs_exist_ok=True)
                 else:
-                    shutil.copy2(item, dst)
+                    shutil.copy2(staging_item, dst)
 
             # Restore preserved items
             logger.info("Restoring preserved directories...")
-            for item, temp_path in preserved.items():
-                dst = self.deploy_dir / item
+            for preserved_item_name, temp_path in preserved.items():
+                dst = self.deploy_dir / preserved_item_name
                 if temp_path.is_dir():
                     shutil.move(str(temp_path), str(dst))
                 else:
