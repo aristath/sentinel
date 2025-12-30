@@ -86,9 +86,12 @@ async def _calculate_commission_in_trade_currency(
 
 
 async def _check_buy_cooldown(
-    trade, recently_bought: set, cooldown_days: int
+    trade, recently_bought: set, cooldown_days: int, bypass_cooldown: bool = False
 ) -> Optional[dict]:
     """Check if BUY trade is in cooldown period."""
+    if bypass_cooldown:
+        return None
+
     if trade.symbol in recently_bought:
         logger.warning(
             f"SAFETY BLOCK: {trade.symbol} in cooldown period, refusing to execute"
@@ -205,7 +208,9 @@ async def _handle_buy_currency(
     return None
 
 
-async def _validate_sell_order(trade, position_repo, trade_repo) -> Optional[dict]:
+async def _validate_sell_order(
+    trade, position_repo, trade_repo, bypass_min_hold: bool = False
+) -> Optional[dict]:
     """Validate SELL order against position and minimum hold time."""
     if not position_repo:
         return None
@@ -231,6 +236,10 @@ async def _validate_sell_order(trade, position_repo, trade_repo) -> Optional[dic
         }
 
     # Check minimum hold time using the most recent transaction date (buy or sell)
+    # Skip if bypass_min_hold is True (for emergency rebalancing)
+    if bypass_min_hold:
+        return None
+
     if trade_repo:
         try:
             last_transaction_at = await trade_repo.get_last_transaction_date(
@@ -360,6 +369,8 @@ async def _validate_trade_before_execution(
     transaction_cost_fixed: float,
     transaction_cost_percent: float,
     exchange_rate_service: ExchangeRateService,
+    bypass_cooldown: bool = False,
+    bypass_min_hold: bool = False,
 ) -> tuple[Optional[dict], int]:
     """Validate trade before execution and return blocking result if any."""
     # Check market hours first (if required for this trade)
@@ -369,7 +380,7 @@ async def _validate_trade_before_execution(
 
     if trade.side.upper() == "BUY":
         cooldown_result = await _check_buy_cooldown(
-            trade, recently_bought, cooldown_days
+            trade, recently_bought, cooldown_days, bypass_cooldown
         )
         if cooldown_result:
             return cooldown_result, 0
@@ -388,7 +399,9 @@ async def _validate_trade_before_execution(
             return currency_result, 1
 
     if trade.side.upper() == "SELL":
-        sell_result = await _validate_sell_order(trade, position_repo, trade_repo)
+        sell_result = await _validate_sell_order(
+            trade, position_repo, trade_repo, bypass_min_hold
+        )
         if sell_result:
             return sell_result, 1
 
@@ -438,6 +451,8 @@ async def _process_single_trade(
     transaction_cost_fixed: float,
     transaction_cost_percent: float,
     exchange_rate_service: ExchangeRateService,
+    bypass_cooldown: bool = False,
+    bypass_min_hold: bool = False,
 ) -> tuple[Optional[dict], int]:
     """Process a single trade and return result and skipped count."""
     try:
@@ -456,6 +471,8 @@ async def _process_single_trade(
             transaction_cost_fixed,
             transaction_cost_percent,
             exchange_rate_service,
+            bypass_cooldown,
+            bypass_min_hold,
         )
         if validation_result:
             return validation_result, skipped
@@ -491,6 +508,8 @@ async def _process_trades(
     transaction_cost_fixed: float,
     transaction_cost_percent: float,
     exchange_rate_service: ExchangeRateService,
+    bypass_cooldown: bool = False,
+    bypass_min_hold: bool = False,
 ) -> tuple[List[dict], int]:
     """Process all trades and return results and skipped count."""
     results = []
@@ -513,6 +532,8 @@ async def _process_trades(
             transaction_cost_fixed,
             transaction_cost_percent,
             exchange_rate_service,
+            bypass_cooldown,
+            bypass_min_hold,
         )
         if result:
             results.append(result)
@@ -636,6 +657,8 @@ class TradeExecutionService:
         currency_balances: Optional[dict[str, float]] = None,
         auto_convert_currency: bool = False,
         source_currency: str = Currency.EUR,
+        bypass_cooldown: bool = False,
+        bypass_min_hold: bool = False,
     ) -> List[dict]:
         """
         Execute a list of trade recommendations via Tradernet.
@@ -645,6 +668,8 @@ class TradeExecutionService:
             currency_balances: Per-currency cash balances for validation (optional)
             auto_convert_currency: If True, automatically convert currency before buying
             source_currency: Currency to convert from when auto_convert is enabled (default: EUR)
+            bypass_cooldown: If True, bypass buy cooldown checks (for emergency rebalancing)
+            bypass_min_hold: If True, bypass minimum hold time checks (for emergency rebalancing)
 
         Returns:
             List of execution results with status for each trade
@@ -694,6 +719,8 @@ class TradeExecutionService:
             currency_balances=currency_balances,
             currency_service=currency_service,
             source_currency=source_currency,
+            bypass_cooldown=bypass_cooldown,
+            bypass_min_hold=bypass_min_hold,
         )
 
     async def _execute_trades_internal(
@@ -703,6 +730,8 @@ class TradeExecutionService:
         currency_balances: Optional[dict[str, float]] = None,
         currency_service: Optional[CurrencyExchangeService] = None,
         source_currency: str = Currency.EUR,
+        bypass_cooldown: bool = False,
+        bypass_min_hold: bool = False,
     ) -> List[dict]:
         """Internal method to execute trades."""
         results: list[dict] = []
@@ -750,6 +779,8 @@ class TradeExecutionService:
             transaction_cost_fixed,
             transaction_cost_percent,
             self._exchange_rate_service,
+            bypass_cooldown,
+            bypass_min_hold,
         )
 
         _handle_skipped_trades_warning(skipped_count)

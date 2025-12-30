@@ -35,6 +35,11 @@ async def _get_valid_symbols(db_manager) -> set:
     return {row[0] for row in await cursor.fetchall()}
 
 
+def _is_currency_conversion(symbol: str) -> bool:
+    """Check if symbol is a currency conversion pair (e.g., USD/EUR, HKD/EUR)."""
+    return "/" in symbol and len(symbol.split("/")) == 2
+
+
 def _validate_trade(
     trade: dict, existing_order_ids: set, valid_symbols: set
 ) -> tuple[bool, str]:
@@ -47,7 +52,12 @@ def _validate_trade(
         return False, "duplicate"
 
     symbol = trade.get("symbol", "")
-    if symbol not in valid_symbols:
+
+    # Allow currency conversions (e.g., USD/EUR, HKD/EUR, GBP/EUR)
+    if _is_currency_conversion(symbol):
+        # Currency conversions are valid
+        pass
+    elif symbol not in valid_symbols:
         return False, f"symbol {symbol} not in stocks table"
 
     side = trade.get("side", "").upper()

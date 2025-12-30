@@ -29,16 +29,20 @@ class TradesTable extends HTMLElement {
             </thead>
             <tbody class="divide-y divide-gray-800">
               <template x-for="trade in ($store.app.trades || [])" :key="trade.id">
-                <tr class="hover:bg-gray-800/50">
+                <tr class="hover:bg-gray-800/50" :class="trade.symbol.includes('/') ? 'bg-gray-800/30' : ''">
                   <td class="py-1.5 px-2 text-gray-400" x-text="formatDateTime(trade.executed_at)"></td>
-                  <td class="py-1.5 px-2 font-mono text-blue-400" x-text="trade.symbol"></td>
-                  <td class="py-1.5 px-2 text-gray-500 truncate max-w-32 hidden sm:table-cell" x-text="trade.name"></td>
+                  <td class="py-1.5 px-2 font-mono"
+                      :class="trade.symbol.includes('/') ? 'text-purple-400' : 'text-blue-400'"
+                      x-text="trade.symbol"></td>
+                  <td class="py-1.5 px-2 text-gray-500 truncate max-w-32 hidden sm:table-cell"
+                      :class="trade.symbol.includes('/') ? 'text-purple-300' : ''"
+                      x-text="trade.name || trade.symbol"></td>
                   <td class="py-1.5 px-2">
                     <span class="px-1.5 py-0.5 rounded text-xs font-medium"
                           :class="trade.side.toLowerCase() === 'buy' ? 'bg-green-900/50 text-green-400' : 'bg-red-900/50 text-red-400'"
                           x-text="trade.side.toUpperCase()"></span>
                   </td>
-                  <td class="py-1.5 px-2 text-right font-mono text-gray-300" x-text="trade.quantity"></td>
+                  <td class="py-1.5 px-2 text-right font-mono text-gray-300" x-text="formatCurrency(trade.quantity)"></td>
                   <td class="py-1.5 px-2 text-right font-mono text-gray-400 hidden sm:table-cell" x-text="formatCurrency(trade.price)"></td>
                   <td class="py-1.5 px-2 text-right font-mono font-semibold text-gray-200" x-text="formatCurrency(trade.quantity * trade.price)"></td>
                 </tr>

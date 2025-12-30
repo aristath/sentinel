@@ -48,14 +48,46 @@ class TradeRequest(BaseModel):
         return v
 
 
+def _is_currency_conversion(symbol: str) -> bool:
+    """Check if symbol is a currency conversion pair."""
+    return "/" in symbol and len(symbol.split("/")) == 2
+
+
+def _get_currency_conversion_name(symbol: str) -> str:
+    """Get display name for currency conversion."""
+    parts = symbol.split("/")
+    if len(parts) == 2:
+        from_curr, to_curr = parts
+        return f"{from_curr} → {to_curr}"
+    return symbol
+
+
 @router.get("")
-async def get_trades(trade_repo: TradeRepositoryDep, limit: int = 50):
+async def get_trades(
+    trade_repo: TradeRepositoryDep,
+    stock_repo: StockRepositoryDep,
+    limit: int = 50,
+):
     """Get trade history."""
     trades = await trade_repo.get_history(limit=limit)
+
+    # Build symbol to name mapping for stocks
+    stock_names = {}
+    for trade in trades:
+        if not _is_currency_conversion(trade.symbol):
+            if trade.symbol not in stock_names:
+                stock = await stock_repo.get_by_symbol(trade.symbol)
+                stock_names[trade.symbol] = stock.name if stock else trade.symbol
+
     return [
         {
             "id": t.id,
             "symbol": t.symbol,
+            "name": (
+                _get_currency_conversion_name(t.symbol)
+                if _is_currency_conversion(t.symbol)
+                else stock_names.get(t.symbol, t.symbol)
+            ),
             "side": t.side,
             "quantity": t.quantity,
             "price": t.price,
