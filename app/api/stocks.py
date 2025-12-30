@@ -379,6 +379,9 @@ async def get_universe_suggestions(
                 # UI can filter by threshold if needed
                 for candidate, candidate_score in scored_candidates:
                     symbol = candidate.get("symbol", "").upper()
+                    # Ensure all values are native Python types (not numpy)
+                    score_float = float(candidate_score)
+                    threshold_float = float(score_threshold)
                     candidates_to_add.append(
                         {
                             "symbol": symbol,
@@ -386,11 +389,11 @@ async def get_universe_suggestions(
                             "country": candidate.get("country"),
                             "industry": candidate.get("industry"),
                             "exchange": candidate.get("exchange", ""),
-                            "score": round(candidate_score, 3),
-                            "meets_threshold": candidate_score >= score_threshold,
-                            "threshold": score_threshold,
+                            "score": round(score_float, 3),
+                            "meets_threshold": bool(score_float >= threshold_float),
+                            "threshold": threshold_float,
                             "isin": candidate.get("isin"),
-                            "volume": candidate.get("volume", 0.0),
+                            "volume": float(candidate.get("volume", 0.0)),
                             "yahoo_symbol": candidate.get("yahoo_symbol"),
                         }
                     )
