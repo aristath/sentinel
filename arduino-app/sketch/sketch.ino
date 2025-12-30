@@ -84,10 +84,9 @@ void setup() {
 }
 
 void loop() {
-  // Handle Bridge messages FIRST to ensure RPC responses are sent immediately
-  // This prevents timeouts when queue processing blocks
-  Bridge.loop();
-
+  // Bridge handles RPC messages automatically in background thread
+  // No need to call Bridge.loop() - it's handled by __loopHook()
+  
   // Check if scrolling has completed
   if (isScrolling && (millis() - scrollStartTime >= estimatedScrollDuration)) {
     isScrolling = false;
@@ -122,5 +121,6 @@ void loop() {
     estimatedScrollDuration = (13 + (text.length() * 5) + 10) * speed;
   }
 
+  // Small delay to allow Bridge background thread to process
   delay(10);
 }
