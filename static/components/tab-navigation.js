@@ -1,7 +1,7 @@
 /**
  * Tab Navigation Component
- * Provides tab switching between "Next Actions" and "Portfolio Details"
- * Keyboard shortcuts: 1 for Next Actions, 2 for Portfolio Details
+ * Provides tab switching between "Next Actions", "Diversification", "Stock Universe", and "Recent Trades"
+ * Keyboard shortcuts: 1 for Next Actions, 2 for Diversification, 3 for Stock Universe, 4 for Recent Trades
  */
 class TabNavigation extends HTMLElement {
   constructor() {
@@ -22,7 +22,13 @@ class TabNavigation extends HTMLElement {
       store.activeTab = 'next-actions';
     } else if (e.key === '2') {
       e.preventDefault();
-      store.activeTab = 'portfolio';
+      store.activeTab = 'diversification';
+    } else if (e.key === '3') {
+      e.preventDefault();
+      store.activeTab = 'stock-universe';
+    } else if (e.key === '4') {
+      e.preventDefault();
+      store.activeTab = 'recent-trades';
     }
   }
 
@@ -49,20 +55,36 @@ class TabNavigation extends HTMLElement {
                   aria-label="Pending actions count"></span>
           </span>
         </button>
-        <button @click="$store.app.activeTab = 'portfolio'"
+        <button @click="$store.app.activeTab = 'diversification'"
                 class="px-3 md:px-4 py-2 text-sm font-medium transition-colors relative"
-                :class="$store.app.activeTab === 'portfolio'
+                :class="$store.app.activeTab === 'diversification'
                   ? 'text-blue-400 border-b-2 border-blue-400'
                   : 'text-gray-400 hover:text-gray-200'"
-                aria-label="Portfolio Details tab">
-          <span class="hidden sm:inline">Portfolio Details</span>
-          <span class="sm:hidden">Portfolio</span>
+                aria-label="Diversification tab">
+          <span class="hidden sm:inline">Diversification</span>
+          <span class="sm:hidden">Diversify</span>
+        </button>
+        <button @click="$store.app.activeTab = 'stock-universe'"
+                class="px-3 md:px-4 py-2 text-sm font-medium transition-colors relative"
+                :class="$store.app.activeTab === 'stock-universe'
+                  ? 'text-blue-400 border-b-2 border-blue-400'
+                  : 'text-gray-400 hover:text-gray-200'"
+                aria-label="Stock Universe tab">
+          <span class="hidden sm:inline">Stock Universe</span>
+          <span class="sm:hidden">Stocks</span>
+        </button>
+        <button @click="$store.app.activeTab = 'recent-trades'"
+                class="px-3 md:px-4 py-2 text-sm font-medium transition-colors relative"
+                :class="$store.app.activeTab === 'recent-trades'
+                  ? 'text-blue-400 border-b-2 border-blue-400'
+                  : 'text-gray-400 hover:text-gray-200'"
+                aria-label="Recent Trades tab">
+          <span class="hidden sm:inline">Recent Trades</span>
+          <span class="sm:hidden">Trades</span>
         </button>
         <div class="ml-auto text-xs text-gray-500 hidden lg:flex items-center gap-1">
           <span class="text-gray-600">Press</span>
-          <kbd class="px-1.5 py-0.5 bg-gray-700 rounded text-gray-300 font-mono">1</kbd>
-          <span class="text-gray-600">or</span>
-          <kbd class="px-1.5 py-0.5 bg-gray-700 rounded text-gray-300 font-mono">2</kbd>
+          <kbd class="px-1.5 py-0.5 bg-gray-700 rounded text-gray-300 font-mono">1-4</kbd>
         </div>
       </div>
     `;

@@ -34,7 +34,7 @@ document.addEventListener('alpine:init', () => {
     sparklines: {},  // {symbol: [{time, value}, ...]}
 
     // UI State - Tabs
-    activeTab: 'next-actions',  // 'next-actions' or 'portfolio'
+    activeTab: 'next-actions',  // 'next-actions', 'diversification', 'stock-universe', or 'recent-trades'
 
     // UI State - Filters
     stockFilter: 'all',

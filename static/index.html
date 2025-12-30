@@ -45,8 +45,8 @@
         <next-actions-card></next-actions-card>
       </div>
 
-      <!-- Portfolio Details Tab -->
-      <div x-show="$store.app.activeTab === 'portfolio'"
+      <!-- Diversification Tab -->
+      <div x-show="$store.app.activeTab === 'diversification'"
            x-transition:enter="transition ease-out duration-200"
            x-transition:enter-start="opacity-0"
            x-transition:enter-end="opacity-100"
@@ -68,13 +68,27 @@
           <country-radar-card></country-radar-card>
           <industry-radar-card></industry-radar-card>
         </div>
+      </div>
 
-        <!-- Stock Universe -->
-        <div class="mt-4">
-          <stock-table></stock-table>
-        </div>
+      <!-- Stock Universe Tab -->
+      <div x-show="$store.app.activeTab === 'stock-universe'"
+           x-transition:enter="transition ease-out duration-200"
+           x-transition:enter-start="opacity-0"
+           x-transition:enter-end="opacity-100"
+           x-transition:leave="transition ease-in duration-150"
+           x-transition:leave-start="opacity-100"
+           x-transition:leave-end="opacity-0">
+        <stock-table></stock-table>
+      </div>
 
-        <!-- Recent Trades -->
+      <!-- Recent Trades Tab -->
+      <div x-show="$store.app.activeTab === 'recent-trades'"
+           x-transition:enter="transition ease-out duration-200"
+           x-transition:enter-start="opacity-0"
+           x-transition:enter-end="opacity-100"
+           x-transition:leave="transition ease-in duration-150"
+           x-transition:leave-start="opacity-100"
+           x-transition:leave-end="opacity-0">
         <trades-table></trades-table>
       </div>
     </div>
