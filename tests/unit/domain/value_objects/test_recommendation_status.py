@@ -14,17 +14,13 @@ class TestRecommendationStatus:
     def test_recommendation_status_enum_values(self):
         """Test that RecommendationStatus enum has expected values."""
         assert RecommendationStatus.PENDING.value == "pending"
-        assert RecommendationStatus.ACCEPTED.value == "accepted"
         assert RecommendationStatus.EXECUTED.value == "executed"
-        assert RecommendationStatus.REJECTED.value == "rejected"
         assert RecommendationStatus.DISMISSED.value == "dismissed"
 
     def test_from_string_with_valid_status(self):
         """Test from_string with valid status strings."""
         assert RecommendationStatus.from_string("pending") == RecommendationStatus.PENDING
-        assert RecommendationStatus.from_string("accepted") == RecommendationStatus.ACCEPTED
         assert RecommendationStatus.from_string("executed") == RecommendationStatus.EXECUTED
-        assert RecommendationStatus.from_string("rejected") == RecommendationStatus.REJECTED
         assert RecommendationStatus.from_string("dismissed") == RecommendationStatus.DISMISSED
 
     def test_from_string_case_insensitive(self):
@@ -50,16 +46,23 @@ class TestRecommendationStatus:
         with pytest.raises(ValueError):
             RecommendationStatus.from_string(None)
 
-    def test_is_final_with_final_statuses(self):
-        """Test is_final method with final statuses."""
-        assert RecommendationStatus.EXECUTED.is_final() is True
-        assert RecommendationStatus.REJECTED.is_final() is True
-        assert RecommendationStatus.DISMISSED.is_final() is True
+    def test_can_transition_to_from_pending(self):
+        """Test can_transition_to method from PENDING status."""
+        assert RecommendationStatus.PENDING.can_transition_to(RecommendationStatus.EXECUTED) is True
+        assert RecommendationStatus.PENDING.can_transition_to(RecommendationStatus.DISMISSED) is True
+        assert RecommendationStatus.PENDING.can_transition_to(RecommendationStatus.PENDING) is False
 
-    def test_is_final_with_non_final_statuses(self):
-        """Test is_final method with non-final statuses."""
-        assert RecommendationStatus.PENDING.is_final() is False
-        assert RecommendationStatus.ACCEPTED.is_final() is False
+    def test_can_transition_to_from_executed(self):
+        """Test can_transition_to method from EXECUTED status (terminal state)."""
+        assert RecommendationStatus.EXECUTED.can_transition_to(RecommendationStatus.PENDING) is False
+        assert RecommendationStatus.EXECUTED.can_transition_to(RecommendationStatus.DISMISSED) is False
+        assert RecommendationStatus.EXECUTED.can_transition_to(RecommendationStatus.EXECUTED) is False
+
+    def test_can_transition_to_from_dismissed(self):
+        """Test can_transition_to method from DISMISSED status (terminal state)."""
+        assert RecommendationStatus.DISMISSED.can_transition_to(RecommendationStatus.PENDING) is False
+        assert RecommendationStatus.DISMISSED.can_transition_to(RecommendationStatus.EXECUTED) is False
+        assert RecommendationStatus.DISMISSED.can_transition_to(RecommendationStatus.DISMISSED) is False
 
     def test_recommendation_status_str_representation(self):
         """Test that RecommendationStatus enum values have correct string representation."""
