@@ -702,9 +702,64 @@ class TradernetClient:
 
             # Normalize response to expected format
             if isinstance(result, list):
+                logger.debug(f"get_most_traded returned list with {len(result)} items")
                 return result
-            elif isinstance(result, dict) and "result" in result:
-                return result["result"] if isinstance(result["result"], list) else []
+            elif isinstance(result, dict):
+                # Try common response keys
+                if "result" in result:
+                    data = result["result"]
+                    if isinstance(data, list):
+                        logger.debug(
+                            f"get_most_traded returned dict with 'result' key: {len(data)} items"
+                        )
+                        return data
+                    else:
+                        logger.warning(
+                            f"get_most_traded 'result' key is not a list: {type(data)}"
+                        )
+                        return []
+                elif "data" in result:
+                    data = result["data"]
+                    if isinstance(data, list):
+                        logger.debug(
+                            f"get_most_traded returned dict with 'data' key: {len(data)} items"
+                        )
+                        return data
+                    else:
+                        logger.warning(
+                            f"get_most_traded 'data' key is not a list: {type(data)}"
+                        )
+                        return []
+                elif "securities" in result:
+                    data = result["securities"]
+                    if isinstance(data, list):
+                        logger.debug(
+                            f"get_most_traded returned dict with 'securities' key: {len(data)} items"
+                        )
+                        return data
+                    else:
+                        logger.warning(
+                            f"get_most_traded 'securities' key is not a list: {type(data)}"
+                        )
+                        return []
+                else:
+                    # Log the actual structure for debugging
+                    logger.warning(
+                        f"Unexpected get_most_traded response format: dict with keys {list(result.keys())}"
+                    )
+                    # Log first 500 chars of the response to help debug
+                    import json
+
+                    try:
+                        response_str = json.dumps(result, default=str, indent=2)[:500]
+                        logger.info(
+                            f"Response structure (first 500 chars): {response_str}"
+                        )
+                    except Exception:
+                        logger.info(
+                            f"Response (repr, first 500 chars): {repr(result)[:500]}"
+                        )
+                    return []
             else:
                 logger.warning(
                     f"Unexpected get_most_traded response format: {type(result)}"
