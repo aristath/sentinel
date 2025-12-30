@@ -172,7 +172,7 @@ async def _step_rebalance_negative_balances():
                 return
 
         # Need to rebalance - initialize services
-        from app.repositories import TradeRepository
+        from app.repositories import RecommendationRepository, TradeRepository
 
         db_manager = get_db_manager()
         exchange_rate_service = get_exchange_rate_service(db_manager)
@@ -180,6 +180,7 @@ async def _step_rebalance_negative_balances():
         position_repo = PositionRepository()
         stock_repo = StockRepository()
         trade_repo = TradeRepository()
+        recommendation_repo = RecommendationRepository()
 
         trade_execution_service = TradeExecutionService(
             trade_repo,
@@ -197,6 +198,7 @@ async def _step_rebalance_negative_balances():
             stock_repo,
             position_repo,
             exchange_rate_service,
+            recommendation_repo,
         )
 
         await rebalancer.rebalance_negative_balances()

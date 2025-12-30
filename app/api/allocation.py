@@ -111,6 +111,20 @@ async def get_allocation_deviations(portfolio_service: PortfolioServiceDep):
     }
 
 
+@router.get("/targets")
+async def get_allocation_targets(
+    allocation_repo: AllocationRepositoryDep,
+):
+    """Get allocation targets for country and industry groups."""
+    country_targets = await allocation_repo.get_country_group_targets()
+    industry_targets = await allocation_repo.get_industry_group_targets()
+
+    return {
+        "country": country_targets,
+        "industry": industry_targets,
+    }
+
+
 class CountryGroup(BaseModel):
     """Country group definition."""
 
