@@ -27,17 +27,19 @@ class TestGetJobSettings:
         from app.jobs.scheduler import _get_job_settings
 
         mock_settings_repo = MagicMock()
-        mock_settings_repo.get_float = AsyncMock(side_effect=[15.0, 3.0])
+        mock_settings_repo.get_float = AsyncMock(side_effect=[5.0, 3.0, 5.0])
 
         with patch(
             "app.repositories.SettingsRepository", return_value=mock_settings_repo
         ):
             settings = await _get_job_settings()
 
-        assert settings["sync_cycle_minutes"] == 15
+        assert settings["sync_cycle_minutes"] == 5
         assert settings["maintenance_hour"] == 3
-        mock_settings_repo.get_float.assert_any_call("job_sync_cycle_minutes", 15.0)
+        assert settings["auto_deploy_minutes"] == 5
+        mock_settings_repo.get_float.assert_any_call("job_sync_cycle_minutes", 5.0)
         mock_settings_repo.get_float.assert_any_call("job_maintenance_hour", 3.0)
+        mock_settings_repo.get_float.assert_any_call("job_auto_deploy_minutes", 5.0)
 
     @pytest.mark.asyncio
     async def test_returns_custom_settings(self):
@@ -45,7 +47,7 @@ class TestGetJobSettings:
         from app.jobs.scheduler import _get_job_settings
 
         mock_settings_repo = MagicMock()
-        mock_settings_repo.get_float = AsyncMock(side_effect=[30.0, 4.0])
+        mock_settings_repo.get_float = AsyncMock(side_effect=[30.0, 4.0, 10.0])
 
         with patch(
             "app.repositories.SettingsRepository", return_value=mock_settings_repo
@@ -54,6 +56,7 @@ class TestGetJobSettings:
 
         assert settings["sync_cycle_minutes"] == 30
         assert settings["maintenance_hour"] == 4
+        assert settings["auto_deploy_minutes"] == 10
 
     @pytest.mark.asyncio
     async def test_converts_floats_to_ints(self):
@@ -61,7 +64,7 @@ class TestGetJobSettings:
         from app.jobs.scheduler import _get_job_settings
 
         mock_settings_repo = MagicMock()
-        mock_settings_repo.get_float = AsyncMock(side_effect=[15.5, 3.9])
+        mock_settings_repo.get_float = AsyncMock(side_effect=[15.5, 3.9, 7.8])
 
         with patch(
             "app.repositories.SettingsRepository", return_value=mock_settings_repo
@@ -71,8 +74,10 @@ class TestGetJobSettings:
         # Should be converted to integers
         assert settings["sync_cycle_minutes"] == 15
         assert settings["maintenance_hour"] == 3
+        assert settings["auto_deploy_minutes"] == 7
         assert isinstance(settings["sync_cycle_minutes"], int)
         assert isinstance(settings["maintenance_hour"], int)
+        assert isinstance(settings["auto_deploy_minutes"], int)
 
 
 class TestJobListener:
