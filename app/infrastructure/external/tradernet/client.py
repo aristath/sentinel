@@ -159,7 +159,7 @@ class TradernetClient:
             return []
 
     def get_cash_balances(self) -> list[CashBalance]:
-        """Get cash balances in all currencies."""
+        """Get cash balances in all currencies (including negative and zero balances)."""
         if not self.is_connected or self._client is None:
             raise ConnectionError("Not connected to Tradernet")
 
@@ -174,12 +174,20 @@ class TradernetClient:
 
             for item in acc_data:
                 amount = float(item.get("s", 0))
-                if amount > 0:  # Only include non-zero balances
-                    balances.append(
-                        CashBalance(
-                            currency=item.get("curr", ""),
-                            amount=amount,
-                        )
+                currency = item.get("curr", "")
+
+                # Include ALL balances (positive, negative, zero)
+                balances.append(
+                    CashBalance(
+                        currency=currency,
+                        amount=amount,
+                    )
+                )
+
+                # Log warning if negative balance detected
+                if amount < 0:
+                    logger.warning(
+                        f"Negative cash balance detected: {amount:.2f} {currency}"
                     )
 
             return balances
@@ -195,7 +203,7 @@ class TradernetClient:
         return total_positions + cash
 
     def get_total_cash_eur(self) -> float:
-        """Get total cash balance converted to EUR."""
+        """Get total cash balance converted to EUR (including negative balances)."""
         if not self.is_connected or self._client is None:
             raise ConnectionError("Not connected to Tradernet")
 
@@ -213,11 +221,13 @@ class TradernetClient:
                 currency = item.get("curr", Currency.EUR)
 
                 if currency == Currency.EUR:
+                    # Include ALL EUR balances (positive, negative, zero)
                     total += amount
-                elif amount > 0:
-                    # Convert to EUR using real-time exchange rate
+                else:
+                    # Include ALL balances (positive, negative, zero) - convert to EUR
                     rate = get_exchange_rate_sync(currency, Currency.EUR)
-                    total += amount / rate
+                    if rate > 0:
+                        total += amount / rate
 
             return total
         except Exception as e:

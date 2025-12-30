@@ -136,6 +136,18 @@ async def _handle_buy_currency(
     if currency_service and trade_currency != source_currency:
         available = currency_balances.get(trade_currency, 0) if currency_balances else 0
 
+        # Block trade if balance is already negative
+        if available < 0:
+            logger.warning(
+                f"Blocking BUY {trade.symbol}: negative {currency_str} balance "
+                f"({available:.2f} {currency_str})"
+            )
+            return {
+                "symbol": trade.symbol,
+                "status": "blocked",
+                "error": f"Negative {currency_str} balance ({available:.2f} {currency_str})",
+            }
+
         if available < required:
             if trade_currency not in converted_currencies:
                 logger.info(
@@ -165,6 +177,19 @@ async def _handle_buy_currency(
 
     elif currency_balances is not None:
         available = currency_balances.get(trade_currency, 0)
+
+        # Block trade if balance is already negative
+        if available < 0:
+            logger.warning(
+                f"Blocking BUY {trade.symbol}: negative {currency_str} balance "
+                f"({available:.2f} {currency_str})"
+            )
+            return {
+                "symbol": trade.symbol,
+                "status": "blocked",
+                "error": f"Negative {currency_str} balance ({available:.2f} {currency_str})",
+            }
+
         if available < required:
             logger.warning(
                 f"Skipping {trade.symbol}: insufficient {currency_str} balance "

@@ -381,7 +381,7 @@ class CurrencyExchangeService:
         )
 
     def _get_balances(self, currency: str, source_currency: str) -> tuple[float, float]:
-        """Get current and source currency balances."""
+        """Get current and source currency balances (including negative balances)."""
         balances = self.client.get_cash_balances()
         current_balance = 0.0
         source_balance = 0.0
@@ -389,8 +389,18 @@ class CurrencyExchangeService:
         for bal in balances:
             if bal.currency == currency:
                 current_balance = bal.amount
+                # Log warning if negative balance detected
+                if current_balance < 0:
+                    logger.warning(
+                        f"Negative balance detected for {currency}: {current_balance:.2f}"
+                    )
             elif bal.currency == source_currency:
                 source_balance = bal.amount
+                # Log warning if negative balance detected
+                if source_balance < 0:
+                    logger.warning(
+                        f"Negative balance detected for {source_currency}: {source_balance:.2f}"
+                    )
 
         return current_balance, source_balance
 
@@ -398,6 +408,14 @@ class CurrencyExchangeService:
         self, currency: str, source_currency: str, needed: float, source_balance: float
     ) -> bool:
         """Convert source currency to target currency to meet balance requirement."""
+        # Safety check: block conversion if source balance is negative
+        if source_balance < 0:
+            logger.error(
+                f"Cannot convert {source_currency} to {currency}: "
+                f"source balance is negative ({source_balance:.2f})"
+            )
+            return False
+
         needed_with_buffer = needed * 1.02
 
         rate = self.get_rate(source_currency, currency)
@@ -457,6 +475,14 @@ class CurrencyExchangeService:
             current_balance, source_balance = self._get_balances(
                 currency, source_currency
             )
+
+            # Block conversion if source balance is negative
+            if source_balance < 0:
+                logger.error(
+                    f"Cannot ensure {currency} balance: source currency {source_currency} "
+                    f"has negative balance ({source_balance:.2f})"
+                )
+                return False
 
             if current_balance >= min_amount:
                 logger.info(
