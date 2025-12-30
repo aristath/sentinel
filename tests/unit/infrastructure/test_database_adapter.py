@@ -4,9 +4,12 @@ These tests validate the DatabaseAdapter wrapper around aiosqlite connections,
 ensuring proper execution of queries and result handling.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
+from app.repositories.base import DatabaseAdapter
 
 
 class TestDatabaseAdapter:
@@ -21,8 +24,6 @@ class TestDatabaseAdapter:
     @pytest.fixture
     def adapter(self, mock_connection):
         """Create DatabaseAdapter with mocked connection."""
-        from app.infrastructure.database.adapter import DatabaseAdapter
-
         return DatabaseAdapter(mock_connection)
 
     @pytest.mark.asyncio
@@ -119,46 +120,27 @@ class TestDatabaseAdapter:
         mock_connection.rollback.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_executescript_runs_script(self, adapter, mock_connection):
-        """Test that executescript runs a SQL script."""
-        mock_connection.executescript = AsyncMock()
+    async def test_transaction_context_manager(self, adapter, mock_connection):
+        """Test that transaction context manager works correctly."""
+        mock_connection.commit = AsyncMock()
+        mock_connection.rollback = AsyncMock()
 
-        script = "CREATE TABLE test (id INTEGER); INSERT INTO test VALUES (1);"
-        await adapter.executescript(script)
+        async with adapter.transaction() as conn:
+            assert conn == mock_connection
 
-        mock_connection.executescript.assert_called_once_with(script)
-
-    @pytest.mark.asyncio
-    async def test_close_closes_connection(self, adapter, mock_connection):
-        """Test that close closes the connection."""
-        mock_connection.close = AsyncMock()
-
-        await adapter.close()
-
-        mock_connection.close.assert_called_once()
+        mock_connection.commit.assert_called_once()
+        mock_connection.rollback.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_context_manager_closes_on_exit(self, mock_connection):
-        """Test that adapter can be used as context manager."""
-        from app.infrastructure.database.adapter import DatabaseAdapter
-
-        mock_connection.close = AsyncMock()
-
-        async with DatabaseAdapter(mock_connection) as adapter:
-            assert adapter is not None
-
-        mock_connection.close.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_context_manager_closes_on_exception(self, mock_connection):
-        """Test that adapter closes connection even on exception."""
-        from app.infrastructure.database.adapter import DatabaseAdapter
-
-        mock_connection.close = AsyncMock()
+    async def test_transaction_rolls_back_on_exception(self, adapter, mock_connection):
+        """Test that transaction rolls back on exception."""
+        mock_connection.commit = AsyncMock()
+        mock_connection.rollback = AsyncMock()
 
         with pytest.raises(ValueError):
-            async with DatabaseAdapter(mock_connection) as adapter:
+            async with adapter.transaction() as conn:
                 raise ValueError("Test exception")
 
-        mock_connection.close.assert_called_once()
+        mock_connection.commit.assert_not_called()
+        mock_connection.rollback.assert_called_once()
 
