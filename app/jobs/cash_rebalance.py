@@ -11,11 +11,7 @@ from app.infrastructure.cache import cache
 from app.infrastructure.daily_pnl import get_daily_pnl_tracker
 from app.infrastructure.events import SystemEvent, emit
 from app.infrastructure.external.tradernet import get_tradernet_client
-from app.infrastructure.hardware.display_service import (
-    clear_processing,
-    set_error,
-    set_processing,
-)
+from app.infrastructure.hardware.display_service import set_led4, set_text
 from app.infrastructure.locking import file_lock
 from app.infrastructure.recommendation_cache import get_recommendation_cache
 from app.repositories import (
@@ -61,7 +57,8 @@ async def _check_pnl_guardrails() -> tuple[dict, bool]:
         logger.warning(f"Trading halted: {pnl_status['reason']}")
         error_msg = "TRADING HALTED - SEVERE DRAWDOWN"
         emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-        set_error(error_msg)
+        set_text(error_msg)
+        set_led4(255, 0, 0)  # Red for error
         emit(SystemEvent.REBALANCE_COMPLETE)
         return pnl_status, False
 
@@ -226,7 +223,8 @@ async def _execute_trade(
         logger.error(f"{next_action.side} failed for {next_action.symbol}: {error}")
         error_msg = f"{next_action.side} ORDER FAILED"
         emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-        set_error(error_msg)
+        set_text(error_msg)
+        set_led4(255, 0, 0)  # Red for error
 
     emit(SystemEvent.SYNC_COMPLETE)
     await sync_portfolio()
@@ -246,7 +244,8 @@ async def _check_and_rebalance_internal():
     logger.info("Starting trade cycle check...")
 
     emit(SystemEvent.REBALANCE_START)
-    set_processing("CHECKING TRADE OPPORTUNITIES...")
+    set_text("CHECKING TRADE OPPORTUNITIES...")
+    set_led4(0, 255, 0)  # Green for processing
 
     try:
         logger.info("Step 0: Syncing trades from Tradernet...")
@@ -278,7 +277,8 @@ async def _check_and_rebalance_internal():
                 logger.warning("Cannot connect to Tradernet, skipping cycle")
                 error_msg = "BROKER CONNECTION FAILED"
                 emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-                set_error(error_msg)
+                set_text(error_msg)
+                set_led4(255, 0, 0)  # Red for error
                 return
 
         cash_balance = client.get_total_cash_eur()
@@ -291,7 +291,7 @@ async def _check_and_rebalance_internal():
         stock_repo = StockRepository()
 
         logger.info("Step 2: Building portfolio context...")
-        set_processing("BUILDING PORTFOLIO CONTEXT...")
+        set_text("BUILDING PORTFOLIO CONTEXT...")
 
         positions = await position_repo.get_all()
         stocks = await stock_repo.get_all_active()
@@ -328,7 +328,7 @@ async def _check_and_rebalance_internal():
                 )
                 emit(SystemEvent.REBALANCE_COMPLETE)
                 await _refresh_recommendation_cache()
-                clear_processing()
+                set_led4(0, 0, 0)  # Clear LED when done
                 return
 
             logger.info(
@@ -346,7 +346,7 @@ async def _check_and_rebalance_internal():
         )
 
         logger.info("Step 3: Getting recommendation from holistic planner...")
-        set_processing("GETTING HOLISTIC RECOMMENDATION...")
+        set_text("GETTING HOLISTIC RECOMMENDATION...")
 
         next_action = await _get_next_holistic_action()
 
@@ -354,7 +354,7 @@ async def _check_and_rebalance_internal():
             logger.info("No trades recommended this cycle")
             emit(SystemEvent.REBALANCE_COMPLETE)
             await _refresh_recommendation_cache()
-            clear_processing()
+            set_led4(0, 0, 0)  # Clear LED when done
             return
 
         if not await _validate_next_action(
@@ -378,9 +378,10 @@ async def _check_and_rebalance_internal():
         logger.error(f"Trade cycle error: {e}", exc_info=True)
         error_msg = "TRADE CYCLE ERROR"
         emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-        set_error(error_msg)
+        set_text(error_msg)
+        set_led4(255, 0, 0)  # Red for error
     finally:
-        clear_processing()
+        set_led4(0, 0, 0)  # Clear LED when done
 
 
 async def _get_next_holistic_action() -> "Recommendation | None":

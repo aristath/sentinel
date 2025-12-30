@@ -13,11 +13,7 @@ from app.infrastructure.dependencies import get_exchange_rate_service
 from app.infrastructure.events import SystemEvent, emit
 from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.external.tradernet import get_tradernet_client
-from app.infrastructure.hardware.display_service import (
-    clear_processing,
-    set_error,
-    set_processing,
-)
+from app.infrastructure.hardware.display_service import set_led3, set_led4, set_text
 from app.infrastructure.locking import file_lock
 from app.repositories.stock import StockRepository
 
@@ -235,7 +231,8 @@ async def _sync_portfolio_internal():
     """Internal portfolio sync implementation."""
     logger.info("Starting portfolio sync")
 
-    set_processing("SYNCING PORTFOLIO...")
+    set_text("SYNCING PORTFOLIO...")
+    set_led3(0, 0, 255)  # Blue for sync
     emit(SystemEvent.SYNC_START)
 
     client = get_tradernet_client()
@@ -245,7 +242,7 @@ async def _sync_portfolio_internal():
             logger.error("Failed to connect to Tradernet, skipping sync")
             error_msg = "BROKER CONNECTION FAILED"
             emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-            set_error(error_msg)
+            set_text(error_msg)
             return
 
     try:
@@ -412,10 +409,11 @@ async def _sync_portfolio_internal():
         emit(SystemEvent.SYNC_COMPLETE)
         error_msg = "PORTFOLIO SYNC FAILED"
         emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-        set_error(error_msg)
+        set_text(error_msg)
         raise
     finally:
-        clear_processing()
+        set_led3(0, 0, 0)  # Clear LED when done
+        set_led4(0, 0, 0)  # Clear LED when done
 
 
 async def sync_prices():
@@ -432,7 +430,8 @@ async def _sync_prices_internal():
     """Internal price sync implementation."""
     logger.info("Starting price sync")
 
-    set_processing("UPDATING STOCK PRICES...")
+    set_text("UPDATING STOCK PRICES...")
+    set_led3(0, 0, 255)  # Blue for sync
     emit(SystemEvent.SYNC_START)
 
     try:
@@ -492,7 +491,7 @@ async def _sync_prices_internal():
         emit(SystemEvent.SYNC_COMPLETE)
         error_msg = "PRICE SYNC FAILED"
         emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-        set_error(error_msg)
+        set_text(error_msg)
         raise
 
 
@@ -502,7 +501,8 @@ async def sync_stock_currencies():
     """
     logger.info("Starting stock currency sync")
 
-    set_processing("SYNCING STOCK CURRENCIES...")
+    set_text("SYNCING STOCK CURRENCIES...")
+    set_led3(0, 0, 255)  # Blue for sync
 
     client = get_tradernet_client()
 

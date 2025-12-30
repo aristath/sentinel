@@ -18,11 +18,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from app.infrastructure.events import SystemEvent, emit
-from app.infrastructure.hardware.display_service import (
-    clear_processing,
-    set_error,
-    set_processing,
-)
+from app.infrastructure.hardware.display_service import set_led4, set_text
 from app.infrastructure.locking import file_lock
 
 logger = logging.getLogger(__name__)
@@ -75,9 +71,9 @@ async def _run_daily_pipeline_internal():
         logger.error(f"Daily pipeline failed: {e}", exc_info=True)
         error_msg = "DAILY PIPELINE CRASHES"
         emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-        set_error(error_msg)
+        set_text(error_msg)
     finally:
-        clear_processing()
+        set_led4(0, 0, 0)  # Clear LED when done
 
 
 async def refresh_single_stock(symbol: str) -> dict[str, Any]:
@@ -96,7 +92,7 @@ async def refresh_single_stock(symbol: str) -> dict[str, Any]:
     logger.info(f"Force refreshing data for {symbol}")
 
     try:
-        set_processing(f"PROCESSING SINGLE STOCK ({symbol})")
+        set_text(f"PROCESSING SINGLE STOCK ({symbol})")
 
         # Run the full pipeline for this stock
         await _sync_historical_for_symbol(symbol)
@@ -111,10 +107,10 @@ async def refresh_single_stock(symbol: str) -> dict[str, Any]:
 
     except Exception as e:
         logger.error(f"Force refresh failed for {symbol}: {e}")
-        set_error(f"STOCK REFRESH FAILED ({symbol})")
+        set_text(f"STOCK REFRESH FAILED ({symbol})")
         return {"status": "error", "symbol": symbol, "reason": str(e)}
     finally:
-        clear_processing()
+        set_led4(0, 0, 0)  # Clear LED when done
 
 
 async def _get_stocks_needing_sync() -> list:
@@ -169,7 +165,8 @@ async def _process_single_stock(symbol: str):
         symbol: The stock symbol to process
     """
     logger.info(f"Processing {symbol}...")
-    set_processing(f"PROCESSING SINGLE STOCK ({symbol})")
+    set_text(f"PROCESSING SINGLE STOCK ({symbol})")
+    set_led4(0, 255, 0)  # Green for processing
 
     try:
         # Step 1: Sync historical prices
@@ -195,11 +192,11 @@ async def _process_single_stock(symbol: str):
 
     except Exception as e:
         logger.error(f"Pipeline error for {symbol}: {e}", exc_info=True)
-        set_error(f"STOCK REFRESH FAILED ({symbol})")
+        set_text(f"STOCK REFRESH FAILED ({symbol})")
         # Don't update last_synced on error - will retry next hour
         raise
     finally:
-        clear_processing()
+        set_led4(0, 0, 0)  # Clear LED when done
 
 
 async def _sync_historical_for_symbol(symbol: str):

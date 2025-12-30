@@ -22,7 +22,7 @@ from app.domain.services.settings_service import SettingsService
 from app.domain.value_objects.currency import Currency
 from app.infrastructure.events import SystemEvent, emit
 from app.infrastructure.external.tradernet import TradernetClient
-from app.infrastructure.hardware.display_service import set_error, set_processing
+from app.infrastructure.hardware.display_service import set_led4, set_text
 from app.infrastructure.market_hours import is_market_open, should_check_market_hours
 from app.repositories.base import safe_parse_datetime_string
 
@@ -158,14 +158,15 @@ async def _handle_buy_currency(
                     f"for {trade.symbol} (need {required:.2f} {currency_str}: "
                     f"{trade_value:.2f} trade + {commission:.2f} commission)"
                 )
-                set_processing(f"CONVERTING {source_currency} TO {currency_str}...")
+                set_text(f"CONVERTING {source_currency} TO {currency_str}...")
+                set_led4(0, 255, 0)  # Green for processing
 
                 if currency_service.ensure_balance(
                     trade_currency, required, source_currency
                 ):
                     converted_currencies.add(trade_currency)
                     logger.info(f"Currency conversion successful for {currency_str}")
-                    set_processing("CURRENCY CONVERSION COMPLETE")
+                    set_text("CURRENCY CONVERSION COMPLETE")
                 else:
                     logger.warning(
                         f"Currency conversion failed for {trade.symbol}: "
@@ -514,7 +515,8 @@ async def _process_single_trade(
         logger.error(f"Failed to execute trade for {trade.symbol}: {e}")
         error_msg = "ORDER PLACEMENT FAILED"
         emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-        set_error(error_msg)
+        set_text(error_msg)
+        set_led4(255, 0, 0)  # Red for error
         return {
             "symbol": trade.symbol,
             "status": "error",
@@ -581,7 +583,8 @@ def _handle_skipped_trades_warning(skipped_count: int) -> None:
         if skipped_count >= 2:
             error_msg = "INSUFFICIENT FOREIGN CURRENCY BALANCE"
             emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-            set_error(error_msg)
+            set_text(error_msg)
+        set_led4(255, 0, 0)  # Red for error
 
 
 async def _execute_single_trade(trade, client) -> Optional[dict]:
@@ -589,7 +592,8 @@ async def _execute_single_trade(trade, client) -> Optional[dict]:
     side_text = "BUYING" if trade.side.upper() == "BUY" else "SELLING"
     value = int(trade.quantity * trade.estimated_price)
     symbol_short = trade.symbol.split(".")[0]
-    set_processing(f"{side_text} {symbol_short} €{value}")
+    set_text(f"{side_text} {symbol_short} €{value}")
+    set_led4(0, 255, 0)  # Green for processing
 
     result = client.place_order(
         symbol=trade.symbol,
@@ -609,7 +613,8 @@ async def _execute_single_trade(trade, client) -> Optional[dict]:
     else:
         error_msg = "ORDER PLACEMENT FAILED"
         emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-        set_error(error_msg)
+        set_text(error_msg)
+        set_led4(255, 0, 0)  # Red for error
         return {
             "symbol": trade.symbol,
             "status": "failed",
@@ -720,7 +725,8 @@ class TradeExecutionService:
                 logger.warning(f"Trade blocked by frequency limit: {reason}")
                 error_msg = "TRADE FREQUENCY LIMIT"
                 emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-                set_error(error_msg)
+                set_text(error_msg)
+                set_led4(255, 0, 0)  # Red for error
                 # Return blocked result for all trades
                 return [
                     {
@@ -737,7 +743,8 @@ class TradeExecutionService:
             if not client.connect():
                 error_msg = "TRADE EXECUTION FAILED"
                 emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-                set_error(error_msg)
+                set_text(error_msg)
+                set_led4(255, 0, 0)  # Red for error
                 raise ConnectionError("Failed to connect to Tradernet")
 
         # Use currency exchange service if auto-convert is enabled

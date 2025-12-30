@@ -16,12 +16,7 @@ from typing import Any, Optional
 
 from app.infrastructure.events import SystemEvent, emit
 from app.infrastructure.external import yahoo_finance as yahoo
-from app.infrastructure.hardware.display_service import (
-    clear_processing,
-    set_error,
-    set_next_actions,
-    set_processing,
-)
+from app.infrastructure.hardware.display_service import set_led3, set_text
 from app.infrastructure.locking import file_lock
 from app.infrastructure.market_hours import (
     get_open_markets,
@@ -56,15 +51,16 @@ async def _run_sync_cycle_internal():
 
     try:
         # Step 1: Sync trades
-        set_processing("SYNCING TRADES...")
+        set_text("SYNCING TRADES...")
+        set_led3(0, 0, 255)  # Blue for sync
         await _step_sync_trades()
 
         # Step 2: Sync cash flows
-        set_processing("SYNCING CASH FLOWS...")
+        set_text("SYNCING CASH FLOWS...")
         await _step_sync_cash_flows()
 
         # Step 3: Sync portfolio
-        set_processing("SYNCING PORTFOLIO...")
+        set_text("SYNCING PORTFOLIO...")
         await _step_sync_portfolio()
 
         # Step 3.5: Check and rebalance negative balances immediately (if any)
@@ -74,7 +70,7 @@ async def _run_sync_cycle_internal():
         await check_and_rebalance_immediately()
 
         # Step 4: Sync prices (market-aware)
-        set_processing("SYNCING PRICES...")
+        set_text("SYNCING PRICES...")
         await _step_sync_prices()
 
         # Step 5: Update display
@@ -87,9 +83,10 @@ async def _run_sync_cycle_internal():
         logger.error(f"Sync cycle failed: {e}", exc_info=True)
         error_msg = "SYNC CYCLE CRASHES"
         emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-        set_error(error_msg)
+        set_text(error_msg)
+        set_led3(255, 0, 0)  # Red for error
     finally:
-        clear_processing()
+        set_led3(0, 0, 0)  # Clear LED when done
 
 
 async def _step_sync_trades():
@@ -249,36 +246,12 @@ async def _step_execute_trade(recommendation) -> dict[str, Any]:
 async def _step_update_display():
     """Step 8: Update the LED ticker display."""
     try:
-        from app.domain.services.ticker_content_service import TickerContentService
-        from app.infrastructure.external.tradernet import get_tradernet_client
-        from app.repositories import (
-            AllocationRepository,
-            PortfolioRepository,
-            PositionRepository,
-            SettingsRepository,
-            StockRepository,
+        from app.infrastructure.hardware.display_updater_service import (
+            update_display_ticker,
         )
 
-        # Instantiate repositories and service
-        portfolio_repo = PortfolioRepository()
-        position_repo = PositionRepository()
-        stock_repo = StockRepository()
-        settings_repo = SettingsRepository()
-        allocation_repo = AllocationRepository()
-        tradernet_client = get_tradernet_client()
-
-        ticker_service = TickerContentService(
-            portfolio_repo=portfolio_repo,
-            position_repo=position_repo,
-            stock_repo=stock_repo,
-            settings_repo=settings_repo,
-            allocation_repo=allocation_repo,
-            tradernet_client=tradernet_client,
-        )
-
-        ticker_text = await ticker_service.generate_ticker_text()
-        set_next_actions(ticker_text)
-        logger.debug(f"Ticker updated: {ticker_text[:50]}...")
+        await update_display_ticker()
+        logger.debug("Ticker updated")
     except Exception as e:
         logger.error(f"Display update failed: {e}")
 

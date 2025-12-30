@@ -25,11 +25,7 @@ from app.domain.value_objects.recommendation_status import RecommendationStatus
 from app.domain.value_objects.trade_side import TradeSide
 from app.infrastructure.cache_invalidation import get_cache_invalidation_service
 from app.infrastructure.events import SystemEvent, emit
-from app.infrastructure.hardware.display_service import (
-    clear_processing,
-    set_error,
-    set_processing,
-)
+from app.infrastructure.hardware.display_service import set_led4, set_text
 from app.infrastructure.locking import file_lock
 from app.infrastructure.market_hours import is_market_open, should_check_market_hours
 from app.jobs.sync_cycle import (
@@ -64,7 +60,8 @@ async def _run_event_based_trading_loop_internal():
             await _wait_for_planning_completion()
 
             # Step 2: Get optimal recommendation
-            set_processing("GETTING RECOMMENDATION...")
+            set_text("GETTING RECOMMENDATION...")
+            set_led4(0, 255, 0)  # Green for processing
             recommendation = await _get_optimal_recommendation()
 
             if not recommendation:
@@ -73,7 +70,7 @@ async def _run_event_based_trading_loop_internal():
                 continue
 
             # Step 3: Check trading conditions (P&L guardrails)
-            set_processing("CHECKING CONDITIONS...")
+            set_text("CHECKING CONDITIONS...")
             can_trade, pnl_status = await _step_check_trading_conditions()
 
             if not can_trade:
@@ -82,7 +79,7 @@ async def _run_event_based_trading_loop_internal():
                 continue
 
             # Step 3.5: Check trade frequency limits
-            set_processing("CHECKING FREQUENCY LIMITS...")
+            set_text("CHECKING FREQUENCY LIMITS...")
             from app.application.services.trade_frequency_service import (
                 TradeFrequencyService,
             )
@@ -101,7 +98,7 @@ async def _run_event_based_trading_loop_internal():
                 continue
 
             # Step 4: Check if trade can execute (market hours)
-            set_processing("CHECKING MARKET HOURS...")
+            set_text("CHECKING MARKET HOURS...")
             can_execute, reason = await _can_execute_trade(recommendation)
 
             if not can_execute:
@@ -110,9 +107,7 @@ async def _run_event_based_trading_loop_internal():
                 continue
 
             # Step 5: Execute trade
-            set_processing(
-                f"EXECUTING {recommendation.side} {recommendation.symbol}..."
-            )
+            set_text(f"EXECUTING {recommendation.side} {recommendation.symbol}...")
             result = await _execute_trade_order(recommendation)
 
             if result.get("status") == "success":
@@ -120,7 +115,7 @@ async def _run_event_based_trading_loop_internal():
                     f"Trade executed: {recommendation.side} {recommendation.symbol}"
                 )
                 # Re-sync portfolio after trade
-                set_processing("SYNCING PORTFOLIO...")
+                set_text("SYNCING PORTFOLIO...")
                 await _step_sync_portfolio()
 
                 # Check and rebalance negative balances immediately after trade
@@ -130,7 +125,7 @@ async def _run_event_based_trading_loop_internal():
                 await check_and_rebalance_immediately()
 
                 # Step 6: Monitor portfolio for changes
-                set_processing("MONITORING PORTFOLIO...")
+                set_text("MONITORING PORTFOLIO...")
                 portfolio_changed = await _monitor_portfolio_for_changes()
 
                 if portfolio_changed:
@@ -156,10 +151,11 @@ async def _run_event_based_trading_loop_internal():
             logger.error(f"Event-based trading loop failed: {e}", exc_info=True)
             error_msg = "MAIN TRADING LOOP CRASHES"
             emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-            set_error(error_msg)
+            set_text(error_msg)
+            set_led4(255, 0, 0)  # Red for error
             await asyncio.sleep(60)  # Wait 1 minute before retrying
         finally:
-            clear_processing()
+            set_led4(0, 0, 0)  # Clear LED when done
 
 
 async def _wait_for_planning_completion():
@@ -457,7 +453,7 @@ async def _wait_for_planning_completion():
     while iteration < max_wait_iterations:
         if await planner_repo.are_all_sequences_evaluated(portfolio_hash):
             logger.info("All sequences evaluated, planning complete")
-            clear_processing()
+            set_led4(0, 0, 0)  # Clear LED when done
             return
 
         # Update planning progress display
@@ -484,11 +480,11 @@ async def _wait_for_planning_completion():
                 is_planning = total_sequences > 0 and not is_finished
 
         if is_planning and total_sequences > 0:
-            set_processing(
+            set_text(
                 f"PLANNING ({evaluated_count}/{total_sequences} SCENARIOS SIMULATED)"
             )
         else:
-            clear_processing()
+            set_led4(0, 0, 0)  # Clear LED when done
 
         # Check periodically (reduced interval since API-driven batches are faster)
         logger.debug(

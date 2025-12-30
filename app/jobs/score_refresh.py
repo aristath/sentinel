@@ -11,11 +11,7 @@ from app.domain.scoring import PortfolioContext, calculate_stock_score
 from app.infrastructure.database.manager import get_db_manager
 from app.infrastructure.events import SystemEvent, emit
 from app.infrastructure.external import yahoo_finance as yahoo
-from app.infrastructure.hardware.display_service import (
-    clear_processing,
-    set_error,
-    set_processing,
-)
+from app.infrastructure.hardware.display_service import set_led4, set_text
 from app.infrastructure.locking import file_lock
 
 logger = logging.getLogger(__name__)
@@ -33,7 +29,8 @@ async def _refresh_all_scores_internal():
 
     emit(SystemEvent.SCORE_REFRESH_START)
     emit(SystemEvent.PROCESSING_START)
-    set_processing("REFRESHING STOCK SCORES...")
+    set_text("REFRESHING STOCK SCORES...")
+    set_led4(0, 255, 0)  # Green for processing
 
     try:
         db_manager = get_db_manager()
@@ -125,9 +122,9 @@ async def _refresh_all_scores_internal():
         emit(SystemEvent.PROCESSING_END)
         error_msg = "SCORE REFRESH CRASHES"
         emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-        set_error(error_msg)
+        set_text(error_msg)
     finally:
-        clear_processing()
+        set_led4(0, 0, 0)  # Clear LED when done
 
 
 async def _build_portfolio_context(db_manager) -> PortfolioContext:

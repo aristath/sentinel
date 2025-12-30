@@ -1,11 +1,6 @@
-"""LED Matrix Display Service - 3-pool priority system for text display.
+"""LED Matrix Display Service - Single message system.
 
-Priority ordering:
-- error_text: Error messages (highest priority)
-- processing_text: Processing/activity messages (medium priority)
-- next_actions_text: Recommendations/next actions (lowest priority, default)
-
-No queue = no stale messages. Highest priority text always shows immediately.
+Latest message wins - always shows the most recent text that was set.
 """
 
 from threading import Lock
@@ -14,81 +9,79 @@ from app.infrastructure.events import SystemEvent, emit
 
 
 class DisplayStateManager:
-    """Thread-safe display state manager with 3-pool priority system.
+    """Thread-safe display state manager with single message system.
 
-    Manages three priority levels of display text:
-    - Error messages (highest priority)
-    - Processing/activity messages (medium priority)
-    - Next actions/recommendations (lowest priority, default)
-
+    Manages display text and RGB LED states. Latest message always wins.
     Thread-safe operations ensure concurrent access from multiple jobs/API endpoints.
     """
 
     def __init__(self) -> None:
         """Initialize display state manager."""
         self._lock = Lock()
-        self._error_text: str = ""  # Error messages (highest priority)
-        self._processing_text: str = (
-            ""  # Processing/activity messages (medium priority)
-        )
-        self._next_actions_text: str = (
-            ""  # Recommendations/next actions (lowest priority)
-        )
+        self._current_text: str = ""  # Latest message (latest wins)
+        self._led3: list[int] = [0, 0, 0]  # RGB LED 3 (sync indicator)
+        self._led4: list[int] = [0, 0, 0]  # RGB LED 4 (processing indicator)
 
-    def set_error(self, text: str) -> None:
-        """Set error message (highest priority, persists until cleared)."""
-        with self._lock:
-            self._error_text = text
-        emit(SystemEvent.DISPLAY_STATE_CHANGED)
+    def set_text(self, text: str) -> None:
+        """Set display text (latest message wins).
 
-    def clear_error(self) -> None:
-        """Clear error message (falls back to processing or next_actions)."""
+        Args:
+            text: Text to display
+        """
         with self._lock:
-            self._error_text = ""
-        emit(SystemEvent.DISPLAY_STATE_CHANGED)
-
-    def set_processing(self, text: str) -> None:
-        """Set processing/activity message (medium priority)."""
-        with self._lock:
-            self._processing_text = text
-        emit(SystemEvent.DISPLAY_STATE_CHANGED)
-
-    def clear_processing(self) -> None:
-        """Clear processing message (falls back to next_actions)."""
-        with self._lock:
-            self._processing_text = ""
-        emit(SystemEvent.DISPLAY_STATE_CHANGED)
-
-    def set_next_actions(self, text: str) -> None:
-        """Set next actions/recommendations text (lowest priority, default)."""
-        with self._lock:
-            self._next_actions_text = text
+            self._current_text = text
         emit(SystemEvent.DISPLAY_STATE_CHANGED)
 
     def get_current_text(self) -> str:
-        """Get text to display (error > processing > next_actions)."""
-        with self._lock:
-            if self._error_text:
-                return self._error_text
-            elif self._processing_text:
-                return self._processing_text
-            else:
-                return self._next_actions_text
+        """Get current display text.
 
-    def get_error_text(self) -> str:
-        """Get current error text (for API endpoints)."""
+        Returns:
+            Current text to display
+        """
         with self._lock:
-            return self._error_text
+            return self._current_text
 
-    def get_processing_text(self) -> str:
-        """Get current processing text (for API endpoints)."""
-        with self._lock:
-            return self._processing_text
+    def set_led3(self, r: int, g: int, b: int) -> None:
+        """Set RGB LED 3 color (sync indicator).
 
-    def get_next_actions_text(self) -> str:
-        """Get current next actions text (for API endpoints)."""
+        Args:
+            r: Red value (0-255)
+            g: Green value (0-255)
+            b: Blue value (0-255)
+        """
         with self._lock:
-            return self._next_actions_text
+            self._led3 = [r, g, b]
+        emit(SystemEvent.DISPLAY_STATE_CHANGED)
+
+    def get_led3(self) -> list[int]:
+        """Get RGB LED 3 color.
+
+        Returns:
+            [r, g, b] values
+        """
+        with self._lock:
+            return self._led3.copy()
+
+    def set_led4(self, r: int, g: int, b: int) -> None:
+        """Set RGB LED 4 color (processing indicator).
+
+        Args:
+            r: Red value (0-255)
+            g: Green value (0-255)
+            b: Blue value (0-255)
+        """
+        with self._lock:
+            self._led4 = [r, g, b]
+        emit(SystemEvent.DISPLAY_STATE_CHANGED)
+
+    def get_led4(self) -> list[int]:
+        """Get RGB LED 4 color.
+
+        Returns:
+            [r, g, b] values
+        """
+        with self._lock:
+            return self._led4.copy()
 
 
 # Singleton instance for dependency injection
@@ -96,36 +89,41 @@ _display_state_manager = DisplayStateManager()
 
 
 # Module-level functions for backward compatibility
-# These delegate directly to the singleton manager.
-# The get_current_text() function is used by app/api/status.py
-def set_error(text: str) -> None:
-    """Set error message (highest priority, persists until cleared)."""
-    _display_state_manager.set_error(text)
+def set_text(text: str) -> None:
+    """Set display text (latest message wins).
 
-
-def clear_error() -> None:
-    """Clear error message (falls back to processing or next_actions)."""
-    _display_state_manager.clear_error()
-
-
-def set_processing(text: str) -> None:
-    """Set processing/activity message (medium priority)."""
-    _display_state_manager.set_processing(text)
-
-
-def clear_processing() -> None:
-    """Clear processing message (falls back to next_actions)."""
-    _display_state_manager.clear_processing()
-
-
-def set_next_actions(text: str) -> None:
-    """Set next actions/recommendations text (lowest priority, default)."""
-    _display_state_manager.set_next_actions(text)
+    Args:
+        text: Text to display
+    """
+    _display_state_manager.set_text(text)
 
 
 def get_current_text() -> str:
-    """Get text to display (error > processing > next_actions).
+    """Get current display text.
 
-    Used by app/api/status.py for the /display/text endpoint.
+    Returns:
+        Current text to display
     """
     return _display_state_manager.get_current_text()
+
+
+def set_led3(r: int, g: int, b: int) -> None:
+    """Set RGB LED 3 color (sync indicator).
+
+    Args:
+        r: Red value (0-255)
+        g: Green value (0-255)
+        b: Blue value (0-255)
+    """
+    _display_state_manager.set_led3(r, g, b)
+
+
+def set_led4(r: int, g: int, b: int) -> None:
+    """Set RGB LED 4 color (processing indicator).
+
+    Args:
+        r: Red value (0-255)
+        g: Green value (0-255)
+        b: Blue value (0-255)
+    """
+    _display_state_manager.set_led4(r, g, b)

@@ -16,11 +16,7 @@ from pathlib import Path
 
 from app.config import settings
 from app.infrastructure.events import SystemEvent, emit
-from app.infrastructure.hardware.display_service import (
-    clear_processing,
-    set_error,
-    set_processing,
-)
+from app.infrastructure.hardware.display_service import set_led4, set_text
 from app.infrastructure.locking import file_lock
 
 logger = logging.getLogger(__name__)
@@ -92,7 +88,8 @@ async def _run_health_check_internal():
     """Internal health check implementation."""
     logger.info("Starting database health check...")
 
-    set_processing("CHECKING DATABASE HEALTH...")
+    set_text("CHECKING DATABASE HEALTH...")
+    set_led4(0, 255, 0)  # Green for processing
 
     issues = []
 
@@ -104,7 +101,7 @@ async def _run_health_check_internal():
             await _report_issues(issues)
             error_msg = f"DB HEALTH: {len(issues)} ISSUE(S)"
             emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-            set_error(error_msg)
+            set_text(error_msg)
         else:
             logger.info("Database health check passed: all databases healthy")
 
@@ -112,9 +109,9 @@ async def _run_health_check_internal():
         logger.error(f"Health check failed: {e}", exc_info=True)
         error_msg = "HEALTH CHECK CRASHES"
         emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-        set_error(error_msg)
+        set_text(error_msg)
     finally:
-        clear_processing()
+        set_led4(0, 0, 0)  # Clear LED when done
 
 
 async def _check_database_integrity(db_path: Path) -> str:
