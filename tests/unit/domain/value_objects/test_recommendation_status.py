@@ -1,4 +1,7 @@
-"""Tests for RecommendationStatus enum."""
+"""Tests for RecommendationStatus value object.
+
+These tests validate the RecommendationStatus enum and its status checking functionality.
+"""
 
 import pytest
 
@@ -6,91 +9,65 @@ from app.domain.value_objects.recommendation_status import RecommendationStatus
 
 
 class TestRecommendationStatus:
-    """Test RecommendationStatus enum values and methods."""
+    """Test RecommendationStatus enum."""
 
-    def test_enum_values_exist(self):
-        """Test that all expected status values exist."""
-        assert RecommendationStatus.PENDING == "pending"
-        assert RecommendationStatus.EXECUTED == "executed"
-        assert RecommendationStatus.DISMISSED == "dismissed"
+    def test_recommendation_status_enum_values(self):
+        """Test that RecommendationStatus enum has expected values."""
+        assert RecommendationStatus.PENDING.value == "pending"
+        assert RecommendationStatus.ACCEPTED.value == "accepted"
+        assert RecommendationStatus.EXECUTED.value == "executed"
+        assert RecommendationStatus.REJECTED.value == "rejected"
+        assert RecommendationStatus.DISMISSED.value == "dismissed"
 
-    def test_status_values_are_strings(self):
-        """Test that status values are strings."""
-        assert isinstance(RecommendationStatus.PENDING, str)
-        assert isinstance(RecommendationStatus.EXECUTED, str)
-        assert isinstance(RecommendationStatus.DISMISSED, str)
+    def test_from_string_with_valid_status(self):
+        """Test from_string with valid status strings."""
+        assert RecommendationStatus.from_string("pending") == RecommendationStatus.PENDING
+        assert RecommendationStatus.from_string("accepted") == RecommendationStatus.ACCEPTED
+        assert RecommendationStatus.from_string("executed") == RecommendationStatus.EXECUTED
+        assert RecommendationStatus.from_string("rejected") == RecommendationStatus.REJECTED
+        assert RecommendationStatus.from_string("dismissed") == RecommendationStatus.DISMISSED
 
-    def test_status_from_string_valid(self):
-        """Test creating status from valid string."""
-        assert (
-            RecommendationStatus.from_string("pending") == RecommendationStatus.PENDING
-        )
-        assert (
-            RecommendationStatus.from_string("executed")
-            == RecommendationStatus.EXECUTED
-        )
-        assert (
-            RecommendationStatus.from_string("dismissed")
-            == RecommendationStatus.DISMISSED
-        )
-        assert (
-            RecommendationStatus.from_string("PENDING") == RecommendationStatus.PENDING
-        )  # Case insensitive
-        assert (
-            RecommendationStatus.from_string("EXECUTED")
-            == RecommendationStatus.EXECUTED
-        )
+    def test_from_string_case_insensitive(self):
+        """Test that from_string is case-insensitive."""
+        assert RecommendationStatus.from_string("PENDING") == RecommendationStatus.PENDING
+        assert RecommendationStatus.from_string("Pending") == RecommendationStatus.PENDING
+        assert RecommendationStatus.from_string("pending") == RecommendationStatus.PENDING
+        assert RecommendationStatus.from_string("EXECUTED") == RecommendationStatus.EXECUTED
 
-    def test_status_from_string_invalid(self):
-        """Test creating status from invalid string raises error."""
+    def test_from_string_with_invalid_status(self):
+        """Test that from_string raises ValueError for invalid statuses."""
         with pytest.raises(ValueError, match="Invalid recommendation status"):
             RecommendationStatus.from_string("INVALID")
 
-        with pytest.raises(ValueError, match="Invalid recommendation status"):
+        with pytest.raises(ValueError):
             RecommendationStatus.from_string("")
 
-        with pytest.raises(ValueError, match="Invalid recommendation status"):
-            RecommendationStatus.from_string("cancelled")
+        with pytest.raises(ValueError):
+            RecommendationStatus.from_string("UNKNOWN")
 
-    def test_status_is_valid(self):
-        """Test checking if status string is valid."""
-        assert RecommendationStatus.is_valid("pending") is True
-        assert RecommendationStatus.is_valid("executed") is True
-        assert RecommendationStatus.is_valid("dismissed") is True
-        assert RecommendationStatus.is_valid("PENDING") is True  # Case insensitive
-        assert RecommendationStatus.is_valid("INVALID") is False
-        assert RecommendationStatus.is_valid("") is False
+    def test_from_string_with_none(self):
+        """Test that from_string raises ValueError for None."""
+        with pytest.raises(ValueError):
+            RecommendationStatus.from_string(None)
 
-    def test_status_transitions(self):
-        """Test that status transitions are valid."""
-        # PENDING can transition to EXECUTED or DISMISSED
-        assert (
-            RecommendationStatus.PENDING.can_transition_to(
-                RecommendationStatus.EXECUTED
-            )
-            is True
-        )
-        assert (
-            RecommendationStatus.PENDING.can_transition_to(
-                RecommendationStatus.DISMISSED
-            )
-            is True
-        )
-        assert (
-            RecommendationStatus.PENDING.can_transition_to(RecommendationStatus.PENDING)
-            is False
-        )
+    def test_is_final_with_final_statuses(self):
+        """Test is_final method with final statuses."""
+        assert RecommendationStatus.EXECUTED.is_final() is True
+        assert RecommendationStatus.REJECTED.is_final() is True
+        assert RecommendationStatus.DISMISSED.is_final() is True
 
-        # EXECUTED and DISMISSED are terminal states
-        assert (
-            RecommendationStatus.EXECUTED.can_transition_to(
-                RecommendationStatus.PENDING
-            )
-            is False
-        )
-        assert (
-            RecommendationStatus.DISMISSED.can_transition_to(
-                RecommendationStatus.PENDING
-            )
-            is False
-        )
+    def test_is_final_with_non_final_statuses(self):
+        """Test is_final method with non-final statuses."""
+        assert RecommendationStatus.PENDING.is_final() is False
+        assert RecommendationStatus.ACCEPTED.is_final() is False
+
+    def test_recommendation_status_str_representation(self):
+        """Test that RecommendationStatus enum values have correct string representation."""
+        assert str(RecommendationStatus.PENDING) == "RecommendationStatus.PENDING"
+        assert str(RecommendationStatus.EXECUTED) == "RecommendationStatus.EXECUTED"
+
+    def test_recommendation_status_equality(self):
+        """Test RecommendationStatus enum equality."""
+        assert RecommendationStatus.PENDING == RecommendationStatus.PENDING
+        assert RecommendationStatus.EXECUTED == RecommendationStatus.EXECUTED
+        assert RecommendationStatus.PENDING != RecommendationStatus.EXECUTED
