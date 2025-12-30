@@ -745,3 +745,88 @@ async def clear_stuck_locks(lock_name: Optional[str] = Query(None)):
             "message": str(e),
             "cleared": cleared,
         }
+
+
+@router.get("/deploy/status")
+async def get_deployment_status():
+    """Get deployment status information.
+
+    Returns:
+        - repo_dir: Repository directory path
+        - deploy_dir: Deployment directory path
+        - has_changes: Whether there are changes between local and remote
+        - local_commit: Current local commit (short hash)
+        - remote_commit: Remote commit (short hash)
+        - service_status: Systemd service status
+        - staging_exists: Whether staging directory exists
+    """
+    try:
+        from pathlib import Path
+
+        from app.infrastructure.deployment.deployment_manager import DeploymentManager
+
+        REPO_DIR = Path("/home/arduino/repos/autoTrader")
+        DEPLOY_DIR = Path("/home/arduino/arduino-trader")
+        STAGING_DIR = Path("/home/arduino/arduino-trader-staging")
+        VENV_DIR = DEPLOY_DIR / "venv"
+
+        if not REPO_DIR.exists():
+            return {
+                "status": "error",
+                "message": f"Repository directory not found: {REPO_DIR}",
+            }
+
+        manager = DeploymentManager(
+            repo_dir=REPO_DIR,
+            deploy_dir=DEPLOY_DIR,
+            staging_dir=STAGING_DIR,
+            venv_dir=VENV_DIR,
+        )
+
+        status = manager.get_deployment_status()
+        return {
+            "status": "ok",
+            **status,
+        }
+    except Exception as e:
+        logger.error(f"Error getting deployment status: {e}", exc_info=True)
+        return {
+            "status": "error",
+            "message": str(e),
+        }
+
+
+@router.post("/deploy/trigger")
+async def trigger_deployment():
+    """Manually trigger deployment check.
+
+    This will check for updates and deploy if changes are detected.
+    Note: Deployment uses file-based locking, so if a deployment is already
+    in progress, this will wait or fail depending on lock timeout.
+
+    Returns:
+        - status: "ok" or "error"
+        - message: Status message
+        - deployed: Whether deployment actually happened (if completed)
+        - commit_before: Commit before deployment (if deployed)
+        - commit_after: Commit after deployment (if deployed)
+        - error: Error message (if failed)
+    """
+    try:
+        # Run deployment in background to avoid blocking the API
+        import asyncio
+
+        from app.jobs.auto_deploy import run_auto_deploy
+
+        asyncio.create_task(run_auto_deploy())
+
+        return {
+            "status": "ok",
+            "message": "Deployment check triggered (running in background)",
+        }
+    except Exception as e:
+        logger.error(f"Error triggering deployment: {e}", exc_info=True)
+        return {
+            "status": "error",
+            "message": str(e),
+        }
