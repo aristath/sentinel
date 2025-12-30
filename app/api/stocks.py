@@ -416,7 +416,7 @@ async def refresh_stock_data(
     Args:
         identifier: Stock symbol (e.g., AAPL.US) or ISIN (e.g., US0378331005)
     """
-    from app.jobs.daily_pipeline import refresh_single_stock
+    from app.jobs.stocks_data_sync import refresh_single_stock
 
     stock = await stock_repo.get_by_identifier(identifier)
     if not stock:

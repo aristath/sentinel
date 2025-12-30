@@ -171,9 +171,9 @@ async def trigger_historical_sync():
         return {"status": "error", "message": str(e)}
 
 
-@router.post("/sync/daily-pipeline")
-async def trigger_daily_pipeline():
-    """Manually trigger daily pipeline (historical sync, industry detection, metrics, scores).
+@router.post("/sync/stocks-data")
+async def trigger_stocks_data_sync():
+    """Manually trigger stocks data sync (historical sync, industry detection, metrics, scores).
 
     Processes all stocks that haven't been synced in 24 hours.
     This includes:
@@ -182,11 +182,11 @@ async def trigger_daily_pipeline():
     - Calculating technical metrics (RSI, EMA, CAGR, etc.)
     - Refreshing stock scores
     """
-    from app.jobs.daily_pipeline import run_daily_pipeline
+    from app.jobs.stocks_data_sync import run_stocks_data_sync
 
     try:
-        await run_daily_pipeline()
-        return {"status": "success", "message": "Daily pipeline completed"}
+        await run_stocks_data_sync()
+        return {"status": "success", "message": "Stocks data sync completed"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 

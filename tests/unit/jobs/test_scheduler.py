@@ -277,7 +277,7 @@ class TestInitScheduler:
                 return_value=mock_settings_repo,
             ),
             patch("app.jobs.sync_cycle.run_sync_cycle"),
-            patch("app.jobs.daily_pipeline.run_daily_pipeline"),
+            patch("app.jobs.stocks_data_sync.run_stocks_data_sync"),
             patch("app.jobs.maintenance.run_daily_maintenance"),
             patch("app.jobs.maintenance.run_weekly_maintenance"),
         ):
@@ -303,7 +303,7 @@ class TestInitScheduler:
                 return_value=mock_settings_repo,
             ),
             patch("app.jobs.sync_cycle.run_sync_cycle"),
-            patch("app.jobs.daily_pipeline.run_daily_pipeline"),
+            patch("app.jobs.stocks_data_sync.run_stocks_data_sync"),
             patch("app.jobs.maintenance.run_daily_maintenance"),
             patch("app.jobs.maintenance.run_weekly_maintenance"),
         ):
@@ -330,7 +330,7 @@ class TestInitScheduler:
                 return_value=mock_settings_repo,
             ),
             patch("app.jobs.sync_cycle.run_sync_cycle"),
-            patch("app.jobs.daily_pipeline.run_daily_pipeline"),
+            patch("app.jobs.stocks_data_sync.run_stocks_data_sync"),
             patch("app.jobs.maintenance.run_daily_maintenance"),
             patch("app.jobs.maintenance.run_weekly_maintenance"),
         ):
@@ -345,8 +345,8 @@ class TestInitScheduler:
         assert isinstance(sync_job.trigger, IntervalTrigger)
 
     @pytest.mark.asyncio
-    async def test_schedules_daily_pipeline_job(self):
-        """Test that daily_pipeline job is scheduled hourly."""
+    async def test_schedules_stocks_data_sync_job(self):
+        """Test that stocks_data_sync job is scheduled hourly."""
         from app.jobs import scheduler as scheduler_module
         from app.jobs.scheduler import init_scheduler
 
@@ -361,17 +361,17 @@ class TestInitScheduler:
                 return_value=mock_settings_repo,
             ),
             patch("app.jobs.sync_cycle.run_sync_cycle"),
-            patch("app.jobs.daily_pipeline.run_daily_pipeline"),
+            patch("app.jobs.stocks_data_sync.run_stocks_data_sync"),
             patch("app.jobs.maintenance.run_daily_maintenance"),
             patch("app.jobs.maintenance.run_weekly_maintenance"),
         ):
             await init_scheduler()
 
         jobs = scheduler_module.scheduler.get_jobs()
-        pipeline_job = next((j for j in jobs if j.id == "daily_pipeline"), None)
+        pipeline_job = next((j for j in jobs if j.id == "stocks_data_sync"), None)
 
         assert pipeline_job is not None
-        assert pipeline_job.name == "Daily Pipeline"
+        assert pipeline_job.name == "Stocks Data Sync"
         assert isinstance(pipeline_job.trigger, IntervalTrigger)
 
     @pytest.mark.asyncio
@@ -391,7 +391,7 @@ class TestInitScheduler:
                 return_value=mock_settings_repo,
             ),
             patch("app.jobs.sync_cycle.run_sync_cycle"),
-            patch("app.jobs.daily_pipeline.run_daily_pipeline"),
+            patch("app.jobs.stocks_data_sync.run_stocks_data_sync"),
             patch("app.jobs.maintenance.run_daily_maintenance"),
             patch("app.jobs.maintenance.run_weekly_maintenance"),
         ):
@@ -421,7 +421,7 @@ class TestInitScheduler:
                 return_value=mock_settings_repo,
             ),
             patch("app.jobs.sync_cycle.run_sync_cycle"),
-            patch("app.jobs.daily_pipeline.run_daily_pipeline"),
+            patch("app.jobs.stocks_data_sync.run_stocks_data_sync"),
             patch("app.jobs.maintenance.run_daily_maintenance"),
             patch("app.jobs.maintenance.run_weekly_maintenance"),
         ):
@@ -451,7 +451,7 @@ class TestInitScheduler:
                 return_value=mock_settings_repo,
             ),
             patch("app.jobs.sync_cycle.run_sync_cycle"),
-            patch("app.jobs.daily_pipeline.run_daily_pipeline"),
+            patch("app.jobs.stocks_data_sync.run_stocks_data_sync"),
             patch("app.jobs.maintenance.run_daily_maintenance"),
             patch("app.jobs.maintenance.run_weekly_maintenance"),
             patch("app.jobs.scheduler.logger") as mock_logger,
@@ -481,7 +481,7 @@ class TestInitScheduler:
                 return_value=mock_settings_repo,
             ),
             patch("app.jobs.sync_cycle.run_sync_cycle"),
-            patch("app.jobs.daily_pipeline.run_daily_pipeline"),
+            patch("app.jobs.stocks_data_sync.run_stocks_data_sync"),
             patch("app.jobs.maintenance.run_daily_maintenance"),
             patch("app.jobs.maintenance.run_weekly_maintenance"),
         ):
@@ -515,7 +515,7 @@ class TestInitScheduler:
                 return_value=mock_settings_repo,
             ),
             patch("app.jobs.sync_cycle.run_sync_cycle"),
-            patch("app.jobs.daily_pipeline.run_daily_pipeline"),
+            patch("app.jobs.stocks_data_sync.run_stocks_data_sync"),
             patch("app.jobs.maintenance.run_daily_maintenance"),
             patch("app.jobs.maintenance.run_weekly_maintenance"),
         ):
@@ -552,7 +552,7 @@ class TestRescheduleAllJobs:
                 return_value=mock_settings_repo,
             ),
             patch("app.jobs.sync_cycle.run_sync_cycle"),
-            patch("app.jobs.daily_pipeline.run_daily_pipeline"),
+            patch("app.jobs.stocks_data_sync.run_stocks_data_sync"),
             patch("app.jobs.maintenance.run_daily_maintenance"),
             patch("app.jobs.maintenance.run_weekly_maintenance"),
         ):
@@ -591,7 +591,7 @@ class TestRescheduleAllJobs:
                 return_value=mock_settings_repo,
             ),
             patch("app.jobs.sync_cycle.run_sync_cycle"),
-            patch("app.jobs.daily_pipeline.run_daily_pipeline"),
+            patch("app.jobs.stocks_data_sync.run_stocks_data_sync"),
             patch("app.jobs.maintenance.run_daily_maintenance"),
             patch("app.jobs.maintenance.run_weekly_maintenance"),
         ):
@@ -618,7 +618,7 @@ class TestRescheduleAllJobs:
                 return_value=mock_settings_repo,
             ),
             patch("app.jobs.sync_cycle.run_sync_cycle"),
-            patch("app.jobs.daily_pipeline.run_daily_pipeline"),
+            patch("app.jobs.stocks_data_sync.run_stocks_data_sync"),
             patch("app.jobs.maintenance.run_daily_maintenance"),
             patch("app.jobs.maintenance.run_weekly_maintenance"),
             patch("app.jobs.scheduler.logger") as mock_logger,
@@ -787,8 +787,8 @@ class TestGetJobHealthStatus:
         mock_job1.next_run_time = datetime(2025, 12, 27, 12, 0, 0)
 
         mock_job2 = MagicMock()
-        mock_job2.id = "daily_pipeline"
-        mock_job2.name = "Daily Pipeline"
+        mock_job2.id = "stocks_data_sync"
+        mock_job2.name = "Stocks Data Sync"
         mock_job2.next_run_time = datetime(2025, 12, 27, 13, 0, 0)
 
         mock_scheduler = MagicMock()
@@ -802,9 +802,9 @@ class TestGetJobHealthStatus:
             status = get_job_health_status()
 
         assert "sync_cycle" in status
-        assert "daily_pipeline" in status
+        assert "stocks_data_sync" in status
         assert status["sync_cycle"]["name"] == "Sync Cycle"
-        assert status["daily_pipeline"]["name"] == "Daily Pipeline"
+        assert status["stocks_data_sync"]["name"] == "Stocks Data Sync"
 
     def test_includes_failure_count(self):
         """Test that failure count is included in status."""
@@ -955,7 +955,7 @@ class TestEdgeCases:
                 return_value=mock_settings_repo,
             ),
             patch("app.jobs.sync_cycle.run_sync_cycle"),
-            patch("app.jobs.daily_pipeline.run_daily_pipeline"),
+            patch("app.jobs.stocks_data_sync.run_stocks_data_sync"),
             patch("app.jobs.maintenance.run_daily_maintenance"),
             patch("app.jobs.maintenance.run_weekly_maintenance"),
         ):
@@ -983,7 +983,7 @@ class TestEdgeCases:
                 return_value=mock_settings_repo,
             ),
             patch("app.jobs.sync_cycle.run_sync_cycle"),
-            patch("app.jobs.daily_pipeline.run_daily_pipeline"),
+            patch("app.jobs.stocks_data_sync.run_stocks_data_sync"),
             patch("app.jobs.maintenance.run_daily_maintenance"),
             patch("app.jobs.maintenance.run_weekly_maintenance"),
         ):
@@ -1051,7 +1051,7 @@ class TestEdgeCases:
                 return_value=mock_settings_repo,
             ),
             patch("app.jobs.sync_cycle.run_sync_cycle"),
-            patch("app.jobs.daily_pipeline.run_daily_pipeline"),
+            patch("app.jobs.stocks_data_sync.run_stocks_data_sync"),
             patch("app.jobs.maintenance.run_daily_maintenance"),
             patch("app.jobs.maintenance.run_weekly_maintenance"),
         ):

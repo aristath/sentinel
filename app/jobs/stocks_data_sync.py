@@ -1,4 +1,4 @@
-"""Daily pipeline job for per-symbol data processing.
+"""Stocks data sync job for per-symbol data processing.
 
 This job runs hourly and processes stocks sequentially:
 1. Gets stocks that haven't been synced in 24 hours (last_synced)
@@ -64,12 +64,12 @@ async def _run_daily_pipeline_internal():
                 logger.error(f"Pipeline failed for {stock.symbol}: {e}")
                 errors += 1
 
-        logger.info(f"Daily pipeline complete: {processed} processed, {errors} errors")
+        logger.info(f"Stocks data sync complete: {processed} processed, {errors} errors")
         emit(SystemEvent.SYNC_COMPLETE)
 
     except Exception as e:
-        logger.error(f"Daily pipeline failed: {e}", exc_info=True)
-        error_msg = "DAILY PIPELINE CRASHES"
+        logger.error(f"Stocks data sync failed: {e}", exc_info=True)
+        error_msg = "STOCKS DATA SYNC CRASHES"
         emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
         set_text(error_msg)
     finally:
@@ -277,7 +277,7 @@ async def _detect_and_update_industry(symbol: str):
     """
     Detect and update industry from Yahoo Finance for a stock.
 
-    This runs automatically during the daily pipeline to keep industry
+    This runs automatically during the stocks data sync to keep industry
     data up to date from Yahoo Finance.
 
     Args:
@@ -348,7 +348,7 @@ async def _detect_and_update_country_and_exchange(symbol: str):
     """
     Detect and update country and exchange from Yahoo Finance for a stock.
 
-    This runs automatically during the daily pipeline to keep country
+    This runs automatically during the stocks data sync to keep country
     and exchange data up to date from Yahoo Finance.
 
     Args:

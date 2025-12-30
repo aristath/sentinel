@@ -3,7 +3,7 @@
 Scheduler with 9 jobs:
 1. sync_cycle - Every 5 minutes, handles data synchronization
 1.5. event_based_trading - Continuously, handles trade execution after planning completion
-2. daily_pipeline - Hourly, processes per-symbol data
+2. stocks_data_sync - Hourly, processes per-symbol data
 3. daily_maintenance - Daily at configured hour, backup and cleanup
 4. weekly_maintenance - Weekly on Sunday, integrity checks
 5. dividend_reinvestment - Daily, automatic dividend reinvestment
@@ -242,7 +242,7 @@ async def init_scheduler() -> AsyncIOScheduler:
 
     logger.info(
         f"Scheduler initialized with 9 scheduled jobs + 1 background task - "
-        f"sync_cycle:{sync_cycle_minutes}m, daily_pipeline:1h, "
+        f"sync_cycle:{sync_cycle_minutes}m, stocks_data_sync:1h, "
         f"maintenance:{maintenance_hour}:00, dividend_reinvestment:{maintenance_hour}:30, "
         f"universe_pruning:1st of month {maintenance_hour}:00, "
         f"stock_discovery:15th of month 02:00, "
@@ -268,7 +268,7 @@ async def reschedule_all_jobs():
         "sync_cycle", trigger=IntervalTrigger(minutes=sync_cycle_minutes)
     )
 
-    # Daily pipeline is fixed at hourly, no reschedule needed
+    # Stocks data sync is fixed at hourly, no reschedule needed
 
     # Reschedule maintenance jobs
     scheduler.reschedule_job(

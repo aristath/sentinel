@@ -15,7 +15,7 @@ from app.domain.value_objects.currency import Currency
 from app.infrastructure.database.manager import DatabaseManager
 from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.external.tradernet import TradernetClient
-from app.jobs.daily_pipeline import _sync_historical_for_symbol
+from app.jobs.stocks_data_sync import _sync_historical_for_symbol
 from app.repositories import StockRepository
 
 logger = logging.getLogger(__name__)

@@ -573,7 +573,7 @@ class TestJobsStatusResponse:
             status="ok",
             jobs=[
                 {"name": "sync_cycle", "enabled": True},
-                {"name": "daily_pipeline", "enabled": False},
+                {"name": "stocks_data_sync", "enabled": False},
             ],
         )
 

@@ -14,14 +14,14 @@ DisplayStateManager (3-pool priority: error > processing > next_actions)
     ├─→ /api/status/led/display (polled every 2s by Python app)
     ├─→ /api/status/led/display/stream (SSE - NOT USED by Python app)
     └─→ DISPLAY_STATE_CHANGED events → SSE subscribers (web UI only)
-    
+
 Python Bridge App (Docker)
     ↓
     ├─→ Polls /api/status/led/display every 2s
     ├─→ Tracks _last_text, _last_text_speed, _last_led3, _last_led4
     ├─→ Estimates scroll duration and waits for completion
     └─→ Calls Router Bridge → Arduino MCU
-    
+
 Arduino Sketch
     ↓
     ├─→ scrollText() - Uses ArduinoGraphics native scrolling
@@ -125,7 +125,7 @@ Arduino Sketch
 - **Problem:** Display updated from many places:
   - `sync_cycle._step_update_display()`
   - `display_updater.update_display_periodic()`
-  - Various jobs (cash_rebalance, event_based_trading, etc.)
+  - Various jobs (event_based_trading, etc.)
 - **Impact:** Hard to track what's happening, potential race conditions
 - **Evidence:** 136 matches for `set_error|set_processing|set_next_actions`
 
@@ -182,14 +182,14 @@ FastAPI App
 DisplayStateManager (single source of truth)
     ↓
     └─→ /api/status/led/display/stream (SSE)
-    
+
 Python Bridge App (Docker)
     ↓
     ├─→ Connects to SSE stream (reconnect on failure)
     ├─→ Receives state changes in real-time
     ├─→ Calls Router Bridge immediately (no state tracking)
     └─→ Simple retry logic on Bridge failures
-    
+
 Arduino Sketch
     ↓
     └─→ Only scrollText, setRGB3, setRGB4 (remove unused)
@@ -226,4 +226,3 @@ Arduino Sketch
 3. Create refactoring plan with specific changes
 4. Implement changes incrementally
 5. Test thoroughly on Arduino hardware
-
