@@ -125,17 +125,25 @@ class StockDiscoveryService:
                             continue
 
                         # Filter by minimum volume
-                        volume = security.get("volume", 0.0)
-                        if isinstance(volume, (int, float)):
-                            volume = float(volume)
-                        else:
-                            volume = 0.0
+                        # Note: If volume is not available (e.g., from ticker-only API response),
+                        # we assume it meets the threshold since these are "most traded" stocks
+                        volume = security.get("volume", None)
+                        if volume is not None:
+                            if isinstance(volume, (int, float)):
+                                volume = float(volume)
+                            else:
+                                volume = 0.0
 
-                        if volume < min_volume:
+                            if volume < min_volume:
+                                logger.debug(
+                                    f"Skipping {symbol}: volume {volume} below minimum {min_volume}"
+                                )
+                                continue
+                        else:
+                            # Volume not available - assume it meets threshold for "most traded" stocks
                             logger.debug(
-                                f"Skipping {symbol}: volume {volume} below minimum {min_volume}"
+                                f"Volume not available for {symbol}, assuming it meets threshold (most traded)"
                             )
-                            continue
 
                         # Add candidate
                         logger.debug(f"Adding candidate: {symbol} (volume: {volume})")
