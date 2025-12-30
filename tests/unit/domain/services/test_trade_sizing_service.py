@@ -80,56 +80,60 @@ class TestCalculateBuyQuantity:
 class TestCalculateSellQuantity:
     """Test calculate_sell_quantity method."""
 
-    def test_calculates_quantity_for_eur_stock(self):
-        """Test quantity calculation for EUR stock."""
+    def test_rounds_down_to_lot_boundary(self):
+        """Test that quantity is rounded down to nearest lot boundary."""
         result = TradeSizingService.calculate_sell_quantity(
-            target_value_eur=500.0, price=50.0, min_lot=1, exchange_rate=1.0
+            target_quantity=15.7, min_lot=5, current_holdings=100
         )
 
-        assert result.quantity == 10  # 500 / 50 = 10 shares
-        assert result.value_native == 500.0
-        assert result.value_eur == 500.0
+        # 15.7 / 5 = 3.14, rounds down to 3 lots
+        assert result == 15  # 3 * 5 = 15 shares
 
     def test_respects_min_lot_constraint(self):
         """Test that minimum lot size is respected for sells."""
         result = TradeSizingService.calculate_sell_quantity(
-            target_value_eur=500.0, price=100.0, min_lot=20, exchange_rate=1.0
+            target_quantity=7, min_lot=5, current_holdings=100
         )
 
-        # 500 / 100 = 5 shares, but min_lot = 20
-        # Should round up to 20
-        assert result.quantity == 20
+        # 7 / 5 = 1.4, rounds down to 1 lot
+        assert result == 5  # 1 * 5 = 5 shares
 
-    def test_handles_currency_conversion(self):
-        """Test handling of currency conversion for sells."""
+    def test_caps_at_current_holdings(self):
+        """Test that sell quantity is capped at current holdings."""
         result = TradeSizingService.calculate_sell_quantity(
-            target_value_eur=1000.0, price=100.0, min_lot=1, exchange_rate=0.9
+            target_quantity=150, min_lot=1, current_holdings=100
         )
 
-        # 1000 EUR / 0.9 = 1111.11 USD value
-        # 1111.11 / 100 = 11.11 shares, rounded down to 11
-        assert result.quantity == 11
-        assert result.value_native == pytest.approx(1100.0, rel=0.01)
+        # Target 150, but only have 100
+        assert result == 100
 
-    def test_rounds_down_to_whole_shares(self):
-        """Test that quantity is rounded down to whole shares for sells."""
+    def test_caps_at_current_holdings_with_lots(self):
+        """Test that sell quantity is capped at current holdings when using lots."""
         result = TradeSizingService.calculate_sell_quantity(
-            target_value_eur=500.0, price=33.33, min_lot=1, exchange_rate=1.0
+            target_quantity=150, min_lot=10, current_holdings=95
         )
 
-        # 500 / 33.33 = 15.001 shares, should round down to 15
-        assert result.quantity == 15
+        # 150 / 10 = 15 lots = 150 shares, but capped at 95
+        # 95 / 10 = 9.5, rounds down to 9 lots = 90 shares
+        assert result == 90
 
-    def test_calculates_lots_correctly(self):
-        """Test that number of lots is calculated correctly for sells."""
+    def test_handles_zero_current_holdings(self):
+        """Test handling when current holdings is zero."""
         result = TradeSizingService.calculate_sell_quantity(
-            target_value_eur=1000.0, price=50.0, min_lot=10, exchange_rate=1.0
+            target_quantity=100, min_lot=1, current_holdings=0
         )
 
-        # 1000 / 50 = 20 shares
-        # 20 / 10 = 2 lots
-        assert result.quantity == 20
-        assert result.num_lots == 2
+        # Should round down but not be capped (since holdings=0 means no cap)
+        assert result == 100
+
+    def test_handles_min_lot_of_one(self):
+        """Test handling when min_lot is 1 (no lot rounding)."""
+        result = TradeSizingService.calculate_sell_quantity(
+            target_quantity=15.7, min_lot=1, current_holdings=100
+        )
+
+        # Should just round down to int
+        assert result == 15
 
 
 class TestEdgeCases:
@@ -168,9 +172,9 @@ class TestEdgeCases:
             target_value_eur=1.0, price=100.0, min_lot=1, exchange_rate=1.0
         )
 
-        # 1 / 100 = 0.01 shares, rounds down to 0
-        # But min_lot = 1, so should be at least 1
-        assert result.quantity >= 1
+        # 1 / 100 = 0.01 shares, but min_lot costs 100 EUR
+        # Since lot_cost_eur (100) > target_value_eur (1), buy exactly min_lot
+        assert result.quantity == 1
 
     def test_handles_very_high_price(self):
         """Test handling of very high stock prices."""
@@ -178,9 +182,9 @@ class TestEdgeCases:
             target_value_eur=1000.0, price=10000.0, min_lot=1, exchange_rate=1.0
         )
 
-        # 1000 / 10000 = 0.1 shares, rounds down to 0
-        # But min_lot = 1, so should be 1
-        assert result.quantity >= 1
+        # lot_cost_eur = 1 * 10000 / 1 = 10000
+        # Since lot_cost_eur (10000) > target_value_eur (1000), buy exactly min_lot
+        assert result.quantity == 1
 
     def test_handles_min_lot_greater_than_calculated_quantity(self):
         """Test when min_lot is greater than calculated quantity."""
