@@ -4,12 +4,11 @@ These tests validate rebalancing trigger detection, including position drift
 and cash threshold triggers.
 """
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
 from app.domain.models import Position
-from app.domain.value_objects.currency import Currency
 
 
 class TestCheckRebalanceTriggers:

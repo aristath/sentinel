@@ -81,7 +81,7 @@ class TestCalculatePriority:
         result = PriorityCalculator.calculate_priority(input_data)
 
         # Should be rounded to 4 decimal places
-        combined = 0.333333 * 1.5  # = 0.4999995
+        # 0.333333 * 1.5 = 0.4999995, should round to 0.5000
         assert result.combined_priority == pytest.approx(0.5000, abs=0.0001)
 
     def test_preserves_optional_fields(self):
