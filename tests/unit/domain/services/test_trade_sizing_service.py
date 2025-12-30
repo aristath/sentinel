@@ -136,6 +136,37 @@ class TestCalculateSellQuantity:
         assert result == 15
 
 
+class TestRoundToLots:
+    """Test round_to_lots method."""
+
+    def test_rounds_down_to_lot_boundary(self):
+        """Test that quantity is rounded down to nearest lot boundary."""
+        result = TradeSizingService.round_to_lots(quantity=17, min_lot=5)
+
+        # 17 / 5 = 3.4, rounds down to 3 lots
+        assert result == 15  # 3 * 5 = 15 shares
+
+    def test_handles_min_lot_of_one(self):
+        """Test handling when min_lot is 1 (no lot rounding)."""
+        result = TradeSizingService.round_to_lots(quantity=15.7, min_lot=1)
+
+        # Should just round down to int
+        assert result == 15
+
+    def test_handles_exact_lot_multiple(self):
+        """Test handling when quantity is exact multiple of min_lot."""
+        result = TradeSizingService.round_to_lots(quantity=20, min_lot=5)
+
+        assert result == 20  # 4 * 5 = 20, exact match
+
+    def test_handles_quantity_less_than_lot(self):
+        """Test handling when quantity is less than one lot."""
+        result = TradeSizingService.round_to_lots(quantity=3, min_lot=5)
+
+        # 3 / 5 = 0.6, rounds down to 0 lots
+        assert result == 0
+
+
 class TestEdgeCases:
     """Test edge cases and boundary conditions."""
 
