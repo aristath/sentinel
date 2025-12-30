@@ -33,8 +33,27 @@ document.addEventListener('alpine:init', () => {
     tradingMode: 'research',  // 'live' or 'research'
     sparklines: {},  // {symbol: [{time, value}, ...]}
 
+    // Logs State
+    logs: {
+      entries: [],
+      selectedLogFile: 'arduino-trader.log',
+      availableLogFiles: [],
+      filterLevel: null,  // null = all, or 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'
+      searchQuery: '',
+      lineCount: 100,
+      showErrorsOnly: false,
+      autoRefresh: true,
+      refreshInterval: 5000,  // 5 seconds
+      totalLines: 0,
+      returnedLines: 0,
+      logPath: '',
+      lastRefresh: null,
+      loading: false,
+      refreshTimer: null
+    },
+
     // UI State - Tabs
-    activeTab: 'next-actions',  // 'next-actions', 'diversification', 'stock-universe', or 'recent-trades'
+    activeTab: 'next-actions',  // 'next-actions', 'diversification', 'stock-universe', 'recent-trades', or 'logs'
 
     // UI State - Filters
     stockFilter: 'all',
@@ -65,7 +84,8 @@ document.addEventListener('alpine:init', () => {
       countrySave: false,
       industrySave: false,
       stockSave: false,
-      refreshData: false
+      refreshData: false,
+      logs: false
     },
 
     // SSE connections
@@ -768,6 +788,90 @@ document.addEventListener('alpine:init', () => {
       } catch (e) {
         console.error('Failed to toggle trading mode:', e);
         this.showMessage('Failed to toggle trading mode', 'error');
+      }
+    },
+
+    // Logs
+    async fetchAvailableLogFiles() {
+      try {
+        const result = await API.fetchAvailableLogFiles();
+        if (result.status === 'ok') {
+          this.logs.availableLogFiles = result.log_files || [];
+        }
+      } catch (e) {
+        console.error('Failed to fetch available log files:', e);
+      }
+    },
+
+    async fetchLogs() {
+      if (this.logs.loading) return;
+      this.logs.loading = true;
+
+      try {
+        let result;
+        if (this.logs.showErrorsOnly) {
+          result = await API.fetchErrorLogs(this.logs.selectedLogFile, this.logs.lineCount);
+        } else {
+          result = await API.fetchLogs(
+            this.logs.selectedLogFile,
+            this.logs.lineCount,
+            this.logs.filterLevel,
+            this.logs.searchQuery || null
+          );
+        }
+
+        if (result.status === 'ok') {
+          this.logs.entries = result.logs || [];
+          this.logs.totalLines = result.total_lines || result.total_error_lines || 0;
+          this.logs.returnedLines = result.returned_lines || 0;
+          this.logs.logPath = result.log_path || result.log_file || '';
+          this.logs.lastRefresh = new Date();
+        } else {
+          this.logs.entries = [];
+          this.showMessage(result.message || 'Failed to fetch logs', 'error');
+        }
+      } catch (e) {
+        console.error('Failed to fetch logs:', e);
+        this.logs.entries = [];
+        this.showMessage('Failed to fetch logs', 'error');
+      } finally {
+        this.logs.loading = false;
+      }
+    },
+
+    startLogsAutoRefresh() {
+      if (this.logs.refreshTimer) return; // Already running
+      if (!this.logs.autoRefresh) return;
+
+      // Fetch immediately
+      this.fetchLogs();
+
+      // Set up interval
+      this.logs.refreshTimer = setInterval(() => {
+        if (this.activeTab === 'logs' && this.logs.autoRefresh) {
+          this.fetchLogs();
+        }
+      }, this.logs.refreshInterval);
+    },
+
+    stopLogsAutoRefresh() {
+      if (this.logs.refreshTimer) {
+        clearInterval(this.logs.refreshTimer);
+        this.logs.refreshTimer = null;
+      }
+    },
+
+    // Watch for tab changes to start/stop auto-refresh
+    watchActiveTab() {
+      // This will be called when activeTab changes
+      if (this.activeTab === 'logs') {
+        // Load available log files if not loaded
+        if (this.logs.availableLogFiles.length === 0) {
+          this.fetchAvailableLogFiles();
+        }
+        this.startLogsAutoRefresh();
+      } else {
+        this.stopLogsAutoRefresh();
       }
     },
 
