@@ -12,6 +12,7 @@ from app.application.services.recommendation.portfolio_context_builder import (
     build_portfolio_context,
 )
 from app.domain.analytics.market_regime import detect_market_regime
+from app.domain.exceptions import ValidationError
 from app.domain.models import MultiStepRecommendation, Recommendation
 from app.domain.repositories.protocols import (
     IAllocationRepository,
@@ -133,33 +134,44 @@ class RebalancingService:
         # Convert MultiStepRecommendation to Recommendation format
         recommendations = []
         for step in buy_steps[:max_trades]:  # Limit to max_trades
-            currency_val = step.currency
-            if isinstance(currency_val, str):
-                currency = Currency.from_string(currency_val)
-            else:
-                currency = currency_val
+            try:
+                currency_val = step.currency
+                if isinstance(currency_val, str):
+                    currency = Currency.from_string(currency_val)
+                else:
+                    currency = currency_val
 
-            # Convert string side to TradeSide enum if needed
-            side_val = (
-                TradeSide.from_string(step.side)
-                if isinstance(step.side, str)
-                else step.side
-            )
-
-            recommendations.append(
-                Recommendation(
-                    symbol=step.symbol,
-                    name=step.name,
-                    side=side_val,
-                    quantity=step.quantity,
-                    estimated_price=step.estimated_price,
-                    estimated_value=step.estimated_value,
-                    reason=step.reason,
-                    country=None,
-                    currency=currency,
-                    status=RecommendationStatus.PENDING,
+                # Convert string side to TradeSide enum if needed
+                side_val = (
+                    TradeSide.from_string(step.side)
+                    if isinstance(step.side, str)
+                    else step.side
                 )
-            )
+
+                # Validate before creating Recommendation (will raise ValidationError if invalid)
+                if step.quantity <= 0 or step.estimated_price <= 0:
+                    logger.warning(
+                        f"Skipping {step.symbol}: invalid quantity ({step.quantity}) or price ({step.estimated_price})"
+                    )
+                    continue
+
+                recommendations.append(
+                    Recommendation(
+                        symbol=step.symbol,
+                        name=step.name,
+                        side=side_val,
+                        quantity=step.quantity,
+                        estimated_price=step.estimated_price,
+                        estimated_value=step.estimated_value,
+                        reason=step.reason,
+                        country=None,
+                        currency=currency,
+                        status=RecommendationStatus.PENDING,
+                    )
+                )
+            except ValidationError as e:
+                logger.warning(f"Skipping invalid recommendation {step.symbol}: {e}")
+                continue
 
         if not recommendations:
             logger.info("No buy recommendations available")

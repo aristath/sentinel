@@ -386,13 +386,15 @@ class TestCalculateRebalanceTrades:
             available_cash_after=0.0,
         )
 
-        # Invalid recommendation (zero quantity)
+        # Invalid recommendation (zero quantity that should be filtered)
+        # MultiStepRecommendation allows invalid values, but they should be filtered
+        # when converting to Recommendation
         invalid_step = MultiStepRecommendation(
             step=2,
             side=TradeSide.BUY,
             symbol="MSFT",
             name="Microsoft",
-            quantity=0.0,  # Invalid
+            quantity=0.0,  # Zero quantity, should be filtered
             estimated_price=100.0,
             estimated_value=0.0,
             currency=Currency.USD,

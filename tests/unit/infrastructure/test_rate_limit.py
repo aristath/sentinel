@@ -34,7 +34,7 @@ class TestRateLimitMiddleware:
     @pytest.fixture
     def middleware(self, mock_app):
         """Create RateLimitMiddleware with test settings."""
-        with patch("app.infrastructure.rate_limit.settings") as mock_settings:
+        with patch("app.config.settings") as mock_settings:
             mock_settings.rate_limit_max_requests = 10
             mock_settings.rate_limit_window_seconds = 60
             mock_settings.rate_limit_trade_max = 5
