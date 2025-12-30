@@ -4,6 +4,8 @@ All display updates should go through this service to ensure consistency
 and proper resource management.
 """
 
+import logging
+
 from app.infrastructure.dependencies import (
     get_allocation_repository,
     get_portfolio_repository,
@@ -14,6 +16,8 @@ from app.infrastructure.dependencies import (
     get_tradernet_client,
 )
 from app.infrastructure.hardware.display_service import set_text
+
+logger = logging.getLogger(__name__)
 
 
 async def update_display_ticker() -> None:
@@ -39,5 +43,14 @@ async def update_display_ticker() -> None:
         tradernet_client=tradernet_client,
     )
 
-    ticker_text = await ticker_service.generate_ticker_text()
-    set_text(ticker_text)
+    try:
+        ticker_text = await ticker_service.generate_ticker_text()
+        if ticker_text:
+            logger.debug(f"Generated ticker text: '{ticker_text}'")
+            set_text(ticker_text)
+        else:
+            logger.warning("Ticker service returned empty text, setting fallback")
+            set_text("READY")
+    except Exception as e:
+        logger.error(f"Failed to update display ticker: {e}", exc_info=True)
+        set_text("DISPLAY ERROR")

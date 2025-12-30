@@ -3,9 +3,12 @@
 Latest message wins - always shows the most recent text that was set.
 """
 
+import logging
 from threading import Lock
 
 from app.infrastructure.events import SystemEvent, emit
+
+logger = logging.getLogger(__name__)
 
 
 class DisplayStateManager:
@@ -29,7 +32,10 @@ class DisplayStateManager:
             text: Text to display
         """
         with self._lock:
+            old_text = self._current_text
             self._current_text = text
+            if old_text != text:
+                logger.debug(f"Display text updated: '{old_text}' -> '{text}'")
         emit(SystemEvent.DISPLAY_STATE_CHANGED)
 
     def get_current_text(self) -> str:

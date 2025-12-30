@@ -82,9 +82,13 @@ def fetch_display_state() -> dict | None:
     try:
         with _http_session.get(f"{API_URL}/api/status/led/display", timeout=2) as resp:
             if resp.status_code == 200:
-                return resp.json()
+                state = resp.json()
+                logger.debug(f"Fetched display state: text='{state.get('display_text', '')}', led3={state.get('led3')}, led4={state.get('led4')}")
+                return state
+            else:
+                logger.warning(f"API returned status {resp.status_code}")
     except Exception as e:
-        logger.debug(f"API fetch: {e}")
+        logger.debug(f"API fetch failed: {e}")
     return None
 
 
@@ -158,7 +162,11 @@ def loop():
         # Update display text (always send, Arduino queues with latest-wins)
         display_text = state.get("display_text", "")
         if display_text:
-            scroll_text(display_text, state.get("ticker_speed", DEFAULT_TICKER_SPEED))
+            success = scroll_text(display_text, state.get("ticker_speed", DEFAULT_TICKER_SPEED))
+            if not success:
+                logger.warning(f"Failed to send display text to Arduino: '{display_text}'")
+        else:
+            logger.debug("Display text is empty, skipping scroll_text call")
 
         time.sleep(1)  # Poll every 1 second
 

@@ -101,6 +101,28 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("Tradernet not connected - check credentials")
 
+    # Initialize display with startup message
+    from app.infrastructure.hardware.display_service import set_text
+
+    set_text("SYSTEM STARTING...")
+    logger.info("Display initialized with startup message")
+
+    # Trigger initial display update in background
+    async def update_display_on_startup():
+        try:
+            from app.infrastructure.hardware.display_updater_service import (
+                update_display_ticker,
+            )
+
+            await update_display_ticker()
+            logger.info("Display updated on startup")
+        except Exception as e:
+            logger.warning(f"Failed to update display on startup: {e}")
+
+    import asyncio
+
+    asyncio.create_task(update_display_on_startup())
+
     yield
 
     # Shutdown

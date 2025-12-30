@@ -127,6 +127,11 @@ async def get_led_display_state(
     led3 = display_manager.get_led3()
     led4 = display_manager.get_led4()
 
+    logger.debug(
+        f"LED display state requested: text='{display_text}', speed={ticker_speed}, "
+        f"led3={led3}, led4={led4}"
+    )
+
     return {
         "display_text": display_text,
         "ticker_speed": ticker_speed,
