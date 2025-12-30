@@ -327,7 +327,8 @@ class TestWeightBoundsCalculation:
 class TestSectorConstraintsBuilding:
     """Test building country and industry sector constraints."""
 
-    def test_geography_constraints_basic(self):
+    @pytest.mark.asyncio
+    async def test_geography_constraints_basic(self):
         """Test basic country group constraint building."""
         manager = ConstraintsManager()
         stocks = [
@@ -338,7 +339,7 @@ class TestSectorConstraintsBuilding:
         country_targets = {"US": 0.60, "EU": 0.40}
         ind_targets = {}
 
-        country_constraints, ind_constraints = manager.build_sector_constraints(
+        country_constraints, ind_constraints = await manager.build_sector_constraints(
             stocks, country_targets, ind_targets
         )
 
@@ -355,7 +356,8 @@ class TestSectorConstraintsBuilding:
         # For now, verify it doesn't crash
         assert isinstance(country_constraints, list)
 
-    def test_industry_constraints_basic(self):
+    @pytest.mark.asyncio
+    async def test_industry_constraints_basic(self):
         """Test basic industry group constraint building."""
         manager = ConstraintsManager()
         stocks = [
@@ -366,7 +368,7 @@ class TestSectorConstraintsBuilding:
         # Group targets (not individual industries)
         ind_targets = {"Technology": 0.70, "Finance": 0.30}
 
-        country_constraints, ind_constraints = manager.build_sector_constraints(
+        country_constraints, ind_constraints = await manager.build_sector_constraints(
             stocks, country_targets, ind_targets
         )
 
@@ -376,7 +378,8 @@ class TestSectorConstraintsBuilding:
         # For now, verify it doesn't crash
         assert isinstance(ind_constraints, list)
 
-    def test_none_country_grouped_as_other(self):
+    @pytest.mark.asyncio
+    async def test_none_country_grouped_as_other(self):
         """Test stocks with None country are grouped as OTHER."""
         manager = ConstraintsManager()
         stocks = [
@@ -386,7 +389,7 @@ class TestSectorConstraintsBuilding:
         country_targets = {"United States": 0.60, "OTHER": 0.40}
         ind_targets = {}
 
-        country_constraints, ind_constraints = manager.build_sector_constraints(
+        country_constraints, ind_constraints = await manager.build_sector_constraints(
             stocks, country_targets, ind_targets
         )
 
@@ -400,7 +403,8 @@ class TestSectorConstraintsBuilding:
         other_constraint = next(c for c in country_constraints if c.name == "OTHER")
         assert "UNKNOWN" in other_constraint.symbols
 
-    def test_none_industry_grouped_as_other(self):
+    @pytest.mark.asyncio
+    async def test_none_industry_grouped_as_other(self):
         """Test stocks with None industry are grouped as OTHER."""
         manager = ConstraintsManager()
         stocks = [
@@ -410,7 +414,7 @@ class TestSectorConstraintsBuilding:
         country_targets = {}
         ind_targets = {"Consumer Electronics": 0.70, "OTHER": 0.30}
 
-        country_constraints, ind_constraints = manager.build_sector_constraints(
+        country_constraints, ind_constraints = await manager.build_sector_constraints(
             stocks, country_targets, ind_targets
         )
 
@@ -424,7 +428,8 @@ class TestSectorConstraintsBuilding:
         other_constraint = next(c for c in ind_constraints if c.name == "OTHER")
         assert "UNKNOWN" in other_constraint.symbols
 
-    def test_zero_target_excluded_from_constraints(self):
+    @pytest.mark.asyncio
+    async def test_zero_target_excluded_from_constraints(self):
         """Test sectors with zero target weight are excluded."""
         manager = ConstraintsManager()
         stocks = [
@@ -435,7 +440,7 @@ class TestSectorConstraintsBuilding:
         country_targets = {"United States": 1.0, "Germany": 0.0}
         ind_targets = {}
 
-        country_constraints, ind_constraints = manager.build_sector_constraints(
+        country_constraints, ind_constraints = await manager.build_sector_constraints(
             stocks, country_targets, ind_targets
         )
 
@@ -443,7 +448,8 @@ class TestSectorConstraintsBuilding:
         assert len(country_constraints) == 1
         assert country_constraints[0].name == "United States"
 
-    def test_missing_target_treated_as_zero(self):
+    @pytest.mark.asyncio
+    async def test_missing_target_treated_as_zero(self):
         """Test sectors not in targets are excluded from constraints."""
         manager = ConstraintsManager()
         stocks = [
@@ -454,7 +460,7 @@ class TestSectorConstraintsBuilding:
         country_targets = {"United States": 0.60}
         ind_targets = {}
 
-        country_constraints, ind_constraints = manager.build_sector_constraints(
+        country_constraints, ind_constraints = await manager.build_sector_constraints(
             stocks, country_targets, ind_targets
         )
 
@@ -462,7 +468,8 @@ class TestSectorConstraintsBuilding:
         assert len(country_constraints) == 1
         assert country_constraints[0].name == "United States"
 
-    def test_bounds_clamped_to_hard_caps(self):
+    @pytest.mark.asyncio
+    async def test_bounds_clamped_to_hard_caps(self):
         """Test constraint bounds are clamped to hard caps."""
         manager = ConstraintsManager(geo_tolerance=0.30)
         stocks = [create_stock("AAPL", country="United States")]
@@ -470,7 +477,7 @@ class TestSectorConstraintsBuilding:
         country_targets = {"United States": 0.95}
         ind_targets = {}
 
-        country_constraints, ind_constraints = manager.build_sector_constraints(
+        country_constraints, ind_constraints = await manager.build_sector_constraints(
             stocks, country_targets, ind_targets
         )
 
@@ -482,7 +489,8 @@ class TestSectorConstraintsBuilding:
             MAX_COUNTRY_CONCENTRATION, abs=0.001
         )
 
-    def test_lower_bound_not_negative(self):
+    @pytest.mark.asyncio
+    async def test_lower_bound_not_negative(self):
         """Test lower bound doesn't go negative."""
         manager = ConstraintsManager(geo_tolerance=0.30)
         stocks = [create_stock("AAPL", country="United States")]
@@ -490,7 +498,7 @@ class TestSectorConstraintsBuilding:
         country_targets = {"United States": 0.10}
         ind_targets = {}
 
-        country_constraints, ind_constraints = manager.build_sector_constraints(
+        country_constraints, ind_constraints = await manager.build_sector_constraints(
             stocks, country_targets, ind_targets
         )
 
@@ -502,7 +510,8 @@ class TestSectorConstraintsBuilding:
             MAX_COUNTRY_CONCENTRATION, abs=0.001
         )
 
-    def test_multiple_stocks_same_sector(self):
+    @pytest.mark.asyncio
+    async def test_multiple_stocks_same_sector(self):
         """Test multiple stocks in same sector are grouped correctly."""
         manager = ConstraintsManager()
         stocks = [
@@ -519,7 +528,7 @@ class TestSectorConstraintsBuilding:
         country_targets = {"United States": 1.0}
         ind_targets = {"Consumer Electronics": 1.0}
 
-        country_constraints, ind_constraints = manager.build_sector_constraints(
+        country_constraints, ind_constraints = await manager.build_sector_constraints(
             stocks, country_targets, ind_targets
         )
 
@@ -533,7 +542,8 @@ class TestSectorConstraintsBuilding:
         assert len(tech_constraint.symbols) == 3
         assert set(tech_constraint.symbols) == {"AAPL", "GOOGL", "MSFT"}
 
-    def test_mixed_sectors_multiple_constraints(self):
+    @pytest.mark.asyncio
+    async def test_mixed_sectors_multiple_constraints(self):
         """Test building constraints with mixed sectors."""
         manager = ConstraintsManager()
         stocks = [
@@ -548,7 +558,7 @@ class TestSectorConstraintsBuilding:
         country_targets = {"United States": 0.60, "Germany": 0.40}
         ind_targets = {"Consumer Electronics": 0.70, "Banks - Diversified": 0.30}
 
-        country_constraints, ind_constraints = manager.build_sector_constraints(
+        country_constraints, ind_constraints = await manager.build_sector_constraints(
             stocks, country_targets, ind_targets
         )
 
@@ -778,12 +788,13 @@ class TestEdgeCases:
 
         assert bounds == {}
 
-    def test_empty_targets(self):
+    @pytest.mark.asyncio
+    async def test_empty_targets(self):
         """Test with empty target dictionaries."""
         manager = ConstraintsManager()
         stocks = [create_stock("AAPL")]
 
-        country_constraints, ind_constraints = manager.build_sector_constraints(
+        country_constraints, ind_constraints = await manager.build_sector_constraints(
             stocks=stocks,
             country_targets={},
             ind_targets={},
@@ -839,7 +850,8 @@ class TestEdgeCases:
         lower, upper = bounds["AAPL"]
         assert lower == pytest.approx(0.10, abs=0.001)
 
-    def test_target_exceeds_one(self):
+    @pytest.mark.asyncio
+    async def test_target_exceeds_one(self):
         """Test target weight > 1.0 is handled."""
         manager = ConstraintsManager()
         stocks = [create_stock("AAPL", country="United States")]
@@ -847,7 +859,7 @@ class TestEdgeCases:
         country_targets = {"United States": 1.5}
         ind_targets = {}
 
-        country_constraints, ind_constraints = manager.build_sector_constraints(
+        country_constraints, ind_constraints = await manager.build_sector_constraints(
             stocks, country_targets, ind_targets
         )
 
@@ -1077,7 +1089,8 @@ class TestEdgeCases:
 class TestTargetNormalization:
     """Test normalization of industry/country targets that sum to > 100%."""
 
-    def test_industry_targets_normalized_when_sum_exceeds_100(self):
+    @pytest.mark.asyncio
+    async def test_industry_targets_normalized_when_sum_exceeds_100(self):
         """Test industry targets are normalized when they sum to > 100%."""
         manager = ConstraintsManager()
         stocks = [
@@ -1089,7 +1102,7 @@ class TestTargetNormalization:
         ind_targets = {"Technology": 0.8, "Software": 0.7}
         country_targets = {}
 
-        country_constraints, ind_constraints = manager.build_sector_constraints(
+        country_constraints, ind_constraints = await manager.build_sector_constraints(
             stocks, country_targets, ind_targets
         )
 
@@ -1103,7 +1116,8 @@ class TestTargetNormalization:
         assert tech_constraint.target == pytest.approx(0.8 / 1.5, abs=0.001)
         assert software_constraint.target == pytest.approx(0.7 / 1.5, abs=0.001)
 
-    def test_country_targets_normalized_when_sum_exceeds_100(self):
+    @pytest.mark.asyncio
+    async def test_country_targets_normalized_when_sum_exceeds_100(self):
         """Test country targets are normalized when they sum to > 100% (only active countries)."""
         manager = ConstraintsManager()
         stocks = [
@@ -1119,7 +1133,7 @@ class TestTargetNormalization:
         }  # France has no stocks
         ind_targets = {}
 
-        country_constraints, ind_constraints = manager.build_sector_constraints(
+        country_constraints, ind_constraints = await manager.build_sector_constraints(
             stocks, country_targets, ind_targets
         )
 
@@ -1135,7 +1149,8 @@ class TestTargetNormalization:
         assert us_constraint.target == pytest.approx(0.8 / 1.2, abs=0.001)
         assert de_constraint.target == pytest.approx(0.4 / 1.2, abs=0.001)
 
-    def test_targets_not_normalized_when_sum_equals_100(self):
+    @pytest.mark.asyncio
+    async def test_targets_not_normalized_when_sum_equals_100(self):
         """Test targets are not normalized when they sum to exactly 100%."""
         manager = ConstraintsManager()
         stocks = [
@@ -1145,7 +1160,7 @@ class TestTargetNormalization:
         ind_targets = {"Technology": 0.6, "Software": 0.4}  # Sums to 100%
         country_targets = {}
 
-        country_constraints, ind_constraints = manager.build_sector_constraints(
+        country_constraints, ind_constraints = await manager.build_sector_constraints(
             stocks, country_targets, ind_targets
         )
 
@@ -1156,7 +1171,8 @@ class TestTargetNormalization:
         assert tech_constraint.target == pytest.approx(0.6, abs=0.001)
         assert software_constraint.target == pytest.approx(0.4, abs=0.001)
 
-    def test_normalization_only_applies_to_active_industries(self):
+    @pytest.mark.asyncio
+    async def test_normalization_only_applies_to_active_industries(self):
         """Test normalization only considers industries that have stocks."""
         manager = ConstraintsManager()
         stocks = [
@@ -1167,7 +1183,7 @@ class TestTargetNormalization:
         ind_targets = {"Technology": 0.8, "Energy": 0.9}  # Energy has no stocks
         country_targets = {}
 
-        country_constraints, ind_constraints = manager.build_sector_constraints(
+        country_constraints, ind_constraints = await manager.build_sector_constraints(
             stocks, country_targets, ind_targets
         )
 
@@ -1177,7 +1193,8 @@ class TestTargetNormalization:
         # Should be normalized to 1.0 (only active industry)
         assert ind_constraints[0].target == pytest.approx(1.0, abs=0.001)
 
-    def test_normalization_only_applies_to_active_countries(self):
+    @pytest.mark.asyncio
+    async def test_normalization_only_applies_to_active_countries(self):
         """Test normalization only considers countries that have stocks."""
         manager = ConstraintsManager()
         stocks = [
@@ -1188,7 +1205,7 @@ class TestTargetNormalization:
         country_targets = {"United States": 0.8, "France": 0.9}  # France has no stocks
         ind_targets = {}
 
-        country_constraints, ind_constraints = manager.build_sector_constraints(
+        country_constraints, ind_constraints = await manager.build_sector_constraints(
             stocks, country_targets, ind_targets
         )
 
@@ -1202,14 +1219,15 @@ class TestTargetNormalization:
 class TestIndustryConcentrationCapAdjustment:
     """Test industry concentration cap adjustment for few industries."""
 
-    def test_single_industry_gets_70_percent_cap(self):
+    @pytest.mark.asyncio
+    async def test_single_industry_gets_70_percent_cap(self):
         """Test single industry constraint gets 70% max concentration."""
         manager = ConstraintsManager()
         stocks = [create_stock("AAPL", industry="Technology")]
         ind_targets = {"Technology": 0.8}
         country_targets = {}
 
-        country_constraints, ind_constraints = manager.build_sector_constraints(
+        country_constraints, ind_constraints = await manager.build_sector_constraints(
             stocks, country_targets, ind_targets
         )
 
@@ -1220,7 +1238,8 @@ class TestIndustryConcentrationCapAdjustment:
         # But should be capped at 70% for single industry
         assert tech_constraint.upper == pytest.approx(0.70, abs=0.001)
 
-    def test_two_industries_get_50_percent_cap_each(self):
+    @pytest.mark.asyncio
+    async def test_two_industries_get_50_percent_cap_each(self):
         """Test two industry constraints each get 50% max concentration."""
         manager = ConstraintsManager()
         stocks = [
@@ -1230,7 +1249,7 @@ class TestIndustryConcentrationCapAdjustment:
         ind_targets = {"Technology": 0.6, "Software": 0.4}
         country_targets = {}
 
-        country_constraints, ind_constraints = manager.build_sector_constraints(
+        country_constraints, ind_constraints = await manager.build_sector_constraints(
             stocks, country_targets, ind_targets
         )
 
@@ -1242,7 +1261,8 @@ class TestIndustryConcentrationCapAdjustment:
         assert tech_constraint.upper == pytest.approx(0.50, abs=0.001)
         assert software_constraint.upper == pytest.approx(0.50, abs=0.001)
 
-    def test_three_plus_industries_get_default_30_percent_cap(self):
+    @pytest.mark.asyncio
+    async def test_three_plus_industries_get_default_30_percent_cap(self):
         """Test three or more industries get default 30% max concentration."""
         manager = ConstraintsManager()
         stocks = [
@@ -1253,7 +1273,7 @@ class TestIndustryConcentrationCapAdjustment:
         ind_targets = {"Technology": 0.4, "Software": 0.3, "Cloud": 0.3}
         country_targets = {}
 
-        country_constraints, ind_constraints = manager.build_sector_constraints(
+        country_constraints, ind_constraints = await manager.build_sector_constraints(
             stocks, country_targets, ind_targets
         )
 
@@ -1264,7 +1284,8 @@ class TestIndustryConcentrationCapAdjustment:
                 MAX_SECTOR_CONCENTRATION, abs=0.001
             )
 
-    def test_industry_cap_adjustment_allows_higher_total_allocation(self):
+    @pytest.mark.asyncio
+    async def test_industry_cap_adjustment_allows_higher_total_allocation(self):
         """Test that cap adjustment allows higher total allocation for few industries."""
         manager = ConstraintsManager()
         stocks = [
@@ -1274,7 +1295,7 @@ class TestIndustryConcentrationCapAdjustment:
         ind_targets = {"Technology": 0.5, "Software": 0.5}
         country_targets = {}
 
-        country_constraints, ind_constraints = manager.build_sector_constraints(
+        country_constraints, ind_constraints = await manager.build_sector_constraints(
             stocks, country_targets, ind_targets
         )
 
@@ -1286,7 +1307,8 @@ class TestIndustryConcentrationCapAdjustment:
 class TestIndustryMinimumBoundScaling:
     """Test scaling down industry minimum bounds when they're too restrictive."""
 
-    def test_industry_minimum_bounds_scaled_when_sum_exceeds_100(self):
+    @pytest.mark.asyncio
+    async def test_industry_minimum_bounds_scaled_when_sum_exceeds_100(self):
         """Test industry minimum bounds are scaled down when they sum to > 100%."""
         manager = ConstraintsManager(ind_tolerance=0.15)
         stocks = [
@@ -1297,7 +1319,7 @@ class TestIndustryMinimumBoundScaling:
         ind_targets = {"Technology": 0.6, "Software": 0.5}  # Targets sum to 110%
         country_targets = {}
 
-        country_constraints, ind_constraints = manager.build_sector_constraints(
+        country_constraints, ind_constraints = await manager.build_sector_constraints(
             stocks, country_targets, ind_targets
         )
 
@@ -1308,7 +1330,10 @@ class TestIndustryMinimumBoundScaling:
         ind_min_sum = sum(c.lower for c in ind_constraints)
         assert ind_min_sum <= 1.0  # Should be <= 100%
 
-    def test_industry_minimum_bounds_scaled_when_combined_with_country_exceeds_70(self):
+    @pytest.mark.asyncio
+    async def test_industry_minimum_bounds_scaled_when_combined_with_country_exceeds_70(
+        self,
+    ):
         """Test industry minimums are scaled when combined with country minimums > 70%."""
         manager = ConstraintsManager(geo_tolerance=0.10, ind_tolerance=0.15)
         stocks = [
@@ -1321,7 +1346,7 @@ class TestIndustryMinimumBoundScaling:
         country_targets = {"United States": 0.4, "Germany": 0.4}
         ind_targets = {"Technology": 0.35, "Software": 0.5}
 
-        country_constraints, ind_constraints = manager.build_sector_constraints(
+        country_constraints, ind_constraints = await manager.build_sector_constraints(
             stocks, country_targets, ind_targets
         )
 
@@ -1333,7 +1358,8 @@ class TestIndustryMinimumBoundScaling:
         # Total should be <= 70%
         assert total_min_sum <= 0.70
 
-    def test_industry_minimum_bounds_not_scaled_when_combined_below_70(self):
+    @pytest.mark.asyncio
+    async def test_industry_minimum_bounds_not_scaled_when_combined_below_70(self):
         """Test industry minimums are NOT scaled when combined total is <= 70%."""
         manager = ConstraintsManager(geo_tolerance=0.10, ind_tolerance=0.15)
         stocks = [
@@ -1346,7 +1372,7 @@ class TestIndustryMinimumBoundScaling:
         # Industry min: 0.3 - 0.15 = 0.15
         # Total: 0.35 < 70%, so no scaling
 
-        country_constraints, ind_constraints = manager.build_sector_constraints(
+        country_constraints, ind_constraints = await manager.build_sector_constraints(
             stocks, country_targets, ind_targets
         )
 
