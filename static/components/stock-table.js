@@ -8,10 +8,16 @@ class StockTable extends HTMLElement {
       <div class="bg-gray-800 border border-gray-700 rounded p-3" x-data="stockTableComponent()">
         <div class="flex items-center justify-between mb-3">
           <h2 class="text-xs text-gray-300 uppercase tracking-wide">Stock Universe</h2>
-          <button @click="$store.app.showAddStockModal = true"
-                  class="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white text-xs rounded transition-colors">
-            + Add Stock
-          </button>
+          <div class="flex gap-2">
+            <button @click="$store.app.openUniverseManagementModal()"
+                    class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded transition-colors">
+              Manage Universe
+            </button>
+            <button @click="$store.app.showAddStockModal = true"
+                    class="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white text-xs rounded transition-colors">
+              + Add Stock
+            </button>
+          </div>
         </div>
 
         <!-- Filter Bar -->
