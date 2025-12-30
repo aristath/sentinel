@@ -73,9 +73,10 @@ SETTING_DEFAULTS = {
     "ticker_show_actions": 1.0,  # Show next actions (BUY/SELL)
     "ticker_show_amounts": 1.0,  # Show amounts for actions
     "ticker_max_actions": 3.0,  # Max recommendations to show (buy + sell)
-    # Job scheduling intervals (simplified to 2 configurable settings)
+    # Job scheduling intervals (simplified to 3 configurable settings)
     "job_sync_cycle_minutes": 15.0,  # Unified sync cycle interval (trades, prices, recommendations)
     "job_maintenance_hour": 3.0,  # Daily maintenance hour (0-23)
+    "job_auto_deploy_minutes": 5.0,  # Auto-deploy check interval (minutes)
     # Universe Pruning settings
     "universe_pruning_enabled": 1.0,  # 1.0 = enabled, 0.0 = disabled
     "universe_pruning_score_threshold": 0.50,  # Minimum average score to keep stock (0-1)

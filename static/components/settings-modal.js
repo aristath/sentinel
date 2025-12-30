@@ -822,6 +822,17 @@ class SettingsModal extends HTMLElement {
                              class="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
                       <span class="text-gray-400 text-sm">h</span>
                     </div>
+                    <div>
+                      <span class="text-sm text-gray-300">Auto-Deploy</span>
+                      <p class="text-xs text-gray-500">Check for updates and deploy changes</p>
+                    </div>
+                    <div class="flex items-center gap-1">
+                      <input type="number"
+                             :value="$store.app.settings.job_auto_deploy_minutes"
+                             @change="$store.app.updateJobSetting('job_auto_deploy_minutes', $event.target.value)"
+                             class="w-16 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                      <span class="text-gray-400 text-sm">min</span>
+                    </div>
                   </div>
                   <div class="mt-4 pt-3 border-t border-gray-700/50">
                     <span class="text-xs text-gray-500 uppercase tracking-wide">Fixed Schedules</span>

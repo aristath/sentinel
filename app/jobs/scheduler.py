@@ -1,6 +1,6 @@
 """APScheduler setup for background jobs.
 
-Scheduler with 9 jobs:
+Scheduler with 10 jobs:
 1. sync_cycle - Every 5 minutes, handles data synchronization
 1.5. event_based_trading - Continuously, handles trade execution after planning completion
 2. daily_pipeline - Hourly, processes per-symbol data
@@ -11,6 +11,7 @@ Scheduler with 9 jobs:
 7. stock_discovery - Monthly (15th), discovers new high-quality stocks
 8. display_updater - Every 9.9 seconds, updates LED display
 9. planner_batch - Every N seconds, processes planner sequences incrementally
+10. auto_deploy - Every N minutes (configurable), checks for updates and deploys changes
 """
 
 import logging
@@ -43,6 +44,9 @@ async def _get_job_settings() -> dict[str, int]:
         ),
         "maintenance_hour": int(
             await settings_repo.get_float("job_maintenance_hour", 3.0)
+        ),
+        "auto_deploy_minutes": int(
+            await settings_repo.get_float("job_auto_deploy_minutes", 5.0)
         ),
     }
 
@@ -85,6 +89,7 @@ async def init_scheduler() -> AsyncIOScheduler:
     scheduler.add_listener(job_listener, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
 
     # Import job functions
+    from app.jobs.auto_deploy import run_auto_deploy
     from app.jobs.daily_pipeline import run_daily_pipeline
     from app.jobs.display_updater import update_display_periodic
     from app.jobs.dividend_reinvestment import auto_reinvest_dividends
@@ -99,6 +104,7 @@ async def init_scheduler() -> AsyncIOScheduler:
     job_settings = await _get_job_settings()
     sync_cycle_minutes = job_settings["sync_cycle_minutes"]
     maintenance_hour = job_settings["maintenance_hour"]
+    auto_deploy_minutes = job_settings["auto_deploy_minutes"]
 
     # Get planner batch settings from settings
     from app.repositories import SettingsRepository
@@ -218,6 +224,16 @@ async def init_scheduler() -> AsyncIOScheduler:
         except Exception:
             pass  # Job doesn't exist, that's fine
 
+    # Job 10: Auto-Deploy - every N minutes (configurable)
+    # Handles: checking for updates from GitHub and deploying changes
+    scheduler.add_job(
+        run_auto_deploy,
+        IntervalTrigger(minutes=auto_deploy_minutes),
+        id="auto_deploy",
+        name="Auto-Deploy",
+        replace_existing=True,
+    )
+
     # Start event-based trading loop as background task (not a scheduled job)
     # since it has a while True loop and runs continuously
     # Wrap in a function that restarts it if it crashes
@@ -237,12 +253,13 @@ async def init_scheduler() -> AsyncIOScheduler:
     logger.info("Started event-based trading loop as background task")
 
     logger.info(
-        f"Scheduler initialized with 8 scheduled jobs + 1 background task - "
+        f"Scheduler initialized with 9 scheduled jobs + 1 background task - "
         f"sync_cycle:{sync_cycle_minutes}m, daily_pipeline:1h, "
         f"maintenance:{maintenance_hour}:00, dividend_reinvestment:{maintenance_hour}:30, "
         f"universe_pruning:1st of month {maintenance_hour}:00, "
         f"stock_discovery:15th of month 02:00, display_updater:9.9s, "
-        f"planner_batch:{planner_batch_interval//60}m (fallback), event_based_trading:background"
+        f"planner_batch:{planner_batch_interval//60}m (fallback), "
+        f"auto_deploy:{auto_deploy_minutes}m, event_based_trading:background"
     )
     return scheduler
 
@@ -256,6 +273,7 @@ async def reschedule_all_jobs():
     job_settings = await _get_job_settings()
     sync_cycle_minutes = job_settings["sync_cycle_minutes"]
     maintenance_hour = job_settings["maintenance_hour"]
+    auto_deploy_minutes = job_settings["auto_deploy_minutes"]
 
     # Reschedule sync cycle
     scheduler.reschedule_job(
@@ -283,11 +301,17 @@ async def reschedule_all_jobs():
     # Stock discovery schedule is fixed (15th at 2am), no reschedule needed
     # Display updater schedule is fixed (9.9s), no reschedule needed
 
+    # Reschedule auto-deploy
+    scheduler.reschedule_job(
+        "auto_deploy", trigger=IntervalTrigger(minutes=auto_deploy_minutes)
+    )
+
     logger.info(
         f"Jobs rescheduled - sync_cycle:{sync_cycle_minutes}m, "
         f"maintenance:{maintenance_hour}:00, dividend_reinvestment:{maintenance_hour}:30, "
         f"universe_pruning:1st of month {maintenance_hour}:00, "
-        f"stock_discovery:15th of month 02:00, display_updater:9.9s"
+        f"stock_discovery:15th of month 02:00, display_updater:9.9s, "
+        f"auto_deploy:{auto_deploy_minutes}m"
     )
 
 
