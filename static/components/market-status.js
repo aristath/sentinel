@@ -5,7 +5,7 @@
 class MarketStatus extends HTMLElement {
   connectedCallback() {
     this.innerHTML = `
-      <div class="flex items-center gap-2 text-xs mb-4" x-data>
+      <div class="flex flex-wrap items-center gap-2 text-xs mb-4" x-data>
         <template x-for="(market, geo) in $store.app.markets" :key="geo">
           <div class="flex items-center gap-1 px-2 py-1 rounded"
                :class="market.open ? 'bg-green-900/30 text-green-400' : 'bg-gray-800 text-gray-500'"
