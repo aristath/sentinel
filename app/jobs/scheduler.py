@@ -136,6 +136,7 @@ async def init_scheduler() -> AsyncIOScheduler:
     from app.jobs.stocks_data_sync import run_stocks_data_sync
     from app.jobs.sync_cycle import run_sync_cycle
     from app.jobs.universe_pruning import prune_universe
+    from app.infrastructure.hardware.display_updater_service import update_display_ticker
 
     # Get settings
     job_settings = await _get_job_settings()
@@ -302,7 +303,18 @@ async def init_scheduler() -> AsyncIOScheduler:
     # SYSTEM JOBS
     # ============================================================================
 
-    # Job 9: Auto-Deploy - every N minutes (configurable)
+    # Job 9: Display Ticker Update - every 10 seconds
+    # Handles: updating LED matrix display with current ticker text
+    # Lightweight job that only updates display, not full sync
+    scheduler.add_job(
+        update_display_ticker,
+        IntervalTrigger(seconds=10),
+        id="display_ticker_update",
+        name="Display Ticker Update",
+        replace_existing=True,
+    )
+
+    # Job 10: Auto-Deploy - every N minutes (configurable)
     # Handles: checking for updates from GitHub and deploying changes
     scheduler.add_job(
         run_auto_deploy,
@@ -335,13 +347,14 @@ async def init_scheduler() -> AsyncIOScheduler:
     logger.info("Started event-based trading loop as background task")
 
     logger.info(
-        f"Scheduler initialized with 9 scheduled jobs + 1 background task - "
+        f"Scheduler initialized with 10 scheduled jobs + 1 background task - "
         f"sync_cycle:{sync_cycle_minutes}m, stocks_data_sync:1h, "
         f"maintenance:{maintenance_hour}:00, dividend_reinvestment:{maintenance_hour}:30, "
         f"universe_pruning:1st of month {maintenance_hour}:00, "
         f"stock_discovery:15th of month 02:00, "
         f"planner_batch:{planner_batch_interval//60}m (fallback), "
-        f"auto_deploy:{auto_deploy_minutes}m, event_based_trading:background"
+        f"display_ticker_update:10s, auto_deploy:{auto_deploy_minutes}m, "
+        f"event_based_trading:background"
     )
     return scheduler
 
