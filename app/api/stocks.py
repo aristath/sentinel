@@ -250,6 +250,12 @@ async def get_universe_suggestions(
                         continue
 
                 logger.info(f"Scored {len(scored_candidates)} candidates")
+                if scored_candidates:
+                    # Log sample scores for debugging
+                    sample_scores = sorted(scored_candidates, key=lambda x: x[1], reverse=True)[:5]
+                    logger.info(
+                        f"Top 5 candidate scores: {[(c.get('symbol'), round(s, 3)) for c, s in sample_scores]}"
+                    )
                 # Filter by score threshold and sort (best first)
                 above_threshold = [
                     (candidate, score)
@@ -259,6 +265,13 @@ async def get_universe_suggestions(
                 logger.info(
                     f"{len(above_threshold)} candidates above threshold {score_threshold}"
                 )
+                if len(scored_candidates) > 0 and len(above_threshold) == 0:
+                    # All candidates scored below threshold - log the highest score
+                    max_score = max(score for _, score in scored_candidates)
+                    logger.warning(
+                        f"No candidates above threshold {score_threshold}. "
+                        f"Highest score was {max_score:.3f}"
+                    )
                 above_threshold.sort(key=lambda x: x[1], reverse=True)
 
                 # Format candidates for response (don't enforce max_per_month limit)
