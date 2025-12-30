@@ -105,6 +105,8 @@ class TradeSafetyService:
         """
         Check if a position has been held for the minimum required days.
 
+        Uses the last transaction date (buy or sell) to calculate hold time.
+
         Args:
             symbol: Stock symbol to check
             min_hold_days: Minimum hold period in days (default: DEFAULT_MIN_HOLD_DAYS)
@@ -113,23 +115,27 @@ class TradeSafetyService:
             Tuple of (is_valid: bool, error_message: Optional[str])
         """
         try:
-            last_bought_at = await self._trade_repo.get_last_buy_date(symbol)
-            if not last_bought_at:
-                # No buy date found - allow (might be legacy data or edge case)
-                logger.warning(f"No buy date found for {symbol}, allowing sell")
+            last_transaction_at = await self._trade_repo.get_last_transaction_date(
+                symbol
+            )
+            if not last_transaction_at:
+                # No transaction date found - allow (might be legacy data or edge case)
+                logger.warning(f"No transaction date found for {symbol}, allowing sell")
                 return True, None
 
-            bought_date = safe_parse_datetime_string(last_bought_at)
-            if not bought_date:
+            transaction_date = safe_parse_datetime_string(last_transaction_at)
+            if not transaction_date:
                 # Can't parse date - allow (fail open)
-                logger.warning(f"Could not parse buy date for {symbol}, allowing sell")
+                logger.warning(
+                    f"Could not parse transaction date for {symbol}, allowing sell"
+                )
                 return True, None
 
-            days_held = (datetime.now() - bought_date).days
+            days_held = (datetime.now() - transaction_date).days
             if days_held < min_hold_days:
                 return (
                     False,
-                    f"Cannot sell {symbol}: held only {days_held} days (minimum {min_hold_days} days required)",
+                    f"Cannot sell {symbol}: last transaction {days_held} days ago (minimum {min_hold_days} days required)",
                 )
 
             return True, None

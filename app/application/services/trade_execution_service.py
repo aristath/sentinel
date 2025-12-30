@@ -205,23 +205,25 @@ async def _validate_sell_order(trade, position_repo, trade_repo) -> Optional[dic
             "error": f"SELL quantity ({trade.quantity}) exceeds position ({position.quantity})",
         }
 
-    # Check minimum hold time using the most recent buy date
+    # Check minimum hold time using the most recent transaction date (buy or sell)
     if trade_repo:
         try:
-            last_bought_at = await trade_repo.get_last_buy_date(trade.symbol)
-            if last_bought_at:
-                bought_date = safe_parse_datetime_string(last_bought_at)
-                if bought_date:
-                    days_held = (datetime.now() - bought_date).days
+            last_transaction_at = await trade_repo.get_last_transaction_date(
+                trade.symbol
+            )
+            if last_transaction_at:
+                transaction_date = safe_parse_datetime_string(last_transaction_at)
+                if transaction_date:
+                    days_held = (datetime.now() - transaction_date).days
                     if days_held < DEFAULT_MIN_HOLD_DAYS:
                         logger.warning(
-                            f"SAFETY BLOCK: {trade.symbol} held only {days_held} days "
+                            f"SAFETY BLOCK: {trade.symbol} last transaction {days_held} days ago "
                             f"(minimum {DEFAULT_MIN_HOLD_DAYS} days required)"
                         )
                         return {
                             "symbol": trade.symbol,
                             "status": "blocked",
-                            "error": f"Held only {days_held} days (minimum {DEFAULT_MIN_HOLD_DAYS} days required)",
+                            "error": f"Last transaction {days_held} days ago (minimum {DEFAULT_MIN_HOLD_DAYS} days required)",
                         }
         except Exception as e:
             logger.error(f"Failed to check minimum hold time for {trade.symbol}: {e}")

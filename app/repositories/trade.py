@@ -311,6 +311,21 @@ class TradeRepository:
         )
         return row["last_sell"] if row else None
 
+    async def get_last_transaction_date(self, symbol: str) -> Optional[str]:
+        """Get the date of the most recent transaction (BUY or SELL) for a symbol.
+
+        This is used for cooldown and minimum hold period checks, which should
+        be calculated from the last transaction regardless of whether it was a buy or sell.
+        """
+        row = await self._db.fetchone(
+            """
+            SELECT MAX(executed_at) as last_transaction FROM trades
+            WHERE symbol = ?
+            """,
+            (symbol.upper(),),
+        )
+        return row["last_transaction"] if row else None
+
     async def get_trade_dates(self) -> dict[str, dict]:
         """Get first_buy and last_sell dates for all symbols."""
         rows = await self._db.fetchall(

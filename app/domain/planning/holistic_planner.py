@@ -140,6 +140,61 @@ def _is_trade_worthwhile(
     return abs(gap_value) >= trade_cost * 2
 
 
+async def _compute_ineligible_symbols(
+    positions: List[Position],
+    stocks_by_symbol: Dict[str, Stock],
+    trade_repo,
+    settings_repo,
+) -> Set[str]:
+    """Compute set of symbols that are ineligible for selling based on hold time and cooldown."""
+    from app.domain.scoring.groups.sell.eligibility import check_sell_eligibility
+
+    ineligible_symbols = set()
+
+    # Get eligibility settings
+    min_hold_days = await settings_repo.get_int("min_hold_days", 90)
+    sell_cooldown_days = await settings_repo.get_int("sell_cooldown_days", 180)
+    max_loss_threshold = await settings_repo.get_float("max_loss_threshold", -0.20)
+
+    for position in positions:
+        symbol = position.symbol
+        stock = stocks_by_symbol.get(symbol)
+        if not stock or not stock.allow_sell:
+            continue
+
+        # Get last transaction date
+        last_transaction_at = await trade_repo.get_last_transaction_date(symbol)
+        if not last_transaction_at:
+            continue  # No transaction history - skip eligibility check
+
+        # Calculate profit percentage for eligibility check
+        current_price = position.current_price or position.avg_price
+        profit_pct = (
+            (current_price - position.avg_price) / position.avg_price
+            if position.avg_price > 0
+            else 0
+        )
+
+        # Check eligibility
+        eligible, _ = check_sell_eligibility(
+            allow_sell=stock.allow_sell,
+            profit_pct=profit_pct,
+            last_transaction_at=last_transaction_at,
+            max_loss_threshold=max_loss_threshold,
+            min_hold_days=min_hold_days,
+            sell_cooldown_days=sell_cooldown_days,
+        )
+
+        if not eligible:
+            ineligible_symbols.add(symbol)
+            logger.debug(
+                f"{symbol}: Ineligible for selling (last_transaction={last_transaction_at}, "
+                f"profit={profit_pct*100:.1f}%)"
+            )
+
+    return ineligible_symbols
+
+
 def _process_buy_opportunity(
     gap_info: dict,
     stock: Optional[Stock],
@@ -338,6 +393,7 @@ async def identify_opportunities_from_weights(
     transaction_cost_percent: float = 0.002,
     exchange_rate_service=None,
     recently_sold: Optional[Set[str]] = None,
+    ineligible_symbols: Optional[Set[str]] = None,
 ) -> Dict[str, List[ActionCandidate]]:
     """
     Identify opportunities based on optimizer target weights.
@@ -406,10 +462,15 @@ async def identify_opportunities_from_weights(
         if gap > 0:
             _process_buy_opportunity(gap_info, stock, position, price, opportunities)
         else:
-            # Skip sell opportunities for symbols in cooldown
+            # Skip sell opportunities for symbols in cooldown or ineligible
             if recently_sold and symbol in recently_sold:
                 logger.debug(
                     f"{symbol}: Skipping sell opportunity (in cooldown period)"
+                )
+                continue
+            if ineligible_symbols and symbol in ineligible_symbols:
+                logger.debug(
+                    f"{symbol}: Skipping sell opportunity (not eligible - minimum hold or cooldown)"
                 )
                 continue
             if position is not None:
@@ -518,15 +579,63 @@ async def identify_opportunities(
                         ind_allocations.get(ind, 0) + value / total_value
                     )
 
-    # Identify profit-taking opportunities (filter out recently sold)
+    # Get eligibility settings for sell checks
+    min_hold_days = await settings_repo.get_int("min_hold_days", 90)
+    sell_cooldown_days = await settings_repo.get_int("sell_cooldown_days", 180)
+    max_loss_threshold = await settings_repo.get_float("max_loss_threshold", -0.20)
+
+    # Fetch last transaction dates for all positions to check eligibility
+    from app.domain.scoring.groups.sell.eligibility import check_sell_eligibility
+
+    ineligible_symbols = set()
+    positions_by_symbol = {p.symbol: p for p in positions}
+
+    for symbol, position in positions_by_symbol.items():
+        stock = stocks_by_symbol.get(symbol)
+        if not stock or not stock.allow_sell:
+            continue
+
+        # Get last transaction date
+        last_transaction_at = await trade_repo.get_last_transaction_date(symbol)
+        if not last_transaction_at:
+            continue  # No transaction history - skip eligibility check
+
+        # Calculate profit percentage for eligibility check
+        current_price = position.current_price or position.avg_price
+        profit_pct = (
+            (current_price - position.avg_price) / position.avg_price
+            if position.avg_price > 0
+            else 0
+        )
+
+        # Check eligibility
+        eligible, _ = check_sell_eligibility(
+            allow_sell=stock.allow_sell,
+            profit_pct=profit_pct,
+            last_transaction_at=last_transaction_at,
+            max_loss_threshold=max_loss_threshold,
+            min_hold_days=min_hold_days,
+            sell_cooldown_days=sell_cooldown_days,
+        )
+
+        if not eligible:
+            ineligible_symbols.add(symbol)
+            logger.debug(
+                f"{symbol}: Skipping sell opportunity (not eligible: "
+                f"last_transaction={last_transaction_at}, profit={profit_pct*100:.1f}%)"
+            )
+
+    # Identify profit-taking opportunities (filter out ineligible and recently sold)
     profit_taking_all = await identify_profit_taking_opportunities(
         positions, stocks_by_symbol, exchange_rate_service
     )
     opportunities["profit_taking"] = [
-        opp for opp in profit_taking_all if opp.symbol not in recently_sold
+        opp
+        for opp in profit_taking_all
+        if opp.symbol not in recently_sold and opp.symbol not in ineligible_symbols
     ]
 
-    # Identify rebalance sell opportunities (filter out recently sold)
+    # Identify rebalance sell opportunities (filter out ineligible and recently sold)
     rebalance_sells_all = await identify_rebalance_sell_opportunities(
         positions,
         stocks_by_symbol,
@@ -536,7 +645,9 @@ async def identify_opportunities(
         exchange_rate_service,
     )
     opportunities["rebalance_sells"] = [
-        opp for opp in rebalance_sells_all if opp.symbol not in recently_sold
+        opp
+        for opp in rebalance_sells_all
+        if opp.symbol not in recently_sold and opp.symbol not in ineligible_symbols
     ]
 
     # Calculate minimum worthwhile trade from transaction costs
@@ -2303,6 +2414,12 @@ async def process_planner_incremental(
         sell_cooldown_days = await settings_repo.get_int("sell_cooldown_days", 180)
         recently_sold = await trade_repo.get_recently_sold_symbols(sell_cooldown_days)
 
+        # Compute ineligible symbols for selling
+        stocks_by_symbol = {s.symbol: s for s in stocks}
+        ineligible_symbols = await _compute_ineligible_symbols(
+            positions, stocks_by_symbol, trade_repo, settings_repo
+        )
+
         # Identify opportunities
         if target_weights and current_prices:
             logger.info("Using optimizer target weights for opportunity identification")
@@ -2317,6 +2434,7 @@ async def process_planner_incremental(
                 transaction_cost_percent=transaction_cost_percent,
                 exchange_rate_service=exchange_rate_service,
                 recently_sold=recently_sold,
+                ineligible_symbols=ineligible_symbols,
             )
         else:
             logger.info("Using heuristic opportunity identification")
@@ -2875,6 +2993,12 @@ async def create_holistic_plan(
     sell_cooldown_days = await settings_repo.get_int("sell_cooldown_days", 180)
     recently_sold = await trade_repo.get_recently_sold_symbols(sell_cooldown_days)
 
+    # Compute ineligible symbols for selling
+    stocks_by_symbol = {s.symbol: s for s in stocks}
+    ineligible_symbols = await _compute_ineligible_symbols(
+        positions, stocks_by_symbol, trade_repo, settings_repo
+    )
+
     # Get beam_width from settings if not provided
     if beam_width is None or beam_width <= 0:
         beam_width = await settings_repo.get_int("beam_width", 10)
@@ -2894,6 +3018,7 @@ async def create_holistic_plan(
             transaction_cost_percent=transaction_cost_percent,
             exchange_rate_service=exchange_rate_service,
             recently_sold=recently_sold,
+            ineligible_symbols=ineligible_symbols,
         )
     else:
         logger.info("Using heuristic opportunity identification")
@@ -2934,7 +3059,6 @@ async def create_holistic_plan(
     )
 
     # Generate adaptive patterns based on portfolio gaps
-    stocks_by_symbol = {s.symbol: s for s in stocks} if stocks else None
     adaptive_patterns = _generate_adaptive_patterns(
         opportunities,
         portfolio_context,

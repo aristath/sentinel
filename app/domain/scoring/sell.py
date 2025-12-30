@@ -15,6 +15,7 @@ Hard Blocks (NEVER sell if any apply):
 """
 
 import logging
+from datetime import datetime
 from typing import Dict, List, Optional
 
 from app.domain.scoring.constants import (
@@ -173,28 +174,55 @@ async def calculate_sell_score(
     # Calculate profit percentage
     profit_pct = (current_price - avg_price) / avg_price if avg_price > 0 else 0
 
+    # Calculate last transaction date (most recent of buy or sell)
+    last_transaction_at = None
+    if first_bought_at and last_sold_at:
+        # Compare dates to find the most recent
+        from app.repositories.base import safe_parse_datetime_string
+
+        buy_date = safe_parse_datetime_string(first_bought_at)
+        sell_date = safe_parse_datetime_string(last_sold_at)
+        if buy_date and sell_date:
+            last_transaction_at = (
+                first_bought_at if buy_date > sell_date else last_sold_at
+            )
+        elif buy_date:
+            last_transaction_at = first_bought_at
+        elif sell_date:
+            last_transaction_at = last_sold_at
+    elif first_bought_at:
+        last_transaction_at = first_bought_at
+    elif last_sold_at:
+        last_transaction_at = last_sold_at
+
     # Check eligibility (hard blocks)
     eligible, block_reason = check_sell_eligibility(
         allow_sell,
         profit_pct,
-        first_bought_at,
-        last_sold_at,
+        last_transaction_at,
         max_loss_threshold=max_loss_threshold,
         min_hold_days=min_hold_days,
         sell_cooldown_days=sell_cooldown_days,
     )
 
-    # Calculate time held
+    # Calculate time held (for scoring purposes, uses first_bought_at)
     time_held_score, days_held = calculate_time_held_score(
         first_bought_at, min_hold_days=min_hold_days
     )
 
-    # If blocked by time held, mark as ineligible
-    if time_held_score == 0.0 and first_bought_at and days_held < min_hold_days:
-        eligible = False
-        block_reason = (
-            block_reason or f"Held only {days_held} days (min {min_hold_days})"
-        )
+    # Additional eligibility check: if last transaction was recent, block based on minimum hold
+    if last_transaction_at:
+        from app.repositories.base import safe_parse_datetime_string
+
+        transaction_date = safe_parse_datetime_string(last_transaction_at)
+        if transaction_date:
+            days_since_transaction = (datetime.now() - transaction_date).days
+            if days_since_transaction < min_hold_days:
+                eligible = False
+                block_reason = (
+                    block_reason
+                    or f"Last transaction {days_since_transaction} days ago (min {min_hold_days})"
+                )
 
     if not eligible:
         return SellScore(
