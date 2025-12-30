@@ -353,26 +353,31 @@ async def get_universe_suggestions(
                     logger.info(
                         f"Top 5 candidate scores: {[(c.get('symbol'), round(s, 3)) for c, s in sample_scores]}"
                     )
-                # Filter by score threshold and sort (best first)
-                above_threshold = [
-                    (candidate, score)
-                    for candidate, score in scored_candidates
-                    if score >= score_threshold
-                ]
-                logger.info(
-                    f"{len(above_threshold)} candidates above threshold {score_threshold}"
+                
+                # For manual review interface, show ALL scored candidates, not just above threshold
+                # Sort by score (best first) and include threshold info for UI filtering
+                scored_candidates.sort(key=lambda x: x[1], reverse=True)
+                
+                # Count how many are above threshold for logging
+                above_threshold_count = sum(
+                    1 for _, score in scored_candidates if score >= score_threshold
                 )
-                if len(scored_candidates) > 0 and len(above_threshold) == 0:
+                logger.info(
+                    f"{above_threshold_count} of {len(scored_candidates)} candidates "
+                    f"above threshold {score_threshold}"
+                )
+                if len(scored_candidates) > 0 and above_threshold_count == 0:
                     # All candidates scored below threshold - log the highest score
                     max_score = max(score for _, score in scored_candidates)
-                    logger.warning(
-                        f"No candidates above threshold {score_threshold}. "
-                        f"Highest score was {max_score:.3f}"
+                    logger.info(
+                        f"All candidates below threshold {score_threshold}. "
+                        f"Highest score was {max_score:.3f}. "
+                        f"Showing all candidates for manual review."
                     )
-                above_threshold.sort(key=lambda x: x[1], reverse=True)
 
-                # Format candidates for response (don't enforce max_per_month limit)
-                for candidate, candidate_score in above_threshold:
+                # Format candidates for response (include all scored candidates)
+                # UI can filter by threshold if needed
+                for candidate, candidate_score in scored_candidates:
                     symbol = candidate.get("symbol", "").upper()
                     candidates_to_add.append(
                         {
