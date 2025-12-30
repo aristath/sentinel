@@ -51,7 +51,7 @@ class TurnoverTracker:
         # Get all trades in the 365-day window
         trades = await self._db_manager.ledger.fetchall(
             """
-            SELECT side, quantity, price, currency, currency_rate
+            SELECT side, quantity, price, currency, currency_rate, value_eur
             FROM trades
             WHERE executed_at >= ? AND executed_at < ?
             ORDER BY executed_at
@@ -69,12 +69,17 @@ class TurnoverTracker:
 
         for trade in trades:
             side = trade["side"].upper()
-            quantity = trade["quantity"]
-            price = trade["price"]
-            currency_rate = trade.get("currency_rate") or 1.0
 
-            # Calculate trade value in EUR
-            trade_value_eur = quantity * price * currency_rate
+            # Use value_eur if available (more accurate), otherwise calculate
+            value_eur = trade.get("value_eur")
+            if value_eur and value_eur > 0:
+                trade_value_eur = value_eur
+            else:
+                # Fallback: calculate from quantity * price * currency_rate
+                quantity = trade["quantity"]
+                price = trade["price"]
+                currency_rate = trade.get("currency_rate") or 1.0
+                trade_value_eur = quantity * price * currency_rate
 
             if side == "BUY":
                 total_buy_value += trade_value_eur
