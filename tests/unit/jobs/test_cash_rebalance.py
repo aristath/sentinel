@@ -100,131 +100,211 @@ class TestValidateNextAction:
 
     @pytest.mark.asyncio
     async def test_allows_buy_when_cash_sufficient(
-        self, mock_trade_repo, mock_buy_action
+        self, mock_trade_repo, mock_settings_repo, mock_buy_action
     ):
         """Test BUY is allowed when cash is sufficient."""
+        from unittest.mock import patch
+
         from app.jobs.cash_rebalance import _validate_next_action
 
-        pnl_status = {"can_buy": True, "can_sell": True}
-        cash_balance = 1000.0
-        min_trade_size = 500.0
+        with patch(
+            "app.jobs.cash_rebalance.TradeFrequencyService"
+        ) as mock_freq_service:
+            mock_freq_service_instance = AsyncMock()
+            mock_freq_service_instance.can_execute_trade = AsyncMock(
+                return_value=(True, None)
+            )
+            mock_freq_service.return_value = mock_freq_service_instance
 
-        result = await _validate_next_action(
-            mock_buy_action,
-            pnl_status,
-            cash_balance,
-            min_trade_size,
-            mock_trade_repo,
-        )
+            pnl_status = {"can_buy": True, "can_sell": True}
+            cash_balance = 1000.0
+            min_trade_size = 500.0
 
-        assert result is True
+            result = await _validate_next_action(
+                mock_buy_action,
+                pnl_status,
+                cash_balance,
+                min_trade_size,
+                mock_trade_repo,
+                mock_settings_repo,
+            )
+
+            assert result is True
 
     @pytest.mark.asyncio
     async def test_blocks_buy_when_cash_insufficient(
-        self, mock_trade_repo, mock_buy_action
+        self, mock_trade_repo, mock_settings_repo, mock_buy_action
     ):
         """Test BUY is blocked when cash is insufficient."""
+        from unittest.mock import patch
+
         from app.jobs.cash_rebalance import _validate_next_action
 
-        pnl_status = {"can_buy": True, "can_sell": True}
-        cash_balance = 400.0
-        min_trade_size = 500.0
+        with patch(
+            "app.jobs.cash_rebalance.TradeFrequencyService"
+        ) as mock_freq_service:
+            mock_freq_service_instance = AsyncMock()
+            mock_freq_service_instance.can_execute_trade = AsyncMock(
+                return_value=(True, None)
+            )
+            mock_freq_service.return_value = mock_freq_service_instance
 
-        result = await _validate_next_action(
-            mock_buy_action,
-            pnl_status,
-            cash_balance,
-            min_trade_size,
-            mock_trade_repo,
-        )
+            pnl_status = {"can_buy": True, "can_sell": True}
+            cash_balance = 400.0
+            min_trade_size = 500.0
 
-        assert result is False
+            result = await _validate_next_action(
+                mock_buy_action,
+                pnl_status,
+                cash_balance,
+                min_trade_size,
+                mock_trade_repo,
+                mock_settings_repo,
+            )
+
+            assert result is False
 
     @pytest.mark.asyncio
     async def test_blocks_buy_when_pnl_guardrail_active(
-        self, mock_trade_repo, mock_buy_action
+        self, mock_trade_repo, mock_settings_repo, mock_buy_action
     ):
         """Test BUY is blocked by P&L guardrail."""
+        from unittest.mock import patch
+
         from app.jobs.cash_rebalance import _validate_next_action
 
-        pnl_status = {"can_buy": False, "can_sell": True, "reason": "Daily loss limit"}
-        cash_balance = 1000.0
-        min_trade_size = 500.0
+        with patch(
+            "app.jobs.cash_rebalance.TradeFrequencyService"
+        ) as mock_freq_service:
+            mock_freq_service_instance = AsyncMock()
+            mock_freq_service_instance.can_execute_trade = AsyncMock(
+                return_value=(True, None)
+            )
+            mock_freq_service.return_value = mock_freq_service_instance
 
-        result = await _validate_next_action(
-            mock_buy_action,
-            pnl_status,
-            cash_balance,
-            min_trade_size,
-            mock_trade_repo,
-        )
+            pnl_status = {
+                "can_buy": False,
+                "can_sell": True,
+                "reason": "Daily loss limit",
+            }
+            cash_balance = 1000.0
+            min_trade_size = 500.0
 
-        assert result is False
+            result = await _validate_next_action(
+                mock_buy_action,
+                pnl_status,
+                cash_balance,
+                min_trade_size,
+                mock_trade_repo,
+                mock_settings_repo,
+            )
+
+            assert result is False
 
     @pytest.mark.asyncio
     async def test_blocks_sell_when_pnl_guardrail_active(
-        self, mock_trade_repo, mock_sell_action
+        self, mock_trade_repo, mock_settings_repo, mock_sell_action
     ):
         """Test SELL is blocked by P&L guardrail."""
+        from unittest.mock import patch
+
         from app.jobs.cash_rebalance import _validate_next_action
 
-        pnl_status = {"can_buy": True, "can_sell": False, "reason": "Max loss reached"}
-        cash_balance = 1000.0
-        min_trade_size = 500.0
+        with patch(
+            "app.jobs.cash_rebalance.TradeFrequencyService"
+        ) as mock_freq_service:
+            mock_freq_service_instance = AsyncMock()
+            mock_freq_service_instance.can_execute_trade = AsyncMock(
+                return_value=(True, None)
+            )
+            mock_freq_service.return_value = mock_freq_service_instance
 
-        result = await _validate_next_action(
-            mock_sell_action,
-            pnl_status,
-            cash_balance,
-            min_trade_size,
-            mock_trade_repo,
-        )
+            pnl_status = {
+                "can_buy": True,
+                "can_sell": False,
+                "reason": "Max loss reached",
+            }
+            cash_balance = 1000.0
+            min_trade_size = 500.0
 
-        assert result is False
+            result = await _validate_next_action(
+                mock_sell_action,
+                pnl_status,
+                cash_balance,
+                min_trade_size,
+                mock_trade_repo,
+                mock_settings_repo,
+            )
+
+            assert result is False
 
     @pytest.mark.asyncio
     async def test_blocks_sell_when_recent_order_exists(
-        self, mock_trade_repo, mock_sell_action
+        self, mock_trade_repo, mock_settings_repo, mock_sell_action
     ):
         """Test SELL is blocked when recent sell order exists."""
+        from unittest.mock import patch
+
         from app.jobs.cash_rebalance import _validate_next_action
 
-        pnl_status = {"can_buy": True, "can_sell": True}
-        cash_balance = 1000.0
-        min_trade_size = 500.0
-        mock_trade_repo.has_recent_sell_order.return_value = True
+        with patch(
+            "app.jobs.cash_rebalance.TradeFrequencyService"
+        ) as mock_freq_service:
+            mock_freq_service_instance = AsyncMock()
+            mock_freq_service_instance.can_execute_trade = AsyncMock(
+                return_value=(True, None)
+            )
+            mock_freq_service.return_value = mock_freq_service_instance
 
-        result = await _validate_next_action(
-            mock_sell_action,
-            pnl_status,
-            cash_balance,
-            min_trade_size,
-            mock_trade_repo,
-        )
+            pnl_status = {"can_buy": True, "can_sell": True}
+            cash_balance = 1000.0
+            min_trade_size = 500.0
+            mock_trade_repo.has_recent_sell_order.return_value = True
 
-        assert result is False
+            result = await _validate_next_action(
+                mock_sell_action,
+                pnl_status,
+                cash_balance,
+                min_trade_size,
+                mock_trade_repo,
+                mock_settings_repo,
+            )
+
+            assert result is False
 
     @pytest.mark.asyncio
     async def test_allows_sell_when_no_recent_order(
-        self, mock_trade_repo, mock_sell_action
+        self, mock_trade_repo, mock_settings_repo, mock_sell_action
     ):
         """Test SELL is allowed when no recent order exists."""
+        from unittest.mock import patch
+
         from app.jobs.cash_rebalance import _validate_next_action
 
-        pnl_status = {"can_buy": True, "can_sell": True}
-        cash_balance = 1000.0
-        min_trade_size = 500.0
-        mock_trade_repo.has_recent_sell_order.return_value = False
+        with patch(
+            "app.jobs.cash_rebalance.TradeFrequencyService"
+        ) as mock_freq_service:
+            mock_freq_service_instance = AsyncMock()
+            mock_freq_service_instance.can_execute_trade = AsyncMock(
+                return_value=(True, None)
+            )
+            mock_freq_service.return_value = mock_freq_service_instance
 
-        result = await _validate_next_action(
-            mock_sell_action,
-            pnl_status,
-            cash_balance,
-            min_trade_size,
-            mock_trade_repo,
-        )
+            pnl_status = {"can_buy": True, "can_sell": True}
+            cash_balance = 1000.0
+            min_trade_size = 500.0
+            mock_trade_repo.has_recent_sell_order.return_value = False
 
-        assert result is True
+            result = await _validate_next_action(
+                mock_sell_action,
+                pnl_status,
+                cash_balance,
+                min_trade_size,
+                mock_trade_repo,
+                mock_settings_repo,
+            )
+
+            assert result is True
 
 
 class TestCheckAndRebalanceInternal:
