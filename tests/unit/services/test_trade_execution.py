@@ -146,6 +146,45 @@ class TestTradeValidation:
         mock_client.place_order.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_buy_blocked_when_negative_balance(
+        self,
+        mock_trade_repo,
+        mock_position_repo,
+        mock_stock_repo,
+        mock_client,
+        mock_currency_exchange_service,
+        mock_exchange_rate_service,
+    ):
+        """BUY order should be blocked if currency balance is negative.
+
+        Bug caught: Attempting trades when balance is already negative.
+        """
+        service = TradeExecutionService(
+            trade_repo=mock_trade_repo,
+            position_repo=mock_position_repo,
+            stock_repo=mock_stock_repo,
+            tradernet_client=mock_client,
+            currency_exchange_service=mock_currency_exchange_service,
+            exchange_rate_service=mock_exchange_rate_service,
+        )
+
+        trade = self._make_trade(side="BUY", quantity=10, price=100, currency="USD")
+
+        # Negative USD balance
+        currency_balances = {"USD": -556.21}
+
+        results = await service.execute_trades(
+            [trade], currency_balances=currency_balances
+        )
+
+        assert len(results) == 1
+        assert results[0]["status"] == "blocked"
+        assert "Negative USD balance" in results[0]["error"]
+
+        # Should NOT have placed order
+        mock_client.place_order.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_buy_allowed_when_sufficient_balance(
         self,
         mock_trade_repo,
