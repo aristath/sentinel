@@ -158,7 +158,7 @@ class DeploymentManager:
                     if not self.venv_dir.exists():
                         logger.warning(
                             f"Virtual environment missing: {self.venv_dir}. "
-                            "Service may fail to start. Venv needs to be recreated."
+                            "It will need to be recreated manually."
                         )
 
                     # Step 6: Restart service
