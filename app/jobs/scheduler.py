@@ -287,10 +287,6 @@ async def init_scheduler() -> AsyncIOScheduler:
     # BACKGROUND TASKS
     # ============================================================================
 
-    # Event-Based Trading - started as background task (not a scheduled job)
-    # since it has a while True loop and runs continuously
-    # Wrap in a function that restarts it if it crashes
-
     # Start event-based trading loop as background task (not a scheduled job)
     # since it has a while True loop and runs continuously
     # Wrap in a function that restarts it if it crashes
