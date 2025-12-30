@@ -174,6 +174,16 @@ async def _execute_trade(
         currency_balances = {
             cb.currency: cb.amount for cb in client.get_cash_balances()
         }
+
+        # Check for negative balances and log warnings
+        for currency, balance in currency_balances.items():
+            if balance < 0:
+                logger.warning(
+                    f"Negative balance detected in cash rebalance: "
+                    f"{balance:.2f} {currency}"
+                )
+                emit(SystemEvent.ERROR_OCCURRED, message=f"NEGATIVE {currency} BALANCE")
+
         pending_totals = client.get_pending_order_totals()
         if pending_totals:
             for currency, pending_amount in pending_totals.items():
