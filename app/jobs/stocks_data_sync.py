@@ -64,7 +64,9 @@ async def _run_daily_pipeline_internal():
                 logger.error(f"Pipeline failed for {stock.symbol}: {e}")
                 errors += 1
 
-        logger.info(f"Stocks data sync complete: {processed} processed, {errors} errors")
+        logger.info(
+            f"Stocks data sync complete: {processed} processed, {errors} errors"
+        )
         emit(SystemEvent.SYNC_COMPLETE)
 
     except Exception as e:

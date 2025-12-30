@@ -97,9 +97,7 @@ class TestRunAutoDeploy:
 
         mock_script_path = Path("/fake/path/auto-deploy.sh")
         mock_process = AsyncMock()
-        mock_process.communicate = AsyncMock(
-            return_value=(b"", b"Permission denied")
-        )
+        mock_process.communicate = AsyncMock(return_value=(b"", b"Permission denied"))
         mock_process.returncode = 1
 
         with patch("app.jobs.auto_deploy.AUTO_DEPLOY_SCRIPT", mock_script_path):
@@ -121,7 +119,8 @@ class TestRunAutoDeploy:
         with patch("app.jobs.auto_deploy.AUTO_DEPLOY_SCRIPT", mock_script_path):
             with patch("pathlib.Path.exists", return_value=True):
                 with patch(
-                    "asyncio.create_subprocess_exec", side_effect=OSError("No such file")
+                    "asyncio.create_subprocess_exec",
+                    side_effect=OSError("No such file"),
                 ):
                     with patch("app.jobs.auto_deploy.logger") as mock_logger:
                         # Should not raise, should log error
@@ -164,7 +163,9 @@ class TestRunAutoDeploy:
                         # Should log error with message about no error output
                         mock_logger.error.assert_called()
                         call_args = str(mock_logger.error.call_args)
-                        assert "No error output" in call_args or "exit code" in call_args
+                        assert (
+                            "No error output" in call_args or "exit code" in call_args
+                        )
 
     @pytest.mark.asyncio
     async def test_uses_correct_script_path(self):
