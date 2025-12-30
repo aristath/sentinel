@@ -16,6 +16,7 @@ from app.api.models import (
     PortfolioPosition,
     ReturnsData,
     RiskMetrics,
+    TurnoverInfo,
 )
 from app.infrastructure.dependencies import (
     ExchangeRateServiceDep,
@@ -291,6 +292,17 @@ async def get_portfolio_analytics(days: int = 365):
             returns, start_date_str, end_date_str
         )
 
+        # Calculate portfolio turnover
+        from app.application.services.turnover_tracker import TurnoverTracker
+        from app.infrastructure.database.manager import get_db_manager
+
+        db_manager = get_db_manager()
+        turnover_tracker = TurnoverTracker(db_manager)
+        annual_turnover = await turnover_tracker.calculate_annual_turnover(
+            end_date=end_date_str
+        )
+        turnover_status = await turnover_tracker.get_turnover_status(annual_turnover)
+
         # Format response using helper functions
         returns_data = _format_returns_data(returns, metrics)
         risk_metrics_data = _format_risk_metrics(metrics)
@@ -298,6 +310,14 @@ async def get_portfolio_analytics(days: int = 365):
         # Convert dict responses to Pydantic models using model_validate
         # This handles the 'return' field alias properly
         returns_model = ReturnsData.model_validate(returns_data)
+
+        turnover_info = TurnoverInfo(
+            annual_turnover=turnover_status.get("turnover"),
+            turnover_display=turnover_status.get("turnover_display", "N/A"),
+            status=turnover_status.get("status", "unknown"),
+            alert=turnover_status.get("alert"),
+            reason=turnover_status.get("reason", ""),
+        )
 
         return PortfolioAnalyticsResponse(
             returns=returns_model,
@@ -311,6 +331,7 @@ async def get_portfolio_analytics(days: int = 365):
                 end_date=end_date_str,
                 days=days,
             ),
+            turnover=turnover_info,
         )
     except Exception as e:
         logger.error(f"Error calculating portfolio analytics: {e}")

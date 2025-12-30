@@ -92,6 +92,16 @@ class PeriodInfo(BaseModel):
     days: int
 
 
+class TurnoverInfo(BaseModel):
+    """Portfolio turnover information."""
+
+    annual_turnover: Optional[float] = None
+    turnover_display: str
+    status: str
+    alert: Optional[str] = None
+    reason: str
+
+
 class PortfolioAnalyticsResponse(BaseModel):
     """Portfolio analytics response."""
 
@@ -99,6 +109,7 @@ class PortfolioAnalyticsResponse(BaseModel):
     risk_metrics: RiskMetrics
     attribution: AttributionData
     period: PeriodInfo
+    turnover: Optional[TurnoverInfo] = None
 
 
 class PortfolioAnalyticsErrorResponse(BaseModel):
