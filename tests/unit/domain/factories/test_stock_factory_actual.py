@@ -229,4 +229,3 @@ class TestStockFactoryCreateWithIndustryDetection:
         stock = StockFactory.create_with_industry_detection(data, detected_industry)
 
         assert stock.industry == "Consumer Electronics"
-

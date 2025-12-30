@@ -3,6 +3,7 @@
 These tests validate the domain event dataclasses and their properties.
 """
 
+from dataclasses import FrozenInstanceError
 from datetime import datetime
 
 import pytest
@@ -48,8 +49,8 @@ class TestStockAddedEvent:
         stock = Stock(symbol="AAPL", name="Apple Inc.")
         event = StockAddedEvent(stock=stock)
 
-        # Should raise AttributeError on attempt to modify
-        with pytest.raises(Exception):  # dataclass(frozen=True) raises FrozenInstanceError
+        # Should raise FrozenInstanceError on attempt to modify
+        with pytest.raises(FrozenInstanceError):
             event.stock = Stock(symbol="MSFT", name="Microsoft")
 
 
@@ -104,8 +105,8 @@ class TestTradeExecutedEvent:
         )
         event = TradeExecutedEvent(trade=trade)
 
-        # Should raise AttributeError on attempt to modify
-        with pytest.raises(Exception):  # dataclass(frozen=True) raises FrozenInstanceError
+        # Should raise FrozenInstanceError on attempt to modify
+        with pytest.raises(FrozenInstanceError):
             event.trade = Trade(
                 symbol="MSFT",
                 side=TradeSide.BUY,
@@ -148,8 +149,8 @@ class TestPositionUpdatedEvent:
         position = Position(symbol="AAPL", quantity=10.0, avg_price=150.0)
         event = PositionUpdatedEvent(position=position)
 
-        # Should raise AttributeError on attempt to modify
-        with pytest.raises(Exception):  # dataclass(frozen=True) raises FrozenInstanceError
+        # Should raise FrozenInstanceError on attempt to modify
+        with pytest.raises(FrozenInstanceError):
             event.position = Position(symbol="MSFT", quantity=5.0, avg_price=300.0)
 
 
@@ -207,8 +208,8 @@ class TestRecommendationCreatedEvent:
         )
         event = RecommendationCreatedEvent(recommendation=recommendation)
 
-        # Should raise AttributeError on attempt to modify
-        with pytest.raises(Exception):  # dataclass(frozen=True) raises FrozenInstanceError
+        # Should raise FrozenInstanceError on attempt to modify
+        with pytest.raises(FrozenInstanceError):
             event.recommendation = Recommendation(
                 symbol="MSFT",
                 name="Microsoft",
