@@ -617,8 +617,66 @@ async def get_disk_usage():
         }
 
 
+def _get_log_file_path(log_file: str) -> Path:
+    """Get the full path to a log file.
+
+    Args:
+        log_file: Log file name (e.g., "arduino-trader.log", "auto-deploy.log")
+
+    Returns:
+        Path to the log file
+    """
+    # Main app log is in data_dir/logs
+    if log_file == "arduino-trader.log":
+        return settings.data_dir / "logs" / log_file
+
+    # Other logs are in /home/arduino/logs
+    return Path(f"/home/arduino/logs/{log_file}")
+
+
+def _get_available_log_files() -> list[dict[str, str]]:
+    """Get list of available log files with their paths.
+
+    Returns:
+        List of dicts with 'name' and 'path' keys
+    """
+    log_files = []
+
+    # Main app log
+    app_log = settings.data_dir / "logs" / "arduino-trader.log"
+    if app_log.exists():
+        log_files.append({"name": "arduino-trader.log", "path": str(app_log)})
+
+    # System logs in /home/arduino/logs
+    system_log_dir = Path("/home/arduino/logs")
+    if system_log_dir.exists():
+        for log_file in system_log_dir.glob("*.log"):
+            log_files.append({"name": log_file.name, "path": str(log_file)})
+
+    return log_files
+
+
+@router.get("/logs/list")
+async def list_log_files():
+    """Get list of available log files."""
+    try:
+        log_files = _get_available_log_files()
+        return {
+            "status": "ok",
+            "log_files": log_files,
+        }
+    except Exception as e:
+        logger.error(f"Failed to list log files: {e}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "log_files": [],
+        }
+
+
 @router.get("/logs")
 async def get_logs(
+    log_file: str = Query("arduino-trader.log", description="Log file name"),
     lines: int = Query(100, ge=1, le=1000, description="Number of lines to return"),
     level: Optional[str] = Query(
         None, description="Filter by log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)"
@@ -627,20 +685,20 @@ async def get_logs(
 ):
     """Get recent application logs.
 
-    Returns logs from the application log file with optional filtering.
+    Returns logs from the specified log file with optional filtering.
     """
     try:
-        log_file = settings.data_dir / "logs" / "arduino-trader.log"
+        log_path = _get_log_file_path(log_file)
 
-        if not log_file.exists():
+        if not log_path.exists():
             return {
                 "status": "error",
-                "message": "Log file not found",
+                "message": f"Log file not found: {log_file}",
                 "logs": [],
             }
 
         # Read log file
-        with open(log_file, "r", encoding="utf-8") as f:
+        with open(log_path, "r", encoding="utf-8") as f:
             all_lines = f.readlines()
 
         # Filter by level if specified
@@ -660,7 +718,8 @@ async def get_logs(
             "status": "ok",
             "total_lines": len(all_lines),
             "returned_lines": len(recent_lines),
-            "log_file": str(log_file),
+            "log_file": log_file,
+            "log_path": str(log_path),
             "logs": [line.rstrip("\n") for line in recent_lines],
         }
     except Exception as e:
@@ -674,21 +733,22 @@ async def get_logs(
 
 @router.get("/logs/errors")
 async def get_error_logs(
+    log_file: str = Query("arduino-trader.log", description="Log file name"),
     lines: int = Query(50, ge=1, le=500, description="Number of lines to return"),
 ):
     """Get recent error logs only (ERROR and CRITICAL levels)."""
     try:
-        log_file = settings.data_dir / "logs" / "arduino-trader.log"
+        log_path = _get_log_file_path(log_file)
 
-        if not log_file.exists():
+        if not log_path.exists():
             return {
                 "status": "error",
-                "message": "Log file not found",
+                "message": f"Log file not found: {log_file}",
                 "logs": [],
             }
 
         # Read log file
-        with open(log_file, "r", encoding="utf-8") as f:
+        with open(log_path, "r", encoding="utf-8") as f:
             all_lines = f.readlines()
 
         # Filter for ERROR and CRITICAL only
@@ -705,7 +765,8 @@ async def get_error_logs(
             "status": "ok",
             "total_error_lines": len(error_lines),
             "returned_lines": len(recent_lines),
-            "log_file": str(log_file),
+            "log_file": log_file,
+            "log_path": str(log_path),
             "logs": [line.rstrip("\n") for line in recent_lines],
         }
     except Exception as e:
