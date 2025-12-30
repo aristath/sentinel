@@ -81,7 +81,19 @@ async def _check_and_rebalance_immediately_internal() -> bool:
             )
 
             if not below_minimum:
-                # No rebalancing needed
+                # No rebalancing needed, but clean up any stale emergency recommendations
+                recommendation_repo = RecommendationRepository()
+                emergency_portfolio_hash = "EMERGENCY:negative_balance_rebalancing"
+                dismissed_count = (
+                    await recommendation_repo.dismiss_all_by_portfolio_hash(
+                        emergency_portfolio_hash
+                    )
+                )
+                if dismissed_count > 0:
+                    logger.info(
+                        f"Dismissed {dismissed_count} stale emergency recommendations "
+                        "since all currencies meet minimum requirements"
+                    )
                 return False
 
         # Negative balances or below minimum detected - rebalance immediately
