@@ -171,6 +171,70 @@ async def trigger_historical_sync():
         return {"status": "error", "message": str(e)}
 
 
+@router.post("/sync/rebuild-universe")
+async def rebuild_universe_from_portfolio():
+    """Rebuild universe from portfolio and populate all histories.
+
+    This endpoint:
+    1. Gets all stocks from current portfolio positions
+    2. Checks if they exist in the universe
+    3. Adds missing stocks with full data (ISIN, Yahoo symbols, etc.)
+    4. Triggers historical data sync for all stocks
+
+    Returns:
+        Status with counts of stocks added and synced
+    """
+    from app.infrastructure.dependencies import get_stock_repository
+    from app.infrastructure.external.tradernet import get_tradernet_client
+    from app.jobs.daily_sync import _ensure_portfolio_stocks_in_universe
+    from app.jobs.historical_data_sync import sync_historical_data
+
+    try:
+        client = get_tradernet_client()
+        if not client.is_connected:
+            if not client.connect():
+                return {
+                    "status": "error",
+                    "message": "Failed to connect to Tradernet",
+                }
+
+        # Get portfolio positions
+        positions = client.get_portfolio()
+        if not positions:
+            return {
+                "status": "success",
+                "message": "No positions in portfolio",
+                "portfolio_positions": 0,
+                "stocks_in_universe": 0,
+            }
+
+        # Get count before adding
+        stock_repo = get_stock_repository()
+        stocks_before = await stock_repo.get_all_active()
+
+        # Ensure all portfolio stocks are in universe
+        await _ensure_portfolio_stocks_in_universe(positions, client, stock_repo)
+
+        # Get count after adding
+        stocks_after = await stock_repo.get_all_active()
+        added_count = len(stocks_after) - len(stocks_before)
+
+        # Trigger historical data sync for all stocks
+        logger.info("Triggering historical data sync for all stocks...")
+        await sync_historical_data()
+
+        return {
+            "status": "success",
+            "message": "Universe rebuilt from portfolio and histories populated",
+            "portfolio_positions": len(positions),
+            "stocks_in_universe": len(stocks_after),
+            "added": added_count,
+        }
+    except Exception as e:
+        logger.error(f"Failed to rebuild universe from portfolio: {e}", exc_info=True)
+        return {"status": "error", "message": str(e)}
+
+
 @router.post("/sync/stocks-data")
 async def trigger_stocks_data_sync():
     """Manually trigger stocks data sync (historical sync, industry detection, metrics, scores).

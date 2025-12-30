@@ -362,6 +362,9 @@ async def _sync_portfolio_internal():
             f"total value: {total_value:.2f}, cash: {cash_balance:.2f}"
         )
 
+        # Check and add missing portfolio stocks to universe
+        await _ensure_portfolio_stocks_in_universe(positions, client, stock_repo)
+
         # Sync stock currencies
         await sync_stock_currencies()
 
@@ -545,3 +548,101 @@ async def sync_stock_currencies():
     except Exception as e:
         logger.error(f"Stock currency sync failed: {e}")
         raise
+
+
+async def _ensure_portfolio_stocks_in_universe(
+    positions: list, client, stock_repo: StockRepository
+) -> None:
+    """Ensure all portfolio stocks are in the universe.
+
+    For each position, checks if the stock exists in the universe.
+    If not, adds it using stock_setup_service which will:
+    1. Get ISIN and Yahoo symbol from Tradernet
+    2. Fetch data from Yahoo Finance (country, exchange, industry)
+    3. Create the stock in the database
+    4. Fetch historical price data (10 years initial seed)
+    5. Calculate and save the initial stock score
+
+    Args:
+        positions: List of Position objects from Tradernet
+        client: TradernetClient instance
+        stock_repo: StockRepository instance
+    """
+    if not positions:
+        logger.debug("No positions to check for universe membership")
+        return
+
+    logger.info("Checking portfolio stocks against universe...")
+
+    # Get all position symbols
+    position_symbols = [pos.symbol for pos in positions]
+    logger.info(f"Checking {len(position_symbols)} portfolio symbols")
+
+    # Check which stocks are missing from universe
+    missing_symbols = []
+    for symbol in position_symbols:
+        existing = await stock_repo.get_by_symbol(symbol)
+        if not existing:
+            missing_symbols.append(symbol)
+            logger.info(f"Portfolio stock {symbol} not in universe - will add")
+
+    if not missing_symbols:
+        logger.info("All portfolio stocks are already in universe")
+        return
+
+    logger.info(f"Adding {len(missing_symbols)} missing stocks to universe...")
+
+    # Import here to avoid circular dependencies
+    from app.application.services.stock_setup_service import StockSetupService
+    from app.infrastructure.dependencies import (
+        get_db_manager,
+        get_score_repository,
+        get_scoring_service,
+    )
+
+    db_manager = get_db_manager()
+    score_repo = get_score_repository()
+    scoring_service = get_scoring_service(
+        stock_repo=stock_repo,
+        score_repo=score_repo,
+        db_manager=db_manager,
+    )
+    stock_setup_service = StockSetupService(
+        stock_repo=stock_repo,
+        scoring_service=scoring_service,
+        tradernet_client=client,
+        db_manager=db_manager,
+    )
+
+    added_count = 0
+    failed_count = 0
+
+    for symbol in missing_symbols:
+        try:
+            logger.info(f"Adding {symbol} to universe...")
+            stock = await stock_setup_service.add_stock_by_identifier(
+                identifier=symbol,
+                min_lot=1,
+                allow_buy=True,
+                allow_sell=True,
+            )
+            logger.info(
+                f"Successfully added {symbol} to universe "
+                f"(ISIN: {stock.isin}, Yahoo: {stock.yahoo_symbol})"
+            )
+            added_count += 1
+        except ValueError as e:
+            # Stock already exists (race condition) or invalid identifier
+            logger.warning(f"Could not add {symbol}: {e}")
+            failed_count += 1
+        except Exception as e:
+            logger.error(f"Failed to add {symbol} to universe: {e}", exc_info=True)
+            failed_count += 1
+
+    logger.info(f"Universe update complete: {added_count} added, {failed_count} failed")
+
+    if added_count > 0:
+        logger.info(
+            f"Added {added_count} new stocks to universe. "
+            "Historical data sync will populate price histories."
+        )
