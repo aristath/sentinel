@@ -250,7 +250,7 @@ class FileDeployer:
                 else:
                     shutil.copy2(str(temp_path), str(dst))
                     temp_path.unlink()
-                logger.debug(f"Restored {item}")
+                logger.debug(f"Restored {preserved_item_name}")
 
             # Clean up staging
             self._cleanup_staging()
