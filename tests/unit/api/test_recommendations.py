@@ -32,7 +32,13 @@ def mock_internal_repos():
             mock_planner_instance.get_best_result.return_value = None
             mock_planner_instance.get_evaluation_count.return_value = 0
             mock_planner.return_value = mock_planner_instance
-            yield
+            with patch("app.repositories.RecommendationRepository") as mock_rec_repo:
+                mock_rec_repo_instance = AsyncMock()
+                mock_rec_repo_instance.get_pending_by_portfolio_hash = AsyncMock(
+                    return_value=[]
+                )
+                mock_rec_repo.return_value = mock_rec_repo_instance
+                yield
 
 
 @pytest.fixture
