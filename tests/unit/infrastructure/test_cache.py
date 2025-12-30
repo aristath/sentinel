@@ -3,6 +3,8 @@
 These tests validate the in-memory cache functionality for caching computed values.
 """
 
+import time
+
 import pytest
 
 from app.infrastructure.cache import SimpleCache
@@ -134,4 +136,46 @@ class TestSimpleCache:
 
         assert cache1.get("key1") == "value1"
         assert cache2.get("key1") == "value2"
+
+    def test_ttl_expiration(self, cache):
+        """Test that cached values expire after TTL."""
+        # Set value with short TTL
+        cache.set("key1", "value1", ttl_seconds=1)
+
+        # Should be available immediately
+        assert cache.get("key1") == "value1"
+
+        # Wait for expiration
+        time.sleep(1.1)
+
+        # Should be expired now
+        assert cache.get("key1") is None
+
+    def test_custom_ttl(self, cache):
+        """Test that custom TTL values work correctly."""
+        # Set with custom TTL (2 seconds)
+        cache.set("key1", "value1", ttl_seconds=2)
+
+        # Should still be available after 1 second
+        time.sleep(1.0)
+        assert cache.get("key1") == "value1"
+
+        # Should expire after 2 seconds
+        time.sleep(1.1)
+        assert cache.get("key1") is None
+
+    def test_expired_key_is_removed(self, cache):
+        """Test that expired keys are removed from cache."""
+        cache.set("key1", "value1", ttl_seconds=1)
+        cache.set("key2", "value2", ttl_seconds=1)
+
+        # Wait for expiration
+        time.sleep(1.1)
+
+        # Get should remove expired keys
+        assert cache.get("key1") is None
+        assert cache.get("key2") is None
+
+        # Keys should be removed from internal cache
+        assert len(cache._cache) == 0
 
