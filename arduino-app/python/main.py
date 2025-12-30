@@ -4,6 +4,8 @@
 from arduino.app_utils import App, Bridge, Logger
 import time
 import requests
+import subprocess
+import psutil
 
 logger = Logger("trader-display")
 
@@ -14,12 +16,6 @@ _http_session = requests.Session()
 
 # Default ticker speed in ms (can be overridden by API)
 DEFAULT_TICKER_SPEED = 50
-
-# Track last values to avoid unnecessary updates
-_last_text = ""
-_last_text_speed = 0
-_last_led3 = None
-_last_led4 = None
 
 
 def scroll_text(text: str, speed: int = 50) -> bool:
@@ -33,14 +29,8 @@ def scroll_text(text: str, speed: int = 50) -> bool:
         True if successful, False otherwise
     """
     try:
-        # Use longer timeout - scrollText may take time to set up scrolling animation
-        # Estimate timeout based on text length: ~100ms per character + 5s base
-        estimated_timeout = max(10, min(60, len(text) * 0.1 + 5))
-        Bridge.call("scrollText", text, speed, timeout=int(estimated_timeout))
+        Bridge.call("scrollText", text, speed, timeout=5)
         return True
-    except TimeoutError:
-        logger.warning(f"scrollText timed out: {text[:50]}...")
-        return False
     except Exception as e:
         logger.debug(f"scrollText failed: {e}")
         return False
@@ -98,106 +88,83 @@ def fetch_display_state() -> dict | None:
     return None
 
 
-def estimate_scroll_duration(text: str, speed_ms: int) -> float:
-    """Estimate how long scrolling text will take to complete.
+def check_bridge_health() -> bool:
+    """Check if Bridge is responsive."""
+    try:
+        # Try a simple call with short timeout
+        Bridge.call("setRGB3", 0, 0, 0, timeout=1)
+        return True
+    except Exception:
+        return False
 
-    Args:
-        text: Text to scroll
-        speed_ms: Milliseconds per scroll step
 
-    Returns:
-        Estimated duration in seconds
+def restart_bridge_if_needed() -> bool:
+    """Restart Bridge if it's stuck.
+
+    Tries to restart the Docker container via Arduino App Framework.
     """
-    # Matrix width is 13 pixels, each character is ~5 pixels wide
-    # Text needs to scroll from right edge (x=13) to completely off left edge
-    # Total scroll distance = text_width + matrix_width
-    # Each scroll step moves 1 pixel, takes speed_ms milliseconds
-    matrix_width = 13
-    char_width = 5
-    text_width = len(text) * char_width
-    total_steps = text_width + matrix_width
-    duration_seconds = (total_steps * speed_ms) / 1000.0
-    # Add some buffer for safety
-    return duration_seconds + 2.0
+    try:
+        # Try to restart the Docker container
+        # Arduino App Framework manages the container, so we try docker restart
+        result = subprocess.run(
+            ["docker", "restart", "trader-display"],
+            capture_output=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            logger.info("Restarted trader-display container")
+            return True
+    except FileNotFoundError:
+        # Docker command not available, try finding and killing bridge process
+        try:
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    cmdline = proc.info.get('cmdline', [])
+                    if cmdline and any('bridge' in str(arg).lower() for arg in cmdline):
+                        proc.kill()
+                        logger.info(f"Killed bridge process {proc.info['pid']}")
+                        return True
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+        except Exception as e:
+            logger.debug(f"Failed to find/kill bridge process: {e}")
+    except Exception as e:
+        logger.debug(f"Failed to restart bridge: {e}")
+    return False
 
 
 def loop():
-    """Main loop - fetch display state from API, update MCU if changed.
+    """Main loop - fetch display state from API, update MCU.
 
-    Strategy:
-    - If no message to display: poll every 10 seconds
-    - If we have a message: call scrollText, then wait for estimated completion
-      before polling for next message
+    Polls every 1 second. Always sends commands to Bridge (stateless).
+    Arduino queue handles deduplication with latest-wins strategy.
     """
-    global _last_text, _last_text_speed, _last_led3, _last_led4
-
     try:
         state = fetch_display_state()
 
         if state is None:
-            # API unreachable - show error
-            if _last_text != "API OFFLINE":
-                if scroll_text("API OFFLINE", DEFAULT_TICKER_SPEED):
-                    _last_text = "API OFFLINE"
-                    _last_text_speed = DEFAULT_TICKER_SPEED
-                    # Wait for scroll to complete before next poll
-                    scroll_duration = estimate_scroll_duration("API OFFLINE", DEFAULT_TICKER_SPEED)
-                    time.sleep(scroll_duration)
-                    return
-            # No message to display - poll less frequently
-            time.sleep(10)
+            # API unreachable
+            if not check_bridge_health():
+                restart_bridge_if_needed()
+            time.sleep(1)
             return
 
-        # Get state values
-        error_message = state.get("error_message")
-        activity_message = state.get("activity_message")
-        ticker_text = state.get("ticker_text", "")
-        ticker_speed = int(state.get("ticker_speed", DEFAULT_TICKER_SPEED))
+        # Update RGB LEDs (always send, let Arduino handle it)
         led3 = state.get("led3", [0, 0, 0])
         led4 = state.get("led4", [0, 0, 0])
+        set_rgb3(led3[0], led3[1], led3[2])
+        set_rgb4(led4[0], led4[1], led4[2])
 
-        # Update RGB LEDs (only if changed)
-        led3_tuple = tuple(led3)
-        if _last_led3 != led3_tuple:
-            set_rgb3(led3[0], led3[1], led3[2])
-            _last_led3 = led3_tuple
+        # Update display text (always send, Arduino queues with latest-wins)
+        display_text = state.get("display_text", "")
+        if display_text:
+            scroll_text(display_text, state.get("ticker_speed", DEFAULT_TICKER_SPEED))
 
-        led4_tuple = tuple(led4)
-        if _last_led4 != led4_tuple:
-            set_rgb4(led4[0], led4[1], led4[2])
-            _last_led4 = led4_tuple
-
-        # Determine what text to display (priority: error > activity > ticker)
-        if error_message:
-            display_text = error_message
-        elif activity_message:
-            display_text = activity_message
-        elif ticker_text:
-            display_text = ticker_text
-        else:
-            display_text = ""
-
-        # If we have text to display and it's different, call scrollText
-        if display_text and (display_text != _last_text or ticker_speed != _last_text_speed):
-            if scroll_text(display_text, ticker_speed):
-                _last_text = display_text
-                _last_text_speed = ticker_speed
-                # Wait for scroll animation to complete before polling for next message
-                scroll_duration = estimate_scroll_duration(display_text, ticker_speed)
-                logger.debug(f"Scrolling '{display_text[:30]}...' for ~{scroll_duration:.1f}s")
-                time.sleep(scroll_duration)
-                return
-            # If scroll_text fails, don't update _last_text so it will retry next iteration
-            # But don't wait - retry soon
-            time.sleep(2)
-            return
-
-        # No message to display or same message - poll less frequently
-        time.sleep(10)
+        time.sleep(1)  # Poll every 1 second
 
     except Exception as e:
         logger.error(f"Loop error: {e}")
-        time.sleep(10)
+        time.sleep(1)
 
 
 logger.info("LED Display starting (scrolling text mode)...")
