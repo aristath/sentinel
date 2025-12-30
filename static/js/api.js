@@ -54,6 +54,19 @@ const API = {
   syncPrices: () => API._post('/api/status/sync/prices'),
   syncHistorical: () => API._post('/api/status/sync/historical'),
 
+  // Logs
+  fetchLogs: (logFile = 'arduino-trader.log', lines = 100, level = null, search = null) => {
+    const params = new URLSearchParams({ log_file: logFile, lines: lines.toString() });
+    if (level) params.append('level', level);
+    if (search) params.append('search', search);
+    return fetch(`/api/status/logs?${params}`).then(r => r.json());
+  },
+  fetchErrorLogs: (logFile = 'arduino-trader.log', lines = 50) => {
+    const params = new URLSearchParams({ log_file: logFile, lines: lines.toString() });
+    return fetch(`/api/status/logs/errors?${params}`).then(r => r.json());
+  },
+  fetchAvailableLogFiles: () => fetch('/api/status/logs/list').then(r => r.json()),
+
   // Jobs
   triggerSyncCycle: () => API._post('/api/status/jobs/sync-cycle'),
   triggerDailyPipeline: () => API._post('/api/status/sync/daily-pipeline'),
