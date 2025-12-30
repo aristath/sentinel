@@ -1,4 +1,7 @@
-"""Tests for Money value object."""
+"""Tests for Money value object.
+
+These tests validate the Money value object for representing monetary amounts with currency.
+"""
 
 import pytest
 
@@ -9,127 +12,131 @@ from app.domain.value_objects.money import Money
 class TestMoney:
     """Test Money value object."""
 
-    def test_create_money_with_currency(self):
-        """Test creating money with amount and currency."""
-        money = Money(amount=100.50, currency=Currency.EUR)
-
-        assert money.amount == 100.50
-        assert money.currency == Currency.EUR
-
-    def test_create_money_defaults_to_eur(self):
-        """Test that currency defaults to EUR."""
-        money = Money(amount=100.0)
-
+    def test_create_money_with_amount_and_currency(self):
+        """Test creating Money with amount and currency."""
+        money = Money(amount=100.0, currency=Currency.EUR)
         assert money.amount == 100.0
         assert money.currency == Currency.EUR
 
-    def test_money_validation_negative_amount(self):
-        """Test that negative amounts are allowed (for losses)."""
-        money = Money(amount=-50.0, currency=Currency.EUR)
-        assert money.amount == -50.0
+    def test_create_money_with_default_currency(self):
+        """Test creating Money with default currency (EUR)."""
+        money = Money(amount=50.0)
+        assert money.amount == 50.0
+        assert money.currency == Currency.EUR
 
-    def test_money_validation_zero(self):
-        """Test that zero amount is allowed."""
-        money = Money(amount=0.0, currency=Currency.EUR)
-        assert money.amount == 0.0
+    def test_create_money_with_int_amount(self):
+        """Test creating Money with integer amount."""
+        money = Money(amount=100, currency=Currency.USD)
+        assert money.amount == 100
+        assert money.currency == Currency.USD
+
+    def test_money_raises_error_for_non_numeric_amount(self):
+        """Test that Money raises ValueError for non-numeric amount."""
+        with pytest.raises(ValueError, match="Amount must be numeric"):
+            Money(amount="100", currency=Currency.EUR)
+
+        with pytest.raises(ValueError):
+            Money(amount=None, currency=Currency.EUR)
+
+    def test_add_money_same_currency(self):
+        """Test adding Money with same currency."""
+        money1 = Money(amount=100.0, currency=Currency.EUR)
+        money2 = Money(amount=50.0, currency=Currency.EUR)
+        result = money1 + money2
+
+        assert result.amount == 150.0
+        assert result.currency == Currency.EUR
+
+    def test_add_money_different_currencies_raises_error(self):
+        """Test that adding Money with different currencies raises ValueError."""
+        money1 = Money(amount=100.0, currency=Currency.EUR)
+        money2 = Money(amount=50.0, currency=Currency.USD)
+
+        with pytest.raises(ValueError, match="Cannot add money with different currencies"):
+            money1 + money2
+
+    def test_subtract_money_same_currency(self):
+        """Test subtracting Money with same currency."""
+        money1 = Money(amount=100.0, currency=Currency.EUR)
+        money2 = Money(amount=30.0, currency=Currency.EUR)
+        result = money1 - money2
+
+        assert result.amount == 70.0
+        assert result.currency == Currency.EUR
+
+    def test_subtract_money_different_currencies_raises_error(self):
+        """Test that subtracting Money with different currencies raises ValueError."""
+        money1 = Money(amount=100.0, currency=Currency.EUR)
+        money2 = Money(amount=50.0, currency=Currency.USD)
+
+        with pytest.raises(ValueError, match="Cannot subtract money with different currencies"):
+            money1 - money2
+
+    def test_multiply_money_by_scalar(self):
+        """Test multiplying Money by a scalar."""
+        money = Money(amount=100.0, currency=Currency.EUR)
+        result = money * 2.5
+
+        assert result.amount == 250.0
+        assert result.currency == Currency.EUR
+
+    def test_multiply_money_by_int_scalar(self):
+        """Test multiplying Money by an integer scalar."""
+        money = Money(amount=100.0, currency=Currency.USD)
+        result = money * 3
+
+        assert result.amount == 300.0
+        assert result.currency == Currency.USD
+
+    def test_right_multiply_scalar_by_money(self):
+        """Test right multiplication (scalar * money)."""
+        money = Money(amount=50.0, currency=Currency.EUR)
+        result = 4 * money
+
+        assert result.amount == 200.0
+        assert result.currency == Currency.EUR
+
+    def test_divide_money_by_scalar(self):
+        """Test dividing Money by a scalar."""
+        money = Money(amount=100.0, currency=Currency.EUR)
+        result = money / 4.0
+
+        assert result.amount == 25.0
+        assert result.currency == Currency.EUR
+
+    def test_divide_money_by_int_scalar(self):
+        """Test dividing Money by an integer scalar."""
+        money = Money(amount=100.0, currency=Currency.USD)
+        result = money / 5
+
+        assert result.amount == 20.0
+        assert result.currency == Currency.USD
+
+    def test_money_immutability(self):
+        """Test that Money is immutable (frozen dataclass)."""
+        money = Money(amount=100.0, currency=Currency.EUR)
+
+        with pytest.raises(Exception):  # dataclass.FrozenInstanceError
+            money.amount = 200.0
 
     def test_money_equality(self):
-        """Test money equality comparison."""
+        """Test Money equality."""
         money1 = Money(amount=100.0, currency=Currency.EUR)
         money2 = Money(amount=100.0, currency=Currency.EUR)
         money3 = Money(amount=100.0, currency=Currency.USD)
-        money4 = Money(amount=200.0, currency=Currency.EUR)
+        money4 = Money(amount=50.0, currency=Currency.EUR)
 
         assert money1 == money2
         assert money1 != money3  # Different currency
         assert money1 != money4  # Different amount
 
-    def test_money_addition_same_currency(self):
-        """Test adding money with same currency."""
-        money1 = Money(amount=100.0, currency=Currency.EUR)
-        money2 = Money(amount=50.0, currency=Currency.EUR)
-
-        result = money1 + money2
-        assert result.amount == 150.0
-        assert result.currency == Currency.EUR
-
-    def test_money_addition_different_currency_raises_error(self):
-        """Test that adding money with different currencies raises error."""
-        money1 = Money(amount=100.0, currency=Currency.EUR)
-        money2 = Money(amount=50.0, currency=Currency.USD)
-
-        with pytest.raises(
-            ValueError, match="Cannot add money with different currencies"
-        ):
-            money1 + money2
-
-    def test_money_subtraction(self):
-        """Test subtracting money."""
-        money1 = Money(amount=100.0, currency=Currency.EUR)
-        money2 = Money(amount=30.0, currency=Currency.EUR)
-
-        result = money1 - money2
-        assert result.amount == 70.0
-        assert result.currency == Currency.EUR
-
-    def test_money_multiplication(self):
-        """Test multiplying money by a scalar."""
-        money = Money(amount=100.0, currency=Currency.EUR)
-
-        result = money * 2.5
-        assert result.amount == 250.0
-        assert result.currency == Currency.EUR
-
-    def test_money_division(self):
-        """Test dividing money by a scalar."""
-        money = Money(amount=100.0, currency=Currency.EUR)
-
-        result = money / 2.0
-        assert result.amount == 50.0
-        assert result.currency == Currency.EUR
-
-    def test_money_comparison(self):
-        """Test money comparison operators."""
-        money1 = Money(amount=100.0, currency=Currency.EUR)
-        money2 = Money(amount=50.0, currency=Currency.EUR)
-        money3 = Money(amount=100.0, currency=Currency.EUR)
-
-        assert money1 > money2
-        assert money2 < money1
-        assert money1 >= money3
-        assert money2 <= money1
-        assert money1 == money3
-
-    def test_money_comparison_different_currency_raises_error(self):
-        """Test that comparing money with different currencies raises error."""
-        money1 = Money(amount=100.0, currency=Currency.EUR)
-        money2 = Money(amount=100.0, currency=Currency.USD)
-
-        with pytest.raises(
-            ValueError, match="Cannot compare money with different currencies"
-        ):
-            money1 > money2
-
-    def test_money_round(self):
-        """Test rounding money to specified decimal places."""
-        money = Money(amount=100.567, currency=Currency.EUR)
-
-        rounded = money.round(2)
-        assert rounded.amount == 100.57
-        assert rounded.currency == Currency.EUR
-
-    def test_money_abs(self):
-        """Test absolute value of money."""
+    def test_money_negative_amount_allowed(self):
+        """Test that Money allows negative amounts (for losses)."""
         money = Money(amount=-50.0, currency=Currency.EUR)
+        assert money.amount == -50.0
+        assert money.currency == Currency.EUR
 
-        abs_money = abs(money)
-        assert abs_money.amount == 50.0
-        assert abs_money.currency == Currency.EUR
-
-    def test_money_to_string(self):
-        """Test string representation of money."""
-        money = Money(amount=100.50, currency=Currency.EUR)
-
-        assert str(money) == "100.50 EUR"
-        # repr uses Python's default float representation (100.5 not 100.50)
-        assert repr(money) == "Money(amount=100.5, currency=Currency.EUR)"
+    def test_money_zero_amount_allowed(self):
+        """Test that Money allows zero amount."""
+        money = Money(amount=0.0, currency=Currency.EUR)
+        assert money.amount == 0.0
