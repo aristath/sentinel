@@ -28,96 +28,6 @@ class IndustryTargets(BaseModel):
     targets: dict[str, float]
 
 
-@router.get("/targets")
-async def get_allocation_targets(allocation_repo: AllocationRepositoryDep):
-    """Get all allocation targets (country and industry)."""
-    targets = await allocation_repo.get_all()
-
-    country = {}
-    industry = {}
-
-    # get_all() returns Dict[str, float] with keys like "country:name" or "industry:name"
-    for key, target_pct in targets.items():
-        parts = key.split(":", 1)
-        if len(parts) == 2:
-            target_type, name = parts
-            if target_type == "country":
-                country[name] = target_pct
-            elif target_type == "industry":
-                industry[name] = target_pct
-
-    return {
-        "country": country,
-        "industry": industry,
-    }
-
-
-@router.put("/targets/country")
-async def update_country_targets(
-    targets: CountryTargets, allocation_repo: AllocationRepositoryDep
-):
-    """Update country allocation weights."""
-    updates = targets.targets
-
-    if not updates:
-        raise HTTPException(status_code=400, detail="No weights provided")
-
-    for name, weight in updates.items():
-        if weight < -1 or weight > 1:
-            raise HTTPException(
-                status_code=400, detail=f"Weight for {name} must be between -1 and 1"
-            )
-
-    for name, weight in updates.items():
-        target = AllocationTarget(
-            type="country",
-            name=name,
-            target_pct=weight,
-        )
-        await allocation_repo.upsert(target)
-
-    country_targets = await allocation_repo.get_by_type("country")
-    result = {t.name: t.target_pct for t in country_targets}
-
-    return {
-        "weights": result,
-        "count": len(result),
-    }
-
-
-@router.put("/targets/industry")
-async def update_industry_targets(
-    targets: IndustryTargets, allocation_repo: AllocationRepositoryDep
-):
-    """Update industry allocation weights."""
-    updates = targets.targets
-
-    if not updates:
-        raise HTTPException(status_code=400, detail="No weights provided")
-
-    for name, weight in updates.items():
-        if weight < -1 or weight > 1:
-            raise HTTPException(
-                status_code=400, detail=f"Weight for {name} must be between -1 and 1"
-            )
-
-    for name, weight in updates.items():
-        target = AllocationTarget(
-            type="industry",
-            name=name,
-            target_pct=weight,
-        )
-        await allocation_repo.upsert(target)
-
-    industry_targets = await allocation_repo.get_by_type("industry")
-    result = {t.name: t.target_pct for t in industry_targets}
-
-    return {
-        "weights": result,
-        "count": len(result),
-    }
-
-
 @router.get("/current")
 async def get_current_allocation(
     portfolio_service: PortfolioServiceDep,
@@ -411,13 +321,13 @@ async def update_country_group_targets(
     allocation_repo: AllocationRepositoryDep,
     grouping_repo: GroupingRepositoryDep,
 ):
-    """Update country group targets (distributes to individual countries)."""
+    """Update country group targets (stores group targets directly)."""
     group_targets = targets.targets
 
     if not group_targets:
         raise HTTPException(status_code=400, detail="No weights provided")
 
-    # Get country groups from custom groups only
+    # Verify groups exist
     country_groups = await grouping_repo.get_country_groups()
     if not country_groups:
         raise HTTPException(
@@ -425,8 +335,7 @@ async def update_country_group_targets(
             detail="No country groups defined. Please create groups first.",
         )
 
-    # Distribute group targets to individual countries
-    # Strategy: distribute evenly among countries in each group
+    # Store group targets directly (no distribution to individuals)
     for group_name, group_weight in group_targets.items():
         if group_weight < -1 or group_weight > 1:
             raise HTTPException(
@@ -434,44 +343,16 @@ async def update_country_group_targets(
                 detail=f"Weight for {group_name} must be between -1 and 1",
             )
 
-        countries_in_group = country_groups.get(group_name, [])
-        if not countries_in_group:
-            # If group doesn't exist or is empty, skip
-            continue
-
-        # Distribute group weight evenly to all countries in group
-        country_weight = (
-            group_weight / len(countries_in_group) if countries_in_group else 0
+        # Store group target directly
+        target = AllocationTarget(
+            type="country_group",
+            name=group_name,
+            target_pct=group_weight,
         )
-
-        for country in countries_in_group:
-            target = AllocationTarget(
-                type="country",
-                name=country,
-                target_pct=country_weight,
-            )
-            await allocation_repo.upsert(target)
+        await allocation_repo.upsert(target)
 
     # Return updated group targets
-    all_targets = await allocation_repo.get_all()
-    country_targets: Dict[str, float] = {
-        key.split(":", 1)[1]: val
-        for key, val in all_targets.items()
-        if key.startswith("country:")
-    }
-
-    # Re-aggregate to groups (use same mapping as for saving)
-    # Build reverse mapping for aggregation
-    country_to_group_agg: Dict[str, str] = {}
-    for group_name, countries in country_groups.items():
-        for country in countries:
-            country_to_group_agg[country] = group_name
-
-    result_groups: Dict[str, float] = {}
-    # Aggregate by groups
-    for country, target_pct in country_targets.items():
-        group = country_to_group_agg.get(country, "OTHER")
-        result_groups[group] = result_groups.get(group, 0) + target_pct
+    result_groups = await allocation_repo.get_country_group_targets()
 
     # Only return groups with non-zero targets
     result_groups = {k: v for k, v in result_groups.items() if v != 0}
@@ -488,13 +369,13 @@ async def update_industry_group_targets(
     allocation_repo: AllocationRepositoryDep,
     grouping_repo: GroupingRepositoryDep,
 ):
-    """Update industry group targets (distributes to individual industries)."""
+    """Update industry group targets (stores group targets directly)."""
     group_targets = targets.targets
 
     if not group_targets:
         raise HTTPException(status_code=400, detail="No weights provided")
 
-    # Get industry groups from custom groups only
+    # Verify groups exist
     industry_groups = await grouping_repo.get_industry_groups()
     if not industry_groups:
         raise HTTPException(
@@ -502,8 +383,7 @@ async def update_industry_group_targets(
             detail="No industry groups defined. Please create groups first.",
         )
 
-    # Distribute group targets to individual industries
-    # Strategy: distribute evenly among industries in each group
+    # Store group targets directly (no distribution to individuals)
     for group_name, group_weight in group_targets.items():
         if group_weight < -1 or group_weight > 1:
             raise HTTPException(
@@ -511,45 +391,16 @@ async def update_industry_group_targets(
                 detail=f"Weight for {group_name} must be between -1 and 1",
             )
 
-        industries_in_group = industry_groups.get(group_name, [])
-        if not industries_in_group:
-            # If group doesn't exist or is empty, skip
-            # Note: "OTHER" is a special catch-all group and cannot have targets set directly
-            continue
-
-        # Distribute group weight evenly to all industries in group
-        industry_weight = (
-            group_weight / len(industries_in_group) if industries_in_group else 0
+        # Store group target directly
+        target = AllocationTarget(
+            type="industry_group",
+            name=group_name,
+            target_pct=group_weight,
         )
-
-        for industry in industries_in_group:
-            target = AllocationTarget(
-                type="industry",
-                name=industry,
-                target_pct=industry_weight,
-            )
-            await allocation_repo.upsert(target)
+        await allocation_repo.upsert(target)
 
     # Return updated group targets
-    all_targets = await allocation_repo.get_all()
-    industry_targets: Dict[str, float] = {
-        key.split(":", 1)[1]: val
-        for key, val in all_targets.items()
-        if key.startswith("industry:")
-    }
-
-    # Re-aggregate to groups (use same mapping as for saving)
-    # Build reverse mapping for aggregation
-    industry_to_group_agg: Dict[str, str] = {}
-    for group_name, industries in industry_groups.items():
-        for industry in industries:
-            industry_to_group_agg[industry] = group_name
-
-    result_groups: Dict[str, float] = {}
-    # Aggregate by groups
-    for industry, target_pct in industry_targets.items():
-        group = industry_to_group_agg.get(industry, "OTHER")
-        result_groups[group] = result_groups.get(group, 0) + target_pct
+    result_groups = await allocation_repo.get_industry_group_targets()
 
     # Only return groups with non-zero targets
     result_groups = {k: v for k, v in result_groups.items() if v != 0}
