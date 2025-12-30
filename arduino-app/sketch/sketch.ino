@@ -5,7 +5,6 @@
 #include <Arduino_RouterBridge.h>
 #include "ArduinoGraphics.h"
 #include "Arduino_LED_Matrix.h"
-#include <queue>
 
 ArduinoLEDMatrix matrix;
 
@@ -14,10 +13,10 @@ ArduinoLEDMatrix matrix;
 // LED4: LED_BUILTIN+3 (R), LED_BUILTIN+4 (G), LED_BUILTIN+5 (B)
 // Active-low: HIGH = OFF, LOW = ON
 
-// Command queue for scrollText (max 10 commands, latest-wins strategy)
-std::queue<String> textQueue;
-std::queue<int> speedQueue;
-const int MAX_QUEUE_SIZE = 10;
+// Latest-wins buffer (no queue needed - we only care about the latest message)
+String pendingText = "";
+int pendingSpeed = 50;
+bool hasPendingText = false;
 
 // Track scrolling state manually (library doesn't have isScrolling())
 bool isScrolling = false;
@@ -41,19 +40,11 @@ void setRGB4(uint8_t r, uint8_t g, uint8_t b) {
 // Scroll text across LED matrix using native ArduinoGraphics
 // text: String to scroll, speed: ms per scroll step (lower = faster)
 void scrollText(String text, int speed) {
-  // If queue is full (10 messages), empty it completely
-  // We only care about the latest message, not historical ones
-  if (textQueue.size() >= MAX_QUEUE_SIZE) {
-    // Empty entire queue - discard all old messages
-    while (!textQueue.empty()) {
-      textQueue.pop();
-      speedQueue.pop();
-    }
-  }
-
-  // Add the latest message
-  textQueue.push(text);
-  speedQueue.push(speed);
+  // Latest-wins: always store the most recent message
+  // Old messages are automatically discarded
+  pendingText = text;
+  pendingSpeed = speed;
+  hasPendingText = true;
 }
 
 void setup() {
@@ -86,39 +77,29 @@ void setup() {
 void loop() {
   // Bridge handles RPC messages automatically in background thread
   // No need to call Bridge.loop() - it's handled by __loopHook()
-  
+
   // Check if scrolling has completed
   if (isScrolling && (millis() - scrollStartTime >= estimatedScrollDuration)) {
     isScrolling = false;
   }
 
-  // Process queue - always show the latest message
-  // If multiple messages queued, process them in order until we get to the last one
-  // This ensures we always show the most recent state
-  if (!textQueue.empty() && !isScrolling) {
-    // Process all queued messages until we get to the last one
-    String text;
-    int speed;
-
-    while (!textQueue.empty()) {
-      text = textQueue.front();
-      speed = speedQueue.front();
-      textQueue.pop();
-      speedQueue.pop();
-    }
-
+  // Process pending text - always show the latest message
+  if (hasPendingText && !isScrolling) {
     // Start scrolling with the latest message
-    matrix.textScrollSpeed(speed);
+    matrix.textScrollSpeed(pendingSpeed);
     matrix.textFont(Font_5x7);
     matrix.beginText(13, 1, 0xFFFFFF);
-    matrix.print(text);
+    matrix.print(pendingText);
     matrix.endText(SCROLL_LEFT);
 
     // Track scrolling state manually
     isScrolling = true;
     scrollStartTime = millis();
     // Estimate duration: matrix width (13) + text width (5 pixels per char) + buffer
-    estimatedScrollDuration = (13 + (text.length() * 5) + 10) * speed;
+    estimatedScrollDuration = (13 + (pendingText.length() * 5) + 10) * pendingSpeed;
+
+    // Clear pending flag
+    hasPendingText = false;
   }
 
   // Small delay to allow Bridge background thread to process
