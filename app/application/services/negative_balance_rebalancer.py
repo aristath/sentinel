@@ -127,6 +127,7 @@ class NegativeBalanceRebalancer:
         logger.warning(
             f"Starting negative balance rebalancing for {len(shortfalls)} currencies"
         )
+        emit(SystemEvent.REBALANCE_START, message="Negative balance rebalancing")
         emit(SystemEvent.ERROR_OCCURRED, message="REBALANCING NEGATIVE BALANCES")
 
         # Step 1: Try currency exchange
@@ -136,6 +137,10 @@ class NegativeBalanceRebalancer:
 
         if not remaining_shortfalls:
             logger.info("Currency exchange resolved all shortfalls")
+            emit(
+                SystemEvent.REBALANCE_COMPLETE,
+                message="Negative balance rebalancing complete",
+            )
             return True
 
         # Step 2: Position sales if exchange insufficient
@@ -144,6 +149,10 @@ class NegativeBalanceRebalancer:
         # Step 3: Final currency exchange
         await self._step_3_final_exchange()
 
+        emit(
+            SystemEvent.REBALANCE_COMPLETE,
+            message="Negative balance rebalancing complete",
+        )
         return True
 
     async def _step_1_currency_exchange(
