@@ -110,7 +110,9 @@ class DeploymentManager:
                 return result
 
             if local_commit and remote_commit:
-                logger.info(f"Changes detected: {local_commit[:8]} -> {remote_commit[:8]}")
+                logger.info(
+                    f"Changes detected: {local_commit[:8]} -> {remote_commit[:8]}"
+                )
 
             # Step 3: Get changed files and categorize
             if not local_commit or not remote_commit:
@@ -118,7 +120,9 @@ class DeploymentManager:
                 logger.error(result.error)
                 return result
 
-            changed_files = self.git_checker.get_changed_files(local_commit, remote_commit)
+            changed_files = self.git_checker.get_changed_files(
+                local_commit, remote_commit
+            )
             categories = self.git_checker.categorize_changes(changed_files)
 
             logger.info(
@@ -189,7 +193,9 @@ class DeploymentManager:
             duration = (datetime.now() - start_time).total_seconds()
             result.duration_seconds = duration
 
-            before_hash = result.commit_before[:8] if result.commit_before else "unknown"
+            before_hash = (
+                result.commit_before[:8] if result.commit_before else "unknown"
+            )
             after_hash = result.commit_after[:8] if result.commit_after else "unknown"
             logger.info(
                 f"Deployment completed successfully in {duration:.1f}s - "
@@ -227,4 +233,3 @@ class DeploymentManager:
             return {
                 "error": str(e),
             }
-

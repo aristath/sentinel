@@ -97,7 +97,7 @@ class TestRateLimitMiddleware:
 
         # Make many requests - should all pass
         for _ in range(100):
-            response = await middleware.dispatch(led_request, call_next)
+            await middleware.dispatch(led_request, call_next)
 
         assert call_next.call_count == 100
 
@@ -112,7 +112,7 @@ class TestRateLimitMiddleware:
 
         # Make many requests - should all pass
         for _ in range(100):
-            response = await middleware.dispatch(static_request, call_next)
+            await middleware.dispatch(static_request, call_next)
 
         assert call_next.call_count == 100
 
@@ -187,4 +187,3 @@ class TestRateLimitMiddleware:
         # Should not crash, use "unknown" as IP
         response = await middleware.dispatch(request, call_next)
         assert response.status_code != 429  # Should still work
-

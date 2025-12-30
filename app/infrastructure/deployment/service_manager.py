@@ -47,22 +47,37 @@ class ServiceManager:
                 )
 
                 # Restart service
-                result = subprocess.run(
-                    ["sudo", "systemctl", "restart", self.service_name],
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
-                )
-
-                if result.returncode != 0:
-                    error_msg = result.stderr or result.stdout
-                    logger.warning(
-                        f"Service restart command failed (attempt {attempt}): {error_msg}"
+                # Note: When restarting from within the service, the process may be killed
+                # by systemd before subprocess.run() can return. This is expected behavior.
+                try:
+                    result = subprocess.run(
+                        ["sudo", "systemctl", "restart", self.service_name],
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
                     )
-                    if attempt < max_attempts:
-                        await asyncio.sleep(5)
-                        continue
-                    raise ServiceRestartError(f"Failed to restart service: {error_msg}")
+
+                    if result.returncode != 0:
+                        error_msg = result.stderr or result.stdout
+                        logger.warning(
+                            f"Service restart command failed (attempt {attempt}): {error_msg}"
+                        )
+                        if attempt < max_attempts:
+                            await asyncio.sleep(5)
+                            continue
+                        raise ServiceRestartError(
+                            f"Failed to restart service: {error_msg}"
+                        )
+                except (KeyboardInterrupt, SystemExit):
+                    # Process is being killed by systemd during restart - this is expected
+                    # The service will restart and the new code will be active
+                    logger.info(
+                        "Service restart initiated - current process will be terminated by systemd"
+                    )
+                    # Give systemd a moment to process the restart
+                    await asyncio.sleep(1)
+                    # Exit gracefully - systemd will restart the service
+                    raise SystemExit(0)
 
                 # Wait for service to start
                 logger.debug("Waiting for service to start...")

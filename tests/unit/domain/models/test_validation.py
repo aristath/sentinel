@@ -9,7 +9,6 @@ import pytest
 
 from app.domain.exceptions import ValidationError
 from app.domain.models import Position, Recommendation, Stock, Trade
-from app.domain.value_objects.currency import Currency
 from app.domain.value_objects.trade_side import TradeSide
 
 
@@ -48,7 +47,9 @@ class TestStockValidation:
 
     def test_stock_validates_min_portfolio_target_range(self):
         """Test that Stock validates min_portfolio_target is 0-20."""
-        with pytest.raises(ValidationError, match="min_portfolio_target must be between 0 and 20"):
+        with pytest.raises(
+            ValidationError, match="min_portfolio_target must be between 0 and 20"
+        ):
             Stock(symbol="AAPL", name="Apple Inc.", min_portfolio_target=21.0)
 
         with pytest.raises(ValidationError):
@@ -56,7 +57,9 @@ class TestStockValidation:
 
     def test_stock_validates_max_portfolio_target_range(self):
         """Test that Stock validates max_portfolio_target is 0-30."""
-        with pytest.raises(ValidationError, match="max_portfolio_target must be between 0 and 30"):
+        with pytest.raises(
+            ValidationError, match="max_portfolio_target must be between 0 and 30"
+        ):
             Stock(symbol="AAPL", name="Apple Inc.", max_portfolio_target=31.0)
 
         with pytest.raises(ValidationError):
@@ -64,7 +67,10 @@ class TestStockValidation:
 
     def test_stock_validates_max_greater_than_min(self):
         """Test that Stock validates max_portfolio_target >= min_portfolio_target."""
-        with pytest.raises(ValidationError, match="max_portfolio_target must be >= min_portfolio_target"):
+        with pytest.raises(
+            ValidationError,
+            match="max_portfolio_target must be >= min_portfolio_target",
+        ):
             Stock(
                 symbol="AAPL",
                 name="Apple Inc.",
@@ -103,10 +109,14 @@ class TestPositionValidation:
 
     def test_position_validates_currency_rate(self):
         """Test that Position corrects invalid currency_rate to 1.0."""
-        position = Position(symbol="AAPL", quantity=10.0, avg_price=100.0, currency_rate=0.0)
+        position = Position(
+            symbol="AAPL", quantity=10.0, avg_price=100.0, currency_rate=0.0
+        )
         assert position.currency_rate == 1.0
 
-        position2 = Position(symbol="AAPL", quantity=10.0, avg_price=100.0, currency_rate=-0.5)
+        position2 = Position(
+            symbol="AAPL", quantity=10.0, avg_price=100.0, currency_rate=-0.5
+        )
         assert position2.currency_rate == 1.0
 
     def test_position_allows_zero_quantity(self):
@@ -306,4 +316,3 @@ class TestRecommendationValidation:
             reason="High score",
         )
         assert recommendation.score_change is None
-

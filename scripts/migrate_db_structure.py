@@ -99,7 +99,9 @@ async def migrate_table(
     row = await target_db.fetchone(f"SELECT COUNT(*) as cnt FROM {table_name}")
     target_count = row["cnt"] if row else 0
 
-    logger.info(f"  Migrated {inserted}/{source_count} rows, target now has {target_count}")
+    logger.info(
+        f"  Migrated {inserted}/{source_count} rows, target now has {target_count}"
+    )
 
     return source_count, target_count
 
@@ -132,22 +134,71 @@ async def main():
             "recommendations.db",
             {"geography": "country"},  # Old column was named 'geography'
         ),
-        (db_manager.ledger, db_manager.dividends, "dividend_history", "ledger.db", "dividends.db", None),
-        (db_manager.cache, db_manager.rates, "exchange_rates", "cache.db", "rates.db", None),
-        (db_manager.state, db_manager.snapshots, "portfolio_snapshots", "state.db", "snapshots.db", None),
-        (db_manager.state, db_manager.calculations, "scores", "state.db", "calculations.db", None),
+        (
+            db_manager.ledger,
+            db_manager.dividends,
+            "dividend_history",
+            "ledger.db",
+            "dividends.db",
+            None,
+        ),
+        (
+            db_manager.cache,
+            db_manager.rates,
+            "exchange_rates",
+            "cache.db",
+            "rates.db",
+            None,
+        ),
+        (
+            db_manager.state,
+            db_manager.snapshots,
+            "portfolio_snapshots",
+            "state.db",
+            "snapshots.db",
+            None,
+        ),
+        (
+            db_manager.state,
+            db_manager.calculations,
+            "scores",
+            "state.db",
+            "calculations.db",
+            None,
+        ),
     ]
 
     results = []
     all_success = True
 
-    for source_db, target_db, table_name, source_name, target_name, column_mapping in migrations:
+    for (
+        source_db,
+        target_db,
+        table_name,
+        source_name,
+        target_name,
+        column_mapping,
+    ) in migrations:
         try:
             source_count, target_count = await migrate_table(
-                source_db, target_db, table_name, source_name, target_name, column_mapping
+                source_db,
+                target_db,
+                table_name,
+                source_name,
+                target_name,
+                column_mapping,
             )
             success = source_count == 0 or target_count >= source_count
-            results.append((table_name, source_name, target_name, source_count, target_count, success))
+            results.append(
+                (
+                    table_name,
+                    source_name,
+                    target_name,
+                    source_count,
+                    target_count,
+                    success,
+                )
+            )
             if not success:
                 all_success = False
         except Exception as e:
@@ -161,10 +212,19 @@ async def main():
     logger.info("Migration Summary")
     logger.info("=" * 60)
 
-    for table_name, source_name, target_name, source_count, target_count, success in results:
+    for (
+        table_name,
+        source_name,
+        target_name,
+        source_count,
+        target_count,
+        success,
+    ) in results:
         status = "OK" if success else "FAILED"
         logger.info(f"{table_name}: {source_name} → {target_name}")
-        logger.info(f"  Source: {source_count}, Target: {target_count}, Status: {status}")
+        logger.info(
+            f"  Source: {source_count}, Target: {target_count}, Status: {status}"
+        )
 
     logger.info("")
     if all_success:

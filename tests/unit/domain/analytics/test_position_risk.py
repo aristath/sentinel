@@ -4,7 +4,7 @@ These tests validate risk metric calculations for individual stock positions,
 including volatility, Sharpe ratio, Sortino ratio, and max drawdown.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -71,7 +71,9 @@ class TestGetPositionRiskMetrics:
                 "app.domain.analytics.position.risk.HistoryRepository",
                 return_value=mock_history_repo,
             ):
-                result = await get_position_risk_metrics("AAPL", "2024-01-01", "2024-01-31")
+                result = await get_position_risk_metrics(
+                    "AAPL", "2024-01-01", "2024-01-31"
+                )
 
                 assert result == {
                     "sortino_ratio": 0.0,
@@ -101,7 +103,9 @@ class TestGetPositionRiskMetrics:
                 "app.domain.analytics.position.risk.HistoryRepository",
                 return_value=mock_history_repo,
             ):
-                result = await get_position_risk_metrics("AAPL", "2024-01-01", "2024-01-31")
+                result = await get_position_risk_metrics(
+                    "AAPL", "2024-01-01", "2024-01-31"
+                )
 
                 assert result == {
                     "sortino_ratio": 0.0,
@@ -138,12 +142,19 @@ class TestGetPositionRiskMetrics:
                 "app.domain.analytics.position.risk.HistoryRepository",
                 return_value=mock_history_repo,
             ):
-                result = await get_position_risk_metrics("AAPL", "2024-01-01", "2024-01-31")
+                result = await get_position_risk_metrics(
+                    "AAPL", "2024-01-01", "2024-01-31"
+                )
 
                 assert isinstance(result, dict)
                 assert all(
                     key in result
-                    for key in ["sortino_ratio", "sharpe_ratio", "volatility", "max_drawdown"]
+                    for key in [
+                        "sortino_ratio",
+                        "sharpe_ratio",
+                        "volatility",
+                        "max_drawdown",
+                    ]
                 )
                 assert result["volatility"] >= 0.0
                 # Metrics should be finite numbers (or 0.0)
@@ -181,7 +192,9 @@ class TestGetPositionRiskMetrics:
                 "app.domain.analytics.position.risk.HistoryRepository",
                 return_value=mock_history_repo,
             ):
-                result = await get_position_risk_metrics("AAPL", "2024-01-01", "2024-01-31")
+                result = await get_position_risk_metrics(
+                    "AAPL", "2024-01-01", "2024-01-31"
+                )
 
                 assert result == {
                     "sortino_ratio": 0.0,
@@ -217,8 +230,12 @@ class TestGetPositionRiskMetrics:
                 # Mock empyrical to return inf/nan values
                 with patch("empyrical.annual_volatility", return_value=float("inf")):
                     with patch("empyrical.sharpe_ratio", return_value=float("nan")):
-                        with patch("empyrical.sortino_ratio", return_value=float("inf")):
-                            with patch("empyrical.max_drawdown", return_value=float("nan")):
+                        with patch(
+                            "empyrical.sortino_ratio", return_value=float("inf")
+                        ):
+                            with patch(
+                                "empyrical.max_drawdown", return_value=float("nan")
+                            ):
                                 result = await get_position_risk_metrics(
                                     "AAPL", "2024-01-01", "2024-01-31"
                                 )
@@ -250,7 +267,9 @@ class TestGetPositionRiskMetrics:
                 "app.domain.analytics.position.risk.HistoryRepository",
                 return_value=mock_history_repo,
             ):
-                result = await get_position_risk_metrics("AAPL", "2024-01-01", "2024-01-31")
+                result = await get_position_risk_metrics(
+                    "AAPL", "2024-01-01", "2024-01-31"
+                )
 
                 assert result == {
                     "sortino_ratio": 0.0,
@@ -258,4 +277,3 @@ class TestGetPositionRiskMetrics:
                     "volatility": 0.0,
                     "max_drawdown": 0.0,
                 }
-

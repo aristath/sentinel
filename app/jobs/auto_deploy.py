@@ -45,7 +45,9 @@ async def _run_auto_deploy_internal():
         return
 
     if not DEPLOY_DIR.exists():
-        logger.warning(f"Deployment directory not found: {DEPLOY_DIR} (will be created)")
+        logger.warning(
+            f"Deployment directory not found: {DEPLOY_DIR} (will be created)"
+        )
 
     # Initialize deployment manager
     manager = DeploymentManager(

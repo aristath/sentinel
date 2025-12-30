@@ -89,4 +89,3 @@ class TestCalculationResult:
 
         assert result.value == -0.05
         assert result.success is True
-

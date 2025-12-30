@@ -81,7 +81,9 @@ async def backfill_isin():
                             logger.info(f"  {stock.symbol} -> {isin}")
                             success_count += 1
                         else:
-                            logger.warning(f"  {stock.symbol}: No valid ISIN in response")
+                            logger.warning(
+                                f"  {stock.symbol}: No valid ISIN in response"
+                            )
                             failure_count += 1
                     else:
                         logger.warning(f"  {stock.symbol}: No quote data returned")

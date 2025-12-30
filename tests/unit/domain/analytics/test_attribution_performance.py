@@ -4,7 +4,7 @@ These tests validate performance attribution by geography and industry,
 including helper functions for attributing returns and calculating annualized values.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pandas as pd
 import pytest
@@ -324,9 +324,7 @@ class TestGetPerformanceAttribution:
             get_performance_attribution,
         )
 
-        returns = pd.Series(
-            [0.01], index=pd.to_datetime(["2024-01-02"])
-        )
+        returns = pd.Series([0.01], index=pd.to_datetime(["2024-01-02"]))
 
         # Position with zero quantity
         positions_df = pd.DataFrame(
@@ -356,4 +354,3 @@ class TestGetPerformanceAttribution:
 
                 # Should return empty attribution (zero positions skipped)
                 assert result == {"country": {}, "industry": {}}
-

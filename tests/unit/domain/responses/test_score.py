@@ -84,4 +84,3 @@ class TestScoreResult:
         result = ScoreResult(score=0.25)
 
         assert result.score == 0.25
-

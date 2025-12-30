@@ -4,9 +4,6 @@ These tests validate correlation ID functionality for structured logging.
 """
 
 import logging
-from unittest.mock import MagicMock, patch
-
-import pytest
 
 from app.infrastructure.logging_context import (
     CorrelationIDFilter,
@@ -167,4 +164,3 @@ class TestGetLogger:
 
         # Check that filter was added
         assert any(isinstance(f, CorrelationIDFilter) for f in root_logger.filters)
-

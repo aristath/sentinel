@@ -3,8 +3,6 @@
 These tests validate the hash generation functions for portfolio state, settings, and allocations.
 """
 
-import pytest
-
 from app.domain.models import Stock
 from app.domain.portfolio_hash import (
     apply_pending_orders_to_portfolio,
@@ -23,10 +21,18 @@ class TestApplyPendingOrdersToPortfolio:
         positions = [{"symbol": "AAPL", "quantity": 10}]
         cash = {"EUR": 1500.0}
         orders = [
-            {"symbol": "AAPL", "side": "buy", "quantity": 5, "price": 100.0, "currency": "EUR"}
+            {
+                "symbol": "AAPL",
+                "side": "buy",
+                "quantity": 5,
+                "price": 100.0,
+                "currency": "EUR",
+            }
         ]
 
-        adjusted_pos, adjusted_cash = apply_pending_orders_to_portfolio(positions, cash, orders)
+        adjusted_pos, adjusted_cash = apply_pending_orders_to_portfolio(
+            positions, cash, orders
+        )
 
         # Position should increase
         assert len(adjusted_pos) == 1
@@ -41,10 +47,18 @@ class TestApplyPendingOrdersToPortfolio:
         positions = [{"symbol": "AAPL", "quantity": 10}]
         cash = {"EUR": 1500.0}
         orders = [
-            {"symbol": "AAPL", "side": "sell", "quantity": 3, "price": 100.0, "currency": "EUR"}
+            {
+                "symbol": "AAPL",
+                "side": "sell",
+                "quantity": 3,
+                "price": 100.0,
+                "currency": "EUR",
+            }
         ]
 
-        adjusted_pos, adjusted_cash = apply_pending_orders_to_portfolio(positions, cash, orders)
+        adjusted_pos, adjusted_cash = apply_pending_orders_to_portfolio(
+            positions, cash, orders
+        )
 
         # Position should decrease
         assert len(adjusted_pos) == 1
@@ -59,11 +73,25 @@ class TestApplyPendingOrdersToPortfolio:
         positions = [{"symbol": "AAPL", "quantity": 10}]
         cash = {"EUR": 2000.0, "USD": 500.0}
         orders = [
-            {"symbol": "AAPL", "side": "buy", "quantity": 5, "price": 100.0, "currency": "EUR"},
-            {"symbol": "MSFT", "side": "buy", "quantity": 3, "price": 200.0, "currency": "USD"},
+            {
+                "symbol": "AAPL",
+                "side": "buy",
+                "quantity": 5,
+                "price": 100.0,
+                "currency": "EUR",
+            },
+            {
+                "symbol": "MSFT",
+                "side": "buy",
+                "quantity": 3,
+                "price": 200.0,
+                "currency": "USD",
+            },
         ]
 
-        adjusted_pos, adjusted_cash = apply_pending_orders_to_portfolio(positions, cash, orders)
+        adjusted_pos, adjusted_cash = apply_pending_orders_to_portfolio(
+            positions, cash, orders
+        )
 
         # AAPL position should increase
         aapl_pos = next((p for p in adjusted_pos if p["symbol"] == "AAPL"), None)
@@ -84,7 +112,13 @@ class TestApplyPendingOrdersToPortfolio:
         positions = [{"symbol": "AAPL", "quantity": 5}]
         cash = {"EUR": 1500.0}
         orders = [
-            {"symbol": "AAPL", "side": "sell", "quantity": 5, "price": 100.0, "currency": "EUR"}
+            {
+                "symbol": "AAPL",
+                "side": "sell",
+                "quantity": 5,
+                "price": 100.0,
+                "currency": "EUR",
+            }
         ]
 
         adjusted_pos, _ = apply_pending_orders_to_portfolio(positions, cash, orders)
@@ -97,13 +131,39 @@ class TestApplyPendingOrdersToPortfolio:
         positions = [{"symbol": "AAPL", "quantity": 10}]
         cash = {"EUR": 1500.0}
         orders = [
-            {"symbol": "", "side": "buy", "quantity": 5, "price": 100.0, "currency": "EUR"},
-            {"symbol": "AAPL", "side": "buy", "quantity": 0, "price": 100.0, "currency": "EUR"},
-            {"symbol": "AAPL", "side": "buy", "quantity": 5, "price": 0, "currency": "EUR"},
-            {"symbol": "AAPL", "side": "buy", "quantity": 5, "price": 100.0, "currency": "EUR"},
+            {
+                "symbol": "",
+                "side": "buy",
+                "quantity": 5,
+                "price": 100.0,
+                "currency": "EUR",
+            },
+            {
+                "symbol": "AAPL",
+                "side": "buy",
+                "quantity": 0,
+                "price": 100.0,
+                "currency": "EUR",
+            },
+            {
+                "symbol": "AAPL",
+                "side": "buy",
+                "quantity": 5,
+                "price": 0,
+                "currency": "EUR",
+            },
+            {
+                "symbol": "AAPL",
+                "side": "buy",
+                "quantity": 5,
+                "price": 100.0,
+                "currency": "EUR",
+            },
         ]
 
-        adjusted_pos, adjusted_cash = apply_pending_orders_to_portfolio(positions, cash, orders)
+        adjusted_pos, adjusted_cash = apply_pending_orders_to_portfolio(
+            positions, cash, orders
+        )
 
         # Only the last valid order should be applied
         assert adjusted_pos[0]["quantity"] == 15
@@ -114,7 +174,13 @@ class TestApplyPendingOrdersToPortfolio:
         positions = [{"symbol": "aapl", "quantity": 10}]
         cash = {"EUR": 1500.0}
         orders = [
-            {"symbol": "AAPL", "side": "buy", "quantity": 5, "price": 100.0, "currency": "EUR"}
+            {
+                "symbol": "AAPL",
+                "side": "buy",
+                "quantity": 5,
+                "price": 100.0,
+                "currency": "EUR",
+            }
         ]
 
         adjusted_pos, _ = apply_pending_orders_to_portfolio(positions, cash, orders)
@@ -128,7 +194,10 @@ class TestGeneratePortfolioHash:
 
     def test_generate_hash_with_positions(self):
         """Test generating hash with positions only."""
-        positions = [{"symbol": "AAPL", "quantity": 10}, {"symbol": "MSFT", "quantity": 5}]
+        positions = [
+            {"symbol": "AAPL", "quantity": 10},
+            {"symbol": "MSFT", "quantity": 5},
+        ]
 
         hash1 = generate_portfolio_hash(positions)
         hash2 = generate_portfolio_hash(positions)
@@ -188,11 +257,21 @@ class TestGeneratePortfolioHash:
         positions = [{"symbol": "AAPL", "quantity": 10}]
         cash = {"EUR": 1500.0}
         orders = [
-            {"symbol": "AAPL", "side": "buy", "quantity": 5, "price": 100.0, "currency": "EUR"}
+            {
+                "symbol": "AAPL",
+                "side": "buy",
+                "quantity": 5,
+                "price": 100.0,
+                "currency": "EUR",
+            }
         ]
 
-        hash1 = generate_portfolio_hash(positions, cash_balances=cash, pending_orders=orders)
-        hash2 = generate_portfolio_hash(positions, cash_balances=cash, pending_orders=orders)
+        hash1 = generate_portfolio_hash(
+            positions, cash_balances=cash, pending_orders=orders
+        )
+        hash2 = generate_portfolio_hash(
+            positions, cash_balances=cash, pending_orders=orders
+        )
 
         # Should be deterministic
         assert hash1 == hash2
@@ -215,8 +294,14 @@ class TestGeneratePortfolioHash:
 
     def test_generate_hash_deterministic_ordering(self):
         """Test that hash is deterministic regardless of input order."""
-        positions1 = [{"symbol": "AAPL", "quantity": 10}, {"symbol": "MSFT", "quantity": 5}]
-        positions2 = [{"symbol": "MSFT", "quantity": 5}, {"symbol": "AAPL", "quantity": 10}]
+        positions1 = [
+            {"symbol": "AAPL", "quantity": 10},
+            {"symbol": "MSFT", "quantity": 5},
+        ]
+        positions2 = [
+            {"symbol": "MSFT", "quantity": 5},
+            {"symbol": "AAPL", "quantity": 10},
+        ]
 
         hash1 = generate_portfolio_hash(positions1)
         hash2 = generate_portfolio_hash(positions2)
@@ -338,7 +423,13 @@ class TestGenerateRecommendationCacheKey:
         cash = {"EUR": 1500.0}
         allocations = {"country:United States": 0.6}
         orders = [
-            {"symbol": "AAPL", "side": "buy", "quantity": 5, "price": 100.0, "currency": "EUR"}
+            {
+                "symbol": "AAPL",
+                "side": "buy",
+                "quantity": 5,
+                "price": 100.0,
+                "currency": "EUR",
+            }
         ]
 
         key1 = generate_recommendation_cache_key(
@@ -364,7 +455,9 @@ class TestGenerateRecommendationCacheKey:
         settings = {"min_stock_score": 0.5}
 
         key1 = generate_recommendation_cache_key(positions, settings)
-        key2 = generate_recommendation_cache_key(positions, settings, None, None, None, None)
+        key2 = generate_recommendation_cache_key(
+            positions, settings, None, None, None, None
+        )
 
         # Should be the same
         assert key1 == key2
@@ -379,4 +472,3 @@ class TestGenerateRecommendationCacheKey:
         key2 = generate_recommendation_cache_key(positions2, settings)
 
         assert key1 != key2
-

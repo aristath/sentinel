@@ -118,14 +118,18 @@ class TestPrice:
         """Test that from_money raises ValueError for zero amount."""
         money = Money(amount=0.0, currency=Currency.EUR)
 
-        with pytest.raises(ValueError, match="Cannot create price from non-positive money"):
+        with pytest.raises(
+            ValueError, match="Cannot create price from non-positive money"
+        ):
             Price.from_money(money)
 
     def test_from_money_with_negative_amount_raises_error(self):
         """Test that from_money raises ValueError for negative amount."""
         money = Money(amount=-50.0, currency=Currency.EUR)
 
-        with pytest.raises(ValueError, match="Cannot create price from non-positive money"):
+        with pytest.raises(
+            ValueError, match="Cannot create price from non-positive money"
+        ):
             Price.from_money(money)
 
     def test_price_immutability(self):

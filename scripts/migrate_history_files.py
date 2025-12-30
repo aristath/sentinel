@@ -109,7 +109,9 @@ async def migrate_history_files():
                 logger.info(f"Already migrated: {filename}")
                 skipped += 1
             else:
-                logger.warning(f"Target {new_filename} already exists, skipping {filename}")
+                logger.warning(
+                    f"Target {new_filename} already exists, skipping {filename}"
+                )
                 skipped += 1
             continue
 
@@ -118,6 +120,7 @@ async def migrate_history_files():
         try:
             # Copy to new name
             import shutil
+
             shutil.copy2(file_path, new_path)
 
             # Rename old to backup

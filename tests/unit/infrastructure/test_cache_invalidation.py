@@ -5,8 +5,6 @@ These tests validate the cache invalidation service for managing cache invalidat
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from app.infrastructure.cache import SimpleCache
 from app.infrastructure.cache_invalidation import (
     CacheInvalidationService,
@@ -29,10 +27,8 @@ class TestCacheInvalidationService:
         mock_cache = MagicMock(spec=SimpleCache)
         service = CacheInvalidationService(mock_cache)
 
-        with patch("app.infrastructure.cache_invalidation.emit") as mock_emit:
-            with patch(
-                "app.infrastructure.cache_invalidation.SystemEvent"
-            ) as mock_system_event:
+        with patch("app.infrastructure.cache_invalidation.emit"):
+            with patch("app.infrastructure.cache_invalidation.SystemEvent"):
                 service.invalidate_trade_caches()
 
                 mock_cache.invalidate_prefix.assert_called_once_with("recommendations:")
@@ -42,10 +38,8 @@ class TestCacheInvalidationService:
         mock_cache = MagicMock(spec=SimpleCache)
         service = CacheInvalidationService(mock_cache)
 
-        with patch("app.infrastructure.cache_invalidation.emit") as mock_emit:
-            with patch(
-                "app.infrastructure.cache_invalidation.SystemEvent"
-            ) as mock_system_event:
+        with patch("app.infrastructure.cache_invalidation.emit"):
+            with patch("app.infrastructure.cache_invalidation.SystemEvent"):
                 service.invalidate_recommendation_caches()
 
                 mock_cache.invalidate_prefix.assert_called_once_with("recommendations:")
@@ -66,10 +60,8 @@ class TestCacheInvalidationService:
         mock_cache = MagicMock(spec=SimpleCache)
         service = CacheInvalidationService(mock_cache)
 
-        with patch("app.infrastructure.cache_invalidation.emit") as mock_emit:
-            with patch(
-                "app.infrastructure.cache_invalidation.SystemEvent"
-            ) as mock_system_event:
+        with patch("app.infrastructure.cache_invalidation.emit"):
+            with patch("app.infrastructure.cache_invalidation.SystemEvent"):
                 service.invalidate_all_trade_related()
 
                 # Should call both invalidate_trade_caches and invalidate_portfolio_caches
@@ -81,7 +73,9 @@ class TestGetCacheInvalidationService:
     """Test get_cache_invalidation_service function."""
 
     @patch("app.infrastructure.cache_invalidation.cache")
-    def test_get_cache_invalidation_service_with_default_cache(self, mock_default_cache):
+    def test_get_cache_invalidation_service_with_default_cache(
+        self, mock_default_cache
+    ):
         """Test get_cache_invalidation_service with default cache."""
         service = get_cache_invalidation_service()
 
@@ -95,4 +89,3 @@ class TestGetCacheInvalidationService:
 
         assert isinstance(service, CacheInvalidationService)
         assert service._cache == mock_cache
-

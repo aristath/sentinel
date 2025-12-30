@@ -4,10 +4,11 @@ These tests validate symbol resolution between Tradernet, ISIN, and Yahoo format
 including identifier type detection, conversion, and caching.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.domain.models import Stock
 from app.domain.services.symbol_resolver import (
     IdentifierType,
     SymbolInfo,
@@ -281,7 +282,9 @@ class TestSymbolResolver:
         assert result == "US0378331005"
 
     @pytest.mark.asyncio
-    async def test_get_symbol_for_display_returns_symbol_as_is(self, mock_tradernet_client):
+    async def test_get_symbol_for_display_returns_symbol_as_is(
+        self, mock_tradernet_client
+    ):
         """Test that get_symbol_for_display returns symbol as-is if not ISIN."""
         resolver = SymbolResolver(mock_tradernet_client)
 
@@ -382,4 +385,3 @@ class TestSymbolResolver:
             tradernet_symbol="AAPL.US", isin=None, yahoo_symbol="AAPL"
         )
         assert info_without_isin.has_isin is False
-

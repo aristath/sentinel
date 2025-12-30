@@ -6,7 +6,7 @@ currency conversion, and minimum trade size enforcement.
 
 import pytest
 
-from app.domain.services.trade_sizing_service import SizedTrade, TradeSizingService
+from app.domain.services.trade_sizing_service import TradeSizingService
 
 
 class TestCalculateBuyQuantity:
@@ -227,4 +227,3 @@ class TestEdgeCases:
         # Should round up to 50
         assert result.quantity == 50
         assert result.num_lots == 1
-

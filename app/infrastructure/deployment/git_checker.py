@@ -44,7 +44,14 @@ class GitChecker:
 
             # Add to safe directories
             subprocess.run(
-                ["git", "config", "--global", "--add", "safe.directory", str(self.repo_dir)],
+                [
+                    "git",
+                    "config",
+                    "--global",
+                    "--add",
+                    "safe.directory",
+                    str(self.repo_dir),
+                ],
                 capture_output=True,
                 timeout=5,
             )

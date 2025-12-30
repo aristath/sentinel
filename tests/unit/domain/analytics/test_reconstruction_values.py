@@ -4,7 +4,7 @@ These tests validate the reconstruction of daily portfolio values
 from positions, prices, and cash.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pandas as pd
 import pytest
@@ -26,7 +26,9 @@ class TestReconstructPortfolioValues:
     @pytest.mark.asyncio
     async def test_returns_series_with_initial_cash_only(self):
         """Test that series is returned with initial cash when no positions."""
-        from app.domain.analytics.reconstruction.values import reconstruct_portfolio_values
+        from app.domain.analytics.reconstruction.values import (
+            reconstruct_portfolio_values,
+        )
 
         # Mock positions and cash
         empty_positions = pd.DataFrame(columns=["date", "symbol", "quantity"])
@@ -54,7 +56,9 @@ class TestReconstructPortfolioValues:
     @pytest.mark.asyncio
     async def test_calculates_portfolio_value_with_positions_and_prices(self):
         """Test that portfolio value is calculated from positions and prices."""
-        from app.domain.analytics.reconstruction.values import reconstruct_portfolio_values
+        from app.domain.analytics.reconstruction.values import (
+            reconstruct_portfolio_values,
+        )
 
         # Positions: 10 shares of AAPL on 2024-01-02
         positions_df = pd.DataFrame(
@@ -105,7 +109,9 @@ class TestReconstructPortfolioValues:
     @pytest.mark.asyncio
     async def test_handles_forward_fill_missing_prices(self):
         """Test that missing prices are forward-filled from previous dates."""
-        from app.domain.analytics.reconstruction.values import reconstruct_portfolio_values
+        from app.domain.analytics.reconstruction.values import (
+            reconstruct_portfolio_values,
+        )
 
         # Positions: 10 shares of AAPL on 2024-01-02
         positions_df = pd.DataFrame(
@@ -152,7 +158,9 @@ class TestReconstructPortfolioValues:
     @pytest.mark.asyncio
     async def test_handles_multiple_symbols(self):
         """Test handling of multiple symbols."""
-        from app.domain.analytics.reconstruction.values import reconstruct_portfolio_values
+        from app.domain.analytics.reconstruction.values import (
+            reconstruct_portfolio_values,
+        )
 
         # Positions: AAPL and MSFT
         positions_df = pd.DataFrame(
@@ -204,7 +212,9 @@ class TestReconstructPortfolioValues:
     @pytest.mark.asyncio
     async def test_skips_zero_quantity_positions(self):
         """Test that zero quantity positions are skipped."""
-        from app.domain.analytics.reconstruction.values import reconstruct_portfolio_values
+        from app.domain.analytics.reconstruction.values import (
+            reconstruct_portfolio_values,
+        )
 
         # Position closed (quantity = 0)
         positions_df = pd.DataFrame(
@@ -240,7 +250,9 @@ class TestReconstructPortfolioValues:
     @pytest.mark.asyncio
     async def test_handles_missing_price_data_gracefully(self):
         """Test that missing price data doesn't crash (just skips that position value)."""
-        from app.domain.analytics.reconstruction.values import reconstruct_portfolio_values
+        from app.domain.analytics.reconstruction.values import (
+            reconstruct_portfolio_values,
+        )
 
         positions_df = pd.DataFrame(
             {
@@ -283,7 +295,9 @@ class TestReconstructPortfolioValues:
     @pytest.mark.asyncio
     async def test_handles_exception_during_price_loading(self):
         """Test that exceptions during price loading are handled gracefully."""
-        from app.domain.analytics.reconstruction.values import reconstruct_portfolio_values
+        from app.domain.analytics.reconstruction.values import (
+            reconstruct_portfolio_values,
+        )
 
         positions_df = pd.DataFrame(
             {
@@ -331,7 +345,9 @@ class TestReconstructPortfolioValues:
     @pytest.mark.asyncio
     async def test_uses_last_known_price_when_no_historical_price(self):
         """Test that _last known price is used when no historical price available."""
-        from app.domain.analytics.reconstruction.values import reconstruct_portfolio_values
+        from app.domain.analytics.reconstruction.values import (
+            reconstruct_portfolio_values,
+        )
 
         positions_df = pd.DataFrame(
             {
@@ -347,7 +363,6 @@ class TestReconstructPortfolioValues:
         )
 
         # Price available but before date range (should use _last)
-        mock_price = DailyPrice(date="2024-01-01", close_price=100.0)
         mock_history_repo = AsyncMock()
         # get_daily_range returns empty (price is before range)
         # But _batch_load_prices will store it as _last
@@ -374,4 +389,3 @@ class TestReconstructPortfolioValues:
                     # Without price, should only have cash
                     # (This test verifies the _last mechanism exists, even if not fully testable here)
                     assert isinstance(result, pd.Series)
-

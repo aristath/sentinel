@@ -19,16 +19,33 @@ class TestRecommendationStatus:
 
     def test_from_string_with_valid_status(self):
         """Test from_string with valid status strings."""
-        assert RecommendationStatus.from_string("pending") == RecommendationStatus.PENDING
-        assert RecommendationStatus.from_string("executed") == RecommendationStatus.EXECUTED
-        assert RecommendationStatus.from_string("dismissed") == RecommendationStatus.DISMISSED
+        assert (
+            RecommendationStatus.from_string("pending") == RecommendationStatus.PENDING
+        )
+        assert (
+            RecommendationStatus.from_string("executed")
+            == RecommendationStatus.EXECUTED
+        )
+        assert (
+            RecommendationStatus.from_string("dismissed")
+            == RecommendationStatus.DISMISSED
+        )
 
     def test_from_string_case_insensitive(self):
         """Test that from_string is case-insensitive."""
-        assert RecommendationStatus.from_string("PENDING") == RecommendationStatus.PENDING
-        assert RecommendationStatus.from_string("Pending") == RecommendationStatus.PENDING
-        assert RecommendationStatus.from_string("pending") == RecommendationStatus.PENDING
-        assert RecommendationStatus.from_string("EXECUTED") == RecommendationStatus.EXECUTED
+        assert (
+            RecommendationStatus.from_string("PENDING") == RecommendationStatus.PENDING
+        )
+        assert (
+            RecommendationStatus.from_string("Pending") == RecommendationStatus.PENDING
+        )
+        assert (
+            RecommendationStatus.from_string("pending") == RecommendationStatus.PENDING
+        )
+        assert (
+            RecommendationStatus.from_string("EXECUTED")
+            == RecommendationStatus.EXECUTED
+        )
 
     def test_from_string_with_invalid_status(self):
         """Test that from_string raises ValueError for invalid statuses."""
@@ -48,21 +65,64 @@ class TestRecommendationStatus:
 
     def test_can_transition_to_from_pending(self):
         """Test can_transition_to method from PENDING status."""
-        assert RecommendationStatus.PENDING.can_transition_to(RecommendationStatus.EXECUTED) is True
-        assert RecommendationStatus.PENDING.can_transition_to(RecommendationStatus.DISMISSED) is True
-        assert RecommendationStatus.PENDING.can_transition_to(RecommendationStatus.PENDING) is False
+        assert (
+            RecommendationStatus.PENDING.can_transition_to(
+                RecommendationStatus.EXECUTED
+            )
+            is True
+        )
+        assert (
+            RecommendationStatus.PENDING.can_transition_to(
+                RecommendationStatus.DISMISSED
+            )
+            is True
+        )
+        assert (
+            RecommendationStatus.PENDING.can_transition_to(RecommendationStatus.PENDING)
+            is False
+        )
 
     def test_can_transition_to_from_executed(self):
         """Test can_transition_to method from EXECUTED status (terminal state)."""
-        assert RecommendationStatus.EXECUTED.can_transition_to(RecommendationStatus.PENDING) is False
-        assert RecommendationStatus.EXECUTED.can_transition_to(RecommendationStatus.DISMISSED) is False
-        assert RecommendationStatus.EXECUTED.can_transition_to(RecommendationStatus.EXECUTED) is False
+        assert (
+            RecommendationStatus.EXECUTED.can_transition_to(
+                RecommendationStatus.PENDING
+            )
+            is False
+        )
+        assert (
+            RecommendationStatus.EXECUTED.can_transition_to(
+                RecommendationStatus.DISMISSED
+            )
+            is False
+        )
+        assert (
+            RecommendationStatus.EXECUTED.can_transition_to(
+                RecommendationStatus.EXECUTED
+            )
+            is False
+        )
 
     def test_can_transition_to_from_dismissed(self):
         """Test can_transition_to method from DISMISSED status (terminal state)."""
-        assert RecommendationStatus.DISMISSED.can_transition_to(RecommendationStatus.PENDING) is False
-        assert RecommendationStatus.DISMISSED.can_transition_to(RecommendationStatus.EXECUTED) is False
-        assert RecommendationStatus.DISMISSED.can_transition_to(RecommendationStatus.DISMISSED) is False
+        assert (
+            RecommendationStatus.DISMISSED.can_transition_to(
+                RecommendationStatus.PENDING
+            )
+            is False
+        )
+        assert (
+            RecommendationStatus.DISMISSED.can_transition_to(
+                RecommendationStatus.EXECUTED
+            )
+            is False
+        )
+        assert (
+            RecommendationStatus.DISMISSED.can_transition_to(
+                RecommendationStatus.DISMISSED
+            )
+            is False
+        )
 
     def test_recommendation_status_str_representation(self):
         """Test that RecommendationStatus enum values have correct string representation."""

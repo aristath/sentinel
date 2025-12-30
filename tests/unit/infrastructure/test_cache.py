@@ -178,4 +178,3 @@ class TestSimpleCache:
 
         # Keys should be removed from internal cache
         assert len(cache._cache) == 0
-

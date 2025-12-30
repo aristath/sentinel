@@ -3,8 +3,6 @@
 These tests validate the event system functionality for publishing and subscribing to events.
 """
 
-import pytest
-
 from app.infrastructure.events import (
     SystemEvent,
     clear_all_listeners,
@@ -169,6 +167,7 @@ class TestEventSystem:
 
     def test_unsubscribe_nonexistent_handler_does_not_error(self):
         """Test that unsubscribe on nonexistent handler does not error."""
+
         def handler(event, **kwargs):
             pass
 
@@ -195,6 +194,7 @@ class TestEventSystem:
 
     def test_listener_exceptions_are_caught(self):
         """Test that listener exceptions are caught and don't propagate."""
+
         def failing_handler(event, **kwargs):
             raise ValueError("Handler error")
 
@@ -202,4 +202,3 @@ class TestEventSystem:
 
         # Should not raise
         emit(SystemEvent.ERROR_OCCURRED)
-

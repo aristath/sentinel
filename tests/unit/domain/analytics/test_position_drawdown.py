@@ -4,7 +4,7 @@ These tests validate drawdown calculations for individual stock positions,
 including maximum drawdown and current drawdown.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -174,7 +174,9 @@ class TestGetPositionDrawdown:
             DailyPrice(date="2024-01-01", close_price=100.0),
             DailyPrice(date="2024-01-02", close_price=110.0),  # Peak
             DailyPrice(date="2024-01-03", close_price=90.0),  # Trough
-            DailyPrice(date="2024-01-04", close_price=105.0),  # Recovered (but still below peak)
+            DailyPrice(
+                date="2024-01-04", close_price=105.0
+            ),  # Recovered (but still below peak)
         ]
 
         mock_history_repo = AsyncMock()
@@ -190,4 +192,3 @@ class TestGetPositionDrawdown:
             assert result["max_drawdown"] == pytest.approx(-0.1818, abs=0.01)
             # Current drawdown from peak 110 to 105 = -4.55%
             assert result["current_drawdown"] == pytest.approx(-0.0455, abs=0.01)
-

@@ -3,8 +3,6 @@
 These tests validate the ServiceResult generic type for service operation results.
 """
 
-from typing import Optional
-
 import pytest
 
 from app.domain.responses.service import ServiceResult
@@ -39,7 +37,9 @@ class TestServiceResult:
 
     def test_error_result_validation_requires_error_message(self):
         """Test that error ServiceResult requires error message."""
-        with pytest.raises(ValueError, match="ServiceResult with success=False must have error message"):
+        with pytest.raises(
+            ValueError, match="ServiceResult with success=False must have error message"
+        ):
             ServiceResult(success=False, error=None)
 
     def test_is_success_returns_true_for_success(self):
@@ -102,4 +102,3 @@ class TestServiceResult:
         assert result.success is True
         assert result.data == "test"
         assert result.metadata == {"processing_time": 0.5, "source": "api"}
-

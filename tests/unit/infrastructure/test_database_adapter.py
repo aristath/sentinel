@@ -4,7 +4,6 @@ These tests validate the DatabaseAdapter wrapper around aiosqlite connections,
 ensuring proper execution of queries and result handling.
 """
 
-from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -65,7 +64,9 @@ class TestDatabaseAdapter:
         mock_cursor.fetchone.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_fetchone_returns_none_when_no_results(self, adapter, mock_connection):
+    async def test_fetchone_returns_none_when_no_results(
+        self, adapter, mock_connection
+    ):
         """Test that fetchone returns None when no results."""
         mock_cursor = AsyncMock()
         mock_cursor.fetchone = AsyncMock(return_value=None)
@@ -90,7 +91,9 @@ class TestDatabaseAdapter:
         mock_cursor.fetchall.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_fetchall_returns_empty_list_when_no_results(self, adapter, mock_connection):
+    async def test_fetchall_returns_empty_list_when_no_results(
+        self, adapter, mock_connection
+    ):
         """Test that fetchall returns empty list when no results."""
         mock_cursor = AsyncMock()
         mock_cursor.fetchall = AsyncMock(return_value=[])
@@ -109,7 +112,6 @@ class TestDatabaseAdapter:
         await adapter.commit()
 
         mock_connection.commit.assert_called_once()
-
 
     @pytest.mark.asyncio
     async def test_transaction_context_manager(self, adapter, mock_connection):
@@ -130,9 +132,8 @@ class TestDatabaseAdapter:
         mock_connection.rollback = AsyncMock()
 
         with pytest.raises(ValueError):
-            async with adapter.transaction() as conn:
+            async with adapter.transaction():
                 raise ValueError("Test exception")
 
         mock_connection.commit.assert_not_called()
         mock_connection.rollback.assert_called_once()
-

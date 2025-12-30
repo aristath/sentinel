@@ -51,7 +51,9 @@ class TestGetFactorAttribution:
             with patch("empyrical.annual_return", return_value=0.12):
                 mock_perf_attrib.return_value = mock_attribution
 
-                result = await get_factor_attribution(returns, "2024-01-01", "2024-01-31")
+                result = await get_factor_attribution(
+                    returns, "2024-01-01", "2024-01-31"
+                )
 
                 assert result["total_return"] == 0.12
                 # Country contribution = average of (0.10, 0.05) = 0.075
@@ -64,9 +66,7 @@ class TestGetFactorAttribution:
         """Test handling when performance attribution returns empty data."""
         from app.domain.analytics.attribution.factors import get_factor_attribution
 
-        returns = pd.Series(
-            [0.01], index=pd.to_datetime(["2024-01-01"])
-        )
+        returns = pd.Series([0.01], index=pd.to_datetime(["2024-01-01"]))
 
         mock_attribution = {"country": {}, "industry": {}}
 
@@ -77,7 +77,9 @@ class TestGetFactorAttribution:
             with patch("empyrical.annual_return", return_value=0.05):
                 mock_perf_attrib.return_value = mock_attribution
 
-                result = await get_factor_attribution(returns, "2024-01-01", "2024-01-31")
+                result = await get_factor_attribution(
+                    returns, "2024-01-01", "2024-01-31"
+                )
 
                 assert result["total_return"] == 0.05
                 assert result["country_contribution"] == 0.0
@@ -88,9 +90,7 @@ class TestGetFactorAttribution:
         """Test handling when empyrical returns non-finite total return."""
         from app.domain.analytics.attribution.factors import get_factor_attribution
 
-        returns = pd.Series(
-            [0.01], index=pd.to_datetime(["2024-01-01"])
-        )
+        returns = pd.Series([0.01], index=pd.to_datetime(["2024-01-01"]))
 
         mock_attribution = {"country": {"US": 0.10}, "industry": {}}
 
@@ -101,7 +101,9 @@ class TestGetFactorAttribution:
             with patch("empyrical.annual_return", return_value=float("inf")):
                 mock_perf_attrib.return_value = mock_attribution
 
-                result = await get_factor_attribution(returns, "2024-01-01", "2024-01-31")
+                result = await get_factor_attribution(
+                    returns, "2024-01-01", "2024-01-31"
+                )
 
                 # Non-finite total return should be converted to 0.0
                 assert result["total_return"] == 0.0
@@ -111,9 +113,7 @@ class TestGetFactorAttribution:
         """Test handling when contributions are non-finite."""
         from app.domain.analytics.attribution.factors import get_factor_attribution
 
-        returns = pd.Series(
-            [0.01], index=pd.to_datetime(["2024-01-01"])
-        )
+        returns = pd.Series([0.01], index=pd.to_datetime(["2024-01-01"]))
 
         # Mock attribution with values that would cause non-finite average
         mock_attribution = {
@@ -128,7 +128,9 @@ class TestGetFactorAttribution:
             with patch("empyrical.annual_return", return_value=0.05):
                 mock_perf_attrib.return_value = mock_attribution
 
-                result = await get_factor_attribution(returns, "2024-01-01", "2024-01-31")
+                result = await get_factor_attribution(
+                    returns, "2024-01-01", "2024-01-31"
+                )
 
                 # Non-finite contributions should be converted to 0.0
                 assert result["country_contribution"] == 0.0
@@ -139,9 +141,7 @@ class TestGetFactorAttribution:
         """Test calculation when only one category has attribution."""
         from app.domain.analytics.attribution.factors import get_factor_attribution
 
-        returns = pd.Series(
-            [0.01], index=pd.to_datetime(["2024-01-01"])
-        )
+        returns = pd.Series([0.01], index=pd.to_datetime(["2024-01-01"]))
 
         mock_attribution = {
             "country": {"US": 0.10},  # Only one country
@@ -155,7 +155,9 @@ class TestGetFactorAttribution:
             with patch("empyrical.annual_return", return_value=0.05):
                 mock_perf_attrib.return_value = mock_attribution
 
-                result = await get_factor_attribution(returns, "2024-01-01", "2024-01-31")
+                result = await get_factor_attribution(
+                    returns, "2024-01-01", "2024-01-31"
+                )
 
                 assert result["country_contribution"] == 0.10
                 assert result["industry_contribution"] == 0.0
@@ -182,10 +184,13 @@ class TestGetFactorAttribution:
             with patch("empyrical.annual_return", return_value=-0.08):
                 mock_perf_attrib.return_value = mock_attribution
 
-                result = await get_factor_attribution(returns, "2024-01-01", "2024-01-31")
+                result = await get_factor_attribution(
+                    returns, "2024-01-01", "2024-01-31"
+                )
 
                 assert result["total_return"] == -0.08
                 # Average of -0.05 and -0.03 = -0.04
                 assert result["country_contribution"] == pytest.approx(-0.04, abs=0.001)
-                assert result["industry_contribution"] == pytest.approx(-0.04, abs=0.001)
-
+                assert result["industry_contribution"] == pytest.approx(
+                    -0.04, abs=0.001
+                )

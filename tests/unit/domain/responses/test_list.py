@@ -72,4 +72,3 @@ class TestListResult:
         assert result.items == items
         assert result.total == 2
         assert result.items[0]["id"] == 1
-

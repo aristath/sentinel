@@ -52,7 +52,9 @@ class TestMoney:
         money1 = Money(amount=100.0, currency=Currency.EUR)
         money2 = Money(amount=50.0, currency=Currency.USD)
 
-        with pytest.raises(ValueError, match="Cannot add money with different currencies"):
+        with pytest.raises(
+            ValueError, match="Cannot add money with different currencies"
+        ):
             money1 + money2
 
     def test_subtract_money_same_currency(self):
@@ -69,7 +71,9 @@ class TestMoney:
         money1 = Money(amount=100.0, currency=Currency.EUR)
         money2 = Money(amount=50.0, currency=Currency.USD)
 
-        with pytest.raises(ValueError, match="Cannot subtract money with different currencies"):
+        with pytest.raises(
+            ValueError, match="Cannot subtract money with different currencies"
+        ):
             money1 - money2
 
     def test_multiply_money_by_scalar(self):
@@ -166,7 +170,9 @@ class TestMoney:
         money1 = Money(amount=100.0, currency=Currency.EUR)
         money2 = Money(amount=50.0, currency=Currency.USD)
 
-        with pytest.raises(ValueError, match="Cannot compare money with different currencies"):
+        with pytest.raises(
+            ValueError, match="Cannot compare money with different currencies"
+        ):
             money1 < money2
 
         with pytest.raises(ValueError):
