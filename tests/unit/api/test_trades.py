@@ -76,7 +76,22 @@ class TestGetTrades:
         mock_repo = AsyncMock()
         mock_repo.get_history = AsyncMock(return_value=mock_trades)
 
-        result = await get_trades(mock_repo, limit=50)
+        mock_stock_repo = AsyncMock()
+        from app.domain.models import Stock
+
+        mock_stock = Stock(
+            symbol="AAPL.US",
+            name="Apple Inc.",
+            yahoo_symbol="AAPL",
+            industry="Technology",
+            country="United States",
+            priority_multiplier=1.0,
+            min_lot=1,
+            active=True,
+        )
+        mock_stock_repo.get_by_symbol = AsyncMock(return_value=mock_stock)
+
+        result = await get_trades(mock_repo, mock_stock_repo, limit=50)
 
         assert len(result) == 1
         assert result[0]["symbol"] == "AAPL.US"
