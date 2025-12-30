@@ -724,8 +724,8 @@ document.addEventListener('alpine:init', () => {
         min_lot: stock.min_lot || 1,
         allow_buy: stock.allow_buy !== false,  // Default true
         allow_sell: !!stock.allow_sell,   // Default false (SQLite stores as 0/1)
-        min_portfolio_target: stock.min_portfolio_target || null,
-        max_portfolio_target: stock.max_portfolio_target || null
+        min_portfolio_target: (stock.min_portfolio_target != null && stock.min_portfolio_target !== '') ? stock.min_portfolio_target : null,
+        max_portfolio_target: (stock.max_portfolio_target != null && stock.max_portfolio_target !== '') ? stock.max_portfolio_target : null
       };
       this.showEditStockModal = true;
     },
@@ -746,8 +746,8 @@ document.addEventListener('alpine:init', () => {
           min_lot: parseInt(this.editingStock.min_lot) || 1,
           allow_buy: this.editingStock.allow_buy,
           allow_sell: this.editingStock.allow_sell,
-          min_portfolio_target: this.editingStock.min_portfolio_target ? parseFloat(this.editingStock.min_portfolio_target) : null,
-          max_portfolio_target: this.editingStock.max_portfolio_target ? parseFloat(this.editingStock.max_portfolio_target) : null
+          min_portfolio_target: (this.editingStock.min_portfolio_target != null && this.editingStock.min_portfolio_target !== '') ? parseFloat(this.editingStock.min_portfolio_target) : null,
+          max_portfolio_target: (this.editingStock.max_portfolio_target != null && this.editingStock.max_portfolio_target !== '') ? parseFloat(this.editingStock.max_portfolio_target) : null
         };
 
         // Include new_symbol if symbol was changed
