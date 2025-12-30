@@ -215,12 +215,16 @@ class NegativeBalanceRebalancer:
                 needed = remaining_shortfalls[currency]
 
                 # Convert needed amount to source currency using exchange rate
+                # get_rate returns rate where: amount_to = amount_from / rate
+                # So to get needed amount in target currency, we need:
+                # needed = source_amount / rate
+                # Therefore: source_amount = needed / rate
                 try:
                     rate = await self._exchange_rate_service.get_rate(
                         source_currency, currency
                     )
                     if rate > 0:
-                        source_amount_needed = needed * rate
+                        source_amount_needed = needed / rate
                     else:
                         # Fallback: assume 1:1 if rate unavailable
                         source_amount_needed = needed
