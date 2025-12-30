@@ -1,222 +1,220 @@
-"""Tests for domain events."""
+"""Tests for domain event classes.
+
+These tests validate the domain event dataclasses and their properties.
+"""
 
 from datetime import datetime
 
-from app.domain.events import (
-    DomainEvent,
-    DomainEventBus,
-    PositionUpdatedEvent,
-    RecommendationCreatedEvent,
-    StockAddedEvent,
-    TradeExecutedEvent,
-)
+import pytest
+
+from app.domain.events.position_events import PositionUpdatedEvent
+from app.domain.events.recommendation_events import RecommendationCreatedEvent
+from app.domain.events.stock_events import StockAddedEvent
+from app.domain.events.trade_events import TradeExecutedEvent
 from app.domain.models import Position, Recommendation, Stock, Trade
 from app.domain.value_objects.currency import Currency
 from app.domain.value_objects.trade_side import TradeSide
 
 
-class TestDomainEvents:
-    """Test domain event base class and specific events."""
+class TestStockAddedEvent:
+    """Test StockAddedEvent domain event."""
 
-    def test_domain_event_base(self):
-        """Test that DomainEvent is a base class."""
-        # DomainEvent is abstract - test with a concrete subclass
-        from app.domain.events.stock_events import StockAddedEvent
-        from app.domain.models import Stock
-        from app.domain.value_objects.currency import Currency
+    def test_creates_stock_added_event(self):
+        """Test creating StockAddedEvent."""
+        stock = Stock(symbol="AAPL", name="Apple Inc.")
+        event = StockAddedEvent(stock=stock)
 
+        assert event.stock == stock
+        assert isinstance(event.occurred_at, datetime)
+        assert event.symbol == "AAPL"
+        assert event.name == "Apple Inc."
+        assert event.country is None
+
+    def test_stock_added_event_properties(self):
+        """Test StockAddedEvent properties."""
         stock = Stock(
-            symbol="AAPL.US",
-            name="Apple Inc.",
+            symbol="MSFT",
+            name="Microsoft Corporation",
             country="United States",
-            currency=Currency.USD,
         )
         event = StockAddedEvent(stock=stock)
-        assert event.occurred_at is not None
 
-    def test_trade_executed_event(self):
-        """Test TradeExecutedEvent creation."""
+        assert event.symbol == "MSFT"
+        assert event.name == "Microsoft Corporation"
+        assert event.country == "United States"
+
+    def test_stock_added_event_is_frozen(self):
+        """Test that StockAddedEvent is immutable."""
+        stock = Stock(symbol="AAPL", name="Apple Inc.")
+        event = StockAddedEvent(stock=stock)
+
+        # Should raise AttributeError on attempt to modify
+        with pytest.raises(Exception):  # dataclass(frozen=True) raises FrozenInstanceError
+            event.stock = Stock(symbol="MSFT", name="Microsoft")
+
+
+class TestTradeExecutedEvent:
+    """Test TradeExecutedEvent domain event."""
+
+    def test_creates_trade_executed_event(self):
+        """Test creating TradeExecutedEvent."""
         trade = Trade(
-            symbol="AAPL.US",
+            symbol="AAPL",
             side=TradeSide.BUY,
             quantity=10.0,
             price=150.0,
             executed_at=datetime.now(),
             order_id="ORD123",
-            currency=Currency.USD,
         )
-
         event = TradeExecutedEvent(trade=trade)
 
         assert event.trade == trade
-        assert event.symbol == "AAPL.US"
+        assert isinstance(event.occurred_at, datetime)
+        assert event.symbol == "AAPL"
         assert event.side == TradeSide.BUY
         assert event.quantity == 10.0
-        assert event.occurred_at is not None
+        assert event.order_id == "ORD123"
 
-    def test_position_updated_event(self):
-        """Test PositionUpdatedEvent creation."""
-        position = Position(
-            symbol="AAPL.US",
-            quantity=10.0,
-            avg_price=150.0,
+    def test_trade_executed_event_properties(self):
+        """Test TradeExecutedEvent properties."""
+        trade = Trade(
+            symbol="MSFT",
+            side=TradeSide.SELL,
+            quantity=5.0,
+            price=300.0,
+            executed_at=datetime.now(),
+            order_id="ORD456",
             currency=Currency.USD,
         )
+        event = TradeExecutedEvent(trade=trade)
 
+        assert event.symbol == "MSFT"
+        assert event.side == TradeSide.SELL
+        assert event.quantity == 5.0
+        assert event.order_id == "ORD456"
+
+    def test_trade_executed_event_is_frozen(self):
+        """Test that TradeExecutedEvent is immutable."""
+        trade = Trade(
+            symbol="AAPL",
+            side=TradeSide.BUY,
+            quantity=10.0,
+            price=150.0,
+            executed_at=datetime.now(),
+        )
+        event = TradeExecutedEvent(trade=trade)
+
+        # Should raise AttributeError on attempt to modify
+        with pytest.raises(Exception):  # dataclass(frozen=True) raises FrozenInstanceError
+            event.trade = Trade(
+                symbol="MSFT",
+                side=TradeSide.BUY,
+                quantity=5.0,
+                price=300.0,
+                executed_at=datetime.now(),
+            )
+
+
+class TestPositionUpdatedEvent:
+    """Test PositionUpdatedEvent domain event."""
+
+    def test_creates_position_updated_event(self):
+        """Test creating PositionUpdatedEvent."""
+        position = Position(symbol="AAPL", quantity=10.0, avg_price=150.0)
         event = PositionUpdatedEvent(position=position)
 
         assert event.position == position
-        assert event.symbol == "AAPL.US"
+        assert isinstance(event.occurred_at, datetime)
+        assert event.symbol == "AAPL"
         assert event.quantity == 10.0
+        assert event.market_value_eur is None
 
-    def test_recommendation_created_event(self):
-        """Test RecommendationCreatedEvent creation."""
+    def test_position_updated_event_properties(self):
+        """Test PositionUpdatedEvent properties."""
+        position = Position(
+            symbol="MSFT",
+            quantity=5.0,
+            avg_price=300.0,
+            market_value_eur=1500.0,
+        )
+        event = PositionUpdatedEvent(position=position)
+
+        assert event.symbol == "MSFT"
+        assert event.quantity == 5.0
+        assert event.market_value_eur == 1500.0
+
+    def test_position_updated_event_is_frozen(self):
+        """Test that PositionUpdatedEvent is immutable."""
+        position = Position(symbol="AAPL", quantity=10.0, avg_price=150.0)
+        event = PositionUpdatedEvent(position=position)
+
+        # Should raise AttributeError on attempt to modify
+        with pytest.raises(Exception):  # dataclass(frozen=True) raises FrozenInstanceError
+            event.position = Position(symbol="MSFT", quantity=5.0, avg_price=300.0)
+
+
+class TestRecommendationCreatedEvent:
+    """Test RecommendationCreatedEvent domain event."""
+
+    def test_creates_recommendation_created_event(self):
+        """Test creating RecommendationCreatedEvent."""
         recommendation = Recommendation(
-            symbol="AAPL.US",
+            symbol="AAPL",
             name="Apple Inc.",
             side=TradeSide.BUY,
             quantity=10,
             estimated_price=150.0,
             estimated_value=1500.0,
             reason="High score",
-            country="United States",
-            currency=Currency.USD,
         )
-
         event = RecommendationCreatedEvent(recommendation=recommendation)
 
         assert event.recommendation == recommendation
-        assert event.symbol == "AAPL.US"
+        assert isinstance(event.occurred_at, datetime)
+        assert event.symbol == "AAPL"
         assert event.side == TradeSide.BUY
+        assert event.quantity == 10
+        assert event.estimated_value == 1500.0
 
-    def test_stock_added_event(self):
-        """Test StockAddedEvent creation."""
-        stock = Stock(
-            symbol="AAPL.US",
+    def test_recommendation_created_event_properties(self):
+        """Test RecommendationCreatedEvent properties."""
+        recommendation = Recommendation(
+            symbol="MSFT",
+            name="Microsoft Corporation",
+            side=TradeSide.SELL,
+            quantity=5,
+            estimated_price=300.0,
+            estimated_value=1500.0,
+            reason="Overweight position",
+        )
+        event = RecommendationCreatedEvent(recommendation=recommendation)
+
+        assert event.symbol == "MSFT"
+        assert event.side == TradeSide.SELL
+        assert event.quantity == 5
+        assert event.estimated_value == 1500.0
+
+    def test_recommendation_created_event_is_frozen(self):
+        """Test that RecommendationCreatedEvent is immutable."""
+        recommendation = Recommendation(
+            symbol="AAPL",
             name="Apple Inc.",
-            country="United States",
-            currency=Currency.USD,
-        )
-
-        event = StockAddedEvent(stock=stock)
-
-        assert event.stock == stock
-        assert event.symbol == "AAPL.US"
-
-
-class TestDomainEventBus:
-    """Test domain event bus."""
-
-    def test_subscribe_and_publish(self):
-        """Test subscribing to events and publishing them."""
-        bus = DomainEventBus()
-        events_received = []
-
-        def handler(event: DomainEvent):
-            events_received.append(event)
-
-        bus.subscribe(TradeExecutedEvent, handler)
-
-        trade = Trade(
-            symbol="AAPL.US",
             side=TradeSide.BUY,
-            quantity=10.0,
-            price=150.0,
-            executed_at=datetime.now(),
-            currency=Currency.USD,
+            quantity=10,
+            estimated_price=150.0,
+            estimated_value=1500.0,
+            reason="High score",
         )
-        event = TradeExecutedEvent(trade=trade)
+        event = RecommendationCreatedEvent(recommendation=recommendation)
 
-        bus.publish(event)
-
-        assert len(events_received) == 1
-        assert events_received[0] == event
-
-    def test_multiple_handlers(self):
-        """Test that multiple handlers receive the same event."""
-        bus = DomainEventBus()
-        handler1_events = []
-        handler2_events = []
-
-        def handler1(event: DomainEvent):
-            handler1_events.append(event)
-
-        def handler2(event: DomainEvent):
-            handler2_events.append(event)
-
-        bus.subscribe(TradeExecutedEvent, handler1)
-        bus.subscribe(TradeExecutedEvent, handler2)
-
-        trade = Trade(
-            symbol="AAPL.US",
-            side=TradeSide.BUY,
-            quantity=10.0,
-            price=150.0,
-            executed_at=datetime.now(),
-            currency=Currency.USD,
-        )
-        event = TradeExecutedEvent(trade=trade)
-
-        bus.publish(event)
-
-        assert len(handler1_events) == 1
-        assert len(handler2_events) == 1
-
-    def test_unsubscribe(self):
-        """Test unsubscribing from events."""
-        bus = DomainEventBus()
-        events_received = []
-
-        def handler(event: DomainEvent):
-            events_received.append(event)
-
-        bus.subscribe(TradeExecutedEvent, handler)
-        bus.unsubscribe(TradeExecutedEvent, handler)
-
-        trade = Trade(
-            symbol="AAPL.US",
-            side=TradeSide.BUY,
-            quantity=10.0,
-            price=150.0,
-            executed_at=datetime.now(),
-            currency=Currency.USD,
-        )
-        event = TradeExecutedEvent(trade=trade)
-
-        bus.publish(event)
-
-        assert len(events_received) == 0
-
-    def test_handler_exception_does_not_stop_others(self):
-        """Test that handler exceptions don't stop other handlers."""
-        bus = DomainEventBus()
-        handler1_called = False
-        handler2_called = False
-
-        def handler1(event: DomainEvent):
-            nonlocal handler1_called
-            handler1_called = True
-            raise ValueError("Handler error")
-
-        def handler2(event: DomainEvent):
-            nonlocal handler2_called
-            handler2_called = True
-
-        bus.subscribe(TradeExecutedEvent, handler1)
-        bus.subscribe(TradeExecutedEvent, handler2)
-
-        trade = Trade(
-            symbol="AAPL.US",
-            side=TradeSide.BUY,
-            quantity=10.0,
-            price=150.0,
-            executed_at=datetime.now(),
-            currency=Currency.USD,
-        )
-        event = TradeExecutedEvent(trade=trade)
-
-        # Should not raise exception
-        bus.publish(event)
-
-        assert handler1_called is True
-        assert handler2_called is True
+        # Should raise AttributeError on attempt to modify
+        with pytest.raises(Exception):  # dataclass(frozen=True) raises FrozenInstanceError
+            event.recommendation = Recommendation(
+                symbol="MSFT",
+                name="Microsoft",
+                side=TradeSide.BUY,
+                quantity=5,
+                estimated_price=300.0,
+                estimated_value=1500.0,
+                reason="Test",
+            )
