@@ -87,7 +87,7 @@ async def _refresh_all_scores_internal():
                 if score and score.group_scores:
                     gs = score.group_scores
 
-                    await db_manager.state.execute(
+                    await db_manager.calculations.execute(
                         """
                         INSERT OR REPLACE INTO scores
                         (symbol, quality_score, opportunity_score, analyst_score,
@@ -111,7 +111,7 @@ async def _refresh_all_scores_internal():
                 logger.error(f"Failed to score {symbol}: {e}")
                 continue
 
-        await db_manager.state.commit()
+        await db_manager.calculations.commit()
         logger.info(f"Refreshed scores for {scores_updated} stocks")
 
         emit(SystemEvent.PROCESSING_END)

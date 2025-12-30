@@ -512,7 +512,7 @@ async def _refresh_score_for_symbol(symbol: str):
     if score and score.group_scores:
         gs = score.group_scores
 
-        await db_manager.state.execute(
+        await db_manager.calculations.execute(
             """
             INSERT OR REPLACE INTO scores
             (symbol, quality_score, opportunity_score, analyst_score,
@@ -529,7 +529,7 @@ async def _refresh_score_for_symbol(symbol: str):
                 datetime.now().isoformat(),
             ),
         )
-        await db_manager.state.commit()
+        await db_manager.calculations.commit()
 
 
 async def _build_portfolio_context(db_manager):
