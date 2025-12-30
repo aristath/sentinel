@@ -13,6 +13,7 @@ from app.domain.repositories.protocols import (
 )
 from app.domain.scoring import PortfolioContext
 from app.infrastructure.database.manager import DatabaseManager
+from app.repositories import GroupingRepository
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,22 @@ async def build_portfolio_context(
     country_weights = await allocation_repo.get_country_group_targets()
     industry_weights = await allocation_repo.get_industry_group_targets()
 
+    # Build group mappings (country -> group, industry -> group)
+    grouping_repo = GroupingRepository()
+    country_groups = await grouping_repo.get_country_groups()
+    industry_groups = await grouping_repo.get_industry_groups()
+
+    # Build reverse mappings: country -> group, industry -> group
+    country_to_group: Dict[str, str] = {}
+    for group_name, country_names in country_groups.items():
+        for country_name in country_names:
+            country_to_group[country_name] = group_name
+
+    industry_to_group: Dict[str, str] = {}
+    for group_name, industry_names in industry_groups.items():
+        for industry_name in industry_names:
+            industry_to_group[industry_name] = group_name
+
     # Build stock metadata maps
     position_map = {p.symbol: p.market_value_eur or 0 for p in positions}
     stock_countries = {s.symbol: s.country for s in stocks if s.country}
@@ -64,4 +81,6 @@ async def build_portfolio_context(
         stock_countries=stock_countries,
         stock_industries=stock_industries,
         stock_scores=stock_scores,
+        country_to_group=country_to_group,
+        industry_to_group=industry_to_group,
     )

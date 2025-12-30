@@ -31,7 +31,12 @@ def _calculate_geo_gap_score(
     country: str, portfolio_context: PortfolioContext
 ) -> float:
     """Calculate country gap score (40% weight)."""
-    geo_weight = portfolio_context.country_weights.get(country, 0)
+    # Map individual country to group
+    country_to_group = portfolio_context.country_to_group or {}
+    group = country_to_group.get(country, "OTHER")
+
+    # Look up weight for the group
+    geo_weight = portfolio_context.country_weights.get(group, 0)
     geo_gap_score = 0.5 + (geo_weight * 0.4)
     return max(0.1, min(0.9, geo_gap_score))
 
@@ -48,8 +53,12 @@ def _calculate_industry_gap_score(
         return 0.5
 
     ind_scores = []
+    industry_to_group = portfolio_context.industry_to_group or {}
     for ind in industries:
-        ind_weight = portfolio_context.industry_weights.get(ind, 0)
+        # Map individual industry to group
+        group = industry_to_group.get(ind, "OTHER")
+        # Look up weight for the group
+        ind_weight = portfolio_context.industry_weights.get(group, 0)
         ind_score = 0.5 + (ind_weight * 0.4)
         ind_scores.append(max(0.1, min(0.9, ind_score)))
 
@@ -221,15 +230,19 @@ def _calculate_diversification_score(
     """Calculate diversification score (40% weight)."""
     country_deviations = []
     if portfolio_context.stock_countries:
-        country_values: Dict[str, float] = {}
+        # Map individual countries to groups and aggregate by group
+        country_to_group = portfolio_context.country_to_group or {}
+        group_values: Dict[str, float] = {}
         for symbol, value in portfolio_context.positions.items():
             country = portfolio_context.stock_countries.get(symbol, "OTHER")
-            country_values[country] = country_values.get(country, 0) + value
+            group = country_to_group.get(country, "OTHER")
+            group_values[group] = group_values.get(group, 0) + value
 
-        for country, weight in portfolio_context.country_weights.items():
-            target_pct = 0.33 + (weight * 0.15)  # Base 33% +/- 15%
+        # Compare group allocations to group targets
+        for group, weight in portfolio_context.country_weights.items():
+            target_pct = weight  # Group targets are already percentages (0-1)
             current_pct = (
-                country_values.get(country, 0) / total_value if total_value > 0 else 0
+                group_values.get(group, 0) / total_value if total_value > 0 else 0
             )
             deviation = abs(current_pct - target_pct)
             country_deviations.append(deviation)

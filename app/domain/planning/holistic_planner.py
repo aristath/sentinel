@@ -1107,9 +1107,12 @@ def _generate_adaptive_patterns(
     if not portfolio_context or portfolio_context.total_value <= 0:
         return sequences
 
-    # Calculate current allocations
-    current_country_allocations: Dict[str, float] = {}
-    current_industry_allocations: Dict[str, float] = {}
+    # Calculate current allocations by group (not individual countries/industries)
+    country_to_group = portfolio_context.country_to_group or {}
+    industry_to_group = portfolio_context.industry_to_group or {}
+
+    current_group_country_allocations: Dict[str, float] = {}
+    current_group_industry_allocations: Dict[str, float] = {}
 
     for symbol, value in portfolio_context.positions.items():
         if value <= 0:
@@ -1117,48 +1120,46 @@ def _generate_adaptive_patterns(
 
         weight = value / portfolio_context.total_value
 
-        # Country allocation
+        # Map country to group and aggregate by group
         if portfolio_context.stock_countries:
             country = portfolio_context.stock_countries.get(symbol)
             if country:
-                current_country_allocations[country] = (
-                    current_country_allocations.get(country, 0) + weight
+                group = country_to_group.get(country, "OTHER")
+                current_group_country_allocations[group] = (
+                    current_group_country_allocations.get(group, 0) + weight
                 )
 
-        # Industry allocation
+        # Map industry to group and aggregate by group
         if portfolio_context.stock_industries:
             industries_str = portfolio_context.stock_industries.get(symbol)
             if industries_str:
                 industries = [i.strip() for i in industries_str.split(",")]
                 for industry in industries:
                     if industry:
-                        current_industry_allocations[industry] = (
-                            current_industry_allocations.get(industry, 0) + weight
+                        group = industry_to_group.get(industry, "OTHER")
+                        current_group_industry_allocations[group] = (
+                            current_group_industry_allocations.get(group, 0) + weight
                         )
 
-    # Identify geographic gaps
-    geographic_gaps: List[Tuple[str, float]] = []  # (country, gap)
+    # Identify geographic gaps (by group)
+    geographic_gaps: List[Tuple[str, float]] = []  # (group, gap)
     if portfolio_context.country_weights:
-        for country, target_weight in portfolio_context.country_weights.items():
-            current_weight = current_country_allocations.get(country, 0)
-            # Convert target_weight (-1 to +1) to percentage
-            # Assuming 0 = 33%, +1 = 48%, -1 = 18%
-            target_pct = 0.33 + (target_weight * 0.15)
+        for group, target_pct in portfolio_context.country_weights.items():
+            # target_pct is already a percentage (0-1), no conversion needed
+            current_weight = current_group_country_allocations.get(group, 0)
             gap = target_pct - current_weight
             if gap > 0.02:  # At least 2% gap
-                geographic_gaps.append((country, gap))
+                geographic_gaps.append((group, gap))
 
-    # Identify sector gaps
-    sector_gaps: List[Tuple[str, float]] = []  # (industry, gap)
+    # Identify sector gaps (by group)
+    sector_gaps: List[Tuple[str, float]] = []  # (group, gap)
     if portfolio_context.industry_weights:
-        for industry, target_weight in portfolio_context.industry_weights.items():
-            current_weight = current_industry_allocations.get(industry, 0)
-            # Convert target_weight (-1 to +1) to percentage
-            # Assuming 0 = 10%, +1 = 20%, -1 = 0%
-            target_pct = 0.10 + (target_weight * 0.10)
+        for group, target_pct in portfolio_context.industry_weights.items():
+            # target_pct is already a percentage (0-1), no conversion needed
+            current_weight = current_group_industry_allocations.get(group, 0)
             gap = target_pct - current_weight
             if gap > 0.01:  # At least 1% gap
-                sector_gaps.append((industry, gap))
+                sector_gaps.append((group, gap))
 
     # Sort gaps by size
     geographic_gaps.sort(key=lambda x: x[1], reverse=True)

@@ -140,11 +140,27 @@ async def _build_portfolio_context(db_manager) -> PortfolioContext:
     total_value = sum(positions.values())
 
     # Get group targets (use repository for consistency)
-    from app.repositories import AllocationRepository
+    from app.repositories import AllocationRepository, GroupingRepository
 
     allocation_repo = AllocationRepository(db=db_manager.config)
     country_weights = await allocation_repo.get_country_group_targets()
     industry_weights = await allocation_repo.get_industry_group_targets()
+
+    # Build group mappings (country -> group, industry -> group)
+    grouping_repo = GroupingRepository(db=db_manager.config)
+    country_groups = await grouping_repo.get_country_groups()
+    industry_groups = await grouping_repo.get_industry_groups()
+
+    # Build reverse mappings: country -> group, industry -> group
+    country_to_group = {}
+    for group_name, country_names in country_groups.items():
+        for country_name in country_names:
+            country_to_group[country_name] = group_name
+
+    industry_to_group = {}
+    for group_name, industry_names in industry_groups.items():
+        for industry_name in industry_names:
+            industry_to_group[industry_name] = group_name
 
     # Get stock metadata for scoring
     cursor = await db_manager.config.execute(
@@ -169,6 +185,8 @@ async def _build_portfolio_context(db_manager) -> PortfolioContext:
         stock_countries=stock_countries,
         stock_industries=stock_industries,
         stock_scores=stock_scores,
+        country_to_group=country_to_group,
+        industry_to_group=industry_to_group,
     )
 
 
