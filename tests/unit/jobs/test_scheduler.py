@@ -541,7 +541,10 @@ class TestRescheduleAllJobs:
 
         mock_settings_repo = MagicMock()
         # First init with 15 minutes, then reschedule to 30
-        mock_settings_repo.get_float = AsyncMock(side_effect=[15.0, 3.0, 30.0, 4.0])
+        # init_scheduler needs 4 values, reschedule_all_jobs needs 3 more (via _get_job_settings)
+        mock_settings_repo.get_float = AsyncMock(
+            side_effect=[15.0, 3.0, 5.0, 1.0, 30.0, 4.0, 5.0]
+        )
 
         with (
             patch(
@@ -569,8 +572,17 @@ class TestRescheduleAllJobs:
         scheduler_module.scheduler = None
 
         mock_settings_repo = MagicMock()
+        # init_scheduler needs 4 values, reschedule_all_jobs needs 3 more
         mock_settings_repo.get_float = AsyncMock(
-            side_effect=[15.0, 3.0, 15.0, 5.0]  # Change maintenance hour to 5
+            side_effect=[
+                15.0,
+                3.0,
+                5.0,
+                1.0,
+                15.0,
+                5.0,
+                5.0,
+            ]  # Change maintenance hour to 5
         )
 
         with (
