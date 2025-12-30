@@ -66,7 +66,7 @@ class JobFooter extends HTMLElement {
             <div class="flex flex-col">
               <button @click="triggerJob(job)"
                       class="px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 text-xs rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      :disabled="loading[job.id]">
+                      :disabled="!!loading[job.id]">
                 <div class="flex items-center justify-center gap-1.5">
                   <span x-show="loading[job.id]" class="inline-block animate-spin text-blue-400">&#9696;</span>
                   <span x-text="job.name"></span>
