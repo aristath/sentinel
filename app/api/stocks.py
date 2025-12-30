@@ -15,6 +15,7 @@ from app.infrastructure.dependencies import (
     PositionRepositoryDep,
     ScoreRepositoryDep,
     ScoringServiceDep,
+    SettingsRepositoryDep,
     StockRepositoryDep,
     StockSetupServiceDep,
 )
@@ -720,3 +721,359 @@ async def delete_stock(
         f"DELETE /api/stocks/{identifier} - Stock {symbol} successfully deleted"
     )
     return {"message": f"Stock {symbol} removed from universe"}
+
+
+@router.get("/universe-suggestions")
+async def get_universe_suggestions(
+    stock_repo: StockRepositoryDep,
+    scoring_service: ScoringServiceDep,
+    settings_repo: SettingsRepositoryDep,
+):
+    """Get suggestions for universe expansion and contraction without executing actions.
+
+    Returns candidates that would be added by discovery and stocks that would be pruned,
+    allowing manual review before execution.
+
+    Returns:
+        Dictionary with:
+        - candidates_to_add: List of stocks suggested for addition
+        - stocks_to_prune: List of stocks suggested for pruning
+    """
+    from app.domain.services.stock_discovery import StockDiscoveryService
+    from app.domain.services.symbol_resolver import SymbolResolver
+    from app.infrastructure.external.tradernet import get_tradernet_client
+    from app.repositories import ScoreRepository
+
+    try:
+        # Get dependencies
+        score_repo = ScoreRepository()
+
+        # ========================================================================
+        # DISCOVERY: Find candidates to add
+        # ========================================================================
+        candidates_to_add = []
+
+        # Check if discovery is enabled
+        discovery_enabled = await settings_repo.get_float(
+            "stock_discovery_enabled", 1.0
+        )
+        if discovery_enabled != 0.0:
+            # Get discovery settings
+            score_threshold = await settings_repo.get_float(
+                "stock_discovery_score_threshold", 0.75
+            )
+
+            # Get existing universe symbols
+            existing_stocks = await stock_repo.get_all_active()
+            existing_symbols = [s.symbol for s in existing_stocks]
+
+            # Initialize discovery service
+            tradernet_client = get_tradernet_client()
+            discovery_service = StockDiscoveryService(
+                tradernet_client=tradernet_client,
+                settings_repo=settings_repo,
+            )
+
+            # Find candidates
+            candidates = await discovery_service.discover_candidates(
+                existing_symbols=existing_symbols
+            )
+
+            if candidates:
+                # Initialize scoring service and symbol resolver
+                # SymbolResolver needs concrete StockRepository, not interface
+                from app.infrastructure.dependencies import get_stock_repository
+
+                concrete_stock_repo = get_stock_repository()
+                symbol_resolver = SymbolResolver(
+                    tradernet_client=tradernet_client,
+                    stock_repo=concrete_stock_repo,
+                )
+
+                # Score candidates and collect results
+                scored_candidates = []
+                for candidate in candidates:
+                    symbol = candidate.get("symbol", "").upper()
+                    if not symbol:
+                        continue
+
+                    try:
+                        # Resolve symbol to get ISIN for Yahoo Finance lookups
+                        symbol_info = await symbol_resolver.resolve(symbol)
+                        if symbol_info.isin:
+                            candidate["isin"] = symbol_info.isin
+
+                        # Score the candidate
+                        score = await scoring_service.calculate_and_save_score(
+                            symbol=symbol,
+                            yahoo_symbol=symbol_info.yahoo_symbol,
+                            country=candidate.get("country"),
+                            industry=candidate.get("industry"),
+                        )
+
+                        if score and score.total_score is not None:
+                            scored_candidates.append((candidate, score.total_score))
+                    except Exception as e:
+                        logger.warning(f"Failed to score {symbol} for suggestions: {e}")
+                        continue
+
+                # Filter by score threshold and sort (best first)
+                above_threshold = [
+                    (candidate, score)
+                    for candidate, score in scored_candidates
+                    if score >= score_threshold
+                ]
+                above_threshold.sort(key=lambda x: x[1], reverse=True)
+
+                # Format candidates for response (don't enforce max_per_month limit)
+                for candidate, candidate_score in above_threshold:
+                    symbol = candidate.get("symbol", "").upper()
+                    candidates_to_add.append(
+                        {
+                            "symbol": symbol,
+                            "name": candidate.get("name", symbol),
+                            "country": candidate.get("country"),
+                            "industry": candidate.get("industry"),
+                            "exchange": candidate.get("exchange", ""),
+                            "score": round(candidate_score, 3),
+                            "isin": candidate.get("isin"),
+                            "volume": candidate.get("volume", 0.0),
+                            "yahoo_symbol": candidate.get("yahoo_symbol"),
+                        }
+                    )
+
+        # ========================================================================
+        # PRUNING: Find stocks to prune
+        # ========================================================================
+        stocks_to_prune = []
+
+        # Check if pruning is enabled
+        pruning_enabled = await settings_repo.get_float("universe_pruning_enabled", 1.0)
+        if pruning_enabled != 0.0:
+            # Get pruning settings
+            score_threshold = await settings_repo.get_float(
+                "universe_pruning_score_threshold", 0.50
+            )
+            months = await settings_repo.get_float("universe_pruning_months", 3.0)
+            min_samples = int(
+                await settings_repo.get_float("universe_pruning_min_samples", 2.0)
+            )
+            check_delisted = (
+                await settings_repo.get_float("universe_pruning_check_delisted", 1.0)
+                == 1.0
+            )
+
+            # Get all active stocks
+            stocks = await stock_repo.get_all_active()
+
+            if stocks:
+                client = get_tradernet_client()
+                if check_delisted and not client.is_connected:
+                    if not client.connect():
+                        check_delisted = False
+
+                for stock in stocks:
+                    try:
+                        # Get recent scores
+                        scores = await score_repo.get_recent_scores(
+                            stock.symbol, months
+                        )
+
+                        # Check minimum samples requirement
+                        if len(scores) < min_samples:
+                            continue
+
+                        # Calculate average score
+                        total_scores = [
+                            s.total_score for s in scores if s.total_score is not None
+                        ]
+                        if not total_scores:
+                            continue
+
+                        avg_score = sum(total_scores) / len(total_scores)
+
+                        # Check if average score is below threshold
+                        if avg_score >= score_threshold:
+                            continue
+
+                        # Check if stock is delisted (if enabled)
+                        is_delisted = False
+                        reason = "low_score"
+                        if check_delisted:
+                            try:
+                                security_info = client.get_security_info(stock.symbol)
+                                if security_info is None:
+                                    is_delisted = True
+                                    reason = "delisted"
+                                else:
+                                    quote = client.get_quote(stock.symbol)
+                                    if quote is None or not hasattr(quote, "price"):
+                                        is_delisted = True
+                                        reason = "delisted"
+                            except Exception:
+                                # Don't mark as delisted if check fails
+                                pass
+
+                        # Add to prune list if criteria met
+                        if is_delisted or avg_score < score_threshold:
+                            # Get current score
+                            current_score_obj = await score_repo.get_by_symbol(
+                                stock.symbol
+                            )
+                            current_score = (
+                                current_score_obj.total_score
+                                if current_score_obj
+                                else None
+                            )
+
+                            stocks_to_prune.append(
+                                {
+                                    "symbol": stock.symbol,
+                                    "name": stock.name,
+                                    "country": stock.country,
+                                    "industry": stock.industry,
+                                    "average_score": round(avg_score, 3),
+                                    "sample_count": len(scores),
+                                    "months_analyzed": months,
+                                    "reason": reason,
+                                    "current_score": (
+                                        round(current_score, 3)
+                                        if current_score is not None
+                                        else None
+                                    ),
+                                }
+                            )
+                    except Exception as e:
+                        logger.warning(
+                            f"Error processing {stock.symbol} for pruning suggestions: {e}"
+                        )
+                        continue
+
+        return {
+            "candidates_to_add": candidates_to_add,
+            "stocks_to_prune": stocks_to_prune,
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get universe suggestions: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get suggestions: {str(e)}"
+        )
+
+
+@router.post("/{symbol}/add-from-suggestion")
+async def add_stock_from_suggestion(
+    symbol: str,
+    stock_setup_service: StockSetupServiceDep,
+    score_repo: ScoreRepositoryDep,
+):
+    """Add a stock to the universe from a suggestion.
+
+    This endpoint is used to manually execute adding a stock that was suggested
+    by the universe suggestions endpoint.
+
+    Args:
+        symbol: Stock symbol (e.g., AAPL.US) to add
+    """
+    try:
+        symbol = symbol.strip().upper()
+        if not symbol:
+            raise HTTPException(status_code=400, detail="Symbol cannot be empty")
+
+        # Check if stock already exists
+        from app.infrastructure.dependencies import get_stock_repository
+
+        concrete_stock_repo = get_stock_repository()
+        existing = await concrete_stock_repo.get_by_symbol(symbol)
+        if existing:
+            raise HTTPException(
+                status_code=400, detail=f"Stock {symbol} already exists in universe"
+            )
+
+        # Add the stock
+        stock = await stock_setup_service.add_stock_by_identifier(
+            identifier=symbol,
+            min_lot=1,
+            allow_buy=True,
+            allow_sell=False,  # Conservative: don't allow selling initially
+        )
+
+        # Get the calculated score
+        score = await score_repo.get_by_symbol(stock.symbol)
+
+        cache.invalidate("stocks_with_scores")
+
+        return {
+            "message": f"Stock {stock.symbol} added to universe",
+            "symbol": stock.symbol,
+            "yahoo_symbol": stock.yahoo_symbol,
+            "isin": stock.isin,
+            "name": stock.name,
+            "country": stock.country,
+            "fullExchangeName": stock.fullExchangeName,
+            "industry": stock.industry,
+            "currency": str(stock.currency) if stock.currency else None,
+            "min_lot": stock.min_lot,
+            "total_score": score.total_score if score else None,
+        }
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ConnectionError as e:
+        raise HTTPException(
+            status_code=503, detail=f"Tradernet connection failed: {str(e)}"
+        )
+    except Exception as e:
+        logger.error(f"Failed to add stock from suggestion: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to add stock: {str(e)}")
+
+
+@router.post("/{symbol}/prune-from-suggestion")
+async def prune_stock_from_suggestion(
+    symbol: str,
+    stock_repo: StockRepositoryDep,
+):
+    """Prune a stock from the universe from a suggestion.
+
+    This endpoint is used to manually execute pruning a stock that was suggested
+    by the universe suggestions endpoint. Marks the stock as inactive.
+
+    Args:
+        symbol: Stock symbol (e.g., AAPL.US) to prune
+    """
+    try:
+        symbol = symbol.strip().upper()
+        if not symbol:
+            raise HTTPException(status_code=400, detail="Symbol cannot be empty")
+
+        # Check if stock exists
+        stock = await stock_repo.get_by_symbol(symbol)
+        if not stock:
+            raise HTTPException(status_code=404, detail=f"Stock {symbol} not found")
+
+        # Check if already inactive
+        if not stock.active:
+            raise HTTPException(
+                status_code=400, detail=f"Stock {symbol} is already inactive"
+            )
+
+        # Mark as inactive (soft delete)
+        # Need concrete StockRepository for mark_inactive method
+        from app.infrastructure.dependencies import get_stock_repository
+
+        concrete_stock_repo = get_stock_repository()
+        await concrete_stock_repo.mark_inactive(symbol)
+
+        cache.invalidate("stocks_with_scores")
+
+        logger.info(f"Stock {symbol} pruned from universe (marked inactive)")
+        return {
+            "message": f"Stock {symbol} pruned from universe",
+            "symbol": symbol,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to prune stock from suggestion: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to prune stock: {str(e)}")
