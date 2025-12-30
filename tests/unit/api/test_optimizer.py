@@ -258,11 +258,11 @@ class TestRunOptimization:
 
                                             # Setup allocation_repo mock
                                             mock_allocation_repo = AsyncMock()
-                                            mock_allocation_repo.get_country_targets.return_value = {
+                                            mock_allocation_repo.get_country_group_targets.return_value = {
                                                 "United States": 50.0,  # 50% -> 0.5
                                                 "Germany": 30.0,  # 30% -> 0.3
                                             }
-                                            mock_allocation_repo.get_industry_targets.return_value = {
+                                            mock_allocation_repo.get_industry_group_targets.return_value = {
                                                 "Consumer Electronics": 40.0,  # 40% -> 0.4
                                             }
                                             mock_allocation_repo_class.return_value = (
@@ -400,10 +400,10 @@ class TestRunOptimization:
 
                                             # Setup allocation_repo mock
                                             mock_allocation_repo = AsyncMock()
-                                            mock_allocation_repo.get_country_targets.return_value = (
+                                            mock_allocation_repo.get_country_group_targets.return_value = (
                                                 {}
                                             )
-                                            mock_allocation_repo.get_industry_targets.return_value = (
+                                            mock_allocation_repo.get_industry_group_targets.return_value = (
                                                 {}
                                             )
                                             mock_allocation_repo_class.return_value = (
@@ -502,10 +502,10 @@ class TestRunOptimization:
 
                                             # Setup allocation_repo mock
                                             mock_allocation_repo = AsyncMock()
-                                            mock_allocation_repo.get_country_targets.return_value = (
+                                            mock_allocation_repo.get_country_group_targets.return_value = (
                                                 {}
                                             )
-                                            mock_allocation_repo.get_industry_targets.return_value = (
+                                            mock_allocation_repo.get_industry_group_targets.return_value = (
                                                 {}
                                             )
                                             mock_allocation_repo_class.return_value = (
@@ -604,11 +604,11 @@ class TestRunOptimization:
                                             # Setup allocation_repo mock
                                             # Returns fractions (0-1), already in correct format
                                             mock_allocation_repo = AsyncMock()
-                                            mock_allocation_repo.get_country_targets.return_value = {
+                                            mock_allocation_repo.get_country_group_targets.return_value = {
                                                 "United States": 0.5,  # Already 0.5 (50%)
                                                 "Germany": 0.3,  # Already 0.3 (30%)
                                             }
-                                            mock_allocation_repo.get_industry_targets.return_value = {
+                                            mock_allocation_repo.get_industry_group_targets.return_value = {
                                                 "Consumer Electronics": 0.4,  # Already 0.4 (40%)
                                             }
                                             mock_allocation_repo_class.return_value = (
@@ -749,10 +749,10 @@ class TestRunOptimization:
 
                                             # Setup allocation_repo mock
                                             mock_allocation_repo = AsyncMock()
-                                            mock_allocation_repo.get_country_targets.return_value = (
+                                            mock_allocation_repo.get_country_group_targets.return_value = (
                                                 {}
                                             )
-                                            mock_allocation_repo.get_industry_targets.return_value = (
+                                            mock_allocation_repo.get_industry_group_targets.return_value = (
                                                 {}
                                             )
                                             mock_allocation_repo_class.return_value = (
@@ -1088,10 +1088,10 @@ class TestEdgeCases:
 
                                             # Setup allocation_repo mock
                                             mock_allocation_repo = AsyncMock()
-                                            mock_allocation_repo.get_country_targets.return_value = (
+                                            mock_allocation_repo.get_country_group_targets.return_value = (
                                                 {}
                                             )
-                                            mock_allocation_repo.get_industry_targets.return_value = (
+                                            mock_allocation_repo.get_industry_group_targets.return_value = (
                                                 {}
                                             )
                                             mock_allocation_repo_class.return_value = (
@@ -1197,10 +1197,10 @@ class TestEdgeCases:
 
                                             # Setup allocation_repo mock
                                             mock_allocation_repo = AsyncMock()
-                                            mock_allocation_repo.get_country_targets.return_value = (
+                                            mock_allocation_repo.get_country_group_targets.return_value = (
                                                 {}
                                             )
-                                            mock_allocation_repo.get_industry_targets.return_value = (
+                                            mock_allocation_repo.get_industry_group_targets.return_value = (
                                                 {}
                                             )
                                             mock_allocation_repo_class.return_value = (
@@ -1323,7 +1323,7 @@ class TestOptimizerUsesAllocationRepo:
     async def test_uses_allocation_repo_for_country_targets(
         self, mock_settings, sample_optimization_result
     ):
-        """Test that allocation_repo.get_country_targets() is used instead of settings."""
+        """Test that allocation_repo.get_country_group_targets() is used instead of settings."""
         mock_stock = MagicMock()
         mock_stock.symbol = "AAPL"
         mock_stock.yahoo_symbol = "AAPL"
@@ -1367,11 +1367,11 @@ class TestOptimizerUsesAllocationRepo:
                                             # Setup allocation_repo mock
                                             # Returns fractions (0-1), already in correct format
                                             mock_allocation_repo = AsyncMock()
-                                            mock_allocation_repo.get_country_targets.return_value = {
+                                            mock_allocation_repo.get_country_group_targets.return_value = {
                                                 "United States": 0.5,  # Already 0.5 (50%)
                                                 "Germany": 0.3,  # Already 0.3 (30%)
                                             }
-                                            mock_allocation_repo.get_industry_targets.return_value = {
+                                            mock_allocation_repo.get_industry_group_targets.return_value = {
                                                 "Technology": 0.4,  # Already 0.4 (40%)
                                             }
                                             mock_allocation_repo_class.return_value = (
@@ -1425,8 +1425,8 @@ class TestOptimizerUsesAllocationRepo:
                                             await run_optimization()
 
                                             # Verify allocation_repo methods were called
-                                            mock_allocation_repo.get_country_targets.assert_called_once()
-                                            mock_allocation_repo.get_industry_targets.assert_called_once()
+                                            mock_allocation_repo.get_country_group_targets.assert_called_once()
+                                            mock_allocation_repo.get_industry_group_targets.assert_called_once()
 
                                             # Verify settings_repo.get_json was NOT called for targets
                                             mock_settings_repo.get_json.assert_not_called()
@@ -1497,11 +1497,11 @@ class TestOptimizerUsesAllocationRepo:
                                             # Setup allocation_repo to return fractions (0-1), not percentages
                                             # These are the actual values stored in the database
                                             mock_allocation_repo = AsyncMock()
-                                            mock_allocation_repo.get_country_targets.return_value = {
+                                            mock_allocation_repo.get_country_group_targets.return_value = {
                                                 "United States": 0.5,  # Already 0.5 (50%), should NOT be divided
                                                 "Japan": 0.2,  # Already 0.2 (20%), should NOT be divided
                                             }
-                                            mock_allocation_repo.get_industry_targets.return_value = {
+                                            mock_allocation_repo.get_industry_group_targets.return_value = {
                                                 "Technology": 0.4,  # Already 0.4 (40%), should NOT be divided
                                                 "Finance": 0.15,  # Already 0.15 (15%), should NOT be divided
                                             }
@@ -1626,10 +1626,10 @@ class TestOptimizerUsesAllocationRepo:
                                             )
 
                                             mock_allocation_repo = AsyncMock()
-                                            mock_allocation_repo.get_country_targets.return_value = {
+                                            mock_allocation_repo.get_country_group_targets.return_value = {
                                                 "United States": 0.5,  # Already fraction
                                             }
-                                            mock_allocation_repo.get_industry_targets.return_value = (
+                                            mock_allocation_repo.get_industry_group_targets.return_value = (
                                                 {}
                                             )
                                             mock_allocation_repo_class.return_value = (
