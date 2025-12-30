@@ -140,6 +140,8 @@ class TestBuildPortfolioContext:
         from app.jobs.score_refresh import _build_portfolio_context
 
         mock_db = MagicMock()
+
+        # Mock state cursor (positions)
         mock_state_cursor = AsyncMock()
         mock_state_cursor.fetchall.return_value = [
             ("AAPL.US", 5000.0),
@@ -148,12 +150,46 @@ class TestBuildPortfolioContext:
         mock_db.state = AsyncMock()
         mock_db.state.execute.return_value = mock_state_cursor
 
+        # Mock config cursor (stock data)
         mock_config_cursor = AsyncMock()
         mock_config_cursor.fetchall.return_value = []
         mock_db.config = AsyncMock()
-        mock_db.config.execute.return_value = mock_config_cursor
 
-        context = await _build_portfolio_context(mock_db)
+        # Mock calculations cursor (scores)
+        mock_calculations_cursor = AsyncMock()
+        mock_calculations_cursor.fetchall.return_value = []
+        mock_db.calculations = AsyncMock()
+        mock_db.calculations.execute.return_value = mock_calculations_cursor
+
+        # Setup execute to return different cursors based on query
+        call_count = [0]
+
+        async def mock_config_execute(*args):
+            call_count[0] += 1
+            return mock_config_cursor
+
+        mock_db.config.execute = mock_config_execute
+
+        # Mock repositories
+        with (
+            patch(
+                "app.jobs.score_refresh.AllocationRepository"
+            ) as mock_alloc_repo_class,
+            patch(
+                "app.jobs.score_refresh.GroupingRepository"
+            ) as mock_grouping_repo_class,
+        ):
+            mock_alloc_repo = AsyncMock()
+            mock_alloc_repo.get_country_group_targets = AsyncMock(return_value={})
+            mock_alloc_repo.get_industry_group_targets = AsyncMock(return_value={})
+            mock_alloc_repo_class.return_value = mock_alloc_repo
+
+            mock_grouping_repo = AsyncMock()
+            mock_grouping_repo.get_country_groups = AsyncMock(return_value={})
+            mock_grouping_repo.get_industry_groups = AsyncMock(return_value={})
+            mock_grouping_repo_class.return_value = mock_grouping_repo
+
+            context = await _build_portfolio_context(mock_db)
 
         assert context.positions == {"AAPL.US": 5000.0, "MSFT.US": 3000.0}
         assert context.total_value == 8000.0
@@ -187,29 +223,50 @@ class TestBuildPortfolioContext:
 
         mock_db.state = AsyncMock()
         mock_db.config = AsyncMock()
+        mock_db.calculations = AsyncMock()
 
         # Setup execute to return different cursors
-        call_count = [0]
-
         async def mock_state_execute(*args):
-            call_count[0] += 1
-            if call_count[0] == 1:
-                return mock_positions_cursor
-            return mock_scores_cursor
+            return mock_positions_cursor
 
         async def mock_config_execute(*args):
-            if "allocation_targets" in str(args):
-                return mock_targets_cursor
             return mock_stocks_cursor
+
+        async def mock_calculations_execute(*args):
+            return mock_scores_cursor
 
         mock_db.state.execute = mock_state_execute
         mock_db.config.execute = mock_config_execute
+        mock_db.calculations.execute = mock_calculations_execute
 
-        context = await _build_portfolio_context(mock_db)
+        # Mock repositories
+        with (
+            patch(
+                "app.jobs.score_refresh.AllocationRepository"
+            ) as mock_alloc_repo_class,
+            patch(
+                "app.jobs.score_refresh.GroupingRepository"
+            ) as mock_grouping_repo_class,
+        ):
+            mock_alloc_repo = AsyncMock()
+            # get_country_group_targets returns group names, not individual countries
+            mock_alloc_repo.get_country_group_targets = AsyncMock(
+                return_value={"US": 0.5, "EU": 0.3}
+            )
+            mock_alloc_repo.get_industry_group_targets = AsyncMock(
+                return_value={"Technology": 0.2}
+            )
+            mock_alloc_repo_class.return_value = mock_alloc_repo
 
-        # Should have processed allocation targets
-        assert hasattr(context, "country_weights")
-        assert hasattr(context, "industry_weights")
+            mock_grouping_repo = AsyncMock()
+            mock_grouping_repo.get_country_groups = AsyncMock(return_value={})
+            mock_grouping_repo.get_industry_groups = AsyncMock(return_value={})
+            mock_grouping_repo_class.return_value = mock_grouping_repo
+
+            context = await _build_portfolio_context(mock_db)
+
+        assert context.country_weights == {"US": 0.5, "EU": 0.3}
+        assert context.industry_weights == {"Technology": 0.2}
 
 
 class TestGetDailyPrices:

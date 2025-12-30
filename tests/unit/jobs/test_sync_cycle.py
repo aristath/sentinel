@@ -38,13 +38,8 @@ class TestSyncCycle:
         async def mock_sync_prices():
             call_order.append("sync_prices")
 
-        async def mock_check_conditions():
-            call_order.append("check_conditions")
-            return True, {}  # Can trade
-
-        async def mock_get_recommendation():
-            call_order.append("get_recommendation")
-            return None  # No recommendation
+        async def mock_check_and_rebalance():
+            call_order.append("check_and_rebalance")
 
         async def mock_update_display():
             call_order.append("update_display")
@@ -66,26 +61,20 @@ class TestSyncCycle:
                 side_effect=mock_sync_portfolio,
             ),
             patch(
+                "app.jobs.emergency_rebalance.check_and_rebalance_immediately",
+                new_callable=AsyncMock,
+                side_effect=mock_check_and_rebalance,
+            ),
+            patch(
                 "app.jobs.sync_cycle._step_sync_prices",
                 new_callable=AsyncMock,
                 side_effect=mock_sync_prices,
-            ),
-            patch(
-                "app.jobs.sync_cycle._step_check_trading_conditions",
-                new_callable=AsyncMock,
-                side_effect=mock_check_conditions,
-            ),
-            patch(
-                "app.jobs.sync_cycle._step_get_recommendation",
-                new_callable=AsyncMock,
-                side_effect=mock_get_recommendation,
             ),
             patch(
                 "app.jobs.sync_cycle._step_update_display",
                 new_callable=AsyncMock,
                 side_effect=mock_update_display,
             ),
-            patch("app.jobs.sync_cycle.file_lock", new_callable=MagicMock),
         ):
             # Make file_lock work as async context manager
             mock_lock = AsyncMock()
@@ -98,9 +87,8 @@ class TestSyncCycle:
             "sync_trades",
             "sync_cash_flows",
             "sync_portfolio",
+            "check_and_rebalance",
             "sync_prices",
-            "check_conditions",
-            "get_recommendation",
             "update_display",
         ]
         assert call_order == expected_order
@@ -233,6 +221,12 @@ class TestStepSyncPrices:
         assert fetch_called is False
 
 
+# NOTE: TestStepExecuteTrade tests are obsolete - trade execution was moved
+# to event_based_trading.py. The _step_execute_trade function still exists
+# but is not called from the sync cycle anymore.
+@pytest.mark.skip(
+    reason="Trade execution moved to event_based_trading - these tests are obsolete"
+)
 class TestStepExecuteTrade:
     """Test the market-aware trade execution step."""
 
