@@ -642,6 +642,73 @@ class SettingsModal extends HTMLElement {
                 </div>
               </div>
 
+              <!-- Trade Frequency Limits Card -->
+              <div class="bg-gray-800 border border-gray-700 rounded p-4">
+                <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wide mb-3">Trade Frequency Limits</h3>
+                <p class="text-xs text-gray-500 mb-4">Prevent excessive trading by enforcing minimum time between trades and daily/weekly limits. Critical for long-term retirement fund management.</p>
+
+                <div class="space-y-3">
+                  <!-- Enable/Disable -->
+                  <label class="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox"
+                           :checked="$store.app.settings.trade_frequency_limits_enabled == 1"
+                           @change="$store.app.updateSetting('trade_frequency_limits_enabled', $event.target.checked ? 1 : 0)"
+                           class="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-800">
+                    <span class="text-sm text-gray-300">Enable frequency limits</span>
+                  </label>
+
+                  <div class="grid grid-cols-[1fr_auto] gap-x-4 gap-y-3 items-start">
+                    <!-- Min Time Between Trades -->
+                    <div>
+                      <span class="text-sm text-gray-300">Min Time Between Trades</span>
+                      <p class="text-xs text-gray-500">Minimum minutes between any trades</p>
+                    </div>
+                    <div class="flex items-center gap-1">
+                      <input type="number"
+                             min="0"
+                             step="5"
+                             :value="$store.app.settings.min_time_between_trades_minutes || 60"
+                             @change="$store.app.updateSetting('min_time_between_trades_minutes', $event.target.value)"
+                             class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                      <span class="text-gray-400 text-sm">min</span>
+                    </div>
+
+                    <!-- Max Trades Per Day -->
+                    <div>
+                      <span class="text-sm text-gray-300">Max Trades Per Day</span>
+                      <p class="text-xs text-gray-500">Maximum trades per calendar day</p>
+                    </div>
+                    <div class="flex items-center gap-1">
+                      <input type="number"
+                             min="1"
+                             step="1"
+                             :value="$store.app.settings.max_trades_per_day || 4"
+                             @change="$store.app.updateSetting('max_trades_per_day', $event.target.value)"
+                             class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                    </div>
+
+                    <!-- Max Trades Per Week -->
+                    <div>
+                      <span class="text-sm text-gray-300">Max Trades Per Week</span>
+                      <p class="text-xs text-gray-500">Maximum trades per rolling 7-day window</p>
+                    </div>
+                    <div class="flex items-center gap-1">
+                      <input type="number"
+                             min="1"
+                             step="1"
+                             :value="$store.app.settings.max_trades_per_week || 10"
+                             @change="$store.app.updateSetting('max_trades_per_week', $event.target.value)"
+                             class="w-20 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-right font-mono text-sm text-gray-200 focus:outline-none focus:border-blue-500">
+                    </div>
+                  </div>
+
+                  <!-- Info note -->
+                  <div class="mt-3 pt-3 border-t border-gray-700/50">
+                    <p class="text-xs text-gray-500">These limits help prevent overtrading and reduce transaction costs. Defaults are conservative for long-term retirement funds.</p>
+                  </div>
+                </div>
+              </div>
+
               <!-- Scoring Parameters Card -->
               <div class="bg-gray-800 border border-gray-700 rounded p-4">
                 <h3 class="text-sm font-medium text-gray-400 uppercase tracking-wide mb-3">Scoring Parameters</h3>
