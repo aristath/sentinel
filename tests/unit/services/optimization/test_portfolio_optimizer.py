@@ -338,7 +338,7 @@ class TestPortfolioOptimizerIntegration:
             "GOOGL": (0.0, 0.40),
             "MSFT": (0.0, 0.40),
         }
-        mock_constraints.build_sector_constraints.return_value = ([], [])
+        mock_constraints.build_sector_constraints = AsyncMock(return_value=([], []))
         mock_constraints.get_constraint_summary.return_value = {}
 
         optimizer = PortfolioOptimizer(
@@ -402,7 +402,7 @@ class TestPortfolioOptimizerIntegration:
             "AAPL": (0.0, 0.60),
             "GOOGL": (0.0, 0.60),
         }
-        mock_constraints.build_sector_constraints.return_value = ([], [])
+        mock_constraints.build_sector_constraints = AsyncMock(return_value=([], []))
         mock_constraints.get_constraint_summary.return_value = {}
 
         optimizer = PortfolioOptimizer(
