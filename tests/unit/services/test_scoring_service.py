@@ -331,7 +331,7 @@ class TestCalculateAndSaveScore:
         # Mock fundamentals
         mock_fundamentals = {"pe_ratio": 15.0, "eps": 5.0}
 
-        # Mock calculate_stock_score
+        # Mock calculate_security_score
         mock_calculated_score = CalculatedSecurityScore(
             symbol="TEST",
             total_score=85.0,
@@ -355,7 +355,7 @@ class TestCalculateAndSaveScore:
                 return_value=mock_fundamentals,
             ),
             patch(
-                "app.modules.scoring.services.scoring_service.calculate_stock_score",
+                "app.modules.scoring.services.scoring_service.calculate_security_score",
                 return_value=mock_calculated_score,
             ),
         ):
@@ -415,7 +415,7 @@ class TestCalculateAndSaveScore:
                 return_value={},
             ) as mock_yahoo,
             patch(
-                "app.modules.scoring.services.scoring_service.calculate_stock_score",
+                "app.modules.scoring.services.scoring_service.calculate_security_score",
                 return_value=None,
             ),
         ):
@@ -543,7 +543,7 @@ class TestCalculateAndSaveScore:
                 return_value={},
             ),
             patch(
-                "app.modules.scoring.services.scoring_service.calculate_stock_score",
+                "app.modules.scoring.services.scoring_service.calculate_security_score",
                 return_value=None,  # Calculation fails
             ),
         ):
@@ -613,13 +613,13 @@ class TestCalculateAndSaveScore:
                 return_value={},
             ),
             patch(
-                "app.modules.scoring.services.scoring_service.calculate_stock_score",
+                "app.modules.scoring.services.scoring_service.calculate_security_score",
                 return_value=None,
             ) as mock_calc,
         ):
             await service.calculate_and_save_score("TEST")
 
-            # Verify calculate_stock_score was called with appropriate defaults
+            # Verify calculate_security_score was called with appropriate defaults
             mock_calc.assert_called_once()
             call_kwargs = mock_calc.call_args[1]
             # country is passed as-is (None when not provided)

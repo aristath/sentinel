@@ -1,4 +1,4 @@
-"""Tests for stock_scorer module.
+"""Tests for security_scorer module.
 
 These tests validate the main stock scoring orchestrator that:
 - Combines 8 scoring groups with configurable weights
@@ -19,8 +19,8 @@ from app.modules.scoring.domain.models import (
 )
 from app.modules.scoring.domain.security_scorer import (
     SCORE_WEIGHTS,
-    calculate_stock_score,
-    calculate_stock_score_from_prefetched,
+    calculate_security_score,
+    calculate_security_score_from_prefetched,
 )
 
 
@@ -53,7 +53,7 @@ class TestScoreWeights:
 
 
 class TestCalculateStockScore:
-    """Test calculate_stock_score function."""
+    """Test calculate_security_score function."""
 
     @pytest.mark.asyncio
     async def test_returns_calculated_stock_score(self):
@@ -100,7 +100,7 @@ class TestCalculateStockScore:
                 return_value=mock_result,
             ),
         ):
-            result = await calculate_stock_score(
+            result = await calculate_security_score(
                 symbol="AAPL.US",
                 daily_prices=[{"close": 100.0} for _ in range(100)],
                 monthly_prices=[{"avg_adj_close": 100.0} for _ in range(24)],
@@ -155,7 +155,7 @@ class TestCalculateStockScore:
                 return_value=mock_result,
             ),
         ):
-            result = await calculate_stock_score(
+            result = await calculate_security_score(
                 symbol="AAPL.US",
                 daily_prices=[{"close": 100.0}] * 100,
                 monthly_prices=[{"avg_adj_close": 100.0}] * 24,
@@ -222,7 +222,7 @@ class TestCalculateStockScore:
                 return_value=mock_result,
             ),
         ):
-            result = await calculate_stock_score(
+            result = await calculate_security_score(
                 symbol="AAPL.US",
                 daily_prices=[{"close": 100.0}] * 100,
                 monthly_prices=[{"avg_adj_close": 100.0}] * 24,
@@ -289,7 +289,7 @@ class TestCalculateStockScore:
                 return_value=mock_result,
             ),
         ):
-            result = await calculate_stock_score(
+            result = await calculate_security_score(
                 symbol="AAPL.US",
                 daily_prices=[{"close": 100.0}] * 100,
                 monthly_prices=[{"avg_adj_close": 100.0}] * 24,
@@ -351,7 +351,7 @@ class TestCalculateStockScore:
                 return_value=create_mock_result(0.3),  # 10% weight
             ),
         ):
-            result = await calculate_stock_score(
+            result = await calculate_security_score(
                 symbol="AAPL.US",
                 daily_prices=[{"close": 100.0}] * 100,
                 monthly_prices=[{"avg_adj_close": 100.0}] * 24,
@@ -423,7 +423,7 @@ class TestCalculateStockScore:
                 return_value=mock_result,
             ),
         ):
-            result = await calculate_stock_score(
+            result = await calculate_security_score(
                 symbol="AAPL.US",
                 daily_prices=[{"close": 100.0}] * 100,
                 monthly_prices=[{"avg_adj_close": 100.0}] * 24,
@@ -484,7 +484,7 @@ class TestCalculateStockScore:
                 return_value=mock_result,
             ),
         ):
-            result = await calculate_stock_score(
+            result = await calculate_security_score(
                 symbol="AAPL.US",
                 daily_prices=[{"close": 100.0}] * 100,
                 monthly_prices=[{"avg_adj_close": 100.0}] * 24,
@@ -543,7 +543,7 @@ class TestCalculateStockScore:
                 return_value=mock_result,
             ),
         ):
-            result = await calculate_stock_score(
+            result = await calculate_security_score(
                 symbol="AAPL.US",
                 daily_prices=prices,
                 monthly_prices=[{"avg_adj_close": 100.0}] * 24,
@@ -600,7 +600,7 @@ class TestCalculateStockScore:
                 return_value=mock_result,
             ),
         ):
-            result = await calculate_stock_score(
+            result = await calculate_security_score(
                 symbol="AAPL.US",
                 daily_prices=prices,
                 monthly_prices=[{"avg_adj_close": 100.0}] * 24,
@@ -655,7 +655,7 @@ class TestCalculateStockScore:
                 return_value=mock_result,
             ),
         ):
-            await calculate_stock_score(
+            await calculate_security_score(
                 symbol="AAPL.US",
                 daily_prices=[{"close": 100.0}] * 100,
                 monthly_prices=[{"avg_adj_close": 100.0}] * 24,
@@ -716,7 +716,7 @@ class TestCalculateStockScore:
                 return_value=mock_result,
             ),
         ):
-            await calculate_stock_score(
+            await calculate_security_score(
                 symbol="AAPL.US",
                 daily_prices=[{"close": 100.0}] * 100,
                 monthly_prices=[{"avg_adj_close": 100.0}] * 24,
@@ -774,7 +774,7 @@ class TestCalculateStockScore:
                 return_value=mock_result,
             ),
         ):
-            await calculate_stock_score(
+            await calculate_security_score(
                 symbol="AAPL.US",
                 daily_prices=[{"close": 100.0}] * 100,
                 monthly_prices=[{"avg_adj_close": 100.0}] * 24,
@@ -832,7 +832,7 @@ class TestCalculateStockScore:
                 mock_opinion,
             ),
         ):
-            await calculate_stock_score(
+            await calculate_security_score(
                 symbol="AAPL.US",
                 daily_prices=[{"close": 100.0}] * 100,
                 monthly_prices=[{"avg_adj_close": 100.0}] * 24,
@@ -907,7 +907,7 @@ class TestCalculateStockScore:
                 return_value=mock_diversification,
             ) as mock_div,
         ):
-            result = await calculate_stock_score(
+            result = await calculate_security_score(
                 symbol="AAPL.US",
                 daily_prices=[{"close": 100.0}] * 100,
                 monthly_prices=[{"avg_adj_close": 100.0}] * 24,
@@ -972,7 +972,7 @@ class TestCalculateStockScore:
                 return_value=mock_result,
             ),
         ):
-            result = await calculate_stock_score(
+            result = await calculate_security_score(
                 symbol="AAPL.US",
                 daily_prices=[{"close": 100.0}] * 100,
                 monthly_prices=[{"avg_adj_close": 100.0}] * 24,
@@ -1037,7 +1037,7 @@ class TestCalculateStockScore:
                 return_value=mock_result,
             ),
         ):
-            result = await calculate_stock_score(
+            result = await calculate_security_score(
                 symbol="AAPL.US",
                 daily_prices=[{"close": 100.0}] * 100,
                 monthly_prices=[{"avg_adj_close": 100.0}] * 24,
@@ -1093,7 +1093,7 @@ class TestCalculateStockScore:
                 return_value=mock_result,
             ),
         ):
-            result = await calculate_stock_score(
+            result = await calculate_security_score(
                 symbol="AAPL.US",
                 daily_prices=[{"close": 100.0}] * 100,
                 monthly_prices=[{"avg_adj_close": 100.0}] * 24,
@@ -1152,7 +1152,7 @@ class TestCalculateStockScore:
                 return_value=mock_result,
             ),
         ):
-            result = await calculate_stock_score(
+            result = await calculate_security_score(
                 symbol="AAPL.US",
                 daily_prices=prices,
                 monthly_prices=[{"avg_adj_close": 100.0}] * 24,
@@ -1223,7 +1223,7 @@ class TestCalculateStockScore:
                 return_value=mock_result,
             ),
         ):
-            result = await calculate_stock_score(
+            result = await calculate_security_score(
                 symbol="AAPL.US",
                 daily_prices=[{"close": 100.0}] * 100,
                 monthly_prices=[{"avg_adj_close": 100.0}] * 24,
@@ -1238,7 +1238,7 @@ class TestCalculateStockScore:
 
 
 class TestCalculateStockScoreFromPrefetched:
-    """Test calculate_stock_score_from_prefetched function."""
+    """Test calculate_security_score_from_prefetched function."""
 
     @pytest.mark.asyncio
     async def test_extracts_data_from_prefetched(self):
@@ -1290,7 +1290,7 @@ class TestCalculateStockScoreFromPrefetched:
                 return_value=mock_result,
             ),
         ):
-            result = await calculate_stock_score_from_prefetched(
+            result = await calculate_security_score_from_prefetched(
                 symbol="AAPL.US",
                 prefetched=prefetched,
             )
@@ -1300,7 +1300,7 @@ class TestCalculateStockScoreFromPrefetched:
 
     @pytest.mark.asyncio
     async def test_passes_all_parameters_through(self):
-        """Test that all parameters are passed through to calculate_stock_score."""
+        """Test that all parameters are passed through to calculate_security_score."""
         prefetched = PrefetchedStockData(
             daily_prices=[{"close": 100.0}] * 100,
             monthly_prices=[{"avg_adj_close": 100.0}] * 24,
@@ -1366,7 +1366,7 @@ class TestCalculateStockScoreFromPrefetched:
                 return_value=mock_result,
             ) as mock_opinion,
         ):
-            await calculate_stock_score_from_prefetched(
+            await calculate_security_score_from_prefetched(
                 symbol="AAPL.US",
                 prefetched=prefetched,
                 country="United States",
@@ -1438,12 +1438,12 @@ class TestCalculateStockScoreFromPrefetched:
             ),
         ):
             # Call both methods
-            result_prefetched = await calculate_stock_score_from_prefetched(
+            result_prefetched = await calculate_security_score_from_prefetched(
                 symbol="AAPL.US",
                 prefetched=prefetched,
             )
 
-            result_direct = await calculate_stock_score(
+            result_direct = await calculate_security_score(
                 symbol="AAPL.US",
                 daily_prices=daily_prices,
                 monthly_prices=monthly_prices,

@@ -107,6 +107,12 @@ from app.modules.scoring.domain.scorers import (
     score_rsi,
 )
 
+# Stock scorer (orchestrator)
+from app.modules.scoring.domain.security_scorer import (
+    calculate_security_score,
+    calculate_security_score_from_prefetched,
+)
+
 # Sell scoring
 from app.modules.scoring.domain.sell import (
     calculate_all_sell_scores,
@@ -118,12 +124,6 @@ from app.modules.scoring.domain.sell import (
     check_sell_eligibility,
     determine_sell_quantity,
     get_sell_settings,
-)
-
-# Stock scorer (orchestrator)
-from app.modules.scoring.domain.stock_scorer import (
-    calculate_stock_score,
-    calculate_stock_score_from_prefetched,
 )
 
 # Windfall detection (profit-taking signals)
@@ -156,8 +156,8 @@ __all__ = [
     "CalculatedStockScore",
     "PrefetchedStockData",
     # Main scoring functions
-    "calculate_stock_score",
-    "calculate_stock_score_from_prefetched",
+    "calculate_security_score",
+    "calculate_security_score_from_prefetched",
     "calculate_sell_score",
     "calculate_all_sell_scores",
     # 8-group scoring functions

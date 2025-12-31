@@ -1,5 +1,5 @@
 """
-Stock Scorer - Orchestrator for all scoring calculations.
+Security Scorer - Orchestrator for all scoring calculations.
 
 Combines 8 scoring groups with configurable weights:
 - Long-term Performance (20%): CAGR, Sortino, Sharpe
@@ -35,7 +35,7 @@ from app.modules.scoring.domain.groups.opportunity import calculate_opportunity_
 from app.modules.scoring.domain.groups.short_term import calculate_short_term_score
 from app.modules.scoring.domain.groups.technicals import calculate_technicals_score
 from app.modules.scoring.domain.models import (
-    CalculatedStockScore,
+    CalculatedSecurityScore,
     PortfolioContext,
     PrefetchedStockData,
 )
@@ -58,7 +58,7 @@ SCORE_WEIGHTS = {
 }
 
 
-async def calculate_stock_score(
+async def calculate_security_score(
     symbol: str,
     daily_prices: List[dict],
     monthly_prices: List[dict],
@@ -72,7 +72,7 @@ async def calculate_stock_score(
     sortino_ratio: Optional[float] = None,
     pyfolio_drawdown: Optional[float] = None,
     weights: Optional[Dict[str, float]] = None,
-) -> Optional[CalculatedStockScore]:
+) -> Optional[CalculatedSecurityScore]:
     """
     Calculate complete stock score with all 8 groups.
 
@@ -94,7 +94,7 @@ async def calculate_stock_score(
         weights: Score group weights (defaults loaded from settings)
 
     Returns:
-        CalculatedStockScore with all components
+        CalculatedSecurityScore with all components
     """
     # Always use fixed weights - the optimizer handles portfolio-level allocation
     if weights is None:
@@ -207,7 +207,7 @@ async def calculate_stock_score(
         closes = np.array([p["close"] for p in daily_prices])
         volatility = calculate_volatility(closes)
 
-    return CalculatedStockScore(
+    return CalculatedSecurityScore(
         symbol=symbol,
         total_score=round(total_score, 3),
         volatility=round(volatility, 4) if volatility else None,
@@ -217,7 +217,7 @@ async def calculate_stock_score(
     )
 
 
-async def calculate_stock_score_from_prefetched(
+async def calculate_security_score_from_prefetched(
     symbol: str,
     prefetched: PrefetchedStockData,
     country: Optional[str] = None,
@@ -227,7 +227,7 @@ async def calculate_stock_score_from_prefetched(
     target_annual_return: float = DEFAULT_TARGET_ANNUAL_RETURN,
     market_avg_pe: float = DEFAULT_MARKET_AVG_PE,
     weights: Optional[Dict[str, float]] = None,
-) -> Optional[CalculatedStockScore]:
+) -> Optional[CalculatedSecurityScore]:
     """
     Calculate stock score using pre-fetched data.
 
@@ -243,9 +243,9 @@ async def calculate_stock_score_from_prefetched(
         weights: Score group weights
 
     Returns:
-        CalculatedStockScore with all components
+        CalculatedSecurityScore with all components
     """
-    return await calculate_stock_score(
+    return await calculate_security_score(
         symbol=symbol,
         daily_prices=prefetched.daily_prices,
         monthly_prices=prefetched.monthly_prices,

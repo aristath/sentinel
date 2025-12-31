@@ -83,16 +83,16 @@ const API = {
   saveIndustryTargets: (targets) => API._put('/api/allocation/groups/targets/industry', { targets }),
 
   // Securities
-  fetchStocks: () => fetch('/api/securities').then(r => r.json()),
-  createStock: (data) => API._post('/api/securities', data),
-  addStockByIdentifier: (data) => API._post('/api/securities/add-by-identifier', data),
-  updateStock: (isin, data) => API._put(`/api/securities/${isin}`, data),
-  deleteStock: (isin) => API._delete(`/api/securities/${isin}`),
+  fetchSecurities: () => fetch('/api/securities').then(r => r.json()),
+  createSecurity: (data) => API._post('/api/securities', data),
+  addSecurityByIdentifier: (data) => API._post('/api/securities/add-by-identifier', data),
+  updateSecurity: (isin, data) => API._put(`/api/securities/${isin}`, data),
+  deleteSecurity: (isin) => API._delete(`/api/securities/${isin}`),
   refreshScore: (isin) => API._post(`/api/securities/${isin}/refresh`),
   refreshAllScores: () => API._post('/api/securities/refresh-all'),
   fetchUniverseSuggestions: () => fetch('/api/securities/universe-suggestions').then(r => r.json()),
-  addStockFromSuggestion: (isin) => API._post(`/api/securities/${isin}/add-from-suggestion`),
-  pruneStockFromSuggestion: (isin) => API._post(`/api/securities/${isin}/prune-from-suggestion`),
+  addSecurityFromSuggestion: (isin) => API._post(`/api/securities/${isin}/add-from-suggestion`),
+  pruneSecurityFromSuggestion: (isin) => API._post(`/api/securities/${isin}/prune-from-suggestion`),
 
   // Trades
   fetchTrades: () => fetch('/api/trades').then(r => r.json()),

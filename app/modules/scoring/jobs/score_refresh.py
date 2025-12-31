@@ -12,7 +12,7 @@ from app.core.events import SystemEvent, emit
 from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.locking import file_lock
 from app.modules.display.services.display_service import set_led4, set_text
-from app.modules.scoring.domain import PortfolioContext, calculate_stock_score
+from app.modules.scoring.domain import PortfolioContext, calculate_security_score
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ async def _refresh_all_scores_internal():
 
                 # Calculate score using 8-group scoring system
                 # Weights are fixed (no longer configurable via settings)
-                score = await calculate_stock_score(
+                score = await calculate_security_score(
                     symbol=symbol,
                     daily_prices=daily_prices,
                     monthly_prices=monthly_prices,

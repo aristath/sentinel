@@ -32,7 +32,7 @@ function securityChartComponent() {
       });
 
       // Watch for ISIN changes from store (for API calls)
-      this.$watch('$store.app.selectedStockIsin', (isin) => {
+      this.$watch('$store.app.selectedSecurityIsin', (isin) => {
         if (isin) {
           this.isin = isin;
           this.loadChart();
@@ -40,7 +40,7 @@ function securityChartComponent() {
       });
 
       // Load chart when modal opens
-      this.$watch('$store.app.showStockChart', (show) => {
+      this.$watch('$store.app.showSecurityChart', (show) => {
         if (show && this.isin) {
           this.loadChart();
         } else if (!show) {
@@ -157,11 +157,11 @@ function securityChartComponent() {
   };
 }
 
-class StockChartModal extends HTMLElement {
+class SecurityChartModal extends HTMLElement {
   connectedCallback() {
     this.innerHTML = `
       <div x-data="securityChartComponent()"
-           x-show="$store.app.showStockChart"
+           x-show="$store.app.showSecurityChart"
            class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
            x-transition>
         <div class="bg-gray-800 border border-gray-700 rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col" @click.stop>
@@ -170,7 +170,7 @@ class StockChartModal extends HTMLElement {
               <h2 class="text-lg font-semibold text-gray-100" x-text="symbol || 'Stock Chart'"></h2>
               <p class="text-xs text-gray-300" x-show="securityName" x-text="securityName"></p>
             </div>
-            <button @click="$store.app.showStockChart = false; closeChart()"
+            <button @click="$store.app.showSecurityChart = false; closeChart()"
                     class="text-gray-400 hover:text-gray-200 text-2xl leading-none">&times;</button>
           </div>
 
@@ -215,4 +215,4 @@ class StockChartModal extends HTMLElement {
   }
 }
 
-customElements.define('security-chart-modal', StockChartModal);
+customElements.define('security-chart-modal', SecurityChartModal);

@@ -432,7 +432,7 @@ async def _refresh_score_for_symbol(symbol: str):
 
     from app.core.database.manager import get_db_manager
     from app.infrastructure.external import yahoo_finance as yahoo
-    from app.modules.scoring.domain.stock_scorer import calculate_stock_score
+    from app.modules.scoring.domain.security_scorer import calculate_security_score
 
     db_manager = get_db_manager()
 
@@ -500,7 +500,7 @@ async def _refresh_score_for_symbol(symbol: str):
     portfolio_context = await _build_portfolio_context(db_manager)
 
     # Calculate score
-    score = await calculate_stock_score(
+    score = await calculate_security_score(
         symbol=symbol,
         daily_prices=daily_prices,
         monthly_prices=monthly_prices,
