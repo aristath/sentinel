@@ -31,7 +31,7 @@ from app.modules.scoring.domain.constants import (
     YIELD_CURVE_INVERTED,
     YIELD_CURVE_NORMAL,
 )
-from app.modules.universe.database.stock_repository import StockRepository
+from app.modules.universe.database.security_repository import SecurityRepository
 from app.repositories.calculations import CalculationsRepository
 from app.repositories.score import ScoreRepository
 
@@ -45,11 +45,11 @@ class ExpectedReturnsCalculator:
         self,
         calc_repo: Optional[CalculationsRepository] = None,
         score_repo: Optional[ScoreRepository] = None,
-        stock_repo: Optional[StockRepository] = None,
+        stock_repo: Optional[SecurityRepository] = None,
     ):
         self._calc_repo = calc_repo or CalculationsRepository()
         self._score_repo = score_repo or ScoreRepository()
-        self._stock_repo = stock_repo or StockRepository()
+        self._stock_repo = stock_repo or SecurityRepository()
 
     async def calculate_expected_returns(
         self,

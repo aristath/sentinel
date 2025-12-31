@@ -194,7 +194,7 @@ async def rebuild_universe_from_portfolio():
     from app.infrastructure.external.tradernet import get_tradernet_client
     from app.jobs.daily_sync import _ensure_portfolio_stocks_in_universe
     from app.jobs.historical_data_sync import sync_historical_data
-    from app.jobs.stocks_data_sync import run_stocks_data_sync
+    from app.jobs.securities_data_sync import run_stocks_data_sync
 
     result = {
         "status": "success",
@@ -319,7 +319,7 @@ async def trigger_stocks_data_sync():
     - Calculating technical metrics (RSI, EMA, CAGR, etc.)
     - Refreshing stock scores
     """
-    from app.jobs.stocks_data_sync import run_stocks_data_sync
+    from app.jobs.securities_data_sync import run_stocks_data_sync
 
     try:
         await run_stocks_data_sync()
@@ -340,7 +340,7 @@ async def trigger_daily_pipeline():
     - Calculating technical metrics (RSI, EMA, CAGR, etc.)
     - Refreshing stock scores
     """
-    from app.jobs.stocks_data_sync import run_stocks_data_sync
+    from app.jobs.securities_data_sync import run_stocks_data_sync
 
     try:
         await run_stocks_data_sync()

@@ -839,7 +839,7 @@ async def refresh_stock_data(
     Args:
         isin: Stock ISIN (e.g., US0378331005)
     """
-    from app.jobs.stocks_data_sync import refresh_single_stock
+    from app.jobs.securities_data_sync import refresh_single_stock
 
     # Validate ISIN format
     isin = isin.strip().upper()

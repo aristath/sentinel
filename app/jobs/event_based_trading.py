@@ -34,7 +34,6 @@ from app.modules.system.jobs.sync_cycle import (
     _step_check_trading_conditions,
     _step_sync_portfolio,
 )
-from app.modules.universe.database.stock_repository import StockRepository
 from app.shared.domain.value_objects.currency import Currency
 
 logger = logging.getLogger(__name__)
@@ -180,12 +179,12 @@ async def _wait_for_planning_completion():
     from app.repositories import (
         AllocationRepository,
         PositionRepository,
+        SecurityRepository,
         SettingsRepository,
-        StockRepository,
     )
 
     position_repo = PositionRepository()
-    stock_repo = StockRepository()
+    stock_repo = SecurityRepository()
     settings_repo = SettingsRepository()
     allocation_repo = AllocationRepository()
     tradernet_client = TradernetClient()
@@ -515,9 +514,10 @@ async def _get_optimal_recommendation() -> Optional[Recommendation]:
     """
     from app.domain.portfolio_hash import generate_portfolio_hash
     from app.modules.planning.database.planner_repository import PlannerRepository
+    from app.modules.universe.database.security_repository import SecurityRepository
 
     position_repo = PositionRepository()
-    stock_repo = StockRepository()
+    stock_repo = SecurityRepository()
     planner_repo = PlannerRepository()
 
     # Get current portfolio state
@@ -587,7 +587,9 @@ async def _can_execute_trade(
     Returns:
         Tuple of (can_execute: bool, reason: Optional[str])
     """
-    stock_repo = StockRepository()
+    from app.modules.universe.database.security_repository import SecurityRepository
+
+    stock_repo = SecurityRepository()
     stock = await stock_repo.get_by_symbol(recommendation.symbol)
 
     if not stock:
@@ -628,9 +630,10 @@ async def _monitor_portfolio_for_changes() -> bool:
         True if portfolio hash changed (trigger restart), False if timeout
     """
     from app.infrastructure.external.tradernet import get_tradernet_client
+    from app.modules.universe.database.security_repository import SecurityRepository
 
     position_repo = PositionRepository()
-    stock_repo = StockRepository()
+    stock_repo = SecurityRepository()
     client = get_tradernet_client()
 
     # Get initial portfolio hash
