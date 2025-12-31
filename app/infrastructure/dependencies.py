@@ -13,7 +13,8 @@ from app.application.services.currency_exchange_service import CurrencyExchangeS
 from app.modules.portfolio.services.portfolio_service import PortfolioService
 # Backward compatibility re-export (temporary - will be removed in Phase 5)
 from app.modules.rebalancing.services.rebalancing_service import RebalancingService
-from app.application.services.stock_setup_service import StockSetupService
+# Backward compatibility re-export (temporary - will be removed in Phase 5)
+from app.modules.universe.services.stock_setup_service import StockSetupService
 # Backward compatibility re-export (temporary - will be removed in Phase 5)
 from app.modules.trading.services.trade_execution_service import TradeExecutionService
 from app.modules.trading.services.trade_safety_service import TradeSafetyService

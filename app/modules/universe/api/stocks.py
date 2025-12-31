@@ -7,9 +7,9 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.domain.events import StockAddedEvent, get_event_bus
-from app.domain.factories.stock_factory import StockFactory
-from app.domain.services.priority_calculator import PriorityCalculator, PriorityInput
-from app.domain.services.symbol_resolver import is_isin
+from app.modules.universe.domain.stock_factory import StockFactory
+from app.modules.universe.domain.priority_calculator import PriorityCalculator, PriorityInput
+from app.modules.universe.domain.symbol_resolver import is_isin
 from app.infrastructure.cache import cache
 from app.infrastructure.dependencies import (
     PortfolioServiceDep,

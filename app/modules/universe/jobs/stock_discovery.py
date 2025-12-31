@@ -6,14 +6,15 @@ based on conservative criteria and user-configurable settings.
 
 import logging
 
-from app.application.services.scoring_service import ScoringService
+from app.core.database.manager import get_db_manager
 from app.domain.models import Stock
-from app.domain.services.stock_discovery import StockDiscoveryService
-from app.domain.services.symbol_resolver import SymbolResolver
-from app.domain.value_objects.currency import Currency
-from app.infrastructure.database.manager import get_db_manager
 from app.infrastructure.external.tradernet import get_tradernet_client
-from app.repositories import ScoreRepository, SettingsRepository, StockRepository
+from app.modules.scoring.services.scoring_service import ScoringService
+from app.modules.universe.database.stock_repository import StockRepository
+from app.modules.universe.domain.stock_discovery import StockDiscoveryService
+from app.modules.universe.domain.symbol_resolver import SymbolResolver
+from app.repositories import ScoreRepository, SettingsRepository
+from app.shared.domain.value_objects.currency import Currency
 
 logger = logging.getLogger(__name__)
 

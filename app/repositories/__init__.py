@@ -20,7 +20,8 @@ from app.modules.portfolio.database.position_repository import PositionRepositor
 from app.repositories.recommendation import RecommendationRepository
 from app.repositories.score import ScoreRepository
 from app.repositories.settings import SettingsRepository
-from app.repositories.stock import StockRepository
+# Backward compatibility re-export (temporary - will be removed in Phase 5)
+from app.modules.universe.database.stock_repository import StockRepository
 from app.repositories.trade import TradeRepository
 
 __all__ = [
