@@ -47,8 +47,11 @@ async def get_position_drawdown(
         )
         returns = closes.pct_change().dropna()
 
-        # Calculate cumulative returns
+        # Calculate cumulative returns, starting from 1.0 to include first price as peak
         cumulative = (1 + returns).cumprod()
+        # Prepend 1.0 at the first price date to include it as a potential peak
+        first_date = closes.index[0]
+        cumulative = pd.concat([pd.Series([1.0], index=[first_date]), cumulative])
 
         # Calculate running maximum
         running_max = cumulative.expanding().max()

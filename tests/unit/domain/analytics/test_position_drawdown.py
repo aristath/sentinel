@@ -25,13 +25,13 @@ class TestGetPositionDrawdown:
     @pytest.mark.asyncio
     async def test_returns_none_for_insufficient_data(self):
         """Test that None is returned when there's insufficient price data."""
-        from app.domain.analytics.position.drawdown import get_position_drawdown
+        from app.modules.analytics.domain.position.drawdown import get_position_drawdown
 
         mock_history_repo = AsyncMock()
         mock_history_repo.get_daily_range.return_value = []  # No price data
 
         with patch(
-            "app.domain.analytics.position.drawdown.HistoryRepository",
+            "app.modules.analytics.domain.position.drawdown.HistoryRepository",
             return_value=mock_history_repo,
         ):
             result = await get_position_drawdown("AAPL", "2024-01-01", "2024-01-31")
@@ -42,7 +42,7 @@ class TestGetPositionDrawdown:
     @pytest.mark.asyncio
     async def test_calculates_max_drawdown_from_peak(self):
         """Test that maximum drawdown is calculated from peak price."""
-        from app.domain.analytics.position.drawdown import get_position_drawdown
+        from app.modules.analytics.domain.position.drawdown import get_position_drawdown
 
         # Prices: 100, 110, 105, 90, 95 (peak at 110, lowest at 90)
         prices = [
@@ -57,7 +57,7 @@ class TestGetPositionDrawdown:
         mock_history_repo.get_daily_range.return_value = prices
 
         with patch(
-            "app.domain.analytics.position.drawdown.HistoryRepository",
+            "app.modules.analytics.domain.position.drawdown.HistoryRepository",
             return_value=mock_history_repo,
         ):
             result = await get_position_drawdown("AAPL", "2024-01-01", "2024-01-31")
@@ -69,7 +69,7 @@ class TestGetPositionDrawdown:
     @pytest.mark.asyncio
     async def test_calculates_current_drawdown_from_latest_peak(self):
         """Test that current drawdown is calculated from latest peak."""
-        from app.domain.analytics.position.drawdown import get_position_drawdown
+        from app.modules.analytics.domain.position.drawdown import get_position_drawdown
 
         # Prices: 100, 110, 105, 120, 115
         # Latest peak is 120, current is 115
@@ -85,7 +85,7 @@ class TestGetPositionDrawdown:
         mock_history_repo.get_daily_range.return_value = prices
 
         with patch(
-            "app.domain.analytics.position.drawdown.HistoryRepository",
+            "app.modules.analytics.domain.position.drawdown.HistoryRepository",
             return_value=mock_history_repo,
         ):
             result = await get_position_drawdown("AAPL", "2024-01-01", "2024-01-31")
@@ -97,7 +97,7 @@ class TestGetPositionDrawdown:
     @pytest.mark.asyncio
     async def test_returns_zero_drawdown_when_at_peak(self):
         """Test that drawdown is zero when price is at peak."""
-        from app.domain.analytics.position.drawdown import get_position_drawdown
+        from app.modules.analytics.domain.position.drawdown import get_position_drawdown
 
         # Prices: 100, 110, 120 (always increasing)
         prices = [
@@ -110,7 +110,7 @@ class TestGetPositionDrawdown:
         mock_history_repo.get_daily_range.return_value = prices
 
         with patch(
-            "app.domain.analytics.position.drawdown.HistoryRepository",
+            "app.modules.analytics.domain.position.drawdown.HistoryRepository",
             return_value=mock_history_repo,
         ):
             result = await get_position_drawdown("AAPL", "2024-01-01", "2024-01-31")
@@ -121,7 +121,7 @@ class TestGetPositionDrawdown:
     @pytest.mark.asyncio
     async def test_handles_single_price_point(self):
         """Test handling when only one price point is available."""
-        from app.domain.analytics.position.drawdown import get_position_drawdown
+        from app.modules.analytics.domain.position.drawdown import get_position_drawdown
 
         prices = [DailyPrice(date="2024-01-01", close_price=100.0)]
 
@@ -129,7 +129,7 @@ class TestGetPositionDrawdown:
         mock_history_repo.get_daily_range.return_value = prices
 
         with patch(
-            "app.domain.analytics.position.drawdown.HistoryRepository",
+            "app.modules.analytics.domain.position.drawdown.HistoryRepository",
             return_value=mock_history_repo,
         ):
             result = await get_position_drawdown("AAPL", "2024-01-01", "2024-01-31")
@@ -141,7 +141,7 @@ class TestGetPositionDrawdown:
     @pytest.mark.asyncio
     async def test_handles_declining_prices(self):
         """Test handling when prices are continuously declining."""
-        from app.domain.analytics.position.drawdown import get_position_drawdown
+        from app.modules.analytics.domain.position.drawdown import get_position_drawdown
 
         # Prices: 120, 110, 100, 90
         prices = [
@@ -155,7 +155,7 @@ class TestGetPositionDrawdown:
         mock_history_repo.get_daily_range.return_value = prices
 
         with patch(
-            "app.domain.analytics.position.drawdown.HistoryRepository",
+            "app.modules.analytics.domain.position.drawdown.HistoryRepository",
             return_value=mock_history_repo,
         ):
             result = await get_position_drawdown("AAPL", "2024-01-01", "2024-01-31")
@@ -166,7 +166,7 @@ class TestGetPositionDrawdown:
     @pytest.mark.asyncio
     async def test_handles_recovery_after_drawdown(self):
         """Test handling when price recovers after drawdown."""
-        from app.domain.analytics.position.drawdown import get_position_drawdown
+        from app.modules.analytics.domain.position.drawdown import get_position_drawdown
 
         # Prices: 100, 110, 90, 105
         # Peak at 110, trough at 90 (-18.18%), but recovered to 105
@@ -183,7 +183,7 @@ class TestGetPositionDrawdown:
         mock_history_repo.get_daily_range.return_value = prices
 
         with patch(
-            "app.domain.analytics.position.drawdown.HistoryRepository",
+            "app.modules.analytics.domain.position.drawdown.HistoryRepository",
             return_value=mock_history_repo,
         ):
             result = await get_position_drawdown("AAPL", "2024-01-01", "2024-01-31")
