@@ -188,7 +188,7 @@ def ensure_stock_exists(
     cursor.execute("SELECT symbol FROM securities WHERE symbol = ?", (symbol,))
 
     if cursor.fetchone():
-        return  # Stock already exists
+        return  # Security already exists
 
     # Get security info from trade data
     name = symbol  # Default to symbol if name not available
