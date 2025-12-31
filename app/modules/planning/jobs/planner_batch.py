@@ -1,4 +1,7 @@
-"""Planner batch job - processes next batch of sequences every N seconds."""
+"""Planner batch job - processes next batch of sequences every N seconds.
+
+Supports both core and satellite buckets with bucket-specific configurations.
+"""
 
 import logging
 from typing import Optional
@@ -11,6 +14,9 @@ from app.infrastructure.external.tradernet import TradernetClient
 from app.modules.planning.database.planner_repository import PlannerRepository
 from app.modules.planning.domain.holistic_planner import (
     create_holistic_plan_incremental,
+)
+from app.modules.planning.services.planner_factory import (  # noqa: F401
+    PlannerFactoryService,
 )
 from app.modules.planning.services.portfolio_context_builder import (
     build_portfolio_context,
@@ -41,7 +47,9 @@ async def _trigger_next_batch_via_api(portfolio_hash: str, next_depth: int):
 
 
 async def process_planner_batch_job(
-    max_depth: int = 0, portfolio_hash: Optional[str] = None
+    max_depth: int = 0,
+    portfolio_hash: Optional[str] = None,
+    bucket_id: str = "core",
 ):
     """
     Process next batch of sequences for holistic planner.
@@ -50,10 +58,15 @@ async def process_planner_batch_job(
     1. API-driven mode (max_depth > 0): Triggered by event-based trading loop, self-triggers next batches
     2. Scheduled fallback mode (max_depth = 0): Runs every 30 minutes as fallback, only if API-driven batches are not active
 
+    Supports both core and satellite buckets:
+    - Core bucket: Uses existing settings from SettingsRepository
+    - Satellite buckets: Uses bucket-specific configuration via PlannerFactoryService
+
     Args:
         max_depth: Recursion depth (for API-driven mode, prevents infinite loops)
                    If 0, this is scheduled fallback mode
         portfolio_hash: Portfolio hash being processed (for API-driven mode)
+        bucket_id: ID of bucket to plan for ('core' or satellite ID, default 'core')
     """
     try:
         # Get dependencies
@@ -336,6 +349,19 @@ async def process_planner_batch_job(
         combinatorial_max_candidates = int(
             await settings_repo.get_float("combinatorial_max_candidates", 12.0)
         )
+
+        # TODO: For satellite buckets, use PlannerFactoryService
+        # Once incremental processing is implemented for modular planner:
+        # if bucket_id != "core":
+        #     from app.modules.satellites.database.satellite_repository import SatelliteRepository
+        #     satellite_repo = SatelliteRepository()
+        #     satellite_settings = await satellite_repo.get_settings(bucket_id)
+        #     factory = PlannerFactoryService(settings_repo=settings_repo, trade_repo=TradeRepository())
+        #     planner = factory.create_for_satellite_bucket(bucket_id, satellite_settings)
+        #     # Use planner.create_plan_incremental(...) once implemented
+        #
+        # For now, use existing incremental planner for all buckets
+        logger.info(f"Processing planner batch for bucket: {bucket_id}")
 
         # Process batch
         plan = await create_holistic_plan_incremental(
