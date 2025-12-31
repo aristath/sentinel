@@ -21,7 +21,7 @@ __all__ = [
     "ScoreRepository",
     "SecurityRepository",
     "SettingsRepository",
-    "StockRepository",  # Backward compatibility alias
+    "StockRepository",  # DEPRECATED: Use SecurityRepository (removal: June 2025)
     "TradeRepository",
 ]
 
@@ -71,7 +71,8 @@ def __getattr__(name: str):
 
         return SecurityRepository
     elif name == "StockRepository":
-        # Backward compatibility - import SecurityRepository as StockRepository
+        # DEPRECATED: Backward compatibility alias for SecurityRepository (removal: June 2025)
+        # See docs/DEPRECATION.md for migration guidance.
         from app.modules.universe.database.security_repository import SecurityRepository
 
         return SecurityRepository
