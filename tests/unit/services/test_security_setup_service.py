@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.domain.models import Security
+from app.domain.value_objects.product_type import ProductType
 from app.modules.universe.domain.symbol_resolver import IdentifierType, SymbolInfo
 from app.modules.universe.services.security_setup_service import SecuritySetupService
 from app.shared.domain.value_objects.currency import Currency
@@ -162,6 +163,7 @@ class TestSecuritySetupService:
         existing_stock = Security(
             symbol="AAPL.US",
             name="Apple Inc.",
+            product_type=ProductType.EQUITY,
             country="US",
             fullExchangeName="NASDAQ",
             yahoo_symbol="AAPL",
