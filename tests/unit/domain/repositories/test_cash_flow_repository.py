@@ -10,7 +10,7 @@ import pytest
 
 from app.domain.models import CashFlow
 from app.shared.domain.value_objects.currency import Currency
-from app.repositories.cash_flow import CashFlowRepository
+from app.modules.cash_flows.database.cash_flow_repository import CashFlowRepository
 
 
 def create_mock_cash_flow(

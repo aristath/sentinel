@@ -1,7 +1,7 @@
 # API routers - re-exported from modules for backward compatibility
 # Note: These are imported directly in main.py from their module locations
-from app.api import charts
-from app.api import settings
+from app.api import charts  # charts.py is still in app/api/
+from app.api import settings  # settings.py is still in app/api/
 from app.modules.allocation.api import allocation
 from app.modules.cash_flows.api import cash_flows
 from app.modules.optimization.api import optimizer

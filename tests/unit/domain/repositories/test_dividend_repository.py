@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.domain.models import DividendRecord
-from app.repositories.dividend import DividendRepository
+from app.modules.dividends.database.dividend_repository import DividendRepository
 
 
 def create_mock_dividend(

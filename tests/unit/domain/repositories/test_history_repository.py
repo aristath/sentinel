@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.domain.models import DailyPrice, MonthlyPrice
-from app.repositories.history import HistoryRepository
+from app.modules.portfolio.database.history_repository import HistoryRepository
 
 
 def create_mock_transaction(mock_conn: AsyncMock):

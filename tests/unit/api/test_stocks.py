@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
-from app.api.stocks import (
+from app.modules.universe.api.stocks import (
     StockCreate,
     StockUpdate,
     _apply_boolean_update,

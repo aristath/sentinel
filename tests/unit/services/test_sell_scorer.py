@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from app.domain.scoring.sell import (
+from app.modules.scoring.domain.sell import (
     calculate_portfolio_balance_score,
     calculate_time_held_score,
     calculate_underperformance_score,

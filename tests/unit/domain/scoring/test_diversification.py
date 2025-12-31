@@ -16,7 +16,7 @@ class TestCalculateGeoGapScore:
 
     def test_returns_base_score_when_no_weight(self):
         """Test that base score is returned when geo not in weights."""
-        from app.domain.scoring.diversification import _calculate_geo_gap_score
+        from app.modules.scoring.domain.diversification import _calculate_geo_gap_score
 
         context = PortfolioContext(
             country_weights={},
@@ -31,7 +31,7 @@ class TestCalculateGeoGapScore:
 
     def test_increases_score_for_positive_weight(self):
         """Test that positive weight increases score."""
-        from app.domain.scoring.diversification import _calculate_geo_gap_score
+        from app.modules.scoring.domain.diversification import _calculate_geo_gap_score
 
         context = PortfolioContext(
             country_weights={
@@ -49,7 +49,7 @@ class TestCalculateGeoGapScore:
 
     def test_decreases_score_for_negative_weight(self):
         """Test that negative weight decreases score."""
-        from app.domain.scoring.diversification import _calculate_geo_gap_score
+        from app.modules.scoring.domain.diversification import _calculate_geo_gap_score
 
         context = PortfolioContext(
             country_weights={
@@ -67,7 +67,7 @@ class TestCalculateGeoGapScore:
 
     def test_clamps_score_to_range(self):
         """Test that score is clamped to [0.1, 0.9] range."""
-        from app.domain.scoring.diversification import _calculate_geo_gap_score
+        from app.modules.scoring.domain.diversification import _calculate_geo_gap_score
 
         context = PortfolioContext(
             country_weights={
@@ -89,7 +89,7 @@ class TestCalculateIndustryGapScore:
 
     def test_returns_base_score_when_no_industry(self):
         """Test that base score is returned when industry is None."""
-        from app.domain.scoring.diversification import _calculate_industry_gap_score
+        from app.modules.scoring.domain.diversification import _calculate_industry_gap_score
 
         context = PortfolioContext(
             country_weights={},
@@ -104,7 +104,7 @@ class TestCalculateIndustryGapScore:
 
     def test_returns_base_score_when_empty_industry(self):
         """Test that base score is returned for empty industry string."""
-        from app.domain.scoring.diversification import _calculate_industry_gap_score
+        from app.modules.scoring.domain.diversification import _calculate_industry_gap_score
 
         context = PortfolioContext(
             country_weights={},
@@ -119,7 +119,7 @@ class TestCalculateIndustryGapScore:
 
     def test_handles_single_industry(self):
         """Test scoring with single industry."""
-        from app.domain.scoring.diversification import _calculate_industry_gap_score
+        from app.modules.scoring.domain.diversification import _calculate_industry_gap_score
 
         context = PortfolioContext(
             country_weights={},
@@ -134,7 +134,7 @@ class TestCalculateIndustryGapScore:
 
     def test_handles_multiple_industries(self):
         """Test scoring with comma-separated industries."""
-        from app.domain.scoring.diversification import _calculate_industry_gap_score
+        from app.modules.scoring.domain.diversification import _calculate_industry_gap_score
 
         context = PortfolioContext(
             country_weights={},
@@ -154,7 +154,7 @@ class TestCalculateAveragingDownScore:
 
     def test_returns_base_when_no_position(self):
         """Test that base score is returned when no position held."""
-        from app.domain.scoring.diversification import _calculate_averaging_down_score
+        from app.modules.scoring.domain.diversification import _calculate_averaging_down_score
 
         context = PortfolioContext(
             country_weights={},
@@ -169,7 +169,7 @@ class TestCalculateAveragingDownScore:
 
     def test_high_score_for_quality_opportunity(self):
         """Test high score for high quality + high opportunity."""
-        from app.domain.scoring.diversification import _calculate_averaging_down_score
+        from app.modules.scoring.domain.diversification import _calculate_averaging_down_score
 
         context = PortfolioContext(
             country_weights={},
@@ -192,7 +192,7 @@ class TestCalculateAveragingDownScore:
         Position is 10% of portfolio (1000/10000), which triggers CONCENTRATION_MED
         Final score = 0.3 * 0.9 = 0.27
         """
-        from app.domain.scoring.diversification import _calculate_averaging_down_score
+        from app.modules.scoring.domain.diversification import _calculate_averaging_down_score
 
         context = PortfolioContext(
             country_weights={},
@@ -214,7 +214,7 @@ class TestApplyCostBasisBonus:
 
     def test_returns_original_when_no_price_data(self):
         """Test that original score is returned when no price data."""
-        from app.domain.scoring.diversification import _apply_cost_basis_bonus
+        from app.modules.scoring.domain.diversification import _apply_cost_basis_bonus
 
         context = PortfolioContext(
             country_weights={},
@@ -229,7 +229,7 @@ class TestApplyCostBasisBonus:
 
     def test_boosts_score_when_below_cost_basis(self):
         """Test that score is boosted when current price below cost basis."""
-        from app.domain.scoring.diversification import _apply_cost_basis_bonus
+        from app.modules.scoring.domain.diversification import _apply_cost_basis_bonus
 
         context = PortfolioContext(
             country_weights={},
@@ -246,7 +246,7 @@ class TestApplyCostBasisBonus:
 
     def test_no_boost_when_above_cost_basis(self):
         """Test that no boost when current price above cost basis."""
-        from app.domain.scoring.diversification import _apply_cost_basis_bonus
+        from app.modules.scoring.domain.diversification import _apply_cost_basis_bonus
 
         context = PortfolioContext(
             country_weights={},
@@ -267,7 +267,7 @@ class TestApplyConcentrationPenalty:
 
     def test_returns_original_when_no_total_value(self):
         """Test no penalty when total value is zero."""
-        from app.domain.scoring.diversification import _apply_concentration_penalty
+        from app.modules.scoring.domain.diversification import _apply_concentration_penalty
 
         context = PortfolioContext(
             country_weights={},
@@ -282,7 +282,7 @@ class TestApplyConcentrationPenalty:
 
     def test_applies_high_concentration_penalty(self):
         """Test severe penalty for high concentration."""
-        from app.domain.scoring.diversification import _apply_concentration_penalty
+        from app.modules.scoring.domain.diversification import _apply_concentration_penalty
 
         context = PortfolioContext(
             country_weights={},
@@ -298,7 +298,7 @@ class TestApplyConcentrationPenalty:
 
     def test_no_penalty_for_small_position(self):
         """Test no penalty for small positions."""
-        from app.domain.scoring.diversification import _apply_concentration_penalty
+        from app.modules.scoring.domain.diversification import _apply_concentration_penalty
 
         context = PortfolioContext(
             country_weights={},
@@ -318,7 +318,7 @@ class TestCalculateDiversificationScore:
 
     def test_returns_score_result(self):
         """Test that ScoreResult is returned."""
-        from app.domain.scoring.diversification import calculate_diversification_score
+        from app.modules.scoring.domain.diversification import calculate_diversification_score
 
         context = PortfolioContext(
             country_weights={"US": 0.1},
@@ -342,7 +342,7 @@ class TestCalculateDiversificationScore:
 
     def test_includes_sub_scores(self):
         """Test that sub_scores are included."""
-        from app.domain.scoring.diversification import calculate_diversification_score
+        from app.modules.scoring.domain.diversification import calculate_diversification_score
 
         context = PortfolioContext(
             country_weights={},
@@ -371,7 +371,7 @@ class TestCalculatePortfolioScore:
     @pytest.mark.asyncio
     async def test_returns_default_for_empty_portfolio(self):
         """Test default score when portfolio is empty."""
-        from app.domain.scoring.diversification import calculate_portfolio_score
+        from app.modules.scoring.domain.diversification import calculate_portfolio_score
 
         context = PortfolioContext(
             country_weights={},
@@ -390,7 +390,7 @@ class TestCalculatePortfolioScore:
     @pytest.mark.asyncio
     async def test_calculates_components(self):
         """Test that all components are calculated."""
-        from app.domain.scoring.diversification import calculate_portfolio_score
+        from app.modules.scoring.domain.diversification import calculate_portfolio_score
 
         context = PortfolioContext(
             country_weights={"US": 0.1, "EU": -0.1},
@@ -412,7 +412,7 @@ class TestCalculatePortfolioScore:
     @pytest.mark.asyncio
     async def test_uses_cache_when_hash_provided(self):
         """Test that cache is checked when portfolio_hash is provided."""
-        from app.domain.scoring.diversification import calculate_portfolio_score
+        from app.modules.scoring.domain.diversification import calculate_portfolio_score
 
         mock_cache = AsyncMock()
         mock_cache.get_analytics.return_value = {
@@ -445,7 +445,7 @@ class TestCalculatePostTransactionScore:
     @pytest.mark.asyncio
     async def test_calculates_new_score_after_transaction(self):
         """Test that new score reflects proposed transaction."""
-        from app.domain.scoring.diversification import calculate_post_transaction_score
+        from app.modules.scoring.domain.diversification import calculate_post_transaction_score
 
         context = PortfolioContext(
             country_weights={"EU": 0.5},  # Underweight EU
@@ -476,7 +476,7 @@ class TestCalculatePostTransactionScore:
     @pytest.mark.asyncio
     async def test_uses_cache_when_hash_provided(self):
         """Test that cached scenario is returned when available."""
-        from app.domain.scoring.diversification import calculate_post_transaction_score
+        from app.modules.scoring.domain.diversification import calculate_post_transaction_score
 
         mock_cache = AsyncMock()
         mock_cache.get_analytics.return_value = {

@@ -8,14 +8,14 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.domain.scoring.constants import (
+from app.modules.scoring.domain.constants import (
     CONSISTENT_DOUBLE_SELL_PCT,
     WINDFALL_EXCESS_HIGH,
     WINDFALL_EXCESS_MEDIUM,
     WINDFALL_SELL_PCT_HIGH,
     WINDFALL_SELL_PCT_MEDIUM,
 )
-from app.domain.scoring.windfall import (
+from app.modules.scoring.domain.windfall import (
     calculate_excess_gain,
     calculate_windfall_score,
     get_windfall_recommendation,

@@ -17,7 +17,7 @@ from app.modules.scoring.domain.models import (
     PortfolioContext,
     PrefetchedStockData,
 )
-from app.domain.scoring.stock_scorer import (
+from app.modules.scoring.domain.stock_scorer import (
     SCORE_WEIGHTS,
     calculate_stock_score,
     calculate_stock_score_from_prefetched,

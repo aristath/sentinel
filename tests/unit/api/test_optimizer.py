@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
-from app.api.optimizer import (
+from app.modules.optimization.api.optimizer import (
     _optimization_result_to_dict,
     get_optimizer_status,
     run_optimization,
