@@ -1,8 +1,8 @@
-"""Stock setup service for adding stocks to the universe.
+"""Security setup service for adding securities to the universe.
 
-Handles comprehensive stock setup by accepting either a Tradernet symbol or ISIN,
+Handles comprehensive security setup by accepting either a Tradernet symbol or ISIN,
 resolving all necessary data from Tradernet and Yahoo Finance, and preparing
-the stock for use in the application.
+the security for use in the application.
 """
 
 import logging
@@ -10,23 +10,23 @@ from typing import Optional
 
 from app.core.database.manager import DatabaseManager
 from app.domain.events import SecurityAddedEvent, get_event_bus
-from app.domain.models import Stock
+from app.domain.models import Security
 from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.external.tradernet import TradernetClient
 from app.jobs.stocks_data_sync import _sync_historical_for_symbol
-from app.modules.universe.database.stock_repository import StockRepository
+from app.modules.universe.database.security_repository import SecurityRepository
 from app.modules.universe.domain.symbol_resolver import IdentifierType, SymbolResolver
 from app.shared.domain.value_objects.currency import Currency
 
 logger = logging.getLogger(__name__)
 
 
-class StockSetupService:
-    """Service for setting up new stocks in the universe."""
+class SecuritySetupService:
+    """Service for setting up new securities in the universe."""
 
     def __init__(
         self,
-        stock_repo: StockRepository,
+        security_repo: SecurityRepository,
         scoring_service,
         tradernet_client: TradernetClient,
         db_manager: DatabaseManager,
@@ -35,58 +35,58 @@ class StockSetupService:
         """Initialize the service.
 
         Args:
-            stock_repo: Stock repository
+            security_repo: Security repository
             scoring_service: Scoring service for calculating initial scores
             tradernet_client: Tradernet client for API calls
             db_manager: Database manager for history operations
             symbol_resolver: Optional symbol resolver (will create if not provided)
         """
-        self._stock_repo = stock_repo
+        self._security_repo = security_repo
         self._scoring_service = scoring_service
         self._tradernet_client = tradernet_client
         self._db_manager = db_manager
         self._symbol_resolver = symbol_resolver or SymbolResolver(
-            tradernet_client, stock_repo
+            tradernet_client, security_repo
         )
 
-    async def add_stock_by_identifier(
+    async def add_security_by_identifier(
         self,
         identifier: str,
         min_lot: int = 1,
         allow_buy: bool = True,
         allow_sell: bool = True,
-    ) -> Stock:
-        """Add a stock to the universe by symbol or ISIN.
+    ) -> Security:
+        """Add a security to the universe by symbol or ISIN.
 
         This method:
         1. Resolves the identifier to get all necessary symbols
         2. Fetches data from Tradernet (symbol, name, currency, ISIN)
         3. Fetches data from Yahoo Finance (country, exchange, industry)
-        4. Creates the stock in the database
+        4. Creates the security in the database
         5. Fetches historical price data (10 years initial seed)
-        6. Calculates and saves the initial stock score
+        6. Calculates and saves the initial security score
 
         Args:
-            identifier: Stock identifier - Tradernet symbol (e.g., "AAPL.US") or ISIN (e.g., "US0378331005")
+            identifier: Security identifier - Tradernet symbol (e.g., "AAPL.US") or ISIN (e.g., "US0378331005")
             min_lot: Minimum lot size (default: 1)
             allow_buy: Whether buying is allowed (default: True)
             allow_sell: Whether selling is allowed (default: True)
 
         Returns:
-            Created Stock domain object
+            Created Security domain object
 
         Raises:
-            ValueError: If stock already exists or identifier is invalid
+            ValueError: If security already exists or identifier is invalid
             ConnectionError: If Tradernet connection fails when required
         """
         identifier = identifier.strip().upper()
         if not identifier:
             raise ValueError("Identifier cannot be empty")
 
-        # Check if stock already exists
-        existing = await self._stock_repo.get_by_identifier(identifier)
+        # Check if security already exists
+        existing = await self._security_repo.get_by_identifier(identifier)
         if existing:
-            raise ValueError(f"Stock already exists: {existing.symbol}")
+            raise ValueError(f"Security already exists: {existing.symbol}")
 
         # Step 1: Detect identifier type and resolve
         id_type = self._symbol_resolver.detect_type(identifier)
@@ -126,7 +126,7 @@ class StockSetupService:
         else:
             # Yahoo format - try to use as-is, but we still need Tradernet symbol
             raise ValueError(
-                f"Cannot add stock with identifier '{identifier}'. "
+                f"Cannot add security with identifier '{identifier}'. "
                 "Please provide a Tradernet symbol (e.g., AAPL.US) or ISIN (e.g., US0378331005)."
             )
 
@@ -149,21 +149,23 @@ class StockSetupService:
         # Get name - prefer Tradernet name, fallback to Yahoo Finance
         name = tradernet_name
         if not name:
-            name = await self._get_stock_name_from_yahoo(tradernet_symbol, yahoo_symbol)
+            name = await self._get_security_name_from_yahoo(
+                tradernet_symbol, yahoo_symbol
+            )
 
         if not name:
-            raise ValueError(f"Could not determine stock name for: {identifier}")
+            raise ValueError(f"Could not determine security name for: {identifier}")
 
         # Detect product type using Yahoo Finance with heuristics
         product_type = yahoo.get_product_type(tradernet_symbol, yahoo_symbol, name)
 
-        # Step 4: Create stock
-        # Create stock using factory, but we need to handle ISIN separately
-        # since factory doesn't support it directly. Create Stock directly instead.
+        # Step 4: Create security
+        # Create security using factory, but we need to handle ISIN separately
+        # since factory doesn't support it directly. Create Security directly instead.
         # Type assertions: we've validated all required fields above
         assert tradernet_symbol is not None, "tradernet_symbol must be set"
         assert name is not None, "name must be set"
-        stock = Stock(
+        security = Security(
             symbol=tradernet_symbol,
             name=name,
             product_type=product_type,
@@ -180,36 +182,39 @@ class StockSetupService:
             currency=currency,
         )
 
-        await self._stock_repo.create(stock)
+        await self._security_repo.create(security)
 
         # Publish domain event
         event_bus = get_event_bus()
-        event_bus.publish(SecurityAddedEvent(security=stock))
+        event_bus.publish(SecurityAddedEvent(security=security))
 
         # Step 5: Fetch historical data (10 years initial seed)
         try:
-            await _sync_historical_for_symbol(stock.symbol)
-            logger.info(f"Fetched historical data for {stock.symbol}")
+            await _sync_historical_for_symbol(security.symbol)
+            logger.info(f"Fetched historical data for {security.symbol}")
         except Exception as e:
             logger.warning(
-                f"Failed to fetch historical data for {stock.symbol}: {e}",
+                f"Failed to fetch historical data for {security.symbol}: {e}",
                 exc_info=True,
             )
-            # Continue - historical data failure shouldn't block stock creation
+            # Continue - historical data failure shouldn't block security creation
 
         # Step 6: Calculate initial score
         try:
             await self._scoring_service.calculate_and_save_score(
-                stock.symbol, stock.yahoo_symbol, country=country, industry=industry
+                security.symbol,
+                security.yahoo_symbol,
+                country=country,
+                industry=industry,
             )
-            logger.info(f"Calculated initial score for {stock.symbol}")
+            logger.info(f"Calculated initial score for {security.symbol}")
         except Exception as e:
             logger.warning(
-                f"Failed to calculate score for {stock.symbol}: {e}", exc_info=True
+                f"Failed to calculate score for {security.symbol}: {e}", exc_info=True
             )
-            # Continue - score calculation failure shouldn't block stock creation
+            # Continue - score calculation failure shouldn't block security creation
 
-        return stock
+        return security
 
     async def _get_tradernet_data(
         self, symbol: str
@@ -290,17 +295,17 @@ class StockSetupService:
             )
             return None
 
-    async def _get_stock_name_from_yahoo(
+    async def _get_security_name_from_yahoo(
         self, symbol: str, yahoo_symbol: Optional[str]
     ) -> Optional[str]:
-        """Get stock name from Yahoo Finance.
+        """Get security name from Yahoo Finance.
 
         Args:
             symbol: Tradernet symbol (for logging)
             yahoo_symbol: Yahoo Finance symbol to look up
 
         Returns:
-            Stock name or None if unavailable
+            Security name or None if unavailable
         """
         try:
             import yfinance as yf
@@ -315,3 +320,7 @@ class StockSetupService:
         except Exception as e:
             logger.warning(f"Failed to get name from Yahoo Finance for {symbol}: {e}")
             return None
+
+
+# Backward compatibility alias
+StockSetupService = SecuritySetupService
