@@ -311,7 +311,7 @@ async def _get_holistic_recommendation():
     from app.domain.models import Recommendation
     from app.domain.portfolio_hash import generate_recommendation_cache_key
     from app.domain.services.settings_service import SettingsService
-    from app.domain.value_objects.currency import Currency
+    from app.shared.domain.value_objects.currency import Currency
     from app.domain.value_objects.recommendation_status import RecommendationStatus
     from app.domain.value_objects.trade_side import TradeSide
     from app.core.cache.cache import cache

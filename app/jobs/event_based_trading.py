@@ -20,7 +20,7 @@ from typing import Optional
 
 from app.domain.models import Recommendation
 from app.domain.portfolio_hash import generate_portfolio_hash
-from app.domain.value_objects.currency import Currency
+from app.shared.domain.value_objects.currency import Currency
 from app.domain.value_objects.recommendation_status import RecommendationStatus
 from app.domain.value_objects.trade_side import TradeSide
 from app.infrastructure.cache_invalidation import get_cache_invalidation_service
@@ -317,7 +317,7 @@ async def _wait_for_planning_completion():
                     # Use order price as avg_price (required by Position validation)
                     avg_price = order_price if order_price and order_price > 0 else 0.01
 
-                    from app.domain.value_objects.currency import Currency
+                    from app.shared.domain.value_objects.currency import Currency
 
                     currency = (
                         Currency.from_string(order_currency)

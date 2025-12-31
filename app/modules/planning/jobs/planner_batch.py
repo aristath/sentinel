@@ -245,7 +245,7 @@ async def process_planner_batch_job(
                     # Use order price as avg_price (required by Position validation)
                     avg_price = order_price if order_price and order_price > 0 else 0.01
 
-                    from app.domain.value_objects.currency import Currency
+                    from app.shared.domain.value_objects.currency import Currency
 
                     currency = (
                         Currency.from_string(order_currency)

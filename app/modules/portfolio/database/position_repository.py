@@ -216,7 +216,7 @@ class PositionRepository:
             pos_dict["allow_sell"] = bool(stock.get("allow_sell", False))
             # Use stock currency if position doesn't have one
             if not pos_dict.get("currency"):
-                from app.domain.value_objects.currency import Currency
+                from app.shared.domain.value_objects.currency import Currency
 
                 pos_dict["currency"] = stock.get("currency") or Currency.EUR
             result.append(pos_dict)
