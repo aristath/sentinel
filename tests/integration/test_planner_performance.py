@@ -10,6 +10,7 @@ from datetime import datetime
 import pytest
 
 from app.domain.models import Position, Security
+from app.domain.value_objects.product_type import ProductType
 from app.modules.planning.domain.holistic_planner import create_holistic_plan
 from app.modules.scoring.domain.models import PortfolioContext
 from app.repositories import SettingsRepository
@@ -174,6 +175,7 @@ async def test_planner_completes_in_reasonable_time(db_manager):
         Security(
             symbol="AAPL.US",
             name="Apple Inc",
+            product_type=ProductType.EQUITY,
             country="United States",
             industry="Technology",
             allow_buy=True,
@@ -183,6 +185,7 @@ async def test_planner_completes_in_reasonable_time(db_manager):
         Security(
             symbol="MSFT.US",
             name="Microsoft Corp",
+            product_type=ProductType.EQUITY,
             country="United States",
             industry="Technology",
             allow_buy=True,
@@ -192,6 +195,7 @@ async def test_planner_completes_in_reasonable_time(db_manager):
         Security(
             symbol="SAP.DE",
             name="SAP SE",
+            product_type=ProductType.EQUITY,
             country="Germany",
             industry="Technology",
             allow_buy=True,
@@ -237,6 +241,7 @@ async def test_planner_handles_empty_portfolio(db_manager):
         Security(
             symbol="AAPL.US",
             name="Apple Inc",
+            product_type=ProductType.EQUITY,
             country="United States",
             industry="Technology",
             allow_buy=True,
