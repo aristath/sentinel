@@ -388,8 +388,8 @@ class TestGenerateStepNarrative:
 
     def test_generates_sell_narrative(self):
         """Test that sell actions get sell narrative."""
-        from app.modules.planning.domain.narrative import generate_step_narrative
         from app.domain.value_objects.trade_side import TradeSide
+        from app.modules.planning.domain.narrative import generate_step_narrative
 
         action = MagicMock()
         action.symbol = "AAPL.US"
@@ -409,8 +409,8 @@ class TestGenerateStepNarrative:
 
     def test_generates_buy_narrative(self):
         """Test that buy actions get buy narrative."""
-        from app.modules.planning.domain.narrative import generate_step_narrative
         from app.domain.value_objects.trade_side import TradeSide
+        from app.modules.planning.domain.narrative import generate_step_narrative
 
         action = MagicMock()
         action.symbol = "AAPL.US"
@@ -446,8 +446,8 @@ class TestGeneratePlanNarrative:
 
     def test_includes_all_components(self):
         """Test that all narrative components are included."""
-        from app.modules.planning.domain.narrative import generate_plan_narrative
         from app.domain.value_objects.trade_side import TradeSide
+        from app.modules.planning.domain.narrative import generate_plan_narrative
 
         mock_sell = MagicMock()
         mock_sell.side = TradeSide.SELL
@@ -479,8 +479,8 @@ class TestGenerateTradeoffExplanation:
 
     def test_no_explanation_for_positive_individual(self):
         """Test no explanation when individual impact is positive."""
-        from app.modules.planning.domain.narrative import generate_tradeoff_explanation
         from app.domain.value_objects.trade_side import TradeSide
+        from app.modules.planning.domain.narrative import generate_tradeoff_explanation
 
         action = MagicMock()
         action.side = TradeSide.SELL
@@ -496,8 +496,8 @@ class TestGenerateTradeoffExplanation:
 
     def test_no_explanation_when_sequence_worse(self):
         """Test no explanation when sequence doesn't improve."""
-        from app.modules.planning.domain.narrative import generate_tradeoff_explanation
         from app.domain.value_objects.trade_side import TradeSide
+        from app.modules.planning.domain.narrative import generate_tradeoff_explanation
 
         action = MagicMock()
         action.side = TradeSide.SELL
@@ -513,8 +513,8 @@ class TestGenerateTradeoffExplanation:
 
     def test_explains_tradeoff(self):
         """Test trade-off explanation when sequence improves."""
-        from app.modules.planning.domain.narrative import generate_tradeoff_explanation
         from app.domain.value_objects.trade_side import TradeSide
+        from app.modules.planning.domain.narrative import generate_tradeoff_explanation
 
         action = MagicMock()
         action.side = TradeSide.SELL
@@ -537,8 +537,8 @@ class TestFormatActionSummary:
 
     def test_formats_sell(self):
         """Test sell action formatting."""
-        from app.modules.planning.domain.narrative import format_action_summary
         from app.domain.value_objects.trade_side import TradeSide
+        from app.modules.planning.domain.narrative import format_action_summary
 
         action = MagicMock()
         action.side = TradeSide.SELL
@@ -556,8 +556,8 @@ class TestFormatActionSummary:
 
     def test_formats_buy(self):
         """Test buy action formatting."""
-        from app.modules.planning.domain.narrative import format_action_summary
         from app.domain.value_objects.trade_side import TradeSide
+        from app.modules.planning.domain.narrative import format_action_summary
 
         action = MagicMock()
         action.side = TradeSide.BUY

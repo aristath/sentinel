@@ -213,7 +213,7 @@ async def stream_planner_status(
     Real-time streaming of planner status updates. Initial status is sent
     immediately on connection, then updates are streamed as batches complete.
     """
-    from app.infrastructure import planner_events  # TODO: Move to planning module
+    from app.modules.planning import events as planner_events
 
     async def event_generator() -> AsyncIterator[str]:
         """Generate SSE events from planner status changes."""

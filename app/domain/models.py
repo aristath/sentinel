@@ -9,7 +9,6 @@ from datetime import datetime
 from typing import Optional
 
 from app.domain.exceptions import ValidationError
-from app.shared.domain.value_objects.currency import Currency
 from app.domain.value_objects.recommendation_status import RecommendationStatus
 from app.domain.value_objects.trade_side import TradeSide
 
@@ -18,6 +17,7 @@ from app.modules.allocation.domain.models import AllocationTarget
 
 # CashFlow moved to modules/cash_flows/domain/models.py
 from app.modules.cash_flows.domain.models import CashFlow
+from app.shared.domain.value_objects.currency import Currency
 
 
 @dataclass
@@ -162,7 +162,6 @@ from app.modules.portfolio.domain.models import (
     MonthlyPrice,
     PortfolioSnapshot,
 )
-
 
 # Allocation and Portfolio Models
 # Moved from app/services/allocator.py

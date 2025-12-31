@@ -380,10 +380,7 @@ class TestShutdownQueryQueue:
         original = module._query_queue
 
         try:
-            from app.core.database.queue import (
-                init_query_queue,
-                shutdown_query_queue,
-            )
+            from app.core.database.queue import init_query_queue, shutdown_query_queue
 
             await init_query_queue()
             await shutdown_query_queue()

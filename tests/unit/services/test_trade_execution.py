@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.modules.trading.services.trade_execution_service import TradeExecutionService
 from app.domain.models import Recommendation
+from app.modules.trading.services.trade_execution_service import TradeExecutionService
 
 
 class TestTradeValidation:
@@ -94,8 +94,8 @@ class TestTradeValidation:
         currency: str = "EUR",
     ) -> Recommendation:
         """Helper to create test trades."""
-        from app.shared.domain.value_objects.currency import Currency
         from app.domain.value_objects.trade_side import TradeSide
+        from app.shared.domain.value_objects.currency import Currency
 
         return Recommendation(
             symbol=symbol,

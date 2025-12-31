@@ -10,10 +10,6 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api import charts
 from app.api import settings as settings_api
-from app.modules.system.api import status
-from app.modules.universe.api import stocks
-from app.modules.trading.api import trades
-from app.modules.portfolio.api import portfolio
 from app.config import settings
 from app.core.database.manager import get_db_manager, init_databases, shutdown_databases
 from app.core.events import SystemEvent, emit
@@ -22,13 +18,18 @@ from app.core.events import SystemEvent, emit
 from app.core.logging import CorrelationIDFilter
 
 # Import event modules to register event subscriptions
-from app.infrastructure import planner_events, recommendation_events  # noqa: F401
+from app.infrastructure import recommendation_events  # noqa: F401
 from app.infrastructure.external.tradernet import get_tradernet_client
 from app.jobs.scheduler import init_scheduler, start_scheduler, stop_scheduler
 from app.modules.allocation.api import allocation
 from app.modules.cash_flows.api import cash_flows
 from app.modules.optimization.api import optimizer
+from app.modules.planning import events as planner_events  # noqa: F401
 from app.modules.planning.api import planner, recommendations
+from app.modules.portfolio.api import portfolio
+from app.modules.system.api import status
+from app.modules.trading.api import trades
+from app.modules.universe.api import stocks
 
 # Log format with correlation ID
 log_format = logging.Formatter(

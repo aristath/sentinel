@@ -9,15 +9,15 @@ These tests ensure the holistic planner makes CORRECT decisions about:
 
 import pytest
 
-from app.modules.scoring.domain.constants import (
-    CONSISTENT_DOUBLE_SELL_PCT,
-    WINDFALL_SELL_PCT_HIGH,
-    WINDFALL_SELL_PCT_MEDIUM,
-)
 from app.modules.dividends.domain.dividend_history import (
     calculate_dividend_growth_rate,
     calculate_dividend_stability_score,
     has_big_dividend_cut,
+)
+from app.modules.scoring.domain.constants import (
+    CONSISTENT_DOUBLE_SELL_PCT,
+    WINDFALL_SELL_PCT_HIGH,
+    WINDFALL_SELL_PCT_MEDIUM,
 )
 from app.modules.scoring.domain.end_state import score_total_return
 from app.modules.scoring.domain.windfall import (

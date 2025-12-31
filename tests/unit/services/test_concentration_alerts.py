@@ -86,10 +86,10 @@ class TestDetectAlerts:
     @pytest.mark.asyncio
     async def test_detects_position_concentration(self, mock_position_repo):
         """Test that individual position concentration alerts are detected."""
+        from app.domain.models import Position
         from app.modules.portfolio.services.concentration_alerts import (
             ConcentrationAlertService,
         )
-        from app.domain.models import Position
 
         portfolio_summary = PortfolioSummary(
             total_value=10000.0,
@@ -169,10 +169,10 @@ class TestDetectAlerts:
     @pytest.mark.asyncio
     async def test_detects_multiple_alerts(self, mock_position_repo):
         """Test that multiple alerts can be detected."""
+        from app.domain.models import Position
         from app.modules.portfolio.services.concentration_alerts import (
             ConcentrationAlertService,
         )
-        from app.domain.models import Position
 
         portfolio_summary = PortfolioSummary(
             total_value=10000.0,
