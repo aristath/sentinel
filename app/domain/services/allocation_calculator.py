@@ -108,12 +108,12 @@ def calculate_position_size(
     Returns:
         Adjusted position size (0.5x to 2.0x of base, ±20% for score)
     """
-    # Use stock volatility, or default if unknown
+    # Use security volatility, or default if unknown
     stock_vol = candidate.volatility if candidate.volatility else DEFAULT_VOLATILITY
 
     # Inverse volatility weight
-    # If target is 15% and stock is 30%, position = base * (0.15/0.30) = 0.5x
-    # If target is 15% and stock is 10%, position = base * (0.15/0.10) = 1.5x
+    # If target is 15% and security is 30%, position = base * (0.15/0.30) = 0.5x
+    # If target is 15% and security is 10%, position = base * (0.15/0.10) = 1.5x
     vol_weight = TARGET_PORTFOLIO_VOLATILITY / max(stock_vol, MIN_VOLATILITY_FOR_SIZING)
     vol_weight = max(MIN_VOL_WEIGHT, min(MAX_VOL_WEIGHT, vol_weight))
 
