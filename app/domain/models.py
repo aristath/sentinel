@@ -30,8 +30,8 @@ from app.shared.domain.value_objects.currency import Currency
 
 
 @dataclass
-class Stock:
-    """Stock in the investment universe."""
+class Security:
+    """Security in the investment universe (stocks, ETFs, ETCs, mutual funds)."""
 
     symbol: str
     name: str
@@ -47,7 +47,7 @@ class Stock:
     allow_buy: bool = True
     allow_sell: bool = False
     currency: Optional[Currency] = None
-    last_synced: Optional[str] = None  # ISO datetime when stock data was last synced
+    last_synced: Optional[str] = None  # ISO datetime when security data was last synced
     min_portfolio_target: Optional[float] = (
         None  # Minimum target portfolio allocation percentage (0-20)
     )
@@ -56,7 +56,7 @@ class Stock:
     )
 
     def __post_init__(self):
-        """Validate stock data."""
+        """Validate security data."""
         if not self.symbol or not self.symbol.strip():
             raise ValidationError("Symbol cannot be empty")
 
@@ -127,8 +127,8 @@ class Trade:
 
 
 @dataclass
-class StockScore:
-    """Calculated score for a stock."""
+class SecurityScore:
+    """Calculated score for a security (stock, ETF, ETC, mutual fund)."""
 
     symbol: str
     isin: Optional[str] = None  # ISIN for broker-agnostic identification
@@ -256,13 +256,13 @@ class Recommendation:
 
 
 @dataclass
-class StockPriority:
-    """Priority score for a stock candidate."""
+class SecurityPriority:
+    """Priority score for a security candidate (stock, ETF, ETC, mutual fund)."""
 
     symbol: str
     name: str
     industry: str
-    stock_score: float
+    security_score: float
     volatility: float  # Raw volatility (0.0-1.0)
     multiplier: float  # Manual priority multiplier
     min_lot: int  # Minimum lot size for trading
@@ -338,12 +338,19 @@ class DividendRecord:
         object.__setattr__(self, "symbol", self.symbol.upper().strip())
 
 
+# Backward compatibility aliases
+Stock = Security  # Deprecated: use Security instead
+StockScore = SecurityScore  # Deprecated: use SecurityScore instead
+StockPriority = SecurityPriority  # Deprecated: use SecurityPriority instead
+
 # Export all models including re-exported CashFlow
 __all__ = [
-    "Stock",
+    "Security",
+    "Stock",  # Deprecated alias
     "Position",
     "Trade",
-    "StockScore",
+    "SecurityScore",
+    "StockScore",  # Deprecated alias
     "AllocationTarget",
     "CashFlow",  # Re-exported from modules/cash_flows/domain/models.py
     "PortfolioSnapshot",
@@ -352,7 +359,8 @@ __all__ = [
     "AllocationStatus",
     "PortfolioSummary",
     "Recommendation",
-    "StockPriority",
+    "SecurityPriority",
+    "StockPriority",  # Deprecated alias
     "MultiStepRecommendation",
     "DividendRecord",
 ]
