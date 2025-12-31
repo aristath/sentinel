@@ -23,7 +23,7 @@ from app.infrastructure.dependencies import (
     PortfolioRepositoryDep,
     PortfolioServiceDep,
     PositionRepositoryDep,
-    StockRepositoryDep,
+    SecurityRepositoryDep,
 )
 from app.infrastructure.external.tradernet_connection import ensure_tradernet_connected
 
@@ -99,7 +99,7 @@ def _format_risk_metrics(metrics: dict) -> dict:
 @router.get("", response_model=List[PortfolioPosition])
 async def get_portfolio(
     position_repo: PositionRepositoryDep,
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
 ):
     """Get current portfolio positions with values."""
 

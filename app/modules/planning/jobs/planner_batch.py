@@ -18,8 +18,8 @@ from app.modules.planning.services.portfolio_context_builder import (
 from app.repositories import (
     AllocationRepository,
     PositionRepository,
+    SecurityRepository,
     SettingsRepository,
-    StockRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -61,7 +61,7 @@ async def process_planner_batch_job(
 
         db_manager = get_db_manager()
         position_repo = PositionRepository()
-        stock_repo = StockRepository()
+        stock_repo = SecurityRepository()
         settings_repo = SettingsRepository()
         allocation_repo = AllocationRepository()
         tradernet_client = TradernetClient()

@@ -7,7 +7,7 @@ from app.domain.models import AllocationStatus, PortfolioSummary
 from app.domain.repositories.protocols import (
     IAllocationRepository,
     IPositionRepository,
-    IStockRepository,
+    ISecurityRepository,
 )
 from app.domain.services.allocation_calculator import parse_industries
 from app.modules.portfolio.database.portfolio_repository import PortfolioRepository
@@ -21,7 +21,7 @@ class PortfolioService:
         portfolio_repo: PortfolioRepository,
         position_repo: IPositionRepository,
         allocation_repo: IAllocationRepository,
-        stock_repo: IStockRepository,
+        stock_repo: ISecurityRepository,
     ):
         self._portfolio_repo = portfolio_repo
         self._position_repo = position_repo

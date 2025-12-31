@@ -147,9 +147,9 @@ async def _get_stocks_needing_sync() -> list:
 
 async def _get_all_active_stocks() -> list:
     """Get all active stocks from the database."""
-    from app.repositories import StockRepository
+    from app.repositories import SecurityRepository
 
-    stock_repo = StockRepository()
+    stock_repo = SecurityRepository()
     return await stock_repo.get_all_active()
 
 
@@ -287,7 +287,7 @@ async def _detect_and_update_industry(symbol: str):
     """
     from app.core.database.manager import get_db_manager
     from app.infrastructure.external import yahoo_finance as yahoo
-    from app.repositories import StockRepository
+    from app.repositories import SecurityRepository
 
     db_manager = get_db_manager()
 
@@ -307,7 +307,7 @@ async def _detect_and_update_industry(symbol: str):
         detected_industry = yahoo.get_stock_industry(symbol, yahoo_symbol)
         if detected_industry:
             # Update the stock's industry in the database
-            stock_repo = StockRepository()
+            stock_repo = SecurityRepository()
             await stock_repo.update(symbol, industry=detected_industry)
             logger.info(f"Updated industry for {symbol}: {detected_industry}")
         else:
@@ -358,7 +358,7 @@ async def _detect_and_update_country_and_exchange(symbol: str):
     """
     from app.core.database.manager import get_db_manager
     from app.infrastructure.external import yahoo_finance as yahoo
-    from app.repositories import StockRepository
+    from app.repositories import SecurityRepository
 
     db_manager = get_db_manager()
 
@@ -389,7 +389,7 @@ async def _detect_and_update_country_and_exchange(symbol: str):
 
         if detected_country or detected_exchange:
             # Update the stock's country and fullExchangeName in the database
-            stock_repo = StockRepository()
+            stock_repo = SecurityRepository()
             updates = {}
             if detected_country:
                 updates["country"] = detected_country

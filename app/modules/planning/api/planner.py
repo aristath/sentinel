@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from app.domain.portfolio_hash import generate_portfolio_hash
 from app.infrastructure.dependencies import (
     PositionRepositoryDep,
-    StockRepositoryDep,
+    SecurityRepositoryDep,
     TradernetClientDep,
 )
 from app.modules.planning.database.planner_repository import PlannerRepository
@@ -22,7 +22,7 @@ router = APIRouter()
 @router.post("/regenerate-sequences")
 async def regenerate_sequences(
     position_repo: PositionRepositoryDep,
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
     tradernet_client: TradernetClientDep,
 ):
     """
@@ -91,7 +91,7 @@ async def regenerate_sequences(
 
 async def _get_planner_status_internal(
     position_repo: PositionRepositoryDep,
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
     tradernet_client: TradernetClientDep,
 ) -> Dict[str, Any]:
     """
@@ -177,7 +177,7 @@ async def _get_planner_status_internal(
 @router.get("/status")
 async def get_planner_status(
     position_repo: PositionRepositoryDep,
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
     tradernet_client: TradernetClientDep,
 ):
     """
@@ -205,7 +205,7 @@ async def get_planner_status(
 @router.get("/status/stream")
 async def stream_planner_status(
     position_repo: PositionRepositoryDep,
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
     tradernet_client: TradernetClientDep,
 ):
     """Stream planner status updates via Server-Sent Events (SSE).

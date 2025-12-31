@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from app.domain.constants import BUY_COOLDOWN_DAYS
 from app.domain.repositories.protocols import (
     IPositionRepository,
-    IStockRepository,
+    ISecurityRepository,
     ITradeRepository,
 )
 from app.domain.value_objects.trade_side import TradeSide
@@ -28,7 +28,7 @@ class TradeSafetyService:
         self,
         trade_repo: ITradeRepository,
         position_repo: IPositionRepository,
-        stock_repo: IStockRepository,
+        stock_repo: ISecurityRepository,
     ):
         self._trade_repo = trade_repo
         self._position_repo = position_repo

@@ -17,8 +17,8 @@ from app.modules.portfolio.database.position_repository import PositionRepositor
 from app.modules.trading.services.trade_execution_service import TradeExecutionService
 from app.repositories import (
     RecommendationRepository,
+    SecurityRepository,
     SettingsRepository,
-    StockRepository,
 )
 from app.shared.domain.value_objects.currency import Currency
 from app.shared.services import CurrencyExchangeService
@@ -37,7 +37,7 @@ class NegativeBalanceRebalancer:
         tradernet_client: TradernetClient,
         currency_exchange_service: CurrencyExchangeService,
         trade_execution_service: TradeExecutionService,
-        stock_repo: StockRepository,
+        stock_repo: SecurityRepository,
         position_repo: PositionRepository,
         exchange_rate_service: ExchangeRateService,
         recommendation_repo: Optional[RecommendationRepository] = None,

@@ -10,7 +10,7 @@ from app.core.database.manager import DatabaseManager
 from app.domain.repositories.protocols import (
     IAllocationRepository,
     IPositionRepository,
-    IStockRepository,
+    ISecurityRepository,
 )
 from app.modules.scoring.domain import PortfolioContext
 from app.repositories import GroupingRepository
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 async def build_portfolio_context(
     position_repo: IPositionRepository,
-    stock_repo: IStockRepository,
+    stock_repo: ISecurityRepository,
     allocation_repo: IAllocationRepository,
     db_manager: DatabaseManager,
 ) -> PortfolioContext:

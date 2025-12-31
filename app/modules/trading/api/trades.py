@@ -11,7 +11,7 @@ from app.infrastructure.dependencies import (
     ConcentrationAlertServiceDep,
     PortfolioServiceDep,
     PositionRepositoryDep,
-    StockRepositoryDep,
+    SecurityRepositoryDep,
     TradeExecutionServiceDep,
     TradeRepositoryDep,
     TradeSafetyServiceDep,
@@ -71,7 +71,7 @@ def _get_currency_conversion_name(symbol: str) -> str:
 @router.get("")
 async def get_trades(
     trade_repo: TradeRepositoryDep,
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
     limit: int = 50,
 ):
     """Get trade history."""
@@ -107,7 +107,7 @@ async def get_trades(
 @router.post("/execute")
 async def execute_trade(
     trade: TradeRequest,
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
     trade_repo: TradeRepositoryDep,
     position_repo: PositionRepositoryDep,
     safety_service: TradeSafetyServiceDep,

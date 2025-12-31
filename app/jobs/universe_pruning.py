@@ -7,7 +7,7 @@ based on consistently low scores over a configurable time period.
 import logging
 
 from app.infrastructure.external.tradernet import get_tradernet_client
-from app.repositories import ScoreRepository, SettingsRepository, StockRepository
+from app.repositories import ScoreRepository, SecurityRepository, SettingsRepository
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ async def prune_universe() -> None:
 
     try:
         # Get dependencies
-        stock_repo = StockRepository()
+        stock_repo = SecurityRepository()
         score_repo = ScoreRepository()
         settings_repo = SettingsRepository()
 

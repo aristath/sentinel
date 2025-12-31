@@ -19,7 +19,11 @@ from app.modules.rebalancing.services.negative_balance_rebalancer import (
     NegativeBalanceRebalancer,
 )
 from app.modules.trading.services.trade_execution_service import TradeExecutionService
-from app.repositories import RecommendationRepository, StockRepository, TradeRepository
+from app.repositories import (
+    RecommendationRepository,
+    SecurityRepository,
+    TradeRepository,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +65,7 @@ async def _check_and_rebalance_immediately_internal() -> bool:
         if not has_negative:
             # Check for currencies below minimum
             trading_currencies = set()
-            stock_repo = StockRepository()
+            stock_repo = SecurityRepository()
             stocks = await stock_repo.get_all_active()
             for stock in stocks:
                 if stock.currency:
@@ -103,7 +107,7 @@ async def _check_and_rebalance_immediately_internal() -> bool:
         exchange_rate_service = get_exchange_rate_service(db_manager)
         currency_exchange_service = get_currency_exchange_service_dep(client)
         position_repo = PositionRepository()
-        stock_repo = StockRepository()
+        stock_repo = SecurityRepository()
         trade_repo = TradeRepository()
         recommendation_repo = RecommendationRepository()
 

@@ -12,8 +12,8 @@ from app.domain.portfolio_hash import generate_recommendation_cache_key
 from app.domain.repositories.protocols import (
     IAllocationRepository,
     IPositionRepository,
+    ISecurityRepository,
     ISettingsRepository,
-    IStockRepository,
 )
 from app.domain.services.settings_service import SettingsService
 from app.infrastructure.external.tradernet import TradernetClient
@@ -37,7 +37,7 @@ class TickerContentService:
         self,
         portfolio_repo: IPortfolioRepository,
         position_repo: IPositionRepository,
-        stock_repo: IStockRepository,
+        stock_repo: ISecurityRepository,
         settings_repo: ISettingsRepository,
         allocation_repo: IAllocationRepository,
         tradernet_client: TradernetClient,

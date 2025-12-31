@@ -16,8 +16,8 @@ from app.infrastructure.dependencies import (
     AllocationRepositoryDep,
     PositionRepositoryDep,
     RebalancingServiceDep,
+    SecurityRepositoryDep,
     SettingsServiceDep,
-    StockRepositoryDep,
     TradeExecutionServiceDep,
     TradeRepositoryDep,
     TradernetClientDep,
@@ -102,7 +102,7 @@ async def get_recommendations(
     position_repo: PositionRepositoryDep,
     settings_service: SettingsServiceDep,
     rebalancing_service: RebalancingServiceDep,
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
     allocation_repo: AllocationRepositoryDep,
     tradernet_client: TradernetClientDep,
 ):
@@ -376,7 +376,7 @@ async def _regenerate_recommendations_cache(
     position_repo: PositionRepositoryDep,
     settings_service: SettingsServiceDep,
     rebalancing_service: RebalancingServiceDep,
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
     allocation_repo: AllocationRepositoryDep,
     tradernet_client: TradernetClientDep,
 ) -> tuple:
@@ -476,7 +476,7 @@ async def execute_recommendation(
     safety_service: TradeSafetyServiceDep,
     trade_execution_service: TradeExecutionServiceDep,
     rebalancing_service: RebalancingServiceDep,
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
     allocation_repo: AllocationRepositoryDep,
     tradernet_client: TradernetClientDep,
 ):

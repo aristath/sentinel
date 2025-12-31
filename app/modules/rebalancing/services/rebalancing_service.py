@@ -14,8 +14,8 @@ from app.domain.models import MultiStepRecommendation, Recommendation
 from app.domain.repositories.protocols import (
     IAllocationRepository,
     IPositionRepository,
+    ISecurityRepository,
     ISettingsRepository,
-    IStockRepository,
     ITradeRepository,
 )
 from app.domain.services.allocation_calculator import get_max_trades
@@ -74,7 +74,7 @@ class RebalancingService:
 
     def __init__(
         self,
-        stock_repo: IStockRepository,
+        stock_repo: ISecurityRepository,
         position_repo: IPositionRepository,
         allocation_repo: IAllocationRepository,
         portfolio_repo: PortfolioRepository,

@@ -19,7 +19,7 @@ from app.repositories import (
     PortfolioRepository,
     PositionRepository,
     ScoreRepository,
-    StockRepository,
+    SecurityRepository,
     TradeRepository,
 )
 
@@ -58,7 +58,7 @@ async def db():
 @pytest.fixture
 async def stock_repo(db):
     """Create a stock repository instance."""
-    return StockRepository(db=db)
+    return SecurityRepository(db=db)
 
 
 @pytest.fixture

@@ -42,5 +42,5 @@ jobs:
         run: |
           python -c "from app.config import settings; print('Config loaded')"
           python -c "from app.domain.models import Stock, Position, Trade; print('Models loaded')"
-          python -c "from app.modules.universe.database.stock_repository import StockRepository; from app.modules.portfolio.database.position_repository import PositionRepository; print('Repositories loaded')"
+          python -c "from app.modules.universe.database.security_repository import SecurityRepository; from app.modules.portfolio.database.position_repository import PositionRepository; print('Repositories loaded')"
           python -c "from app.modules.universe.api.stocks import router; print('API router loaded')"

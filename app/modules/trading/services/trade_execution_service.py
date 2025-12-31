@@ -11,8 +11,8 @@ from app.core.events import SystemEvent, emit
 from app.domain.models import Recommendation, Trade
 from app.domain.repositories.protocols import (
     IPositionRepository,
+    ISecurityRepository,
     ISettingsRepository,
-    IStockRepository,
     ITradeRepository,
 )
 from app.domain.services.exchange_rate_service import ExchangeRateService
@@ -629,7 +629,7 @@ class TradeExecutionService:
         self,
         trade_repo: ITradeRepository,
         position_repo: IPositionRepository,
-        stock_repo: IStockRepository,
+        stock_repo: ISecurityRepository,
         tradernet_client: TradernetClient,
         currency_exchange_service: CurrencyExchangeService,
         exchange_rate_service: ExchangeRateService,

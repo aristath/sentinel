@@ -131,7 +131,6 @@ def get_display_state_manager() -> DisplayStateManager:
 
 # Type aliases for use in function signatures
 SecurityRepositoryDep = Annotated[ISecurityRepository, Depends(get_security_repository)]
-StockRepositoryDep = SecurityRepositoryDep  # Deprecated: use SecurityRepositoryDep
 PositionRepositoryDep = Annotated[IPositionRepository, Depends(get_position_repository)]
 TradeRepositoryDep = Annotated[ITradeRepository, Depends(get_trade_repository)]
 ScoreRepositoryDep = Annotated[ScoreRepository, Depends(get_score_repository)]
@@ -166,7 +165,7 @@ def get_portfolio_service(
     portfolio_repo: PortfolioRepositoryDep,
     position_repo: PositionRepositoryDep,
     allocation_repo: AllocationRepositoryDep,
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
 ) -> PortfolioService:
     """Get PortfolioService instance."""
     return PortfolioService(
@@ -178,7 +177,7 @@ def get_portfolio_service(
 
 
 def get_scoring_service(
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
     score_repo: ScoreRepositoryDep,
     db_manager: DatabaseManagerDep,
 ) -> ScoringService:
@@ -207,7 +206,7 @@ def get_exchange_rate_service(
 def get_ticker_content_service(
     portfolio_repo: PortfolioRepositoryDep,
     position_repo: PositionRepositoryDep,
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
     settings_repo: SettingsRepositoryDep,
     allocation_repo: AllocationRepositoryDep,
     tradernet_client: TradernetClientDep,
@@ -231,7 +230,7 @@ def get_currency_exchange_service_dep(
 
 
 def get_rebalancing_service(
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
     position_repo: PositionRepositoryDep,
     allocation_repo: AllocationRepositoryDep,
     portfolio_repo: PortfolioRepositoryDep,
@@ -287,7 +286,7 @@ def get_trade_execution_service(
 def get_trade_safety_service(
     trade_repo: TradeRepositoryDep,
     position_repo: PositionRepositoryDep,
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
 ) -> TradeSafetyService:
     """Get TradeSafetyService instance."""
     return TradeSafetyService(
@@ -330,13 +329,13 @@ ConcentrationAlertServiceDep = Annotated[
 
 
 def get_stock_setup_service(
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
     scoring_service: ScoringServiceDep,
     tradernet_client: TradernetClientDep,
     db_manager: DatabaseManagerDep,
 ) -> SecuritySetupService:
     """Get SecuritySetupService instance."""
-    # StockRepositoryDep is ISecurityRepository, but SecuritySetupService needs SecurityRepository
+    # SecurityRepositoryDep is ISecurityRepository, but SecuritySetupService needs SecurityRepository
     # We can safely cast since get_stock_repository() returns SecurityRepository
     return SecuritySetupService(
         security_repo=stock_repo,  # type: ignore[arg-type]

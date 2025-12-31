@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.core.cache.cache import cache
 from app.core.database.manager import DatabaseManager
-from app.infrastructure.dependencies import DatabaseManagerDep, StockRepositoryDep
+from app.infrastructure.dependencies import DatabaseManagerDep, SecurityRepositoryDep
 from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.external.tradernet_connection import ensure_tradernet_connected
 from app.modules.universe.domain.symbol_resolver import is_isin
@@ -263,7 +263,7 @@ def _combine_and_filter_data(
 async def get_stock_chart(
     isin: str,
     db_manager: DatabaseManagerDep,
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
     range: str = Query("1Y", description="Time range: 1M, 3M, 6M, 1Y, all"),
     source: str = Query("tradernet", description="Data source: tradernet or yahoo"),
 ):

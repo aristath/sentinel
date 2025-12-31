@@ -33,8 +33,8 @@ from app.repositories import (
     PortfolioRepository,
     PositionRepository,
     RecommendationRepository,
+    SecurityRepository,
     SettingsRepository,
-    StockRepository,
     TradeRepository,
 )
 from app.shared.domain.value_objects.currency import Currency
@@ -47,7 +47,7 @@ async def _reinvest_in_same_stock(
     symbol_dividends: List[DividendRecord],
     total_amount: float,
     client,
-    stock_repo: StockRepository,
+    stock_repo: SecurityRepository,
     recommendations: List[Recommendation],
     dividends_to_mark: Dict[str, List[int]],
 ) -> None:
@@ -129,7 +129,7 @@ async def auto_reinvest_dividends() -> None:
     try:
         # Get dependencies
         dividend_repo = DividendRepository()
-        stock_repo = StockRepository()
+        stock_repo = SecurityRepository()
         settings_repo = SettingsRepository()
         settings_service = SettingsService(settings_repo)
         client = get_tradernet_client()

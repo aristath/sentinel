@@ -19,8 +19,8 @@ from app.infrastructure.dependencies import (
     DisplayStateManagerDep,
     PortfolioRepositoryDep,
     PositionRepositoryDep,
+    SecurityRepositoryDep,
     SettingsRepositoryDep,
-    StockRepositoryDep,
 )
 
 logger = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ class PlannerBatchRequest(BaseModel):
 @router.get("", response_model=StatusResponse)
 async def get_status(
     portfolio_repo: PortfolioRepositoryDep,
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
     position_repo: PositionRepositoryDep,
 ):
     """Get system health and status."""

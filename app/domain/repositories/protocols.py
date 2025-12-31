@@ -56,7 +56,7 @@ class ISecurityRepository(Protocol):
 
 
 # Backward compatibility alias
-IStockRepository = ISecurityRepository
+ISecurityRepository = ISecurityRepository
 
 
 class IPositionRepository(Protocol):

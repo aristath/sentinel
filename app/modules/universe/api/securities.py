@@ -13,9 +13,9 @@ from app.infrastructure.dependencies import (
     PositionRepositoryDep,
     ScoreRepositoryDep,
     ScoringServiceDep,
+    SecurityRepositoryDep,
     SecuritySetupServiceDep,
     SettingsRepositoryDep,
-    StockRepositoryDep,
 )
 from app.infrastructure.recommendation_cache import get_recommendation_cache
 from app.modules.universe.domain.priority_calculator import (
@@ -69,7 +69,7 @@ class SecurityUpdate(BaseModel):
 
 @router.get("")
 async def get_stocks(
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
     portfolio_service: PortfolioServiceDep,
     position_repo: PositionRepositoryDep,
 ):
@@ -151,7 +151,7 @@ async def get_stocks(
 
 @router.get("/universe-suggestions")
 async def get_universe_suggestions(
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
     scoring_service: ScoringServiceDep,
     settings_repo: SettingsRepositoryDep,
 ):
@@ -212,7 +212,7 @@ async def get_universe_suggestions(
 
             if candidates:
                 # Initialize scoring service and symbol resolver
-                # SymbolResolver needs concrete StockRepository, not interface
+                # SymbolResolver needs concrete SecurityRepository, not interface
                 from app.infrastructure.dependencies import get_stock_repository
 
                 concrete_stock_repo = get_stock_repository()
@@ -563,7 +563,7 @@ async def get_universe_suggestions(
 @router.get("/{isin}")
 async def get_stock(
     isin: str,
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
     position_repo: PositionRepositoryDep,
     score_repo: ScoreRepositoryDep,
 ):
@@ -644,7 +644,7 @@ async def get_stock(
 @router.post("")
 async def create_stock(
     stock_data: SecurityCreate,
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
     score_repo: ScoreRepositoryDep,
     scoring_service: ScoringServiceDep,
 ):
@@ -784,7 +784,7 @@ async def add_stock_by_identifier(
 
 @router.post("/refresh-all")
 async def refresh_all_scores(
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
     scoring_service: ScoringServiceDep,
 ):
     """Recalculate scores for all stocks in universe and update industries."""
@@ -825,7 +825,7 @@ async def refresh_all_scores(
 @router.post("/{isin}/refresh-data")
 async def refresh_stock_data(
     isin: str,
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
 ):
     """Trigger full data refresh for a stock.
 
@@ -875,7 +875,7 @@ async def refresh_stock_data(
 @router.post("/{isin}/refresh")
 async def refresh_stock_score(
     isin: str,
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
     scoring_service: ScoringServiceDep,
 ):
     """Trigger score recalculation for a stock (quick, no historical data sync).
@@ -955,7 +955,7 @@ async def refresh_stock_score(
 
 
 async def _validate_symbol_change(
-    old_symbol: str, new_symbol: str, stock_repo: StockRepositoryDep
+    old_symbol: str, new_symbol: str, stock_repo: SecurityRepositoryDep
 ) -> None:
     """Validate that new symbol doesn't already exist."""
     if new_symbol != old_symbol:
@@ -1084,7 +1084,7 @@ def _format_stock_response(stock, score) -> dict:
 async def update_stock(
     isin: str,
     update: SecurityUpdate,
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
     scoring_service: ScoringServiceDep,
 ):
     """Update stock details.
@@ -1151,7 +1151,7 @@ async def update_stock(
 @router.delete("/{isin}")
 async def delete_stock(
     isin: str,
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
 ):
     """Remove a stock from the universe (soft delete by setting active=0).
 
@@ -1254,7 +1254,7 @@ async def add_stock_from_suggestion(
 @router.post("/{isin}/prune-from-suggestion")
 async def prune_stock_from_suggestion(
     isin: str,
-    stock_repo: StockRepositoryDep,
+    stock_repo: SecurityRepositoryDep,
 ):
     """Prune a stock from the universe from a suggestion.
 
@@ -1284,7 +1284,7 @@ async def prune_stock_from_suggestion(
             )
 
         # Mark as inactive (soft delete)
-        # Need concrete StockRepository for mark_inactive method
+        # Need concrete SecurityRepository for mark_inactive method
         from app.infrastructure.dependencies import get_stock_repository
 
         concrete_stock_repo = get_stock_repository()
