@@ -17,7 +17,7 @@ class TestCheckDatabaseIntegrity:
     @pytest.mark.asyncio
     async def test_returns_ok_for_healthy_db(self):
         """Test returning 'ok' for healthy database."""
-        from app.jobs.health_check import _check_database_integrity
+        from app.modules.system.jobs.health_check import _check_database_integrity
 
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "test.db"
@@ -38,7 +38,7 @@ class TestCheckDatabaseIntegrity:
     @pytest.mark.asyncio
     async def test_returns_error_for_corrupted_db(self):
         """Test returning error message for corrupted database."""
-        from app.jobs.health_check import _check_database_integrity
+        from app.modules.system.jobs.health_check import _check_database_integrity
 
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "test.db"
@@ -59,7 +59,7 @@ class TestCheckDatabaseIntegrity:
     @pytest.mark.asyncio
     async def test_returns_exception_message_on_error(self):
         """Test returning exception message when check fails."""
-        from app.jobs.health_check import _check_database_integrity
+        from app.modules.system.jobs.health_check import _check_database_integrity
 
         with tempfile.TemporaryDirectory() as tmpdir:
             db_path = Path(tmpdir) / "test.db"
@@ -76,7 +76,7 @@ class TestCheckCoreDatabases:
     @pytest.mark.asyncio
     async def test_checks_all_core_databases(self):
         """Test that all core databases are checked."""
-        from app.jobs.health_check import _check_core_databases
+        from app.modules.system.jobs.health_check import _check_core_databases
 
         issues = []
 
@@ -86,8 +86,10 @@ class TestCheckCoreDatabases:
                 (Path(tmpdir) / db_file).write_bytes(b"test")
 
             with (
-                patch("app.jobs.health_check.settings") as mock_settings,
-                patch("app.jobs.health_check._check_database_integrity") as mock_check,
+                patch("app.modules.system.jobs.health_check.settings") as mock_settings,
+                patch(
+                    "app.modules.system.jobs.health_check._check_database_integrity"
+                ) as mock_check,
             ):
                 mock_settings.data_dir = Path(tmpdir)
                 mock_check.return_value = "ok"
@@ -100,7 +102,7 @@ class TestCheckCoreDatabases:
     @pytest.mark.asyncio
     async def test_reports_corrupted_database(self):
         """Test that corrupted databases are reported."""
-        from app.jobs.health_check import _check_core_databases
+        from app.modules.system.jobs.health_check import _check_core_databases
 
         issues = []
 
@@ -109,8 +111,10 @@ class TestCheckCoreDatabases:
             (Path(tmpdir) / "config.db").write_bytes(b"test")
 
             with (
-                patch("app.jobs.health_check.settings") as mock_settings,
-                patch("app.jobs.health_check._check_database_integrity") as mock_check,
+                patch("app.modules.system.jobs.health_check.settings") as mock_settings,
+                patch(
+                    "app.modules.system.jobs.health_check._check_database_integrity"
+                ) as mock_check,
             ):
                 mock_settings.data_dir = Path(tmpdir)
                 mock_check.return_value = "database corrupted"
@@ -128,7 +132,7 @@ class TestCheckHistoryDatabases:
     @pytest.mark.asyncio
     async def test_checks_history_databases(self):
         """Test that history databases are checked."""
-        from app.jobs.health_check import _check_history_databases
+        from app.modules.system.jobs.health_check import _check_history_databases
 
         issues = []
 
@@ -138,8 +142,10 @@ class TestCheckHistoryDatabases:
             (history_dir / "AAPL.US.db").write_bytes(b"test")
 
             with (
-                patch("app.jobs.health_check.settings") as mock_settings,
-                patch("app.jobs.health_check._check_database_integrity") as mock_check,
+                patch("app.modules.system.jobs.health_check.settings") as mock_settings,
+                patch(
+                    "app.modules.system.jobs.health_check._check_database_integrity"
+                ) as mock_check,
             ):
                 mock_settings.data_dir = Path(tmpdir)
                 mock_check.return_value = "ok"
@@ -152,12 +158,14 @@ class TestCheckHistoryDatabases:
     @pytest.mark.asyncio
     async def test_skips_when_no_history_dir(self):
         """Test that check is skipped when no history directory."""
-        from app.jobs.health_check import _check_history_databases
+        from app.modules.system.jobs.health_check import _check_history_databases
 
         issues = []
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            with patch("app.jobs.health_check.settings") as mock_settings:
+            with patch(
+                "app.modules.system.jobs.health_check.settings"
+            ) as mock_settings:
                 mock_settings.data_dir = Path(tmpdir)
 
                 await _check_history_databases(issues)
@@ -171,20 +179,20 @@ class TestRunHealthCheckInternal:
     @pytest.mark.asyncio
     async def test_completes_successfully_when_healthy(self):
         """Test successful health check completion."""
-        from app.jobs.health_check import _run_health_check_internal
+        from app.modules.system.jobs.health_check import _run_health_check_internal
 
         with (
-            patch("app.jobs.health_check._check_core_databases"),
-            patch("app.jobs.health_check._check_history_databases"),
-            patch("app.jobs.health_check.set_text"),
-            patch("pass  # LED cleared"),
+            patch("app.modules.system.jobs.health_check._check_core_databases"),
+            patch("app.modules.system.jobs.health_check._check_history_databases"),
+            patch("app.modules.system.jobs.health_check.set_text"),
+            patch("app.modules.system.jobs.health_check.set_led4"),
         ):
             await _run_health_check_internal()
 
     @pytest.mark.asyncio
     async def test_reports_issues_when_found(self):
         """Test reporting issues when found."""
-        from app.jobs.health_check import _run_health_check_internal
+        from app.modules.system.jobs.health_check import _run_health_check_internal
 
         async def add_issue(issues):
             issues.append(
@@ -197,13 +205,16 @@ class TestRunHealthCheckInternal:
             )
 
         with (
-            patch("app.jobs.health_check._check_core_databases", side_effect=add_issue),
-            patch("app.jobs.health_check._check_history_databases"),
-            patch("app.jobs.health_check._report_issues") as mock_report,
-            patch("app.jobs.health_check.set_text"),
-            patch("app.jobs.health_check.set_text"),
-            patch("app.jobs.health_check.emit"),
-            patch("pass  # LED cleared"),
+            patch(
+                "app.modules.system.jobs.health_check._check_core_databases",
+                side_effect=add_issue,
+            ),
+            patch("app.modules.system.jobs.health_check._check_history_databases"),
+            patch("app.modules.system.jobs.health_check._report_issues") as mock_report,
+            patch("app.modules.system.jobs.health_check.set_text"),
+            patch("app.modules.system.jobs.health_check.set_text"),
+            patch("app.modules.system.jobs.health_check.emit"),
+            patch("app.modules.system.jobs.health_check.set_led4"),
         ):
             await _run_health_check_internal()
 
@@ -216,7 +227,7 @@ class TestReportIssues:
     @pytest.mark.asyncio
     async def test_logs_recovered_issues(self):
         """Test logging recovered issues."""
-        from app.jobs.health_check import _report_issues
+        from app.modules.system.jobs.health_check import _report_issues
 
         issues = [
             {
@@ -232,7 +243,7 @@ class TestReportIssues:
     @pytest.mark.asyncio
     async def test_logs_critical_issues(self):
         """Test logging critical issues."""
-        from app.jobs.health_check import _report_issues
+        from app.modules.system.jobs.health_check import _report_issues
 
         issues = [
             {
@@ -252,7 +263,7 @@ class TestGetDatabaseStats:
     @pytest.mark.asyncio
     async def test_returns_database_statistics(self, tmp_path):
         """Test that database stats are returned correctly."""
-        from app.jobs.health_check import get_database_stats
+        from app.modules.system.jobs.health_check import get_database_stats
 
         # Create a test database file
         test_db = tmp_path / "config.db"
@@ -283,13 +294,13 @@ class TestRunHealthCheck:
     @pytest.mark.asyncio
     async def test_calls_internal_function(self):
         """Test that run_health_check calls internal function with lock."""
-        from app.jobs.health_check import run_health_check
+        from app.modules.system.jobs.health_check import run_health_check
 
         with patch(
-            "app.jobs.health_check._run_health_check_internal",
+            "app.modules.system.jobs.health_check._run_health_check_internal",
             new_callable=AsyncMock,
         ) as mock_internal:
-            with patch("app.jobs.health_check.file_lock"):
+            with patch("app.modules.system.jobs.health_check.file_lock"):
                 await run_health_check()
 
         mock_internal.assert_called_once()
@@ -301,7 +312,7 @@ class TestCheckWalStatus:
     @pytest.mark.asyncio
     async def test_checks_wal_files(self, tmp_path):
         """Test that WAL files are checked."""
-        from app.jobs.health_check import check_wal_status
+        from app.modules.system.jobs.health_check import check_wal_status
 
         # Create test database files
         config_db = tmp_path / "config.db"
@@ -318,7 +329,7 @@ class TestCheckWalStatus:
     @pytest.mark.asyncio
     async def test_handles_missing_wal(self, tmp_path):
         """Test that missing WAL files are handled gracefully."""
-        from app.jobs.health_check import check_wal_status
+        from app.modules.system.jobs.health_check import check_wal_status
 
         # Create test database without WAL
         config_db = tmp_path / "config.db"
@@ -338,7 +349,7 @@ class TestRebuildCacheDb:
     @pytest.mark.asyncio
     async def test_rebuilds_cache_database(self, tmp_path):
         """Test rebuilding corrupted cache database."""
-        from app.jobs.health_check import _rebuild_cache_db
+        from app.modules.system.jobs.health_check import _rebuild_cache_db
 
         # Create corrupted cache.db
         cache_db = tmp_path / "cache.db"
@@ -350,7 +361,7 @@ class TestRebuildCacheDb:
 
         with (
             patch("aiosqlite.connect", return_value=mock_db),
-            patch("app.jobs.health_check.emit"),
+            patch("app.modules.system.jobs.health_check.emit"),
         ):
             await _rebuild_cache_db(cache_db)
 
@@ -360,7 +371,7 @@ class TestRebuildCacheDb:
     @pytest.mark.asyncio
     async def test_handles_rebuild_failure(self, tmp_path):
         """Test handling rebuild failure."""
-        from app.jobs.health_check import _rebuild_cache_db
+        from app.modules.system.jobs.health_check import _rebuild_cache_db
 
         # Create corrupted cache.db
         cache_db = tmp_path / "cache.db"
@@ -377,7 +388,7 @@ class TestRebuildSymbolHistory:
     @pytest.mark.asyncio
     async def test_rebuilds_history_database(self, tmp_path):
         """Test rebuilding corrupted history database."""
-        from app.jobs.health_check import _rebuild_symbol_history
+        from app.modules.system.jobs.health_check import _rebuild_symbol_history
 
         # Create corrupted history db
         history_db = tmp_path / "AAPL.US.db"
@@ -389,7 +400,7 @@ class TestRebuildSymbolHistory:
 
         with (
             patch("aiosqlite.connect", return_value=mock_db),
-            patch("app.jobs.health_check.emit"),
+            patch("app.modules.system.jobs.health_check.emit"),
         ):
             await _rebuild_symbol_history(history_db, "AAPL.US")
 
@@ -399,7 +410,7 @@ class TestRebuildSymbolHistory:
     @pytest.mark.asyncio
     async def test_handles_history_rebuild_failure(self, tmp_path):
         """Test handling history rebuild failure."""
-        from app.jobs.health_check import _rebuild_symbol_history
+        from app.modules.system.jobs.health_check import _rebuild_symbol_history
 
         # Create corrupted history db
         history_db = tmp_path / "AAPL.US.db"
@@ -416,7 +427,7 @@ class TestHistoryDatabasesWithIssues:
     @pytest.mark.asyncio
     async def test_reports_and_rebuilds_corrupted_history(self, tmp_path):
         """Test reporting and rebuilding corrupted history database."""
-        from app.jobs.health_check import _check_history_databases
+        from app.modules.system.jobs.health_check import _check_history_databases
 
         history_dir = tmp_path / "history"
         history_dir.mkdir()
@@ -425,9 +436,13 @@ class TestHistoryDatabasesWithIssues:
         issues = []
 
         with (
-            patch("app.jobs.health_check.settings") as mock_settings,
-            patch("app.jobs.health_check._check_database_integrity") as mock_check,
-            patch("app.jobs.health_check._rebuild_symbol_history") as mock_rebuild,
+            patch("app.modules.system.jobs.health_check.settings") as mock_settings,
+            patch(
+                "app.modules.system.jobs.health_check._check_database_integrity"
+            ) as mock_check,
+            patch(
+                "app.modules.system.jobs.health_check._rebuild_symbol_history"
+            ) as mock_rebuild,
         ):
             mock_settings.data_dir = tmp_path
             mock_check.return_value = "database corrupted"
@@ -445,7 +460,7 @@ class TestCoreDatabasesWithCacheRebuild:
     @pytest.mark.asyncio
     async def test_rebuilds_corrupted_cache(self, tmp_path):
         """Test that corrupted cache.db is rebuilt."""
-        from app.jobs.health_check import _check_core_databases
+        from app.modules.system.jobs.health_check import _check_core_databases
 
         # Create cache.db
         (tmp_path / "cache.db").write_bytes(b"test")
@@ -453,9 +468,13 @@ class TestCoreDatabasesWithCacheRebuild:
         issues = []
 
         with (
-            patch("app.jobs.health_check.settings") as mock_settings,
-            patch("app.jobs.health_check._check_database_integrity") as mock_check,
-            patch("app.jobs.health_check._rebuild_cache_db") as mock_rebuild,
+            patch("app.modules.system.jobs.health_check.settings") as mock_settings,
+            patch(
+                "app.modules.system.jobs.health_check._check_database_integrity"
+            ) as mock_check,
+            patch(
+                "app.modules.system.jobs.health_check._rebuild_cache_db"
+            ) as mock_rebuild,
         ):
             mock_settings.data_dir = tmp_path
             mock_check.return_value = "database corrupted"
