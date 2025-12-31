@@ -22,11 +22,16 @@ class OpportunityContext:
     available_cash_eur: float
     total_portfolio_value_eur: float
 
-    # Optional context
-    country_allocations: Optional[Dict[str, float]] = None
+    # Optional context for rebalancing
+    country_allocations: Optional[Dict[str, float]] = None  # Current allocations
     industry_allocations: Optional[Dict[str, float]] = None
-    target_weights: Optional[Dict[str, float]] = None
+    country_to_group: Optional[Dict[str, str]] = None  # Country -> group mapping
+    country_weights: Optional[Dict[str, float]] = None  # Target weights per group
+
+    # Optional context for other features
+    target_weights: Optional[Dict[str, float]] = None  # Optimizer target weights
     recently_traded: Optional[Dict[str, str]] = None  # symbol -> last_trade_date
+    security_scores: Optional[Dict[str, float]] = None  # symbol -> score
 
 
 class OpportunityCalculator(ABC):
