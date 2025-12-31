@@ -13,7 +13,7 @@ from app.domain.models import Trade
 from app.domain.repositories.protocols import IPositionRepository, ITradeRepository
 from app.domain.services.exchange_rate_service import ExchangeRateService
 from app.shared.domain.value_objects.currency import Currency
-from app.shared.domain.value_objects.trade_side import TradeSide
+from app.domain.value_objects.trade_side import TradeSide
 
 logger = logging.getLogger(__name__)
 

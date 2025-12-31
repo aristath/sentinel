@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.domain.models import Position, Stock
-from app.domain.planning.holistic_planner import create_holistic_plan
+from app.modules.planning.domain.holistic_planner import create_holistic_plan
 from app.domain.scoring.models import PortfolioContext
 
 

@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.domain.planning.holistic_planner import (
+from app.modules.planning.domain.holistic_planner import (
     ActionCandidate,
     HolisticPlan,
     HolisticStep,
