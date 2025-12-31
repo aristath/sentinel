@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from app.infrastructure.external.tradernet import TradernetClient
-    from app.repositories import StockRepository
+    from app.modules.universe.database.stock_repository import StockRepository
 
 logger = logging.getLogger(__name__)
 
