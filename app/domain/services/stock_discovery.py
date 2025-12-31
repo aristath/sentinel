@@ -74,21 +74,43 @@ class StockDiscoveryService:
             existing_set = {s.upper() for s in existing_symbols}
 
             # Fetch candidates from Tradernet
-            candidates = []
+            # Fetch from all exchanges first, then filter and apply limit
+            # This ensures we get a mix from all configured exchanges
+            all_securities = []
             for exchange in exchanges:
                 try:
+                    logger.info(f"Fetching securities from exchange: {exchange}")
+                    # Fetch smaller batch from each exchange to ensure we try all exchanges
+                    per_exchange_limit = max(25, fetch_limit // len(exchanges))
                     securities = self._tradernet_client.get_most_traded(
                         instrument_type="stocks",  # Note: API expects "stocks" (plural), not "stock"
                         exchange=exchange,
                         gainers=False,  # False = most traded, True = fastest-growing
-                        limit=fetch_limit,
+                        limit=per_exchange_limit,
                     )
 
                     logger.info(
                         f"Fetched {len(securities)} securities from exchange {exchange}"
                     )
-                    # Filter candidates
-                    for security in securities:
+                    
+                    if len(securities) == 0:
+                        logger.warning(
+                            f"No securities returned from exchange {exchange}. "
+                            f"This might indicate the exchange is not supported or has no data."
+                        )
+                        continue
+                    
+                    all_securities.extend(securities)
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to fetch securities from exchange {exchange}: {e}",
+                        exc_info=True,
+                    )
+                    continue
+            
+            # Now filter all securities and apply limit
+            candidates = []
+            for security in all_securities:
                         if not isinstance(security, dict):
                             logger.debug(
                                 f"Skipping non-dict security: {type(security)}"
