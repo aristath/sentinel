@@ -25,7 +25,7 @@ async def migrate():
 
     async with aiosqlite.connect(DB_PATH) as db:
         # Check if yahoo_symbol column exists
-        cursor = await db.execute("PRAGMA table_info(stocks)")
+        cursor = await db.execute("PRAGMA table_info(securities)")
         columns = [row[1] for row in await cursor.fetchall()]
 
         if "yahoo_symbol" not in columns:
@@ -46,7 +46,7 @@ async def migrate():
         print("Applying Yahoo symbol mappings...")
         for tradernet, yahoo in mappings.items():
             cursor = await db.execute(
-                "UPDATE stocks SET yahoo_symbol = ? WHERE symbol = ?",
+                "UPDATE securities SET yahoo_symbol = ? WHERE symbol = ?",
                 (yahoo, tradernet),
             )
             if cursor.rowcount > 0:
@@ -58,7 +58,7 @@ async def migrate():
         # Show current stocks
         print("\nCurrent stocks:")
         cursor = await db.execute(
-            "SELECT symbol, yahoo_symbol, name, industry FROM stocks WHERE active = 1"
+            "SELECT symbol, yahoo_symbol, name, industry FROM securities WHERE active = 1"
         )
         for row in await cursor.fetchall():
             yahoo = row[1] or "(convention)"

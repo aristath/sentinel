@@ -185,7 +185,7 @@ def ensure_stock_exists(
 ) -> None:
     """Ensure a stock exists in the stocks table, creating if needed."""
     cursor = conn.cursor()
-    cursor.execute("SELECT symbol FROM stocks WHERE symbol = ?", (symbol,))
+    cursor.execute("SELECT symbol FROM securities WHERE symbol = ?", (symbol,))
 
     if cursor.fetchone():
         return  # Stock already exists
@@ -203,7 +203,7 @@ def ensure_stock_exists(
     if not dry_run:
         cursor.execute(
             """
-            INSERT INTO stocks (symbol, yahoo_symbol, name, industry, geography, active)
+            INSERT INTO securities (symbol, yahoo_symbol, name, industry, geography, active)
             VALUES (?, ?, ?, ?, ?, 1)
         """,
             (symbol, yahoo_symbol, name, industry, geography),

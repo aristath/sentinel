@@ -39,7 +39,7 @@ def symbol_to_filename(symbol: str) -> str:
 async def get_symbol_isin_mapping(config_db) -> dict[str, str]:
     """Get mapping of symbol -> ISIN from stocks table."""
     rows = await config_db.fetchall(
-        "SELECT symbol, isin FROM stocks WHERE isin IS NOT NULL AND isin != ''"
+        "SELECT symbol, isin FROM securities WHERE isin IS NOT NULL AND isin != ''"
     )
     return {row["symbol"]: row["isin"] for row in rows}
 

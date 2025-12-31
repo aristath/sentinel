@@ -52,7 +52,7 @@ async def seed_stocks(json_path: Path):
             try:
                 await conn.execute(
                     """
-                    INSERT OR REPLACE INTO stocks
+                    INSERT OR REPLACE INTO securities
                     (symbol, yahoo_symbol, name, industry, geography,
                      priority_multiplier, min_lot, active, allow_buy, allow_sell,
                      currency, created_at, updated_at)
@@ -85,7 +85,7 @@ async def seed_stocks(json_path: Path):
 
     # Show summary by geography
     result = await db_manager.config.fetchall(
-        "SELECT geography, COUNT(*) as cnt, SUM(active) as active FROM stocks GROUP BY geography"
+        "SELECT geography, COUNT(*) as cnt, SUM(active) as active FROM securities GROUP BY geography"
     )
     print("\nBy geography:")
     for row in result:

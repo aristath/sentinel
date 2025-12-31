@@ -120,7 +120,7 @@ async def get_all_stock_sparklines(db_manager: DatabaseManagerDep):
 
         # Get all active stocks
         stocks = await db_manager.config.fetchall(
-            "SELECT symbol FROM stocks WHERE active = 1"
+            "SELECT symbol FROM securities WHERE active = 1"
         )
 
         result = {}

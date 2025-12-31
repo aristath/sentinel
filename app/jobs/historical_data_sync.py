@@ -63,7 +63,7 @@ async def _sync_stock_price_history():
 
     # Get all active stocks from config
     cursor = await db_manager.config.execute(
-        "SELECT symbol, yahoo_symbol FROM stocks WHERE active = 1"
+        "SELECT symbol, yahoo_symbol FROM securities WHERE active = 1"
     )
     rows = await cursor.fetchall()
     stocks = [(row[0], row[1]) for row in rows]

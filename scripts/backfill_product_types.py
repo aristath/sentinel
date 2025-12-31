@@ -35,7 +35,7 @@ async def backfill_product_types():
     stocks = await config_db.fetchall(
         """
         SELECT symbol, name, yahoo_symbol, isin, product_type, country, industry
-        FROM stocks
+        FROM securities
         ORDER BY symbol
         """
     )
@@ -84,7 +84,7 @@ async def backfill_product_types():
 
             # Update database
             await config_db.execute(
-                "UPDATE stocks SET product_type = ?, updated_at = ? WHERE symbol = ?",
+                "UPDATE securities SET product_type = ?, updated_at = ? WHERE symbol = ?",
                 (product_type.value, datetime.now().isoformat(), symbol),
             )
             await config_db.commit()

@@ -340,7 +340,7 @@ async def init_config_schema(db):
         logger.info("Migrating config database to schema version 4 (last_synced)...")
 
         # Check if last_synced column exists
-        cursor = await db.execute("PRAGMA table_info(stocks)")
+        cursor = await db.execute("PRAGMA table_info(securities)")
         columns = [row[1] for row in await cursor.fetchall()]
 
         if "last_synced" not in columns:
@@ -363,7 +363,7 @@ async def init_config_schema(db):
         )
 
         # Check if country column exists
-        cursor = await db.execute("PRAGMA table_info(stocks)")
+        cursor = await db.execute("PRAGMA table_info(securities)")
         columns = [row[1] for row in await cursor.fetchall()]
 
         if "country" not in columns:
@@ -376,7 +376,7 @@ async def init_config_schema(db):
 
         # Create index on country
         await db.execute(
-            "CREATE INDEX IF NOT EXISTS idx_stocks_country ON stocks(country)"
+            "CREATE INDEX IF NOT EXISTS idx_securities_country ON stocks(country)"
         )
 
         # Update recommendations table: add country column (migration from geography)
@@ -409,7 +409,7 @@ async def init_config_schema(db):
         )
 
         # Check if min_portfolio_target column exists
-        cursor = await db.execute("PRAGMA table_info(stocks)")
+        cursor = await db.execute("PRAGMA table_info(securities)")
         columns = [row[1] for row in await cursor.fetchall()]
 
         if "min_portfolio_target" not in columns:
@@ -507,13 +507,13 @@ async def init_config_schema(db):
         logger.info("Migrating config database to schema version 8 (isin column)...")
 
         # Check if isin column exists
-        cursor = await db.execute("PRAGMA table_info(stocks)")
+        cursor = await db.execute("PRAGMA table_info(securities)")
         columns = [row[1] for row in await cursor.fetchall()]
 
         if "isin" not in columns:
             await db.execute("ALTER TABLE stocks ADD COLUMN isin TEXT")
             await db.execute(
-                "CREATE INDEX IF NOT EXISTS idx_stocks_isin ON stocks(isin)"
+                "CREATE INDEX IF NOT EXISTS idx_securities_isin ON stocks(isin)"
             )
             logger.info("Added isin column to stocks table")
 
@@ -537,7 +537,7 @@ async def init_config_schema(db):
         )
 
         # Check if product_type column exists
-        cursor = await db.execute("PRAGMA table_info(stocks)")
+        cursor = await db.execute("PRAGMA table_info(securities)")
         columns = [row[1] for row in await cursor.fetchall()]
 
         if "product_type" not in columns:
@@ -601,7 +601,7 @@ async def init_config_schema(db):
             await db.execute(
                 """
                 INSERT INTO securities
-                SELECT * FROM stocks
+                SELECT * FROM securities
                 """
             )
 

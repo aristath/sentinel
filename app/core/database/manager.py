@@ -247,7 +247,7 @@ class DatabaseManager:
         # Look up ISIN from stocks table
         try:
             row = await self.config.fetchone(
-                "SELECT isin FROM stocks WHERE symbol = ?", (identifier,)
+                "SELECT isin FROM securities WHERE symbol = ?", (identifier,)
             )
             if row and row["isin"]:
                 return row["isin"]
@@ -384,10 +384,7 @@ async def init_databases(data_dir: Path) -> DatabaseManager:
     )
     from app.modules.dividends.database.schemas import init_dividends_schema
     from app.modules.planning.database.schemas import init_planner_schema
-    from app.modules.portfolio.database.schemas import (
-        init_history_schema,
-        init_snapshots_schema,
-    )
+    from app.modules.portfolio.database.schemas import init_snapshots_schema
 
     _db_manager = DatabaseManager(data_dir)
 

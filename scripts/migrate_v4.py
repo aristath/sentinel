@@ -36,7 +36,7 @@ async def migrate():
 
     async with aiosqlite.connect(db_path) as db:
         # Check stocks table for min_lot column
-        cursor = await db.execute("PRAGMA table_info(stocks)")
+        cursor = await db.execute("PRAGMA table_info(securities)")
         stock_columns = [row[1] for row in await cursor.fetchall()]
 
         if "min_lot" not in stock_columns:
@@ -46,7 +46,7 @@ async def migrate():
             # Update known lot sizes
             for symbol, lot_size in KNOWN_LOT_SIZES.items():
                 await db.execute(
-                    "UPDATE stocks SET min_lot = ? WHERE symbol = ?", (lot_size, symbol)
+                    "UPDATE securities SET min_lot = ? WHERE symbol = ?", (lot_size, symbol)
                 )
             print(f"Updated {len(KNOWN_LOT_SIZES)} stocks with known lot sizes")
         else:

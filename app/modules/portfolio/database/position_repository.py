@@ -182,7 +182,7 @@ class PositionRepository:
         # Get stocks from config.db
         stock_rows = await self._manager.config.fetchall(
             "SELECT symbol, name, country, fullExchangeName, industry, min_lot, allow_sell, currency "
-            "FROM stocks WHERE active = 1"
+            "FROM securities WHERE active = 1"
         )
         # Convert Row objects to dicts
         stocks_by_symbol = {}

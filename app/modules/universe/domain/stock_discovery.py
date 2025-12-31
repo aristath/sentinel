@@ -83,7 +83,7 @@ class StockDiscoveryService:
                     # Fetch smaller batch from each exchange to ensure we try all exchanges
                     per_exchange_limit = max(25, fetch_limit // len(exchanges))
                     securities = self._tradernet_client.get_most_traded(
-                        instrument_type="stocks",  # Note: API expects "stocks" (plural), not "stock"
+                        instrument_type="securities",  # Note: API expects "securities" (plural), not "stock"
                         exchange=exchange,
                         gainers=False,  # False = most traded, True = fastest-growing
                         limit=per_exchange_limit,

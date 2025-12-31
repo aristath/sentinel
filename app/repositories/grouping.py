@@ -138,13 +138,13 @@ class GroupingRepository:
     async def get_available_countries(self) -> List[str]:
         """Get list of all unique countries from stocks table."""
         rows = await self._db.fetchall(
-            "SELECT DISTINCT country FROM stocks WHERE country IS NOT NULL AND country != '' ORDER BY country"
+            "SELECT DISTINCT country FROM securities WHERE country IS NOT NULL AND country != '' ORDER BY country"
         )
         return [row["country"] for row in rows]
 
     async def get_available_industries(self) -> List[str]:
         """Get list of all unique industries from stocks table."""
         rows = await self._db.fetchall(
-            "SELECT DISTINCT industry FROM stocks WHERE industry IS NOT NULL AND industry != '' ORDER BY industry"
+            "SELECT DISTINCT industry FROM securities WHERE industry IS NOT NULL AND industry != '' ORDER BY industry"
         )
         return [row["industry"] for row in rows]

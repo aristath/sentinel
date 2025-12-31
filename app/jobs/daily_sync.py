@@ -67,7 +67,7 @@ async def _calculate_cash_balance_eur(
 async def _determine_country(symbol: str, db_manager) -> Optional[str]:
     """Determine country for a symbol."""
     cursor = await db_manager.config.execute(
-        "SELECT country FROM stocks WHERE symbol = ?", (symbol,)
+        "SELECT country FROM securities WHERE symbol = ?", (symbol,)
     )
     row = await cursor.fetchone()
     if row:
@@ -538,7 +538,7 @@ async def sync_stock_currencies():
                     currency = q.get("x_curr")
                     if symbol and currency:
                         await db_manager.config.execute(
-                            "UPDATE stocks SET currency = ? WHERE symbol = ?",
+                            "UPDATE securities SET currency = ? WHERE symbol = ?",
                             (currency, symbol),
                         )
                         updated += 1

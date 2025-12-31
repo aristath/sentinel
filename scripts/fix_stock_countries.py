@@ -51,7 +51,7 @@ async def fix_missing_countries():
 
     # Get stocks missing country but with exchange name
     cursor = await db_manager.config.execute(
-        """SELECT symbol, fullExchangeName FROM stocks 
+        """SELECT symbol, fullExchangeName FROM securities
         WHERE active = 1 AND country IS NULL AND fullExchangeName IS NOT NULL
         ORDER BY symbol"""
     )
@@ -77,7 +77,7 @@ async def check_missing_data():
 
     cursor = await db_manager.config.execute(
         """SELECT symbol, name, country, industry, fullExchangeName, yahoo_symbol, currency
-        FROM stocks 
+        FROM securities
         WHERE active = 1 AND (country IS NULL OR industry IS NULL OR currency IS NULL)
         ORDER BY symbol"""
     )
@@ -117,4 +117,3 @@ async def main():
 
 if __name__ == "__main__":
     sys.exit(asyncio.run(main()))
-

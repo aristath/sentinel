@@ -215,7 +215,7 @@ async def _sync_historical_for_symbol(symbol: str):
 
     # Get the stock's yahoo_symbol
     cursor = await db_manager.config.execute(
-        "SELECT yahoo_symbol FROM stocks WHERE symbol = ?", (symbol,)
+        "SELECT yahoo_symbol FROM securities WHERE symbol = ?", (symbol,)
     )
     row = await cursor.fetchone()
     yahoo_symbol = row[0] if row else None
@@ -293,7 +293,7 @@ async def _detect_and_update_industry(symbol: str):
 
     # Get the stock's yahoo_symbol
     cursor = await db_manager.config.execute(
-        "SELECT yahoo_symbol FROM stocks WHERE symbol = ?", (symbol,)
+        "SELECT yahoo_symbol FROM securities WHERE symbol = ?", (symbol,)
     )
     row = await cursor.fetchone()
     if not row:
@@ -364,7 +364,7 @@ async def _detect_and_update_country_and_exchange(symbol: str):
 
     # Get the stock's yahoo_symbol
     cursor = await db_manager.config.execute(
-        "SELECT yahoo_symbol FROM stocks WHERE symbol = ?", (symbol,)
+        "SELECT yahoo_symbol FROM securities WHERE symbol = ?", (symbol,)
     )
     row = await cursor.fetchone()
     if not row:
@@ -438,7 +438,7 @@ async def _refresh_score_for_symbol(symbol: str):
 
     # Get stock metadata
     cursor = await db_manager.config.execute(
-        "SELECT yahoo_symbol, country, industry FROM stocks WHERE symbol = ?",
+        "SELECT yahoo_symbol, country, industry FROM securities WHERE symbol = ?",
         (symbol,),
     )
     row = await cursor.fetchone()
@@ -570,7 +570,7 @@ async def _build_portfolio_context(db_manager):
 
     # Get stock metadata for scoring
     cursor = await db_manager.config.execute(
-        "SELECT symbol, country, industry FROM stocks WHERE active = 1"
+        "SELECT symbol, country, industry FROM securities WHERE active = 1"
     )
     stock_data = await cursor.fetchall()
 
@@ -604,7 +604,7 @@ async def _update_last_synced(symbol: str):
     now = datetime.now().isoformat()
 
     await db_manager.config.execute(
-        "UPDATE stocks SET last_synced = ?, updated_at = ? WHERE symbol = ?",
+        "UPDATE securities SET last_synced = ?, updated_at = ? WHERE symbol = ?",
         (now, now, symbol),
     )
     await db_manager.config.commit()

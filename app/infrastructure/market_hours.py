@@ -87,7 +87,7 @@ async def get_exchanges_from_database() -> list[str]:
 
         db_manager = get_db_manager()
         rows = await db_manager.config.fetchall(
-            "SELECT DISTINCT fullExchangeName FROM stocks "
+            "SELECT DISTINCT fullExchangeName FROM securities "
             "WHERE fullExchangeName IS NOT NULL AND active = 1 "
             "ORDER BY fullExchangeName"
         )

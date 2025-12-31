@@ -261,7 +261,7 @@ async def _cleanup_old_daily_prices_internal():
 
         # Get all active symbols
         cursor = await db_manager.config.execute(
-            "SELECT symbol FROM stocks WHERE active = 1"
+            "SELECT symbol FROM securities WHERE active = 1"
         )
         symbols = [row[0] for row in await cursor.fetchall()]
 

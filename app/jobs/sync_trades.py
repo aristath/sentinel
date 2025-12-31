@@ -27,7 +27,7 @@ async def _get_existing_order_ids(db_manager) -> set:
 
 async def _get_valid_symbols(db_manager) -> set:
     """Get set of valid stock symbols from database."""
-    cursor = await db_manager.config.execute("SELECT symbol FROM stocks")
+    cursor = await db_manager.config.execute("SELECT symbol FROM securities")
     return {row[0] for row in await cursor.fetchall()}
 
 

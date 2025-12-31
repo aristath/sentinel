@@ -37,7 +37,7 @@ async def _refresh_all_scores_internal():
 
         # Get all active stocks
         cursor = await db_manager.config.execute(
-            "SELECT symbol, yahoo_symbol, country, industry FROM stocks WHERE active = 1"
+            "SELECT symbol, yahoo_symbol, country, industry FROM securities WHERE active = 1"
         )
         stocks = await cursor.fetchall()
 
@@ -161,7 +161,7 @@ async def _build_portfolio_context(db_manager) -> PortfolioContext:
 
     # Get stock metadata for scoring
     cursor = await db_manager.config.execute(
-        "SELECT symbol, country, industry FROM stocks WHERE active = 1"
+        "SELECT symbol, country, industry FROM securities WHERE active = 1"
     )
     stock_data = await cursor.fetchall()
 

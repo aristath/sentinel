@@ -35,7 +35,7 @@ async def migrate():
             print("Volatility column already exists in scores table")
 
         # Check stocks table for priority_multiplier column
-        cursor = await db.execute("PRAGMA table_info(stocks)")
+        cursor = await db.execute("PRAGMA table_info(securities)")
         stock_columns = [row[1] for row in await cursor.fetchall()]
 
         if "priority_multiplier" not in stock_columns:

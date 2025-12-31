@@ -31,10 +31,10 @@ async def seed_stocks():
         await db.executescript(SCHEMA)
         await db.commit()
         print("Database schema initialized")
-        for stock in data["stocks"]:
+        for stock in data["securities"]:
             await db.execute(
                 """
-                INSERT OR REPLACE INTO stocks (symbol, yahoo_symbol, name, industry, geography, active)
+                INSERT OR REPLACE INTO securities (symbol, yahoo_symbol, name, industry, geography, active)
                 VALUES (?, ?, ?, ?, ?, 1)
                 """,
                 (

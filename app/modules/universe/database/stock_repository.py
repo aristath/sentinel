@@ -32,7 +32,7 @@ class StockRepository:
     async def get_by_symbol(self, symbol: str) -> Optional[Stock]:
         """Get stock by symbol."""
         row = await self._db.fetchone(
-            "SELECT * FROM stocks WHERE symbol = ?", (symbol.upper(),)
+            "SELECT * FROM securities WHERE symbol = ?", (symbol.upper(),)
         )
         if not row:
             return None
@@ -41,7 +41,7 @@ class StockRepository:
     async def get_by_isin(self, isin: str) -> Optional[Stock]:
         """Get stock by ISIN."""
         row = await self._db.fetchone(
-            "SELECT * FROM stocks WHERE isin = ?", (isin.upper(),)
+            "SELECT * FROM securities WHERE isin = ?", (isin.upper(),)
         )
         if not row:
             return None
@@ -72,12 +72,12 @@ class StockRepository:
 
     async def get_all_active(self) -> List[Stock]:
         """Get all active stocks."""
-        rows = await self._db.fetchall("SELECT * FROM stocks WHERE active = 1")
+        rows = await self._db.fetchall("SELECT * FROM securities WHERE active = 1")
         return [self._row_to_stock(row) for row in rows]
 
     async def get_all(self) -> List[Stock]:
         """Get all stocks (active and inactive)."""
-        rows = await self._db.fetchall("SELECT * FROM stocks")
+        rows = await self._db.fetchall("SELECT * FROM securities")
         return [self._row_to_stock(row) for row in rows]
 
     async def create(self, stock: Stock) -> None:
@@ -86,7 +86,7 @@ class StockRepository:
         async with transaction_context(self._db) as conn:
             await conn.execute(
                 """
-                INSERT INTO stocks
+                INSERT INTO securities
                 (symbol, yahoo_symbol, isin, name, industry, country, fullExchangeName,
                  priority_multiplier, min_lot, active, allow_buy, allow_sell,
                  currency, min_portfolio_target, max_portfolio_target,
@@ -171,7 +171,7 @@ class StockRepository:
 
         async with transaction_context(self._db) as conn:
             await conn.execute(
-                f"UPDATE stocks SET {set_clause} WHERE symbol = ?", values
+                f"UPDATE securities SET {set_clause} WHERE symbol = ?", values
             )
 
     async def delete(self, symbol: str) -> None:
@@ -198,7 +198,9 @@ class StockRepository:
         db_manager = get_db_manager()
 
         # Fetch stocks from config.db
-        stock_rows = await self._db.fetchall("SELECT * FROM stocks WHERE active = 1")
+        stock_rows = await self._db.fetchall(
+            "SELECT * FROM securities WHERE active = 1"
+        )
         stocks = {
             row["symbol"]: {key: row[key] for key in row.keys()} for row in stock_rows
         }
