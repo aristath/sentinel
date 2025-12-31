@@ -259,8 +259,8 @@ def _combine_and_filter_data(
     return result
 
 
-@router.get("/stocks/{isin}")
-async def get_stock_chart(
+@router.get("/securities/{isin}")
+async def get_security_chart(
     isin: str,
     db_manager: DatabaseManagerDep,
     security_repo: SecurityRepositoryDep,
@@ -268,7 +268,7 @@ async def get_stock_chart(
     source: str = Query("tradernet", description="Data source: tradernet or yahoo"),
 ):
     """
-    Get stock price history for charting.
+    Get security price history for charting.
 
     Returns array of {time: 'YYYY-MM-DD', value: number} using close prices.
     Checks cache first, then fetches from API if missing.

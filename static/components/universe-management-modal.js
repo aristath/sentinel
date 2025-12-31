@@ -1,6 +1,6 @@
 /**
  * Universe Management Modal Component
- * Shows suggestions for adding and pruning securitys from the universe
+ * Shows suggestions for adding and pruning securities from the universe
  */
 class UniverseManagementModal extends HTMLElement {
   connectedCallback() {
@@ -80,20 +80,20 @@ class UniverseManagementModal extends HTMLElement {
                     Securities to Prune
                   </span>
                   <span class="text-xs text-gray-400">
-                    (<span x-text="$store.app.universeSuggestions.securitysToPrune.length"></span>)
+                    (<span x-text="$store.app.universeSuggestions.securitiesToPrune.length"></span>)
                   </span>
                 </h3>
 
                 <!-- Empty State -->
-                <div x-show="$store.app.universeSuggestions.securitysToPrune.length === 0"
+                <div x-show="$store.app.universeSuggestions.securitiesToPrune.length === 0"
                      class="text-center py-4 text-gray-400 text-sm border border-gray-700 rounded">
-                  No securitys meet pruning criteria
+                  No securities meet pruning criteria
                 </div>
 
                 <!-- Prune List -->
-                <div x-show="$store.app.universeSuggestions.securitysToPrune.length > 0"
+                <div x-show="$store.app.universeSuggestions.securitiesToPrune.length > 0"
                      class="space-y-2">
-                  <template x-for="security in $store.app.universeSuggestions.securitysToPrune" :key="security.symbol">
+                  <template x-for="security in $store.app.universeSuggestions.securitiesToPrune" :key="security.symbol">
                     <div class="bg-gray-900 border border-gray-700 rounded p-3 flex items-start justify-between gap-4">
                       <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2 mb-1">

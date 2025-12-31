@@ -25,8 +25,8 @@ function securityChartComponent() {
         if (symbol) {
           this.symbol = symbol;
           // Find security name from store
-          const securitys = this.$store.app.securitys || [];
-          const security = securitys.find(s => s.symbol === symbol);
+          const securities = this.$store.app.securities || [];
+          const security = securities.find(s => s.symbol === symbol);
           this.securityName = security ? security.name : null;
         }
       });
@@ -56,7 +56,7 @@ function securityChartComponent() {
       this.error = null;
 
       try {
-        const data = await API.fetchStockChart(this.isin, this.selectedRange, this.selectedSource);
+        const data = await API.fetchSecurityChart(this.isin, this.selectedRange, this.selectedSource);
 
         if (!data || data.length === 0) {
           this.chartData = [];

@@ -1,6 +1,6 @@
 /**
- * Add Stock Modal Component
- * Form for adding new securitys to the universe
+ * Add Security Modal Component
+ * Form for adding new securities to the universe
  */
 class AddStockModal extends HTMLElement {
   connectedCallback() {
@@ -10,7 +10,7 @@ class AddStockModal extends HTMLElement {
            x-transition>
         <div class="bg-gray-800 border border-gray-700 rounded-lg w-full max-w-md modal-content" @click.stop>
           <div class="flex items-center justify-between p-4 border-b border-gray-700">
-            <h2 class="text-lg font-semibold text-gray-100">Add Stock to Universe</h2>
+            <h2 class="text-lg font-semibold text-gray-100">Add Security to Universe</h2>
             <button @click="$store.app.showAddStockModal = false; $store.app.resetNewStock()"
                     class="text-gray-400 hover:text-gray-200 text-2xl leading-none">&times;</button>
           </div>
@@ -39,7 +39,7 @@ class AddStockModal extends HTMLElement {
                     :disabled="$store.app.addingStock || !$store.app.newStock.identifier"
                     class="px-4 py-2 bg-green-600 hover:bg-green-500 text-white text-sm rounded transition-colors disabled:opacity-50">
               <span x-show="$store.app.addingStock" class="inline-block animate-spin mr-1">&#9696;</span>
-              <span x-text="$store.app.addingStock ? 'Adding Stock...' : 'Add Stock'"></span>
+              <span x-text="$store.app.addingStock ? 'Adding Security...' : 'Add Security'"></span>
             </button>
           </div>
         </div>

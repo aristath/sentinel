@@ -1,6 +1,6 @@
 /**
- * Edit Stock Modal Component
- * Form for editing existing securitys in the universe
+ * Edit Security Modal Component
+ * Form for editing existing securities in the universe
  */
 class EditStockModal extends HTMLElement {
   connectedCallback() {
@@ -10,7 +10,7 @@ class EditStockModal extends HTMLElement {
            x-transition>
         <div class="bg-gray-800 border border-gray-700 rounded-lg w-full max-w-md modal-content" @click.stop>
           <div class="flex items-center justify-between p-4 border-b border-gray-700">
-            <h2 class="text-lg font-semibold text-gray-100">Edit Stock</h2>
+            <h2 class="text-lg font-semibold text-gray-100">Edit Security</h2>
             <button @click="$store.app.closeEditStock()"
                     class="text-gray-400 hover:text-gray-200 text-2xl leading-none">&times;</button>
           </div>
@@ -72,7 +72,7 @@ class EditStockModal extends HTMLElement {
                        min="1"
                        step="1"
                        class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
-                <p class="text-xs text-gray-300 mt-1">Minimum shares per trade (e.g., 100 for Japanese securitys)</p>
+                <p class="text-xs text-gray-300 mt-1">Minimum shares per trade (e.g., 100 for Japanese securities)</p>
               </div>
 
               <div>

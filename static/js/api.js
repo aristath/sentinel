@@ -102,9 +102,9 @@ const API = {
   executeRecommendation: () => API._post('/api/trades/recommendations/execute'),
 
   // Charts
-  fetchStockChart: (isin, range = '1Y', source = 'tradernet') => {
+  fetchSecurityChart: (isin, range = '1Y', source = 'tradernet') => {
     const params = new URLSearchParams({ range, source });
-    return fetch(`/api/charts/securitys/${isin}?${params}`).then(r => r.json());
+    return fetch(`/api/charts/securities/${isin}?${params}`).then(r => r.json());
   },
   fetchSparklines: () => fetch('/api/charts/sparklines').then(r => r.json()),
 

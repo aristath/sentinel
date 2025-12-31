@@ -15,7 +15,7 @@ document.addEventListener('alpine:init', () => {
     },
     alerts: [],  // Concentration limit alerts
     cashBreakdown: [],  // [{currency: 'EUR', amount: 1000}, ...]
-    securitys: [],
+    securities: [],
     trades: [],
     tradernet: { connected: false },
     markets: {},  // {EU: {open: bool, ...}, US: {...}, ASIA: {...}}
@@ -108,7 +108,7 @@ document.addEventListener('alpine:init', () => {
     // Universe Management
     universeSuggestions: {
       candidatesToAdd: [],
-      securitysToPrune: []
+      securitiesToPrune: []
     },
     addingFromSuggestion: {},  // Track per-symbol: { 'AAPL.US': true }
     pruningFromSuggestion: {},  // Track per-symbol: { 'XYZ.US': true }
@@ -166,19 +166,19 @@ document.addEventListener('alpine:init', () => {
 
     async fetchStocks() {
       try {
-        const securitys = await API.fetchStocks();
+        const securities = await API.fetchStocks();
 
-        // Frontend validation: check if allocation shows value but securitys don't have positions
+        // Frontend validation: check if allocation shows value but securities don't have positions
         // This catches edge cases where API validation might have missed something
         // Only check if allocation has already been loaded (avoid race conditions with parallel fetchAll)
         const allocationLoaded = this.allocation &&
                                  this.allocation.total_value !== undefined;
         const hasAllocationValue = allocationLoaded && this.allocation.total_value > 0;
-        const hasStockPositions = securitys.some(s => s.position_value > 0);
+        const hasStockPositions = securities.some(s => s.position_value > 0);
 
-        // If allocation shows value but securitys don't, cache might be stale
+        // If allocation shows value but securities don't, cache might be stale
         // Only retry once to avoid infinite loops (use a flag to prevent retry loops)
-        if (hasAllocationValue && !hasStockPositions && securitys.length > 0 && !this._stocksRetryFlag) {
+        if (hasAllocationValue && !hasStockPositions && securities.length > 0 && !this._stocksRetryFlag) {
           this._stocksRetryFlag = true; // Prevent infinite retries
           console.warn('Position data mismatch detected in frontend, retrying fetch');
           // Wait a brief moment for any async cache invalidation to complete
@@ -186,7 +186,7 @@ document.addEventListener('alpine:init', () => {
           const freshStocks = await API.fetchStocks();
           // Only use fresh data if it actually has positions
           if (freshStocks.some(s => s.position_value > 0)) {
-            this.securitys = freshStocks;
+            this.securities = freshStocks;
             this._stocksRetryFlag = false; // Reset flag on success
             return;
           }
@@ -195,10 +195,10 @@ document.addEventListener('alpine:init', () => {
           this._stocksRetryFlag = false; // Reset flag
         }
 
-        this.securitys = securitys;
+        this.securities = securities;
         this._stocksRetryFlag = false; // Reset flag on normal path
       } catch (e) {
-        console.error('Failed to fetch securitys:', e);
+        console.error('Failed to fetch securities:', e);
         this._stocksRetryFlag = false; // Reset flag on error
       }
     },
@@ -429,7 +429,7 @@ document.addEventListener('alpine:init', () => {
     // Computed Properties
     get industries() {
       const set = new Set();
-      this.securitys.forEach(s => {
+      this.securities.forEach(s => {
         if (s.industry) {
           s.industry.split(',').forEach(ind => {
             const trimmed = ind.trim();
@@ -446,7 +446,7 @@ document.addEventListener('alpine:init', () => {
         return this.allocation.country.map(c => c.name).sort();
       }
       // Fallback: return individual countries if no group data
-      const countries = new Set(this.securitys.map(s => s.country).filter(Boolean));
+      const countries = new Set(this.securities.map(s => s.country).filter(Boolean));
       return Array.from(countries).sort();
     },
 
@@ -457,7 +457,7 @@ document.addEventListener('alpine:init', () => {
       }
       // Fallback: return individual industries if no group data
       const inds = new Set();
-      this.securitys.forEach(s => {
+      this.securities.forEach(s => {
         if (s.industry) {
           s.industry.split(',').forEach(i => inds.add(i.trim()));
         }
@@ -465,8 +465,8 @@ document.addEventListener('alpine:init', () => {
       return Array.from(inds).sort();
     },
 
-    get filteredStocks() {
-      let filtered = this.securitys;
+    get filteredSecurities() {
+      let filtered = this.securities;
 
       if (this.securityFilter !== 'all') {
         filtered = filtered.filter(s => s.country === this.securityFilter);
@@ -690,7 +690,7 @@ document.addEventListener('alpine:init', () => {
     },
 
     async removeStock(isin) {
-      const security = this.securitys.find(s => s.isin === isin);
+      const security = this.securities.find(s => s.isin === isin);
       const displaySymbol = security ? security.symbol : isin;
       if (!confirm(`Remove ${displaySymbol} from the universe?`)) return;
       try {
@@ -714,7 +714,7 @@ document.addEventListener('alpine:init', () => {
         const data = await API.fetchUniverseSuggestions();
         this.universeSuggestions = {
           candidatesToAdd: data.candidates_to_add || [],
-          securitysToPrune: data.securitys_to_prune || []
+          securitiesToPrune: data.securities_to_prune || []
         };
       } catch (e) {
         this.showMessage('Failed to fetch universe suggestions', 'error');
@@ -734,7 +734,7 @@ document.addEventListener('alpine:init', () => {
         this.universeSuggestions.candidatesToAdd = this.universeSuggestions.candidatesToAdd.filter(
           c => c.isin !== isin
         );
-        // Refresh securitys list
+        // Refresh securities list
         await this.fetchStocks();
       } catch (e) {
         const errorMessage = e.message || 'Failed to add security';
@@ -747,14 +747,14 @@ document.addEventListener('alpine:init', () => {
       this.pruningFromSuggestion[isin] = true;
       try {
         await API.pruneStockFromSuggestion(isin);
-        const security = this.universeSuggestions.securitysToPrune.find(s => s.isin === isin);
+        const security = this.universeSuggestions.securitiesToPrune.find(s => s.isin === isin);
         const displaySymbol = security ? security.symbol : isin;
         this.showMessage(`${displaySymbol} pruned from universe`, 'success');
         // Remove from prune list
-        this.universeSuggestions.securitysToPrune = this.universeSuggestions.securitysToPrune.filter(
+        this.universeSuggestions.securitiesToPrune = this.universeSuggestions.securitiesToPrune.filter(
           s => s.isin !== isin
         );
-        // Refresh securitys list
+        // Refresh securities list
         await this.fetchStocks();
       } catch (e) {
         const errorMessage = e.message || 'Failed to prune security';
@@ -823,7 +823,7 @@ document.addEventListener('alpine:init', () => {
       const multiplier = Math.max(0.1, Math.min(3.0, parseFloat(value) || 1.0));
       try {
         await API.updateStock(isin, { priority_multiplier: multiplier });
-        const security = this.securitys.find(s => s.isin === isin);
+        const security = this.securities.find(s => s.isin === isin);
         if (security) security.priority_multiplier = multiplier;
         await this.fetchStocks();
       } catch (e) {

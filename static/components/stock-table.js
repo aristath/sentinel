@@ -15,7 +15,7 @@ class StockTable extends HTMLElement {
             </button>
             <button @click="$store.app.showAddStockModal = true"
                     class="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white text-xs rounded transition-colors">
-              + Add Stock
+              + Add Security
             </button>
           </div>
         </div>
@@ -52,9 +52,9 @@ class StockTable extends HTMLElement {
         </div>
 
         <!-- Results count -->
-        <div class="text-xs text-gray-300 mb-2" x-show="$store.app.securitys.length > 0">
-          <span x-text="$store.app.filteredStocks.length"></span> of
-          <span x-text="$store.app.securitys.length"></span> securitys
+        <div class="text-xs text-gray-300 mb-2" x-show="$store.app.securities.length > 0">
+          <span x-text="$store.app.filteredSecurities.length"></span> of
+          <span x-text="$store.app.securities.length"></span> securities
         </div>
 
         <div class="overflow-x-auto">
@@ -121,7 +121,7 @@ class StockTable extends HTMLElement {
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-800">
-              <template x-for="security in ($store.app.filteredStocks || [])" :key="security.symbol">
+              <template x-for="security in ($store.app.filteredSecurities || [])" :key="security.symbol">
                 <tr class="hover:bg-gray-800/50"
                     :class="getPositionAlert(security.symbol) ? (getPositionAlert(security.symbol).severity === 'critical' ? 'border-l-4 border-red-500' : 'border-l-4 border-yellow-500') : ''">
                   <td class="py-1.5 px-2 font-mono text-blue-400 sticky left-0 bg-gray-800">
@@ -224,13 +224,13 @@ class StockTable extends HTMLElement {
         </div>
 
         <!-- Empty states -->
-        <div x-show="$store.app.filteredStocks.length === 0 && $store.app.securitys.length > 0"
+        <div x-show="$store.app.filteredSecurities.length === 0 && $store.app.securities.length > 0"
              class="text-center py-6 text-gray-300 text-sm">
-          No securitys match your filters
+          No securities match your filters
         </div>
-        <div x-show="$store.app.securitys.length === 0"
+        <div x-show="$store.app.securities.length === 0"
              class="text-center py-6 text-gray-300 text-sm">
-          No securitys in universe
+          No securities in universe
         </div>
       </div>
     `;
@@ -265,7 +265,7 @@ function getPositionAlertClass(symbol) {
   const alert = getPositionAlert(symbol);
   if (!alert) {
     // Default: check if security has position value
-    const security = (window.Alpine?.store('app')?.securitys || []).find(s => s.symbol === symbol);
+    const security = (window.Alpine?.store('app')?.securities || []).find(s => s.symbol === symbol);
     return security?.position_value ? 'text-green-400' : 'text-gray-400';
   }
   // Highlight row with border color based on severity
