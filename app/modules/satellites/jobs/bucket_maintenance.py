@@ -10,6 +10,8 @@ This job runs daily to:
 import logging
 from datetime import datetime
 
+from app.core.database.manager import get_db_manager
+from app.domain.services.exchange_rate_service import ExchangeRateService
 from app.modules.satellites.domain.aggression_calculator import calculate_aggression
 from app.modules.satellites.domain.models import BucketStatus
 from app.modules.satellites.services.balance_service import BalanceService
@@ -57,10 +59,18 @@ async def update_high_water_marks():
             ]
             positions_value = sum(position_values)
 
-            # Get cash balance
+            # Get cash balance (convert all to EUR)
             balances = await balance_service.get_all_balances(bucket.id)
             cash_eur = sum(b.balance for b in balances if b.currency == "EUR")
-            # TODO: Convert USD to EUR if needed
+
+            # Convert USD balances to EUR
+            usd_balances = [b for b in balances if b.currency == "USD"]
+            if usd_balances:
+                db_manager = get_db_manager()
+                exchange_service = ExchangeRateService(db_manager)
+                usd_rate = await exchange_service.get_rate("USD", "EUR")
+                for usd_bal in usd_balances:
+                    cash_eur += usd_bal.balance * usd_rate
 
             current_value = positions_value + cash_eur
 

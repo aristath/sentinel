@@ -10,7 +10,9 @@ This service wraps the existing holistic planner but applies satellite-specific 
 import logging
 from typing import Optional
 
+from app.core.database.manager import get_db_manager
 from app.domain.models import Position, Security
+from app.domain.services.exchange_rate_service import ExchangeRateService
 from app.modules.planning.domain.holistic_planner import (
     ActionCandidate,
     create_holistic_plan,
@@ -98,7 +100,20 @@ class SatellitePlannerService:
         # Get bucket cash balance (convert to EUR)
         balances = await self.balance_service.get_all_balances(bucket_id)
         available_cash_eur = sum(b.balance for b in balances if b.currency == "EUR")
-        # TODO: Convert USD balances to EUR if needed
+
+        # Convert USD balances to EUR
+        usd_balances = [b for b in balances if b.currency == "USD"]
+        if usd_balances:
+            db_manager = get_db_manager()
+            exchange_service = ExchangeRateService(db_manager)
+            usd_rate = await exchange_service.get_rate("USD", "EUR")
+            for usd_bal in usd_balances:
+                eur_equivalent = usd_bal.balance * usd_rate
+                available_cash_eur += eur_equivalent
+                logger.debug(
+                    f"Converted USD {usd_bal.balance:.2f} to EUR {eur_equivalent:.2f} "
+                    f"(rate: {usd_rate:.4f})"
+                )
 
         # For satellites, apply trading parameters from settings
         if bucket_id != "core":
@@ -190,7 +205,9 @@ class SatellitePlannerService:
 
         # For satellites, apply aggression-based position sizing
         if bucket_id != "core" and aggression_result:
-            plan = self._apply_aggression_scaling(plan, aggression_result.aggression)
+            plan = await self._apply_aggression_scaling(
+                plan, aggression_result.aggression
+            )
 
         logger.info(
             f"Generated plan for bucket {bucket_id}: {len(plan)} actions, "
@@ -199,7 +216,7 @@ class SatellitePlannerService:
 
         return plan
 
-    def _apply_aggression_scaling(
+    async def _apply_aggression_scaling(
         self, plan: list[ActionCandidate], aggression: float
     ) -> list[ActionCandidate]:
         """Scale position sizes in plan based on aggression level.
@@ -226,11 +243,18 @@ class SatellitePlannerService:
                 )
                 continue
 
-            # Recalculate value with scaled quantity
+            # Recalculate value with scaled quantity (convert to EUR if needed)
             scaled_value = scaled_quantity * action.price
             if action.currency != "EUR":
-                # TODO: Apply exchange rate if needed
-                pass
+                # Apply exchange rate to convert to EUR
+                db_manager = get_db_manager()
+                exchange_service = ExchangeRateService(db_manager)
+                rate = await exchange_service.get_rate(action.currency, "EUR")
+                scaled_value = scaled_value * rate
+                logger.debug(
+                    f"Converted {action.currency} {scaled_value/rate:.2f} to EUR {scaled_value:.2f} "
+                    f"(rate: {rate:.4f})"
+                )
 
             scaled_action = ActionCandidate(
                 side=action.side,

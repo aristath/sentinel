@@ -118,6 +118,27 @@ class BucketRepository:
         # Add updated_at timestamp
         updates["updated_at"] = datetime.now().isoformat()
 
+        # Whitelist allowed columns to prevent SQL injection
+        ALLOWED_COLUMNS = {
+            "name",
+            "notes",
+            "description",
+            "type",
+            "status",
+            "target_allocation_pct",
+            "high_water_mark",
+            "high_water_mark_date",
+            "consecutive_losses",
+            "max_consecutive_losses",
+        }
+
+        # Validate all column names
+        invalid_columns = set(updates.keys()) - ALLOWED_COLUMNS
+        if invalid_columns:
+            raise ValueError(
+                f"Invalid column names in update: {', '.join(invalid_columns)}"
+            )
+
         # Convert enum values to strings
         if "type" in updates and isinstance(updates["type"], BucketType):
             updates["type"] = updates["type"].value

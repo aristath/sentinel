@@ -1,0 +1,714 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.9.6, pytest-8.4.2, pluggy-1.6.0 -- /Library/Developer/CommandLineTools/usr/bin/python3
+cachedir: .pytest_cache
+rootdir: /Users/aristath/arduino-trader
+configfile: pytest.ini
+testpaths: tests
+plugins: asyncio-1.2.0, anyio-4.12.0
+asyncio: mode=auto, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collecting ... collected 1728 items / 42 errors
+
+==================================== ERRORS ====================================
+__________ ERROR collecting tests/integration/test_error_recovery.py ___________
+ImportError while importing test module '/Users/aristath/arduino-trader/tests/integration/test_error_recovery.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/importlib/__init__.py:127: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/integration/test_error_recovery.py:9: in <module>
+    from app.modules.trading.services.trade_execution_service import TradeExecutionService
+app/modules/trading/services/trade_execution_service.py:21: in <module>
+    from app.infrastructure.market_hours import is_market_open, should_check_market_hours
+app/infrastructure/market_hours.py:15: in <module>
+    import exchange_calendars as xcals
+E   ModuleNotFoundError: No module named 'exchange_calendars'
+_______ ERROR collecting tests/integration/test_external_api_failures.py _______
+tests/integration/test_external_api_failures.py:11: in <module>
+    from app.infrastructure.external import yahoo_finance as yahoo
+app/infrastructure/external/yahoo_finance.py:7: in <module>
+    from app.infrastructure.external.yahoo.data_fetchers import (
+app/infrastructure/external/yahoo/data_fetchers.py:11: in <module>
+    import yfinance as yf
+../Library/Python/3.9/lib/python/site-packages/yfinance/__init__.py:26: in <module>
+    from .calendars import Calendars
+../Library/Python/3.9/lib/python/site-packages/yfinance/calendars.py:16: in <module>
+    class CalendarQuery:
+../Library/Python/3.9/lib/python/site-packages/yfinance/calendars.py:33: in CalendarQuery
+    def __init__(self, operator: str, operand: list[Any] | list["CalendarQuery"]):
+E   TypeError: unsupported operand type(s) for |: 'types.GenericAlias' and 'types.GenericAlias'
+________ ERROR collecting tests/integration/test_planner_performance.py ________
+ImportError while importing test module '/Users/aristath/arduino-trader/tests/integration/test_planner_performance.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/importlib/__init__.py:127: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/integration/test_planner_performance.py:14: in <module>
+    from app.modules.planning.domain.holistic_planner import create_holistic_plan
+app/modules/planning/domain/__init__.py:11: in <module>
+    from app.modules.planning.domain.holistic_planner import (
+app/modules/planning/domain/holistic_planner.py:38: in <module>
+    from app.modules.scoring.domain.diversification import calculate_portfolio_score
+app/modules/scoring/domain/__init__.py:32: in <module>
+    from app.modules.scoring.domain.caching import (
+app/modules/scoring/domain/caching/__init__.py:7: in <module>
+    from app.modules.scoring.domain.caching.technical import (
+app/modules/scoring/domain/caching/technical.py:14: in <module>
+    from app.modules.scoring.domain.calculations import (
+app/modules/scoring/domain/calculations/__init__.py:8: in <module>
+    from app.modules.scoring.domain.calculations.bollinger import calculate_bollinger_bands
+app/modules/scoring/domain/calculations/bollinger.py:10: in <module>
+    import pandas_ta as ta
+E   ModuleNotFoundError: No module named 'pandas_ta'
+________ ERROR collecting tests/integration/test_regime_cash_reserve.py ________
+tests/integration/test_regime_cash_reserve.py:12: in <module>
+    from app.modules.rebalancing.services.rebalancing_service import RebalancingService
+app/modules/rebalancing/services/rebalancing_service.py:26: in <module>
+    from app.infrastructure.external import yahoo_finance as yahoo
+app/infrastructure/external/yahoo_finance.py:7: in <module>
+    from app.infrastructure.external.yahoo.data_fetchers import (
+app/infrastructure/external/yahoo/data_fetchers.py:11: in <module>
+    import yfinance as yf
+../Library/Python/3.9/lib/python/site-packages/yfinance/__init__.py:26: in <module>
+    from .calendars import Calendars
+../Library/Python/3.9/lib/python/site-packages/yfinance/calendars.py:16: in <module>
+    class CalendarQuery:
+../Library/Python/3.9/lib/python/site-packages/yfinance/calendars.py:33: in CalendarQuery
+    def __init__(self, operator: str, operand: list[Any] | list["CalendarQuery"]):
+E   TypeError: unsupported operand type(s) for |: 'types.GenericAlias' and 'types.GenericAlias'
+________________ ERROR collecting tests/unit/api/test_charts.py ________________
+tests/unit/api/test_charts.py:12: in <module>
+    from app.api.charts import (
+app/api/__init__.py:3: in <module>
+    from app.api import charts  # charts.py is still in app/api/
+app/api/charts.py:11: in <module>
+    from app.infrastructure.dependencies import DatabaseManagerDep, SecurityRepositoryDep
+app/infrastructure/dependencies.py:33: in <module>
+    from app.modules.portfolio.services.portfolio_service import PortfolioService
+app/modules/portfolio/services/portfolio_service.py:16: in <module>
+    class PortfolioService:
+app/modules/portfolio/services/portfolio_service.py:69: in PortfolioService
+    all_stock_countries: set[str] | None = None,
+E   TypeError: unsupported operand type(s) for |: 'types.GenericAlias' and 'NoneType'
+________________ ERROR collecting tests/unit/api/test_errors.py ________________
+tests/unit/api/test_errors.py:7: in <module>
+    from app.api.errors import error_response, success_response
+app/api/__init__.py:3: in <module>
+    from app.api import charts  # charts.py is still in app/api/
+app/api/charts.py:11: in <module>
+    from app.infrastructure.dependencies import DatabaseManagerDep, SecurityRepositoryDep
+app/infrastructure/dependencies.py:33: in <module>
+    from app.modules.portfolio.services.portfolio_service import PortfolioService
+app/modules/portfolio/services/portfolio_service.py:16: in <module>
+    class PortfolioService:
+app/modules/portfolio/services/portfolio_service.py:69: in PortfolioService
+    all_stock_countries: set[str] | None = None,
+E   TypeError: unsupported operand type(s) for |: 'types.GenericAlias' and 'NoneType'
+________________ ERROR collecting tests/unit/api/test_models.py ________________
+tests/unit/api/test_models.py:10: in <module>
+    from app.api.models import (
+app/api/__init__.py:3: in <module>
+    from app.api import charts  # charts.py is still in app/api/
+app/api/charts.py:11: in <module>
+    from app.infrastructure.dependencies import DatabaseManagerDep, SecurityRepositoryDep
+app/infrastructure/dependencies.py:33: in <module>
+    from app.modules.portfolio.services.portfolio_service import PortfolioService
+app/modules/portfolio/services/portfolio_service.py:16: in <module>
+    class PortfolioService:
+app/modules/portfolio/services/portfolio_service.py:69: in PortfolioService
+    all_stock_countries: set[str] | None = None,
+E   TypeError: unsupported operand type(s) for |: 'types.GenericAlias' and 'NoneType'
+______________ ERROR collecting tests/unit/api/test_optimizer.py _______________
+tests/unit/api/test_optimizer.py:13: in <module>
+    from app.modules.optimization.api.optimizer import (
+app/modules/optimization/api/__init__.py:3: in <module>
+    from app.modules.optimization.api.optimizer import router
+app/modules/optimization/api/optimizer.py:11: in <module>
+    from app.infrastructure.external import yahoo_finance as yahoo
+app/infrastructure/external/yahoo_finance.py:7: in <module>
+    from app.infrastructure.external.yahoo.data_fetchers import (
+app/infrastructure/external/yahoo/data_fetchers.py:11: in <module>
+    import yfinance as yf
+../Library/Python/3.9/lib/python/site-packages/yfinance/__init__.py:26: in <module>
+    from .calendars import Calendars
+../Library/Python/3.9/lib/python/site-packages/yfinance/calendars.py:16: in <module>
+    class CalendarQuery:
+../Library/Python/3.9/lib/python/site-packages/yfinance/calendars.py:33: in CalendarQuery
+    def __init__(self, operator: str, operand: list[Any] | list["CalendarQuery"]):
+E   TypeError: unsupported operand type(s) for |: 'types.GenericAlias' and 'types.GenericAlias'
+______________ ERROR collecting tests/unit/api/test_securities.py ______________
+tests/unit/api/test_securities.py:8: in <module>
+    from app.modules.universe.api.securities import (
+app/modules/universe/api/securities.py:10: in <module>
+    from app.domain.events import SecurityAddedEvent, get_event_bus
+app/domain/events/__init__.py:11: in <module>
+    from app.domain.events.security_events import SecurityAddedEvent
+app/domain/events/security_events.py:11: in <module>
+    class SecurityAddedEvent(DomainEvent):
+app/domain/events/security_events.py:32: in SecurityAddedEvent
+    def country(self) -> str | None:
+E   TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+_______________ ERROR collecting tests/unit/api/test_settings.py _______________
+tests/unit/api/test_settings.py:13: in <module>
+    from app.api.settings import (
+app/api/__init__.py:3: in <module>
+    from app.api import charts  # charts.py is still in app/api/
+app/api/charts.py:11: in <module>
+    from app.infrastructure.dependencies import DatabaseManagerDep, SecurityRepositoryDep
+app/infrastructure/dependencies.py:33: in <module>
+    from app.modules.portfolio.services.portfolio_service import PortfolioService
+app/modules/portfolio/services/portfolio_service.py:16: in <module>
+    class PortfolioService:
+app/modules/portfolio/services/portfolio_service.py:69: in PortfolioService
+    all_stock_countries: set[str] | None = None,
+E   TypeError: unsupported operand type(s) for |: 'types.GenericAlias' and 'NoneType'
+________________ ERROR collecting tests/unit/api/test_status.py ________________
+tests/unit/api/test_status.py:13: in <module>
+    from app.modules.system.api.status import (
+app/modules/system/api/status.py:11: in <module>
+    from app.api.models import (
+app/api/__init__.py:3: in <module>
+    from app.api import charts  # charts.py is still in app/api/
+app/api/charts.py:11: in <module>
+    from app.infrastructure.dependencies import DatabaseManagerDep, SecurityRepositoryDep
+app/infrastructure/dependencies.py:33: in <module>
+    from app.modules.portfolio.services.portfolio_service import PortfolioService
+app/modules/portfolio/services/portfolio_service.py:16: in <module>
+    class PortfolioService:
+app/modules/portfolio/services/portfolio_service.py:69: in PortfolioService
+    all_stock_countries: set[str] | None = None,
+E   TypeError: unsupported operand type(s) for |: 'types.GenericAlias' and 'NoneType'
+_______ ERROR collecting tests/unit/domain/events/test_domain_events.py ________
+tests/unit/domain/events/test_domain_events.py:13: in <module>
+    from app.domain.events.security_events import SecurityAddedEvent
+app/domain/events/__init__.py:11: in <module>
+    from app.domain.events.security_events import SecurityAddedEvent
+app/domain/events/security_events.py:11: in <module>
+    class SecurityAddedEvent(DomainEvent):
+app/domain/events/security_events.py:32: in SecurityAddedEvent
+    def country(self) -> str | None:
+E   TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+_ ERROR collecting tests/unit/domain/planning/opportunities/test_averaging_down.py _
+ImportError while importing test module '/Users/aristath/arduino-trader/tests/unit/domain/planning/opportunities/test_averaging_down.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/importlib/__init__.py:127: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/unit/domain/planning/opportunities/test_averaging_down.py:12: in <module>
+    from app.modules.planning.domain.opportunities.averaging_down import (
+app/modules/planning/domain/__init__.py:11: in <module>
+    from app.modules.planning.domain.holistic_planner import (
+app/modules/planning/domain/holistic_planner.py:38: in <module>
+    from app.modules.scoring.domain.diversification import calculate_portfolio_score
+app/modules/scoring/domain/__init__.py:32: in <module>
+    from app.modules.scoring.domain.caching import (
+app/modules/scoring/domain/caching/__init__.py:7: in <module>
+    from app.modules.scoring.domain.caching.technical import (
+app/modules/scoring/domain/caching/technical.py:14: in <module>
+    from app.modules.scoring.domain.calculations import (
+app/modules/scoring/domain/calculations/__init__.py:8: in <module>
+    from app.modules.scoring.domain.calculations.bollinger import calculate_bollinger_bands
+app/modules/scoring/domain/calculations/bollinger.py:10: in <module>
+    import pandas_ta as ta
+E   ModuleNotFoundError: No module named 'pandas_ta'
+_ ERROR collecting tests/unit/domain/planning/opportunities/test_rebalance_sells.py _
+ImportError while importing test module '/Users/aristath/arduino-trader/tests/unit/domain/planning/opportunities/test_rebalance_sells.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/importlib/__init__.py:127: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/unit/domain/planning/opportunities/test_rebalance_sells.py:12: in <module>
+    from app.modules.planning.domain.opportunities.rebalance_sells import (
+app/modules/planning/domain/__init__.py:11: in <module>
+    from app.modules.planning.domain.holistic_planner import (
+app/modules/planning/domain/holistic_planner.py:38: in <module>
+    from app.modules.scoring.domain.diversification import calculate_portfolio_score
+app/modules/scoring/domain/__init__.py:32: in <module>
+    from app.modules.scoring.domain.caching import (
+app/modules/scoring/domain/caching/__init__.py:7: in <module>
+    from app.modules.scoring.domain.caching.technical import (
+app/modules/scoring/domain/caching/technical.py:14: in <module>
+    from app.modules.scoring.domain.calculations import (
+app/modules/scoring/domain/calculations/__init__.py:8: in <module>
+    from app.modules.scoring.domain.calculations.bollinger import calculate_bollinger_bands
+app/modules/scoring/domain/calculations/bollinger.py:10: in <module>
+    import pandas_ta as ta
+E   ModuleNotFoundError: No module named 'pandas_ta'
+_____ ERROR collecting tests/unit/domain/planning/test_holistic_planner.py _____
+ImportError while importing test module '/Users/aristath/arduino-trader/tests/unit/domain/planning/test_holistic_planner.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/importlib/__init__.py:127: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/unit/domain/planning/test_holistic_planner.py:15: in <module>
+    from app.modules.planning.domain.holistic_planner import (
+app/modules/planning/domain/__init__.py:11: in <module>
+    from app.modules.planning.domain.holistic_planner import (
+app/modules/planning/domain/holistic_planner.py:38: in <module>
+    from app.modules.scoring.domain.diversification import calculate_portfolio_score
+app/modules/scoring/domain/__init__.py:32: in <module>
+    from app.modules.scoring.domain.caching import (
+app/modules/scoring/domain/caching/__init__.py:7: in <module>
+    from app.modules.scoring.domain.caching.technical import (
+app/modules/scoring/domain/caching/technical.py:14: in <module>
+    from app.modules.scoring.domain.calculations import (
+app/modules/scoring/domain/calculations/__init__.py:8: in <module>
+    from app.modules.scoring.domain.calculations.bollinger import calculate_bollinger_bands
+app/modules/scoring/domain/calculations/bollinger.py:10: in <module>
+    import pandas_ta as ta
+E   ModuleNotFoundError: No module named 'pandas_ta'
+___ ERROR collecting tests/unit/domain/planning/test_planner_performance.py ____
+ImportError while importing test module '/Users/aristath/arduino-trader/tests/unit/domain/planning/test_planner_performance.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/importlib/__init__.py:127: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/unit/domain/planning/test_planner_performance.py:19: in <module>
+    from app.modules.planning.domain.holistic_planner import create_holistic_plan
+app/modules/planning/domain/__init__.py:11: in <module>
+    from app.modules.planning.domain.holistic_planner import (
+app/modules/planning/domain/holistic_planner.py:38: in <module>
+    from app.modules.scoring.domain.diversification import calculate_portfolio_score
+app/modules/scoring/domain/__init__.py:32: in <module>
+    from app.modules.scoring.domain.caching import (
+app/modules/scoring/domain/caching/__init__.py:7: in <module>
+    from app.modules.scoring.domain.caching.technical import (
+app/modules/scoring/domain/caching/technical.py:14: in <module>
+    from app.modules.scoring.domain.calculations import (
+app/modules/scoring/domain/calculations/__init__.py:8: in <module>
+    from app.modules.scoring.domain.calculations.bollinger import calculate_bollinger_bands
+app/modules/scoring/domain/calculations/bollinger.py:10: in <module>
+    import pandas_ta as ta
+E   ModuleNotFoundError: No module named 'pandas_ta'
+_ ERROR collecting tests/unit/domain/repositories/test_cash_flow_repository.py _
+tests/unit/domain/repositories/test_cash_flow_repository.py:25: in <module>
+    status: str | None = "completed",
+E   TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+_ ERROR collecting tests/unit/domain/repositories/test_dividend_repository.py __
+tests/unit/domain/repositories/test_dividend_repository.py:18: in <module>
+    isin: str | None = None,
+E   TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+_ ERROR collecting tests/unit/domain/repositories/test_recommendation_repository.py _
+tests/unit/domain/repositories/test_recommendation_repository.py:58: in <module>
+    executed_at: str | None = None,
+E   TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+_____ ERROR collecting tests/unit/domain/scoring/groups/test_short_term.py _____
+ImportError while importing test module '/Users/aristath/arduino-trader/tests/unit/domain/scoring/groups/test_short_term.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/importlib/__init__.py:127: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/unit/domain/scoring/groups/test_short_term.py:10: in <module>
+    from app.modules.scoring.domain.groups.short_term import (
+app/modules/scoring/domain/__init__.py:32: in <module>
+    from app.modules.scoring.domain.caching import (
+app/modules/scoring/domain/caching/__init__.py:7: in <module>
+    from app.modules.scoring.domain.caching.technical import (
+app/modules/scoring/domain/caching/technical.py:14: in <module>
+    from app.modules.scoring.domain.calculations import (
+app/modules/scoring/domain/calculations/__init__.py:8: in <module>
+    from app.modules.scoring.domain.calculations.bollinger import calculate_bollinger_bands
+app/modules/scoring/domain/calculations/bollinger.py:10: in <module>
+    import pandas_ta as ta
+E   ModuleNotFoundError: No module named 'pandas_ta'
+______ ERROR collecting tests/unit/domain/scoring/test_diversification.py ______
+ImportError while importing test module '/Users/aristath/arduino-trader/tests/unit/domain/scoring/test_diversification.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/importlib/__init__.py:127: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/unit/domain/scoring/test_diversification.py:11: in <module>
+    from app.modules.scoring.domain.models import PortfolioContext
+app/modules/scoring/domain/__init__.py:32: in <module>
+    from app.modules.scoring.domain.caching import (
+app/modules/scoring/domain/caching/__init__.py:7: in <module>
+    from app.modules.scoring.domain.caching.technical import (
+app/modules/scoring/domain/caching/technical.py:14: in <module>
+    from app.modules.scoring.domain.calculations import (
+app/modules/scoring/domain/calculations/__init__.py:8: in <module>
+    from app.modules.scoring.domain.calculations.bollinger import calculate_bollinger_bands
+app/modules/scoring/domain/calculations/bollinger.py:10: in <module>
+    import pandas_ta as ta
+E   ModuleNotFoundError: No module named 'pandas_ta'
+_____ ERROR collecting tests/unit/domain/scoring/test_holistic_scoring.py ______
+ImportError while importing test module '/Users/aristath/arduino-trader/tests/unit/domain/scoring/test_holistic_scoring.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/importlib/__init__.py:127: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/unit/domain/scoring/test_holistic_scoring.py:22: in <module>
+    from app.modules.scoring.domain.end_state import score_total_return
+app/modules/scoring/domain/__init__.py:32: in <module>
+    from app.modules.scoring.domain.caching import (
+app/modules/scoring/domain/caching/__init__.py:7: in <module>
+    from app.modules.scoring.domain.caching.technical import (
+app/modules/scoring/domain/caching/technical.py:14: in <module>
+    from app.modules.scoring.domain.calculations import (
+app/modules/scoring/domain/calculations/__init__.py:8: in <module>
+    from app.modules.scoring.domain.calculations.bollinger import calculate_bollinger_bands
+app/modules/scoring/domain/calculations/bollinger.py:10: in <module>
+    import pandas_ta as ta
+E   ModuleNotFoundError: No module named 'pandas_ta'
+______ ERROR collecting tests/unit/domain/scoring/test_security_scorer.py ______
+ImportError while importing test module '/Users/aristath/arduino-trader/tests/unit/domain/scoring/test_security_scorer.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/importlib/__init__.py:127: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/unit/domain/scoring/test_security_scorer.py:15: in <module>
+    from app.modules.scoring.domain.models import (
+app/modules/scoring/domain/__init__.py:32: in <module>
+    from app.modules.scoring.domain.caching import (
+app/modules/scoring/domain/caching/__init__.py:7: in <module>
+    from app.modules.scoring.domain.caching.technical import (
+app/modules/scoring/domain/caching/technical.py:14: in <module>
+    from app.modules.scoring.domain.calculations import (
+app/modules/scoring/domain/calculations/__init__.py:8: in <module>
+    from app.modules.scoring.domain.calculations.bollinger import calculate_bollinger_bands
+app/modules/scoring/domain/calculations/bollinger.py:10: in <module>
+    import pandas_ta as ta
+E   ModuleNotFoundError: No module named 'pandas_ta'
+___________ ERROR collecting tests/unit/domain/scoring/test_sell.py ____________
+ImportError while importing test module '/Users/aristath/arduino-trader/tests/unit/domain/scoring/test_sell.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/importlib/__init__.py:127: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/unit/domain/scoring/test_sell.py:10: in <module>
+    from app.modules.scoring.domain.models import TechnicalData
+app/modules/scoring/domain/__init__.py:32: in <module>
+    from app.modules.scoring.domain.caching import (
+app/modules/scoring/domain/caching/__init__.py:7: in <module>
+    from app.modules.scoring.domain.caching.technical import (
+app/modules/scoring/domain/caching/technical.py:14: in <module>
+    from app.modules.scoring.domain.calculations import (
+app/modules/scoring/domain/calculations/__init__.py:8: in <module>
+    from app.modules.scoring.domain.calculations.bollinger import calculate_bollinger_bands
+app/modules/scoring/domain/calculations/bollinger.py:10: in <module>
+    import pandas_ta as ta
+E   ModuleNotFoundError: No module named 'pandas_ta'
+_________ ERROR collecting tests/unit/domain/scoring/test_windfall.py __________
+ImportError while importing test module '/Users/aristath/arduino-trader/tests/unit/domain/scoring/test_windfall.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/importlib/__init__.py:127: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/unit/domain/scoring/test_windfall.py:18: in <module>
+    from app.modules.scoring.domain.windfall import (
+app/modules/scoring/domain/__init__.py:32: in <module>
+    from app.modules.scoring.domain.caching import (
+app/modules/scoring/domain/caching/__init__.py:7: in <module>
+    from app.modules.scoring.domain.caching.technical import (
+app/modules/scoring/domain/caching/technical.py:14: in <module>
+    from app.modules.scoring.domain.calculations import (
+app/modules/scoring/domain/calculations/__init__.py:8: in <module>
+    from app.modules.scoring.domain.calculations.bollinger import calculate_bollinger_bands
+app/modules/scoring/domain/calculations/bollinger.py:10: in <module>
+    import pandas_ta as ta
+E   ModuleNotFoundError: No module named 'pandas_ta'
+____ ERROR collecting tests/unit/infrastructure/test_cache_invalidation.py _____
+tests/unit/infrastructure/test_cache_invalidation.py:9: in <module>
+    from app.infrastructure.cache_invalidation import (
+app/infrastructure/cache_invalidation.py:66: in <module>
+    cache: SimpleCache | None = None,
+E   TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+____ ERROR collecting tests/unit/infrastructure/test_yahoo_data_fetchers.py ____
+tests/unit/infrastructure/test_yahoo_data_fetchers.py:11: in <module>
+    from app.infrastructure.external.yahoo.data_fetchers import (
+app/infrastructure/external/yahoo/data_fetchers.py:11: in <module>
+    import yfinance as yf
+../Library/Python/3.9/lib/python/site-packages/yfinance/__init__.py:26: in <module>
+    from .calendars import Calendars
+../Library/Python/3.9/lib/python/site-packages/yfinance/calendars.py:16: in <module>
+    class CalendarQuery:
+../Library/Python/3.9/lib/python/site-packages/yfinance/calendars.py:33: in CalendarQuery
+    def __init__(self, operator: str, operand: list[Any] | list["CalendarQuery"]):
+E   TypeError: unsupported operand type(s) for |: 'types.GenericAlias' and 'types.GenericAlias'
+_ ERROR collecting tests/unit/services/optimization/test_constraints_manager.py _
+tests/unit/services/optimization/test_constraints_manager.py:12: in <module>
+    from app.modules.optimization.services.constraints_manager import (
+app/modules/optimization/services/__init__.py:8: in <module>
+    from app.modules.optimization.services.expected_returns import ExpectedReturnsCalculator
+app/modules/optimization/services/expected_returns.py:16: in <module>
+    from app.infrastructure.external.yahoo import market_indicators
+app/infrastructure/external/yahoo/market_indicators.py:9: in <module>
+    from app.infrastructure.external.yahoo import data_fetchers
+app/infrastructure/external/yahoo/data_fetchers.py:11: in <module>
+    import yfinance as yf
+../Library/Python/3.9/lib/python/site-packages/yfinance/__init__.py:26: in <module>
+    from .calendars import Calendars
+../Library/Python/3.9/lib/python/site-packages/yfinance/calendars.py:16: in <module>
+    class CalendarQuery:
+../Library/Python/3.9/lib/python/site-packages/yfinance/calendars.py:33: in CalendarQuery
+    def __init__(self, operator: str, operand: list[Any] | list["CalendarQuery"]):
+E   TypeError: unsupported operand type(s) for |: 'types.GenericAlias' and 'types.GenericAlias'
+__ ERROR collecting tests/unit/services/optimization/test_expected_returns.py __
+tests/unit/services/optimization/test_expected_returns.py:11: in <module>
+    from app.modules.optimization.services.expected_returns import ExpectedReturnsCalculator
+app/modules/optimization/services/__init__.py:8: in <module>
+    from app.modules.optimization.services.expected_returns import ExpectedReturnsCalculator
+app/modules/optimization/services/expected_returns.py:16: in <module>
+    from app.infrastructure.external.yahoo import market_indicators
+app/infrastructure/external/yahoo/market_indicators.py:9: in <module>
+    from app.infrastructure.external.yahoo import data_fetchers
+app/infrastructure/external/yahoo/data_fetchers.py:11: in <module>
+    import yfinance as yf
+../Library/Python/3.9/lib/python/site-packages/yfinance/__init__.py:26: in <module>
+    from .calendars import Calendars
+../Library/Python/3.9/lib/python/site-packages/yfinance/calendars.py:16: in <module>
+    class CalendarQuery:
+../Library/Python/3.9/lib/python/site-packages/yfinance/calendars.py:33: in CalendarQuery
+    def __init__(self, operator: str, operand: list[Any] | list["CalendarQuery"]):
+E   TypeError: unsupported operand type(s) for |: 'types.GenericAlias' and 'types.GenericAlias'
+_ ERROR collecting tests/unit/services/optimization/test_portfolio_optimizer.py _
+tests/unit/services/optimization/test_portfolio_optimizer.py:14: in <module>
+    from app.modules.optimization.services.portfolio_optimizer import PortfolioOptimizer
+app/modules/optimization/services/__init__.py:8: in <module>
+    from app.modules.optimization.services.expected_returns import ExpectedReturnsCalculator
+app/modules/optimization/services/expected_returns.py:16: in <module>
+    from app.infrastructure.external.yahoo import market_indicators
+app/infrastructure/external/yahoo/market_indicators.py:9: in <module>
+    from app.infrastructure.external.yahoo import data_fetchers
+app/infrastructure/external/yahoo/data_fetchers.py:11: in <module>
+    import yfinance as yf
+../Library/Python/3.9/lib/python/site-packages/yfinance/__init__.py:26: in <module>
+    from .calendars import Calendars
+../Library/Python/3.9/lib/python/site-packages/yfinance/calendars.py:16: in <module>
+    class CalendarQuery:
+../Library/Python/3.9/lib/python/site-packages/yfinance/calendars.py:33: in CalendarQuery
+    def __init__(self, operator: str, operand: list[Any] | list["CalendarQuery"]):
+E   TypeError: unsupported operand type(s) for |: 'types.GenericAlias' and 'types.GenericAlias'
+____ ERROR collecting tests/unit/services/optimization/test_risk_models.py _____
+tests/unit/services/optimization/test_risk_models.py:12: in <module>
+    from app.modules.optimization.services.risk_models import RiskModelBuilder
+app/modules/optimization/services/__init__.py:8: in <module>
+    from app.modules.optimization.services.expected_returns import ExpectedReturnsCalculator
+app/modules/optimization/services/expected_returns.py:16: in <module>
+    from app.infrastructure.external.yahoo import market_indicators
+app/infrastructure/external/yahoo/market_indicators.py:9: in <module>
+    from app.infrastructure.external.yahoo import data_fetchers
+app/infrastructure/external/yahoo/data_fetchers.py:11: in <module>
+    import yfinance as yf
+../Library/Python/3.9/lib/python/site-packages/yfinance/__init__.py:26: in <module>
+    from .calendars import Calendars
+../Library/Python/3.9/lib/python/site-packages/yfinance/calendars.py:16: in <module>
+    class CalendarQuery:
+../Library/Python/3.9/lib/python/site-packages/yfinance/calendars.py:33: in CalendarQuery
+    def __init__(self, operator: str, operand: list[Any] | list["CalendarQuery"]):
+E   TypeError: unsupported operand type(s) for |: 'types.GenericAlias' and 'types.GenericAlias'
+_______ ERROR collecting tests/unit/services/test_cache_invalidation.py ________
+tests/unit/services/test_cache_invalidation.py:8: in <module>
+    from app.infrastructure.cache_invalidation import CacheInvalidationService
+app/infrastructure/cache_invalidation.py:66: in <module>
+    cache: SimpleCache | None = None,
+E   TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+___ ERROR collecting tests/unit/services/test_negative_balance_rebalancer.py ___
+tests/unit/services/test_negative_balance_rebalancer.py:9: in <module>
+    from app.modules.rebalancing.services.negative_balance_rebalancer import (
+app/modules/rebalancing/services/negative_balance_rebalancer.py:9: in <module>
+    from app.api.settings import get_trading_mode
+app/api/__init__.py:3: in <module>
+    from app.api import charts  # charts.py is still in app/api/
+app/api/charts.py:11: in <module>
+    from app.infrastructure.dependencies import DatabaseManagerDep, SecurityRepositoryDep
+app/infrastructure/dependencies.py:33: in <module>
+    from app.modules.portfolio.services.portfolio_service import PortfolioService
+app/modules/portfolio/services/portfolio_service.py:16: in <module>
+    class PortfolioService:
+app/modules/portfolio/services/portfolio_service.py:69: in PortfolioService
+    all_stock_countries: set[str] | None = None,
+E   TypeError: unsupported operand type(s) for |: 'types.GenericAlias' and 'NoneType'
+____ ERROR collecting tests/unit/services/test_portfolio_context_builder.py ____
+ImportError while importing test module '/Users/aristath/arduino-trader/tests/unit/services/test_portfolio_context_builder.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/importlib/__init__.py:127: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/unit/services/test_portfolio_context_builder.py:12: in <module>
+    from app.domain.scoring import PortfolioContext
+app/domain/scoring/__init__.py:3: in <module>
+    from app.modules.scoring.domain import (
+app/modules/scoring/domain/__init__.py:32: in <module>
+    from app.modules.scoring.domain.caching import (
+app/modules/scoring/domain/caching/__init__.py:7: in <module>
+    from app.modules.scoring.domain.caching.technical import (
+app/modules/scoring/domain/caching/technical.py:14: in <module>
+    from app.modules.scoring.domain.calculations import (
+app/modules/scoring/domain/calculations/__init__.py:8: in <module>
+    from app.modules.scoring.domain.calculations.bollinger import calculate_bollinger_bands
+app/modules/scoring/domain/calculations/bollinger.py:10: in <module>
+    import pandas_ta as ta
+E   ModuleNotFoundError: No module named 'pandas_ta'
+________ ERROR collecting tests/unit/services/test_portfolio_service.py ________
+tests/unit/services/test_portfolio_service.py:11: in <module>
+    from app.modules.portfolio.services.portfolio_service import PortfolioService
+app/modules/portfolio/services/portfolio_service.py:16: in <module>
+    class PortfolioService:
+app/modules/portfolio/services/portfolio_service.py:69: in PortfolioService
+    all_stock_countries: set[str] | None = None,
+E   TypeError: unsupported operand type(s) for |: 'types.GenericAlias' and 'NoneType'
+_________ ERROR collecting tests/unit/services/test_scoring_service.py _________
+ImportError while importing test module '/Users/aristath/arduino-trader/tests/unit/services/test_scoring_service.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/importlib/__init__.py:127: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/unit/services/test_scoring_service.py:16: in <module>
+    from app.modules.scoring.domain import CalculatedSecurityScore
+app/modules/scoring/domain/__init__.py:32: in <module>
+    from app.modules.scoring.domain.caching import (
+app/modules/scoring/domain/caching/__init__.py:7: in <module>
+    from app.modules.scoring.domain.caching.technical import (
+app/modules/scoring/domain/caching/technical.py:14: in <module>
+    from app.modules.scoring.domain.calculations import (
+app/modules/scoring/domain/calculations/__init__.py:8: in <module>
+    from app.modules.scoring.domain.calculations.bollinger import calculate_bollinger_bands
+app/modules/scoring/domain/calculations/bollinger.py:10: in <module>
+    import pandas_ta as ta
+E   ModuleNotFoundError: No module named 'pandas_ta'
+_____ ERROR collecting tests/unit/services/test_security_setup_service.py ______
+tests/unit/services/test_security_setup_service.py:14: in <module>
+    from app.modules.universe.services.security_setup_service import SecuritySetupService
+app/modules/universe/services/security_setup_service.py:12: in <module>
+    from app.domain.events import SecurityAddedEvent, get_event_bus
+app/domain/events/__init__.py:11: in <module>
+    from app.domain.events.security_events import SecurityAddedEvent
+app/domain/events/security_events.py:11: in <module>
+    class SecurityAddedEvent(DomainEvent):
+app/domain/events/security_events.py:32: in SecurityAddedEvent
+    def country(self) -> str | None:
+E   TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+___________ ERROR collecting tests/unit/services/test_sell_scorer.py ___________
+ImportError while importing test module '/Users/aristath/arduino-trader/tests/unit/services/test_sell_scorer.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/importlib/__init__.py:127: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/unit/services/test_sell_scorer.py:11: in <module>
+    from app.modules.scoring.domain.sell import (
+app/modules/scoring/domain/__init__.py:32: in <module>
+    from app.modules.scoring.domain.caching import (
+app/modules/scoring/domain/caching/__init__.py:7: in <module>
+    from app.modules.scoring.domain.caching.technical import (
+app/modules/scoring/domain/caching/technical.py:14: in <module>
+    from app.modules.scoring.domain.calculations import (
+app/modules/scoring/domain/calculations/__init__.py:8: in <module>
+    from app.modules.scoring.domain.calculations.bollinger import calculate_bollinger_bands
+app/modules/scoring/domain/calculations/bollinger.py:10: in <module>
+    import pandas_ta as ta
+E   ModuleNotFoundError: No module named 'pandas_ta'
+____ ERROR collecting tests/unit/services/test_technical_data_calculator.py ____
+ImportError while importing test module '/Users/aristath/arduino-trader/tests/unit/services/test_technical_data_calculator.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/importlib/__init__.py:127: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/unit/services/test_technical_data_calculator.py:13: in <module>
+    from app.domain.scoring import TechnicalData
+app/domain/scoring/__init__.py:3: in <module>
+    from app.modules.scoring.domain import (
+app/modules/scoring/domain/__init__.py:32: in <module>
+    from app.modules.scoring.domain.caching import (
+app/modules/scoring/domain/caching/__init__.py:7: in <module>
+    from app.modules.scoring.domain.caching.technical import (
+app/modules/scoring/domain/caching/technical.py:14: in <module>
+    from app.modules.scoring.domain.calculations import (
+app/modules/scoring/domain/calculations/__init__.py:8: in <module>
+    from app.modules.scoring.domain.calculations.bollinger import calculate_bollinger_bands
+app/modules/scoring/domain/calculations/bollinger.py:10: in <module>
+    import pandas_ta as ta
+E   ModuleNotFoundError: No module named 'pandas_ta'
+_________ ERROR collecting tests/unit/services/test_trade_execution.py _________
+ImportError while importing test module '/Users/aristath/arduino-trader/tests/unit/services/test_trade_execution.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/importlib/__init__.py:127: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/unit/services/test_trade_execution.py:12: in <module>
+    from app.modules.trading.services.trade_execution_service import TradeExecutionService
+app/modules/trading/services/trade_execution_service.py:21: in <module>
+    from app.infrastructure.market_hours import is_market_open, should_check_market_hours
+app/infrastructure/market_hours.py:15: in <module>
+    import exchange_calendars as xcals
+E   ModuleNotFoundError: No module named 'exchange_calendars'
+_________ ERROR collecting tests/unit/services/test_trade_recorder.py __________
+tests/unit/services/test_trade_recorder.py:12: in <module>
+    from app.modules.trading.services.trade_execution.trade_recorder import record_trade
+app/modules/trading/services/trade_execution/__init__.py:6: in <module>
+    from app.modules.trading.services.trade_execution.trade_recorder import record_trade
+app/modules/trading/services/trade_execution/trade_recorder.py:10: in <module>
+    from app.domain.events import TradeExecutedEvent, get_event_bus
+app/domain/events/__init__.py:11: in <module>
+    from app.domain.events.security_events import SecurityAddedEvent
+app/domain/events/security_events.py:11: in <module>
+    class SecurityAddedEvent(DomainEvent):
+app/domain/events/security_events.py:32: in SecurityAddedEvent
+    def country(self) -> str | None:
+E   TypeError: unsupported operand type(s) for |: 'type' and 'NoneType'
+______ ERROR collecting tests/unit/services/test_trade_safety_service.py _______
+ImportError while importing test module '/Users/aristath/arduino-trader/tests/unit/services/test_trade_safety_service.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/importlib/__init__.py:127: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+tests/unit/services/test_trade_safety_service.py:10: in <module>
+    from app.modules.trading.services.trade_safety_service import TradeSafetyService
+app/modules/trading/services/trade_safety_service.py:17: in <module>
+    from app.infrastructure.market_hours import is_market_open, should_check_market_hours
+app/infrastructure/market_hours.py:15: in <module>
+    import exchange_calendars as xcals
+E   ModuleNotFoundError: No module named 'exchange_calendars'
+=============================== warnings summary ===============================
+app/config.py:8
+  /Users/aristath/arduino-trader/app/config.py:8: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class Settings(BaseSettings):
+
+../Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35
+  /Users/aristath/Library/Python/3.9/lib/python/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+ERROR tests/integration/test_error_recovery.py
+ERROR tests/integration/test_external_api_failures.py - TypeError: unsupporte...
+ERROR tests/integration/test_planner_performance.py
+ERROR tests/integration/test_regime_cash_reserve.py - TypeError: unsupported ...
+ERROR tests/unit/api/test_charts.py - TypeError: unsupported operand type(s) ...
+ERROR tests/unit/api/test_errors.py - TypeError: unsupported operand type(s) ...
+ERROR tests/unit/api/test_models.py - TypeError: unsupported operand type(s) ...
+ERROR tests/unit/api/test_optimizer.py - TypeError: unsupported operand type(...
+ERROR tests/unit/api/test_securities.py - TypeError: unsupported operand type...
+ERROR tests/unit/api/test_settings.py - TypeError: unsupported operand type(s...
+ERROR tests/unit/api/test_status.py - TypeError: unsupported operand type(s) ...
+ERROR tests/unit/domain/events/test_domain_events.py - TypeError: unsupported...
+ERROR tests/unit/domain/planning/opportunities/test_averaging_down.py
+ERROR tests/unit/domain/planning/opportunities/test_rebalance_sells.py
+ERROR tests/unit/domain/planning/test_holistic_planner.py
+ERROR tests/unit/domain/planning/test_planner_performance.py
+ERROR tests/unit/domain/repositories/test_cash_flow_repository.py - TypeError...
+ERROR tests/unit/domain/repositories/test_dividend_repository.py - TypeError:...
+ERROR tests/unit/domain/repositories/test_recommendation_repository.py - Type...
+ERROR tests/unit/domain/scoring/groups/test_short_term.py
+ERROR tests/unit/domain/scoring/test_diversification.py
+ERROR tests/unit/domain/scoring/test_holistic_scoring.py
+ERROR tests/unit/domain/scoring/test_security_scorer.py
+ERROR tests/unit/domain/scoring/test_sell.py
+ERROR tests/unit/domain/scoring/test_windfall.py
+ERROR tests/unit/infrastructure/test_cache_invalidation.py - TypeError: unsup...
+ERROR tests/unit/infrastructure/test_yahoo_data_fetchers.py - TypeError: unsu...
+ERROR tests/unit/services/optimization/test_constraints_manager.py - TypeErro...
+ERROR tests/unit/services/optimization/test_expected_returns.py - TypeError: ...
+ERROR tests/unit/services/optimization/test_portfolio_optimizer.py - TypeErro...
+ERROR tests/unit/services/optimization/test_risk_models.py - TypeError: unsup...
+ERROR tests/unit/services/test_cache_invalidation.py - TypeError: unsupported...
+ERROR tests/unit/services/test_negative_balance_rebalancer.py - TypeError: un...
+ERROR tests/unit/services/test_portfolio_context_builder.py
+ERROR tests/unit/services/test_portfolio_service.py - TypeError: unsupported ...
+ERROR tests/unit/services/test_scoring_service.py
+ERROR tests/unit/services/test_security_setup_service.py - TypeError: unsuppo...
+ERROR tests/unit/services/test_sell_scorer.py
+ERROR tests/unit/services/test_technical_data_calculator.py
+ERROR tests/unit/services/test_trade_execution.py
+ERROR tests/unit/services/test_trade_recorder.py - TypeError: unsupported ope...
+ERROR tests/unit/services/test_trade_safety_service.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 42 errors during collection !!!!!!!!!!!!!!!!!!!
+======================= 2 warnings, 42 errors in 12.44s ========================
