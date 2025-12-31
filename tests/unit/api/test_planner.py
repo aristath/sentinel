@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
-from app.domain.models import Stock
+from app.domain.models import Security
 from app.shared.domain.value_objects.currency import Currency
 
 
@@ -28,7 +28,7 @@ def mock_position_repo():
 def mock_stock_repo():
     """Mock stock repository."""
     repo = AsyncMock()
-    mock_stock = Stock(
+    mock_stock = Security(
         symbol="AAPL",
         name="Apple Inc.",
         country="United States",

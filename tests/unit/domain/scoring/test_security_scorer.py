@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.modules.scoring.domain.models import (
-    CalculatedStockScore,
+    CalculatedSecurityScore,
     PortfolioContext,
     PrefetchedStockData,
 )
@@ -57,7 +57,7 @@ class TestCalculateStockScore:
 
     @pytest.mark.asyncio
     async def test_returns_calculated_stock_score(self):
-        """Test that function returns CalculatedStockScore object."""
+        """Test that function returns CalculatedSecurityScore object."""
         # Mock all scoring group functions
         mock_result = MagicMock()
         mock_result.score = 0.7
@@ -107,7 +107,7 @@ class TestCalculateStockScore:
                 fundamentals=MagicMock(),
             )
 
-        assert isinstance(result, CalculatedStockScore)
+        assert isinstance(result, CalculatedSecurityScore)
         assert result.symbol == "AAPL.US"
         assert isinstance(result.calculated_at, datetime)
 
@@ -1295,7 +1295,7 @@ class TestCalculateStockScoreFromPrefetched:
                 prefetched=prefetched,
             )
 
-        assert isinstance(result, CalculatedStockScore)
+        assert isinstance(result, CalculatedSecurityScore)
         assert result.symbol == "AAPL.US"
 
     @pytest.mark.asyncio

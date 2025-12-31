@@ -8,41 +8,41 @@ from datetime import datetime
 import pytest
 
 from app.domain.exceptions import ValidationError
-from app.domain.models import Position, Recommendation, Stock, Trade
+from app.domain.models import Position, Recommendation, Security, Trade
 from app.domain.value_objects.trade_side import TradeSide
 
 
-class TestStockValidation:
+class TestSecurityValidation:
     """Test Stock model validation."""
 
     def test_stock_validates_empty_symbol(self):
         """Test that Stock raises ValidationError for empty symbol."""
         with pytest.raises(ValidationError, match="Symbol cannot be empty"):
-            Stock(symbol="", name="Apple Inc.")
+            Security(symbol="", name="Apple Inc.")
 
     def test_stock_validates_whitespace_symbol(self):
         """Test that Stock raises ValidationError for whitespace-only symbol."""
         with pytest.raises(ValidationError, match="Symbol cannot be empty"):
-            Stock(symbol="   ", name="Apple Inc.")
+            Security(symbol="   ", name="Apple Inc.")
 
     def test_stock_validates_empty_name(self):
         """Test that Stock raises ValidationError for empty name."""
         with pytest.raises(ValidationError, match="Name cannot be empty"):
-            Stock(symbol="AAPL", name="")
+            Security(symbol="AAPL", name="")
 
     def test_stock_normalizes_symbol_to_uppercase(self):
         """Test that Stock normalizes symbol to uppercase."""
-        stock = Stock(symbol="aapl", name="Apple Inc.")
+        stock = Security(symbol="aapl", name="Apple Inc.")
         assert stock.symbol == "AAPL"
 
     def test_stock_strips_symbol_whitespace(self):
         """Test that Stock strips whitespace from symbol."""
-        stock = Stock(symbol="  AAPL  ", name="Apple Inc.")
+        stock = Security(symbol="  AAPL  ", name="Apple Inc.")
         assert stock.symbol == "AAPL"
 
     def test_stock_validates_min_lot(self):
         """Test that Stock corrects min_lot to minimum 1."""
-        stock = Stock(symbol="AAPL", name="Apple Inc.", min_lot=0)
+        stock = Security(symbol="AAPL", name="Apple Inc.", min_lot=0)
         assert stock.min_lot == 1
 
     def test_stock_validates_min_portfolio_target_range(self):
@@ -50,20 +50,20 @@ class TestStockValidation:
         with pytest.raises(
             ValidationError, match="min_portfolio_target must be between 0 and 20"
         ):
-            Stock(symbol="AAPL", name="Apple Inc.", min_portfolio_target=21.0)
+            Security(symbol="AAPL", name="Apple Inc.", min_portfolio_target=21.0)
 
         with pytest.raises(ValidationError):
-            Stock(symbol="AAPL", name="Apple Inc.", min_portfolio_target=-0.1)
+            Security(symbol="AAPL", name="Apple Inc.", min_portfolio_target=-0.1)
 
     def test_stock_validates_max_portfolio_target_range(self):
         """Test that Stock validates max_portfolio_target is 0-30."""
         with pytest.raises(
             ValidationError, match="max_portfolio_target must be between 0 and 30"
         ):
-            Stock(symbol="AAPL", name="Apple Inc.", max_portfolio_target=31.0)
+            Security(symbol="AAPL", name="Apple Inc.", max_portfolio_target=31.0)
 
         with pytest.raises(ValidationError):
-            Stock(symbol="AAPL", name="Apple Inc.", max_portfolio_target=-0.1)
+            Security(symbol="AAPL", name="Apple Inc.", max_portfolio_target=-0.1)
 
     def test_stock_validates_max_greater_than_min(self):
         """Test that Stock validates max_portfolio_target >= min_portfolio_target."""
@@ -71,7 +71,7 @@ class TestStockValidation:
             ValidationError,
             match="max_portfolio_target must be >= min_portfolio_target",
         ):
-            Stock(
+            Security(
                 symbol="AAPL",
                 name="Apple Inc.",
                 min_portfolio_target=0.15,

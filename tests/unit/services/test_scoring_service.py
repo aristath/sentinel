@@ -12,8 +12,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.domain.models import StockScore
-from app.domain.scoring import CalculatedStockScore
+from app.domain.models import SecurityScore
+from app.modules.scoring.domain import CalculatedSecurityScore
 from app.modules.scoring.services.scoring_service import (
     ScoringService,
     _to_domain_score,
@@ -25,7 +25,7 @@ class TestToDomainScore:
 
     def test_converts_with_all_group_scores(self):
         """Test conversion when all group scores are present."""
-        calc_score = CalculatedStockScore(
+        calc_score = CalculatedSecurityScore(
             symbol="TEST",
             total_score=85.5,
             volatility=0.25,
@@ -63,7 +63,7 @@ class TestToDomainScore:
 
     def test_converts_with_only_long_term_score(self):
         """Test quality_score uses only long_term when fundamentals missing."""
-        calc_score = CalculatedStockScore(
+        calc_score = CalculatedSecurityScore(
             symbol="TEST",
             total_score=75.0,
             volatility=0.20,
@@ -84,7 +84,7 @@ class TestToDomainScore:
 
     def test_converts_with_only_fundamentals_score(self):
         """Test quality_score uses only fundamentals when long_term missing."""
-        calc_score = CalculatedStockScore(
+        calc_score = CalculatedSecurityScore(
             symbol="TEST",
             total_score=70.0,
             volatility=0.18,
@@ -105,7 +105,7 @@ class TestToDomainScore:
 
     def test_converts_with_no_group_scores(self):
         """Test conversion when group_scores is None."""
-        calc_score = CalculatedStockScore(
+        calc_score = CalculatedSecurityScore(
             symbol="TEST",
             total_score=60.0,
             volatility=0.30,
@@ -127,7 +127,7 @@ class TestToDomainScore:
 
     def test_converts_with_empty_group_scores(self):
         """Test conversion when group_scores is empty dict."""
-        calc_score = CalculatedStockScore(
+        calc_score = CalculatedSecurityScore(
             symbol="TEST",
             total_score=60.0,
             volatility=0.30,
@@ -144,7 +144,7 @@ class TestToDomainScore:
 
     def test_history_years_calculated_from_cagr(self):
         """Test history_years is set when CAGR data is present."""
-        calc_score = CalculatedStockScore(
+        calc_score = CalculatedSecurityScore(
             symbol="TEST",
             total_score=80.0,
             volatility=0.22,
@@ -162,7 +162,7 @@ class TestToDomainScore:
 
     def test_history_years_none_without_cagr(self):
         """Test history_years is None when no CAGR data."""
-        calc_score = CalculatedStockScore(
+        calc_score = CalculatedSecurityScore(
             symbol="TEST",
             total_score=70.0,
             volatility=0.25,
@@ -332,7 +332,7 @@ class TestCalculateAndSaveScore:
         mock_fundamentals = {"pe_ratio": 15.0, "eps": 5.0}
 
         # Mock calculate_stock_score
-        mock_calculated_score = CalculatedStockScore(
+        mock_calculated_score = CalculatedSecurityScore(
             symbol="TEST",
             total_score=85.0,
             volatility=0.22,
@@ -373,7 +373,7 @@ class TestCalculateAndSaveScore:
         # Verify score was saved
         score_repo.upsert.assert_called_once()
         saved_score = score_repo.upsert.call_args[0][0]
-        assert isinstance(saved_score, StockScore)
+        assert isinstance(saved_score, SecurityScore)
         assert saved_score.symbol == "TEST"
         assert saved_score.total_score == 85.0
 
@@ -662,13 +662,13 @@ class TestScoreAllStocks:
         service = ScoringService(stock_repo, score_repo, db_manager)
 
         # Mock calculate_and_save_score to return different scores
-        score1 = CalculatedStockScore(
+        score1 = CalculatedSecurityScore(
             symbol="STOCK1",
             total_score=85.0,
             volatility=0.20,
             calculated_at=datetime(2024, 1, 15, 10, 30),
         )
-        score2 = CalculatedStockScore(
+        score2 = CalculatedSecurityScore(
             symbol="STOCK2",
             total_score=90.0,
             volatility=0.18,
@@ -750,13 +750,13 @@ class TestScoreAllStocks:
         service = ScoringService(stock_repo, score_repo, db_manager)
 
         # Mock calculate_and_save_score: STOCK2 fails, others succeed
-        score1 = CalculatedStockScore(
+        score1 = CalculatedSecurityScore(
             symbol="STOCK1",
             total_score=85.0,
             volatility=0.20,
             calculated_at=datetime(2024, 1, 15, 10, 30),
         )
-        score3 = CalculatedStockScore(
+        score3 = CalculatedSecurityScore(
             symbol="STOCK3",
             total_score=88.0,
             volatility=0.22,
@@ -793,7 +793,7 @@ class TestScoreAllStocks:
 
         service = ScoringService(stock_repo, score_repo, db_manager)
 
-        score = CalculatedStockScore(
+        score = CalculatedSecurityScore(
             symbol="TEST",
             total_score=75.0,
             volatility=0.25,
@@ -840,7 +840,7 @@ class TestScoringServiceEdgeCases:
     @pytest.mark.asyncio
     async def test_score_with_zero_volatility(self):
         """Test handling score with zero volatility."""
-        calc_score = CalculatedStockScore(
+        calc_score = CalculatedSecurityScore(
             symbol="TEST",
             total_score=80.0,
             volatility=0.0,  # Zero volatility
@@ -855,7 +855,7 @@ class TestScoringServiceEdgeCases:
     @pytest.mark.asyncio
     async def test_score_with_negative_values(self):
         """Test handling score with negative group scores."""
-        calc_score = CalculatedStockScore(
+        calc_score = CalculatedSecurityScore(
             symbol="TEST",
             total_score=50.0,
             volatility=0.30,
@@ -874,7 +874,7 @@ class TestScoringServiceEdgeCases:
     @pytest.mark.asyncio
     async def test_score_with_very_high_values(self):
         """Test handling score with values above 100."""
-        calc_score = CalculatedStockScore(
+        calc_score = CalculatedSecurityScore(
             symbol="TEST",
             total_score=150.0,  # Above normal range
             volatility=0.15,

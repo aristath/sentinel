@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.domain.models import Position, Stock
+from app.domain.models import Position, Security
 from app.modules.planning.domain.opportunities.rebalance_sells import (
     identify_rebalance_sell_opportunities,
 )
@@ -32,7 +32,7 @@ class TestIdentifyRebalanceSellOpportunities:
     @pytest.fixture
     def sample_stock(self):
         """Create a sample stock."""
-        return Stock(
+        return Security(
             symbol="AAPL.US",
             name="Apple Inc",
             min_lot=1,
@@ -80,7 +80,7 @@ class TestIdentifyRebalanceSellOpportunities:
     @pytest.mark.asyncio
     async def test_skips_stock_not_allowed_to_sell(self, sample_position):
         """Test skipping stocks not allowed to sell."""
-        stock = Stock(
+        stock = Security(
             symbol="AAPL.US",
             name="Apple Inc",
             min_lot=1,

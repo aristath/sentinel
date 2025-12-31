@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.domain.models import Stock
+from app.domain.models import Security
 from app.modules.rebalancing.services.negative_balance_rebalancer import (
     NegativeBalanceRebalancer,
 )
@@ -92,19 +92,19 @@ class TestNegativeBalanceRebalancer:
     async def test_get_trading_currencies(self, rebalancer, mock_stock_repo):
         """Test getting currencies from active stocks."""
         stocks = [
-            Stock(
+            Security(
                 symbol="AAPL.US",
                 name="Apple Inc",
                 currency=Currency.USD,
                 active=True,
             ),
-            Stock(
+            Security(
                 symbol="SAP.DE",
                 name="SAP SE",
                 currency=Currency.EUR,
                 active=True,
             ),
-            Stock(
+            Security(
                 symbol="700.HK",
                 name="Tencent",
                 currency=Currency.HKD,
@@ -126,7 +126,7 @@ class TestNegativeBalanceRebalancer:
     ):
         """Test check_currency_minimums when all currencies meet minimum."""
         stocks = [
-            Stock(
+            Security(
                 symbol="AAPL.US",
                 name="Apple Inc",
                 currency=Currency.USD,
@@ -147,7 +147,7 @@ class TestNegativeBalanceRebalancer:
     ):
         """Test check_currency_minimums when currency is below minimum."""
         stocks = [
-            Stock(
+            Security(
                 symbol="AAPL.US",
                 name="Apple Inc",
                 currency=Currency.USD,
@@ -169,7 +169,7 @@ class TestNegativeBalanceRebalancer:
     ):
         """Test check_currency_minimums when balance is negative."""
         stocks = [
-            Stock(
+            Security(
                 symbol="AAPL.US",
                 name="Apple Inc",
                 currency=Currency.USD,

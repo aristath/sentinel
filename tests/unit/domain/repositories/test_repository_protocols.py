@@ -5,16 +5,16 @@ class TestRepositoryProtocols:
     """Test that repository protocols are properly defined."""
 
     def test_stock_repository_protocol(self):
-        """Test that StockRepository implements IStockRepository."""
-        from app.repositories.stock import StockRepository
+        """Test that SecurityRepository implements ISecurityRepository."""
+        from app.repositories.stock import SecurityRepository
 
         # Check that the class has the required protocol methods
-        assert hasattr(StockRepository, "get_by_symbol")
-        assert hasattr(StockRepository, "get_all")
-        assert hasattr(StockRepository, "get_all_active")
-        assert hasattr(StockRepository, "create")
-        assert hasattr(StockRepository, "update")
-        assert hasattr(StockRepository, "delete")
+        assert hasattr(SecurityRepository, "get_by_symbol")
+        assert hasattr(SecurityRepository, "get_all")
+        assert hasattr(SecurityRepository, "get_all_active")
+        assert hasattr(SecurityRepository, "create")
+        assert hasattr(SecurityRepository, "update")
+        assert hasattr(SecurityRepository, "delete")
 
     def test_position_repository_protocol(self):
         """Test that PositionRepository implements IPositionRepository."""

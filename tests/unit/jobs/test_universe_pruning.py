@@ -11,14 +11,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.domain.models import Stock, StockScore
+from app.domain.models import Security, SecurityScore
 
 
-def create_stock(symbol: str, active: bool = True) -> Stock:
+def create_stock(symbol: str, active: bool = True) -> Security:
     """Helper to create stock."""
     from app.shared.domain.value_objects.currency import Currency
 
-    return Stock(
+    return Security(
         symbol=symbol,
         name=f"{symbol} Inc.",
         active=active,
@@ -28,12 +28,12 @@ def create_stock(symbol: str, active: bool = True) -> Stock:
 
 def create_stock_score(
     symbol: str, total_score: float, calculated_at: Optional[str] = None
-) -> StockScore:
+) -> SecurityScore:
     """Helper to create stock score."""
     if calculated_at is None:
         calculated_at = datetime.now().isoformat()
 
-    return StockScore(
+    return SecurityScore(
         symbol=symbol,
         total_score=total_score,
         calculated_at=datetime.fromisoformat(calculated_at),
@@ -75,7 +75,7 @@ def mock_universe_pruning_dependencies(
 
     with (
         patch(
-            "app.jobs.universe_pruning.StockRepository", return_value=mock_stock_repo
+            "app.jobs.universe_pruning.SecurityRepository", return_value=mock_stock_repo
         ),
         patch(
             "app.jobs.universe_pruning.ScoreRepository", return_value=mock_score_repo

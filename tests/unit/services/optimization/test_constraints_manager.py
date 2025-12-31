@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.domain.models import Position, Stock
+from app.domain.models import Position, Security
 from app.modules.optimization.services.constraints_manager import (
     ConstraintsManager,
     SectorConstraint,
@@ -32,9 +32,9 @@ def create_stock(
     industry: str = "Consumer Electronics",
     min_portfolio_target: float | None = None,
     max_portfolio_target: float | None = None,
-) -> Stock:
-    """Create a mock Stock object for testing."""
-    stock = MagicMock(spec=Stock)
+) -> Security:
+    """Create a mock Security object for testing."""
+    stock = MagicMock(spec=Security)
     stock.symbol = symbol
     stock.allow_buy = allow_buy
     stock.allow_sell = allow_sell

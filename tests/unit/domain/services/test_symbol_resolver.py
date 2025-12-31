@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.domain.models import Stock
+from app.domain.models import Security
 from app.modules.universe.domain.symbol_resolver import (
     IdentifierType,
     SymbolInfo,
@@ -122,7 +122,7 @@ class TestSymbolResolver:
 
     @pytest.fixture
     def mock_stock_repo(self):
-        """Mock StockRepository."""
+        """Mock SecurityRepository."""
         repo = AsyncMock()
         return repo
 
@@ -161,9 +161,9 @@ class TestSymbolResolver:
         self, mock_tradernet_client, mock_stock_repo
     ):
         """Test resolving Tradernet symbol when ISIN is cached."""
-        from app.domain.models import Stock
+        from app.domain.models import Security
 
-        mock_stock = Stock(
+        mock_stock = Security(
             symbol="AAPL.US",
             name="Apple",
             isin="US0378331005",
@@ -216,7 +216,7 @@ class TestSymbolResolver:
         self, mock_tradernet_client, mock_stock_repo
     ):
         """Test that resolve_and_cache caches ISIN when found."""
-        mock_stock = Stock(symbol="AAPL.US", name="Apple", isin=None, country="US")
+        mock_stock = Security(symbol="AAPL.US", name="Apple", isin=None, country="US")
         mock_stock_repo.get_by_symbol.return_value = mock_stock
         mock_tradernet_client.get_quotes_raw.return_value = {
             "result": {"q": [{"issue_nb": "US0378331005"}]}
@@ -254,9 +254,9 @@ class TestSymbolResolver:
         self, mock_tradernet_client, mock_stock_repo
     ):
         """Test that get_symbol_for_display returns symbol for ISIN."""
-        from app.domain.models import Stock
+        from app.domain.models import Security
 
-        mock_stock = Stock(
+        mock_stock = Security(
             symbol="AAPL.US", name="Apple", isin="US0378331005", country="US"
         )
         mock_stock_repo.get_by_isin.return_value = mock_stock
@@ -297,9 +297,9 @@ class TestSymbolResolver:
         self, mock_tradernet_client, mock_stock_repo
     ):
         """Test that get_isin_for_symbol returns ISIN from repository."""
-        from app.domain.models import Stock
+        from app.domain.models import Security
 
-        mock_stock = Stock(
+        mock_stock = Security(
             symbol="AAPL.US", name="Apple", isin="US0378331005", country="US"
         )
         mock_stock_repo.get_by_symbol.return_value = mock_stock

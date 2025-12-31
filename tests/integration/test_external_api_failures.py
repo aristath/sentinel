@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.domain.models import Position, Stock
+from app.domain.models import Position, Security
 from app.domain.services.exchange_rate_service import ExchangeRateService
 from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.external.tradernet import get_tradernet_client
@@ -13,7 +13,7 @@ from app.repositories import (
     AllocationRepository,
     PortfolioRepository,
     PositionRepository,
-    StockRepository,
+    SecurityRepository,
 )
 
 
@@ -87,12 +87,12 @@ async def test_rebalancing_service_handles_price_fetch_failure(db):
     from app.modules.rebalancing.services.rebalancing_service import RebalancingService
 
     # Setup test data
-    stock_repo = StockRepository(db=db)
+    stock_repo = SecurityRepository(db=db)
     position_repo = PositionRepository(db=db)
     allocation_repo = AllocationRepository(db=db)
     portfolio_repo = PortfolioRepository(db=db)
 
-    stock = Stock(
+    stock = Security(
         symbol="AAPL",
         yahoo_symbol="AAPL",
         name="Apple Inc.",

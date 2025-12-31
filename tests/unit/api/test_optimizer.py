@@ -233,7 +233,7 @@ class TestRunOptimization:
 
         with patch("app.api.optimizer.SettingsRepository") as mock_repo_class:
             with patch("app.api.optimizer.SettingsService") as mock_service_class:
-                with patch("app.api.optimizer.StockRepository") as mock_stock_class:
+                with patch("app.api.optimizer.SecurityRepository") as mock_stock_class:
                     with patch(
                         "app.api.optimizer.PositionRepository"
                     ) as mock_position_class:
@@ -338,7 +338,7 @@ class TestRunOptimization:
         """Test error when no stocks in universe."""
         with patch("app.api.optimizer.SettingsRepository") as mock_repo_class:
             with patch("app.api.optimizer.SettingsService") as mock_service_class:
-                with patch("app.api.optimizer.StockRepository") as mock_stock_class:
+                with patch("app.api.optimizer.SecurityRepository") as mock_stock_class:
                     with patch(
                         "app.api.optimizer.PositionRepository"
                     ) as mock_position_class:
@@ -375,7 +375,7 @@ class TestRunOptimization:
 
         with patch("app.api.optimizer.SettingsRepository") as mock_repo_class:
             with patch("app.api.optimizer.SettingsService") as mock_service_class:
-                with patch("app.api.optimizer.StockRepository") as mock_stock_class:
+                with patch("app.api.optimizer.SecurityRepository") as mock_stock_class:
                     with patch(
                         "app.api.optimizer.PositionRepository"
                     ) as mock_position_class:
@@ -477,7 +477,7 @@ class TestRunOptimization:
 
         with patch("app.api.optimizer.SettingsRepository") as mock_repo_class:
             with patch("app.api.optimizer.SettingsService") as mock_service_class:
-                with patch("app.api.optimizer.StockRepository") as mock_stock_class:
+                with patch("app.api.optimizer.SecurityRepository") as mock_stock_class:
                     with patch(
                         "app.api.optimizer.PositionRepository"
                     ) as mock_position_class:
@@ -578,7 +578,7 @@ class TestRunOptimization:
 
         with patch("app.api.optimizer.SettingsRepository") as mock_repo_class:
             with patch("app.api.optimizer.SettingsService") as mock_service_class:
-                with patch("app.api.optimizer.StockRepository") as mock_stock_class:
+                with patch("app.api.optimizer.SecurityRepository") as mock_stock_class:
                     with patch(
                         "app.api.optimizer.PositionRepository"
                     ) as mock_position_class:
@@ -681,7 +681,9 @@ class TestRunOptimization:
                                             call_kwargs = (
                                                 mock_optimizer.optimize.call_args.kwargs
                                             )
-                                            assert call_kwargs["stocks"] == [mock_stock]
+                                            assert call_kwargs["securities"] == [
+                                                mock_stock
+                                            ]
                                             assert "AAPL" in call_kwargs["positions"]
                                             assert call_kwargs["cash_balance"] == 5000.0
                                             assert call_kwargs["blend"] == 0.5
@@ -724,7 +726,7 @@ class TestRunOptimization:
 
         with patch("app.api.optimizer.SettingsRepository") as mock_repo_class:
             with patch("app.api.optimizer.SettingsService") as mock_service_class:
-                with patch("app.api.optimizer.StockRepository") as mock_stock_class:
+                with patch("app.api.optimizer.SecurityRepository") as mock_stock_class:
                     with patch(
                         "app.api.optimizer.PositionRepository"
                     ) as mock_position_class:
@@ -1063,7 +1065,7 @@ class TestEdgeCases:
 
         with patch("app.api.optimizer.SettingsRepository") as mock_repo_class:
             with patch("app.api.optimizer.SettingsService") as mock_service_class:
-                with patch("app.api.optimizer.StockRepository") as mock_stock_class:
+                with patch("app.api.optimizer.SecurityRepository") as mock_stock_class:
                     with patch(
                         "app.api.optimizer.PositionRepository"
                     ) as mock_position_class:
@@ -1172,7 +1174,7 @@ class TestEdgeCases:
 
         with patch("app.api.optimizer.SettingsRepository") as mock_repo_class:
             with patch("app.api.optimizer.SettingsService") as mock_service_class:
-                with patch("app.api.optimizer.StockRepository") as mock_stock_class:
+                with patch("app.api.optimizer.SecurityRepository") as mock_stock_class:
                     with patch(
                         "app.api.optimizer.PositionRepository"
                     ) as mock_position_class:
@@ -1333,7 +1335,7 @@ class TestOptimizerUsesAllocationRepo:
 
         with patch("app.api.optimizer.SettingsRepository") as mock_settings_repo_class:
             with patch("app.api.optimizer.SettingsService") as mock_service_class:
-                with patch("app.api.optimizer.StockRepository") as mock_stock_class:
+                with patch("app.api.optimizer.SecurityRepository") as mock_stock_class:
                     with patch(
                         "app.api.optimizer.PositionRepository"
                     ) as mock_position_class:
@@ -1463,7 +1465,7 @@ class TestOptimizerUsesAllocationRepo:
 
         with patch("app.api.optimizer.SettingsRepository") as mock_settings_repo_class:
             with patch("app.api.optimizer.SettingsService") as mock_service_class:
-                with patch("app.api.optimizer.StockRepository") as mock_stock_class:
+                with patch("app.api.optimizer.SecurityRepository") as mock_stock_class:
                     with patch(
                         "app.api.optimizer.PositionRepository"
                     ) as mock_position_class:
@@ -1594,7 +1596,7 @@ class TestOptimizerUsesAllocationRepo:
 
         with patch("app.api.optimizer.SettingsRepository") as mock_settings_repo_class:
             with patch("app.api.optimizer.SettingsService") as mock_service_class:
-                with patch("app.api.optimizer.StockRepository") as mock_stock_class:
+                with patch("app.api.optimizer.SecurityRepository") as mock_stock_class:
                     with patch(
                         "app.api.optimizer.PositionRepository"
                     ) as mock_position_class:

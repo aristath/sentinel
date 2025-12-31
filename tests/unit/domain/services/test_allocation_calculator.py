@@ -4,7 +4,7 @@ These tests validate allocation and rebalancing calculations including
 rebalance band checks, position sizing, and trade limits.
 """
 
-from app.domain.models import StockPriority
+from app.domain.models import SecurityPriority
 
 
 class TestIsOutsideRebalanceBand:
@@ -137,7 +137,7 @@ class TestCalculatePositionSize:
         """Test that position size is adjusted by volatility."""
         from app.domain.services.allocation_calculator import calculate_position_size
 
-        candidate = StockPriority(
+        candidate = SecurityPriority(
             symbol="AAPL",
             stock_score=0.5,
             volatility=0.20,  # 20% volatility
@@ -153,7 +153,7 @@ class TestCalculatePositionSize:
         """Test that default volatility is used when volatility is None."""
         from app.domain.services.allocation_calculator import calculate_position_size
 
-        candidate = StockPriority(
+        candidate = SecurityPriority(
             symbol="AAPL",
             stock_score=0.5,
             volatility=None,
@@ -169,7 +169,7 @@ class TestCalculatePositionSize:
         """Test that minimum size constraint is applied."""
         from app.domain.services.allocation_calculator import calculate_position_size
 
-        candidate = StockPriority(
+        candidate = SecurityPriority(
             symbol="AAPL",
             stock_score=0.5,
             volatility=0.20,
@@ -184,13 +184,13 @@ class TestCalculatePositionSize:
         """Test that stock score adjusts position size."""
         from app.domain.services.allocation_calculator import calculate_position_size
 
-        candidate_high_score = StockPriority(
+        candidate_high_score = SecurityPriority(
             symbol="AAPL",
             stock_score=1.0,  # High score
             volatility=0.20,
         )
 
-        candidate_low_score = StockPriority(
+        candidate_low_score = SecurityPriority(
             symbol="MSFT",
             stock_score=0.0,  # Low score
             volatility=0.20,

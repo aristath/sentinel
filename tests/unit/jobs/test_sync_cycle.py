@@ -444,7 +444,7 @@ class TestStepUpdateDisplay:
         with (
             patch("app.repositories.PortfolioRepository"),
             patch("app.repositories.PositionRepository"),
-            patch("app.repositories.StockRepository"),
+            patch("app.repositories.SecurityRepository"),
             patch("app.repositories.SettingsRepository"),
             patch("app.repositories.AllocationRepository"),
             patch("app.infrastructure.external.tradernet.get_tradernet_client"),

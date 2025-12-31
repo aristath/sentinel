@@ -5,7 +5,7 @@ sizes could lead to over-concentrated positions or wasted cash.
 """
 
 from app.domain.constants import MAX_VOL_WEIGHT, MIN_VOL_WEIGHT
-from app.domain.models import StockPriority
+from app.domain.models import SecurityPriority
 from app.domain.services.allocation_calculator import (
     calculate_position_size,
     get_max_trades,
@@ -29,9 +29,9 @@ class TestCalculatePositionSize:
         score: float = 0.7,
         priority: float = 1.0,
         volatility: float = 0.20,
-    ) -> StockPriority:
+    ) -> SecurityPriority:
         """Helper to create test candidates."""
-        return StockPriority(
+        return SecurityPriority(
             symbol="TEST",
             name="Test Stock",
             country="United States",

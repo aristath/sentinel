@@ -7,44 +7,44 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.domain.models import Stock
+from app.domain.models import Security
 
 
-class TestStockRepositoryInit:
+class TestSecurityRepositoryInit:
     """Test stock repository initialization."""
 
     def test_init_with_db(self):
         """Test initialization with provided database."""
-        from app.modules.universe.database.stock_repository import StockRepository
+        from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_db = AsyncMock()
         mock_db.fetchone = AsyncMock()
 
-        repo = StockRepository(db=mock_db)
+        repo = SecurityRepository(db=mock_db)
 
         assert repo._db == mock_db
 
     def test_init_wraps_raw_connection(self):
         """Test that raw connection is wrapped."""
-        from app.modules.universe.database.stock_repository import StockRepository
+        from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_conn = MagicMock()
         mock_conn.execute = MagicMock()
         # No fetchone attribute
 
-        repo = StockRepository(db=mock_conn)
+        repo = SecurityRepository(db=mock_conn)
 
         # Should be wrapped in DatabaseAdapter
         assert hasattr(repo._db, "fetchone")
 
 
-class TestStockRepositoryQueries:
+class TestSecurityRepositoryQueries:
     """Test stock query operations."""
 
     @pytest.mark.asyncio
     async def test_get_by_symbol_found(self):
         """Test getting stock by symbol when found."""
-        from app.modules.universe.database.stock_repository import StockRepository
+        from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_row = {
             "symbol": "AAPL.US",
@@ -63,7 +63,7 @@ class TestStockRepositoryQueries:
         mock_db = AsyncMock()
         mock_db.fetchone = AsyncMock(return_value=mock_row)
 
-        repo = StockRepository(db=mock_db)
+        repo = SecurityRepository(db=mock_db)
 
         result = await repo.get_by_symbol("AAPL.US")
 
@@ -74,12 +74,12 @@ class TestStockRepositoryQueries:
     @pytest.mark.asyncio
     async def test_get_by_symbol_not_found(self):
         """Test getting stock by symbol when not found."""
-        from app.modules.universe.database.stock_repository import StockRepository
+        from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_db = AsyncMock()
         mock_db.fetchone = AsyncMock(return_value=None)
 
-        repo = StockRepository(db=mock_db)
+        repo = SecurityRepository(db=mock_db)
 
         result = await repo.get_by_symbol("NONEXISTENT")
 
@@ -88,7 +88,7 @@ class TestStockRepositoryQueries:
     @pytest.mark.asyncio
     async def test_get_all_active(self):
         """Test getting all active stocks."""
-        from app.modules.universe.database.stock_repository import StockRepository
+        from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_rows = [
             {
@@ -122,17 +122,17 @@ class TestStockRepositoryQueries:
         mock_db = AsyncMock()
         mock_db.fetchall = AsyncMock(return_value=mock_rows)
 
-        repo = StockRepository(db=mock_db)
+        repo = SecurityRepository(db=mock_db)
 
         result = await repo.get_all_active()
 
         assert len(result) == 2
-        assert all(isinstance(s, Stock) for s in result)
+        assert all(isinstance(s, Security) for s in result)
 
     @pytest.mark.asyncio
     async def test_get_all(self):
         """Test getting all stocks."""
-        from app.modules.universe.database.stock_repository import StockRepository
+        from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_rows = [
             {
@@ -153,29 +153,29 @@ class TestStockRepositoryQueries:
         mock_db = AsyncMock()
         mock_db.fetchall = AsyncMock(return_value=mock_rows)
 
-        repo = StockRepository(db=mock_db)
+        repo = SecurityRepository(db=mock_db)
 
         result = await repo.get_all()
 
         assert len(result) == 1
 
 
-class TestStockRepositoryCreate:
+class TestSecurityRepositoryCreate:
     """Test stock creation operations."""
 
     @pytest.mark.asyncio
     async def test_creates_stock(self):
         """Test creating a stock record."""
-        from app.modules.universe.database.stock_repository import StockRepository
+        from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_db = AsyncMock()
         mock_db.transaction = MagicMock()
         mock_db.transaction.return_value.__aenter__ = AsyncMock(return_value=mock_db)
         mock_db.transaction.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        repo = StockRepository(db=mock_db)
+        repo = SecurityRepository(db=mock_db)
 
-        stock = Stock(
+        stock = Security(
             symbol="AAPL.US",
             yahoo_symbol="AAPL",
             name="Apple Inc",
@@ -196,16 +196,16 @@ class TestStockRepositoryCreate:
     @pytest.mark.asyncio
     async def test_create_with_portfolio_targets(self):
         """Test creating a stock with min/max portfolio targets."""
-        from app.modules.universe.database.stock_repository import StockRepository
+        from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_db = AsyncMock()
         mock_db.transaction = MagicMock()
         mock_db.transaction.return_value.__aenter__ = AsyncMock(return_value=mock_db)
         mock_db.transaction.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        repo = StockRepository(db=mock_db)
+        repo = SecurityRepository(db=mock_db)
 
-        stock = Stock(
+        stock = Security(
             symbol="AAPL.US",
             name="Apple Inc",
             min_portfolio_target=5.0,
@@ -223,16 +223,16 @@ class TestStockRepositoryCreate:
     @pytest.mark.asyncio
     async def test_create_with_null_portfolio_targets(self):
         """Test creating a stock with NULL portfolio targets."""
-        from app.modules.universe.database.stock_repository import StockRepository
+        from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_db = AsyncMock()
         mock_db.transaction = MagicMock()
         mock_db.transaction.return_value.__aenter__ = AsyncMock(return_value=mock_db)
         mock_db.transaction.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        repo = StockRepository(db=mock_db)
+        repo = SecurityRepository(db=mock_db)
 
-        stock = Stock(symbol="AAPL.US", name="Apple Inc")
+        stock = Security(symbol="AAPL.US", name="Apple Inc")
 
         await repo.create(stock)
 
@@ -243,20 +243,20 @@ class TestStockRepositoryCreate:
         # max_portfolio_target should also be None
 
 
-class TestStockRepositoryUpdate:
+class TestSecurityRepositoryUpdate:
     """Test stock update operations."""
 
     @pytest.mark.asyncio
     async def test_updates_stock(self):
         """Test updating a stock."""
-        from app.modules.universe.database.stock_repository import StockRepository
+        from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_db = AsyncMock()
         mock_db.transaction = MagicMock()
         mock_db.transaction.return_value.__aenter__ = AsyncMock(return_value=mock_db)
         mock_db.transaction.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        repo = StockRepository(db=mock_db)
+        repo = SecurityRepository(db=mock_db)
 
         await repo.update("AAPL.US", name="Apple Inc.", active=True)
 
@@ -265,11 +265,11 @@ class TestStockRepositoryUpdate:
     @pytest.mark.asyncio
     async def test_update_no_changes(self):
         """Test update with no changes does nothing."""
-        from app.modules.universe.database.stock_repository import StockRepository
+        from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_db = AsyncMock()
 
-        repo = StockRepository(db=mock_db)
+        repo = SecurityRepository(db=mock_db)
 
         await repo.update("AAPL.US")
 
@@ -278,14 +278,14 @@ class TestStockRepositoryUpdate:
     @pytest.mark.asyncio
     async def test_update_converts_booleans(self):
         """Test that boolean values are converted to integers."""
-        from app.modules.universe.database.stock_repository import StockRepository
+        from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_db = AsyncMock()
         mock_db.transaction = MagicMock()
         mock_db.transaction.return_value.__aenter__ = AsyncMock(return_value=mock_db)
         mock_db.transaction.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        repo = StockRepository(db=mock_db)
+        repo = SecurityRepository(db=mock_db)
 
         await repo.update("AAPL.US", active=True, allow_buy=False, allow_sell=True)
 
@@ -298,14 +298,14 @@ class TestStockRepositoryUpdate:
     @pytest.mark.asyncio
     async def test_update_with_portfolio_targets(self):
         """Test updating stock with min/max portfolio targets."""
-        from app.modules.universe.database.stock_repository import StockRepository
+        from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_db = AsyncMock()
         mock_db.transaction = MagicMock()
         mock_db.transaction.return_value.__aenter__ = AsyncMock(return_value=mock_db)
         mock_db.transaction.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        repo = StockRepository(db=mock_db)
+        repo = SecurityRepository(db=mock_db)
 
         await repo.update(
             "AAPL.US", min_portfolio_target=5.0, max_portfolio_target=15.0
@@ -319,14 +319,14 @@ class TestStockRepositoryUpdate:
     @pytest.mark.asyncio
     async def test_update_clearing_portfolio_targets(self):
         """Test updating stock to clear portfolio targets (set to None)."""
-        from app.modules.universe.database.stock_repository import StockRepository
+        from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_db = AsyncMock()
         mock_db.transaction = MagicMock()
         mock_db.transaction.return_value.__aenter__ = AsyncMock(return_value=mock_db)
         mock_db.transaction.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        repo = StockRepository(db=mock_db)
+        repo = SecurityRepository(db=mock_db)
 
         await repo.update(
             "AAPL.US", min_portfolio_target=None, max_portfolio_target=None
@@ -338,20 +338,20 @@ class TestStockRepositoryUpdate:
         assert "max_portfolio_target" in call_args[0]
 
 
-class TestStockRepositoryDelete:
+class TestSecurityRepositoryDelete:
     """Test stock delete operations."""
 
     @pytest.mark.asyncio
     async def test_delete_sets_inactive(self):
         """Test that delete soft-deletes by setting active=False."""
-        from app.modules.universe.database.stock_repository import StockRepository
+        from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_db = AsyncMock()
         mock_db.transaction = MagicMock()
         mock_db.transaction.return_value.__aenter__ = AsyncMock(return_value=mock_db)
         mock_db.transaction.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        repo = StockRepository(db=mock_db)
+        repo = SecurityRepository(db=mock_db)
 
         await repo.delete("AAPL.US")
 
@@ -359,13 +359,13 @@ class TestStockRepositoryDelete:
         mock_db.execute.assert_called_once()
 
 
-class TestStockRepositoryGetWithScores:
+class TestSecurityRepositoryGetWithScores:
     """Test getting stocks with scores."""
 
     @pytest.mark.asyncio
     async def test_merges_stock_score_position_data(self):
         """Test that stock, score, and position data are merged."""
-        from app.modules.universe.database.stock_repository import StockRepository
+        from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_stock_row = MagicMock()
         mock_stock_row.__getitem__ = lambda self, key: {
@@ -450,7 +450,7 @@ class TestStockRepositoryGetWithScores:
         mock_db_manager.calculations = mock_calculations_db
         mock_db_manager.state = mock_state_db
 
-        repo = StockRepository(db=mock_db)
+        repo = SecurityRepository(db=mock_db)
 
         with patch(
             "app.modules.universe.database.stock_repository.get_db_manager",
@@ -469,10 +469,10 @@ class TestRowToStock:
 
     def test_converts_valid_row(self):
         """Test converting a valid database row to Stock model."""
-        from app.modules.universe.database.stock_repository import StockRepository
+        from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_db = AsyncMock()
-        repo = StockRepository(db=mock_db)
+        repo = SecurityRepository(db=mock_db)
 
         row = {
             "symbol": "AAPL.US",
@@ -502,10 +502,10 @@ class TestRowToStock:
 
     def test_handles_null_priority_multiplier(self):
         """Test handling null priority_multiplier."""
-        from app.modules.universe.database.stock_repository import StockRepository
+        from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_db = AsyncMock()
-        repo = StockRepository(db=mock_db)
+        repo = SecurityRepository(db=mock_db)
 
         row = {
             "symbol": "AAPL.US",
@@ -533,10 +533,10 @@ class TestRowToStock:
 
     def test_row_to_stock_maps_portfolio_targets(self):
         """Test that _row_to_stock maps portfolio target columns correctly."""
-        from app.modules.universe.database.stock_repository import StockRepository
+        from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_db = AsyncMock()
-        repo = StockRepository(db=mock_db)
+        repo = SecurityRepository(db=mock_db)
 
         row = {
             "symbol": "AAPL.US",
@@ -565,10 +565,10 @@ class TestRowToStock:
 
     def test_row_to_stock_handles_null_portfolio_targets(self):
         """Test that _row_to_stock handles NULL portfolio targets."""
-        from app.modules.universe.database.stock_repository import StockRepository
+        from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_db = AsyncMock()
-        repo = StockRepository(db=mock_db)
+        repo = SecurityRepository(db=mock_db)
 
         row = {
             "symbol": "AAPL.US",
@@ -597,10 +597,10 @@ class TestRowToStock:
 
     def test_row_to_stock_handles_missing_portfolio_target_columns(self):
         """Test that _row_to_stock handles missing portfolio target columns (old schema)."""
-        from app.modules.universe.database.stock_repository import StockRepository
+        from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_db = AsyncMock()
-        repo = StockRepository(db=mock_db)
+        repo = SecurityRepository(db=mock_db)
 
         row = {
             "symbol": "AAPL.US",

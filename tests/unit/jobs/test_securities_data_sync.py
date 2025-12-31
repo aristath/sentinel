@@ -19,7 +19,7 @@ class TestStocksDataSync:
     @pytest.mark.asyncio
     async def test_processes_only_stale_stocks(self):
         """Test that only stocks not synced in 24 hours are processed."""
-        from app.jobs.stocks_data_sync import _get_stocks_needing_sync
+        from app.jobs.securities_data_sync import _get_stocks_needing_sync
 
         now = datetime.now()
         stale_time = (now - timedelta(hours=25)).isoformat()
@@ -47,7 +47,7 @@ class TestStocksDataSync:
     @pytest.mark.asyncio
     async def test_processes_stocks_sequentially(self):
         """Test that stocks are processed one at a time, not in parallel."""
-        from app.jobs.stocks_data_sync import run_stocks_data_sync
+        from app.jobs.securities_data_sync import run_stocks_data_sync
 
         processed_order = []
 
@@ -85,7 +85,7 @@ class TestStocksDataSync:
     @pytest.mark.asyncio
     async def test_skips_all_when_all_stocks_fresh(self):
         """Test that no processing happens when all stocks are fresh."""
-        from app.jobs.stocks_data_sync import run_stocks_data_sync
+        from app.jobs.securities_data_sync import run_stocks_data_sync
 
         process_called = False
 
@@ -121,7 +121,7 @@ class TestProcessSingleStock:
     @pytest.mark.asyncio
     async def test_runs_all_steps_for_stock(self):
         """Test that all three steps run for each stock."""
-        from app.jobs.stocks_data_sync import _process_single_stock
+        from app.jobs.securities_data_sync import _process_single_stock
 
         steps_run = []
 
@@ -176,7 +176,7 @@ class TestProcessSingleStock:
     @pytest.mark.asyncio
     async def test_updates_last_synced_on_success(self):
         """Test that last_synced is updated after successful processing."""
-        from app.jobs.stocks_data_sync import _process_single_stock
+        from app.jobs.securities_data_sync import _process_single_stock
 
         last_synced_updated = []
 
@@ -220,7 +220,7 @@ class TestProcessSingleStock:
     @pytest.mark.asyncio
     async def test_does_not_update_last_synced_on_error(self):
         """Test that last_synced is NOT updated if processing fails."""
-        from app.jobs.stocks_data_sync import _process_single_stock
+        from app.jobs.securities_data_sync import _process_single_stock
 
         last_synced_updated = []
 
@@ -267,7 +267,7 @@ class TestDisplayUpdates:
     @pytest.mark.asyncio
     async def test_shows_updating_message(self):
         """Test that LED shows 'UPDATING {SYMBOL} DATA' during processing."""
-        from app.jobs.stocks_data_sync import _process_single_stock
+        from app.jobs.securities_data_sync import _process_single_stock
 
         processing_messages = []
 
@@ -314,7 +314,7 @@ class TestDisplayUpdates:
     @pytest.mark.asyncio
     async def test_clears_processing_after_completion(self):
         """Test that processing display is cleared after completion."""
-        from app.jobs.stocks_data_sync import _process_single_stock
+        from app.jobs.securities_data_sync import _process_single_stock
 
         clear_called = False
 
@@ -364,7 +364,7 @@ class TestForceRefresh:
     @pytest.mark.asyncio
     async def test_force_refresh_bypasses_last_synced(self):
         """Test that force refresh processes stock regardless of last_synced."""
-        from app.jobs.stocks_data_sync import refresh_single_stock
+        from app.jobs.securities_data_sync import refresh_single_stock
 
         steps_run = []
 
@@ -421,7 +421,7 @@ class TestForceRefresh:
     @pytest.mark.asyncio
     async def test_force_refresh_returns_error_on_failure(self):
         """Test that force refresh returns error status on failure."""
-        from app.jobs.stocks_data_sync import refresh_single_stock
+        from app.jobs.securities_data_sync import refresh_single_stock
 
         async def mock_sync_error(symbol):
             raise Exception("Sync failed")

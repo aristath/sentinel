@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.domain.models import DividendRecord, Stock
+from app.domain.models import DividendRecord, Security
 from app.shared.domain.value_objects.currency import Currency
 
 
@@ -40,9 +40,9 @@ def create_dividend(
     )
 
 
-def create_stock(symbol: str, name: Optional[str] = None, min_lot: int = 1) -> Stock:
+def create_stock(symbol: str, name: Optional[str] = None, min_lot: int = 1) -> Security:
     """Helper to create stock."""
-    return Stock(
+    return Security(
         symbol=symbol,
         name=name or f"{symbol} Inc.",
         min_lot=min_lot,
@@ -101,7 +101,7 @@ def mock_dividend_reinvestment_dependencies(
             return_value=mock_dividend_repo,
         ),
         patch(
-            "app.jobs.dividend_reinvestment.StockRepository",
+            "app.jobs.dividend_reinvestment.SecurityRepository",
             return_value=mock_stock_repo,
         ),
         patch(

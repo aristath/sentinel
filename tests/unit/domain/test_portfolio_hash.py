@@ -3,7 +3,7 @@
 These tests validate the hash generation functions for portfolio state, settings, and allocations.
 """
 
-from app.domain.models import Stock
+from app.domain.models import Security
 from app.domain.portfolio_hash import (
     apply_pending_orders_to_portfolio,
     generate_allocations_hash,
@@ -210,7 +210,7 @@ class TestGeneratePortfolioHash:
         """Test generating hash with stocks universe."""
         positions = [{"symbol": "AAPL", "quantity": 10}]
         stocks = [
-            Stock(
+            Security(
                 symbol="AAPL",
                 allow_buy=True,
                 allow_sell=False,
@@ -219,7 +219,7 @@ class TestGeneratePortfolioHash:
                 country="US",
                 industry="Technology",
             ),
-            Stock(
+            Security(
                 symbol="MSFT",
                 allow_buy=True,
                 allow_sell=True,
@@ -410,7 +410,7 @@ class TestGenerateRecommendationCacheKey:
         positions = [{"symbol": "AAPL", "quantity": 10}]
         settings = {"min_stock_score": 0.5}
         stocks = [
-            Stock(
+            Security(
                 symbol="AAPL",
                 allow_buy=True,
                 allow_sell=False,

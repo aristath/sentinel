@@ -33,9 +33,9 @@ def mock_position_repo():
 def mock_stock_repo():
     """Mock stock repository."""
     repo = AsyncMock()
-    from app.domain.models import Stock
+    from app.domain.models import Security
 
-    mock_stock = Stock(
+    mock_stock = Security(
         symbol="AAPL",
         name="Apple Inc.",
         country="United States",
@@ -123,12 +123,12 @@ class TestProcessPlannerBatchJob:
                 mock_pos_repo_class.return_value = mock_pos_repo
 
                 with patch(
-                    "app.jobs.planner_batch.StockRepository"
+                    "app.jobs.planner_batch.SecurityRepository"
                 ) as mock_stock_repo_class:
                     mock_stock_repo = AsyncMock()
-                    from app.domain.models import Stock
+                    from app.domain.models import Security
 
-                    mock_stock = Stock(
+                    mock_stock = Security(
                         symbol="AAPL",
                         name="Apple Inc.",
                         country="United States",
@@ -208,7 +208,7 @@ class TestProcessPlannerBatchJob:
                 mock_pos_repo_class.return_value = mock_pos_repo
 
                 with patch(
-                    "app.jobs.planner_batch.StockRepository"
+                    "app.jobs.planner_batch.SecurityRepository"
                 ) as mock_stock_repo_class:
                     mock_stock_repo = AsyncMock()
                     mock_stock_repo.get_all_active.return_value = []
@@ -258,7 +258,7 @@ class TestProcessPlannerBatchJob:
                 mock_pos_repo_class.return_value = mock_pos_repo
 
                 with patch(
-                    "app.jobs.planner_batch.StockRepository"
+                    "app.jobs.planner_batch.SecurityRepository"
                 ) as mock_stock_repo_class:
                     mock_stock_repo = AsyncMock()
                     mock_stock_repo.get_all_active.return_value = []
@@ -344,7 +344,7 @@ class TestProcessPlannerBatchJob:
                 mock_pos_repo_class.return_value = mock_pos_repo
 
                 with patch(
-                    "app.jobs.planner_batch.StockRepository"
+                    "app.jobs.planner_batch.SecurityRepository"
                 ) as mock_stock_repo_class:
                     mock_stock_repo = AsyncMock()
                     mock_stock_repo.get_all_active.return_value = []
@@ -430,7 +430,7 @@ class TestProcessPlannerBatchJob:
                 mock_pos_repo_class.return_value = mock_pos_repo
 
                 with patch(
-                    "app.jobs.planner_batch.StockRepository"
+                    "app.jobs.planner_batch.SecurityRepository"
                 ) as mock_stock_repo_class:
                     mock_stock_repo = AsyncMock()
                     mock_stock_repo.get_all_active.return_value = []
@@ -519,7 +519,7 @@ class TestProcessPlannerBatchJob:
                 mock_pos_repo_class.return_value = mock_pos_repo
 
                 with patch(
-                    "app.jobs.planner_batch.StockRepository"
+                    "app.jobs.planner_batch.SecurityRepository"
                 ) as mock_stock_repo_class:
                     mock_stock_repo = AsyncMock()
                     mock_stock_repo.get_all_active.return_value = []
@@ -611,7 +611,7 @@ class TestProcessPlannerBatchJob:
                 mock_pos_repo_class.return_value = mock_pos_repo
 
                 with patch(
-                    "app.jobs.planner_batch.StockRepository"
+                    "app.jobs.planner_batch.SecurityRepository"
                 ) as mock_stock_repo_class:
                     mock_stock_repo = AsyncMock()
                     mock_stock_repo.get_all_active.return_value = []

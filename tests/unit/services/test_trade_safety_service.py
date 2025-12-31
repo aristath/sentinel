@@ -31,10 +31,10 @@ def mock_position_repo():
 
 @pytest.fixture
 def mock_stock_repo():
-    """Mock StockRepository."""
-    from app.repositories import StockRepository
+    """Mock SecurityRepository."""
+    from app.repositories import SecurityRepository
 
-    repo = MagicMock(spec=StockRepository)
+    repo = MagicMock(spec=SecurityRepository)
     return repo
 
 

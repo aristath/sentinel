@@ -12,7 +12,7 @@ from app.domain.events.position_events import PositionUpdatedEvent
 from app.domain.events.recommendation_events import RecommendationCreatedEvent
 from app.domain.events.stock_events import StockAddedEvent
 from app.domain.events.trade_events import TradeExecutedEvent
-from app.domain.models import Position, Recommendation, Stock, Trade
+from app.domain.models import Position, Recommendation, Security, Trade
 from app.domain.value_objects.trade_side import TradeSide
 from app.shared.domain.value_objects.currency import Currency
 
@@ -22,7 +22,7 @@ class TestStockAddedEvent:
 
     def test_creates_stock_added_event(self):
         """Test creating StockAddedEvent."""
-        stock = Stock(symbol="AAPL", name="Apple Inc.")
+        stock = Security(symbol="AAPL", name="Apple Inc.")
         event = StockAddedEvent(stock=stock)
 
         assert event.stock == stock
@@ -33,7 +33,7 @@ class TestStockAddedEvent:
 
     def test_stock_added_event_properties(self):
         """Test StockAddedEvent properties."""
-        stock = Stock(
+        stock = Security(
             symbol="MSFT",
             name="Microsoft Corporation",
             country="United States",
@@ -46,12 +46,12 @@ class TestStockAddedEvent:
 
     def test_stock_added_event_is_frozen(self):
         """Test that StockAddedEvent is immutable."""
-        stock = Stock(symbol="AAPL", name="Apple Inc.")
+        stock = Security(symbol="AAPL", name="Apple Inc.")
         event = StockAddedEvent(stock=stock)
 
         # Should raise FrozenInstanceError on attempt to modify
         with pytest.raises(FrozenInstanceError):
-            event.stock = Stock(symbol="MSFT", name="Microsoft")
+            event.stock = Security(symbol="MSFT", name="Microsoft")
 
 
 class TestTradeExecutedEvent:

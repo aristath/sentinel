@@ -9,7 +9,7 @@ from datetime import datetime
 
 import pytest
 
-from app.domain.models import Position, Stock
+from app.domain.models import Position, Security
 from app.modules.planning.domain.holistic_planner import create_holistic_plan
 from app.modules.scoring.domain.models import PortfolioContext
 from app.repositories import SettingsRepository
@@ -171,7 +171,7 @@ async def test_planner_completes_in_reasonable_time(db_manager):
     ]
 
     stocks = [
-        Stock(
+        Security(
             symbol="AAPL.US",
             name="Apple Inc",
             country="United States",
@@ -180,7 +180,7 @@ async def test_planner_completes_in_reasonable_time(db_manager):
             allow_sell=True,
             min_lot=1,
         ),
-        Stock(
+        Security(
             symbol="MSFT.US",
             name="Microsoft Corp",
             country="United States",
@@ -189,7 +189,7 @@ async def test_planner_completes_in_reasonable_time(db_manager):
             allow_sell=True,
             min_lot=1,
         ),
-        Stock(
+        Security(
             symbol="SAP.DE",
             name="SAP SE",
             country="Germany",
@@ -234,7 +234,7 @@ async def test_planner_handles_empty_portfolio(db_manager):
     )
 
     stocks = [
-        Stock(
+        Security(
             symbol="AAPL.US",
             name="Apple Inc",
             country="United States",

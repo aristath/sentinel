@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.domain.models import Stock
+from app.domain.models import Security
 from app.modules.planning.domain.opportunities.averaging_down import (
     identify_averaging_down_opportunities,
 )
@@ -20,7 +20,7 @@ class TestIdentifyAveragingDownOpportunities:
     @pytest.fixture
     def sample_stock(self):
         """Create a sample stock."""
-        return Stock(
+        return Security(
             symbol="AAPL.US",
             name="Apple Inc",
             min_lot=1,
@@ -63,7 +63,7 @@ class TestIdentifyAveragingDownOpportunities:
     @pytest.mark.asyncio
     async def test_skips_stock_not_allowed_to_buy(self, portfolio_context):
         """Test skipping stocks that are not allowed to buy."""
-        stock = Stock(
+        stock = Security(
             symbol="AAPL.US",
             name="Apple Inc",
             min_lot=1,

@@ -7,7 +7,7 @@ import pytest
 
 from app.domain.models import Position
 from app.modules.trading.services.trade_execution_service import TradeExecutionService
-from app.repositories import PositionRepository, StockRepository, TradeRepository
+from app.repositories import PositionRepository, SecurityRepository, TradeRepository
 
 
 @pytest.mark.asyncio
@@ -38,7 +38,7 @@ async def test_trade_execution_rollback_on_database_error(db):
     )
 
     position_repo = PositionRepository(db=db)
-    stock_repo = StockRepository(db=db)
+    stock_repo = SecurityRepository(db=db)
 
     # Create mock currency exchange service and exchange rate service
     from app.domain.services.exchange_rate_service import ExchangeRateService
@@ -99,7 +99,7 @@ async def test_trade_execution_handles_external_failure(db):
     )
 
     position_repo = PositionRepository(db=db)
-    stock_repo = StockRepository(db=db)
+    stock_repo = SecurityRepository(db=db)
 
     # Create mock client that fails on order placement
     mock_client = MagicMock()

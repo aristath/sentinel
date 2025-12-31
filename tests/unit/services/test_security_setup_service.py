@@ -8,18 +8,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.domain.models import Stock
+from app.domain.models import Security
 from app.modules.universe.domain.symbol_resolver import IdentifierType, SymbolInfo
-from app.modules.universe.services.stock_setup_service import StockSetupService
+from app.modules.universe.services.security_setup_service import SecuritySetupService
 from app.shared.domain.value_objects.currency import Currency
 
 
-class TestStockSetupService:
-    """Test StockSetupService class."""
+class TestSecuritySetupService:
+    """Test SecuritySetupService class."""
 
     @pytest.fixture
     def mock_stock_repo(self):
-        """Mock StockRepository."""
+        """Mock SecurityRepository."""
         repo = AsyncMock()
         repo.get_by_identifier = AsyncMock(return_value=None)  # Stock doesn't exist
         repo.create = AsyncMock()
@@ -68,8 +68,8 @@ class TestStockSetupService:
         mock_db_manager,
         mock_symbol_resolver,
     ):
-        """Create StockSetupService with mocked dependencies."""
-        return StockSetupService(
+        """Create SecuritySetupService with mocked dependencies."""
+        return SecuritySetupService(
             stock_repo=mock_stock_repo,
             scoring_service=mock_scoring_service,
             tradernet_client=mock_tradernet_client,
@@ -107,7 +107,7 @@ class TestStockSetupService:
             ) as mock_sync:
                 result = await service.add_stock_by_identifier("AAPL.US")
 
-                assert isinstance(result, Stock)
+                assert isinstance(result, Security)
                 assert result.symbol == "AAPL.US"
                 assert result.country == "US"
                 assert result.industry == "Technology"
@@ -151,7 +151,7 @@ class TestStockSetupService:
             ):
                 result = await service.add_stock_by_identifier("US0378331005")
 
-                assert isinstance(result, Stock)
+                assert isinstance(result, Security)
                 assert result.symbol == "AAPL.US"
                 assert result.isin == "US0378331005"
                 mock_stock_repo.create.assert_called_once()
@@ -159,7 +159,7 @@ class TestStockSetupService:
     @pytest.mark.asyncio
     async def test_raises_error_if_stock_already_exists(self, service, mock_stock_repo):
         """Test that ValueError is raised if stock already exists."""
-        existing_stock = Stock(
+        existing_stock = Security(
             symbol="AAPL.US",
             name="Apple Inc.",
             country="US",
@@ -264,7 +264,7 @@ class TestStockSetupService:
                 # Should still create stock
                 result = await service.add_stock_by_identifier("AAPL.US")
 
-                assert isinstance(result, Stock)
+                assert isinstance(result, Security)
                 mock_stock_repo.create.assert_called_once()
 
     @pytest.mark.asyncio
@@ -299,7 +299,7 @@ class TestStockSetupService:
                 # Should still create stock
                 result = await service.add_stock_by_identifier("AAPL.US")
 
-                assert isinstance(result, Stock)
+                assert isinstance(result, Security)
                 mock_stock_repo.create.assert_called_once()
 
     @pytest.mark.asyncio

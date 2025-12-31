@@ -28,7 +28,7 @@ class TestExpectedReturnsCalculator:
 
     @pytest.fixture
     def mock_stock_repo(self):
-        """Mock StockRepository."""
+        """Mock SecurityRepository."""
         repo = AsyncMock()
         return repo
 

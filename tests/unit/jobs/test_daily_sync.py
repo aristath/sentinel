@@ -275,7 +275,7 @@ class TestSyncPortfolioInternal:
             patch("pass  # LED cleared"),
             patch("app.jobs.daily_sync.emit"),
             patch("app.repositories.PositionRepository") as mock_position_repo_class,
-            patch("app.repositories.StockRepository") as mock_stock_repo_class,
+            patch("app.repositories.SecurityRepository") as mock_stock_repo_class,
         ):
             mock_client = MagicMock()
             mock_client.is_connected = True
@@ -312,7 +312,7 @@ class TestSyncPricesInternal:
         mock_stock_repo.get_all_active.return_value = []
 
         with (
-            patch("app.jobs.daily_sync.StockRepository") as mock_stock_class,
+            patch("app.jobs.daily_sync.SecurityRepository") as mock_stock_class,
             patch("app.jobs.daily_sync.set_text"),
             patch("app.jobs.daily_sync.emit"),
         ):
@@ -350,7 +350,7 @@ class TestSyncPricesInternal:
         mock_db.state = mock_state
 
         with (
-            patch("app.jobs.daily_sync.StockRepository") as mock_stock_class,
+            patch("app.jobs.daily_sync.SecurityRepository") as mock_stock_class,
             patch("app.jobs.daily_sync.get_db_manager") as mock_get_db,
             patch("app.jobs.daily_sync.yahoo.get_batch_quotes") as mock_yahoo,
             patch("app.jobs.daily_sync.set_text"),
@@ -377,7 +377,7 @@ class TestSyncPricesInternal:
         mock_stock_repo.get_all_active.return_value = [mock_stock]
 
         with (
-            patch("app.jobs.daily_sync.StockRepository") as mock_stock_class,
+            patch("app.jobs.daily_sync.SecurityRepository") as mock_stock_class,
             patch("app.jobs.daily_sync.yahoo.get_batch_quotes") as mock_yahoo,
             patch("app.jobs.daily_sync.set_text"),
             patch("app.jobs.daily_sync.set_text") as mock_set_error,
@@ -425,7 +425,7 @@ class TestSyncStockCurrencies:
 
         with (
             patch("app.jobs.daily_sync.get_tradernet_client") as mock_get_client,
-            patch("app.jobs.daily_sync.StockRepository") as mock_stock_class,
+            patch("app.jobs.daily_sync.SecurityRepository") as mock_stock_class,
             patch("app.jobs.daily_sync.set_text"),
         ):
             mock_client = MagicMock()
@@ -460,7 +460,7 @@ class TestSyncStockCurrencies:
 
         with (
             patch("app.jobs.daily_sync.get_tradernet_client") as mock_get_client,
-            patch("app.jobs.daily_sync.StockRepository") as mock_stock_class,
+            patch("app.jobs.daily_sync.SecurityRepository") as mock_stock_class,
             patch("app.jobs.daily_sync.get_db_manager") as mock_get_db,
             patch("app.jobs.daily_sync.set_text"),
         ):

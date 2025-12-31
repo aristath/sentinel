@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, patch
 import pandas as pd
 import pytest
 
-from app.domain.models import DailyPrice, Stock
+from app.domain.models import DailyPrice, Security
 
 
 class TestAttributeReturnByCategory:
@@ -228,7 +228,7 @@ class TestGetPerformanceAttribution:
         )
 
         # Mock stock repository
-        mock_stock = Stock(
+        mock_stock = Security(
             symbol="AAPL",
             name="Apple",
             country="US",
@@ -249,7 +249,7 @@ class TestGetPerformanceAttribution:
             new_callable=AsyncMock,
         ) as mock_reconstruct:
             with patch(
-                "app.modules.analytics.domain.attribution.performance.StockRepository",
+                "app.modules.analytics.domain.attribution.performance.SecurityRepository",
                 return_value=mock_stock_repo,
             ):
                 with patch(
@@ -299,7 +299,7 @@ class TestGetPerformanceAttribution:
             new_callable=AsyncMock,
         ) as mock_reconstruct:
             with patch(
-                "app.modules.analytics.domain.attribution.performance.StockRepository",
+                "app.modules.analytics.domain.attribution.performance.SecurityRepository",
                 return_value=mock_stock_repo,
             ):
                 with patch(
@@ -343,7 +343,7 @@ class TestGetPerformanceAttribution:
             new_callable=AsyncMock,
         ) as mock_reconstruct:
             with patch(
-                "app.modules.analytics.domain.attribution.performance.StockRepository",
+                "app.modules.analytics.domain.attribution.performance.SecurityRepository",
                 return_value=mock_stock_repo,
             ):
                 mock_reconstruct.return_value = positions_df

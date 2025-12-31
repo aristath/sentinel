@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app.domain.models import Position, Stock
+from app.domain.models import Position, Security
 from app.modules.optimization.services.portfolio_optimizer import PortfolioOptimizer
 
 
@@ -224,7 +224,7 @@ class TestPortfolioOptimizerErrorHandling:
 
         optimizer = PortfolioOptimizer(expected_returns_calc=mock_returns_calc)
 
-        stocks = [MagicMock(spec=Stock, symbol="AAPL", active=True)]
+        stocks = [MagicMock(spec=Security, symbol="AAPL", active=True)]
 
         result = await optimizer.optimize(
             stocks=stocks,
@@ -251,7 +251,7 @@ class TestPortfolioOptimizerErrorHandling:
             risk_model_builder=mock_risk_builder,
         )
 
-        stocks = [MagicMock(spec=Stock, symbol="AAPL", active=True)]
+        stocks = [MagicMock(spec=Security, symbol="AAPL", active=True)]
 
         result = await optimizer.optimize(
             stocks=stocks,
@@ -349,9 +349,9 @@ class TestPortfolioOptimizerIntegration:
 
         # Create test stocks
         stocks = [
-            MagicMock(spec=Stock, symbol="AAPL", active=True),
-            MagicMock(spec=Stock, symbol="GOOGL", active=True),
-            MagicMock(spec=Stock, symbol="MSFT", active=True),
+            MagicMock(spec=Security, symbol="AAPL", active=True),
+            MagicMock(spec=Security, symbol="GOOGL", active=True),
+            MagicMock(spec=Security, symbol="MSFT", active=True),
         ]
 
         # Use a low target return to ensure feasibility with random data
@@ -412,8 +412,8 @@ class TestPortfolioOptimizerIntegration:
         )
 
         stocks = [
-            MagicMock(spec=Stock, symbol="AAPL", active=True),
-            MagicMock(spec=Stock, symbol="GOOGL", active=True),
+            MagicMock(spec=Security, symbol="AAPL", active=True),
+            MagicMock(spec=Security, symbol="GOOGL", active=True),
         ]
 
         portfolio_value = 10000

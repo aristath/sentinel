@@ -39,7 +39,7 @@ class TestWaitForPlanningCompletion:
                 "app.jobs.event_based_trading.PlannerRepository", return_value=mock_repo
             ),
             patch("app.jobs.event_based_trading.PositionRepository"),
-            patch("app.jobs.event_based_trading.StockRepository"),
+            patch("app.jobs.event_based_trading.SecurityRepository"),
             patch(
                 "app.jobs.planner_batch.process_planner_batch_job",
                 new_callable=AsyncMock,
@@ -65,7 +65,7 @@ class TestWaitForPlanningCompletion:
                 "app.jobs.event_based_trading.PlannerRepository", return_value=mock_repo
             ),
             patch("app.jobs.event_based_trading.PositionRepository"),
-            patch("app.jobs.event_based_trading.StockRepository"),
+            patch("app.jobs.event_based_trading.SecurityRepository"),
             patch(
                 "app.modules.planning.services.portfolio_context_builder.build_portfolio_context",
                 new_callable=AsyncMock,
@@ -97,7 +97,7 @@ class TestWaitForPlanningCompletion:
                 "app.jobs.event_based_trading.PlannerRepository", return_value=mock_repo
             ),
             patch("app.jobs.event_based_trading.PositionRepository"),
-            patch("app.jobs.event_based_trading.StockRepository"),
+            patch("app.jobs.event_based_trading.SecurityRepository"),
             patch(
                 "app.jobs.planner_batch.process_planner_batch_job",
                 new_callable=AsyncMock,
@@ -156,7 +156,7 @@ class TestGetOptimalRecommendation:
                 "app.jobs.event_based_trading.PlannerRepository", return_value=mock_repo
             ),
             patch("app.jobs.event_based_trading.PositionRepository"),
-            patch("app.jobs.event_based_trading.StockRepository"),
+            patch("app.jobs.event_based_trading.SecurityRepository"),
             patch.object(mock_repo, "_get_db", return_value=mock_db),
             patch(
                 "app.domain.scoring.portfolio_scorer.calculate_portfolio_score",
@@ -184,7 +184,7 @@ class TestGetOptimalRecommendation:
                 "app.jobs.event_based_trading.PlannerRepository", return_value=mock_repo
             ),
             patch("app.jobs.event_based_trading.PositionRepository"),
-            patch("app.jobs.event_based_trading.StockRepository"),
+            patch("app.jobs.event_based_trading.SecurityRepository"),
         ):
             recommendation = await _get_optimal_recommendation()
 
@@ -219,7 +219,8 @@ class TestCanExecuteTrade:
 
         with (
             patch(
-                "app.jobs.event_based_trading.StockRepository", return_value=mock_repo
+                "app.jobs.event_based_trading.SecurityRepository",
+                return_value=mock_repo,
             ),
             patch(
                 "app.jobs.event_based_trading.should_check_market_hours",
@@ -256,7 +257,8 @@ class TestCanExecuteTrade:
 
         with (
             patch(
-                "app.jobs.event_based_trading.StockRepository", return_value=mock_repo
+                "app.jobs.event_based_trading.SecurityRepository",
+                return_value=mock_repo,
             ),
             patch(
                 "app.jobs.event_based_trading.should_check_market_hours",
@@ -294,7 +296,8 @@ class TestCanExecuteTrade:
 
         with (
             patch(
-                "app.jobs.event_based_trading.StockRepository", return_value=mock_repo
+                "app.jobs.event_based_trading.SecurityRepository",
+                return_value=mock_repo,
             ),
             patch(
                 "app.jobs.event_based_trading.should_check_market_hours",
@@ -328,7 +331,7 @@ class TestCanExecuteTrade:
         mock_repo.get_by_symbol = AsyncMock(return_value=None)
 
         with patch(
-            "app.jobs.event_based_trading.StockRepository", return_value=mock_repo
+            "app.jobs.event_based_trading.SecurityRepository", return_value=mock_repo
         ):
             can_execute, reason = await _can_execute_trade(recommendation)
 
@@ -349,7 +352,7 @@ class TestMonitorPortfolioForChanges:
 
         with (
             patch("app.jobs.event_based_trading.PositionRepository"),
-            patch("app.jobs.event_based_trading.StockRepository"),
+            patch("app.jobs.event_based_trading.SecurityRepository"),
             patch("app.infrastructure.external.tradernet.get_tradernet_client"),
             patch(
                 "app.domain.portfolio_hash.generate_portfolio_hash",
@@ -381,7 +384,7 @@ class TestMonitorPortfolioForChanges:
 
         with (
             patch("app.jobs.event_based_trading.PositionRepository"),
-            patch("app.jobs.event_based_trading.StockRepository"),
+            patch("app.jobs.event_based_trading.SecurityRepository"),
             patch("app.jobs.event_based_trading.get_tradernet_client"),
             patch(
                 "app.jobs.event_based_trading.generate_portfolio_hash",
@@ -411,7 +414,7 @@ class TestMonitorPortfolioForChanges:
 
         with (
             patch("app.jobs.event_based_trading.PositionRepository"),
-            patch("app.jobs.event_based_trading.StockRepository"),
+            patch("app.jobs.event_based_trading.SecurityRepository"),
             patch("app.jobs.event_based_trading.get_tradernet_client"),
             patch(
                 "app.jobs.event_based_trading.generate_portfolio_hash",

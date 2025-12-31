@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.domain.models import StockScore
+from app.domain.models import SecurityScore
 from app.repositories.score import ScoreRepository
 
 
@@ -63,7 +63,7 @@ class TestScoreRepository:
         result = await repo.get_by_symbol("AAPL.US")
 
         assert result is not None
-        assert isinstance(result, StockScore)
+        assert isinstance(result, SecurityScore)
         assert result.symbol == "AAPL.US"
         assert result.total_score == 0.72
 
@@ -94,7 +94,7 @@ class TestScoreRepository:
         result = await repo.get_all()
 
         assert len(result) == 2
-        assert all(isinstance(s, StockScore) for s in result)
+        assert all(isinstance(s, SecurityScore) for s in result)
 
     @pytest.mark.asyncio
     async def test_get_all_empty(self, repo, mock_db):
@@ -118,7 +118,7 @@ class TestScoreRepository:
     @pytest.mark.asyncio
     async def test_upsert_score(self, repo):
         """Test upserting a score."""
-        score = StockScore(
+        score = SecurityScore(
             symbol="AAPL.US",
             total_score=0.75,
             quality_score=0.8,
@@ -145,7 +145,7 @@ class TestScoreRepository:
     @pytest.mark.asyncio
     async def test_upsert_score_with_string_calculated_at(self, repo):
         """Test upserting a score with string calculated_at."""
-        score = StockScore(
+        score = SecurityScore(
             symbol="AAPL.US",
             total_score=0.75,
             calculated_at="2024-01-15T10:30:00",
@@ -171,7 +171,7 @@ class TestScoreRepository:
     @pytest.mark.asyncio
     async def test_upsert_score_none_calculated_at(self, repo):
         """Test upserting a score with no calculated_at."""
-        score = StockScore(
+        score = SecurityScore(
             symbol="AAPL.US",
             total_score=0.75,
             calculated_at=None,
@@ -242,7 +242,7 @@ class TestScoreRepository:
         """Test converting row to StockScore."""
         result = repo._row_to_score(sample_row)
 
-        assert isinstance(result, StockScore)
+        assert isinstance(result, SecurityScore)
         assert result.symbol == "AAPL.US"
         assert result.quality_score == 0.8
         assert result.total_score == 0.72

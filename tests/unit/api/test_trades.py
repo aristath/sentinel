@@ -77,9 +77,9 @@ class TestGetTrades:
         mock_repo.get_history = AsyncMock(return_value=mock_trades)
 
         mock_stock_repo = AsyncMock()
-        from app.domain.models import Stock
+        from app.domain.models import Security
 
-        mock_stock = Stock(
+        mock_stock = Security(
             symbol="AAPL.US",
             name="Apple Inc.",
             yahoo_symbol="AAPL",

@@ -4,8 +4,8 @@ from datetime import datetime
 
 import pytest
 
-from app.domain.models import Position, Stock, Trade
-from app.repositories import PositionRepository, StockRepository
+from app.domain.models import Position, Security, Trade
+from app.repositories import PositionRepository, SecurityRepository
 from app.repositories.base import transaction_context
 
 
@@ -36,7 +36,7 @@ async def test_transaction_commit_on_success(db, stock_repo, trade_repo):
     """Test that transactions commit successfully when no errors occur."""
     # Create stocks first (required for trade history JOIN)
     for symbol in ["AAPL", "MSFT"]:
-        stock = Stock(
+        stock = Security(
             symbol=symbol,
             yahoo_symbol=symbol,
             name=f"{symbol} Inc.",
@@ -81,10 +81,10 @@ async def test_transaction_commit_on_success(db, stock_repo, trade_repo):
 @pytest.mark.asyncio
 async def test_multiple_repository_operations_in_transaction(db):
     """Test multiple repository operations within a single transaction."""
-    stock_repo = StockRepository(db=db)
+    stock_repo = SecurityRepository(db=db)
     position_repo = PositionRepository(db=db)
 
-    stock = Stock(
+    stock = Security(
         symbol="AAPL",
         yahoo_symbol="AAPL",
         name="Apple Inc.",
@@ -125,7 +125,7 @@ async def test_auto_commit_behavior(db, stock_repo, trade_repo):
     """Test that auto_commit=True commits immediately."""
     # Create stocks first (required for trade history JOIN)
     for symbol in ["AAPL", "MSFT"]:
-        stock = Stock(
+        stock = Security(
             symbol=symbol,
             yahoo_symbol=symbol,
             name=f"{symbol} Inc.",

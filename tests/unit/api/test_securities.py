@@ -281,7 +281,7 @@ class TestCreateStock:
         with (
             patch("app.api.stocks.cache"),
             patch("app.api.stocks.get_event_bus") as mock_event_bus,
-            patch("app.api.stocks.StockFactory") as mock_factory,
+            patch("app.api.stocks.SecurityFactory") as mock_factory,
         ):
             mock_stock = MagicMock()
             mock_stock.min_lot = 1
@@ -319,7 +319,7 @@ class TestCreateStock:
         with (
             patch("app.api.stocks.cache"),
             patch("app.api.stocks.get_event_bus") as mock_event_bus,
-            patch("app.api.stocks.StockFactory") as mock_factory,
+            patch("app.api.stocks.SecurityFactory") as mock_factory,
             patch(
                 "app.infrastructure.external.yahoo_finance.get_stock_industry"
             ) as mock_yahoo_industry,

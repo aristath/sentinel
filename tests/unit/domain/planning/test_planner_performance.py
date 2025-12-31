@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.domain.models import Position, Stock
+from app.domain.models import Position, Security
 from app.modules.planning.domain.holistic_planner import create_holistic_plan
 from app.modules.scoring.domain.models import PortfolioContext
 
@@ -75,7 +75,7 @@ async def test_metrics_prefetching_reduces_db_queries():
     ]
 
     stocks = [
-        Stock(
+        Security(
             symbol="AAPL.US",
             name="Apple Inc",
             country="United States",
@@ -84,7 +84,7 @@ async def test_metrics_prefetching_reduces_db_queries():
             allow_sell=True,
             min_lot=1,
         ),
-        Stock(
+        Security(
             symbol="MSFT.US",
             name="Microsoft Corp",
             country="United States",
@@ -93,7 +93,7 @@ async def test_metrics_prefetching_reduces_db_queries():
             allow_sell=True,
             min_lot=1,
         ),
-        Stock(
+        Security(
             symbol="SAP.DE",
             name="SAP SE",
             country="Germany",
@@ -180,7 +180,7 @@ async def test_parallel_evaluation_improves_performance():
     ]
 
     stocks = [
-        Stock(
+        Security(
             symbol="AAPL.US",
             name="Apple Inc",
             country="United States",

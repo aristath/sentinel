@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.modules.scoring.domain.models import CalculatedStockScore
+from app.modules.scoring.domain.models import CalculatedSecurityScore
 
 
 def create_candidate(
@@ -25,11 +25,11 @@ def create_candidate(
     }
 
 
-def create_mock_score(symbol: str, total_score: float) -> CalculatedStockScore:
-    """Helper to create mock CalculatedStockScore."""
+def create_mock_score(symbol: str, total_score: float) -> CalculatedSecurityScore:
+    """Helper to create mock CalculatedSecurityScore."""
     from datetime import datetime
 
-    return CalculatedStockScore(
+    return CalculatedSecurityScore(
         symbol=symbol,
         total_score=total_score,
         volatility=0.2,
@@ -80,13 +80,15 @@ def mock_stock_discovery_dependencies(
     mock_score_repo = MagicMock()
 
     with (
-        patch("app.jobs.stock_discovery.StockRepository", return_value=mock_stock_repo),
+        patch(
+            "app.jobs.stock_discovery.SecurityRepository", return_value=mock_stock_repo
+        ),
         patch(
             "app.jobs.stock_discovery.SettingsRepository",
             return_value=mock_settings_repo,
         ),
         patch(
-            "app.jobs.stock_discovery.StockDiscoveryService",
+            "app.jobs.stock_discovery.SecurityDiscoveryService",
             return_value=mock_discovery_service,
         ),
         patch(

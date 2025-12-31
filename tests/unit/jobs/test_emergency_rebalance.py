@@ -29,9 +29,9 @@ def mock_tradernet_client():
 def mock_stock_repo():
     """Mock stock repository."""
     repo = AsyncMock()
-    from app.domain.models import Stock
+    from app.domain.models import Security
 
-    mock_stock = Stock(
+    mock_stock = Security(
         symbol="AAPL",
         name="Apple Inc.",
         country="United States",
@@ -70,12 +70,12 @@ class TestCheckAndRebalanceImmediately:
                 return_value=mock_tradernet_client,
             ):
                 with patch(
-                    "app.jobs.emergency_rebalance.StockRepository"
+                    "app.jobs.emergency_rebalance.SecurityRepository"
                 ) as mock_stock_repo_class:
                     mock_stock_repo = AsyncMock()
-                    from app.domain.models import Stock
+                    from app.domain.models import Security
 
-                    mock_stock = Stock(
+                    mock_stock = Security(
                         symbol="AAPL",
                         name="Apple Inc.",
                         country="United States",
@@ -138,7 +138,7 @@ class TestCheckAndRebalanceImmediately:
                                     "app.jobs.emergency_rebalance.PositionRepository"
                                 ):
                                     with patch(
-                                        "app.jobs.emergency_rebalance.StockRepository"
+                                        "app.jobs.emergency_rebalance.SecurityRepository"
                                     ):
                                         with patch(
                                             "app.jobs.emergency_rebalance.TradeRepository"
@@ -203,12 +203,12 @@ class TestCheckAndRebalanceImmediately:
                                     "app.jobs.emergency_rebalance.PositionRepository"
                                 ):
                                     with patch(
-                                        "app.jobs.emergency_rebalance.StockRepository"
+                                        "app.jobs.emergency_rebalance.SecurityRepository"
                                     ) as mock_stock_repo_class:
                                         mock_stock_repo = AsyncMock()
-                                        from app.domain.models import Stock
+                                        from app.domain.models import Security
 
-                                        mock_stock = Stock(
+                                        mock_stock = Security(
                                             symbol="AAPL",
                                             name="Apple Inc.",
                                             country="United States",
@@ -264,12 +264,12 @@ class TestCheckAndRebalanceImmediately:
                 return_value=mock_tradernet_client,
             ):
                 with patch(
-                    "app.jobs.emergency_rebalance.StockRepository"
+                    "app.jobs.emergency_rebalance.SecurityRepository"
                 ) as mock_stock_repo_class:
                     mock_stock_repo = AsyncMock()
-                    from app.domain.models import Stock
+                    from app.domain.models import Security
 
-                    mock_stock = Stock(
+                    mock_stock = Security(
                         symbol="AAPL",
                         name="Apple Inc.",
                         country="United States",
@@ -377,7 +377,7 @@ class TestCheckAndRebalanceImmediately:
                 "app.jobs.emergency_rebalance.get_tradernet_client",
                 return_value=mock_tradernet_client,
             ):
-                with patch("app.jobs.emergency_rebalance.StockRepository"):
+                with patch("app.jobs.emergency_rebalance.SecurityRepository"):
                     with patch("app.jobs.emergency_rebalance.RecommendationRepository"):
                         await check_and_rebalance_immediately()
 
@@ -406,7 +406,7 @@ class TestCheckAndRebalanceImmediately:
                 return_value=mock_tradernet_client,
             ):
                 with patch(
-                    "app.jobs.emergency_rebalance.StockRepository"
+                    "app.jobs.emergency_rebalance.SecurityRepository"
                 ) as mock_stock_repo_class:
                     mock_stock_repo = AsyncMock()
                     mock_stock_repo.get_all_active.return_value = []  # No stocks

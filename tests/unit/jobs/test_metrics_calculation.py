@@ -340,7 +340,7 @@ class TestCalculateMetricsForAllStocks:
         mock_stock_repo.get_all_active.return_value = [mock_stock1, mock_stock2]
 
         with patch(
-            "app.jobs.metrics_calculation.StockRepository",
+            "app.jobs.metrics_calculation.SecurityRepository",
             return_value=mock_stock_repo,
         ):
             with patch(
@@ -366,7 +366,7 @@ class TestCalculateMetricsForAllStocks:
         mock_stock_repo.get_all_active.return_value = [mock_stock]
 
         with patch(
-            "app.jobs.metrics_calculation.StockRepository",
+            "app.jobs.metrics_calculation.SecurityRepository",
             return_value=mock_stock_repo,
         ):
             with patch(
@@ -388,7 +388,7 @@ class TestCalculateMetricsForAllStocks:
         mock_stock_repo.get_all_active.return_value = []
 
         with patch(
-            "app.jobs.metrics_calculation.StockRepository",
+            "app.jobs.metrics_calculation.SecurityRepository",
             return_value=mock_stock_repo,
         ):
             stats = await calculate_metrics_for_all_stocks()

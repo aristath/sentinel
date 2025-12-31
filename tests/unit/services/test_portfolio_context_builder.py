@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.domain.models import Stock
+from app.domain.models import Security
 from app.domain.scoring import PortfolioContext
 from app.shared.domain.value_objects.currency import Currency
 
@@ -30,7 +30,7 @@ def mock_position_repo():
 def mock_stock_repo():
     """Mock stock repository."""
     repo = AsyncMock()
-    mock_stock = Stock(
+    mock_stock = Security(
         symbol="AAPL",
         name="Apple Inc.",
         country="United States",
@@ -353,7 +353,7 @@ class TestBuildPortfolioContext:
         )
 
         mock_stock_repo = AsyncMock()
-        mock_stock = Stock(
+        mock_stock = Security(
             symbol="UNKNOWN",
             name="Unknown Stock",
             country=None,

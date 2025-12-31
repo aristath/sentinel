@@ -8,8 +8,8 @@ from app.domain.models import (
     AllocationTarget,
     PortfolioSnapshot,
     Position,
-    Stock,
-    StockScore,
+    Security,
+    SecurityScore,
     Trade,
 )
 
@@ -17,7 +17,7 @@ from app.domain.models import (
 @pytest.mark.asyncio
 async def test_stock_repository_create_and_get(stock_repo):
     """Test creating and retrieving a stock."""
-    stock = Stock(
+    stock = Security(
         symbol="AAPL",
         yahoo_symbol="AAPL",
         name="Apple Inc.",
@@ -39,7 +39,7 @@ async def test_stock_repository_create_and_get(stock_repo):
 @pytest.mark.asyncio
 async def test_stock_repository_get_all_active(stock_repo):
     """Test getting all active stocks."""
-    stock1 = Stock(
+    stock1 = Security(
         symbol="AAPL",
         yahoo_symbol="AAPL",
         name="Apple Inc.",
@@ -49,7 +49,7 @@ async def test_stock_repository_get_all_active(stock_repo):
         min_lot=1,
         active=True,
     )
-    stock2 = Stock(
+    stock2 = Security(
         symbol="MSFT",
         yahoo_symbol="MSFT",
         name="Microsoft Corp.",
@@ -138,7 +138,7 @@ async def test_allocation_repository_upsert_and_get(allocation_repo):
 @pytest.mark.asyncio
 async def test_score_repository_upsert(score_repo):
     """Test upserting a score."""
-    score = StockScore(
+    score = SecurityScore(
         symbol="AAPL",
         quality_score=0.8,
         opportunity_score=0.7,
@@ -159,7 +159,7 @@ async def test_score_repository_upsert(score_repo):
 async def test_trade_repository_create(stock_repo, trade_repo):
     """Test creating a trade."""
     # Create stock first (required for trade history JOIN)
-    stock = Stock(
+    stock = Security(
         symbol="AAPL",
         yahoo_symbol="AAPL",
         name="Apple Inc.",
