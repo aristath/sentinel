@@ -29,7 +29,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-class StockCreate(BaseModel):
+class SecurityCreate(BaseModel):
     """Request model for creating a stock."""
 
     symbol: str
@@ -41,7 +41,7 @@ class StockCreate(BaseModel):
     allow_sell: Optional[bool] = False
 
 
-class StockAddByIdentifier(BaseModel):
+class SecurityAddByIdentifier(BaseModel):
     """Request model for adding a stock by identifier (symbol or ISIN)."""
 
     identifier: str  # Symbol or ISIN
@@ -50,7 +50,7 @@ class StockAddByIdentifier(BaseModel):
     allow_sell: Optional[bool] = True
 
 
-class StockUpdate(BaseModel):
+class SecurityUpdate(BaseModel):
     """Request model for updating a stock."""
 
     new_symbol: Optional[str] = None
@@ -643,7 +643,7 @@ async def get_stock(
 
 @router.post("")
 async def create_stock(
-    stock_data: StockCreate,
+    stock_data: SecurityCreate,
     stock_repo: StockRepositoryDep,
     score_repo: ScoreRepositoryDep,
     scoring_service: ScoringServiceDep,
@@ -705,7 +705,7 @@ async def create_stock(
 
 @router.post("/add-by-identifier")
 async def add_stock_by_identifier(
-    stock_data: StockAddByIdentifier,
+    stock_data: SecurityAddByIdentifier,
     stock_setup_service: StockSetupServiceDep,
     score_repo: ScoreRepositoryDep,
 ):
@@ -1007,7 +1007,7 @@ def _apply_boolean_update(updates: dict, field_name: str, value: bool | None) ->
 
 
 def _build_update_dict(
-    update: StockUpdate, new_symbol: str | None
+    update: SecurityUpdate, new_symbol: str | None
 ) -> dict[str, str | float | int | bool | None]:
     """Build dictionary of fields to update."""
     updates: dict[str, str | float | int | bool | None] = {}
@@ -1083,7 +1083,7 @@ def _format_stock_response(stock, score) -> dict:
 @router.put("/{isin}")
 async def update_stock(
     isin: str,
-    update: StockUpdate,
+    update: SecurityUpdate,
     stock_repo: StockRepositoryDep,
     scoring_service: ScoringServiceDep,
 ):
