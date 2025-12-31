@@ -27,15 +27,15 @@ from app.domain.services.settings_service import SettingsService
 from app.domain.services.ticker_content_service import TickerContentService
 from app.infrastructure.database.manager import DatabaseManager, get_db_manager
 from app.infrastructure.external.tradernet import TradernetClient, get_tradernet_client
-from app.infrastructure.hardware.display_service import (
-    DisplayStateManager,
-    _display_state_manager,
-)
 from app.modules.allocation.database.allocation_repository import AllocationRepository
 from app.modules.allocation.services.concentration_alerts import (
     ConcentrationAlertService,
 )
 from app.modules.cash_flows.database.cash_flow_repository import CashFlowRepository
+from app.modules.display.services.display_service import (
+    DisplayStateManager,
+    _display_state_manager,
+)
 from app.repositories import (
     CalculationsRepository,
     GroupingRepository,
