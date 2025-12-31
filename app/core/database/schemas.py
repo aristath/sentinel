@@ -825,8 +825,7 @@ CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol);
 CREATE INDEX IF NOT EXISTS idx_trades_executed_at ON trades(executed_at);
 CREATE INDEX IF NOT EXISTS idx_trades_order_id ON trades(order_id);
 CREATE INDEX IF NOT EXISTS idx_trades_symbol_side ON trades(symbol, side);
-CREATE INDEX IF NOT EXISTS idx_trades_bucket ON trades(bucket_id);
-CREATE INDEX IF NOT EXISTS idx_trades_mode ON trades(mode);
+-- bucket_id and mode indexes created in migration (version 3->4) or fresh DB init
 
 -- Cash flow transactions (append-only)
 CREATE TABLE IF NOT EXISTS cash_flows (
@@ -892,11 +891,12 @@ async def init_ledger_schema(db):
 
     if current_version == 0:
         now = datetime.now().isoformat()
-        # Create indexes for new databases
+        # Create indexes for new databases (including bucket_id and mode)
         await db.execute("CREATE INDEX IF NOT EXISTS idx_trades_isin ON trades(isin)")
         await db.execute(
             "CREATE INDEX IF NOT EXISTS idx_trades_bucket ON trades(bucket_id)"
         )
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_trades_mode ON trades(mode)")
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
             (4, now, "Initial ledger schema with ISIN column and multi-bucket support"),
