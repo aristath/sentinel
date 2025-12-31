@@ -294,7 +294,7 @@ async def get_portfolio_analytics(days: int = 365):
 
         # Calculate portfolio turnover
         from app.application.services.turnover_tracker import TurnoverTracker
-        from app.infrastructure.database.manager import get_db_manager
+        from app.core.database.manager import get_db_manager
 
         db_manager = get_db_manager()
         turnover_tracker = TurnoverTracker(db_manager)

@@ -281,7 +281,7 @@ async def _update_position_prices(quotes: dict[str, float]):
     """Update position prices in the database."""
     from datetime import datetime
 
-    from app.infrastructure.database.manager import get_db_manager
+    from app.core.database.manager import get_db_manager
 
     db_manager = get_db_manager()
     now = datetime.now().isoformat()
@@ -607,7 +607,7 @@ async def _execute_trade_order(recommendation) -> dict[str, Any]:
     """Execute a trade order via Tradernet."""
     from app.modules.trading.services.trade_execution_service import TradeExecutionService
     from app.domain.value_objects.trade_side import TradeSide
-    from app.infrastructure.database.manager import get_db_manager
+    from app.core.database.manager import get_db_manager
     from app.infrastructure.dependencies import (
         get_currency_exchange_service_dep,
         get_exchange_rate_service,

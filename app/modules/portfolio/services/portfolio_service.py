@@ -165,7 +165,7 @@ class PortfolioService:
 
             client = await ensure_tradernet_connected(raise_on_error=False)
             if client:
-                from app.infrastructure.database.manager import get_db_manager
+                from app.core.database.manager import get_db_manager
                 from app.infrastructure.dependencies import get_exchange_rate_service
 
                 db_manager = get_db_manager()
