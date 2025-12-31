@@ -6,14 +6,8 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.domain.events import StockAddedEvent, get_event_bus
-from app.modules.universe.domain.stock_factory import StockFactory
-from app.modules.universe.domain.priority_calculator import (
-    PriorityCalculator,
-    PriorityInput,
-)
-from app.modules.universe.domain.symbol_resolver import is_isin
 from app.core.cache.cache import cache
+from app.domain.events import StockAddedEvent, get_event_bus
 from app.infrastructure.dependencies import (
     PortfolioServiceDep,
     PositionRepositoryDep,
@@ -24,6 +18,12 @@ from app.infrastructure.dependencies import (
     StockSetupServiceDep,
 )
 from app.infrastructure.recommendation_cache import get_recommendation_cache
+from app.modules.universe.domain.priority_calculator import (
+    PriorityCalculator,
+    PriorityInput,
+)
+from app.modules.universe.domain.stock_factory import StockFactory
+from app.modules.universe.domain.symbol_resolver import is_isin
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -165,9 +165,9 @@ async def get_universe_suggestions(
         - candidates_to_add: List of stocks suggested for addition
         - stocks_to_prune: List of stocks suggested for pruning
     """
+    from app.infrastructure.external.tradernet import get_tradernet_client
     from app.modules.universe.domain.stock_discovery import StockDiscoveryService
     from app.modules.universe.domain.symbol_resolver import SymbolResolver
-    from app.infrastructure.external.tradernet import get_tradernet_client
     from app.repositories import ScoreRepository
 
     try:
@@ -223,10 +223,11 @@ async def get_universe_suggestions(
 
                 # Score candidates and collect results
                 # First, fetch historical data for candidates (needed for scoring)
+                import asyncio
+
+                from app.config import settings
                 from app.core.database.manager import get_db_manager
                 from app.infrastructure.external import yahoo_finance as yahoo
-                from app.config import settings
-                import asyncio
 
                 db_manager = get_db_manager()
                 scored_candidates = []
