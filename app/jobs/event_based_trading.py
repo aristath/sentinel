@@ -18,24 +18,24 @@ import asyncio
 import logging
 from typing import Optional
 
+from app.core.events import SystemEvent, emit
 from app.domain.models import Recommendation
 from app.domain.portfolio_hash import generate_portfolio_hash
-from app.shared.domain.value_objects.currency import Currency
 from app.domain.value_objects.recommendation_status import RecommendationStatus
 from app.domain.value_objects.trade_side import TradeSide
 from app.infrastructure.cache_invalidation import get_cache_invalidation_service
-from app.core.events import SystemEvent, emit
-from app.modules.display.services.display_service import set_led4, set_text
 from app.infrastructure.locking import file_lock
 from app.infrastructure.market_hours import is_market_open, should_check_market_hours
+from app.modules.display.services.display_service import set_led4, set_text
+from app.modules.planning.database.planner_repository import PlannerRepository
+from app.modules.portfolio.database.position_repository import PositionRepository
 from app.modules.system.jobs.sync_cycle import (
     _execute_trade_order,
     _step_check_trading_conditions,
     _step_sync_portfolio,
 )
-from app.modules.planning.database.planner_repository import PlannerRepository
-from app.modules.portfolio.database.position_repository import PositionRepository
 from app.modules.universe.database.stock_repository import StockRepository
+from app.shared.domain.value_objects.currency import Currency
 
 logger = logging.getLogger(__name__)
 
@@ -168,8 +168,8 @@ async def _wait_for_planning_completion():
     This function calls the planner batch processing until all sequences
     for the current portfolio hash have been evaluated (completed=1).
     """
-    from app.domain.services.exchange_rate_service import ExchangeRateService
     from app.core.database.manager import get_db_manager
+    from app.domain.services.exchange_rate_service import ExchangeRateService
     from app.infrastructure.external.tradernet import TradernetClient
     from app.modules.planning.domain.holistic_planner import (
         create_holistic_plan_incremental,
