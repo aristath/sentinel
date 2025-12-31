@@ -23,6 +23,9 @@ class TradeFactory:
         currency: Optional[Currency] = None,
         currency_rate: Optional[float] = None,
         source: str = "tradernet",
+        isin: Optional[str] = None,
+        bucket_id: str = "core",
+        mode: str = "live",
     ) -> Trade:
         """Create Trade from execution result.
 
@@ -36,6 +39,9 @@ class TradeFactory:
             currency: Trade currency (optional, defaults to EUR)
             currency_rate: Exchange rate to EUR (optional)
             source: Trade source (defaults to "tradernet")
+            isin: Security ISIN for broker-agnostic identification (optional)
+            bucket_id: Which bucket owns this trade (defaults to "core")
+            mode: Trading mode - 'live' or 'research' (defaults to "live")
 
         Returns:
             Trade domain object with calculated EUR value
@@ -62,6 +68,9 @@ class TradeFactory:
             currency_rate=currency_rate,
             value_eur=value_eur,
             source=source,
+            isin=isin,
+            bucket_id=bucket_id,
+            mode=mode,
         )
 
     @classmethod
