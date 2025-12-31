@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pandas_ta as ta
 
-from app.domain.scoring import TechnicalData
+from app.modules.scoring.domain.models import TechnicalData
 from app.infrastructure.database.manager import DatabaseManager
 
 logger = logging.getLogger(__name__)
