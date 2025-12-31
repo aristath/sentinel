@@ -373,11 +373,11 @@ async def init_config_schema(db):
         columns = [row[1] for row in await cursor.fetchall()]
 
         if "country" not in columns:
-            await db.execute("ALTER TABLE stocks ADD COLUMN country TEXT")
+            await db.execute("ALTER TABLE securities ADD COLUMN country TEXT")
             logger.info("Added country column to stocks table")
 
         if "fullExchangeName" not in columns:
-            await db.execute("ALTER TABLE stocks ADD COLUMN fullExchangeName TEXT")
+            await db.execute("ALTER TABLE securities ADD COLUMN fullExchangeName TEXT")
             logger.info("Added fullExchangeName column to stocks table")
 
         # Create index on country
@@ -419,11 +419,15 @@ async def init_config_schema(db):
         columns = [row[1] for row in await cursor.fetchall()]
 
         if "min_portfolio_target" not in columns:
-            await db.execute("ALTER TABLE stocks ADD COLUMN min_portfolio_target REAL")
+            await db.execute(
+                "ALTER TABLE securities ADD COLUMN min_portfolio_target REAL"
+            )
             logger.info("Added min_portfolio_target column to stocks table")
 
         if "max_portfolio_target" not in columns:
-            await db.execute("ALTER TABLE stocks ADD COLUMN max_portfolio_target REAL")
+            await db.execute(
+                "ALTER TABLE securities ADD COLUMN max_portfolio_target REAL"
+            )
             logger.info("Added max_portfolio_target column to stocks table")
 
         await db.execute(
@@ -627,6 +631,7 @@ async def init_config_schema(db):
                         last_synced TEXT,
                         min_portfolio_target REAL,
                         max_portfolio_target REAL,
+                        bucket_id TEXT DEFAULT 'core',
                         created_at TEXT NOT NULL,
                         updated_at TEXT NOT NULL
                     )
@@ -634,10 +639,21 @@ async def init_config_schema(db):
                 )
 
                 # Copy all data from stocks to securities
+                # Note: stocks table doesn't have bucket_id, so we set it to 'core' for all migrated records
                 await db.execute(
                     """
-                    INSERT INTO securities
-                    SELECT * FROM stocks
+                    INSERT INTO securities (
+                        symbol, yahoo_symbol, isin, name, product_type, industry, country,
+                        fullExchangeName, priority_multiplier, min_lot, active, allow_buy,
+                        allow_sell, currency, last_synced, min_portfolio_target,
+                        max_portfolio_target, bucket_id, created_at, updated_at
+                    )
+                    SELECT
+                        symbol, yahoo_symbol, isin, name, product_type, industry, country,
+                        fullExchangeName, priority_multiplier, min_lot, active, allow_buy,
+                        allow_sell, currency, last_synced, min_portfolio_target,
+                        max_portfolio_target, 'core', created_at, updated_at
+                    FROM stocks
                     """
                 )
 

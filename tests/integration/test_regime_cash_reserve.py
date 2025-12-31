@@ -30,8 +30,8 @@ async def setup_test_data(db_manager):
         """
         INSERT INTO securities (symbol, yahoo_symbol, name, industry, country,
                           priority_multiplier, min_lot, active, allow_buy, allow_sell,
-                          created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          product_type, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             "AAPL.US",
@@ -44,6 +44,7 @@ async def setup_test_data(db_manager):
             1,
             1,
             1,
+            "EQUITY",
             datetime.now().isoformat(),
             datetime.now().isoformat(),
         ),

@@ -44,10 +44,11 @@ async def test_schema_migration_v5_to_v6_adds_portfolio_target_columns():
         conn.row_factory = aiosqlite.Row
         db = ConnectionWrapper(conn)
 
-        # Create securities table with version 5 schema (without portfolio target columns)
+        # Create stocks table with version 5 schema (without portfolio target columns)
+        # Note: Version 10 renames stocks to securities, so v5 uses the old name
         await db.execute(
             """
-            CREATE TABLE IF NOT EXISTS securities (
+            CREATE TABLE IF NOT EXISTS stocks (
                 symbol TEXT PRIMARY KEY,
                 yahoo_symbol TEXT,
                 name TEXT NOT NULL,
@@ -84,7 +85,7 @@ async def test_schema_migration_v5_to_v6_adds_portfolio_target_columns():
 
         # Insert a test security
         await db.execute(
-            """INSERT INTO securities
+            """INSERT INTO stocks
                (symbol, name, created_at, updated_at)
                VALUES (?, ?, ?, ?)""",
             ("AAPL", "Apple Inc.", "2024-01-01T00:00:00", "2024-01-01T00:00:00"),
@@ -95,7 +96,7 @@ async def test_schema_migration_v5_to_v6_adds_portfolio_target_columns():
         # Run migration
         await init_config_schema(db)
 
-        # Check that columns were added
+        # Check that columns were added (table renamed to 'securities' in version 10)
         cursor = await db.execute("PRAGMA table_info(securities)")
         columns = {row[1]: row[2] for row in await cursor.fetchall()}
 
@@ -103,6 +104,7 @@ async def test_schema_migration_v5_to_v6_adds_portfolio_target_columns():
         assert "max_portfolio_target" in columns
         assert columns["min_portfolio_target"] == "REAL"
         assert columns["max_portfolio_target"] == "REAL"
+        assert "bucket_id" in columns  # Added in version 10
 
         # Check that existing data is preserved
         row = await db.fetchone("SELECT * FROM securities WHERE symbol = ?", ("AAPL",))
@@ -112,10 +114,11 @@ async def test_schema_migration_v5_to_v6_adds_portfolio_target_columns():
         # New columns should be NULL
         assert row["min_portfolio_target"] is None
         assert row["max_portfolio_target"] is None
+        assert row["bucket_id"] == "core"  # Default value for migrated securities
 
-        # Check that schema version was updated to 8 (includes isin migration)
+        # Check that schema version was updated to 10 (includes rename stocks→securities)
         version_row = await db.fetchone("SELECT MAX(version) as v FROM schema_version")
-        assert version_row["v"] == 8
+        assert version_row["v"] == 10
 
 
 @pytest.mark.asyncio
