@@ -426,18 +426,6 @@ async def trigger_dividend_reinvestment():
         return {"status": "error", "message": str(e)}
 
 
-@router.post("/jobs/universe-pruning")
-async def trigger_universe_pruning():
-    """Manually trigger universe pruning (removal of low-quality securities)."""
-    from app.jobs.universe_pruning import prune_universe
-
-    try:
-        await prune_universe()
-        return {"status": "success", "message": "Universe pruning completed"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-
 @router.post("/jobs/planner-batch")
 async def trigger_planner_batch(request: PlannerBatchRequest):
     """
@@ -454,18 +442,6 @@ async def trigger_planner_batch(request: PlannerBatchRequest):
             max_depth=request.depth, portfolio_hash=request.portfolio_hash
         )
         return {"status": "success", "message": "Planner batch processed"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-
-@router.post("/jobs/security-discovery")
-async def trigger_stock_discovery():
-    """Manually trigger security discovery (addition of high-quality securities)."""
-    from app.modules.universe.jobs.security_discovery import discover_new_stocks
-
-    try:
-        await discover_new_stocks()
-        return {"status": "success", "message": "Stock discovery completed"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
