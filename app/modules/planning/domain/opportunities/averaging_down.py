@@ -1,6 +1,6 @@
 """Averaging down opportunity identification.
 
-Identifies quality stocks that are down and present averaging down opportunities.
+Identifies quality securities that are down and present averaging down opportunities.
 """
 
 from typing import Dict, List, Optional
@@ -14,7 +14,7 @@ from app.modules.trading.domain.trade_sizing_service import TradeSizingService
 
 
 async def identify_averaging_down_opportunities(
-    stocks: List[Security],
+    securities: List[Security],
     portfolio_context: PortfolioContext,
     batch_prices: Dict[str, float],
     base_trade_amount: float,
@@ -24,7 +24,7 @@ async def identify_averaging_down_opportunities(
     Identify averaging down opportunities (quality dips to buy more of).
 
     Args:
-        stocks: Available stocks
+        securities: Available securities
         portfolio_context: Portfolio context with positions and prices
         batch_prices: Dict mapping symbol to current price
         base_trade_amount: Base trade amount in EUR
@@ -36,17 +36,17 @@ async def identify_averaging_down_opportunities(
     opportunities = []
     avg_price_data = portfolio_context.position_avg_prices or {}
 
-    for stock in stocks:
-        if not stock.allow_buy:
+    for security in securities:
+        if not security.allow_buy:
             continue
 
-        price = batch_prices.get(stock.symbol)
+        price = batch_prices.get(security.symbol)
         if not price or price <= 0:
             continue
 
         # Get quality score
         quality_score = (
-            portfolio_context.security_scores.get(stock.symbol, 0.5)
+            portfolio_context.security_scores.get(security.symbol, 0.5)
             if portfolio_context.security_scores
             else 0.5
         )
@@ -54,46 +54,46 @@ async def identify_averaging_down_opportunities(
             continue
 
         # Check if we own this and it's down (averaging down opportunity)
-        current_position = portfolio_context.positions.get(stock.symbol, 0)
+        current_position = portfolio_context.positions.get(security.symbol, 0)
 
-        if current_position > 0 and stock.symbol in avg_price_data:
-            avg_price = avg_price_data[stock.symbol]
+        if current_position > 0 and security.symbol in avg_price_data:
+            avg_price = avg_price_data[security.symbol]
             if avg_price > 0:
                 loss_pct = (price - avg_price) / avg_price
                 if loss_pct < -0.20:  # Down 20%+ but quality
                     # Calculate buy amount with lot-aware sizing
                     exchange_rate = 1.0
                     if (
-                        stock.currency
-                        and stock.currency != "EUR"
+                        security.currency
+                        and security.currency != "EUR"
                         and exchange_rate_service
                     ):
                         exchange_rate = await exchange_rate_service.get_rate(
-                            stock.currency or "EUR", "EUR"
+                            security.currency or "EUR", "EUR"
                         )
                     sized = TradeSizingService.calculate_buy_quantity(
                         target_value_eur=base_trade_amount,
                         price=price,
-                        min_lot=stock.min_lot,
+                        min_lot=security.min_lot,
                         exchange_rate=exchange_rate,
                     )
 
                     # Apply priority multiplier: higher multiplier = higher buy priority
                     base_priority = quality_score + abs(loss_pct)
-                    multiplier = stock.priority_multiplier if stock else 1.0
+                    multiplier = security.priority_multiplier if security else 1.0
                     final_priority = base_priority * multiplier
 
                     opportunities.append(
                         ActionCandidate(
                             side=TradeSide.BUY,
-                            symbol=stock.symbol,
-                            name=stock.name,
+                            symbol=security.symbol,
+                            name=security.name,
                             quantity=sized.quantity,
                             price=price,
                             value_eur=sized.value_eur,
-                            currency=stock.currency or "EUR",
+                            currency=security.currency or "EUR",
                             priority=final_priority,
-                            reason=f"Quality stock down {abs(loss_pct)*100:.0f}%, averaging down",
+                            reason=f"Quality security down {abs(loss_pct)*100:.0f}%, averaging down",
                             tags=["averaging_down", "buy_low"],
                         )
                     )

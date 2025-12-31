@@ -17,12 +17,12 @@ router = APIRouter()
 
 # Default values for all configurable settings
 # NOTE: Score weights (score_weight_*, sell_weight_*) have been removed.
-# The optimizer now handles portfolio-level allocation. Per-stock scoring
+# The optimizer now handles portfolio-level allocation. Per-security scoring
 # uses fixed weights defined in app/domain/scoring/security_scorer.py and sell.py.
 SETTING_DEFAULTS = {
     # Core trading constraints
     "min_hold_days": 90,  # Minimum days before selling
-    "sell_cooldown_days": 180,  # Days between sells of same stock
+    "sell_cooldown_days": 180,  # Days between sells of same security
     "max_loss_threshold": -0.20,  # Don't sell if loss exceeds this (as decimal)
     "min_security_score": 0.5,  # Minimum score for security to be recommended (0-1)
     "target_annual_return": 0.11,  # Optimal CAGR for scoring (11%)

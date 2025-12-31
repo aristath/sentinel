@@ -1,7 +1,7 @@
 """
 Expected Returns Calculator.
 
-Calculates expected returns for each stock by blending:
+Calculates expected returns for each security by blending:
 - Historical CAGR (70% default, 80% in bull, 70% in sideways)
 - Score-adjusted target return (30% default, 20% in bull, 30% in sideways)
 - Market regime adjustment (bear: reduce by 20-30%)
@@ -62,7 +62,7 @@ class ExpectedReturnsCalculator:
         Calculate expected returns for a list of symbols.
 
         Args:
-            symbols: List of stock symbols
+            symbols: List of security symbols
             target_return: Target annual return (default 11%)
             dividend_bonuses: Optional dict of pending dividend bonuses per symbol
             regime: Market regime ("bull", "bear", "sideways", or None for default)
@@ -233,7 +233,7 @@ class ExpectedReturnsCalculator:
         # Add dividend yield to CAGR for total return
         total_return_cagr = cagr + dividend_yield
 
-        # Get stock score (0-1 range)
+        # Get security score (0-1 range)
         score = await self._score_repo.get_by_symbol(symbol)
         stock_score = score.total_score if score else 0.5
 
@@ -276,8 +276,8 @@ class ExpectedReturnsCalculator:
         base_return = base_return * (1.0 + forward_adjustment)
 
         # Apply user preference multiplier
-        stock = await self._stock_repo.get_by_symbol(symbol)
-        multiplier = stock.priority_multiplier if stock else 1.0
+        security = await self._stock_repo.get_by_symbol(symbol)
+        multiplier = security.priority_multiplier if security else 1.0
         adjusted_return = base_return * multiplier
 
         # Add pending dividend bonus (DRIP fallback)

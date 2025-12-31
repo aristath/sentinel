@@ -42,9 +42,9 @@ from app.modules.scoring.domain.models import (
 
 logger = logging.getLogger(__name__)
 
-# Fixed weights for stock scoring
+# Fixed weights for security scoring
 # These are no longer configurable via settings - the portfolio optimizer
-# now handles portfolio-level allocation decisions. Per-stock scoring uses
+# now handles portfolio-level allocation decisions. Per-security scoring uses
 # these fixed weights that balance quality, opportunity, and diversification.
 SCORE_WEIGHTS = {
     "long_term": 0.20,  # CAGR, Sortino, Sharpe
@@ -74,7 +74,7 @@ async def calculate_security_score(
     weights: Optional[Dict[str, float]] = None,
 ) -> Optional[CalculatedSecurityScore]:
     """
-    Calculate complete stock score with all 8 groups.
+    Calculate complete security score with all 8 groups.
 
     Raw metrics are cached in calculations.db. Scores are calculated on-demand.
 
@@ -229,7 +229,7 @@ async def calculate_security_score_from_prefetched(
     weights: Optional[Dict[str, float]] = None,
 ) -> Optional[CalculatedSecurityScore]:
     """
-    Calculate stock score using pre-fetched data.
+    Calculate security score using pre-fetched data.
 
     Args:
         symbol: Tradernet symbol

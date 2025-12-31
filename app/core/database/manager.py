@@ -154,7 +154,7 @@ class DatabaseManager:
     - dividends: Dividend history with DRIP tracking
     - rates: Exchange rates
     - snapshots: Portfolio snapshots (daily time-series)
-    - history: Per-stock price databases (keyed by ISIN)
+    - history: Per-security price databases (keyed by ISIN)
     """
 
     def __init__(self, data_dir: Path):
@@ -175,19 +175,19 @@ class DatabaseManager:
         self.snapshots = Database(data_dir / "snapshots.db")
         self.planner = Database(data_dir / "planner.db")
 
-        # Per-stock history databases (lazy loaded, keyed by ISIN)
+        # Per-security history databases (lazy loaded, keyed by ISIN)
         self._history: dict[str, Database] = {}
         self._history_lock = asyncio.Lock()
 
     async def history(self, identifier: str) -> Database:
         """
-        Get or create per-stock history database.
+        Get or create per-security history database.
 
         Accepts either symbol or ISIN as identifier.
         Files are named by ISIN (if available) or sanitized symbol.
 
-        Each stock gets its own database for:
-        - Corruption isolation (one stock's corruption doesn't affect others)
+        Each security gets its own database for:
+        - Corruption isolation (one security's corruption doesn't affect others)
         - Independent recovery (can re-fetch from Yahoo if corrupted)
         - Smaller files (easier backup/restore)
         """

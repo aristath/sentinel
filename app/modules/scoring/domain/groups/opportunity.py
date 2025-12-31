@@ -34,7 +34,7 @@ def is_price_too_high(current_price: float, high_52w: float) -> bool:
     Guardrail to prevent chasing all-time highs.
 
     Args:
-        current_price: Current stock price
+        current_price: Current security price
         high_52w: 52-week high price
 
     Returns:

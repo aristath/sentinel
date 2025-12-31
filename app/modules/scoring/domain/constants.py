@@ -27,7 +27,7 @@ MID_DIVIDEND_BONUS = 0.07
 HIGH_DIVIDEND_BONUS = 0.10
 
 # Dividend reinvestment strategy threshold
-HIGH_DIVIDEND_REINVESTMENT_THRESHOLD = 0.03  # 3%+ yield: reinvest in same stock
+HIGH_DIVIDEND_REINVESTMENT_THRESHOLD = 0.03  # 3%+ yield: reinvest in same security
 
 # Quality score component weights (must sum to 1.0)
 QUALITY_WEIGHT_TOTAL_RETURN = 0.40
@@ -265,7 +265,7 @@ COVARIANCE_MIN_HISTORY = 60  # Minimum days needed for covariance
 
 # Weight cutoffs
 OPTIMIZER_WEIGHT_CUTOFF = 0.005  # Ignore weights below 0.5%
-MAX_CONCENTRATION = 0.20  # Maximum 20% in any single stock
+MAX_CONCENTRATION = 0.20  # Maximum 20% in any single security
 
 # Expected return bounds (clamp to reasonable range)
 EXPECTED_RETURN_MIN = -0.10  # -10% floor

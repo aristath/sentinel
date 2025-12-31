@@ -277,7 +277,7 @@ class TradernetClient:
 
     def find_symbol(self, symbol: str, exchange: Optional[str] = None) -> dict:
         """
-        Search for stock symbols/instruments by symbol or ISIN.
+        Search for security symbols/instruments by symbol or ISIN.
 
         This method accepts both Tradernet symbols and ISINs.
         Useful for resolving ISINs to Tradernet symbols.

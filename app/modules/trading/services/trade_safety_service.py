@@ -245,7 +245,7 @@ class TradeSafetyService:
 
     async def check_market_hours(self, symbol: str, side: str) -> Optional[str]:
         """
-        Check if the stock's market is currently open (if required for this trade).
+        Check if the security's market is currently open (if required for this trade).
 
         Args:
             symbol: Stock symbol to check
@@ -255,14 +255,14 @@ class TradeSafetyService:
             Error message if market is closed, None if open, check not required, or check failed
         """
         try:
-            stock = await self._stock_repo.get_by_symbol(symbol)
-            if not stock:
+            security = await self._stock_repo.get_by_symbol(symbol)
+            if not security:
                 logger.warning(
                     f"Stock {symbol} not found, cannot check market hours. Allowing trade."
                 )
                 return None
 
-            exchange = getattr(stock, "fullExchangeName", None)
+            exchange = getattr(security, "fullExchangeName", None)
             if not exchange:
                 logger.warning(f"Stock {symbol} has no exchange set. Allowing trade.")
                 return None

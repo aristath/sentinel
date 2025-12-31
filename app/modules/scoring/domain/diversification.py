@@ -290,7 +290,7 @@ async def calculate_portfolio_score(
     Components:
     - Diversification (40%): How close to target geo/industry allocations
     - Dividend (30%): Weighted average dividend yield across positions
-    - Quality (30%): Weighted average stock quality scores
+    - Quality (30%): Weighted average security quality scores
 
     Args:
         portfolio_context: Portfolio context with positions and weights
@@ -355,8 +355,8 @@ async def calculate_post_transaction_score(
         country: Stock country (e.g., "United States", "Germany")
         industry: Stock industry
         proposed_value: Transaction value (min_lot * price)
-        stock_quality: Quality score of the stock (0-1)
-        stock_dividend: Dividend yield of the stock (0-1)
+        stock_quality: Quality score of the security (0-1)
+        stock_dividend: Dividend yield of the security (0-1)
         portfolio_context: Current portfolio context
         portfolio_hash: Optional portfolio hash for caching. If provided, will check cache first.
 

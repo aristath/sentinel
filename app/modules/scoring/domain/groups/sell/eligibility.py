@@ -77,7 +77,7 @@ def check_sell_eligibility(
     Check if selling is allowed based on hard blocks.
 
     Args:
-        allow_sell: Whether selling is enabled for this stock
+        allow_sell: Whether selling is enabled for this security
         profit_pct: Current profit/loss percentage
         last_transaction_at: Date of last transaction (buy or sell) for this symbol
         max_loss_threshold: Maximum loss threshold (default: DEFAULT_MAX_LOSS_THRESHOLD)

@@ -2,7 +2,7 @@
 Database Schemas - CREATE TABLE statements for all databases.
 
 This module contains schema definitions for:
-- config.db: Stock universe, allocation targets, settings
+- config.db: Security universe, allocation targets, settings
 - ledger.db: Trades, cash flows (append-only)
 - state.db: Positions (current state, rebuildable from ledger)
 - cache.db: Ephemeral computed aggregates (can be deleted)
@@ -12,7 +12,7 @@ This module contains schema definitions for:
 - rates.db: Exchange rates
 - snapshots.db: Portfolio snapshots (daily time-series)
 - planner.db: Holistic planner sequences, evaluations, and best results
-- history/{isin}.db: Per-stock price data (keyed by ISIN)
+- history/{isin}.db: Per-security price data (keyed by ISIN)
 """
 
 import logging
@@ -692,7 +692,7 @@ async def init_config_schema(db):
     # =========================================================================
     if current_version == 10:
         logger.info(
-            "Migrating config database to schema version 11 (rename stock settings to security)..."
+            "Migrating config database to schema version 11 (rename security settings to security)..."
         )
 
         # Rename min_stock_score to min_security_score
@@ -734,7 +734,7 @@ async def init_config_schema(db):
 
         await db.commit()
         logger.info(
-            "Config database migrated to schema version 11 (renamed stock settings to security)"
+            "Config database migrated to schema version 11 (renamed security settings to security)"
         )
 
 
@@ -901,7 +901,7 @@ CREATE TABLE IF NOT EXISTS positions (
 
 -- Note: idx_positions_isin is created in migration or init_state_schema for new databases
 
--- Stock scores (cached calculations)
+-- Security scores (cached calculations)
 CREATE TABLE IF NOT EXISTS scores (
     symbol TEXT PRIMARY KEY,
 
@@ -1161,7 +1161,7 @@ CREATE INDEX IF NOT EXISTS idx_calculations_metric ON calculated_metrics(metric)
 CREATE INDEX IF NOT EXISTS idx_calculations_expires ON calculated_metrics(expires_at);
 -- Note: idx_calculations_isin is created in migration or init_calculations_schema
 
--- Stock scores (cached composite calculations)
+-- Security scores (cached composite calculations)
 -- Moved from state.db as these are calculated values, not state
 CREATE TABLE IF NOT EXISTS scores (
     symbol TEXT PRIMARY KEY,

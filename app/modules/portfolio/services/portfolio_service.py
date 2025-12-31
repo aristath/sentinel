@@ -74,7 +74,7 @@ class PortfolioService:
             if key.startswith("country:"):
                 all_countries.add(key.split(":", 1)[1])
         all_countries.update(country_values.keys())
-        # Include all countries from stock universe
+        # Include all countries from security universe
         if all_stock_countries:
             all_countries.update(all_stock_countries)
 
@@ -109,7 +109,7 @@ class PortfolioService:
             if key.startswith("industry:"):
                 all_industries.add(key.split(":", 1)[1])
         all_industries.update(industry_values.keys())
-        # Include all industries from stock universe
+        # Include all industries from security universe
         if all_stock_industries:
             all_industries.update(all_stock_industries)
 
@@ -144,15 +144,15 @@ class PortfolioService:
             positions
         )
 
-        # Get all countries and industries from active stocks in the universe
+        # Get all countries and industries from active securities in the universe
         all_stocks = await self._stock_repo.get_all_active()
         all_stock_countries = set()
         all_stock_industries = set()
-        for stock in all_stocks:
-            if stock.country:
-                all_stock_countries.add(stock.country)
-            if stock.industry:
-                industries = parse_industries(stock.industry)
+        for security in all_stocks:
+            if security.country:
+                all_stock_countries.add(security.country)
+            if security.industry:
+                industries = parse_industries(security.industry)
                 all_stock_industries.update(industries)
 
         # Get cash balance from actual Tradernet balances (more accurate than snapshot)

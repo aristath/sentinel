@@ -15,7 +15,7 @@ class SizedTrade:
     """Result of trade sizing calculation."""
 
     quantity: int  # Number of shares
-    value_native: float  # Value in stock's currency
+    value_native: float  # Value in security's currency
     value_eur: float  # Value in EUR
     num_lots: int  # Number of lots (quantity / min_lot)
 

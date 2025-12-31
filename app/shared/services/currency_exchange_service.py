@@ -508,5 +508,5 @@ class CurrencyExchangeService:
         return sorted(currencies)
 
 
-# Note: Currency is now synced from Tradernet and stored in stocks.currency
-# No mapping function needed - currency comes directly from the stock's currency field
+# Note: Currency is now synced from Tradernet and stored in securities.currency
+# No mapping function needed - currency comes directly from the security's currency field

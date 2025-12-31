@@ -9,7 +9,7 @@ from app.shared.domain.value_objects.currency import Currency
 
 @dataclass
 class Position:
-    """Current position in a stock."""
+    """Current position in a security."""
 
     symbol: str
     quantity: float
@@ -63,7 +63,7 @@ class PortfolioSnapshot:
 
 @dataclass
 class DailyPrice:
-    """Daily OHLC price data for a stock."""
+    """Daily OHLC price data for a security."""
 
     date: str
     close_price: float

@@ -31,10 +31,10 @@ class RiskModelBuilder:
         """
         Build a covariance matrix from historical price data.
 
-        Uses Ledoit-Wolf shrinkage for robustness with ~80 stocks and 252 trading days.
+        Uses Ledoit-Wolf shrinkage for robustness with ~80 securities and 252 trading days.
 
         Args:
-            symbols: List of stock symbols
+            symbols: List of security symbols
             lookback_days: Number of days of history to use
 
         Returns:
@@ -148,7 +148,7 @@ class RiskModelBuilder:
         threshold: float = 0.80,
     ) -> List[Dict]:
         """
-        Find highly correlated stock pairs.
+        Find highly correlated security pairs.
 
         Args:
             returns_df: DataFrame of daily returns

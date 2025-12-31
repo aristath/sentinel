@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 # Portfolio Response Models
 class PortfolioPosition(BaseModel):
-    """Portfolio position with stock information."""
+    """Portfolio position with security information."""
 
     symbol: str
     name: str

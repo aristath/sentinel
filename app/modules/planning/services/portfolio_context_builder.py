@@ -28,7 +28,7 @@ async def build_portfolio_context(
 
     Args:
         position_repo: Repository for positions
-        security_repo: Repository for stocks
+        security_repo: Repository for securities
         allocation_repo: Repository for allocations
         db_manager: Database manager for accessing scores
 
@@ -36,7 +36,7 @@ async def build_portfolio_context(
         PortfolioContext with all portfolio metadata needed for scoring
     """
     positions = await position_repo.get_all()
-    stocks = await security_repo.get_all_active()
+    securities = await security_repo.get_all_active()
     total_value = await position_repo.get_total_value()
 
     # Load group targets directly (already at group level)
@@ -59,10 +59,10 @@ async def build_portfolio_context(
         for industry_name in industry_names:
             industry_to_group[industry_name] = group_name
 
-    # Build stock metadata maps
+    # Build security metadata maps
     position_map = {p.symbol: p.market_value_eur or 0 for p in positions}
-    security_countries = {s.symbol: s.country for s in stocks if s.country}
-    security_industries = {s.symbol: s.industry for s in stocks if s.industry}
+    security_countries = {s.symbol: s.country for s in securities if s.country}
+    security_industries = {s.symbol: s.industry for s in securities if s.industry}
     security_scores: Dict[str, float] = {}
 
     # Get existing scores

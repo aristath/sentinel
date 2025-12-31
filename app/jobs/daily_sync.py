@@ -365,7 +365,7 @@ async def _sync_portfolio_internal():
         # Check and add missing portfolio securities to universe
         await _ensure_portfolio_securities_in_universe(positions, client, security_repo)
 
-        # Sync stock currencies
+        # Sync security currencies
         await sync_security_currencies()
 
         # Sync prices from Yahoo
@@ -448,9 +448,9 @@ async def _sync_prices_internal():
 
         # Extract symbols and yahoo_symbols
         rows = [
-            (stock.symbol, stock.yahoo_symbol)
-            for stock in securities
-            if stock.yahoo_symbol
+            (security.symbol, security.yahoo_symbol)
+            for security in securities
+            if security.yahoo_symbol
         ]
 
         if not rows:
@@ -508,9 +508,9 @@ async def sync_security_currencies():
     """
     from app.repositories import SecurityRepository
 
-    logger.info("Starting stock currency sync")
+    logger.info("Starting security currency sync")
 
-    set_text("SYNCING STOCK CURRENCIES...")
+    set_text("SYNCING SECURITY CURRENCIES...")
     set_led3(0, 0, 255)  # Blue for sync
 
     client = get_tradernet_client()
@@ -524,7 +524,7 @@ async def sync_security_currencies():
         # Note: Using SecurityRepository instead of direct DB access
         security_repo = SecurityRepository()
         securities = await security_repo.get_all_active()
-        symbols = [stock.symbol for stock in securities]
+        symbols = [security.symbol for security in securities]
 
         if not symbols:
             logger.info("No securities to sync currencies for")
@@ -535,7 +535,7 @@ async def sync_security_currencies():
 
         updated = 0
         # Note: Direct DB access here is a known architecture violation.
-        # This job needs to update stock currency directly. See README.md Architecture section for details.
+        # This job needs to update security currency directly. See README.md Architecture section for details.
         db_manager = get_db_manager()
         async with db_manager.config.transaction():
             for q in q_list:
@@ -549,10 +549,10 @@ async def sync_security_currencies():
                         )
                         updated += 1
 
-        logger.info(f"Stock currency sync complete: updated {updated} securities")
+        logger.info(f"Security currency sync complete: updated {updated} securities")
 
     except Exception as e:
-        logger.error(f"Stock currency sync failed: {e}")
+        logger.error(f"Security currency sync failed: {e}")
         raise
 
 
@@ -561,13 +561,13 @@ async def _ensure_portfolio_securities_in_universe(
 ) -> None:
     """Ensure all portfolio securities are in the universe.
 
-    For each position, checks if the stock exists in the universe.
+    For each position, checks if the security exists in the universe.
     If not, adds it using stock_setup_service which will:
     1. Get ISIN and Yahoo symbol from Tradernet
     2. Fetch data from Yahoo Finance (country, exchange, industry)
-    3. Create the stock in the database
+    3. Create the security in the database
     4. Fetch historical price data (10 years initial seed)
-    5. Calculate and save the initial stock score
+    5. Calculate and save the initial security score
 
     Args:
         positions: List of Position objects from Tradernet
@@ -590,7 +590,7 @@ async def _ensure_portfolio_securities_in_universe(
         existing = await security_repo.get_by_symbol(symbol)
         if not existing:
             missing_symbols.append(symbol)
-            logger.info(f"Portfolio stock {symbol} not in universe - will add")
+            logger.info(f"Portfolio security {symbol} not in universe - will add")
 
     if not missing_symbols:
         logger.info("All portfolio securities are already in universe")
@@ -628,7 +628,7 @@ async def _ensure_portfolio_securities_in_universe(
     for symbol in missing_symbols:
         try:
             logger.info(f"Adding {symbol} to universe...")
-            stock = await stock_setup_service.add_security_by_identifier(
+            security = await stock_setup_service.add_security_by_identifier(
                 identifier=symbol,
                 min_lot=1,
                 allow_buy=True,
@@ -636,7 +636,7 @@ async def _ensure_portfolio_securities_in_universe(
             )
             logger.info(
                 f"Successfully added {symbol} to universe "
-                f"(ISIN: {stock.isin}, Yahoo: {stock.yahoo_symbol})"
+                f"(ISIN: {security.isin}, Yahoo: {security.yahoo_symbol})"
             )
             added_count += 1
         except ValueError as e:
