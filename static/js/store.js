@@ -65,7 +65,6 @@ document.addEventListener('alpine:init', () => {
     showEditSecurityModal: false,
     showSecurityChart: false,
     showSettingsModal: false,
-    showUniverseManagementModal: false,
     selectedSecuritySymbol: null,
     selectedSecurityIsin: null,
     editingSecurity: null,
@@ -86,8 +85,7 @@ document.addEventListener('alpine:init', () => {
       industrySave: false,
       securitySave: false,
       refreshData: false,
-      logs: false,
-      universeSuggestions: false
+      logs: false
     },
 
     // SSE connections
@@ -104,14 +102,6 @@ document.addEventListener('alpine:init', () => {
     // Add Stock Form
     newSecurity: { identifier: '' },
     addingSecurity: false,
-
-    // Universe Management
-    universeSuggestions: {
-      candidatesToAdd: [],
-      securitiesToPrune: []
-    },
-    addingFromSuggestion: {},  // Track per-symbol: { 'AAPL.US': true }
-    pruningFromSuggestion: {},  // Track per-symbol: { 'XYZ.US': true }
 
     // Fetch All Data
     async fetchAll() {
@@ -700,67 +690,6 @@ document.addEventListener('alpine:init', () => {
       } catch (e) {
         this.showMessage('Failed to remove security', 'error');
       }
-    },
-
-    // Universe Management
-    async openUniverseManagementModal() {
-      this.showUniverseManagementModal = true;
-      await this.fetchUniverseSuggestions();
-    },
-
-    async fetchUniverseSuggestions() {
-      this.loading.universeSuggestions = true;
-      try {
-        const data = await API.fetchUniverseSuggestions();
-        this.universeSuggestions = {
-          candidatesToAdd: data.candidates_to_add || [],
-          securitiesToPrune: data.securities_to_prune || []
-        };
-      } catch (e) {
-        this.showMessage('Failed to fetch universe suggestions', 'error');
-        console.error('Failed to fetch universe suggestions:', e);
-      }
-      this.loading.universeSuggestions = false;
-    },
-
-    async addSecurityFromSuggestion(isin) {
-      this.addingFromSuggestion[isin] = true;
-      try {
-        await API.addSecurityFromSuggestion(isin);
-        const candidate = this.universeSuggestions.candidatesToAdd.find(c => c.isin === isin);
-        const displaySymbol = candidate ? candidate.symbol : isin;
-        this.showMessage(`${displaySymbol} added to universe`, 'success');
-        // Remove from candidates list
-        this.universeSuggestions.candidatesToAdd = this.universeSuggestions.candidatesToAdd.filter(
-          c => c.isin !== isin
-        );
-        // Refresh securities list
-        await this.fetchSecurities();
-      } catch (e) {
-        const errorMessage = e.message || 'Failed to add security';
-        this.showMessage(errorMessage, 'error');
-      }
-      this.addingFromSuggestion[isin] = false;
-    },
-
-    async pruneStockFromSuggestion(isin) {
-      this.pruningFromSuggestion[isin] = true;
-      try {
-        await API.pruneSecurityFromSuggestion(isin);
-        const security = this.universeSuggestions.securitiesToPrune.find(s => s.isin === isin);
-        const displaySymbol = security ? security.symbol : isin;
-        this.showMessage(`${displaySymbol} pruned from universe`, 'success');
-        // Remove from prune list
-        this.universeSuggestions.securitiesToPrune = this.universeSuggestions.securitiesToPrune.filter(
-          s => s.isin !== isin
-        );
-        // Refresh securities list
-        await this.fetchSecurities();
-      } catch (e) {
-        const errorMessage = e.message || 'Failed to prune security';
-        this.showMessage(errorMessage, 'error');
-      }
-      this.pruningFromSuggestion[isin] = false;
     },
 
     openEditSecurity(security) {
