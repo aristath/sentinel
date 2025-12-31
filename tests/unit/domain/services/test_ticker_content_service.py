@@ -93,12 +93,12 @@ class TestTickerContentService:
         mock_settings_repo.get_float.return_value = 1.0  # Show value
 
         with patch(
-            "app.domain.services.ticker_content_service.format_market_status_for_display",
+            "app.modules.universe.domain.ticker_content_service.format_market_status_for_display",
             new_callable=AsyncMock,
         ) as mock_format_status:
             mock_format_status.return_value = "MARKET OPEN"
             with patch(
-                "app.domain.services.ticker_content_service.cache"
+                "app.modules.universe.domain.ticker_content_service.cache"
             ) as mock_cache:
                 mock_cache.get.return_value = None  # No recommendations
 
@@ -123,12 +123,12 @@ class TestTickerContentService:
         mock_settings_repo.get_float.return_value = 1.0  # Show cash
 
         with patch(
-            "app.domain.services.ticker_content_service.format_market_status_for_display",
+            "app.modules.universe.domain.ticker_content_service.format_market_status_for_display",
             new_callable=AsyncMock,
         ) as mock_format_status:
             mock_format_status.return_value = "MARKET OPEN"
             with patch(
-                "app.domain.services.ticker_content_service.cache"
+                "app.modules.universe.domain.ticker_content_service.cache"
             ) as mock_cache:
                 mock_cache.get.return_value = None
 
@@ -160,12 +160,12 @@ class TestTickerContentService:
         mock_settings_repo.get_float.side_effect = get_float_side_effect
 
         with patch(
-            "app.domain.services.ticker_content_service.format_market_status_for_display",
+            "app.modules.universe.domain.ticker_content_service.format_market_status_for_display",
             new_callable=AsyncMock,
         ) as mock_format_status:
             mock_format_status.return_value = "MARKET OPEN"
             with patch(
-                "app.domain.services.ticker_content_service.cache"
+                "app.modules.universe.domain.ticker_content_service.cache"
             ) as mock_cache:
                 mock_cache.get.return_value = None
 
@@ -203,13 +203,13 @@ class TestTickerContentService:
             mock_get_settings.return_value = MagicMock(to_dict=lambda: {})
 
             with patch(
-                "app.domain.services.ticker_content_service.format_market_status_for_display",
+                "app.modules.universe.domain.ticker_content_service.format_market_status_for_display",
                 new_callable=AsyncMock,
             ) as mock_format_status:
                 mock_format_status.return_value = "MARKET OPEN"
 
                 with patch(
-                    "app.domain.services.ticker_content_service.cache"
+                    "app.modules.universe.domain.ticker_content_service.cache"
                 ) as mock_cache:
                     # Mock recommendations
                     mock_cache.get.return_value = {
@@ -264,13 +264,13 @@ class TestTickerContentService:
             mock_get_settings.return_value = MagicMock(to_dict=lambda: {})
 
             with patch(
-                "app.domain.services.ticker_content_service.format_market_status_for_display",
+                "app.modules.universe.domain.ticker_content_service.format_market_status_for_display",
                 new_callable=AsyncMock,
             ) as mock_format_status:
                 mock_format_status.return_value = "MARKET OPEN"
 
                 with patch(
-                    "app.domain.services.ticker_content_service.cache"
+                    "app.modules.universe.domain.ticker_content_service.cache"
                 ) as mock_cache:
                     mock_cache.get.return_value = {
                         "steps": [
@@ -298,7 +298,7 @@ class TestTickerContentService:
         mock_tradernet_client.is_connected = True
 
         with patch(
-            "app.domain.services.ticker_content_service.format_market_status_for_display",
+            "app.modules.universe.domain.ticker_content_service.format_market_status_for_display",
             new_callable=AsyncMock,
         ) as mock_format_status:
             mock_format_status.return_value = ""
@@ -316,7 +316,7 @@ class TestTickerContentService:
         mock_tradernet_client.is_connected = False
 
         with patch(
-            "app.domain.services.ticker_content_service.format_market_status_for_display",
+            "app.modules.universe.domain.ticker_content_service.format_market_status_for_display",
             new_callable=AsyncMock,
         ) as mock_format_status:
             mock_format_status.return_value = ""
@@ -347,12 +347,12 @@ class TestTickerContentService:
         mock_settings_repo.get_float.return_value = 1.0
 
         with patch(
-            "app.domain.services.ticker_content_service.format_market_status_for_display",
+            "app.modules.universe.domain.ticker_content_service.format_market_status_for_display",
             new_callable=AsyncMock,
         ) as mock_format_status:
             mock_format_status.return_value = ""
             with patch(
-                "app.domain.services.ticker_content_service.cache"
+                "app.modules.universe.domain.ticker_content_service.cache"
             ) as mock_cache:
                 mock_cache.get.return_value = None
 
