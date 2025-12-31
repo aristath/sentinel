@@ -1,21 +1,21 @@
-"""Stock factory for creating Stock domain objects."""
+"""Security factory for creating Security domain objects."""
 
 from typing import Optional
 
 from app.domain.exceptions import ValidationError
-from app.domain.models import Stock
+from app.domain.models import Security
 from app.shared.domain.value_objects.currency import Currency
 
 
-class StockFactory:
-    """Factory for creating Stock domain objects."""
+class SecurityFactory:
+    """Factory for creating Security domain objects."""
 
     @classmethod
-    def create_from_api_request(cls, data: dict) -> Stock:
-        """Create Stock from API request data.
+    def create_from_api_request(cls, data: dict) -> Security:
+        """Create Security from API request data.
 
         Args:
-            data: Dictionary with stock data from API request
+            data: Dictionary with security data from API request
                 - symbol: str (required)
                 - name: str (required)
                 - country: str (optional, auto-detected from Yahoo Finance)
@@ -28,7 +28,7 @@ class StockFactory:
                 - currency: Currency (optional, synced from Tradernet)
 
         Returns:
-            Stock domain object
+            Security domain object
 
         Raises:
             ValidationError: If validation fails
@@ -51,7 +51,7 @@ class StockFactory:
         if currency and isinstance(currency, str):
             currency = Currency.from_string(currency)
 
-        return Stock(
+        return Security(
             symbol=symbol,
             name=name,
             country=data.get("country"),
@@ -69,27 +69,27 @@ class StockFactory:
     @classmethod
     def create_with_industry_detection(
         cls, data: dict, industry: Optional[str] = None
-    ) -> Stock:
-        """Create Stock with industry detection.
+    ) -> Security:
+        """Create Security with industry detection.
 
         Args:
-            data: Dictionary with stock data
+            data: Dictionary with security data
             industry: Detected industry (optional, will use data['industry'] if not provided)
 
         Returns:
-            Stock domain object
+            Security domain object
         """
-        stock_data = data.copy()
+        security_data = data.copy()
         if industry:
-            stock_data["industry"] = industry
-        return cls.create_from_api_request(stock_data)
+            security_data["industry"] = industry
+        return cls.create_from_api_request(security_data)
 
     @classmethod
-    def create_from_import(cls, data: dict) -> Stock:
-        """Create Stock from import data (bulk imports).
+    def create_from_import(cls, data: dict) -> Security:
+        """Create Security from import data (bulk imports).
 
         Args:
-            data: Dictionary with stock data from import
+            data: Dictionary with security data from import
                 - symbol: str (required)
                 - name: str (required)
                 - country: str (optional, auto-detected from Yahoo Finance)
@@ -100,7 +100,7 @@ class StockFactory:
                 - min_lot: int (optional, defaults to 1)
 
         Returns:
-            Stock domain object
+            Security domain object
         """
         # Normalize symbol
         symbol = data.get("symbol", "").strip().upper()
@@ -112,7 +112,7 @@ class StockFactory:
         elif isinstance(currency, str):
             currency = Currency.from_string(currency)
 
-        return Stock(
+        return Security(
             symbol=symbol,
             name=data.get("name", "").strip(),
             country=data.get("country"),
@@ -126,3 +126,7 @@ class StockFactory:
             allow_sell=data.get("allow_sell", False),
             currency=currency,
         )
+
+
+# Backward compatibility alias
+StockFactory = SecurityFactory
