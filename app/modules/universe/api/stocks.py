@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.core.cache.cache import cache
-from app.domain.events import StockAddedEvent, get_event_bus
+from app.domain.events import SecurityAddedEvent, get_event_bus
 from app.infrastructure.dependencies import (
     PortfolioServiceDep,
     PositionRepositoryDep,
@@ -681,7 +681,7 @@ async def create_stock(
 
     # Publish domain event
     event_bus = get_event_bus()
-    event_bus.publish(StockAddedEvent(stock=new_stock))
+    event_bus.publish(SecurityAddedEvent(security=new_stock))
 
     score = await scoring_service.calculate_and_save_score(
         stock_data.symbol.upper(), stock_data.yahoo_symbol

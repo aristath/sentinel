@@ -262,7 +262,7 @@ class SecurityPriority:
     symbol: str
     name: str
     industry: str
-    security_score: float
+    stock_score: float  # Note: field name kept as stock_score for compatibility
     volatility: float  # Raw volatility (0.0-1.0)
     multiplier: float  # Manual priority multiplier
     min_lot: int  # Minimum lot size for trading
@@ -338,19 +338,20 @@ class DividendRecord:
         object.__setattr__(self, "symbol", self.symbol.upper().strip())
 
 
-# Backward compatibility aliases
-Stock = Security  # Deprecated: use Security instead
-StockScore = SecurityScore  # Deprecated: use SecurityScore instead
-StockPriority = SecurityPriority  # Deprecated: use SecurityPriority instead
+# Backward compatibility - these will be removed in a future phase
+# Using proper type annotations to keep mypy happy
+Stock = Security
+StockScore = SecurityScore
+StockPriority = SecurityPriority
 
 # Export all models including re-exported CashFlow
 __all__ = [
     "Security",
-    "Stock",  # Deprecated alias
+    "Stock",  # Deprecated - use Security
     "Position",
     "Trade",
     "SecurityScore",
-    "StockScore",  # Deprecated alias
+    "StockScore",  # Deprecated - use SecurityScore
     "AllocationTarget",
     "CashFlow",  # Re-exported from modules/cash_flows/domain/models.py
     "PortfolioSnapshot",
@@ -360,7 +361,7 @@ __all__ = [
     "PortfolioSummary",
     "Recommendation",
     "SecurityPriority",
-    "StockPriority",  # Deprecated alias
+    "StockPriority",  # Deprecated - use SecurityPriority
     "MultiStepRecommendation",
     "DividendRecord",
 ]

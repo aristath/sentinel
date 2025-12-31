@@ -9,7 +9,7 @@ import logging
 from typing import Optional
 
 from app.core.database.manager import DatabaseManager
-from app.domain.events import StockAddedEvent, get_event_bus
+from app.domain.events import SecurityAddedEvent, get_event_bus
 from app.domain.models import Stock
 from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.external.tradernet import TradernetClient
@@ -184,7 +184,7 @@ class StockSetupService:
 
         # Publish domain event
         event_bus = get_event_bus()
-        event_bus.publish(StockAddedEvent(stock=stock))
+        event_bus.publish(SecurityAddedEvent(security=stock))
 
         # Step 5: Fetch historical data (10 years initial seed)
         try:

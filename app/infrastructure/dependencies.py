@@ -12,8 +12,8 @@ from app.core.database.manager import DatabaseManager, get_db_manager
 from app.domain.repositories.protocols import (
     IAllocationRepository,
     IPositionRepository,
+    ISecurityRepository,
     ISettingsRepository,
-    IStockRepository,
     ITradeRepository,
 )
 from app.domain.services.exchange_rate_service import ExchangeRateService
@@ -35,7 +35,7 @@ from app.modules.rebalancing.services.rebalancing_service import RebalancingServ
 from app.modules.scoring.services.scoring_service import ScoringService
 from app.modules.trading.services.trade_execution_service import TradeExecutionService
 from app.modules.trading.services.trade_safety_service import TradeSafetyService
-from app.modules.universe.database.stock_repository import StockRepository
+from app.modules.universe.database.security_repository import SecurityRepository
 from app.modules.universe.domain.ticker_content_service import TickerContentService
 from app.modules.universe.services.stock_setup_service import StockSetupService
 from app.repositories.calculations import CalculationsRepository
@@ -49,9 +49,15 @@ from app.shared.services import CurrencyExchangeService
 # Repository Dependencies
 
 
-def get_stock_repository() -> StockRepository:
-    """Get StockRepository instance."""
-    return StockRepository()
+def get_security_repository() -> SecurityRepository:
+    """Get SecurityRepository instance."""
+    return SecurityRepository()
+
+
+# Backward compatibility alias
+def get_stock_repository() -> SecurityRepository:
+    """Get SecurityRepository instance (deprecated name)."""
+    return get_security_repository()
 
 
 def get_position_repository() -> IPositionRepository:
@@ -124,7 +130,8 @@ def get_display_state_manager() -> DisplayStateManager:
 
 
 # Type aliases for use in function signatures
-StockRepositoryDep = Annotated[IStockRepository, Depends(get_stock_repository)]
+SecurityRepositoryDep = Annotated[ISecurityRepository, Depends(get_security_repository)]
+StockRepositoryDep = SecurityRepositoryDep  # Deprecated: use SecurityRepositoryDep
 PositionRepositoryDep = Annotated[IPositionRepository, Depends(get_position_repository)]
 TradeRepositoryDep = Annotated[ITradeRepository, Depends(get_trade_repository)]
 ScoreRepositoryDep = Annotated[ScoreRepository, Depends(get_score_repository)]
