@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS stocks (
     yahoo_symbol TEXT,
     isin TEXT,                   -- International Securities Identification Number (12 chars)
     name TEXT NOT NULL,
+    product_type TEXT,           -- Product type: EQUITY, ETF, ETC, MUTUALFUND, UNKNOWN
     industry TEXT,
     country TEXT,                -- Country name from Yahoo Finance (e.g., "United States", "Germany")
     fullExchangeName TEXT,       -- Exchange name from Yahoo Finance (e.g., "NASDAQ", "XETR")
@@ -218,15 +219,15 @@ async def init_config_schema(db):
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
             (
-                8,
+                9,
                 now,
-                "Initial config schema with portfolio_hash recommendations, last_synced, country, fullExchangeName, portfolio targets, custom grouping, and isin",
+                "Initial config schema with portfolio_hash recommendations, last_synced, country, fullExchangeName, portfolio targets, custom grouping, isin, and product_type",
             ),
         )
 
         await db.commit()
         logger.info(
-            "Config database initialized with schema version 8 (includes portfolio_hash, last_synced, portfolio targets, custom grouping, and isin)"
+            "Config database initialized with schema version 9 (includes portfolio_hash, last_synced, portfolio targets, custom grouping, isin, and product_type)"
         )
     elif current_version == 1:
         # Migration: Add recommendations table (version 1 -> 2)
@@ -524,6 +525,35 @@ async def init_config_schema(db):
         )
         await db.commit()
         logger.info("Config database migrated to schema version 8 (isin column)")
+        current_version = 8  # Continue to next migration
+
+    if current_version == 8:
+        # Migration: Add product_type column to stocks table (version 8 -> 9)
+        now = datetime.now().isoformat()
+        logger.info(
+            "Migrating config database to schema version 9 (product_type column)..."
+        )
+
+        # Check if product_type column exists
+        cursor = await db.execute("PRAGMA table_info(stocks)")
+        columns = [row[1] for row in await cursor.fetchall()]
+
+        if "product_type" not in columns:
+            await db.execute("ALTER TABLE stocks ADD COLUMN product_type TEXT")
+            logger.info("Added product_type column to stocks table")
+
+        await db.execute(
+            "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
+            (
+                9,
+                now,
+                "Added product_type column to stocks for product classification (EQUITY, ETF, ETC, MUTUALFUND)",
+            ),
+        )
+        await db.commit()
+        logger.info(
+            "Config database migrated to schema version 9 (product_type column)"
+        )
 
 
 # =============================================================================
