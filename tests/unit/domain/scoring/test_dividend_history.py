@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.modules.scoring.domain.constants import DIVIDEND_CUT_THRESHOLD
-from app.modules.scoring.domain.dividend_history import (
+from app.modules.dividends.domain.dividend_history import (
     _calculate_cut_penalty,
     _calculate_growth_bonus,
     _calculate_yield_bonus,

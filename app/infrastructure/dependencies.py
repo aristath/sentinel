@@ -39,14 +39,12 @@ from app.modules.portfolio.database.portfolio_repository import PortfolioReposit
 from app.modules.portfolio.database.position_repository import PositionRepository
 from app.modules.scoring.services.scoring_service import ScoringService
 from app.modules.universe.database.stock_repository import StockRepository
-from app.repositories import (
-    CalculationsRepository,
-    GroupingRepository,
-    RecommendationRepository,
-    ScoreRepository,
-    SettingsRepository,
-    TradeRepository,
-)
+from app.repositories.calculations import CalculationsRepository
+from app.repositories.grouping import GroupingRepository
+from app.repositories.recommendation import RecommendationRepository
+from app.repositories.score import ScoreRepository
+from app.repositories.settings import SettingsRepository
+from app.repositories.trade import TradeRepository
 
 # Repository Dependencies
 

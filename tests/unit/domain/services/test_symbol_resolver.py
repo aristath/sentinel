@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.domain.models import Stock
-from app.domain.services.symbol_resolver import (
+from app.modules.universe.domain.symbol_resolver import (
     IdentifierType,
     SymbolInfo,
     SymbolResolver,

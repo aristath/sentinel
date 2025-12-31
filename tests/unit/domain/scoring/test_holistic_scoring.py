@@ -14,7 +14,7 @@ from app.modules.scoring.domain.constants import (
     WINDFALL_SELL_PCT_HIGH,
     WINDFALL_SELL_PCT_MEDIUM,
 )
-from app.modules.scoring.domain.dividend_history import (
+from app.modules.dividends.domain.dividend_history import (
     calculate_dividend_growth_rate,
     calculate_dividend_stability_score,
     has_big_dividend_cut,

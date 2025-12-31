@@ -10,7 +10,7 @@ import pytest
 
 from app.application.services.stock_setup_service import StockSetupService
 from app.domain.models import Stock
-from app.domain.services.symbol_resolver import IdentifierType, SymbolInfo
+from app.modules.universe.domain.symbol_resolver import IdentifierType, SymbolInfo
 from app.shared.domain.value_objects.currency import Currency
 
 
