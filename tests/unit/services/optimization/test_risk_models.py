@@ -183,7 +183,7 @@ class TestRiskModelBuilder:
                     assert "INSUFFICIENT" not in cov_matrix.index
 
     def test_get_correlations(self, builder):
-        """Test finding highly correlated stock pairs."""
+        """Test finding highly correlated security pairs."""
         # Create sample returns DataFrame
         dates = pd.date_range("2024-01-01", periods=10, freq="D")
         returns_df = pd.DataFrame(

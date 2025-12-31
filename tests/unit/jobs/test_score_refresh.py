@@ -1,7 +1,7 @@
 """Tests for score refresh job.
 
-These tests validate the periodic stock scoring system that calculates
-and stores scores for all active stocks.
+These tests validate the periodic security scoring system that calculates
+and stores scores for all active securities.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -34,7 +34,7 @@ class TestRefreshAllScoresInternal:
 
     @pytest.mark.asyncio
     async def test_handles_no_active_stocks(self):
-        """Test graceful handling when no stocks to score."""
+        """Test graceful handling when no securities to score."""
         from app.jobs.score_refresh import _refresh_all_scores_internal
 
         mock_db = AsyncMock()
@@ -48,7 +48,7 @@ class TestRefreshAllScoresInternal:
                     with patch("pass  # LED cleared"):
                         await _refresh_all_scores_internal()
 
-        # Should not crash when no stocks
+        # Should not crash when no securities
 
     @pytest.mark.asyncio
     async def test_emits_events(self):
@@ -71,12 +71,12 @@ class TestRefreshAllScoresInternal:
 
     @pytest.mark.asyncio
     async def test_skips_stocks_with_insufficient_data(self):
-        """Test that stocks with insufficient data are skipped."""
+        """Test that securities with insufficient data are skipped."""
         from app.jobs.score_refresh import _refresh_all_scores_internal
 
         mock_db = AsyncMock()
         mock_cursor = AsyncMock()
-        # One stock with symbol, yahoo_symbol, country, industry
+        # One security with symbol, yahoo_symbol, country, industry
         mock_cursor.fetchall.return_value = [
             ("TEST.US", "TEST", "United States", "Consumer Electronics")
         ]
@@ -150,7 +150,7 @@ class TestBuildPortfolioContext:
         mock_db.state = AsyncMock()
         mock_db.state.execute.return_value = mock_state_cursor
 
-        # Mock config cursor (stock data)
+        # Mock config cursor (security data)
         mock_config_cursor = AsyncMock()
         mock_config_cursor.fetchall.return_value = []
         mock_db.config = AsyncMock()
@@ -213,7 +213,7 @@ class TestBuildPortfolioContext:
             ("Consumer Electronics", 0.2, "industry"),
         ]
 
-        # Mock stock data cursor
+        # Mock security data cursor
         mock_stocks_cursor = AsyncMock()
         mock_stocks_cursor.fetchall.return_value = []
 

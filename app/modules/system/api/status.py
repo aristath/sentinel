@@ -94,9 +94,9 @@ async def get_status(
             else:
                 last_sync = latest[:16] if len(latest) >= 16 else latest
 
-    # Get stock count
-    active_stocks = await security_repo.get_all_active()
-    stock_count = len(active_stocks)
+    # Get security count
+    active_securities = await security_repo.get_all_active()
+    security_count = len(active_securities)
 
     # Get position count
     positions = await position_repo.get_all()
@@ -105,7 +105,7 @@ async def get_status(
     return {
         "status": "healthy",
         "last_sync": last_sync,
-        "stock_universe_count": stock_count,
+        "security_universe_count": security_count,
         "active_positions": position_count,
         "cash_balance": cash_balance,
         "check_interval_minutes": settings.cash_check_interval_minutes,
@@ -166,7 +166,7 @@ async def trigger_price_sync():
 
 @router.post("/sync/historical")
 async def trigger_historical_sync():
-    """Manually trigger historical data sync (stock prices + monthly aggregation)."""
+    """Manually trigger historical data sync (security prices + monthly aggregation)."""
     from app.jobs.historical_data_sync import sync_historical_data
 
     try:
@@ -181,11 +181,11 @@ async def rebuild_universe_from_portfolio():
     """Rebuild universe from portfolio and populate all databases.
 
     This endpoint performs a complete rebuild:
-    1. Gets all stocks from current portfolio positions
+    1. Gets all securities from current portfolio positions
     2. Checks if they exist in the universe
-    3. Adds missing stocks with full data (ISIN, Yahoo symbols, etc.)
-    4. Syncs historical data for all stocks in universe
-    5. Refreshes scores and metrics for all stocks
+    3. Adds missing securities with full data (ISIN, Yahoo symbols, etc.)
+    4. Syncs historical data for all securities in universe
+    5. Refreshes scores and metrics for all securities
 
     Returns:
         Status with detailed counts of operations performed
@@ -230,33 +230,33 @@ async def rebuild_universe_from_portfolio():
         result["portfolio_positions"] = len(positions)
         logger.info(f"Found {len(positions)} portfolio positions")
 
-        # Step 3: Get stock counts before adding
+        # Step 3: Get security counts before adding
         security_repo = get_security_repository()
         stocks_before = await security_repo.get_all_active()
         result["stocks_in_universe_before"] = len(stocks_before)
-        logger.info(f"Universe has {len(stocks_before)} stocks before rebuild")
+        logger.info(f"Universe has {len(stocks_before)} securities before rebuild")
 
-        # Step 4: Ensure all portfolio stocks are in universe
-        logger.info("Adding missing portfolio stocks to universe...")
+        # Step 4: Ensure all portfolio securities are in universe
+        logger.info("Adding missing portfolio securities to universe...")
         try:
             await _ensure_portfolio_stocks_in_universe(positions, client, security_repo)
         except Exception as e:
-            error_msg = f"Failed to add portfolio stocks: {e}"
+            error_msg = f"Failed to add portfolio securities: {e}"
             logger.error(error_msg, exc_info=True)
             result["errors"].append(error_msg)
-            # Continue - some stocks might have been added
+            # Continue - some securities might have been added
 
-        # Step 5: Get stock counts after adding
+        # Step 5: Get security counts after adding
         stocks_after = await security_repo.get_all_active()
         result["stocks_in_universe_after"] = len(stocks_after)
         result["stocks_added"] = len(stocks_after) - len(stocks_before)
         logger.info(
-            f"Universe now has {len(stocks_after)} stocks "
+            f"Universe now has {len(stocks_after)} securities "
             f"({result['stocks_added']} added)"
         )
 
-        # Step 6: Sync historical data for all stocks
-        logger.info("Syncing historical data for all stocks in universe...")
+        # Step 6: Sync historical data for all securities
+        logger.info("Syncing historical data for all securities in universe...")
         try:
             await sync_historical_data()
             result["historical_synced"] = True
@@ -267,8 +267,8 @@ async def rebuild_universe_from_portfolio():
             result["errors"].append(error_msg)
             # Continue - historical sync failure shouldn't block the process
 
-        # Step 7: Refresh scores and metrics for all stocks
-        logger.info("Refreshing scores and metrics for all stocks...")
+        # Step 7: Refresh scores and metrics for all securities
+        logger.info("Refreshing scores and metrics for all securities...")
         try:
             await run_stocks_data_sync()
             result["scores_refreshed"] = True
@@ -283,7 +283,7 @@ async def rebuild_universe_from_portfolio():
         if result["errors"]:
             result["message"] = (
                 f"Universe rebuild completed with {len(result['errors'])} error(s). "
-                f"Added {result['stocks_added']} stocks, "
+                f"Added {result['stocks_added']} securities, "
                 f"synced historical data: {result['historical_synced']}, "
                 f"refreshed scores: {result['scores_refreshed']}"
             )
@@ -291,9 +291,9 @@ async def rebuild_universe_from_portfolio():
         else:
             result["message"] = (
                 f"Universe rebuild completed successfully. "
-                f"Added {result['stocks_added']} stocks, "
-                f"synced historical data for all stocks, "
-                f"refreshed scores and metrics for all stocks."
+                f"Added {result['stocks_added']} securities, "
+                f"synced historical data for all securities, "
+                f"refreshed scores and metrics for all securities."
             )
 
         logger.info(f"Universe rebuild completed: {result['message']}")
@@ -308,42 +308,42 @@ async def rebuild_universe_from_portfolio():
         return result
 
 
-@router.post("/sync/stocks-data")
-async def trigger_stocks_data_sync():
-    """Manually trigger stocks data sync (historical sync, industry detection, metrics, scores).
+@router.post("/sync/securities-data")
+async def trigger_securities_data_sync():
+    """Manually trigger securities data sync (historical sync, industry detection, metrics, scores).
 
-    Processes all stocks that haven't been synced in 24 hours.
+    Processes all securities that haven't been synced in 24 hours.
     This includes:
     - Syncing historical prices from Yahoo Finance
     - Detecting and updating industry from Yahoo Finance
     - Calculating technical metrics (RSI, EMA, CAGR, etc.)
-    - Refreshing stock scores
+    - Refreshing security scores
     """
-    from app.jobs.securities_data_sync import run_stocks_data_sync
+    from app.jobs.securities_data_sync import run_securities_data_sync
 
     try:
-        await run_stocks_data_sync()
-        return {"status": "success", "message": "Stocks data sync completed"}
+        await run_securities_data_sync()
+        return {"status": "success", "message": "Securities data sync completed"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
 
 @router.post("/sync/daily-pipeline")
 async def trigger_daily_pipeline():
-    """Manually trigger daily pipeline (stocks data sync).
+    """Manually trigger daily pipeline (securities data sync).
 
-    This is an alias for /sync/stocks-data for backwards compatibility.
-    Processes all stocks that haven't been synced in 24 hours.
+    This is an alias for /sync/securities-data for backwards compatibility.
+    Processes all securities that haven't been synced in 24 hours.
     This includes:
     - Syncing historical prices from Yahoo Finance
     - Detecting and updating industry from Yahoo Finance
     - Calculating technical metrics (RSI, EMA, CAGR, etc.)
-    - Refreshing stock scores
+    - Refreshing security scores
     """
-    from app.jobs.securities_data_sync import run_stocks_data_sync
+    from app.jobs.securities_data_sync import run_securities_data_sync
 
     try:
-        await run_stocks_data_sync()
+        await run_securities_data_sync()
         return {"status": "success", "message": "Daily pipeline completed"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -426,18 +426,6 @@ async def trigger_dividend_reinvestment():
         return {"status": "error", "message": str(e)}
 
 
-@router.post("/jobs/universe-pruning")
-async def trigger_universe_pruning():
-    """Manually trigger universe pruning (removal of low-quality stocks)."""
-    from app.jobs.universe_pruning import prune_universe
-
-    try:
-        await prune_universe()
-        return {"status": "success", "message": "Universe pruning completed"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-
 @router.post("/jobs/planner-batch")
 async def trigger_planner_batch(request: PlannerBatchRequest):
     """
@@ -454,18 +442,6 @@ async def trigger_planner_batch(request: PlannerBatchRequest):
             max_depth=request.depth, portfolio_hash=request.portfolio_hash
         )
         return {"status": "success", "message": "Planner batch processed"}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-
-@router.post("/jobs/stock-discovery")
-async def trigger_stock_discovery():
-    """Manually trigger stock discovery (addition of high-quality stocks)."""
-    from app.modules.universe.jobs.security_discovery import discover_new_stocks
-
-    try:
-        await discover_new_stocks()
-        return {"status": "success", "message": "Stock discovery completed"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
@@ -608,9 +584,9 @@ def _get_backup_info(data_dir: Path) -> tuple[int, int]:
 
 @router.get("/markets", response_model=MarketsStatusResponse)
 async def get_markets_status():
-    """Get current market open/closed status for markets where we have stocks.
+    """Get current market open/closed status for markets where we have securities.
 
-    Returns status for all markets where stocks exist in our universe including:
+    Returns status for all markets where securities exist in our universe including:
     - Whether each market is currently open
     - Exchange code (e.g., XNYS, XAMS, ASEX)
     - Timezone

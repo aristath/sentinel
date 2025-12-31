@@ -15,7 +15,7 @@ class SizedTrade:
     """Result of trade sizing calculation."""
 
     quantity: int  # Number of shares
-    value_native: float  # Value in stock's currency
+    value_native: float  # Value in security's currency
     value_eur: float  # Value in EUR
     num_lots: int  # Number of lots (quantity / min_lot)
 
@@ -35,7 +35,7 @@ class TradeSizingService:
 
         Args:
             target_value_eur: Desired trade value in EUR
-            price: Stock price in native currency
+            price: Security price in native currency
             min_lot: Minimum lot size (default 1)
             exchange_rate: Native currency per 1 EUR (e.g., HKD/EUR ≈ 8.4)
 

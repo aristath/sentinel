@@ -3,8 +3,8 @@
 Migration script for v2 schema changes.
 
 Adds:
-- yahoo_symbol column to stocks table
-- Sets known Asian stock Yahoo symbol mappings
+- yahoo_symbol column to securities table
+- Sets known Asian security Yahoo symbol mappings
 """
 
 import asyncio
@@ -30,13 +30,13 @@ async def migrate():
 
         if "yahoo_symbol" not in columns:
             print("Adding yahoo_symbol column...")
-            await db.execute("ALTER TABLE stocks ADD COLUMN yahoo_symbol TEXT")
+            await db.execute("ALTER TABLE securities ADD COLUMN yahoo_symbol TEXT")
             await db.commit()
             print("Column added.")
         else:
             print("yahoo_symbol column already exists.")
 
-        # Update known Asian stock mappings that require explicit Yahoo symbols
+        # Update known Asian security mappings that require explicit Yahoo symbols
         mappings = {
             "XIAO.1810.AS": "1810.HK",
             "BYD.285.AS": "285.HK",
@@ -55,8 +55,8 @@ async def migrate():
         await db.commit()
         print("Migration complete.")
 
-        # Show current stocks
-        print("\nCurrent stocks:")
+        # Show current securities
+        print("\nCurrent securities:")
         cursor = await db.execute(
             "SELECT symbol, yahoo_symbol, name, industry FROM securities WHERE active = 1"
         )

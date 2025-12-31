@@ -575,7 +575,7 @@ Daily job to:
 
 ### Unified View with Visual Distinction
 
-- Single stock list with badge/color per bucket
+- Single security list with badge/color per bucket
 - Single recommendations list, tagged by bucket
 - Dashboard shows combined + per-bucket breakdown
 - Filter toggle to focus on one bucket

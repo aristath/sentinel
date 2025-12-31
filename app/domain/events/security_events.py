@@ -11,7 +11,7 @@ from app.domain.models import Security
 class SecurityAddedEvent(DomainEvent):
     """Event raised when a security is added to the universe.
 
-    This event represents a business event: a new security (stock, ETF, ETC, mutual fund)
+    This event represents a business event: a new security (equity, ETF, ETC, mutual fund)
     has been added to the investment universe.
     """
 

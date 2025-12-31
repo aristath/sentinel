@@ -66,13 +66,13 @@ async def _check_and_rebalance_immediately_internal() -> bool:
             # Check for currencies below minimum
             trading_currencies = set()
             security_repo = SecurityRepository()
-            stocks = await security_repo.get_all_active()
-            for stock in stocks:
-                if stock.currency:
+            securities = await security_repo.get_all_active()
+            for security in securities:
+                if security.currency:
                     currency_str = (
-                        stock.currency.value
-                        if hasattr(stock.currency, "value")
-                        else str(stock.currency)
+                        security.currency.value
+                        if hasattr(security.currency, "value")
+                        else str(security.currency)
                     )
                     trading_currencies.add(currency_str.upper())
 

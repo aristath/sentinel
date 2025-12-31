@@ -21,7 +21,7 @@ async def get_position_drawdown(
     Analyze drawdown periods for a specific position.
 
     Args:
-        symbol: Stock symbol
+        symbol: Security symbol
         start_date: Start date for analysis
         end_date: End date for analysis
 

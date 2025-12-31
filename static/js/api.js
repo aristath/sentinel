@@ -73,8 +73,6 @@ const API = {
   triggerDailyMaintenance: () => API._post('/api/status/maintenance/daily'),
   triggerWeeklyMaintenance: () => API._post('/api/status/jobs/weekly-maintenance'),
   triggerDividendReinvestment: () => API._post('/api/status/jobs/dividend-reinvestment'),
-  triggerUniversePruning: () => API._post('/api/status/jobs/universe-pruning'),
-  triggerSecurityDiscovery: () => API._post('/api/status/jobs/security-discovery'),
 
   // Allocation
   fetchAllocation: () => fetch('/api/allocation/groups/allocation').then(r => r.json()),
@@ -83,16 +81,13 @@ const API = {
   saveIndustryTargets: (targets) => API._put('/api/allocation/groups/targets/industry', { targets }),
 
   // Securities
-  fetchStocks: () => fetch('/api/securities').then(r => r.json()),
-  createStock: (data) => API._post('/api/securities', data),
-  addStockByIdentifier: (data) => API._post('/api/securities/add-by-identifier', data),
-  updateStock: (isin, data) => API._put(`/api/securities/${isin}`, data),
-  deleteStock: (isin) => API._delete(`/api/securities/${isin}`),
+  fetchSecurities: () => fetch('/api/securities').then(r => r.json()),
+  createSecurity: (data) => API._post('/api/securities', data),
+  addSecurityByIdentifier: (data) => API._post('/api/securities/add-by-identifier', data),
+  updateSecurity: (isin, data) => API._put(`/api/securities/${isin}`, data),
+  deleteSecurity: (isin) => API._delete(`/api/securities/${isin}`),
   refreshScore: (isin) => API._post(`/api/securities/${isin}/refresh`),
   refreshAllScores: () => API._post('/api/securities/refresh-all'),
-  fetchUniverseSuggestions: () => fetch('/api/securities/universe-suggestions').then(r => r.json()),
-  addStockFromSuggestion: (isin) => API._post(`/api/securities/${isin}/add-from-suggestion`),
-  pruneStockFromSuggestion: (isin) => API._post(`/api/securities/${isin}/prune-from-suggestion`),
 
   // Trades
   fetchTrades: () => fetch('/api/trades').then(r => r.json()),
@@ -102,9 +97,9 @@ const API = {
   executeRecommendation: () => API._post('/api/trades/recommendations/execute'),
 
   // Charts
-  fetchStockChart: (isin, range = '1Y', source = 'tradernet') => {
+  fetchSecurityChart: (isin, range = '1Y', source = 'tradernet') => {
     const params = new URLSearchParams({ range, source });
-    return fetch(`/api/charts/securitys/${isin}?${params}`).then(r => r.json());
+    return fetch(`/api/charts/securities/${isin}?${params}`).then(r => r.json());
   },
   fetchSparklines: () => fetch('/api/charts/sparklines').then(r => r.json()),
 

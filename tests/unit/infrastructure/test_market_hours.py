@@ -3,8 +3,8 @@
 These tests validate the market hours functionality including:
 - Checking if markets are currently open
 - Getting list of open markets
-- Filtering stocks by open markets
-- Grouping stocks by exchange
+- Filtering securities by open markets
+- Grouping securities by exchange
 """
 
 from datetime import datetime
@@ -229,14 +229,14 @@ class TestGetMarketStatus:
 
 
 class TestFilterStocksByOpenMarkets:
-    """Test filtering stocks by open markets."""
+    """Test filtering securities by open markets."""
 
     @pytest.mark.asyncio
     async def test_filters_stocks_to_open_markets_only(self):
-        """Test filtering stocks to only those with open markets."""
+        """Test filtering securities to only those with open markets."""
         from app.infrastructure.market_hours import filter_stocks_by_open_markets
 
-        # Create mock stocks
+        # Create mock securities
         stock_eu = MagicMock()
         stock_eu.fullExchangeName = "XETR"
         stock_eu.symbol = "SAP.DE"
@@ -249,7 +249,7 @@ class TestFilterStocksByOpenMarkets:
         stock_asia.fullExchangeName = "XHKG"
         stock_asia.symbol = "9988.HK"
 
-        stocks = [stock_eu, stock_us, stock_asia]
+        securities = [stock_eu, stock_us, stock_asia]
 
         # Saturday - all markets closed
         with (
@@ -262,19 +262,19 @@ class TestFilterStocksByOpenMarkets:
                 2024, 1, 13, 12, 0, tzinfo=ZoneInfo("UTC")
             )
             mock_db.return_value = ["XETR", "NYSE", "XHKG"]
-            filtered = await filter_stocks_by_open_markets(stocks)
+            filtered = await filter_stocks_by_open_markets(securities)
             assert len(filtered) == 0
 
     @pytest.mark.asyncio
     async def test_returns_all_stocks_when_all_markets_open(self):
-        """Test returning all stocks when their markets are open."""
+        """Test returning all securities when their markets are open."""
         from app.infrastructure.market_hours import filter_stocks_by_open_markets
 
         stock_us = MagicMock()
         stock_us.fullExchangeName = "NYSE"
         stock_us.symbol = "AAPL.US"
 
-        stocks = [stock_us]
+        securities = [stock_us]
 
         # Tuesday at 15:00 UTC - US market open
         with (
@@ -287,7 +287,7 @@ class TestFilterStocksByOpenMarkets:
                 2024, 1, 16, 15, 0, tzinfo=ZoneInfo("UTC")
             )
             mock_db.return_value = ["NYSE"]
-            filtered = await filter_stocks_by_open_markets(stocks)
+            filtered = await filter_stocks_by_open_markets(securities)
             assert len(filtered) == 1
             assert filtered[0].symbol == "AAPL.US"
 
@@ -371,10 +371,10 @@ class TestShouldCheckMarketHours:
 
 
 class TestGroupStocksByExchange:
-    """Test grouping stocks by exchange."""
+    """Test grouping securities by exchange."""
 
     def test_groups_stocks_correctly(self):
-        """Test grouping stocks by their exchange."""
+        """Test grouping securities by their exchange."""
         from app.infrastructure.market_hours import group_stocks_by_exchange
 
         stock_eu1 = MagicMock()
@@ -393,16 +393,16 @@ class TestGroupStocksByExchange:
         stock_asia.fullExchangeName = "XHKG"
         stock_asia.symbol = "9988.HK"
 
-        stocks = [stock_eu1, stock_eu2, stock_us, stock_asia]
+        securities = [stock_eu1, stock_eu2, stock_us, stock_asia]
 
-        grouped = group_stocks_by_exchange(stocks)
+        grouped = group_stocks_by_exchange(securities)
 
         assert len(grouped["XETR"]) == 2
         assert len(grouped["NYSE"]) == 1
         assert len(grouped["XHKG"]) == 1
 
     def test_handles_empty_list(self):
-        """Test handling empty stock list."""
+        """Test handling empty security list."""
         from app.infrastructure.market_hours import group_stocks_by_exchange
 
         grouped = group_stocks_by_exchange([])
@@ -410,14 +410,14 @@ class TestGroupStocksByExchange:
         assert grouped == {}
 
     def test_handles_unknown_exchange(self):
-        """Test handling stocks with unknown or missing exchange."""
+        """Test handling securities with unknown or missing exchange."""
         from app.infrastructure.market_hours import group_stocks_by_exchange
 
-        stock = MagicMock()
-        stock.fullExchangeName = None
-        stock.symbol = "XXX.XX"
+        security = MagicMock()
+        security.fullExchangeName = None
+        security.symbol = "XXX.XX"
 
-        grouped = group_stocks_by_exchange([stock])
+        grouped = group_stocks_by_exchange([security])
 
         # Should not appear in any group
         assert len(grouped) == 0

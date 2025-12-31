@@ -135,10 +135,10 @@ class TestProcessBuyOpportunity:
             "target": 0.30,
             "current": 0.20,
         }
-        stock = MagicMock()
-        stock.allow_buy = True
-        stock.name = "Apple Inc"
-        stock.min_lot = 1
+        security = MagicMock()
+        security.allow_buy = True
+        security.name = "Apple Inc"
+        security.min_lot = 1
 
         position = None
         price = 150.0
@@ -147,7 +147,7 @@ class TestProcessBuyOpportunity:
             "averaging_down": [],
         }
 
-        _process_buy_opportunity(gap_info, stock, position, price, opportunities)
+        _process_buy_opportunity(gap_info, security, position, price, opportunities)
 
         assert len(opportunities["rebalance_buys"]) == 1
         candidate = opportunities["rebalance_buys"][0]
@@ -155,7 +155,7 @@ class TestProcessBuyOpportunity:
         assert candidate.quantity == 10  # 1500 / 150
 
     def test_skips_if_allow_buy_false(self):
-        """Test that stock with allow_buy=False is skipped."""
+        """Test that security with allow_buy=False is skipped."""
         gap_info = {
             "symbol": "AAPL",
             "gap_value": 1500.0,
@@ -163,18 +163,18 @@ class TestProcessBuyOpportunity:
             "target": 0.30,
             "current": 0.20,
         }
-        stock = MagicMock()
-        stock.allow_buy = False
+        security = MagicMock()
+        security.allow_buy = False
 
         opportunities = {"rebalance_buys": [], "averaging_down": []}
 
-        _process_buy_opportunity(gap_info, stock, None, 150.0, opportunities)
+        _process_buy_opportunity(gap_info, security, None, 150.0, opportunities)
 
         assert len(opportunities["rebalance_buys"]) == 0
         assert len(opportunities["averaging_down"]) == 0
 
     def test_skips_if_stock_is_none(self):
-        """Test that None stock is skipped."""
+        """Test that None security is skipped."""
         gap_info = {
             "symbol": "AAPL",
             "gap_value": 1500.0,
@@ -197,14 +197,14 @@ class TestProcessBuyOpportunity:
             "target": 0.25,
             "current": 0.20,
         }
-        stock = MagicMock()
-        stock.allow_buy = True
-        stock.name = "Apple"
-        stock.min_lot = 5
+        security = MagicMock()
+        security.allow_buy = True
+        security.name = "Apple"
+        security.min_lot = 5
 
         opportunities = {"rebalance_buys": [], "averaging_down": []}
 
-        _process_buy_opportunity(gap_info, stock, None, 150.0, opportunities)
+        _process_buy_opportunity(gap_info, security, None, 150.0, opportunities)
 
         # Should use min_lot of 5
         assert len(opportunities["rebalance_buys"]) == 1
@@ -219,10 +219,10 @@ class TestProcessBuyOpportunity:
             "target": 0.30,
             "current": 0.20,
         }
-        stock = MagicMock()
-        stock.allow_buy = True
-        stock.name = "Apple"
-        stock.min_lot = 1
+        security = MagicMock()
+        security.allow_buy = True
+        security.name = "Apple"
+        security.min_lot = 1
 
         position = MagicMock()
         position.avg_price = 200.0  # Current price below avg
@@ -230,7 +230,7 @@ class TestProcessBuyOpportunity:
 
         opportunities = {"rebalance_buys": [], "averaging_down": []}
 
-        _process_buy_opportunity(gap_info, stock, position, 150.0, opportunities)
+        _process_buy_opportunity(gap_info, security, position, 150.0, opportunities)
 
         # Should be in averaging_down, not rebalance_buys
         assert len(opportunities["averaging_down"]) == 1
@@ -246,14 +246,14 @@ class TestProcessBuyOpportunity:
             "target": 0.201,
             "current": 0.20,
         }
-        stock = MagicMock()
-        stock.allow_buy = True
-        stock.name = "Apple"
-        stock.min_lot = None
+        security = MagicMock()
+        security.allow_buy = True
+        security.name = "Apple"
+        security.min_lot = None
 
         opportunities = {"rebalance_buys": [], "averaging_down": []}
 
-        _process_buy_opportunity(gap_info, stock, None, 150.0, opportunities)
+        _process_buy_opportunity(gap_info, security, None, 150.0, opportunities)
 
         assert len(opportunities["rebalance_buys"]) == 0
 
@@ -272,7 +272,7 @@ class TestActionCandidate:
             value_eur=1500.0,
             currency="USD",
             priority=0.85,
-            reason="High quality stock",
+            reason="High quality security",
             tags=["quality", "opportunity"],
         )
 
@@ -403,7 +403,7 @@ class TestGenerateActionSequences:
         """Should generate direct buy sequence when cash is available.
 
         Bug caught: If cash is available, system should prioritize
-        buying quality stocks without requiring sells first.
+        buying quality securities without requiring sells first.
         """
         opportunities = {
             "profit_taking": [],
@@ -417,7 +417,7 @@ class TestGenerateActionSequences:
                     value_eur=700.0,
                     currency="USD",
                     priority=0.8,
-                    reason="Down 25%, quality stock",
+                    reason="Down 25%, quality security",
                     tags=["averaging_down"],
                 ),
             ],
@@ -506,7 +506,7 @@ class TestGenerateActionSequences:
                 ActionCandidate(
                     side=TradeSide.BUY,
                     symbol="EXPENSIVE",
-                    name="Expensive Stock",
+                    name="Expensive Security",
                     quantity=100,
                     price=100.0,
                     value_eur=10000.0,  # More than available cash
@@ -563,7 +563,7 @@ class TestGenerateActionSequences:
                 ActionCandidate(
                     side=TradeSide.SELL,
                     symbol="OVERWEIGHT",
-                    name="Overweight Stock",
+                    name="Overweight Security",
                     quantity=20,
                     price=50.0,
                     value_eur=900.0,
@@ -577,7 +577,7 @@ class TestGenerateActionSequences:
                 ActionCandidate(
                     side=TradeSide.BUY,
                     symbol="UNDERWEIGHT",
-                    name="Underweight Stock",
+                    name="Underweight Security",
                     quantity=15,
                     price=60.0,
                     value_eur=800.0,
@@ -630,7 +630,7 @@ class TestGenerateActionSequences:
                 ActionCandidate(
                     side=TradeSide.SELL,
                     symbol="WINNER",
-                    name="Winner Stock",
+                    name="Winner Security",
                     quantity=10,
                     price=200.0,
                     value_eur=1800.0,

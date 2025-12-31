@@ -50,8 +50,8 @@ python3 scripts/import_freedom24.py --db /path/to/custom.db /tmp/export.json
 ### What Gets Imported
 
 **Trades:**
-- Stock buy/sell transactions (instrument type 1)
-- Skips forex conversions, options, and other non-stock instruments
+- Security buy/sell transactions (instrument type 1)
+- Skips forex conversions, options, and other non-security instruments
 
 **Cash Flows:**
 - Card deposits

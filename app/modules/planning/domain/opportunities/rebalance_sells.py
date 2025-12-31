@@ -25,7 +25,7 @@ async def identify_rebalance_sell_opportunities(
 
     Args:
         positions: Current positions
-        stocks_by_symbol: Dict mapping symbol to Stock
+        stocks_by_symbol: Dict mapping symbol to Security
         portfolio_context: Portfolio context with weights
         country_allocations: Current country allocation percentages
         total_value: Total portfolio value
@@ -37,8 +37,8 @@ async def identify_rebalance_sell_opportunities(
     opportunities = []
 
     for pos in positions:
-        stock = stocks_by_symbol.get(pos.symbol)
-        if not stock or not stock.allow_sell:
+        security = stocks_by_symbol.get(pos.symbol)
+        if not security or not security.allow_sell:
             continue
 
         position_value = pos.market_value_eur or 0
@@ -47,7 +47,7 @@ async def identify_rebalance_sell_opportunities(
 
         # Check for rebalance sells (overweight group)
         # Map individual country to group
-        country = stock.country
+        country = security.country
         if country:
             country_to_group = portfolio_context.country_to_group or {}
             group = country_to_group.get(country, "OTHER")
@@ -76,14 +76,14 @@ async def identify_rebalance_sell_opportunities(
                     if sell_qty > 0:
                         # Apply priority multiplier inversely: higher multiplier = lower sell priority
                         base_priority = overweight * 2
-                        multiplier = stock.priority_multiplier if stock else 1.0
+                        multiplier = security.priority_multiplier if security else 1.0
                         final_priority = base_priority / multiplier
 
                         opportunities.append(
                             ActionCandidate(
                                 side=TradeSide.SELL,
                                 symbol=pos.symbol,
-                                name=stock.name,
+                                name=security.name,
                                 quantity=sell_qty,
                                 price=pos.current_price or pos.avg_price,
                                 value_eur=sell_value_eur,

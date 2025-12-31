@@ -19,7 +19,7 @@ class Settings:
     sell_cooldown_days: int = 180
     max_loss_threshold: float = -0.20
     target_annual_return: float = 0.11
-    min_stock_score: float = 0.5
+    min_security_score: float = 0.5
     # Optimizer settings
     optimizer_blend: float = 0.5
     optimizer_target_return: float = 0.11
@@ -81,7 +81,7 @@ class Settings:
         self._validate_non_negative(self.sell_cooldown_days, "sell_cooldown_days")
         self._validate_negative(self.max_loss_threshold, "max_loss_threshold")
         self._validate_positive(self.target_annual_return, "target_annual_return")
-        self._validate_range(self.min_stock_score, "min_stock_score", 0, 1)
+        self._validate_range(self.min_security_score, "min_security_score", 0, 1)
         self._validate_range(self.optimizer_blend, "optimizer_blend", 0, 1)
         self._validate_positive(self.optimizer_target_return, "optimizer_target_return")
         self._validate_non_negative(
@@ -164,7 +164,7 @@ class Settings:
             sell_cooldown_days=get_int("sell_cooldown_days", 180),
             max_loss_threshold=get_float("max_loss_threshold", -0.20),
             target_annual_return=get_float("target_annual_return", 0.11),
-            min_stock_score=get_float("min_stock_score", 0.5),
+            min_security_score=get_float("min_security_score", 0.5),
             optimizer_blend=get_float("optimizer_blend", 0.5),
             optimizer_target_return=get_float("optimizer_target_return", 0.11),
             transaction_cost_fixed=get_float("transaction_cost_fixed", 2.0),
@@ -200,7 +200,7 @@ class Settings:
             "sell_cooldown_days": self.sell_cooldown_days,
             "max_loss_threshold": self.max_loss_threshold,
             "target_annual_return": self.target_annual_return,
-            "min_stock_score": self.min_stock_score,
+            "min_security_score": self.min_security_score,
             "optimizer_blend": self.optimizer_blend,
             "optimizer_target_return": self.optimizer_target_return,
             "transaction_cost_fixed": self.transaction_cost_fixed,

@@ -1,15 +1,15 @@
-"""Stocks data sync job for per-symbol data processing.
+"""Securities data sync job for per-symbol data processing.
 
-This job runs hourly and processes stocks sequentially:
-1. Gets stocks that haven't been synced in 24 hours (last_synced)
-2. For each stock, runs the data pipeline:
+This job runs hourly and processes securities sequentially:
+1. Gets securities that haven't been synced in 24 hours (last_synced)
+2. For each security, runs the data pipeline:
    - Sync historical prices from Yahoo
    - Calculate technical metrics
-   - Refresh stock score
+   - Refresh security score
 3. Updates LED display to show progress
 4. Updates last_synced timestamp after successful processing
 
-Stocks are processed one at a time to avoid overwhelming external APIs
+Securities are processed one at a time to avoid overwhelming external APIs
 and to provide clear progress feedback on the LED display.
 """
 
@@ -27,66 +27,66 @@ logger = logging.getLogger(__name__)
 SYNC_THRESHOLD_HOURS = 24
 
 
-async def run_stocks_data_sync():
+async def run_securities_data_sync():
     """
-    Run the stocks data sync for all stocks needing sync.
+    Run the securities data sync for all securities needing sync.
 
     This is the main entry point called by the scheduler every hour.
     """
-    async with file_lock("stocks_data_sync", timeout=3600.0):
-        await _run_stocks_data_sync_internal()
+    async with file_lock("securities_data_sync", timeout=3600.0):
+        await _run_securities_data_sync_internal()
 
 
-async def _run_stocks_data_sync_internal():
-    """Internal stocks data sync implementation."""
-    logger.info("Starting stocks data sync...")
+async def _run_securities_data_sync_internal():
+    """Internal securities data sync implementation."""
+    logger.info("Starting securities data sync...")
 
     emit(SystemEvent.SYNC_START)
 
     try:
-        stocks = await _get_stocks_needing_sync()
+        securities = await _get_securities_needing_sync()
 
-        if not stocks:
-            logger.info("All stocks are up to date, no processing needed")
+        if not securities:
+            logger.info("All securities are up to date, no processing needed")
             emit(SystemEvent.SYNC_COMPLETE)
             return
 
-        logger.info(f"Processing {len(stocks)} stocks needing sync")
+        logger.info(f"Processing {len(securities)} securities needing sync")
 
         processed = 0
         errors = 0
 
-        for stock in stocks:
+        for security in securities:
             try:
-                await _process_single_stock(stock.symbol)
+                await _process_single_security(security.symbol)
                 processed += 1
             except Exception as e:
-                logger.error(f"Pipeline failed for {stock.symbol}: {e}")
+                logger.error(f"Pipeline failed for {security.symbol}: {e}")
                 errors += 1
 
         logger.info(
-            f"Stocks data sync complete: {processed} processed, {errors} errors"
+            f"Securities data sync complete: {processed} processed, {errors} errors"
         )
         emit(SystemEvent.SYNC_COMPLETE)
 
     except Exception as e:
-        logger.error(f"Stocks data sync failed: {e}", exc_info=True)
-        error_msg = "STOCKS DATA SYNC CRASHES"
+        logger.error(f"Securities data sync failed: {e}", exc_info=True)
+        error_msg = "SECURITIES DATA SYNC CRASHES"
         emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
         set_text(error_msg)
     finally:
         set_led4(0, 0, 0)  # Clear LED when done
 
 
-async def refresh_single_stock(symbol: str) -> dict[str, Any]:
+async def refresh_single_security(symbol: str) -> dict[str, Any]:
     """
-    Force refresh a single stock's data.
+    Force refresh a single security's data.
 
-    This bypasses the last_synced check and immediately processes the stock.
+    This bypasses the last_synced check and immediately processes the security.
     Used by the API endpoint for manual refreshes.
 
     Args:
-        symbol: The stock symbol to refresh
+        symbol: The security symbol to refresh
 
     Returns:
         Dict with status and details
@@ -94,9 +94,9 @@ async def refresh_single_stock(symbol: str) -> dict[str, Any]:
     logger.info(f"Force refreshing data for {symbol}")
 
     try:
-        set_text(f"PROCESSING SINGLE STOCK ({symbol})")
+        set_text(f"PROCESSING SINGLE SECURITY ({symbol})")
 
-        # Run the full pipeline for this stock
+        # Run the full pipeline for this security
         await _sync_historical_for_symbol(symbol)
         await _detect_and_update_country_and_exchange(symbol)
         await _detect_and_update_industry(symbol)
@@ -109,65 +109,65 @@ async def refresh_single_stock(symbol: str) -> dict[str, Any]:
 
     except Exception as e:
         logger.error(f"Force refresh failed for {symbol}: {e}")
-        set_text(f"STOCK REFRESH FAILED ({symbol})")
+        set_text(f"SECURITY REFRESH FAILED ({symbol})")
         return {"status": "error", "symbol": symbol, "reason": str(e)}
     finally:
         set_led4(0, 0, 0)  # Clear LED when done
 
 
-async def _get_stocks_needing_sync() -> list:
+async def _get_securities_needing_sync() -> list:
     """
-    Get all active stocks that need to be synced.
+    Get all active securities that need to be synced.
 
-    A stock needs sync if:
+    A security needs sync if:
     - last_synced is NULL (never synced)
     - last_synced is older than SYNC_THRESHOLD_HOURS
 
     Returns:
-        List of stock objects needing sync
+        List of security objects needing sync
     """
-    all_stocks = await _get_all_active_stocks()
+    all_securities = await _get_all_active_securities()
     threshold = datetime.now() - timedelta(hours=SYNC_THRESHOLD_HOURS)
 
-    stocks_needing_sync = []
-    for stock in all_stocks:
-        if stock.last_synced is None:
-            stocks_needing_sync.append(stock)
+    securities_needing_sync = []
+    for security in all_securities:
+        if security.last_synced is None:
+            securities_needing_sync.append(security)
         else:
             try:
-                last_synced = datetime.fromisoformat(stock.last_synced)
+                last_synced = datetime.fromisoformat(security.last_synced)
                 if last_synced < threshold:
-                    stocks_needing_sync.append(stock)
+                    securities_needing_sync.append(security)
             except (ValueError, TypeError):
                 # Invalid date format, treat as needing sync
-                stocks_needing_sync.append(stock)
+                securities_needing_sync.append(security)
 
-    return stocks_needing_sync
+    return securities_needing_sync
 
 
-async def _get_all_active_stocks() -> list:
-    """Get all active stocks from the database."""
+async def _get_all_active_securities() -> list:
+    """Get all active securities from the database."""
     from app.repositories import SecurityRepository
 
     security_repo = SecurityRepository()
     return await security_repo.get_all_active()
 
 
-async def _process_single_stock(symbol: str):
+async def _process_single_security(symbol: str):
     """
-    Process a single stock through the full data pipeline.
+    Process a single security through the full data pipeline.
 
     Steps:
     1. Sync historical prices from Yahoo
     2. Detect and update industry from Yahoo Finance
     3. Calculate technical metrics (RSI, EMA, CAGR, etc.)
-    4. Refresh stock score
+    4. Refresh security score
 
     Args:
-        symbol: The stock symbol to process
+        symbol: The security symbol to process
     """
     logger.info(f"Processing {symbol}...")
-    set_text(f"PROCESSING SINGLE STOCK ({symbol})")
+    set_text(f"PROCESSING SINGLE SECURITY ({symbol})")
     set_led4(0, 255, 0)  # Green for processing
 
     try:
@@ -194,7 +194,7 @@ async def _process_single_stock(symbol: str):
 
     except Exception as e:
         logger.error(f"Pipeline error for {symbol}: {e}", exc_info=True)
-        set_text(f"STOCK REFRESH FAILED ({symbol})")
+        set_text(f"SECURITY REFRESH FAILED ({symbol})")
         # Don't update last_synced on error - will retry next hour
         raise
     finally:
@@ -213,7 +213,7 @@ async def _sync_historical_for_symbol(symbol: str):
 
     db_manager = get_db_manager()
 
-    # Get the stock's yahoo_symbol
+    # Get the security's yahoo_symbol
     cursor = await db_manager.config.execute(
         "SELECT yahoo_symbol FROM securities WHERE symbol = ?", (symbol,)
     )
@@ -277,13 +277,14 @@ async def _sync_historical_for_symbol(symbol: str):
 
 async def _detect_and_update_industry(symbol: str):
     """
-    Detect and update industry from Yahoo Finance for a stock.
+    Detect and update industry from Yahoo Finance for a security.
 
-    This runs automatically during the stocks data sync to keep industry
-    data up to date from Yahoo Finance.
+    This runs automatically during the securities data sync to keep industry
+    data up to date from Yahoo Finance. Only updates if the field is empty/NULL
+    to preserve user-edited values.
 
     Args:
-        symbol: The stock symbol to update
+        symbol: The security symbol to update
     """
     from app.core.database.manager import get_db_manager
     from app.infrastructure.external import yahoo_finance as yahoo
@@ -291,30 +292,34 @@ async def _detect_and_update_industry(symbol: str):
 
     db_manager = get_db_manager()
 
-    # Get the stock's yahoo_symbol
+    # Get the security's yahoo_symbol and current industry
     cursor = await db_manager.config.execute(
-        "SELECT yahoo_symbol FROM securities WHERE symbol = ?", (symbol,)
+        "SELECT yahoo_symbol, industry FROM securities WHERE symbol = ?", (symbol,)
     )
     row = await cursor.fetchone()
     if not row:
-        logger.warning(f"Stock {symbol} not found for industry detection")
+        logger.warning(f"Security {symbol} not found for industry detection")
         return
 
-    yahoo_symbol = row[0]
+    yahoo_symbol, current_industry = row
 
-    # Detect industry from Yahoo Finance
-    try:
-        detected_industry = yahoo.get_security_industry(symbol, yahoo_symbol)
-        if detected_industry:
-            # Update the stock's industry in the database
-            security_repo = SecurityRepository()
-            await security_repo.update(symbol, industry=detected_industry)
-            logger.info(f"Updated industry for {symbol}: {detected_industry}")
-        else:
-            logger.debug(f"No industry detected for {symbol} from Yahoo Finance")
-    except Exception as e:
-        # Don't fail the entire pipeline if industry detection fails
-        logger.warning(f"Failed to detect industry for {symbol}: {e}")
+    # Only update if industry is not already set (preserve user-edited values)
+    if not current_industry:
+        # Detect industry from Yahoo Finance
+        try:
+            detected_industry = yahoo.get_security_industry(symbol, yahoo_symbol)
+            if detected_industry:
+                # Update the security's industry in the database
+                security_repo = SecurityRepository()
+                await security_repo.update(symbol, industry=detected_industry)
+                logger.info(f"Updated empty industry for {symbol}: {detected_industry}")
+            else:
+                logger.debug(f"No industry detected for {symbol} from Yahoo Finance")
+        except Exception as e:
+            # Don't fail the entire pipeline if industry detection fails
+            logger.warning(f"Failed to detect industry for {symbol}: {e}")
+    else:
+        logger.debug(f"Industry already set for {symbol}, skipping Yahoo detection")
 
 
 # Fallback mapping: exchange name -> country (used only when Yahoo doesn't provide country)
@@ -348,13 +353,14 @@ EXCHANGE_TO_COUNTRY = {
 
 async def _detect_and_update_country_and_exchange(symbol: str):
     """
-    Detect and update country and exchange from Yahoo Finance for a stock.
+    Detect and update country and exchange from Yahoo Finance for a security.
 
-    This runs automatically during the stocks data sync to keep country
-    and exchange data up to date from Yahoo Finance.
+    This runs automatically during the securities data sync to keep country
+    and exchange data up to date from Yahoo Finance. Only updates fields that
+    are empty/NULL to preserve user-edited values.
 
     Args:
-        symbol: The stock symbol to update
+        symbol: The security symbol to update
     """
     from app.core.database.manager import get_db_manager
     from app.infrastructure.external import yahoo_finance as yahoo
@@ -362,16 +368,17 @@ async def _detect_and_update_country_and_exchange(symbol: str):
 
     db_manager = get_db_manager()
 
-    # Get the stock's yahoo_symbol
+    # Get the security's yahoo_symbol and current country/exchange values
     cursor = await db_manager.config.execute(
-        "SELECT yahoo_symbol FROM securities WHERE symbol = ?", (symbol,)
+        "SELECT yahoo_symbol, country, fullExchangeName FROM securities WHERE symbol = ?",
+        (symbol,),
     )
     row = await cursor.fetchone()
     if not row:
-        logger.warning(f"Stock {symbol} not found for country/exchange detection")
+        logger.warning(f"Security {symbol} not found for country/exchange detection")
         return
 
-    yahoo_symbol = row[0]
+    yahoo_symbol, current_country, current_exchange = row
 
     # Detect country and exchange from Yahoo Finance
     try:
@@ -387,23 +394,27 @@ async def _detect_and_update_country_and_exchange(symbol: str):
                     f"Inferred country for {symbol} from exchange {detected_exchange}: {detected_country}"
                 )
 
-        if detected_country or detected_exchange:
-            # Update the stock's country and fullExchangeName in the database
+        # Only update fields that are empty/NULL (preserve user-edited values)
+        updates = {}
+        if detected_country and not current_country:
+            updates["country"] = detected_country
+        if detected_exchange and not current_exchange:
+            updates["fullExchangeName"] = detected_exchange
+
+        if updates:
+            # Update the security's country and fullExchangeName in the database
             security_repo = SecurityRepository()
-            updates = {}
-            if detected_country:
-                updates["country"] = detected_country
-            if detected_exchange:
-                updates["fullExchangeName"] = detected_exchange
-            if updates:
-                await security_repo.update(symbol, **updates)
-                logger.info(
-                    f"Updated country/exchange for {symbol}: country={detected_country}, exchange={detected_exchange}"
-                )
+            await security_repo.update(symbol, **updates)
+            logger.info(f"Updated empty country/exchange for {symbol}: {updates}")
         else:
-            logger.debug(
-                f"No country/exchange detected for {symbol} from Yahoo Finance"
-            )
+            if detected_country or detected_exchange:
+                logger.debug(
+                    f"Country/exchange already set for {symbol}, skipping Yahoo detection"
+                )
+            else:
+                logger.debug(
+                    f"No country/exchange detected for {symbol} from Yahoo Finance"
+                )
     except Exception as e:
         # Don't fail the entire pipeline if country/exchange detection fails
         logger.warning(f"Failed to detect country/exchange for {symbol}: {e}")
@@ -425,25 +436,25 @@ async def _refresh_score_for_symbol(symbol: str):
     """
     Refresh the score for a single symbol.
 
-    Uses the scoring domain to calculate the stock's score based on
+    Uses the scoring domain to calculate the security's score based on
     historical data, fundamentals, and portfolio context.
     """
     from datetime import datetime
 
     from app.core.database.manager import get_db_manager
     from app.infrastructure.external import yahoo_finance as yahoo
-    from app.modules.scoring.domain.stock_scorer import calculate_stock_score
+    from app.modules.scoring.domain.security_scorer import calculate_security_score
 
     db_manager = get_db_manager()
 
-    # Get stock metadata
+    # Get security metadata
     cursor = await db_manager.config.execute(
         "SELECT yahoo_symbol, country, industry FROM securities WHERE symbol = ?",
         (symbol,),
     )
     row = await cursor.fetchone()
     if not row:
-        logger.warning(f"Stock {symbol} not found in config")
+        logger.warning(f"Security {symbol} not found in config")
         return
 
     yahoo_symbol, country, industry = row
@@ -500,7 +511,7 @@ async def _refresh_score_for_symbol(symbol: str):
     portfolio_context = await _build_portfolio_context(db_manager)
 
     # Calculate score
-    score = await calculate_stock_score(
+    score = await calculate_security_score(
         symbol=symbol,
         daily_prices=daily_prices,
         monthly_prices=monthly_prices,
@@ -568,7 +579,7 @@ async def _build_portfolio_context(db_manager):
         for industry_name in industry_names:
             industry_to_group[industry_name] = group_name
 
-    # Get stock metadata for scoring
+    # Get security metadata for scoring
     cursor = await db_manager.config.execute(
         "SELECT symbol, country, industry FROM securities WHERE active = 1"
     )
@@ -597,7 +608,7 @@ async def _build_portfolio_context(db_manager):
 
 
 async def _update_last_synced(symbol: str):
-    """Update the last_synced timestamp for a stock."""
+    """Update the last_synced timestamp for a security."""
     from app.core.database.manager import get_db_manager
 
     db_manager = get_db_manager()

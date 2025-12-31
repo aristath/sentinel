@@ -55,10 +55,10 @@ class SecurityRepository:
         and queries accordingly.
 
         Args:
-            identifier: Stock symbol or ISIN
+            identifier: Security symbol or ISIN
 
         Returns:
-            Stock if found, None otherwise
+            Security if found, None otherwise
         """
         identifier = identifier.strip().upper()
 
@@ -72,12 +72,12 @@ class SecurityRepository:
         return await self.get_by_symbol(identifier)
 
     async def get_all_active(self) -> List[Security]:
-        """Get all active stocks."""
+        """Get all active securities."""
         rows = await self._db.fetchall("SELECT * FROM securities WHERE active = 1")
         return [self._row_to_security(row) for row in rows]
 
     async def get_all(self) -> List[Security]:
-        """Get all stocks (active and inactive)."""
+        """Get all securities (active and inactive)."""
         rows = await self._db.fetchall("SELECT * FROM securities")
         return [self._row_to_security(row) for row in rows]
 
@@ -117,10 +117,10 @@ class SecurityRepository:
             )
 
     async def update(self, symbol: str, **updates) -> None:
-        """Update stock fields.
+        """Update security fields.
 
         Args:
-            symbol: Stock symbol to update
+            symbol: Security symbol to update
             **updates: Field name -> value mappings to update
 
         Raises:
@@ -179,15 +179,15 @@ class SecurityRepository:
             )
 
     async def delete(self, symbol: str) -> None:
-        """Soft delete a stock (set active=False)."""
+        """Soft delete a security (set active=False)."""
         await self.update(symbol, active=False)
 
     async def mark_inactive(self, symbol: str) -> None:
-        """Mark a stock as inactive (alias for delete/soft-delete)."""
+        """Mark a security as inactive (alias for delete/soft-delete)."""
         await self.update(symbol, active=False)
 
     async def get_with_scores(self) -> List[dict]:
-        """Get all active stocks with their scores and positions.
+        """Get all active securities with their scores and positions.
 
         Note: This method directly accesses multiple databases (config.db and state.db)
         which violates the repository pattern. This is a known architecture violation
@@ -201,12 +201,13 @@ class SecurityRepository:
         """
         db_manager = get_db_manager()
 
-        # Fetch stocks from config.db
-        stock_rows = await self._db.fetchall(
+        # Fetch securities from config.db
+        security_rows = await self._db.fetchall(
             "SELECT * FROM securities WHERE active = 1"
         )
-        stocks = {
-            row["symbol"]: {key: row[key] for key in row.keys()} for row in stock_rows
+        securities = {
+            row["symbol"]: {key: row[key] for key in row.keys()}
+            for row in security_rows
         }
 
         # Fetch scores from calculations.db
@@ -224,30 +225,30 @@ class SecurityRepository:
 
         # Merge data
         result = []
-        for symbol, stock in stocks.items():
+        for symbol, security in securities.items():
             # Add score data
             if symbol in scores:
                 score = scores[symbol]
-                stock["total_score"] = score.get("total_score")
-                stock["quality_score"] = score.get("quality_score")
-                stock["opportunity_score"] = score.get("opportunity_score")
-                stock["analyst_score"] = score.get("analyst_score")
-                stock["allocation_fit_score"] = score.get("allocation_fit_score")
-                stock["volatility"] = score.get("volatility")
-                stock["calculated_at"] = score.get("calculated_at")
+                security["total_score"] = score.get("total_score")
+                security["quality_score"] = score.get("quality_score")
+                security["opportunity_score"] = score.get("opportunity_score")
+                security["analyst_score"] = score.get("analyst_score")
+                security["allocation_fit_score"] = score.get("allocation_fit_score")
+                security["volatility"] = score.get("volatility")
+                security["calculated_at"] = score.get("calculated_at")
 
             # Add position data
             if symbol in positions:
                 pos = positions[symbol]
-                stock["position_value"] = pos.get("market_value_eur") or 0
-                stock["quantity"] = pos.get("quantity") or 0
-                stock["avg_price"] = pos.get("avg_price")
-                stock["current_price"] = pos.get("current_price")
+                security["position_value"] = pos.get("market_value_eur") or 0
+                security["quantity"] = pos.get("quantity") or 0
+                security["avg_price"] = pos.get("avg_price")
+                security["current_price"] = pos.get("current_price")
             else:
-                stock["position_value"] = 0
-                stock["quantity"] = 0
+                security["position_value"] = 0
+                security["quantity"] = 0
 
-            result.append(stock)
+            result.append(security)
 
         return result
 

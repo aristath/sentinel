@@ -11,9 +11,7 @@ window.jobFooterComponent = function() {
       { id: 'daily-pipeline', name: 'Daily Pipeline', api: 'triggerDailyPipeline' },
       { id: 'daily-maintenance', name: 'Daily Maintenance', api: 'triggerDailyMaintenance' },
       { id: 'weekly-maintenance', name: 'Weekly Maintenance', api: 'triggerWeeklyMaintenance' },
-      { id: 'dividend-reinvestment', name: 'Dividend Reinvestment', api: 'triggerDividendReinvestment' },
-      { id: 'universe-pruning', name: 'Universe Pruning', api: 'triggerUniversePruning' },
-      { id: 'security-discovery', name: 'Stock Discovery', api: 'triggerSecurityDiscovery' }
+      { id: 'dividend-reinvestment', name: 'Dividend Reinvestment', api: 'triggerDividendReinvestment' }
     ],
     async triggerJob(job) {
       if (this.loading[job.id]) return;

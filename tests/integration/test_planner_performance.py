@@ -16,19 +16,19 @@ from app.repositories import SettingsRepository
 
 
 async def setup_test_stocks(db_manager):
-    """Set up test stocks in the database."""
+    """Set up test securities in the database."""
     config_db = db_manager.config
 
-    stocks = [
+    securities = [
         ("AAPL.US", "AAPL", "Apple Inc", "Technology", "United States"),
         ("MSFT.US", "MSFT", "Microsoft Corp", "Technology", "United States"),
         ("SAP.DE", "SAP.DE", "SAP SE", "Technology", "Germany"),
     ]
 
-    for symbol, yahoo, name, industry, country in stocks:
+    for symbol, yahoo, name, industry, country in securities:
         await config_db.execute(
             """
-            INSERT INTO stocks (symbol, yahoo_symbol, name, industry, country,
+            INSERT INTO securities (symbol, yahoo_symbol, name, industry, country,
                               priority_multiplier, min_lot, active, allow_buy, allow_sell,
                               created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -87,7 +87,7 @@ async def setup_test_stocks(db_manager):
 
 
 async def setup_test_metrics(db_manager, symbols: list):
-    """Set up test metrics/calculations for stocks."""
+    """Set up test metrics/calculations for securities."""
     calc_db = db_manager.calculations
 
     for symbol in symbols:
@@ -170,7 +170,7 @@ async def test_planner_completes_in_reasonable_time(db_manager):
         ),
     ]
 
-    stocks = [
+    securities = [
         Security(
             symbol="AAPL.US",
             name="Apple Inc",
@@ -204,7 +204,7 @@ async def test_planner_completes_in_reasonable_time(db_manager):
     plan = await create_holistic_plan(
         portfolio_context=portfolio_context,
         available_cash=1000.0,
-        stocks=stocks,
+        securities=securities,
         positions=positions,
         max_plan_depth=2,  # Keep small for test speed
     )
@@ -233,7 +233,7 @@ async def test_planner_handles_empty_portfolio(db_manager):
         security_dividends={},
     )
 
-    stocks = [
+    securities = [
         Security(
             symbol="AAPL.US",
             name="Apple Inc",
@@ -248,7 +248,7 @@ async def test_planner_handles_empty_portfolio(db_manager):
     plan = await create_holistic_plan(
         portfolio_context=portfolio_context,
         available_cash=1000.0,
-        stocks=stocks,
+        securities=securities,
         positions=[],
         max_plan_depth=2,
     )

@@ -1,7 +1,7 @@
-"""Tests for stock setup service.
+"""Tests for security setup service.
 
-These tests validate stock setup functionality, including identifier resolution,
-data fetching from Tradernet and Yahoo Finance, and stock creation.
+These tests validate security setup functionality, including identifier resolution,
+data fetching from Tradernet and Yahoo Finance, and security creation.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -21,7 +21,7 @@ class TestSecuritySetupService:
     def mock_stock_repo(self):
         """Mock SecurityRepository."""
         repo = AsyncMock()
-        repo.get_by_identifier = AsyncMock(return_value=None)  # Stock doesn't exist
+        repo.get_by_identifier = AsyncMock(return_value=None)  # Security doesn't exist
         repo.create = AsyncMock()
         return repo
 
@@ -81,7 +81,7 @@ class TestSecuritySetupService:
     async def test_adds_stock_by_tradernet_symbol(
         self, service, mock_stock_repo, mock_symbol_resolver, mock_tradernet_client
     ):
-        """Test adding stock by Tradernet symbol."""
+        """Test adding security by Tradernet symbol."""
         # Mock Tradernet data
         mock_tradernet_client.get_quotes_raw.return_value = {
             "result": {
@@ -118,7 +118,7 @@ class TestSecuritySetupService:
     async def test_adds_stock_by_isin(
         self, service, mock_stock_repo, mock_symbol_resolver, mock_tradernet_client
     ):
-        """Test adding stock by ISIN."""
+        """Test adding security by ISIN."""
         mock_symbol_resolver.detect_type.return_value = IdentifierType.ISIN
         mock_symbol_resolver.resolve.return_value = SymbolInfo(
             tradernet_symbol=None,
@@ -158,7 +158,7 @@ class TestSecuritySetupService:
 
     @pytest.mark.asyncio
     async def test_raises_error_if_stock_already_exists(self, service, mock_stock_repo):
-        """Test that ValueError is raised if stock already exists."""
+        """Test that ValueError is raised if security already exists."""
         existing_stock = Security(
             symbol="AAPL.US",
             name="Apple Inc.",
@@ -237,7 +237,7 @@ class TestSecuritySetupService:
     async def test_handles_historical_data_fetch_failure(
         self, service, mock_stock_repo, mock_tradernet_client
     ):
-        """Test that stock creation continues even if historical data fetch fails."""
+        """Test that security creation continues even if historical data fetch fails."""
         mock_tradernet_client.get_quotes_raw.return_value = {
             "result": {
                 "q": [
@@ -261,7 +261,7 @@ class TestSecuritySetupService:
             ) as mock_sync:
                 mock_sync.side_effect = Exception("Historical data fetch failed")
 
-                # Should still create stock
+                # Should still create security
                 result = await service.add_security_by_identifier("AAPL.US")
 
                 assert isinstance(result, Security)
@@ -271,7 +271,7 @@ class TestSecuritySetupService:
     async def test_handles_score_calculation_failure(
         self, service, mock_stock_repo, mock_scoring_service, mock_tradernet_client
     ):
-        """Test that stock creation continues even if score calculation fails."""
+        """Test that security creation continues even if score calculation fails."""
         mock_tradernet_client.get_quotes_raw.return_value = {
             "result": {
                 "q": [
@@ -296,7 +296,7 @@ class TestSecuritySetupService:
                 "app.modules.universe.services.security_setup_service._sync_historical_for_symbol",
                 new_callable=AsyncMock,
             ):
-                # Should still create stock
+                # Should still create security
                 result = await service.add_security_by_identifier("AAPL.US")
 
                 assert isinstance(result, Security)
@@ -306,7 +306,7 @@ class TestSecuritySetupService:
     async def test_publishes_stock_added_event(
         self, service, mock_stock_repo, mock_tradernet_client
     ):
-        """Test that SecurityAddedEvent is published when stock is added."""
+        """Test that SecurityAddedEvent is published when security is added."""
         mock_tradernet_client.get_quotes_raw.return_value = {
             "result": {
                 "q": [

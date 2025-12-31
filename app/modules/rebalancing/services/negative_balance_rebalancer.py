@@ -48,7 +48,7 @@ class NegativeBalanceRebalancer:
             tradernet_client: Tradernet client for balance checks
             currency_exchange_service: Service for currency conversions
             trade_execution_service: Service for executing trades
-            security_repo: Repository for stock data
+            security_repo: Repository for security data
             position_repo: Repository for position data
             exchange_rate_service: Service for exchange rate conversions
             recommendation_repo: Repository for storing recommendations (optional)
@@ -56,25 +56,25 @@ class NegativeBalanceRebalancer:
         self._client = tradernet_client
         self._currency_service = currency_exchange_service
         self._trade_execution_service = trade_execution_service
-        self._stock_repo = security_repo
+        self._security_repo = security_repo
         self._position_repo = position_repo
         self._exchange_rate_service = exchange_rate_service
         self._recommendation_repo = recommendation_repo or RecommendationRepository()
 
     async def get_trading_currencies(self) -> Set[str]:
-        """Get currencies from active stocks in the universe.
+        """Get currencies from active securities in the universe.
 
         Returns:
             Set of currency codes (e.g., {"USD", "EUR", "GBP", "HKD"})
         """
-        stocks = await self._stock_repo.get_all_active()
+        securities = await self._security_repo.get_all_active()
         currencies = set()
-        for stock in stocks:
-            if stock.currency:
+        for security in securities:
+            if security.currency:
                 currency_str = (
-                    stock.currency.value
-                    if hasattr(stock.currency, "value")
-                    else str(stock.currency)
+                    security.currency.value
+                    if hasattr(security.currency, "value")
+                    else str(security.currency)
                 )
                 currencies.add(currency_str.upper())
         return currencies
@@ -95,7 +95,7 @@ class NegativeBalanceRebalancer:
         shortfalls: Dict[str, float] = {}
 
         # Check all currencies that are either:
-        # 1. Trading currencies (from active stocks), OR
+        # 1. Trading currencies (from active securities), OR
         # 2. Have negative balances (must fix regardless)
         currencies_to_check = set(trading_currencies)
         for currency, balance in cash_balances.items():

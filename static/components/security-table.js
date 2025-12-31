@@ -1,8 +1,8 @@
 /**
- * Stock Table Component
+ * Security Table Component
  * Displays the security universe with filtering, sorting, and position data
  */
-class StockTable extends HTMLElement {
+class SecurityTable extends HTMLElement {
   connectedCallback() {
     this.innerHTML = `
       <div class="bg-gray-800 border border-gray-700 rounded p-3" x-data="securityTableComponent()">
@@ -13,9 +13,9 @@ class StockTable extends HTMLElement {
                     class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded transition-colors">
               Manage Universe
             </button>
-            <button @click="$store.app.showAddStockModal = true"
+            <button @click="$store.app.showAddSecurityModal = true"
                     class="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white text-xs rounded transition-colors">
-              + Add Stock
+              + Add Security
             </button>
           </div>
         </div>
@@ -52,66 +52,66 @@ class StockTable extends HTMLElement {
         </div>
 
         <!-- Results count -->
-        <div class="text-xs text-gray-300 mb-2" x-show="$store.app.securitys.length > 0">
-          <span x-text="$store.app.filteredStocks.length"></span> of
-          <span x-text="$store.app.securitys.length"></span> securitys
+        <div class="text-xs text-gray-300 mb-2" x-show="$store.app.securities.length > 0">
+          <span x-text="$store.app.filteredSecurities.length"></span> of
+          <span x-text="$store.app.securities.length"></span> securities
         </div>
 
         <div class="overflow-x-auto">
           <table class="w-full text-xs">
             <thead class="text-gray-300 uppercase text-left border-b border-gray-700">
               <tr>
-                <th @click="$store.app.sortStocks('symbol')"
+                <th @click="$store.app.sortSecurities('symbol')"
                     class="py-2 px-2 cursor-pointer hover:text-gray-300 sticky left-0 bg-gray-800 z-10">
                   Symbol
                   <span x-show="$store.app.sortBy === 'symbol'" class="ml-1"
                         x-text="$store.app.sortDesc ? '▼' : '▲'"></span>
                 </th>
                 <th class="py-2 px-1">Chart</th>
-                <th @click="$store.app.sortStocks('name')"
+                <th @click="$store.app.sortSecurities('name')"
                     class="py-2 px-2 cursor-pointer hover:text-gray-300">
                   Company
                   <span x-show="$store.app.sortBy === 'name'" class="ml-1"
                         x-text="$store.app.sortDesc ? '▼' : '▲'"></span>
                 </th>
-                <th @click="$store.app.sortStocks('country')"
+                <th @click="$store.app.sortSecurities('country')"
                     class="py-2 px-2 cursor-pointer hover:text-gray-300">
                   Country
                   <span x-show="$store.app.sortBy === 'country'" class="ml-1"
                         x-text="$store.app.sortDesc ? '▼' : '▲'"></span>
                 </th>
-                <th @click="$store.app.sortStocks('fullExchangeName')"
+                <th @click="$store.app.sortSecurities('fullExchangeName')"
                     class="py-2 px-2 cursor-pointer hover:text-gray-300">
                   Exchange
                   <span x-show="$store.app.sortBy === 'fullExchangeName'" class="ml-1"
                         x-text="$store.app.sortDesc ? '▼' : '▲'"></span>
                 </th>
-                <th @click="$store.app.sortStocks('industry')"
+                <th @click="$store.app.sortSecurities('industry')"
                     class="py-2 px-2 cursor-pointer hover:text-gray-300">
                   Sector
                   <span x-show="$store.app.sortBy === 'industry'" class="ml-1"
                         x-text="$store.app.sortDesc ? '▼' : '▲'"></span>
                 </th>
-                <th @click="$store.app.sortStocks('position_value')"
+                <th @click="$store.app.sortSecurities('position_value')"
                     class="py-2 px-2 cursor-pointer hover:text-gray-300 text-right">
                   Value
                   <span x-show="$store.app.sortBy === 'position_value'" class="ml-1"
                         x-text="$store.app.sortDesc ? '▼' : '▲'"></span>
                 </th>
-                <th @click="$store.app.sortStocks('total_score')"
+                <th @click="$store.app.sortSecurities('total_score')"
                     class="py-2 px-2 cursor-pointer hover:text-gray-300 text-right">
                   Score
                   <span x-show="$store.app.sortBy === 'total_score'" class="ml-1"
                         x-text="$store.app.sortDesc ? '▼' : '▲'"></span>
                 </th>
-                <th @click="$store.app.sortStocks('priority_multiplier')"
+                <th @click="$store.app.sortSecurities('priority_multiplier')"
                     class="py-2 px-2 cursor-pointer hover:text-gray-300 text-center">
                   Mult
                   <span x-show="$store.app.sortBy === 'priority_multiplier'" class="ml-1"
                         x-text="$store.app.sortDesc ? '▼' : '▲'"></span>
                 </th>
                 <th class="py-2 px-2 text-center" title="Buy/Sell status">B/S</th>
-                <th @click="$store.app.sortStocks('priority_score')"
+                <th @click="$store.app.sortSecurities('priority_score')"
                     class="py-2 px-2 cursor-pointer hover:text-gray-300 text-right">
                   Priority
                   <span x-show="$store.app.sortBy === 'priority_score'" class="ml-1"
@@ -121,11 +121,11 @@ class StockTable extends HTMLElement {
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-800">
-              <template x-for="security in ($store.app.filteredStocks || [])" :key="security.symbol">
+              <template x-for="security in ($store.app.filteredSecurities || [])" :key="security.symbol">
                 <tr class="hover:bg-gray-800/50"
                     :class="getPositionAlert(security.symbol) ? (getPositionAlert(security.symbol).severity === 'critical' ? 'border-l-4 border-red-500' : 'border-l-4 border-yellow-500') : ''">
                   <td class="py-1.5 px-2 font-mono text-blue-400 sticky left-0 bg-gray-800">
-                    <button @click.stop="$store.app.showStockChart = true; $store.app.selectedStockSymbol = security.symbol; $store.app.selectedStockIsin = security.isin"
+                    <button @click.stop="$store.app.showSecurityChart = true; $store.app.selectedSecuritySymbol = security.symbol; $store.app.selectedSecurityIsin = security.isin"
                             class="hover:underline cursor-pointer"
                             title="View chart">
                       <span x-text="security.symbol"></span>
@@ -188,7 +188,7 @@ class StockTable extends HTMLElement {
                   </td>
                   <td class="py-1.5 px-2 text-center" @click.stop>
                     <div class="flex justify-center gap-1">
-                      <button @click="$store.app.openEditStock(security)"
+                      <button @click="$store.app.openEditSecurity(security)"
                               class="p-1 text-gray-300 hover:text-blue-400 transition-colors"
                               title="Edit security">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -206,7 +206,7 @@ class StockTable extends HTMLElement {
                           <path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
                         </svg>
                       </button>
-                      <button @click="$store.app.removeStock(security.isin)"
+                      <button @click="$store.app.removeSecurity(security.isin)"
                               class="p-1 text-gray-300 hover:text-red-400 transition-colors"
                               title="Remove from universe">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -224,13 +224,13 @@ class StockTable extends HTMLElement {
         </div>
 
         <!-- Empty states -->
-        <div x-show="$store.app.filteredStocks.length === 0 && $store.app.securitys.length > 0"
+        <div x-show="$store.app.filteredSecurities.length === 0 && $store.app.securities.length > 0"
              class="text-center py-6 text-gray-300 text-sm">
-          No securitys match your filters
+          No securities match your filters
         </div>
-        <div x-show="$store.app.securitys.length === 0"
+        <div x-show="$store.app.securities.length === 0"
              class="text-center py-6 text-gray-300 text-sm">
-          No securitys in universe
+          No securities in universe
         </div>
       </div>
     `;
@@ -265,7 +265,7 @@ function getPositionAlertClass(symbol) {
   const alert = getPositionAlert(symbol);
   if (!alert) {
     // Default: check if security has position value
-    const security = (window.Alpine?.store('app')?.securitys || []).find(s => s.symbol === symbol);
+    const security = (window.Alpine?.store('app')?.securities || []).find(s => s.symbol === symbol);
     return security?.position_value ? 'text-green-400' : 'text-gray-400';
   }
   // Highlight row with border color based on severity
@@ -278,4 +278,4 @@ function getPositionAlertClass(symbol) {
 window.getPositionAlert = getPositionAlert;
 window.getPositionAlertClass = getPositionAlertClass;
 
-customElements.define('security-table', StockTable);
+customElements.define('security-table', SecurityTable);

@@ -2,7 +2,7 @@
 
 WHEN TO RUN:
 - After deploying migration v9 (adds product_type column)
-- For existing installations upgrading from stocks-only to multi-product support
+- For existing installations upgrading from securities-only to multi-product support
 - Fresh installations do NOT need this (product_type set on security creation)
 
 WHAT IT DOES:
@@ -53,7 +53,7 @@ logger = logging.getLogger(__name__)
 
 
 async def backfill_product_types(dry_run: bool = False, force: bool = False):
-    """Backfill product types for all stocks in the database.
+    """Backfill product types for all securities in the database.
 
     Args:
         dry_run: If True, show what would be updated without changing database
@@ -64,8 +64,8 @@ async def backfill_product_types(dry_run: bool = False, force: bool = False):
 
     config_db = await db_manager.get_config_db()
 
-    # Get all stocks
-    stocks = await config_db.fetchall(
+    # Get all securities
+    securities = await config_db.fetchall(
         """
         SELECT symbol, name, yahoo_symbol, isin, product_type, country, industry
         FROM securities
@@ -73,8 +73,8 @@ async def backfill_product_types(dry_run: bool = False, force: bool = False):
         """
     )
 
-    total_stocks = len(stocks)
-    logger.info(f"Found {total_stocks} stocks in database")
+    total_stocks = len(securities)
+    logger.info(f"Found {total_stocks} securities in database")
     if dry_run:
         logger.info("DRY RUN MODE - No database changes will be made")
 
@@ -92,14 +92,14 @@ async def backfill_product_types(dry_run: bool = False, force: bool = False):
 
     needs_manual_review = []
 
-    for stock in stocks:
-        symbol = stock["symbol"]
-        name = stock["name"]
-        yahoo_symbol = stock["yahoo_symbol"]
-        isin = stock["isin"]
-        current_product_type = stock["product_type"]
-        country = stock["country"]
-        industry = stock["industry"]
+    for security in securities:
+        symbol = security["symbol"]
+        name = security["name"]
+        yahoo_symbol = security["yahoo_symbol"]
+        isin = security["isin"]
+        current_product_type = security["product_type"]
+        country = security["country"]
+        industry = security["industry"]
 
         # Skip if already has product_type (unless force mode)
         if current_product_type and not force:
@@ -173,7 +173,7 @@ async def backfill_product_types(dry_run: bool = False, force: bool = False):
     else:
         print("BACKFILL SUMMARY")
     print("=" * 80)
-    print(f"Total stocks: {total_stocks}")
+    print(f"Total securities: {total_stocks}")
     print(f"Already had product_type: {stats['already_set']}")
     action = "Would update" if dry_run else "Updated"
     print(f"{action}: {stats['updated']}")

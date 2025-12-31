@@ -1,7 +1,7 @@
 """Tests for priority calculator service.
 
-These tests validate priority calculations for stock recommendations,
-including stock score multiplication and sorting.
+These tests validate priority calculations for security recommendations,
+including security score multiplication and sorting.
 """
 
 import pytest
@@ -170,7 +170,7 @@ class TestCalculatePriorities:
     """Test calculate_priorities method."""
 
     def test_calculates_priorities_for_multiple_stocks(self):
-        """Test that priorities are calculated for multiple stocks."""
+        """Test that priorities are calculated for multiple securities."""
         inputs = [
             PriorityInput(
                 symbol="AAPL",

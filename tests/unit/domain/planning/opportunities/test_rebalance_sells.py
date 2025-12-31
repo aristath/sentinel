@@ -31,7 +31,7 @@ class TestIdentifyRebalanceSellOpportunities:
 
     @pytest.fixture
     def sample_stock(self):
-        """Create a sample stock."""
+        """Create a sample security."""
         return Security(
             symbol="AAPL.US",
             name="Apple Inc",
@@ -79,8 +79,8 @@ class TestIdentifyRebalanceSellOpportunities:
 
     @pytest.mark.asyncio
     async def test_skips_stock_not_allowed_to_sell(self, sample_position):
-        """Test skipping stocks not allowed to sell."""
-        stock = Security(
+        """Test skipping securities not allowed to sell."""
+        security = Security(
             symbol="AAPL.US",
             name="Apple Inc",
             min_lot=1,
@@ -96,7 +96,7 @@ class TestIdentifyRebalanceSellOpportunities:
             total_value=20000,
             country_to_group={},
         )
-        stocks_by_symbol = {"AAPL.US": stock}
+        stocks_by_symbol = {"AAPL.US": security}
         country_allocations = {"OTHER": 0.80}
 
         opportunities = await identify_rebalance_sell_opportunities(
@@ -135,8 +135,8 @@ class TestIdentifyRebalanceSellOpportunities:
 
     @pytest.mark.asyncio
     async def test_skips_unknown_stock(self, sample_position, portfolio_context):
-        """Test skipping positions for unknown stocks."""
-        stocks_by_symbol = {}  # No stock info
+        """Test skipping positions for unknown securities."""
+        stocks_by_symbol = {}  # No security info
         country_allocations = {"United States": 0.80}
 
         opportunities = await identify_rebalance_sell_opportunities(

@@ -85,7 +85,7 @@ async def calculate_total_return_score(
     Calculate total return score (CAGR + dividend yield combined).
 
     Args:
-        symbol: Stock symbol (for reference only, not used for DB queries)
+        symbol: Security symbol (for reference only, not used for DB queries)
         metrics: Pre-fetched metrics dict containing CAGR_5Y and DIVIDEND_YIELD
 
     Returns:
@@ -157,7 +157,7 @@ async def calculate_long_term_promise(
     - Sortino (15%): Good returns with low downside risk
 
     Args:
-        symbol: Stock symbol (for reference only, not used for DB queries)
+        symbol: Security symbol (for reference only, not used for DB queries)
         metrics: Pre-fetched metrics dict containing CONSISTENCY_SCORE, FINANCIAL_STRENGTH,
                  DIVIDEND_CONSISTENCY (or PAYOUT_RATIO), and SORTINO
 
@@ -261,7 +261,7 @@ async def calculate_stability_score(
     - Sharpe Score (20%): Higher risk-adjusted returns = higher score
 
     Args:
-        symbol: Stock symbol (for reference only, not used for DB queries)
+        symbol: Security symbol (for reference only, not used for DB queries)
         metrics: Pre-fetched metrics dict containing VOLATILITY_ANNUAL, MAX_DRAWDOWN, and SHARPE
 
     Returns:

@@ -26,7 +26,7 @@ def mock_position_repo():
 
 @pytest.fixture
 def mock_stock_repo():
-    """Mock stock repository."""
+    """Mock security repository."""
     repo = AsyncMock()
     mock_stock = Security(
         symbol="AAPL",

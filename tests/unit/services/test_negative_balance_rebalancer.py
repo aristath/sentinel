@@ -39,7 +39,7 @@ class TestNegativeBalanceRebalancer:
 
     @pytest.fixture
     def mock_stock_repo(self):
-        """Create mock stock repository."""
+        """Create mock security repository."""
         repo = AsyncMock()
         repo.get_all_active = AsyncMock(return_value=[])
         return repo
@@ -90,8 +90,8 @@ class TestNegativeBalanceRebalancer:
 
     @pytest.mark.asyncio
     async def test_get_trading_currencies(self, rebalancer, mock_stock_repo):
-        """Test getting currencies from active stocks."""
-        stocks = [
+        """Test getting currencies from active securities."""
+        securities = [
             Security(
                 symbol="AAPL.US",
                 name="Apple Inc",
@@ -111,7 +111,7 @@ class TestNegativeBalanceRebalancer:
                 active=True,
             ),
         ]
-        mock_stock_repo.get_all_active.return_value = stocks
+        mock_stock_repo.get_all_active.return_value = securities
 
         currencies = await rebalancer.get_trading_currencies()
 
@@ -125,7 +125,7 @@ class TestNegativeBalanceRebalancer:
         self, rebalancer, mock_stock_repo
     ):
         """Test check_currency_minimums when all currencies meet minimum."""
-        stocks = [
+        securities = [
             Security(
                 symbol="AAPL.US",
                 name="Apple Inc",
@@ -133,7 +133,7 @@ class TestNegativeBalanceRebalancer:
                 active=True,
             ),
         ]
-        mock_stock_repo.get_all_active.return_value = stocks
+        mock_stock_repo.get_all_active.return_value = securities
 
         cash_balances = {"USD": 100.0, "EUR": 50.0}
 
@@ -146,7 +146,7 @@ class TestNegativeBalanceRebalancer:
         self, rebalancer, mock_stock_repo
     ):
         """Test check_currency_minimums when currency is below minimum."""
-        stocks = [
+        securities = [
             Security(
                 symbol="AAPL.US",
                 name="Apple Inc",
@@ -154,7 +154,7 @@ class TestNegativeBalanceRebalancer:
                 active=True,
             ),
         ]
-        mock_stock_repo.get_all_active.return_value = stocks
+        mock_stock_repo.get_all_active.return_value = securities
 
         cash_balances = {"USD": 2.0}  # Below minimum of 5.0
 
@@ -168,7 +168,7 @@ class TestNegativeBalanceRebalancer:
         self, rebalancer, mock_stock_repo
     ):
         """Test check_currency_minimums when balance is negative."""
-        stocks = [
+        securities = [
             Security(
                 symbol="AAPL.US",
                 name="Apple Inc",
@@ -176,7 +176,7 @@ class TestNegativeBalanceRebalancer:
                 active=True,
             ),
         ]
-        mock_stock_repo.get_all_active.return_value = stocks
+        mock_stock_repo.get_all_active.return_value = securities
 
         cash_balances = {"USD": -556.21}
 

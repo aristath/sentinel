@@ -1,8 +1,8 @@
 /**
- * Stock Sparkline Component
+ * Security Sparkline Component
  * Custom SVG-based sparkline chart for security table
  */
-class StockSparkline extends HTMLElement {
+class SecuritySparkline extends HTMLElement {
   static get observedAttributes() {
     return ['symbol', 'has-position'];
   }
@@ -211,4 +211,4 @@ class StockSparkline extends HTMLElement {
   }
 }
 
-customElements.define('security-sparkline', StockSparkline);
+customElements.define('security-sparkline', SecuritySparkline);

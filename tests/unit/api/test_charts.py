@@ -1,6 +1,6 @@
 """Tests for charts API endpoints.
 
-These tests validate stock price charting functionality, including
+These tests validate security price charting functionality, including
 data caching, date range parsing, and data source fallback logic.
 """
 
@@ -195,7 +195,7 @@ class TestCombineAndFilterData:
 
 
 class TestGetCachedStockPrices:
-    """Test the cached stock price retrieval."""
+    """Test the cached security price retrieval."""
 
     @pytest.mark.asyncio
     async def test_retrieves_prices_with_date_filter(self):
@@ -234,7 +234,7 @@ class TestGetCachedStockPrices:
 
 
 class TestStoreStockPrices:
-    """Test stock price storage."""
+    """Test security price storage."""
 
     @pytest.mark.asyncio
     async def test_stores_tradernet_ohlc_data(self):
@@ -477,7 +477,7 @@ class TestSparklines:
 
     @pytest.mark.asyncio
     async def test_returns_sparklines_for_active_stocks(self):
-        """Test that sparklines are returned for all active stocks."""
+        """Test that sparklines are returned for all active securities."""
         from app.api.charts import get_all_stock_sparklines
 
         mock_db_manager = AsyncMock()
@@ -523,7 +523,7 @@ class TestSparklines:
 
 
 class TestStockChart:
-    """Test the individual stock chart endpoint."""
+    """Test the individual security chart endpoint."""
 
     @pytest.mark.asyncio
     async def test_returns_chart_data_from_cache(self):
@@ -537,7 +537,7 @@ class TestStockChart:
         # db_manager.history() is an async method that returns a db connection
         mock_db_manager.history = AsyncMock(return_value=mock_history_db)
 
-        # Mock stock lookup by ISIN
+        # Mock security lookup by ISIN
         mock_stock = MagicMock()
         mock_stock.symbol = "AAPL.US"
         mock_stock.isin = "US0378331005"
@@ -573,7 +573,7 @@ class TestStockChart:
         mock_stock_repo = AsyncMock()
         mock_db_manager.history = AsyncMock(return_value=mock_history_db)
 
-        # Mock stock lookup by ISIN
+        # Mock security lookup by ISIN
         mock_stock = MagicMock()
         mock_stock.symbol = "AAPL.US"
         mock_stock.isin = "US0378331005"
@@ -616,7 +616,7 @@ class TestStockChart:
         mock_stock_repo = AsyncMock()
         mock_db_manager.history = AsyncMock(side_effect=Exception("Database error"))
 
-        # Mock stock lookup by ISIN
+        # Mock security lookup by ISIN
         mock_stock = MagicMock()
         mock_stock.symbol = "AAPL.US"
         mock_stock.isin = "US0378331005"

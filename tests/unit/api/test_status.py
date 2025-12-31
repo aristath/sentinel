@@ -36,7 +36,7 @@ def mock_portfolio_repo():
 
 @pytest.fixture
 def mock_stock_repo():
-    """Mock stock repository."""
+    """Mock security repository."""
     repo = AsyncMock()
     return repo
 

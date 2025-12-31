@@ -96,7 +96,7 @@ class SettingsModal extends HTMLElement {
                       <span class="text-gray-300 text-sm">%</span>
                     </div>
                     <div>
-                      <span class="text-sm text-gray-300">Min Stock Score</span>
+                      <span class="text-sm text-gray-300">Min Security Score</span>
                       <p class="text-xs text-gray-300">Minimum score to consider (0-1)</p>
                     </div>
                     <div class="flex items-center gap-1">

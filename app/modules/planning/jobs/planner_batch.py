@@ -341,7 +341,7 @@ async def process_planner_batch_job(
         plan = await create_holistic_plan_incremental(
             portfolio_context=portfolio_context,
             available_cash=available_cash,
-            stocks=stocks,
+            securities=stocks,
             positions=positions,
             exchange_rate_service=exchange_rate_service,
             target_weights=target_weights,

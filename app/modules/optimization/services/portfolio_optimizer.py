@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class WeightChange:
-    """Represents a change in target weight for a stock."""
+    """Represents a change in target weight for a security."""
 
     symbol: str
     current_weight: float
@@ -89,7 +89,7 @@ class PortfolioOptimizer:
 
     async def optimize(
         self,
-        stocks: List[Security],
+        securities: List[Security],
         positions: Dict[str, Position],
         portfolio_value: float,
         current_prices: Dict[str, float],
@@ -108,7 +108,7 @@ class PortfolioOptimizer:
         Optimize portfolio allocation.
 
         Args:
-            stocks: List of Stock objects in universe
+            securities: List of Security objects in universe
             positions: Dict mapping symbol to current Position
             portfolio_value: Total portfolio value in EUR
             current_prices: Dict mapping symbol to current price
@@ -131,11 +131,11 @@ class PortfolioOptimizer:
         ind_targets = ind_targets or {}
         dividend_bonuses = dividend_bonuses or {}
 
-        # Get symbols with active stocks
-        symbols = [s.symbol for s in stocks if s.active]
+        # Get symbols with active securities
+        symbols = [s.symbol for s in securities if s.active]
 
         if not symbols:
-            return self._error_result(timestamp, blend, "No active stocks")
+            return self._error_result(timestamp, blend, "No active securities")
 
         # Calculate expected returns (with regime adjustment)
         expected_returns = await self._returns_calc.calculate_expected_returns(
@@ -177,7 +177,7 @@ class PortfolioOptimizer:
         valid_symbols = list(expected_returns.keys())
 
         # Calculate weight bounds
-        stocks_map = {s.symbol: s for s in stocks}
+        stocks_map = {s.symbol: s for s in securities}
         valid_stocks = [stocks_map[s] for s in valid_symbols if s in stocks_map]
         bounds = self._constraints_manager.calculate_weight_bounds(
             valid_stocks, positions, portfolio_value, current_prices
@@ -291,7 +291,7 @@ class PortfolioOptimizer:
         warnings = []
         is_feasible = True
 
-        # Check individual stock bounds
+        # Check individual security bounds
         locked_stocks = []
         for symbol in common_symbols:
             if symbol in bounds:
@@ -305,7 +305,7 @@ class PortfolioOptimizer:
                     locked_stocks.append(symbol)
 
         if locked_stocks:
-            logger.debug(f"Locked stocks (can't change): {len(locked_stocks)}")
+            logger.debug(f"Locked securities (can't change): {len(locked_stocks)}")
 
         # Check country constraints
         country_min_sum = sum(c.lower for c in country_constraints)
@@ -351,7 +351,7 @@ class PortfolioOptimizer:
 
         # Check total minimum sum across all constraints
         # This is critical - if country + industry minimums exceed 100%, it's infeasible
-        # Note: Individual stock minimums are already accounted for in bounds
+        # Note: Individual security minimums are already accounted for in bounds
         total_min_sum = country_min_sum + ind_min_sum
         if total_min_sum > 1.0:
             warnings.append(
@@ -450,7 +450,7 @@ class PortfolioOptimizer:
         if warnings:
             logger.warning(f"Constraint validation warnings: {'; '.join(warnings)}")
 
-        # Check for constraint overlap (stocks in both country and industry constraints)
+        # Check for constraint overlap (securities in both country and industry constraints)
         country_symbols = set()
         for constraint in country_constraints:
             country_symbols.update(constraint.symbols)
@@ -466,7 +466,7 @@ class PortfolioOptimizer:
                 f"{', '.join(sorted(overlapping_symbols)[:10])}"
             )
 
-        # Log individual stock bound summary for debugging
+        # Log individual security bound summary for debugging
         if bounds:
             total_stock_min = sum(lower for lower, _ in bounds.values())
             total_stock_max = sum(upper for _, upper in bounds.values())
@@ -474,13 +474,13 @@ class PortfolioOptimizer:
                 1 for lower, upper in bounds.values() if lower == upper and lower > 0
             )
             logger.info(
-                f"Individual stock bounds: {len(bounds)} stocks, "
+                f"Individual security bounds: {len(bounds)} securities, "
                 f"min_sum={total_stock_min:.2%}, max_sum={total_stock_max:.2%}, "
                 f"locked={locked_count}"
             )
 
         # Scale down constraints if combined minimums exceed feasibility threshold
-        # This is critical - individual stock bounds can add significant minimum requirements
+        # This is critical - individual security bounds can add significant minimum requirements
         if bounds and (country_constraints or ind_constraints):
             total_stock_min = sum(lower for lower, _ in bounds.values())
             country_min_sum = sum(c.lower for c in country_constraints)
@@ -488,31 +488,31 @@ class PortfolioOptimizer:
             total_all_min = total_stock_min + country_min_sum + ind_min_sum
 
             # Target: total minimums = 80% (leaves 20% slack for optimizer)
-            # Lower target needed when constraints overlap (same stocks in multiple sectors)
-            # and when individual stock bounds are restrictive
+            # Lower target needed when constraints overlap (same securities in multiple sectors)
+            # and when individual security bounds are restrictive
             target_total_min = 0.80
 
             if total_all_min > target_total_min:
                 logger.warning(
-                    f"Total minimum bounds (stocks={total_stock_min:.2%} + "
+                    f"Total minimum bounds (securities={total_stock_min:.2%} + "
                     f"country={country_min_sum:.2%} + industry={ind_min_sum:.2%} = "
                     f"{total_all_min:.2%}) exceed {target_total_min:.0%}, scaling down constraints"
                 )
 
-                # Strategy: Scale down proportionally, but prioritize individual stock bounds
-                # If stock minimums are very high (>70%), scale them down first
+                # Strategy: Scale down proportionally, but prioritize individual security bounds
+                # If security minimums are very high (>70%), scale them down first
                 # Otherwise, scale sector constraints
                 if total_stock_min > 0.70:
-                    # Stock minimums are too high - scale them down
+                    # Security minimums are too high - scale them down
                     stock_scale_factor = (
                         target_total_min - country_min_sum - ind_min_sum
                     ) / total_stock_min
                     if stock_scale_factor > 0 and stock_scale_factor < 1.0:
                         logger.warning(
-                            f"Individual stock minimum bounds ({total_stock_min:.2%}) are too high, "
+                            f"Individual security minimum bounds ({total_stock_min:.2%}) are too high, "
                             f"scaling down by {stock_scale_factor:.2%}"
                         )
-                        # Scale individual stock bounds (modify bounds dict)
+                        # Scale individual security bounds (modify bounds dict)
                         for symbol in bounds:
                             lower, upper = bounds[symbol]
                             new_lower = lower * stock_scale_factor
@@ -539,7 +539,7 @@ class PortfolioOptimizer:
 
                         logger.info(
                             f"Scaled sector minimums by {scale_factor:.2%} to "
-                            f"{target_sector_min:.2%} (stocks={total_stock_min:.2%}, "
+                            f"{target_sector_min:.2%} (securities={total_stock_min:.2%}, "
                             f"total={target_sector_min + total_stock_min:.2%})"
                         )
 
@@ -857,7 +857,7 @@ class PortfolioOptimizer:
             target_weights: Ideal target weights from optimizer
             positions: Current positions
             portfolio_value: Total portfolio value
-            current_prices: Current stock prices
+            current_prices: Current security prices
 
         Returns:
             Adjusted target weights that move incrementally toward ideal targets

@@ -48,7 +48,7 @@ class TestGetValidSymbols:
 
     @pytest.mark.asyncio
     async def test_returns_set_of_symbols(self):
-        """Test that stock symbols are returned as a set."""
+        """Test that security symbols are returned as a set."""
         from app.jobs.sync_trades import _get_valid_symbols
 
         mock_db = MagicMock()
@@ -102,7 +102,7 @@ class TestValidateTrade:
         is_valid, reason = _validate_trade(trade, existing, valid_symbols)
 
         assert not is_valid
-        assert "not in stocks table" in reason
+        assert "not in securities table" in reason
 
     def test_rejects_invalid_side(self):
         """Test that invalid trade sides are rejected."""

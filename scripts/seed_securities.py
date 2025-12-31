@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Seed the database with stock universe from JSON."""
+"""Seed the database with security universe from JSON."""
 
 import asyncio
 import json
@@ -15,11 +15,11 @@ from app.database import SCHEMA  # noqa: E402
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 DB_PATH = DATA_DIR / "trader.db"
-STOCKS_JSON = DATA_DIR / "stocks.json"
+STOCKS_JSON = DATA_DIR / "securities.json"
 
 
 async def seed_stocks():
-    """Load stocks from JSON and insert into database."""
+    """Load securities from JSON and insert into database."""
     # Ensure data directory exists
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -31,22 +31,22 @@ async def seed_stocks():
         await db.executescript(SCHEMA)
         await db.commit()
         print("Database schema initialized")
-        for stock in data["securities"]:
+        for security in data["securities"]:
             await db.execute(
                 """
                 INSERT OR REPLACE INTO securities (symbol, yahoo_symbol, name, industry, geography, active)
                 VALUES (?, ?, ?, ?, ?, 1)
                 """,
                 (
-                    stock["symbol"],
-                    stock.get("yahoo_symbol"),
-                    stock["name"],
-                    stock.get("industry"),
-                    stock["geography"],
+                    security["symbol"],
+                    security.get("yahoo_symbol"),
+                    security["name"],
+                    security.get("industry"),
+                    security["geography"],
                 ),
             )
         await db.commit()
-        print(f"Seeded {len(data['stocks'])} stocks")
+        print(f"Seeded {len(data['securities'])} securities")
 
 
 if __name__ == "__main__":

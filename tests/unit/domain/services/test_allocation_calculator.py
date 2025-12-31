@@ -181,7 +181,7 @@ class TestCalculatePositionSize:
         assert result == 100.0
 
     def test_adjusts_for_stock_score(self):
-        """Test that stock score adjusts position size."""
+        """Test that security score adjusts position size."""
         from app.domain.services.allocation_calculator import calculate_position_size
 
         candidate_high_score = SecurityPriority(

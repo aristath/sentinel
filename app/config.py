@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     min_cash_threshold: float = 400.0  # EUR - minimum cash to trigger rebalance
     # Note: min_trade_size removed - now calculated from transaction costs in DB settings
     max_trades_per_cycle: int = 5  # Maximum trades per rebalance cycle
-    min_stock_score: float = 0.5  # Minimum score to consider buying a stock
+    min_security_score: float = 0.5  # Minimum score to consider buying a security
 
     # Price fetching / Retry configuration
     price_fetch_max_retries: int = 3  # Maximum retries for price fetching

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Seed stock universe from JSON export.
+Seed security universe from JSON export.
 
 Usage:
     python scripts/seed_stock_universe.py ~/STOCKS-UNIVERSE.json
 
-This imports the curated stock universe into config.db.
+This imports the curated security universe into config.db.
 All other data (trades, positions, prices) will be fetched
 from external APIs by the normal sync jobs.
 """
@@ -27,14 +27,14 @@ from app.core.database.manager import (  # noqa: E402
 
 
 async def seed_stocks(json_path: Path):
-    """Import stocks from JSON into config.db."""
+    """Import securities from JSON into config.db."""
 
     # Load JSON
-    print(f"Loading stock universe from: {json_path}")
+    print(f"Loading security universe from: {json_path}")
     with open(json_path) as f:
-        stocks = json.load(f)
+        securities = json.load(f)
 
-    print(f"Found {len(stocks)} stocks")
+    print(f"Found {len(securities)} securities")
 
     # Initialize database
     data_dir = Path(__file__).parent.parent / "data"
@@ -43,12 +43,12 @@ async def seed_stocks(json_path: Path):
     db_manager = get_db_manager()
     now = datetime.now().isoformat()
 
-    # Insert stocks
+    # Insert securities
     inserted = 0
     skipped = 0
 
     async with db_manager.config.transaction() as conn:
-        for stock in stocks:
+        for security in securities:
             try:
                 await conn.execute(
                     """
@@ -59,24 +59,24 @@ async def seed_stocks(json_path: Path):
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
-                        stock["symbol"],
-                        stock.get("yahoo_symbol"),
-                        stock["name"],
-                        stock.get("industry"),
-                        stock["geography"],
-                        stock.get("priority_multiplier", 1.0),
-                        stock.get("min_lot", 1),
-                        stock.get("active", 1),
-                        stock.get("allow_buy", 1),
-                        stock.get("allow_sell", 0),
-                        stock.get("currency"),
+                        security["symbol"],
+                        security.get("yahoo_symbol"),
+                        security["name"],
+                        security.get("industry"),
+                        security["geography"],
+                        security.get("priority_multiplier", 1.0),
+                        security.get("min_lot", 1),
+                        security.get("active", 1),
+                        security.get("allow_buy", 1),
+                        security.get("allow_sell", 0),
+                        security.get("currency"),
                         now,
                         now,
                     ),
                 )
                 inserted += 1
             except Exception as e:
-                print(f"  Error inserting {stock['symbol']}: {e}")
+                print(f"  Error inserting {security['symbol']}: {e}")
                 skipped += 1
 
     print("\nSeeding complete:")

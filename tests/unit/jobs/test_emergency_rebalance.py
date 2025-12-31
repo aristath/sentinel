@@ -27,7 +27,7 @@ def mock_tradernet_client():
 
 @pytest.fixture
 def mock_stock_repo():
-    """Mock stock repository."""
+    """Mock security repository."""
     repo = AsyncMock()
     from app.domain.models import Security
 
@@ -409,7 +409,7 @@ class TestCheckAndRebalanceImmediately:
                     "app.jobs.emergency_rebalance.SecurityRepository"
                 ) as mock_stock_repo_class:
                     mock_stock_repo = AsyncMock()
-                    mock_stock_repo.get_all_active.return_value = []  # No stocks
+                    mock_stock_repo.get_all_active.return_value = []  # No securities
                     mock_stock_repo_class.return_value = mock_stock_repo
 
                     with patch(

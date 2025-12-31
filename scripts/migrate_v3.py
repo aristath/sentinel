@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Migration script v3: Add volatility column to scores table
-                     Add priority_multiplier column to stocks table.
+                     Add priority_multiplier column to securities table.
 
 Run this once to add columns for the enhanced algorithm.
 
@@ -16,7 +16,7 @@ import aiosqlite
 
 
 async def migrate():
-    """Add volatility column to scores, priority_multiplier to stocks."""
+    """Add volatility column to scores, priority_multiplier to securities."""
     db_path = Path("data/trader.db")
 
     if not db_path.exists():
@@ -34,17 +34,17 @@ async def migrate():
         else:
             print("Volatility column already exists in scores table")
 
-        # Check stocks table for priority_multiplier column
+        # Check securities table for priority_multiplier column
         cursor = await db.execute("PRAGMA table_info(securities)")
         stock_columns = [row[1] for row in await cursor.fetchall()]
 
         if "priority_multiplier" not in stock_columns:
             await db.execute(
-                "ALTER TABLE stocks ADD COLUMN priority_multiplier REAL DEFAULT 1.0"
+                "ALTER TABLE securities ADD COLUMN priority_multiplier REAL DEFAULT 1.0"
             )
-            print("Added priority_multiplier column to stocks table")
+            print("Added priority_multiplier column to securities table")
         else:
-            print("Priority_multiplier column already exists in stocks table")
+            print("Priority_multiplier column already exists in securities table")
 
         await db.commit()
 

@@ -25,7 +25,7 @@ router = APIRouter()
 
 class TradeRequest(BaseModel):
     symbol: str = Field(
-        ..., min_length=1, description="Stock ISIN (e.g., US0378331005)"
+        ..., min_length=1, description="Security ISIN (e.g., US0378331005)"
     )  # ISIN only
     side: TradeSide = Field(..., description="Trade side: BUY or SELL")
     quantity: float = Field(
@@ -77,13 +77,13 @@ async def get_trades(
     """Get trade history."""
     trades = await trade_repo.get_history(limit=limit)
 
-    # Build symbol to name mapping for stocks
+    # Build symbol to name mapping for securities
     stock_names = {}
     for trade in trades:
         if not _is_currency_conversion(trade.symbol):
             if trade.symbol not in stock_names:
-                stock = await security_repo.get_by_symbol(trade.symbol)
-                stock_names[trade.symbol] = stock.name if stock else trade.symbol
+                security = await security_repo.get_by_symbol(trade.symbol)
+                stock_names[trade.symbol] = security.name if security else trade.symbol
 
     return [
         {
@@ -117,13 +117,13 @@ async def execute_trade(
 
     The symbol field must be an ISIN.
     """
-    # Check stock exists - trade.symbol is validated as ISIN by the model
-    stock = await security_repo.get_by_isin(trade.symbol)
-    if not stock:
-        raise HTTPException(status_code=404, detail="Stock not found")
+    # Check security exists - trade.symbol is validated as ISIN by the model
+    security = await security_repo.get_by_isin(trade.symbol)
+    if not security:
+        raise HTTPException(status_code=404, detail="Security not found")
 
     # Use the resolved symbol for trading
-    symbol = stock.symbol
+    symbol = security.symbol
 
     # Ensure connection
     client = await ensure_tradernet_connected()

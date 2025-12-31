@@ -193,7 +193,7 @@ async def _wait_for_planning_completion():
 
     # Get current portfolio state
     positions = await position_repo.get_all()
-    stocks = await security_repo.get_all_active()
+    securities = await security_repo.get_all_active()
 
     # Fetch pending orders
     pending_orders = []
@@ -211,7 +211,7 @@ async def _wait_for_planning_completion():
         else {}
     )
     portfolio_hash = generate_portfolio_hash(
-        position_dicts, stocks, cash_balances, pending_orders
+        position_dicts, securities, cash_balances, pending_orders
     )
 
     planner_repo = PlannerRepository()
@@ -408,7 +408,7 @@ async def _wait_for_planning_completion():
         await create_holistic_plan_incremental(
             portfolio_context=portfolio_context,
             available_cash=available_cash,
-            stocks=stocks,
+            securities=securities,
             positions=positions,
             exchange_rate_service=exchange_rate_service,
             target_weights=target_weights,
@@ -522,9 +522,9 @@ async def _get_optimal_recommendation() -> Optional[Recommendation]:
 
     # Get current portfolio state
     positions = await position_repo.get_all()
-    stocks = await security_repo.get_all_active()
+    securities = await security_repo.get_all_active()
     position_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
-    portfolio_hash = generate_portfolio_hash(position_dicts, stocks)
+    portfolio_hash = generate_portfolio_hash(position_dicts, securities)
 
     # Get best result
     best_result = await planner_repo.get_best_result(portfolio_hash)
@@ -590,18 +590,18 @@ async def _can_execute_trade(
     from app.modules.universe.database.security_repository import SecurityRepository
 
     security_repo = SecurityRepository()
-    stock = await security_repo.get_by_symbol(recommendation.symbol)
+    security = await security_repo.get_by_symbol(recommendation.symbol)
 
-    if not stock:
+    if not security:
         logger.warning(
-            f"Stock {recommendation.symbol} not found, cannot check market hours. Allowing trade."
+            f"Security {recommendation.symbol} not found, cannot check market hours. Allowing trade."
         )
         return True, None
 
-    exchange = getattr(stock, "fullExchangeName", None)
+    exchange = getattr(security, "fullExchangeName", None)
     if not exchange:
         logger.warning(
-            f"Stock {recommendation.symbol} has no exchange set. Allowing trade."
+            f"Security {recommendation.symbol} has no exchange set. Allowing trade."
         )
         return True, None
 
@@ -638,14 +638,14 @@ async def _monitor_portfolio_for_changes() -> bool:
 
     # Get initial portfolio hash
     positions = await position_repo.get_all()
-    stocks = await security_repo.get_all_active()
+    securities = await security_repo.get_all_active()
     cash_balances = (
         {b.currency: b.amount for b in client.get_cash_balances()}
         if client.is_connected
         else {}
     )
     position_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
-    initial_hash = generate_portfolio_hash(position_dicts, stocks, cash_balances)
+    initial_hash = generate_portfolio_hash(position_dicts, securities, cash_balances)
 
     # Phase 1: Every 30 seconds for 5 minutes (10 iterations)
     for i in range(10):
@@ -663,7 +663,7 @@ async def _monitor_portfolio_for_changes() -> bool:
             {"symbol": p.symbol, "quantity": p.quantity} for p in positions_after
         ]
         current_hash = generate_portfolio_hash(
-            position_dicts_after, stocks, cash_balances_after
+            position_dicts_after, securities, cash_balances_after
         )
 
         if current_hash != initial_hash:
@@ -688,7 +688,7 @@ async def _monitor_portfolio_for_changes() -> bool:
             {"symbol": p.symbol, "quantity": p.quantity} for p in positions_after
         ]
         current_hash = generate_portfolio_hash(
-            position_dicts_after, stocks, cash_balances_after
+            position_dicts_after, securities, cash_balances_after
         )
 
         if current_hash != initial_hash:

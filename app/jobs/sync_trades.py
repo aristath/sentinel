@@ -26,7 +26,7 @@ async def _get_existing_order_ids(db_manager) -> set:
 
 
 async def _get_valid_symbols(db_manager) -> set:
-    """Get set of valid stock symbols from database."""
+    """Get set of valid security symbols from database."""
     cursor = await db_manager.config.execute("SELECT symbol FROM securities")
     return {row[0] for row in await cursor.fetchall()}
 
@@ -54,7 +54,7 @@ def _validate_trade(
         # Currency conversions are valid
         pass
     elif symbol not in valid_symbols:
-        return False, f"symbol {symbol} not in stocks table"
+        return False, f"symbol {symbol} not in securities table"
 
     side = trade.get("side", "").upper()
     if side not in ("BUY", "SELL"):

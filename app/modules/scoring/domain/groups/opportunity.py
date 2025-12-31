@@ -34,7 +34,7 @@ def is_price_too_high(current_price: float, high_52w: float) -> bool:
     Guardrail to prevent chasing all-time highs.
 
     Args:
-        current_price: Current stock price
+        current_price: Current security price
         high_52w: 52-week high price
 
     Returns:
@@ -55,7 +55,7 @@ async def calculate_opportunity_score(
     Calculate opportunity score (value/dip signals).
 
     Args:
-        symbol: Stock symbol (for cache lookup)
+        symbol: Security symbol (for cache lookup)
         daily_prices: List of daily price dicts
         fundamentals: Yahoo fundamentals data
         market_avg_pe: Market average P/E for comparison

@@ -207,9 +207,9 @@ class TestGeneratePortfolioHash:
         assert len(hash1) == 8  # 8-character hex hash
 
     def test_generate_hash_with_stocks_universe(self):
-        """Test generating hash with stocks universe."""
+        """Test generating hash with securities universe."""
         positions = [{"symbol": "AAPL", "quantity": 10}]
-        stocks = [
+        securities = [
             Security(
                 symbol="AAPL",
                 allow_buy=True,
@@ -230,8 +230,8 @@ class TestGeneratePortfolioHash:
             ),
         ]
 
-        hash1 = generate_portfolio_hash(positions, stocks=stocks)
-        hash2 = generate_portfolio_hash(positions, stocks=stocks)
+        hash1 = generate_portfolio_hash(positions, securities=securities)
+        hash2 = generate_portfolio_hash(positions, securities=securities)
 
         # Should be deterministic
         assert hash1 == hash2
@@ -409,7 +409,7 @@ class TestGenerateRecommendationCacheKey:
         """Test generating cache key with all parameters."""
         positions = [{"symbol": "AAPL", "quantity": 10}]
         settings = {"min_stock_score": 0.5}
-        stocks = [
+        securities = [
             Security(
                 symbol="AAPL",
                 allow_buy=True,
@@ -433,10 +433,10 @@ class TestGenerateRecommendationCacheKey:
         ]
 
         key1 = generate_recommendation_cache_key(
-            positions, settings, stocks, cash, allocations, orders
+            positions, settings, securities, cash, allocations, orders
         )
         key2 = generate_recommendation_cache_key(
-            positions, settings, stocks, cash, allocations, orders
+            positions, settings, securities, cash, allocations, orders
         )
 
         # Should be deterministic

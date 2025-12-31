@@ -109,7 +109,7 @@ def mock_step():
 
 @pytest.fixture
 def mock_stock_repo():
-    """Mock stock repository."""
+    """Mock security repository."""
     repo = AsyncMock()
     repo.get_all_active.return_value = []
     return repo
@@ -576,7 +576,7 @@ class TestGetRecommendations:
                     mock_tradernet_client,
                 )
 
-        # Verify hash was called with position data, settings, stocks, and cash
+        # Verify hash was called with position data, settings, securities, and cash
         mock_hash.assert_called_once()
         call_args = mock_hash.call_args[0]
         positions_arg = call_args[0]

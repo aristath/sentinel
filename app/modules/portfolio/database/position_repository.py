@@ -195,7 +195,7 @@ class PositionRepository:
             if security_dict and "symbol" in security_dict:
                 securities_by_symbol[security_dict["symbol"]] = security_dict
 
-        # Merge position and stock data
+        # Merge position and security data
         result = []
         for pos in position_rows:
             # Convert Row object to dict

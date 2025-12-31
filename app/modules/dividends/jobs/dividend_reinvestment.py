@@ -2,8 +2,8 @@
 
 Automatically reinvests dividends by executing buy orders when dividends are received.
 Uses yield-based strategy:
-- High-yield stocks (>=3%): reinvest in same stock
-- Low-yield stocks (<3%): use holistic planner to find best opportunities
+- High-yield securities (>=3%): reinvest in same security
+- Low-yield securities (<3%): use holistic planner to find best opportunities
 """
 
 import logging
@@ -51,8 +51,8 @@ async def _reinvest_in_same_stock(
     recommendations: List[Recommendation],
     dividends_to_mark: Dict[str, List[int]],
 ) -> None:
-    """Reinvest dividends in the same stock (high-yield strategy)."""
-    # Get current stock price
+    """Reinvest dividends in the same security (high-yield strategy)."""
+    # Get current security price
     try:
         quote = client.get_quote(symbol)
         if not quote or not hasattr(quote, "price"):
@@ -68,10 +68,10 @@ async def _reinvest_in_same_stock(
         logger.error(f"Error getting price for {symbol}: {e}, skipping")
         return
 
-    # Get stock info for name and other details
-    stock = await security_repo.get_by_symbol(symbol)
-    if not stock:
-        logger.warning(f"Stock {symbol} not found in universe, skipping")
+    # Get security info for name and other details
+    security = await security_repo.get_by_symbol(symbol)
+    if not security:
+        logger.warning(f"Security {symbol} not found in universe, skipping")
         return
 
     # Calculate shares to buy
@@ -83,25 +83,25 @@ async def _reinvest_in_same_stock(
         return
 
     # Adjust for min_lot
-    if stock.min_lot > 1:
-        quantity = (quantity // stock.min_lot) * stock.min_lot
+    if security.min_lot > 1:
+        quantity = (quantity // security.min_lot) * security.min_lot
         if quantity == 0:
-            quantity = stock.min_lot
+            quantity = security.min_lot
 
     estimated_value = quantity * price
 
     # Create BUY recommendation
-    currency = stock.currency or Currency.EUR
+    currency = security.currency or Currency.EUR
     recommendation = Recommendation(
         symbol=symbol,
-        name=stock.name,
+        name=security.name,
         side=TradeSide.BUY,
         quantity=float(quantity),
         estimated_price=price,
         estimated_value=estimated_value,
         reason=f"Dividend reinvestment (high yield): {total_amount:.2f} EUR from {len(symbol_dividends)} dividend(s)",
-        country=stock.country,
-        industry=stock.industry,
+        country=security.country,
+        industry=security.industry,
         currency=currency,
         status=RecommendationStatus.PENDING,
     )
@@ -119,7 +119,7 @@ async def auto_reinvest_dividends() -> None:
     2. Group dividends by symbol and sum amounts
     3. For each symbol with total >= min_trade_size:
        - Check dividend yield
-       - If yield >= 3%: reinvest in same stock
+       - If yield >= 3%: reinvest in same security
        - If yield < 3%: aggregate for best opportunities
     4. For low-yield dividends: use holistic planner to find highest-scoring opportunities
     5. For small dividends (< min_trade_size): set pending bonus
@@ -188,7 +188,7 @@ async def auto_reinvest_dividends() -> None:
         dividends_to_mark: Dict[str, List[int]] = {}  # symbol -> list of dividend IDs
         low_yield_dividends: Dict[str, float] = (
             {}
-        )  # symbol -> total amount for low-yield stocks
+        )  # symbol -> total amount for low-yield securities
 
         # Process each symbol - check yield and categorize
         for symbol, symbol_dividends in grouped_dividends.items():
@@ -208,7 +208,7 @@ async def auto_reinvest_dividends() -> None:
                         )
                 continue
 
-            # Get dividend yield for this stock
+            # Get dividend yield for this security
             dividend_yield = await calc_repo.get_metric(symbol, "DIVIDEND_YIELD")
             if dividend_yield is None:
                 # Yield not in cache, assume low yield and use for opportunities
@@ -218,12 +218,12 @@ async def auto_reinvest_dividends() -> None:
                 low_yield_dividends[symbol] = total_amount
                 continue
 
-            # Check if yield is high enough for same-stock reinvestment
+            # Check if yield is high enough for same-security reinvestment
             if dividend_yield >= HIGH_DIVIDEND_REINVESTMENT_THRESHOLD:
-                # High-yield stock (>=3%): reinvest in same stock
+                # High-yield security (>=3%): reinvest in same security
                 logger.info(
                     f"Symbol {symbol}: high yield {dividend_yield*100:.1f}%, "
-                    f"reinvesting {total_amount:.2f} EUR in same stock"
+                    f"reinvesting {total_amount:.2f} EUR in same security"
                 )
                 await _reinvest_in_same_stock(
                     symbol,
@@ -235,7 +235,7 @@ async def auto_reinvest_dividends() -> None:
                     dividends_to_mark,
                 )
             else:
-                # Low-yield stock (<3%): aggregate for best opportunities
+                # Low-yield security (<3%): aggregate for best opportunities
                 logger.info(
                     f"Symbol {symbol}: low yield {dividend_yield*100:.1f}%, "
                     f"aggregating {total_amount:.2f} EUR for best opportunities"

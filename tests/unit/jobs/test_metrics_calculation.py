@@ -1,7 +1,7 @@
 """Tests for metrics calculation job.
 
 These tests validate the batch calculation of technical indicators,
-CAGR, momentum, and other metrics for stocks.
+CAGR, momentum, and other metrics for securities.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -329,7 +329,7 @@ class TestCalculateMetricsForAllStocks:
 
     @pytest.mark.asyncio
     async def test_processes_all_active_stocks(self):
-        """Test that all active stocks are processed."""
+        """Test that all active securities are processed."""
         from app.jobs.metrics_calculation import calculate_metrics_for_all_stocks
 
         mock_stock_repo = AsyncMock()
@@ -381,7 +381,7 @@ class TestCalculateMetricsForAllStocks:
 
     @pytest.mark.asyncio
     async def test_returns_empty_stats_for_no_stocks(self):
-        """Test empty statistics when no active stocks."""
+        """Test empty statistics when no active securities."""
         from app.jobs.metrics_calculation import calculate_metrics_for_all_stocks
 
         mock_stock_repo = AsyncMock()

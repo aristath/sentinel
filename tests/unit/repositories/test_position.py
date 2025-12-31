@@ -284,7 +284,7 @@ class TestPositionRepositoryGetTotalValue:
 
 
 class TestPositionRepositoryGetWithStockInfo:
-    """Test getting positions with stock info."""
+    """Test getting positions with security info."""
 
     @pytest.mark.asyncio
     async def test_get_with_stock_info_empty(self):
@@ -304,7 +304,7 @@ class TestPositionRepositoryGetWithStockInfo:
 
     @pytest.mark.asyncio
     async def test_get_with_stock_info_merges_data(self):
-        """Test that position and stock data are merged."""
+        """Test that position and security data are merged."""
         from app.modules.portfolio.database.position_repository import (
             PositionRepository,
         )

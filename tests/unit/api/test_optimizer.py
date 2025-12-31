@@ -36,7 +36,7 @@ def mock_settings_service():
 
 @pytest.fixture
 def mock_stock_repo():
-    """Mock stock repository."""
+    """Mock security repository."""
     return AsyncMock()
 
 
@@ -335,7 +335,7 @@ class TestRunOptimization:
 
     @pytest.mark.asyncio
     async def test_run_optimization_no_stocks(self, mock_settings):
-        """Test error when no stocks in universe."""
+        """Test error when no securities in universe."""
         with patch("app.api.optimizer.SettingsRepository") as mock_repo_class:
             with patch("app.api.optimizer.SettingsService") as mock_service_class:
                 with patch("app.api.optimizer.SecurityRepository") as mock_stock_class:
@@ -350,7 +350,7 @@ class TestRunOptimization:
                         mock_service_class.return_value = mock_service
 
                         mock_stock_repo = AsyncMock()
-                        mock_stock_repo.get_all.return_value = []  # No stocks
+                        mock_stock_repo.get_all.return_value = []  # No securities
                         mock_stock_class.return_value = mock_stock_repo
 
                         mock_position_repo = AsyncMock()
@@ -360,7 +360,7 @@ class TestRunOptimization:
                             await run_optimization()
 
                         assert exc_info.value.status_code == 400
-                        assert "No stocks in universe" in exc_info.value.detail
+                        assert "No securities in universe" in exc_info.value.detail
 
     @pytest.mark.asyncio
     async def test_run_optimization_caches_result(

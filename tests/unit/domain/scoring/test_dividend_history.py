@@ -367,7 +367,7 @@ class TestCalculateDividendStabilityScore:
     """Test dividend stability score calculation."""
 
     def test_perfect_dividend_stock_high_score(self):
-        """Test that perfect dividend stock gets high score."""
+        """Test that perfect dividend security gets high score."""
         # Growing dividends, no cuts, high yield
         history = [1.00, 1.10, 1.21, 1.33, 1.46]  # 10% CAGR
         score, details = calculate_dividend_stability_score(
@@ -586,7 +586,7 @@ class TestGetDividendAnalysis:
 
     @pytest.mark.asyncio
     async def test_yield_assessment_no_dividend(self):
-        """Test yield assessment for non-dividend stock."""
+        """Test yield assessment for non-dividend security."""
         with patch("app.repositories.calculations.CalculationsRepository") as MockRepo:
             mock_repo = AsyncMock()
             mock_repo.get_metric.side_effect = [
@@ -660,11 +660,11 @@ class TestGetDividendRecommendation:
     """Test dividend recommendation generation."""
 
     def test_no_dividend_stock(self):
-        """Test recommendation for non-dividend stock."""
+        """Test recommendation for non-dividend security."""
         rec = _get_dividend_recommendation(
             stability=0.80, yield_assessment="no_dividend", payout_ratio=None
         )
-        assert rec == "Non-dividend stock - income not a factor"
+        assert rec == "Non-dividend security - income not a factor"
 
     def test_excellent_high_yield(self):
         """Test recommendation for excellent stability with high yield."""

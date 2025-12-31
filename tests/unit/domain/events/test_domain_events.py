@@ -22,10 +22,10 @@ class TestSecurityAddedEvent:
 
     def test_creates_stock_added_event(self):
         """Test creating SecurityAddedEvent."""
-        stock = Security(symbol="AAPL", name="Apple Inc.")
-        event = SecurityAddedEvent(stock=stock)
+        security = Security(symbol="AAPL", name="Apple Inc.")
+        event = SecurityAddedEvent(security=security)
 
-        assert event.stock == stock
+        assert event.security == security
         assert isinstance(event.occurred_at, datetime)
         assert event.symbol == "AAPL"
         assert event.name == "Apple Inc."
@@ -33,12 +33,12 @@ class TestSecurityAddedEvent:
 
     def test_stock_added_event_properties(self):
         """Test SecurityAddedEvent properties."""
-        stock = Security(
+        security = Security(
             symbol="MSFT",
             name="Microsoft Corporation",
             country="United States",
         )
-        event = SecurityAddedEvent(stock=stock)
+        event = SecurityAddedEvent(security=security)
 
         assert event.symbol == "MSFT"
         assert event.name == "Microsoft Corporation"
@@ -46,12 +46,12 @@ class TestSecurityAddedEvent:
 
     def test_stock_added_event_is_frozen(self):
         """Test that SecurityAddedEvent is immutable."""
-        stock = Security(symbol="AAPL", name="Apple Inc.")
-        event = SecurityAddedEvent(stock=stock)
+        security = Security(symbol="AAPL", name="Apple Inc.")
+        event = SecurityAddedEvent(security=security)
 
         # Should raise FrozenInstanceError on attempt to modify
         with pytest.raises(FrozenInstanceError):
-            event.stock = Security(symbol="MSFT", name="Microsoft")
+            event.security = Security(symbol="MSFT", name="Microsoft")
 
 
 class TestTradeExecutedEvent:

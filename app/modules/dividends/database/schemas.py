@@ -9,7 +9,7 @@ DIVIDENDS_SCHEMA = """
 -- Dividend history with DRIP tracking
 -- Tracks dividend payments and whether they were reinvested.
 -- pending_bonus: If dividend couldn't be reinvested (too small), store a bonus
--- that the optimizer will apply to that stock's expected return.
+-- that the optimizer will apply to that security's expected return.
 CREATE TABLE IF NOT EXISTS dividend_history (
     id INTEGER PRIMARY KEY,
     symbol TEXT NOT NULL,

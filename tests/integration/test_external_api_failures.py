@@ -92,7 +92,7 @@ async def test_rebalancing_service_handles_price_fetch_failure(db):
     allocation_repo = AllocationRepository(db=db)
     portfolio_repo = PortfolioRepository(db=db)
 
-    stock = Security(
+    security = Security(
         symbol="AAPL",
         yahoo_symbol="AAPL",
         name="Apple Inc.",
@@ -102,7 +102,7 @@ async def test_rebalancing_service_handles_price_fetch_failure(db):
         min_lot=1,
         active=True,
     )
-    await security_repo.create(stock)
+    await security_repo.create(security)
 
     position = Position(
         symbol="AAPL",
@@ -161,10 +161,10 @@ async def test_rebalancing_service_handles_price_fetch_failure(db):
             exchange_rate_service=mock_exchange_rate_service,
         )
 
-        # Should handle error gracefully (skip stocks with price fetch failures)
+        # Should handle error gracefully (skip securities with price fetch failures)
         try:
             trades = await service.calculate_rebalance_trades(available_cash=1000.0)
-            # Should return empty list or skip problematic stocks
+            # Should return empty list or skip problematic securities
             assert isinstance(trades, list)
         except Exception:
             # Or raise exception - both behaviors are acceptable

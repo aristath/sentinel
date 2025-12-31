@@ -15,7 +15,7 @@ document.addEventListener('alpine:init', () => {
     },
     alerts: [],  // Concentration limit alerts
     cashBreakdown: [],  // [{currency: 'EUR', amount: 1000}, ...]
-    securitys: [],
+    securities: [],
     trades: [],
     tradernet: { connected: false },
     markets: {},  // {EU: {open: bool, ...}, US: {...}, ASIA: {...}}
@@ -61,14 +61,13 @@ document.addEventListener('alpine:init', () => {
     minScore: 0,
     sortBy: 'priority_score',
     sortDesc: true,
-    showAddStockModal: false,
-    showEditStockModal: false,
-    showStockChart: false,
+    showAddSecurityModal: false,
+    showEditSecurityModal: false,
+    showSecurityChart: false,
     showSettingsModal: false,
-    showUniverseManagementModal: false,
-    selectedStockSymbol: null,
-    selectedStockIsin: null,
-    editingStock: null,
+    selectedSecuritySymbol: null,
+    selectedSecurityIsin: null,
+    editingSecurity: null,
     executingSymbol: null,
     executingSellSymbol: null,
     executingStep: null,
@@ -86,8 +85,7 @@ document.addEventListener('alpine:init', () => {
       industrySave: false,
       securitySave: false,
       refreshData: false,
-      logs: false,
-      universeSuggestions: false
+      logs: false
     },
 
     // SSE connections
@@ -101,17 +99,9 @@ document.addEventListener('alpine:init', () => {
     editingIndustry: false,
     industryTargets: {},
 
-    // Add Stock Form
-    newStock: { identifier: '' },
-    addingStock: false,
-
-    // Universe Management
-    universeSuggestions: {
-      candidatesToAdd: [],
-      securitysToPrune: []
-    },
-    addingFromSuggestion: {},  // Track per-symbol: { 'AAPL.US': true }
-    pruningFromSuggestion: {},  // Track per-symbol: { 'XYZ.US': true }
+    // Add Security Form
+    newSecurity: { identifier: '' },
+    addingSecurity: false,
 
     // Fetch All Data
     async fetchAll() {
@@ -119,7 +109,7 @@ document.addEventListener('alpine:init', () => {
         this.fetchStatus(),
         this.fetchAllocation(),
         this.fetchCashBreakdown(),
-        this.fetchStocks(),
+        this.fetchSecurities(),
         this.fetchTrades(),
         this.fetchTradernet(),
         this.fetchMarkets(),
@@ -164,42 +154,42 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    async fetchStocks() {
+    async fetchSecurities() {
       try {
-        const securitys = await API.fetchStocks();
+        const securities = await API.fetchSecurities();
 
-        // Frontend validation: check if allocation shows value but securitys don't have positions
+        // Frontend validation: check if allocation shows value but securities don't have positions
         // This catches edge cases where API validation might have missed something
         // Only check if allocation has already been loaded (avoid race conditions with parallel fetchAll)
         const allocationLoaded = this.allocation &&
                                  this.allocation.total_value !== undefined;
         const hasAllocationValue = allocationLoaded && this.allocation.total_value > 0;
-        const hasStockPositions = securitys.some(s => s.position_value > 0);
+        const hasSecurityPositions = securities.some(s => s.position_value > 0);
 
-        // If allocation shows value but securitys don't, cache might be stale
+        // If allocation shows value but securities don't, cache might be stale
         // Only retry once to avoid infinite loops (use a flag to prevent retry loops)
-        if (hasAllocationValue && !hasStockPositions && securitys.length > 0 && !this._stocksRetryFlag) {
-          this._stocksRetryFlag = true; // Prevent infinite retries
+        if (hasAllocationValue && !hasSecurityPositions && securities.length > 0 && !this._securitiesRetryFlag) {
+          this._securitiesRetryFlag = true; // Prevent infinite retries
           console.warn('Position data mismatch detected in frontend, retrying fetch');
           // Wait a brief moment for any async cache invalidation to complete
           await new Promise(resolve => setTimeout(resolve, 100));
-          const freshStocks = await API.fetchStocks();
+          const freshSecurities = await API.fetchSecurities();
           // Only use fresh data if it actually has positions
-          if (freshStocks.some(s => s.position_value > 0)) {
-            this.securitys = freshStocks;
-            this._stocksRetryFlag = false; // Reset flag on success
+          if (freshSecurities.some(s => s.position_value > 0)) {
+            this.securities = freshSecurities;
+            this._securitiesRetryFlag = false; // Reset flag on success
             return;
           }
           // If still no positions, log warning but use what we have
           console.warn('Position data still missing after retry - may need manual refresh');
-          this._stocksRetryFlag = false; // Reset flag
+          this._securitiesRetryFlag = false; // Reset flag
         }
 
-        this.securitys = securitys;
-        this._stocksRetryFlag = false; // Reset flag on normal path
+        this.securities = securities;
+        this._securitiesRetryFlag = false; // Reset flag on normal path
       } catch (e) {
-        console.error('Failed to fetch securitys:', e);
-        this._stocksRetryFlag = false; // Reset flag on error
+        console.error('Failed to fetch securities:', e);
+        this._securitiesRetryFlag = false; // Reset flag on error
       }
     },
 
@@ -429,7 +419,7 @@ document.addEventListener('alpine:init', () => {
     // Computed Properties
     get industries() {
       const set = new Set();
-      this.securitys.forEach(s => {
+      this.securities.forEach(s => {
         if (s.industry) {
           s.industry.split(',').forEach(ind => {
             const trimmed = ind.trim();
@@ -446,7 +436,7 @@ document.addEventListener('alpine:init', () => {
         return this.allocation.country.map(c => c.name).sort();
       }
       // Fallback: return individual countries if no group data
-      const countries = new Set(this.securitys.map(s => s.country).filter(Boolean));
+      const countries = new Set(this.securities.map(s => s.country).filter(Boolean));
       return Array.from(countries).sort();
     },
 
@@ -457,7 +447,7 @@ document.addEventListener('alpine:init', () => {
       }
       // Fallback: return individual industries if no group data
       const inds = new Set();
-      this.securitys.forEach(s => {
+      this.securities.forEach(s => {
         if (s.industry) {
           s.industry.split(',').forEach(i => inds.add(i.trim()));
         }
@@ -465,8 +455,8 @@ document.addEventListener('alpine:init', () => {
       return Array.from(inds).sort();
     },
 
-    get filteredStocks() {
-      let filtered = this.securitys;
+    get filteredSecurities() {
+      let filtered = this.securities;
 
       if (this.securityFilter !== 'all') {
         filtered = filtered.filter(s => s.country === this.securityFilter);
@@ -507,7 +497,7 @@ document.addEventListener('alpine:init', () => {
       });
     },
 
-    sortStocks(field) {
+    sortSecurities(field) {
       if (this.sortBy === field) {
         this.sortDesc = !this.sortDesc;
       } else {
@@ -522,7 +512,7 @@ document.addEventListener('alpine:init', () => {
       try {
         const data = await API.refreshAllScores();
         this.showMessage(data.message, 'success');
-        await this.fetchStocks();
+        await this.fetchSecurities();
       } catch (e) {
         this.showMessage('Failed to refresh scores', 'error');
       }
@@ -532,13 +522,13 @@ document.addEventListener('alpine:init', () => {
     async refreshSingleScore(isin) {
       try {
         await API.refreshScore(isin);
-        await this.fetchStocks();
+        await this.fetchSecurities();
       } catch (e) {
         this.showMessage('Failed to refresh score', 'error');
       }
     },
 
-    async refreshStockData(isin) {
+    async refreshSecurityData(isin) {
       if (!isin) return;
       this.loading.refreshData = true;
       try {
@@ -548,7 +538,7 @@ document.addEventListener('alpine:init', () => {
         const data = await response.json();
         if (response.ok) {
           this.showMessage(`Data refresh completed for ${data.symbol || isin}`, 'success');
-          await this.fetchStocks();
+          await this.fetchSecurities();
         } else {
           this.showMessage(data.detail || 'Data refresh failed', 'error');
         }
@@ -619,7 +609,7 @@ document.addEventListener('alpine:init', () => {
         this.showMessage('Country weights updated', 'success');
         this.editingCountry = false;
         await this.fetchAllocation();
-        await this.fetchStocks();
+        await this.fetchSecurities();
       } catch (e) {
         this.showMessage('Failed to save weights', 'error');
       }
@@ -655,116 +645,55 @@ document.addEventListener('alpine:init', () => {
         this.showMessage('Industry weights updated', 'success');
         this.editingIndustry = false;
         await this.fetchAllocation();
-        await this.fetchStocks();
+        await this.fetchSecurities();
       } catch (e) {
         this.showMessage('Failed to save weights', 'error');
       }
       this.loading.industrySave = false;
     },
 
-    // Stock Management
-    resetNewStock() {
-      this.newStock = { identifier: '' };
+    // Security Management
+    resetNewSecurity() {
+      this.newSecurity = { identifier: '' };
     },
 
-    async addStock() {
-      if (!this.newStock.identifier || !this.newStock.identifier.trim()) {
+    async addSecurity() {
+      if (!this.newSecurity.identifier || !this.newSecurity.identifier.trim()) {
         this.showMessage('Identifier is required', 'error');
         return;
       }
-      this.addingStock = true;
+      this.addingSecurity = true;
       try {
         const payload = {
-          identifier: this.newStock.identifier.trim().toUpperCase()
+          identifier: this.newSecurity.identifier.trim().toUpperCase()
         };
-        await API.addStockByIdentifier(payload);
-        this.showMessage('Stock added successfully', 'success');
-        this.showAddStockModal = false;
-        this.resetNewStock();
-        await this.fetchStocks();
+        await API.addSecurityByIdentifier(payload);
+        this.showMessage('Security added successfully', 'success');
+        this.showAddSecurityModal = false;
+        this.resetNewSecurity();
+        await this.fetchSecurities();
       } catch (e) {
         const errorMessage = e.message || 'Failed to add security';
         this.showMessage(errorMessage, 'error');
       }
-      this.addingStock = false;
+      this.addingSecurity = false;
     },
 
-    async removeStock(isin) {
-      const security = this.securitys.find(s => s.isin === isin);
+    async removeSecurity(isin) {
+      const security = this.securities.find(s => s.isin === isin);
       const displaySymbol = security ? security.symbol : isin;
       if (!confirm(`Remove ${displaySymbol} from the universe?`)) return;
       try {
-        await API.deleteStock(isin);
+        await API.deleteSecurity(isin);
         this.showMessage(`${displaySymbol} removed`, 'success');
-        await this.fetchStocks();
+        await this.fetchSecurities();
       } catch (e) {
         this.showMessage('Failed to remove security', 'error');
       }
     },
 
-    // Universe Management
-    async openUniverseManagementModal() {
-      this.showUniverseManagementModal = true;
-      await this.fetchUniverseSuggestions();
-    },
-
-    async fetchUniverseSuggestions() {
-      this.loading.universeSuggestions = true;
-      try {
-        const data = await API.fetchUniverseSuggestions();
-        this.universeSuggestions = {
-          candidatesToAdd: data.candidates_to_add || [],
-          securitysToPrune: data.securitys_to_prune || []
-        };
-      } catch (e) {
-        this.showMessage('Failed to fetch universe suggestions', 'error');
-        console.error('Failed to fetch universe suggestions:', e);
-      }
-      this.loading.universeSuggestions = false;
-    },
-
-    async addStockFromSuggestion(isin) {
-      this.addingFromSuggestion[isin] = true;
-      try {
-        await API.addStockFromSuggestion(isin);
-        const candidate = this.universeSuggestions.candidatesToAdd.find(c => c.isin === isin);
-        const displaySymbol = candidate ? candidate.symbol : isin;
-        this.showMessage(`${displaySymbol} added to universe`, 'success');
-        // Remove from candidates list
-        this.universeSuggestions.candidatesToAdd = this.universeSuggestions.candidatesToAdd.filter(
-          c => c.isin !== isin
-        );
-        // Refresh securitys list
-        await this.fetchStocks();
-      } catch (e) {
-        const errorMessage = e.message || 'Failed to add security';
-        this.showMessage(errorMessage, 'error');
-      }
-      this.addingFromSuggestion[isin] = false;
-    },
-
-    async pruneStockFromSuggestion(isin) {
-      this.pruningFromSuggestion[isin] = true;
-      try {
-        await API.pruneStockFromSuggestion(isin);
-        const security = this.universeSuggestions.securitysToPrune.find(s => s.isin === isin);
-        const displaySymbol = security ? security.symbol : isin;
-        this.showMessage(`${displaySymbol} pruned from universe`, 'success');
-        // Remove from prune list
-        this.universeSuggestions.securitysToPrune = this.universeSuggestions.securitysToPrune.filter(
-          s => s.isin !== isin
-        );
-        // Refresh securitys list
-        await this.fetchStocks();
-      } catch (e) {
-        const errorMessage = e.message || 'Failed to prune security';
-        this.showMessage(errorMessage, 'error');
-      }
-      this.pruningFromSuggestion[isin] = false;
-    },
-
-    openEditStock(security) {
-      this.editingStock = {
+    openEditSecurity(security) {
+      this.editingSecurity = {
         originalIsin: security.isin,  // Track original ISIN for API calls
         originalSymbol: security.symbol,  // Track original symbol for rename detection
         symbol: security.symbol,
@@ -780,38 +709,38 @@ document.addEventListener('alpine:init', () => {
         min_portfolio_target: (security.min_portfolio_target != null && security.min_portfolio_target !== '') ? security.min_portfolio_target : null,
         max_portfolio_target: (security.max_portfolio_target != null && security.max_portfolio_target !== '') ? security.max_portfolio_target : null
       };
-      this.showEditStockModal = true;
+      this.showEditSecurityModal = true;
     },
 
-    closeEditStock() {
-      this.showEditStockModal = false;
-      this.editingStock = null;
+    closeEditSecurity() {
+      this.showEditSecurityModal = false;
+      this.editingSecurity = null;
     },
 
     async saveStock() {
-      if (!this.editingStock) return;
+      if (!this.editingSecurity) return;
 
       this.loading.securitySave = true;
       try {
         const payload = {
-          name: this.editingStock.name,
-          yahoo_symbol: this.editingStock.yahoo_symbol || null,
-          min_lot: parseInt(this.editingStock.min_lot) || 1,
-          allow_buy: this.editingStock.allow_buy,
-          allow_sell: this.editingStock.allow_sell,
-          min_portfolio_target: (this.editingStock.min_portfolio_target != null && this.editingStock.min_portfolio_target !== '') ? parseFloat(this.editingStock.min_portfolio_target) : null,
-          max_portfolio_target: (this.editingStock.max_portfolio_target != null && this.editingStock.max_portfolio_target !== '') ? parseFloat(this.editingStock.max_portfolio_target) : null
+          name: this.editingSecurity.name,
+          yahoo_symbol: this.editingSecurity.yahoo_symbol || null,
+          min_lot: parseInt(this.editingSecurity.min_lot) || 1,
+          allow_buy: this.editingSecurity.allow_buy,
+          allow_sell: this.editingSecurity.allow_sell,
+          min_portfolio_target: (this.editingSecurity.min_portfolio_target != null && this.editingSecurity.min_portfolio_target !== '') ? parseFloat(this.editingSecurity.min_portfolio_target) : null,
+          max_portfolio_target: (this.editingSecurity.max_portfolio_target != null && this.editingSecurity.max_portfolio_target !== '') ? parseFloat(this.editingSecurity.max_portfolio_target) : null
         };
 
         // Include new_symbol if symbol was changed
-        if (this.editingStock.symbol !== this.editingStock.originalSymbol) {
-          payload.new_symbol = this.editingStock.symbol.toUpperCase();
+        if (this.editingSecurity.symbol !== this.editingSecurity.originalSymbol) {
+          payload.new_symbol = this.editingSecurity.symbol.toUpperCase();
         }
 
-        await API.updateStock(this.editingStock.originalIsin, payload);
-        this.showMessage('Stock updated successfully', 'success');
-        this.closeEditStock();
-        await this.fetchStocks();
+        await API.updateSecurity(this.editingSecurity.originalIsin, payload);
+        this.showMessage('Security updated successfully', 'success');
+        this.closeEditSecurity();
+        await this.fetchSecurities();
         await this.fetchAllocation();
       } catch (e) {
         this.showMessage('Failed to update security', 'error');
@@ -822,10 +751,10 @@ document.addEventListener('alpine:init', () => {
     async updateMultiplier(isin, value) {
       const multiplier = Math.max(0.1, Math.min(3.0, parseFloat(value) || 1.0));
       try {
-        await API.updateStock(isin, { priority_multiplier: multiplier });
-        const security = this.securitys.find(s => s.isin === isin);
+        await API.updateSecurity(isin, { priority_multiplier: multiplier });
+        const security = this.securities.find(s => s.isin === isin);
         if (security) security.priority_multiplier = multiplier;
-        await this.fetchStocks();
+        await this.fetchSecurities();
       } catch (e) {
         this.showMessage('Failed to update multiplier', 'error');
       }

@@ -35,7 +35,7 @@ async def get_ema(
     Get EMA value from cache or calculate it.
 
     Args:
-        symbol: Stock symbol
+        symbol: Security symbol
         closes: Array of closing prices
         length: EMA period (default 200)
 
@@ -67,7 +67,7 @@ async def get_rsi(
     Get RSI value from cache or calculate it.
 
     Args:
-        symbol: Stock symbol
+        symbol: Security symbol
         closes: Array of closing prices
         length: RSI period (default 14)
 
@@ -102,7 +102,7 @@ async def get_bollinger_bands(
     Get Bollinger Bands from cache or calculate them.
 
     Args:
-        symbol: Stock symbol
+        symbol: Security symbol
         closes: Array of closing prices
         length: BB period (default 20)
         std: Standard deviation multiplier (default 2)
@@ -146,7 +146,7 @@ async def get_sharpe_ratio(
     Get Sharpe ratio from cache or calculate it.
 
     Args:
-        symbol: Stock symbol
+        symbol: Security symbol
         closes: Array of closing prices
         risk_free_rate: Risk-free rate (default 0)
 
@@ -175,7 +175,7 @@ async def get_max_drawdown(symbol: str, closes: np.ndarray) -> Optional[float]:
     Get max drawdown from cache or calculate it.
 
     Args:
-        symbol: Stock symbol
+        symbol: Security symbol
         closes: Array of closing prices
 
     Returns:
@@ -204,7 +204,7 @@ async def get_52_week_high(symbol: str, highs: np.ndarray) -> float:
     Get 52-week high price from cache or calculate it.
 
     Args:
-        symbol: Stock symbol
+        symbol: Security symbol
         highs: Array of high prices (at least 252 days for full year)
 
     Returns:
@@ -246,7 +246,7 @@ async def get_52_week_low(symbol: str, lows: np.ndarray) -> float:
     Get 52-week low price from cache or calculate it.
 
     Args:
-        symbol: Stock symbol
+        symbol: Security symbol
         lows: Array of low prices (at least 252 days for full year)
 
     Returns:

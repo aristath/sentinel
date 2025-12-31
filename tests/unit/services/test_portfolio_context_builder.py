@@ -28,7 +28,7 @@ def mock_position_repo():
 
 @pytest.fixture
 def mock_stock_repo():
-    """Mock stock repository."""
+    """Mock security repository."""
     repo = AsyncMock()
     mock_stock = Security(
         symbol="AAPL",
@@ -77,7 +77,7 @@ class TestBuildPortfolioContext:
             build_portfolio_context,
         )
 
-        # Setup stock score row
+        # Setup security score row
         mock_row = MagicMock()
         mock_row.__getitem__ = lambda self, key: {
             "symbol": "AAPL",
@@ -215,7 +215,7 @@ class TestBuildPortfolioContext:
     async def test_includes_stock_scores(
         self, mock_position_repo, mock_stock_repo, mock_allocation_repo, mock_db_manager
     ):
-        """Test that stock scores are included in context."""
+        """Test that security scores are included in context."""
         from app.modules.planning.services.portfolio_context_builder import (
             build_portfolio_context,
         )
@@ -316,7 +316,7 @@ class TestBuildPortfolioContext:
     async def test_includes_stock_countries_and_industries(
         self, mock_position_repo, mock_stock_repo, mock_allocation_repo, mock_db_manager
     ):
-        """Test that stock countries and industries are included."""
+        """Test that security countries and industries are included."""
         from app.modules.planning.services.portfolio_context_builder import (
             build_portfolio_context,
         )
@@ -347,7 +347,7 @@ class TestBuildPortfolioContext:
     async def test_handles_stocks_without_country_or_industry(
         self, mock_position_repo, mock_allocation_repo, mock_db_manager
     ):
-        """Test handling of stocks without country or industry."""
+        """Test handling of securities without country or industry."""
         from app.modules.planning.services.portfolio_context_builder import (
             build_portfolio_context,
         )
@@ -355,7 +355,7 @@ class TestBuildPortfolioContext:
         mock_stock_repo = AsyncMock()
         mock_stock = Security(
             symbol="UNKNOWN",
-            name="Unknown Stock",
+            name="Unknown Security",
             country=None,
             currency=Currency.USD,
             industry=None,
@@ -379,7 +379,7 @@ class TestBuildPortfolioContext:
                 mock_db_manager,
             )
 
-            # Stock without country/industry should not be in the maps
+            # Security without country/industry should not be in the maps
             assert "UNKNOWN" not in context.security_countries
             assert "UNKNOWN" not in context.security_industries
 

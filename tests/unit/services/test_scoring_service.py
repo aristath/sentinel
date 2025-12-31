@@ -1,10 +1,10 @@
 """Comprehensive tests for scoring_service module.
 
 These tests validate the ScoringService orchestrates scoring operations correctly:
-- Calculating and saving stock scores
+- Calculating and saving security scores
 - Handling insufficient data
 - Managing errors gracefully
-- Processing all active stocks in the universe
+- Processing all active securities in the universe
 """
 
 from datetime import datetime
@@ -331,7 +331,7 @@ class TestCalculateAndSaveScore:
         # Mock fundamentals
         mock_fundamentals = {"pe_ratio": 15.0, "eps": 5.0}
 
-        # Mock calculate_stock_score
+        # Mock calculate_security_score
         mock_calculated_score = CalculatedSecurityScore(
             symbol="TEST",
             total_score=85.0,
@@ -355,7 +355,7 @@ class TestCalculateAndSaveScore:
                 return_value=mock_fundamentals,
             ),
             patch(
-                "app.modules.scoring.services.scoring_service.calculate_stock_score",
+                "app.modules.scoring.services.scoring_service.calculate_security_score",
                 return_value=mock_calculated_score,
             ),
         ):
@@ -415,7 +415,7 @@ class TestCalculateAndSaveScore:
                 return_value={},
             ) as mock_yahoo,
             patch(
-                "app.modules.scoring.services.scoring_service.calculate_stock_score",
+                "app.modules.scoring.services.scoring_service.calculate_security_score",
                 return_value=None,
             ),
         ):
@@ -543,7 +543,7 @@ class TestCalculateAndSaveScore:
                 return_value={},
             ),
             patch(
-                "app.modules.scoring.services.scoring_service.calculate_stock_score",
+                "app.modules.scoring.services.scoring_service.calculate_security_score",
                 return_value=None,  # Calculation fails
             ),
         ):
@@ -613,13 +613,13 @@ class TestCalculateAndSaveScore:
                 return_value={},
             ),
             patch(
-                "app.modules.scoring.services.scoring_service.calculate_stock_score",
+                "app.modules.scoring.services.scoring_service.calculate_security_score",
                 return_value=None,
             ) as mock_calc,
         ):
             await service.calculate_and_save_score("TEST")
 
-            # Verify calculate_stock_score was called with appropriate defaults
+            # Verify calculate_security_score was called with appropriate defaults
             mock_calc.assert_called_once()
             call_kwargs = mock_calc.call_args[1]
             # country is passed as-is (None when not provided)
@@ -641,10 +641,10 @@ class TestScoreAllStocks:
 
     @pytest.mark.asyncio
     async def test_scores_all_active_stocks(self, mock_services):
-        """Test that all active stocks are scored."""
+        """Test that all active securities are scored."""
         security_repo, score_repo, db_manager = mock_services
 
-        # Mock active stocks
+        # Mock active securities
         mock_stock1 = MagicMock()
         mock_stock1.symbol = "STOCK1"
         mock_stock1.yahoo_symbol = "STOCK1.US"
@@ -679,14 +679,14 @@ class TestScoreAllStocks:
 
         scores = await service.score_all_stocks()
 
-        # Verify all stocks were scored
+        # Verify all securities were scored
         assert len(scores) == 2
         assert scores[0].symbol == "STOCK1"
         assert scores[0].total_score == 85.0
         assert scores[1].symbol == "STOCK2"
         assert scores[1].total_score == 90.0
 
-        # Verify calculate_and_save_score was called for each stock
+        # Verify calculate_and_save_score was called for each security
         assert service.calculate_and_save_score.call_count == 2
         service.calculate_and_save_score.assert_any_call(
             "STOCK1",
@@ -703,7 +703,7 @@ class TestScoreAllStocks:
 
     @pytest.mark.asyncio
     async def test_handles_no_active_stocks(self, mock_services):
-        """Test handling when no active stocks exist."""
+        """Test handling when no active securities exist."""
         security_repo, score_repo, db_manager = mock_services
 
         security_repo.get_all_active.return_value = []
@@ -722,7 +722,7 @@ class TestScoreAllStocks:
         """Test that failed calculations are skipped and don't break the loop."""
         security_repo, score_repo, db_manager = mock_services
 
-        # Mock active stocks
+        # Mock active securities
         mock_stock1 = MagicMock()
         mock_stock1.symbol = "STOCK1"
         mock_stock1.yahoo_symbol = "STOCK1.US"
@@ -774,15 +774,15 @@ class TestScoreAllStocks:
         assert scores[0].symbol == "STOCK1"
         assert scores[1].symbol == "STOCK3"
 
-        # Verify all stocks were attempted
+        # Verify all securities were attempted
         assert service.calculate_and_save_score.call_count == 3
 
     @pytest.mark.asyncio
     async def test_processes_stocks_with_none_attributes(self, mock_services):
-        """Test handling stocks with None yahoo_symbol, country, or industry."""
+        """Test handling securities with None yahoo_symbol, country, or industry."""
         security_repo, score_repo, db_manager = mock_services
 
-        # Mock stock with None attributes
+        # Mock security with None attributes
         mock_stock = MagicMock()
         mock_stock.symbol = "TEST"
         mock_stock.yahoo_symbol = None
@@ -804,7 +804,7 @@ class TestScoreAllStocks:
 
         scores = await service.score_all_stocks()
 
-        # Should still process the stock
+        # Should still process the security
         assert len(scores) == 1
         assert scores[0].symbol == "TEST"
 

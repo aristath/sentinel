@@ -277,7 +277,7 @@ class TradernetClient:
 
     def find_symbol(self, symbol: str, exchange: Optional[str] = None) -> dict:
         """
-        Search for stock symbols/instruments by symbol or ISIN.
+        Search for security symbols/instruments by symbol or ISIN.
 
         This method accepts both Tradernet symbols and ISINs.
         Useful for resolving ISINs to Tradernet symbols.
@@ -361,7 +361,7 @@ class TradernetClient:
         Check if a pending order exists for the given symbol (broker API only).
 
         Args:
-            symbol: Stock symbol to check (e.g., "AAPL.US")
+            symbol: Security symbol to check (e.g., "AAPL.US")
 
         Returns:
             True if any pending order exists for this symbol (regardless of side)
@@ -383,7 +383,7 @@ class TradernetClient:
         Get historical OHLC data for a symbol.
 
         Args:
-            symbol: Stock symbol
+            symbol: Security symbol
             start: Start date (defaults to 2010-01-01 if not provided)
             end: End date (defaults to now if not provided)
             days: Optional backward compatibility - calculates start date from days ago
@@ -430,7 +430,7 @@ class TradernetClient:
         Get security info including lot size from Tradernet API.
 
         Args:
-            symbol: Stock symbol (e.g., "XIAO.1810.AS")
+            symbol: Security symbol (e.g., "XIAO.1810.AS")
 
         Returns:
             Dict with security info including 'lot' (minimum lot size) if available,
@@ -459,7 +459,7 @@ class TradernetClient:
         Place an order.
 
         Args:
-            symbol: Stock symbol (e.g., "AAPL.US")
+            symbol: Security symbol (e.g., "AAPL.US")
             side: "BUY" or "SELL"
             quantity: Number of shares
             order_type: "market" or "limit"

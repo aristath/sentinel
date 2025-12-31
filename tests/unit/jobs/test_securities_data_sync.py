@@ -1,8 +1,8 @@
-"""Tests for the stocks data sync job.
+"""Tests for the securities data sync job.
 
-The stocks data sync runs hourly and processes stocks sequentially:
-1. Only processes stocks not updated in 24 hours (last_synced)
-2. For each stock: sync historical data, calculate metrics, refresh score
+The securities data sync runs hourly and processes securities sequentially:
+1. Only processes securities not updated in 24 hours (last_synced)
+2. For each security: sync historical data, calculate metrics, refresh score
 3. Updates LED display with "UPDATING {SYMBOL} DATA"
 4. Updates last_synced after successful processing
 """
@@ -18,7 +18,7 @@ class TestStocksDataSync:
 
     @pytest.mark.asyncio
     async def test_processes_only_stale_stocks(self):
-        """Test that only stocks not synced in 24 hours are processed."""
+        """Test that only securities not synced in 24 hours are processed."""
         from app.jobs.securities_data_sync import _get_stocks_needing_sync
 
         now = datetime.now()
@@ -38,7 +38,7 @@ class TestStocksDataSync:
         ):
             stocks_to_sync = await _get_stocks_needing_sync()
 
-        # Only stale and never-synced stocks should be returned
+        # Only stale and never-synced securities should be returned
         symbols = [s.symbol for s in stocks_to_sync]
         assert "STALE.DE" in symbols
         assert "NEVER.HK" in symbols
@@ -46,7 +46,7 @@ class TestStocksDataSync:
 
     @pytest.mark.asyncio
     async def test_processes_stocks_sequentially(self):
-        """Test that stocks are processed one at a time, not in parallel."""
+        """Test that securities are processed one at a time, not in parallel."""
         from app.jobs.securities_data_sync import run_stocks_data_sync
 
         processed_order = []
@@ -79,12 +79,12 @@ class TestStocksDataSync:
             with patch("app.jobs.stocks_data_sync.file_lock", return_value=mock_lock):
                 await run_stocks_data_sync()
 
-        # All stocks should be processed in order
+        # All securities should be processed in order
         assert processed_order == ["AAA.DE", "BBB.US", "CCC.HK"]
 
     @pytest.mark.asyncio
     async def test_skips_all_when_all_stocks_fresh(self):
-        """Test that no processing happens when all stocks are fresh."""
+        """Test that no processing happens when all securities are fresh."""
         from app.jobs.securities_data_sync import run_stocks_data_sync
 
         process_called = False
@@ -97,7 +97,7 @@ class TestStocksDataSync:
             patch(
                 "app.jobs.stocks_data_sync._get_stocks_needing_sync",
                 new_callable=AsyncMock,
-                return_value=[],  # No stale stocks
+                return_value=[],  # No stale securities
             ),
             patch(
                 "app.jobs.stocks_data_sync._process_single_stock",
@@ -116,11 +116,11 @@ class TestStocksDataSync:
 
 
 class TestProcessSingleStock:
-    """Test the per-stock processing pipeline."""
+    """Test the per-security processing pipeline."""
 
     @pytest.mark.asyncio
     async def test_runs_all_steps_for_stock(self):
-        """Test that all three steps run for each stock."""
+        """Test that all three steps run for each security."""
         from app.jobs.securities_data_sync import _process_single_stock
 
         steps_run = []
@@ -359,11 +359,11 @@ class TestDisplayUpdates:
 
 
 class TestForceRefresh:
-    """Test the force refresh functionality for individual stocks."""
+    """Test the force refresh functionality for individual securities."""
 
     @pytest.mark.asyncio
     async def test_force_refresh_bypasses_last_synced(self):
-        """Test that force refresh processes stock regardless of last_synced."""
+        """Test that force refresh processes security regardless of last_synced."""
         from app.jobs.securities_data_sync import refresh_single_stock
 
         steps_run = []
@@ -410,7 +410,7 @@ class TestForceRefresh:
         ):
             result = await refresh_single_stock("FRESH.US")
 
-        # Should process the stock
+        # Should process the security
         assert steps_run == [
             ("historical", "FRESH.US"),
             ("metrics", "FRESH.US"),

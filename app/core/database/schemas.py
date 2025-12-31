@@ -2,7 +2,7 @@
 Database Schemas - CREATE TABLE statements for all databases.
 
 This module contains schema definitions for:
-- config.db: Stock universe, allocation targets, settings
+- config.db: Security universe, allocation targets, settings
 - ledger.db: Trades, cash flows (append-only)
 - state.db: Positions (current state, rebuildable from ledger)
 - cache.db: Ephemeral computed aggregates (can be deleted)
@@ -12,7 +12,7 @@ This module contains schema definitions for:
 - rates.db: Exchange rates
 - snapshots.db: Portfolio snapshots (daily time-series)
 - planner.db: Holistic planner sequences, evaluations, and best results
-- history/{isin}.db: Per-stock price data (keyed by ISIN)
+- history/{isin}.db: Per-security price data (keyed by ISIN)
 """
 
 import logging
@@ -149,9 +149,9 @@ DEFAULT_ALLOCATION_TARGETS: list[tuple[str, str, float]] = []
 DEFAULT_SETTINGS = [
     ("min_cash_threshold", "500", "Minimum EUR cash reserve"),
     ("max_trades_per_cycle", "5", "Maximum trades per rebalance cycle"),
-    ("min_stock_score", "0.5", "Minimum score to consider buying"),
+    ("min_security_score", "0.5", "Minimum score to consider buying"),
     ("min_hold_days", "90", "Minimum days before selling"),
-    ("sell_cooldown_days", "180", "Days between sells of same stock"),
+    ("sell_cooldown_days", "180", "Days between sells of same security"),
     ("max_loss_threshold", "-0.20", "Don't sell if loss exceeds this"),
     ("target_annual_return", "0.11", "Target CAGR for scoring (11%)"),
     # Optimizer settings
@@ -687,6 +687,56 @@ async def init_config_schema(db):
             "Config database migrated to schema version 10 (stocks → securities)"
         )
 
+    # =========================================================================
+    # Migration: Rename settings from stock_* to security_* (version 10 -> 11)
+    # =========================================================================
+    if current_version == 10:
+        logger.info(
+            "Migrating config database to schema version 11 (rename security settings to security)..."
+        )
+
+        # Rename min_stock_score to min_security_score
+        await db.execute(
+            "UPDATE settings SET key = 'min_security_score' WHERE key = 'min_stock_score'"
+        )
+
+        # Rename all stock_discovery_* settings to security_discovery_*
+        stock_discovery_settings = [
+            "stock_discovery_enabled",
+            "stock_discovery_score_threshold",
+            "stock_discovery_max_per_month",
+            "stock_discovery_require_manual_review",
+            "stock_discovery_geographies",
+            "stock_discovery_exchanges",
+            "stock_discovery_min_volume",
+            "stock_discovery_fetch_limit",
+        ]
+
+        for old_key in stock_discovery_settings:
+            new_key = old_key.replace("stock_discovery_", "security_discovery_")
+            await db.execute(
+                "UPDATE settings SET key = ? WHERE key = ?", (new_key, old_key)
+            )
+
+        # Record migration
+        now = datetime.now().isoformat()
+        await db.execute(
+            """
+            INSERT INTO schema_version (version, applied_at, description)
+            VALUES (?, ?, ?)
+            """,
+            (
+                11,
+                now,
+                "Renamed settings: min_stock_score → min_security_score, stock_discovery_* → security_discovery_*",
+            ),
+        )
+
+        await db.commit()
+        logger.info(
+            "Config database migrated to schema version 11 (renamed security settings to security)"
+        )
+
 
 # =============================================================================
 # LEDGER.DB - Immutable audit trail (append-only)
@@ -738,7 +788,7 @@ CREATE INDEX IF NOT EXISTS idx_cash_flows_type ON cash_flows(transaction_type);
 -- Dividend history with DRIP tracking
 -- Tracks dividend payments and whether they were reinvested.
 -- pending_bonus: If dividend couldn't be reinvested (too small), store a bonus
--- that the optimizer will apply to that stock's expected return.
+-- that the optimizer will apply to that security's expected return.
 CREATE TABLE IF NOT EXISTS dividend_history (
     id INTEGER PRIMARY KEY,
     symbol TEXT NOT NULL,
@@ -851,7 +901,7 @@ CREATE TABLE IF NOT EXISTS positions (
 
 -- Note: idx_positions_isin is created in migration or init_state_schema for new databases
 
--- Stock scores (cached calculations)
+-- Security scores (cached calculations)
 CREATE TABLE IF NOT EXISTS scores (
     symbol TEXT PRIMARY KEY,
 
@@ -1094,7 +1144,7 @@ async def init_cache_schema(db):
 # =============================================================================
 
 CALCULATIONS_SCHEMA = """
--- Pre-computed raw metrics for all stocks
+-- Pre-computed raw metrics for all securities
 CREATE TABLE IF NOT EXISTS calculated_metrics (
     symbol TEXT NOT NULL,
     isin TEXT,                      -- ISIN for broker-agnostic identification
@@ -1111,7 +1161,7 @@ CREATE INDEX IF NOT EXISTS idx_calculations_metric ON calculated_metrics(metric)
 CREATE INDEX IF NOT EXISTS idx_calculations_expires ON calculated_metrics(expires_at);
 -- Note: idx_calculations_isin is created in migration or init_calculations_schema
 
--- Stock scores (cached composite calculations)
+-- Security scores (cached composite calculations)
 -- Moved from state.db as these are calculated values, not state
 CREATE TABLE IF NOT EXISTS scores (
     symbol TEXT PRIMARY KEY,

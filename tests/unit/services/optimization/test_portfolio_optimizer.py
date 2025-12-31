@@ -201,11 +201,11 @@ class TestPortfolioOptimizerErrorHandling:
 
     @pytest.mark.asyncio
     async def test_optimize_returns_error_when_no_stocks(self):
-        """Test that optimization fails gracefully with no stocks."""
+        """Test that optimization fails gracefully with no securities."""
         optimizer = create_optimizer()
 
         result = await optimizer.optimize(
-            stocks=[],
+            securities=[],
             positions={},
             portfolio_value=10000,
             current_prices={},
@@ -213,7 +213,7 @@ class TestPortfolioOptimizerErrorHandling:
         )
 
         assert result.success is False
-        assert result.error == "No active stocks"
+        assert result.error == "No active securities"
         assert result.target_weights == {}
 
     @pytest.mark.asyncio
@@ -224,10 +224,10 @@ class TestPortfolioOptimizerErrorHandling:
 
         optimizer = PortfolioOptimizer(expected_returns_calc=mock_returns_calc)
 
-        stocks = [MagicMock(spec=Security, symbol="AAPL", active=True)]
+        securities = [MagicMock(spec=Security, symbol="AAPL", active=True)]
 
         result = await optimizer.optimize(
-            stocks=stocks,
+            securities=securities,
             positions={},
             portfolio_value=10000,
             current_prices={"AAPL": 150.0},
@@ -251,10 +251,10 @@ class TestPortfolioOptimizerErrorHandling:
             risk_model_builder=mock_risk_builder,
         )
 
-        stocks = [MagicMock(spec=Security, symbol="AAPL", active=True)]
+        securities = [MagicMock(spec=Security, symbol="AAPL", active=True)]
 
         result = await optimizer.optimize(
-            stocks=stocks,
+            securities=securities,
             positions={},
             portfolio_value=10000,
             current_prices={"AAPL": 150.0},
@@ -347,8 +347,8 @@ class TestPortfolioOptimizerIntegration:
             constraints_manager=mock_constraints,
         )
 
-        # Create test stocks
-        stocks = [
+        # Create test securities
+        securities = [
             MagicMock(spec=Security, symbol="AAPL", active=True),
             MagicMock(spec=Security, symbol="GOOGL", active=True),
             MagicMock(spec=Security, symbol="MSFT", active=True),
@@ -356,7 +356,7 @@ class TestPortfolioOptimizerIntegration:
 
         # Use a low target return to ensure feasibility with random data
         result = await optimizer.optimize(
-            stocks=stocks,
+            securities=securities,
             positions={},
             portfolio_value=100000,
             current_prices={"AAPL": 150, "GOOGL": 2800, "MSFT": 330},
@@ -411,7 +411,7 @@ class TestPortfolioOptimizerIntegration:
             constraints_manager=mock_constraints,
         )
 
-        stocks = [
+        securities = [
             MagicMock(spec=Security, symbol="AAPL", active=True),
             MagicMock(spec=Security, symbol="GOOGL", active=True),
         ]
@@ -421,7 +421,7 @@ class TestPortfolioOptimizerIntegration:
 
         # Use a low target return to ensure feasibility with random data
         result = await optimizer.optimize(
-            stocks=stocks,
+            securities=securities,
             positions={},
             portfolio_value=portfolio_value,
             current_prices={"AAPL": 150, "GOOGL": 2800},

@@ -64,15 +64,15 @@
         </div>
       </div>
 
-      <!-- Stock Universe Tab -->
-      <div x-show="$store.app.activeTab === 'stock-universe'"
+      <!-- Security Universe Tab -->
+      <div x-show="$store.app.activeTab === 'security-universe'"
            x-transition:enter="transition ease-out duration-200"
            x-transition:enter-start="opacity-0"
            x-transition:enter-end="opacity-100"
            x-transition:leave="transition ease-in duration-150"
            x-transition:leave-start="opacity-100"
            x-transition:leave-end="opacity-0">
-        <stock-table></stock-table>
+        <security-table></security-table>
       </div>
 
       <!-- Recent Trades Tab -->
@@ -103,9 +103,9 @@
   </div>
 
   <!-- Modals -->
-  <add-stock-modal></add-stock-modal>
-  <edit-stock-modal></edit-stock-modal>
-  <stock-chart-modal></stock-chart-modal>
+  <add-security-modal></add-security-modal>
+  <edit-security-modal></edit-security-modal>
+  <security-chart-modal></security-chart-modal>
   <settings-modal></settings-modal>
   <universe-management-modal></universe-management-modal>
 
@@ -121,13 +121,13 @@
   <script src="/static/components/country-radar-card.js"></script>
   <script src="/static/components/industry-radar-card.js"></script>
   <script src="/static/components/quick-actions.js"></script>
-  <script src="/static/components/stock-sparkline.js"></script>
-  <script src="/static/components/stock-table.js"></script>
+  <script src="/static/components/security-sparkline.js"></script>
+  <script src="/static/components/security-table.js"></script>
   <script src="/static/components/trades-table.js"></script>
   <script src="/static/components/next-actions-card.js"></script>
-  <script src="/static/components/add-stock-modal.js"></script>
-  <script src="/static/components/edit-stock-modal.js"></script>
-  <script src="/static/components/stock-chart.js"></script>
+  <script src="/static/components/add-security-modal.js"></script>
+  <script src="/static/components/edit-security-modal.js"></script>
+  <script src="/static/components/security-chart.js"></script>
   <script src="/static/components/settings-modal.js"></script>
   <script src="/static/components/universe-management-modal.js"></script>
   <script src="/static/components/job-footer.js"></script>

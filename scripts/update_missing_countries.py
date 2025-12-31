@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Update missing country data for stocks based on exchange names."""
+"""Update missing country data for securities based on exchange names."""
 
 import asyncio
 import sys
@@ -23,7 +23,7 @@ async def update_missing_countries():
         "Stuttgart": "Germany",
     }
 
-    # Get stocks missing country but with exchange name
+    # Get securities missing country but with exchange name
     cursor = await db_manager.config.execute(
         """SELECT symbol, fullExchangeName FROM securities
         WHERE active = 1 AND country IS NULL AND fullExchangeName IS NOT NULL
@@ -43,7 +43,7 @@ async def update_missing_countries():
         else:
             print(f"Warning: {symbol} has exchange '{exchange}' not in mapping")
 
-    print(f"\nUpdated {updated} stocks with country data")
+    print(f"\nUpdated {updated} securities with country data")
     return updated
 
 

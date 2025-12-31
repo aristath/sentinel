@@ -17,14 +17,14 @@ router = APIRouter()
 
 # Default values for all configurable settings
 # NOTE: Score weights (score_weight_*, sell_weight_*) have been removed.
-# The optimizer now handles portfolio-level allocation. Per-stock scoring
-# uses fixed weights defined in app/domain/scoring/stock_scorer.py and sell.py.
+# The optimizer now handles portfolio-level allocation. Per-security scoring
+# uses fixed weights defined in app/domain/scoring/security_scorer.py and sell.py.
 SETTING_DEFAULTS = {
     # Core trading constraints
     "min_hold_days": 90,  # Minimum days before selling
-    "sell_cooldown_days": 180,  # Days between sells of same stock
+    "sell_cooldown_days": 180,  # Days between sells of same security
     "max_loss_threshold": -0.20,  # Don't sell if loss exceeds this (as decimal)
-    "min_stock_score": 0.5,  # Minimum score for stock to be recommended (0-1)
+    "min_security_score": 0.5,  # Minimum score for security to be recommended (0-1)
     "target_annual_return": 0.11,  # Optimal CAGR for scoring (11%)
     "market_avg_pe": 22.0,  # Reference P/E for valuation
     # Trading mode
@@ -79,10 +79,10 @@ SETTING_DEFAULTS = {
     "job_auto_deploy_minutes": 5.0,  # Auto-deploy check interval (minutes)
     # Universe Pruning settings
     "universe_pruning_enabled": 1.0,  # 1.0 = enabled, 0.0 = disabled
-    "universe_pruning_score_threshold": 0.50,  # Minimum average score to keep stock (0-1)
+    "universe_pruning_score_threshold": 0.50,  # Minimum average score to keep security (0-1)
     "universe_pruning_months": 3.0,  # Number of months to look back for scores
     "universe_pruning_min_samples": 2.0,  # Minimum number of score samples required
-    "universe_pruning_check_delisted": 1.0,  # 1.0 = check for delisted stocks, 0.0 = skip
+    "universe_pruning_check_delisted": 1.0,  # 1.0 = check for delisted securities, 0.0 = skip
     # Event-Driven Rebalancing settings
     "event_driven_rebalancing_enabled": 1.0,  # 1.0 = enabled, 0.0 = disabled
     "rebalance_position_drift_threshold": 0.05,  # Position drift threshold (0.05 = 5%)
@@ -92,15 +92,15 @@ SETTING_DEFAULTS = {
     "min_time_between_trades_minutes": 60.0,  # Minimum minutes between any trades
     "max_trades_per_day": 4.0,  # Maximum trades per calendar day
     "max_trades_per_week": 10.0,  # Maximum trades per rolling 7-day window
-    # Stock Discovery settings
-    "stock_discovery_enabled": 1.0,  # 1.0 = enabled, 0.0 = disabled
-    "stock_discovery_score_threshold": 0.75,  # Minimum score to add stock (0-1)
-    "stock_discovery_max_per_month": 2.0,  # Maximum stocks to add per month
-    "stock_discovery_require_manual_review": 0.0,  # 1.0 = require review, 0.0 = auto-add
-    "stock_discovery_geographies": "EU,US,ASIA",  # Comma-separated geography list
-    "stock_discovery_exchanges": "usa,europe",  # Comma-separated exchange list
-    "stock_discovery_min_volume": 1000000.0,  # Minimum daily volume for liquidity
-    "stock_discovery_fetch_limit": 50.0,  # Maximum candidates to fetch from API
+    # Security Discovery settings
+    "security_discovery_enabled": 1.0,  # 1.0 = enabled, 0.0 = disabled
+    "security_discovery_score_threshold": 0.75,  # Minimum score to add security (0-1)
+    "security_discovery_max_per_month": 2.0,  # Maximum securities to add per month
+    "security_discovery_require_manual_review": 0.0,  # 1.0 = require review, 0.0 = auto-add
+    "security_discovery_geographies": "EU,US,ASIA",  # Comma-separated geography list
+    "security_discovery_exchanges": "usa,europe",  # Comma-separated exchange list
+    "security_discovery_min_volume": 1000000.0,  # Minimum daily volume for liquidity
+    "security_discovery_fetch_limit": 50.0,  # Maximum candidates to fetch from API
     # Market Regime Detection settings
     "market_regime_detection_enabled": 1.0,  # 1.0 = enabled, 0.0 = disabled
     "market_regime_bull_cash_reserve": 0.02,  # Cash reserve percentage in bull market (2%)
@@ -204,8 +204,8 @@ async def get_all_settings(settings_repo: SettingsRepositoryDep):
     # String settings that should be returned as strings
     string_settings = {
         "trading_mode",
-        "stock_discovery_geographies",
-        "stock_discovery_exchanges",
+        "security_discovery_geographies",
+        "security_discovery_exchanges",
         "risk_profile",
     }
 
@@ -244,7 +244,7 @@ async def update_setting_value(
             )
         await set_trading_mode(mode, settings_repo)
         return {key: mode}
-    elif key in ("stock_discovery_geographies", "stock_discovery_exchanges"):
+    elif key in ("security_discovery_geographies", "security_discovery_exchanges"):
         # Store as string for comma-separated lists
         await settings_repo.set(key, str(data.value))
         cache.invalidate("settings:all")
@@ -477,7 +477,7 @@ async def update_setting_value(
     # Invalidate recommendation caches when recommendation-affecting settings change
     # Note: optimizer settings (optimizer_blend, optimizer_target_return) also affect recommendations
     recommendation_settings = {
-        "min_stock_score",
+        "min_security_score",
         "min_hold_days",
         "sell_cooldown_days",
         "max_loss_threshold",

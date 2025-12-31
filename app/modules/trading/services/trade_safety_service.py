@@ -43,7 +43,7 @@ class TradeSafetyService:
         Checks both broker API and local database for recent orders.
 
         Args:
-            symbol: Stock symbol to check
+            symbol: Security symbol to check
             side: Trade side (BUY or SELL)
             client: Tradernet client instance
             hours: Hours to look back for recent SELL orders (default: 2)
@@ -75,7 +75,7 @@ class TradeSafetyService:
         Check if a symbol is in cooldown period.
 
         Args:
-            symbol: Stock symbol to check
+            symbol: Security symbol to check
             side: Trade side (BUY or SELL)
             days: Cooldown period in days (default: BUY_COOLDOWN_DAYS)
 
@@ -108,7 +108,7 @@ class TradeSafetyService:
         Uses the last transaction date (buy or sell) to calculate hold time.
 
         Args:
-            symbol: Stock symbol to check
+            symbol: Security symbol to check
             min_hold_days: Minimum hold period in days (default: DEFAULT_MIN_HOLD_DAYS)
 
         Returns:
@@ -151,7 +151,7 @@ class TradeSafetyService:
         Validate that a SELL order has sufficient position.
 
         Args:
-            symbol: Stock symbol
+            symbol: Security symbol
             quantity: Quantity to sell
 
         Returns:
@@ -189,7 +189,7 @@ class TradeSafetyService:
         Perform all safety checks for a trade.
 
         Args:
-            symbol: Stock symbol
+            symbol: Security symbol
             side: Trade side (BUY or SELL)
             quantity: Trade quantity
             client: Tradernet client instance
@@ -245,26 +245,28 @@ class TradeSafetyService:
 
     async def check_market_hours(self, symbol: str, side: str) -> Optional[str]:
         """
-        Check if the stock's market is currently open (if required for this trade).
+        Check if the security's market is currently open (if required for this trade).
 
         Args:
-            symbol: Stock symbol to check
+            symbol: Security symbol to check
             side: Trade side (BUY or SELL)
 
         Returns:
             Error message if market is closed, None if open, check not required, or check failed
         """
         try:
-            stock = await self._stock_repo.get_by_symbol(symbol)
-            if not stock:
+            security = await self._stock_repo.get_by_symbol(symbol)
+            if not security:
                 logger.warning(
-                    f"Stock {symbol} not found, cannot check market hours. Allowing trade."
+                    f"Security {symbol} not found, cannot check market hours. Allowing trade."
                 )
                 return None
 
-            exchange = getattr(stock, "fullExchangeName", None)
+            exchange = getattr(security, "fullExchangeName", None)
             if not exchange:
-                logger.warning(f"Stock {symbol} has no exchange set. Allowing trade.")
+                logger.warning(
+                    f"Security {symbol} has no exchange set. Allowing trade."
+                )
                 return None
 
             # Check if market hours validation is required for this trade

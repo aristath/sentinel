@@ -85,7 +85,7 @@ class RebalancingService:
         tradernet_client: TradernetClient,
         exchange_rate_service: ExchangeRateService,
     ):
-        self._stock_repo = security_repo
+        self._security_repo = security_repo
         self._position_repo = position_repo
         self._allocation_repo = allocation_repo
         self._portfolio_repo = portfolio_repo
@@ -258,9 +258,9 @@ class RebalancingService:
         )
         beam_width = await self._settings_repo.get_int("beam_width", 10)
 
-        # Get positions and stocks (needed for portfolio value calculation)
+        # Get positions and securities (needed for portfolio value calculation)
         positions = await self._position_repo.get_all()
-        stocks = await self._stock_repo.get_all_active()
+        securities = await self._security_repo.get_all_active()
 
         # Get current cash balance
         available_cash = (
@@ -400,7 +400,7 @@ class RebalancingService:
 
         # Get current prices for portfolio value calculation
         yahoo_symbols: Dict[str, Optional[str]] = {
-            s.symbol: s.yahoo_symbol for s in stocks if s.yahoo_symbol
+            s.symbol: s.yahoo_symbol for s in securities if s.yahoo_symbol
         }
         current_prices = yahoo.get_batch_quotes(yahoo_symbols)
 
@@ -460,7 +460,7 @@ class RebalancingService:
         # Build portfolio context
         portfolio_context = await build_portfolio_context(
             position_repo=self._position_repo,
-            security_repo=self._stock_repo,
+            security_repo=self._security_repo,
             allocation_repo=self._allocation_repo,
             db_manager=self._db_manager,
         )
@@ -488,7 +488,7 @@ class RebalancingService:
         grouping_repo = GroupingRepository()
         optimizer = PortfolioOptimizer(grouping_repo=grouping_repo)
         optimization_result = await optimizer.optimize(
-            stocks=stocks,
+            securities=securities,
             positions=positions_dict,
             portfolio_value=portfolio_value,
             current_prices=current_prices,
@@ -548,7 +548,7 @@ class RebalancingService:
                 else {}
             )
             portfolio_hash = generate_portfolio_hash(
-                position_dicts, stocks, cash_balances_for_hash, pending_orders
+                position_dicts, securities, cash_balances_for_hash, pending_orders
             )
             best_result = await planner_repo.get_best_result(portfolio_hash)
 
@@ -657,7 +657,7 @@ class RebalancingService:
             plan = await create_holistic_plan(
                 portfolio_context=portfolio_context,
                 available_cash=planner_available_cash,
-                stocks=stocks,
+                securities=securities,
                 positions=positions,
                 exchange_rate_service=self._exchange_rate_service,
                 target_weights=target_weights,
@@ -692,10 +692,10 @@ class RebalancingService:
             score_before = current_score_value
 
             # Simulate this single step
-            stocks_by_symbol = {s.symbol: s for s in stocks}
-            stock = stocks_by_symbol.get(step.symbol)
-            country = stock.country if stock else None
-            industry = stock.industry if stock else None
+            stocks_by_symbol = {s.symbol: s for s in securities}
+            security = stocks_by_symbol.get(step.symbol)
+            country = security.country if security else None
+            industry = security.industry if security else None
 
             new_positions = dict(current_context.positions)
             new_geographies = dict(current_context.security_countries or {})

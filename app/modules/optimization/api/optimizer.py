@@ -88,16 +88,16 @@ async def run_optimization() -> Dict[str, Any]:
     position_repo = PositionRepository()
 
     # Get current portfolio data
-    stocks = await security_repo.get_all()
-    if not stocks:
-        raise HTTPException(status_code=400, detail="No stocks in universe")
+    securities = await security_repo.get_all()
+    if not securities:
+        raise HTTPException(status_code=400, detail="No securities in universe")
 
     positions_list = await position_repo.get_all()
     positions = {p.symbol: p for p in positions_list}
 
     # Get current prices
     yahoo_symbols: dict[str, str | None] = {
-        s.symbol: s.yahoo_symbol for s in stocks if s.yahoo_symbol
+        s.symbol: s.yahoo_symbol for s in securities if s.yahoo_symbol
     }
     current_prices = yahoo.get_batch_quotes(yahoo_symbols)
 
@@ -135,7 +135,7 @@ async def run_optimization() -> Dict[str, Any]:
     grouping_repo = GroupingRepository()
     optimizer = PortfolioOptimizer(grouping_repo=grouping_repo)
     result = await optimizer.optimize(
-        stocks=stocks,
+        securities=securities,
         positions=positions,
         portfolio_value=portfolio_value,
         current_prices=current_prices,

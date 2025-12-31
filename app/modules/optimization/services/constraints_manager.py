@@ -4,7 +4,7 @@ Constraints Manager for Portfolio Optimization.
 Translates business rules into PyPortfolioOpt constraints:
 - allow_buy/allow_sell flags
 - min_lot constraints (can't partially sell if at min lot)
-- Concentration limits (20% max per stock)
+- Concentration limits (20% max per security)
 - Country/Industry sector constraints (grouped into territories/industry groups)
 """
 
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class WeightBounds:
-    """Weight bounds for a single stock."""
+    """Weight bounds for a single security."""
 
     symbol: str
     lower: float  # Minimum weight (0.0 to 1.0)
@@ -62,16 +62,16 @@ class ConstraintsManager:
 
     def calculate_weight_bounds(
         self,
-        stocks: List[Security],
+        securities: List[Security],
         positions: Dict[str, Position],
         portfolio_value: float,
         current_prices: Dict[str, float],
     ) -> Dict[str, Tuple[float, float]]:
         """
-        Calculate weight bounds for each stock.
+        Calculate weight bounds for each security.
 
         Args:
-            stocks: List of Stock objects
+            securities: List of Security objects
             positions: Dict mapping symbol to Position
             portfolio_value: Total portfolio value in EUR
             current_prices: Dict mapping symbol to current price
@@ -82,12 +82,12 @@ class ConstraintsManager:
         bounds = {}
 
         logger.debug(
-            f"Calculating weight bounds for {len(stocks)} stocks, "
+            f"Calculating weight bounds for {len(securities)} securities, "
             f"portfolio_value={portfolio_value:.2f} EUR"
         )
 
-        for stock in stocks:
-            symbol = stock.symbol
+        for security in securities:
+            symbol = security.symbol
             position = positions.get(symbol)
             current_price = current_prices.get(symbol, 0)
 
@@ -110,20 +110,20 @@ class ConstraintsManager:
             constraint_steps.append(f"initial: lower={lower:.2%}, upper={upper:.2%}")
 
             # Apply user-defined portfolio targets (convert percentage to fraction)
-            if stock.min_portfolio_target is not None:
-                lower = stock.min_portfolio_target / 100.0
+            if security.min_portfolio_target is not None:
+                lower = security.min_portfolio_target / 100.0
                 constraint_steps.append(
-                    f"min_portfolio_target={stock.min_portfolio_target}% → lower={lower:.2%}"
+                    f"min_portfolio_target={security.min_portfolio_target}% → lower={lower:.2%}"
                 )
 
-            if stock.max_portfolio_target is not None:
-                upper = stock.max_portfolio_target / 100.0
+            if security.max_portfolio_target is not None:
+                upper = security.max_portfolio_target / 100.0
                 constraint_steps.append(
-                    f"max_portfolio_target={stock.max_portfolio_target}% → upper={upper:.2%}"
+                    f"max_portfolio_target={security.max_portfolio_target}% → upper={upper:.2%}"
                 )
 
             # Check allow_buy constraint
-            if not stock.allow_buy:
+            if not security.allow_buy:
                 # Can't buy more, so upper bound = current weight
                 old_upper = upper
                 upper = min(upper, current_weight)
@@ -132,7 +132,7 @@ class ConstraintsManager:
                 )
 
             # Check allow_sell constraint
-            if not stock.allow_sell:
+            if not security.allow_sell:
                 # Can't sell, so lower bound = current weight
                 old_lower = lower
                 lower = max(lower, current_weight)
@@ -141,19 +141,19 @@ class ConstraintsManager:
                 )
 
             # Check min_lot constraint
-            if position and stock.min_lot > 0 and current_price > 0:
-                if position.quantity <= stock.min_lot:
+            if position and security.min_lot > 0 and current_price > 0:
+                if position.quantity <= security.min_lot:
                     # Can't partially sell - it's all or nothing
                     # Set lower bound to current weight (can't reduce)
                     old_lower = lower
                     lower = max(lower, current_weight)
                     constraint_steps.append(
-                        f"at min_lot (qty={position.quantity} <= {stock.min_lot}) → "
+                        f"at min_lot (qty={position.quantity} <= {security.min_lot}) → "
                         f"lower=max({old_lower:.2%}, {current_weight:.2%})={lower:.2%}"
                     )
                 else:
                     # Can sell down to min_lot worth
-                    min_lot_value = stock.min_lot * current_price
+                    min_lot_value = security.min_lot * current_price
                     min_weight = (
                         min_lot_value / portfolio_value if portfolio_value > 0 else 0
                     )
@@ -164,7 +164,7 @@ class ConstraintsManager:
                             f"{symbol}: min_lot constraint would create infeasible bounds "
                             f"(min_weight={min_weight:.2%} > upper={upper:.2%}). "
                             f"Ignoring min_lot constraint. Consider reducing min_lot "
-                            f"from {stock.min_lot} to allow rebalancing."
+                            f"from {security.min_lot} to allow rebalancing."
                         )
                         constraint_steps.append(
                             f"min_lot constraint ignored (min_weight={min_weight:.2%} > "
@@ -187,10 +187,10 @@ class ConstraintsManager:
                     f"current_weight={current_weight:.2%}, "
                     f"portfolio_value={portfolio_value:.2f} EUR, "
                     f"position_value={position.market_value_eur if position and position.market_value_eur else 0:.2f} EUR, "
-                    f"min_portfolio_target={stock.min_portfolio_target}, "
-                    f"max_portfolio_target={stock.max_portfolio_target}, "
-                    f"allow_sell={stock.allow_sell}, allow_buy={stock.allow_buy}, "
-                    f"min_lot={stock.min_lot}, position_qty={position.quantity if position else 0}, "
+                    f"min_portfolio_target={security.min_portfolio_target}, "
+                    f"max_portfolio_target={security.max_portfolio_target}, "
+                    f"allow_sell={security.allow_sell}, allow_buy={security.allow_buy}, "
+                    f"min_lot={security.min_lot}, position_qty={position.quantity if position else 0}, "
                     f"current_price={current_price:.2f}. "
                     f"Constraint steps: {'; '.join(constraint_steps)}. "
                     f"Using current weight {current_weight:.2%} for both bounds."
@@ -254,7 +254,7 @@ class ConstraintsManager:
 
     async def build_sector_constraints(
         self,
-        stocks: List[Security],
+        securities: List[Security],
         country_targets: Dict[str, float],
         ind_targets: Dict[str, float],
     ) -> Tuple[List[SectorConstraint], List[SectorConstraint]]:
@@ -262,10 +262,10 @@ class ConstraintsManager:
         Build country and industry sector constraints.
 
         Accepts group targets directly (no aggregation needed).
-        Maps stocks to groups and creates constraints for groups with targets.
+        Maps securities to groups and creates constraints for groups with targets.
 
         Args:
-            stocks: List of Stock objects
+            securities: List of Security objects
             country_targets: Dict mapping group name to target weight (already at group level)
             ind_targets: Dict mapping group name to target weight (already at group level)
 
@@ -275,41 +275,41 @@ class ConstraintsManager:
         # Get country to group mapping (custom from DB or hardcoded fallback)
         country_to_group = await self._get_country_group_mapping()
 
-        # Group stocks by territory/group instead of individual countries
+        # Group securities by territory/group instead of individual countries
         territory_groups: Dict[str, List[str]] = {}
 
-        for stock in stocks:
-            country = stock.country or "OTHER"
+        for security in securities:
+            country = security.country or "OTHER"
             # Map country to group
             territory = country_to_group.get(country, "OTHER")
 
             if territory not in territory_groups:
                 territory_groups[territory] = []
-            territory_groups[territory].append(stock.symbol)
+            territory_groups[territory].append(security.symbol)
 
         logger.info(
-            f"Grouped stocks into {len(territory_groups)} country groups: "
-            f"{', '.join(f'{t}={len(s)} stocks' for t, s in sorted(territory_groups.items()))}"
+            f"Grouped securities into {len(territory_groups)} country groups: "
+            f"{', '.join(f'{t}={len(s)} securities' for t, s in sorted(territory_groups.items()))}"
         )
 
         # Get industry to group mapping (custom from DB or hardcoded fallback)
         industry_to_group = await self._get_industry_group_mapping()
 
-        # Group stocks by industry group instead of individual industries
+        # Group securities by industry group instead of individual industries
         industry_group_groups: Dict[str, List[str]] = {}
 
-        for stock in stocks:
-            industry = stock.industry or "OTHER"
+        for security in securities:
+            industry = security.industry or "OTHER"
             # Map industry to group
             industry_group = industry_to_group.get(industry, "OTHER")
 
             if industry_group not in industry_group_groups:
                 industry_group_groups[industry_group] = []
-            industry_group_groups[industry_group].append(stock.symbol)
+            industry_group_groups[industry_group].append(security.symbol)
 
         logger.info(
-            f"Grouped stocks into {len(industry_group_groups)} industry groups: "
-            f"{', '.join(f'{g}={len(s)} stocks' for g, s in sorted(industry_group_groups.items()))}"
+            f"Grouped securities into {len(industry_group_groups)} industry groups: "
+            f"{', '.join(f'{g}={len(s)} securities' for g, s in sorted(industry_group_groups.items()))}"
         )
 
         # Use territory groups and industry group groups for constraints
@@ -434,7 +434,7 @@ class ConstraintsManager:
                     constraint.lower = constraint.lower * scale_factor
                     constraint.lower = min(constraint.lower, constraint.upper)
             # Scale down BOTH country and industry minimums proportionally if combined > 70%
-            # This leaves 30% slack for individual stock bounds and optimization flexibility
+            # This leaves 30% slack for individual security bounds and optimization flexibility
             # Scaling both proportionally maintains relative weights while ensuring feasibility
             elif total_min_sum > 0.70:
                 logger.warning(
@@ -483,7 +483,7 @@ class ConstraintsManager:
         Returns:
             Dict with constraint details
         """
-        # Count constrained stocks
+        # Count constrained securities
         locked = []  # lower == upper (can't change)
         buy_only = []  # lower == 0, upper < max (can only buy)
         sell_blocked = []  # lower > 0 (can't fully exit)

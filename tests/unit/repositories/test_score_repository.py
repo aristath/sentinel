@@ -1,6 +1,6 @@
 """Tests for score repository.
 
-These tests validate stock score storage and retrieval.
+These tests validate security score storage and retrieval.
 """
 
 from datetime import datetime
@@ -107,7 +107,7 @@ class TestScoreRepository:
 
     @pytest.mark.asyncio
     async def test_get_top(self, repo, mock_db, sample_row):
-        """Test getting top scored stocks."""
+        """Test getting top scored securities."""
         mock_db.fetchall.return_value = [sample_row]
 
         result = await repo.get_top(limit=5)

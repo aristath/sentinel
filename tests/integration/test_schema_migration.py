@@ -44,10 +44,10 @@ async def test_schema_migration_v5_to_v6_adds_portfolio_target_columns():
         conn.row_factory = aiosqlite.Row
         db = ConnectionWrapper(conn)
 
-        # Create stocks table with version 5 schema (without portfolio target columns)
+        # Create securities table with version 5 schema (without portfolio target columns)
         await db.execute(
             """
-            CREATE TABLE IF NOT EXISTS stocks (
+            CREATE TABLE IF NOT EXISTS securities (
                 symbol TEXT PRIMARY KEY,
                 yahoo_symbol TEXT,
                 name TEXT NOT NULL,
@@ -82,9 +82,9 @@ async def test_schema_migration_v5_to_v6_adds_portfolio_target_columns():
             (5, "2024-01-01T00:00:00", "Version 5 schema"),
         )
 
-        # Insert a test stock
+        # Insert a test security
         await db.execute(
-            """INSERT INTO stocks
+            """INSERT INTO securities
                (symbol, name, created_at, updated_at)
                VALUES (?, ?, ?, ?)""",
             ("AAPL", "Apple Inc.", "2024-01-01T00:00:00", "2024-01-01T00:00:00"),
@@ -96,7 +96,7 @@ async def test_schema_migration_v5_to_v6_adds_portfolio_target_columns():
         await init_config_schema(db)
 
         # Check that columns were added
-        cursor = await db.execute("PRAGMA table_info(stocks)")
+        cursor = await db.execute("PRAGMA table_info(securities)")
         columns = {row[1]: row[2] for row in await cursor.fetchall()}
 
         assert "min_portfolio_target" in columns
@@ -105,7 +105,7 @@ async def test_schema_migration_v5_to_v6_adds_portfolio_target_columns():
         assert columns["max_portfolio_target"] == "REAL"
 
         # Check that existing data is preserved
-        row = await db.fetchone("SELECT * FROM stocks WHERE symbol = ?", ("AAPL",))
+        row = await db.fetchone("SELECT * FROM securities WHERE symbol = ?", ("AAPL",))
         assert row is not None
         assert row["symbol"] == "AAPL"
         assert row["name"] == "Apple Inc."
@@ -128,8 +128,8 @@ async def test_new_installation_includes_portfolio_target_columns():
         # Run init on fresh database (version 0)
         await init_config_schema(db)
 
-        # Check that columns exist in stocks table
-        cursor = await db.execute("PRAGMA table_info(stocks)")
+        # Check that columns exist in securities table
+        cursor = await db.execute("PRAGMA table_info(securities)")
         columns = {row[1]: row[2] for row in await cursor.fetchall()}
 
         assert "min_portfolio_target" in columns
@@ -151,17 +151,17 @@ async def test_portfolio_target_columns_are_nullable():
 
         await init_config_schema(db)
 
-        # Insert stock without portfolio targets (should be NULL)
+        # Insert security without portfolio targets (should be NULL)
         await db.execute(
-            """INSERT INTO stocks
+            """INSERT INTO securities
                (symbol, name, created_at, updated_at)
                VALUES (?, ?, ?, ?)""",
             ("MSFT", "Microsoft Corp.", "2024-01-01T00:00:00", "2024-01-01T00:00:00"),
         )
 
-        # Insert stock with portfolio targets
+        # Insert security with portfolio targets
         await db.execute(
-            """INSERT INTO stocks
+            """INSERT INTO securities
                (symbol, name, min_portfolio_target, max_portfolio_target, created_at, updated_at)
                VALUES (?, ?, ?, ?, ?, ?)""",
             (
@@ -177,11 +177,13 @@ async def test_portfolio_target_columns_are_nullable():
         await db.commit()
 
         # Verify NULL values are allowed
-        row1 = await db.fetchone("SELECT * FROM stocks WHERE symbol = ?", ("MSFT",))
+        row1 = await db.fetchone("SELECT * FROM securities WHERE symbol = ?", ("MSFT",))
         assert row1["min_portfolio_target"] is None
         assert row1["max_portfolio_target"] is None
 
         # Verify non-NULL values work
-        row2 = await db.fetchone("SELECT * FROM stocks WHERE symbol = ?", ("GOOGL",))
+        row2 = await db.fetchone(
+            "SELECT * FROM securities WHERE symbol = ?", ("GOOGL",)
+        )
         assert row2["min_portfolio_target"] == 5.0
         assert row2["max_portfolio_target"] == 15.0

@@ -22,7 +22,7 @@ class TradeExecutedEvent(DomainEvent):
 
     @property
     def symbol(self) -> str:
-        """Stock symbol for the trade."""
+        """Security symbol for the trade."""
         return self.trade.symbol
 
     @property

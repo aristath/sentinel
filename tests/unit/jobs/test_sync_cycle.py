@@ -142,7 +142,7 @@ class TestStepSyncPrices:
 
     @pytest.mark.asyncio
     async def test_only_fetches_prices_for_open_markets(self):
-        """Test that prices are only fetched for stocks with open markets."""
+        """Test that prices are only fetched for securities with open markets."""
         from app.jobs.sync_cycle import _step_sync_prices
 
         stock_eu = MagicMock()
@@ -160,7 +160,7 @@ class TestStepSyncPrices:
         stock_asia.yahoo_symbol = "9988.HK"
         stock_asia.fullExchangeName = "XHKG"
 
-        stocks = [stock_eu, stock_us, stock_asia]
+        securities = [stock_eu, stock_us, stock_asia]
         fetched_symbols = []
 
         def mock_get_batch_quotes(symbol_map):
@@ -180,7 +180,7 @@ class TestStepSyncPrices:
                     "XHKG": [stock_asia],
                 },
             ),
-            patch("app.jobs.sync_cycle._get_active_stocks", return_value=stocks),
+            patch("app.jobs.sync_cycle._get_active_stocks", return_value=securities),
             patch(
                 "app.jobs.sync_cycle.yahoo.get_batch_quotes",
                 side_effect=mock_get_batch_quotes,
@@ -191,7 +191,7 @@ class TestStepSyncPrices:
         ):
             await _step_sync_prices()
 
-        # Only EU stocks should be fetched
+        # Only EU securities should be fetched
         assert "SAP.DE" in fetched_symbols
         assert "AAPL.US" not in fetched_symbols
         assert "9988.HK" not in fetched_symbols
@@ -239,7 +239,7 @@ class TestStepExecuteTrade:
         recommendation.symbol = "9988.HK"
         recommendation.side = "BUY"
 
-        # Mock stock with strict market hours exchange (ASIA)
+        # Mock security with strict market hours exchange (ASIA)
         mock_stock = MagicMock()
         mock_stock.fullExchangeName = "XHKG"
 
@@ -284,7 +284,7 @@ class TestStepExecuteTrade:
         recommendation.symbol = "AAPL.US"
         recommendation.side = "BUY"
 
-        # Mock stock with flexible hours exchange (US)
+        # Mock security with flexible hours exchange (US)
         mock_stock = MagicMock()
         mock_stock.fullExchangeName = "NYSE"
 
@@ -325,7 +325,7 @@ class TestStepExecuteTrade:
         recommendation.symbol = "AAPL.US"
         recommendation.side = "SELL"
 
-        # Mock stock with flexible hours exchange (US)
+        # Mock security with flexible hours exchange (US)
         mock_stock = MagicMock()
         mock_stock.fullExchangeName = "NYSE"
 
@@ -363,7 +363,7 @@ class TestStepExecuteTrade:
 
     @pytest.mark.asyncio
     async def test_executes_trade_when_market_open(self):
-        """Test that trade is executed when stock's market is open."""
+        """Test that trade is executed when security's market is open."""
         from app.jobs.sync_cycle import _step_execute_trade
 
         recommendation = MagicMock()
@@ -405,7 +405,7 @@ class TestStepGetRecommendation:
         from app.jobs.sync_cycle import _step_get_recommendation
 
         async def mock_get_recommendations():
-            # The planner should receive all stocks (not filtered by market)
+            # The planner should receive all securities (not filtered by market)
             return MagicMock(symbol="SAP.DE", side="BUY")
 
         with (

@@ -16,8 +16,8 @@ from app.domain.models import (
 
 @pytest.mark.asyncio
 async def test_stock_repository_create_and_get(security_repo):
-    """Test creating and retrieving a stock."""
-    stock = Security(
+    """Test creating and retrieving a security."""
+    security = Security(
         symbol="AAPL",
         yahoo_symbol="AAPL",
         name="Apple Inc.",
@@ -28,7 +28,7 @@ async def test_stock_repository_create_and_get(security_repo):
         active=True,
     )
 
-    await security_repo.create(stock)
+    await security_repo.create(security)
 
     retrieved = await security_repo.get_by_symbol("AAPL")
     assert retrieved is not None
@@ -38,7 +38,7 @@ async def test_stock_repository_create_and_get(security_repo):
 
 @pytest.mark.asyncio
 async def test_stock_repository_get_all_active(security_repo):
-    """Test getting all active stocks."""
+    """Test getting all active securities."""
     stock1 = Security(
         symbol="AAPL",
         yahoo_symbol="AAPL",
@@ -158,8 +158,8 @@ async def test_score_repository_upsert(score_repo):
 @pytest.mark.asyncio
 async def test_trade_repository_create(security_repo, trade_repo):
     """Test creating a trade."""
-    # Create stock first (required for trade history JOIN)
-    stock = Security(
+    # Create security first (required for trade history JOIN)
+    security = Security(
         symbol="AAPL",
         yahoo_symbol="AAPL",
         name="Apple Inc.",
@@ -169,7 +169,7 @@ async def test_trade_repository_create(security_repo, trade_repo):
         min_lot=1,
         active=True,
     )
-    await security_repo.create(stock)
+    await security_repo.create(security)
 
     trade = Trade(
         symbol="AAPL",

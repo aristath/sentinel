@@ -49,10 +49,10 @@ def import_trades(conn: sqlite3.Connection, data: dict, dry_run: bool = False) -
         order_id = trade.get("id")
         instr_type = trade.get("instr_type")
 
-        # Skip non-stock instruments (options, forex conversions)
-        # instr_type 1 = stocks, 6 = forex, 4 = options, 16 = option exercise
+        # Skip non-security instruments (options, forex conversions)
+        # instr_type 1 = securities, 6 = forex, 4 = options, 16 = option exercise
         if instr_type not in [1]:
-            print(f"  Skipping non-stock: {symbol} (type {instr_type})")
+            print(f"  Skipping non-security: {symbol} (type {instr_type})")
             continue
 
         # Skip if missing required fields
@@ -73,7 +73,7 @@ def import_trades(conn: sqlite3.Connection, data: dict, dry_run: bool = False) -
             skipped += 1
             continue
 
-        # Ensure stock exists
+        # Ensure security exists
         ensure_stock_exists(conn, symbol, trade, dry_run)
 
         if not dry_run:
@@ -183,14 +183,14 @@ def import_cash_flows(
 def ensure_stock_exists(
     conn: sqlite3.Connection, symbol: str, trade: dict, dry_run: bool = False
 ) -> None:
-    """Ensure a stock exists in the stocks table, creating if needed."""
+    """Ensure a security exists in the securities table, creating if needed."""
     cursor = conn.cursor()
     cursor.execute("SELECT symbol FROM securities WHERE symbol = ?", (symbol,))
 
     if cursor.fetchone():
-        return  # Stock already exists
+        return  # Security already exists
 
-    # Get stock info from trade data
+    # Get security info from trade data
     name = symbol  # Default to symbol if name not available
     geography = get_geography_from_symbol(symbol)
 
@@ -210,7 +210,7 @@ def ensure_stock_exists(
         )
         conn.commit()
 
-    print(f"  Created stock: {symbol} ({geography})")
+    print(f"  Created security: {symbol} ({geography})")
 
 
 def import_file(

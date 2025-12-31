@@ -43,7 +43,7 @@ def _parse_date_range(range_str: str) -> Optional[datetime]:
 async def _get_cached_security_prices(
     symbol: str, start_date: Optional[datetime], db_manager: DatabaseManager
 ) -> list[dict]:
-    """Get cached stock prices from per-symbol database."""
+    """Get cached security prices from per-symbol database."""
 
     if start_date:
         start_date_str = start_date.strftime("%Y-%m-%d")
@@ -73,7 +73,7 @@ async def _get_cached_security_prices(
 async def _store_security_prices(
     symbol: str, prices: list, source: str, db_manager: DatabaseManager
 ):
-    """Store stock prices in per-symbol database."""
+    """Store security prices in per-symbol database."""
     now = datetime.now().isoformat()
 
     for price_data in prices:
@@ -111,30 +111,30 @@ async def _store_security_prices(
 @router.get("/sparklines")
 async def get_all_stock_sparklines(db_manager: DatabaseManagerDep):
     """
-    Get 1-year sparkline data for all active stocks.
+    Get 1-year sparkline data for all active securities.
     Returns dict: {symbol: [{time, value}, ...]}
-    Per-stock caching for 12 hours - new stocks are fetched immediately.
+    Per-security caching for 12 hours - new securities are fetched immediately.
     """
     try:
         start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
 
-        # Get all active stocks
-        stocks = await db_manager.config.fetchall(
+        # Get all active securities
+        securities = await db_manager.config.fetchall(
             "SELECT symbol FROM securities WHERE active = 1"
         )
 
         result = {}
-        for stock in stocks:
-            symbol = stock["symbol"]
+        for security in securities:
+            symbol = security["symbol"]
             cache_key = f"sparkline:{symbol}"
 
-            # Check per-stock cache first
+            # Check per-security cache first
             cached = cache.get(cache_key)
             if cached is not None:
                 result[symbol] = cached
                 continue
 
-            # Fetch from database for this stock
+            # Fetch from database for this security
             history_db = await db_manager.history(symbol)
             prices = await history_db.fetchall(
                 """
@@ -152,7 +152,7 @@ async def get_all_stock_sparklines(db_manager: DatabaseManagerDep):
                     if row["date"] and row["close_price"]
                 ]
                 result[symbol] = sparkline_data
-                # Cache this stock's sparkline for 12 hours
+                # Cache this security's sparkline for 12 hours
                 cache.set(cache_key, sparkline_data, ttl_seconds=43200)
 
         return result
@@ -178,7 +178,7 @@ async def _should_fetch_data(
 async def _fetch_from_tradernet(
     symbol: str, fetch_start: datetime, fetch_end: datetime, db_manager: DatabaseManager
 ) -> list[dict]:
-    """Fetch stock prices from Tradernet API."""
+    """Fetch security prices from Tradernet API."""
     try:
         tradernet_client = await ensure_tradernet_connected(raise_on_error=False)
         if not tradernet_client:
@@ -204,7 +204,7 @@ async def _fetch_from_tradernet(
 async def _fetch_from_yahoo(
     symbol: str, range_str: str, db_manager: DatabaseManager
 ) -> list[dict]:
-    """Fetch stock prices from Yahoo Finance API."""
+    """Fetch security prices from Yahoo Finance API."""
     try:
         period_map = {
             "1M": "1mo",
@@ -259,8 +259,8 @@ def _combine_and_filter_data(
     return result
 
 
-@router.get("/stocks/{isin}")
-async def get_stock_chart(
+@router.get("/securities/{isin}")
+async def get_security_chart(
     isin: str,
     db_manager: DatabaseManagerDep,
     security_repo: SecurityRepositoryDep,
@@ -268,13 +268,13 @@ async def get_stock_chart(
     source: str = Query("tradernet", description="Data source: tradernet or yahoo"),
 ):
     """
-    Get stock price history for charting.
+    Get security price history for charting.
 
     Returns array of {time: 'YYYY-MM-DD', value: number} using close prices.
     Checks cache first, then fetches from API if missing.
 
     Args:
-        isin: Stock ISIN (e.g., US0378331005)
+        isin: Security ISIN (e.g., US0378331005)
     """
     try:
         # Validate ISIN format
@@ -282,13 +282,13 @@ async def get_stock_chart(
         if not is_isin(isin):
             raise HTTPException(status_code=400, detail="Invalid ISIN format")
 
-        # Look up stock by ISIN to get tradernet symbol
-        stock = await security_repo.get_by_isin(isin)
-        if not stock:
-            raise HTTPException(status_code=404, detail="Stock not found")
+        # Look up security by ISIN to get tradernet symbol
+        security = await security_repo.get_by_isin(isin)
+        if not security:
+            raise HTTPException(status_code=404, detail="Security not found")
 
         # Use the tradernet symbol for history database lookup
-        symbol = stock.symbol
+        symbol = security.symbol
         start_date = _parse_date_range(range)
         cached_data = await _get_cached_security_prices(symbol, start_date, db_manager)
 
@@ -313,7 +313,7 @@ async def get_stock_chart(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get stock chart data for ISIN {isin}: {e}")
+        logger.error(f"Failed to get security chart data for ISIN {isin}: {e}")
         raise HTTPException(
-            status_code=500, detail=f"Failed to get stock chart data: {str(e)}"
+            status_code=500, detail=f"Failed to get security chart data: {str(e)}"
         )

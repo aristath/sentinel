@@ -17,11 +17,11 @@ class TestCalculatePositionSize:
     """Tests for position size calculation.
 
     Position sizing uses risk parity (inverse volatility weighting):
-    - Volatility: Low vol stocks get larger positions (up to 2x), high vol get smaller (down to 0.5x)
-    - Score adjustment: ±10% based on stock score
+    - Volatility: Low vol securities get larger positions (up to 2x), high vol get smaller (down to 0.5x)
+    - Score adjustment: ±10% based on security score
 
     Bug this catches: Wrong position sizes could cause overexposure
-    to risky stocks or underinvestment in good opportunities.
+    to risky securities or underinvestment in good opportunities.
     """
 
     def _make_candidate(
@@ -33,7 +33,7 @@ class TestCalculatePositionSize:
         """Helper to create test candidates."""
         return SecurityPriority(
             symbol="TEST",
-            name="Test Stock",
+            name="Test Security",
             country="United States",
             industry="Consumer Electronics",
             security_score=score,
@@ -44,7 +44,7 @@ class TestCalculatePositionSize:
         )
 
     def test_high_score_gets_larger_position(self):
-        """High stock score should result in larger position (±20% adjustment).
+        """High security score should result in larger position (±20% adjustment).
 
         Bug caught: If score doesn't affect size, all trades would
         be the same size regardless of conviction.
@@ -68,7 +68,7 @@ class TestCalculatePositionSize:
         """High volatility should reduce position size (risk parity).
 
         Bug caught: If volatility isn't considered, system would
-        take same-sized bets on stable and volatile stocks.
+        take same-sized bets on stable and volatile securities.
         """
         base = 1000
         min_size = 100
@@ -114,7 +114,7 @@ class TestCalculatePositionSize:
         base = 1000
         min_size = 100
 
-        # Perfect stock: high score, very low vol (gets max vol weight)
+        # Perfect security: high score, very low vol (gets max vol weight)
         perfect = self._make_candidate(
             score=1.0, volatility=0.05
         )  # 5% vol -> max weight
@@ -133,7 +133,7 @@ class TestCalculatePositionSize:
         base = 1000
         min_size = 200
 
-        # Terrible stock: low score, very high vol
+        # Terrible security: low score, very high vol
         terrible = self._make_candidate(
             score=0.1, volatility=0.60
         )  # 60% vol -> min weight

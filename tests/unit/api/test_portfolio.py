@@ -18,7 +18,7 @@ def mock_position_repo():
 
 @pytest.fixture
 def mock_stock_repo():
-    """Mock stock repository."""
+    """Mock security repository."""
     return AsyncMock()
 
 
@@ -41,7 +41,7 @@ class TestGetPortfolio:
     async def test_returns_positions_with_stock_info(
         self, mock_position_repo, mock_stock_repo
     ):
-        """Test that positions are returned with stock information."""
+        """Test that positions are returned with security information."""
         from app.modules.portfolio.api.portfolio import get_portfolio
 
         # Setup mock position
@@ -57,7 +57,7 @@ class TestGetPortfolio:
 
         mock_position_repo.get_all.return_value = [mock_position]
 
-        # Setup mock stock
+        # Setup mock security
         mock_stock = MagicMock()
         mock_stock.name = "Apple Inc."
         mock_stock.industry = "Consumer Electronics"
@@ -77,7 +77,7 @@ class TestGetPortfolio:
     async def test_handles_position_without_stock(
         self, mock_position_repo, mock_stock_repo
     ):
-        """Test handling of position without stock info."""
+        """Test handling of position without security info."""
         from app.modules.portfolio.api.portfolio import get_portfolio
 
         mock_position = MagicMock()
@@ -214,7 +214,7 @@ class TestGetPortfolioSummary:
         mock_summary.total_value = 50000.0
         mock_summary.cash_balance = 2000.0
 
-        # Only US stocks
+        # Only US securities
         mock_us = MagicMock()
         mock_us.name = "US"
         mock_us.current_pct = 1.0

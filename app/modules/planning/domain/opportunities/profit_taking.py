@@ -22,7 +22,7 @@ async def identify_profit_taking_opportunities(
 
     Args:
         positions: Current positions
-        stocks_by_symbol: Dict mapping symbol to Stock
+        stocks_by_symbol: Dict mapping symbol to Security
         exchange_rate_service: Optional exchange rate service for currency conversion
 
     Returns:
@@ -31,8 +31,8 @@ async def identify_profit_taking_opportunities(
     opportunities = []
 
     for pos in positions:
-        stock = stocks_by_symbol.get(pos.symbol)
-        if not stock or not stock.allow_sell:
+        security = stocks_by_symbol.get(pos.symbol)
+        if not security or not security.allow_sell:
             continue
 
         position_value = pos.market_value_eur or 0
@@ -70,14 +70,14 @@ async def identify_profit_taking_opportunities(
 
             # Apply priority multiplier inversely: higher multiplier = lower sell priority
             base_priority = windfall_rec.get("windfall_score", 0.5) + 0.5
-            multiplier = stock.priority_multiplier if stock else 1.0
+            multiplier = security.priority_multiplier if security else 1.0
             final_priority = base_priority / multiplier
 
             opportunities.append(
                 ActionCandidate(
                     side=TradeSide.SELL,
                     symbol=pos.symbol,
-                    name=stock.name,
+                    name=security.name,
                     quantity=sell_qty,
                     price=pos.current_price or pos.avg_price,
                     value_eur=sell_value_eur,

@@ -11,7 +11,7 @@ class DividendRepository:
     """Repository for dividend history operations.
 
     Tracks dividend payments, DRIP (dividend reinvestment) status,
-    and pending bonuses for stocks where reinvestment wasn't possible.
+    and pending bonuses for securities where reinvestment wasn't possible.
     """
 
     def __init__(self):
@@ -189,9 +189,9 @@ class DividendRepository:
 
     async def clear_bonus(self, symbol: str) -> int:
         """
-        Clear pending bonuses for a symbol (after stock is bought).
+        Clear pending bonuses for a symbol (after security is bought).
 
-        Called when a stock is purchased to consume the pending dividend bonus.
+        Called when a security is purchased to consume the pending dividend bonus.
 
         Returns:
             Number of records updated.

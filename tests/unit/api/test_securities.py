@@ -1,4 +1,4 @@
-"""Tests for stocks API endpoints."""
+"""Tests for securities API endpoints."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -25,14 +25,14 @@ from app.modules.universe.api.securities import (
 
 
 class TestGetStocks:
-    """Tests for GET /stocks endpoint."""
+    """Tests for GET /securities endpoint."""
 
     @pytest.mark.asyncio
     async def test_get_stocks_returns_cached_data(self):
         """Test that cached data is returned when available."""
         cached_data = [{"symbol": "AAPL", "name": "Apple", "position_value": 100}]
 
-        with patch("app.api.stocks.cache") as mock_cache:
+        with patch("app.api.securities.cache") as mock_cache:
             mock_cache.get.return_value = cached_data
 
             mock_stock_repo = AsyncMock()
@@ -49,7 +49,7 @@ class TestGetStocks:
 
     @pytest.mark.asyncio
     async def test_get_stocks_fetches_when_no_cache(self):
-        """Test that stocks are fetched when cache is empty."""
+        """Test that securities are fetched when cache is empty."""
         mock_stock = {
             "symbol": "AAPL",
             "name": "Apple",
@@ -66,7 +66,7 @@ class TestGetStocks:
         mock_summary.country_allocations = []
         mock_summary.industry_allocations = []
 
-        with patch("app.api.stocks.cache") as mock_cache:
+        with patch("app.api.securities.cache") as mock_cache:
             mock_cache.get.return_value = None
 
             mock_stock_repo = AsyncMock()
@@ -87,11 +87,11 @@ class TestGetStocks:
 
 
 class TestGetStock:
-    """Tests for GET /stocks/{isin} endpoint."""
+    """Tests for GET /securities/{isin} endpoint."""
 
     @pytest.mark.asyncio
     async def test_get_stock_found(self):
-        """Test getting a stock that exists."""
+        """Test getting a security that exists."""
         mock_stock = MagicMock()
         mock_stock.symbol = "AAPL.US"
         mock_stock.isin = "US0378331005"
@@ -114,7 +114,7 @@ class TestGetStock:
         mock_score_repo = AsyncMock()
         mock_score_repo.get_by_symbol.return_value = None
 
-        with patch("app.api.stocks.is_isin", return_value=True):
+        with patch("app.api.securities.is_isin", return_value=True):
             result = await get_stock(
                 "US0378331005", mock_stock_repo, mock_position_repo, mock_score_repo
             )
@@ -126,14 +126,14 @@ class TestGetStock:
 
     @pytest.mark.asyncio
     async def test_get_stock_not_found(self):
-        """Test getting a stock that doesn't exist."""
+        """Test getting a security that doesn't exist."""
         mock_stock_repo = AsyncMock()
         mock_stock_repo.get_by_isin.return_value = None
 
         mock_position_repo = AsyncMock()
         mock_score_repo = AsyncMock()
 
-        with patch("app.api.stocks.is_isin", return_value=True):
+        with patch("app.api.securities.is_isin", return_value=True):
             with pytest.raises(HTTPException) as exc_info:
                 await get_stock(
                     "US9999999999", mock_stock_repo, mock_position_repo, mock_score_repo
@@ -144,7 +144,7 @@ class TestGetStock:
 
     @pytest.mark.asyncio
     async def test_get_stock_with_score(self):
-        """Test getting a stock with score data."""
+        """Test getting a security with score data."""
         mock_stock = MagicMock()
         mock_stock.symbol = "AAPL.US"
         mock_stock.isin = "US0378331005"
@@ -181,7 +181,7 @@ class TestGetStock:
         mock_score_repo = AsyncMock()
         mock_score_repo.get_by_symbol.return_value = mock_score
 
-        with patch("app.api.stocks.is_isin", return_value=True):
+        with patch("app.api.securities.is_isin", return_value=True):
             result = await get_stock(
                 "US0378331005", mock_stock_repo, mock_position_repo, mock_score_repo
             )
@@ -191,7 +191,7 @@ class TestGetStock:
 
     @pytest.mark.asyncio
     async def test_get_stock_with_position(self):
-        """Test getting a stock with position data."""
+        """Test getting a security with position data."""
         mock_stock = MagicMock()
         mock_stock.symbol = "AAPL.US"
         mock_stock.isin = "US0378331005"
@@ -222,7 +222,7 @@ class TestGetStock:
         mock_score_repo = AsyncMock()
         mock_score_repo.get_by_symbol.return_value = None
 
-        with patch("app.api.stocks.is_isin", return_value=True):
+        with patch("app.api.securities.is_isin", return_value=True):
             result = await get_stock(
                 "US0378331005", mock_stock_repo, mock_position_repo, mock_score_repo
             )
@@ -233,13 +233,13 @@ class TestGetStock:
 
 
 class TestCreateStock:
-    """Tests for POST /stocks endpoint."""
+    """Tests for POST /securities endpoint."""
 
     @pytest.mark.asyncio
     async def test_create_stock_already_exists(self):
-        """Test creating a stock that already exists."""
+        """Test creating a security that already exists."""
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_symbol.return_value = MagicMock()  # Stock exists
+        mock_stock_repo.get_by_symbol.return_value = MagicMock()  # Security exists
 
         mock_score_repo = AsyncMock()
         mock_scoring_service = AsyncMock()
@@ -260,9 +260,9 @@ class TestCreateStock:
 
     @pytest.mark.asyncio
     async def test_create_stock_with_industry(self):
-        """Test creating a stock with industry provided."""
+        """Test creating a security with industry provided."""
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_symbol.return_value = None  # Stock doesn't exist
+        mock_stock_repo.get_by_symbol.return_value = None  # Security doesn't exist
 
         mock_score_repo = AsyncMock()
 
@@ -279,9 +279,9 @@ class TestCreateStock:
         )
 
         with (
-            patch("app.api.stocks.cache"),
-            patch("app.api.stocks.get_event_bus") as mock_event_bus,
-            patch("app.api.stocks.SecurityFactory") as mock_factory,
+            patch("app.api.securities.cache"),
+            patch("app.api.securities.get_event_bus") as mock_event_bus,
+            patch("app.api.securities.SecurityFactory") as mock_factory,
         ):
             mock_stock = MagicMock()
             mock_stock.min_lot = 1
@@ -298,7 +298,7 @@ class TestCreateStock:
 
     @pytest.mark.asyncio
     async def test_create_stock_detects_industry(self):
-        """Test creating a stock without industry triggers detection."""
+        """Test creating a security without industry triggers detection."""
         mock_stock_repo = AsyncMock()
         mock_stock_repo.get_by_symbol.return_value = None
 
@@ -317,9 +317,9 @@ class TestCreateStock:
         )
 
         with (
-            patch("app.api.stocks.cache"),
-            patch("app.api.stocks.get_event_bus") as mock_event_bus,
-            patch("app.api.stocks.SecurityFactory") as mock_factory,
+            patch("app.api.securities.cache"),
+            patch("app.api.securities.get_event_bus") as mock_event_bus,
+            patch("app.api.securities.SecurityFactory") as mock_factory,
             patch(
                 "app.infrastructure.external.yahoo_finance.get_security_industry"
             ) as mock_yahoo_industry,
@@ -346,7 +346,7 @@ class TestCreateStock:
 
 
 class TestRefreshAllScores:
-    """Tests for POST /stocks/refresh-all endpoint."""
+    """Tests for POST /securities/refresh-all endpoint."""
 
     @pytest.mark.asyncio
     async def test_refresh_all_scores_success(self):
@@ -365,9 +365,9 @@ class TestRefreshAllScores:
         mock_scoring_service = AsyncMock()
         mock_scoring_service.score_all_stocks.return_value = [mock_score]
 
-        with patch("app.api.stocks.get_recommendation_cache") as mock_cache:
+        with patch("app.api.securities.get_recommendation_cache") as mock_cache:
             mock_cache.return_value = AsyncMock()
-            with patch("app.api.stocks.cache"):
+            with patch("app.api.securities.cache"):
                 result = await refresh_all_scores(mock_stock_repo, mock_scoring_service)
 
                 assert "Refreshed scores" in result["message"]
@@ -388,8 +388,8 @@ class TestRefreshAllScores:
         mock_scoring_service.score_all_stocks.return_value = []
 
         with (
-            patch("app.api.stocks.get_recommendation_cache") as mock_cache,
-            patch("app.api.stocks.cache"),
+            patch("app.api.securities.get_recommendation_cache") as mock_cache,
+            patch("app.api.securities.cache"),
             patch(
                 "app.infrastructure.external.yahoo_finance.get_security_industry"
             ) as mock_yahoo,
@@ -413,8 +413,8 @@ class TestRefreshAllScores:
         mock_scoring_service = AsyncMock()
 
         with (
-            patch("app.api.stocks.get_recommendation_cache") as mock_cache,
-            patch("app.api.stocks.cache"),
+            patch("app.api.securities.get_recommendation_cache") as mock_cache,
+            patch("app.api.securities.cache"),
         ):
             mock_cache.return_value = AsyncMock()
 
@@ -425,11 +425,11 @@ class TestRefreshAllScores:
 
 
 class TestRefreshStockScore:
-    """Tests for POST /stocks/{isin}/refresh endpoint."""
+    """Tests for POST /securities/{isin}/refresh endpoint."""
 
     @pytest.mark.asyncio
     async def test_refresh_stock_score_success(self):
-        """Test refreshing a single stock score."""
+        """Test refreshing a single security score."""
         mock_stock = MagicMock()
         mock_stock.symbol = "AAPL.US"
         mock_stock.isin = "US0378331005"
@@ -459,9 +459,9 @@ class TestRefreshStockScore:
         mock_scoring_service = AsyncMock()
         mock_scoring_service.calculate_and_save_score.return_value = mock_score
 
-        with patch("app.api.stocks.get_recommendation_cache") as mock_cache:
+        with patch("app.api.securities.get_recommendation_cache") as mock_cache:
             mock_cache.return_value = AsyncMock()
-            with patch("app.api.stocks.is_isin", return_value=True):
+            with patch("app.api.securities.is_isin", return_value=True):
                 result = await refresh_stock_score(
                     "US0378331005", mock_stock_repo, mock_scoring_service
                 )
@@ -472,15 +472,15 @@ class TestRefreshStockScore:
 
     @pytest.mark.asyncio
     async def test_refresh_stock_score_not_found(self):
-        """Test refreshing score for non-existent stock."""
+        """Test refreshing score for non-existent security."""
         mock_stock_repo = AsyncMock()
         mock_stock_repo.get_by_isin.return_value = None
 
         mock_scoring_service = AsyncMock()
 
-        with patch("app.api.stocks.get_recommendation_cache") as mock_cache:
+        with patch("app.api.securities.get_recommendation_cache") as mock_cache:
             mock_cache.return_value = AsyncMock()
-            with patch("app.api.stocks.is_isin", return_value=True):
+            with patch("app.api.securities.is_isin", return_value=True):
                 with pytest.raises(HTTPException) as exc_info:
                     await refresh_stock_score(
                         "US9999999999", mock_stock_repo, mock_scoring_service
@@ -504,9 +504,9 @@ class TestRefreshStockScore:
         mock_scoring_service = AsyncMock()
         mock_scoring_service.calculate_and_save_score.return_value = None  # Failed
 
-        with patch("app.api.stocks.get_recommendation_cache") as mock_cache:
+        with patch("app.api.securities.get_recommendation_cache") as mock_cache:
             mock_cache.return_value = AsyncMock()
-            with patch("app.api.stocks.is_isin", return_value=True):
+            with patch("app.api.securities.is_isin", return_value=True):
                 with pytest.raises(HTTPException) as exc_info:
                     await refresh_stock_score(
                         "US0378331005", mock_stock_repo, mock_scoring_service
@@ -516,11 +516,11 @@ class TestRefreshStockScore:
 
 
 class TestUpdateStock:
-    """Tests for PUT /stocks/{isin} endpoint."""
+    """Tests for PUT /securities/{isin} endpoint."""
 
     @pytest.mark.asyncio
     async def test_update_stock_success(self):
-        """Test updating a stock successfully."""
+        """Test updating a security successfully."""
         mock_stock = MagicMock()
         mock_stock.symbol = "AAPL.US"
         mock_stock.isin = "US0378331005"
@@ -545,8 +545,8 @@ class TestUpdateStock:
 
         update = SecurityUpdate(name="Apple Inc.")
 
-        with patch("app.api.stocks.cache"):
-            with patch("app.api.stocks.is_isin", return_value=True):
+        with patch("app.api.securities.cache"):
+            with patch("app.api.securities.is_isin", return_value=True):
                 result = await update_stock(
                     "US0378331005", update, mock_stock_repo, mock_scoring_service
                 )
@@ -557,7 +557,7 @@ class TestUpdateStock:
 
     @pytest.mark.asyncio
     async def test_update_stock_not_found(self):
-        """Test updating a stock that doesn't exist."""
+        """Test updating a security that doesn't exist."""
         mock_stock_repo = AsyncMock()
         mock_stock_repo.get_by_isin.return_value = None
 
@@ -565,7 +565,7 @@ class TestUpdateStock:
 
         update = SecurityUpdate(name="New Name")
 
-        with patch("app.api.stocks.is_isin", return_value=True):
+        with patch("app.api.securities.is_isin", return_value=True):
             with pytest.raises(HTTPException) as exc_info:
                 await update_stock(
                     "US9999999999", update, mock_stock_repo, mock_scoring_service
@@ -587,7 +587,7 @@ class TestUpdateStock:
 
         update = SecurityUpdate()  # Empty update
 
-        with patch("app.api.stocks.is_isin", return_value=True):
+        with patch("app.api.securities.is_isin", return_value=True):
             with pytest.raises(HTTPException) as exc_info:
                 await update_stock(
                     "US0378331005", update, mock_stock_repo, mock_scoring_service
@@ -598,7 +598,7 @@ class TestUpdateStock:
 
     @pytest.mark.asyncio
     async def test_update_stock_symbol_change(self):
-        """Test changing a stock's symbol."""
+        """Test changing a security's symbol."""
         mock_stock = MagicMock()
         mock_stock.symbol = "AAPL.US"
         mock_stock.isin = "US0378331005"
@@ -613,7 +613,7 @@ class TestUpdateStock:
         mock_stock.allow_sell = False
 
         mock_stock_repo = AsyncMock()
-        # First call finds stock by ISIN, second check for new symbol returns None (doesn't exist)
+        # First call finds security by ISIN, second check for new symbol returns None (doesn't exist)
         mock_stock_repo.get_by_isin.return_value = mock_stock
         mock_stock_repo.get_by_symbol.return_value = None  # New symbol doesn't exist
         mock_stock_repo.get_by_symbol.side_effect = [
@@ -628,8 +628,8 @@ class TestUpdateStock:
 
         update = SecurityUpdate(new_symbol="AAPL2.US")
 
-        with patch("app.api.stocks.cache"):
-            with patch("app.api.stocks.is_isin", return_value=True):
+        with patch("app.api.securities.cache"):
+            with patch("app.api.securities.is_isin", return_value=True):
                 result = await update_stock(
                     "US0378331005", update, mock_stock_repo, mock_scoring_service
                 )
@@ -638,7 +638,7 @@ class TestUpdateStock:
 
     @pytest.mark.asyncio
     async def test_update_stock_with_portfolio_targets(self):
-        """Test updating stock with min/max portfolio targets."""
+        """Test updating security with min/max portfolio targets."""
         mock_stock = MagicMock()
         mock_stock.symbol = "AAPL.US"
         mock_stock.isin = "US0378331005"
@@ -663,8 +663,8 @@ class TestUpdateStock:
 
         update = SecurityUpdate(min_portfolio_target=5.0, max_portfolio_target=15.0)
 
-        with patch("app.api.stocks.cache"):
-            with patch("app.api.stocks.is_isin", return_value=True):
+        with patch("app.api.securities.cache"):
+            with patch("app.api.securities.is_isin", return_value=True):
                 result = await update_stock(
                     "US0378331005", update, mock_stock_repo, mock_scoring_service
                 )
@@ -690,8 +690,8 @@ class TestUpdateStock:
 
         update = SecurityUpdate(min_portfolio_target=25.0)  # Over limit
 
-        with patch("app.api.stocks.cache"):
-            with patch("app.api.stocks.is_isin", return_value=True):
+        with patch("app.api.securities.cache"):
+            with patch("app.api.securities.is_isin", return_value=True):
                 await update_stock(
                     "US0378331005", update, mock_stock_repo, mock_scoring_service
                 )
@@ -713,8 +713,8 @@ class TestUpdateStock:
 
         update = SecurityUpdate(max_portfolio_target=35.0)  # Over limit
 
-        with patch("app.api.stocks.cache"):
-            with patch("app.api.stocks.is_isin", return_value=True):
+        with patch("app.api.securities.cache"):
+            with patch("app.api.securities.is_isin", return_value=True):
                 await update_stock(
                     "US0378331005", update, mock_stock_repo, mock_scoring_service
                 )
@@ -735,8 +735,8 @@ class TestUpdateStock:
 
         update = SecurityUpdate(min_portfolio_target=15.0, max_portfolio_target=5.0)
 
-        with patch("app.api.stocks.cache"):
-            with patch("app.api.stocks.is_isin", return_value=True):
+        with patch("app.api.securities.cache"):
+            with patch("app.api.securities.is_isin", return_value=True):
                 with pytest.raises(HTTPException) as exc_info:
                     await update_stock(
                         "US0378331005", update, mock_stock_repo, mock_scoring_service
@@ -750,7 +750,7 @@ class TestUpdateStock:
 
 
 class TestGetStockResponse:
-    """Tests for GET /stocks/{isin} response format."""
+    """Tests for GET /securities/{isin} response format."""
 
     @pytest.mark.asyncio
     async def test_get_stock_includes_portfolio_targets(self):
@@ -779,7 +779,7 @@ class TestGetStockResponse:
         mock_score_repo = AsyncMock()
         mock_score_repo.get_by_symbol.return_value = None
 
-        with patch("app.api.stocks.is_isin", return_value=True):
+        with patch("app.api.securities.is_isin", return_value=True):
             result = await get_stock(
                 "US0378331005", mock_stock_repo, mock_position_repo, mock_score_repo
             )
@@ -789,7 +789,7 @@ class TestGetStockResponse:
 
 
 class TestGetStocksResponse:
-    """Tests for GET /stocks response format."""
+    """Tests for GET /securities response format."""
 
     @pytest.mark.asyncio
     async def test_get_stocks_includes_portfolio_targets(self):
@@ -812,7 +812,7 @@ class TestGetStocksResponse:
         mock_summary.country_allocations = []
         mock_summary.industry_allocations = []
 
-        with patch("app.api.stocks.cache") as mock_cache:
+        with patch("app.api.securities.cache") as mock_cache:
             mock_cache.get.return_value = None
 
             mock_stock_repo = AsyncMock()
@@ -833,11 +833,11 @@ class TestGetStocksResponse:
 
 
 class TestDeleteStock:
-    """Tests for DELETE /stocks/{isin} endpoint."""
+    """Tests for DELETE /securities/{isin} endpoint."""
 
     @pytest.mark.asyncio
     async def test_delete_stock_success(self):
-        """Test deleting a stock successfully."""
+        """Test deleting a security successfully."""
         mock_stock = MagicMock()
         mock_stock.symbol = "AAPL.US"
         mock_stock.isin = "US0378331005"
@@ -845,8 +845,8 @@ class TestDeleteStock:
         mock_stock_repo = AsyncMock()
         mock_stock_repo.get_by_isin.return_value = mock_stock
 
-        with patch("app.api.stocks.cache"):
-            with patch("app.api.stocks.is_isin", return_value=True):
+        with patch("app.api.securities.cache"):
+            with patch("app.api.securities.is_isin", return_value=True):
                 result = await delete_stock("US0378331005", mock_stock_repo)
 
                 assert "removed" in result["message"].lower()
@@ -854,11 +854,11 @@ class TestDeleteStock:
 
     @pytest.mark.asyncio
     async def test_delete_stock_not_found(self):
-        """Test deleting a stock that doesn't exist."""
+        """Test deleting a security that doesn't exist."""
         mock_stock_repo = AsyncMock()
         mock_stock_repo.get_by_isin.return_value = None
 
-        with patch("app.api.stocks.is_isin", return_value=True):
+        with patch("app.api.securities.is_isin", return_value=True):
             with pytest.raises(HTTPException) as exc_info:
                 await delete_stock("US9999999999", mock_stock_repo)
 
@@ -979,7 +979,7 @@ class TestHelperFunctions:
         assert result["name"] == "Apple"
 
     def test_format_stock_response_without_score(self):
-        """Test formatting stock response without score."""
+        """Test formatting security response without score."""
         mock_stock = MagicMock()
         mock_stock.symbol = "AAPL"
         mock_stock.yahoo_symbol = "AAPL"
@@ -998,7 +998,7 @@ class TestHelperFunctions:
         assert "total_score" not in result
 
     def test_format_stock_response_with_score(self):
-        """Test formatting stock response with score."""
+        """Test formatting security response with score."""
         mock_stock = MagicMock()
         mock_stock.symbol = "AAPL"
         mock_stock.yahoo_symbol = "AAPL"

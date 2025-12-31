@@ -19,7 +19,7 @@ class TestIdentifyAveragingDownOpportunities:
 
     @pytest.fixture
     def sample_stock(self):
-        """Create a sample stock."""
+        """Create a sample security."""
         return Security(
             symbol="AAPL.US",
             name="Apple Inc",
@@ -45,12 +45,12 @@ class TestIdentifyAveragingDownOpportunities:
 
     @pytest.mark.asyncio
     async def test_identifies_quality_dip(self, sample_stock, portfolio_context):
-        """Test identifying quality stock that is down 20%+."""
-        stocks = [sample_stock]
+        """Test identifying quality security that is down 20%+."""
+        securities = [sample_stock]
         batch_prices = {"AAPL.US": 110.0}  # 26% down from avg of 150
 
         opportunities = await identify_averaging_down_opportunities(
-            stocks=stocks,
+            securities=securities,
             portfolio_context=portfolio_context,
             batch_prices=batch_prices,
             base_trade_amount=1000,
@@ -62,8 +62,8 @@ class TestIdentifyAveragingDownOpportunities:
 
     @pytest.mark.asyncio
     async def test_skips_stock_not_allowed_to_buy(self, portfolio_context):
-        """Test skipping stocks that are not allowed to buy."""
-        stock = Security(
+        """Test skipping securities that are not allowed to buy."""
+        security = Security(
             symbol="AAPL.US",
             name="Apple Inc",
             min_lot=1,
@@ -74,7 +74,7 @@ class TestIdentifyAveragingDownOpportunities:
         batch_prices = {"AAPL.US": 110.0}
 
         opportunities = await identify_averaging_down_opportunities(
-            stocks=[stock],
+            securities=[security],
             portfolio_context=portfolio_context,
             batch_prices=batch_prices,
             base_trade_amount=1000,
@@ -84,11 +84,11 @@ class TestIdentifyAveragingDownOpportunities:
 
     @pytest.mark.asyncio
     async def test_skips_stock_without_price(self, sample_stock, portfolio_context):
-        """Test skipping stocks without price data."""
+        """Test skipping securities without price data."""
         batch_prices = {}  # No price
 
         opportunities = await identify_averaging_down_opportunities(
-            stocks=[sample_stock],
+            securities=[sample_stock],
             portfolio_context=portfolio_context,
             batch_prices=batch_prices,
             base_trade_amount=1000,
@@ -98,7 +98,7 @@ class TestIdentifyAveragingDownOpportunities:
 
     @pytest.mark.asyncio
     async def test_skips_low_quality_stock(self, sample_stock):
-        """Test skipping low quality stocks."""
+        """Test skipping low quality securities."""
         portfolio_context = PortfolioContext(
             country_weights={},
             industry_weights={},
@@ -110,7 +110,7 @@ class TestIdentifyAveragingDownOpportunities:
         batch_prices = {"AAPL.US": 110.0}
 
         opportunities = await identify_averaging_down_opportunities(
-            stocks=[sample_stock],
+            securities=[sample_stock],
             portfolio_context=portfolio_context,
             batch_prices=batch_prices,
             base_trade_amount=1000,
@@ -120,7 +120,7 @@ class TestIdentifyAveragingDownOpportunities:
 
     @pytest.mark.asyncio
     async def test_skips_stock_not_owned(self, sample_stock):
-        """Test skipping stocks not currently owned."""
+        """Test skipping securities not currently owned."""
         portfolio_context = PortfolioContext(
             country_weights={},
             industry_weights={},
@@ -132,7 +132,7 @@ class TestIdentifyAveragingDownOpportunities:
         batch_prices = {"AAPL.US": 110.0}
 
         opportunities = await identify_averaging_down_opportunities(
-            stocks=[sample_stock],
+            securities=[sample_stock],
             portfolio_context=portfolio_context,
             batch_prices=batch_prices,
             base_trade_amount=1000,
@@ -142,7 +142,7 @@ class TestIdentifyAveragingDownOpportunities:
 
     @pytest.mark.asyncio
     async def test_skips_stock_not_down_enough(self, sample_stock):
-        """Test skipping stocks that aren't down 20%+."""
+        """Test skipping securities that aren't down 20%+."""
         portfolio_context = PortfolioContext(
             country_weights={},
             industry_weights={},
@@ -154,7 +154,7 @@ class TestIdentifyAveragingDownOpportunities:
         batch_prices = {"AAPL.US": 140.0}  # Only 7% down
 
         opportunities = await identify_averaging_down_opportunities(
-            stocks=[sample_stock],
+            securities=[sample_stock],
             portfolio_context=portfolio_context,
             batch_prices=batch_prices,
             base_trade_amount=1000,
@@ -164,14 +164,14 @@ class TestIdentifyAveragingDownOpportunities:
 
     @pytest.mark.asyncio
     async def test_uses_exchange_rate_service(self, sample_stock, portfolio_context):
-        """Test using exchange rate service for non-EUR stocks."""
+        """Test using exchange rate service for non-EUR securities."""
         batch_prices = {"AAPL.US": 110.0}
 
         mock_exchange_service = AsyncMock()
         mock_exchange_service.get_rate.return_value = 1.1  # 1 USD = 1.1 EUR
 
         opportunities = await identify_averaging_down_opportunities(
-            stocks=[sample_stock],
+            securities=[sample_stock],
             portfolio_context=portfolio_context,
             batch_prices=batch_prices,
             base_trade_amount=1000,
@@ -195,7 +195,7 @@ class TestIdentifyAveragingDownOpportunities:
         batch_prices = {"AAPL.US": 100.0}  # 33% down
 
         opportunities = await identify_averaging_down_opportunities(
-            stocks=[sample_stock],
+            securities=[sample_stock],
             portfolio_context=portfolio_context,
             batch_prices=batch_prices,
             base_trade_amount=1000,
@@ -211,7 +211,7 @@ class TestIdentifyAveragingDownOpportunities:
         batch_prices = {"AAPL.US": 110.0}
 
         opportunities = await identify_averaging_down_opportunities(
-            stocks=[sample_stock],
+            securities=[sample_stock],
             portfolio_context=portfolio_context,
             batch_prices=batch_prices,
             base_trade_amount=1000,

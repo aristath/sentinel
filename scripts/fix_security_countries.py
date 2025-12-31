@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Script to fix missing country data for stocks based on exchange names.
+"""Script to fix missing country data for securities based on exchange names.
 
 This script uses the exchange-to-country mapping to populate missing country fields.
 """
@@ -49,7 +49,7 @@ async def fix_missing_countries():
         "Stuttgart": "Germany",  # Additional mapping
     }
 
-    # Get stocks missing country but with exchange name
+    # Get securities missing country but with exchange name
     cursor = await db_manager.config.execute(
         """SELECT symbol, fullExchangeName FROM securities
         WHERE active = 1 AND country IS NULL AND fullExchangeName IS NOT NULL
@@ -69,12 +69,12 @@ async def fix_missing_countries():
         else:
             print(f"Warning: {symbol} has exchange '{exchange}' not in mapping")
 
-    print(f"\nUpdated {updated} stocks with country data")
+    print(f"\nUpdated {updated} securities with country data")
     return updated
 
 
 async def check_missing_data():
-    """Check which stocks are still missing data."""
+    """Check which securities are still missing data."""
     db_manager = get_db_manager()
 
     cursor = await db_manager.config.execute(
@@ -97,7 +97,7 @@ async def check_missing_data():
             )
         return len(rows)
     else:
-        print("\n✓ All stocks have complete data!")
+        print("\n✓ All securities have complete data!")
         return 0
 
 
@@ -110,10 +110,10 @@ async def main():
     missing = await check_missing_data()
 
     if missing == 0:
-        print("\n✓ All stocks now have complete data!")
+        print("\n✓ All securities now have complete data!")
         return 0
     else:
-        print(f"\n⚠ {missing} stocks still have missing data")
+        print(f"\n⚠ {missing} securities still have missing data")
         return 1
 
 

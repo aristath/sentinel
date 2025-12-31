@@ -197,7 +197,7 @@ class TestCalculateAveragingDownScore:
         assert score > 0.7
 
     def test_low_score_for_low_quality(self):
-        """Test lower score for low quality stocks.
+        """Test lower score for low quality securities.
 
         With quality=0.2, opportunity=0.2: avg_down_potential = 0.04 < 0.3
         Base score = 0.3
@@ -483,7 +483,7 @@ class TestCalculatePostTransactionScore:
             security_dividends={"AAPL.US": 0.01},
         )
 
-        # Buy an EU stock to improve diversification
+        # Buy an EU security to improve diversification
         new_score, score_change = await calculate_post_transaction_score(
             symbol="SAP.EU",
             country="Germany",

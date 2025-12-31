@@ -156,9 +156,9 @@ def calculate_diversification_score(
     Calculate diversification score based on portfolio awareness.
 
     Args:
-        symbol: Stock symbol
-        country: Stock country (e.g., "United States", "Germany")
-        industry: Stock industry (comma-separated if multiple)
+        symbol: Security symbol
+        country: Security country (e.g., "United States", "Germany")
+        industry: Security industry (comma-separated if multiple)
         quality_score: Pre-calculated quality score (0-1)
         opportunity_score: Pre-calculated opportunity score (0-1)
         portfolio_context: Portfolio weights and positions
@@ -290,7 +290,7 @@ async def calculate_portfolio_score(
     Components:
     - Diversification (40%): How close to target geo/industry allocations
     - Dividend (30%): Weighted average dividend yield across positions
-    - Quality (30%): Weighted average stock quality scores
+    - Quality (30%): Weighted average security quality scores
 
     Args:
         portfolio_context: Portfolio context with positions and weights
@@ -351,12 +351,12 @@ async def calculate_post_transaction_score(
     Calculate portfolio score AFTER a proposed transaction.
 
     Args:
-        symbol: Stock symbol to buy
-        country: Stock country (e.g., "United States", "Germany")
-        industry: Stock industry
+        symbol: Security symbol to buy
+        country: Security country (e.g., "United States", "Germany")
+        industry: Security industry
         proposed_value: Transaction value (min_lot * price)
-        stock_quality: Quality score of the stock (0-1)
-        stock_dividend: Dividend yield of the stock (0-1)
+        stock_quality: Quality score of the security (0-1)
+        stock_dividend: Dividend yield of the security (0-1)
         portfolio_context: Current portfolio context
         portfolio_hash: Optional portfolio hash for caching. If provided, will check cache first.
 

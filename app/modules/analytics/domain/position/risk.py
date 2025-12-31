@@ -24,7 +24,7 @@ async def get_position_risk_metrics(
     Uses 72-hour cache to reduce expensive calculations.
 
     Args:
-        symbol: Stock symbol
+        symbol: Security symbol
         start_date: Start date for analysis
         end_date: End date for analysis
 

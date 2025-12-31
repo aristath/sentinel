@@ -151,7 +151,7 @@ def calculate_dividend_stability_score(
     Args:
         dividend_history: List of annual dividend amounts (oldest first)
         portfolio_avg_yield: Average dividend yield of portfolio
-        current_yield: Current dividend yield of this stock
+        current_yield: Current dividend yield of this security
 
     Returns:
         Tuple of (stability_score, details_dict)
@@ -202,12 +202,12 @@ async def get_dividend_analysis(
     portfolio_avg_yield: float = 0.03,
 ) -> Dict:
     """
-    Get complete dividend analysis for a stock.
+    Get complete dividend analysis for a security.
 
     Fetches dividend data and calculates stability metrics.
 
     Args:
-        symbol: Stock symbol
+        symbol: Security symbol
         portfolio_avg_yield: Average yield of portfolio for comparison
 
     Returns:
@@ -283,7 +283,7 @@ def _get_dividend_recommendation(
 ) -> str:
     """Generate human-readable dividend recommendation."""
     if yield_assessment == "no_dividend":
-        return "Non-dividend stock - income not a factor"
+        return "Non-dividend security - income not a factor"
 
     if stability >= 0.80:
         if yield_assessment == "significantly_above_average":
@@ -311,12 +311,12 @@ def is_dividend_consistent(
     min_stability: float = 0.60,
 ) -> bool:
     """
-    Quick check if a stock has consistent dividends.
+    Quick check if a security has consistent dividends.
 
-    Used by the holistic planner to identify reliable income stocks.
+    Used by the holistic planner to identify reliable income securities.
 
     Args:
-        symbol_yield: Stock's current dividend yield
+        symbol_yield: Security's current dividend yield
         portfolio_avg_yield: Portfolio average yield
         stability_score: Pre-calculated stability score
         min_stability: Minimum stability to be considered consistent

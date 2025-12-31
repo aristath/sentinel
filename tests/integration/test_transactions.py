@@ -34,9 +34,9 @@ async def test_trade_creation_and_retrieval(db, trade_repo):
 @pytest.mark.asyncio
 async def test_transaction_commit_on_success(db, security_repo, trade_repo):
     """Test that transactions commit successfully when no errors occur."""
-    # Create stocks first (required for trade history JOIN)
+    # Create securities first (required for trade history JOIN)
     for symbol in ["AAPL", "MSFT"]:
-        stock = Security(
+        security = Security(
             symbol=symbol,
             yahoo_symbol=symbol,
             name=f"{symbol} Inc.",
@@ -46,7 +46,7 @@ async def test_transaction_commit_on_success(db, security_repo, trade_repo):
             min_lot=1,
             active=True,
         )
-        await security_repo.create(stock)
+        await security_repo.create(security)
 
     trade1 = Trade(
         symbol="AAPL",
@@ -84,7 +84,7 @@ async def test_multiple_repository_operations_in_transaction(db):
     security_repo = SecurityRepository(db=db)
     position_repo = PositionRepository(db=db)
 
-    stock = Security(
+    security = Security(
         symbol="AAPL",
         yahoo_symbol="AAPL",
         name="Apple Inc.",
@@ -107,7 +107,7 @@ async def test_multiple_repository_operations_in_transaction(db):
     )
 
     async with transaction_context(db):
-        await security_repo.create(stock)
+        await security_repo.create(security)
         await position_repo.upsert(position)
 
     # Both should be committed
@@ -123,9 +123,9 @@ async def test_multiple_repository_operations_in_transaction(db):
 @pytest.mark.asyncio
 async def test_auto_commit_behavior(db, security_repo, trade_repo):
     """Test that auto_commit=True commits immediately."""
-    # Create stocks first (required for trade history JOIN)
+    # Create securities first (required for trade history JOIN)
     for symbol in ["AAPL", "MSFT"]:
-        stock = Security(
+        security = Security(
             symbol=symbol,
             yahoo_symbol=symbol,
             name=f"{symbol} Inc.",
@@ -135,7 +135,7 @@ async def test_auto_commit_behavior(db, security_repo, trade_repo):
             min_lot=1,
             active=True,
         )
-        await security_repo.create(stock)
+        await security_repo.create(security)
 
     trade = Trade(
         symbol="AAPL",

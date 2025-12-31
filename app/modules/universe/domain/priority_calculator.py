@@ -9,7 +9,7 @@ The scoring system (scorer.py) now handles:
 - Allocation Fit (15%): geo gaps, industry gaps, averaging down
 
 This calculator now simply:
-1. Takes the stock score (which includes allocation fit)
+1. Takes the security score (which includes allocation fit)
 2. Applies manual multiplier
 3. Sorts by final priority
 """
@@ -54,7 +54,7 @@ class PriorityResult:
 
 
 class PriorityCalculator:
-    """Service for calculating stock priority scores."""
+    """Service for calculating security priority scores."""
 
     @staticmethod
     def parse_industries(industry_str: Optional[str]) -> List[str]:
@@ -76,7 +76,7 @@ class PriorityCalculator:
         input_data: PriorityInput,
     ) -> PriorityResult:
         """
-        Calculate priority score for a stock.
+        Calculate priority score for a security.
 
         The stock_score from scorer.py already includes:
         - Quality (35%)
@@ -87,12 +87,12 @@ class PriorityCalculator:
         This function simply applies the manual multiplier.
 
         Args:
-            input_data: Stock data for priority calculation
+            input_data: Security data for priority calculation
 
         Returns:
             PriorityResult with calculated priority
         """
-        # The stock score already includes all factors from scorer.py
+        # The security score already includes all factors from scorer.py
         # Just apply the manual multiplier
         combined_priority = input_data.stock_score * input_data.multiplier
 
@@ -115,10 +115,10 @@ class PriorityCalculator:
         inputs: List[PriorityInput],
     ) -> List[PriorityResult]:
         """
-        Calculate priorities for multiple stocks.
+        Calculate priorities for multiple securities.
 
         Args:
-            inputs: List of stock data for priority calculation
+            inputs: List of security data for priority calculation
 
         Returns:
             List of PriorityResult sorted by combined_priority (highest first)

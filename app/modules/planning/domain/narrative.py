@@ -29,7 +29,7 @@ def _add_strategy_summary(
     """Add strategy summary to narrative parts."""
     if windfall_sells and averaging_buys:
         parts.append(
-            "This plan takes profits from windfall gains and reinvests in quality stocks "
+            "This plan takes profits from windfall gains and reinvests in quality securities "
             "that are temporarily down."
         )
     elif windfall_sells:
@@ -233,7 +233,7 @@ def _generate_buy_narrative(
     # Explain based on tags
     if "averaging_down" in tags:
         parts.append(
-            "This quality stock is temporarily down, presenting an opportunity to "
+            "This quality security is temporarily down, presenting an opportunity to "
             "lower the average cost basis."
         )
         parts.append(f"{reason}.")
@@ -258,7 +258,7 @@ def _generate_buy_narrative(
     elif "quality" in tags or "opportunity" in tags:
         parts.append(f"{reason}.")
         parts.append(
-            "High-quality stocks with good fundamentals tend to outperform over the long term."
+            "High-quality securities with good fundamentals tend to outperform over the long term."
         )
 
     else:
@@ -272,7 +272,7 @@ def _generate_buy_narrative(
     )
     if dividend_yield and dividend_yield > 0.03:
         parts.append(
-            f"This stock also provides a {dividend_yield*100:.1f}% dividend yield for income."
+            f"This security also provides a {dividend_yield*100:.1f}% dividend yield for income."
         )
 
     return " ".join(parts)

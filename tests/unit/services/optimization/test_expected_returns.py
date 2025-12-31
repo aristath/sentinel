@@ -61,7 +61,7 @@ class TestExpectedReturnsCalculator:
         mock_score.total_score = 0.75  # 75% score
         mock_score_repo.get_by_symbol = AsyncMock(return_value=mock_score)
 
-        # Mock stock
+        # Mock security
         mock_stock = MagicMock()
         mock_stock.priority_multiplier = 1.0
         mock_stock_repo.get_by_symbol = AsyncMock(return_value=mock_stock)

@@ -41,7 +41,7 @@ def create_dividend(
 
 
 def create_stock(symbol: str, name: Optional[str] = None, min_lot: int = 1) -> Security:
-    """Helper to create stock."""
+    """Helper to create security."""
     return Security(
         symbol=symbol,
         name=name or f"{symbol} Inc.",
@@ -74,7 +74,7 @@ def mock_dividend_reinvestment_dependencies(
     if mock_trade_execution_service is None:
         mock_trade_execution_service = AsyncMock()
 
-    # Setup stock repo
+    # Setup security repo
     if stocks_by_symbol:
 
         async def get_by_symbol(symbol):

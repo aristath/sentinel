@@ -10,7 +10,7 @@ from app.core.database.manager import DatabaseManager
 from app.domain.models import SecurityScore
 from app.domain.repositories.protocols import ISecurityRepository
 from app.infrastructure.external import yahoo_finance as yahoo
-from app.modules.scoring.domain import CalculatedSecurityScore, calculate_stock_score
+from app.modules.scoring.domain import CalculatedSecurityScore, calculate_security_score
 from app.repositories import ScoreRepository
 
 logger = logging.getLogger(__name__)
@@ -139,7 +139,7 @@ class ScoringService:
                 symbol, yahoo_symbol=yahoo_symbol_str
             )
 
-            score = await calculate_stock_score(
+            score = await calculate_security_score(
                 symbol,
                 daily_prices=daily_prices,
                 monthly_prices=monthly_prices,

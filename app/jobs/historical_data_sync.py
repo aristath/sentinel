@@ -1,4 +1,4 @@
-"""Historical data sync job for stock prices.
+"""Historical data sync job for security prices.
 
 Fetches historical prices from Yahoo and stores in per-symbol databases.
 """
@@ -20,10 +20,10 @@ logger = logging.getLogger(__name__)
 
 async def sync_historical_data():
     """
-    Sync historical stock prices.
+    Sync historical security prices.
 
     This job:
-    1. Fetches historical stock prices for all active stocks (1 year)
+    1. Fetches historical security prices for all active securities (1 year)
     2. Aggregates prices into monthly averages for long-term storage
 
     Uses file locking to prevent concurrent runs.
@@ -53,31 +53,31 @@ async def _sync_historical_data_internal():
 
 
 async def _sync_security_price_history():
-    """Fetch and store historical stock prices for all active stocks."""
-    logger.info("Starting stock price history sync (using Yahoo Finance)")
+    """Fetch and store historical security prices for all active securities."""
+    logger.info("Starting security price history sync (using Yahoo Finance)")
 
     set_text("SYNCING HISTORICAL PRICES...")
     set_led4(0, 255, 0)  # Green for processing
 
     db_manager = get_db_manager()
 
-    # Get all active stocks from config
+    # Get all active securities from config
     cursor = await db_manager.config.execute(
         "SELECT symbol, yahoo_symbol FROM securities WHERE active = 1"
     )
     rows = await cursor.fetchall()
-    stocks = [(row[0], row[1]) for row in rows]
+    securities = [(row[0], row[1]) for row in rows]
 
-    if not stocks:
-        logger.info("No active stocks to sync")
+    if not securities:
+        logger.info("No active securities to sync")
         return
 
-    logger.info(f"Syncing historical prices for {len(stocks)} stocks")
+    logger.info(f"Syncing historical prices for {len(securities)} securities")
 
     processed = 0
     errors = 0
 
-    for symbol, yahoo_symbol in stocks:
+    for symbol, yahoo_symbol in securities:
         try:
             # Get history database for this symbol
             history_db = await db_manager.history(symbol)
@@ -101,7 +101,7 @@ async def _sync_security_price_history():
 
             processed += 1
             if processed % 10 == 0:
-                logger.info(f"Processed {processed}/{len(stocks)} stocks")
+                logger.info(f"Processed {processed}/{len(securities)} securities")
 
             await asyncio.sleep(settings.external_api_rate_limit_delay)
 
@@ -111,7 +111,7 @@ async def _sync_security_price_history():
             continue
 
     logger.info(
-        f"Stock price history sync complete: {processed} processed, {errors} errors"
+        f"Security price history sync complete: {processed} processed, {errors} errors"
     )
 
 

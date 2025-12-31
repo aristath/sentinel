@@ -1,6 +1,6 @@
-"""Tests for stock repository.
+"""Tests for security repository.
 
-These tests validate stock CRUD operations.
+These tests validate security CRUD operations.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -11,7 +11,7 @@ from app.domain.models import Security
 
 
 class TestSecurityRepositoryInit:
-    """Test stock repository initialization."""
+    """Test security repository initialization."""
 
     def test_init_with_db(self):
         """Test initialization with provided database."""
@@ -39,11 +39,11 @@ class TestSecurityRepositoryInit:
 
 
 class TestSecurityRepositoryQueries:
-    """Test stock query operations."""
+    """Test security query operations."""
 
     @pytest.mark.asyncio
     async def test_get_by_symbol_found(self):
-        """Test getting stock by symbol when found."""
+        """Test getting security by symbol when found."""
         from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_row = {
@@ -73,7 +73,7 @@ class TestSecurityRepositoryQueries:
 
     @pytest.mark.asyncio
     async def test_get_by_symbol_not_found(self):
-        """Test getting stock by symbol when not found."""
+        """Test getting security by symbol when not found."""
         from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_db = AsyncMock()
@@ -87,7 +87,7 @@ class TestSecurityRepositoryQueries:
 
     @pytest.mark.asyncio
     async def test_get_all_active(self):
-        """Test getting all active stocks."""
+        """Test getting all active securities."""
         from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_rows = [
@@ -131,7 +131,7 @@ class TestSecurityRepositoryQueries:
 
     @pytest.mark.asyncio
     async def test_get_all(self):
-        """Test getting all stocks."""
+        """Test getting all securities."""
         from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_rows = [
@@ -161,11 +161,11 @@ class TestSecurityRepositoryQueries:
 
 
 class TestSecurityRepositoryCreate:
-    """Test stock creation operations."""
+    """Test security creation operations."""
 
     @pytest.mark.asyncio
     async def test_creates_stock(self):
-        """Test creating a stock record."""
+        """Test creating a security record."""
         from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_db = AsyncMock()
@@ -175,7 +175,7 @@ class TestSecurityRepositoryCreate:
 
         repo = SecurityRepository(db=mock_db)
 
-        stock = Security(
+        security = Security(
             symbol="AAPL.US",
             yahoo_symbol="AAPL",
             name="Apple Inc",
@@ -189,13 +189,13 @@ class TestSecurityRepositoryCreate:
             currency="USD",
         )
 
-        await repo.create(stock)
+        await repo.create(security)
 
         mock_db.execute.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_create_with_portfolio_targets(self):
-        """Test creating a stock with min/max portfolio targets."""
+        """Test creating a security with min/max portfolio targets."""
         from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_db = AsyncMock()
@@ -205,14 +205,14 @@ class TestSecurityRepositoryCreate:
 
         repo = SecurityRepository(db=mock_db)
 
-        stock = Security(
+        security = Security(
             symbol="AAPL.US",
             name="Apple Inc",
             min_portfolio_target=5.0,
             max_portfolio_target=15.0,
         )
 
-        await repo.create(stock)
+        await repo.create(security)
 
         mock_db.execute.assert_called_once()
         # Check that portfolio targets are in the INSERT statement
@@ -222,7 +222,7 @@ class TestSecurityRepositoryCreate:
 
     @pytest.mark.asyncio
     async def test_create_with_null_portfolio_targets(self):
-        """Test creating a stock with NULL portfolio targets."""
+        """Test creating a security with NULL portfolio targets."""
         from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_db = AsyncMock()
@@ -232,9 +232,9 @@ class TestSecurityRepositoryCreate:
 
         repo = SecurityRepository(db=mock_db)
 
-        stock = Security(symbol="AAPL.US", name="Apple Inc")
+        security = Security(symbol="AAPL.US", name="Apple Inc")
 
-        await repo.create(stock)
+        await repo.create(security)
 
         mock_db.execute.assert_called_once()
         # Check that None values are in the INSERT statement
@@ -244,11 +244,11 @@ class TestSecurityRepositoryCreate:
 
 
 class TestSecurityRepositoryUpdate:
-    """Test stock update operations."""
+    """Test security update operations."""
 
     @pytest.mark.asyncio
     async def test_updates_stock(self):
-        """Test updating a stock."""
+        """Test updating a security."""
         from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_db = AsyncMock()
@@ -297,7 +297,7 @@ class TestSecurityRepositoryUpdate:
 
     @pytest.mark.asyncio
     async def test_update_with_portfolio_targets(self):
-        """Test updating stock with min/max portfolio targets."""
+        """Test updating security with min/max portfolio targets."""
         from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_db = AsyncMock()
@@ -318,7 +318,7 @@ class TestSecurityRepositoryUpdate:
 
     @pytest.mark.asyncio
     async def test_update_clearing_portfolio_targets(self):
-        """Test updating stock to clear portfolio targets (set to None)."""
+        """Test updating security to clear portfolio targets (set to None)."""
         from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_db = AsyncMock()
@@ -339,7 +339,7 @@ class TestSecurityRepositoryUpdate:
 
 
 class TestSecurityRepositoryDelete:
-    """Test stock delete operations."""
+    """Test security delete operations."""
 
     @pytest.mark.asyncio
     async def test_delete_sets_inactive(self):
@@ -360,11 +360,11 @@ class TestSecurityRepositoryDelete:
 
 
 class TestSecurityRepositoryGetWithScores:
-    """Test getting stocks with scores."""
+    """Test getting securities with scores."""
 
     @pytest.mark.asyncio
     async def test_merges_stock_score_position_data(self):
-        """Test that stock, score, and position data are merged."""
+        """Test that security, score, and position data are merged."""
         from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_stock_row = MagicMock()
@@ -465,10 +465,10 @@ class TestSecurityRepositoryGetWithScores:
 
 
 class TestRowToStock:
-    """Test row to stock conversion."""
+    """Test row to security conversion."""
 
     def test_converts_valid_row(self):
-        """Test converting a valid database row to Stock model."""
+        """Test converting a valid database row to Security model."""
         from app.modules.universe.database.security_repository import SecurityRepository
 
         mock_db = AsyncMock()

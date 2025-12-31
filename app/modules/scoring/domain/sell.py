@@ -2,7 +2,7 @@
 Sell Score - When and how much to sell.
 
 This module implements a 4-component weighted scoring model for SELL decisions:
-- Underperformance Score (40%): How poorly stock performed vs target (8-15% annual)
+- Underperformance Score (40%): How poorly security performed vs target (8-15% annual)
 - Time Held Score (20%): Longer hold with underperformance = higher sell priority
 - Portfolio Balance Score (20%): Overweight positions score higher
 - Instability Score (20%): Detect potential bubbles and unsustainable gains
@@ -141,16 +141,16 @@ async def calculate_sell_score(
     Calculate complete sell score for a position.
 
     Args:
-        symbol: Stock symbol
+        symbol: Security symbol
         quantity: Current position quantity
         avg_price: Average purchase price
         current_price: Current market price
-        min_lot: Minimum lot size for this stock
-        allow_sell: Whether selling is enabled for this stock
+        min_lot: Minimum lot size for this security
+        allow_sell: Whether selling is enabled for this security
         first_bought_at: When position was first opened
         last_sold_at: When position was last sold (for cooldown)
-        country: Stock's country (e.g., "United States", "Germany")
-        industry: Stock's industry (comma-separated if multiple)
+        country: Security's country (e.g., "United States", "Germany")
+        industry: Security's industry (comma-separated if multiple)
         total_portfolio_value: Total portfolio value in EUR
         country_allocations: Current country allocation percentages
         ind_allocations: Current industry allocation percentages
@@ -355,7 +355,7 @@ async def calculate_all_sell_scores(
     Calculate sell scores for all positions.
 
     Args:
-        positions: List of position dicts with stock info (from get_with_stock_info)
+        positions: List of position dicts with security info (from get_with_stock_info)
         total_portfolio_value: Total portfolio value in EUR
         country_allocations: Current country allocation percentages
         ind_allocations: Current industry allocation percentages

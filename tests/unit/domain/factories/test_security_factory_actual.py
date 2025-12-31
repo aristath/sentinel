@@ -1,6 +1,6 @@
 """Tests for SecurityFactory class.
 
-These tests validate the SecurityFactory class methods for creating Stock objects.
+These tests validate the SecurityFactory class methods for creating Security objects.
 """
 
 import pytest
@@ -15,7 +15,7 @@ class TestSecurityFactoryCreateFromApiRequest:
     """Test SecurityFactory.create_from_api_request method."""
 
     def test_create_stock_with_all_fields(self):
-        """Test creating Stock with all fields from API request."""
+        """Test creating Security with all fields from API request."""
         data = {
             "symbol": "AAPL",
             "name": "Apple Inc.",
@@ -29,40 +29,40 @@ class TestSecurityFactoryCreateFromApiRequest:
             "currency": Currency.USD,
         }
 
-        stock = SecurityFactory.create_from_api_request(data)
+        security = SecurityFactory.create_from_api_request(data)
 
-        assert isinstance(stock, Security)
-        assert stock.symbol == "AAPL"
-        assert stock.name == "Apple Inc."
-        assert stock.country == "United States"
-        assert stock.fullExchangeName == "NASDAQ"
-        assert stock.industry == "Technology"
-        assert stock.min_lot == 1
-        assert stock.allow_buy is True
-        assert stock.allow_sell is False
-        assert stock.yahoo_symbol == "AAPL"
-        assert stock.currency == Currency.USD
+        assert isinstance(security, Security)
+        assert security.symbol == "AAPL"
+        assert security.name == "Apple Inc."
+        assert security.country == "United States"
+        assert security.fullExchangeName == "NASDAQ"
+        assert security.industry == "Technology"
+        assert security.min_lot == 1
+        assert security.allow_buy is True
+        assert security.allow_sell is False
+        assert security.yahoo_symbol == "AAPL"
+        assert security.currency == Currency.USD
 
     def test_create_stock_with_minimal_required_fields(self):
-        """Test creating Stock with minimal required fields."""
+        """Test creating Security with minimal required fields."""
         data = {"symbol": "AAPL", "name": "Apple Inc."}
 
-        stock = SecurityFactory.create_from_api_request(data)
+        security = SecurityFactory.create_from_api_request(data)
 
-        assert stock.symbol == "AAPL"
-        assert stock.name == "Apple Inc."
-        assert stock.min_lot == 1  # Default
-        assert stock.allow_buy is True  # Default
-        assert stock.allow_sell is False  # Default
-        assert stock.active is True  # Default
+        assert security.symbol == "AAPL"
+        assert security.name == "Apple Inc."
+        assert security.min_lot == 1  # Default
+        assert security.allow_buy is True  # Default
+        assert security.allow_sell is False  # Default
+        assert security.active is True  # Default
 
     def test_create_stock_normalizes_symbol(self):
         """Test that symbol is normalized to uppercase."""
         data = {"symbol": "aapl", "name": "Apple Inc."}
 
-        stock = SecurityFactory.create_from_api_request(data)
+        security = SecurityFactory.create_from_api_request(data)
 
-        assert stock.symbol == "AAPL"
+        assert security.symbol == "AAPL"
 
     def test_create_stock_raises_error_for_empty_symbol(self):
         """Test that empty symbol raises ValidationError."""
@@ -93,36 +93,36 @@ class TestSecurityFactoryCreateFromApiRequest:
             SecurityFactory.create_from_api_request(data)
 
     def test_create_stock_with_currency_string(self):
-        """Test creating Stock with currency as string."""
+        """Test creating Security with currency as string."""
         data = {"symbol": "AAPL", "name": "Apple Inc.", "currency": "USD"}
 
-        stock = SecurityFactory.create_from_api_request(data)
+        security = SecurityFactory.create_from_api_request(data)
 
-        assert stock.currency == Currency.USD
+        assert security.currency == Currency.USD
 
     def test_create_stock_with_min_lot_validation(self):
         """Test that min_lot is validated (minimum 1)."""
         data = {"symbol": "AAPL", "name": "Apple Inc.", "min_lot": 0}
 
-        stock = SecurityFactory.create_from_api_request(data)
+        security = SecurityFactory.create_from_api_request(data)
 
-        assert stock.min_lot == 1  # Should be corrected to 1
+        assert security.min_lot == 1  # Should be corrected to 1
 
     def test_create_stock_strips_whitespace(self):
         """Test that symbol and name are stripped of whitespace."""
         data = {"symbol": "  AAPL  ", "name": "  Apple Inc.  "}
 
-        stock = SecurityFactory.create_from_api_request(data)
+        security = SecurityFactory.create_from_api_request(data)
 
-        assert stock.symbol == "AAPL"
-        assert stock.name == "Apple Inc."
+        assert security.symbol == "AAPL"
+        assert security.name == "Apple Inc."
 
 
 class TestSecurityFactoryCreateFromImport:
     """Test SecurityFactory.create_from_import method."""
 
     def test_create_stock_from_import_with_all_fields(self):
-        """Test creating Stock from import data with all fields."""
+        """Test creating Security from import data with all fields."""
         data = {
             "symbol": "MSFT",
             "name": "Microsoft Corporation",
@@ -138,94 +138,98 @@ class TestSecurityFactoryCreateFromImport:
             "allow_sell": False,
         }
 
-        stock = SecurityFactory.create_from_import(data)
+        security = SecurityFactory.create_from_import(data)
 
-        assert isinstance(stock, Security)
-        assert stock.symbol == "MSFT"
-        assert stock.name == "Microsoft Corporation"
-        assert stock.country == "United States"
-        assert stock.fullExchangeName == "NASDAQ"
-        assert stock.yahoo_symbol == "MSFT"
-        assert stock.industry == "Technology"
-        assert stock.currency == Currency.USD
-        assert stock.min_lot == 1
-        assert stock.priority_multiplier == 1.5
-        assert stock.active is True
-        assert stock.allow_buy is True
-        assert stock.allow_sell is False
+        assert isinstance(security, Security)
+        assert security.symbol == "MSFT"
+        assert security.name == "Microsoft Corporation"
+        assert security.country == "United States"
+        assert security.fullExchangeName == "NASDAQ"
+        assert security.yahoo_symbol == "MSFT"
+        assert security.industry == "Technology"
+        assert security.currency == Currency.USD
+        assert security.min_lot == 1
+        assert security.priority_multiplier == 1.5
+        assert security.active is True
+        assert security.allow_buy is True
+        assert security.allow_sell is False
 
     def test_create_stock_from_import_with_defaults(self):
-        """Test creating Stock from import with default values."""
+        """Test creating Security from import with default values."""
         data = {"symbol": "GOOGL", "name": "Alphabet Inc."}
 
-        stock = SecurityFactory.create_from_import(data)
+        security = SecurityFactory.create_from_import(data)
 
-        assert stock.symbol == "GOOGL"
-        assert stock.name == "Alphabet Inc."
-        assert stock.priority_multiplier == 1.0  # Default
-        assert stock.min_lot == 1  # Default
-        assert stock.active is True  # Default
-        assert stock.allow_buy is True  # Default
-        assert stock.allow_sell is False  # Default
+        assert security.symbol == "GOOGL"
+        assert security.name == "Alphabet Inc."
+        assert security.priority_multiplier == 1.0  # Default
+        assert security.min_lot == 1  # Default
+        assert security.active is True  # Default
+        assert security.allow_buy is True  # Default
+        assert security.allow_sell is False  # Default
 
     def test_create_stock_from_import_normalizes_symbol(self):
         """Test that symbol is normalized to uppercase."""
         data = {"symbol": "googl", "name": "Alphabet Inc."}
 
-        stock = SecurityFactory.create_from_import(data)
+        security = SecurityFactory.create_from_import(data)
 
-        assert stock.symbol == "GOOGL"
+        assert security.symbol == "GOOGL"
 
     def test_create_stock_from_import_with_currency_string(self):
-        """Test creating Stock from import with currency as string."""
+        """Test creating Security from import with currency as string."""
         data = {"symbol": "TSLA", "name": "Tesla Inc.", "currency": "USD"}
 
-        stock = SecurityFactory.create_from_import(data)
+        security = SecurityFactory.create_from_import(data)
 
-        assert stock.currency == Currency.USD
+        assert security.currency == Currency.USD
 
     def test_create_stock_from_import_with_currency_enum(self):
-        """Test creating Stock from import with currency as Currency enum."""
+        """Test creating Security from import with currency as Currency enum."""
         data = {"symbol": "TSLA", "name": "Tesla Inc.", "currency": Currency.USD}
 
-        stock = SecurityFactory.create_from_import(data)
+        security = SecurityFactory.create_from_import(data)
 
-        assert stock.currency == Currency.USD
+        assert security.currency == Currency.USD
 
     def test_create_stock_from_import_with_min_lot_validation(self):
         """Test that min_lot is validated (minimum 1)."""
         data = {"symbol": "AAPL", "name": "Apple Inc.", "min_lot": 0}
 
-        stock = SecurityFactory.create_from_import(data)
+        security = SecurityFactory.create_from_import(data)
 
-        assert stock.min_lot == 1  # Should be corrected to 1
+        assert security.min_lot == 1  # Should be corrected to 1
 
 
 class TestSecurityFactoryCreateWithIndustryDetection:
     """Test SecurityFactory.create_with_industry_detection method."""
 
     def test_create_stock_with_detected_industry(self):
-        """Test creating Stock with detected industry."""
+        """Test creating Security with detected industry."""
         data = {"symbol": "AAPL", "name": "Apple Inc."}
         detected_industry = "Consumer Electronics"
 
-        stock = SecurityFactory.create_with_industry_detection(data, detected_industry)
+        security = SecurityFactory.create_with_industry_detection(
+            data, detected_industry
+        )
 
-        assert stock.industry == "Consumer Electronics"
+        assert security.industry == "Consumer Electronics"
 
     def test_create_stock_with_industry_from_data(self):
-        """Test creating Stock with industry from data (when detected_industry is None)."""
+        """Test creating Security with industry from data (when detected_industry is None)."""
         data = {"symbol": "AAPL", "name": "Apple Inc.", "industry": "Technology"}
 
-        stock = SecurityFactory.create_with_industry_detection(data, None)
+        security = SecurityFactory.create_with_industry_detection(data, None)
 
-        assert stock.industry == "Technology"
+        assert security.industry == "Technology"
 
     def test_create_stock_prioritizes_detected_industry(self):
         """Test that detected_industry takes precedence over data industry."""
         data = {"symbol": "AAPL", "name": "Apple Inc.", "industry": "Technology"}
         detected_industry = "Consumer Electronics"
 
-        stock = SecurityFactory.create_with_industry_detection(data, detected_industry)
+        security = SecurityFactory.create_with_industry_detection(
+            data, detected_industry
+        )
 
-        assert stock.industry == "Consumer Electronics"
+        assert security.industry == "Consumer Electronics"

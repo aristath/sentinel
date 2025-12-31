@@ -18,11 +18,11 @@ from app.modules.scoring.domain.sell import (
 class TestCalculateUnderperformanceScore:
     """Tests for underperformance scoring.
 
-    This determines if a stock should be sold based on returns.
+    This determines if a security should be sold based on returns.
     The system should:
     - BLOCK sells for large losses (hold for recovery)
-    - Prioritize selling stagnant/underperforming stocks
-    - Keep stocks in the ideal return range
+    - Prioritize selling stagnant/underperforming securities
+    - Keep securities in the ideal return range
     """
 
     def test_large_loss_returns_zero_score_blocks_sell(self):
@@ -72,7 +72,7 @@ class TestCalculateUnderperformanceScore:
         assert profit_pct == pytest.approx(-0.10, abs=0.01)
 
     def test_ideal_return_range_gets_low_score(self):
-        """8-15% annual return should get LOW sell score (keep the stock).
+        """8-15% annual return should get LOW sell score (keep the security).
 
         Bug caught: If good performers get high scores, system would
         sell winners instead of losers.
@@ -83,7 +83,7 @@ class TestCalculateUnderperformanceScore:
 
         score, profit_pct = calculate_underperformance_score(current, avg, days)
 
-        assert score <= 0.2  # Low priority - keep this stock
+        assert score <= 0.2  # Low priority - keep this security
         assert profit_pct == pytest.approx(0.12, abs=0.01)
 
     def test_exceeding_target_gets_moderate_score(self):
@@ -135,7 +135,7 @@ class TestCalculateTimeHeldScore:
         """Positions held <90 days should be blocked from selling.
 
         Bug caught: Selling too early would trigger wash sale issues
-        and not give stocks time to recover from volatility.
+        and not give securities time to recover from volatility.
         """
         # 60 days ago
         bought = (datetime.now() - timedelta(days=60)).isoformat()
@@ -255,7 +255,7 @@ class TestCalculatePortfolioBalanceScore:
     def test_high_concentration_single_position(self):
         """A single position >10% of portfolio should increase score.
 
-        Bug caught: Single stock concentration risk.
+        Bug caught: Single security concentration risk.
         """
         country_allocations = {"EU": 0.33, "US": 0.33, "ASIA": 0.34}
         ind_allocations = {"Consumer Electronics": 0.30}
@@ -289,7 +289,7 @@ class TestCalculatePortfolioBalanceScore:
         assert score == 0.5  # Neutral
 
     def test_multi_industry_stock_averages(self):
-        """Stock in multiple industries should average their weights.
+        """Security in multiple industries should average their weights.
 
         Bug caught: Multi-industry parsing errors.
         """

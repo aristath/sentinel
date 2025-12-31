@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Migration script v4: Add min_lot column to stocks table.
+Migration script v4: Add min_lot column to securities table.
 
 This column specifies the minimum number of shares that must be
-purchased for a stock (e.g., 100 for Japanese stocks).
+purchased for a security (e.g., 100 for Japanese securities).
 
 Usage:
     python scripts/migrate_v4.py
@@ -14,20 +14,20 @@ from pathlib import Path
 
 import aiosqlite
 
-# Known minimum lot sizes for Asian stocks
+# Known minimum lot sizes for Asian securities
 KNOWN_LOT_SIZES = {
-    # Japanese stocks trade in 100-share lots
+    # Japanese securities trade in 100-share lots
     "7203.T": 100,  # Toyota
     "6758.T": 100,  # Sony
     "9984.T": 100,  # SoftBank
-    # Korean stocks typically trade in single shares
+    # Korean securities typically trade in single shares
     "005930.KS": 1,  # Samsung
-    # European and US stocks typically trade in single shares
+    # European and US securities typically trade in single shares
 }
 
 
 async def migrate():
-    """Add min_lot column to stocks table."""
+    """Add min_lot column to securities table."""
     db_path = Path("data/trader.db")
 
     if not db_path.exists():
@@ -35,13 +35,13 @@ async def migrate():
         return False
 
     async with aiosqlite.connect(db_path) as db:
-        # Check stocks table for min_lot column
+        # Check securities table for min_lot column
         cursor = await db.execute("PRAGMA table_info(securities)")
         stock_columns = [row[1] for row in await cursor.fetchall()]
 
         if "min_lot" not in stock_columns:
-            await db.execute("ALTER TABLE stocks ADD COLUMN min_lot INTEGER DEFAULT 1")
-            print("Added min_lot column to stocks table")
+            await db.execute("ALTER TABLE securities ADD COLUMN min_lot INTEGER DEFAULT 1")
+            print("Added min_lot column to securities table")
 
             # Update known lot sizes
             for symbol, lot_size in KNOWN_LOT_SIZES.items():
@@ -49,9 +49,9 @@ async def migrate():
                     "UPDATE securities SET min_lot = ? WHERE symbol = ?",
                     (lot_size, symbol),
                 )
-            print(f"Updated {len(KNOWN_LOT_SIZES)} stocks with known lot sizes")
+            print(f"Updated {len(KNOWN_LOT_SIZES)} securities with known lot sizes")
         else:
-            print("min_lot column already exists in stocks table")
+            print("min_lot column already exists in securities table")
 
         await db.commit()
 

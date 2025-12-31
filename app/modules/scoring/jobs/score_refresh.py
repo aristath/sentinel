@@ -1,6 +1,6 @@
-"""Periodic stock score refresh job.
+"""Periodic security score refresh job.
 
-Uses the new scoring domain to calculate scores for all active stocks.
+Uses the new scoring domain to calculate scores for all active securities.
 """
 
 import logging
@@ -12,13 +12,13 @@ from app.core.events import SystemEvent, emit
 from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.locking import file_lock
 from app.modules.display.services.display_service import set_led4, set_text
-from app.modules.scoring.domain import PortfolioContext, calculate_stock_score
+from app.modules.scoring.domain import PortfolioContext, calculate_security_score
 
 logger = logging.getLogger(__name__)
 
 
 async def refresh_all_scores():
-    """Refresh scores for all active stocks in the universe."""
+    """Refresh scores for all active securities in the universe."""
     async with file_lock("score_refresh", timeout=300.0):
         await _refresh_all_scores_internal()
 
@@ -35,14 +35,14 @@ async def _refresh_all_scores_internal():
     try:
         db_manager = get_db_manager()
 
-        # Get all active stocks
+        # Get all active securities
         cursor = await db_manager.config.execute(
             "SELECT symbol, yahoo_symbol, country, industry FROM securities WHERE active = 1"
         )
-        stocks = await cursor.fetchall()
+        securities = await cursor.fetchall()
 
-        if not stocks:
-            logger.info("No active stocks to score")
+        if not securities:
+            logger.info("No active securities to score")
             emit(SystemEvent.PROCESSING_END)
             emit(SystemEvent.SCORE_REFRESH_COMPLETE)
             return
@@ -51,7 +51,7 @@ async def _refresh_all_scores_internal():
         portfolio_context = await _build_portfolio_context(db_manager)
 
         scores_updated = 0
-        for row in stocks:
+        for row in securities:
             symbol, yahoo_symbol, country, industry = row
             logger.info(f"Scoring {symbol}...")
 
@@ -73,7 +73,7 @@ async def _refresh_all_scores_internal():
 
                 # Calculate score using 8-group scoring system
                 # Weights are fixed (no longer configurable via settings)
-                score = await calculate_stock_score(
+                score = await calculate_security_score(
                     symbol=symbol,
                     daily_prices=daily_prices,
                     monthly_prices=monthly_prices,
@@ -112,7 +112,7 @@ async def _refresh_all_scores_internal():
                 continue
 
         await db_manager.calculations.commit()
-        logger.info(f"Refreshed scores for {scores_updated} stocks")
+        logger.info(f"Refreshed scores for {scores_updated} securities")
 
         emit(SystemEvent.PROCESSING_END)
         emit(SystemEvent.SCORE_REFRESH_COMPLETE)
@@ -159,7 +159,7 @@ async def _build_portfolio_context(db_manager) -> PortfolioContext:
         for industry_name in industry_names:
             industry_to_group[industry_name] = group_name
 
-    # Get stock metadata for scoring
+    # Get security metadata for scoring
     cursor = await db_manager.config.execute(
         "SELECT symbol, country, industry FROM securities WHERE active = 1"
     )

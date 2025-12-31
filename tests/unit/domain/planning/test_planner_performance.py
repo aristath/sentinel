@@ -74,7 +74,7 @@ async def test_metrics_prefetching_reduces_db_queries():
         ),
     ]
 
-    stocks = [
+    securities = [
         Security(
             symbol="AAPL.US",
             name="Apple Inc",
@@ -135,7 +135,7 @@ async def test_metrics_prefetching_reduces_db_queries():
         await create_holistic_plan(
             portfolio_context=portfolio_context,
             available_cash=1000.0,
-            stocks=stocks,
+            securities=securities,
             positions=positions,
             max_plan_depth=3,  # Smaller depth for faster test
         )
@@ -179,7 +179,7 @@ async def test_parallel_evaluation_improves_performance():
         )
     ]
 
-    stocks = [
+    securities = [
         Security(
             symbol="AAPL.US",
             name="Apple Inc",
@@ -218,7 +218,7 @@ async def test_parallel_evaluation_improves_performance():
         plan = await create_holistic_plan(
             portfolio_context=portfolio_context,
             available_cash=1000.0,
-            stocks=stocks,
+            securities=securities,
             positions=positions,
             max_plan_depth=2,  # Small depth for faster test
         )

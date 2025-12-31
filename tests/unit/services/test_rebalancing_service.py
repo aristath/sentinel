@@ -83,7 +83,7 @@ class TestCalculateMinTradeAmount:
 
 @pytest.fixture
 def mock_stock_repo():
-    """Mock stock repository."""
+    """Mock security repository."""
     return AsyncMock()
 
 

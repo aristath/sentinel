@@ -1,6 +1,6 @@
 """Tests for position drawdown calculations.
 
-These tests validate drawdown calculations for individual stock positions,
+These tests validate drawdown calculations for individual security positions,
 including maximum drawdown and current drawdown.
 """
 

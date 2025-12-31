@@ -25,10 +25,10 @@ async def setup_test_data(db_manager):
     """Set up test data in the database."""
     config_db = db_manager.config
 
-    # Create a test stock
+    # Create a test security
     await config_db.execute(
         """
-        INSERT INTO stocks (symbol, yahoo_symbol, name, industry, country,
+        INSERT INTO securities (symbol, yahoo_symbol, name, industry, country,
                           priority_multiplier, min_lot, active, allow_buy, allow_sell,
                           created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)

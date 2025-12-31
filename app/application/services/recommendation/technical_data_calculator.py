@@ -120,7 +120,7 @@ async def get_technical_data_for_positions(
     - Distance from 200-day MA
 
     Args:
-        symbols: List of stock symbols to calculate technical data for
+        symbols: List of security symbols to calculate technical data for
         db_manager: Database manager for accessing history databases
 
     Returns:

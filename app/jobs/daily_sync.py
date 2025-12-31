@@ -254,7 +254,7 @@ async def _sync_portfolio_internal():
         security_repo = SecurityRepository()
 
         positions_before = await position_repo.get_all()
-        stocks = await security_repo.get_all_active()
+        securities = await security_repo.get_all_active()
         cash_balances_before_raw = client.get_cash_balances()
         cash_balances_before = (
             {b.currency: b.amount for b in cash_balances_before_raw}
@@ -274,7 +274,7 @@ async def _sync_portfolio_internal():
             pending_orders = []
 
         hash_before = generate_portfolio_hash(
-            position_dicts_before, stocks, cash_balances_before, pending_orders
+            position_dicts_before, securities, cash_balances_before, pending_orders
         )
         logger.debug(f"Portfolio hash before sync: {hash_before}")
 
@@ -362,11 +362,11 @@ async def _sync_portfolio_internal():
             f"total value: {total_value:.2f}, cash: {cash_balance:.2f}"
         )
 
-        # Check and add missing portfolio stocks to universe
-        await _ensure_portfolio_stocks_in_universe(positions, client, security_repo)
+        # Check and add missing portfolio securities to universe
+        await _ensure_portfolio_securities_in_universe(positions, client, security_repo)
 
-        # Sync stock currencies
-        await sync_stock_currencies()
+        # Sync security currencies
+        await sync_security_currencies()
 
         # Sync prices from Yahoo
         await _sync_prices_internal()
@@ -384,7 +384,7 @@ async def _sync_portfolio_internal():
         ]
         # Use same pending_orders as before (they should still be pending)
         hash_after = generate_portfolio_hash(
-            position_dicts_after, stocks, cash_balances_after, pending_orders
+            position_dicts_after, securities, cash_balances_after, pending_orders
         )
         logger.debug(f"Portfolio hash after sync: {hash_after}")
 
@@ -421,7 +421,7 @@ async def _sync_portfolio_internal():
 
 async def sync_prices():
     """
-    Sync current prices for all stocks in universe.
+    Sync current prices for all securities in universe.
 
     Uses file locking to prevent concurrent syncs.
     """
@@ -444,15 +444,17 @@ async def _sync_prices_internal():
         # This could use SecurityRepository.get_all_active() but needs yahoo_symbol field.
         # See README.md Architecture section for details.
         security_repo = SecurityRepository()
-        stocks = await security_repo.get_all_active()
+        securities = await security_repo.get_all_active()
 
         # Extract symbols and yahoo_symbols
         rows = [
-            (stock.symbol, stock.yahoo_symbol) for stock in stocks if stock.yahoo_symbol
+            (security.symbol, security.yahoo_symbol)
+            for security in securities
+            if security.yahoo_symbol
         ]
 
         if not rows:
-            logger.info("No stocks to sync")
+            logger.info("No securities to sync")
             emit(SystemEvent.SYNC_COMPLETE)
             return
 
@@ -500,15 +502,15 @@ async def _sync_prices_internal():
         raise
 
 
-async def sync_stock_currencies():
+async def sync_security_currencies():
     """
-    Fetch and store trading currency for all stocks from Tradernet.
+    Fetch and store trading currency for all securities from Tradernet.
     """
     from app.repositories import SecurityRepository
 
-    logger.info("Starting stock currency sync")
+    logger.info("Starting security currency sync")
 
-    set_text("SYNCING STOCK CURRENCIES...")
+    set_text("SYNCING SECURITY CURRENCIES...")
     set_led3(0, 0, 255)  # Blue for sync
 
     client = get_tradernet_client()
@@ -521,11 +523,11 @@ async def sync_stock_currencies():
     try:
         # Note: Using SecurityRepository instead of direct DB access
         security_repo = SecurityRepository()
-        stocks = await security_repo.get_all_active()
-        symbols = [stock.symbol for stock in stocks]
+        securities = await security_repo.get_all_active()
+        symbols = [security.symbol for security in securities]
 
         if not symbols:
-            logger.info("No stocks to sync currencies for")
+            logger.info("No securities to sync currencies for")
             return
 
         quotes_response = client.get_quotes_raw(symbols)
@@ -533,7 +535,7 @@ async def sync_stock_currencies():
 
         updated = 0
         # Note: Direct DB access here is a known architecture violation.
-        # This job needs to update stock currency directly. See README.md Architecture section for details.
+        # This job needs to update security currency directly. See README.md Architecture section for details.
         db_manager = get_db_manager()
         async with db_manager.config.transaction():
             for q in q_list:
@@ -547,25 +549,25 @@ async def sync_stock_currencies():
                         )
                         updated += 1
 
-        logger.info(f"Stock currency sync complete: updated {updated} stocks")
+        logger.info(f"Security currency sync complete: updated {updated} securities")
 
     except Exception as e:
-        logger.error(f"Stock currency sync failed: {e}")
+        logger.error(f"Security currency sync failed: {e}")
         raise
 
 
-async def _ensure_portfolio_stocks_in_universe(
+async def _ensure_portfolio_securities_in_universe(
     positions: list, client, security_repo: SecurityRepository
 ) -> None:
-    """Ensure all portfolio stocks are in the universe.
+    """Ensure all portfolio securities are in the universe.
 
-    For each position, checks if the stock exists in the universe.
+    For each position, checks if the security exists in the universe.
     If not, adds it using stock_setup_service which will:
     1. Get ISIN and Yahoo symbol from Tradernet
     2. Fetch data from Yahoo Finance (country, exchange, industry)
-    3. Create the stock in the database
+    3. Create the security in the database
     4. Fetch historical price data (10 years initial seed)
-    5. Calculate and save the initial stock score
+    5. Calculate and save the initial security score
 
     Args:
         positions: List of Position objects from Tradernet
@@ -576,25 +578,25 @@ async def _ensure_portfolio_stocks_in_universe(
         logger.debug("No positions to check for universe membership")
         return
 
-    logger.info("Checking portfolio stocks against universe...")
+    logger.info("Checking portfolio securities against universe...")
 
     # Get all position symbols
     position_symbols = [pos.symbol for pos in positions]
     logger.info(f"Checking {len(position_symbols)} portfolio symbols")
 
-    # Check which stocks are missing from universe
+    # Check which securities are missing from universe
     missing_symbols = []
     for symbol in position_symbols:
         existing = await security_repo.get_by_symbol(symbol)
         if not existing:
             missing_symbols.append(symbol)
-            logger.info(f"Portfolio stock {symbol} not in universe - will add")
+            logger.info(f"Portfolio security {symbol} not in universe - will add")
 
     if not missing_symbols:
-        logger.info("All portfolio stocks are already in universe")
+        logger.info("All portfolio securities are already in universe")
         return
 
-    logger.info(f"Adding {len(missing_symbols)} missing stocks to universe...")
+    logger.info(f"Adding {len(missing_symbols)} missing securities to universe...")
 
     # Import here to avoid circular dependencies
     from app.infrastructure.dependencies import (
@@ -626,7 +628,7 @@ async def _ensure_portfolio_stocks_in_universe(
     for symbol in missing_symbols:
         try:
             logger.info(f"Adding {symbol} to universe...")
-            stock = await stock_setup_service.add_security_by_identifier(
+            security = await stock_setup_service.add_security_by_identifier(
                 identifier=symbol,
                 min_lot=1,
                 allow_buy=True,
@@ -634,11 +636,11 @@ async def _ensure_portfolio_stocks_in_universe(
             )
             logger.info(
                 f"Successfully added {symbol} to universe "
-                f"(ISIN: {stock.isin}, Yahoo: {stock.yahoo_symbol})"
+                f"(ISIN: {security.isin}, Yahoo: {security.yahoo_symbol})"
             )
             added_count += 1
         except ValueError as e:
-            # Stock already exists (race condition) or invalid identifier
+            # Security already exists (race condition) or invalid identifier
             logger.warning(f"Could not add {symbol}: {e}")
             failed_count += 1
         except Exception as e:
@@ -649,6 +651,6 @@ async def _ensure_portfolio_stocks_in_universe(
 
     if added_count > 0:
         logger.info(
-            f"Added {added_count} new stocks to universe. "
+            f"Added {added_count} new securities to universe. "
             "Historical data sync will populate price histories."
         )

@@ -107,7 +107,7 @@ async def get_portfolio(
     result = []
 
     for position in positions:
-        stock = await security_repo.get_by_symbol(position.symbol)
+        security = await security_repo.get_by_symbol(position.symbol)
         pos_dict = {
             "symbol": position.symbol,
             "quantity": position.quantity,
@@ -118,13 +118,13 @@ async def get_portfolio(
             "market_value_eur": position.market_value_eur,
             "last_updated": position.last_updated,
         }
-        if stock:
+        if security:
             pos_dict.update(
                 {
-                    "stock_name": stock.name,
-                    "industry": stock.industry,
-                    "country": stock.country,
-                    "fullExchangeName": stock.fullExchangeName,
+                    "stock_name": security.name,
+                    "industry": security.industry,
+                    "country": security.country,
+                    "fullExchangeName": security.fullExchangeName,
                 }
             )
         result.append(pos_dict)

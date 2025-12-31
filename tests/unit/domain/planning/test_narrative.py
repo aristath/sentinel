@@ -227,7 +227,7 @@ class TestGenerateSellNarrative:
             name="Apple Inc",
             value=1000,
             tags=["windfall"],
-            reason="Stock gained 50% above normal growth",
+            reason="Security gained 50% above normal growth",
             portfolio_context=context,
             all_opportunities={},
         )
@@ -312,7 +312,7 @@ class TestGenerateBuyNarrative:
             name="Alibaba Group",
             value=1000,
             tags=["averaging_down"],
-            reason="Quality stock down 20%",
+            reason="Quality security down 20%",
             portfolio_context=context,
             all_opportunities={},
         )
@@ -374,7 +374,7 @@ class TestGenerateBuyNarrative:
             name="AT&T",
             value=500,
             tags=["quality"],
-            reason="Solid dividend stock",
+            reason="Solid dividend security",
             portfolio_context=context,
             all_opportunities={},
         )
@@ -417,7 +417,7 @@ class TestGenerateStepNarrative:
         action.name = "Apple Inc"
         action.side = TradeSide.BUY
         action.tags = ["quality"]
-        action.reason = "Good quality stock"
+        action.reason = "Good quality security"
         action.value_eur = 1000
 
         context = MagicMock()

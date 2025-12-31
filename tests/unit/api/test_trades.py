@@ -104,7 +104,7 @@ class TestExecuteTrade:
 
     @pytest.mark.asyncio
     async def test_raises_404_for_unknown_stock(self):
-        """Test raising 404 when stock not found."""
+        """Test raising 404 when security not found."""
         from app.modules.trading.api.trades import TradeRequest, execute_trade
 
         request = TradeRequest(symbol="UNKNOWN", side=TradeSide.BUY, quantity=10)

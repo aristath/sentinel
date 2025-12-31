@@ -128,12 +128,12 @@ async def _step_sync_prices():
     """
     Step 4: Sync prices from Yahoo Finance (market-aware).
 
-    Only fetches prices for stocks whose markets are currently open.
+    Only fetches prices for securities whose markets are currently open.
     """
     try:
-        stocks = await _get_active_stocks()
-        if not stocks:
-            logger.info("No active stocks to sync prices for")
+        securities = await _get_active_stocks()
+        if not securities:
+            logger.info("No active securities to sync prices for")
             return
 
         open_markets = await get_open_markets()
@@ -143,14 +143,16 @@ async def _step_sync_prices():
 
         logger.info(f"Open markets: {open_markets}")
 
-        grouped = group_stocks_by_exchange(stocks)
+        grouped = group_stocks_by_exchange(securities)
 
         for exchange in open_markets:
             market_stocks = grouped.get(exchange, [])
             if not market_stocks:
                 continue
 
-            logger.info(f"Fetching prices for {len(market_stocks)} {exchange} stocks")
+            logger.info(
+                f"Fetching prices for {len(market_stocks)} {exchange} securities"
+            )
 
             symbol_yahoo_map = {
                 s.symbol: s.yahoo_symbol for s in market_stocks if s.yahoo_symbol
@@ -196,7 +198,7 @@ async def _step_get_recommendation() -> Optional[Any]:
     """
     Step 6: Get recommendation from holistic planner.
 
-    The planner considers ALL stocks across all markets,
+    The planner considers ALL securities across all markets,
     not just those with open markets.
     """
     try:
@@ -210,7 +212,7 @@ async def _step_execute_trade(recommendation) -> dict[str, Any]:
     """
     Step 7: Execute trade (market-aware).
 
-    Only executes if the stock's market is currently open (if required for this trade).
+    Only executes if the security's market is currently open (if required for this trade).
 
     Args:
         recommendation: The trade recommendation
@@ -219,14 +221,14 @@ async def _step_execute_trade(recommendation) -> dict[str, Any]:
         Dict with status and details
     """
     try:
-        # Get the stock to check its exchange
-        stock = await _get_stock_by_symbol(recommendation.symbol)
-        if not stock:
-            return {"status": "skipped", "reason": "Stock not found"}
+        # Get the security to check its exchange
+        security = await _get_stock_by_symbol(recommendation.symbol)
+        if not security:
+            return {"status": "skipped", "reason": "Security not found"}
 
-        exchange = getattr(stock, "fullExchangeName", None)
+        exchange = getattr(security, "fullExchangeName", None)
         if not exchange:
-            logger.warning(f"Stock {recommendation.symbol} has no exchange set")
+            logger.warning(f"Security {recommendation.symbol} has no exchange set")
             # Allow trade anyway - exchange might not be set
         elif should_check_market_hours(exchange, recommendation.side.value):
             # Market hours check is required for this trade
@@ -262,7 +264,7 @@ async def _step_update_display():
 
 
 async def _get_active_stocks() -> list:
-    """Get all active stocks from the database."""
+    """Get all active securities from the database."""
     from app.repositories import SecurityRepository
 
     security_repo = SecurityRepository()
@@ -270,7 +272,7 @@ async def _get_active_stocks() -> list:
 
 
 async def _get_stock_by_symbol(symbol: str):
-    """Get a stock by symbol."""
+    """Get a security by symbol."""
     from app.repositories import SecurityRepository
 
     security_repo = SecurityRepository()
@@ -332,7 +334,7 @@ async def _get_holistic_recommendation():
 
     # Check cache first
     positions = await position_repo.get_all()
-    stocks = await security_repo.get_all_active()
+    securities = await security_repo.get_all_active()
     settings = await settings_service.get_settings()
     allocations = await allocation_repo.get_all()
     position_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
@@ -353,7 +355,7 @@ async def _get_holistic_recommendation():
     portfolio_cache_key = generate_recommendation_cache_key(
         position_dicts,
         settings.to_dict(),
-        stocks,
+        securities,
         cash_balances,
         allocations,
         pending_orders,
@@ -373,7 +375,7 @@ async def _get_holistic_recommendation():
 
         planner_repo = PlannerRepository()
         portfolio_hash = generate_portfolio_hash(
-            position_dicts, stocks, cash_balances, pending_orders
+            position_dicts, securities, cash_balances, pending_orders
         )
         best_result = await planner_repo.get_best_result(portfolio_hash)
 
@@ -698,7 +700,7 @@ async def _frequent_portfolio_update():
         client = get_tradernet_client()
 
         positions_before = await position_repo.get_all()
-        stocks = await security_repo.get_all_active()
+        securities = await security_repo.get_all_active()
         cash_balances_before = (
             {b.currency: b.amount for b in client.get_cash_balances()}
             if client.is_connected
@@ -708,7 +710,7 @@ async def _frequent_portfolio_update():
             {"symbol": p.symbol, "quantity": p.quantity} for p in positions_before
         ]
         hash_before = generate_portfolio_hash(
-            position_dicts_before, stocks, cash_balances_before
+            position_dicts_before, securities, cash_balances_before
         )
 
         # Sync portfolio to update positions and generate new portfolio hash
@@ -725,7 +727,7 @@ async def _frequent_portfolio_update():
             {"symbol": p.symbol, "quantity": p.quantity} for p in positions_after
         ]
         hash_after = generate_portfolio_hash(
-            position_dicts_after, stocks, cash_balances_after
+            position_dicts_after, securities, cash_balances_after
         )
 
         # Only invalidate recommendation caches if portfolio hash changed

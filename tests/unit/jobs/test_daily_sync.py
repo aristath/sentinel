@@ -305,7 +305,7 @@ class TestSyncPricesInternal:
 
     @pytest.mark.asyncio
     async def test_skips_when_no_stocks(self):
-        """Test that sync is skipped when no stocks."""
+        """Test that sync is skipped when no securities."""
         from app.jobs.daily_sync import _sync_prices_internal
 
         mock_stock_repo = AsyncMock()
@@ -417,7 +417,7 @@ class TestSyncStockCurrencies:
 
     @pytest.mark.asyncio
     async def test_skips_when_no_stocks(self):
-        """Test that sync is skipped when no stocks."""
+        """Test that sync is skipped when no securities."""
         from app.jobs.daily_sync import sync_stock_currencies
 
         mock_stock_repo = AsyncMock()

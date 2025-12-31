@@ -2,14 +2,14 @@
 """
 History Database File Migration Script.
 
-Renames per-stock history database files from symbol-based names to ISIN-based names.
+Renames per-security history database files from symbol-based names to ISIN-based names.
 For example: AAPL_US.db -> US0378331005.db
 
 Run this script on the Arduino device AFTER deploying new code:
     python scripts/migrate_history_files.py
 
 The script will:
-1. Load symbol->ISIN mapping from stocks table
+1. Load symbol->ISIN mapping from securities table
 2. Rename history files from symbol to ISIN format
 3. Keep backup of old files (.bak) for rollback
 4. Report success/failure for each file
@@ -37,7 +37,7 @@ def symbol_to_filename(symbol: str) -> str:
 
 
 async def get_symbol_isin_mapping(config_db) -> dict[str, str]:
-    """Get mapping of symbol -> ISIN from stocks table."""
+    """Get mapping of symbol -> ISIN from securities table."""
     rows = await config_db.fetchall(
         "SELECT symbol, isin FROM securities WHERE isin IS NOT NULL AND isin != ''"
     )
@@ -59,12 +59,12 @@ async def migrate_history_files():
         logger.info("No history directory found, nothing to migrate")
         return 0
 
-    # Initialize database manager to access stocks table
+    # Initialize database manager to access securities table
     db_manager = await init_databases(settings.data_dir)
 
     # Get symbol -> ISIN mapping
     symbol_isin_map = await get_symbol_isin_mapping(db_manager.config)
-    logger.info(f"Found {len(symbol_isin_map)} stocks with ISIN")
+    logger.info(f"Found {len(symbol_isin_map)} securities with ISIN")
 
     # Get all existing history files
     history_files = list(history_dir.glob("*.db"))

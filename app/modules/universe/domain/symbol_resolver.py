@@ -1,6 +1,6 @@
 """Symbol resolver service for translating between identifier formats.
 
-Handles resolution of stock identifiers between:
+Handles resolution of security identifiers between:
 - Tradernet format (e.g., AAPL.US, SAP.DE, SAN.EU)
 - ISIN format (e.g., US0378331005, ES0113900J37)
 - Yahoo Finance format (e.g., AAPL, SAP.DE)
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class IdentifierType(Enum):
-    """Type of stock identifier."""
+    """Type of security identifier."""
 
     ISIN = "isin"
     TRADERNET = "tradernet"
@@ -66,7 +66,7 @@ def detect_identifier_type(identifier: str) -> IdentifierType:
     """Detect the type of identifier.
 
     Args:
-        identifier: Stock identifier string
+        identifier: Security identifier string
 
     Returns:
         IdentifierType enum value
@@ -82,8 +82,8 @@ def tradernet_to_yahoo(tradernet_symbol: str) -> str:
     """Convert Tradernet symbol to Yahoo format (simple conversion).
 
     This is the fallback when ISIN is not available.
-    For .US stocks, strips the suffix.
-    For .GR stocks, converts to .AT (Athens).
+    For .US securities, strips the suffix.
+    For .GR securities, converts to .AT (Athens).
     Other suffixes pass through unchanged.
 
     Args:
@@ -94,11 +94,11 @@ def tradernet_to_yahoo(tradernet_symbol: str) -> str:
     """
     symbol = tradernet_symbol.upper()
 
-    # US stocks: strip .US suffix
+    # US securities: strip .US suffix
     if symbol.endswith(".US"):
         return symbol[:-3]
 
-    # Greek stocks: .GR -> .AT (Athens Exchange)
+    # Greek securities: .GR -> .AT (Athens Exchange)
     if symbol.endswith(".GR"):
         return symbol[:-3] + ".AT"
 
@@ -107,7 +107,7 @@ def tradernet_to_yahoo(tradernet_symbol: str) -> str:
 
 
 class SymbolResolver:
-    """Service for resolving stock identifiers to usable formats.
+    """Service for resolving security identifiers to usable formats.
 
     Can resolve:
     - Tradernet symbols to ISIN (via Tradernet API)
@@ -148,7 +148,7 @@ class SymbolResolver:
         1. Return as-is (no Tradernet symbol or ISIN known)
 
         Args:
-            identifier: Stock identifier (any format)
+            identifier: Security identifier (any format)
 
         Returns:
             SymbolInfo with resolved identifiers
@@ -203,10 +203,12 @@ class SymbolResolver:
         """
         # Check database cache first
         if self._security_repo:
-            stock = await self._security_repo.get_by_symbol(tradernet_symbol)
-            if stock and stock.isin:
-                logger.debug(f"Found cached ISIN for {tradernet_symbol}: {stock.isin}")
-                return stock.isin
+            security = await self._security_repo.get_by_symbol(tradernet_symbol)
+            if security and security.isin:
+                logger.debug(
+                    f"Found cached ISIN for {tradernet_symbol}: {security.isin}"
+                )
+                return security.isin
 
         # Fetch from Tradernet API
         return self._fetch_isin_from_tradernet(tradernet_symbol)
@@ -264,8 +266,8 @@ class SymbolResolver:
         # Cache the ISIN if we have a repo and found an ISIN
         if self._security_repo and info.isin:
             try:
-                stock = await self._security_repo.get_by_symbol(tradernet_symbol)
-                if stock and not stock.isin:
+                security = await self._security_repo.get_by_symbol(tradernet_symbol)
+                if security and not security.isin:
                     await self._security_repo.update(tradernet_symbol, isin=info.isin)
                     logger.info(f"Cached ISIN for {tradernet_symbol}: {info.isin}")
             except Exception as e:
@@ -280,7 +282,7 @@ class SymbolResolver:
         and don't need full SymbolInfo.
 
         Args:
-            identifier: Stock identifier (Tradernet symbol, Yahoo symbol, or ISIN)
+            identifier: Security identifier (Tradernet symbol, Yahoo symbol, or ISIN)
 
         Returns:
             ISIN string if resolvable, None otherwise
@@ -314,9 +316,9 @@ class SymbolResolver:
 
         if is_isin(identifier):
             # Look up by ISIN to get symbol
-            stock = await self._security_repo.get_by_isin(identifier)
-            if stock:
-                return stock.symbol
+            security = await self._security_repo.get_by_isin(identifier)
+            if security:
+                return security.symbol
             return identifier
         else:
             # Already a symbol, return as-is
@@ -334,7 +336,7 @@ class SymbolResolver:
         if not self._security_repo:
             return None
 
-        stock = await self._security_repo.get_by_symbol(symbol.upper())
-        if stock and stock.isin:
-            return stock.isin
+        security = await self._security_repo.get_by_symbol(symbol.upper())
+        if security and security.isin:
+            return security.isin
         return None

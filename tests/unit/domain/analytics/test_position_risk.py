@@ -1,6 +1,6 @@
 """Tests for position risk metrics calculations.
 
-These tests validate risk metric calculations for individual stock positions,
+These tests validate risk metric calculations for individual security positions,
 including volatility, Sharpe ratio, Sortino ratio, and max drawdown.
 """
 

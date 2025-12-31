@@ -103,7 +103,7 @@ class TestCalculateExcessGain:
         assert excess == pytest.approx(0.2975, abs=0.01)
 
     def test_underperforming_stock_negative_excess(self):
-        """Test that underperforming stock shows negative excess."""
+        """Test that underperforming security shows negative excess."""
         excess = calculate_excess_gain(
             current_gain=0.05,  # 5% gain
             years_held=2.0,
@@ -330,7 +330,7 @@ class TestShouldTakeProfits:
         assert "within normal range" in reason
 
     def test_performing_near_expectations(self):
-        """Test stock performing near expectations."""
+        """Test security performing near expectations."""
         should_sell, sell_pct, reason = should_take_profits(
             current_gain=0.10,  # 10% gain
             years_held=1.0,
@@ -342,7 +342,7 @@ class TestShouldTakeProfits:
         assert "near expectations" in reason
 
     def test_underperforming_stock(self):
-        """Test underperforming stock."""
+        """Test underperforming security."""
         should_sell, sell_pct, reason = should_take_profits(
             current_gain=0.05,  # 5% gain
             years_held=2.0,

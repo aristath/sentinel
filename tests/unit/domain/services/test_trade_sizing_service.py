@@ -13,7 +13,7 @@ class TestCalculateBuyQuantity:
     """Test calculate_buy_quantity method."""
 
     def test_calculates_quantity_for_eur_stock(self):
-        """Test quantity calculation for EUR stock."""
+        """Test quantity calculation for EUR security."""
         result = TradeSizingService.calculate_buy_quantity(
             target_value_eur=1000.0, price=50.0, min_lot=1, exchange_rate=1.0
         )
@@ -34,7 +34,7 @@ class TestCalculateBuyQuantity:
         assert result.num_lots == 1  # 20 / 20 = 1 lot
 
     def test_handles_currency_conversion(self):
-        """Test handling of currency conversion for non-EUR stocks."""
+        """Test handling of currency conversion for non-EUR securities."""
         result = TradeSizingService.calculate_buy_quantity(
             target_value_eur=1000.0, price=100.0, min_lot=1, exchange_rate=1.1
         )
@@ -208,7 +208,7 @@ class TestEdgeCases:
         assert result.quantity == 1
 
     def test_handles_very_high_price(self):
-        """Test handling of very high stock prices."""
+        """Test handling of very high security prices."""
         result = TradeSizingService.calculate_buy_quantity(
             target_value_eur=1000.0, price=10000.0, min_lot=1, exchange_rate=1.0
         )

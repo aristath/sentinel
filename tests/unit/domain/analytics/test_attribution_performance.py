@@ -227,7 +227,7 @@ class TestGetPerformanceAttribution:
             }
         )
 
-        # Mock stock repository
+        # Mock security repository
         mock_stock = Security(
             symbol="AAPL",
             name="Apple",

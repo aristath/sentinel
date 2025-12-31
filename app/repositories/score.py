@@ -66,7 +66,7 @@ class ScoreRepository:
         return [self._row_to_score(row) for row in rows]
 
     async def get_top(self, limit: int = 10) -> List[SecurityScore]:
-        """Get top scored stocks."""
+        """Get top scored securities."""
         rows = await self._db.fetchall(
             """
             SELECT * FROM scores
@@ -140,7 +140,7 @@ class ScoreRepository:
         For proper historical tracking, we would need a score_history table.
 
         Args:
-            symbol: Stock symbol
+            symbol: Security symbol
             months: Number of months to look back
 
         Returns:

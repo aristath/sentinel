@@ -1,26 +1,26 @@
 /**
- * Edit Stock Modal Component
- * Form for editing existing securitys in the universe
+ * Edit Security Modal Component
+ * Form for editing existing securities in the universe
  */
-class EditStockModal extends HTMLElement {
+class EditSecurityModal extends HTMLElement {
   connectedCallback() {
     this.innerHTML = `
-      <div x-data x-show="$store.app.showEditStockModal"
+      <div x-data x-show="$store.app.showEditSecurityModal"
            class="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 flex items-center justify-center p-4"
            x-transition>
         <div class="bg-gray-800 border border-gray-700 rounded-lg w-full max-w-md modal-content" @click.stop>
           <div class="flex items-center justify-between p-4 border-b border-gray-700">
-            <h2 class="text-lg font-semibold text-gray-100">Edit Stock</h2>
+            <h2 class="text-lg font-semibold text-gray-100">Edit Security</h2>
             <button @click="$store.app.closeEditStock()"
                     class="text-gray-400 hover:text-gray-200 text-2xl leading-none">&times;</button>
           </div>
 
-          <template x-if="$store.app.editingStock">
+          <template x-if="$store.app.editingSecurity">
             <div class="p-4 space-y-4">
               <div>
                 <label class="block text-sm text-gray-300 mb-1">Symbol (Tradernet)</label>
                 <input type="text"
-                       x-model="$store.app.editingStock.symbol"
+                       x-model="$store.app.editingSecurity.symbol"
                        class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
                 <p class="text-xs text-gray-300 mt-1">Tradernet ticker symbol (e.g., ASML.NL, RHM.DE)</p>
               </div>
@@ -28,7 +28,7 @@ class EditStockModal extends HTMLElement {
               <div>
                 <label class="block text-sm text-gray-300 mb-1">Yahoo Symbol (override)</label>
                 <input type="text"
-                       x-model="$store.app.editingStock.yahoo_symbol"
+                       x-model="$store.app.editingSecurity.yahoo_symbol"
                        placeholder="Leave empty to use convention"
                        class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
                 <p class="text-xs text-gray-300 mt-1">e.g., 1810.HK for Xiaomi, 300750.SZ for CATL</p>
@@ -37,48 +37,60 @@ class EditStockModal extends HTMLElement {
               <div>
                 <label class="block text-sm text-gray-300 mb-1">Name</label>
                 <input type="text"
-                       x-model="$store.app.editingStock.name"
+                       x-model="$store.app.editingSecurity.name"
                        class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
               </div>
 
               <div>
+                <label class="block text-sm text-gray-300 mb-1">ISIN</label>
+                <input type="text"
+                       disabled
+                       :value="$store.app.editingSecurity.isin"
+                       class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-sm text-gray-400 cursor-not-allowed">
+                <p class="text-xs text-gray-300 mt-1">Unique security identifier (cannot be changed)</p>
+              </div>
+
+              <div>
                 <label class="block text-sm text-gray-300 mb-1">Country</label>
-                <div class="px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-300">
-                  <span x-text="$store.app.editingStock.country || 'Auto-detected from Yahoo Finance'"></span>
-                </div>
-                <p class="text-xs text-gray-300 mt-1">Automatically detected from Yahoo Finance</p>
+                <input type="text"
+                       x-model="$store.app.editingSecurity.country"
+                       placeholder="e.g., United States, Netherlands, Germany"
+                       class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
+                <p class="text-xs text-gray-300 mt-1">Country where the security is domiciled (auto-detected from Yahoo Finance, can be manually edited)</p>
               </div>
 
               <div>
                 <label class="block text-sm text-gray-300 mb-1">Exchange</label>
-                <div class="px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-300">
-                  <span x-text="$store.app.editingStock.fullExchangeName || 'Auto-detected from Yahoo Finance'"></span>
-                </div>
-                <p class="text-xs text-gray-300 mt-1">Automatically detected from Yahoo Finance</p>
+                <input type="text"
+                       x-model="$store.app.editingSecurity.fullExchangeName"
+                       placeholder="e.g., NASDAQ, Euronext Amsterdam, XETRA"
+                       class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
+                <p class="text-xs text-gray-300 mt-1">Exchange where the security trades (auto-detected from Yahoo Finance, can be manually edited)</p>
               </div>
 
               <div>
                 <label class="block text-sm text-gray-300 mb-1">Industry</label>
-                <div class="px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-300">
-                  <span x-text="$store.app.editingStock.industry || 'Auto-detected from Yahoo Finance'"></span>
-                </div>
-                <p class="text-xs text-gray-300 mt-1">Automatically detected from Yahoo Finance during daily pipeline</p>
+                <input type="text"
+                       x-model="$store.app.editingSecurity.industry"
+                       placeholder="e.g., Technology, Healthcare, Financial Services"
+                       class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
+                <p class="text-xs text-gray-300 mt-1">Industry classification (auto-detected from Yahoo Finance, can be manually edited)</p>
               </div>
 
               <div>
                 <label class="block text-sm text-gray-300 mb-1">Min Lot Size</label>
                 <input type="number"
-                       x-model="$store.app.editingStock.min_lot"
+                       x-model="$store.app.editingSecurity.min_lot"
                        min="1"
                        step="1"
                        class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
-                <p class="text-xs text-gray-300 mt-1">Minimum shares per trade (e.g., 100 for Japanese securitys)</p>
+                <p class="text-xs text-gray-300 mt-1">Minimum shares per trade (e.g., 100 for Japanese securities)</p>
               </div>
 
               <div>
                 <label class="block text-sm text-gray-300 mb-1">Min Portfolio Target (%)</label>
                 <input type="number"
-                       x-model="$store.app.editingStock.min_portfolio_target"
+                       x-model="$store.app.editingSecurity.min_portfolio_target"
                        min="0"
                        max="20"
                        step="0.1"
@@ -89,7 +101,7 @@ class EditStockModal extends HTMLElement {
               <div>
                 <label class="block text-sm text-gray-300 mb-1">Max Portfolio Target (%)</label>
                 <input type="number"
-                       x-model="$store.app.editingStock.max_portfolio_target"
+                       x-model="$store.app.editingSecurity.max_portfolio_target"
                        min="0"
                        max="30"
                        step="0.1"
@@ -100,7 +112,7 @@ class EditStockModal extends HTMLElement {
               <div class="border-t border-gray-700 pt-4 mt-4 space-y-3">
                 <label class="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox"
-                         x-model="$store.app.editingStock.allow_buy"
+                         x-model="$store.app.editingSecurity.allow_buy"
                          class="w-4 h-4 rounded border-gray-600 bg-gray-900 text-green-600 focus:ring-green-500 focus:ring-offset-gray-800">
                   <div>
                     <span class="text-sm text-gray-300">Allow BUY</span>
@@ -110,7 +122,7 @@ class EditStockModal extends HTMLElement {
 
                 <label class="flex items-center gap-3 cursor-pointer">
                   <input type="checkbox"
-                         x-model="$store.app.editingStock.allow_sell"
+                         x-model="$store.app.editingSecurity.allow_sell"
                          class="w-4 h-4 rounded border-gray-600 bg-gray-900 text-red-600 focus:ring-red-500 focus:ring-offset-gray-800">
                   <div>
                     <span class="text-sm text-gray-300">Allow SELL</span>
@@ -122,7 +134,7 @@ class EditStockModal extends HTMLElement {
           </template>
 
           <div class="flex justify-between items-center p-4 border-t border-gray-700">
-            <button @click="$store.app.refreshStockData($store.app.editingStock?.originalIsin)"
+            <button @click="$store.app.refreshSecurityData($store.app.editingSecurity?.originalIsin)"
                     :disabled="$store.app.loading.refreshData"
                     class="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 text-white text-sm rounded transition-colors disabled:opacity-50"
                     title="Sync historical data, recalculate metrics, and refresh score">
@@ -148,4 +160,4 @@ class EditStockModal extends HTMLElement {
   }
 }
 
-customElements.define('edit-security-modal', EditStockModal);
+customElements.define('edit-security-modal', EditSecurityModal);
