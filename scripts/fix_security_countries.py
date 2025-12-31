@@ -12,13 +12,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.core.database.manager import get_db_manager
-from app.modules.universe.database.stock_repository import StockRepository
+from app.modules.universe.database.security_repository import SecurityRepository
 
 
 async def fix_missing_countries():
     """Fix missing country data by inferring from exchange names."""
     db_manager = get_db_manager()
-    stock_repo = StockRepository()
+    stock_repo = SecurityRepository()
 
     # Exchange to country mapping (from stocks_data_sync.py)
     exchange_to_country = {

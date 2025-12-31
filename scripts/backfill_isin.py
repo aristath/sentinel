@@ -22,7 +22,7 @@ sys.path.insert(0, str(project_root))
 from app.config import settings  # noqa: E402
 from app.core.database.manager import init_databases  # noqa: E402
 from app.infrastructure.external.tradernet import get_tradernet_client  # noqa: E402
-from app.modules.universe.database.stock_repository import StockRepository  # noqa: E402
+from app.modules.universe.database.security_repository import SecurityRepository  # noqa: E402
 from app.modules.universe.domain.symbol_resolver import is_isin  # noqa: E402
 
 logging.basicConfig(
@@ -38,7 +38,7 @@ async def backfill_isin():
 
     # Initialize database manager
     db_manager = await init_databases(settings.data_dir)
-    stock_repo = StockRepository()
+    stock_repo = SecurityRepository()
 
     # Connect to Tradernet
     tradernet = get_tradernet_client()
