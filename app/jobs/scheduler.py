@@ -1,6 +1,6 @@
 """APScheduler setup for background jobs.
 
-The scheduler manages 7 scheduled jobs plus 1 background task, organized by category:
+The scheduler manages 8-9 scheduled jobs plus 1 background task, organized by category:
 
 DATA SYNC JOBS:
 1. sync_cycle - Every 5 minutes (configurable)
@@ -37,6 +37,11 @@ MAINTENANCE JOBS:
 PORTFOLIO MANAGEMENT JOBS:
 5. dividend_reinvestment - Daily, 30 minutes after daily maintenance
    - Automatic reinvestment of dividend payments
+
+9. bucket_reconciliation - Daily, 45 minutes after daily maintenance (optional)
+   - Verifies virtual bucket balances match actual brokerage balances
+   - Auto-corrects minor discrepancies
+   - Only active if satellites module is installed
 
 SYSTEM JOBS:
 6. display_ticker_update - Every 10 seconds
@@ -274,6 +279,32 @@ async def init_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 
+    # Job 9: Bucket Reconciliation - daily, 45 minutes after daily maintenance
+    # Handles: verifying virtual bucket balances match actual brokerage balances
+    #
+    # JOB RELATIONSHIPS:
+    # - Runs after daily_maintenance and dividend_reinvestment
+    # - Ensures SUM(bucket_balances) == actual_balance for each currency
+    # - Auto-corrects minor discrepancies within tolerance
+    # - Alerts on significant drift
+    try:
+        from app.modules.satellites.jobs.bucket_reconciliation import (
+            run_bucket_reconciliation,
+        )
+
+        scheduler.add_job(
+            run_bucket_reconciliation,
+            CronTrigger(hour=maintenance_hour, minute=45),
+            id="bucket_reconciliation",
+            name="Bucket Reconciliation",
+            replace_existing=True,
+        )
+        logger.info("Bucket reconciliation job added to scheduler")
+    except ImportError:
+        logger.debug(
+            "Bucket reconciliation job not available - satellites module not installed"
+        )
+
     # ============================================================================
     # SYSTEM JOBS
     # ============================================================================
@@ -321,10 +352,12 @@ async def init_scheduler() -> AsyncIOScheduler:
     asyncio.create_task(_run_with_restart())
     logger.info("Started event-based trading loop as background task")
 
+    job_count = len(scheduler.get_jobs())
     logger.info(
-        f"Scheduler initialized with 7 scheduled jobs + 1 background task - "
+        f"Scheduler initialized with {job_count} scheduled jobs + 1 background task - "
         f"sync_cycle:{sync_cycle_minutes}m, securities_data_sync:1h, "
         f"maintenance:{maintenance_hour}:00, dividend_reinvestment:{maintenance_hour}:30, "
+        f"bucket_reconciliation:{maintenance_hour}:45, "
         f"planner_batch:{planner_batch_interval//60}m (fallback), "
         f"display_ticker_update:10s, auto_deploy:{auto_deploy_minutes}m, "
         f"event_based_trading:background"
@@ -362,6 +395,16 @@ async def reschedule_all_jobs():
         "dividend_reinvestment",
         trigger=CronTrigger(hour=maintenance_hour, minute=30),
     )
+
+    # Reschedule bucket reconciliation if it exists
+    try:
+        scheduler.reschedule_job(
+            "bucket_reconciliation",
+            trigger=CronTrigger(hour=maintenance_hour, minute=45),
+        )
+    except Exception:
+        # Job doesn't exist (satellites module not installed), that's fine
+        pass
 
     # Reschedule auto-deploy
     scheduler.reschedule_job(
