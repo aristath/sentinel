@@ -542,7 +542,7 @@ document.addEventListener('alpine:init', () => {
       if (!isin) return;
       this.loading.refreshData = true;
       try {
-        const response = await fetch(`/api/stocks/${encodeURIComponent(isin)}/refresh-data`, {
+        const response = await fetch(`/api/securities/${encodeURIComponent(isin)}/refresh-data`, {
           method: 'POST'
         });
         const data = await response.json();

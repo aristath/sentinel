@@ -290,17 +290,17 @@ Many settings are stored in the database and can be configured via the Settings 
 - `GET /api/portfolio/cash-breakdown` - Cash balance breakdown
 - `GET /api/portfolio/analytics` - Portfolio analytics and metrics
 
-### Stocks
+### Securities
 
-- `GET /api/stocks` - Stock universe with scores and priorities
-- `GET /api/stocks/{isin}` - Get single stock details by ISIN (e.g., US0378331005)
-- `POST /api/stocks` - Add new stock to universe
-- `POST /api/stocks/add-by-identifier` - Add stock by symbol or ISIN
-- `PUT /api/stocks/{isin}` - Update stock settings (ISIN required)
-- `DELETE /api/stocks/{isin}` - Remove stock from universe (ISIN required)
-- `POST /api/stocks/refresh-all` - Recalculate all stock scores
-- `POST /api/stocks/{isin}/refresh` - Refresh single stock score (ISIN required)
-- `POST /api/stocks/{isin}/refresh-data` - Refresh stock data from APIs (ISIN required)
+- `GET /api/securities` - Securities universe with scores and priorities (stocks, ETFs, ETCs)
+- `GET /api/securities/{isin}` - Get single security details by ISIN (e.g., US0378331005)
+- `POST /api/securities` - Add new security to universe
+- `POST /api/securities/add-by-identifier` - Add security by symbol or ISIN
+- `PUT /api/securities/{isin}` - Update security settings (ISIN required)
+- `DELETE /api/securities/{isin}` - Remove security from universe (ISIN required)
+- `POST /api/securities/refresh-all` - Recalculate all security scores
+- `POST /api/securities/{isin}/refresh` - Refresh single security score (ISIN required)
+- `POST /api/securities/{isin}/refresh-data` - Refresh security data from APIs (ISIN required)
 
 ### Trades
 
