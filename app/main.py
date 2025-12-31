@@ -8,9 +8,10 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import charts, portfolio
+from app.api import charts
 from app.api import settings as settings_api
 from app.api import status, stocks, trades
+from app.modules.portfolio.api import portfolio
 from app.config import settings
 from app.core.database.manager import get_db_manager, init_databases, shutdown_databases
 from app.core.events import SystemEvent, emit
