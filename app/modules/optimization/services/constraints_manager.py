@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 from app.domain.models import Position, Stock
-from app.domain.scoring.constants import (
+from app.modules.scoring.domain.constants import (
     GEO_ALLOCATION_TOLERANCE,
     IND_ALLOCATION_TOLERANCE,
     MAX_CONCENTRATION,

@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, Tuple
 import pandas as pd
 from pypfopt import risk_models as pypfopt_risk
 
-from app.domain.scoring.constants import (
+from app.modules.scoring.domain.constants import (
     COVARIANCE_LOOKBACK_DAYS,
     COVARIANCE_MIN_HISTORY,
 )

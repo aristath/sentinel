@@ -16,7 +16,7 @@ from pypfopt.exceptions import OptimizationError
 
 from app.domain.constants import TARGET_PORTFOLIO_VOLATILITY
 from app.domain.models import Position, Stock
-from app.domain.scoring.constants import (
+from app.modules.scoring.domain.constants import (
     OPTIMIZER_TARGET_RETURN,
     OPTIMIZER_WEIGHT_CUTOFF,
 )

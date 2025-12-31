@@ -8,7 +8,7 @@ from typing import List
 
 from app.domain.models import PortfolioSummary
 from app.domain.repositories.protocols import IPositionRepository
-from app.domain.scoring.constants import (
+from app.modules.scoring.domain.constants import (
     COUNTRY_ALERT_THRESHOLD,
     MAX_COUNTRY_CONCENTRATION,
     MAX_POSITION_CONCENTRATION,

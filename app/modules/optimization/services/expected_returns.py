@@ -13,7 +13,7 @@ Calculates expected returns for each stock by blending:
 import logging
 from typing import Dict, List, Optional
 
-from app.domain.scoring.constants import (
+from app.modules.scoring.domain.constants import (
     EXPECTED_RETURN_MAX,
     EXPECTED_RETURN_MIN,
     EXPECTED_RETURNS_CAGR_WEIGHT,

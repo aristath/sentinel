@@ -566,7 +566,7 @@ class RebalancingService:
                     )
 
                     if eval_row:
-                        from app.domain.scoring.diversification import (
+                        from app.modules.scoring.domain.diversification import (
                             calculate_portfolio_score,
                         )
                         from app.modules.planning.domain.narrative import (
@@ -675,7 +675,7 @@ class RebalancingService:
         if not plan.steps:
             return []
 
-        from app.domain.scoring.diversification import calculate_portfolio_score
+        from app.modules.scoring.domain.diversification import calculate_portfolio_score
 
         recommendations = []
         running_cash = available_cash

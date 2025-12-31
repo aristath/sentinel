@@ -34,9 +34,9 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from app.domain.models import Position, Stock
 from app.domain.portfolio_hash import generate_portfolio_hash
-from app.domain.scoring.diversification import calculate_portfolio_score
-from app.domain.scoring.end_state import calculate_portfolio_end_state_score
-from app.domain.scoring.models import PortfolioContext
+from app.modules.scoring.domain.diversification import calculate_portfolio_score
+from app.modules.scoring.domain.end_state import calculate_portfolio_end_state_score
+from app.modules.scoring.domain.models import PortfolioContext
 from app.domain.value_objects.trade_side import TradeSide
 
 logger = logging.getLogger(__name__)
@@ -147,7 +147,7 @@ async def _compute_ineligible_symbols(
     settings_repo,
 ) -> Set[str]:
     """Compute set of symbols that are ineligible for selling based on hold time and cooldown."""
-    from app.domain.scoring.groups.sell.eligibility import check_sell_eligibility
+    from app.modules.scoring.domain.groups.sell.eligibility import check_sell_eligibility
 
     ineligible_symbols = set()
 
@@ -604,7 +604,7 @@ async def identify_opportunities(
     max_loss_threshold = await settings_repo.get_float("max_loss_threshold", -0.20)
 
     # Fetch last transaction dates for all positions to check eligibility
-    from app.domain.scoring.groups.sell.eligibility import check_sell_eligibility
+    from app.modules.scoring.domain.groups.sell.eligibility import check_sell_eligibility
 
     ineligible_symbols = set()
     positions_by_symbol = {p.symbol: p for p in positions}

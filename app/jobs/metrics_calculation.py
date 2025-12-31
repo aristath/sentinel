@@ -11,7 +11,7 @@ from typing import Optional
 
 import numpy as np
 
-from app.domain.scoring.caching import (
+from app.modules.scoring.domain.caching import (
     get_52_week_high,
     get_52_week_low,
     get_bollinger_bands,
@@ -20,7 +20,7 @@ from app.domain.scoring.caching import (
     get_rsi,
     get_sharpe_ratio,
 )
-from app.domain.scoring.calculations import calculate_cagr
+from app.modules.scoring.domain.calculations import calculate_cagr
 from app.modules.portfolio.database.history_repository import HistoryRepository
 from app.modules.universe.database.stock_repository import StockRepository
 from app.repositories.calculations import CalculationsRepository
