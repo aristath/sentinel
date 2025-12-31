@@ -6,13 +6,13 @@ Builds PortfolioContext objects for use in scoring and recommendation generation
 import logging
 from typing import Dict
 
+from app.core.database.manager import DatabaseManager
 from app.domain.repositories.protocols import (
     IAllocationRepository,
     IPositionRepository,
     IStockRepository,
 )
 from app.domain.scoring import PortfolioContext
-from app.infrastructure.database.manager import DatabaseManager
 from app.repositories import GroupingRepository
 
 logger = logging.getLogger(__name__)

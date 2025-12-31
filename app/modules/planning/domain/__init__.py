@@ -8,7 +8,7 @@ best end-state portfolio score.
 """
 
 # Holistic planner - End-state optimized planning
-from app.domain.planning.holistic_planner import (
+from app.modules.planning.domain.holistic_planner import (
     ActionCandidate,
     HolisticPlan,
     HolisticStep,
@@ -19,7 +19,7 @@ from app.domain.planning.holistic_planner import (
 )
 
 # Narrative generator - Human-readable explanations
-from app.domain.planning.narrative import (
+from app.modules.planning.domain.narrative import (
     format_action_summary,
     generate_plan_narrative,
     generate_step_narrative,

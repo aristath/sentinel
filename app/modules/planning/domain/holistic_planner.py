@@ -532,14 +532,14 @@ async def identify_opportunities(
     from app.application.services.rebalancing_service import calculate_min_trade_amount
     from app.config import settings as app_settings
     from app.domain.constants import BUY_COOLDOWN_DAYS
-    from app.domain.planning.opportunities import (
+    from app.infrastructure.external import yahoo_finance as yahoo
+    from app.modules.planning.domain.opportunities import (
         identify_averaging_down_opportunities,
         identify_opportunity_buy_opportunities,
         identify_profit_taking_opportunities,
         identify_rebalance_buy_opportunities,
         identify_rebalance_sell_opportunities,
     )
-    from app.infrastructure.external import yahoo_finance as yahoo
     from app.repositories import SettingsRepository, TradeRepository
 
     settings_repo = SettingsRepository()
@@ -2394,7 +2394,7 @@ async def process_planner_incremental(
     """
     from datetime import datetime
 
-    from app.domain.planning.narrative import (
+    from app.modules.planning.domain.narrative import (
         generate_plan_narrative,
         generate_step_narrative,
     )
@@ -2995,7 +2995,7 @@ async def create_holistic_plan(
     Returns:
         HolisticPlan with the best sequence and end-state analysis
     """
-    from app.domain.planning.narrative import (
+    from app.modules.planning.domain.narrative import (
         generate_plan_narrative,
         generate_step_narrative,
     )

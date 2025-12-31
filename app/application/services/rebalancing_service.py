@@ -8,9 +8,6 @@ import json
 import logging
 from typing import Dict, List, Optional
 
-from app.application.services.recommendation.portfolio_context_builder import (
-    build_portfolio_context,
-)
 from app.domain.analytics.market_regime import detect_market_regime
 from app.domain.exceptions import ValidationError
 from app.domain.models import MultiStepRecommendation, Recommendation
@@ -31,6 +28,9 @@ from app.domain.value_objects.trade_side import TradeSide
 from app.infrastructure.database.manager import DatabaseManager
 from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.external.tradernet import TradernetClient
+from app.modules.planning.services.portfolio_context_builder import (
+    build_portfolio_context,
+)
 from app.repositories import PortfolioRepository, RecommendationRepository
 
 
@@ -525,7 +525,9 @@ class RebalancingService:
         # Try incremental mode first if enabled
         if incremental_enabled:
             from app.domain.portfolio_hash import generate_portfolio_hash
-            from app.repositories.planner_repository import PlannerRepository
+            from app.modules.planning.database.planner_repository import (
+                PlannerRepository,
+            )
 
             planner_repo = PlannerRepository()
             position_dicts = [
@@ -563,12 +565,12 @@ class RebalancingService:
                     )
 
                     if eval_row:
-                        from app.domain.planning.narrative import (
-                            generate_plan_narrative,
-                            generate_step_narrative,
-                        )
                         from app.domain.scoring.diversification import (
                             calculate_portfolio_score,
+                        )
+                        from app.modules.planning.domain.narrative import (
+                            generate_plan_narrative,
+                            generate_step_narrative,
                         )
 
                         breakdown = json.loads(eval_row["breakdown_json"])
@@ -577,7 +579,7 @@ class RebalancingService:
                         )
 
                         # Convert sequence to HolisticPlan
-                        from app.domain.planning.holistic_planner import (
+                        from app.modules.planning.domain.holistic_planner import (
                             HolisticPlan,
                             HolisticStep,
                         )
@@ -634,7 +636,9 @@ class RebalancingService:
 
         # Fallback to full mode if incremental didn't return a plan
         if not plan:
-            from app.domain.planning.holistic_planner import create_holistic_plan
+            from app.modules.planning.domain.holistic_planner import (
+                create_holistic_plan,
+            )
 
             logger.info(
                 "Using full planner mode (incremental disabled or no database result)"

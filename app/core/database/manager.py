@@ -379,12 +379,12 @@ async def init_databases(data_dir: Path) -> DatabaseManager:
         init_config_schema,
         init_dividends_schema,
         init_ledger_schema,
-        init_planner_schema,
         init_rates_schema,
         init_recommendations_schema,
         init_snapshots_schema,
         init_state_schema,
     )
+    from app.modules.planning.database.schemas import init_planner_schema
 
     _db_manager = DatabaseManager(data_dir)
 

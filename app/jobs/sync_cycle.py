@@ -369,7 +369,7 @@ async def _get_holistic_recommendation():
     best_result = None
     if incremental_enabled:
         from app.domain.portfolio_hash import generate_portfolio_hash
-        from app.repositories.planner_repository import PlannerRepository
+        from app.modules.planning.database.planner_repository import PlannerRepository
 
         planner_repo = PlannerRepository()
         portfolio_hash = generate_portfolio_hash(

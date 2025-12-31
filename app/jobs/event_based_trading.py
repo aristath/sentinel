@@ -165,13 +165,15 @@ async def _wait_for_planning_completion():
     This function calls the planner batch processing until all sequences
     for the current portfolio hash have been evaluated (completed=1).
     """
-    from app.application.services.recommendation.portfolio_context_builder import (
-        build_portfolio_context,
-    )
-    from app.domain.planning.holistic_planner import create_holistic_plan_incremental
     from app.domain.services.exchange_rate_service import ExchangeRateService
     from app.infrastructure.database.manager import get_db_manager
     from app.infrastructure.external.tradernet import TradernetClient
+    from app.modules.planning.domain.holistic_planner import (
+        create_holistic_plan_incremental,
+    )
+    from app.modules.planning.services.portfolio_context_builder import (
+        build_portfolio_context,
+    )
     from app.repositories import (
         AllocationRepository,
         PositionRepository,
@@ -509,7 +511,7 @@ async def _get_optimal_recommendation() -> Optional[Recommendation]:
         Recommendation object for the first step, or None if no recommendation available
     """
     from app.domain.portfolio_hash import generate_portfolio_hash
-    from app.repositories.planner_repository import PlannerRepository
+    from app.modules.planning.database.planner_repository import PlannerRepository
 
     position_repo = PositionRepository()
     stock_repo = StockRepository()
