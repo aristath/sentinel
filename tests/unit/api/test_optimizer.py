@@ -144,7 +144,7 @@ class TestGetOptimizerStatus:
                 mock_service_class.return_value = mock_service
 
                 with patch(
-                    "app.application.services.rebalancing_service.calculate_min_trade_amount",
+                    "app.modules.rebalancing_service.calculate_min_trade_amount",
                     return_value=285.71,
                 ):
                     result = await get_optimizer_status()
@@ -182,7 +182,7 @@ class TestGetOptimizerStatus:
                 mock_service_class.return_value = mock_service
 
                 with patch(
-                    "app.application.services.rebalancing_service.calculate_min_trade_amount",
+                    "app.modules.rebalancing_service.calculate_min_trade_amount",
                     return_value=285.71,
                 ):
                     result = await get_optimizer_status()
@@ -203,7 +203,7 @@ class TestGetOptimizerStatus:
                 mock_service_class.return_value = mock_service
 
                 with patch(
-                    "app.application.services.rebalancing_service.calculate_min_trade_amount"
+                    "app.modules.rebalancing_service.calculate_min_trade_amount"
                 ) as mock_calc:
                     mock_calc.return_value = 285.71
 

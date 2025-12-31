@@ -290,7 +290,7 @@ class TestProcessSymbolTechnicalData:
         mock_db_manager.history = AsyncMock(return_value=mock_history_db)
 
         with patch(
-            "app.application.services.recommendation.technical_data_calculator.logger"
+            "app.modules.recommendation.technical_data_calculator.logger"
         ) as mock_logger:
             result = await _process_symbol_technical_data("AAPL", mock_db_manager)
 
@@ -313,7 +313,7 @@ class TestProcessSymbolTechnicalData:
         mock_db_manager.history = AsyncMock(return_value=mock_history_db)
 
         with patch(
-            "app.application.services.recommendation.technical_data_calculator.logger"
+            "app.modules.recommendation.technical_data_calculator.logger"
         ) as mock_logger:
             result = await _process_symbol_technical_data("AAPL", mock_db_manager)
 
@@ -336,7 +336,7 @@ class TestProcessSymbolTechnicalData:
         mock_db_manager.history = AsyncMock(return_value=mock_history_db)
 
         with patch(
-            "app.application.services.recommendation.technical_data_calculator.logger"
+            "app.modules.recommendation.technical_data_calculator.logger"
         ) as mock_logger:
             result = await _process_symbol_technical_data("AAPL", mock_db_manager)
 
@@ -357,7 +357,7 @@ class TestProcessSymbolTechnicalData:
         mock_db_manager.history = AsyncMock(return_value=mock_history_db)
 
         with patch(
-            "app.application.services.recommendation.technical_data_calculator.logger"
+            "app.modules.recommendation.technical_data_calculator.logger"
         ) as mock_logger:
             result = await _process_symbol_technical_data("AAPL", mock_db_manager)
 
@@ -379,7 +379,7 @@ class TestGetTechnicalDataForPositions:
         mock_db_manager = MagicMock()
 
         with patch(
-            "app.application.services.recommendation.technical_data_calculator._process_symbol_technical_data"
+            "app.modules.recommendation.technical_data_calculator._process_symbol_technical_data"
         ) as mock_process:
             mock_technical_data = TechnicalData(
                 current_volatility=0.15,
@@ -421,7 +421,7 @@ class TestGetTechnicalDataForPositions:
         mock_db_manager = MagicMock()
 
         with patch(
-            "app.application.services.recommendation.technical_data_calculator._process_symbol_technical_data"
+            "app.modules.recommendation.technical_data_calculator._process_symbol_technical_data"
         ) as mock_process:
 
             def side_effect(symbol, db_manager):

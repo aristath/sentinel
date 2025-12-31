@@ -95,12 +95,12 @@ class TestStockSetupService:
         }
 
         # Mock Yahoo Finance data
-        with patch("app.application.services.stock_setup_service.yahoo") as mock_yahoo:
+        with patch("app.modules.stock_setup_service.yahoo") as mock_yahoo:
             mock_yahoo.get_stock_country_and_exchange.return_value = ("US", "NASDAQ")
             mock_yahoo.get_stock_industry.return_value = "Technology"
 
             with patch(
-                "app.application.services.stock_setup_service._sync_historical_for_symbol",
+                "app.modules.stock_setup_service._sync_historical_for_symbol",
                 new_callable=AsyncMock,
             ) as mock_sync:
                 result = await service.add_stock_by_identifier("AAPL.US")
@@ -137,12 +137,12 @@ class TestStockSetupService:
         }
 
         # Mock Yahoo Finance data
-        with patch("app.application.services.stock_setup_service.yahoo") as mock_yahoo:
+        with patch("app.modules.stock_setup_service.yahoo") as mock_yahoo:
             mock_yahoo.get_stock_country_and_exchange.return_value = ("US", "NASDAQ")
             mock_yahoo.get_stock_industry.return_value = "Technology"
 
             with patch(
-                "app.application.services.stock_setup_service._sync_historical_for_symbol",
+                "app.modules.stock_setup_service._sync_historical_for_symbol",
                 new_callable=AsyncMock,
             ):
                 result = await service.add_stock_by_identifier("US0378331005")
@@ -210,12 +210,12 @@ class TestStockSetupService:
             }
         }
 
-        with patch("app.application.services.stock_setup_service.yahoo") as mock_yahoo:
+        with patch("app.modules.stock_setup_service.yahoo") as mock_yahoo:
             mock_yahoo.get_stock_country_and_exchange.return_value = ("US", "NASDAQ")
             mock_yahoo.get_stock_industry.return_value = "Technology"
 
             with patch(
-                "app.application.services.stock_setup_service._sync_historical_for_symbol",
+                "app.modules.stock_setup_service._sync_historical_for_symbol",
                 new_callable=AsyncMock,
             ):
                 # Identifier should be normalized
@@ -243,12 +243,12 @@ class TestStockSetupService:
             }
         }
 
-        with patch("app.application.services.stock_setup_service.yahoo") as mock_yahoo:
+        with patch("app.modules.stock_setup_service.yahoo") as mock_yahoo:
             mock_yahoo.get_stock_country_and_exchange.return_value = ("US", "NASDAQ")
             mock_yahoo.get_stock_industry.return_value = "Technology"
 
             with patch(
-                "app.application.services.stock_setup_service._sync_historical_for_symbol",
+                "app.modules.stock_setup_service._sync_historical_for_symbol",
                 new_callable=AsyncMock,
             ) as mock_sync:
                 mock_sync.side_effect = Exception("Historical data fetch failed")
@@ -278,12 +278,12 @@ class TestStockSetupService:
             "Score calculation failed"
         )
 
-        with patch("app.application.services.stock_setup_service.yahoo") as mock_yahoo:
+        with patch("app.modules.stock_setup_service.yahoo") as mock_yahoo:
             mock_yahoo.get_stock_country_and_exchange.return_value = ("US", "NASDAQ")
             mock_yahoo.get_stock_industry.return_value = "Technology"
 
             with patch(
-                "app.application.services.stock_setup_service._sync_historical_for_symbol",
+                "app.modules.stock_setup_service._sync_historical_for_symbol",
                 new_callable=AsyncMock,
             ):
                 # Should still create stock
@@ -309,15 +309,15 @@ class TestStockSetupService:
         }
 
         with (
-            patch("app.application.services.stock_setup_service.yahoo") as mock_yahoo,
+            patch("app.modules.stock_setup_service.yahoo") as mock_yahoo,
             patch(
-                "app.application.services.stock_setup_service.get_event_bus"
+                "app.modules.stock_setup_service.get_event_bus"
             ) as mock_event_bus,
             patch(
-                "app.application.services.stock_setup_service.StockAddedEvent"
+                "app.modules.stock_setup_service.StockAddedEvent"
             ) as mock_event_class,
             patch(
-                "app.application.services.stock_setup_service._sync_historical_for_symbol",
+                "app.modules.stock_setup_service._sync_historical_for_symbol",
                 new_callable=AsyncMock,
             ),
         ):
@@ -353,9 +353,9 @@ class TestStockSetupService:
         }
 
         with (
-            patch("app.application.services.stock_setup_service.yahoo") as mock_yahoo,
+            patch("app.modules.stock_setup_service.yahoo") as mock_yahoo,
             patch(
-                "app.application.services.stock_setup_service._sync_historical_for_symbol",
+                "app.modules.stock_setup_service._sync_historical_for_symbol",
                 new_callable=AsyncMock,
             ),
         ):
@@ -383,9 +383,9 @@ class TestStockSetupService:
         }
 
         with (
-            patch("app.application.services.stock_setup_service.yahoo") as mock_yahoo,
+            patch("app.modules.stock_setup_service.yahoo") as mock_yahoo,
             patch(
-                "app.application.services.stock_setup_service._sync_historical_for_symbol",
+                "app.modules.stock_setup_service._sync_historical_for_symbol",
                 new_callable=AsyncMock,
             ),
         ):

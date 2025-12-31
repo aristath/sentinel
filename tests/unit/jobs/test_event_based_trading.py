@@ -67,7 +67,7 @@ class TestWaitForPlanningCompletion:
             patch("app.jobs.event_based_trading.PositionRepository"),
             patch("app.jobs.event_based_trading.StockRepository"),
             patch(
-                "app.application.services.recommendation.portfolio_context_builder.build_portfolio_context",
+                "app.modules.recommendation.portfolio_context_builder.build_portfolio_context",
                 new_callable=AsyncMock,
             ),
             patch("app.infrastructure.external.tradernet.get_tradernet_client"),

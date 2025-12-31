@@ -438,7 +438,7 @@ class TestGetPortfolioAnalytics:
                             return_value=mock_db_manager,
                         ):
                             with patch(
-                                "app.application.services.turnover_tracker.TurnoverTracker",
+                                "app.modules.turnover_tracker.TurnoverTracker",
                                 return_value=mock_turnover_tracker,
                             ):
                                 result = await get_portfolio_analytics(days=365)

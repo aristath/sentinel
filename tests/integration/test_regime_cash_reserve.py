@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.application.services.rebalancing_service import RebalancingService
+from app.modules.rebalancing.services.rebalancing_service import RebalancingService
 from app.repositories import (
     AllocationRepository,
     PortfolioRepository,
@@ -133,7 +133,7 @@ async def test_bull_market_uses_bull_cash_reserve(db_manager):
     mock_client.get_total_cash_eur.return_value = 10000.0  # Sync method
 
     with patch(
-        "app.application.services.rebalancing_service.detect_market_regime",
+        "app.modules.rebalancing_service.detect_market_regime",
         new_callable=AsyncMock,
         return_value="bull",
     ):
@@ -166,7 +166,7 @@ async def test_bear_market_uses_bear_cash_reserve(db_manager):
     mock_client.get_total_cash_eur.return_value = 10000.0
 
     with patch(
-        "app.application.services.rebalancing_service.detect_market_regime",
+        "app.modules.rebalancing_service.detect_market_regime",
         new_callable=AsyncMock,
         return_value="bear",
     ):
@@ -197,7 +197,7 @@ async def test_sideways_market_uses_sideways_cash_reserve(db_manager):
     mock_client.get_total_cash_eur.return_value = 10000.0
 
     with patch(
-        "app.application.services.rebalancing_service.detect_market_regime",
+        "app.modules.rebalancing_service.detect_market_regime",
         new_callable=AsyncMock,
         return_value="sideways",
     ):
@@ -229,7 +229,7 @@ async def test_disabled_regime_detection_uses_default_cash_reserve(db_manager):
 
     # Even if we mock the regime, it should not be called when disabled
     with patch(
-        "app.application.services.rebalancing_service.detect_market_regime",
+        "app.modules.rebalancing_service.detect_market_regime",
         new_callable=AsyncMock,
         return_value="bull",
     ) as mock_detect:

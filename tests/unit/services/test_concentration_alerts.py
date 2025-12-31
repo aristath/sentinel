@@ -24,7 +24,7 @@ class TestDetectAlerts:
     @pytest.mark.asyncio
     async def test_detects_country_concentration(self, mock_position_repo):
         """Test that country concentration alerts are detected."""
-        from app.application.services.concentration_alerts import (
+        from app.modules.portfolio.services.concentration_alerts import (
             ConcentrationAlertService,
         )
 
@@ -55,7 +55,7 @@ class TestDetectAlerts:
     @pytest.mark.asyncio
     async def test_detects_sector_concentration(self, mock_position_repo):
         """Test that sector concentration alerts are detected."""
-        from app.application.services.concentration_alerts import (
+        from app.modules.portfolio.services.concentration_alerts import (
             ConcentrationAlertService,
         )
 
@@ -86,7 +86,7 @@ class TestDetectAlerts:
     @pytest.mark.asyncio
     async def test_detects_position_concentration(self, mock_position_repo):
         """Test that individual position concentration alerts are detected."""
-        from app.application.services.concentration_alerts import (
+        from app.modules.portfolio.services.concentration_alerts import (
             ConcentrationAlertService,
         )
         from app.domain.models import Position
@@ -117,7 +117,7 @@ class TestDetectAlerts:
     @pytest.mark.asyncio
     async def test_returns_empty_list_when_no_concentration(self, mock_position_repo):
         """Test that empty list is returned when there's no concentration."""
-        from app.application.services.concentration_alerts import (
+        from app.modules.portfolio.services.concentration_alerts import (
             ConcentrationAlertService,
         )
 
@@ -148,7 +148,7 @@ class TestDetectAlerts:
     @pytest.mark.asyncio
     async def test_handles_empty_portfolio(self, mock_position_repo):
         """Test handling when portfolio is empty."""
-        from app.application.services.concentration_alerts import (
+        from app.modules.portfolio.services.concentration_alerts import (
             ConcentrationAlertService,
         )
 
@@ -169,7 +169,7 @@ class TestDetectAlerts:
     @pytest.mark.asyncio
     async def test_detects_multiple_alerts(self, mock_position_repo):
         """Test that multiple alerts can be detected."""
-        from app.application.services.concentration_alerts import (
+        from app.modules.portfolio.services.concentration_alerts import (
             ConcentrationAlertService,
         )
         from app.domain.models import Position
@@ -217,7 +217,7 @@ class TestDetectAlerts:
     @pytest.mark.asyncio
     async def test_alerts_have_correct_structure(self, mock_position_repo):
         """Test that alerts have the correct structure."""
-        from app.application.services.concentration_alerts import (
+        from app.modules.portfolio.services.concentration_alerts import (
             ConcentrationAlertService,
         )
 
@@ -259,7 +259,7 @@ class TestCalculateSeverity:
 
     def test_returns_critical_for_high_percentage(self):
         """Test that critical severity is returned for high percentage."""
-        from app.application.services.concentration_alerts import (
+        from app.modules.portfolio.services.concentration_alerts import (
             ConcentrationAlertService,
         )
 
@@ -273,7 +273,7 @@ class TestCalculateSeverity:
 
     def test_returns_warning_for_moderate_percentage(self):
         """Test that warning severity is returned for moderate percentage."""
-        from app.application.services.concentration_alerts import (
+        from app.modules.portfolio.services.concentration_alerts import (
             ConcentrationAlertService,
         )
 
@@ -287,7 +287,7 @@ class TestCalculateSeverity:
 
     def test_returns_warning_for_zero_limit(self):
         """Test that warning is returned when limit is zero."""
-        from app.application.services.concentration_alerts import (
+        from app.modules.portfolio.services.concentration_alerts import (
             ConcentrationAlertService,
         )
 

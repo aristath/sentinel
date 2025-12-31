@@ -597,7 +597,7 @@ class TestPortfolioOptimizerSectorConstraints:
 
         # Patch in the module where it's used, not where it's defined
         with patch(
-            "app.application.services.optimization.portfolio_optimizer.EfficientFrontier"
+            "app.modules.optimization.portfolio_optimizer.EfficientFrontier"
         ) as mock_ef_class:
             mock_ef = MagicMock()
             mock_ef_class.return_value = mock_ef
@@ -687,7 +687,7 @@ class TestPortfolioOptimizerSectorConstraints:
 
         # Patch in the module where it's used, not where it's defined
         with patch(
-            "app.application.services.optimization.portfolio_optimizer.EfficientFrontier"
+            "app.modules.optimization.portfolio_optimizer.EfficientFrontier"
         ) as mock_ef_class:
             mock_ef = MagicMock()
             mock_ef_class.return_value = mock_ef
@@ -760,7 +760,7 @@ class TestPortfolioOptimizerSectorConstraints:
         target_return = 0.11
 
         with patch(
-            "app.application.services.optimization.portfolio_optimizer.EfficientFrontier"
+            "app.modules.optimization.portfolio_optimizer.EfficientFrontier"
         ) as mock_ef_class:
             mock_ef = MagicMock()
             mock_ef_class.return_value = mock_ef
@@ -830,7 +830,7 @@ class TestPortfolioOptimizerSectorConstraints:
         target_return = 0.11
 
         with patch(
-            "app.application.services.optimization.portfolio_optimizer.EfficientFrontier"
+            "app.modules.optimization.portfolio_optimizer.EfficientFrontier"
         ) as mock_ef_class:
             mock_ef = MagicMock()
             mock_ef_class.return_value = mock_ef
@@ -903,7 +903,7 @@ class TestPortfolioOptimizerSectorConstraints:
         target_return = 0.11
 
         with patch(
-            "app.application.services.optimization.portfolio_optimizer.EfficientFrontier"
+            "app.modules.optimization.portfolio_optimizer.EfficientFrontier"
         ) as mock_ef_class:
             mock_ef = MagicMock()
             mock_ef_class.return_value = mock_ef
@@ -958,7 +958,7 @@ class TestPortfolioOptimizerRetirementFallbacks:
         ind_constraints = []
 
         with patch(
-            "app.application.services.optimization.portfolio_optimizer.EfficientFrontier"
+            "app.modules.optimization.portfolio_optimizer.EfficientFrontier"
         ) as mock_ef_class:
             mock_ef = MagicMock()
             mock_ef_class.return_value = mock_ef
@@ -1001,7 +1001,7 @@ class TestPortfolioOptimizerRetirementFallbacks:
         ind_constraints = []
 
         with patch(
-            "app.application.services.optimization.portfolio_optimizer.EfficientFrontier"
+            "app.modules.optimization.portfolio_optimizer.EfficientFrontier"
         ) as mock_ef_class:
             mock_ef = MagicMock()
             mock_ef_class.return_value = mock_ef
@@ -1049,7 +1049,7 @@ class TestPortfolioOptimizerRetirementFallbacks:
         ind_constraints = []
 
         with patch(
-            "app.application.services.optimization.portfolio_optimizer.EfficientFrontier"
+            "app.modules.optimization.portfolio_optimizer.EfficientFrontier"
         ) as mock_ef_class:
             mock_ef = MagicMock()
             mock_ef_class.return_value = mock_ef
@@ -1096,7 +1096,7 @@ class TestPortfolioOptimizerRetirementFallbacks:
         ind_constraints = []
 
         with patch(
-            "app.application.services.optimization.portfolio_optimizer.EfficientFrontier"
+            "app.modules.optimization.portfolio_optimizer.EfficientFrontier"
         ) as mock_ef_class:
             mock_ef = MagicMock()
             mock_ef_class.return_value = mock_ef

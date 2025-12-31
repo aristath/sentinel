@@ -59,7 +59,7 @@ class TestAdjustCountryWeights:
 
     def test_increases_weight_for_positive_attribution(self):
         """Test that weights increase for positive attribution."""
-        from app.application.services.recommendation.performance_adjustment_calculator import (
+        from app.modules.planning.services.performance_adjustment_calculator import (
             _adjust_country_weights,
         )
 
@@ -74,7 +74,7 @@ class TestAdjustCountryWeights:
 
     def test_decreases_weight_for_negative_attribution(self):
         """Test that weights decrease for negative attribution."""
-        from app.application.services.recommendation.performance_adjustment_calculator import (
+        from app.modules.planning.services.performance_adjustment_calculator import (
             _adjust_country_weights,
         )
 
@@ -89,7 +89,7 @@ class TestAdjustCountryWeights:
 
     def test_handles_zero_attribution(self):
         """Test handling when attribution is zero."""
-        from app.application.services.recommendation.performance_adjustment_calculator import (
+        from app.modules.planning.services.performance_adjustment_calculator import (
             _adjust_country_weights,
         )
 
@@ -105,7 +105,7 @@ class TestAdjustCountryWeights:
 
     def test_preserves_total_weight_approximately(self):
         """Test that total weights remain approximately the same."""
-        from app.application.services.recommendation.performance_adjustment_calculator import (
+        from app.modules.planning.services.performance_adjustment_calculator import (
             _adjust_country_weights,
         )
 
@@ -123,7 +123,7 @@ class TestAdjustCountryWeights:
 
     def test_handles_missing_attribution_entries(self):
         """Test handling when some countries don't have attribution."""
-        from app.application.services.recommendation.performance_adjustment_calculator import (
+        from app.modules.planning.services.performance_adjustment_calculator import (
             _adjust_country_weights,
         )
 
@@ -139,7 +139,7 @@ class TestAdjustCountryWeights:
 
     def test_handles_zero_avg_return(self):
         """Test handling when average return is zero."""
-        from app.application.services.recommendation.performance_adjustment_calculator import (
+        from app.modules.planning.services.performance_adjustment_calculator import (
             _adjust_country_weights,
         )
 
@@ -158,7 +158,7 @@ class TestAdjustIndWeights:
 
     def test_increases_weight_for_positive_attribution(self):
         """Test that weights increase for positive industry attribution."""
-        from app.application.services.recommendation.performance_adjustment_calculator import (
+        from app.modules.planning.services.performance_adjustment_calculator import (
             _adjust_ind_weights,
         )
 
@@ -173,7 +173,7 @@ class TestAdjustIndWeights:
 
     def test_decreases_weight_for_negative_attribution(self):
         """Test that weights decrease for negative industry attribution."""
-        from app.application.services.recommendation.performance_adjustment_calculator import (
+        from app.modules.planning.services.performance_adjustment_calculator import (
             _adjust_ind_weights,
         )
 
@@ -188,7 +188,7 @@ class TestAdjustIndWeights:
 
     def test_preserves_total_weight_approximately(self):
         """Test that total weights remain approximately the same."""
-        from app.application.services.recommendation.performance_adjustment_calculator import (
+        from app.modules.planning.services.performance_adjustment_calculator import (
             _adjust_ind_weights,
         )
 
@@ -205,7 +205,7 @@ class TestAdjustIndWeights:
 
     def test_handles_missing_attribution_entries(self):
         """Test handling when some industries don't have attribution."""
-        from app.application.services.recommendation.performance_adjustment_calculator import (
+        from app.modules.planning.services.performance_adjustment_calculator import (
             _adjust_ind_weights,
         )
 
@@ -228,19 +228,19 @@ class TestGetPerformanceAdjustedWeights:
         self, mock_allocation_repo
     ):
         """Test that adjusted weights are returned when attribution data exists."""
-        from app.application.services.recommendation.performance_adjustment_calculator import (
+        from app.modules.planning.services.performance_adjustment_calculator import (
             get_performance_adjusted_weights,
         )
 
         with (
             patch(
-                "app.application.services.recommendation.performance_adjustment_calculator.get_performance_attribution"
+                "app.modules.recommendation.performance_adjustment_calculator.get_performance_attribution"
             ) as mock_get_attribution,
             patch(
-                "app.application.services.recommendation.performance_adjustment_calculator.reconstruct_portfolio_values"
+                "app.modules.recommendation.performance_adjustment_calculator.reconstruct_portfolio_values"
             ) as mock_reconstruct,
             patch(
-                "app.application.services.recommendation.performance_adjustment_calculator.calculate_portfolio_returns"
+                "app.modules.recommendation.performance_adjustment_calculator.calculate_portfolio_returns"
             ) as mock_calc_returns,
         ):
             import pandas as pd
@@ -267,19 +267,19 @@ class TestGetPerformanceAdjustedWeights:
     @pytest.mark.asyncio
     async def test_returns_base_weights_when_no_attribution(self, mock_allocation_repo):
         """Test that base weights are returned when no attribution data."""
-        from app.application.services.recommendation.performance_adjustment_calculator import (
+        from app.modules.planning.services.performance_adjustment_calculator import (
             get_performance_adjusted_weights,
         )
 
         with (
             patch(
-                "app.application.services.recommendation.performance_adjustment_calculator.get_performance_attribution"
+                "app.modules.recommendation.performance_adjustment_calculator.get_performance_attribution"
             ) as mock_get_attribution,
             patch(
-                "app.application.services.recommendation.performance_adjustment_calculator.reconstruct_portfolio_values"
+                "app.modules.recommendation.performance_adjustment_calculator.reconstruct_portfolio_values"
             ) as mock_reconstruct,
             patch(
-                "app.application.services.recommendation.performance_adjustment_calculator.calculate_portfolio_returns"
+                "app.modules.recommendation.performance_adjustment_calculator.calculate_portfolio_returns"
             ) as mock_calc_returns,
         ):
             import pandas as pd
@@ -302,19 +302,19 @@ class TestGetPerformanceAdjustedWeights:
     @pytest.mark.asyncio
     async def test_handles_empty_attribution_data(self, mock_allocation_repo):
         """Test handling when attribution data is empty."""
-        from app.application.services.recommendation.performance_adjustment_calculator import (
+        from app.modules.planning.services.performance_adjustment_calculator import (
             get_performance_adjusted_weights,
         )
 
         with (
             patch(
-                "app.application.services.recommendation.performance_adjustment_calculator.get_performance_attribution"
+                "app.modules.recommendation.performance_adjustment_calculator.get_performance_attribution"
             ) as mock_get_attribution,
             patch(
-                "app.application.services.recommendation.performance_adjustment_calculator.reconstruct_portfolio_values"
+                "app.modules.recommendation.performance_adjustment_calculator.reconstruct_portfolio_values"
             ) as mock_reconstruct,
             patch(
-                "app.application.services.recommendation.performance_adjustment_calculator.calculate_portfolio_returns"
+                "app.modules.recommendation.performance_adjustment_calculator.calculate_portfolio_returns"
             ) as mock_calc_returns,
         ):
             import pandas as pd
@@ -337,22 +337,22 @@ class TestGetPerformanceAdjustedWeights:
     @pytest.mark.asyncio
     async def test_uses_portfolio_hash_when_provided(self, mock_allocation_repo):
         """Test that portfolio hash is used when provided."""
-        from app.application.services.recommendation.performance_adjustment_calculator import (
+        from app.modules.planning.services.performance_adjustment_calculator import (
             get_performance_adjusted_weights,
         )
 
         with (
             patch(
-                "app.application.services.recommendation.performance_adjustment_calculator.get_recommendation_cache"
+                "app.modules.recommendation.performance_adjustment_calculator.get_recommendation_cache"
             ) as mock_get_cache,
             patch(
-                "app.application.services.recommendation.performance_adjustment_calculator.get_performance_attribution"
+                "app.modules.recommendation.performance_adjustment_calculator.get_performance_attribution"
             ) as mock_get_attribution,
             patch(
-                "app.application.services.recommendation.performance_adjustment_calculator.reconstruct_portfolio_values"
+                "app.modules.recommendation.performance_adjustment_calculator.reconstruct_portfolio_values"
             ) as mock_reconstruct,
             patch(
-                "app.application.services.recommendation.performance_adjustment_calculator.calculate_portfolio_returns"
+                "app.modules.recommendation.performance_adjustment_calculator.calculate_portfolio_returns"
             ) as mock_calc_returns,
         ):
             import pandas as pd
@@ -386,19 +386,19 @@ class TestGetPerformanceAdjustedWeights:
         self, mock_allocation_repo
     ):
         """Test handling when avg_return is missing from attribution data."""
-        from app.application.services.recommendation.performance_adjustment_calculator import (
+        from app.modules.planning.services.performance_adjustment_calculator import (
             get_performance_adjusted_weights,
         )
 
         with (
             patch(
-                "app.application.services.recommendation.performance_adjustment_calculator.get_performance_attribution"
+                "app.modules.recommendation.performance_adjustment_calculator.get_performance_attribution"
             ) as mock_get_attribution,
             patch(
-                "app.application.services.recommendation.performance_adjustment_calculator.reconstruct_portfolio_values"
+                "app.modules.recommendation.performance_adjustment_calculator.reconstruct_portfolio_values"
             ) as mock_reconstruct,
             patch(
-                "app.application.services.recommendation.performance_adjustment_calculator.calculate_portfolio_returns"
+                "app.modules.recommendation.performance_adjustment_calculator.calculate_portfolio_returns"
             ) as mock_calc_returns,
         ):
             import pandas as pd
@@ -424,19 +424,19 @@ class TestGetPerformanceAdjustedWeights:
     @pytest.mark.asyncio
     async def test_applies_adjustments_proportionally(self, mock_allocation_repo):
         """Test that adjustments are applied proportionally to base weights."""
-        from app.application.services.recommendation.performance_adjustment_calculator import (
+        from app.modules.planning.services.performance_adjustment_calculator import (
             get_performance_adjusted_weights,
         )
 
         with (
             patch(
-                "app.application.services.recommendation.performance_adjustment_calculator.get_performance_attribution"
+                "app.modules.recommendation.performance_adjustment_calculator.get_performance_attribution"
             ) as mock_get_attribution,
             patch(
-                "app.application.services.recommendation.performance_adjustment_calculator.reconstruct_portfolio_values"
+                "app.modules.recommendation.performance_adjustment_calculator.reconstruct_portfolio_values"
             ) as mock_reconstruct,
             patch(
-                "app.application.services.recommendation.performance_adjustment_calculator.calculate_portfolio_returns"
+                "app.modules.recommendation.performance_adjustment_calculator.calculate_portfolio_returns"
             ) as mock_calc_returns,
         ):
             import pandas as pd

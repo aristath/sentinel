@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.application.services.trade_frequency_service import TradeFrequencyService
+from app.modules.trading.services.trade_frequency_service import TradeFrequencyService
 
 
 class TestTradeFrequencyService:
