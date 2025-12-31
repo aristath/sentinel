@@ -79,7 +79,9 @@ class TestRegenerateSequences:
         """Test successful sequence regeneration."""
         from app.modules.planning.api.planner import regenerate_sequences
 
-        with patch("app.api.planner.PlannerRepository") as mock_planner_class:
+        with patch(
+            "app.modules.planning.api.planner.PlannerRepository"
+        ) as mock_planner_class:
             mock_planner_repo = AsyncMock()
             mock_db = AsyncMock()
             mock_db.execute = AsyncMock()
@@ -106,7 +108,9 @@ class TestRegenerateSequences:
         """Test that portfolio hash is generated correctly."""
         from app.modules.planning.api.planner import regenerate_sequences
 
-        with patch("app.api.planner.PlannerRepository") as mock_planner_class:
+        with patch(
+            "app.modules.planning.api.planner.PlannerRepository"
+        ) as mock_planner_class:
             mock_planner_repo = AsyncMock()
             mock_db = AsyncMock()
             mock_db.execute = AsyncMock()
@@ -133,7 +137,9 @@ class TestRegenerateSequences:
         disconnected_client = MagicMock()
         disconnected_client.is_connected = False
 
-        with patch("app.api.planner.PlannerRepository") as mock_planner_class:
+        with patch(
+            "app.modules.planning.api.planner.PlannerRepository"
+        ) as mock_planner_class:
             mock_planner_repo = AsyncMock()
             mock_db = AsyncMock()
             mock_db.execute = AsyncMock()
@@ -162,7 +168,9 @@ class TestRegenerateSequences:
         error_client.get_pending_orders.side_effect = Exception("API Error")
         error_client.get_cash_balances.side_effect = Exception("API Error")
 
-        with patch("app.api.planner.PlannerRepository") as mock_planner_class:
+        with patch(
+            "app.modules.planning.api.planner.PlannerRepository"
+        ) as mock_planner_class:
             mock_planner_repo = AsyncMock()
             mock_db = AsyncMock()
             mock_db.execute = AsyncMock()
@@ -185,7 +193,9 @@ class TestRegenerateSequences:
         """Test that sequences are deleted and best_result is cleared."""
         from app.modules.planning.api.planner import regenerate_sequences
 
-        with patch("app.api.planner.PlannerRepository") as mock_planner_class:
+        with patch(
+            "app.modules.planning.api.planner.PlannerRepository"
+        ) as mock_planner_class:
             mock_planner_repo = AsyncMock()
             mock_db = AsyncMock()
             mock_db.execute = AsyncMock()
@@ -211,7 +221,9 @@ class TestRegenerateSequences:
         """Test handling of repository errors."""
         from app.modules.planning.api.planner import regenerate_sequences
 
-        with patch("app.api.planner.PlannerRepository") as mock_planner_class:
+        with patch(
+            "app.modules.planning.api.planner.PlannerRepository"
+        ) as mock_planner_class:
             mock_planner_repo = AsyncMock()
             mock_planner_repo.delete_sequences_only.side_effect = Exception(
                 "Database error"
@@ -237,7 +249,9 @@ class TestGetPlannerStatus:
         """Test status when no sequences exist."""
         from app.modules.planning.api.planner import get_planner_status
 
-        with patch("app.api.planner.PlannerRepository") as mock_planner_class:
+        with patch(
+            "app.modules.planning.api.planner.PlannerRepository"
+        ) as mock_planner_class:
             mock_planner_repo = AsyncMock()
             mock_planner_repo.has_sequences = AsyncMock(return_value=False)
             mock_planner_repo.get_total_sequence_count = AsyncMock(return_value=0)
@@ -245,7 +259,7 @@ class TestGetPlannerStatus:
             mock_planner_repo.are_all_sequences_evaluated = AsyncMock(return_value=True)
             mock_planner_class.return_value = mock_planner_repo
 
-            with patch("app.api.planner.get_scheduler") as mock_get_scheduler:
+            with patch("app.jobs.scheduler.get_scheduler") as mock_get_scheduler:
                 mock_scheduler = MagicMock()
                 mock_scheduler.running = True
                 mock_scheduler.get_jobs.return_value = []
@@ -269,7 +283,9 @@ class TestGetPlannerStatus:
         """Test status when sequences exist."""
         from app.modules.planning.api.planner import get_planner_status
 
-        with patch("app.api.planner.PlannerRepository") as mock_planner_class:
+        with patch(
+            "app.modules.planning.api.planner.PlannerRepository"
+        ) as mock_planner_class:
             mock_planner_repo = AsyncMock()
             mock_planner_repo.has_sequences = AsyncMock(return_value=True)
             mock_planner_repo.get_total_sequence_count = AsyncMock(return_value=100)
@@ -279,7 +295,7 @@ class TestGetPlannerStatus:
             )
             mock_planner_class.return_value = mock_planner_repo
 
-            with patch("app.api.planner.get_scheduler") as mock_get_scheduler:
+            with patch("app.jobs.scheduler.get_scheduler") as mock_get_scheduler:
                 mock_scheduler = MagicMock()
                 mock_scheduler.running = True
                 mock_job = MagicMock()
@@ -305,7 +321,9 @@ class TestGetPlannerStatus:
         """Test that progress percentage is calculated correctly."""
         from app.modules.planning.api.planner import get_planner_status
 
-        with patch("app.api.planner.PlannerRepository") as mock_planner_class:
+        with patch(
+            "app.modules.planning.api.planner.PlannerRepository"
+        ) as mock_planner_class:
             mock_planner_repo = AsyncMock()
             mock_planner_repo.has_sequences = AsyncMock(return_value=True)
             mock_planner_repo.get_total_sequence_count = AsyncMock(return_value=200)
@@ -315,7 +333,7 @@ class TestGetPlannerStatus:
             )
             mock_planner_class.return_value = mock_planner_repo
 
-            with patch("app.api.planner.get_scheduler") as mock_get_scheduler:
+            with patch("app.jobs.scheduler.get_scheduler") as mock_get_scheduler:
                 mock_scheduler = MagicMock()
                 mock_scheduler.running = True
                 mock_scheduler.get_jobs.return_value = []
@@ -335,7 +353,9 @@ class TestGetPlannerStatus:
         """Test that is_planning is True when scheduler job exists."""
         from app.modules.planning.api.planner import get_planner_status
 
-        with patch("app.api.planner.PlannerRepository") as mock_planner_class:
+        with patch(
+            "app.modules.planning.api.planner.PlannerRepository"
+        ) as mock_planner_class:
             mock_planner_repo = AsyncMock()
             mock_planner_repo.has_sequences = AsyncMock(return_value=True)
             mock_planner_repo.get_total_sequence_count = AsyncMock(return_value=100)
@@ -345,7 +365,7 @@ class TestGetPlannerStatus:
             )
             mock_planner_class.return_value = mock_planner_repo
 
-            with patch("app.api.planner.get_scheduler") as mock_get_scheduler:
+            with patch("app.jobs.scheduler.get_scheduler") as mock_get_scheduler:
                 mock_scheduler = MagicMock()
                 mock_scheduler.running = True
                 mock_job = MagicMock()
@@ -366,7 +386,9 @@ class TestGetPlannerStatus:
         """Test that is_planning is False when all sequences are evaluated."""
         from app.modules.planning.api.planner import get_planner_status
 
-        with patch("app.api.planner.PlannerRepository") as mock_planner_class:
+        with patch(
+            "app.modules.planning.api.planner.PlannerRepository"
+        ) as mock_planner_class:
             mock_planner_repo = AsyncMock()
             mock_planner_repo.has_sequences = AsyncMock(return_value=True)
             mock_planner_repo.get_total_sequence_count = AsyncMock(return_value=100)
@@ -374,7 +396,7 @@ class TestGetPlannerStatus:
             mock_planner_repo.are_all_sequences_evaluated = AsyncMock(return_value=True)
             mock_planner_class.return_value = mock_planner_repo
 
-            with patch("app.api.planner.get_scheduler") as mock_get_scheduler:
+            with patch("app.jobs.scheduler.get_scheduler") as mock_get_scheduler:
                 mock_scheduler = MagicMock()
                 mock_scheduler.running = True
                 mock_job = MagicMock()
@@ -396,7 +418,9 @@ class TestGetPlannerStatus:
         """Test handling when scheduler is not available."""
         from app.modules.planning.api.planner import get_planner_status
 
-        with patch("app.api.planner.PlannerRepository") as mock_planner_class:
+        with patch(
+            "app.modules.planning.api.planner.PlannerRepository"
+        ) as mock_planner_class:
             mock_planner_repo = AsyncMock()
             mock_planner_repo.has_sequences = AsyncMock(return_value=True)
             mock_planner_repo.get_total_sequence_count = AsyncMock(return_value=100)
@@ -406,7 +430,7 @@ class TestGetPlannerStatus:
             )
             mock_planner_class.return_value = mock_planner_repo
 
-            with patch("app.api.planner.get_scheduler") as mock_get_scheduler:
+            with patch("app.jobs.scheduler.get_scheduler") as mock_get_scheduler:
                 mock_get_scheduler.side_effect = Exception("Scheduler error")
 
                 result = await get_planner_status(
@@ -423,7 +447,9 @@ class TestGetPlannerStatus:
         """Test error handling."""
         from app.modules.planning.api.planner import get_planner_status
 
-        with patch("app.api.planner.PlannerRepository") as mock_planner_class:
+        with patch(
+            "app.modules.planning.api.planner.PlannerRepository"
+        ) as mock_planner_class:
             mock_planner_repo = AsyncMock()
             mock_planner_repo.has_sequences.side_effect = Exception("Database error")
             mock_planner_class.return_value = mock_planner_repo
@@ -459,7 +485,7 @@ class TestStreamPlannerStatus:
         with patch("app.api.planner._get_planner_status_internal") as mock_get_status:
             mock_get_status.return_value = mock_status
 
-            with patch("app.infrastructure.planner_events") as mock_events:
+            with patch("app.modules.planning.events.planner_events") as mock_events:
                 mock_events.set_current_status = AsyncMock()
                 mock_events.subscribe_planner_events = AsyncMock()
 
@@ -488,7 +514,7 @@ class TestStreamPlannerStatus:
         with patch("app.api.planner._get_planner_status_internal") as mock_get_status:
             mock_get_status.return_value = mock_status
 
-            with patch("app.infrastructure.planner_events") as mock_events:
+            with patch("app.modules.planning.events.planner_events") as mock_events:
                 mock_events.set_current_status = AsyncMock()
 
                 async def mock_subscribe():
@@ -519,7 +545,7 @@ class TestStreamPlannerStatus:
         with patch("app.api.planner._get_planner_status_internal") as mock_get_status:
             mock_get_status.side_effect = Exception("Status error")
 
-            with patch("app.infrastructure.planner_events") as mock_events:
+            with patch("app.modules.planning.events.planner_events") as mock_events:
                 mock_events.set_current_status = AsyncMock()
                 mock_events.subscribe_planner_events = AsyncMock()
 
