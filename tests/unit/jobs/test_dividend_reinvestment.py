@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.domain.models import DividendRecord, Security
+from app.domain.value_objects.product_type import ProductType
 from app.shared.domain.value_objects.currency import Currency
 
 
@@ -45,6 +46,7 @@ def create_stock(symbol: str, name: Optional[str] = None, min_lot: int = 1) -> S
     return Security(
         symbol=symbol,
         name=name or f"{symbol} Inc.",
+        product_type=ProductType.EQUITY,
         min_lot=min_lot,
         currency=Currency.EUR,
     )
