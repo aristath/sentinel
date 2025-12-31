@@ -75,7 +75,7 @@ class TestRegenerateSequences:
         self, mock_position_repo, mock_stock_repo, mock_tradernet_client
     ):
         """Test successful sequence regeneration."""
-        from app.api.planner import regenerate_sequences
+        from app.modules.planning.api.planner import regenerate_sequences
 
         with patch("app.api.planner.PlannerRepository") as mock_planner_class:
             mock_planner_repo = AsyncMock()
@@ -102,7 +102,7 @@ class TestRegenerateSequences:
         self, mock_position_repo, mock_stock_repo, mock_tradernet_client
     ):
         """Test that portfolio hash is generated correctly."""
-        from app.api.planner import regenerate_sequences
+        from app.modules.planning.api.planner import regenerate_sequences
 
         with patch("app.api.planner.PlannerRepository") as mock_planner_class:
             mock_planner_repo = AsyncMock()
@@ -126,7 +126,7 @@ class TestRegenerateSequences:
         self, mock_position_repo, mock_stock_repo
     ):
         """Test handling when Tradernet is not connected."""
-        from app.api.planner import regenerate_sequences
+        from app.modules.planning.api.planner import regenerate_sequences
 
         disconnected_client = MagicMock()
         disconnected_client.is_connected = False
@@ -153,7 +153,7 @@ class TestRegenerateSequences:
         self, mock_position_repo, mock_stock_repo
     ):
         """Test handling when Tradernet API calls fail."""
-        from app.api.planner import regenerate_sequences
+        from app.modules.planning.api.planner import regenerate_sequences
 
         error_client = MagicMock()
         error_client.is_connected = True
@@ -181,7 +181,7 @@ class TestRegenerateSequences:
         self, mock_position_repo, mock_stock_repo, mock_tradernet_client
     ):
         """Test that sequences are deleted and best_result is cleared."""
-        from app.api.planner import regenerate_sequences
+        from app.modules.planning.api.planner import regenerate_sequences
 
         with patch("app.api.planner.PlannerRepository") as mock_planner_class:
             mock_planner_repo = AsyncMock()
@@ -207,7 +207,7 @@ class TestRegenerateSequences:
         self, mock_position_repo, mock_stock_repo, mock_tradernet_client
     ):
         """Test handling of repository errors."""
-        from app.api.planner import regenerate_sequences
+        from app.modules.planning.api.planner import regenerate_sequences
 
         with patch("app.api.planner.PlannerRepository") as mock_planner_class:
             mock_planner_repo = AsyncMock()
@@ -233,7 +233,7 @@ class TestGetPlannerStatus:
         self, mock_position_repo, mock_stock_repo, mock_tradernet_client
     ):
         """Test status when no sequences exist."""
-        from app.api.planner import get_planner_status
+        from app.modules.planning.api.planner import get_planner_status
 
         with patch("app.api.planner.PlannerRepository") as mock_planner_class:
             mock_planner_repo = AsyncMock()
@@ -265,7 +265,7 @@ class TestGetPlannerStatus:
         self, mock_position_repo, mock_stock_repo, mock_tradernet_client
     ):
         """Test status when sequences exist."""
-        from app.api.planner import get_planner_status
+        from app.modules.planning.api.planner import get_planner_status
 
         with patch("app.api.planner.PlannerRepository") as mock_planner_class:
             mock_planner_repo = AsyncMock()
@@ -301,7 +301,7 @@ class TestGetPlannerStatus:
         self, mock_position_repo, mock_stock_repo, mock_tradernet_client
     ):
         """Test that progress percentage is calculated correctly."""
-        from app.api.planner import get_planner_status
+        from app.modules.planning.api.planner import get_planner_status
 
         with patch("app.api.planner.PlannerRepository") as mock_planner_class:
             mock_planner_repo = AsyncMock()
@@ -331,7 +331,7 @@ class TestGetPlannerStatus:
         self, mock_position_repo, mock_stock_repo, mock_tradernet_client
     ):
         """Test that is_planning is True when scheduler job exists."""
-        from app.api.planner import get_planner_status
+        from app.modules.planning.api.planner import get_planner_status
 
         with patch("app.api.planner.PlannerRepository") as mock_planner_class:
             mock_planner_repo = AsyncMock()
@@ -362,7 +362,7 @@ class TestGetPlannerStatus:
         self, mock_position_repo, mock_stock_repo, mock_tradernet_client
     ):
         """Test that is_planning is False when all sequences are evaluated."""
-        from app.api.planner import get_planner_status
+        from app.modules.planning.api.planner import get_planner_status
 
         with patch("app.api.planner.PlannerRepository") as mock_planner_class:
             mock_planner_repo = AsyncMock()
@@ -392,7 +392,7 @@ class TestGetPlannerStatus:
         self, mock_position_repo, mock_stock_repo, mock_tradernet_client
     ):
         """Test handling when scheduler is not available."""
-        from app.api.planner import get_planner_status
+        from app.modules.planning.api.planner import get_planner_status
 
         with patch("app.api.planner.PlannerRepository") as mock_planner_class:
             mock_planner_repo = AsyncMock()
@@ -419,7 +419,7 @@ class TestGetPlannerStatus:
         self, mock_position_repo, mock_stock_repo, mock_tradernet_client
     ):
         """Test error handling."""
-        from app.api.planner import get_planner_status
+        from app.modules.planning.api.planner import get_planner_status
 
         with patch("app.api.planner.PlannerRepository") as mock_planner_class:
             mock_planner_repo = AsyncMock()
@@ -442,7 +442,7 @@ class TestStreamPlannerStatus:
         self, mock_position_repo, mock_stock_repo, mock_tradernet_client
     ):
         """Test that initial status is streamed."""
-        from app.api.planner import stream_planner_status
+        from app.modules.planning.api.planner import stream_planner_status
 
         mock_status = {
             "has_sequences": True,
@@ -479,7 +479,7 @@ class TestStreamPlannerStatus:
         self, mock_position_repo, mock_stock_repo, mock_tradernet_client
     ):
         """Test that events are formatted as SSE."""
-        from app.api.planner import stream_planner_status
+        from app.modules.planning.api.planner import stream_planner_status
 
         mock_status = {"has_sequences": False, "total_sequences": 0}
 
@@ -512,7 +512,7 @@ class TestStreamPlannerStatus:
         self, mock_position_repo, mock_stock_repo, mock_tradernet_client
     ):
         """Test error handling in stream."""
-        from app.api.planner import stream_planner_status
+        from app.modules.planning.api.planner import stream_planner_status
 
         with patch("app.api.planner._get_planner_status_internal") as mock_get_status:
             mock_get_status.side_effect = Exception("Status error")

@@ -72,19 +72,19 @@ class TestHistoryRepositoryInit:
 
     def test_init_normalizes_symbol(self):
         """Test that symbol is normalized to uppercase."""
-        with patch("app.repositories.history.get_db_manager"):
+        with patch("app.modules.portfolio.database.history_repository.get_db_manager"):
             repo = HistoryRepository("aapl")
             assert repo.symbol == "AAPL"
 
     def test_init_stores_symbol(self):
         """Test that repository stores the symbol."""
-        with patch("app.repositories.history.get_db_manager"):
+        with patch("app.modules.portfolio.database.history_repository.get_db_manager"):
             repo = HistoryRepository("MSFT")
             assert repo.symbol == "MSFT"
 
     def test_init_db_is_lazy_loaded(self):
         """Test that database is not loaded on init."""
-        with patch("app.repositories.history.get_db_manager"):
+        with patch("app.modules.portfolio.database.history_repository.get_db_manager"):
             repo = HistoryRepository("AAPL")
             assert repo._db is None
 
@@ -95,14 +95,16 @@ class TestHistoryRepositoryGetDb:
     @pytest.mark.asyncio
     async def test_get_db_initializes_database(self):
         """Test that _get_db initializes the database on first call."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
             mock_get_db.return_value = mock_db_manager
 
             with patch(
-                "app.repositories.history.init_history_schema"
+                "app.modules.portfolio.database.history_repository.init_history_schema"
             ) as mock_init_schema:
                 repo = HistoryRepository("AAPL")
                 db = await repo._get_db()
@@ -114,13 +116,17 @@ class TestHistoryRepositoryGetDb:
     @pytest.mark.asyncio
     async def test_get_db_caches_database(self):
         """Test that _get_db caches the database after first call."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
             mock_get_db.return_value = mock_db_manager
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
 
                 # First call
@@ -139,7 +145,9 @@ class TestHistoryRepositoryDailyPrices:
     @pytest.mark.asyncio
     async def test_get_daily_prices_with_default_limit(self):
         """Test retrieving daily prices with default limit."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -151,7 +159,9 @@ class TestHistoryRepositoryDailyPrices:
             ]
             mock_db.fetchall.return_value = mock_rows
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 result = await repo.get_daily_prices()
 
@@ -167,7 +177,9 @@ class TestHistoryRepositoryDailyPrices:
     @pytest.mark.asyncio
     async def test_get_daily_prices_with_custom_limit(self):
         """Test retrieving daily prices with custom limit."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -175,7 +187,9 @@ class TestHistoryRepositoryDailyPrices:
 
             mock_db.fetchall.return_value = []
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 await repo.get_daily_prices(limit=100)
 
@@ -185,7 +199,9 @@ class TestHistoryRepositoryDailyPrices:
     @pytest.mark.asyncio
     async def test_get_daily_prices_empty_result(self):
         """Test retrieving daily prices when no data exists."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -193,7 +209,9 @@ class TestHistoryRepositoryDailyPrices:
 
             mock_db.fetchall.return_value = []
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 result = await repo.get_daily_prices()
 
@@ -202,7 +220,9 @@ class TestHistoryRepositoryDailyPrices:
     @pytest.mark.asyncio
     async def test_get_daily_range(self):
         """Test retrieving daily prices within a date range."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -215,7 +235,9 @@ class TestHistoryRepositoryDailyPrices:
             ]
             mock_db.fetchall.return_value = mock_rows
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 result = await repo.get_daily_range("2024-01-10", "2024-01-12")
 
@@ -229,7 +251,9 @@ class TestHistoryRepositoryDailyPrices:
     @pytest.mark.asyncio
     async def test_get_daily_range_empty(self):
         """Test retrieving daily range with no results."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -237,7 +261,9 @@ class TestHistoryRepositoryDailyPrices:
 
             mock_db.fetchall.return_value = []
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 result = await repo.get_daily_range("2024-01-01", "2024-01-05")
 
@@ -246,7 +272,9 @@ class TestHistoryRepositoryDailyPrices:
     @pytest.mark.asyncio
     async def test_get_latest_price(self):
         """Test retrieving the most recent daily price."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -255,7 +283,9 @@ class TestHistoryRepositoryDailyPrices:
             mock_row = create_mock_daily_price(date="2024-01-15", close_price=150.0)
             mock_db.fetchone.return_value = mock_row
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 result = await repo.get_latest_price()
 
@@ -267,7 +297,9 @@ class TestHistoryRepositoryDailyPrices:
     @pytest.mark.asyncio
     async def test_get_latest_price_no_data(self):
         """Test retrieving latest price when no data exists."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -275,7 +307,9 @@ class TestHistoryRepositoryDailyPrices:
 
             mock_db.fetchone.return_value = None
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 result = await repo.get_latest_price()
 
@@ -288,7 +322,9 @@ class TestHistoryRepositoryUpsertDaily:
     @pytest.mark.asyncio
     async def test_upsert_daily(self):
         """Test upserting a single daily price."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -298,7 +334,9 @@ class TestHistoryRepositoryUpsertDaily:
             mock_conn = AsyncMock()
             mock_db.transaction = create_mock_transaction(mock_conn)
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 price = DailyPrice(
                     date="2024-01-15",
@@ -327,13 +365,17 @@ class TestHistoryRepositoryUpsertDaily:
     @pytest.mark.asyncio
     async def test_upsert_daily_batch_empty(self):
         """Test upserting empty batch returns 0."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
             mock_get_db.return_value = mock_db_manager
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 result = await repo.upsert_daily_batch([])
 
@@ -342,7 +384,9 @@ class TestHistoryRepositoryUpsertDaily:
     @pytest.mark.asyncio
     async def test_upsert_daily_batch_multiple(self):
         """Test upserting multiple daily prices."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -352,7 +396,9 @@ class TestHistoryRepositoryUpsertDaily:
             mock_conn = AsyncMock()
             mock_db.transaction = create_mock_transaction(mock_conn)
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 prices = [
                     DailyPrice(
@@ -387,7 +433,9 @@ class TestHistoryRepositoryMonthlyPrices:
     @pytest.mark.asyncio
     async def test_get_monthly_prices_with_default_limit(self):
         """Test retrieving monthly prices with default limit."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -399,7 +447,9 @@ class TestHistoryRepositoryMonthlyPrices:
             ]
             mock_db.fetchall.return_value = mock_rows
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 result = await repo.get_monthly_prices()
 
@@ -413,7 +463,9 @@ class TestHistoryRepositoryMonthlyPrices:
     @pytest.mark.asyncio
     async def test_get_monthly_prices_with_custom_limit(self):
         """Test retrieving monthly prices with custom limit."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -421,7 +473,9 @@ class TestHistoryRepositoryMonthlyPrices:
 
             mock_db.fetchall.return_value = []
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 await repo.get_monthly_prices(limit=60)
 
@@ -431,7 +485,9 @@ class TestHistoryRepositoryMonthlyPrices:
     @pytest.mark.asyncio
     async def test_get_monthly_prices_empty(self):
         """Test retrieving monthly prices when no data exists."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -439,7 +495,9 @@ class TestHistoryRepositoryMonthlyPrices:
 
             mock_db.fetchall.return_value = []
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 result = await repo.get_monthly_prices()
 
@@ -448,7 +506,9 @@ class TestHistoryRepositoryMonthlyPrices:
     @pytest.mark.asyncio
     async def test_upsert_monthly(self):
         """Test upserting a monthly price."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -458,7 +518,9 @@ class TestHistoryRepositoryMonthlyPrices:
             mock_conn = AsyncMock()
             mock_db.transaction = create_mock_transaction(mock_conn)
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 price = MonthlyPrice(
                     year_month="2024-01",
@@ -489,7 +551,9 @@ class TestHistoryRepositoryAggregation:
     @pytest.mark.asyncio
     async def test_aggregate_to_monthly(self):
         """Test aggregating daily prices to monthly."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -502,7 +566,9 @@ class TestHistoryRepositoryAggregation:
             mock_conn.execute.return_value = mock_cursor
             mock_db.transaction = create_mock_transaction(mock_conn)
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 result = await repo.aggregate_to_monthly()
 
@@ -512,7 +578,9 @@ class TestHistoryRepositoryAggregation:
     @pytest.mark.asyncio
     async def test_aggregate_to_monthly_no_data(self):
         """Test aggregating when no daily data exists."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -525,7 +593,9 @@ class TestHistoryRepositoryAggregation:
             mock_conn.execute.return_value = mock_cursor
             mock_db.transaction = create_mock_transaction(mock_conn)
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 result = await repo.aggregate_to_monthly()
 
@@ -538,7 +608,9 @@ class TestHistoryRepositoryDeletion:
     @pytest.mark.asyncio
     async def test_delete_before(self):
         """Test deleting daily prices before a date."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -553,7 +625,9 @@ class TestHistoryRepositoryDeletion:
             mock_conn = AsyncMock()
             mock_db.transaction = create_mock_transaction(mock_conn)
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 result = await repo.delete_before("2023-01-01")
 
@@ -566,7 +640,9 @@ class TestHistoryRepositoryDeletion:
     @pytest.mark.asyncio
     async def test_delete_before_no_data(self):
         """Test deleting when no data exists before date."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -577,7 +653,9 @@ class TestHistoryRepositoryDeletion:
             mock_cursor.fetchone.return_value = {"cnt": 0}
             mock_db.execute.return_value = mock_cursor
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 result = await repo.delete_before("2023-01-01")
 
@@ -588,7 +666,9 @@ class TestHistoryRepositoryDeletion:
     @pytest.mark.asyncio
     async def test_delete_before_null_count(self):
         """Test deleting when count query returns None."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -599,7 +679,9 @@ class TestHistoryRepositoryDeletion:
             mock_cursor.fetchone.return_value = None
             mock_db.execute.return_value = mock_cursor
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 result = await repo.delete_before("2023-01-01")
 
@@ -612,7 +694,9 @@ class TestHistoryRepository52Week:
     @pytest.mark.asyncio
     async def test_get_52_week_high(self):
         """Test retrieving 52-week high price."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -620,7 +704,9 @@ class TestHistoryRepository52Week:
 
             mock_db.fetchone.return_value = {"high": 160.0}
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 result = await repo.get_52_week_high()
 
@@ -629,7 +715,9 @@ class TestHistoryRepository52Week:
     @pytest.mark.asyncio
     async def test_get_52_week_high_no_data(self):
         """Test retrieving 52-week high when no data exists."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -637,7 +725,9 @@ class TestHistoryRepository52Week:
 
             mock_db.fetchone.return_value = None
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 result = await repo.get_52_week_high()
 
@@ -646,7 +736,9 @@ class TestHistoryRepository52Week:
     @pytest.mark.asyncio
     async def test_get_52_week_low(self):
         """Test retrieving 52-week low price."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -654,7 +746,9 @@ class TestHistoryRepository52Week:
 
             mock_db.fetchone.return_value = {"low": 140.0}
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 result = await repo.get_52_week_low()
 
@@ -663,7 +757,9 @@ class TestHistoryRepository52Week:
     @pytest.mark.asyncio
     async def test_get_52_week_low_no_data(self):
         """Test retrieving 52-week low when no data exists."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -671,7 +767,9 @@ class TestHistoryRepository52Week:
 
             mock_db.fetchone.return_value = None
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 result = await repo.get_52_week_low()
 
@@ -684,7 +782,9 @@ class TestHistoryRepositoryIntegrity:
     @pytest.mark.asyncio
     async def test_integrity_check_success(self):
         """Test successful integrity check."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -692,7 +792,9 @@ class TestHistoryRepositoryIntegrity:
 
             mock_db.integrity_check.return_value = "ok"
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 result = await repo.integrity_check()
 
@@ -702,7 +804,9 @@ class TestHistoryRepositoryIntegrity:
     @pytest.mark.asyncio
     async def test_integrity_check_failure(self):
         """Test integrity check with errors."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -710,7 +814,9 @@ class TestHistoryRepositoryIntegrity:
 
             mock_db.integrity_check.return_value = "corruption detected"
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 result = await repo.integrity_check()
 
@@ -722,7 +828,9 @@ class TestHistoryRepositoryRowConversion:
 
     def test_row_to_daily_basic(self):
         """Test converting a basic database row to DailyPrice."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_get_db.return_value = mock_db_manager
 
@@ -750,7 +858,9 @@ class TestHistoryRepositoryRowConversion:
 
     def test_row_to_daily_with_none_source(self):
         """Test converting a row with None source defaults to 'yahoo'."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_get_db.return_value = mock_db_manager
 
@@ -764,7 +874,9 @@ class TestHistoryRepositoryRowConversion:
 
     def test_row_to_monthly_basic(self):
         """Test converting a basic database row to MonthlyPrice."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_get_db.return_value = mock_db_manager
 
@@ -790,7 +902,9 @@ class TestHistoryRepositoryRowConversion:
 
     def test_row_to_monthly_with_none_source(self):
         """Test converting a row with None source defaults to 'calculated'."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_get_db.return_value = mock_db_manager
 
@@ -809,7 +923,9 @@ class TestHistoryRepositoryEdgeCases:
     @pytest.mark.asyncio
     async def test_get_daily_prices_with_zero_limit(self):
         """Test retrieving daily prices with zero limit."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -817,7 +933,9 @@ class TestHistoryRepositoryEdgeCases:
 
             mock_db.fetchall.return_value = []
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 result = await repo.get_daily_prices(limit=0)
 
@@ -827,7 +945,9 @@ class TestHistoryRepositoryEdgeCases:
     @pytest.mark.asyncio
     async def test_upsert_daily_with_minimal_data(self):
         """Test upserting daily price with only required fields."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -837,7 +957,9 @@ class TestHistoryRepositoryEdgeCases:
             mock_conn = AsyncMock()
             mock_db.transaction = create_mock_transaction(mock_conn)
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 price = DailyPrice(
                     date="2024-01-15",
@@ -861,7 +983,9 @@ class TestHistoryRepositoryEdgeCases:
     @pytest.mark.asyncio
     async def test_symbol_normalization_in_multiple_instances(self):
         """Test that multiple repository instances normalize symbols correctly."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_get_db.return_value = mock_db_manager
 
@@ -876,7 +1000,9 @@ class TestHistoryRepositoryEdgeCases:
     @pytest.mark.asyncio
     async def test_get_daily_range_same_start_end_date(self):
         """Test retrieving daily range with same start and end date."""
-        with patch("app.repositories.history.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.portfolio.database.history_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db_manager = MagicMock()
             mock_db = AsyncMock()
             mock_db_manager.history = AsyncMock(return_value=mock_db)
@@ -885,7 +1011,9 @@ class TestHistoryRepositoryEdgeCases:
             mock_rows = [create_mock_daily_price(date="2024-01-15")]
             mock_db.fetchall.return_value = mock_rows
 
-            with patch("app.repositories.history.init_history_schema"):
+            with patch(
+                "app.modules.portfolio.database.history_repository.init_history_schema"
+            ):
                 repo = HistoryRepository("AAPL")
                 result = await repo.get_daily_range("2024-01-15", "2024-01-15")
 

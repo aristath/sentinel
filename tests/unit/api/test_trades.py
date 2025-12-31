@@ -18,7 +18,7 @@ class TestTradeRequestValidation:
 
     def test_validates_symbol(self):
         """Test that symbol is validated and normalized."""
-        from app.api.trades import TradeRequest
+        from app.modules.trading.api.trades import TradeRequest
 
         request = TradeRequest(symbol="  aapl.us  ", side=TradeSide.BUY, quantity=10)
 
@@ -28,7 +28,7 @@ class TestTradeRequestValidation:
         """Test that quantity must be positive."""
         from pydantic import ValidationError
 
-        from app.api.trades import TradeRequest
+        from app.modules.trading.api.trades import TradeRequest
 
         with pytest.raises(ValidationError):
             TradeRequest(symbol="AAPL.US", side=TradeSide.BUY, quantity=0)
@@ -37,14 +37,14 @@ class TestTradeRequestValidation:
         """Test that quantity has upper limit."""
         from pydantic import ValidationError
 
-        from app.api.trades import TradeRequest
+        from app.modules.trading.api.trades import TradeRequest
 
         with pytest.raises(ValidationError):
             TradeRequest(symbol="AAPL.US", side=TradeSide.BUY, quantity=2000000)
 
     def test_accepts_valid_request(self):
         """Test that valid request is accepted."""
-        from app.api.trades import TradeRequest
+        from app.modules.trading.api.trades import TradeRequest
 
         request = TradeRequest(symbol="AAPL.US", side=TradeSide.BUY, quantity=100)
 
@@ -59,7 +59,7 @@ class TestGetTrades:
     @pytest.mark.asyncio
     async def test_returns_trade_history(self):
         """Test returning trade history."""
-        from app.api.trades import get_trades
+        from app.modules.trading.api.trades import get_trades
 
         mock_trades = [
             Trade(
@@ -105,7 +105,7 @@ class TestExecuteTrade:
     @pytest.mark.asyncio
     async def test_raises_404_for_unknown_stock(self):
         """Test raising 404 when stock not found."""
-        from app.api.trades import TradeRequest, execute_trade
+        from app.modules.trading.api.trades import TradeRequest, execute_trade
 
         request = TradeRequest(symbol="UNKNOWN", side=TradeSide.BUY, quantity=10)
 
@@ -127,7 +127,7 @@ class TestExecuteTrade:
     @pytest.mark.asyncio
     async def test_executes_trade_successfully(self):
         """Test successful trade execution."""
-        from app.api.trades import TradeRequest, execute_trade
+        from app.modules.trading.api.trades import TradeRequest, execute_trade
 
         request = TradeRequest(symbol="AAPL.US", side=TradeSide.BUY, quantity=10)
 
@@ -170,7 +170,7 @@ class TestExecuteTrade:
     @pytest.mark.asyncio
     async def test_raises_500_on_trade_failure(self):
         """Test raising 500 when trade execution fails."""
-        from app.api.trades import TradeRequest, execute_trade
+        from app.modules.trading.api.trades import TradeRequest, execute_trade
 
         request = TradeRequest(symbol="AAPL.US", side=TradeSide.BUY, quantity=10)
 
@@ -207,7 +207,7 @@ class TestGetAllocation:
     @pytest.mark.asyncio
     async def test_returns_allocation_data(self):
         """Test returning allocation data."""
-        from app.api.trades import get_allocation
+        from app.modules.trading.api.trades import get_allocation
 
         mock_geo_alloc = MagicMock()
         mock_geo_alloc.name = "US"
