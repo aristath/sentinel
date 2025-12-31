@@ -390,11 +390,12 @@ async def check_planner_health(bucket_id: str):
 -- Main configurations table
 CREATE TABLE planner_configurations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,  -- e.g., "Core Conservative", "Momentum Hunter v2"
-    description TEXT,
+    name TEXT NOT NULL,  -- Technical identifier for version group (e.g., "momentum_hunter")
+    title TEXT NOT NULL,  -- User-friendly display name (e.g., "Momentum Hunter - Aggressive")
+    description TEXT,  -- Longer explanation of strategy
     config_toml TEXT NOT NULL,
-    version INTEGER NOT NULL,  -- Auto-incremented per configuration
-    is_active BOOLEAN DEFAULT 1,  -- Current active version
+    version INTEGER NOT NULL,  -- Auto-incremented per configuration name
+    is_active BOOLEAN DEFAULT 1,  -- Current active version for this name
     created_at TEXT NOT NULL,
     created_by TEXT DEFAULT 'user',  -- 'user' or 'system'
     parent_version_id INTEGER,  -- Previous version (for history chain)
@@ -426,11 +427,20 @@ class ConfigurationManager:
     async def create_new_version(
         self,
         name: str,
+        title: str,
         config_toml: str,
         description: str = None,
         parent_version_id: int = None
     ) -> int:
-        """Create new configuration version."""
+        """Create new configuration version.
+
+        Args:
+            name: Technical identifier for version group (e.g., 'momentum_hunter')
+            title: User-friendly display name (e.g., 'Momentum Hunter - Aggressive')
+            config_toml: TOML configuration string
+            description: Longer explanation of changes/strategy
+            parent_version_id: ID of previous version (for history chain)
+        """
 
         # Get next version number for this config name
         result = await self.config_db.fetchone(
@@ -448,9 +458,9 @@ class ConfigurationManager:
         # Insert new version
         cursor = await self.config_db.execute(
             """INSERT INTO planner_configurations
-               (name, description, config_toml, version, is_active, created_at, parent_version_id)
-               VALUES (?, ?, ?, ?, 1, ?, ?)""",
-            (name, description, config_toml, next_version, datetime.now().isoformat(), parent_version_id)
+               (name, title, description, config_toml, version, is_active, created_at, parent_version_id)
+               VALUES (?, ?, ?, ?, ?, 1, ?, ?)""",
+            (name, title, description, config_toml, next_version, datetime.now().isoformat(), parent_version_id)
         )
         await self.config_db.commit()
         return cursor.lastrowid
@@ -512,7 +522,7 @@ class ConfigurationManager:
         """Get version history for a configuration."""
 
         rows = await self.config_db.fetchall(
-            """SELECT id, version, description, created_at, created_by, is_active
+            """SELECT id, version, title, description, created_at, created_by, is_active
                FROM planner_configurations
                WHERE name = ?
                ORDER BY version DESC""",
@@ -545,12 +555,14 @@ class ConfigurationManager:
 @router.post("/configs")
 async def create_config(
     name: str,
+    title: str,
     config_toml: str,
     description: str = None
 ):
     """Create new configuration or new version of existing."""
     config_id = await config_manager.create_new_version(
         name=name,
+        title=title,
         config_toml=config_toml,
         description=description
     )
@@ -589,9 +601,10 @@ async def get_current_config(bucket_id: str):
 ```python
 # User creates "Momentum Hunter" config
 config_id_v1 = await create_config(
-    name="Momentum Hunter",
+    name="momentum_hunter",  # Technical identifier
+    title="Momentum Hunter - Aggressive",  # User-friendly display
     config_toml="[core]\nmax_plan_depth = 3\n...",
-    description="Aggressive momentum strategy"
+    description="Aggressive momentum strategy focusing on short-term gains"
 )  # Returns config_id=1, version=1
 
 # Assign to satellite_a
@@ -599,16 +612,19 @@ await assign_config("satellite_a", config_id_v1)
 
 # User tweaks parameters → creates v2
 config_id_v2 = await create_config(
-    name="Momentum Hunter",  # Same name
+    name="momentum_hunter",  # Same name = new version of same config
+    title="Momentum Hunter - Deeper Search",  # Updated title
     config_toml="[core]\nmax_plan_depth = 5\n...",  # Different params
-    description="Increased depth for better coverage"
+    description="Increased depth for better coverage of opportunities"
 )  # Returns config_id=2, version=2
 
 # Auto-assign latest version to satellite_a
 await assign_config("satellite_a", config_id_v2)
 
 # Performance worse? Rollback to v1
-await rollback_config("satellite_a", "Momentum Hunter", version=1)
+await rollback_config("satellite_a", "momentum_hunter", version=1)
+
+# UI can display: "Momentum Hunter - Aggressive (v1)" vs "Momentum Hunter - Deeper Search (v2)"
 ```
 
 **Migration from Current System**:
@@ -627,7 +643,8 @@ async def migrate_existing_configs():
         if current_config:
             # Create v1 in new system
             config_id = await config_manager.create_new_version(
-                name=f"{satellite['name']} Config",
+                name=f"{satellite['id']}_config",  # Technical name
+                title=f"{satellite['name']} Strategy",  # Display name
                 config_toml=current_config,
                 description="Migrated from legacy system"
             )
@@ -641,9 +658,10 @@ async def migrate_existing_configs():
     # Create core config from current settings
     core_config_toml = await build_toml_from_settings()
     config_id = await config_manager.create_new_version(
-        name="Core Conservative",
+        name="core_conservative",  # Technical identifier
+        title="Core - Conservative Long-Term",  # User-friendly title
         config_toml=core_config_toml,
-        description="Migrated core planner settings"
+        description="Migrated core planner settings with all features enabled"
     )
     await config_manager.assign_config_to_bucket("core", config_id)
 ```
@@ -1269,18 +1287,360 @@ def generate_toml_schema() -> dict:
 4. ✅ **Configuration Versioning** - Audit trail
 5. ✅ **Health Checks** - Operational visibility
 6. ✅ **Module Metadata** - Foundation for dependencies
+7. ✅ **Configuration Import/Export** - Backup and recovery
+8. ✅ **Planner Instance Caching** - Performance
 
 ### Should-Have (Phase 7-8)
-7. **Circuit Breaker** - Prevent cascading failures
-8. **Dry-Run Mode** - Safe testing
-9. **Configuration Diffing** - Better UX
-10. **Module Dependencies** - Validate compatibility
+9. **Circuit Breaker** - Prevent cascading failures
+10. **Dry-Run Mode** - Safe testing
+11. **Configuration Diffing** - Better UX
+12. **Module Dependencies** - Validate compatibility
 
 ### Nice-to-Have (Post-launch)
-11. Plugin System - Extensibility
-12. A/B Testing - Optimization
-13. Preset Library - Community
-14. Calculation Caching - Performance
+13. Plugin System - Extensibility
+14. A/B Testing - Optimization
+15. Preset Library - Community
+16. Calculation Caching - Performance
+
+---
+
+## Category 8: Configuration Import/Export
+
+###  8.1 Configuration File Export
+
+**Problem**: Need backup and sharing mechanism for configurations.
+
+**Solution**: Export/import configurations as TOML files.
+
+```python
+# services/config_import_export.py
+class ConfigurationImportExport:
+    """Import and export configurations as files."""
+
+    async def export_config(
+        self,
+        config_id: int,
+        file_path: str = None
+    ) -> str:
+        """
+        Export configuration as TOML file.
+
+        Args:
+            config_id: Configuration ID to export
+            file_path: Optional path to write file
+
+        Returns:
+            TOML string (also writes to file if path provided)
+        """
+        # Get configuration from database
+        config = await self.config_manager.get_config_by_id(config_id)
+
+        # Add metadata header
+        toml_with_metadata = f'''# Planner Configuration Export
+# Name: {config['name']}
+# Title: {config['title']}
+# Version: {config['version']}
+# Created: {config['created_at']}
+# Exported: {datetime.now().isoformat()}
+#
+# Description:
+# {config['description']}
+
+{config['config_toml']}
+'''
+
+        # Write to file if path provided
+        if file_path:
+            async with aiofiles.open(file_path, 'w') as f:
+                await f.write(toml_with_metadata)
+
+        return toml_with_metadata
+
+    async def import_config(
+        self,
+        toml_content: str,
+        name: str = None,
+        title: str = None
+    ) -> int:
+        """
+        Import configuration from TOML string or file.
+
+        Args:
+            toml_content: TOML configuration string
+            name: Override name (extracts from metadata if not provided)
+            title: Override title (extracts from metadata if not provided)
+
+        Returns:
+            New configuration ID
+        """
+        # Parse TOML
+        import tomllib
+        config_dict = tomllib.loads(toml_content)
+
+        # Extract name/title from metadata comments if not provided
+        if not name or not title:
+            # Parse comments for metadata
+            lines = toml_content.split('\n')
+            metadata = self._extract_metadata_from_comments(lines)
+            name = name or metadata.get('name', 'imported_config')
+            title = title or metadata.get('title', 'Imported Configuration')
+
+        # Validate configuration
+        from app.modules.planning.domain.config.validator import ConfigurationValidator
+        validator = ConfigurationValidator()
+        validation_result = validator.validate(config_dict)
+
+        if not validation_result.is_valid:
+            raise ValueError(f"Invalid configuration: {validation_result.errors}")
+
+        # Create new configuration version
+        config_id = await self.config_manager.create_new_version(
+            name=name,
+            title=title,
+            config_toml=toml_content,
+            description="Imported configuration"
+        )
+
+        return config_id
+
+    def _extract_metadata_from_comments(self, lines: list) -> dict:
+        """Extract metadata from comment header."""
+        metadata = {}
+        for line in lines:
+            if not line.startswith('#'):
+                break
+            if ': ' in line:
+                key, value = line[1:].split(': ', 1)
+                metadata[key.strip().lower()] = value.strip()
+        return metadata
+```
+
+**API Endpoints**:
+```python
+# api/planner_config.py
+@router.get("/configs/{config_id}/export")
+async def export_config(config_id: int):
+    """Export configuration as downloadable TOML file."""
+    toml_content = await config_import_export.export_config(config_id)
+
+    return Response(
+        content=toml_content,
+        media_type="text/plain",
+        headers={
+            "Content-Disposition": f"attachment; filename=planner_config_{config_id}.toml"
+        }
+    )
+
+@router.post("/configs/import")
+async def import_config(
+    file: UploadFile = File(...),
+    name: str = None,
+    title: str = None
+):
+    """Import configuration from TOML file."""
+    toml_content = await file.read()
+    toml_string = toml_content.decode('utf-8')
+
+    config_id = await config_import_export.import_config(
+        toml_string,
+        name=name,
+        title=title
+    )
+
+    return {"config_id": config_id, "status": "imported"}
+
+@router.post("/configs/{config_id}/clone")
+async def clone_config(
+    config_id: int,
+    new_name: str,
+    new_title: str
+):
+    """Clone existing configuration with new name."""
+    # Export original
+    toml_content = await config_import_export.export_config(config_id)
+
+    # Import as new config
+    new_config_id = await config_import_export.import_config(
+        toml_content,
+        name=new_name,
+        title=new_title
+    )
+
+    return {"config_id": new_config_id, "status": "cloned"}
+```
+
+**Benefits**:
+- Backup configurations as files
+- Share configurations (even though single user, useful for device migration)
+- Clone/fork existing configurations easily
+- Version control configs in git if desired
+- Disaster recovery
+
+**Implementation**: Phase 7
+
+---
+
+## Category 9: Planner Instance Lifecycle & Cache Management
+
+### 9.1 Planner Instance Caching
+
+**Problem**: Creating planner instances is expensive (loads modules, parses config). Without caching, every planning job creates new instance.
+
+**Solution**: Cache planner instances per bucket, invalidate on config change.
+
+```python
+# services/planner_factory.py (enhanced)
+class PlannerFactory:
+    """Factory for creating and caching planner instances."""
+
+    def __init__(self):
+        self._planner_cache: Dict[str, 'HolisticPlanner'] = {}
+        self._config_hashes: Dict[str, str] = {}  # bucket_id -> config hash
+
+    async def get_planner(self, bucket_id: str) -> 'HolisticPlanner':
+        """
+        Get planner instance for bucket.
+
+        Uses cache if config unchanged, otherwise creates new instance.
+
+        Args:
+            bucket_id: Bucket identifier ('core', 'satellite_a', etc.)
+
+        Returns:
+            HolisticPlanner instance
+        """
+        # Get current configuration for bucket
+        config = await self.config_manager.get_bucket_config(bucket_id)
+
+        # Calculate config hash
+        config_hash = hashlib.sha256(
+            config['config_toml'].encode()
+        ).hexdigest()
+
+        # Check if cached planner is valid
+        if bucket_id in self._planner_cache:
+            cached_hash = self._config_hashes.get(bucket_id)
+
+            if cached_hash == config_hash:
+                # Cache hit - return cached instance
+                logger.info(f"Using cached planner for bucket '{bucket_id}'")
+                return self._planner_cache[bucket_id]
+            else:
+                # Config changed - invalidate cache
+                logger.info(
+                    f"Config changed for bucket '{bucket_id}', "
+                    f"invalidating cache"
+                )
+                await self.invalidate_cache(bucket_id)
+
+        # Cache miss or invalidated - create new planner
+        logger.info(f"Creating new planner instance for bucket '{bucket_id}'")
+        planner = await self._create_planner(bucket_id, config)
+
+        # Cache the instance
+        self._planner_cache[bucket_id] = planner
+        self._config_hashes[bucket_id] = config_hash
+
+        return planner
+
+    async def invalidate_cache(self, bucket_id: str = None):
+        """
+        Invalidate planner cache.
+
+        Args:
+            bucket_id: Specific bucket to invalidate, or None for all
+        """
+        if bucket_id:
+            # Invalidate specific bucket
+            if bucket_id in self._planner_cache:
+                logger.info(f"Invalidating planner cache for '{bucket_id}'")
+                del self._planner_cache[bucket_id]
+                del self._config_hashes[bucket_id]
+        else:
+            # Invalidate all
+            logger.info("Invalidating all planner caches")
+            self._planner_cache.clear()
+            self._config_hashes.clear()
+
+    async def _create_planner(
+        self,
+        bucket_id: str,
+        config: dict
+    ) -> 'HolisticPlanner':
+        """Create new planner instance from configuration."""
+        import tomllib
+        from app.modules.planning.domain.config.planner_config import (
+            parse_toml_config
+        )
+
+        # Parse TOML configuration
+        planner_config = parse_toml_config(config['config_toml'])
+
+        # Create planner instance
+        planner = HolisticPlanner(
+            config=planner_config,
+            bucket_id=bucket_id,
+            repositories=self.repositories,
+            services=self.services
+        )
+
+        return planner
+```
+
+### 9.2 Configuration Change Detection
+
+**Problem**: Need to detect when configurations change to invalidate cache.
+
+**Solution**: Event-driven cache invalidation.
+
+```python
+# services/config_manager.py (enhanced)
+class ConfigurationManager:
+    """Manage planner configuration versions with cache invalidation."""
+
+    def __init__(
+        self,
+        config_db_path: str = "planner_configurations.db",
+        planner_factory: 'PlannerFactory' = None
+    ):
+        self.config_db = aiosqlite.connect(config_db_path)
+        self.planner_factory = planner_factory  # For cache invalidation
+
+    async def assign_config_to_bucket(
+        self,
+        bucket_id: str,
+        planner_config_id: int
+    ):
+        """Assign configuration to bucket and invalidate cache."""
+
+        # Assign in database
+        await self.main_db.execute(
+            """INSERT OR REPLACE INTO bucket_planner_configs
+               (bucket_id, planner_config_id, assigned_at)
+               VALUES (?, ?, ?)""",
+            (bucket_id, planner_config_id, datetime.now().isoformat())
+        )
+        await self.main_db.commit()
+
+        # Invalidate planner cache for this bucket
+        if self.planner_factory:
+            await self.planner_factory.invalidate_cache(bucket_id)
+
+        # Emit configuration changed event
+        await self.emit_event(ConfigurationChangedEvent(
+            bucket_id=bucket_id,
+            config_id=planner_config_id,
+            timestamp=datetime.now()
+        ))
+```
+
+**Benefits**:
+- Fast planner access (no recreation on every job)
+- Automatic cache invalidation on config changes
+- Memory efficient (only cache active planners)
+- Detects configuration changes automatically
+
+**Implementation**: Phase 6 (with planner refactor)
 
 ---
 
@@ -1302,11 +1662,14 @@ def generate_toml_schema() -> dict:
 - Implement GracefulDegradation
 - Add CircuitBreaker
 - Implement DryRun mode
+- **Planner Instance Caching** - NEW
+- **Cache Invalidation** - NEW
 
 **Phase 7 (Testing & Validation):**
 - Add HealthChecks API
 - Implement ConfigurationDiffer
 - Auto-generate module docs
+- **Configuration Import/Export** - NEW
 
 **Phase 8 (Post-launch enhancements):**
 - Plugin system
@@ -1341,9 +1704,11 @@ def generate_toml_schema() -> dict:
 | Circuit Breaker | 2-3 days | 6 |
 | Dry-Run Mode | 2-3 days | 6 |
 | Config Diffing | 2-3 days | 7 |
+| **Import/Export** | **2-3 days** | **7** |
+| **Planner Caching** | **1-2 days** | **6** |
 
-**Total Additional Time: ~3-4 weeks**
+**Total Additional Time: ~4-5 weeks**
 
-**New Timeline with Enhancements: 11-16 weeks**
+**New Timeline with Enhancements: 12-17 weeks**
 
 Worth it? **Absolutely** - These make the system production-ready, maintainable, and debuggable.
