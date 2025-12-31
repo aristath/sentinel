@@ -220,7 +220,7 @@ async def get_universe_suggestions(
 
                 # Score candidates and collect results
                 # First, fetch historical data for candidates (needed for scoring)
-                from app.infrastructure.database.manager import get_db_manager
+                from app.core.database.manager import get_db_manager
                 from app.infrastructure.external import yahoo_finance as yahoo
                 from app.config import settings
                 import asyncio
