@@ -516,7 +516,7 @@ async def get_job_status():
 async def get_database_stats():
     """Get database statistics including historical data counts and freshness."""
     from app.api.errors import error_response, success_response
-    from app.jobs.health_check import get_database_stats as get_db_stats
+    from app.modules.system.jobs.health_check import get_database_stats as get_db_stats
 
     try:
         stats = await get_db_stats()
