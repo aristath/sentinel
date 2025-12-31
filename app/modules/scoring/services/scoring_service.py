@@ -1,23 +1,23 @@
 """Scoring application service.
 
-Orchestrates stock scoring operations using the long-term value scoring system.
+Orchestrates security scoring operations using the long-term value scoring system.
 """
 
 import logging
 from typing import List, Optional
 
 from app.core.database.manager import DatabaseManager
-from app.domain.models import StockScore
-from app.domain.repositories.protocols import IStockRepository
+from app.domain.models import SecurityScore
+from app.domain.repositories.protocols import ISecurityRepository
 from app.infrastructure.external import yahoo_finance as yahoo
-from app.modules.scoring.domain import CalculatedStockScore, calculate_stock_score
+from app.modules.scoring.domain import CalculatedSecurityScore, calculate_stock_score
 from app.repositories import ScoreRepository
 
 logger = logging.getLogger(__name__)
 
 
-def _to_domain_score(score: CalculatedStockScore) -> StockScore:
-    """Convert CalculatedStockScore to domain StockScore model."""
+def _to_domain_score(score: CalculatedSecurityScore) -> SecurityScore:
+    """Convert CalculatedSecurityScore to domain SecurityScore model."""
     group_scores = score.group_scores or {}
     sub_scores = score.sub_scores or {}
 
@@ -44,7 +44,7 @@ def _to_domain_score(score: CalculatedStockScore) -> StockScore:
         # If we have CAGR data, assume at least 5 years
         history_years = 5.0 if cagr_score else None
 
-    return StockScore(
+    return SecurityScore(
         symbol=score.symbol,
         quality_score=quality_score,
         opportunity_score=group_scores.get("opportunity"),
@@ -62,11 +62,11 @@ def _to_domain_score(score: CalculatedStockScore) -> StockScore:
 
 
 class ScoringService:
-    """Application service for stock scoring operations."""
+    """Application service for security scoring operations."""
 
     def __init__(
         self,
-        stock_repo: IStockRepository,
+        stock_repo: ISecurityRepository,
         score_repo: ScoreRepository,
         db_manager: DatabaseManager,
     ):
@@ -101,15 +101,15 @@ class ScoringService:
         yahoo_symbol: Optional[str] = None,
         country: Optional[str] = None,
         industry: Optional[str] = None,
-    ) -> Optional[CalculatedStockScore]:
+    ) -> Optional[CalculatedSecurityScore]:
         """
-        Calculate stock score and save to database.
+        Calculate security score and save to database.
 
         Args:
-            symbol: Stock symbol
+            symbol: Security symbol
             yahoo_symbol: Optional Yahoo Finance symbol override
-            country: Stock country for allocation fit (optional)
-            industry: Stock industry for allocation fit (optional)
+            country: Security country for allocation fit (optional)
+            industry: Security industry for allocation fit (optional)
 
         Returns:
             Calculated score or None if calculation failed
@@ -155,27 +155,30 @@ class ScoringService:
             logger.error(f"Failed to calculate score for {symbol}: {e}")
             return None
 
-    async def score_all_stocks(self) -> List[CalculatedStockScore]:
+    async def score_all_securities(self) -> List[CalculatedSecurityScore]:
         """
-        Score all active stocks in the universe and update database.
+        Score all active securities in the universe and update database.
 
         Returns:
             List of calculated scores
         """
-        stocks = await self.stock_repo.get_all_active()
+        securities = await self.stock_repo.get_all_active()
         scores = []
 
-        for stock in stocks:
-            logger.info(f"Scoring {stock.symbol}...")
+        for security in securities:
+            logger.info(f"Scoring {security.symbol}...")
             score = await self.calculate_and_save_score(
-                stock.symbol,
-                yahoo_symbol=stock.yahoo_symbol,
-                country=stock.country,
-                industry=stock.industry,
+                security.symbol,
+                yahoo_symbol=security.yahoo_symbol,
+                country=security.country,
+                industry=security.industry,
             )
             if score:
                 scores.append(score)
-                logger.info(f"Scored {stock.symbol}: {score.total_score:.3f}")
+                logger.info(f"Scored {security.symbol}: {score.total_score:.3f}")
 
-        logger.info(f"Scored {len(scores)} stocks")
+        logger.info(f"Scored {len(scores)} securities")
         return scores
+
+    # Backward compatibility alias
+    score_all_stocks = score_all_securities

@@ -90,10 +90,10 @@ from app.modules.scoring.domain.groups import (
 
 # Models - All dataclasses for scoring
 from app.modules.scoring.domain.models import (
-    CalculatedStockScore,
+    CalculatedSecurityScore,
     PortfolioContext,
     PortfolioScore,
-    PrefetchedStockData,
+    PrefetchedSecurityData,
     SellScore,
     TechnicalData,
 )
@@ -134,6 +134,10 @@ from app.modules.scoring.domain.windfall import (
     should_take_profits,
 )
 
+# Backward compatibility aliases (after all imports)
+CalculatedStockScore = CalculatedSecurityScore
+PrefetchedStockData = PrefetchedSecurityData
+
 # === 8-GROUP SCORING MODULES ===
 
 
@@ -144,10 +148,13 @@ __all__ = [
     # Models
     "PortfolioContext",
     "PortfolioScore",
-    "CalculatedStockScore",
-    "PrefetchedStockData",
+    "CalculatedSecurityScore",
+    "PrefetchedSecurityData",
     "TechnicalData",
     "SellScore",
+    # Backward compatibility
+    "CalculatedStockScore",
+    "PrefetchedStockData",
     # Main scoring functions
     "calculate_stock_score",
     "calculate_stock_score_from_prefetched",
