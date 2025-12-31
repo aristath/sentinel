@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 
 from app.domain.models import DailyPrice, Security
+from app.domain.value_objects.product_type import ProductType
 
 
 class TestAttributeReturnByCategory:
@@ -231,6 +232,7 @@ class TestGetPerformanceAttribution:
         mock_stock = Security(
             symbol="AAPL",
             name="Apple",
+            product_type=ProductType.EQUITY,
             country="US",
             industry="Technology",
             isin=None,
