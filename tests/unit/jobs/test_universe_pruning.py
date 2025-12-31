@@ -16,7 +16,7 @@ from app.domain.models import Stock, StockScore
 
 def create_stock(symbol: str, active: bool = True) -> Stock:
     """Helper to create stock."""
-    from app.domain.value_objects.currency import Currency
+    from app.shared.domain.value_objects.currency import Currency
 
     return Stock(
         symbol=symbol,

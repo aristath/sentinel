@@ -15,7 +15,7 @@ class TestGetPortfolioMetrics:
     @pytest.mark.asyncio
     async def test_calculates_metrics_for_valid_returns(self):
         """Test that metrics are calculated for valid returns."""
-        from app.domain.analytics.metrics.portfolio import get_portfolio_metrics
+        from app.modules.analytics.domain.metrics.portfolio import get_portfolio_metrics
 
         # Create a simple returns series (1% daily return)
         returns = pd.Series(
@@ -36,7 +36,7 @@ class TestGetPortfolioMetrics:
     @pytest.mark.asyncio
     async def test_returns_zero_metrics_for_empty_returns(self):
         """Test that zero metrics are returned for empty returns."""
-        from app.domain.analytics.metrics.portfolio import get_portfolio_metrics
+        from app.modules.analytics.domain.metrics.portfolio import get_portfolio_metrics
 
         returns = pd.Series([], dtype=float)
 
@@ -52,7 +52,7 @@ class TestGetPortfolioMetrics:
     @pytest.mark.asyncio
     async def test_returns_zero_metrics_for_single_value(self):
         """Test that zero metrics are returned for single value (insufficient data)."""
-        from app.domain.analytics.metrics.portfolio import get_portfolio_metrics
+        from app.modules.analytics.domain.metrics.portfolio import get_portfolio_metrics
 
         returns = pd.Series(
             [0.01], index=pd.date_range("2024-01-01", periods=1, freq="D")
@@ -70,7 +70,7 @@ class TestGetPortfolioMetrics:
     @pytest.mark.asyncio
     async def test_handles_negative_returns(self):
         """Test handling of negative returns."""
-        from app.domain.analytics.metrics.portfolio import get_portfolio_metrics
+        from app.modules.analytics.domain.metrics.portfolio import get_portfolio_metrics
 
         # Negative returns (declining portfolio)
         returns = pd.Series(
@@ -86,7 +86,7 @@ class TestGetPortfolioMetrics:
     @pytest.mark.asyncio
     async def test_handles_risk_free_rate(self):
         """Test that risk-free rate is used in Sharpe/Sortino calculations."""
-        from app.domain.analytics.metrics.portfolio import get_portfolio_metrics
+        from app.modules.analytics.domain.metrics.portfolio import get_portfolio_metrics
 
         returns = pd.Series(
             [0.01] * 100, index=pd.date_range("2024-01-01", periods=100, freq="D")
@@ -102,7 +102,7 @@ class TestGetPortfolioMetrics:
     @pytest.mark.asyncio
     async def test_handles_benchmark(self):
         """Test that benchmark parameter is accepted (even if not fully used)."""
-        from app.domain.analytics.metrics.portfolio import get_portfolio_metrics
+        from app.modules.analytics.domain.metrics.portfolio import get_portfolio_metrics
 
         returns = pd.Series(
             [0.01] * 100, index=pd.date_range("2024-01-01", periods=100, freq="D")
@@ -119,7 +119,7 @@ class TestGetPortfolioMetrics:
     @pytest.mark.asyncio
     async def test_handles_infinite_values_gracefully(self):
         """Test that infinite values are converted to 0.0."""
-        from app.domain.analytics.metrics.portfolio import get_portfolio_metrics
+        from app.modules.analytics.domain.metrics.portfolio import get_portfolio_metrics
 
         # Create returns that might produce infinite values
         returns = pd.Series(
@@ -139,7 +139,7 @@ class TestGetPortfolioMetrics:
     @pytest.mark.asyncio
     async def test_handles_nan_values_gracefully(self):
         """Test that NaN values are handled gracefully."""
-        from app.domain.analytics.metrics.portfolio import get_portfolio_metrics
+        from app.modules.analytics.domain.metrics.portfolio import get_portfolio_metrics
 
         # Returns with some NaN values
         returns = pd.Series(
@@ -157,7 +157,7 @@ class TestGetPortfolioMetrics:
     @pytest.mark.asyncio
     async def test_calmar_ratio_handles_zero_drawdown(self):
         """Test that Calmar ratio handles zero drawdown correctly."""
-        from app.domain.analytics.metrics.portfolio import get_portfolio_metrics
+        from app.modules.analytics.domain.metrics.portfolio import get_portfolio_metrics
 
         # Returns with no drawdown (always positive)
         returns = pd.Series(
@@ -178,7 +178,7 @@ class TestGetPortfolioMetrics:
         """Test that exceptions during calculation return zero metrics."""
         from unittest.mock import patch
 
-        from app.domain.analytics.metrics.portfolio import get_portfolio_metrics
+        from app.modules.analytics.domain.metrics.portfolio import get_portfolio_metrics
 
         returns = pd.Series(
             [0.01] * 100, index=pd.date_range("2024-01-01", periods=100, freq="D")
@@ -186,7 +186,9 @@ class TestGetPortfolioMetrics:
 
         # Mock empyrical to raise an exception
         with patch("empyrical.annual_return", side_effect=Exception("Test error")):
-            with patch("app.domain.analytics.metrics.portfolio.logger") as mock_logger:
+            with patch(
+                "app.modules.analytics.domain.metrics.portfolio.logger"
+            ) as mock_logger:
                 metrics = await get_portfolio_metrics(returns)
 
                 # Should return zero metrics

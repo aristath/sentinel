@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.infrastructure.cache import SimpleCache
+from app.core.cache.cache import SimpleCache
 from app.infrastructure.cache_invalidation import CacheInvalidationService
 
 

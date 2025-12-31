@@ -12,7 +12,7 @@ class TestDividendConsistencyFromPayout:
 
     def test_optimal_payout_30_to_60(self):
         """Test optimal payout ratio range returns 1.0."""
-        from app.domain.scoring.end_state import (
+        from app.modules.scoring.domain.end_state import (
             _derive_dividend_consistency_from_payout,
         )
 
@@ -22,7 +22,7 @@ class TestDividendConsistencyFromPayout:
 
     def test_low_payout_below_30(self):
         """Test low payout ratio returns scaled score."""
-        from app.domain.scoring.end_state import (
+        from app.modules.scoring.domain.end_state import (
             _derive_dividend_consistency_from_payout,
         )
 
@@ -34,7 +34,7 @@ class TestDividendConsistencyFromPayout:
 
     def test_high_payout_60_to_80(self):
         """Test moderately high payout returns reduced score."""
-        from app.domain.scoring.end_state import (
+        from app.modules.scoring.domain.end_state import (
             _derive_dividend_consistency_from_payout,
         )
 
@@ -43,7 +43,7 @@ class TestDividendConsistencyFromPayout:
 
     def test_excessive_payout_above_80(self):
         """Test excessive payout returns low score."""
-        from app.domain.scoring.end_state import (
+        from app.modules.scoring.domain.end_state import (
             _derive_dividend_consistency_from_payout,
         )
 
@@ -56,35 +56,35 @@ class TestConvertSortinoToScore:
 
     def test_excellent_sortino_above_2(self):
         """Test excellent Sortino returns 1.0."""
-        from app.domain.scoring.end_state import _convert_sortino_to_score
+        from app.modules.scoring.domain.end_state import _convert_sortino_to_score
 
         assert _convert_sortino_to_score(2.0) == 1.0
         assert _convert_sortino_to_score(3.0) == 1.0
 
     def test_good_sortino_1_5_to_2(self):
         """Test good Sortino returns high score."""
-        from app.domain.scoring.end_state import _convert_sortino_to_score
+        from app.modules.scoring.domain.end_state import _convert_sortino_to_score
 
         score = _convert_sortino_to_score(1.75)
         assert 0.8 < score < 1.0
 
     def test_decent_sortino_1_to_1_5(self):
         """Test decent Sortino returns good score."""
-        from app.domain.scoring.end_state import _convert_sortino_to_score
+        from app.modules.scoring.domain.end_state import _convert_sortino_to_score
 
         score = _convert_sortino_to_score(1.25)
         assert 0.6 < score < 0.8
 
     def test_low_sortino_0_to_1(self):
         """Test low Sortino returns reduced score."""
-        from app.domain.scoring.end_state import _convert_sortino_to_score
+        from app.modules.scoring.domain.end_state import _convert_sortino_to_score
 
         score = _convert_sortino_to_score(0.5)
         assert 0 < score < 0.6
 
     def test_negative_sortino(self):
         """Test negative Sortino returns 0."""
-        from app.domain.scoring.end_state import _convert_sortino_to_score
+        from app.modules.scoring.domain.end_state import _convert_sortino_to_score
 
         assert _convert_sortino_to_score(-1.0) == 0.0
 
@@ -94,28 +94,28 @@ class TestConvertVolatilityToScore:
 
     def test_low_volatility_below_15(self):
         """Test low volatility returns 1.0."""
-        from app.domain.scoring.end_state import _convert_volatility_to_score
+        from app.modules.scoring.domain.end_state import _convert_volatility_to_score
 
         assert _convert_volatility_to_score(0.10) == 1.0
         assert _convert_volatility_to_score(0.15) == 1.0
 
     def test_moderate_volatility_15_to_25(self):
         """Test moderate volatility returns good score."""
-        from app.domain.scoring.end_state import _convert_volatility_to_score
+        from app.modules.scoring.domain.end_state import _convert_volatility_to_score
 
         score = _convert_volatility_to_score(0.20)
         assert 0.7 < score < 1.0
 
     def test_high_volatility_25_to_40(self):
         """Test high volatility returns reduced score."""
-        from app.domain.scoring.end_state import _convert_volatility_to_score
+        from app.modules.scoring.domain.end_state import _convert_volatility_to_score
 
         score = _convert_volatility_to_score(0.30)
         assert 0.3 < score < 0.7
 
     def test_extreme_volatility_above_40(self):
         """Test extreme volatility returns low score."""
-        from app.domain.scoring.end_state import _convert_volatility_to_score
+        from app.modules.scoring.domain.end_state import _convert_volatility_to_score
 
         score = _convert_volatility_to_score(0.50)
         assert 0.1 <= score < 0.3
@@ -126,35 +126,35 @@ class TestConvertDrawdownToScore:
 
     def test_small_drawdown_below_10(self):
         """Test small drawdown returns 1.0."""
-        from app.domain.scoring.end_state import _convert_drawdown_to_score
+        from app.modules.scoring.domain.end_state import _convert_drawdown_to_score
 
         assert _convert_drawdown_to_score(-0.05) == 1.0
         assert _convert_drawdown_to_score(-0.10) == 1.0
 
     def test_moderate_drawdown_10_to_20(self):
         """Test moderate drawdown returns high score."""
-        from app.domain.scoring.end_state import _convert_drawdown_to_score
+        from app.modules.scoring.domain.end_state import _convert_drawdown_to_score
 
         score = _convert_drawdown_to_score(-0.15)
         assert 0.8 < score < 1.0
 
     def test_significant_drawdown_20_to_30(self):
         """Test significant drawdown returns good score."""
-        from app.domain.scoring.end_state import _convert_drawdown_to_score
+        from app.modules.scoring.domain.end_state import _convert_drawdown_to_score
 
         score = _convert_drawdown_to_score(-0.25)
         assert 0.6 < score < 0.8
 
     def test_large_drawdown_30_to_50(self):
         """Test large drawdown returns reduced score."""
-        from app.domain.scoring.end_state import _convert_drawdown_to_score
+        from app.modules.scoring.domain.end_state import _convert_drawdown_to_score
 
         score = _convert_drawdown_to_score(-0.40)
         assert 0.2 < score < 0.6
 
     def test_severe_drawdown_above_50(self):
         """Test severe drawdown returns low score."""
-        from app.domain.scoring.end_state import _convert_drawdown_to_score
+        from app.modules.scoring.domain.end_state import _convert_drawdown_to_score
 
         score = _convert_drawdown_to_score(-0.60)
         assert score <= 0.2
@@ -165,35 +165,35 @@ class TestConvertSharpeToScore:
 
     def test_excellent_sharpe_above_2(self):
         """Test excellent Sharpe returns 1.0."""
-        from app.domain.scoring.end_state import _convert_sharpe_to_score
+        from app.modules.scoring.domain.end_state import _convert_sharpe_to_score
 
         assert _convert_sharpe_to_score(2.0) == 1.0
         assert _convert_sharpe_to_score(2.5) == 1.0
 
     def test_good_sharpe_1_to_2(self):
         """Test good Sharpe returns high score."""
-        from app.domain.scoring.end_state import _convert_sharpe_to_score
+        from app.modules.scoring.domain.end_state import _convert_sharpe_to_score
 
         score = _convert_sharpe_to_score(1.5)
         assert 0.7 < score < 1.0
 
     def test_decent_sharpe_0_5_to_1(self):
         """Test decent Sharpe returns moderate score."""
-        from app.domain.scoring.end_state import _convert_sharpe_to_score
+        from app.modules.scoring.domain.end_state import _convert_sharpe_to_score
 
         score = _convert_sharpe_to_score(0.75)
         assert 0.4 < score < 0.7
 
     def test_low_sharpe_0_to_0_5(self):
         """Test low Sharpe returns low score."""
-        from app.domain.scoring.end_state import _convert_sharpe_to_score
+        from app.modules.scoring.domain.end_state import _convert_sharpe_to_score
 
         score = _convert_sharpe_to_score(0.25)
         assert 0 < score < 0.4
 
     def test_negative_sharpe(self):
         """Test negative Sharpe returns 0."""
-        from app.domain.scoring.end_state import _convert_sharpe_to_score
+        from app.modules.scoring.domain.end_state import _convert_sharpe_to_score
 
         assert _convert_sharpe_to_score(-0.5) == 0.0
 
@@ -204,7 +204,7 @@ class TestCalculateTotalReturnScore:
     @pytest.mark.asyncio
     async def test_uses_metrics_dict(self):
         """Test that metrics dict is used."""
-        from app.domain.scoring.end_state import calculate_total_return_score
+        from app.modules.scoring.domain.end_state import calculate_total_return_score
 
         metrics = {
             "CAGR_5Y": 0.12,
@@ -222,7 +222,7 @@ class TestCalculateTotalReturnScore:
     @pytest.mark.asyncio
     async def test_handles_missing_metrics(self):
         """Test that missing metrics default to 0.0."""
-        from app.domain.scoring.end_state import calculate_total_return_score
+        from app.modules.scoring.domain.end_state import calculate_total_return_score
 
         metrics = {
             "CAGR_5Y": 0.10,
@@ -240,7 +240,7 @@ class TestCalculateLongTermPromise:
     @pytest.mark.asyncio
     async def test_uses_metrics_dict(self):
         """Test that metrics dict is used."""
-        from app.domain.scoring.end_state import calculate_long_term_promise
+        from app.modules.scoring.domain.end_state import calculate_long_term_promise
 
         metrics = {
             "CONSISTENCY_SCORE": 0.8,
@@ -260,7 +260,7 @@ class TestCalculateLongTermPromise:
     @pytest.mark.asyncio
     async def test_defaults_to_0_5_when_no_data(self):
         """Test default 0.5 when metrics are missing."""
-        from app.domain.scoring.end_state import calculate_long_term_promise
+        from app.modules.scoring.domain.end_state import calculate_long_term_promise
 
         metrics = {}  # Empty metrics dict
 
@@ -279,7 +279,7 @@ class TestCalculateStabilityScore:
     @pytest.mark.asyncio
     async def test_combines_all_components(self):
         """Test that all stability components are combined."""
-        from app.domain.scoring.end_state import calculate_stability_score
+        from app.modules.scoring.domain.end_state import calculate_stability_score
 
         metrics = {
             "VOLATILITY_ANNUAL": 0.20,  # Moderate volatility
@@ -297,7 +297,7 @@ class TestCalculateStabilityScore:
     @pytest.mark.asyncio
     async def test_uses_metrics_dict(self):
         """Test that metrics dict is used."""
-        from app.domain.scoring.end_state import calculate_stability_score
+        from app.modules.scoring.domain.end_state import calculate_stability_score
 
         metrics = {
             "VOLATILITY_ANNUAL": 0.25,
@@ -319,7 +319,9 @@ class TestCalculatePortfolioEndStateScore:
     @pytest.mark.asyncio
     async def test_returns_0_5_for_empty_portfolio(self):
         """Test that empty portfolio returns 0.5."""
-        from app.domain.scoring.end_state import calculate_portfolio_end_state_score
+        from app.modules.scoring.domain.end_state import (
+            calculate_portfolio_end_state_score,
+        )
 
         score, breakdown = await calculate_portfolio_end_state_score(
             positions={},
@@ -334,7 +336,9 @@ class TestCalculatePortfolioEndStateScore:
     @pytest.mark.asyncio
     async def test_calculates_weighted_scores(self):
         """Test weighted score calculation across positions."""
-        from app.domain.scoring.end_state import calculate_portfolio_end_state_score
+        from app.modules.scoring.domain.end_state import (
+            calculate_portfolio_end_state_score,
+        )
 
         metrics_cache = {
             "AAPL.US": {
@@ -380,7 +384,9 @@ class TestCalculatePortfolioEndStateScore:
     @pytest.mark.asyncio
     async def test_skips_zero_value_positions(self):
         """Test that zero-value positions are skipped."""
-        from app.domain.scoring.end_state import calculate_portfolio_end_state_score
+        from app.modules.scoring.domain.end_state import (
+            calculate_portfolio_end_state_score,
+        )
 
         metrics_cache = {
             "AAPL.US": {
@@ -409,7 +415,9 @@ class TestCalculatePortfolioEndStateScore:
     @pytest.mark.asyncio
     async def test_includes_weight_contributions(self):
         """Test that breakdown includes weight contributions."""
-        from app.domain.scoring.end_state import calculate_portfolio_end_state_score
+        from app.modules.scoring.domain.end_state import (
+            calculate_portfolio_end_state_score,
+        )
 
         metrics_cache = {
             "AAPL.US": {
@@ -444,7 +452,7 @@ class TestCalculateTotalReturnScoreWithMetrics:
     @pytest.mark.asyncio
     async def test_uses_metrics_dict(self):
         """Test that metrics dict is used instead of DB queries."""
-        from app.domain.scoring.end_state import calculate_total_return_score
+        from app.modules.scoring.domain.end_state import calculate_total_return_score
 
         metrics = {
             "CAGR_5Y": 0.12,
@@ -461,7 +469,7 @@ class TestCalculateTotalReturnScoreWithMetrics:
     @pytest.mark.asyncio
     async def test_handles_missing_metrics(self):
         """Test that missing metrics default to 0.0."""
-        from app.domain.scoring.end_state import calculate_total_return_score
+        from app.modules.scoring.domain.end_state import calculate_total_return_score
 
         metrics = {
             "CAGR_5Y": None,  # Missing
@@ -481,7 +489,7 @@ class TestCalculateLongTermPromiseWithMetrics:
     @pytest.mark.asyncio
     async def test_uses_metrics_dict(self):
         """Test that metrics dict is used instead of DB queries."""
-        from app.domain.scoring.end_state import calculate_long_term_promise
+        from app.modules.scoring.domain.end_state import calculate_long_term_promise
 
         metrics = {
             "CONSISTENCY_SCORE": 0.8,
@@ -501,7 +509,7 @@ class TestCalculateLongTermPromiseWithMetrics:
     @pytest.mark.asyncio
     async def test_handles_missing_metrics(self):
         """Test that missing metrics default appropriately."""
-        from app.domain.scoring.end_state import calculate_long_term_promise
+        from app.modules.scoring.domain.end_state import calculate_long_term_promise
 
         metrics = {
             "CONSISTENCY_SCORE": None,
@@ -524,7 +532,7 @@ class TestCalculateStabilityScoreWithMetrics:
     @pytest.mark.asyncio
     async def test_uses_metrics_dict(self):
         """Test that metrics dict is used instead of DB queries."""
-        from app.domain.scoring.end_state import calculate_stability_score
+        from app.modules.scoring.domain.end_state import calculate_stability_score
 
         metrics = {
             "VOLATILITY_ANNUAL": 0.20,
@@ -542,7 +550,7 @@ class TestCalculateStabilityScoreWithMetrics:
     @pytest.mark.asyncio
     async def test_handles_missing_metrics(self):
         """Test that missing metrics default appropriately."""
-        from app.domain.scoring.end_state import calculate_stability_score
+        from app.modules.scoring.domain.end_state import calculate_stability_score
 
         metrics = {
             "VOLATILITY_ANNUAL": None,
@@ -564,7 +572,9 @@ class TestCalculatePortfolioEndStateScoreWithMetricsCache:
     @pytest.mark.asyncio
     async def test_uses_metrics_cache(self):
         """Test that metrics cache is used instead of individual DB queries."""
-        from app.domain.scoring.end_state import calculate_portfolio_end_state_score
+        from app.modules.scoring.domain.end_state import (
+            calculate_portfolio_end_state_score,
+        )
 
         metrics_cache = {
             "AAPL.US": {
@@ -608,7 +618,9 @@ class TestCalculatePortfolioEndStateScoreWithMetricsCache:
     @pytest.mark.asyncio
     async def test_handles_missing_symbols_in_cache(self):
         """Test that missing symbols in cache use defaults."""
-        from app.domain.scoring.end_state import calculate_portfolio_end_state_score
+        from app.modules.scoring.domain.end_state import (
+            calculate_portfolio_end_state_score,
+        )
 
         metrics_cache = {
             "AAPL.US": {

@@ -47,7 +47,7 @@ async def get_symbol_isin_mapping(config_db) -> dict[str, str]:
 async def migrate_history_files():
     """Migrate history database files from symbol to ISIN naming."""
     from app.config import settings
-    from app.infrastructure.database.manager import init_databases
+    from app.core.database.manager import init_databases
 
     logger.info("=" * 60)
     logger.info("History File Migration")

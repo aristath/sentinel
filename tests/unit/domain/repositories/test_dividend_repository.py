@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.domain.models import DividendRecord
-from app.repositories.dividend import DividendRepository
+from app.modules.dividends.database.dividend_repository import DividendRepository
 
 
 def create_mock_dividend(
@@ -55,7 +55,9 @@ class TestDividendRepositoryCreate:
     @pytest.mark.asyncio
     async def test_create_dividend_record(self):
         """Test creating a new dividend record."""
-        with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.dividends.database.dividend_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = MagicMock()
             mock_db.dividends = mock_ledger
@@ -96,7 +98,9 @@ class TestDividendRepositoryQuery:
     @pytest.mark.asyncio
     async def test_get_by_id(self):
         """Test retrieving dividend by ID."""
-        with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.dividends.database.dividend_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.dividends = mock_ledger
@@ -115,7 +119,9 @@ class TestDividendRepositoryQuery:
     @pytest.mark.asyncio
     async def test_get_by_id_not_found(self):
         """Test retrieving non-existent dividend returns None."""
-        with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.dividends.database.dividend_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.dividends = mock_ledger
@@ -131,7 +137,9 @@ class TestDividendRepositoryQuery:
     @pytest.mark.asyncio
     async def test_get_by_cash_flow_id(self):
         """Test retrieving dividend by cash flow ID."""
-        with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.dividends.database.dividend_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.dividends = mock_ledger
@@ -149,7 +157,9 @@ class TestDividendRepositoryQuery:
     @pytest.mark.asyncio
     async def test_exists_for_cash_flow_true(self):
         """Test checking if dividend exists for cash flow."""
-        with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.dividends.database.dividend_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.dividends = mock_ledger
@@ -165,7 +175,9 @@ class TestDividendRepositoryQuery:
     @pytest.mark.asyncio
     async def test_exists_for_cash_flow_false(self):
         """Test checking if dividend doesn't exist for cash flow."""
-        with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.dividends.database.dividend_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.dividends = mock_ledger
@@ -181,7 +193,9 @@ class TestDividendRepositoryQuery:
     @pytest.mark.asyncio
     async def test_get_by_symbol(self):
         """Test retrieving all dividends for a symbol."""
-        with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.dividends.database.dividend_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.dividends = mock_ledger
@@ -202,7 +216,9 @@ class TestDividendRepositoryQuery:
     @pytest.mark.asyncio
     async def test_get_all_with_limit(self):
         """Test retrieving all dividends with limit."""
-        with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.dividends.database.dividend_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.dividends = mock_ledger
@@ -220,7 +236,9 @@ class TestDividendRepositoryQuery:
     @pytest.mark.asyncio
     async def test_get_all_without_limit(self):
         """Test retrieving all dividends without limit."""
-        with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.dividends.database.dividend_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.dividends = mock_ledger
@@ -241,7 +259,9 @@ class TestDividendRepositoryPendingBonus:
     @pytest.mark.asyncio
     async def test_get_pending_bonuses(self):
         """Test retrieving all pending bonuses by symbol."""
-        with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.dividends.database.dividend_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.dividends = mock_ledger
@@ -261,7 +281,9 @@ class TestDividendRepositoryPendingBonus:
     @pytest.mark.asyncio
     async def test_get_pending_bonus_for_symbol(self):
         """Test retrieving pending bonus for a specific symbol."""
-        with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.dividends.database.dividend_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.dividends = mock_ledger
@@ -277,7 +299,9 @@ class TestDividendRepositoryPendingBonus:
     @pytest.mark.asyncio
     async def test_get_pending_bonus_returns_zero_when_none(self):
         """Test that pending bonus returns 0 when no bonuses exist."""
-        with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.dividends.database.dividend_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.dividends = mock_ledger
@@ -293,7 +317,9 @@ class TestDividendRepositoryPendingBonus:
     @pytest.mark.asyncio
     async def test_set_pending_bonus(self):
         """Test setting pending bonus for a dividend."""
-        with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.dividends.database.dividend_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.dividends = mock_ledger
@@ -311,7 +337,9 @@ class TestDividendRepositoryPendingBonus:
     @pytest.mark.asyncio
     async def test_clear_bonus(self):
         """Test clearing pending bonuses for a symbol."""
-        with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.dividends.database.dividend_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.dividends = mock_ledger
@@ -334,7 +362,9 @@ class TestDividendRepositoryReinvestment:
     @pytest.mark.asyncio
     async def test_mark_reinvested(self):
         """Test marking a dividend as reinvested."""
-        with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.dividends.database.dividend_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.dividends = mock_ledger
@@ -355,7 +385,9 @@ class TestDividendRepositoryReinvestment:
     @pytest.mark.asyncio
     async def test_get_unreinvested_dividends(self):
         """Test retrieving dividends that haven't been reinvested."""
-        with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.dividends.database.dividend_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.dividends = mock_ledger
@@ -376,7 +408,9 @@ class TestDividendRepositoryReinvestment:
     @pytest.mark.asyncio
     async def test_get_total_reinvested(self):
         """Test getting total reinvested amount."""
-        with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.dividends.database.dividend_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.dividends = mock_ledger
@@ -392,7 +426,9 @@ class TestDividendRepositoryReinvestment:
     @pytest.mark.asyncio
     async def test_get_total_reinvested_returns_zero_when_none(self):
         """Test that total reinvested returns 0 when no data."""
-        with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.dividends.database.dividend_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.dividends = mock_ledger
@@ -408,7 +444,9 @@ class TestDividendRepositoryReinvestment:
     @pytest.mark.asyncio
     async def test_get_reinvestment_rate(self):
         """Test calculating reinvestment rate."""
-        with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.dividends.database.dividend_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.dividends = mock_ledger
@@ -424,7 +462,9 @@ class TestDividendRepositoryReinvestment:
     @pytest.mark.asyncio
     async def test_get_reinvestment_rate_returns_zero_when_no_dividends(self):
         """Test that reinvestment rate returns 0 when no dividends."""
-        with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.dividends.database.dividend_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.dividends = mock_ledger
@@ -444,7 +484,9 @@ class TestDividendRepositoryStatistics:
     @pytest.mark.asyncio
     async def test_get_total_dividends_by_symbol(self):
         """Test getting total dividends per symbol."""
-        with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.dividends.database.dividend_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.dividends = mock_ledger
@@ -468,7 +510,9 @@ class TestDividendRepositoryRowConversion:
 
     def test_row_to_dividend_basic(self):
         """Test converting a basic database row to DividendRecord."""
-        with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.dividends.database.dividend_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_get_db.return_value = mock_db
 
@@ -494,7 +538,9 @@ class TestDividendRepositoryRowConversion:
 
     def test_row_to_dividend_reinvested(self):
         """Test converting a reinvested dividend row."""
-        with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.dividends.database.dividend_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_get_db.return_value = mock_db
 
@@ -514,7 +560,9 @@ class TestDividendRepositoryRowConversion:
 
     def test_row_to_dividend_with_bonus(self):
         """Test converting a dividend row with pending bonus."""
-        with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.dividends.database.dividend_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_get_db.return_value = mock_db
 
@@ -532,7 +580,9 @@ class TestDividendRepositoryRowConversion:
 
     def test_row_to_dividend_cleared_bonus(self):
         """Test converting a dividend row with cleared bonus."""
-        with patch("app.repositories.dividend.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.dividends.database.dividend_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_get_db.return_value = mock_db
 

@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 async def main():
     """Delete individual allocation targets."""
     from app.config import settings
-    from app.infrastructure.database.manager import init_databases
+    from app.core.database.manager import init_databases
 
     logger.info("=" * 60)
     logger.info("Delete Individual Allocation Targets")

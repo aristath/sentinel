@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.domain.value_objects.currency import Currency
+from app.shared.domain.value_objects.currency import Currency
 
 
 @pytest.fixture
@@ -710,7 +710,7 @@ class TestProcessPlannerBatchJob:
                                                             call_args = (
                                                                 mock_emit.call_args
                                                             )
-                                                            from app.infrastructure.events import (
+                                                            from app.core.events import (
                                                                 SystemEvent,
                                                             )
 

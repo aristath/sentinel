@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.domain.scoring.models import TechnicalData
-from app.domain.scoring.sell import (
+from app.modules.scoring.domain.models import TechnicalData
+from app.modules.scoring.domain.sell import (
     SELL_WEIGHTS,
     _calculate_drawdown_score,
     _calculate_total_sell_score,
@@ -134,7 +134,7 @@ class TestCalculateDrawdownScore:
         mock_dd = {"current_drawdown": -0.30, "days_in_drawdown": 100}
 
         with patch(
-            "app.domain.analytics.get_position_drawdown",
+            "app.modules.analytics.domain.get_position_drawdown",
             new_callable=AsyncMock,
             return_value=mock_dd,
         ):
@@ -148,7 +148,7 @@ class TestCalculateDrawdownScore:
         mock_dd = {"current_drawdown": -0.20, "days_in_drawdown": 200}
 
         with patch(
-            "app.domain.analytics.get_position_drawdown",
+            "app.modules.analytics.domain.get_position_drawdown",
             new_callable=AsyncMock,
             return_value=mock_dd,
         ):
@@ -162,7 +162,7 @@ class TestCalculateDrawdownScore:
         mock_dd = {"current_drawdown": -0.18, "days_in_drawdown": 120}
 
         with patch(
-            "app.domain.analytics.get_position_drawdown",
+            "app.modules.analytics.domain.get_position_drawdown",
             new_callable=AsyncMock,
             return_value=mock_dd,
         ):
@@ -176,7 +176,7 @@ class TestCalculateDrawdownScore:
         mock_dd = {"current_drawdown": -0.16, "days_in_drawdown": 30}
 
         with patch(
-            "app.domain.analytics.get_position_drawdown",
+            "app.modules.analytics.domain.get_position_drawdown",
             new_callable=AsyncMock,
             return_value=mock_dd,
         ):
@@ -190,7 +190,7 @@ class TestCalculateDrawdownScore:
         mock_dd = {"current_drawdown": -0.12, "days_in_drawdown": 50}
 
         with patch(
-            "app.domain.analytics.get_position_drawdown",
+            "app.modules.analytics.domain.get_position_drawdown",
             new_callable=AsyncMock,
             return_value=mock_dd,
         ):
@@ -204,7 +204,7 @@ class TestCalculateDrawdownScore:
         mock_dd = {"current_drawdown": -0.05, "days_in_drawdown": 10}
 
         with patch(
-            "app.domain.analytics.get_position_drawdown",
+            "app.modules.analytics.domain.get_position_drawdown",
             new_callable=AsyncMock,
             return_value=mock_dd,
         ):
@@ -216,7 +216,7 @@ class TestCalculateDrawdownScore:
     async def test_returns_neutral_on_exception(self):
         """Test returning 0.3 (neutral) on exception."""
         with patch(
-            "app.domain.analytics.get_position_drawdown",
+            "app.modules.analytics.domain.get_position_drawdown",
             new_callable=AsyncMock,
             side_effect=Exception("Database error"),
         ):

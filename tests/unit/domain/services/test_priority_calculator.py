@@ -6,7 +6,7 @@ including stock score multiplication and sorting.
 
 import pytest
 
-from app.domain.services.priority_calculator import (
+from app.modules.universe.domain.priority_calculator import (
     PriorityCalculator,
     PriorityInput,
     PriorityResult,

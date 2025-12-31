@@ -10,7 +10,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from app.infrastructure.database.manager import get_db_manager
+from app.core.database.manager import get_db_manager
 
 logger = logging.getLogger(__name__)
 
@@ -196,7 +196,7 @@ class RecommendationCache:
             )
             # Emit event for recommendation updates
             try:
-                from app.infrastructure.events import SystemEvent, emit
+                from app.core.events import SystemEvent, emit
 
                 emit(SystemEvent.RECOMMENDATIONS_INVALIDATED)
             except Exception as e:
@@ -223,7 +223,7 @@ class RecommendationCache:
             logger.info(f"Invalidated {count} recommendation cache entries")
             # Emit event for recommendation updates
             try:
-                from app.infrastructure.events import SystemEvent, emit
+                from app.core.events import SystemEvent, emit
 
                 emit(SystemEvent.RECOMMENDATIONS_INVALIDATED)
             except Exception as e:

@@ -18,23 +18,24 @@ import asyncio
 import logging
 from typing import Optional
 
+from app.core.events import SystemEvent, emit
 from app.domain.models import Recommendation
 from app.domain.portfolio_hash import generate_portfolio_hash
-from app.domain.value_objects.currency import Currency
 from app.domain.value_objects.recommendation_status import RecommendationStatus
 from app.domain.value_objects.trade_side import TradeSide
 from app.infrastructure.cache_invalidation import get_cache_invalidation_service
-from app.infrastructure.events import SystemEvent, emit
-from app.infrastructure.hardware.display_service import set_led4, set_text
 from app.infrastructure.locking import file_lock
 from app.infrastructure.market_hours import is_market_open, should_check_market_hours
-from app.jobs.sync_cycle import (
+from app.modules.display.services.display_service import set_led4, set_text
+from app.modules.planning.database.planner_repository import PlannerRepository
+from app.modules.portfolio.database.position_repository import PositionRepository
+from app.modules.system.jobs.sync_cycle import (
     _execute_trade_order,
     _step_check_trading_conditions,
     _step_sync_portfolio,
 )
-from app.repositories import PositionRepository, StockRepository
-from app.repositories.planner_repository import PlannerRepository
+from app.modules.universe.database.stock_repository import StockRepository
+from app.shared.domain.value_objects.currency import Currency
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +81,7 @@ async def _run_event_based_trading_loop_internal():
 
             # Step 3.5: Check trade frequency limits
             set_text("CHECKING FREQUENCY LIMITS...")
-            from app.application.services.trade_frequency_service import (
+            from app.modules.trading.services.trade_frequency_service import (
                 TradeFrequencyService,
             )
             from app.repositories import SettingsRepository, TradeRepository
@@ -120,7 +121,9 @@ async def _run_event_based_trading_loop_internal():
 
                 # Check and rebalance negative balances immediately after trade
                 # (trades can affect cash balances)
-                from app.jobs.emergency_rebalance import check_and_rebalance_immediately
+                from app.modules.rebalancing.jobs.emergency_rebalance import (
+                    check_and_rebalance_immediately,
+                )
 
                 await check_and_rebalance_immediately()
 
@@ -165,13 +168,15 @@ async def _wait_for_planning_completion():
     This function calls the planner batch processing until all sequences
     for the current portfolio hash have been evaluated (completed=1).
     """
-    from app.application.services.recommendation.portfolio_context_builder import (
+    from app.core.database.manager import get_db_manager
+    from app.domain.services.exchange_rate_service import ExchangeRateService
+    from app.infrastructure.external.tradernet import TradernetClient
+    from app.modules.planning.domain.holistic_planner import (
+        create_holistic_plan_incremental,
+    )
+    from app.modules.planning.services.portfolio_context_builder import (
         build_portfolio_context,
     )
-    from app.domain.planning.holistic_planner import create_holistic_plan_incremental
-    from app.domain.services.exchange_rate_service import ExchangeRateService
-    from app.infrastructure.database.manager import get_db_manager
-    from app.infrastructure.external.tradernet import TradernetClient
     from app.repositories import (
         AllocationRepository,
         PositionRepository,
@@ -312,7 +317,7 @@ async def _wait_for_planning_completion():
                     # Use order price as avg_price (required by Position validation)
                     avg_price = order_price if order_price and order_price > 0 else 0.01
 
-                    from app.domain.value_objects.currency import Currency
+                    from app.shared.domain.value_objects.currency import Currency
 
                     currency = (
                         Currency.from_string(order_currency)
@@ -346,7 +351,7 @@ async def _wait_for_planning_completion():
                 logger.info("No cash balances after applying pending orders")
 
         # Get optimizer target weights if available
-        from app.application.services.optimization.portfolio_optimizer import (
+        from app.modules.optimization.services.portfolio_optimizer import (
             PortfolioOptimizer,
         )
         from app.repositories import GroupingRepository
@@ -441,7 +446,7 @@ async def _wait_for_planning_completion():
             f"Failed to trigger first batch via API: {e}, falling back to direct call"
         )
         # Fallback: call directly
-        from app.jobs.planner_batch import process_planner_batch_job
+        from app.modules.planning.jobs.planner_batch import process_planner_batch_job
 
         await process_planner_batch_job(max_depth=1, portfolio_hash=portfolio_hash)
 
@@ -509,7 +514,7 @@ async def _get_optimal_recommendation() -> Optional[Recommendation]:
         Recommendation object for the first step, or None if no recommendation available
     """
     from app.domain.portfolio_hash import generate_portfolio_hash
-    from app.repositories.planner_repository import PlannerRepository
+    from app.modules.planning.database.planner_repository import PlannerRepository
 
     position_repo = PositionRepository()
     stock_repo = StockRepository()

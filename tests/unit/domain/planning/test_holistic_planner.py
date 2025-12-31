@@ -11,7 +11,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.domain.planning.holistic_planner import (
+from app.domain.value_objects.trade_side import TradeSide
+from app.modules.planning.domain.holistic_planner import (
     ActionCandidate,
     HolisticPlan,
     HolisticStep,
@@ -20,7 +21,6 @@ from app.domain.planning.holistic_planner import (
     _process_buy_opportunity,
     generate_action_sequences,
 )
-from app.domain.value_objects.trade_side import TradeSide
 
 
 class TestCalculateWeightGaps:

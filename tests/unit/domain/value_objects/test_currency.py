@@ -5,7 +5,7 @@ These tests validate the Currency enum and its from_string conversion functional
 
 import pytest
 
-from app.domain.value_objects.currency import Currency
+from app.shared.domain.value_objects.currency import Currency
 
 
 class TestCurrency:

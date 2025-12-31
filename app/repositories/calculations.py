@@ -4,8 +4,8 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
-from app.domain.scoring.constants import DEFAULT_METRIC_TTL, METRIC_TTL
-from app.infrastructure.database import get_db_manager
+from app.core.database import get_db_manager
+from app.modules.scoring.domain.constants import DEFAULT_METRIC_TTL, METRIC_TTL
 
 logger = logging.getLogger(__name__)
 

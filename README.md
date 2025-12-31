@@ -82,53 +82,69 @@ Autonomous portfolio management system for Arduino Uno Q. Manages retirement fun
 
 ### Code Structure
 
+The codebase is organized into **self-contained modules**, each containing all functionality for a specific feature:
+
 ```
 app/
-├── domain/              # Pure business logic (no infrastructure dependencies)
+├── modules/             # Feature modules (self-contained)
+│   ├── allocation/      # Allocation targets and concentration alerts
+│   │   ├── api/         # API endpoints
+│   │   ├── database/    # Repository implementations
+│   │   ├── domain/      # Domain models
+│   │   ├── services/    # Application services
+│   │   └── jobs/        # Background jobs
+│   │
+│   ├── analytics/       # Portfolio analytics (attribution, metrics, reconstruction)
+│   ├── cash_flows/      # Cash flow ledger and sync
+│   ├── display/         # LED display services
+│   ├── dividends/       # Dividend reinvestment and history
+│   ├── optimization/    # Portfolio optimization (Mean-Variance, HRP)
+│   ├── planning/        # Holistic planner and recommendations
+│   ├── portfolio/       # Positions, snapshots, history
+│   ├── rebalancing/     # Rebalancing logic and services
+│   ├── scoring/         # Stock and portfolio scoring
+│   ├── system/          # Health checks, sync cycle, system stats
+│   ├── trading/         # Trade execution, safety, frequency
+│   └── universe/        # Stock management, discovery, external APIs
+│
+├── core/                # Shared infrastructure
+│   ├── cache/           # SimpleCache
+│   ├── database/        # DatabaseManager, schemas, queue
+│   ├── events/          # Event system
+│   ├── logging/         # Correlation ID logging
+│   └── middleware/      # Rate limiting middleware
+│
+├── shared/              # Shared domain concepts
+│   └── domain/
+│       ├── events/      # Shared event definitions
+│       └── value_objects/  # Currency, Money, Price, etc.
+│
+├── domain/              # Legacy domain (being phased out)
 │   ├── repositories/    # Repository interfaces (Protocol-based)
-│   ├── services/        # Domain services (PriorityCalculator, SettingsService)
-│   ├── scoring/         # Stock scoring system (8 groups)
-│   ├── analytics/       # Portfolio analytics
-│   ├── planning/        # Rebalancing strategies (holistic planner)
-│   ├── events/          # Domain events
-│   └── value_objects/   # Value objects (Currency, Money, Price, etc.)
+│   ├── services/        # Shared domain services
+│   └── models.py        # Re-exports from modules
 │
 ├── infrastructure/      # External concerns
-│   ├── database/        # Database manager, schemas
 │   ├── external/        # API clients (Tradernet, Yahoo Finance)
 │   ├── hardware/        # LED display controller
 │   └── dependencies.py  # FastAPI dependency injection
 │
-├── application/         # Orchestration layer
-│   └── services/        # Application services
-│       ├── optimization/    # Portfolio optimizer (Mean-Variance, HRP)
-│       ├── recommendation/  # Recommendation services
-│       ├── PortfolioService
-│       ├── RebalancingService
-│       ├── ScoringService
-│       └── TradeExecutionService
+├── application/         # Legacy application services (being phased out)
+│   └── services/        # Shared services (currency exchange, etc.)
 │
-├── repositories/        # Repository implementations (SQLite)
+├── repositories/        # Legacy repositories (being phased out)
+│   └── ...              # Some repositories still here (calculations, settings, etc.)
 │
-├── api/                 # Thin controllers (delegation only)
-│   ├── portfolio.py
-│   ├── stocks.py
-│   ├── trades.py
-│   ├── allocation.py
-│   ├── cash_flows.py
-│   ├── charts.py
-│   ├── optimizer.py
-│   ├── planner.py
-│   ├── recommendations.py
-│   ├── settings.py
-│   └── status.py
+├── api/                 # Legacy API endpoints (being phased out)
+│   ├── charts.py        # Charts API
+│   ├── settings.py      # Settings API
+│   └── errors.py        # Error handlers
 │
-└── jobs/               # Background jobs (APScheduler)
-    ├── scheduler.py
+└── jobs/               # Background jobs (infrastructure-level)
+    ├── scheduler.py     # Job scheduler
     ├── event_based_trading.py
-    ├── sync_cycle.py
-    ├── daily_pipeline.py
-    ├── planner_batch.py
+    ├── daily_sync.py
+    ├── maintenance.py
     └── ...
 ```
 
@@ -740,11 +756,25 @@ make dead-code       # vulture
 
 ### Adding New Features
 
-1. **Domain Logic**: Add to `app/domain/services/` (pure, testable)
-2. **Repository Interface**: Add to `app/domain/repositories/protocols.py`
-3. **Repository Implementation**: Add to `app/repositories/`
-4. **Application Service**: Add to `app/application/services/` (orchestration)
-5. **API Endpoint**: Add to `app/api/` (thin controller)
+The codebase uses a **modular architecture**. Each feature should be self-contained in its own module:
+
+1. **Create Module**: Create a new directory under `app/modules/` (e.g., `app/modules/my_feature/`)
+2. **Module Structure**: Each module contains:
+   - `api/` - API endpoints (FastAPI routers)
+   - `database/` - Repository implementations
+   - `domain/` - Domain models and business logic
+   - `services/` - Application services (orchestration)
+   - `jobs/` - Background jobs (if needed)
+   - `external/` - External API clients (if needed)
+3. **Repository Interface**: Add to `app/domain/repositories/protocols.py` if shared
+4. **Dependencies**: Use FastAPI `Depends()` in `app/infrastructure/dependencies.py`
+5. **Register Router**: Add module router to `app/main.py`
+
+**Example**: To add a new "notifications" feature:
+- Create `app/modules/notifications/` with subdirectories
+- Add `app/modules/notifications/api/notifications.py` with router
+- Add `app/modules/notifications/database/notification_repository.py`
+- Register router in `app/main.py`: `app.include_router(notifications.router, ...)`
 
 ### Testing Philosophy
 

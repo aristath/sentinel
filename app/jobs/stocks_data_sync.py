@@ -17,9 +17,9 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any
 
-from app.infrastructure.events import SystemEvent, emit
-from app.infrastructure.hardware.display_service import set_led4, set_text
+from app.core.events import SystemEvent, emit
 from app.infrastructure.locking import file_lock
+from app.modules.display.services.display_service import set_led4, set_text
 
 logger = logging.getLogger(__name__)
 
@@ -208,7 +208,7 @@ async def _sync_historical_for_symbol(symbol: str):
     Fetches daily and monthly prices from Yahoo Finance.
     """
     from app.config import settings
-    from app.infrastructure.database.manager import get_db_manager
+    from app.core.database.manager import get_db_manager
     from app.infrastructure.external import yahoo_finance as yahoo
 
     db_manager = get_db_manager()
@@ -285,7 +285,7 @@ async def _detect_and_update_industry(symbol: str):
     Args:
         symbol: The stock symbol to update
     """
-    from app.infrastructure.database.manager import get_db_manager
+    from app.core.database.manager import get_db_manager
     from app.infrastructure.external import yahoo_finance as yahoo
     from app.repositories import StockRepository
 
@@ -356,7 +356,7 @@ async def _detect_and_update_country_and_exchange(symbol: str):
     Args:
         symbol: The stock symbol to update
     """
-    from app.infrastructure.database.manager import get_db_manager
+    from app.core.database.manager import get_db_manager
     from app.infrastructure.external import yahoo_finance as yahoo
     from app.repositories import StockRepository
 
@@ -430,9 +430,9 @@ async def _refresh_score_for_symbol(symbol: str):
     """
     from datetime import datetime
 
-    from app.domain.scoring import calculate_stock_score
-    from app.infrastructure.database.manager import get_db_manager
+    from app.core.database.manager import get_db_manager
     from app.infrastructure.external import yahoo_finance as yahoo
+    from app.modules.scoring.domain.stock_scorer import calculate_stock_score
 
     db_manager = get_db_manager()
 
@@ -536,7 +536,7 @@ async def _refresh_score_for_symbol(symbol: str):
 
 async def _build_portfolio_context(db_manager):
     """Build portfolio context for allocation fit calculations."""
-    from app.domain.scoring import PortfolioContext
+    from app.modules.scoring.domain.models import PortfolioContext
 
     # Get current positions
     cursor = await db_manager.state.execute(
@@ -598,7 +598,7 @@ async def _build_portfolio_context(db_manager):
 
 async def _update_last_synced(symbol: str):
     """Update the last_synced timestamp for a stock."""
-    from app.infrastructure.database.manager import get_db_manager
+    from app.core.database.manager import get_db_manager
 
     db_manager = get_db_manager()
     now = datetime.now().isoformat()

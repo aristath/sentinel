@@ -4,18 +4,18 @@ import logging
 from datetime import datetime
 from typing import Optional
 
+from app.core.database.manager import get_db_manager
+from app.core.events import SystemEvent, emit
 from app.domain.events import PositionUpdatedEvent, get_event_bus
 from app.domain.models import Position
 from app.domain.services.exchange_rate_service import ExchangeRateService
-from app.domain.value_objects.currency import Currency
-from app.infrastructure.database.manager import get_db_manager
 from app.infrastructure.dependencies import get_exchange_rate_service
-from app.infrastructure.events import SystemEvent, emit
 from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.external.tradernet import get_tradernet_client
-from app.infrastructure.hardware.display_service import set_led3, set_led4, set_text
 from app.infrastructure.locking import file_lock
-from app.repositories.stock import StockRepository
+from app.modules.display.services.display_service import set_led3, set_led4, set_text
+from app.modules.universe.database.stock_repository import StockRepository
+from app.shared.domain.value_objects.currency import Currency
 
 logger = logging.getLogger(__name__)
 
@@ -593,12 +593,12 @@ async def _ensure_portfolio_stocks_in_universe(
     logger.info(f"Adding {len(missing_symbols)} missing stocks to universe...")
 
     # Import here to avoid circular dependencies
-    from app.application.services.stock_setup_service import StockSetupService
     from app.infrastructure.dependencies import (
         get_db_manager,
         get_score_repository,
         get_scoring_service,
     )
+    from app.modules.universe.services.stock_setup_service import StockSetupService
 
     db_manager = get_db_manager()
     score_repo = get_score_repository()

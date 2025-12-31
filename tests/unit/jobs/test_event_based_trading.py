@@ -15,9 +15,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.domain.models import Recommendation
-from app.domain.value_objects.currency import Currency
 from app.domain.value_objects.recommendation_status import RecommendationStatus
 from app.domain.value_objects.trade_side import TradeSide
+from app.shared.domain.value_objects.currency import Currency
 
 
 class TestWaitForPlanningCompletion:
@@ -67,7 +67,7 @@ class TestWaitForPlanningCompletion:
             patch("app.jobs.event_based_trading.PositionRepository"),
             patch("app.jobs.event_based_trading.StockRepository"),
             patch(
-                "app.application.services.recommendation.portfolio_context_builder.build_portfolio_context",
+                "app.modules.planning.services.portfolio_context_builder.build_portfolio_context",
                 new_callable=AsyncMock,
             ),
             patch("app.infrastructure.external.tradernet.get_tradernet_client"),

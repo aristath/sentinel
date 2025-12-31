@@ -8,7 +8,11 @@ without requiring abstract base classes.
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Protocol, Set
 
-from app.domain.models import AllocationTarget, Position, Stock, Trade
+from app.domain.models import Position, Stock, Trade
+
+# AllocationTarget moved to modules/allocation/domain/models.py
+# Backward compatibility import (temporary - will be removed in Phase 5)
+from app.modules.allocation.domain.models import AllocationTarget
 
 
 class IStockRepository(Protocol):

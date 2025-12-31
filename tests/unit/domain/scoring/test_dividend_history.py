@@ -8,8 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.domain.scoring.constants import DIVIDEND_CUT_THRESHOLD
-from app.domain.scoring.dividend_history import (
+from app.modules.dividends.domain.dividend_history import (
     _calculate_cut_penalty,
     _calculate_growth_bonus,
     _calculate_yield_bonus,
@@ -20,6 +19,7 @@ from app.domain.scoring.dividend_history import (
     has_big_dividend_cut,
     is_dividend_consistent,
 )
+from app.modules.scoring.domain.constants import DIVIDEND_CUT_THRESHOLD
 
 
 class TestHasBigDividendCut:

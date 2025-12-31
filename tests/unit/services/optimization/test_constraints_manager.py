@@ -8,13 +8,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.application.services.optimization.constraints_manager import (
+from app.domain.models import Position, Stock
+from app.modules.optimization.services.constraints_manager import (
     ConstraintsManager,
     SectorConstraint,
     WeightBounds,
 )
-from app.domain.models import Position, Stock
-from app.domain.scoring.constants import (
+from app.modules.scoring.domain.constants import (
     GEO_ALLOCATION_TOLERANCE,
     IND_ALLOCATION_TOLERANCE,
     MAX_CONCENTRATION,

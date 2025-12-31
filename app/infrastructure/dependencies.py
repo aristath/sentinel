@@ -8,14 +8,7 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from app.application.services.concentration_alerts import ConcentrationAlertService
-from app.application.services.currency_exchange_service import CurrencyExchangeService
-from app.application.services.portfolio_service import PortfolioService
-from app.application.services.rebalancing_service import RebalancingService
-from app.application.services.scoring_service import ScoringService
-from app.application.services.stock_setup_service import StockSetupService
-from app.application.services.trade_execution_service import TradeExecutionService
-from app.application.services.trade_safety_service import TradeSafetyService
+from app.core.database.manager import DatabaseManager, get_db_manager
 from app.domain.repositories.protocols import (
     IAllocationRepository,
     IPositionRepository,
@@ -25,26 +18,33 @@ from app.domain.repositories.protocols import (
 )
 from app.domain.services.exchange_rate_service import ExchangeRateService
 from app.domain.services.settings_service import SettingsService
-from app.domain.services.ticker_content_service import TickerContentService
-from app.infrastructure.database.manager import DatabaseManager, get_db_manager
 from app.infrastructure.external.tradernet import TradernetClient, get_tradernet_client
-from app.infrastructure.hardware.display_service import (
+from app.modules.allocation.database.allocation_repository import AllocationRepository
+from app.modules.allocation.services.concentration_alerts import (
+    ConcentrationAlertService,
+)
+from app.modules.cash_flows.database.cash_flow_repository import CashFlowRepository
+from app.modules.display.services.display_service import (
     DisplayStateManager,
     _display_state_manager,
 )
-from app.repositories import (
-    AllocationRepository,
-    CalculationsRepository,
-    CashFlowRepository,
-    GroupingRepository,
-    PortfolioRepository,
-    PositionRepository,
-    RecommendationRepository,
-    ScoreRepository,
-    SettingsRepository,
-    StockRepository,
-    TradeRepository,
-)
+from app.modules.portfolio.database.portfolio_repository import PortfolioRepository
+from app.modules.portfolio.database.position_repository import PositionRepository
+from app.modules.portfolio.services.portfolio_service import PortfolioService
+from app.modules.rebalancing.services.rebalancing_service import RebalancingService
+from app.modules.scoring.services.scoring_service import ScoringService
+from app.modules.trading.services.trade_execution_service import TradeExecutionService
+from app.modules.trading.services.trade_safety_service import TradeSafetyService
+from app.modules.universe.database.stock_repository import StockRepository
+from app.modules.universe.domain.ticker_content_service import TickerContentService
+from app.modules.universe.services.stock_setup_service import StockSetupService
+from app.repositories.calculations import CalculationsRepository
+from app.repositories.grouping import GroupingRepository
+from app.repositories.recommendation import RecommendationRepository
+from app.repositories.score import ScoreRepository
+from app.repositories.settings import SettingsRepository
+from app.repositories.trade import TradeRepository
+from app.shared.services import CurrencyExchangeService
 
 # Repository Dependencies
 

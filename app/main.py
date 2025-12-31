@@ -8,32 +8,28 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import (
-    allocation,
-    cash_flows,
-    charts,
-    optimizer,
-    planner,
-    portfolio,
-    recommendations,
-)
+from app.api import charts
 from app.api import settings as settings_api
-from app.api import status, stocks, trades
 from app.config import settings
-
-# Import event modules to register event subscriptions
-from app.infrastructure import planner_events, recommendation_events  # noqa: F401
-from app.infrastructure.database.manager import (
-    get_db_manager,
-    init_databases,
-    shutdown_databases,
-)
-from app.infrastructure.events import SystemEvent, emit
-from app.infrastructure.external.tradernet import get_tradernet_client
+from app.core.database.manager import get_db_manager, init_databases, shutdown_databases
+from app.core.events import SystemEvent, emit
 
 # Configure logging with correlation ID support and log rotation
-from app.infrastructure.logging_context import CorrelationIDFilter
+from app.core.logging import CorrelationIDFilter
+
+# Import event modules to register event subscriptions
+from app.infrastructure import recommendation_events  # noqa: F401
+from app.infrastructure.external.tradernet import get_tradernet_client
 from app.jobs.scheduler import init_scheduler, start_scheduler, stop_scheduler
+from app.modules.allocation.api import allocation
+from app.modules.cash_flows.api import cash_flows
+from app.modules.optimization.api import optimizer
+from app.modules.planning import events as planner_events  # noqa: F401
+from app.modules.planning.api import planner, recommendations
+from app.modules.portfolio.api import portfolio
+from app.modules.system.api import status
+from app.modules.trading.api import trades
+from app.modules.universe.api import stocks
 
 # Log format with correlation ID
 log_format = logging.Formatter(
@@ -102,7 +98,7 @@ async def lifespan(app: FastAPI):
         logger.warning("Tradernet not connected - check credentials")
 
     # Initialize display with startup message
-    from app.infrastructure.hardware.display_service import set_text
+    from app.modules.display.services.display_service import set_text
 
     set_text("SYSTEM STARTING...")
     logger.info("Display initialized with startup message")
@@ -110,7 +106,7 @@ async def lifespan(app: FastAPI):
     # Trigger initial display update in background
     async def update_display_on_startup():
         try:
-            from app.infrastructure.hardware.display_updater_service import (
+            from app.modules.display.services.display_updater_service import (
                 update_display_ticker,
             )
 
@@ -138,7 +134,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-from app.infrastructure.rate_limit import RateLimitMiddleware  # noqa: E402
+from app.core.middleware import RateLimitMiddleware  # noqa: E402
 
 # Add rate limiting middleware (must be before other middleware)
 app.add_middleware(RateLimitMiddleware)  # Uses values from config
@@ -147,10 +143,7 @@ app.add_middleware(RateLimitMiddleware)  # Uses values from config
 @app.middleware("http")
 async def request_context_middleware(request: Request, call_next):
     """Add correlation ID and LED indicators to requests."""
-    from app.infrastructure.logging_context import (
-        clear_correlation_id,
-        set_correlation_id,
-    )
+    from app.core.logging import clear_correlation_id, set_correlation_id
 
     # Set correlation ID for this request
     correlation_id = set_correlation_id()

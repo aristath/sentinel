@@ -1,9 +1,9 @@
 """Tests for unified Recommendation domain model."""
 
 from app.domain.models import Recommendation
-from app.domain.value_objects.currency import Currency
 from app.domain.value_objects.recommendation_status import RecommendationStatus
 from app.domain.value_objects.trade_side import TradeSide
+from app.shared.domain.value_objects.currency import Currency
 
 
 class TestRecommendation:

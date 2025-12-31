@@ -8,7 +8,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
-from app.infrastructure.database.manager import get_db_manager
+from app.core.database.manager import get_db_manager
 
 logger = logging.getLogger(__name__)
 

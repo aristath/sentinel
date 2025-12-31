@@ -10,13 +10,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
-from app.api.optimizer import (
+from app.modules.optimization.api.optimizer import (
     _optimization_result_to_dict,
     get_optimizer_status,
     run_optimization,
     update_optimization_cache,
 )
-from app.application.services.optimization.portfolio_optimizer import (
+from app.modules.optimization.services.portfolio_optimizer import (
     OptimizationResult,
     WeightChange,
 )
@@ -106,7 +106,7 @@ def sample_optimization_result():
 @pytest.fixture(autouse=True)
 def reset_cache():
     """Reset the module-level cache before each test."""
-    import app.api.optimizer as optimizer_module
+    import app.modules.optimization.api.optimizer as optimizer_module
 
     optimizer_module._last_optimization_result = None
     optimizer_module._last_optimization_time = None
@@ -144,7 +144,7 @@ class TestGetOptimizerStatus:
                 mock_service_class.return_value = mock_service
 
                 with patch(
-                    "app.application.services.rebalancing_service.calculate_min_trade_amount",
+                    "app.modules.rebalancing.services.rebalancing_service.calculate_min_trade_amount",
                     return_value=285.71,
                 ):
                     result = await get_optimizer_status()
@@ -159,7 +159,7 @@ class TestGetOptimizerStatus:
     @pytest.mark.asyncio
     async def test_returns_status_with_cached_result(self, mock_settings):
         """Test that cached optimization result is included."""
-        import app.api.optimizer as optimizer_module
+        import app.modules.optimization.api.optimizer as optimizer_module
 
         # Setup cache
         cached_result = {
@@ -182,7 +182,7 @@ class TestGetOptimizerStatus:
                 mock_service_class.return_value = mock_service
 
                 with patch(
-                    "app.application.services.rebalancing_service.calculate_min_trade_amount",
+                    "app.modules.rebalancing.services.rebalancing_service.calculate_min_trade_amount",
                     return_value=285.71,
                 ):
                     result = await get_optimizer_status()
@@ -203,7 +203,7 @@ class TestGetOptimizerStatus:
                 mock_service_class.return_value = mock_service
 
                 with patch(
-                    "app.application.services.rebalancing_service.calculate_min_trade_amount"
+                    "app.modules.rebalancing.services.rebalancing_service.calculate_min_trade_amount"
                 ) as mock_calc:
                     mock_calc.return_value = 285.71
 
@@ -367,7 +367,7 @@ class TestRunOptimization:
         self, mock_settings, sample_optimization_result
     ):
         """Test that optimization result is cached."""
-        import app.api.optimizer as optimizer_module
+        import app.modules.optimization.api.optimizer as optimizer_module
 
         mock_stock = MagicMock()
         mock_stock.symbol = "AAPL"
@@ -1015,7 +1015,7 @@ class TestUpdateOptimizationCache:
 
     def test_updates_cache(self, sample_optimization_result):
         """Test that cache is updated correctly."""
-        import app.api.optimizer as optimizer_module
+        import app.modules.optimization.api.optimizer as optimizer_module
 
         portfolio_value = 10000.0
 
@@ -1031,7 +1031,7 @@ class TestUpdateOptimizationCache:
 
     def test_updates_cache_timestamp(self, sample_optimization_result):
         """Test that timestamp is set when cache is updated."""
-        import app.api.optimizer as optimizer_module
+        import app.modules.optimization.api.optimizer as optimizer_module
 
         before_time = datetime.now()
 

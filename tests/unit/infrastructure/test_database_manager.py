@@ -14,7 +14,7 @@ class TestDatabaseInit:
 
     def test_init_sets_path(self):
         """Test that path is set correctly."""
-        from app.infrastructure.database.manager import Database
+        from app.core.database.manager import Database
 
         path = Path("/tmp/test.db")
         db = Database(path)
@@ -24,7 +24,7 @@ class TestDatabaseInit:
 
     def test_init_readonly(self):
         """Test readonly mode initialization."""
-        from app.infrastructure.database.manager import Database
+        from app.core.database.manager import Database
 
         path = Path("/tmp/test.db")
         db = Database(path, readonly=True)
@@ -33,7 +33,7 @@ class TestDatabaseInit:
 
     def test_name_property(self):
         """Test name property returns stem."""
-        from app.infrastructure.database.manager import Database
+        from app.core.database.manager import Database
 
         db = Database(Path("/tmp/mydb.db"))
         assert db.name == "mydb"
@@ -45,7 +45,7 @@ class TestDatabaseConnect:
     @pytest.mark.asyncio
     async def test_connect_creates_directory(self):
         """Test that connect creates parent directory."""
-        from app.infrastructure.database.manager import Database
+        from app.core.database.manager import Database
 
         with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
             mock_conn = AsyncMock()
@@ -62,7 +62,7 @@ class TestDatabaseConnect:
     @pytest.mark.asyncio
     async def test_connect_readonly_uses_uri(self):
         """Test readonly connection uses URI mode."""
-        from app.infrastructure.database.manager import Database
+        from app.core.database.manager import Database
 
         with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
             mock_conn = AsyncMock()
@@ -82,7 +82,7 @@ class TestDatabaseConnect:
     @pytest.mark.asyncio
     async def test_connect_configures_pragmas(self):
         """Test that connection configures SQLite pragmas."""
-        from app.infrastructure.database.manager import Database
+        from app.core.database.manager import Database
 
         with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
             mock_conn = AsyncMock()
@@ -104,7 +104,7 @@ class TestDatabaseConnect:
     @pytest.mark.asyncio
     async def test_connect_returns_same_connection(self):
         """Test that connect returns cached connection."""
-        from app.infrastructure.database.manager import Database
+        from app.core.database.manager import Database
 
         with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
             mock_conn = AsyncMock()
@@ -129,7 +129,7 @@ class TestDatabaseClose:
     @pytest.mark.asyncio
     async def test_close_closes_connection(self):
         """Test that close closes the connection."""
-        from app.infrastructure.database.manager import Database
+        from app.core.database.manager import Database
 
         with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
             mock_conn = AsyncMock()
@@ -148,7 +148,7 @@ class TestDatabaseClose:
     @pytest.mark.asyncio
     async def test_close_when_not_connected(self):
         """Test close when not connected does nothing."""
-        from app.infrastructure.database.manager import Database
+        from app.core.database.manager import Database
 
         db = Database(Path("/tmp/test.db"))
         # Should not raise
@@ -162,7 +162,7 @@ class TestDatabaseTransaction:
     @pytest.mark.asyncio
     async def test_transaction_commits_on_success(self):
         """Test that transaction commits on success."""
-        from app.infrastructure.database.manager import Database
+        from app.core.database.manager import Database
 
         with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
             mock_conn = AsyncMock()
@@ -181,7 +181,7 @@ class TestDatabaseTransaction:
     @pytest.mark.asyncio
     async def test_transaction_rollback_on_error(self):
         """Test that transaction rolls back on error."""
-        from app.infrastructure.database.manager import Database
+        from app.core.database.manager import Database
 
         with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
             mock_conn = AsyncMock()
@@ -204,7 +204,7 @@ class TestDatabaseOperations:
     @pytest.mark.asyncio
     async def test_execute(self):
         """Test execute method."""
-        from app.infrastructure.database.manager import Database
+        from app.core.database.manager import Database
 
         with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
             mock_cursor = AsyncMock()
@@ -223,7 +223,7 @@ class TestDatabaseOperations:
     @pytest.mark.asyncio
     async def test_executemany(self):
         """Test executemany method."""
-        from app.infrastructure.database.manager import Database
+        from app.core.database.manager import Database
 
         with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
             mock_cursor = AsyncMock()
@@ -242,7 +242,7 @@ class TestDatabaseOperations:
     @pytest.mark.asyncio
     async def test_executescript(self):
         """Test executescript method."""
-        from app.infrastructure.database.manager import Database
+        from app.core.database.manager import Database
 
         with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
             mock_conn = AsyncMock()
@@ -259,7 +259,7 @@ class TestDatabaseOperations:
     @pytest.mark.asyncio
     async def test_commit(self):
         """Test commit method."""
-        from app.infrastructure.database.manager import Database
+        from app.core.database.manager import Database
 
         with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
             mock_conn = AsyncMock()
@@ -276,7 +276,7 @@ class TestDatabaseOperations:
     @pytest.mark.asyncio
     async def test_fetchone(self):
         """Test fetchone method."""
-        from app.infrastructure.database.manager import Database
+        from app.core.database.manager import Database
 
         with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
             mock_row = {"id": 1}
@@ -297,7 +297,7 @@ class TestDatabaseOperations:
     @pytest.mark.asyncio
     async def test_fetchall(self):
         """Test fetchall method."""
-        from app.infrastructure.database.manager import Database
+        from app.core.database.manager import Database
 
         with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
             mock_rows = [{"id": 1}, {"id": 2}]
@@ -318,7 +318,7 @@ class TestDatabaseOperations:
     @pytest.mark.asyncio
     async def test_integrity_check(self):
         """Test integrity_check method."""
-        from app.infrastructure.database.manager import Database
+        from app.core.database.manager import Database
 
         with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
             mock_cursor = AsyncMock()
@@ -338,7 +338,7 @@ class TestDatabaseOperations:
     @pytest.mark.asyncio
     async def test_integrity_check_no_result(self):
         """Test integrity_check when no result."""
-        from app.infrastructure.database.manager import Database
+        from app.core.database.manager import Database
 
         with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
             mock_cursor = AsyncMock()
@@ -358,7 +358,7 @@ class TestDatabaseOperations:
     @pytest.mark.asyncio
     async def test_checkpoint(self):
         """Test checkpoint method."""
-        from app.infrastructure.database.manager import Database
+        from app.core.database.manager import Database
 
         with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
             mock_conn = AsyncMock()
@@ -380,7 +380,7 @@ class TestDatabaseManager:
 
     def test_init_creates_databases(self):
         """Test that init creates all database instances."""
-        from app.infrastructure.database.manager import DatabaseManager
+        from app.core.database.manager import DatabaseManager
 
         data_dir = Path("/tmp/test_data")
         manager = DatabaseManager(data_dir)
@@ -399,7 +399,7 @@ class TestDatabaseManagerHistory:
     @pytest.mark.asyncio
     async def test_history_creates_database(self):
         """Test that history creates per-symbol database."""
-        from app.infrastructure.database.manager import DatabaseManager
+        from app.core.database.manager import DatabaseManager
 
         data_dir = Path("/tmp/test_data")
         manager = DatabaseManager(data_dir)
@@ -418,7 +418,7 @@ class TestDatabaseManagerHistory:
     @pytest.mark.asyncio
     async def test_history_caches_database(self):
         """Test that history returns cached database."""
-        from app.infrastructure.database.manager import DatabaseManager
+        from app.core.database.manager import DatabaseManager
 
         data_dir = Path("/tmp/test_data")
         manager = DatabaseManager(data_dir)
@@ -440,7 +440,7 @@ class TestDatabaseManagerHistory:
     @pytest.mark.asyncio
     async def test_history_sanitizes_symbol(self):
         """Test that history sanitizes symbol for filename."""
-        from app.infrastructure.database.manager import DatabaseManager
+        from app.core.database.manager import DatabaseManager
 
         data_dir = Path("/tmp/test_data")
         manager = DatabaseManager(data_dir)
@@ -463,7 +463,7 @@ class TestDatabaseManagerCloseAll:
     @pytest.mark.asyncio
     async def test_close_all_closes_core_databases(self):
         """Test that close_all closes all core databases."""
-        from app.infrastructure.database.manager import DatabaseManager
+        from app.core.database.manager import DatabaseManager
 
         data_dir = Path("/tmp/test_data")
         manager = DatabaseManager(data_dir)
@@ -486,7 +486,7 @@ class TestDatabaseManagerCloseAll:
     @pytest.mark.asyncio
     async def test_close_all_closes_history_databases(self):
         """Test that close_all closes history databases."""
-        from app.infrastructure.database.manager import DatabaseManager
+        from app.core.database.manager import DatabaseManager
 
         data_dir = Path("/tmp/test_data")
         manager = DatabaseManager(data_dir)
@@ -513,7 +513,7 @@ class TestDatabaseManagerIntegrityCheck:
     @pytest.mark.asyncio
     async def test_integrity_check_all(self):
         """Test that integrity_check_all checks all databases."""
-        from app.infrastructure.database.manager import DatabaseManager
+        from app.core.database.manager import DatabaseManager
 
         data_dir = Path("/tmp/test_data")
         manager = DatabaseManager(data_dir)
@@ -536,7 +536,7 @@ class TestDatabaseManagerIntegrityCheck:
     @pytest.mark.asyncio
     async def test_integrity_check_handles_errors(self):
         """Test that integrity_check_all handles errors."""
-        from app.infrastructure.database.manager import DatabaseManager
+        from app.core.database.manager import DatabaseManager
 
         data_dir = Path("/tmp/test_data")
         manager = DatabaseManager(data_dir)
@@ -556,7 +556,7 @@ class TestDatabaseManagerIntegrityCheck:
     @pytest.mark.asyncio
     async def test_integrity_check_includes_history(self):
         """Test that integrity_check_all checks history databases."""
-        from app.infrastructure.database.manager import DatabaseManager
+        from app.core.database.manager import DatabaseManager
 
         data_dir = Path("/tmp/test_data")
         manager = DatabaseManager(data_dir)
@@ -587,7 +587,7 @@ class TestDatabaseManagerCheckpointAll:
     @pytest.mark.asyncio
     async def test_checkpoint_all(self):
         """Test that checkpoint_all checkpoints all databases."""
-        from app.infrastructure.database.manager import DatabaseManager
+        from app.core.database.manager import DatabaseManager
 
         data_dir = Path("/tmp/test_data")
         manager = DatabaseManager(data_dir)
@@ -610,7 +610,7 @@ class TestDatabaseManagerCheckpointAll:
     @pytest.mark.asyncio
     async def test_checkpoint_all_includes_history(self):
         """Test that checkpoint_all checkpoints history databases."""
-        from app.infrastructure.database.manager import DatabaseManager
+        from app.core.database.manager import DatabaseManager
 
         data_dir = Path("/tmp/test_data")
         manager = DatabaseManager(data_dir)
@@ -640,7 +640,7 @@ class TestDatabaseManagerGetHistorySymbols:
 
     def test_get_history_symbols_no_directory(self):
         """Test get_history_symbols when directory doesn't exist."""
-        from app.infrastructure.database.manager import DatabaseManager
+        from app.core.database.manager import DatabaseManager
 
         data_dir = Path("/tmp/nonexistent_" + str(id(self)))
         manager = DatabaseManager(data_dir)
@@ -651,7 +651,7 @@ class TestDatabaseManagerGetHistorySymbols:
 
     def test_get_history_symbols_with_files(self):
         """Test get_history_symbols with database files."""
-        from app.infrastructure.database.manager import DatabaseManager
+        from app.core.database.manager import DatabaseManager
 
         data_dir = Path("/tmp/test_data")
         manager = DatabaseManager(data_dir)
@@ -683,7 +683,7 @@ class TestGetDbManager:
         module._db_manager = None
 
         try:
-            from app.infrastructure.database.manager import get_db_manager
+            from app.core.database.manager import get_db_manager
 
             with pytest.raises(RuntimeError) as exc_info:
                 get_db_manager()
@@ -727,7 +727,7 @@ class TestInitDatabases:
                     new_callable=AsyncMock,
                 ),
             ):
-                from app.infrastructure.database.manager import init_databases
+                from app.core.database.manager import init_databases
 
                 manager = await init_databases(Path("/tmp/test_data"))
 
@@ -750,7 +750,7 @@ class TestShutdownDatabases:
         module._db_manager = mock_manager
 
         try:
-            from app.infrastructure.database.manager import shutdown_databases
+            from app.core.database.manager import shutdown_databases
 
             await shutdown_databases()
 
@@ -768,7 +768,7 @@ class TestShutdownDatabases:
         module._db_manager = None
 
         try:
-            from app.infrastructure.database.manager import shutdown_databases
+            from app.core.database.manager import shutdown_databases
 
             # Should not raise
             await shutdown_databases()

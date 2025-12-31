@@ -11,8 +11,8 @@ import logging
 from datetime import datetime
 from typing import Optional, Tuple
 
+from app.core.database.manager import get_db_manager
 from app.domain.constants import DAILY_LOSS_FULL_HALT, DAILY_LOSS_SELL_HALT
-from app.infrastructure.database.manager import get_db_manager
 
 logger = logging.getLogger(__name__)
 

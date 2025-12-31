@@ -11,8 +11,8 @@ import pandas as pd
 import pytest
 
 from app.domain.models import CashFlow, Trade
-from app.domain.value_objects.currency import Currency
 from app.domain.value_objects.trade_side import TradeSide
+from app.shared.domain.value_objects.currency import Currency
 
 
 @pytest.fixture

@@ -4,8 +4,8 @@ import logging
 from datetime import datetime, timedelta
 from typing import List, Optional, Set
 
+from app.core.database import get_db_manager
 from app.domain.models import Trade
-from app.infrastructure.database import get_db_manager
 from app.repositories.base import safe_get_datetime, transaction_context
 
 logger = logging.getLogger(__name__)

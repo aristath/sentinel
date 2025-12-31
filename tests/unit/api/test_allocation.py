@@ -60,7 +60,7 @@ class TestGetCurrentAllocation:
         self, mock_portfolio_service, mock_alert_service
     ):
         """Test that current allocation is returned with country and industry data."""
-        from app.api.allocation import get_current_allocation
+        from app.modules.allocation.api.allocation import get_current_allocation
 
         # Setup portfolio summary
         country_alloc = AllocationStatus(
@@ -105,8 +105,10 @@ class TestGetCurrentAllocation:
     @pytest.mark.asyncio
     async def test_includes_alerts(self, mock_portfolio_service, mock_alert_service):
         """Test that concentration alerts are included."""
-        from app.api.allocation import get_current_allocation
-        from app.application.services.concentration_alerts import ConcentrationAlert
+        from app.modules.allocation.api.allocation import get_current_allocation
+        from app.modules.allocation.services.concentration_alerts import (
+            ConcentrationAlert,
+        )
 
         summary = PortfolioSummary(
             total_value=10000.0,
@@ -139,7 +141,7 @@ class TestGetCurrentAllocation:
         self, mock_portfolio_service, mock_alert_service
     ):
         """Test handling of empty allocations."""
-        from app.api.allocation import get_current_allocation
+        from app.modules.allocation.api.allocation import get_current_allocation
 
         summary = PortfolioSummary(
             total_value=0.0,
@@ -164,7 +166,7 @@ class TestGetAllocationDeviations:
     @pytest.mark.asyncio
     async def test_returns_deviations_with_status(self, mock_portfolio_service):
         """Test that deviations are returned with status indicators."""
-        from app.api.allocation import get_allocation_deviations
+        from app.modules.allocation.api.allocation import get_allocation_deviations
 
         # Underweight country
         country_under = AllocationStatus(
@@ -212,7 +214,7 @@ class TestGetAllocationDeviations:
     @pytest.mark.asyncio
     async def test_calculates_need_correctly(self, mock_portfolio_service):
         """Test that 'need' is calculated correctly (max(0, -deviation))."""
-        from app.api.allocation import get_allocation_deviations
+        from app.modules.allocation.api.allocation import get_allocation_deviations
 
         country = AllocationStatus(
             category="country",
@@ -242,7 +244,7 @@ class TestGetAllocationTargets:
     @pytest.mark.asyncio
     async def test_returns_country_and_industry_targets(self, mock_allocation_repo):
         """Test that targets for both country and industry are returned."""
-        from app.api.allocation import get_allocation_targets
+        from app.modules.allocation.api.allocation import get_allocation_targets
 
         mock_allocation_repo.get_country_group_targets.return_value = {
             "US": 0.5,
@@ -263,7 +265,7 @@ class TestGetAllocationTargets:
     @pytest.mark.asyncio
     async def test_handles_empty_targets(self, mock_allocation_repo):
         """Test handling of empty targets."""
-        from app.api.allocation import get_allocation_targets
+        from app.modules.allocation.api.allocation import get_allocation_targets
 
         mock_allocation_repo.get_country_group_targets.return_value = {}
         mock_allocation_repo.get_industry_group_targets.return_value = {}
@@ -280,7 +282,7 @@ class TestGetCountryGroups:
     @pytest.mark.asyncio
     async def test_returns_country_groups(self, mock_grouping_repo):
         """Test that country groups are returned."""
-        from app.api.allocation import get_country_groups
+        from app.modules.allocation.api.allocation import get_country_groups
 
         mock_grouping_repo.get_country_groups.return_value = {
             "US": ["United States", "Canada"],
@@ -296,7 +298,7 @@ class TestGetCountryGroups:
     @pytest.mark.asyncio
     async def test_handles_empty_groups(self, mock_grouping_repo):
         """Test handling of empty groups."""
-        from app.api.allocation import get_country_groups
+        from app.modules.allocation.api.allocation import get_country_groups
 
         mock_grouping_repo.get_country_groups.return_value = {}
 
@@ -311,7 +313,7 @@ class TestGetIndustryGroups:
     @pytest.mark.asyncio
     async def test_returns_industry_groups(self, mock_grouping_repo):
         """Test that industry groups are returned."""
-        from app.api.allocation import get_industry_groups
+        from app.modules.allocation.api.allocation import get_industry_groups
 
         mock_grouping_repo.get_industry_groups.return_value = {
             "Technology": ["Software", "Hardware"],
@@ -326,7 +328,7 @@ class TestGetIndustryGroups:
     @pytest.mark.asyncio
     async def test_handles_empty_groups(self, mock_grouping_repo):
         """Test handling of empty groups."""
-        from app.api.allocation import get_industry_groups
+        from app.modules.allocation.api.allocation import get_industry_groups
 
         mock_grouping_repo.get_industry_groups.return_value = {}
 
@@ -341,7 +343,10 @@ class TestUpdateCountryGroup:
     @pytest.mark.asyncio
     async def test_creates_or_updates_country_group(self, mock_grouping_repo):
         """Test that country group is created or updated."""
-        from app.api.allocation import CountryGroup, update_country_group
+        from app.modules.allocation.api.allocation import (
+            CountryGroup,
+            update_country_group,
+        )
 
         group = CountryGroup(group_name="US", country_names=["United States", "Canada"])
 
@@ -356,7 +361,10 @@ class TestUpdateCountryGroup:
     @pytest.mark.asyncio
     async def test_validates_group_name_required(self, mock_grouping_repo):
         """Test that empty group name raises error."""
-        from app.api.allocation import CountryGroup, update_country_group
+        from app.modules.allocation.api.allocation import (
+            CountryGroup,
+            update_country_group,
+        )
 
         group = CountryGroup(group_name="", country_names=["United States"])
 
@@ -369,7 +377,10 @@ class TestUpdateCountryGroup:
     @pytest.mark.asyncio
     async def test_filters_empty_countries(self, mock_grouping_repo):
         """Test that empty country names are filtered out."""
-        from app.api.allocation import CountryGroup, update_country_group
+        from app.modules.allocation.api.allocation import (
+            CountryGroup,
+            update_country_group,
+        )
 
         group = CountryGroup(
             group_name="US",
@@ -387,7 +398,10 @@ class TestUpdateCountryGroup:
     @pytest.mark.asyncio
     async def test_allows_empty_country_list(self, mock_grouping_repo):
         """Test that empty country list is allowed (user can add later)."""
-        from app.api.allocation import CountryGroup, update_country_group
+        from app.modules.allocation.api.allocation import (
+            CountryGroup,
+            update_country_group,
+        )
 
         group = CountryGroup(group_name="NEW", country_names=[])
 
@@ -399,7 +413,10 @@ class TestUpdateCountryGroup:
     @pytest.mark.asyncio
     async def test_strips_whitespace_from_group_name(self, mock_grouping_repo):
         """Test that whitespace is stripped from group name."""
-        from app.api.allocation import CountryGroup, update_country_group
+        from app.modules.allocation.api.allocation import (
+            CountryGroup,
+            update_country_group,
+        )
 
         group = CountryGroup(group_name="  US  ", country_names=["United States"])
 
@@ -417,7 +434,10 @@ class TestUpdateIndustryGroup:
     @pytest.mark.asyncio
     async def test_creates_or_updates_industry_group(self, mock_grouping_repo):
         """Test that industry group is created or updated."""
-        from app.api.allocation import IndustryGroup, update_industry_group
+        from app.modules.allocation.api.allocation import (
+            IndustryGroup,
+            update_industry_group,
+        )
 
         group = IndustryGroup(
             group_name="Tech", industry_names=["Software", "Hardware"]
@@ -433,7 +453,10 @@ class TestUpdateIndustryGroup:
     @pytest.mark.asyncio
     async def test_validates_group_name_required(self, mock_grouping_repo):
         """Test that empty group name raises error."""
-        from app.api.allocation import IndustryGroup, update_industry_group
+        from app.modules.allocation.api.allocation import (
+            IndustryGroup,
+            update_industry_group,
+        )
 
         group = IndustryGroup(group_name="   ", industry_names=["Software"])
 
@@ -445,7 +468,10 @@ class TestUpdateIndustryGroup:
     @pytest.mark.asyncio
     async def test_filters_empty_industries(self, mock_grouping_repo):
         """Test that empty industry names are filtered out."""
-        from app.api.allocation import IndustryGroup, update_industry_group
+        from app.modules.allocation.api.allocation import (
+            IndustryGroup,
+            update_industry_group,
+        )
 
         group = IndustryGroup(
             group_name="Tech",
@@ -465,7 +491,7 @@ class TestDeleteCountryGroup:
     @pytest.mark.asyncio
     async def test_deletes_country_group(self, mock_grouping_repo):
         """Test that country group is deleted."""
-        from app.api.allocation import delete_country_group
+        from app.modules.allocation.api.allocation import delete_country_group
 
         result = await delete_country_group("US", mock_grouping_repo)
 
@@ -479,7 +505,7 @@ class TestDeleteIndustryGroup:
     @pytest.mark.asyncio
     async def test_deletes_industry_group(self, mock_grouping_repo):
         """Test that industry group is deleted."""
-        from app.api.allocation import delete_industry_group
+        from app.modules.allocation.api.allocation import delete_industry_group
 
         result = await delete_industry_group("Tech", mock_grouping_repo)
 
@@ -493,7 +519,7 @@ class TestGetAvailableCountries:
     @pytest.mark.asyncio
     async def test_returns_available_countries(self, mock_grouping_repo):
         """Test that available countries are returned."""
-        from app.api.allocation import get_available_countries
+        from app.modules.allocation.api.allocation import get_available_countries
 
         mock_grouping_repo.get_available_countries.return_value = [
             "United States",
@@ -510,7 +536,7 @@ class TestGetAvailableCountries:
     @pytest.mark.asyncio
     async def test_handles_empty_list(self, mock_grouping_repo):
         """Test handling of empty country list."""
-        from app.api.allocation import get_available_countries
+        from app.modules.allocation.api.allocation import get_available_countries
 
         mock_grouping_repo.get_available_countries.return_value = []
 
@@ -525,7 +551,7 @@ class TestGetAvailableIndustries:
     @pytest.mark.asyncio
     async def test_returns_available_industries(self, mock_grouping_repo):
         """Test that available industries are returned."""
-        from app.api.allocation import get_available_industries
+        from app.modules.allocation.api.allocation import get_available_industries
 
         mock_grouping_repo.get_available_industries.return_value = [
             "Technology",
@@ -548,7 +574,7 @@ class TestGetGroupAllocation:
         self, mock_portfolio_service, mock_grouping_repo, mock_allocation_repo
     ):
         """Test that allocations aggregated by groups are returned."""
-        from app.api.allocation import get_group_allocation
+        from app.modules.allocation.api.allocation import get_group_allocation
 
         # Setup country allocations (individual countries)
         country_alloc1 = AllocationStatus(
@@ -604,7 +630,7 @@ class TestGetGroupAllocation:
         self, mock_portfolio_service, mock_grouping_repo
     ):
         """Test that countries without groups map to 'OTHER'."""
-        from app.api.allocation import get_group_allocation
+        from app.modules.allocation.api.allocation import get_group_allocation
 
         country_alloc = AllocationStatus(
             category="country",
@@ -637,7 +663,7 @@ class TestGetGroupAllocation:
         self, mock_portfolio_service, mock_grouping_repo
     ):
         """Test handling when total value is zero."""
-        from app.api.allocation import get_group_allocation
+        from app.modules.allocation.api.allocation import get_group_allocation
 
         summary = PortfolioSummary(
             total_value=0.0,
@@ -664,7 +690,10 @@ class TestUpdateCountryGroupTargets:
         self, mock_allocation_repo, mock_grouping_repo
     ):
         """Test that country group targets are updated."""
-        from app.api.allocation import CountryTargets, update_country_group_targets
+        from app.modules.allocation.api.allocation import (
+            CountryTargets,
+            update_country_group_targets,
+        )
 
         mock_grouping_repo.get_country_groups.return_value = {
             "US": ["United States"],
@@ -691,7 +720,10 @@ class TestUpdateCountryGroupTargets:
         self, mock_allocation_repo, mock_grouping_repo
     ):
         """Test that empty targets raise error."""
-        from app.api.allocation import CountryTargets, update_country_group_targets
+        from app.modules.allocation.api.allocation import (
+            CountryTargets,
+            update_country_group_targets,
+        )
 
         targets = CountryTargets(targets={})
 
@@ -708,7 +740,10 @@ class TestUpdateCountryGroupTargets:
         self, mock_allocation_repo, mock_grouping_repo
     ):
         """Test that updating targets requires groups to exist."""
-        from app.api.allocation import CountryTargets, update_country_group_targets
+        from app.modules.allocation.api.allocation import (
+            CountryTargets,
+            update_country_group_targets,
+        )
 
         mock_grouping_repo.get_country_groups.return_value = {}
         targets = CountryTargets(targets={"US": 0.5})
@@ -726,7 +761,10 @@ class TestUpdateCountryGroupTargets:
         self, mock_allocation_repo, mock_grouping_repo
     ):
         """Test that weights must be between -1 and 1."""
-        from app.api.allocation import CountryTargets, update_country_group_targets
+        from app.modules.allocation.api.allocation import (
+            CountryTargets,
+            update_country_group_targets,
+        )
 
         mock_grouping_repo.get_country_groups.return_value = {"US": ["United States"]}
 
@@ -750,7 +788,10 @@ class TestUpdateCountryGroupTargets:
     @pytest.mark.asyncio
     async def test_filters_zero_targets(self, mock_allocation_repo, mock_grouping_repo):
         """Test that zero targets are filtered from response."""
-        from app.api.allocation import CountryTargets, update_country_group_targets
+        from app.modules.allocation.api.allocation import (
+            CountryTargets,
+            update_country_group_targets,
+        )
 
         mock_grouping_repo.get_country_groups.return_value = {
             "US": ["United States"],
@@ -781,7 +822,10 @@ class TestUpdateIndustryGroupTargets:
         self, mock_allocation_repo, mock_grouping_repo
     ):
         """Test that industry group targets are updated."""
-        from app.api.allocation import IndustryTargets, update_industry_group_targets
+        from app.modules.allocation.api.allocation import (
+            IndustryTargets,
+            update_industry_group_targets,
+        )
 
         mock_grouping_repo.get_industry_groups.return_value = {
             "Technology": ["Software"],
@@ -806,7 +850,10 @@ class TestUpdateIndustryGroupTargets:
         self, mock_allocation_repo, mock_grouping_repo
     ):
         """Test that empty targets raise error."""
-        from app.api.allocation import IndustryTargets, update_industry_group_targets
+        from app.modules.allocation.api.allocation import (
+            IndustryTargets,
+            update_industry_group_targets,
+        )
 
         targets = IndustryTargets(targets={})
 
@@ -823,7 +870,10 @@ class TestUpdateIndustryGroupTargets:
         self, mock_allocation_repo, mock_grouping_repo
     ):
         """Test that updating targets requires groups to exist."""
-        from app.api.allocation import IndustryTargets, update_industry_group_targets
+        from app.modules.allocation.api.allocation import (
+            IndustryTargets,
+            update_industry_group_targets,
+        )
 
         mock_grouping_repo.get_industry_groups.return_value = {}
         targets = IndustryTargets(targets={"Technology": 0.3})
@@ -841,7 +891,10 @@ class TestUpdateIndustryGroupTargets:
         self, mock_allocation_repo, mock_grouping_repo
     ):
         """Test that weights must be between -1 and 1."""
-        from app.api.allocation import IndustryTargets, update_industry_group_targets
+        from app.modules.allocation.api.allocation import (
+            IndustryTargets,
+            update_industry_group_targets,
+        )
 
         mock_grouping_repo.get_industry_groups.return_value = {
             "Technology": ["Software"]

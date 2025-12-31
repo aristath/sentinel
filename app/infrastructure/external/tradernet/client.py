@@ -8,7 +8,6 @@ from tradernet import TraderNetAPI
 
 from app.config import settings
 from app.domain.services.exchange_rate_service import ExchangeRateService
-from app.domain.value_objects.currency import Currency
 from app.infrastructure.external.tradernet.models import (
     OHLC,
     CashBalance,
@@ -36,6 +35,7 @@ from app.infrastructure.external.tradernet.utils import (
     led_api_call,
     set_exchange_rate_service,
 )
+from app.shared.domain.value_objects.currency import Currency
 
 logger = logging.getLogger(__name__)
 

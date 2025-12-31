@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pandas as pd
 import pytest
 
-from app.application.services.optimization.risk_models import RiskModelBuilder
+from app.modules.optimization.services.risk_models import RiskModelBuilder
 
 
 class TestRiskModelBuilder:
@@ -48,7 +48,7 @@ class TestRiskModelBuilder:
         )
 
         with patch(
-            "app.application.services.optimization.risk_models.HistoryRepository"
+            "app.modules.optimization.services.risk_models.HistoryRepository"
         ) as mock_repo_class:
 
             def repo_side_effect(symbol):
@@ -62,7 +62,7 @@ class TestRiskModelBuilder:
 
             # Mock Ledoit-Wolf to return a simple covariance matrix
             with patch(
-                "app.application.services.optimization.risk_models.pypfopt_risk.CovarianceShrinkage"
+                "app.modules.optimization.services.risk_models.pypfopt_risk.CovarianceShrinkage"
             ) as mock_shrinkage:
                 mock_cov_matrix = pd.DataFrame(
                     [[0.0001, 0.00005], [0.00005, 0.0001]],
@@ -90,7 +90,7 @@ class TestRiskModelBuilder:
         mock_history_repo.get_daily_prices = AsyncMock(return_value=[])
 
         with patch(
-            "app.application.services.optimization.risk_models.HistoryRepository",
+            "app.modules.optimization.services.risk_models.HistoryRepository",
             return_value=mock_history_repo,
         ):
             cov_matrix, returns_df = await builder.build_covariance_matrix(symbols)
@@ -111,7 +111,7 @@ class TestRiskModelBuilder:
         mock_history_repo.get_daily_prices = AsyncMock(return_value=mock_prices)
 
         with patch(
-            "app.application.services.optimization.risk_models.HistoryRepository",
+            "app.modules.optimization.services.risk_models.HistoryRepository",
             return_value=mock_history_repo,
         ):
             cov_matrix, returns_df = await builder.build_covariance_matrix(symbols)
@@ -153,7 +153,7 @@ class TestRiskModelBuilder:
         mock_repo_bad.get_daily_prices = AsyncMock(return_value=mock_prices_bad)
 
         with patch(
-            "app.application.services.optimization.risk_models.HistoryRepository"
+            "app.modules.optimization.services.risk_models.HistoryRepository"
         ) as mock_repo_class:
 
             def repo_side_effect(symbol):
@@ -164,7 +164,7 @@ class TestRiskModelBuilder:
             mock_repo_class.side_effect = repo_side_effect
 
             with patch(
-                "app.application.services.optimization.risk_models.pypfopt_risk.CovarianceShrinkage"
+                "app.modules.optimization.services.risk_models.pypfopt_risk.CovarianceShrinkage"
             ) as mock_shrinkage:
                 # Create a covariance matrix for valid symbols only
                 mock_cov_matrix = pd.DataFrame(

@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.application.services.trade_execution_service import TradeExecutionService
 from app.domain.models import Position
+from app.modules.trading.services.trade_execution_service import TradeExecutionService
 from app.repositories import PositionRepository, StockRepository, TradeRepository
 
 
@@ -41,10 +41,8 @@ async def test_trade_execution_rollback_on_database_error(db):
     stock_repo = StockRepository(db=db)
 
     # Create mock currency exchange service and exchange rate service
-    from app.application.services.currency_exchange_service import (
-        CurrencyExchangeService,
-    )
     from app.domain.services.exchange_rate_service import ExchangeRateService
+    from app.shared.services import CurrencyExchangeService
 
     mock_currency_service = MagicMock(spec=CurrencyExchangeService)
     mock_exchange_rate_service = MagicMock(spec=ExchangeRateService)
@@ -109,10 +107,8 @@ async def test_trade_execution_handles_external_failure(db):
     mock_client.place_order.side_effect = Exception("API Error")
 
     # Create mock currency exchange service and exchange rate service
-    from app.application.services.currency_exchange_service import (
-        CurrencyExchangeService,
-    )
     from app.domain.services.exchange_rate_service import ExchangeRateService
+    from app.shared.services import CurrencyExchangeService
 
     mock_currency_service = MagicMock(spec=CurrencyExchangeService)
     mock_exchange_rate_service = MagicMock(spec=ExchangeRateService)

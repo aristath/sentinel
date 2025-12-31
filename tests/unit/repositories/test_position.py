@@ -15,7 +15,9 @@ class TestPositionRepositoryInit:
 
     def test_init_with_db(self):
         """Test initialization with provided database."""
-        from app.repositories.position import PositionRepository
+        from app.modules.portfolio.database.position_repository import (
+            PositionRepository,
+        )
 
         mock_db = AsyncMock()
         mock_db.fetchone = AsyncMock()
@@ -26,7 +28,9 @@ class TestPositionRepositoryInit:
 
     def test_init_wraps_raw_connection(self):
         """Test that raw connection is wrapped."""
-        from app.repositories.position import PositionRepository
+        from app.modules.portfolio.database.position_repository import (
+            PositionRepository,
+        )
 
         mock_conn = MagicMock()
         mock_conn.execute = MagicMock()
@@ -42,7 +46,9 @@ class TestPositionRepositoryQueries:
     @pytest.mark.asyncio
     async def test_get_by_symbol_found(self):
         """Test getting position by symbol when found."""
-        from app.repositories.position import PositionRepository
+        from app.modules.portfolio.database.position_repository import (
+            PositionRepository,
+        )
 
         mock_row = {
             "symbol": "AAPL.US",
@@ -74,7 +80,9 @@ class TestPositionRepositoryQueries:
     @pytest.mark.asyncio
     async def test_get_by_symbol_not_found(self):
         """Test getting position by symbol when not found."""
-        from app.repositories.position import PositionRepository
+        from app.modules.portfolio.database.position_repository import (
+            PositionRepository,
+        )
 
         mock_db = AsyncMock()
         mock_db.fetchone = AsyncMock(return_value=None)
@@ -88,7 +96,9 @@ class TestPositionRepositoryQueries:
     @pytest.mark.asyncio
     async def test_get_all(self):
         """Test getting all positions."""
-        from app.repositories.position import PositionRepository
+        from app.modules.portfolio.database.position_repository import (
+            PositionRepository,
+        )
 
         mock_rows = [
             {
@@ -125,7 +135,9 @@ class TestPositionRepositoryUpsert:
     @pytest.mark.asyncio
     async def test_upsert_position(self):
         """Test upserting a position."""
-        from app.repositories.position import PositionRepository
+        from app.modules.portfolio.database.position_repository import (
+            PositionRepository,
+        )
 
         mock_db = AsyncMock()
         mock_db.transaction = MagicMock()
@@ -161,7 +173,9 @@ class TestPositionRepositoryDelete:
     @pytest.mark.asyncio
     async def test_delete_all(self):
         """Test deleting all positions."""
-        from app.repositories.position import PositionRepository
+        from app.modules.portfolio.database.position_repository import (
+            PositionRepository,
+        )
 
         mock_db = AsyncMock()
         mock_db.transaction = MagicMock()
@@ -177,7 +191,9 @@ class TestPositionRepositoryDelete:
     @pytest.mark.asyncio
     async def test_delete_by_symbol(self):
         """Test deleting a specific position."""
-        from app.repositories.position import PositionRepository
+        from app.modules.portfolio.database.position_repository import (
+            PositionRepository,
+        )
 
         mock_db = AsyncMock()
         mock_db.transaction = MagicMock()
@@ -197,7 +213,9 @@ class TestPositionRepositoryUpdatePrice:
     @pytest.mark.asyncio
     async def test_update_price(self):
         """Test updating price for a position."""
-        from app.repositories.position import PositionRepository
+        from app.modules.portfolio.database.position_repository import (
+            PositionRepository,
+        )
 
         mock_db = AsyncMock()
         mock_db.transaction = MagicMock()
@@ -213,7 +231,9 @@ class TestPositionRepositoryUpdatePrice:
     @pytest.mark.asyncio
     async def test_update_last_sold_at(self):
         """Test updating last sold timestamp."""
-        from app.repositories.position import PositionRepository
+        from app.modules.portfolio.database.position_repository import (
+            PositionRepository,
+        )
 
         mock_db = AsyncMock()
         mock_db.transaction = MagicMock()
@@ -233,7 +253,9 @@ class TestPositionRepositoryGetTotalValue:
     @pytest.mark.asyncio
     async def test_get_total_value(self):
         """Test getting total portfolio value."""
-        from app.repositories.position import PositionRepository
+        from app.modules.portfolio.database.position_repository import (
+            PositionRepository,
+        )
 
         mock_db = AsyncMock()
         mock_db.fetchone = AsyncMock(return_value={"total": 50000.0})
@@ -247,7 +269,9 @@ class TestPositionRepositoryGetTotalValue:
     @pytest.mark.asyncio
     async def test_get_total_value_no_positions(self):
         """Test getting total value when no positions."""
-        from app.repositories.position import PositionRepository
+        from app.modules.portfolio.database.position_repository import (
+            PositionRepository,
+        )
 
         mock_db = AsyncMock()
         mock_db.fetchone = AsyncMock(return_value=None)
@@ -265,7 +289,9 @@ class TestPositionRepositoryGetWithStockInfo:
     @pytest.mark.asyncio
     async def test_get_with_stock_info_empty(self):
         """Test getting positions when empty."""
-        from app.repositories.position import PositionRepository
+        from app.modules.portfolio.database.position_repository import (
+            PositionRepository,
+        )
 
         mock_db = AsyncMock()
         mock_db.fetchall = AsyncMock(return_value=[])
@@ -279,7 +305,9 @@ class TestPositionRepositoryGetWithStockInfo:
     @pytest.mark.asyncio
     async def test_get_with_stock_info_merges_data(self):
         """Test that position and stock data are merged."""
-        from app.repositories.position import PositionRepository
+        from app.modules.portfolio.database.position_repository import (
+            PositionRepository,
+        )
 
         mock_pos_row = MagicMock()
         mock_pos_row.__getitem__ = lambda self, key: {
@@ -343,7 +371,9 @@ class TestRowToPosition:
 
     def test_converts_valid_row(self):
         """Test converting a valid database row to Position model."""
-        from app.repositories.position import PositionRepository
+        from app.modules.portfolio.database.position_repository import (
+            PositionRepository,
+        )
 
         mock_db = AsyncMock()
         repo = PositionRepository(db=mock_db)
@@ -376,7 +406,9 @@ class TestRowToPosition:
 
     def test_handles_null_values(self):
         """Test handling null values in row."""
-        from app.repositories.position import PositionRepository
+        from app.modules.portfolio.database.position_repository import (
+            PositionRepository,
+        )
 
         mock_db = AsyncMock()
         repo = PositionRepository(db=mock_db)

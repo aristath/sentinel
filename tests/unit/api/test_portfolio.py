@@ -42,7 +42,7 @@ class TestGetPortfolio:
         self, mock_position_repo, mock_stock_repo
     ):
         """Test that positions are returned with stock information."""
-        from app.api.portfolio import get_portfolio
+        from app.modules.portfolio.api.portfolio import get_portfolio
 
         # Setup mock position
         mock_position = MagicMock()
@@ -78,7 +78,7 @@ class TestGetPortfolio:
         self, mock_position_repo, mock_stock_repo
     ):
         """Test handling of position without stock info."""
-        from app.api.portfolio import get_portfolio
+        from app.modules.portfolio.api.portfolio import get_portfolio
 
         mock_position = MagicMock()
         mock_position.symbol = "UNKNOWN"
@@ -102,7 +102,7 @@ class TestGetPortfolio:
     @pytest.mark.asyncio
     async def test_sorts_by_market_value(self, mock_position_repo, mock_stock_repo):
         """Test that positions are sorted by market value descending."""
-        from app.api.portfolio import get_portfolio
+        from app.modules.portfolio.api.portfolio import get_portfolio
 
         # Create positions with different values
         pos1 = MagicMock()
@@ -137,7 +137,7 @@ class TestGetPortfolio:
     @pytest.mark.asyncio
     async def test_handles_empty_portfolio(self, mock_position_repo, mock_stock_repo):
         """Test handling of empty portfolio."""
-        from app.api.portfolio import get_portfolio
+        from app.modules.portfolio.api.portfolio import get_portfolio
 
         mock_position_repo.get_all.return_value = []
 
@@ -148,7 +148,7 @@ class TestGetPortfolio:
     @pytest.mark.asyncio
     async def test_handles_none_prices(self, mock_position_repo, mock_stock_repo):
         """Test handling of positions with None prices."""
-        from app.api.portfolio import get_portfolio
+        from app.modules.portfolio.api.portfolio import get_portfolio
 
         pos = MagicMock()
         pos.symbol = "TEST"
@@ -175,7 +175,7 @@ class TestGetPortfolioSummary:
     @pytest.mark.asyncio
     async def test_returns_summary(self, mock_portfolio_service):
         """Test that summary is returned correctly."""
-        from app.api.portfolio import get_portfolio_summary
+        from app.modules.portfolio.api.portfolio import get_portfolio_summary
 
         mock_summary = MagicMock()
         mock_summary.total_value = 100000.0
@@ -208,7 +208,7 @@ class TestGetPortfolioSummary:
     @pytest.mark.asyncio
     async def test_handles_missing_geographies(self, mock_portfolio_service):
         """Test handling when some geographies are missing."""
-        from app.api.portfolio import get_portfolio_summary
+        from app.modules.portfolio.api.portfolio import get_portfolio_summary
 
         mock_summary = MagicMock()
         mock_summary.total_value = 50000.0
@@ -235,7 +235,7 @@ class TestGetPortfolioHistory:
     @pytest.mark.asyncio
     async def test_returns_history(self, mock_portfolio_repo):
         """Test that history is returned correctly."""
-        from app.api.portfolio import get_portfolio_history
+        from app.modules.portfolio.api.portfolio import get_portfolio_history
 
         mock_snapshot = MagicMock()
         mock_snapshot.date = "2024-01-15"
@@ -257,7 +257,7 @@ class TestGetPortfolioHistory:
     @pytest.mark.asyncio
     async def test_requests_90_days(self, mock_portfolio_repo):
         """Test that history is requested for 90 days."""
-        from app.api.portfolio import get_portfolio_history
+        from app.modules.portfolio.api.portfolio import get_portfolio_history
 
         mock_portfolio_repo.get_history.return_value = []
 
@@ -272,7 +272,7 @@ class TestGetTransactionHistory:
     @pytest.mark.asyncio
     async def test_returns_transaction_history(self):
         """Test that transaction history is returned."""
-        from app.api.portfolio import get_transaction_history
+        from app.modules.portfolio.api.portfolio import get_transaction_history
 
         mock_client = MagicMock()
         mock_client.get_cash_movements.return_value = {
@@ -297,7 +297,7 @@ class TestGetTransactionHistory:
     @pytest.mark.asyncio
     async def test_handles_api_error(self):
         """Test handling of API errors."""
-        from app.api.portfolio import get_transaction_history
+        from app.modules.portfolio.api.portfolio import get_transaction_history
 
         mock_client = MagicMock()
         mock_client.get_cash_movements.side_effect = Exception("API error")
@@ -319,7 +319,7 @@ class TestGetCashBreakdown:
     @pytest.mark.asyncio
     async def test_returns_cash_breakdown(self):
         """Test that cash breakdown is returned."""
-        from app.api.portfolio import get_cash_breakdown
+        from app.modules.portfolio.api.portfolio import get_cash_breakdown
 
         mock_client = MagicMock()
         mock_balance = MagicMock()
@@ -346,7 +346,7 @@ class TestGetCashBreakdown:
     @pytest.mark.asyncio
     async def test_handles_no_connection(self):
         """Test handling when Tradernet is not connected."""
-        from app.api.portfolio import get_cash_breakdown
+        from app.modules.portfolio.api.portfolio import get_cash_breakdown
 
         mock_exchange_rate_service = AsyncMock()
 
@@ -363,7 +363,7 @@ class TestGetCashBreakdown:
     @pytest.mark.asyncio
     async def test_handles_api_error(self):
         """Test handling of API errors."""
-        from app.api.portfolio import get_cash_breakdown
+        from app.modules.portfolio.api.portfolio import get_cash_breakdown
 
         mock_client = MagicMock()
         mock_client.get_cash_balances.side_effect = Exception("API error")
@@ -389,7 +389,7 @@ class TestGetPortfolioAnalytics:
         """Test that analytics are returned."""
         import pandas as pd
 
-        from app.api.portfolio import get_portfolio_analytics
+        from app.modules.portfolio.api.portfolio import get_portfolio_analytics
 
         mock_values = pd.Series([100, 101, 102])
         mock_returns = pd.Series(
@@ -438,7 +438,7 @@ class TestGetPortfolioAnalytics:
                             return_value=mock_db_manager,
                         ):
                             with patch(
-                                "app.application.services.turnover_tracker.TurnoverTracker",
+                                "app.modules.turnover_tracker.TurnoverTracker",
                                 return_value=mock_turnover_tracker,
                             ):
                                 result = await get_portfolio_analytics(days=365)
@@ -454,7 +454,7 @@ class TestGetPortfolioAnalytics:
         """Test handling of insufficient data."""
         import pandas as pd
 
-        from app.api.portfolio import get_portfolio_analytics
+        from app.modules.portfolio.api.portfolio import get_portfolio_analytics
 
         with patch(
             "app.domain.analytics.reconstruct_portfolio_values",
@@ -470,7 +470,7 @@ class TestGetPortfolioAnalytics:
     @pytest.mark.asyncio
     async def test_handles_analytics_error(self):
         """Test handling of analytics calculation error."""
-        from app.api.portfolio import get_portfolio_analytics
+        from app.modules.portfolio.api.portfolio import get_portfolio_analytics
 
         with patch(
             "app.domain.analytics.reconstruct_portfolio_values",

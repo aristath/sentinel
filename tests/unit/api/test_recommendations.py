@@ -26,7 +26,7 @@ def mock_internal_repos():
         mock_settings_instance.get_float.return_value = 0.0  # Disable incremental mode
         mock_settings.return_value = mock_settings_instance
         with patch(
-            "app.repositories.planner_repository.PlannerRepository"
+            "app.modules.planning.database.planner_repository.PlannerRepository"
         ) as mock_planner:
             mock_planner_instance = AsyncMock()
             mock_planner_instance.get_best_result.return_value = None
@@ -151,12 +151,12 @@ class TestGetRecommendations:
         mock_step,
     ):
         """Test that GET /recommendations returns sequence from holistic planner."""
-        from app.api.recommendations import get_recommendations
+        from app.modules.planning.api.recommendations import get_recommendations
 
         mock_position_repo.get_all.return_value = []
         mock_rebalancing_service.get_recommendations.return_value = [mock_step]
 
-        with patch("app.api.recommendations.cache") as mock_cache:
+        with patch("app.modules.planning.api.recommendations.cache") as mock_cache:
             mock_cache.get.return_value = None
             with patch(
                 "app.domain.portfolio_hash.generate_recommendation_cache_key",
@@ -187,12 +187,12 @@ class TestGetRecommendations:
         mock_tradernet_client,
     ):
         """Test that empty result is returned when no recommendations available."""
-        from app.api.recommendations import get_recommendations
+        from app.modules.planning.api.recommendations import get_recommendations
 
         mock_position_repo.get_all.return_value = []
         mock_rebalancing_service.get_recommendations.return_value = []
 
-        with patch("app.api.recommendations.cache") as mock_cache:
+        with patch("app.modules.planning.api.recommendations.cache") as mock_cache:
             mock_cache.get.return_value = None
             with patch(
                 "app.domain.portfolio_hash.generate_recommendation_cache_key",
@@ -223,7 +223,7 @@ class TestGetRecommendations:
         mock_tradernet_client,
     ):
         """Test that cache key uses 'recommendations:' prefix, not 'multi_step_recommendations:'."""
-        from app.api.recommendations import get_recommendations
+        from app.modules.planning.api.recommendations import get_recommendations
 
         mock_position_repo.get_all.return_value = []
 
@@ -237,7 +237,7 @@ class TestGetRecommendations:
             "final_available_cash": 1000.0,
         }
 
-        with patch("app.api.recommendations.cache") as mock_cache:
+        with patch("app.modules.planning.api.recommendations.cache") as mock_cache:
             mock_cache.get.return_value = cached_data
             with patch(
                 "app.domain.portfolio_hash.generate_recommendation_cache_key",
@@ -270,7 +270,7 @@ class TestGetRecommendations:
         mock_tradernet_client,
     ):
         """Test that cached data is returned when available."""
-        from app.api.recommendations import get_recommendations
+        from app.modules.planning.api.recommendations import get_recommendations
 
         mock_position_repo.get_all.return_value = []
 
@@ -281,7 +281,7 @@ class TestGetRecommendations:
             "final_available_cash": 500.0,
         }
 
-        with patch("app.api.recommendations.cache") as mock_cache:
+        with patch("app.modules.planning.api.recommendations.cache") as mock_cache:
             mock_cache.get.return_value = cached_data
             with patch(
                 "app.domain.portfolio_hash.generate_recommendation_cache_key",
@@ -312,12 +312,12 @@ class TestGetRecommendations:
         mock_step,
     ):
         """Test that result is cached with 5 minute TTL."""
-        from app.api.recommendations import get_recommendations
+        from app.modules.planning.api.recommendations import get_recommendations
 
         mock_position_repo.get_all.return_value = []
         mock_rebalancing_service.get_recommendations.return_value = [mock_step]
 
-        with patch("app.api.recommendations.cache") as mock_cache:
+        with patch("app.modules.planning.api.recommendations.cache") as mock_cache:
             mock_cache.get.return_value = None
             with patch(
                 "app.domain.portfolio_hash.generate_recommendation_cache_key",
@@ -349,7 +349,7 @@ class TestGetRecommendations:
         mock_tradernet_client,
     ):
         """Test handling of multi-step recommendations."""
-        from app.api.recommendations import get_recommendations
+        from app.modules.planning.api.recommendations import get_recommendations
 
         mock_position_repo.get_all.return_value = []
 
@@ -387,7 +387,7 @@ class TestGetRecommendations:
 
         mock_rebalancing_service.get_recommendations.return_value = [step1, step2]
 
-        with patch("app.api.recommendations.cache") as mock_cache:
+        with patch("app.modules.planning.api.recommendations.cache") as mock_cache:
             mock_cache.get.return_value = None
             with patch(
                 "app.domain.portfolio_hash.generate_recommendation_cache_key",
@@ -419,7 +419,7 @@ class TestGetRecommendations:
         mock_tradernet_client,
     ):
         """Test that numeric values are properly rounded."""
-        from app.api.recommendations import get_recommendations
+        from app.modules.planning.api.recommendations import get_recommendations
 
         mock_position_repo.get_all.return_value = []
 
@@ -441,7 +441,7 @@ class TestGetRecommendations:
 
         mock_rebalancing_service.get_recommendations.return_value = [step]
 
-        with patch("app.api.recommendations.cache") as mock_cache:
+        with patch("app.modules.planning.api.recommendations.cache") as mock_cache:
             mock_cache.get.return_value = None
             with patch(
                 "app.domain.portfolio_hash.generate_recommendation_cache_key",
@@ -476,14 +476,14 @@ class TestGetRecommendations:
         mock_tradernet_client,
     ):
         """Test that service exceptions are converted to HTTPException."""
-        from app.api.recommendations import get_recommendations
+        from app.modules.planning.api.recommendations import get_recommendations
 
         mock_position_repo.get_all.return_value = []
         mock_rebalancing_service.get_recommendations.side_effect = Exception(
             "Service error"
         )
 
-        with patch("app.api.recommendations.cache") as mock_cache:
+        with patch("app.modules.planning.api.recommendations.cache") as mock_cache:
             mock_cache.get.return_value = None
             with patch(
                 "app.domain.portfolio_hash.generate_recommendation_cache_key",
@@ -513,13 +513,13 @@ class TestGetRecommendations:
         mock_tradernet_client,
     ):
         """Test that HTTPException is propagated without wrapping."""
-        from app.api.recommendations import get_recommendations
+        from app.modules.planning.api.recommendations import get_recommendations
 
         mock_position_repo.get_all.return_value = []
         http_exc = HTTPException(status_code=404, detail="Not found")
         mock_rebalancing_service.get_recommendations.side_effect = http_exc
 
-        with patch("app.api.recommendations.cache") as mock_cache:
+        with patch("app.modules.planning.api.recommendations.cache") as mock_cache:
             mock_cache.get.return_value = None
             with patch(
                 "app.domain.portfolio_hash.generate_recommendation_cache_key",
@@ -549,7 +549,7 @@ class TestGetRecommendations:
         mock_step,
     ):
         """Test that cache key is generated from portfolio state."""
-        from app.api.recommendations import get_recommendations
+        from app.modules.planning.api.recommendations import get_recommendations
 
         pos1 = MagicMock()
         pos1.symbol = "AAPL"
@@ -561,7 +561,7 @@ class TestGetRecommendations:
 
         mock_rebalancing_service.get_recommendations.return_value = [mock_step]
 
-        with patch("app.api.recommendations.cache") as mock_cache:
+        with patch("app.modules.planning.api.recommendations.cache") as mock_cache:
             mock_cache.get.return_value = None
             with patch(
                 "app.domain.portfolio_hash.generate_recommendation_cache_key"
@@ -605,7 +605,7 @@ class TestExecuteRecommendation:
         mock_tradernet_client,
     ):
         """Test that execute endpoint always executes first step (no step_number parameter)."""
-        from app.api.recommendations import execute_recommendation
+        from app.modules.planning.api.recommendations import execute_recommendation
 
         mock_position_repo.get_all.return_value = []
 
@@ -628,7 +628,7 @@ class TestExecuteRecommendation:
             ]
         }
 
-        with patch("app.api.recommendations.cache") as mock_cache:
+        with patch("app.modules.planning.api.recommendations.cache") as mock_cache:
             mock_cache.get.return_value = cached_data
             with patch(
                 "app.domain.portfolio_hash.generate_recommendation_cache_key",
@@ -672,7 +672,7 @@ class TestExecuteRecommendation:
         """Test that execute_recommendation function doesn't take step_number parameter."""
         import inspect
 
-        from app.api.recommendations import execute_recommendation
+        from app.modules.planning.api.recommendations import execute_recommendation
 
         sig = inspect.signature(execute_recommendation)
         params = list(sig.parameters.keys())
@@ -694,7 +694,7 @@ class TestExecuteRecommendation:
         mock_tradernet_client,
     ):
         """Test that execute uses 'recommendations:' cache key."""
-        from app.api.recommendations import execute_recommendation
+        from app.modules.planning.api.recommendations import execute_recommendation
 
         mock_position_repo.get_all.return_value = []
 
@@ -710,7 +710,7 @@ class TestExecuteRecommendation:
             ]
         }
 
-        with patch("app.api.recommendations.cache") as mock_cache:
+        with patch("app.modules.planning.api.recommendations.cache") as mock_cache:
             mock_cache.get.return_value = cached_data
             with patch(
                 "app.domain.portfolio_hash.generate_recommendation_cache_key",
@@ -759,7 +759,7 @@ class TestExecuteRecommendation:
         mock_tradernet_client,
     ):
         """Test that recommendations are regenerated when cache misses."""
-        from app.api.recommendations import execute_recommendation
+        from app.modules.planning.api.recommendations import execute_recommendation
 
         mock_position_repo.get_all.return_value = []
 
@@ -781,7 +781,7 @@ class TestExecuteRecommendation:
 
         mock_rebalancing_service.get_recommendations.return_value = [step]
 
-        with patch("app.api.recommendations.cache") as mock_cache:
+        with patch("app.modules.planning.api.recommendations.cache") as mock_cache:
             mock_cache.get.return_value = None  # Cache miss
             with patch(
                 "app.domain.portfolio_hash.generate_recommendation_cache_key",
@@ -827,12 +827,12 @@ class TestExecuteRecommendation:
         mock_tradernet_client,
     ):
         """Test that 404 is raised when no recommendations available."""
-        from app.api.recommendations import execute_recommendation
+        from app.modules.planning.api.recommendations import execute_recommendation
 
         mock_position_repo.get_all.return_value = []
         mock_rebalancing_service.get_recommendations.return_value = []
 
-        with patch("app.api.recommendations.cache") as mock_cache:
+        with patch("app.modules.planning.api.recommendations.cache") as mock_cache:
             mock_cache.get.return_value = None
             with patch(
                 "app.domain.portfolio_hash.generate_recommendation_cache_key",
@@ -868,7 +868,7 @@ class TestExecuteRecommendation:
         mock_tradernet_client,
     ):
         """Test that trade is validated before execution."""
-        from app.api.recommendations import execute_recommendation
+        from app.modules.planning.api.recommendations import execute_recommendation
 
         mock_position_repo.get_all.return_value = []
 
@@ -884,7 +884,7 @@ class TestExecuteRecommendation:
             ]
         }
 
-        with patch("app.api.recommendations.cache") as mock_cache:
+        with patch("app.modules.planning.api.recommendations.cache") as mock_cache:
             mock_cache.get.return_value = cached_data
             with patch(
                 "app.domain.portfolio_hash.generate_recommendation_cache_key",
@@ -935,7 +935,7 @@ class TestExecuteRecommendation:
         mock_tradernet_client,
     ):
         """Test that trade is recorded after successful execution."""
-        from app.api.recommendations import execute_recommendation
+        from app.modules.planning.api.recommendations import execute_recommendation
 
         mock_position_repo.get_all.return_value = []
 
@@ -951,7 +951,7 @@ class TestExecuteRecommendation:
             ]
         }
 
-        with patch("app.api.recommendations.cache") as mock_cache:
+        with patch("app.modules.planning.api.recommendations.cache") as mock_cache:
             mock_cache.get.return_value = cached_data
             with patch(
                 "app.domain.portfolio_hash.generate_recommendation_cache_key",
@@ -1002,7 +1002,7 @@ class TestExecuteRecommendation:
         mock_tradernet_client,
     ):
         """Test that caches are invalidated after execution."""
-        from app.api.recommendations import execute_recommendation
+        from app.modules.planning.api.recommendations import execute_recommendation
 
         mock_position_repo.get_all.return_value = []
 
@@ -1018,7 +1018,7 @@ class TestExecuteRecommendation:
             ]
         }
 
-        with patch("app.api.recommendations.cache") as mock_cache:
+        with patch("app.modules.planning.api.recommendations.cache") as mock_cache:
             mock_cache.get.return_value = cached_data
             with patch(
                 "app.domain.portfolio_hash.generate_recommendation_cache_key",
@@ -1066,7 +1066,7 @@ class TestExecuteRecommendation:
         mock_tradernet_client,
     ):
         """Test that 500 is raised when order placement fails."""
-        from app.api.recommendations import execute_recommendation
+        from app.modules.planning.api.recommendations import execute_recommendation
 
         mock_position_repo.get_all.return_value = []
 
@@ -1087,7 +1087,7 @@ class TestExecuteRecommendation:
         mock_client.is_connected = True
         mock_client.get_cash_balances.return_value = []
 
-        with patch("app.api.recommendations.cache") as mock_cache:
+        with patch("app.modules.planning.api.recommendations.cache") as mock_cache:
             mock_cache.get.return_value = cached_data
             with patch(
                 "app.domain.portfolio_hash.generate_recommendation_cache_key",
@@ -1129,7 +1129,7 @@ class TestExecuteRecommendation:
         mock_tradernet_client,
     ):
         """Test that exceptions during execution are handled."""
-        from app.api.recommendations import execute_recommendation
+        from app.modules.planning.api.recommendations import execute_recommendation
 
         mock_position_repo.get_all.return_value = []
 
@@ -1145,7 +1145,7 @@ class TestExecuteRecommendation:
             ]
         }
 
-        with patch("app.api.recommendations.cache") as mock_cache:
+        with patch("app.modules.planning.api.recommendations.cache") as mock_cache:
             mock_cache.get.return_value = cached_data
             with patch(
                 "app.domain.portfolio_hash.generate_recommendation_cache_key",
@@ -1187,7 +1187,7 @@ class TestExecuteRecommendation:
         mock_tradernet_client,
     ):
         """Test that HTTPException from safety check is propagated."""
-        from app.api.recommendations import execute_recommendation
+        from app.modules.planning.api.recommendations import execute_recommendation
 
         mock_position_repo.get_all.return_value = []
 
@@ -1206,7 +1206,7 @@ class TestExecuteRecommendation:
         http_exc = HTTPException(status_code=400, detail="Invalid trade")
         mock_safety_service.validate_trade.side_effect = http_exc
 
-        with patch("app.api.recommendations.cache") as mock_cache:
+        with patch("app.modules.planning.api.recommendations.cache") as mock_cache:
             mock_cache.get.return_value = cached_data
             with patch(
                 "app.domain.portfolio_hash.generate_recommendation_cache_key",
@@ -1242,7 +1242,7 @@ class TestExecuteSingleStep:
         self, mock_safety_service, mock_trade_execution_service, mock_tradernet_client
     ):
         """Test successful step execution."""
-        from app.api.recommendations import _execute_single_step
+        from app.modules.planning.api.recommendations import _execute_single_step
 
         step = {
             "symbol": "AAPL",
@@ -1270,7 +1270,7 @@ class TestExecuteSingleStep:
         self, mock_safety_service, mock_trade_execution_service, mock_tradernet_client
     ):
         """Test that step is blocked when pending order exists."""
-        from app.api.recommendations import _execute_single_step
+        from app.modules.planning.api.recommendations import _execute_single_step
 
         mock_safety_service.check_pending_orders.return_value = True
 
@@ -1300,7 +1300,7 @@ class TestExecuteSingleStep:
         self, mock_safety_service, mock_trade_execution_service
     ):
         """Test handling of failed order placement."""
-        from app.api.recommendations import _execute_single_step
+        from app.modules.planning.api.recommendations import _execute_single_step
 
         mock_client = MagicMock()
         mock_client.place_order.return_value = None  # Failed
@@ -1329,7 +1329,7 @@ class TestExecuteSingleStep:
         self, mock_safety_service, mock_trade_execution_service
     ):
         """Test handling of exception during step execution."""
-        from app.api.recommendations import _execute_single_step
+        from app.modules.planning.api.recommendations import _execute_single_step
 
         mock_client = MagicMock()
         mock_client.place_order.side_effect = Exception("Network error")
@@ -1358,7 +1358,7 @@ class TestExecuteSingleStep:
         self, mock_safety_service, mock_trade_execution_service, mock_tradernet_client
     ):
         """Test that trade is recorded after successful order."""
-        from app.api.recommendations import _execute_single_step
+        from app.modules.planning.api.recommendations import _execute_single_step
 
         step = {
             "symbol": "AAPL",
@@ -1398,7 +1398,9 @@ class TestRegenerateRecommendationsCache:
         mock_tradernet_client,
     ):
         """Test successful cache regeneration."""
-        from app.api.recommendations import _regenerate_recommendations_cache
+        from app.modules.planning.api.recommendations import (
+            _regenerate_recommendations_cache,
+        )
 
         mock_position_repo.get_all.return_value = []
 
@@ -1420,7 +1422,7 @@ class TestRegenerateRecommendationsCache:
 
         mock_rebalancing_service.get_recommendations.return_value = [step]
 
-        with patch("app.api.recommendations.cache"):
+        with patch("app.modules.planning.api.recommendations.cache"):
             with patch(
                 "app.domain.portfolio_hash.generate_recommendation_cache_key",
                 return_value="test-key",
@@ -1450,12 +1452,14 @@ class TestRegenerateRecommendationsCache:
         mock_tradernet_client,
     ):
         """Test that 404 is raised when no recommendations available."""
-        from app.api.recommendations import _regenerate_recommendations_cache
+        from app.modules.planning.api.recommendations import (
+            _regenerate_recommendations_cache,
+        )
 
         mock_position_repo.get_all.return_value = []
         mock_rebalancing_service.get_recommendations.return_value = []
 
-        with patch("app.api.recommendations.cache"):
+        with patch("app.modules.planning.api.recommendations.cache"):
             with patch(
                 "app.domain.portfolio_hash.generate_recommendation_cache_key",
                 return_value="test-key",
@@ -1484,7 +1488,9 @@ class TestRegenerateRecommendationsCache:
         mock_tradernet_client,
     ):
         """Test that regenerated data is cached."""
-        from app.api.recommendations import _regenerate_recommendations_cache
+        from app.modules.planning.api.recommendations import (
+            _regenerate_recommendations_cache,
+        )
 
         mock_position_repo.get_all.return_value = []
 
@@ -1506,7 +1512,7 @@ class TestRegenerateRecommendationsCache:
 
         mock_rebalancing_service.get_recommendations.return_value = [step]
 
-        with patch("app.api.recommendations.cache") as mock_cache:
+        with patch("app.modules.planning.api.recommendations.cache") as mock_cache:
             with patch(
                 "app.domain.portfolio_hash.generate_recommendation_cache_key",
                 return_value="test-key",

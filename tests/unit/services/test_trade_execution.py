@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.application.services.trade_execution_service import TradeExecutionService
 from app.domain.models import Recommendation
+from app.modules.trading.services.trade_execution_service import TradeExecutionService
 
 
 class TestTradeValidation:
@@ -69,9 +69,7 @@ class TestTradeValidation:
     @pytest.fixture
     def mock_currency_exchange_service(self):
         """Create mock currency exchange service."""
-        from app.application.services.currency_exchange_service import (
-            CurrencyExchangeService,
-        )
+        from app.shared.services import CurrencyExchangeService
 
         service = MagicMock(spec=CurrencyExchangeService)
         return service
@@ -94,8 +92,8 @@ class TestTradeValidation:
         currency: str = "EUR",
     ) -> Recommendation:
         """Helper to create test trades."""
-        from app.domain.value_objects.currency import Currency
         from app.domain.value_objects.trade_side import TradeSide
+        from app.shared.domain.value_objects.currency import Currency
 
         return Recommendation(
             symbol=symbol,

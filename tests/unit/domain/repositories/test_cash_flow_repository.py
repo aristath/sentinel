@@ -9,8 +9,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.domain.models import CashFlow
-from app.domain.value_objects.currency import Currency
-from app.repositories.cash_flow import CashFlowRepository
+from app.modules.cash_flows.database.cash_flow_repository import CashFlowRepository
+from app.shared.domain.value_objects.currency import Currency
 
 
 def create_mock_cash_flow(
@@ -52,7 +52,9 @@ class TestCashFlowRepositoryCreate:
     @pytest.mark.asyncio
     async def test_create_cash_flow_record(self):
         """Test creating a new cash flow record."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = MagicMock()
             mock_db.ledger = mock_ledger
@@ -100,7 +102,9 @@ class TestCashFlowRepositoryCreate:
     @pytest.mark.asyncio
     async def test_create_cash_flow_with_params_json(self):
         """Test creating cash flow with JSON parameters."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = MagicMock()
             mock_db.ledger = mock_ledger
@@ -141,7 +145,9 @@ class TestCashFlowRepositoryQuery:
     @pytest.mark.asyncio
     async def test_get_by_transaction_id(self):
         """Test retrieving cash flow by transaction ID."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.ledger = mock_ledger
@@ -166,7 +172,9 @@ class TestCashFlowRepositoryQuery:
     @pytest.mark.asyncio
     async def test_get_by_transaction_id_not_found(self):
         """Test retrieving non-existent cash flow returns None."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.ledger = mock_ledger
@@ -182,7 +190,9 @@ class TestCashFlowRepositoryQuery:
     @pytest.mark.asyncio
     async def test_exists_true(self):
         """Test checking if cash flow exists returns True."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.ledger = mock_ledger
@@ -201,7 +211,9 @@ class TestCashFlowRepositoryQuery:
     @pytest.mark.asyncio
     async def test_exists_false(self):
         """Test checking if cash flow doesn't exist returns False."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.ledger = mock_ledger
@@ -217,7 +229,9 @@ class TestCashFlowRepositoryQuery:
     @pytest.mark.asyncio
     async def test_get_all_with_limit(self):
         """Test retrieving all cash flows with limit."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.ledger = mock_ledger
@@ -242,7 +256,9 @@ class TestCashFlowRepositoryQuery:
     @pytest.mark.asyncio
     async def test_get_all_without_limit(self):
         """Test retrieving all cash flows without limit."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.ledger = mock_ledger
@@ -262,7 +278,9 @@ class TestCashFlowRepositoryQuery:
     @pytest.mark.asyncio
     async def test_get_by_date_range(self):
         """Test retrieving cash flows within a date range."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.ledger = mock_ledger
@@ -286,7 +304,9 @@ class TestCashFlowRepositoryQuery:
     @pytest.mark.asyncio
     async def test_get_by_type(self):
         """Test retrieving cash flows by transaction type."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.ledger = mock_ledger
@@ -314,7 +334,9 @@ class TestCashFlowRepositorySyncFromAPI:
     @pytest.mark.asyncio
     async def test_sync_from_api_new_transactions(self):
         """Test syncing new transactions from API."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = MagicMock()
             mock_db.ledger = mock_ledger
@@ -369,7 +391,9 @@ class TestCashFlowRepositorySyncFromAPI:
     @pytest.mark.asyncio
     async def test_sync_from_api_skip_existing(self):
         """Test that sync skips existing transactions."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = MagicMock()
             mock_db.ledger = mock_ledger
@@ -398,7 +422,9 @@ class TestCashFlowRepositorySyncFromAPI:
     @pytest.mark.asyncio
     async def test_sync_from_api_with_params(self):
         """Test syncing transactions with JSON params."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = MagicMock()
             mock_db.ledger = mock_ledger
@@ -447,7 +473,9 @@ class TestCashFlowRepositorySyncFromAPI:
     @pytest.mark.asyncio
     async def test_sync_from_api_skip_invalid_transactions(self):
         """Test that sync skips transactions without ID."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = MagicMock()
             mock_db.ledger = mock_ledger
@@ -478,7 +506,9 @@ class TestCashFlowRepositorySyncFromAPI:
     @pytest.mark.asyncio
     async def test_sync_from_api_handles_defaults(self):
         """Test that sync handles missing optional fields with defaults."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = MagicMock()
             mock_db.ledger = mock_ledger
@@ -523,7 +553,9 @@ class TestCashFlowRepositoryTotals:
     @pytest.mark.asyncio
     async def test_get_total_deposits(self):
         """Test getting total deposits in EUR."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.ledger = mock_ledger
@@ -542,7 +574,9 @@ class TestCashFlowRepositoryTotals:
     @pytest.mark.asyncio
     async def test_get_total_deposits_returns_zero_when_none(self):
         """Test that total deposits returns 0 when no deposits exist."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.ledger = mock_ledger
@@ -558,7 +592,9 @@ class TestCashFlowRepositoryTotals:
     @pytest.mark.asyncio
     async def test_get_total_deposits_handles_case_variations(self):
         """Test that deposits query handles case variations."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.ledger = mock_ledger
@@ -579,7 +615,9 @@ class TestCashFlowRepositoryTotals:
     @pytest.mark.asyncio
     async def test_get_total_withdrawals(self):
         """Test getting total withdrawals in EUR."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.ledger = mock_ledger
@@ -598,7 +636,9 @@ class TestCashFlowRepositoryTotals:
     @pytest.mark.asyncio
     async def test_get_total_withdrawals_returns_zero_when_none(self):
         """Test that total withdrawals returns 0 when no withdrawals exist."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.ledger = mock_ledger
@@ -618,7 +658,9 @@ class TestCashFlowRepositoryCashBalanceHistory:
     @pytest.mark.asyncio
     async def test_get_cash_balance_history_with_deposits(self):
         """Test calculating cash balance history with deposits."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.ledger = mock_ledger
@@ -656,7 +698,9 @@ class TestCashFlowRepositoryCashBalanceHistory:
     @pytest.mark.asyncio
     async def test_get_cash_balance_history_with_withdrawals(self):
         """Test calculating cash balance history with withdrawals."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.ledger = mock_ledger
@@ -688,7 +732,9 @@ class TestCashFlowRepositoryCashBalanceHistory:
     @pytest.mark.asyncio
     async def test_get_cash_balance_history_with_dividends(self):
         """Test calculating cash balance history including dividends."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.ledger = mock_ledger
@@ -726,7 +772,9 @@ class TestCashFlowRepositoryCashBalanceHistory:
     @pytest.mark.asyncio
     async def test_get_cash_balance_history_multiple_transactions_same_day(self):
         """Test cash balance history with multiple transactions on the same day."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.ledger = mock_ledger
@@ -763,7 +811,9 @@ class TestCashFlowRepositoryCashBalanceHistory:
     @pytest.mark.asyncio
     async def test_get_cash_balance_history_empty_result(self):
         """Test cash balance history with no transactions."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.ledger = mock_ledger
@@ -781,7 +831,9 @@ class TestCashFlowRepositoryCashBalanceHistory:
     @pytest.mark.asyncio
     async def test_get_cash_balance_history_with_initial_cash(self):
         """Test cash balance history respects initial cash balance."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.ledger = mock_ledger
@@ -807,7 +859,9 @@ class TestCashFlowRepositoryCashBalanceHistory:
     @pytest.mark.asyncio
     async def test_get_cash_balance_history_handles_null_amounts(self):
         """Test cash balance history handles null amount_eur gracefully."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.ledger = mock_ledger
@@ -840,7 +894,9 @@ class TestCashFlowRepositoryCashBalanceHistory:
     @pytest.mark.asyncio
     async def test_get_cash_balance_history_case_insensitive_types(self):
         """Test cash balance history handles case-insensitive transaction types."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_ledger = AsyncMock()
             mock_db.ledger = mock_ledger
@@ -882,7 +938,9 @@ class TestCashFlowRepositoryRowConversion:
 
     def test_row_to_cash_flow_basic(self):
         """Test converting a basic database row to CashFlow model."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_get_db.return_value = mock_db
 
@@ -908,7 +966,9 @@ class TestCashFlowRepositoryRowConversion:
 
     def test_row_to_cash_flow_with_all_fields(self):
         """Test converting a complete database row to CashFlow model."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_get_db.return_value = mock_db
 
@@ -947,7 +1007,9 @@ class TestCashFlowRepositoryRowConversion:
 
     def test_row_to_cash_flow_with_nulls(self):
         """Test converting a database row with null optional fields."""
-        with patch("app.repositories.cash_flow.get_db_manager") as mock_get_db:
+        with patch(
+            "app.modules.cash_flows.database.cash_flow_repository.get_db_manager"
+        ) as mock_get_db:
             mock_db = MagicMock()
             mock_get_db.return_value = mock_db
 

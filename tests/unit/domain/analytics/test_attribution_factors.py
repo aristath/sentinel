@@ -16,7 +16,9 @@ class TestGetFactorAttribution:
     @pytest.mark.asyncio
     async def test_returns_zero_for_empty_returns(self):
         """Test that empty returns series returns zero contributions."""
-        from app.domain.analytics.attribution.factors import get_factor_attribution
+        from app.modules.analytics.domain.attribution.factors import (
+            get_factor_attribution,
+        )
 
         returns = pd.Series(dtype=float)
         result = await get_factor_attribution(returns, "2024-01-01", "2024-01-31")
@@ -30,7 +32,9 @@ class TestGetFactorAttribution:
     @pytest.mark.asyncio
     async def test_calculates_contributions_correctly(self):
         """Test that factor contributions are calculated correctly."""
-        from app.domain.analytics.attribution.factors import get_factor_attribution
+        from app.modules.analytics.domain.attribution.factors import (
+            get_factor_attribution,
+        )
 
         # Mock returns
         returns = pd.Series(
@@ -45,7 +49,7 @@ class TestGetFactorAttribution:
         }
 
         with patch(
-            "app.domain.analytics.attribution.factors.get_performance_attribution",
+            "app.modules.analytics.domain.attribution.factors.get_performance_attribution",
             new_callable=AsyncMock,
         ) as mock_perf_attrib:
             with patch("empyrical.annual_return", return_value=0.12):
@@ -64,14 +68,16 @@ class TestGetFactorAttribution:
     @pytest.mark.asyncio
     async def test_handles_empty_attribution(self):
         """Test handling when performance attribution returns empty data."""
-        from app.domain.analytics.attribution.factors import get_factor_attribution
+        from app.modules.analytics.domain.attribution.factors import (
+            get_factor_attribution,
+        )
 
         returns = pd.Series([0.01], index=pd.to_datetime(["2024-01-01"]))
 
         mock_attribution = {"country": {}, "industry": {}}
 
         with patch(
-            "app.domain.analytics.attribution.factors.get_performance_attribution",
+            "app.modules.analytics.domain.attribution.factors.get_performance_attribution",
             new_callable=AsyncMock,
         ) as mock_perf_attrib:
             with patch("empyrical.annual_return", return_value=0.05):
@@ -88,14 +94,16 @@ class TestGetFactorAttribution:
     @pytest.mark.asyncio
     async def test_handles_non_finite_total_return(self):
         """Test handling when empyrical returns non-finite total return."""
-        from app.domain.analytics.attribution.factors import get_factor_attribution
+        from app.modules.analytics.domain.attribution.factors import (
+            get_factor_attribution,
+        )
 
         returns = pd.Series([0.01], index=pd.to_datetime(["2024-01-01"]))
 
         mock_attribution = {"country": {"US": 0.10}, "industry": {}}
 
         with patch(
-            "app.domain.analytics.attribution.factors.get_performance_attribution",
+            "app.modules.analytics.domain.attribution.factors.get_performance_attribution",
             new_callable=AsyncMock,
         ) as mock_perf_attrib:
             with patch("empyrical.annual_return", return_value=float("inf")):
@@ -111,7 +119,9 @@ class TestGetFactorAttribution:
     @pytest.mark.asyncio
     async def test_handles_non_finite_contributions(self):
         """Test handling when contributions are non-finite."""
-        from app.domain.analytics.attribution.factors import get_factor_attribution
+        from app.modules.analytics.domain.attribution.factors import (
+            get_factor_attribution,
+        )
 
         returns = pd.Series([0.01], index=pd.to_datetime(["2024-01-01"]))
 
@@ -122,7 +132,7 @@ class TestGetFactorAttribution:
         }
 
         with patch(
-            "app.domain.analytics.attribution.factors.get_performance_attribution",
+            "app.modules.analytics.domain.attribution.factors.get_performance_attribution",
             new_callable=AsyncMock,
         ) as mock_perf_attrib:
             with patch("empyrical.annual_return", return_value=0.05):
@@ -139,7 +149,9 @@ class TestGetFactorAttribution:
     @pytest.mark.asyncio
     async def test_calculates_single_category_contribution(self):
         """Test calculation when only one category has attribution."""
-        from app.domain.analytics.attribution.factors import get_factor_attribution
+        from app.modules.analytics.domain.attribution.factors import (
+            get_factor_attribution,
+        )
 
         returns = pd.Series([0.01], index=pd.to_datetime(["2024-01-01"]))
 
@@ -149,7 +161,7 @@ class TestGetFactorAttribution:
         }
 
         with patch(
-            "app.domain.analytics.attribution.factors.get_performance_attribution",
+            "app.modules.analytics.domain.attribution.factors.get_performance_attribution",
             new_callable=AsyncMock,
         ) as mock_perf_attrib:
             with patch("empyrical.annual_return", return_value=0.05):
@@ -165,7 +177,9 @@ class TestGetFactorAttribution:
     @pytest.mark.asyncio
     async def test_calculates_negative_contributions(self):
         """Test calculation when contributions are negative."""
-        from app.domain.analytics.attribution.factors import get_factor_attribution
+        from app.modules.analytics.domain.attribution.factors import (
+            get_factor_attribution,
+        )
 
         returns = pd.Series(
             [-0.01, -0.02],
@@ -178,7 +192,7 @@ class TestGetFactorAttribution:
         }
 
         with patch(
-            "app.domain.analytics.attribution.factors.get_performance_attribution",
+            "app.modules.analytics.domain.attribution.factors.get_performance_attribution",
             new_callable=AsyncMock,
         ) as mock_perf_attrib:
             with patch("empyrical.annual_return", return_value=-0.08):

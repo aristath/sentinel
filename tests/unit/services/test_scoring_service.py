@@ -12,9 +12,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.application.services.scoring_service import ScoringService, _to_domain_score
 from app.domain.models import StockScore
 from app.domain.scoring import CalculatedStockScore
+from app.modules.scoring.services.scoring_service import (
+    ScoringService,
+    _to_domain_score,
+)
 
 
 class TestToDomainScore:
@@ -352,7 +355,7 @@ class TestCalculateAndSaveScore:
                 return_value=mock_fundamentals,
             ),
             patch(
-                "app.application.services.scoring_service.calculate_stock_score",
+                "app.modules.scoring.services.scoring_service.calculate_stock_score",
                 return_value=mock_calculated_score,
             ),
         ):
@@ -412,7 +415,7 @@ class TestCalculateAndSaveScore:
                 return_value={},
             ) as mock_yahoo,
             patch(
-                "app.application.services.scoring_service.calculate_stock_score",
+                "app.modules.scoring.services.scoring_service.calculate_stock_score",
                 return_value=None,
             ),
         ):
@@ -540,7 +543,7 @@ class TestCalculateAndSaveScore:
                 return_value={},
             ),
             patch(
-                "app.application.services.scoring_service.calculate_stock_score",
+                "app.modules.scoring.services.scoring_service.calculate_stock_score",
                 return_value=None,  # Calculation fails
             ),
         ):
@@ -610,7 +613,7 @@ class TestCalculateAndSaveScore:
                 return_value={},
             ),
             patch(
-                "app.application.services.scoring_service.calculate_stock_score",
+                "app.modules.scoring.services.scoring_service.calculate_stock_score",
                 return_value=None,
             ) as mock_calc,
         ):

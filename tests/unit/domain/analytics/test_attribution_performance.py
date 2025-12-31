@@ -17,7 +17,7 @@ class TestAttributeReturnByCategory:
 
     def test_attributes_return_by_country_and_industry(self):
         """Test that returns are attributed correctly by country and industry."""
-        from app.domain.analytics.attribution.performance import (
+        from app.modules.analytics.domain.attribution.performance import (
             _attribute_return_by_category,
         )
 
@@ -52,7 +52,7 @@ class TestAttributeReturnByCategory:
 
     def test_handles_unknown_country(self):
         """Test handling of unknown country."""
-        from app.domain.analytics.attribution.performance import (
+        from app.modules.analytics.domain.attribution.performance import (
             _attribute_return_by_category,
         )
 
@@ -74,7 +74,7 @@ class TestAttributeReturnByCategory:
 
     def test_handles_missing_industry(self):
         """Test handling of missing industry (None)."""
-        from app.domain.analytics.attribution.performance import (
+        from app.modules.analytics.domain.attribution.performance import (
             _attribute_return_by_category,
         )
 
@@ -100,7 +100,7 @@ class TestCalculateAnnualizedAttribution:
 
     def test_calculates_annualized_attribution_correctly(self):
         """Test that annualized attribution is calculated correctly."""
-        from app.domain.analytics.attribution.performance import (
+        from app.modules.analytics.domain.attribution.performance import (
             _calculate_annualized_attribution,
         )
 
@@ -122,7 +122,7 @@ class TestCalculateAnnualizedAttribution:
 
     def test_handles_total_return_less_than_minus_one(self):
         """Test handling when total return is <= -1."""
-        from app.domain.analytics.attribution.performance import (
+        from app.modules.analytics.domain.attribution.performance import (
             _calculate_annualized_attribution,
         )
 
@@ -136,7 +136,7 @@ class TestCalculateAnnualizedAttribution:
 
     def test_handles_empty_contributions(self):
         """Test handling of empty contributions lists."""
-        from app.domain.analytics.attribution.performance import (
+        from app.modules.analytics.domain.attribution.performance import (
             _calculate_annualized_attribution,
         )
 
@@ -151,7 +151,7 @@ class TestCalculateAnnualizedAttribution:
 
     def test_handles_non_finite_values(self):
         """Test handling of non-finite annualized values."""
-        from app.domain.analytics.attribution.performance import (
+        from app.modules.analytics.domain.attribution.performance import (
             _calculate_annualized_attribution,
         )
 
@@ -172,7 +172,7 @@ class TestGetPerformanceAttribution:
     @pytest.mark.asyncio
     async def test_returns_empty_for_empty_returns(self):
         """Test that empty returns series returns empty attribution."""
-        from app.domain.analytics.attribution.performance import (
+        from app.modules.analytics.domain.attribution.performance import (
             get_performance_attribution,
         )
 
@@ -184,7 +184,7 @@ class TestGetPerformanceAttribution:
     @pytest.mark.asyncio
     async def test_returns_empty_for_empty_positions(self):
         """Test that empty positions returns empty attribution."""
-        from app.domain.analytics.attribution.performance import (
+        from app.modules.analytics.domain.attribution.performance import (
             get_performance_attribution,
         )
 
@@ -193,7 +193,7 @@ class TestGetPerformanceAttribution:
         )
 
         with patch(
-            "app.domain.analytics.attribution.performance.reconstruct_historical_positions",
+            "app.modules.analytics.domain.attribution.performance.reconstruct_historical_positions",
             new_callable=AsyncMock,
         ) as mock_reconstruct:
             mock_reconstruct.return_value = pd.DataFrame(
@@ -209,7 +209,7 @@ class TestGetPerformanceAttribution:
     @pytest.mark.asyncio
     async def test_calculates_attribution_correctly(self):
         """Test that attribution is calculated correctly from positions and returns."""
-        from app.domain.analytics.attribution.performance import (
+        from app.modules.analytics.domain.attribution.performance import (
             get_performance_attribution,
         )
 
@@ -245,15 +245,15 @@ class TestGetPerformanceAttribution:
         ]
 
         with patch(
-            "app.domain.analytics.attribution.performance.reconstruct_historical_positions",
+            "app.modules.analytics.domain.attribution.performance.reconstruct_historical_positions",
             new_callable=AsyncMock,
         ) as mock_reconstruct:
             with patch(
-                "app.domain.analytics.attribution.performance.StockRepository",
+                "app.modules.analytics.domain.attribution.performance.StockRepository",
                 return_value=mock_stock_repo,
             ):
                 with patch(
-                    "app.domain.analytics.attribution.performance.HistoryRepository",
+                    "app.modules.analytics.domain.attribution.performance.HistoryRepository",
                     return_value=mock_history_repo,
                 ):
                     mock_reconstruct.return_value = positions_df
@@ -270,7 +270,7 @@ class TestGetPerformanceAttribution:
     @pytest.mark.asyncio
     async def test_skips_dates_with_no_positions(self):
         """Test that dates with no positions are skipped."""
-        from app.domain.analytics.attribution.performance import (
+        from app.modules.analytics.domain.attribution.performance import (
             get_performance_attribution,
         )
 
@@ -295,15 +295,15 @@ class TestGetPerformanceAttribution:
         mock_history_repo.get_daily_range.return_value = []
 
         with patch(
-            "app.domain.analytics.attribution.performance.reconstruct_historical_positions",
+            "app.modules.analytics.domain.attribution.performance.reconstruct_historical_positions",
             new_callable=AsyncMock,
         ) as mock_reconstruct:
             with patch(
-                "app.domain.analytics.attribution.performance.StockRepository",
+                "app.modules.analytics.domain.attribution.performance.StockRepository",
                 return_value=mock_stock_repo,
             ):
                 with patch(
-                    "app.domain.analytics.attribution.performance.HistoryRepository",
+                    "app.modules.analytics.domain.attribution.performance.HistoryRepository",
                     return_value=mock_history_repo,
                 ):
                     mock_reconstruct.return_value = positions_df
@@ -320,7 +320,7 @@ class TestGetPerformanceAttribution:
     @pytest.mark.asyncio
     async def test_skips_zero_total_value(self):
         """Test that dates with zero total value are skipped."""
-        from app.domain.analytics.attribution.performance import (
+        from app.modules.analytics.domain.attribution.performance import (
             get_performance_attribution,
         )
 
@@ -339,11 +339,11 @@ class TestGetPerformanceAttribution:
         mock_stock_repo.get_all.return_value = []
 
         with patch(
-            "app.domain.analytics.attribution.performance.reconstruct_historical_positions",
+            "app.modules.analytics.domain.attribution.performance.reconstruct_historical_positions",
             new_callable=AsyncMock,
         ) as mock_reconstruct:
             with patch(
-                "app.domain.analytics.attribution.performance.StockRepository",
+                "app.modules.analytics.domain.attribution.performance.StockRepository",
                 return_value=mock_stock_repo,
             ):
                 mock_reconstruct.return_value = positions_df

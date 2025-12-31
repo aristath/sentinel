@@ -17,7 +17,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from app.config import settings  # noqa: E402
-from app.infrastructure.database.manager import init_databases  # noqa: E402
+from app.core.database.manager import init_databases  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

@@ -83,7 +83,7 @@ async def get_exchanges_from_database() -> list[str]:
         List of unique fullExchangeName values from active stocks
     """
     try:
-        from app.infrastructure.database import get_db_manager
+        from app.core.database import get_db_manager
 
         db_manager = get_db_manager()
         rows = await db_manager.config.fetchall(

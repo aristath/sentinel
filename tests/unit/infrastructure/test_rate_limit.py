@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from starlette.responses import Response
 
-from app.infrastructure.rate_limit import RateLimitMiddleware
+from app.core.middleware import RateLimitMiddleware
 
 
 class TestRateLimitMiddleware:

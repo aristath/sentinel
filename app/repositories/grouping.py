@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Dict, List
 
-from app.infrastructure.database import get_db_manager
+from app.core.database import get_db_manager
 from app.repositories.base import transaction_context
 
 

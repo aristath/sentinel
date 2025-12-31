@@ -8,9 +8,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.domain.models import MultiStepRecommendation, Recommendation
-from app.domain.value_objects.currency import Currency
 from app.domain.value_objects.recommendation_status import RecommendationStatus
 from app.domain.value_objects.trade_side import TradeSide
+from app.shared.domain.value_objects.currency import Currency
 
 
 class TestCalculateMinTradeAmount:
@@ -18,7 +18,7 @@ class TestCalculateMinTradeAmount:
 
     def test_calculates_minimum_for_standard_fees(self):
         """Test calculation with standard Freedom24 fees."""
-        from app.application.services.rebalancing_service import (
+        from app.modules.rebalancing.services.rebalancing_service import (
             calculate_min_trade_amount,
         )
 
@@ -34,7 +34,7 @@ class TestCalculateMinTradeAmount:
 
     def test_returns_high_minimum_when_percent_exceeds_max_ratio(self):
         """Test that high minimum is returned when percent exceeds max ratio."""
-        from app.application.services.rebalancing_service import (
+        from app.modules.rebalancing.services.rebalancing_service import (
             calculate_min_trade_amount,
         )
 
@@ -49,7 +49,7 @@ class TestCalculateMinTradeAmount:
 
     def test_handles_zero_fixed_cost(self):
         """Test handling when fixed cost is zero."""
-        from app.application.services.rebalancing_service import (
+        from app.modules.rebalancing.services.rebalancing_service import (
             calculate_min_trade_amount,
         )
 
@@ -61,7 +61,7 @@ class TestCalculateMinTradeAmount:
 
     def test_handles_different_max_cost_ratios(self):
         """Test with different max cost ratios."""
-        from app.application.services.rebalancing_service import (
+        from app.modules.rebalancing.services.rebalancing_service import (
             calculate_min_trade_amount,
         )
 
@@ -169,7 +169,9 @@ class TestCalculateRebalanceTrades:
         mock_exchange_rate_service,
     ):
         """Test that empty list is returned when cash is below minimum."""
-        from app.application.services.rebalancing_service import RebalancingService
+        from app.modules.rebalancing.services.rebalancing_service import (
+            RebalancingService,
+        )
 
         service = RebalancingService(
             stock_repo=mock_stock_repo,
@@ -204,7 +206,9 @@ class TestCalculateRebalanceTrades:
         mock_exchange_rate_service,
     ):
         """Test that empty list is returned when there are no recommendations."""
-        from app.application.services.rebalancing_service import RebalancingService
+        from app.modules.rebalancing.services.rebalancing_service import (
+            RebalancingService,
+        )
 
         service = RebalancingService(
             stock_repo=mock_stock_repo,
@@ -240,7 +244,9 @@ class TestCalculateRebalanceTrades:
         mock_exchange_rate_service,
     ):
         """Test that empty list is returned when there are no buy recommendations."""
-        from app.application.services.rebalancing_service import RebalancingService
+        from app.modules.rebalancing.services.rebalancing_service import (
+            RebalancingService,
+        )
 
         service = RebalancingService(
             stock_repo=mock_stock_repo,
@@ -294,7 +300,9 @@ class TestCalculateRebalanceTrades:
         mock_exchange_rate_service,
     ):
         """Test that MultiStepRecommendation is converted to Recommendation."""
-        from app.application.services.rebalancing_service import RebalancingService
+        from app.modules.rebalancing.services.rebalancing_service import (
+            RebalancingService,
+        )
 
         service = RebalancingService(
             stock_repo=mock_stock_repo,
@@ -353,7 +361,9 @@ class TestCalculateRebalanceTrades:
         mock_exchange_rate_service,
     ):
         """Test that invalid recommendations are filtered out."""
-        from app.application.services.rebalancing_service import RebalancingService
+        from app.modules.rebalancing.services.rebalancing_service import (
+            RebalancingService,
+        )
 
         service = RebalancingService(
             stock_repo=mock_stock_repo,

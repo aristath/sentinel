@@ -5,7 +5,7 @@ These tests validate the cache invalidation service for managing cache invalidat
 
 from unittest.mock import MagicMock, patch
 
-from app.infrastructure.cache import SimpleCache
+from app.core.cache.cache import SimpleCache
 from app.infrastructure.cache_invalidation import (
     CacheInvalidationService,
     get_cache_invalidation_service,

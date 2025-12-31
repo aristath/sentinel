@@ -7,13 +7,13 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Tuple
 
-from app.domain.analytics import (
+from app.domain.repositories.protocols import IAllocationRepository
+from app.infrastructure.recommendation_cache import get_recommendation_cache
+from app.modules.analytics.domain import (
     calculate_portfolio_returns,
     get_performance_attribution,
     reconstruct_portfolio_values,
 )
-from app.domain.repositories.protocols import IAllocationRepository
-from app.infrastructure.recommendation_cache import get_recommendation_cache
 
 logger = logging.getLogger(__name__)
 

@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.domain.models import AllocationTarget
-from app.repositories.allocation import AllocationRepository
+from app.modules.allocation.database.allocation_repository import AllocationRepository
 
 
 class TestAllocationRepository:
@@ -115,7 +115,9 @@ class TestAllocationRepository:
             target_pct=0.45,
         )
 
-        with patch("app.repositories.allocation.transaction_context") as mock_txn:
+        with patch(
+            "app.modules.allocation.database.allocation_repository.transaction_context"
+        ) as mock_txn:
             mock_conn = AsyncMock()
             mock_conn.execute = AsyncMock()
 
@@ -135,7 +137,9 @@ class TestAllocationRepository:
     @pytest.mark.asyncio
     async def test_delete_target(self, repo, mock_db):
         """Test deleting an allocation target."""
-        with patch("app.repositories.allocation.transaction_context") as mock_txn:
+        with patch(
+            "app.modules.allocation.database.allocation_repository.transaction_context"
+        ) as mock_txn:
             mock_conn = AsyncMock()
             mock_conn.execute = AsyncMock()
 
@@ -181,7 +185,9 @@ class TestAllocationRepository:
 
     def test_init_without_db(self):
         """Test initializing without db uses get_db_manager."""
-        with patch("app.repositories.allocation.get_db_manager") as mock_manager:
+        with patch(
+            "app.modules.allocation.database.allocation_repository.get_db_manager"
+        ) as mock_manager:
             mock_config = MagicMock()
             mock_manager.return_value.config = mock_config
 

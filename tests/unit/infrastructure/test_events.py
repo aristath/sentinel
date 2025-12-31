@@ -3,7 +3,7 @@
 These tests validate the event system functionality for publishing and subscribing to events.
 """
 
-from app.infrastructure.events import (
+from app.core.events import (
     SystemEvent,
     clear_all_listeners,
     emit,

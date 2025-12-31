@@ -548,7 +548,7 @@ class TestRequestContextMiddleware:
         """Test that middleware skips LED polling endpoint."""
         from starlette.testclient import TestClient
 
-        from app.infrastructure.events import SystemEvent
+        from app.core.events import SystemEvent
         from app.main import app
 
         with patch("app.main.emit") as mock_emit:

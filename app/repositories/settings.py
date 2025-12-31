@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from app.infrastructure.database import get_db_manager
+from app.core.database import get_db_manager
 
 
 class SettingsRepository:

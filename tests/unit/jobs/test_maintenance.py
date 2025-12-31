@@ -139,7 +139,7 @@ class TestIntegrityCheckInternal:
     @pytest.mark.asyncio
     async def test_passes_when_all_ok(self):
         """Test passing integrity check."""
-        from app.infrastructure.events import SystemEvent
+        from app.core.events import SystemEvent
         from app.jobs.maintenance import _integrity_check_internal
 
         mock_cursor = AsyncMock()

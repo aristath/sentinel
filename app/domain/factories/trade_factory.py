@@ -4,8 +4,8 @@ from datetime import datetime
 from typing import Optional, Union
 
 from app.domain.models import Trade
-from app.domain.value_objects.currency import Currency
 from app.domain.value_objects.trade_side import TradeSide
+from app.shared.domain.value_objects.currency import Currency
 
 
 class TradeFactory:

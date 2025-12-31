@@ -15,7 +15,7 @@ class TestStockRepositoryInit:
 
     def test_init_with_db(self):
         """Test initialization with provided database."""
-        from app.repositories.stock import StockRepository
+        from app.modules.universe.database.stock_repository import StockRepository
 
         mock_db = AsyncMock()
         mock_db.fetchone = AsyncMock()
@@ -26,7 +26,7 @@ class TestStockRepositoryInit:
 
     def test_init_wraps_raw_connection(self):
         """Test that raw connection is wrapped."""
-        from app.repositories.stock import StockRepository
+        from app.modules.universe.database.stock_repository import StockRepository
 
         mock_conn = MagicMock()
         mock_conn.execute = MagicMock()
@@ -44,7 +44,7 @@ class TestStockRepositoryQueries:
     @pytest.mark.asyncio
     async def test_get_by_symbol_found(self):
         """Test getting stock by symbol when found."""
-        from app.repositories.stock import StockRepository
+        from app.modules.universe.database.stock_repository import StockRepository
 
         mock_row = {
             "symbol": "AAPL.US",
@@ -74,7 +74,7 @@ class TestStockRepositoryQueries:
     @pytest.mark.asyncio
     async def test_get_by_symbol_not_found(self):
         """Test getting stock by symbol when not found."""
-        from app.repositories.stock import StockRepository
+        from app.modules.universe.database.stock_repository import StockRepository
 
         mock_db = AsyncMock()
         mock_db.fetchone = AsyncMock(return_value=None)
@@ -88,7 +88,7 @@ class TestStockRepositoryQueries:
     @pytest.mark.asyncio
     async def test_get_all_active(self):
         """Test getting all active stocks."""
-        from app.repositories.stock import StockRepository
+        from app.modules.universe.database.stock_repository import StockRepository
 
         mock_rows = [
             {
@@ -132,7 +132,7 @@ class TestStockRepositoryQueries:
     @pytest.mark.asyncio
     async def test_get_all(self):
         """Test getting all stocks."""
-        from app.repositories.stock import StockRepository
+        from app.modules.universe.database.stock_repository import StockRepository
 
         mock_rows = [
             {
@@ -166,7 +166,7 @@ class TestStockRepositoryCreate:
     @pytest.mark.asyncio
     async def test_creates_stock(self):
         """Test creating a stock record."""
-        from app.repositories.stock import StockRepository
+        from app.modules.universe.database.stock_repository import StockRepository
 
         mock_db = AsyncMock()
         mock_db.transaction = MagicMock()
@@ -196,7 +196,7 @@ class TestStockRepositoryCreate:
     @pytest.mark.asyncio
     async def test_create_with_portfolio_targets(self):
         """Test creating a stock with min/max portfolio targets."""
-        from app.repositories.stock import StockRepository
+        from app.modules.universe.database.stock_repository import StockRepository
 
         mock_db = AsyncMock()
         mock_db.transaction = MagicMock()
@@ -223,7 +223,7 @@ class TestStockRepositoryCreate:
     @pytest.mark.asyncio
     async def test_create_with_null_portfolio_targets(self):
         """Test creating a stock with NULL portfolio targets."""
-        from app.repositories.stock import StockRepository
+        from app.modules.universe.database.stock_repository import StockRepository
 
         mock_db = AsyncMock()
         mock_db.transaction = MagicMock()
@@ -249,7 +249,7 @@ class TestStockRepositoryUpdate:
     @pytest.mark.asyncio
     async def test_updates_stock(self):
         """Test updating a stock."""
-        from app.repositories.stock import StockRepository
+        from app.modules.universe.database.stock_repository import StockRepository
 
         mock_db = AsyncMock()
         mock_db.transaction = MagicMock()
@@ -265,7 +265,7 @@ class TestStockRepositoryUpdate:
     @pytest.mark.asyncio
     async def test_update_no_changes(self):
         """Test update with no changes does nothing."""
-        from app.repositories.stock import StockRepository
+        from app.modules.universe.database.stock_repository import StockRepository
 
         mock_db = AsyncMock()
 
@@ -278,7 +278,7 @@ class TestStockRepositoryUpdate:
     @pytest.mark.asyncio
     async def test_update_converts_booleans(self):
         """Test that boolean values are converted to integers."""
-        from app.repositories.stock import StockRepository
+        from app.modules.universe.database.stock_repository import StockRepository
 
         mock_db = AsyncMock()
         mock_db.transaction = MagicMock()
@@ -298,7 +298,7 @@ class TestStockRepositoryUpdate:
     @pytest.mark.asyncio
     async def test_update_with_portfolio_targets(self):
         """Test updating stock with min/max portfolio targets."""
-        from app.repositories.stock import StockRepository
+        from app.modules.universe.database.stock_repository import StockRepository
 
         mock_db = AsyncMock()
         mock_db.transaction = MagicMock()
@@ -319,7 +319,7 @@ class TestStockRepositoryUpdate:
     @pytest.mark.asyncio
     async def test_update_clearing_portfolio_targets(self):
         """Test updating stock to clear portfolio targets (set to None)."""
-        from app.repositories.stock import StockRepository
+        from app.modules.universe.database.stock_repository import StockRepository
 
         mock_db = AsyncMock()
         mock_db.transaction = MagicMock()
@@ -344,7 +344,7 @@ class TestStockRepositoryDelete:
     @pytest.mark.asyncio
     async def test_delete_sets_inactive(self):
         """Test that delete soft-deletes by setting active=False."""
-        from app.repositories.stock import StockRepository
+        from app.modules.universe.database.stock_repository import StockRepository
 
         mock_db = AsyncMock()
         mock_db.transaction = MagicMock()
@@ -365,7 +365,7 @@ class TestStockRepositoryGetWithScores:
     @pytest.mark.asyncio
     async def test_merges_stock_score_position_data(self):
         """Test that stock, score, and position data are merged."""
-        from app.repositories.stock import StockRepository
+        from app.modules.universe.database.stock_repository import StockRepository
 
         mock_stock_row = MagicMock()
         mock_stock_row.__getitem__ = lambda self, key: {
@@ -453,7 +453,8 @@ class TestStockRepositoryGetWithScores:
         repo = StockRepository(db=mock_db)
 
         with patch(
-            "app.repositories.stock.get_db_manager", return_value=mock_db_manager
+            "app.modules.universe.database.stock_repository.get_db_manager",
+            return_value=mock_db_manager,
         ):
             result = await repo.get_with_scores()
 
@@ -468,7 +469,7 @@ class TestRowToStock:
 
     def test_converts_valid_row(self):
         """Test converting a valid database row to Stock model."""
-        from app.repositories.stock import StockRepository
+        from app.modules.universe.database.stock_repository import StockRepository
 
         mock_db = AsyncMock()
         repo = StockRepository(db=mock_db)
@@ -501,7 +502,7 @@ class TestRowToStock:
 
     def test_handles_null_priority_multiplier(self):
         """Test handling null priority_multiplier."""
-        from app.repositories.stock import StockRepository
+        from app.modules.universe.database.stock_repository import StockRepository
 
         mock_db = AsyncMock()
         repo = StockRepository(db=mock_db)
@@ -532,7 +533,7 @@ class TestRowToStock:
 
     def test_row_to_stock_maps_portfolio_targets(self):
         """Test that _row_to_stock maps portfolio target columns correctly."""
-        from app.repositories.stock import StockRepository
+        from app.modules.universe.database.stock_repository import StockRepository
 
         mock_db = AsyncMock()
         repo = StockRepository(db=mock_db)
@@ -564,7 +565,7 @@ class TestRowToStock:
 
     def test_row_to_stock_handles_null_portfolio_targets(self):
         """Test that _row_to_stock handles NULL portfolio targets."""
-        from app.repositories.stock import StockRepository
+        from app.modules.universe.database.stock_repository import StockRepository
 
         mock_db = AsyncMock()
         repo = StockRepository(db=mock_db)
@@ -596,7 +597,7 @@ class TestRowToStock:
 
     def test_row_to_stock_handles_missing_portfolio_target_columns(self):
         """Test that _row_to_stock handles missing portfolio target columns (old schema)."""
-        from app.repositories.stock import StockRepository
+        from app.modules.universe.database.stock_repository import StockRepository
 
         mock_db = AsyncMock()
         repo = StockRepository(db=mock_db)

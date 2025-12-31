@@ -3,8 +3,8 @@
 from datetime import datetime
 from typing import List, Optional
 
+from app.core.database import get_db_manager
 from app.domain.models import StockScore
-from app.infrastructure.database import get_db_manager
 from app.repositories.base import transaction_context
 
 
@@ -166,7 +166,7 @@ class ScoreRepository:
         calculated_at = None
         if row["calculated_at"]:
             try:
-                from app.repositories.base import safe_parse_datetime_string
+                from app.shared.utils import safe_parse_datetime_string
 
                 calculated_at = safe_parse_datetime_string(str(row["calculated_at"]))
             except (ValueError, TypeError):

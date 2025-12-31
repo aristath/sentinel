@@ -13,7 +13,7 @@ from typing import Dict, Optional, Tuple
 
 import httpx
 
-from app.infrastructure.database.manager import DatabaseManager
+from app.core.database.manager import DatabaseManager
 
 logger = logging.getLogger(__name__)
 

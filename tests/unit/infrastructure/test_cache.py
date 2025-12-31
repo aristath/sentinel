@@ -7,7 +7,7 @@ import time
 
 import pytest
 
-from app.infrastructure.cache import SimpleCache
+from app.core.cache.cache import SimpleCache
 
 
 class TestSimpleCache:

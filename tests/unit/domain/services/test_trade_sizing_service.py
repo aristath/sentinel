@@ -6,7 +6,7 @@ currency conversion, and minimum trade size enforcement.
 
 import pytest
 
-from app.domain.services.trade_sizing_service import TradeSizingService
+from app.modules.trading.domain.trade_sizing_service import TradeSizingService
 
 
 class TestCalculateBuyQuantity:

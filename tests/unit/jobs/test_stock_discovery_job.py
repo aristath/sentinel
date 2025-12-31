@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.domain.scoring.models import CalculatedStockScore
+from app.modules.scoring.domain.models import CalculatedStockScore
 
 
 def create_candidate(

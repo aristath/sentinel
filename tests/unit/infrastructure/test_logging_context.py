@@ -5,7 +5,7 @@ These tests validate correlation ID functionality for structured logging.
 
 import logging
 
-from app.infrastructure.logging_context import (
+from app.core.logging import (
     CorrelationIDFilter,
     clear_correlation_id,
     get_correlation_id,

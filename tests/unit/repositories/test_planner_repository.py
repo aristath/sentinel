@@ -11,7 +11,7 @@ class TestAreAllSequencesEvaluated:
     @pytest.mark.asyncio
     async def test_returns_true_when_all_sequences_evaluated(self):
         """Test that method returns True when all sequences are evaluated."""
-        from app.repositories.planner_repository import PlannerRepository
+        from app.modules.planning.database.planner_repository import PlannerRepository
 
         repo = PlannerRepository()
         mock_db = MagicMock()
@@ -26,7 +26,7 @@ class TestAreAllSequencesEvaluated:
     @pytest.mark.asyncio
     async def test_returns_false_when_not_all_sequences_evaluated(self):
         """Test that method returns False when not all sequences are evaluated."""
-        from app.repositories.planner_repository import PlannerRepository
+        from app.modules.planning.database.planner_repository import PlannerRepository
 
         repo = PlannerRepository()
         mock_db = MagicMock()
@@ -40,7 +40,7 @@ class TestAreAllSequencesEvaluated:
     @pytest.mark.asyncio
     async def test_returns_false_when_no_sequences(self):
         """Test that method returns False when no sequences exist."""
-        from app.repositories.planner_repository import PlannerRepository
+        from app.modules.planning.database.planner_repository import PlannerRepository
 
         repo = PlannerRepository()
         mock_db = MagicMock()
@@ -54,7 +54,7 @@ class TestAreAllSequencesEvaluated:
     @pytest.mark.asyncio
     async def test_returns_false_when_row_is_none(self):
         """Test that method returns False when database returns None."""
-        from app.repositories.planner_repository import PlannerRepository
+        from app.modules.planning.database.planner_repository import PlannerRepository
 
         repo = PlannerRepository()
         mock_db = MagicMock()
@@ -68,7 +68,7 @@ class TestAreAllSequencesEvaluated:
     @pytest.mark.asyncio
     async def test_handles_partial_evaluation(self):
         """Test that method correctly handles partial evaluation."""
-        from app.repositories.planner_repository import PlannerRepository
+        from app.modules.planning.database.planner_repository import PlannerRepository
 
         repo = PlannerRepository()
         mock_db = MagicMock()
@@ -82,7 +82,7 @@ class TestAreAllSequencesEvaluated:
     @pytest.mark.asyncio
     async def test_uses_correct_portfolio_hash(self):
         """Test that method uses the correct portfolio hash in query."""
-        from app.repositories.planner_repository import PlannerRepository
+        from app.modules.planning.database.planner_repository import PlannerRepository
 
         repo = PlannerRepository()
         mock_db = MagicMock()

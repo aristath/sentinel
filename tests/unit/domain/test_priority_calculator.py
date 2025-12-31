@@ -7,7 +7,10 @@ Allocation Fit scores. The priority calculator just applies the manual multiplie
 
 import pytest
 
-from app.domain.services.priority_calculator import PriorityCalculator, PriorityInput
+from app.modules.universe.domain.priority_calculator import (
+    PriorityCalculator,
+    PriorityInput,
+)
 
 
 class TestPriorityCalculator:

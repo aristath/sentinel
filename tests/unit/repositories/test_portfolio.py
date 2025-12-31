@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.domain.models import PortfolioSnapshot
-from app.repositories.portfolio import PortfolioRepository
+from app.modules.portfolio.database.portfolio_repository import PortfolioRepository
 
 
 class TestPortfolioRepository:
@@ -140,7 +140,9 @@ class TestPortfolioRepository:
             cash_balance=5000.0,
         )
 
-        with patch("app.repositories.portfolio.transaction_context") as mock_txn:
+        with patch(
+            "app.modules.portfolio.database.portfolio_repository.transaction_context"
+        ) as mock_txn:
             mock_conn = AsyncMock()
             mock_conn.execute = AsyncMock()
 
@@ -164,7 +166,9 @@ class TestPortfolioRepository:
         mock_cursor.fetchone = AsyncMock(return_value={"cnt": 5})
         mock_db.execute.return_value = mock_cursor
 
-        with patch("app.repositories.portfolio.transaction_context") as mock_txn:
+        with patch(
+            "app.modules.portfolio.database.portfolio_repository.transaction_context"
+        ) as mock_txn:
             mock_conn = AsyncMock()
             mock_conn.execute = AsyncMock()
 
@@ -286,7 +290,9 @@ class TestPortfolioRepository:
 
     def test_init_without_db(self):
         """Test initializing without db uses get_db_manager."""
-        with patch("app.repositories.portfolio.get_db_manager") as mock_manager:
+        with patch(
+            "app.modules.portfolio.database.portfolio_repository.get_db_manager"
+        ) as mock_manager:
             mock_snapshots = MagicMock()
             mock_db_manager = MagicMock()
             mock_db_manager.snapshots = mock_snapshots

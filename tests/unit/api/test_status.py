@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import FastAPI
 
-from app.api.status import (
+from app.modules.system.api.status import (
     _calculate_data_dir_size,
     _get_backup_info,
     _get_core_db_sizes,
@@ -63,7 +63,7 @@ class TestGetStatus:
         self, mock_portfolio_repo, mock_stock_repo, mock_position_repo
     ):
         """Test that status returns healthy with real data."""
-        from app.api.status import get_status
+        from app.modules.system.api.status import get_status
 
         # Setup mock data
         mock_snapshot = MagicMock()
@@ -91,7 +91,7 @@ class TestGetStatus:
         self, mock_portfolio_repo, mock_stock_repo, mock_position_repo
     ):
         """Test behavior when no portfolio snapshot exists."""
-        from app.api.status import get_status
+        from app.modules.system.api.status import get_status
 
         mock_portfolio_repo.get_latest.return_value = None
         mock_position_repo.get_all.return_value = []
@@ -109,7 +109,7 @@ class TestGetStatus:
         self, mock_portfolio_repo, mock_stock_repo, mock_position_repo
     ):
         """Test behavior when no positions exist."""
-        from app.api.status import get_status
+        from app.modules.system.api.status import get_status
 
         mock_snapshot = MagicMock()
         mock_snapshot.cash_balance = 10000.0
@@ -129,7 +129,7 @@ class TestGetStatus:
         self, mock_portfolio_repo, mock_stock_repo, mock_position_repo
     ):
         """Test fallback when date parsing fails."""
-        from app.api.status import get_status
+        from app.modules.system.api.status import get_status
 
         mock_portfolio_repo.get_latest.return_value = None
 
@@ -151,7 +151,7 @@ class TestGetStatus:
         self, mock_portfolio_repo, mock_stock_repo, mock_position_repo
     ):
         """Test handling of positions without last_updated field."""
-        from app.api.status import get_status
+        from app.modules.system.api.status import get_status
 
         mock_portfolio_repo.get_latest.return_value = None
 
@@ -172,7 +172,7 @@ class TestGetStatus:
         self, mock_portfolio_repo, mock_stock_repo, mock_position_repo
     ):
         """Test that the most recent position update is found."""
-        from app.api.status import get_status
+        from app.modules.system.api.status import get_status
 
         mock_portfolio_repo.get_latest.return_value = None
 
@@ -200,7 +200,7 @@ class TestGetDisplayText:
     @pytest.mark.asyncio
     async def test_returns_display_settings(self, mock_settings_repo):
         """Test that display text returns correct settings."""
-        from app.api.status import get_display_text
+        from app.modules.system.api.status import get_display_text
 
         mock_settings_repo.get_float.side_effect = lambda key, default: {
             "ticker_speed": 75.0,
@@ -220,7 +220,7 @@ class TestGetDisplayText:
     @pytest.mark.asyncio
     async def test_uses_default_values(self, mock_settings_repo):
         """Test that default values are used when settings are missing."""
-        from app.api.status import get_display_text
+        from app.modules.system.api.status import get_display_text
 
         # Return defaults
         mock_settings_repo.get_float.side_effect = lambda key, default: default
@@ -241,7 +241,7 @@ class TestSyncTriggers:
     @pytest.mark.asyncio
     async def test_portfolio_sync_success(self):
         """Test successful portfolio sync trigger."""
-        from app.api.status import trigger_portfolio_sync
+        from app.modules.system.api.status import trigger_portfolio_sync
 
         with patch(
             "app.jobs.daily_sync.sync_portfolio", new_callable=AsyncMock
@@ -254,7 +254,7 @@ class TestSyncTriggers:
     @pytest.mark.asyncio
     async def test_portfolio_sync_handles_error(self):
         """Test portfolio sync error handling."""
-        from app.api.status import trigger_portfolio_sync
+        from app.modules.system.api.status import trigger_portfolio_sync
 
         with patch(
             "app.jobs.daily_sync.sync_portfolio",
@@ -269,7 +269,7 @@ class TestSyncTriggers:
     @pytest.mark.asyncio
     async def test_price_sync_success(self):
         """Test successful price sync trigger."""
-        from app.api.status import trigger_price_sync
+        from app.modules.system.api.status import trigger_price_sync
 
         with patch(
             "app.jobs.daily_sync.sync_prices", new_callable=AsyncMock
@@ -282,7 +282,7 @@ class TestSyncTriggers:
     @pytest.mark.asyncio
     async def test_price_sync_handles_error(self):
         """Test price sync error handling."""
-        from app.api.status import trigger_price_sync
+        from app.modules.system.api.status import trigger_price_sync
 
         with patch(
             "app.jobs.daily_sync.sync_prices",
@@ -297,7 +297,7 @@ class TestSyncTriggers:
     @pytest.mark.asyncio
     async def test_historical_sync_success(self):
         """Test successful historical data sync trigger."""
-        from app.api.status import trigger_historical_sync
+        from app.modules.system.api.status import trigger_historical_sync
 
         with patch(
             "app.jobs.historical_data_sync.sync_historical_data", new_callable=AsyncMock
@@ -310,7 +310,7 @@ class TestSyncTriggers:
     @pytest.mark.asyncio
     async def test_daily_maintenance_success(self):
         """Test successful daily maintenance trigger."""
-        from app.api.status import trigger_daily_maintenance
+        from app.modules.system.api.status import trigger_daily_maintenance
 
         with patch(
             "app.jobs.maintenance.run_daily_maintenance", new_callable=AsyncMock
@@ -327,7 +327,7 @@ class TestTradernetStatus:
     @pytest.mark.asyncio
     async def test_connected_status(self):
         """Test status when connected to Tradernet."""
-        from app.api.status import get_tradernet_status
+        from app.modules.system.api.status import get_tradernet_status
 
         mock_client = MagicMock()
         with patch(
@@ -343,7 +343,7 @@ class TestTradernetStatus:
     @pytest.mark.asyncio
     async def test_disconnected_when_client_none(self):
         """Test status when Tradernet client is None."""
-        from app.api.status import get_tradernet_status
+        from app.modules.system.api.status import get_tradernet_status
 
         with patch(
             "app.infrastructure.external.tradernet_connection.ensure_tradernet_connected",
@@ -357,7 +357,7 @@ class TestTradernetStatus:
     @pytest.mark.asyncio
     async def test_disconnected_on_exception(self):
         """Test status when connection throws exception."""
-        from app.api.status import get_tradernet_status
+        from app.modules.system.api.status import get_tradernet_status
 
         with patch(
             "app.infrastructure.external.tradernet_connection.ensure_tradernet_connected",
@@ -375,7 +375,7 @@ class TestJobStatus:
     @pytest.mark.asyncio
     async def test_returns_job_health_status(self):
         """Test successful job status retrieval."""
-        from app.api.status import get_job_status
+        from app.modules.system.api.status import get_job_status
 
         mock_status = {
             "portfolio_sync": {"last_run": "2024-01-15T10:00:00", "healthy": True},
@@ -393,7 +393,7 @@ class TestJobStatus:
     @pytest.mark.asyncio
     async def test_handles_error(self):
         """Test job status error handling."""
-        from app.api.status import get_job_status
+        from app.modules.system.api.status import get_job_status
 
         with patch(
             "app.jobs.scheduler.get_job_health_status",
@@ -411,7 +411,7 @@ class TestDatabaseStats:
     @pytest.mark.asyncio
     async def test_returns_database_stats(self):
         """Test successful database stats retrieval."""
-        from app.api.status import get_database_stats
+        from app.modules.system.api.status import get_database_stats
 
         mock_stats = {
             "total_stocks": 50,
@@ -420,7 +420,7 @@ class TestDatabaseStats:
         }
 
         with patch(
-            "app.jobs.health_check.get_database_stats",
+            "app.modules.system.jobs.health_check.get_database_stats",
             new_callable=AsyncMock,
             return_value=mock_stats,
         ):
@@ -432,10 +432,10 @@ class TestDatabaseStats:
     @pytest.mark.asyncio
     async def test_handles_error(self):
         """Test database stats error handling."""
-        from app.api.status import get_database_stats
+        from app.modules.system.api.status import get_database_stats
 
         with patch(
-            "app.jobs.health_check.get_database_stats",
+            "app.modules.system.jobs.health_check.get_database_stats",
             new_callable=AsyncMock,
             side_effect=Exception("Database locked"),
         ):
@@ -547,7 +547,7 @@ class TestDiskUsageEndpoint:
     @pytest.mark.asyncio
     async def test_returns_disk_usage(self, tmp_path):
         """Test successful disk usage retrieval."""
-        from app.api.status import get_disk_usage
+        from app.modules.system.api.status import get_disk_usage
 
         # Create test files
         (tmp_path / "config.db").write_bytes(b"x" * 1024)
@@ -565,7 +565,7 @@ class TestDiskUsageEndpoint:
     @pytest.mark.asyncio
     async def test_handles_error(self):
         """Test disk usage error handling."""
-        from app.api.status import get_disk_usage
+        from app.modules.system.api.status import get_disk_usage
 
         with patch("app.api.status.settings") as mock_settings:
             mock_settings.data_dir = Path("/nonexistent/path")

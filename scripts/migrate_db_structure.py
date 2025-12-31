@@ -109,7 +109,7 @@ async def migrate_table(
 async def main():
     """Run the database structure migration."""
     from app.config import settings
-    from app.infrastructure.database.manager import init_databases
+    from app.core.database.manager import init_databases
 
     logger.info("=" * 60)
     logger.info("Database Structure Migration")

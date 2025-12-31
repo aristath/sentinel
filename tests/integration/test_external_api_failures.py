@@ -84,7 +84,7 @@ async def test_tradernet_api_request_failure():
 @pytest.mark.asyncio
 async def test_rebalancing_service_handles_price_fetch_failure(db):
     """Test that rebalancing service handles price fetch failures gracefully."""
-    from app.application.services.rebalancing_service import RebalancingService
+    from app.modules.rebalancing.services.rebalancing_service import RebalancingService
 
     # Setup test data
     stock_repo = StockRepository(db=db)
@@ -183,7 +183,7 @@ async def test_exchange_rate_cache_fallback(db):
         mock_client.return_value = mock_instance
 
         # Create a mock database manager that uses the db fixture
-        from app.infrastructure.database.manager import DatabaseManager
+        from app.core.database.manager import DatabaseManager
 
         mock_db_manager = MagicMock(spec=DatabaseManager)
         mock_db_manager.cache = db  # Use the db fixture's cache connection

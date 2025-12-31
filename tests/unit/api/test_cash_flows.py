@@ -9,7 +9,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.domain.models import CashFlow
-from app.domain.value_objects.currency import Currency
+from app.shared.domain.value_objects.currency import Currency
 
 
 class TestValidateDateFormat:
@@ -17,7 +17,7 @@ class TestValidateDateFormat:
 
     def test_accepts_valid_date_format(self):
         """Test that valid YYYY-MM-DD format is accepted."""
-        from app.api.cash_flows import _validate_date_format
+        from app.modules.cash_flows.api.cash_flows import _validate_date_format
 
         # Should not raise exception
         _validate_date_format("2024-01-15")
@@ -26,7 +26,7 @@ class TestValidateDateFormat:
 
     def test_rejects_invalid_date_format(self):
         """Test that invalid date format raises HTTPException."""
-        from app.api.cash_flows import _validate_date_format
+        from app.modules.cash_flows.api.cash_flows import _validate_date_format
 
         with pytest.raises(HTTPException) as exc_info:
             _validate_date_format("15-01-2024")  # Wrong order
@@ -36,7 +36,7 @@ class TestValidateDateFormat:
 
     def test_rejects_invalid_date_values(self):
         """Test that invalid date values raise HTTPException."""
-        from app.api.cash_flows import _validate_date_format
+        from app.modules.cash_flows.api.cash_flows import _validate_date_format
 
         with pytest.raises(HTTPException) as exc_info:
             _validate_date_format("2024-13-01")  # Invalid month
@@ -45,7 +45,7 @@ class TestValidateDateFormat:
 
     def test_rejects_invalid_separator(self):
         """Test that invalid separator raises HTTPException."""
-        from app.api.cash_flows import _validate_date_format
+        from app.modules.cash_flows.api.cash_flows import _validate_date_format
 
         with pytest.raises(HTTPException) as exc_info:
             _validate_date_format("2024/01/15")  # Slash instead of dash
@@ -54,7 +54,7 @@ class TestValidateDateFormat:
 
     def test_rejects_partial_date(self):
         """Test that partial date raises HTTPException."""
-        from app.api.cash_flows import _validate_date_format
+        from app.modules.cash_flows.api.cash_flows import _validate_date_format
 
         with pytest.raises(HTTPException) as exc_info:
             _validate_date_format("2024-01")  # Missing day
@@ -67,7 +67,7 @@ class TestValidateDateRange:
 
     def test_accepts_valid_date_range(self):
         """Test that valid date range is accepted."""
-        from app.api.cash_flows import _validate_date_range
+        from app.modules.cash_flows.api.cash_flows import _validate_date_range
 
         # Should not raise exception
         _validate_date_range("2024-01-01", "2024-01-31")
@@ -75,7 +75,7 @@ class TestValidateDateRange:
 
     def test_accepts_none_values(self):
         """Test that None values are accepted."""
-        from app.api.cash_flows import _validate_date_range
+        from app.modules.cash_flows.api.cash_flows import _validate_date_range
 
         # Should not raise exception
         _validate_date_range(None, None)
@@ -84,7 +84,7 @@ class TestValidateDateRange:
 
     def test_validates_start_date_format(self):
         """Test that start date format is validated."""
-        from app.api.cash_flows import _validate_date_range
+        from app.modules.cash_flows.api.cash_flows import _validate_date_range
 
         with pytest.raises(HTTPException) as exc_info:
             _validate_date_range("invalid-date", "2024-01-31")
@@ -93,7 +93,7 @@ class TestValidateDateRange:
 
     def test_validates_end_date_format(self):
         """Test that end date format is validated."""
-        from app.api.cash_flows import _validate_date_range
+        from app.modules.cash_flows.api.cash_flows import _validate_date_range
 
         with pytest.raises(HTTPException) as exc_info:
             _validate_date_range("2024-01-01", "invalid-date")
@@ -102,7 +102,7 @@ class TestValidateDateRange:
 
     def test_rejects_reversed_date_range(self):
         """Test that reversed date range raises HTTPException."""
-        from app.api.cash_flows import _validate_date_range
+        from app.modules.cash_flows.api.cash_flows import _validate_date_range
 
         with pytest.raises(HTTPException) as exc_info:
             _validate_date_range("2024-01-31", "2024-01-01")
@@ -116,7 +116,7 @@ class TestFormatCashFlowResponse:
 
     def test_formats_single_cash_flow(self):
         """Test formatting single cash flow to dict."""
-        from app.api.cash_flows import _format_cash_flow_response
+        from app.modules.cash_flows.api.cash_flows import _format_cash_flow_response
 
         cash_flow = CashFlow(
             id=1,
@@ -153,7 +153,7 @@ class TestFormatCashFlowResponse:
 
     def test_formats_multiple_cash_flows(self):
         """Test formatting multiple cash flows."""
-        from app.api.cash_flows import _format_cash_flow_response
+        from app.modules.cash_flows.api.cash_flows import _format_cash_flow_response
 
         cash_flows = [
             CashFlow(
@@ -184,7 +184,7 @@ class TestFormatCashFlowResponse:
 
     def test_formats_empty_list(self):
         """Test formatting empty list."""
-        from app.api.cash_flows import _format_cash_flow_response
+        from app.modules.cash_flows.api.cash_flows import _format_cash_flow_response
 
         result = _format_cash_flow_response([])
 
@@ -192,7 +192,7 @@ class TestFormatCashFlowResponse:
 
     def test_handles_none_optional_fields(self):
         """Test handling of None optional fields."""
-        from app.api.cash_flows import _format_cash_flow_response
+        from app.modules.cash_flows.api.cash_flows import _format_cash_flow_response
 
         cash_flow = CashFlow(
             id=1,
@@ -224,7 +224,7 @@ class TestFetchCashFlows:
     @pytest.mark.asyncio
     async def test_fetches_by_date_range(self):
         """Test fetching cash flows by date range."""
-        from app.api.cash_flows import _fetch_cash_flows
+        from app.modules.cash_flows.api.cash_flows import _fetch_cash_flows
 
         mock_repo = AsyncMock()
         mock_repo.get_by_date_range = AsyncMock(return_value=[])
@@ -242,7 +242,7 @@ class TestFetchCashFlows:
     @pytest.mark.asyncio
     async def test_fetches_by_transaction_type(self):
         """Test fetching cash flows by transaction type."""
-        from app.api.cash_flows import _fetch_cash_flows
+        from app.modules.cash_flows.api.cash_flows import _fetch_cash_flows
 
         mock_repo = AsyncMock()
         mock_repo.get_by_type = AsyncMock(return_value=[])
@@ -260,7 +260,7 @@ class TestFetchCashFlows:
     @pytest.mark.asyncio
     async def test_fetches_all_with_limit(self):
         """Test fetching all cash flows with limit."""
-        from app.api.cash_flows import _fetch_cash_flows
+        from app.modules.cash_flows.api.cash_flows import _fetch_cash_flows
 
         mock_repo = AsyncMock()
         mock_repo.get_all = AsyncMock(return_value=[])
@@ -278,7 +278,7 @@ class TestFetchCashFlows:
     @pytest.mark.asyncio
     async def test_date_range_takes_precedence_over_type(self):
         """Test that date range takes precedence over transaction type."""
-        from app.api.cash_flows import _fetch_cash_flows
+        from app.modules.cash_flows.api.cash_flows import _fetch_cash_flows
 
         mock_repo = AsyncMock()
         mock_repo.get_by_date_range = AsyncMock(return_value=[])
@@ -298,7 +298,7 @@ class TestFetchCashFlows:
     @pytest.mark.asyncio
     async def test_date_range_requires_both_dates(self):
         """Test that date range requires both start and end dates."""
-        from app.api.cash_flows import _fetch_cash_flows
+        from app.modules.cash_flows.api.cash_flows import _fetch_cash_flows
 
         mock_repo = AsyncMock()
         mock_repo.get_by_date_range = AsyncMock(return_value=[])
@@ -324,7 +324,7 @@ class TestGetCashFlows:
     @pytest.mark.asyncio
     async def test_returns_all_cash_flows(self):
         """Test returning all cash flows."""
-        from app.api.cash_flows import get_cash_flows
+        from app.modules.cash_flows.api.cash_flows import get_cash_flows
 
         mock_cash_flows = [
             CashFlow(
@@ -354,7 +354,7 @@ class TestGetCashFlows:
     @pytest.mark.asyncio
     async def test_applies_limit(self):
         """Test applying limit to results."""
-        from app.api.cash_flows import get_cash_flows
+        from app.modules.cash_flows.api.cash_flows import get_cash_flows
 
         mock_repo = AsyncMock()
         mock_repo.get_all = AsyncMock(return_value=[])
@@ -368,7 +368,7 @@ class TestGetCashFlows:
     @pytest.mark.asyncio
     async def test_filters_by_transaction_type(self):
         """Test filtering by transaction type."""
-        from app.api.cash_flows import get_cash_flows
+        from app.modules.cash_flows.api.cash_flows import get_cash_flows
 
         mock_cash_flows = [
             CashFlow(
@@ -401,7 +401,7 @@ class TestGetCashFlows:
     @pytest.mark.asyncio
     async def test_filters_by_date_range(self):
         """Test filtering by date range."""
-        from app.api.cash_flows import get_cash_flows
+        from app.modules.cash_flows.api.cash_flows import get_cash_flows
 
         mock_cash_flows = [
             CashFlow(
@@ -428,7 +428,7 @@ class TestGetCashFlows:
     @pytest.mark.asyncio
     async def test_validates_date_format(self):
         """Test that date format is validated."""
-        from app.api.cash_flows import get_cash_flows
+        from app.modules.cash_flows.api.cash_flows import get_cash_flows
 
         mock_repo = AsyncMock()
 
@@ -442,7 +442,7 @@ class TestGetCashFlows:
     @pytest.mark.asyncio
     async def test_validates_date_range_order(self):
         """Test that date range order is validated."""
-        from app.api.cash_flows import get_cash_flows
+        from app.modules.cash_flows.api.cash_flows import get_cash_flows
 
         mock_repo = AsyncMock()
 
@@ -457,7 +457,7 @@ class TestGetCashFlows:
     @pytest.mark.asyncio
     async def test_handles_empty_results(self):
         """Test handling empty results."""
-        from app.api.cash_flows import get_cash_flows
+        from app.modules.cash_flows.api.cash_flows import get_cash_flows
 
         mock_repo = AsyncMock()
         mock_repo.get_all = AsyncMock(return_value=[])
@@ -471,7 +471,7 @@ class TestGetCashFlows:
     @pytest.mark.asyncio
     async def test_handles_repository_error(self):
         """Test handling repository errors."""
-        from app.api.cash_flows import get_cash_flows
+        from app.modules.cash_flows.api.cash_flows import get_cash_flows
 
         mock_repo = AsyncMock()
         mock_repo.get_all = AsyncMock(side_effect=Exception("Database error"))
@@ -491,7 +491,7 @@ class TestGetCashFlows:
     @pytest.mark.asyncio
     async def test_preserves_http_exceptions(self):
         """Test that HTTPExceptions are preserved."""
-        from app.api.cash_flows import get_cash_flows
+        from app.modules.cash_flows.api.cash_flows import get_cash_flows
 
         mock_repo = AsyncMock()
         mock_repo.get_all = AsyncMock(
@@ -517,7 +517,7 @@ class TestSyncCashFlows:
     @pytest.mark.asyncio
     async def test_syncs_transactions_successfully(self):
         """Test successful transaction sync."""
-        from app.api.cash_flows import sync_cash_flows
+        from app.modules.cash_flows.api.cash_flows import sync_cash_flows
 
         mock_transactions = [
             {
@@ -562,7 +562,7 @@ class TestSyncCashFlows:
     @pytest.mark.asyncio
     async def test_handles_no_transactions(self):
         """Test handling when no transactions are found."""
-        from app.api.cash_flows import sync_cash_flows
+        from app.modules.cash_flows.api.cash_flows import sync_cash_flows
 
         mock_client = MagicMock()
         mock_client.get_all_cash_flows.return_value = []
@@ -582,7 +582,7 @@ class TestSyncCashFlows:
     @pytest.mark.asyncio
     async def test_handles_none_transactions(self):
         """Test handling when transactions are None."""
-        from app.api.cash_flows import sync_cash_flows
+        from app.modules.cash_flows.api.cash_flows import sync_cash_flows
 
         mock_client = MagicMock()
         mock_client.get_all_cash_flows.return_value = None
@@ -602,7 +602,7 @@ class TestSyncCashFlows:
     @pytest.mark.asyncio
     async def test_handles_partial_sync(self):
         """Test handling when only some transactions are synced."""
-        from app.api.cash_flows import sync_cash_flows
+        from app.modules.cash_flows.api.cash_flows import sync_cash_flows
 
         mock_transactions = [{"id": "TX1"}, {"id": "TX2"}, {"id": "TX3"}]
 
@@ -629,7 +629,7 @@ class TestSyncCashFlows:
         Note: ensure_tradernet_connected() is called outside the try block,
         so the exception is not caught and wrapped in HTTPException.
         """
-        from app.api.cash_flows import sync_cash_flows
+        from app.modules.cash_flows.api.cash_flows import sync_cash_flows
 
         mock_repo = AsyncMock()
 
@@ -646,7 +646,7 @@ class TestSyncCashFlows:
     @pytest.mark.asyncio
     async def test_handles_api_fetch_error(self):
         """Test handling API fetch errors."""
-        from app.api.cash_flows import sync_cash_flows
+        from app.modules.cash_flows.api.cash_flows import sync_cash_flows
 
         mock_client = MagicMock()
         mock_client.get_all_cash_flows.side_effect = Exception("API error")
@@ -667,7 +667,7 @@ class TestSyncCashFlows:
     @pytest.mark.asyncio
     async def test_handles_repository_sync_error(self):
         """Test handling repository sync errors."""
-        from app.api.cash_flows import sync_cash_flows
+        from app.modules.cash_flows.api.cash_flows import sync_cash_flows
 
         mock_transactions = [{"id": "TX1"}]
 
@@ -695,7 +695,7 @@ class TestGetCashFlowsSummary:
     @pytest.mark.asyncio
     async def test_returns_summary_with_all_types(self):
         """Test returning summary with all transaction types."""
-        from app.api.cash_flows import get_cash_flows_summary
+        from app.modules.cash_flows.api.cash_flows import get_cash_flows_summary
 
         mock_cash_flows = [
             CashFlow(
@@ -751,7 +751,7 @@ class TestGetCashFlowsSummary:
     @pytest.mark.asyncio
     async def test_handles_multiple_same_type(self):
         """Test handling multiple transactions of the same type."""
-        from app.api.cash_flows import get_cash_flows_summary
+        from app.modules.cash_flows.api.cash_flows import get_cash_flows_summary
 
         mock_cash_flows = [
             CashFlow(
@@ -789,7 +789,7 @@ class TestGetCashFlowsSummary:
     @pytest.mark.asyncio
     async def test_handles_none_transaction_type(self):
         """Test handling transactions with None type."""
-        from app.api.cash_flows import get_cash_flows_summary
+        from app.modules.cash_flows.api.cash_flows import get_cash_flows_summary
 
         mock_cash_flows = [
             CashFlow(
@@ -817,7 +817,7 @@ class TestGetCashFlowsSummary:
     @pytest.mark.asyncio
     async def test_handles_empty_cash_flows(self):
         """Test handling empty cash flows."""
-        from app.api.cash_flows import get_cash_flows_summary
+        from app.modules.cash_flows.api.cash_flows import get_cash_flows_summary
 
         mock_repo = AsyncMock()
         mock_repo.get_all = AsyncMock(return_value=[])
@@ -833,7 +833,7 @@ class TestGetCashFlowsSummary:
     @pytest.mark.asyncio
     async def test_case_insensitive_deposit_matching(self):
         """Test case-insensitive matching for deposits."""
-        from app.api.cash_flows import get_cash_flows_summary
+        from app.modules.cash_flows.api.cash_flows import get_cash_flows_summary
 
         mock_cash_flows = [
             CashFlow(
@@ -878,7 +878,7 @@ class TestGetCashFlowsSummary:
     @pytest.mark.asyncio
     async def test_case_insensitive_withdrawal_matching(self):
         """Test case-insensitive matching for withdrawals."""
-        from app.api.cash_flows import get_cash_flows_summary
+        from app.modules.cash_flows.api.cash_flows import get_cash_flows_summary
 
         mock_cash_flows = [
             CashFlow(
@@ -923,7 +923,7 @@ class TestGetCashFlowsSummary:
     @pytest.mark.asyncio
     async def test_rounds_amounts_to_two_decimals(self):
         """Test that amounts are rounded to 2 decimal places."""
-        from app.api.cash_flows import get_cash_flows_summary
+        from app.modules.cash_flows.api.cash_flows import get_cash_flows_summary
 
         mock_cash_flows = [
             CashFlow(
@@ -949,7 +949,7 @@ class TestGetCashFlowsSummary:
     @pytest.mark.asyncio
     async def test_handles_repository_error(self):
         """Test handling repository errors."""
-        from app.api.cash_flows import get_cash_flows_summary
+        from app.modules.cash_flows.api.cash_flows import get_cash_flows_summary
 
         mock_repo = AsyncMock()
         mock_repo.get_all = AsyncMock(side_effect=Exception("Database error"))
@@ -963,7 +963,7 @@ class TestGetCashFlowsSummary:
     @pytest.mark.asyncio
     async def test_net_cash_flow_calculation(self):
         """Test net cash flow calculation."""
-        from app.api.cash_flows import get_cash_flows_summary
+        from app.modules.cash_flows.api.cash_flows import get_cash_flows_summary
 
         mock_cash_flows = [
             CashFlow(
@@ -999,7 +999,7 @@ class TestGetCashFlowsSummary:
     @pytest.mark.asyncio
     async def test_handles_mixed_transaction_types(self):
         """Test handling various transaction types."""
-        from app.api.cash_flows import get_cash_flows_summary
+        from app.modules.cash_flows.api.cash_flows import get_cash_flows_summary
 
         mock_cash_flows = [
             CashFlow(

@@ -6,14 +6,14 @@ import tempfile
 import aiosqlite
 import pytest
 
-from app.infrastructure.database.schemas import (
+from app.core.database.schemas import (
     CACHE_SCHEMA,
     CALCULATIONS_SCHEMA,
     CONFIG_SCHEMA,
-    HISTORY_SCHEMA,
     LEDGER_SCHEMA,
     STATE_SCHEMA,
 )
+from app.modules.portfolio.database.schemas import HISTORY_SCHEMA
 from app.repositories import (
     AllocationRepository,
     PortfolioRepository,
@@ -113,8 +113,8 @@ async def db_manager(tmp_path):
     This fixture initializes the global database manager with temporary databases,
     allowing tests that use get_db_manager() internally to work correctly.
     """
-    from app.infrastructure.database import manager as db_manager_module
-    from app.infrastructure.database.manager import init_databases
+    from app.core.database import manager as db_manager_module
+    from app.core.database.manager import init_databases
 
     # Save original manager
     original_manager = db_manager_module._db_manager

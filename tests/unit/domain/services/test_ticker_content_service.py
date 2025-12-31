@@ -64,7 +64,9 @@ class TestTickerContentService:
         mock_tradernet_client,
     ):
         """Create TickerContentService instance."""
-        from app.domain.services.ticker_content_service import TickerContentService
+        from app.modules.universe.domain.ticker_content_service import (
+            TickerContentService,
+        )
 
         return TickerContentService(
             portfolio_repo=mock_portfolio_repo,

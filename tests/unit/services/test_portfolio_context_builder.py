@@ -10,7 +10,7 @@ import pytest
 
 from app.domain.models import Stock
 from app.domain.scoring import PortfolioContext
-from app.domain.value_objects.currency import Currency
+from app.shared.domain.value_objects.currency import Currency
 
 
 @pytest.fixture
@@ -73,7 +73,7 @@ class TestBuildPortfolioContext:
         self, mock_position_repo, mock_stock_repo, mock_allocation_repo, mock_db_manager
     ):
         """Test that context is built correctly with positions."""
-        from app.application.services.recommendation.portfolio_context_builder import (
+        from app.modules.planning.services.portfolio_context_builder import (
             build_portfolio_context,
         )
 
@@ -87,7 +87,7 @@ class TestBuildPortfolioContext:
         mock_db_manager.state.fetchall = AsyncMock(return_value=[mock_row])
 
         with patch(
-            "app.application.services.recommendation.portfolio_context_builder.GroupingRepository"
+            "app.modules.planning.services.portfolio_context_builder.GroupingRepository"
         ) as mock_grouping_repo_class:
             mock_grouping_repo = AsyncMock()
             mock_grouping_repo.get_country_groups = AsyncMock(
@@ -117,14 +117,14 @@ class TestBuildPortfolioContext:
         self, mock_position_repo, mock_stock_repo, mock_allocation_repo, mock_db_manager
     ):
         """Test that allocation targets are included in context."""
-        from app.application.services.recommendation.portfolio_context_builder import (
+        from app.modules.planning.services.portfolio_context_builder import (
             build_portfolio_context,
         )
 
         mock_db_manager.state.fetchall = AsyncMock(return_value=[])
 
         with patch(
-            "app.application.services.recommendation.portfolio_context_builder.GroupingRepository"
+            "app.modules.planning.services.portfolio_context_builder.GroupingRepository"
         ) as mock_grouping_repo_class:
             mock_grouping_repo = AsyncMock()
             mock_grouping_repo.get_country_groups = AsyncMock(
@@ -152,14 +152,14 @@ class TestBuildPortfolioContext:
         self, mock_position_repo, mock_stock_repo, mock_allocation_repo, mock_db_manager
     ):
         """Test that country to group mapping is built correctly."""
-        from app.application.services.recommendation.portfolio_context_builder import (
+        from app.modules.planning.services.portfolio_context_builder import (
             build_portfolio_context,
         )
 
         mock_db_manager.state.fetchall = AsyncMock(return_value=[])
 
         with patch(
-            "app.application.services.recommendation.portfolio_context_builder.GroupingRepository"
+            "app.modules.planning.services.portfolio_context_builder.GroupingRepository"
         ) as mock_grouping_repo_class:
             mock_grouping_repo = AsyncMock()
             mock_grouping_repo.get_country_groups = AsyncMock(
@@ -184,14 +184,14 @@ class TestBuildPortfolioContext:
         self, mock_position_repo, mock_stock_repo, mock_allocation_repo, mock_db_manager
     ):
         """Test that industry to group mapping is built correctly."""
-        from app.application.services.recommendation.portfolio_context_builder import (
+        from app.modules.planning.services.portfolio_context_builder import (
             build_portfolio_context,
         )
 
         mock_db_manager.state.fetchall = AsyncMock(return_value=[])
 
         with patch(
-            "app.application.services.recommendation.portfolio_context_builder.GroupingRepository"
+            "app.modules.planning.services.portfolio_context_builder.GroupingRepository"
         ) as mock_grouping_repo_class:
             mock_grouping_repo = AsyncMock()
             mock_grouping_repo.get_country_groups = AsyncMock(return_value={})
@@ -216,7 +216,7 @@ class TestBuildPortfolioContext:
         self, mock_position_repo, mock_stock_repo, mock_allocation_repo, mock_db_manager
     ):
         """Test that stock scores are included in context."""
-        from app.application.services.recommendation.portfolio_context_builder import (
+        from app.modules.planning.services.portfolio_context_builder import (
             build_portfolio_context,
         )
 
@@ -230,7 +230,7 @@ class TestBuildPortfolioContext:
         mock_db_manager.state.fetchall = AsyncMock(return_value=[mock_row])
 
         with patch(
-            "app.application.services.recommendation.portfolio_context_builder.GroupingRepository"
+            "app.modules.planning.services.portfolio_context_builder.GroupingRepository"
         ) as mock_grouping_repo_class:
             mock_grouping_repo = AsyncMock()
             mock_grouping_repo.get_country_groups = AsyncMock(return_value={})
@@ -252,7 +252,7 @@ class TestBuildPortfolioContext:
         self, mock_stock_repo, mock_allocation_repo, mock_db_manager
     ):
         """Test handling when there are no positions."""
-        from app.application.services.recommendation.portfolio_context_builder import (
+        from app.modules.planning.services.portfolio_context_builder import (
             build_portfolio_context,
         )
 
@@ -263,7 +263,7 @@ class TestBuildPortfolioContext:
         mock_db_manager.state.fetchall = AsyncMock(return_value=[])
 
         with patch(
-            "app.application.services.recommendation.portfolio_context_builder.GroupingRepository"
+            "app.modules.planning.services.portfolio_context_builder.GroupingRepository"
         ) as mock_grouping_repo_class:
             mock_grouping_repo = AsyncMock()
             mock_grouping_repo.get_country_groups = AsyncMock(return_value={})
@@ -285,7 +285,7 @@ class TestBuildPortfolioContext:
         self, mock_stock_repo, mock_allocation_repo, mock_db_manager
     ):
         """Test that total_value defaults to 1.0 if zero."""
-        from app.application.services.recommendation.portfolio_context_builder import (
+        from app.modules.planning.services.portfolio_context_builder import (
             build_portfolio_context,
         )
 
@@ -296,7 +296,7 @@ class TestBuildPortfolioContext:
         mock_db_manager.state.fetchall = AsyncMock(return_value=[])
 
         with patch(
-            "app.application.services.recommendation.portfolio_context_builder.GroupingRepository"
+            "app.modules.planning.services.portfolio_context_builder.GroupingRepository"
         ) as mock_grouping_repo_class:
             mock_grouping_repo = AsyncMock()
             mock_grouping_repo.get_country_groups = AsyncMock(return_value={})
@@ -317,14 +317,14 @@ class TestBuildPortfolioContext:
         self, mock_position_repo, mock_stock_repo, mock_allocation_repo, mock_db_manager
     ):
         """Test that stock countries and industries are included."""
-        from app.application.services.recommendation.portfolio_context_builder import (
+        from app.modules.planning.services.portfolio_context_builder import (
             build_portfolio_context,
         )
 
         mock_db_manager.state.fetchall = AsyncMock(return_value=[])
 
         with patch(
-            "app.application.services.recommendation.portfolio_context_builder.GroupingRepository"
+            "app.modules.planning.services.portfolio_context_builder.GroupingRepository"
         ) as mock_grouping_repo_class:
             mock_grouping_repo = AsyncMock()
             mock_grouping_repo.get_country_groups = AsyncMock(return_value={})
@@ -348,7 +348,7 @@ class TestBuildPortfolioContext:
         self, mock_position_repo, mock_allocation_repo, mock_db_manager
     ):
         """Test handling of stocks without country or industry."""
-        from app.application.services.recommendation.portfolio_context_builder import (
+        from app.modules.planning.services.portfolio_context_builder import (
             build_portfolio_context,
         )
 
@@ -365,7 +365,7 @@ class TestBuildPortfolioContext:
         mock_db_manager.state.fetchall = AsyncMock(return_value=[])
 
         with patch(
-            "app.application.services.recommendation.portfolio_context_builder.GroupingRepository"
+            "app.modules.planning.services.portfolio_context_builder.GroupingRepository"
         ) as mock_grouping_repo_class:
             mock_grouping_repo = AsyncMock()
             mock_grouping_repo.get_country_groups = AsyncMock(return_value={})
@@ -388,7 +388,7 @@ class TestBuildPortfolioContext:
         self, mock_position_repo, mock_stock_repo, mock_db_manager
     ):
         """Test handling when there are no allocation targets."""
-        from app.application.services.recommendation.portfolio_context_builder import (
+        from app.modules.planning.services.portfolio_context_builder import (
             build_portfolio_context,
         )
 
@@ -399,7 +399,7 @@ class TestBuildPortfolioContext:
         mock_db_manager.state.fetchall = AsyncMock(return_value=[])
 
         with patch(
-            "app.application.services.recommendation.portfolio_context_builder.GroupingRepository"
+            "app.modules.planning.services.portfolio_context_builder.GroupingRepository"
         ) as mock_grouping_repo_class:
             mock_grouping_repo = AsyncMock()
             mock_grouping_repo.get_country_groups = AsyncMock(return_value={})
@@ -421,7 +421,7 @@ class TestBuildPortfolioContext:
         self, mock_position_repo, mock_stock_repo, mock_allocation_repo, mock_db_manager
     ):
         """Test handling when quality_score is None."""
-        from app.application.services.recommendation.portfolio_context_builder import (
+        from app.modules.planning.services.portfolio_context_builder import (
             build_portfolio_context,
         )
 
@@ -435,7 +435,7 @@ class TestBuildPortfolioContext:
         mock_db_manager.state.fetchall = AsyncMock(return_value=[mock_row])
 
         with patch(
-            "app.application.services.recommendation.portfolio_context_builder.GroupingRepository"
+            "app.modules.planning.services.portfolio_context_builder.GroupingRepository"
         ) as mock_grouping_repo_class:
             mock_grouping_repo = AsyncMock()
             mock_grouping_repo.get_country_groups = AsyncMock(return_value={})

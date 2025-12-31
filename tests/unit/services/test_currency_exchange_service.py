@@ -14,7 +14,7 @@ class TestFindRateSymbol:
 
     def test_finds_direct_symbol(self):
         """Test finding a direct rate symbol."""
-        from app.application.services.currency_exchange_service import _find_rate_symbol
+        from app.shared.services.currency_exchange_service import _find_rate_symbol
 
         mock_service = MagicMock()
         mock_service.RATE_SYMBOLS = {
@@ -28,7 +28,7 @@ class TestFindRateSymbol:
 
     def test_finds_inverse_symbol(self):
         """Test finding an inverse rate symbol."""
-        from app.application.services.currency_exchange_service import _find_rate_symbol
+        from app.shared.services.currency_exchange_service import _find_rate_symbol
 
         mock_service = MagicMock()
         mock_service.RATE_SYMBOLS = {
@@ -42,7 +42,7 @@ class TestFindRateSymbol:
 
     def test_returns_none_for_unknown_pair(self):
         """Test returns None for unknown currency pair."""
-        from app.application.services.currency_exchange_service import _find_rate_symbol
+        from app.shared.services.currency_exchange_service import _find_rate_symbol
 
         mock_service = MagicMock()
         mock_service.RATE_SYMBOLS = {}
@@ -58,7 +58,7 @@ class TestGetRateViaPath:
 
     def test_single_step_path(self):
         """Test getting rate with a single step path."""
-        from app.application.services.currency_exchange_service import (
+        from app.shared.services.currency_exchange_service import (
             ConversionStep,
             _get_rate_via_path,
         )
@@ -82,7 +82,7 @@ class TestGetRateViaPath:
 
     def test_single_step_path_zero_price(self):
         """Test returns None when quote price is zero."""
-        from app.application.services.currency_exchange_service import (
+        from app.shared.services.currency_exchange_service import (
             ConversionStep,
             _get_rate_via_path,
         )
@@ -106,7 +106,7 @@ class TestGetRateViaPath:
 
     def test_two_step_path(self):
         """Test getting rate with a two step path."""
-        from app.application.services.currency_exchange_service import (
+        from app.shared.services.currency_exchange_service import (
             ConversionStep,
             _get_rate_via_path,
         )
@@ -135,9 +135,7 @@ class TestGetRateViaPath:
 
     def test_returns_none_for_empty_path(self):
         """Test returns None for empty conversion path."""
-        from app.application.services.currency_exchange_service import (
-            _get_rate_via_path,
-        )
+        from app.shared.services.currency_exchange_service import _get_rate_via_path
 
         mock_service = MagicMock()
         mock_service.get_conversion_path.return_value = []
@@ -152,7 +150,7 @@ class TestCurrencyExchangeService:
 
     def test_init_sets_client(self):
         """Test that client is set on init."""
-        from app.application.services.currency_exchange_service import (
+        from app.shared.services.currency_exchange_service import (
             CurrencyExchangeService,
         )
 
@@ -164,7 +162,7 @@ class TestCurrencyExchangeService:
 
     def test_get_conversion_path_direct(self):
         """Test getting a direct conversion path."""
-        from app.application.services.currency_exchange_service import (
+        from app.shared.services.currency_exchange_service import (
             CurrencyExchangeService,
         )
 
@@ -181,7 +179,7 @@ class TestCurrencyExchangeService:
 
     def test_get_conversion_path_same_currency(self):
         """Test getting path for same currency returns empty."""
-        from app.application.services.currency_exchange_service import (
+        from app.shared.services.currency_exchange_service import (
             CurrencyExchangeService,
         )
 
@@ -194,7 +192,7 @@ class TestCurrencyExchangeService:
 
     def test_get_conversion_path_via_eur(self):
         """Test getting a two-step conversion path via EUR."""
-        from app.application.services.currency_exchange_service import (
+        from app.shared.services.currency_exchange_service import (
             CurrencyExchangeService,
         )
 
@@ -212,7 +210,7 @@ class TestCurrencyExchangeService:
 
     def test_get_rate_direct_pair(self):
         """Test getting rate for a direct pair."""
-        from app.application.services.currency_exchange_service import (
+        from app.shared.services.currency_exchange_service import (
             CurrencyExchangeService,
         )
 
@@ -228,7 +226,7 @@ class TestCurrencyExchangeService:
 
     def test_get_rate_inverse_pair(self):
         """Test getting rate for an inverse pair."""
-        from app.application.services.currency_exchange_service import (
+        from app.shared.services.currency_exchange_service import (
             CurrencyExchangeService,
         )
 
@@ -245,7 +243,7 @@ class TestCurrencyExchangeService:
 
     def test_get_rate_same_currency(self):
         """Test getting rate for same currency returns 1.0."""
-        from app.application.services.currency_exchange_service import (
+        from app.shared.services.currency_exchange_service import (
             CurrencyExchangeService,
         )
 
@@ -258,7 +256,7 @@ class TestCurrencyExchangeService:
 
     def test_get_available_currencies(self):
         """Test getting list of available currencies."""
-        from app.application.services.currency_exchange_service import (
+        from app.shared.services.currency_exchange_service import (
             CurrencyExchangeService,
         )
 
@@ -278,7 +276,7 @@ class TestExchangeDataClasses:
 
     def test_exchange_rate_dataclass(self):
         """Test ExchangeRate dataclass."""
-        from app.application.services.currency_exchange_service import ExchangeRate
+        from app.shared.services.currency_exchange_service import ExchangeRate
 
         rate = ExchangeRate(
             from_currency="EUR",
@@ -297,7 +295,7 @@ class TestExchangeDataClasses:
 
     def test_conversion_step_dataclass(self):
         """Test ConversionStep dataclass."""
-        from app.application.services.currency_exchange_service import ConversionStep
+        from app.shared.services.currency_exchange_service import ConversionStep
 
         step = ConversionStep(
             from_currency="EUR",
@@ -320,7 +318,7 @@ class TestValidateExchangeRequest:
 
     def test_returns_false_for_same_currency(self):
         """Test that same currency returns False."""
-        from app.application.services.currency_exchange_service import (
+        from app.shared.services.currency_exchange_service import (
             CurrencyExchangeService,
         )
 
@@ -333,7 +331,7 @@ class TestValidateExchangeRequest:
 
     def test_returns_false_for_negative_amount(self):
         """Test that negative amount returns False."""
-        from app.application.services.currency_exchange_service import (
+        from app.shared.services.currency_exchange_service import (
             CurrencyExchangeService,
         )
 
@@ -346,7 +344,7 @@ class TestValidateExchangeRequest:
 
     def test_returns_false_for_zero_amount(self):
         """Test that zero amount returns False."""
-        from app.application.services.currency_exchange_service import (
+        from app.shared.services.currency_exchange_service import (
             CurrencyExchangeService,
         )
 
@@ -359,7 +357,7 @@ class TestValidateExchangeRequest:
 
     def test_returns_false_when_disconnected(self):
         """Test that returns False when client is disconnected and can't reconnect."""
-        from app.application.services.currency_exchange_service import (
+        from app.shared.services.currency_exchange_service import (
             CurrencyExchangeService,
         )
 
@@ -375,7 +373,7 @@ class TestValidateExchangeRequest:
 
     def test_returns_true_for_valid_request(self):
         """Test that valid request returns True."""
-        from app.application.services.currency_exchange_service import (
+        from app.shared.services.currency_exchange_service import (
             CurrencyExchangeService,
         )
 
@@ -394,7 +392,7 @@ class TestEnsureBalance:
 
     def test_returns_true_when_balance_sufficient(self):
         """Test returns True when target balance already met."""
-        from app.application.services.currency_exchange_service import (
+        from app.shared.services.currency_exchange_service import (
             CurrencyExchangeService,
         )
 
@@ -425,7 +423,7 @@ class TestEnsureBalance:
 
     def test_returns_false_when_insufficient_source(self):
         """Test returns False when source currency balance insufficient."""
-        from app.application.services.currency_exchange_service import (
+        from app.shared.services.currency_exchange_service import (
             CurrencyExchangeService,
         )
 
@@ -463,7 +461,7 @@ class TestDirectPairs:
 
     def test_eur_usd_pair(self):
         """Test EUR/USD pair configuration."""
-        from app.application.services.currency_exchange_service import (
+        from app.shared.services.currency_exchange_service import (
             CurrencyExchangeService,
         )
 
@@ -476,7 +474,7 @@ class TestDirectPairs:
 
     def test_eur_gbp_pair(self):
         """Test EUR/GBP pair configuration."""
-        from app.application.services.currency_exchange_service import (
+        from app.shared.services.currency_exchange_service import (
             CurrencyExchangeService,
         )
 
@@ -485,7 +483,7 @@ class TestDirectPairs:
 
     def test_hkd_pairs(self):
         """Test HKD pair configurations."""
-        from app.application.services.currency_exchange_service import (
+        from app.shared.services.currency_exchange_service import (
             CurrencyExchangeService,
         )
 

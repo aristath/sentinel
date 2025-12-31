@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.domain.scoring.groups.short_term import (
+from app.modules.scoring.domain.groups.short_term import (
     calculate_recent_momentum,
     calculate_short_term_score,
 )
