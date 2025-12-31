@@ -102,10 +102,10 @@ app/
 │   ├── planning/        # Holistic planner and recommendations
 │   ├── portfolio/       # Positions, snapshots, history
 │   ├── rebalancing/     # Rebalancing logic and services
-│   ├── scoring/         # Stock and portfolio scoring
+│   ├── scoring/         # Security and portfolio scoring
 │   ├── system/          # Health checks, sync cycle, system stats
 │   ├── trading/         # Trade execution, safety, frequency
-│   └── universe/        # Stock management, discovery, external APIs
+│   └── universe/        # Security management, discovery, external APIs
 │
 ├── core/                # Shared infrastructure
 │   ├── cache/           # SimpleCache
@@ -345,8 +345,8 @@ Many settings are stored in the database and can be configured via the Settings 
 
 ### Charts
 
-- `GET /api/charts/sparklines` - Stock price sparklines
-- `GET /api/charts/stocks/{isin}` - Historical price chart data (ISIN required, e.g., US0378331005)
+- `GET /api/charts/sparklines` - Security price sparklines
+- `GET /api/charts/securities/{isin}` - Historical price chart data (ISIN required, e.g., US0378331005)
 
 ### Optimizer
 

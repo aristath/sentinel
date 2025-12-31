@@ -99,7 +99,7 @@ document.addEventListener('alpine:init', () => {
     editingIndustry: false,
     industryTargets: {},
 
-    // Add Stock Form
+    // Add Security Form
     newSecurity: { identifier: '' },
     addingSecurity: false,
 
@@ -652,7 +652,7 @@ document.addEventListener('alpine:init', () => {
       this.loading.industrySave = false;
     },
 
-    // Stock Management
+    // Security Management
     resetNewSecurity() {
       this.newSecurity = { identifier: '' };
     },
@@ -668,7 +668,7 @@ document.addEventListener('alpine:init', () => {
           identifier: this.newSecurity.identifier.trim().toUpperCase()
         };
         await API.addSecurityByIdentifier(payload);
-        this.showMessage('Stock added successfully', 'success');
+        this.showMessage('Security added successfully', 'success');
         this.showAddSecurityModal = false;
         this.resetNewSecurity();
         await this.fetchSecurities();
@@ -712,7 +712,7 @@ document.addEventListener('alpine:init', () => {
       this.showEditSecurityModal = true;
     },
 
-    closeEditStock() {
+    closeEditSecurity() {
       this.showEditSecurityModal = false;
       this.editingSecurity = null;
     },
@@ -738,8 +738,8 @@ document.addEventListener('alpine:init', () => {
         }
 
         await API.updateSecurity(this.editingSecurity.originalIsin, payload);
-        this.showMessage('Stock updated successfully', 'success');
-        this.closeEditStock();
+        this.showMessage('Security updated successfully', 'success');
+        this.closeEditSecurity();
         await this.fetchSecurities();
         await this.fetchAllocation();
       } catch (e) {

@@ -1,5 +1,5 @@
 /**
- * Stock Sparkline Component
+ * Security Sparkline Component
  * Custom SVG-based sparkline chart for security table
  */
 class SecuritySparkline extends HTMLElement {

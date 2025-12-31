@@ -1,5 +1,5 @@
 /**
- * Stock Chart Modal Component
+ * Security Chart Modal Component
  * Displays security price history in a modal using Lightweight Charts
  */
 
@@ -167,7 +167,7 @@ class SecurityChartModal extends HTMLElement {
         <div class="bg-gray-800 border border-gray-700 rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col" @click.stop>
           <div class="flex items-center justify-between p-4 border-b border-gray-700">
             <div>
-              <h2 class="text-lg font-semibold text-gray-100" x-text="symbol || 'Stock Chart'"></h2>
+              <h2 class="text-lg font-semibold text-gray-100" x-text="symbol || 'Security Chart'"></h2>
               <p class="text-xs text-gray-300" x-show="securityName" x-text="securityName"></p>
             </div>
             <button @click="$store.app.showSecurityChart = false; closeChart()"

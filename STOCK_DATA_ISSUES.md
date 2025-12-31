@@ -1,15 +1,15 @@
-# Stock Data Issues - Investigation Report
+# Security Data Issues - Investigation Report
 
 ## Summary
 
-Three stocks in the universe have incomplete data (missing country and industry fields):
+Three securities in the universe have incomplete data (missing country and industry fields):
 1. **AETF.GR** - ALPHA ETF FTSE Athex Large Cap Equity UCITS
 2. **IPX.EU** - Impax Asset Management Group PL
 3. **UKW.EU** - Greencoat UK Wind
 
 ## Root Cause
 
-The stocks have **ISINs stored as `yahoo_symbol`** instead of proper Yahoo Finance ticker symbols:
+The securities have **ISINs stored as `yahoo_symbol`** instead of proper Yahoo Finance ticker symbols:
 - AETF.GR: `yahoo_symbol = "GRF000153004"` (should be `NULL` to use `AETF.AT` via converter)
 - IPX.EU: `yahoo_symbol = "GB0004905260.SG"` (invalid Yahoo symbol)
 - UKW.EU: `yahoo_symbol = "GB00B8SC6K54"` (invalid Yahoo symbol)
@@ -20,11 +20,11 @@ Yahoo Finance does not recognize ISINs as valid ticker symbols, so API calls to 
 
 ### How `yahoo_symbol` Gets Set
 
-When stocks are added via `StockSetupService.add_stock_by_identifier()`:
+When securities are added via `SecuritySetupService.add_security_by_identifier()`:
 - `SymbolResolver.resolve()` returns `SymbolInfo` with `yahoo_symbol = isin` (line 174 in `symbol_resolver.py`)
 - This ISIN is then stored directly in the database
 
-This works for some stocks but fails when Yahoo Finance doesn't recognize the ISIN format.
+This works for some securities but fails when Yahoo Finance doesn't recognize the ISIN format.
 
 ### Symbol Converter Behavior
 
@@ -37,7 +37,7 @@ The `get_yahoo_symbol()` function in `symbol_converter.py`:
 
 ### Current State After Fix
 
-We cleared the `yahoo_symbol` field (set to `NULL`) for all three stocks using the API:
+We cleared the `yahoo_symbol` field (set to `NULL`) for all three securities using the API:
 ```bash
 curl -X PUT http://localhost:8000/api/securities/{ISIN} -H 'Content-Type: application/json' -d '{"yahoo_symbol": ""}'
 ```
@@ -88,11 +88,11 @@ To find the correct Yahoo Finance symbols:
    curl -X POST http://localhost:8000/api/securities/{ISIN}/refresh-data
    ```
 
-## Database Query to Check Incomplete Stocks
+## Database Query to Check Incomplete Securities
 
 ```sql
 SELECT symbol, name, country, industry, fullExchangeName, yahoo_symbol, isin
-FROM stocks
+FROM securities
 WHERE country IS NULL OR industry IS NULL OR fullExchangeName IS NULL
    OR yahoo_symbol IS NULL OR isin IS NULL OR currency IS NULL
 ORDER BY symbol;
@@ -102,5 +102,5 @@ ORDER BY symbol;
 
 - `app/infrastructure/external/yahoo/symbol_converter.py` - Symbol conversion logic
 - `app/domain/services/symbol_resolver.py` - Sets `yahoo_symbol = isin` (line 174)
-- `app/jobs/stocks_data_sync.py` - `_detect_and_update_country_and_exchange()` function
+- `app/jobs/securities_data_sync.py` - `_detect_and_update_country_and_exchange()` function
 - `app/api/securities.py` - Update endpoint (`PUT /api/securities/{isin}`)
