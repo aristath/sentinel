@@ -566,6 +566,7 @@ class TestStockChart:
     @pytest.mark.asyncio
     async def test_returns_empty_when_no_data(self):
         """Test that empty list is returned when no data available."""
+        # Import here to avoid module-level caching issues
         from app.api.charts import get_security_chart
 
         mock_db_manager = MagicMock()
@@ -580,20 +581,11 @@ class TestStockChart:
         mock_stock_repo.get_by_isin.return_value = mock_stock
 
         # No cached data
-        mock_history_db.fetchall.return_value = []
+        mock_history_db.fetchall = AsyncMock(return_value=[])
 
-        # Mock tradernet to return None (not connected)
-        with patch(
-            "app.infrastructure.external.tradernet_connection."
-            "ensure_tradernet_connected",
-            new_callable=AsyncMock,
-            return_value=None,
-        ):
-            # Mock yahoo to return empty
-            with patch(
-                "app.api.charts.yahoo.get_historical_prices",
-                return_value=[],
-            ):
+        # Mock the helper functions that fetch data
+        with patch("app.api.charts._fetch_from_tradernet", return_value=[]):
+            with patch("app.api.charts._fetch_from_yahoo", return_value=[]):
                 with patch("app.api.charts.is_isin", return_value=True):
                     result = await get_security_chart(
                         "US0378331005",
