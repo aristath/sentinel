@@ -338,10 +338,10 @@ class TestBuildPortfolioContext:
                 mock_db_manager,
             )
 
-            assert context.stock_countries is not None
-            assert context.stock_countries["AAPL"] == "United States"
-            assert context.stock_industries is not None
-            assert context.stock_industries["AAPL"] == "Technology"
+            assert context.security_countries is not None
+            assert context.security_countries["AAPL"] == "United States"
+            assert context.security_industries is not None
+            assert context.security_industries["AAPL"] == "Technology"
 
     @pytest.mark.asyncio
     async def test_handles_stocks_without_country_or_industry(
@@ -380,8 +380,8 @@ class TestBuildPortfolioContext:
             )
 
             # Stock without country/industry should not be in the maps
-            assert "UNKNOWN" not in context.stock_countries
-            assert "UNKNOWN" not in context.stock_industries
+            assert "UNKNOWN" not in context.security_countries
+            assert "UNKNOWN" not in context.security_industries
 
     @pytest.mark.asyncio
     async def test_handles_empty_allocation_targets(

@@ -66,11 +66,11 @@ class ScoringService:
 
     def __init__(
         self,
-        stock_repo: ISecurityRepository,
+        security_repo: ISecurityRepository,
         score_repo: ScoreRepository,
         db_manager: DatabaseManager,
     ):
-        self.stock_repo = stock_repo
+        self.security_repo = security_repo
         self.score_repo = score_repo
         self._db_manager = db_manager
 
@@ -162,7 +162,7 @@ class ScoringService:
         Returns:
             List of calculated scores
         """
-        securities = await self.stock_repo.get_all_active()
+        securities = await self.security_repo.get_all_active()
         scores = []
 
         for security in securities:

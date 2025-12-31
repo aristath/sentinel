@@ -47,8 +47,8 @@ async def identify_rebalance_buy_opportunities(
 
         # Get quality score
         quality_score = (
-            portfolio_context.stock_scores.get(stock.symbol, 0.5)
-            if portfolio_context.stock_scores
+            portfolio_context.security_scores.get(stock.symbol, 0.5)
+            if portfolio_context.security_scores
             else 0.5
         )
 

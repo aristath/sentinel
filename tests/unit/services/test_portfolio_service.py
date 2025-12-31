@@ -29,14 +29,14 @@ class TestPortfolioServiceCalculations:
         portfolio_repo = AsyncMock()
         position_repo = AsyncMock()
         allocation_repo = AsyncMock()
-        stock_repo = AsyncMock()
+        security_repo = AsyncMock()
 
         # Default: empty portfolio
         portfolio_repo.get_latest_cash_balance.return_value = 0.0
         position_repo.get_with_stock_info.return_value = []
         allocation_repo.get_all.return_value = {}
 
-        return portfolio_repo, position_repo, allocation_repo, stock_repo
+        return portfolio_repo, position_repo, allocation_repo, security_repo
 
     @pytest.mark.asyncio
     async def test_single_country_100_percent(self, mock_repos):
@@ -44,7 +44,7 @@ class TestPortfolioServiceCalculations:
 
         Bug caught: Division errors or wrong percentage calculation.
         """
-        portfolio_repo, position_repo, allocation_repo, stock_repo = mock_repos
+        portfolio_repo, position_repo, allocation_repo, security_repo = mock_repos
 
         position_repo.get_with_stock_info.return_value = [
             {
@@ -56,7 +56,7 @@ class TestPortfolioServiceCalculations:
         ]
 
         service = PortfolioService(
-            portfolio_repo, position_repo, allocation_repo, stock_repo
+            portfolio_repo, position_repo, allocation_repo, security_repo
         )
         summary = await service.get_portfolio_summary()
 
@@ -71,7 +71,7 @@ class TestPortfolioServiceCalculations:
 
         Bug caught: Aggregation errors across positions.
         """
-        portfolio_repo, position_repo, allocation_repo, stock_repo = mock_repos
+        portfolio_repo, position_repo, allocation_repo, security_repo = mock_repos
 
         position_repo.get_with_stock_info.return_value = [
             {
@@ -89,7 +89,7 @@ class TestPortfolioServiceCalculations:
         ]
 
         service = PortfolioService(
-            portfolio_repo, position_repo, allocation_repo, stock_repo
+            portfolio_repo, position_repo, allocation_repo, security_repo
         )
         summary = await service.get_portfolio_summary()
 
@@ -111,7 +111,7 @@ class TestPortfolioServiceCalculations:
 
         Bug caught: Multi-industry stocks being double-counted or ignored.
         """
-        portfolio_repo, position_repo, allocation_repo, stock_repo = mock_repos
+        portfolio_repo, position_repo, allocation_repo, security_repo = mock_repos
 
         position_repo.get_with_stock_info.return_value = [
             {
@@ -123,7 +123,7 @@ class TestPortfolioServiceCalculations:
         ]
 
         service = PortfolioService(
-            portfolio_repo, position_repo, allocation_repo, stock_repo
+            portfolio_repo, position_repo, allocation_repo, security_repo
         )
         summary = await service.get_portfolio_summary()
 
@@ -141,12 +141,12 @@ class TestPortfolioServiceCalculations:
 
         Bug caught: Division by zero when portfolio is empty.
         """
-        portfolio_repo, position_repo, allocation_repo, stock_repo = mock_repos
+        portfolio_repo, position_repo, allocation_repo, security_repo = mock_repos
 
         position_repo.get_with_stock_info.return_value = []
 
         service = PortfolioService(
-            portfolio_repo, position_repo, allocation_repo, stock_repo
+            portfolio_repo, position_repo, allocation_repo, security_repo
         )
         summary = await service.get_portfolio_summary()
 
@@ -159,7 +159,7 @@ class TestPortfolioServiceCalculations:
 
         Bug caught: NoneType errors when data is incomplete.
         """
-        portfolio_repo, position_repo, allocation_repo, stock_repo = mock_repos
+        portfolio_repo, position_repo, allocation_repo, security_repo = mock_repos
 
         position_repo.get_with_stock_info.return_value = [
             {
@@ -171,7 +171,7 @@ class TestPortfolioServiceCalculations:
         ]
 
         service = PortfolioService(
-            portfolio_repo, position_repo, allocation_repo, stock_repo
+            portfolio_repo, position_repo, allocation_repo, security_repo
         )
         summary = await service.get_portfolio_summary()
 
@@ -185,7 +185,7 @@ class TestPortfolioServiceCalculations:
 
         Bug caught: parse_industries(None) or empty string handling.
         """
-        portfolio_repo, position_repo, allocation_repo, stock_repo = mock_repos
+        portfolio_repo, position_repo, allocation_repo, security_repo = mock_repos
 
         position_repo.get_with_stock_info.return_value = [
             {
@@ -197,7 +197,7 @@ class TestPortfolioServiceCalculations:
         ]
 
         service = PortfolioService(
-            portfolio_repo, position_repo, allocation_repo, stock_repo
+            portfolio_repo, position_repo, allocation_repo, security_repo
         )
         summary = await service.get_portfolio_summary()
 
@@ -211,7 +211,7 @@ class TestPortfolioServiceCalculations:
 
         Bug caught: Missing EUR value causing zero allocation.
         """
-        portfolio_repo, position_repo, allocation_repo, stock_repo = mock_repos
+        portfolio_repo, position_repo, allocation_repo, security_repo = mock_repos
 
         position_repo.get_with_stock_info.return_value = [
             {
@@ -225,7 +225,7 @@ class TestPortfolioServiceCalculations:
         ]
 
         service = PortfolioService(
-            portfolio_repo, position_repo, allocation_repo, stock_repo
+            portfolio_repo, position_repo, allocation_repo, security_repo
         )
         summary = await service.get_portfolio_summary()
 
@@ -238,7 +238,7 @@ class TestPortfolioServiceCalculations:
 
         Bug caught: Cash balance not being retrieved.
         """
-        portfolio_repo, position_repo, allocation_repo, stock_repo = mock_repos
+        portfolio_repo, position_repo, allocation_repo, security_repo = mock_repos
 
         portfolio_repo.get_latest_cash_balance.return_value = 5000.50
         position_repo.get_with_stock_info.return_value = [
@@ -251,7 +251,7 @@ class TestPortfolioServiceCalculations:
         ]
 
         service = PortfolioService(
-            portfolio_repo, position_repo, allocation_repo, stock_repo
+            portfolio_repo, position_repo, allocation_repo, security_repo
         )
         summary = await service.get_portfolio_summary()
 
@@ -264,7 +264,7 @@ class TestPortfolioServiceCalculations:
 
         Bug caught: Wrong deviation calculation affecting rebalancing.
         """
-        portfolio_repo, position_repo, allocation_repo, stock_repo = mock_repos
+        portfolio_repo, position_repo, allocation_repo, security_repo = mock_repos
 
         # Target weight 0.5 for Germany
         allocation_repo.get_all.return_value = {"country:Germany": 0.5}
@@ -285,7 +285,7 @@ class TestPortfolioServiceCalculations:
         ]
 
         service = PortfolioService(
-            portfolio_repo, position_repo, allocation_repo, stock_repo
+            portfolio_repo, position_repo, allocation_repo, security_repo
         )
         summary = await service.get_portfolio_summary()
 
@@ -302,7 +302,7 @@ class TestPortfolioServiceCalculations:
 
         Bug caught: Floating point precision issues in display.
         """
-        portfolio_repo, position_repo, allocation_repo, stock_repo = mock_repos
+        portfolio_repo, position_repo, allocation_repo, security_repo = mock_repos
 
         # Values that could cause floating point issues
         position_repo.get_with_stock_info.return_value = [
@@ -321,7 +321,7 @@ class TestPortfolioServiceCalculations:
         ]
 
         service = PortfolioService(
-            portfolio_repo, position_repo, allocation_repo, stock_repo
+            portfolio_repo, position_repo, allocation_repo, security_repo
         )
         summary = await service.get_portfolio_summary()
 

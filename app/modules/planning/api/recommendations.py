@@ -102,7 +102,7 @@ async def get_recommendations(
     position_repo: PositionRepositoryDep,
     settings_service: SettingsServiceDep,
     rebalancing_service: RebalancingServiceDep,
-    stock_repo: SecurityRepositoryDep,
+    security_repo: SecurityRepositoryDep,
     allocation_repo: AllocationRepositoryDep,
     tradernet_client: TradernetClientDep,
 ):
@@ -121,7 +121,7 @@ async def get_recommendations(
     # Generate portfolio-aware cache key
     positions = await position_repo.get_all()
     settings = await settings_service.get_settings()
-    stocks = await stock_repo.get_all_active()
+    stocks = await security_repo.get_all_active()
     allocations = await allocation_repo.get_all()
     position_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
     cash_balances = (
@@ -376,7 +376,7 @@ async def _regenerate_recommendations_cache(
     position_repo: PositionRepositoryDep,
     settings_service: SettingsServiceDep,
     rebalancing_service: RebalancingServiceDep,
-    stock_repo: SecurityRepositoryDep,
+    security_repo: SecurityRepositoryDep,
     allocation_repo: AllocationRepositoryDep,
     tradernet_client: TradernetClientDep,
 ) -> tuple:
@@ -393,7 +393,7 @@ async def _regenerate_recommendations_cache(
 
     positions = await position_repo.get_all()
     settings = await settings_service.get_settings()
-    stocks = await stock_repo.get_all_active()
+    stocks = await security_repo.get_all_active()
     allocations = await allocation_repo.get_all()
     position_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
     cash_balances = (
@@ -476,7 +476,7 @@ async def execute_recommendation(
     safety_service: TradeSafetyServiceDep,
     trade_execution_service: TradeExecutionServiceDep,
     rebalancing_service: RebalancingServiceDep,
-    stock_repo: SecurityRepositoryDep,
+    security_repo: SecurityRepositoryDep,
     allocation_repo: AllocationRepositoryDep,
     tradernet_client: TradernetClientDep,
 ):
@@ -499,7 +499,7 @@ async def execute_recommendation(
         # Generate portfolio-aware cache key
         positions = await position_repo.get_all()
         settings = await settings_service.get_settings()
-        stocks = await stock_repo.get_all_active()
+        stocks = await security_repo.get_all_active()
         allocations = await allocation_repo.get_all()
         position_dicts = [
             {"symbol": p.symbol, "quantity": p.quantity} for p in positions
@@ -536,7 +536,7 @@ async def execute_recommendation(
                 position_repo,
                 settings_service,
                 rebalancing_service,
-                stock_repo,
+                security_repo,
                 allocation_repo,
                 tradernet_client,
             )

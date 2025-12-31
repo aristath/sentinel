@@ -87,7 +87,7 @@ async def test_rebalancing_service_handles_price_fetch_failure(db):
     from app.modules.rebalancing.services.rebalancing_service import RebalancingService
 
     # Setup test data
-    stock_repo = SecurityRepository(db=db)
+    security_repo = SecurityRepository(db=db)
     position_repo = PositionRepository(db=db)
     allocation_repo = AllocationRepository(db=db)
     portfolio_repo = PortfolioRepository(db=db)
@@ -102,7 +102,7 @@ async def test_rebalancing_service_handles_price_fetch_failure(db):
         min_lot=1,
         active=True,
     )
-    await stock_repo.create(stock)
+    await security_repo.create(stock)
 
     position = Position(
         symbol="AAPL",
@@ -149,7 +149,7 @@ async def test_rebalancing_service_handles_price_fetch_failure(db):
         mock_exchange_rate_service.get_rate = AsyncMock(return_value=1.0)
 
         service = RebalancingService(
-            stock_repo=stock_repo,
+            security_repo=security_repo,
             position_repo=position_repo,
             allocation_repo=allocation_repo,
             portfolio_repo=portfolio_repo,

@@ -56,7 +56,7 @@ async def db():
 
 
 @pytest.fixture
-async def stock_repo(db):
+async def security_repo(db):
     """Create a stock repository instance."""
     return SecurityRepository(db=db)
 

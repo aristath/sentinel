@@ -265,16 +265,16 @@ async def _get_active_stocks() -> list:
     """Get all active stocks from the database."""
     from app.repositories import SecurityRepository
 
-    stock_repo = SecurityRepository()
-    return await stock_repo.get_all_active()
+    security_repo = SecurityRepository()
+    return await security_repo.get_all_active()
 
 
 async def _get_stock_by_symbol(symbol: str):
     """Get a stock by symbol."""
     from app.repositories import SecurityRepository
 
-    stock_repo = SecurityRepository()
-    return await stock_repo.get_by_symbol(symbol)
+    security_repo = SecurityRepository()
+    return await security_repo.get_by_symbol(symbol)
 
 
 async def _update_position_prices(quotes: dict[str, float]):
@@ -325,14 +325,14 @@ async def _get_holistic_recommendation():
 
     position_repo = PositionRepository()
     settings_repo = SettingsRepository()
-    stock_repo = SecurityRepository()
+    security_repo = SecurityRepository()
     allocation_repo = AllocationRepository()
     settings_service = SettingsService(settings_repo)
     tradernet_client = TradernetClient.shared()
 
     # Check cache first
     positions = await position_repo.get_all()
-    stocks = await stock_repo.get_all_active()
+    stocks = await security_repo.get_all_active()
     settings = await settings_service.get_settings()
     allocations = await allocation_repo.get_all()
     position_dicts = [{"symbol": p.symbol, "quantity": p.quantity} for p in positions]
@@ -525,7 +525,7 @@ async def _get_holistic_recommendation():
     # No result in database yet - call planner (fallback to full mode)
     logger.info("No result in database, calling holistic planner (full mode)...")
 
-    # Instantiate remaining required dependencies (stock_repo and tradernet_client already created)
+    # Instantiate remaining required dependencies (security_repo and tradernet_client already created)
     allocation_repo = AllocationRepository()
     portfolio_repo = PortfolioRepository()
     trade_repo = TradeRepository()
@@ -534,7 +534,7 @@ async def _get_holistic_recommendation():
     exchange_rate_service = CurrencyExchangeService(tradernet_client)
 
     rebalancing_service = RebalancingService(
-        stock_repo=stock_repo,
+        security_repo=security_repo,
         position_repo=position_repo,
         allocation_repo=allocation_repo,
         portfolio_repo=portfolio_repo,
@@ -622,12 +622,12 @@ async def _execute_trade_order(recommendation) -> dict[str, Any]:
 
     from app.repositories import SecurityRepository, SettingsRepository
 
-    stock_repo = SecurityRepository()
+    security_repo = SecurityRepository()
     settings_repo = SettingsRepository()
     trade_execution = TradeExecutionService(
         trade_repo,
         position_repo,
-        stock_repo,
+        security_repo,
         tradernet_client,
         currency_exchange_service,
         exchange_rate_service,
@@ -694,11 +694,11 @@ async def _frequent_portfolio_update():
         from app.repositories import PositionRepository, SecurityRepository
 
         position_repo = PositionRepository()
-        stock_repo = SecurityRepository()
+        security_repo = SecurityRepository()
         client = get_tradernet_client()
 
         positions_before = await position_repo.get_all()
-        stocks = await stock_repo.get_all_active()
+        stocks = await security_repo.get_all_active()
         cash_balances_before = (
             {b.currency: b.amount for b in client.get_cash_balances()}
             if client.is_connected

@@ -15,7 +15,7 @@ document.addEventListener('alpine:init', () => {
     },
     alerts: [],  // Concentration limit alerts
     cashBreakdown: [],  // [{currency: 'EUR', amount: 1000}, ...]
-    stocks: [],
+    securitys: [],
     trades: [],
     tradernet: { connected: false },
     markets: {},  // {EU: {open: bool, ...}, US: {...}, ASIA: {...}}
@@ -52,10 +52,10 @@ document.addEventListener('alpine:init', () => {
     },
 
     // UI State - Tabs
-    activeTab: 'next-actions',  // 'next-actions', 'diversification', 'stock-universe', 'recent-trades', or 'logs'
+    activeTab: 'next-actions',  // 'next-actions', 'diversification', 'security-universe', 'recent-trades', or 'logs'
 
     // UI State - Filters
-    stockFilter: 'all',
+    securityFilter: 'all',
     industryFilter: 'all',
     searchQuery: '',
     minScore: 0,
@@ -84,7 +84,7 @@ document.addEventListener('alpine:init', () => {
       execute: false,
       countrySave: false,
       industrySave: false,
-      stockSave: false,
+      securitySave: false,
       refreshData: false,
       logs: false,
       universeSuggestions: false
@@ -108,7 +108,7 @@ document.addEventListener('alpine:init', () => {
     // Universe Management
     universeSuggestions: {
       candidatesToAdd: [],
-      stocksToPrune: []
+      securitysToPrune: []
     },
     addingFromSuggestion: {},  // Track per-symbol: { 'AAPL.US': true }
     pruningFromSuggestion: {},  // Track per-symbol: { 'XYZ.US': true }
@@ -166,19 +166,19 @@ document.addEventListener('alpine:init', () => {
 
     async fetchStocks() {
       try {
-        const stocks = await API.fetchStocks();
+        const securitys = await API.fetchStocks();
 
-        // Frontend validation: check if allocation shows value but stocks don't have positions
+        // Frontend validation: check if allocation shows value but securitys don't have positions
         // This catches edge cases where API validation might have missed something
         // Only check if allocation has already been loaded (avoid race conditions with parallel fetchAll)
         const allocationLoaded = this.allocation &&
                                  this.allocation.total_value !== undefined;
         const hasAllocationValue = allocationLoaded && this.allocation.total_value > 0;
-        const hasStockPositions = stocks.some(s => s.position_value > 0);
+        const hasStockPositions = securitys.some(s => s.position_value > 0);
 
-        // If allocation shows value but stocks don't, cache might be stale
+        // If allocation shows value but securitys don't, cache might be stale
         // Only retry once to avoid infinite loops (use a flag to prevent retry loops)
-        if (hasAllocationValue && !hasStockPositions && stocks.length > 0 && !this._stocksRetryFlag) {
+        if (hasAllocationValue && !hasStockPositions && securitys.length > 0 && !this._stocksRetryFlag) {
           this._stocksRetryFlag = true; // Prevent infinite retries
           console.warn('Position data mismatch detected in frontend, retrying fetch');
           // Wait a brief moment for any async cache invalidation to complete
@@ -186,7 +186,7 @@ document.addEventListener('alpine:init', () => {
           const freshStocks = await API.fetchStocks();
           // Only use fresh data if it actually has positions
           if (freshStocks.some(s => s.position_value > 0)) {
-            this.stocks = freshStocks;
+            this.securitys = freshStocks;
             this._stocksRetryFlag = false; // Reset flag on success
             return;
           }
@@ -195,10 +195,10 @@ document.addEventListener('alpine:init', () => {
           this._stocksRetryFlag = false; // Reset flag
         }
 
-        this.stocks = stocks;
+        this.securitys = securitys;
         this._stocksRetryFlag = false; // Reset flag on normal path
       } catch (e) {
-        console.error('Failed to fetch stocks:', e);
+        console.error('Failed to fetch securitys:', e);
         this._stocksRetryFlag = false; // Reset flag on error
       }
     },
@@ -429,7 +429,7 @@ document.addEventListener('alpine:init', () => {
     // Computed Properties
     get industries() {
       const set = new Set();
-      this.stocks.forEach(s => {
+      this.securitys.forEach(s => {
         if (s.industry) {
           s.industry.split(',').forEach(ind => {
             const trimmed = ind.trim();
@@ -446,7 +446,7 @@ document.addEventListener('alpine:init', () => {
         return this.allocation.country.map(c => c.name).sort();
       }
       // Fallback: return individual countries if no group data
-      const countries = new Set(this.stocks.map(s => s.country).filter(Boolean));
+      const countries = new Set(this.securitys.map(s => s.country).filter(Boolean));
       return Array.from(countries).sort();
     },
 
@@ -457,7 +457,7 @@ document.addEventListener('alpine:init', () => {
       }
       // Fallback: return individual industries if no group data
       const inds = new Set();
-      this.stocks.forEach(s => {
+      this.securitys.forEach(s => {
         if (s.industry) {
           s.industry.split(',').forEach(i => inds.add(i.trim()));
         }
@@ -466,10 +466,10 @@ document.addEventListener('alpine:init', () => {
     },
 
     get filteredStocks() {
-      let filtered = this.stocks;
+      let filtered = this.securitys;
 
-      if (this.stockFilter !== 'all') {
-        filtered = filtered.filter(s => s.country === this.stockFilter);
+      if (this.securityFilter !== 'all') {
+        filtered = filtered.filter(s => s.country === this.securityFilter);
       }
 
       if (this.industryFilter !== 'all') {
@@ -683,22 +683,22 @@ document.addEventListener('alpine:init', () => {
         this.resetNewStock();
         await this.fetchStocks();
       } catch (e) {
-        const errorMessage = e.message || 'Failed to add stock';
+        const errorMessage = e.message || 'Failed to add security';
         this.showMessage(errorMessage, 'error');
       }
       this.addingStock = false;
     },
 
     async removeStock(isin) {
-      const stock = this.stocks.find(s => s.isin === isin);
-      const displaySymbol = stock ? stock.symbol : isin;
+      const security = this.securitys.find(s => s.isin === isin);
+      const displaySymbol = security ? security.symbol : isin;
       if (!confirm(`Remove ${displaySymbol} from the universe?`)) return;
       try {
         await API.deleteStock(isin);
         this.showMessage(`${displaySymbol} removed`, 'success');
         await this.fetchStocks();
       } catch (e) {
-        this.showMessage('Failed to remove stock', 'error');
+        this.showMessage('Failed to remove security', 'error');
       }
     },
 
@@ -714,7 +714,7 @@ document.addEventListener('alpine:init', () => {
         const data = await API.fetchUniverseSuggestions();
         this.universeSuggestions = {
           candidatesToAdd: data.candidates_to_add || [],
-          stocksToPrune: data.stocks_to_prune || []
+          securitysToPrune: data.securitys_to_prune || []
         };
       } catch (e) {
         this.showMessage('Failed to fetch universe suggestions', 'error');
@@ -734,10 +734,10 @@ document.addEventListener('alpine:init', () => {
         this.universeSuggestions.candidatesToAdd = this.universeSuggestions.candidatesToAdd.filter(
           c => c.isin !== isin
         );
-        // Refresh stocks list
+        // Refresh securitys list
         await this.fetchStocks();
       } catch (e) {
-        const errorMessage = e.message || 'Failed to add stock';
+        const errorMessage = e.message || 'Failed to add security';
         this.showMessage(errorMessage, 'error');
       }
       this.addingFromSuggestion[isin] = false;
@@ -747,38 +747,38 @@ document.addEventListener('alpine:init', () => {
       this.pruningFromSuggestion[isin] = true;
       try {
         await API.pruneStockFromSuggestion(isin);
-        const stock = this.universeSuggestions.stocksToPrune.find(s => s.isin === isin);
-        const displaySymbol = stock ? stock.symbol : isin;
+        const security = this.universeSuggestions.securitysToPrune.find(s => s.isin === isin);
+        const displaySymbol = security ? security.symbol : isin;
         this.showMessage(`${displaySymbol} pruned from universe`, 'success');
         // Remove from prune list
-        this.universeSuggestions.stocksToPrune = this.universeSuggestions.stocksToPrune.filter(
+        this.universeSuggestions.securitysToPrune = this.universeSuggestions.securitysToPrune.filter(
           s => s.isin !== isin
         );
-        // Refresh stocks list
+        // Refresh securitys list
         await this.fetchStocks();
       } catch (e) {
-        const errorMessage = e.message || 'Failed to prune stock';
+        const errorMessage = e.message || 'Failed to prune security';
         this.showMessage(errorMessage, 'error');
       }
       this.pruningFromSuggestion[isin] = false;
     },
 
-    openEditStock(stock) {
+    openEditStock(security) {
       this.editingStock = {
-        originalIsin: stock.isin,  // Track original ISIN for API calls
-        originalSymbol: stock.symbol,  // Track original symbol for rename detection
-        symbol: stock.symbol,
-        isin: stock.isin,
-        yahoo_symbol: stock.yahoo_symbol || '',
-        name: stock.name,
-        country: stock.country || '',
-        fullExchangeName: stock.fullExchangeName || '',
-        industry: stock.industry || '',
-        min_lot: stock.min_lot || 1,
-        allow_buy: stock.allow_buy !== false,  // Default true
-        allow_sell: !!stock.allow_sell,   // Default false (SQLite stores as 0/1)
-        min_portfolio_target: (stock.min_portfolio_target != null && stock.min_portfolio_target !== '') ? stock.min_portfolio_target : null,
-        max_portfolio_target: (stock.max_portfolio_target != null && stock.max_portfolio_target !== '') ? stock.max_portfolio_target : null
+        originalIsin: security.isin,  // Track original ISIN for API calls
+        originalSymbol: security.symbol,  // Track original symbol for rename detection
+        symbol: security.symbol,
+        isin: security.isin,
+        yahoo_symbol: security.yahoo_symbol || '',
+        name: security.name,
+        country: security.country || '',
+        fullExchangeName: security.fullExchangeName || '',
+        industry: security.industry || '',
+        min_lot: security.min_lot || 1,
+        allow_buy: security.allow_buy !== false,  // Default true
+        allow_sell: !!security.allow_sell,   // Default false (SQLite stores as 0/1)
+        min_portfolio_target: (security.min_portfolio_target != null && security.min_portfolio_target !== '') ? security.min_portfolio_target : null,
+        max_portfolio_target: (security.max_portfolio_target != null && security.max_portfolio_target !== '') ? security.max_portfolio_target : null
       };
       this.showEditStockModal = true;
     },
@@ -791,7 +791,7 @@ document.addEventListener('alpine:init', () => {
     async saveStock() {
       if (!this.editingStock) return;
 
-      this.loading.stockSave = true;
+      this.loading.securitySave = true;
       try {
         const payload = {
           name: this.editingStock.name,
@@ -814,17 +814,17 @@ document.addEventListener('alpine:init', () => {
         await this.fetchStocks();
         await this.fetchAllocation();
       } catch (e) {
-        this.showMessage('Failed to update stock', 'error');
+        this.showMessage('Failed to update security', 'error');
       }
-      this.loading.stockSave = false;
+      this.loading.securitySave = false;
     },
 
     async updateMultiplier(isin, value) {
       const multiplier = Math.max(0.1, Math.min(3.0, parseFloat(value) || 1.0));
       try {
         await API.updateStock(isin, { priority_multiplier: multiplier });
-        const stock = this.stocks.find(s => s.isin === isin);
-        if (stock) stock.priority_multiplier = multiplier;
+        const security = this.securitys.find(s => s.isin === isin);
+        if (security) security.priority_multiplier = multiplier;
         await this.fetchStocks();
       } catch (e) {
         this.showMessage('Failed to update multiplier', 'error');

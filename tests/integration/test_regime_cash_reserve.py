@@ -98,7 +98,7 @@ def create_rebalancing_service(db_manager, tradernet_client):
     config_db = db_manager.config
 
     return RebalancingService(
-        stock_repo=SecurityRepository(db=config_db),
+        security_repo=SecurityRepository(db=config_db),
         position_repo=PositionRepository(db=db_manager.state),
         allocation_repo=AllocationRepository(db=config_db),
         portfolio_repo=PortfolioRepository(db=db_manager.state),

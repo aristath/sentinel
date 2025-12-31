@@ -221,8 +221,8 @@ async def calculate_metrics_for_all_stocks() -> dict:
     """
     from app.modules.universe.database.security_repository import SecurityRepository
 
-    stock_repo = SecurityRepository()
-    active_stocks = await stock_repo.get_all_active()
+    security_repo = SecurityRepository()
+    active_stocks = await security_repo.get_all_active()
 
     stats = {
         "processed": 0,

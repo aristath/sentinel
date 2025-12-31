@@ -90,7 +90,7 @@ def mock_universe_pruning_dependencies(
         ),
     ):
         yield {
-            "stock_repo": mock_stock_repo,
+            "security_repo": mock_stock_repo,
             "score_repo": mock_score_repo,
             "settings_repo": mock_settings_repo,
             "tradernet_client": mock_tradernet_client,

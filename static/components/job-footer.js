@@ -13,7 +13,7 @@ window.jobFooterComponent = function() {
       { id: 'weekly-maintenance', name: 'Weekly Maintenance', api: 'triggerWeeklyMaintenance' },
       { id: 'dividend-reinvestment', name: 'Dividend Reinvestment', api: 'triggerDividendReinvestment' },
       { id: 'universe-pruning', name: 'Universe Pruning', api: 'triggerUniversePruning' },
-      { id: 'stock-discovery', name: 'Stock Discovery', api: 'triggerStockDiscovery' }
+      { id: 'security-discovery', name: 'Stock Discovery', api: 'triggerSecurityDiscovery' }
     ],
     async triggerJob(job) {
       if (this.loading[job.id]) return;

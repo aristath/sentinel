@@ -138,8 +138,8 @@ async def get_performance_attribution(
         return {"country": {}, "industry": {}}
 
     # Get stock info for country/industry
-    stock_repo = SecurityRepository()
-    stocks = await stock_repo.get_all()
+    security_repo = SecurityRepository()
+    stocks = await security_repo.get_all()
     stock_info = {
         s.symbol: {"country": s.country, "industry": s.industry} for s in stocks
     }

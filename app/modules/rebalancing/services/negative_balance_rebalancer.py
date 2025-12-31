@@ -37,7 +37,7 @@ class NegativeBalanceRebalancer:
         tradernet_client: TradernetClient,
         currency_exchange_service: CurrencyExchangeService,
         trade_execution_service: TradeExecutionService,
-        stock_repo: SecurityRepository,
+        security_repo: SecurityRepository,
         position_repo: PositionRepository,
         exchange_rate_service: ExchangeRateService,
         recommendation_repo: Optional[RecommendationRepository] = None,
@@ -48,7 +48,7 @@ class NegativeBalanceRebalancer:
             tradernet_client: Tradernet client for balance checks
             currency_exchange_service: Service for currency conversions
             trade_execution_service: Service for executing trades
-            stock_repo: Repository for stock data
+            security_repo: Repository for stock data
             position_repo: Repository for position data
             exchange_rate_service: Service for exchange rate conversions
             recommendation_repo: Repository for storing recommendations (optional)
@@ -56,7 +56,7 @@ class NegativeBalanceRebalancer:
         self._client = tradernet_client
         self._currency_service = currency_exchange_service
         self._trade_execution_service = trade_execution_service
-        self._stock_repo = stock_repo
+        self._stock_repo = security_repo
         self._position_repo = position_repo
         self._exchange_rate_service = exchange_rate_service
         self._recommendation_repo = recommendation_repo or RecommendationRepository()

@@ -38,7 +38,7 @@ class PlannerBatchRequest(BaseModel):
 @router.get("", response_model=StatusResponse)
 async def get_status(
     portfolio_repo: PortfolioRepositoryDep,
-    stock_repo: SecurityRepositoryDep,
+    security_repo: SecurityRepositoryDep,
     position_repo: PositionRepositoryDep,
 ):
     """Get system health and status."""
@@ -95,7 +95,7 @@ async def get_status(
                 last_sync = latest[:16] if len(latest) >= 16 else latest
 
     # Get stock count
-    active_stocks = await stock_repo.get_all_active()
+    active_stocks = await security_repo.get_all_active()
     stock_count = len(active_stocks)
 
     # Get position count
@@ -190,7 +190,7 @@ async def rebuild_universe_from_portfolio():
     Returns:
         Status with detailed counts of operations performed
     """
-    from app.infrastructure.dependencies import get_stock_repository
+    from app.infrastructure.dependencies import get_security_repository
     from app.infrastructure.external.tradernet import get_tradernet_client
     from app.jobs.daily_sync import _ensure_portfolio_stocks_in_universe
     from app.jobs.historical_data_sync import sync_historical_data
@@ -231,15 +231,15 @@ async def rebuild_universe_from_portfolio():
         logger.info(f"Found {len(positions)} portfolio positions")
 
         # Step 3: Get stock counts before adding
-        stock_repo = get_stock_repository()
-        stocks_before = await stock_repo.get_all_active()
+        security_repo = get_security_repository()
+        stocks_before = await security_repo.get_all_active()
         result["stocks_in_universe_before"] = len(stocks_before)
         logger.info(f"Universe has {len(stocks_before)} stocks before rebuild")
 
         # Step 4: Ensure all portfolio stocks are in universe
         logger.info("Adding missing portfolio stocks to universe...")
         try:
-            await _ensure_portfolio_stocks_in_universe(positions, client, stock_repo)
+            await _ensure_portfolio_stocks_in_universe(positions, client, security_repo)
         except Exception as e:
             error_msg = f"Failed to add portfolio stocks: {e}"
             logger.error(error_msg, exc_info=True)
@@ -247,7 +247,7 @@ async def rebuild_universe_from_portfolio():
             # Continue - some stocks might have been added
 
         # Step 5: Get stock counts after adding
-        stocks_after = await stock_repo.get_all_active()
+        stocks_after = await security_repo.get_all_active()
         result["stocks_in_universe_after"] = len(stocks_after)
         result["stocks_added"] = len(stocks_after) - len(stocks_before)
         logger.info(
@@ -461,7 +461,7 @@ async def trigger_planner_batch(request: PlannerBatchRequest):
 @router.post("/jobs/stock-discovery")
 async def trigger_stock_discovery():
     """Manually trigger stock discovery (addition of high-quality stocks)."""
-    from app.modules.universe.jobs.stock_discovery import discover_new_stocks
+    from app.modules.universe.jobs.security_discovery import discover_new_stocks
 
     try:
         await discover_new_stocks()

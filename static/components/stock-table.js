@@ -1,13 +1,13 @@
 /**
  * Stock Table Component
- * Displays the stock universe with filtering, sorting, and position data
+ * Displays the security universe with filtering, sorting, and position data
  */
 class StockTable extends HTMLElement {
   connectedCallback() {
     this.innerHTML = `
-      <div class="bg-gray-800 border border-gray-700 rounded p-3" x-data="stockTableComponent()">
+      <div class="bg-gray-800 border border-gray-700 rounded p-3" x-data="securityTableComponent()">
         <div class="flex items-center justify-between mb-3">
-          <h2 class="text-xs text-gray-300 uppercase tracking-wide">Stock Universe</h2>
+          <h2 class="text-xs text-gray-300 uppercase tracking-wide">Security Universe</h2>
           <div class="flex gap-2">
             <button @click="$store.app.openUniverseManagementModal()"
                     class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded transition-colors">
@@ -27,7 +27,7 @@ class StockTable extends HTMLElement {
                  placeholder="Search symbol or name..."
                  class="flex-1 px-2 py-1.5 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
           <div class="flex gap-2">
-            <select x-model="$store.app.stockFilter"
+            <select x-model="$store.app.securityFilter"
                     class="px-2 py-1.5 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
               <option value="all">All Countries</option>
               <template x-for="country in ($store.app.countries || [])" :key="country">
@@ -52,9 +52,9 @@ class StockTable extends HTMLElement {
         </div>
 
         <!-- Results count -->
-        <div class="text-xs text-gray-300 mb-2" x-show="$store.app.stocks.length > 0">
+        <div class="text-xs text-gray-300 mb-2" x-show="$store.app.securitys.length > 0">
           <span x-text="$store.app.filteredStocks.length"></span> of
-          <span x-text="$store.app.stocks.length"></span> stocks
+          <span x-text="$store.app.securitys.length"></span> securitys
         </div>
 
         <div class="overflow-x-auto">
@@ -121,82 +121,82 @@ class StockTable extends HTMLElement {
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-800">
-              <template x-for="stock in ($store.app.filteredStocks || [])" :key="stock.symbol">
+              <template x-for="security in ($store.app.filteredStocks || [])" :key="security.symbol">
                 <tr class="hover:bg-gray-800/50"
-                    :class="getPositionAlert(stock.symbol) ? (getPositionAlert(stock.symbol).severity === 'critical' ? 'border-l-4 border-red-500' : 'border-l-4 border-yellow-500') : ''">
+                    :class="getPositionAlert(security.symbol) ? (getPositionAlert(security.symbol).severity === 'critical' ? 'border-l-4 border-red-500' : 'border-l-4 border-yellow-500') : ''">
                   <td class="py-1.5 px-2 font-mono text-blue-400 sticky left-0 bg-gray-800">
-                    <button @click.stop="$store.app.showStockChart = true; $store.app.selectedStockSymbol = stock.symbol; $store.app.selectedStockIsin = stock.isin"
+                    <button @click.stop="$store.app.showStockChart = true; $store.app.selectedStockSymbol = security.symbol; $store.app.selectedStockIsin = security.isin"
                             class="hover:underline cursor-pointer"
                             title="View chart">
-                      <span x-text="stock.symbol"></span>
+                      <span x-text="security.symbol"></span>
                     </button>
                   </td>
                   <td class="py-1.5 px-1">
-                    <stock-sparkline
-                         :symbol="stock.symbol"
-                         :has-position="stock.position_value > 0 ? 'true' : 'false'">
-                    </stock-sparkline>
+                    <security-sparkline
+                         :symbol="security.symbol"
+                         :has-position="security.position_value > 0 ? 'true' : 'false'">
+                    </security-sparkline>
                   </td>
-                  <td class="py-1.5 px-2 text-gray-300 truncate max-w-32" x-text="stock.name"></td>
-                  <td class="py-1.5 px-2 text-gray-300 truncate max-w-24" x-text="stock.country || '-'"></td>
-                  <td class="py-1.5 px-2 text-gray-300 truncate max-w-24" x-text="stock.fullExchangeName || '-'"></td>
-                  <td class="py-1.5 px-2 text-gray-300 truncate max-w-24" x-text="stock.industry || '-'"></td>
+                  <td class="py-1.5 px-2 text-gray-300 truncate max-w-32" x-text="security.name"></td>
+                  <td class="py-1.5 px-2 text-gray-300 truncate max-w-24" x-text="security.country || '-'"></td>
+                  <td class="py-1.5 px-2 text-gray-300 truncate max-w-24" x-text="security.fullExchangeName || '-'"></td>
+                  <td class="py-1.5 px-2 text-gray-300 truncate max-w-24" x-text="security.industry || '-'"></td>
                   <td class="py-1.5 px-2 text-right font-mono"
-                      :class="getPositionAlertClass(stock.symbol)">
+                      :class="getPositionAlertClass(security.symbol)">
                     <div class="flex items-center justify-end gap-2">
-                      <span x-text="stock.position_value ? formatCurrency(stock.position_value) : '-'"></span>
-                      <template x-if="getPositionAlert(stock.symbol)">
+                      <span x-text="security.position_value ? formatCurrency(security.position_value) : '-'"></span>
+                      <template x-if="getPositionAlert(security.symbol)">
                         <span class="text-xs"
-                              :class="getPositionAlert(stock.symbol).severity === 'critical' ? 'text-red-400' : 'text-yellow-400'"
-                              :title="'Position concentration: ' + (getPositionAlert(stock.symbol).current_pct * 100).toFixed(1) + '% (Limit: ' + (getPositionAlert(stock.symbol).limit_pct * 100).toFixed(0) + '%)'"
-                              x-text="getPositionAlert(stock.symbol).severity === 'critical' ? '🔴' : '⚠️'"></span>
+                              :class="getPositionAlert(security.symbol).severity === 'critical' ? 'text-red-400' : 'text-yellow-400'"
+                              :title="'Position concentration: ' + (getPositionAlert(security.symbol).current_pct * 100).toFixed(1) + '% (Limit: ' + (getPositionAlert(security.symbol).limit_pct * 100).toFixed(0) + '%)'"
+                              x-text="getPositionAlert(security.symbol).severity === 'critical' ? '🔴' : '⚠️'"></span>
                       </template>
                     </div>
                   </td>
                   <td class="py-1.5 px-2 text-right">
                     <span class="font-mono px-1.5 py-0.5 rounded"
-                          :class="getScoreClass(stock.total_score)"
-                          x-text="formatScore(stock.total_score)"></span>
+                          :class="getScoreClass(security.total_score)"
+                          x-text="formatScore(security.total_score)"></span>
                   </td>
                   <td class="py-1.5 px-2 text-center">
                     <input type="number"
                            class="w-12 px-1 py-0.5 bg-gray-900 border border-gray-600 rounded text-center text-xs text-gray-300 focus:border-blue-500 focus:outline-none"
-                           :value="stock.priority_multiplier || 1"
+                           :value="security.priority_multiplier || 1"
                            min="0.1"
                            max="3"
                            step="0.1"
                            @click.stop
-                           @change="$store.app.updateMultiplier(stock.isin, $event.target.value)"
+                           @change="$store.app.updateMultiplier(security.isin, $event.target.value)"
                            title="Priority multiplier (0.1-3.0)">
                   </td>
                   <td class="py-1.5 px-2 text-center">
                     <div class="flex justify-center gap-1">
-                      <span x-show="stock.allow_buy"
+                      <span x-show="security.allow_buy"
                             class="w-2.5 h-2.5 rounded-full bg-green-500"
                             title="Buy enabled"></span>
-                      <span x-show="stock.allow_sell"
+                      <span x-show="security.allow_sell"
                             class="w-2.5 h-2.5 rounded-full bg-red-500"
                             title="Sell enabled"></span>
-                      <span x-show="!stock.allow_buy && !stock.allow_sell"
+                      <span x-show="!security.allow_buy && !security.allow_sell"
                             class="text-gray-400">-</span>
                     </div>
                   </td>
                   <td class="py-1.5 px-2 text-right">
                     <span class="font-mono px-1.5 py-0.5 rounded"
-                          :class="getPriorityClass(stock.priority_score)"
-                          x-text="formatPriority(stock.priority_score)"></span>
+                          :class="getPriorityClass(security.priority_score)"
+                          x-text="formatPriority(security.priority_score)"></span>
                   </td>
                   <td class="py-1.5 px-2 text-center" @click.stop>
                     <div class="flex justify-center gap-1">
-                      <button @click="$store.app.openEditStock(stock)"
+                      <button @click="$store.app.openEditStock(security)"
                               class="p-1 text-gray-300 hover:text-blue-400 transition-colors"
-                              title="Edit stock">
+                              title="Edit security">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                           <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                         </svg>
                       </button>
-                      <button @click="$store.app.refreshSingleScore(stock.isin)"
+                      <button @click="$store.app.refreshSingleScore(security.isin)"
                               class="p-1 text-gray-300 hover:text-green-400 transition-colors"
                               title="Refresh score">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -206,7 +206,7 @@ class StockTable extends HTMLElement {
                           <path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
                         </svg>
                       </button>
-                      <button @click="$store.app.removeStock(stock.isin)"
+                      <button @click="$store.app.removeStock(security.isin)"
                               class="p-1 text-gray-300 hover:text-red-400 transition-colors"
                               title="Remove from universe">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -224,13 +224,13 @@ class StockTable extends HTMLElement {
         </div>
 
         <!-- Empty states -->
-        <div x-show="$store.app.filteredStocks.length === 0 && $store.app.stocks.length > 0"
+        <div x-show="$store.app.filteredStocks.length === 0 && $store.app.securitys.length > 0"
              class="text-center py-6 text-gray-300 text-sm">
-          No stocks match your filters
+          No securitys match your filters
         </div>
-        <div x-show="$store.app.stocks.length === 0"
+        <div x-show="$store.app.securitys.length === 0"
              class="text-center py-6 text-gray-300 text-sm">
-          No stocks in universe
+          No securitys in universe
         </div>
       </div>
     `;
@@ -240,7 +240,7 @@ class StockTable extends HTMLElement {
 /**
  * Alpine.js component for table interactions
  */
-function stockTableComponent() {
+function securityTableComponent() {
   return {
     init() {
       this.$watch('$store.app.minScore', (val) => {
@@ -264,9 +264,9 @@ function getPositionAlert(symbol) {
 function getPositionAlertClass(symbol) {
   const alert = getPositionAlert(symbol);
   if (!alert) {
-    // Default: check if stock has position value
-    const stock = (window.Alpine?.store('app')?.stocks || []).find(s => s.symbol === symbol);
-    return stock?.position_value ? 'text-green-400' : 'text-gray-400';
+    // Default: check if security has position value
+    const security = (window.Alpine?.store('app')?.securitys || []).find(s => s.symbol === symbol);
+    return security?.position_value ? 'text-green-400' : 'text-gray-400';
   }
   // Highlight row with border color based on severity
   return alert.severity === 'critical'
@@ -278,4 +278,4 @@ function getPositionAlertClass(symbol) {
 window.getPositionAlert = getPositionAlert;
 window.getPositionAlertClass = getPositionAlertClass;
 
-customElements.define('stock-table', StockTable);
+customElements.define('security-table', StockTable);

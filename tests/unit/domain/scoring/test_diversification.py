@@ -421,9 +421,9 @@ class TestCalculatePortfolioScore:
             industry_weights={},
             positions={"AAPL.US": 5000, "SAP.EU": 5000},
             total_value=10000,
-            stock_countries={"AAPL.US": "US", "SAP.EU": "EU"},
-            stock_scores={"AAPL.US": 0.8, "SAP.EU": 0.7},
-            stock_dividends={"AAPL.US": 0.01, "SAP.EU": 0.02},
+            security_countries={"AAPL.US": "US", "SAP.EU": "EU"},
+            security_scores={"AAPL.US": 0.8, "SAP.EU": 0.7},
+            security_dividends={"AAPL.US": 0.01, "SAP.EU": 0.02},
         )
 
         score = await calculate_portfolio_score(context)
@@ -478,9 +478,9 @@ class TestCalculatePostTransactionScore:
             industry_weights={},
             positions={"AAPL.US": 8000},
             total_value=10000,
-            stock_countries={"AAPL.US": "US"},
-            stock_scores={"AAPL.US": 0.7},
-            stock_dividends={"AAPL.US": 0.01},
+            security_countries={"AAPL.US": "US"},
+            security_scores={"AAPL.US": 0.7},
+            security_dividends={"AAPL.US": 0.01},
         )
 
         # Buy an EU stock to improve diversification

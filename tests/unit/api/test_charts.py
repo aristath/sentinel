@@ -13,10 +13,10 @@ from app.api.charts import (
     _combine_and_filter_data,
     _fetch_from_tradernet,
     _fetch_from_yahoo,
-    _get_cached_stock_prices,
+    _get_cached_security_prices,
     _parse_date_range,
     _should_fetch_data,
-    _store_stock_prices,
+    _store_security_prices,
 )
 
 
@@ -210,7 +210,7 @@ class TestGetCachedStockPrices:
         ]
 
         start_date = datetime(2024, 1, 1)
-        result = await _get_cached_stock_prices("AAPL", start_date, mock_db_manager)
+        result = await _get_cached_security_prices("AAPL", start_date, mock_db_manager)
 
         assert len(result) == 2
         assert result[0]["time"] == "2024-01-01"
@@ -228,7 +228,7 @@ class TestGetCachedStockPrices:
             {"date": "2024-01-01", "close_price": 200.0},
         ]
 
-        result = await _get_cached_stock_prices("AAPL", None, mock_db_manager)
+        result = await _get_cached_security_prices("AAPL", None, mock_db_manager)
 
         assert len(result) == 2
 
@@ -252,7 +252,7 @@ class TestStoreStockPrices:
         mock_price.low = 147.0
         mock_price.volume = 1000000
 
-        await _store_stock_prices("AAPL", [mock_price], "tradernet", mock_db_manager)
+        await _store_security_prices("AAPL", [mock_price], "tradernet", mock_db_manager)
 
         mock_history_db.execute.assert_called_once()
         call_args = mock_history_db.execute.call_args
@@ -276,7 +276,7 @@ class TestStoreStockPrices:
         # Remove timestamp attribute to simulate Yahoo format
         del mock_price.timestamp
 
-        await _store_stock_prices("AAPL", [mock_price], "yahoo", mock_db_manager)
+        await _store_security_prices("AAPL", [mock_price], "yahoo", mock_db_manager)
 
         mock_history_db.execute.assert_called_once()
 
@@ -290,7 +290,7 @@ class TestStoreStockPrices:
         # Create mock data without timestamp or date (invalid)
         mock_price = MagicMock(spec=[])  # Empty spec means no attributes
 
-        await _store_stock_prices("AAPL", [mock_price], "unknown", mock_db_manager)
+        await _store_security_prices("AAPL", [mock_price], "unknown", mock_db_manager)
 
         # Should not call execute since data is invalid
         mock_history_db.execute.assert_not_called()

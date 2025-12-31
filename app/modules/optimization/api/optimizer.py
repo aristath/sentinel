@@ -84,11 +84,11 @@ async def run_optimization() -> Dict[str, Any]:
     settings_service = SettingsService(settings_repo)
     settings = await settings_service.get_settings()
 
-    stock_repo = SecurityRepository()
+    security_repo = SecurityRepository()
     position_repo = PositionRepository()
 
     # Get current portfolio data
-    stocks = await stock_repo.get_all()
+    stocks = await security_repo.get_all()
     if not stocks:
         raise HTTPException(status_code=400, detail="No stocks in universe")
 

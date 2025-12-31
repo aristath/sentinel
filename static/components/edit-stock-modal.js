@@ -1,6 +1,6 @@
 /**
  * Edit Stock Modal Component
- * Form for editing existing stocks in the universe
+ * Form for editing existing securitys in the universe
  */
 class EditStockModal extends HTMLElement {
   connectedCallback() {
@@ -72,7 +72,7 @@ class EditStockModal extends HTMLElement {
                        min="1"
                        step="1"
                        class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
-                <p class="text-xs text-gray-300 mt-1">Minimum shares per trade (e.g., 100 for Japanese stocks)</p>
+                <p class="text-xs text-gray-300 mt-1">Minimum shares per trade (e.g., 100 for Japanese securitys)</p>
               </div>
 
               <div>
@@ -135,9 +135,9 @@ class EditStockModal extends HTMLElement {
                 Cancel
               </button>
               <button @click="$store.app.saveStock()"
-                      :disabled="$store.app.loading.stockSave"
+                      :disabled="$store.app.loading.securitySave"
                       class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded transition-colors disabled:opacity-50">
-                <span x-show="$store.app.loading.stockSave" class="inline-block animate-spin mr-1">&#9696;</span>
+                <span x-show="$store.app.loading.securitySave" class="inline-block animate-spin mr-1">&#9696;</span>
                 Save Changes
               </button>
             </div>
@@ -148,4 +148,4 @@ class EditStockModal extends HTMLElement {
   }
 }
 
-customElements.define('edit-stock-modal', EditStockModal);
+customElements.define('edit-security-modal', EditStockModal);

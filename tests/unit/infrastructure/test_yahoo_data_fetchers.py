@@ -14,7 +14,7 @@ from app.infrastructure.external.yahoo.data_fetchers import (
     get_current_price,
     get_fundamental_data,
     get_historical_prices,
-    get_stock_industry,
+    get_security_industry,
 )
 
 
@@ -341,7 +341,7 @@ class TestGetCurrentPrice:
 
 
 class TestGetStockIndustry:
-    """Test get_stock_industry function."""
+    """Test get_security_industry function."""
 
     def test_returns_technology_industry(self):
         """Test returning actual industry name from Yahoo Finance."""
@@ -351,7 +351,7 @@ class TestGetStockIndustry:
         mock_ticker.info = mock_info
 
         with patch("yfinance.Ticker", return_value=mock_ticker):
-            result = get_stock_industry("AAPL.US")
+            result = get_security_industry("AAPL.US")
 
         assert result == "Consumer Electronics"
 
@@ -363,7 +363,7 @@ class TestGetStockIndustry:
         mock_ticker.info = mock_info
 
         with patch("yfinance.Ticker", return_value=mock_ticker):
-            result = get_stock_industry("PFE.US")
+            result = get_security_industry("PFE.US")
 
         assert result == "Drug Manufacturers"
 
@@ -375,7 +375,7 @@ class TestGetStockIndustry:
         mock_ticker.info = mock_info
 
         with patch("yfinance.Ticker", return_value=mock_ticker):
-            result = get_stock_industry("JPM.US")
+            result = get_security_industry("JPM.US")
 
         assert result == "Banks - Diversified"
 
@@ -387,7 +387,7 @@ class TestGetStockIndustry:
         mock_ticker.info = mock_info
 
         with patch("yfinance.Ticker", return_value=mock_ticker):
-            result = get_stock_industry("NKE.US")
+            result = get_security_industry("NKE.US")
 
         assert result == "Retail - Apparel"
 
@@ -399,7 +399,7 @@ class TestGetStockIndustry:
         mock_ticker.info = mock_info
 
         with patch("yfinance.Ticker", return_value=mock_ticker):
-            result = get_stock_industry("BA.US")
+            result = get_security_industry("BA.US")
 
         assert result == "Aerospace & Defense"
 
@@ -411,7 +411,7 @@ class TestGetStockIndustry:
         mock_ticker.info = mock_info
 
         with patch("yfinance.Ticker", return_value=mock_ticker):
-            result = get_stock_industry("XOM.US")
+            result = get_security_industry("XOM.US")
 
         assert result == "Oil & Gas Integrated"
 
@@ -423,7 +423,7 @@ class TestGetStockIndustry:
         mock_ticker.info = mock_info
 
         with patch("yfinance.Ticker", return_value=mock_ticker):
-            result = get_stock_industry("AAPL.US")
+            result = get_security_industry("AAPL.US")
 
         assert result == "Consumer Electronics"
 
@@ -435,14 +435,14 @@ class TestGetStockIndustry:
         mock_ticker.info = mock_info
 
         with patch("yfinance.Ticker", return_value=mock_ticker):
-            result = get_stock_industry("UNKNOWN.US")
+            result = get_security_industry("UNKNOWN.US")
 
         assert result == "Unknown Sector XYZ"
 
     def test_returns_none_on_exception(self):
         """Test returning None on exception."""
         with patch("yfinance.Ticker", side_effect=Exception("API error")):
-            result = get_stock_industry("INVALID")
+            result = get_security_industry("INVALID")
 
         assert result is None
 

@@ -347,10 +347,10 @@ def _create_cooldown_failed_results(trades) -> List[dict]:
     ]
 
 
-async def _check_market_hours(trade, stock_repo) -> Optional[dict]:
+async def _check_market_hours(trade, security_repo) -> Optional[dict]:
     """Check if the stock's market is currently open (if required for this trade)."""
     try:
-        stock = await stock_repo.get_by_symbol(trade.symbol)
+        stock = await security_repo.get_by_symbol(trade.symbol)
         if not stock:
             logger.warning(
                 f"Stock {trade.symbol} not found, cannot check market hours. Allowing trade."
@@ -396,7 +396,7 @@ async def _validate_trade_before_execution(
     position_repo,
     client,
     trade_repo,
-    stock_repo,
+    security_repo,
     transaction_cost_fixed: float,
     transaction_cost_percent: float,
     exchange_rate_service: ExchangeRateService,
@@ -405,7 +405,7 @@ async def _validate_trade_before_execution(
 ) -> tuple[Optional[dict], int]:
     """Validate trade before execution and return blocking result if any."""
     # Check market hours first (if required for this trade)
-    market_hours_result = await _check_market_hours(trade, stock_repo)
+    market_hours_result = await _check_market_hours(trade, security_repo)
     if market_hours_result:
         return market_hours_result, 0
 
@@ -477,7 +477,7 @@ async def _process_single_trade(
     position_repo,
     client,
     trade_repo,
-    stock_repo,
+    security_repo,
     service,
     transaction_cost_fixed: float,
     transaction_cost_percent: float,
@@ -498,7 +498,7 @@ async def _process_single_trade(
             position_repo,
             client,
             trade_repo,
-            stock_repo,
+            security_repo,
             transaction_cost_fixed,
             transaction_cost_percent,
             exchange_rate_service,
@@ -535,7 +535,7 @@ async def _process_trades(
     position_repo,
     client,
     trade_repo,
-    stock_repo,
+    security_repo,
     service,
     transaction_cost_fixed: float,
     transaction_cost_percent: float,
@@ -559,7 +559,7 @@ async def _process_trades(
             position_repo,
             client,
             trade_repo,
-            stock_repo,
+            security_repo,
             service,
             transaction_cost_fixed,
             transaction_cost_percent,
@@ -629,7 +629,7 @@ class TradeExecutionService:
         self,
         trade_repo: ITradeRepository,
         position_repo: IPositionRepository,
-        stock_repo: ISecurityRepository,
+        security_repo: ISecurityRepository,
         tradernet_client: TradernetClient,
         currency_exchange_service: CurrencyExchangeService,
         exchange_rate_service: ExchangeRateService,
@@ -637,7 +637,7 @@ class TradeExecutionService:
     ):
         self._trade_repo = trade_repo
         self._position_repo = position_repo
-        self._stock_repo = stock_repo
+        self._stock_repo = security_repo
         self._tradernet_client = tradernet_client
         self._currency_exchange_service = currency_exchange_service
         self._exchange_rate_service = exchange_rate_service

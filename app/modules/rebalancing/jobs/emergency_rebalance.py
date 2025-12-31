@@ -65,8 +65,8 @@ async def _check_and_rebalance_immediately_internal() -> bool:
         if not has_negative:
             # Check for currencies below minimum
             trading_currencies = set()
-            stock_repo = SecurityRepository()
-            stocks = await stock_repo.get_all_active()
+            security_repo = SecurityRepository()
+            stocks = await security_repo.get_all_active()
             for stock in stocks:
                 if stock.currency:
                     currency_str = (
@@ -107,14 +107,14 @@ async def _check_and_rebalance_immediately_internal() -> bool:
         exchange_rate_service = get_exchange_rate_service(db_manager)
         currency_exchange_service = get_currency_exchange_service_dep(client)
         position_repo = PositionRepository()
-        stock_repo = SecurityRepository()
+        security_repo = SecurityRepository()
         trade_repo = TradeRepository()
         recommendation_repo = RecommendationRepository()
 
         trade_execution_service = TradeExecutionService(
             trade_repo,
             position_repo,
-            stock_repo,
+            security_repo,
             client,
             currency_exchange_service,
             exchange_rate_service,
@@ -124,7 +124,7 @@ async def _check_and_rebalance_immediately_internal() -> bool:
             client,
             currency_exchange_service,
             trade_execution_service,
-            stock_repo,
+            security_repo,
             position_repo,
             exchange_rate_service,
             recommendation_repo,

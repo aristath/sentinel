@@ -114,7 +114,7 @@ async def test_concurrent_position_updates_with_lock(db):
 async def test_concurrent_trade_execution_atomicity(db):
     """Test that concurrent trade executions maintain atomicity."""
     # Create stocks first (required for trade history JOIN)
-    stock_repo = SecurityRepository(db=db)
+    security_repo = SecurityRepository(db=db)
     for symbol in ["AAPL", "MSFT", "GOOGL"]:
         stock = Security(
             symbol=symbol,
@@ -126,7 +126,7 @@ async def test_concurrent_trade_execution_atomicity(db):
             min_lot=1,
             active=True,
         )
-        await stock_repo.create(stock)
+        await security_repo.create(stock)
 
     trade_repo = TradeRepository(db=db)
     trades_created = []

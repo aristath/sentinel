@@ -228,7 +228,7 @@ def get_current_price(
     return None
 
 
-def get_stock_industry(
+def get_security_industry(
     symbol: str, yahoo_symbol: Optional[str] = None
 ) -> Optional[str]:
     """
@@ -257,7 +257,7 @@ def get_stock_industry(
         return None
 
 
-def get_stock_country_and_exchange(
+def get_security_country_and_exchange(
     symbol: str, yahoo_symbol: Optional[str] = None
 ) -> tuple[Optional[str], Optional[str]]:
     """

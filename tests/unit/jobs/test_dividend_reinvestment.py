@@ -145,7 +145,7 @@ def mock_dividend_reinvestment_dependencies(
     ):
         yield {
             "dividend_repo": mock_dividend_repo,
-            "stock_repo": mock_stock_repo,
+            "security_repo": mock_stock_repo,
             "settings_repo": mock_settings_repo,
             "tradernet_client": mock_tradernet_client,
             "trade_execution_service": mock_trade_execution_service,

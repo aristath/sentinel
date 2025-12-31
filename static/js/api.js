@@ -74,7 +74,7 @@ const API = {
   triggerWeeklyMaintenance: () => API._post('/api/status/jobs/weekly-maintenance'),
   triggerDividendReinvestment: () => API._post('/api/status/jobs/dividend-reinvestment'),
   triggerUniversePruning: () => API._post('/api/status/jobs/universe-pruning'),
-  triggerStockDiscovery: () => API._post('/api/status/jobs/stock-discovery'),
+  triggerSecurityDiscovery: () => API._post('/api/status/jobs/security-discovery'),
 
   // Allocation
   fetchAllocation: () => fetch('/api/allocation/groups/allocation').then(r => r.json()),
@@ -82,7 +82,7 @@ const API = {
   saveCountryTargets: (targets) => API._put('/api/allocation/groups/targets/country', { targets }),
   saveIndustryTargets: (targets) => API._put('/api/allocation/groups/targets/industry', { targets }),
 
-  // Stocks
+  // Securities
   fetchStocks: () => fetch('/api/securities').then(r => r.json()),
   createStock: (data) => API._post('/api/securities', data),
   addStockByIdentifier: (data) => API._post('/api/securities/add-by-identifier', data),
@@ -104,7 +104,7 @@ const API = {
   // Charts
   fetchStockChart: (isin, range = '1Y', source = 'tradernet') => {
     const params = new URLSearchParams({ range, source });
-    return fetch(`/api/charts/stocks/${isin}?${params}`).then(r => r.json());
+    return fetch(`/api/charts/securitys/${isin}?${params}`).then(r => r.json());
   },
   fetchSparklines: () => fetch('/api/charts/sparklines').then(r => r.json()),
 

@@ -40,7 +40,7 @@ def _parse_date_range(range_str: str) -> Optional[datetime]:
         return None
 
 
-async def _get_cached_stock_prices(
+async def _get_cached_security_prices(
     symbol: str, start_date: Optional[datetime], db_manager: DatabaseManager
 ) -> list[dict]:
     """Get cached stock prices from per-symbol database."""
@@ -70,7 +70,7 @@ async def _get_cached_stock_prices(
     return [{"time": row["date"], "value": row["close_price"]} for row in rows]
 
 
-async def _store_stock_prices(
+async def _store_security_prices(
     symbol: str, prices: list, source: str, db_manager: DatabaseManager
 ):
     """Store stock prices in per-symbol database."""
@@ -194,7 +194,7 @@ async def _fetch_from_tradernet(
             {"time": ohlc.timestamp.strftime("%Y-%m-%d"), "value": ohlc.close}
             for ohlc in ohlc_data
         ]
-        await _store_stock_prices(symbol, ohlc_data, "tradernet", db_manager)
+        await _store_security_prices(symbol, ohlc_data, "tradernet", db_manager)
         return fetched_data
     except Exception as e:
         logger.warning(f"Failed to fetch from Tradernet for {symbol}: {e}")
@@ -225,7 +225,7 @@ async def _fetch_from_yahoo(
             {"time": hp.date.strftime("%Y-%m-%d"), "value": hp.close}
             for hp in historical_prices
         ]
-        await _store_stock_prices(symbol, historical_prices, "yahoo", db_manager)
+        await _store_security_prices(symbol, historical_prices, "yahoo", db_manager)
         return fetched_data
     except Exception as e:
         logger.error(f"Failed to fetch from Yahoo for {symbol}: {e}")
@@ -263,7 +263,7 @@ def _combine_and_filter_data(
 async def get_stock_chart(
     isin: str,
     db_manager: DatabaseManagerDep,
-    stock_repo: SecurityRepositoryDep,
+    security_repo: SecurityRepositoryDep,
     range: str = Query("1Y", description="Time range: 1M, 3M, 6M, 1Y, all"),
     source: str = Query("tradernet", description="Data source: tradernet or yahoo"),
 ):
@@ -283,14 +283,14 @@ async def get_stock_chart(
             raise HTTPException(status_code=400, detail="Invalid ISIN format")
 
         # Look up stock by ISIN to get tradernet symbol
-        stock = await stock_repo.get_by_isin(isin)
+        stock = await security_repo.get_by_isin(isin)
         if not stock:
             raise HTTPException(status_code=404, detail="Stock not found")
 
         # Use the tradernet symbol for history database lookup
         symbol = stock.symbol
         start_date = _parse_date_range(range)
-        cached_data = await _get_cached_stock_prices(symbol, start_date, db_manager)
+        cached_data = await _get_cached_security_prices(symbol, start_date, db_manager)
 
         need_fetch = await _should_fetch_data(cached_data, start_date)
         fetched_data = []

@@ -74,7 +74,7 @@ class RebalancingService:
 
     def __init__(
         self,
-        stock_repo: ISecurityRepository,
+        security_repo: ISecurityRepository,
         position_repo: IPositionRepository,
         allocation_repo: IAllocationRepository,
         portfolio_repo: PortfolioRepository,
@@ -85,7 +85,7 @@ class RebalancingService:
         tradernet_client: TradernetClient,
         exchange_rate_service: ExchangeRateService,
     ):
-        self._stock_repo = stock_repo
+        self._stock_repo = security_repo
         self._position_repo = position_repo
         self._allocation_repo = allocation_repo
         self._portfolio_repo = portfolio_repo
@@ -460,7 +460,7 @@ class RebalancingService:
         # Build portfolio context
         portfolio_context = await build_portfolio_context(
             position_repo=self._position_repo,
-            stock_repo=self._stock_repo,
+            security_repo=self._stock_repo,
             allocation_repo=self._allocation_repo,
             db_manager=self._db_manager,
         )
@@ -698,8 +698,8 @@ class RebalancingService:
             industry = stock.industry if stock else None
 
             new_positions = dict(current_context.positions)
-            new_geographies = dict(current_context.stock_countries or {})
-            new_industries = dict(current_context.stock_industries or {})
+            new_geographies = dict(current_context.security_countries or {})
+            new_industries = dict(current_context.security_industries or {})
 
             if step.side == "SELL":
                 current_value = new_positions.get(step.symbol, 0)
@@ -732,10 +732,10 @@ class RebalancingService:
                 industry_weights=current_context.industry_weights,
                 positions=new_positions,
                 total_value=new_total,
-                stock_countries=new_geographies,
-                stock_industries=new_industries,
-                stock_scores=current_context.stock_scores,
-                stock_dividends=current_context.stock_dividends,
+                security_countries=new_geographies,
+                security_industries=new_industries,
+                security_scores=current_context.security_scores,
+                security_dividends=current_context.security_dividends,
             )
 
             # Calculate portfolio score after this step

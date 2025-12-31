@@ -69,7 +69,7 @@ class SecurityUpdate(BaseModel):
 
 @router.get("")
 async def get_stocks(
-    stock_repo: SecurityRepositoryDep,
+    security_repo: SecurityRepositoryDep,
     portfolio_service: PortfolioServiceDep,
     position_repo: PositionRepositoryDep,
 ):
@@ -105,7 +105,7 @@ async def get_stocks(
             # Cache looks valid, return it
             return cached
 
-    stocks_data = await stock_repo.get_with_scores()
+    stocks_data = await security_repo.get_with_scores()
 
     priority_inputs = []
     stock_dicts = []
@@ -151,7 +151,7 @@ async def get_stocks(
 
 @router.get("/universe-suggestions")
 async def get_universe_suggestions(
-    stock_repo: SecurityRepositoryDep,
+    security_repo: SecurityRepositoryDep,
     scoring_service: ScoringServiceDep,
     settings_repo: SettingsRepositoryDep,
 ):
@@ -166,7 +166,7 @@ async def get_universe_suggestions(
         - stocks_to_prune: List of stocks suggested for pruning
     """
     from app.infrastructure.external.tradernet import get_tradernet_client
-    from app.modules.universe.domain.stock_discovery import StockDiscoveryService
+    from app.modules.universe.domain.security_discovery import StockDiscoveryService
     from app.modules.universe.domain.symbol_resolver import SymbolResolver
     from app.repositories import ScoreRepository
 
@@ -192,7 +192,7 @@ async def get_universe_suggestions(
             )
 
             # Get existing universe symbols
-            existing_stocks = await stock_repo.get_all_active()
+            existing_stocks = await security_repo.get_all_active()
             existing_symbols = [s.symbol for s in existing_stocks]
 
             # Initialize discovery service
@@ -213,9 +213,9 @@ async def get_universe_suggestions(
             if candidates:
                 # Initialize scoring service and symbol resolver
                 # SymbolResolver needs concrete SecurityRepository, not interface
-                from app.infrastructure.dependencies import get_stock_repository
+                from app.infrastructure.dependencies import get_security_repository
 
-                concrete_stock_repo = get_stock_repository()
+                concrete_stock_repo = get_security_repository()
                 symbol_resolver = SymbolResolver(
                     tradernet_client=tradernet_client,
                     security_repo=concrete_stock_repo,
@@ -432,7 +432,7 @@ async def get_universe_suggestions(
             )
 
             # Get all active stocks
-            stocks = await stock_repo.get_all_active()
+            stocks = await security_repo.get_all_active()
             logger.info(f"Checking {len(stocks)} active stocks for pruning")
 
             if stocks:
@@ -563,7 +563,7 @@ async def get_universe_suggestions(
 @router.get("/{isin}")
 async def get_stock(
     isin: str,
-    stock_repo: SecurityRepositoryDep,
+    security_repo: SecurityRepositoryDep,
     position_repo: PositionRepositoryDep,
     score_repo: ScoreRepositoryDep,
 ):
@@ -577,7 +577,7 @@ async def get_stock(
     if not is_isin(isin):
         raise HTTPException(status_code=400, detail="Invalid ISIN format")
 
-    stock = await stock_repo.get_by_isin(isin)
+    stock = await security_repo.get_by_isin(isin)
     if not stock:
         raise HTTPException(status_code=404, detail="Stock not found")
 
@@ -643,58 +643,60 @@ async def get_stock(
 
 @router.post("")
 async def create_stock(
-    stock_data: SecurityCreate,
-    stock_repo: SecurityRepositoryDep,
+    security_data: SecurityCreate,
+    security_repo: SecurityRepositoryDep,
     score_repo: ScoreRepositoryDep,
     scoring_service: ScoringServiceDep,
 ):
     """Add a new stock to the universe."""
 
-    existing = await stock_repo.get_by_symbol(stock_data.symbol.upper())
+    existing = await security_repo.get_by_symbol(security_data.symbol.upper())
     if existing:
         raise HTTPException(status_code=400, detail="Stock already exists")
 
     # Auto-detect country, exchange, and industry from Yahoo Finance
     from app.infrastructure.external import yahoo_finance as yahoo
 
-    country, full_exchange_name = yahoo.get_stock_country_and_exchange(
-        stock_data.symbol, stock_data.yahoo_symbol
+    country, full_exchange_name = yahoo.get_security_country_and_exchange(
+        security_data.symbol, security_data.yahoo_symbol
     )
-    industry = yahoo.get_stock_industry(stock_data.symbol, stock_data.yahoo_symbol)
+    industry = yahoo.get_security_industry(
+        security_data.symbol, security_data.yahoo_symbol
+    )
 
     # Use factory to create stock
     stock_dict = {
-        "symbol": stock_data.symbol,
-        "name": stock_data.name,
+        "symbol": security_data.symbol,
+        "name": security_data.name,
         "country": country,
         "fullExchangeName": full_exchange_name,
         "industry": industry,
-        "yahoo_symbol": stock_data.yahoo_symbol,
-        "min_lot": stock_data.min_lot,
-        "allow_buy": stock_data.allow_buy,
-        "allow_sell": stock_data.allow_sell,
+        "yahoo_symbol": security_data.yahoo_symbol,
+        "min_lot": security_data.min_lot,
+        "allow_buy": security_data.allow_buy,
+        "allow_sell": security_data.allow_sell,
     }
 
     new_stock = SecurityFactory.create_from_api_request(stock_dict)
 
-    await stock_repo.create(new_stock)
+    await security_repo.create(new_stock)
 
     # Publish domain event
     event_bus = get_event_bus()
     event_bus.publish(SecurityAddedEvent(security=new_stock))
 
     score = await scoring_service.calculate_and_save_score(
-        stock_data.symbol.upper(), stock_data.yahoo_symbol
+        security_data.symbol.upper(), security_data.yahoo_symbol
     )
 
     cache.invalidate("stocks_with_scores")
 
     return {
-        "message": f"Stock {stock_data.symbol.upper()} added to universe",
-        "symbol": stock_data.symbol.upper(),
+        "message": f"Stock {security_data.symbol.upper()} added to universe",
+        "symbol": security_data.symbol.upper(),
         "isin": new_stock.isin,
-        "yahoo_symbol": stock_data.yahoo_symbol,
-        "name": stock_data.name,
+        "yahoo_symbol": security_data.yahoo_symbol,
+        "name": security_data.name,
         "country": new_stock.country,
         "fullExchangeName": new_stock.fullExchangeName,
         "industry": industry,
@@ -705,7 +707,7 @@ async def create_stock(
 
 @router.post("/add-by-identifier")
 async def add_stock_by_identifier(
-    stock_data: SecurityAddByIdentifier,
+    security_data: SecurityAddByIdentifier,
     stock_setup_service: SecuritySetupServiceDep,
     score_repo: ScoreRepositoryDep,
 ):
@@ -724,7 +726,7 @@ async def add_stock_by_identifier(
     6. Calculate and save the initial stock score
 
     Args:
-        stock_data: Request containing identifier and optional settings
+        security_data: Request containing identifier and optional settings
         stock_setup_service: Stock setup service
         score_repo: Score repository for retrieving calculated score
 
@@ -733,7 +735,7 @@ async def add_stock_by_identifier(
     """
     try:
         # Validate identifier format (basic check)
-        identifier = stock_data.identifier.strip().upper()
+        identifier = security_data.identifier.strip().upper()
         if not identifier:
             raise HTTPException(status_code=400, detail="Identifier cannot be empty")
 
@@ -743,12 +745,14 @@ async def add_stock_by_identifier(
         # Add the stock
         stock = await stock_setup_service.add_security_by_identifier(
             identifier=identifier,
-            min_lot=stock_data.min_lot or 1,
+            min_lot=security_data.min_lot or 1,
             allow_buy=(
-                stock_data.allow_buy if stock_data.allow_buy is not None else True
+                security_data.allow_buy if security_data.allow_buy is not None else True
             ),
             allow_sell=(
-                stock_data.allow_sell if stock_data.allow_sell is not None else True
+                security_data.allow_sell
+                if security_data.allow_sell is not None
+                else True
             ),
         )
 
@@ -784,7 +788,7 @@ async def add_stock_by_identifier(
 
 @router.post("/refresh-all")
 async def refresh_all_scores(
-    stock_repo: SecurityRepositoryDep,
+    security_repo: SecurityRepositoryDep,
     scoring_service: ScoringServiceDep,
 ):
     """Recalculate scores for all stocks in universe and update industries."""
@@ -800,15 +804,15 @@ async def refresh_all_scores(
     logger.info("Invalidated in-memory recommendation caches")
 
     try:
-        stocks = await stock_repo.get_all_active()
+        stocks = await security_repo.get_all_active()
 
         for stock in stocks:
             if not stock.industry:
-                detected_industry = yahoo.get_stock_industry(
+                detected_industry = yahoo.get_security_industry(
                     stock.symbol, stock.yahoo_symbol
                 )
                 if detected_industry:
-                    await stock_repo.update(stock.symbol, industry=detected_industry)
+                    await security_repo.update(stock.symbol, industry=detected_industry)
 
         scores = await scoring_service.score_all_stocks()
 
@@ -823,9 +827,9 @@ async def refresh_all_scores(
 
 
 @router.post("/{isin}/refresh-data")
-async def refresh_stock_data(
+async def refresh_security_data(
     isin: str,
-    stock_repo: SecurityRepositoryDep,
+    security_repo: SecurityRepositoryDep,
 ):
     """Trigger full data refresh for a stock.
 
@@ -846,7 +850,7 @@ async def refresh_stock_data(
     if not is_isin(isin):
         raise HTTPException(status_code=400, detail="Invalid ISIN format")
 
-    stock = await stock_repo.get_by_isin(isin)
+    stock = await security_repo.get_by_isin(isin)
     if not stock:
         raise HTTPException(status_code=404, detail="Stock not found")
 
@@ -875,7 +879,7 @@ async def refresh_stock_data(
 @router.post("/{isin}/refresh")
 async def refresh_stock_score(
     isin: str,
-    stock_repo: SecurityRepositoryDep,
+    security_repo: SecurityRepositoryDep,
     scoring_service: ScoringServiceDep,
 ):
     """Trigger score recalculation for a stock (quick, no historical data sync).
@@ -892,7 +896,7 @@ async def refresh_stock_score(
     recommendation_cache = get_recommendation_cache()
     await recommendation_cache.invalidate_all_recommendations()
 
-    stock = await stock_repo.get_by_isin(isin)
+    stock = await security_repo.get_by_isin(isin)
     if not stock:
         raise HTTPException(status_code=404, detail="Stock not found")
 
@@ -955,11 +959,11 @@ async def refresh_stock_score(
 
 
 async def _validate_symbol_change(
-    old_symbol: str, new_symbol: str, stock_repo: SecurityRepositoryDep
+    old_symbol: str, new_symbol: str, security_repo: SecurityRepositoryDep
 ) -> None:
     """Validate that new symbol doesn't already exist."""
     if new_symbol != old_symbol:
-        existing = await stock_repo.get_by_symbol(new_symbol)
+        existing = await security_repo.get_by_symbol(new_symbol)
         if existing:
             raise HTTPException(
                 status_code=400, detail=f"Symbol {new_symbol} already exists"
@@ -1061,7 +1065,7 @@ def _build_update_dict(
 
 def _format_stock_response(stock, score) -> dict:
     """Format stock data for API response."""
-    stock_data = {
+    security_data = {
         "symbol": stock.symbol,
         "isin": stock.isin,
         "yahoo_symbol": stock.yahoo_symbol,
@@ -1076,15 +1080,15 @@ def _format_stock_response(stock, score) -> dict:
         "allow_sell": stock.allow_sell,
     }
     if score:
-        stock_data["total_score"] = score.total_score
-    return stock_data
+        security_data["total_score"] = score.total_score
+    return security_data
 
 
 @router.put("/{isin}")
 async def update_stock(
     isin: str,
     update: SecurityUpdate,
-    stock_repo: SecurityRepositoryDep,
+    security_repo: SecurityRepositoryDep,
     scoring_service: ScoringServiceDep,
 ):
     """Update stock details.
@@ -1098,7 +1102,7 @@ async def update_stock(
         if not is_isin(isin):
             raise HTTPException(status_code=400, detail="Invalid ISIN format")
 
-        stock = await stock_repo.get_by_isin(isin)
+        stock = await security_repo.get_by_isin(isin)
         if not stock:
             raise HTTPException(status_code=404, detail="Stock not found")
 
@@ -1107,7 +1111,7 @@ async def update_stock(
         new_symbol = None
         if update.new_symbol is not None:
             new_symbol = update.new_symbol.upper()
-            await _validate_symbol_change(old_symbol, new_symbol, stock_repo)
+            await _validate_symbol_change(old_symbol, new_symbol, security_repo)
 
         updates = _build_update_dict(
             update, new_symbol if new_symbol != old_symbol else None
@@ -1115,12 +1119,12 @@ async def update_stock(
         if not updates:
             raise HTTPException(status_code=400, detail="No updates provided")
 
-        await stock_repo.update(old_symbol, **updates)
+        await security_repo.update(old_symbol, **updates)
 
         final_symbol = (
             new_symbol if new_symbol and new_symbol != old_symbol else old_symbol
         )
-        updated_stock = await stock_repo.get_by_symbol(final_symbol)
+        updated_stock = await security_repo.get_by_symbol(final_symbol)
         if not updated_stock:
             raise HTTPException(status_code=404, detail="Stock not found after update")
 
@@ -1151,7 +1155,7 @@ async def update_stock(
 @router.delete("/{isin}")
 async def delete_stock(
     isin: str,
-    stock_repo: SecurityRepositoryDep,
+    security_repo: SecurityRepositoryDep,
 ):
     """Remove a stock from the universe (soft delete by setting active=0).
 
@@ -1165,7 +1169,7 @@ async def delete_stock(
 
     logger.info(f"DELETE /api/securities/{isin} - Attempting to delete stock")
 
-    stock = await stock_repo.get_by_isin(isin)
+    stock = await security_repo.get_by_isin(isin)
     if not stock:
         logger.warning(f"DELETE /api/securities/{isin} - Stock not found")
         raise HTTPException(status_code=404, detail="Stock not found")
@@ -1174,7 +1178,7 @@ async def delete_stock(
     logger.info(
         f"DELETE /api/securities/{isin} - Soft deleting stock {symbol} (setting active=0)"
     )
-    await stock_repo.delete(symbol)
+    await security_repo.delete(symbol)
 
     cache.invalidate("stocks_with_scores")
 
@@ -1203,9 +1207,9 @@ async def add_stock_from_suggestion(
             raise HTTPException(status_code=400, detail="Invalid ISIN format")
 
         # Check if stock already exists
-        from app.infrastructure.dependencies import get_stock_repository
+        from app.infrastructure.dependencies import get_security_repository
 
-        concrete_stock_repo = get_stock_repository()
+        concrete_stock_repo = get_security_repository()
         existing = await concrete_stock_repo.get_by_isin(isin)
         if existing:
             raise HTTPException(
@@ -1254,7 +1258,7 @@ async def add_stock_from_suggestion(
 @router.post("/{isin}/prune-from-suggestion")
 async def prune_stock_from_suggestion(
     isin: str,
-    stock_repo: SecurityRepositoryDep,
+    security_repo: SecurityRepositoryDep,
 ):
     """Prune a stock from the universe from a suggestion.
 
@@ -1271,7 +1275,7 @@ async def prune_stock_from_suggestion(
 
     try:
         # Check if stock exists
-        stock = await stock_repo.get_by_isin(isin)
+        stock = await security_repo.get_by_isin(isin)
         if not stock:
             raise HTTPException(
                 status_code=404, detail=f"Stock with ISIN {isin} not found"
@@ -1285,9 +1289,9 @@ async def prune_stock_from_suggestion(
 
         # Mark as inactive (soft delete)
         # Need concrete SecurityRepository for mark_inactive method
-        from app.infrastructure.dependencies import get_stock_repository
+        from app.infrastructure.dependencies import get_security_repository
 
-        concrete_stock_repo = get_stock_repository()
+        concrete_stock_repo = get_security_repository()
         symbol = stock.symbol
         await concrete_stock_repo.mark_inactive(symbol)
 

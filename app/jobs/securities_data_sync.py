@@ -149,8 +149,8 @@ async def _get_all_active_stocks() -> list:
     """Get all active stocks from the database."""
     from app.repositories import SecurityRepository
 
-    stock_repo = SecurityRepository()
-    return await stock_repo.get_all_active()
+    security_repo = SecurityRepository()
+    return await security_repo.get_all_active()
 
 
 async def _process_single_stock(symbol: str):
@@ -304,11 +304,11 @@ async def _detect_and_update_industry(symbol: str):
 
     # Detect industry from Yahoo Finance
     try:
-        detected_industry = yahoo.get_stock_industry(symbol, yahoo_symbol)
+        detected_industry = yahoo.get_security_industry(symbol, yahoo_symbol)
         if detected_industry:
             # Update the stock's industry in the database
-            stock_repo = SecurityRepository()
-            await stock_repo.update(symbol, industry=detected_industry)
+            security_repo = SecurityRepository()
+            await security_repo.update(symbol, industry=detected_industry)
             logger.info(f"Updated industry for {symbol}: {detected_industry}")
         else:
             logger.debug(f"No industry detected for {symbol} from Yahoo Finance")
@@ -375,7 +375,7 @@ async def _detect_and_update_country_and_exchange(symbol: str):
 
     # Detect country and exchange from Yahoo Finance
     try:
-        detected_country, detected_exchange = yahoo.get_stock_country_and_exchange(
+        detected_country, detected_exchange = yahoo.get_security_country_and_exchange(
             symbol, yahoo_symbol
         )
 
@@ -389,14 +389,14 @@ async def _detect_and_update_country_and_exchange(symbol: str):
 
         if detected_country or detected_exchange:
             # Update the stock's country and fullExchangeName in the database
-            stock_repo = SecurityRepository()
+            security_repo = SecurityRepository()
             updates = {}
             if detected_country:
                 updates["country"] = detected_country
             if detected_exchange:
                 updates["fullExchangeName"] = detected_exchange
             if updates:
-                await stock_repo.update(symbol, **updates)
+                await security_repo.update(symbol, **updates)
                 logger.info(
                     f"Updated country/exchange for {symbol}: country={detected_country}, exchange={detected_exchange}"
                 )
@@ -572,25 +572,25 @@ async def _build_portfolio_context(db_manager):
     cursor = await db_manager.config.execute(
         "SELECT symbol, country, industry FROM securities WHERE active = 1"
     )
-    stock_data = await cursor.fetchall()
+    security_data = await cursor.fetchall()
 
-    stock_countries = {row[0]: row[1] for row in stock_data if row[1]}
-    stock_industries = {row[0]: row[2] for row in stock_data if row[2]}
+    security_countries = {row[0]: row[1] for row in security_data if row[1]}
+    security_industries = {row[0]: row[2] for row in security_data if row[2]}
 
     # Get scores for quality weighting (from calculations.db)
     cursor = await db_manager.calculations.execute(
         "SELECT symbol, quality_score FROM scores"
     )
-    stock_scores = {row[0]: row[1] for row in await cursor.fetchall() if row[1]}
+    security_scores = {row[0]: row[1] for row in await cursor.fetchall() if row[1]}
 
     return PortfolioContext(
         country_weights=country_weights,
         industry_weights=industry_weights,
         positions=positions,
         total_value=total_value,
-        stock_countries=stock_countries,
-        stock_industries=stock_industries,
-        stock_scores=stock_scores,
+        security_countries=security_countries,
+        security_industries=security_industries,
+        security_scores=security_scores,
         country_to_group=country_to_group,
         industry_to_group=industry_to_group,
     )

@@ -71,7 +71,7 @@ class TestTickerContentService:
         return TickerContentService(
             portfolio_repo=mock_portfolio_repo,
             position_repo=mock_position_repo,
-            stock_repo=mock_stock_repo,
+            security_repo=mock_stock_repo,
             settings_repo=mock_settings_repo,
             allocation_repo=mock_allocation_repo,
             tradernet_client=mock_tradernet_client,

@@ -251,10 +251,10 @@ async def _sync_portfolio_internal():
         from app.repositories import PositionRepository, SecurityRepository
 
         position_repo = PositionRepository()
-        stock_repo = SecurityRepository()
+        security_repo = SecurityRepository()
 
         positions_before = await position_repo.get_all()
-        stocks = await stock_repo.get_all_active()
+        stocks = await security_repo.get_all_active()
         cash_balances_before_raw = client.get_cash_balances()
         cash_balances_before = (
             {b.currency: b.amount for b in cash_balances_before_raw}
@@ -363,7 +363,7 @@ async def _sync_portfolio_internal():
         )
 
         # Check and add missing portfolio stocks to universe
-        await _ensure_portfolio_stocks_in_universe(positions, client, stock_repo)
+        await _ensure_portfolio_stocks_in_universe(positions, client, security_repo)
 
         # Sync stock currencies
         await sync_stock_currencies()
@@ -443,8 +443,8 @@ async def _sync_prices_internal():
         # Note: Direct DB access here is a known architecture violation.
         # This could use SecurityRepository.get_all_active() but needs yahoo_symbol field.
         # See README.md Architecture section for details.
-        stock_repo = SecurityRepository()
-        stocks = await stock_repo.get_all_active()
+        security_repo = SecurityRepository()
+        stocks = await security_repo.get_all_active()
 
         # Extract symbols and yahoo_symbols
         rows = [
@@ -520,8 +520,8 @@ async def sync_stock_currencies():
 
     try:
         # Note: Using SecurityRepository instead of direct DB access
-        stock_repo = SecurityRepository()
-        stocks = await stock_repo.get_all_active()
+        security_repo = SecurityRepository()
+        stocks = await security_repo.get_all_active()
         symbols = [stock.symbol for stock in stocks]
 
         if not symbols:
@@ -555,7 +555,7 @@ async def sync_stock_currencies():
 
 
 async def _ensure_portfolio_stocks_in_universe(
-    positions: list, client, stock_repo: SecurityRepository
+    positions: list, client, security_repo: SecurityRepository
 ) -> None:
     """Ensure all portfolio stocks are in the universe.
 
@@ -570,7 +570,7 @@ async def _ensure_portfolio_stocks_in_universe(
     Args:
         positions: List of Position objects from Tradernet
         client: TradernetClient instance
-        stock_repo: SecurityRepository instance
+        security_repo: SecurityRepository instance
     """
     if not positions:
         logger.debug("No positions to check for universe membership")
@@ -585,7 +585,7 @@ async def _ensure_portfolio_stocks_in_universe(
     # Check which stocks are missing from universe
     missing_symbols = []
     for symbol in position_symbols:
-        existing = await stock_repo.get_by_symbol(symbol)
+        existing = await security_repo.get_by_symbol(symbol)
         if not existing:
             missing_symbols.append(symbol)
             logger.info(f"Portfolio stock {symbol} not in universe - will add")
@@ -609,12 +609,12 @@ async def _ensure_portfolio_stocks_in_universe(
     db_manager = get_db_manager()
     score_repo = get_score_repository()
     scoring_service = get_scoring_service(
-        stock_repo=stock_repo,
+        security_repo=security_repo,
         score_repo=score_repo,
         db_manager=db_manager,
     )
     stock_setup_service = SecuritySetupService(
-        security_repo=stock_repo,
+        security_repo=security_repo,
         scoring_service=scoring_service,
         tradernet_client=client,
         db_manager=db_manager,

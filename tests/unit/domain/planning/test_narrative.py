@@ -305,7 +305,7 @@ class TestGenerateBuyNarrative:
         from app.modules.planning.domain.narrative import _generate_buy_narrative
 
         context = MagicMock()
-        context.stock_dividends = {}
+        context.security_dividends = {}
 
         narrative = _generate_buy_narrative(
             symbol="BABA.US",
@@ -326,7 +326,7 @@ class TestGenerateBuyNarrative:
         from app.modules.planning.domain.narrative import _generate_buy_narrative
 
         context = MagicMock()
-        context.stock_dividends = {}
+        context.security_dividends = {}
 
         narrative = _generate_buy_narrative(
             symbol="SAP.EU",
@@ -347,7 +347,7 @@ class TestGenerateBuyNarrative:
         from app.modules.planning.domain.narrative import _generate_buy_narrative
 
         context = MagicMock()
-        context.stock_dividends = {}
+        context.security_dividends = {}
 
         narrative = _generate_buy_narrative(
             symbol="MSFT.US",
@@ -367,7 +367,7 @@ class TestGenerateBuyNarrative:
         from app.modules.planning.domain.narrative import _generate_buy_narrative
 
         context = MagicMock()
-        context.stock_dividends = {"T.US": 0.07}  # 7% yield
+        context.security_dividends = {"T.US": 0.07}  # 7% yield
 
         narrative = _generate_buy_narrative(
             symbol="T.US",
@@ -400,7 +400,7 @@ class TestGenerateStepNarrative:
         action.value_eur = 1000
 
         context = MagicMock()
-        context.stock_dividends = {}
+        context.security_dividends = {}
         context.positions = {"AAPL.US": 5000.0}  # Current position value
 
         narrative = generate_step_narrative(action, context, {})
@@ -421,7 +421,7 @@ class TestGenerateStepNarrative:
         action.value_eur = 1000
 
         context = MagicMock()
-        context.stock_dividends = {}
+        context.security_dividends = {}
 
         narrative = generate_step_narrative(action, context, {})
 

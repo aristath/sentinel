@@ -22,7 +22,7 @@ router = APIRouter()
 @router.post("/regenerate-sequences")
 async def regenerate_sequences(
     position_repo: PositionRepositoryDep,
-    stock_repo: SecurityRepositoryDep,
+    security_repo: SecurityRepositoryDep,
     tradernet_client: TradernetClientDep,
 ):
     """
@@ -38,7 +38,7 @@ async def regenerate_sequences(
     try:
         # Get current portfolio state
         positions = await position_repo.get_all()
-        stocks = await stock_repo.get_all_active()
+        stocks = await security_repo.get_all_active()
 
         # Fetch pending orders for hash generation
         pending_orders = []
@@ -91,7 +91,7 @@ async def regenerate_sequences(
 
 async def _get_planner_status_internal(
     position_repo: PositionRepositoryDep,
-    stock_repo: SecurityRepositoryDep,
+    security_repo: SecurityRepositoryDep,
     tradernet_client: TradernetClientDep,
 ) -> Dict[str, Any]:
     """
@@ -102,7 +102,7 @@ async def _get_planner_status_internal(
     """
     # Get current portfolio state
     positions = await position_repo.get_all()
-    stocks = await stock_repo.get_all_active()
+    stocks = await security_repo.get_all_active()
 
     # Fetch pending orders for hash generation
     pending_orders = []
@@ -177,7 +177,7 @@ async def _get_planner_status_internal(
 @router.get("/status")
 async def get_planner_status(
     position_repo: PositionRepositoryDep,
-    stock_repo: SecurityRepositoryDep,
+    security_repo: SecurityRepositoryDep,
     tradernet_client: TradernetClientDep,
 ):
     """
@@ -195,7 +195,7 @@ async def get_planner_status(
     """
     try:
         return await _get_planner_status_internal(
-            position_repo, stock_repo, tradernet_client
+            position_repo, security_repo, tradernet_client
         )
     except Exception as e:
         logger.error(f"Error getting planner status: {e}", exc_info=True)
@@ -205,7 +205,7 @@ async def get_planner_status(
 @router.get("/status/stream")
 async def stream_planner_status(
     position_repo: PositionRepositoryDep,
-    stock_repo: SecurityRepositoryDep,
+    security_repo: SecurityRepositoryDep,
     tradernet_client: TradernetClientDep,
 ):
     """Stream planner status updates via Server-Sent Events (SSE).
@@ -220,7 +220,7 @@ async def stream_planner_status(
         try:
             # Get initial status and cache it (subscribe_planner_events will send it)
             initial_status = await _get_planner_status_internal(
-                position_repo, stock_repo, tradernet_client
+                position_repo, security_repo, tradernet_client
             )
             await planner_events.set_current_status(initial_status)
 

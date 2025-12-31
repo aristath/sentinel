@@ -266,8 +266,8 @@ def _generate_buy_narrative(
 
     # Add dividend context if relevant
     dividend_yield = (
-        portfolio_context.stock_dividends.get(symbol, 0)
-        if portfolio_context.stock_dividends
+        portfolio_context.security_dividends.get(symbol, 0)
+        if portfolio_context.security_dividends
         else 0
     )
     if dividend_yield and dividend_yield > 0.03:

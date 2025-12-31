@@ -46,7 +46,8 @@ async def migrate():
             # Update known lot sizes
             for symbol, lot_size in KNOWN_LOT_SIZES.items():
                 await db.execute(
-                    "UPDATE securities SET min_lot = ? WHERE symbol = ?", (lot_size, symbol)
+                    "UPDATE securities SET min_lot = ? WHERE symbol = ?",
+                    (lot_size, symbol),
                 )
             print(f"Updated {len(KNOWN_LOT_SIZES)} stocks with known lot sizes")
         else:

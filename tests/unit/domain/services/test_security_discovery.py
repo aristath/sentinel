@@ -31,7 +31,7 @@ class TestFilteringLogic:
 
         Bug caught: Wrong geography stocks included, violating user preferences.
         """
-        from app.domain.services.stock_discovery import SecurityDiscoveryService
+        from app.domain.services.security_discovery import SecurityDiscoveryService
 
         mock_client = MagicMock()
         mock_client.get_most_traded.return_value = [
@@ -75,7 +75,7 @@ class TestFilteringLogic:
 
         Bug caught: Wrong exchange stocks included.
         """
-        from app.domain.services.stock_discovery import SecurityDiscoveryService
+        from app.domain.services.security_discovery import SecurityDiscoveryService
 
         mock_client = MagicMock()
         mock_client.get_most_traded.return_value = [
@@ -119,7 +119,7 @@ class TestFilteringLogic:
 
         Bug caught: Low-liquidity stocks included, hard to trade.
         """
-        from app.domain.services.stock_discovery import SecurityDiscoveryService
+        from app.domain.services.security_discovery import SecurityDiscoveryService
 
         mock_client = MagicMock()
         mock_client.get_most_traded.return_value = [
@@ -163,7 +163,7 @@ class TestFilteringLogic:
 
         Bug caught: Duplicate stocks added to universe.
         """
-        from app.domain.services.stock_discovery import SecurityDiscoveryService
+        from app.domain.services.security_discovery import SecurityDiscoveryService
 
         mock_client = MagicMock()
         mock_client.get_most_traded.return_value = [
@@ -210,7 +210,7 @@ class TestFilteringLogic:
 
         Bug caught: Too many candidates fetched, API rate limits.
         """
-        from app.domain.services.stock_discovery import SecurityDiscoveryService
+        from app.domain.services.security_discovery import SecurityDiscoveryService
 
         # Generate many mock securities
         many_securities = [
@@ -258,7 +258,7 @@ class TestEdgeCases:
 
         Bug caught: Off-by-one at threshold.
         """
-        from app.domain.services.stock_discovery import SecurityDiscoveryService
+        from app.domain.services.security_discovery import SecurityDiscoveryService
 
         mock_client = MagicMock()
         mock_client.get_most_traded.return_value = [
@@ -300,7 +300,7 @@ class TestEdgeCases:
 
         Bug caught: No candidates when universe empty.
         """
-        from app.domain.services.stock_discovery import SecurityDiscoveryService
+        from app.domain.services.security_discovery import SecurityDiscoveryService
 
         mock_client = MagicMock()
         mock_client.get_most_traded.return_value = [
@@ -342,7 +342,7 @@ class TestEdgeCases:
 
         Bug caught: Memory issues or API errors.
         """
-        from app.domain.services.stock_discovery import SecurityDiscoveryService
+        from app.domain.services.security_discovery import SecurityDiscoveryService
 
         mock_client = MagicMock()
         mock_client.get_most_traded.return_value = [
@@ -382,7 +382,7 @@ class TestEdgeCases:
 
         Bug caught: Returns duplicates.
         """
-        from app.domain.services.stock_discovery import SecurityDiscoveryService
+        from app.domain.services.security_discovery import SecurityDiscoveryService
 
         mock_client = MagicMock()
         mock_client.get_most_traded.return_value = [
@@ -431,7 +431,7 @@ class TestSettingsIntegration:
 
         Bug caught: Ignores user geography settings.
         """
-        from app.domain.services.stock_discovery import SecurityDiscoveryService
+        from app.domain.services.security_discovery import SecurityDiscoveryService
 
         mock_client = MagicMock()
         mock_client.get_most_traded.return_value = [
@@ -473,7 +473,7 @@ class TestSettingsIntegration:
 
         Bug caught: Settings not parsed correctly.
         """
-        from app.domain.services.stock_discovery import SecurityDiscoveryService
+        from app.domain.services.security_discovery import SecurityDiscoveryService
 
         mock_client = MagicMock()
 
@@ -531,7 +531,7 @@ class TestErrorHandling:
 
         Bug caught: Crashes on API failure.
         """
-        from app.domain.services.stock_discovery import SecurityDiscoveryService
+        from app.domain.services.security_discovery import SecurityDiscoveryService
 
         mock_client = MagicMock()
         mock_client.get_most_traded.side_effect = Exception("API error")
@@ -570,7 +570,7 @@ class TestErrorHandling:
 
         Bug caught: Ignores user exchange settings.
         """
-        from app.domain.services.stock_discovery import SecurityDiscoveryService
+        from app.domain.services.security_discovery import SecurityDiscoveryService
 
         mock_client = MagicMock()
         mock_client.get_most_traded.return_value = [
@@ -613,7 +613,7 @@ class TestErrorHandling:
 
         Bug caught: Wrong liquidity threshold.
         """
-        from app.domain.services.stock_discovery import SecurityDiscoveryService
+        from app.domain.services.security_discovery import SecurityDiscoveryService
 
         mock_client = MagicMock()
         mock_client.get_most_traded.return_value = [
@@ -656,7 +656,7 @@ class TestErrorHandling:
 
         Bug caught: Crashes on malformed data.
         """
-        from app.domain.services.stock_discovery import SecurityDiscoveryService
+        from app.domain.services.security_discovery import SecurityDiscoveryService
 
         mock_client = MagicMock()
         mock_client.get_most_traded.return_value = None  # Invalid response

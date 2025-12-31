@@ -21,12 +21,12 @@ class PortfolioService:
         portfolio_repo: PortfolioRepository,
         position_repo: IPositionRepository,
         allocation_repo: IAllocationRepository,
-        stock_repo: ISecurityRepository,
+        security_repo: ISecurityRepository,
     ):
         self._portfolio_repo = portfolio_repo
         self._position_repo = position_repo
         self._allocation_repo = allocation_repo
-        self._stock_repo = stock_repo
+        self._stock_repo = security_repo
 
     def _calculate_position_value(self, pos: dict) -> float:
         """Calculate EUR value for a position."""

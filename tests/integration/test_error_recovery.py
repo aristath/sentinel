@@ -38,7 +38,7 @@ async def test_trade_execution_rollback_on_database_error(db):
     )
 
     position_repo = PositionRepository(db=db)
-    stock_repo = SecurityRepository(db=db)
+    security_repo = SecurityRepository(db=db)
 
     # Create mock currency exchange service and exchange rate service
     from app.domain.services.exchange_rate_service import ExchangeRateService
@@ -51,7 +51,7 @@ async def test_trade_execution_rollback_on_database_error(db):
     service = TradeExecutionService(
         trade_repo=trade_repo,
         position_repo=position_repo,
-        stock_repo=stock_repo,
+        security_repo=security_repo,
         tradernet_client=mock_client,
         currency_exchange_service=mock_currency_service,
         exchange_rate_service=mock_exchange_rate_service,
@@ -99,7 +99,7 @@ async def test_trade_execution_handles_external_failure(db):
     )
 
     position_repo = PositionRepository(db=db)
-    stock_repo = SecurityRepository(db=db)
+    security_repo = SecurityRepository(db=db)
 
     # Create mock client that fails on order placement
     mock_client = MagicMock()
@@ -117,7 +117,7 @@ async def test_trade_execution_handles_external_failure(db):
     service = TradeExecutionService(
         trade_repo=trade_repo,
         position_repo=position_repo,
-        stock_repo=stock_repo,
+        security_repo=security_repo,
         tradernet_client=mock_client,
         currency_exchange_service=mock_currency_service,
         exchange_rate_service=mock_exchange_rate_service,

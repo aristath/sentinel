@@ -371,7 +371,7 @@ class TestInitScheduler:
         pipeline_job = next((j for j in jobs if j.id == "stocks_data_sync"), None)
 
         assert pipeline_job is not None
-        assert pipeline_job.name == "Stocks Data Sync"
+        assert pipeline_job.name == "Securities Data Sync"
         assert isinstance(pipeline_job.trigger, IntervalTrigger)
 
     @pytest.mark.asyncio
@@ -788,7 +788,7 @@ class TestGetJobHealthStatus:
 
         mock_job2 = MagicMock()
         mock_job2.id = "stocks_data_sync"
-        mock_job2.name = "Stocks Data Sync"
+        mock_job2.name = "Securities Data Sync"
         mock_job2.next_run_time = datetime(2025, 12, 27, 13, 0, 0)
 
         mock_scheduler = MagicMock()
@@ -804,7 +804,7 @@ class TestGetJobHealthStatus:
         assert "sync_cycle" in status
         assert "stocks_data_sync" in status
         assert status["sync_cycle"]["name"] == "Sync Cycle"
-        assert status["stocks_data_sync"]["name"] == "Stocks Data Sync"
+        assert status["stocks_data_sync"]["name"] == "Securities Data Sync"
 
     def test_includes_failure_count(self):
         """Test that failure count is included in status."""

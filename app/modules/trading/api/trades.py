@@ -71,7 +71,7 @@ def _get_currency_conversion_name(symbol: str) -> str:
 @router.get("")
 async def get_trades(
     trade_repo: TradeRepositoryDep,
-    stock_repo: SecurityRepositoryDep,
+    security_repo: SecurityRepositoryDep,
     limit: int = 50,
 ):
     """Get trade history."""
@@ -82,7 +82,7 @@ async def get_trades(
     for trade in trades:
         if not _is_currency_conversion(trade.symbol):
             if trade.symbol not in stock_names:
-                stock = await stock_repo.get_by_symbol(trade.symbol)
+                stock = await security_repo.get_by_symbol(trade.symbol)
                 stock_names[trade.symbol] = stock.name if stock else trade.symbol
 
     return [
@@ -107,7 +107,7 @@ async def get_trades(
 @router.post("/execute")
 async def execute_trade(
     trade: TradeRequest,
-    stock_repo: SecurityRepositoryDep,
+    security_repo: SecurityRepositoryDep,
     trade_repo: TradeRepositoryDep,
     position_repo: PositionRepositoryDep,
     safety_service: TradeSafetyServiceDep,
@@ -118,7 +118,7 @@ async def execute_trade(
     The symbol field must be an ISIN.
     """
     # Check stock exists - trade.symbol is validated as ISIN by the model
-    stock = await stock_repo.get_by_isin(trade.symbol)
+    stock = await security_repo.get_by_isin(trade.symbol)
     if not stock:
         raise HTTPException(status_code=404, detail="Stock not found")
 

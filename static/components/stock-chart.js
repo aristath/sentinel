@@ -1,12 +1,12 @@
 /**
  * Stock Chart Modal Component
- * Displays stock price history in a modal using Lightweight Charts
+ * Displays security price history in a modal using Lightweight Charts
  */
 
 /**
- * Alpine.js component for stock chart
+ * Alpine.js component for security chart
  */
-function stockChartComponent() {
+function securityChartComponent() {
   return {
     selectedRange: '10Y',
     selectedSource: 'yahoo',
@@ -17,17 +17,17 @@ function stockChartComponent() {
     lineSeries: null,
     symbol: null,
     isin: null,
-    stockName: null,
+    securityName: null,
 
     init() {
       // Watch for symbol changes from store (for display)
       this.$watch('$store.app.selectedStockSymbol', (symbol) => {
         if (symbol) {
           this.symbol = symbol;
-          // Find stock name from store
-          const stocks = this.$store.app.stocks || [];
-          const stock = stocks.find(s => s.symbol === symbol);
-          this.stockName = stock ? stock.name : null;
+          // Find security name from store
+          const securitys = this.$store.app.securitys || [];
+          const security = securitys.find(s => s.symbol === symbol);
+          this.securityName = security ? security.name : null;
         }
       });
 
@@ -75,7 +75,7 @@ function stockChartComponent() {
         await this.$nextTick();
         this.renderChart();
       } catch (err) {
-        console.error('Failed to load stock chart:', err);
+        console.error('Failed to load security chart:', err);
         this.error = 'Failed to load chart data';
         if (this.chart) {
           this.chart.remove();
@@ -88,7 +88,7 @@ function stockChartComponent() {
     },
 
     renderChart() {
-      const container = document.getElementById('stock-chart-container');
+      const container = document.getElementById('security-chart-container');
       if (!container) return;
 
       // Remove existing chart
@@ -152,7 +152,7 @@ function stockChartComponent() {
       this.error = null;
       this.symbol = null;
       this.isin = null;
-      this.stockName = null;
+      this.securityName = null;
     },
   };
 }
@@ -160,7 +160,7 @@ function stockChartComponent() {
 class StockChartModal extends HTMLElement {
   connectedCallback() {
     this.innerHTML = `
-      <div x-data="stockChartComponent()"
+      <div x-data="securityChartComponent()"
            x-show="$store.app.showStockChart"
            class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
            x-transition>
@@ -168,7 +168,7 @@ class StockChartModal extends HTMLElement {
           <div class="flex items-center justify-between p-4 border-b border-gray-700">
             <div>
               <h2 class="text-lg font-semibold text-gray-100" x-text="symbol || 'Stock Chart'"></h2>
-              <p class="text-xs text-gray-300" x-show="stockName" x-text="stockName"></p>
+              <p class="text-xs text-gray-300" x-show="securityName" x-text="securityName"></p>
             </div>
             <button @click="$store.app.showStockChart = false; closeChart()"
                     class="text-gray-400 hover:text-gray-200 text-2xl leading-none">&times;</button>
@@ -201,12 +201,12 @@ class StockChartModal extends HTMLElement {
             <div x-show="error && !loading" class="text-red-400 text-sm p-4" x-text="error"></div>
 
             <!-- Chart container -->
-            <div x-show="!loading && !error" id="stock-chart-container" class="h-96"></div>
+            <div x-show="!loading && !error" id="security-chart-container" class="h-96"></div>
 
             <!-- Empty state -->
             <div x-show="!loading && !error && (!chartData || chartData.length === 0)"
                  class="flex items-center justify-center h-96 text-gray-300 text-sm">
-              No data available for this stock
+              No data available for this security
             </div>
           </div>
         </div>
@@ -215,4 +215,4 @@ class StockChartModal extends HTMLElement {
   }
 }
 
-customElements.define('stock-chart-modal', StockChartModal);
+customElements.define('security-chart-modal', StockChartModal);

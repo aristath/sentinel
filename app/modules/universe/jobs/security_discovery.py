@@ -86,7 +86,7 @@ async def discover_new_securities() -> None:
         # Initialize scoring service and symbol resolver
         score_repo = ScoreRepository()
         scoring_service = ScoringService(
-            stock_repo=security_repo,
+            security_repo=security_repo,
             score_repo=score_repo,
             db_manager=db_manager,
         )

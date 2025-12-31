@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 async def build_portfolio_context(
     position_repo: IPositionRepository,
-    stock_repo: ISecurityRepository,
+    security_repo: ISecurityRepository,
     allocation_repo: IAllocationRepository,
     db_manager: DatabaseManager,
 ) -> PortfolioContext:
@@ -28,7 +28,7 @@ async def build_portfolio_context(
 
     Args:
         position_repo: Repository for positions
-        stock_repo: Repository for stocks
+        security_repo: Repository for stocks
         allocation_repo: Repository for allocations
         db_manager: Database manager for accessing scores
 
@@ -36,7 +36,7 @@ async def build_portfolio_context(
         PortfolioContext with all portfolio metadata needed for scoring
     """
     positions = await position_repo.get_all()
-    stocks = await stock_repo.get_all_active()
+    stocks = await security_repo.get_all_active()
     total_value = await position_repo.get_total_value()
 
     # Load group targets directly (already at group level)
@@ -61,9 +61,9 @@ async def build_portfolio_context(
 
     # Build stock metadata maps
     position_map = {p.symbol: p.market_value_eur or 0 for p in positions}
-    stock_countries = {s.symbol: s.country for s in stocks if s.country}
-    stock_industries = {s.symbol: s.industry for s in stocks if s.industry}
-    stock_scores: Dict[str, float] = {}
+    security_countries = {s.symbol: s.country for s in stocks if s.country}
+    security_industries = {s.symbol: s.industry for s in stocks if s.industry}
+    security_scores: Dict[str, float] = {}
 
     # Get existing scores
     score_rows = await db_manager.state.fetchall(
@@ -71,16 +71,16 @@ async def build_portfolio_context(
     )
     for row in score_rows:
         if row["quality_score"]:
-            stock_scores[row["symbol"]] = row["quality_score"]
+            security_scores[row["symbol"]] = row["quality_score"]
 
     return PortfolioContext(
         country_weights=country_weights,
         industry_weights=industry_weights,
         positions=position_map,
         total_value=total_value if total_value > 0 else 1.0,
-        stock_countries=stock_countries,
-        stock_industries=stock_industries,
-        stock_scores=stock_scores,
+        security_countries=security_countries,
+        security_industries=security_industries,
+        security_scores=security_scores,
         country_to_group=country_to_group,
         industry_to_group=industry_to_group,
     )

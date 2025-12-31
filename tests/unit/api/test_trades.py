@@ -115,7 +115,7 @@ class TestExecuteTrade:
         with pytest.raises(HTTPException) as exc_info:
             await execute_trade(
                 trade=request,
-                stock_repo=mock_stock_repo,
+                security_repo=mock_stock_repo,
                 trade_repo=AsyncMock(),
                 position_repo=AsyncMock(),
                 safety_service=AsyncMock(),
@@ -157,7 +157,7 @@ class TestExecuteTrade:
 
             result = await execute_trade(
                 trade=request,
-                stock_repo=mock_stock_repo,
+                security_repo=mock_stock_repo,
                 trade_repo=AsyncMock(),
                 position_repo=AsyncMock(),
                 safety_service=mock_safety_service,
@@ -191,7 +191,7 @@ class TestExecuteTrade:
             with pytest.raises(HTTPException) as exc_info:
                 await execute_trade(
                     trade=request,
-                    stock_repo=mock_stock_repo,
+                    security_repo=mock_stock_repo,
                     trade_repo=AsyncMock(),
                     position_repo=AsyncMock(),
                     safety_service=mock_safety_service,

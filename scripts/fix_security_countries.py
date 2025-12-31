@@ -18,7 +18,7 @@ from app.modules.universe.database.security_repository import SecurityRepository
 async def fix_missing_countries():
     """Fix missing country data by inferring from exchange names."""
     db_manager = get_db_manager()
-    stock_repo = SecurityRepository()
+    security_repo = SecurityRepository()
 
     # Exchange to country mapping (from stocks_data_sync.py)
     exchange_to_country = {
@@ -61,8 +61,10 @@ async def fix_missing_countries():
     for symbol, exchange in rows:
         if exchange in exchange_to_country:
             country = exchange_to_country[exchange]
-            print(f"Updating {symbol}: setting country = {country} (from exchange {exchange})")
-            await stock_repo.update(symbol, country=country)
+            print(
+                f"Updating {symbol}: setting country = {country} (from exchange {exchange})"
+            )
+            await security_repo.update(symbol, country=country)
             updated += 1
         else:
             print(f"Warning: {symbol} has exchange '{exchange}' not in mapping")

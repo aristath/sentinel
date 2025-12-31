@@ -3,7 +3,7 @@
  * Tabbed interface for organized settings management
  *
  * Note: Score weight settings have been removed. The portfolio optimizer
- * now handles allocation decisions. Per-stock scoring uses fixed weights.
+ * now handles allocation decisions. Per-security scoring uses fixed weights.
  */
 class SettingsModal extends HTMLElement {
   connectedCallback() {

@@ -124,7 +124,7 @@ class TestTradeValidation:
         service = TradeExecutionService(
             trade_repo=mock_trade_repo,
             position_repo=mock_position_repo,
-            stock_repo=mock_stock_repo,
+            security_repo=mock_stock_repo,
             tradernet_client=mock_client,
             currency_exchange_service=mock_currency_exchange_service,
             exchange_rate_service=mock_exchange_rate_service,
@@ -163,7 +163,7 @@ class TestTradeValidation:
         service = TradeExecutionService(
             trade_repo=mock_trade_repo,
             position_repo=mock_position_repo,
-            stock_repo=mock_stock_repo,
+            security_repo=mock_stock_repo,
             tradernet_client=mock_client,
             currency_exchange_service=mock_currency_exchange_service,
             exchange_rate_service=mock_exchange_rate_service,
@@ -202,7 +202,7 @@ class TestTradeValidation:
         service = TradeExecutionService(
             trade_repo=mock_trade_repo,
             position_repo=mock_position_repo,
-            stock_repo=mock_stock_repo,
+            security_repo=mock_stock_repo,
             tradernet_client=mock_client,
             currency_exchange_service=mock_currency_exchange_service,
             exchange_rate_service=mock_exchange_rate_service,
@@ -243,7 +243,7 @@ class TestTradeValidation:
         service = TradeExecutionService(
             trade_repo=mock_trade_repo,
             position_repo=mock_position_repo,
-            stock_repo=mock_stock_repo,
+            security_repo=mock_stock_repo,
             tradernet_client=mock_client,
             currency_exchange_service=mock_currency_exchange_service,
             exchange_rate_service=mock_exchange_rate_service,
@@ -281,7 +281,7 @@ class TestTradeValidation:
         service = TradeExecutionService(
             trade_repo=mock_trade_repo,
             position_repo=mock_position_repo,
-            stock_repo=mock_stock_repo,
+            security_repo=mock_stock_repo,
             tradernet_client=mock_client,
             currency_exchange_service=mock_currency_exchange_service,
             exchange_rate_service=mock_exchange_rate_service,
@@ -320,7 +320,7 @@ class TestTradeValidation:
         service = TradeExecutionService(
             trade_repo=mock_trade_repo,
             position_repo=mock_position_repo,
-            stock_repo=mock_stock_repo,
+            security_repo=mock_stock_repo,
             tradernet_client=mock_client,
             currency_exchange_service=mock_currency_exchange_service,
             exchange_rate_service=mock_exchange_rate_service,
@@ -356,7 +356,7 @@ class TestTradeValidation:
         service = TradeExecutionService(
             trade_repo=mock_trade_repo,
             position_repo=mock_position_repo,
-            stock_repo=mock_stock_repo,
+            security_repo=mock_stock_repo,
             tradernet_client=mock_client,
             currency_exchange_service=mock_currency_exchange_service,
             exchange_rate_service=mock_exchange_rate_service,
@@ -384,7 +384,7 @@ class TestTradeValidation:
         service = TradeExecutionService(
             trade_repo=mock_trade_repo,
             position_repo=mock_position_repo,
-            stock_repo=mock_stock_repo,
+            security_repo=mock_stock_repo,
             tradernet_client=mock_client,
             currency_exchange_service=mock_currency_exchange_service,
             exchange_rate_service=mock_exchange_rate_service,
@@ -431,7 +431,7 @@ class TestTradeValidation:
         service = TradeExecutionService(
             trade_repo=mock_trade_repo,
             position_repo=mock_position_repo,
-            stock_repo=mock_stock_repo,
+            security_repo=mock_stock_repo,
             tradernet_client=mock_client,
             currency_exchange_service=mock_currency_exchange_service,
             exchange_rate_service=mock_exchange_rate_service,
@@ -463,7 +463,7 @@ class TestTradeValidation:
         service = TradeExecutionService(
             trade_repo=mock_trade_repo,
             position_repo=mock_position_repo,
-            stock_repo=mock_stock_repo,
+            security_repo=mock_stock_repo,
             tradernet_client=mock_client,
             currency_exchange_service=mock_currency_exchange_service,
             exchange_rate_service=mock_exchange_rate_service,
@@ -508,7 +508,7 @@ class TestTradeValidation:
         service = TradeExecutionService(
             trade_repo=mock_trade_repo,
             position_repo=mock_position_repo,
-            stock_repo=mock_stock_repo,
+            security_repo=mock_stock_repo,
             tradernet_client=mock_client,
             currency_exchange_service=mock_currency_exchange_service,
             exchange_rate_service=mock_exchange_rate_service,
@@ -542,7 +542,7 @@ class TestTradeValidation:
         service = TradeExecutionService(
             trade_repo=mock_trade_repo,
             position_repo=mock_position_repo,
-            stock_repo=mock_stock_repo,
+            security_repo=mock_stock_repo,
             tradernet_client=mock_client,
             currency_exchange_service=mock_currency_exchange_service,
             exchange_rate_service=mock_exchange_rate_service,

@@ -1,6 +1,6 @@
 /**
  * Add Stock Modal Component
- * Form for adding new stocks to the universe
+ * Form for adding new securitys to the universe
  */
 class AddStockModal extends HTMLElement {
   connectedCallback() {
@@ -48,4 +48,4 @@ class AddStockModal extends HTMLElement {
   }
 }
 
-customElements.define('add-stock-modal', AddStockModal);
+customElements.define('add-security-modal', AddStockModal);

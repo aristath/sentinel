@@ -99,7 +99,7 @@ def _format_risk_metrics(metrics: dict) -> dict:
 @router.get("", response_model=List[PortfolioPosition])
 async def get_portfolio(
     position_repo: PositionRepositoryDep,
-    stock_repo: SecurityRepositoryDep,
+    security_repo: SecurityRepositoryDep,
 ):
     """Get current portfolio positions with values."""
 
@@ -107,7 +107,7 @@ async def get_portfolio(
     result = []
 
     for position in positions:
-        stock = await stock_repo.get_by_symbol(position.symbol)
+        stock = await security_repo.get_by_symbol(position.symbol)
         pos_dict = {
             "symbol": position.symbol,
             "quantity": position.quantity,

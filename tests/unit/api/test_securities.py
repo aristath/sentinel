@@ -244,7 +244,7 @@ class TestCreateStock:
         mock_score_repo = AsyncMock()
         mock_scoring_service = AsyncMock()
 
-        stock_data = SecurityCreate(
+        security_data = SecurityCreate(
             symbol="AAPL",
             name="Apple",
             country="United States",
@@ -252,7 +252,7 @@ class TestCreateStock:
 
         with pytest.raises(HTTPException) as exc_info:
             await create_stock(
-                stock_data, mock_stock_repo, mock_score_repo, mock_scoring_service
+                security_data, mock_stock_repo, mock_score_repo, mock_scoring_service
             )
 
         assert exc_info.value.status_code == 400
@@ -271,7 +271,7 @@ class TestCreateStock:
         mock_scoring_service = AsyncMock()
         mock_scoring_service.calculate_and_save_score.return_value = mock_score
 
-        stock_data = SecurityCreate(
+        security_data = SecurityCreate(
             symbol="AAPL",
             name="Apple",
             country="United States",
@@ -289,7 +289,7 @@ class TestCreateStock:
             mock_event_bus.return_value = MagicMock()
 
             result = await create_stock(
-                stock_data, mock_stock_repo, mock_score_repo, mock_scoring_service
+                security_data, mock_stock_repo, mock_score_repo, mock_scoring_service
             )
 
             assert result["symbol"] == "AAPL"
@@ -309,7 +309,7 @@ class TestCreateStock:
         mock_scoring_service = AsyncMock()
         mock_scoring_service.calculate_and_save_score.return_value = mock_score
 
-        stock_data = SecurityCreate(
+        security_data = SecurityCreate(
             symbol="AAPL",
             name="Apple",
             country="United States",
@@ -321,10 +321,10 @@ class TestCreateStock:
             patch("app.api.stocks.get_event_bus") as mock_event_bus,
             patch("app.api.stocks.SecurityFactory") as mock_factory,
             patch(
-                "app.infrastructure.external.yahoo_finance.get_stock_industry"
+                "app.infrastructure.external.yahoo_finance.get_security_industry"
             ) as mock_yahoo_industry,
             patch(
-                "app.infrastructure.external.yahoo_finance.get_stock_country_and_exchange"
+                "app.infrastructure.external.yahoo_finance.get_security_country_and_exchange"
             ) as mock_yahoo_country,
         ):
             mock_stock = MagicMock()
@@ -337,7 +337,7 @@ class TestCreateStock:
             mock_yahoo_country.return_value = ("United States", "NASDAQ")
 
             result = await create_stock(
-                stock_data, mock_stock_repo, mock_score_repo, mock_scoring_service
+                security_data, mock_stock_repo, mock_score_repo, mock_scoring_service
             )
 
             assert result["symbol"] == "AAPL"
@@ -391,7 +391,7 @@ class TestRefreshAllScores:
             patch("app.api.stocks.get_recommendation_cache") as mock_cache,
             patch("app.api.stocks.cache"),
             patch(
-                "app.infrastructure.external.yahoo_finance.get_stock_industry"
+                "app.infrastructure.external.yahoo_finance.get_security_industry"
             ) as mock_yahoo,
         ):
             mock_cache.return_value = AsyncMock()

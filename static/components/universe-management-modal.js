@@ -1,6 +1,6 @@
 /**
  * Universe Management Modal Component
- * Shows suggestions for adding and pruning stocks from the universe
+ * Shows suggestions for adding and pruning securitys from the universe
  */
 class UniverseManagementModal extends HTMLElement {
   connectedCallback() {
@@ -73,64 +73,64 @@ class UniverseManagementModal extends HTMLElement {
                 </div>
               </div>
 
-              <!-- Stocks to Prune Section -->
+              <!-- Securities to Prune Section -->
               <div>
                 <h3 class="text-sm font-semibold text-gray-200 mb-3 flex items-center gap-2">
                   <span class="px-2 py-1 bg-red-600/20 text-red-400 rounded text-xs">
-                    Stocks to Prune
+                    Securities to Prune
                   </span>
                   <span class="text-xs text-gray-400">
-                    (<span x-text="$store.app.universeSuggestions.stocksToPrune.length"></span>)
+                    (<span x-text="$store.app.universeSuggestions.securitysToPrune.length"></span>)
                   </span>
                 </h3>
 
                 <!-- Empty State -->
-                <div x-show="$store.app.universeSuggestions.stocksToPrune.length === 0"
+                <div x-show="$store.app.universeSuggestions.securitysToPrune.length === 0"
                      class="text-center py-4 text-gray-400 text-sm border border-gray-700 rounded">
-                  No stocks meet pruning criteria
+                  No securitys meet pruning criteria
                 </div>
 
                 <!-- Prune List -->
-                <div x-show="$store.app.universeSuggestions.stocksToPrune.length > 0"
+                <div x-show="$store.app.universeSuggestions.securitysToPrune.length > 0"
                      class="space-y-2">
-                  <template x-for="stock in $store.app.universeSuggestions.stocksToPrune" :key="stock.symbol">
+                  <template x-for="security in $store.app.universeSuggestions.securitysToPrune" :key="security.symbol">
                     <div class="bg-gray-900 border border-gray-700 rounded p-3 flex items-start justify-between gap-4">
                       <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2 mb-1">
-                          <span class="font-mono text-red-400 font-semibold" x-text="stock.symbol"></span>
+                          <span class="font-mono text-red-400 font-semibold" x-text="security.symbol"></span>
                           <span class="px-1.5 py-0.5 rounded text-xs font-mono"
-                                :class="stock.reason === 'delisted' ? 'bg-red-600/20 text-red-400' : 'bg-yellow-600/20 text-yellow-400'"
-                                x-text="stock.reason === 'delisted' ? 'Delisted' : 'Low Score'"></span>
+                                :class="security.reason === 'delisted' ? 'bg-red-600/20 text-red-400' : 'bg-yellow-600/20 text-yellow-400'"
+                                x-text="security.reason === 'delisted' ? 'Delisted' : 'Low Score'"></span>
                         </div>
-                        <div class="text-sm text-gray-300 mb-1" x-text="stock.name"></div>
+                        <div class="text-sm text-gray-300 mb-1" x-text="security.name"></div>
                         <div class="flex flex-wrap gap-2 text-xs text-gray-400 mb-2">
-                          <span x-show="stock.country" x-text="'Country: ' + stock.country"></span>
-                          <span x-show="stock.industry" x-text="'Industry: ' + stock.industry"></span>
+                          <span x-show="security.country" x-text="'Country: ' + security.country"></span>
+                          <span x-show="security.industry" x-text="'Industry: ' + security.industry"></span>
                         </div>
                         <div class="grid grid-cols-2 gap-2 text-xs">
                           <div>
                             <span class="text-gray-500">Avg Score:</span>
-                            <span class="text-gray-300 font-mono ml-1" x-text="stock.average_score.toFixed(3)"></span>
+                            <span class="text-gray-300 font-mono ml-1" x-text="security.average_score.toFixed(3)"></span>
                           </div>
                           <div>
                             <span class="text-gray-500">Current Score:</span>
-                            <span class="text-gray-300 font-mono ml-1" x-text="stock.current_score !== null ? stock.current_score.toFixed(3) : 'N/A'"></span>
+                            <span class="text-gray-300 font-mono ml-1" x-text="security.current_score !== null ? security.current_score.toFixed(3) : 'N/A'"></span>
                           </div>
                           <div>
                             <span class="text-gray-500">Samples:</span>
-                            <span class="text-gray-300 ml-1" x-text="stock.sample_count"></span>
+                            <span class="text-gray-300 ml-1" x-text="security.sample_count"></span>
                           </div>
                           <div>
                             <span class="text-gray-500">Months:</span>
-                            <span class="text-gray-300 ml-1" x-text="stock.months_analyzed"></span>
+                            <span class="text-gray-300 ml-1" x-text="security.months_analyzed"></span>
                           </div>
                         </div>
                       </div>
-                      <button @click="$store.app.pruneStockFromSuggestion(stock.isin)"
-                              :disabled="$store.app.pruningFromSuggestion[stock.isin]"
+                      <button @click="$store.app.pruneStockFromSuggestion(security.isin)"
+                              :disabled="$store.app.pruningFromSuggestion[security.isin]"
                               class="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs rounded transition-colors disabled:opacity-50 whitespace-nowrap">
-                        <span x-show="$store.app.pruningFromSuggestion[stock.isin]" class="inline-block animate-spin mr-1">&#9696;</span>
-                        <span x-text="$store.app.pruningFromSuggestion[stock.isin] ? 'Pruning...' : 'Prune'"></span>
+                        <span x-show="$store.app.pruningFromSuggestion[security.isin]" class="inline-block animate-spin mr-1">&#9696;</span>
+                        <span x-text="$store.app.pruningFromSuggestion[security.isin] ? 'Pruning...' : 'Prune'"></span>
                       </button>
                     </div>
                   </template>

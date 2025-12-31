@@ -576,8 +576,8 @@ async def identify_opportunities(
     for symbol, value in portfolio_context.positions.items():
         # Map country to group
         country = (
-            portfolio_context.stock_countries.get(symbol, "OTHER")
-            if portfolio_context.stock_countries
+            portfolio_context.security_countries.get(symbol, "OTHER")
+            if portfolio_context.security_countries
             else "OTHER"
         )
         group = country_to_group.get(country, "OTHER")
@@ -587,8 +587,8 @@ async def identify_opportunities(
 
         # Map industries to groups
         industries = (
-            portfolio_context.stock_industries.get(symbol)
-            if portfolio_context.stock_industries
+            portfolio_context.security_industries.get(symbol)
+            if portfolio_context.security_industries
             else None
         )
         if industries:
@@ -696,8 +696,8 @@ async def identify_opportunities(
         and s.symbol not in recently_bought
         and batch_prices.get(s.symbol, 0) > 0
         and (
-            portfolio_context.stock_scores.get(s.symbol, 0.5)
-            if portfolio_context.stock_scores
+            portfolio_context.security_scores.get(s.symbol, 0.5)
+            if portfolio_context.security_scores
             else 0.5
         )
         >= app_settings.min_stock_score
@@ -1134,8 +1134,8 @@ def _generate_adaptive_patterns(
         weight = value / portfolio_context.total_value
 
         # Map country to group and aggregate by group
-        if portfolio_context.stock_countries:
-            country = portfolio_context.stock_countries.get(symbol)
+        if portfolio_context.security_countries:
+            country = portfolio_context.security_countries.get(symbol)
             if country:
                 group = country_to_group.get(country, "OTHER")
                 current_group_country_allocations[group] = (
@@ -1143,8 +1143,8 @@ def _generate_adaptive_patterns(
                 )
 
         # Map industry to group and aggregate by group
-        if portfolio_context.stock_industries:
-            industries_str = portfolio_context.stock_industries.get(symbol)
+        if portfolio_context.security_industries:
+            industries_str = portfolio_context.security_industries.get(symbol)
             if industries_str:
                 industries = [i.strip() for i in industries_str.split(",")]
                 for industry in industries:
@@ -2297,8 +2297,8 @@ async def simulate_sequence(
             # Note: Currency conversion would happen here if needed
 
         new_positions = dict(current_context.positions)
-        new_geographies = dict(current_context.stock_countries or {})
-        new_industries = dict(current_context.stock_industries or {})
+        new_geographies = dict(current_context.security_countries or {})
+        new_industries = dict(current_context.security_industries or {})
 
         if action.side == TradeSide.SELL:
             # Reduce position (cash is PART of portfolio, so total doesn't change)
@@ -2340,10 +2340,10 @@ async def simulate_sequence(
             industry_weights=current_context.industry_weights,
             positions=new_positions,
             total_value=new_total,
-            stock_countries=new_geographies,
-            stock_industries=new_industries,
-            stock_scores=current_context.stock_scores,
-            stock_dividends=current_context.stock_dividends,
+            security_countries=new_geographies,
+            security_industries=new_industries,
+            security_scores=current_context.security_scores,
+            security_dividends=current_context.security_dividends,
         )
 
     return current_context, current_cash

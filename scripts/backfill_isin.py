@@ -22,7 +22,9 @@ sys.path.insert(0, str(project_root))
 from app.config import settings  # noqa: E402
 from app.core.database.manager import init_databases  # noqa: E402
 from app.infrastructure.external.tradernet import get_tradernet_client  # noqa: E402
-from app.modules.universe.database.security_repository import SecurityRepository  # noqa: E402
+from app.modules.universe.database.security_repository import (  # noqa: E402
+    SecurityRepository,
+)
 from app.modules.universe.domain.symbol_resolver import is_isin  # noqa: E402
 
 logging.basicConfig(
@@ -38,7 +40,7 @@ async def backfill_isin():
 
     # Initialize database manager
     db_manager = await init_databases(settings.data_dir)
-    stock_repo = SecurityRepository()
+    security_repo = SecurityRepository()
 
     # Connect to Tradernet
     tradernet = get_tradernet_client()
@@ -49,7 +51,7 @@ async def backfill_isin():
 
     try:
         # Get all active stocks
-        stocks = await stock_repo.get_all_active()
+        stocks = await security_repo.get_all_active()
         logger.info(f"Found {len(stocks)} active stocks")
 
         # Filter to stocks without ISIN
@@ -77,7 +79,7 @@ async def backfill_isin():
                         isin = quote_data.get("issue_nb")
                         if isin and is_isin(isin):
                             # Update stock with ISIN
-                            await stock_repo.update(stock.symbol, isin=isin)
+                            await security_repo.update(stock.symbol, isin=isin)
                             logger.info(f"  {stock.symbol} -> {isin}")
                             success_count += 1
                         else:

@@ -41,7 +41,7 @@ PORTFOLIO MANAGEMENT JOBS:
 6. universe_pruning - Monthly on 1st at configured hour
    - Removes low-quality stocks from universe
 
-7. stock_discovery - Monthly on 15th at 2:00
+7. security_discovery - Monthly on 15th at 2:00
    - Discovers and adds high-quality stocks
    - Checks stock_discovery_enabled setting internally
 
@@ -177,14 +177,14 @@ async def init_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 
-    # Job 2: Stocks Data Sync - hourly
+    # Job 2: Securities Data Sync - hourly
     # Handles: historical data sync, metrics calculation, score refresh
     # Processes stocks sequentially, only those not synced in 24 hours
     scheduler.add_job(
         run_stocks_data_sync,
         IntervalTrigger(hours=1),
         id="stocks_data_sync",
-        name="Stocks Data Sync",
+        name="Securities Data Sync",
         replace_existing=True,
     )
 
@@ -296,7 +296,7 @@ async def init_scheduler() -> AsyncIOScheduler:
     scheduler.add_job(
         discover_new_stocks,
         CronTrigger(day=15, hour=2, minute=0),
-        id="stock_discovery",
+        id="security_discovery",
         name="Stock Discovery",
         replace_existing=True,
     )
@@ -353,7 +353,7 @@ async def init_scheduler() -> AsyncIOScheduler:
         f"sync_cycle:{sync_cycle_minutes}m, stocks_data_sync:1h, "
         f"maintenance:{maintenance_hour}:00, dividend_reinvestment:{maintenance_hour}:30, "
         f"universe_pruning:1st of month {maintenance_hour}:00, "
-        f"stock_discovery:15th of month 02:00, "
+        f"security_discovery:15th of month 02:00, "
         f"planner_batch:{planner_batch_interval//60}m (fallback), "
         f"display_ticker_update:10s, auto_deploy:{auto_deploy_minutes}m, "
         f"event_based_trading:background"
@@ -406,7 +406,7 @@ async def reschedule_all_jobs():
         f"Jobs rescheduled - sync_cycle:{sync_cycle_minutes}m, "
         f"maintenance:{maintenance_hour}:00, dividend_reinvestment:{maintenance_hour}:30, "
         f"universe_pruning:1st of month {maintenance_hour}:00, "
-        f"stock_discovery:15th of month 02:00, "
+        f"security_discovery:15th of month 02:00, "
         f"auto_deploy:{auto_deploy_minutes}m"
     )
 

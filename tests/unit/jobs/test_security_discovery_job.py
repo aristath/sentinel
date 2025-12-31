@@ -81,28 +81,34 @@ def mock_stock_discovery_dependencies(
 
     with (
         patch(
-            "app.jobs.stock_discovery.SecurityRepository", return_value=mock_stock_repo
+            "app.jobs.security_discovery.SecurityRepository",
+            return_value=mock_stock_repo,
         ),
         patch(
-            "app.jobs.stock_discovery.SettingsRepository",
+            "app.jobs.security_discovery.SettingsRepository",
             return_value=mock_settings_repo,
         ),
         patch(
-            "app.jobs.stock_discovery.SecurityDiscoveryService",
+            "app.jobs.security_discovery.SecurityDiscoveryService",
             return_value=mock_discovery_service,
         ),
         patch(
-            "app.jobs.stock_discovery.ScoringService", return_value=mock_scoring_service
+            "app.jobs.security_discovery.ScoringService",
+            return_value=mock_scoring_service,
         ),
-        patch("app.jobs.stock_discovery.ScoreRepository", return_value=mock_score_repo),
-        patch("app.jobs.stock_discovery.get_db_manager", return_value=mock_db_manager),
         patch(
-            "app.jobs.stock_discovery.get_tradernet_client",
+            "app.jobs.security_discovery.ScoreRepository", return_value=mock_score_repo
+        ),
+        patch(
+            "app.jobs.security_discovery.get_db_manager", return_value=mock_db_manager
+        ),
+        patch(
+            "app.jobs.security_discovery.get_tradernet_client",
             return_value=mock_tradernet_client,
         ),
     ):
         yield {
-            "stock_repo": mock_stock_repo,
+            "security_repo": mock_stock_repo,
             "settings_repo": mock_settings_repo,
             "discovery_service": mock_discovery_service,
             "scoring_service": mock_scoring_service,
@@ -118,7 +124,7 @@ class TestScoringAndFiltering:
 
         Bug caught: High-quality stocks not added.
         """
-        from app.jobs.stock_discovery import discover_new_stocks
+        from app.jobs.security_discovery import discover_new_stocks
 
         candidates = [create_candidate("AAPL")]
         score = create_mock_score("AAPL", 0.80)  # Above 0.75 threshold
@@ -149,7 +155,7 @@ class TestScoringAndFiltering:
 
         Bug caught: Low-quality stocks added.
         """
-        from app.jobs.stock_discovery import discover_new_stocks
+        from app.jobs.security_discovery import discover_new_stocks
 
         candidates = [create_candidate("AAPL")]
         score = create_mock_score("AAPL", 0.70)  # Below 0.75 threshold
@@ -179,7 +185,7 @@ class TestScoringAndFiltering:
 
         Bug caught: Off-by-one at threshold.
         """
-        from app.jobs.stock_discovery import discover_new_stocks
+        from app.jobs.security_discovery import discover_new_stocks
 
         candidates = [create_candidate("AAPL")]
         score = create_mock_score("AAPL", 0.75)  # Exactly at threshold
@@ -210,7 +216,7 @@ class TestScoringAndFiltering:
 
         Bug caught: Filters before scoring, misses opportunities.
         """
-        from app.jobs.stock_discovery import discover_new_stocks
+        from app.jobs.security_discovery import discover_new_stocks
 
         candidates = [
             create_candidate("AAPL"),
@@ -252,7 +258,7 @@ class TestMonthlyLimit:
 
         Bug caught: Too many stocks added, universe grows too fast.
         """
-        from app.jobs.stock_discovery import discover_new_stocks
+        from app.jobs.security_discovery import discover_new_stocks
 
         # 5 candidates, but limit is 2
         candidates = [
@@ -303,7 +309,7 @@ class TestMonthlyLimit:
 
         Bug caught: Adds first N instead of best N.
         """
-        from app.jobs.stock_discovery import discover_new_stocks
+        from app.jobs.security_discovery import discover_new_stocks
 
         candidates = [
             create_candidate("LOW"),
@@ -364,7 +370,7 @@ class TestManualReview:
 
         Bug caught: Flags when should auto-add.
         """
-        from app.jobs.stock_discovery import discover_new_stocks
+        from app.jobs.security_discovery import discover_new_stocks
 
         candidates = [create_candidate("AAPL")]
         score = create_mock_score("AAPL", 0.80)
@@ -412,7 +418,7 @@ class TestStateVerification:
 
         Bug caught: In-memory state doesn't match database.
         """
-        from app.jobs.stock_discovery import discover_new_stocks
+        from app.jobs.security_discovery import discover_new_stocks
 
         candidates = [create_candidate("AAPL")]
         score = create_mock_score("AAPL", 0.80)
@@ -443,7 +449,7 @@ class TestStateVerification:
 
         Bug caught: Stock added but inactive.
         """
-        from app.jobs.stock_discovery import discover_new_stocks
+        from app.jobs.security_discovery import discover_new_stocks
 
         candidates = [create_candidate("AAPL")]
         score = create_mock_score("AAPL", 0.80)
@@ -479,7 +485,7 @@ class TestEdgeCases:
 
         Bug caught: Crashes on empty list.
         """
-        from app.jobs.stock_discovery import discover_new_stocks
+        from app.jobs.security_discovery import discover_new_stocks
 
         mock_stock_repo = AsyncMock()
         mock_stock_repo.get_all_active = AsyncMock(return_value=[])
@@ -506,7 +512,7 @@ class TestEdgeCases:
 
         Bug caught: Adds low-quality stocks.
         """
-        from app.jobs.stock_discovery import discover_new_stocks
+        from app.jobs.security_discovery import discover_new_stocks
 
         candidates = [
             create_candidate("LOW1"),
@@ -542,7 +548,7 @@ class TestEdgeCases:
 
         Bug caught: One failure blocks all discovery.
         """
-        from app.jobs.stock_discovery import discover_new_stocks
+        from app.jobs.security_discovery import discover_new_stocks
 
         candidates = [
             create_candidate("FAIL"),
@@ -583,7 +589,7 @@ class TestErrorHandling:
 
         Bug caught: Job crashes on service failure.
         """
-        from app.jobs.stock_discovery import discover_new_stocks
+        from app.jobs.security_discovery import discover_new_stocks
 
         mock_stock_repo = AsyncMock()
         mock_stock_repo.get_all_active = AsyncMock(return_value=[])
@@ -612,7 +618,7 @@ class TestErrorHandling:
 
         Bug caught: Job runs when disabled.
         """
-        from app.jobs.stock_discovery import discover_new_stocks
+        from app.jobs.security_discovery import discover_new_stocks
 
         mock_stock_repo = AsyncMock()
         mock_discovery_service = MagicMock()

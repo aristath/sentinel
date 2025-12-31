@@ -29,7 +29,7 @@ async def prune_universe() -> None:
 
     try:
         # Get dependencies
-        stock_repo = SecurityRepository()
+        security_repo = SecurityRepository()
         score_repo = ScoreRepository()
         settings_repo = SettingsRepository()
 
@@ -56,7 +56,7 @@ async def prune_universe() -> None:
         )
 
         # Get all active stocks
-        stocks = await stock_repo.get_all_active()
+        stocks = await security_repo.get_all_active()
         logger.info(f"Checking {len(stocks)} active stocks for pruning")
 
         if not stocks:
@@ -145,7 +145,7 @@ async def prune_universe() -> None:
                         f"(threshold: {score_threshold}, samples: {len(scores)})"
                     )
                     # Mark as inactive rather than delete to preserve historical data
-                    await stock_repo.mark_inactive(stock.symbol)
+                    await security_repo.mark_inactive(stock.symbol)
                     pruned_count += 1
 
             except Exception as e:

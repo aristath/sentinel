@@ -1,7 +1,7 @@
 /**
  * Tab Navigation Component
- * Provides tab switching between "Next Actions", "Diversification", "Stock Universe", "Recent Trades", and "Logs"
- * Keyboard shortcuts: 1 for Next Actions, 2 for Diversification, 3 for Stock Universe, 4 for Recent Trades, 5 for Logs
+ * Provides tab switching between "Next Actions", "Diversification", "Security Universe", "Recent Trades", and "Logs"
+ * Keyboard shortcuts: 1 for Next Actions, 2 for Diversification, 3 for Security Universe, 4 for Recent Trades, 5 for Logs
  */
 class TabNavigation extends HTMLElement {
   constructor() {
@@ -27,7 +27,7 @@ class TabNavigation extends HTMLElement {
       store.watchActiveTab();
     } else if (e.key === '3') {
       e.preventDefault();
-      store.activeTab = 'stock-universe';
+      store.activeTab = 'security-universe';
       store.watchActiveTab();
     } else if (e.key === '4') {
       e.preventDefault();
@@ -72,14 +72,14 @@ class TabNavigation extends HTMLElement {
           <span class="hidden sm:inline">Diversification</span>
           <span class="sm:hidden">Diversify</span>
         </button>
-        <button @click="$store.app.activeTab = 'stock-universe'; $store.app.watchActiveTab()"
+        <button @click="$store.app.activeTab = 'security-universe'; $store.app.watchActiveTab()"
                 class="px-3 md:px-4 py-2 text-sm font-medium transition-colors relative"
-                :class="$store.app.activeTab === 'stock-universe'
+                :class="$store.app.activeTab === 'security-universe'
                   ? 'text-blue-400 border-b-2 border-blue-400'
                   : 'text-gray-300 hover:text-gray-100'"
-                aria-label="Stock Universe tab">
-          <span class="hidden sm:inline">Stock Universe</span>
-          <span class="sm:hidden">Stocks</span>
+                aria-label="Security Universe tab">
+          <span class="hidden sm:inline">Security Universe</span>
+          <span class="sm:hidden">Securities</span>
         </button>
         <button @click="$store.app.activeTab = 'recent-trades'; $store.app.watchActiveTab()"
                 class="px-3 md:px-4 py-2 text-sm font-medium transition-colors relative"

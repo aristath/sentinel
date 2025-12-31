@@ -15,7 +15,7 @@ from app.domain.models import (
 
 
 @pytest.mark.asyncio
-async def test_stock_repository_create_and_get(stock_repo):
+async def test_stock_repository_create_and_get(security_repo):
     """Test creating and retrieving a stock."""
     stock = Security(
         symbol="AAPL",
@@ -28,16 +28,16 @@ async def test_stock_repository_create_and_get(stock_repo):
         active=True,
     )
 
-    await stock_repo.create(stock)
+    await security_repo.create(stock)
 
-    retrieved = await stock_repo.get_by_symbol("AAPL")
+    retrieved = await security_repo.get_by_symbol("AAPL")
     assert retrieved is not None
     assert retrieved.symbol == "AAPL"
     assert retrieved.name == "Apple Inc."
 
 
 @pytest.mark.asyncio
-async def test_stock_repository_get_all_active(stock_repo):
+async def test_stock_repository_get_all_active(security_repo):
     """Test getting all active stocks."""
     stock1 = Security(
         symbol="AAPL",
@@ -60,10 +60,10 @@ async def test_stock_repository_get_all_active(stock_repo):
         active=False,  # Inactive
     )
 
-    await stock_repo.create(stock1)
-    await stock_repo.create(stock2)
+    await security_repo.create(stock1)
+    await security_repo.create(stock2)
 
-    active_stocks = await stock_repo.get_all_active()
+    active_stocks = await security_repo.get_all_active()
     assert len(active_stocks) == 1
     assert active_stocks[0].symbol == "AAPL"
 
@@ -156,7 +156,7 @@ async def test_score_repository_upsert(score_repo):
 
 
 @pytest.mark.asyncio
-async def test_trade_repository_create(stock_repo, trade_repo):
+async def test_trade_repository_create(security_repo, trade_repo):
     """Test creating a trade."""
     # Create stock first (required for trade history JOIN)
     stock = Security(
@@ -169,7 +169,7 @@ async def test_trade_repository_create(stock_repo, trade_repo):
         min_lot=1,
         active=True,
     )
-    await stock_repo.create(stock)
+    await security_repo.create(stock)
 
     trade = Trade(
         symbol="AAPL",

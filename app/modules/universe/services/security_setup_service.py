@@ -141,10 +141,10 @@ class SecuritySetupService:
 
         # Step 3: Fetch data from Yahoo Finance
         yahoo_symbol = symbol_info.yahoo_symbol or isin or tradernet_symbol
-        country, full_exchange_name = yahoo.get_stock_country_and_exchange(
+        country, full_exchange_name = yahoo.get_security_country_and_exchange(
             tradernet_symbol, yahoo_symbol
         )
-        industry = yahoo.get_stock_industry(tradernet_symbol, yahoo_symbol)
+        industry = yahoo.get_security_industry(tradernet_symbol, yahoo_symbol)
 
         # Get name - prefer Tradernet name, fallback to Yahoo Finance
         name = tradernet_name

@@ -174,7 +174,7 @@ class TestCalculateRebalanceTrades:
         )
 
         service = RebalancingService(
-            stock_repo=mock_stock_repo,
+            security_repo=mock_stock_repo,
             position_repo=mock_position_repo,
             allocation_repo=mock_allocation_repo,
             portfolio_repo=mock_portfolio_repo,
@@ -211,7 +211,7 @@ class TestCalculateRebalanceTrades:
         )
 
         service = RebalancingService(
-            stock_repo=mock_stock_repo,
+            security_repo=mock_stock_repo,
             position_repo=mock_position_repo,
             allocation_repo=mock_allocation_repo,
             portfolio_repo=mock_portfolio_repo,
@@ -249,7 +249,7 @@ class TestCalculateRebalanceTrades:
         )
 
         service = RebalancingService(
-            stock_repo=mock_stock_repo,
+            security_repo=mock_stock_repo,
             position_repo=mock_position_repo,
             allocation_repo=mock_allocation_repo,
             portfolio_repo=mock_portfolio_repo,
@@ -305,7 +305,7 @@ class TestCalculateRebalanceTrades:
         )
 
         service = RebalancingService(
-            stock_repo=mock_stock_repo,
+            security_repo=mock_stock_repo,
             position_repo=mock_position_repo,
             allocation_repo=mock_allocation_repo,
             portfolio_repo=mock_portfolio_repo,
@@ -366,7 +366,7 @@ class TestCalculateRebalanceTrades:
         )
 
         service = RebalancingService(
-            stock_repo=mock_stock_repo,
+            security_repo=mock_stock_repo,
             position_repo=mock_position_repo,
             allocation_repo=mock_allocation_repo,
             portfolio_repo=mock_portfolio_repo,

@@ -42,7 +42,7 @@ The codebase has documented violations in the README.md Architecture section. Be
 ### Types
 ```python
 # Use Optional[T]
-def get_stock(symbol: str) -> Optional[Stock]:
+def get_security(symbol: str) -> Optional[Security]:
 ```
 
 ### I/O

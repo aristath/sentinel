@@ -37,7 +37,7 @@ class TickerContentService:
         self,
         portfolio_repo: IPortfolioRepository,
         position_repo: IPositionRepository,
-        stock_repo: ISecurityRepository,
+        security_repo: ISecurityRepository,
         settings_repo: ISettingsRepository,
         allocation_repo: IAllocationRepository,
         tradernet_client: TradernetClient,
@@ -47,14 +47,14 @@ class TickerContentService:
         Args:
             portfolio_repo: Portfolio repository
             position_repo: Position repository
-            stock_repo: Stock repository
+            security_repo: Stock repository
             settings_repo: Settings repository
             allocation_repo: Allocation repository
             tradernet_client: Tradernet client for cash balances
         """
         self._portfolio_repo = portfolio_repo
         self._position_repo = position_repo
-        self._stock_repo = stock_repo
+        self._stock_repo = security_repo
         self._settings_repo = settings_repo
         self._allocation_repo = allocation_repo
         self._tradernet_client = tradernet_client

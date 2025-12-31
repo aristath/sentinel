@@ -43,7 +43,7 @@ class TestSyncHistoricalDataInternal:
 
         with (
             patch(
-                "app.jobs.historical_data_sync._sync_stock_price_history"
+                "app.jobs.historical_data_sync._sync_security_price_history"
             ) as mock_sync,
             patch("app.jobs.historical_data_sync.emit") as mock_emit,
             patch("pass  # LED cleared"),
@@ -61,7 +61,7 @@ class TestSyncHistoricalDataInternal:
 
         with (
             patch(
-                "app.jobs.historical_data_sync._sync_stock_price_history",
+                "app.jobs.historical_data_sync._sync_security_price_history",
                 side_effect=Exception("Sync failed"),
             ),
             patch("app.jobs.historical_data_sync.emit"),
@@ -80,7 +80,7 @@ class TestSyncStockPriceHistory:
     @pytest.mark.asyncio
     async def test_skips_when_no_active_stocks(self):
         """Test that sync is skipped when no active stocks."""
-        from app.jobs.historical_data_sync import _sync_stock_price_history
+        from app.jobs.historical_data_sync import _sync_security_price_history
 
         mock_cursor = AsyncMock()
         mock_cursor.fetchall.return_value = []
@@ -98,7 +98,7 @@ class TestSyncStockPriceHistory:
             ),
             patch("app.jobs.historical_data_sync.set_text"),
         ):
-            await _sync_stock_price_history()
+            await _sync_security_price_history()
 
             # Should only call execute once (to get active stocks)
             mock_config.execute.assert_called_once()
@@ -106,7 +106,7 @@ class TestSyncStockPriceHistory:
     @pytest.mark.asyncio
     async def test_processes_active_stocks(self):
         """Test processing active stocks."""
-        from app.jobs.historical_data_sync import _sync_stock_price_history
+        from app.jobs.historical_data_sync import _sync_security_price_history
 
         # Config cursor returns active stocks
         mock_config_cursor = AsyncMock()
@@ -142,7 +142,7 @@ class TestSyncStockPriceHistory:
             patch("app.jobs.historical_data_sync.settings", mock_settings),
             patch("app.jobs.historical_data_sync.set_text"),
         ):
-            await _sync_stock_price_history()
+            await _sync_security_price_history()
 
             # Should call history() for each stock
             assert mock_db_manager.history.call_count == 2
@@ -150,7 +150,7 @@ class TestSyncStockPriceHistory:
     @pytest.mark.asyncio
     async def test_fetches_prices_when_data_outdated(self):
         """Test that prices are fetched when data is outdated."""
-        from app.jobs.historical_data_sync import _sync_stock_price_history
+        from app.jobs.historical_data_sync import _sync_security_price_history
 
         # Config cursor returns active stocks
         mock_config_cursor = AsyncMock()
@@ -184,14 +184,14 @@ class TestSyncStockPriceHistory:
                 "app.jobs.historical_data_sync._fetch_and_store_prices"
             ) as mock_fetch,
         ):
-            await _sync_stock_price_history()
+            await _sync_security_price_history()
 
             mock_fetch.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_handles_stock_sync_error(self):
         """Test handling error during individual stock sync."""
-        from app.jobs.historical_data_sync import _sync_stock_price_history
+        from app.jobs.historical_data_sync import _sync_security_price_history
 
         # Config cursor returns active stocks
         mock_config_cursor = AsyncMock()
@@ -216,7 +216,7 @@ class TestSyncStockPriceHistory:
             patch("app.jobs.historical_data_sync.set_text"),
         ):
             # Should not raise - errors are caught and logged
-            await _sync_stock_price_history()
+            await _sync_security_price_history()
 
 
 class TestFetchAndStorePrices:

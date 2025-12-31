@@ -39,7 +39,7 @@ async def _sync_historical_data_internal():
     emit(SystemEvent.SYNC_START)
 
     try:
-        await _sync_stock_price_history()
+        await _sync_security_price_history()
         logger.info("Historical data sync complete")
         emit(SystemEvent.SYNC_COMPLETE)
     except Exception as e:
@@ -52,7 +52,7 @@ async def _sync_historical_data_internal():
         set_led4(0, 0, 0)  # Clear LED when done
 
 
-async def _sync_stock_price_history():
+async def _sync_security_price_history():
     """Fetch and store historical stock prices for all active stocks."""
     logger.info("Starting stock price history sync (using Yahoo Finance)")
 

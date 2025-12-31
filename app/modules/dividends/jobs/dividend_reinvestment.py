@@ -47,7 +47,7 @@ async def _reinvest_in_same_stock(
     symbol_dividends: List[DividendRecord],
     total_amount: float,
     client,
-    stock_repo: SecurityRepository,
+    security_repo: SecurityRepository,
     recommendations: List[Recommendation],
     dividends_to_mark: Dict[str, List[int]],
 ) -> None:
@@ -69,7 +69,7 @@ async def _reinvest_in_same_stock(
         return
 
     # Get stock info for name and other details
-    stock = await stock_repo.get_by_symbol(symbol)
+    stock = await security_repo.get_by_symbol(symbol)
     if not stock:
         logger.warning(f"Stock {symbol} not found in universe, skipping")
         return
@@ -129,7 +129,7 @@ async def auto_reinvest_dividends() -> None:
     try:
         # Get dependencies
         dividend_repo = DividendRepository()
-        stock_repo = SecurityRepository()
+        security_repo = SecurityRepository()
         settings_repo = SettingsRepository()
         settings_service = SettingsService(settings_repo)
         client = get_tradernet_client()
@@ -144,7 +144,7 @@ async def auto_reinvest_dividends() -> None:
         trade_execution_service = TradeExecutionService(
             trade_repo=trade_repo,
             position_repo=position_repo,
-            stock_repo=stock_repo,
+            security_repo=security_repo,
             tradernet_client=client,
             currency_exchange_service=currency_exchange_service,
             exchange_rate_service=exchange_rate_service,
@@ -230,7 +230,7 @@ async def auto_reinvest_dividends() -> None:
                     symbol_dividends,
                     total_amount,
                     client,
-                    stock_repo,
+                    security_repo,
                     recommendations,
                     dividends_to_mark,
                 )
@@ -256,7 +256,7 @@ async def auto_reinvest_dividends() -> None:
             recommendation_repo = RecommendationRepository()
 
             rebalancing_service = RebalancingService(
-                stock_repo=stock_repo,
+                security_repo=security_repo,
                 position_repo=position_repo,
                 allocation_repo=allocation_repo,
                 portfolio_repo=portfolio_repo,

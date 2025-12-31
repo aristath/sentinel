@@ -45,11 +45,11 @@ class ExpectedReturnsCalculator:
         self,
         calc_repo: Optional[CalculationsRepository] = None,
         score_repo: Optional[ScoreRepository] = None,
-        stock_repo: Optional[SecurityRepository] = None,
+        security_repo: Optional[SecurityRepository] = None,
     ):
         self._calc_repo = calc_repo or CalculationsRepository()
         self._score_repo = score_repo or ScoreRepository()
-        self._stock_repo = stock_repo or SecurityRepository()
+        self._stock_repo = security_repo or SecurityRepository()
 
     async def calculate_expected_returns(
         self,

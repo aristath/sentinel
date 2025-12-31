@@ -129,18 +129,18 @@ async def test_planner_completes_in_reasonable_time(db_manager):
         industry_weights={"Technology": 1.0},
         positions={"AAPL.US": 5000, "MSFT.US": 3000, "SAP.DE": 2000},
         total_value=10000,
-        stock_countries={
+        security_countries={
             "AAPL.US": "United States",
             "MSFT.US": "United States",
             "SAP.DE": "Germany",
         },
-        stock_industries={
+        security_industries={
             "AAPL.US": "Technology",
             "MSFT.US": "Technology",
             "SAP.DE": "Technology",
         },
-        stock_scores={"AAPL.US": 0.8, "MSFT.US": 0.7, "SAP.DE": 0.6},
-        stock_dividends={"AAPL.US": 0.015, "MSFT.US": 0.01, "SAP.DE": 0.02},
+        security_scores={"AAPL.US": 0.8, "MSFT.US": 0.7, "SAP.DE": 0.6},
+        security_dividends={"AAPL.US": 0.015, "MSFT.US": 0.01, "SAP.DE": 0.02},
     )
 
     positions = [
@@ -227,10 +227,10 @@ async def test_planner_handles_empty_portfolio(db_manager):
         industry_weights={},
         positions={},
         total_value=0,
-        stock_countries={},
-        stock_industries={},
-        stock_scores={},
-        stock_dividends={},
+        security_countries={},
+        security_industries={},
+        security_scores={},
+        security_dividends={},
     )
 
     stocks = [

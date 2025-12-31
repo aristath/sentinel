@@ -98,8 +98,8 @@ class TestSecuritySetupService:
         with patch(
             "app.modules.universe.services.security_setup_service.yahoo"
         ) as mock_yahoo:
-            mock_yahoo.get_stock_country_and_exchange.return_value = ("US", "NASDAQ")
-            mock_yahoo.get_stock_industry.return_value = "Technology"
+            mock_yahoo.get_security_country_and_exchange.return_value = ("US", "NASDAQ")
+            mock_yahoo.get_security_industry.return_value = "Technology"
 
             with patch(
                 "app.modules.universe.services.security_setup_service._sync_historical_for_symbol",
@@ -142,8 +142,8 @@ class TestSecuritySetupService:
         with patch(
             "app.modules.universe.services.security_setup_service.yahoo"
         ) as mock_yahoo:
-            mock_yahoo.get_stock_country_and_exchange.return_value = ("US", "NASDAQ")
-            mock_yahoo.get_stock_industry.return_value = "Technology"
+            mock_yahoo.get_security_country_and_exchange.return_value = ("US", "NASDAQ")
+            mock_yahoo.get_security_industry.return_value = "Technology"
 
             with patch(
                 "app.modules.universe.services.security_setup_service._sync_historical_for_symbol",
@@ -217,8 +217,8 @@ class TestSecuritySetupService:
         with patch(
             "app.modules.universe.services.security_setup_service.yahoo"
         ) as mock_yahoo:
-            mock_yahoo.get_stock_country_and_exchange.return_value = ("US", "NASDAQ")
-            mock_yahoo.get_stock_industry.return_value = "Technology"
+            mock_yahoo.get_security_country_and_exchange.return_value = ("US", "NASDAQ")
+            mock_yahoo.get_security_industry.return_value = "Technology"
 
             with patch(
                 "app.modules.universe.services.security_setup_service._sync_historical_for_symbol",
@@ -252,8 +252,8 @@ class TestSecuritySetupService:
         with patch(
             "app.modules.universe.services.security_setup_service.yahoo"
         ) as mock_yahoo:
-            mock_yahoo.get_stock_country_and_exchange.return_value = ("US", "NASDAQ")
-            mock_yahoo.get_stock_industry.return_value = "Technology"
+            mock_yahoo.get_security_country_and_exchange.return_value = ("US", "NASDAQ")
+            mock_yahoo.get_security_industry.return_value = "Technology"
 
             with patch(
                 "app.modules.universe.services.security_setup_service._sync_historical_for_symbol",
@@ -289,8 +289,8 @@ class TestSecuritySetupService:
         with patch(
             "app.modules.universe.services.security_setup_service.yahoo"
         ) as mock_yahoo:
-            mock_yahoo.get_stock_country_and_exchange.return_value = ("US", "NASDAQ")
-            mock_yahoo.get_stock_industry.return_value = "Technology"
+            mock_yahoo.get_security_country_and_exchange.return_value = ("US", "NASDAQ")
+            mock_yahoo.get_security_industry.return_value = "Technology"
 
             with patch(
                 "app.modules.universe.services.security_setup_service._sync_historical_for_symbol",
@@ -333,8 +333,8 @@ class TestSecuritySetupService:
                 new_callable=AsyncMock,
             ),
         ):
-            mock_yahoo.get_stock_country_and_exchange.return_value = ("US", "NASDAQ")
-            mock_yahoo.get_stock_industry.return_value = "Technology"
+            mock_yahoo.get_security_country_and_exchange.return_value = ("US", "NASDAQ")
+            mock_yahoo.get_security_industry.return_value = "Technology"
 
             mock_bus = MagicMock()
             mock_event_bus.return_value = mock_bus
@@ -373,8 +373,8 @@ class TestSecuritySetupService:
                 new_callable=AsyncMock,
             ),
         ):
-            mock_yahoo.get_stock_country_and_exchange.return_value = ("US", "NASDAQ")
-            mock_yahoo.get_stock_industry.return_value = "Technology"
+            mock_yahoo.get_security_country_and_exchange.return_value = ("US", "NASDAQ")
+            mock_yahoo.get_security_industry.return_value = "Technology"
 
             result = await service.add_security_by_identifier("AAPL.US", min_lot=10)
 
@@ -405,8 +405,8 @@ class TestSecuritySetupService:
                 new_callable=AsyncMock,
             ),
         ):
-            mock_yahoo.get_stock_country_and_exchange.return_value = ("US", "NASDAQ")
-            mock_yahoo.get_stock_industry.return_value = "Technology"
+            mock_yahoo.get_security_country_and_exchange.return_value = ("US", "NASDAQ")
+            mock_yahoo.get_security_industry.return_value = "Technology"
 
             result = await service.add_security_by_identifier(
                 "AAPL.US", allow_buy=False, allow_sell=False

@@ -163,25 +163,25 @@ async def _build_portfolio_context(db_manager) -> PortfolioContext:
     cursor = await db_manager.config.execute(
         "SELECT symbol, country, industry FROM securities WHERE active = 1"
     )
-    stock_data = await cursor.fetchall()
+    security_data = await cursor.fetchall()
 
-    stock_countries = {row[0]: row[1] for row in stock_data if row[1]}
-    stock_industries = {row[0]: row[2] for row in stock_data if row[2]}
+    security_countries = {row[0]: row[1] for row in security_data if row[1]}
+    security_industries = {row[0]: row[2] for row in security_data if row[2]}
 
     # Get scores for quality weighting (from calculations.db)
     cursor = await db_manager.calculations.execute(
         "SELECT symbol, quality_score FROM scores"
     )
-    stock_scores = {row[0]: row[1] for row in await cursor.fetchall() if row[1]}
+    security_scores = {row[0]: row[1] for row in await cursor.fetchall() if row[1]}
 
     return PortfolioContext(
         country_weights=country_weights,
         industry_weights=industry_weights,
         positions=positions,
         total_value=total_value,
-        stock_countries=stock_countries,
-        stock_industries=stock_industries,
-        stock_scores=stock_scores,
+        security_countries=security_countries,
+        security_industries=security_industries,
+        security_scores=security_scores,
         country_to_group=country_to_group,
         industry_to_group=industry_to_group,
     )

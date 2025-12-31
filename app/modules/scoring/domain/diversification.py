@@ -229,12 +229,12 @@ def _calculate_diversification_score(
 ) -> float:
     """Calculate diversification score (40% weight)."""
     country_deviations = []
-    if portfolio_context.stock_countries:
+    if portfolio_context.security_countries:
         # Map individual countries to groups and aggregate by group
         country_to_group = portfolio_context.country_to_group or {}
         group_values: Dict[str, float] = {}
         for symbol, value in portfolio_context.positions.items():
-            country = portfolio_context.stock_countries.get(symbol, "OTHER")
+            country = portfolio_context.security_countries.get(symbol, "OTHER")
             group = country_to_group.get(country, "OTHER")
             group_values[group] = group_values.get(group, 0) + value
 
@@ -257,12 +257,12 @@ def _calculate_dividend_score(
     portfolio_context: PortfolioContext, total_value: float
 ) -> float:
     """Calculate dividend score (30% weight)."""
-    if not portfolio_context.stock_dividends:
+    if not portfolio_context.security_dividends:
         return 50.0
 
     weighted_dividend = 0.0
     for symbol, value in portfolio_context.positions.items():
-        div_yield = portfolio_context.stock_dividends.get(symbol, 0) or 0
+        div_yield = portfolio_context.security_dividends.get(symbol, 0) or 0
         weighted_dividend += div_yield * (value / total_value)
     return min(100, 30 + weighted_dividend * 1000)
 
@@ -271,12 +271,12 @@ def _calculate_quality_score(
     portfolio_context: PortfolioContext, total_value: float
 ) -> float:
     """Calculate quality score (30% weight)."""
-    if not portfolio_context.stock_scores:
+    if not portfolio_context.security_scores:
         return 50.0
 
     weighted_quality = 0.0
     for symbol, value in portfolio_context.positions.items():
-        quality = portfolio_context.stock_scores.get(symbol, 0.5) or 0.5
+        quality = portfolio_context.security_scores.get(symbol, 0.5) or 0.5
         weighted_quality += quality * (value / total_value)
     return weighted_quality * 100
 
@@ -398,17 +398,17 @@ async def calculate_post_transaction_score(
     new_positions = dict(portfolio_context.positions)
     new_positions[symbol] = new_positions.get(symbol, 0) + proposed_value
 
-    new_geographies = dict(portfolio_context.stock_countries or {})
+    new_geographies = dict(portfolio_context.security_countries or {})
     new_geographies[symbol] = country
 
-    new_industries = dict(portfolio_context.stock_industries or {})
+    new_industries = dict(portfolio_context.security_industries or {})
     if industry:
         new_industries[symbol] = industry
 
-    new_scores = dict(portfolio_context.stock_scores or {})
+    new_scores = dict(portfolio_context.security_scores or {})
     new_scores[symbol] = stock_quality
 
-    new_dividends = dict(portfolio_context.stock_dividends or {})
+    new_dividends = dict(portfolio_context.security_dividends or {})
     new_dividends[symbol] = stock_dividend
 
     new_context = PortfolioContext(
@@ -416,10 +416,10 @@ async def calculate_post_transaction_score(
         industry_weights=portfolio_context.industry_weights,
         positions=new_positions,
         total_value=portfolio_context.total_value + proposed_value,
-        stock_countries=new_geographies,
-        stock_industries=new_industries,
-        stock_scores=new_scores,
-        stock_dividends=new_dividends,
+        security_countries=new_geographies,
+        security_industries=new_industries,
+        security_scores=new_scores,
+        security_dividends=new_dividends,
     )
 
     # Calculate new portfolio score (don't cache post-transaction portfolio score separately)

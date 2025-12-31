@@ -38,7 +38,7 @@ class TestExpectedReturnsCalculator:
         return ExpectedReturnsCalculator(
             calc_repo=mock_calc_repo,
             score_repo=mock_score_repo,
-            stock_repo=mock_stock_repo,
+            security_repo=mock_stock_repo,
         )
 
     @pytest.mark.asyncio
