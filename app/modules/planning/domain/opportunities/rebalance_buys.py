@@ -8,7 +8,7 @@ from typing import Dict, List, Optional
 from app.domain.models import Stock
 from app.domain.scoring.models import PortfolioContext
 from app.domain.services.exchange_rate_service import ExchangeRateService
-from app.domain.services.trade_sizing_service import TradeSizingService
+from app.modules.trading.domain.trade_sizing_service import TradeSizingService
 from app.domain.value_objects.trade_side import TradeSide
 from app.modules.planning.domain.holistic_planner import ActionCandidate
 
