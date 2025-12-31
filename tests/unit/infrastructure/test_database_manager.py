@@ -47,7 +47,7 @@ class TestDatabaseConnect:
         """Test that connect creates parent directory."""
         from app.core.database.manager import Database
 
-        with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
+        with patch("app.core.database.manager.aiosqlite") as mock_aiosqlite:
             mock_conn = AsyncMock()
             mock_aiosqlite.connect = AsyncMock(return_value=mock_conn)
             mock_aiosqlite.Row = object
@@ -64,7 +64,7 @@ class TestDatabaseConnect:
         """Test readonly connection uses URI mode."""
         from app.core.database.manager import Database
 
-        with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
+        with patch("app.core.database.manager.aiosqlite") as mock_aiosqlite:
             mock_conn = AsyncMock()
             mock_aiosqlite.connect = AsyncMock(return_value=mock_conn)
             mock_aiosqlite.Row = object
@@ -84,7 +84,7 @@ class TestDatabaseConnect:
         """Test that connection configures SQLite pragmas."""
         from app.core.database.manager import Database
 
-        with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
+        with patch("app.core.database.manager.aiosqlite") as mock_aiosqlite:
             mock_conn = AsyncMock()
             mock_conn.execute = AsyncMock()
             mock_aiosqlite.connect = AsyncMock(return_value=mock_conn)
@@ -106,7 +106,7 @@ class TestDatabaseConnect:
         """Test that connect returns cached connection."""
         from app.core.database.manager import Database
 
-        with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
+        with patch("app.core.database.manager.aiosqlite") as mock_aiosqlite:
             mock_conn = AsyncMock()
             mock_aiosqlite.connect = AsyncMock(return_value=mock_conn)
             mock_aiosqlite.Row = object
@@ -131,7 +131,7 @@ class TestDatabaseClose:
         """Test that close closes the connection."""
         from app.core.database.manager import Database
 
-        with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
+        with patch("app.core.database.manager.aiosqlite") as mock_aiosqlite:
             mock_conn = AsyncMock()
             mock_aiosqlite.connect = AsyncMock(return_value=mock_conn)
             mock_aiosqlite.Row = object
@@ -164,7 +164,7 @@ class TestDatabaseTransaction:
         """Test that transaction commits on success."""
         from app.core.database.manager import Database
 
-        with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
+        with patch("app.core.database.manager.aiosqlite") as mock_aiosqlite:
             mock_conn = AsyncMock()
             mock_aiosqlite.connect = AsyncMock(return_value=mock_conn)
             mock_aiosqlite.Row = object
@@ -183,7 +183,7 @@ class TestDatabaseTransaction:
         """Test that transaction rolls back on error."""
         from app.core.database.manager import Database
 
-        with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
+        with patch("app.core.database.manager.aiosqlite") as mock_aiosqlite:
             mock_conn = AsyncMock()
             mock_aiosqlite.connect = AsyncMock(return_value=mock_conn)
             mock_aiosqlite.Row = object
@@ -206,7 +206,7 @@ class TestDatabaseOperations:
         """Test execute method."""
         from app.core.database.manager import Database
 
-        with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
+        with patch("app.core.database.manager.aiosqlite") as mock_aiosqlite:
             mock_cursor = AsyncMock()
             mock_conn = AsyncMock()
             mock_conn.execute = AsyncMock(return_value=mock_cursor)
@@ -225,7 +225,7 @@ class TestDatabaseOperations:
         """Test executemany method."""
         from app.core.database.manager import Database
 
-        with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
+        with patch("app.core.database.manager.aiosqlite") as mock_aiosqlite:
             mock_cursor = AsyncMock()
             mock_conn = AsyncMock()
             mock_conn.executemany = AsyncMock(return_value=mock_cursor)
@@ -244,7 +244,7 @@ class TestDatabaseOperations:
         """Test executescript method."""
         from app.core.database.manager import Database
 
-        with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
+        with patch("app.core.database.manager.aiosqlite") as mock_aiosqlite:
             mock_conn = AsyncMock()
             mock_aiosqlite.connect = AsyncMock(return_value=mock_conn)
             mock_aiosqlite.Row = object
@@ -261,7 +261,7 @@ class TestDatabaseOperations:
         """Test commit method."""
         from app.core.database.manager import Database
 
-        with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
+        with patch("app.core.database.manager.aiosqlite") as mock_aiosqlite:
             mock_conn = AsyncMock()
             mock_aiosqlite.connect = AsyncMock(return_value=mock_conn)
             mock_aiosqlite.Row = object
@@ -278,7 +278,7 @@ class TestDatabaseOperations:
         """Test fetchone method."""
         from app.core.database.manager import Database
 
-        with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
+        with patch("app.core.database.manager.aiosqlite") as mock_aiosqlite:
             mock_row = {"id": 1}
             mock_cursor = AsyncMock()
             mock_cursor.fetchone = AsyncMock(return_value=mock_row)
@@ -299,7 +299,7 @@ class TestDatabaseOperations:
         """Test fetchall method."""
         from app.core.database.manager import Database
 
-        with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
+        with patch("app.core.database.manager.aiosqlite") as mock_aiosqlite:
             mock_rows = [{"id": 1}, {"id": 2}]
             mock_cursor = AsyncMock()
             mock_cursor.fetchall = AsyncMock(return_value=mock_rows)
@@ -320,7 +320,7 @@ class TestDatabaseOperations:
         """Test integrity_check method."""
         from app.core.database.manager import Database
 
-        with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
+        with patch("app.core.database.manager.aiosqlite") as mock_aiosqlite:
             mock_cursor = AsyncMock()
             mock_cursor.fetchone = AsyncMock(return_value=["ok"])
             mock_conn = AsyncMock()
@@ -340,7 +340,7 @@ class TestDatabaseOperations:
         """Test integrity_check when no result."""
         from app.core.database.manager import Database
 
-        with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
+        with patch("app.core.database.manager.aiosqlite") as mock_aiosqlite:
             mock_cursor = AsyncMock()
             mock_cursor.fetchone = AsyncMock(return_value=None)
             mock_conn = AsyncMock()
@@ -360,7 +360,7 @@ class TestDatabaseOperations:
         """Test checkpoint method."""
         from app.core.database.manager import Database
 
-        with patch("app.infrastructure.database.manager.aiosqlite") as mock_aiosqlite:
+        with patch("app.core.database.manager.aiosqlite") as mock_aiosqlite:
             mock_conn = AsyncMock()
             mock_aiosqlite.connect = AsyncMock(return_value=mock_conn)
             mock_aiosqlite.Row = object
@@ -407,7 +407,7 @@ class TestDatabaseManagerHistory:
         with (
             patch.object(Path, "mkdir"),
             patch(
-                "app.infrastructure.database.schemas.init_history_schema",
+                "app.modules.portfolio.database.schemas.init_history_schema",
                 new_callable=AsyncMock,
             ),
         ):
@@ -426,7 +426,7 @@ class TestDatabaseManagerHistory:
         with (
             patch.object(Path, "mkdir"),
             patch(
-                "app.infrastructure.database.schemas.init_history_schema",
+                "app.modules.portfolio.database.schemas.init_history_schema",
                 new_callable=AsyncMock,
             ) as mock_init,
         ):
@@ -448,7 +448,7 @@ class TestDatabaseManagerHistory:
         with (
             patch.object(Path, "mkdir"),
             patch(
-                "app.infrastructure.database.schemas.init_history_schema",
+                "app.modules.portfolio.database.schemas.init_history_schema",
                 new_callable=AsyncMock,
             ),
         ):
@@ -676,7 +676,7 @@ class TestGetDbManager:
 
     def test_raises_when_not_initialized(self):
         """Test that get_db_manager raises when not initialized."""
-        import app.infrastructure.database.manager as module
+        import app.core.database.manager as module
 
         # Save and clear the global
         original = module._db_manager
@@ -700,30 +700,30 @@ class TestInitDatabases:
     @pytest.mark.asyncio
     async def test_initializes_manager(self):
         """Test that init_databases creates and returns manager."""
-        import app.infrastructure.database.manager as module
+        import app.core.database.manager as module
 
         original = module._db_manager
 
         try:
             with (
                 patch(
-                    "app.infrastructure.database.schemas.init_config_schema",
+                    "app.core.database.schemas.init_config_schema",
                     new_callable=AsyncMock,
                 ),
                 patch(
-                    "app.infrastructure.database.schemas.init_ledger_schema",
+                    "app.core.database.schemas.init_ledger_schema",
                     new_callable=AsyncMock,
                 ),
                 patch(
-                    "app.infrastructure.database.schemas.init_state_schema",
+                    "app.core.database.schemas.init_state_schema",
                     new_callable=AsyncMock,
                 ),
                 patch(
-                    "app.infrastructure.database.schemas.init_cache_schema",
+                    "app.core.database.schemas.init_cache_schema",
                     new_callable=AsyncMock,
                 ),
                 patch(
-                    "app.infrastructure.database.schemas.init_calculations_schema",
+                    "app.core.database.schemas.init_calculations_schema",
                     new_callable=AsyncMock,
                 ),
             ):
@@ -743,7 +743,7 @@ class TestShutdownDatabases:
     @pytest.mark.asyncio
     async def test_shutdown_closes_and_clears_manager(self):
         """Test that shutdown_databases closes and clears manager."""
-        import app.infrastructure.database.manager as module
+        import app.core.database.manager as module
 
         mock_manager = AsyncMock()
         original = module._db_manager
@@ -762,7 +762,7 @@ class TestShutdownDatabases:
     @pytest.mark.asyncio
     async def test_shutdown_when_not_initialized(self):
         """Test shutdown when not initialized does nothing."""
-        import app.infrastructure.database.manager as module
+        import app.core.database.manager as module
 
         original = module._db_manager
         module._db_manager = None
