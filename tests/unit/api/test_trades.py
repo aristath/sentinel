@@ -18,12 +18,14 @@ class TestTradeRequestValidation:
     """Test TradeRequest validation."""
 
     def test_validates_symbol(self):
-        """Test that symbol is validated and normalized."""
+        """Test that ISIN is validated and normalized."""
         from app.modules.trading.api.trades import TradeRequest
 
-        request = TradeRequest(symbol="  aapl.us  ", side=TradeSide.BUY, quantity=10)
+        request = TradeRequest(
+            symbol="  us0378331005  ", side=TradeSide.BUY, quantity=10
+        )
 
-        assert request.symbol == "AAPL.US"
+        assert request.symbol == "US0378331005"
 
     def test_validates_quantity_positive(self):
         """Test that quantity must be positive."""
@@ -32,7 +34,7 @@ class TestTradeRequestValidation:
         from app.modules.trading.api.trades import TradeRequest
 
         with pytest.raises(ValidationError):
-            TradeRequest(symbol="AAPL.US", side=TradeSide.BUY, quantity=0)
+            TradeRequest(symbol="US0378331005", side=TradeSide.BUY, quantity=0)
 
     def test_validates_quantity_max(self):
         """Test that quantity has upper limit."""
@@ -41,15 +43,15 @@ class TestTradeRequestValidation:
         from app.modules.trading.api.trades import TradeRequest
 
         with pytest.raises(ValidationError):
-            TradeRequest(symbol="AAPL.US", side=TradeSide.BUY, quantity=2000000)
+            TradeRequest(symbol="US0378331005", side=TradeSide.BUY, quantity=2000000)
 
     def test_accepts_valid_request(self):
         """Test that valid request is accepted."""
         from app.modules.trading.api.trades import TradeRequest
 
-        request = TradeRequest(symbol="AAPL.US", side=TradeSide.BUY, quantity=100)
+        request = TradeRequest(symbol="US0378331005", side=TradeSide.BUY, quantity=100)
 
-        assert request.symbol == "AAPL.US"
+        assert request.symbol == "US0378331005"
         assert request.side == TradeSide.BUY
         assert request.quantity == 100
 
@@ -109,10 +111,10 @@ class TestExecuteTrade:
         """Test raising 404 when security not found."""
         from app.modules.trading.api.trades import TradeRequest, execute_trade
 
-        request = TradeRequest(symbol="UNKNOWN", side=TradeSide.BUY, quantity=10)
+        request = TradeRequest(symbol="US9999999999", side=TradeSide.BUY, quantity=10)
 
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_identifier = AsyncMock(return_value=None)
+        mock_stock_repo.get_by_isin = AsyncMock(return_value=None)
 
         with pytest.raises(HTTPException) as exc_info:
             await execute_trade(
@@ -131,11 +133,12 @@ class TestExecuteTrade:
         """Test successful trade execution."""
         from app.modules.trading.api.trades import TradeRequest, execute_trade
 
-        request = TradeRequest(symbol="AAPL.US", side=TradeSide.BUY, quantity=10)
+        request = TradeRequest(symbol="US0378331005", side=TradeSide.BUY, quantity=10)
 
         mock_stock = MagicMock()
+        mock_stock.symbol = "AAPL.US"
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_symbol = AsyncMock(return_value=mock_stock)
+        mock_stock_repo.get_by_isin = AsyncMock(return_value=mock_stock)
 
         mock_trade_result = MagicMock()
         mock_trade_result.price = 150.0
@@ -149,11 +152,13 @@ class TestExecuteTrade:
 
         with (
             patch(
-                "app.api.trades.ensure_tradernet_connected",
+                "app.modules.trading.api.trades.ensure_tradernet_connected",
                 new_callable=AsyncMock,
                 return_value=mock_client,
             ),
-            patch("app.api.trades.get_cache_invalidation_service") as mock_cache,
+            patch(
+                "app.modules.trading.api.trades.get_cache_invalidation_service"
+            ) as mock_cache,
         ):
             mock_cache.return_value = MagicMock()
 
@@ -174,11 +179,12 @@ class TestExecuteTrade:
         """Test raising 500 when trade execution fails."""
         from app.modules.trading.api.trades import TradeRequest, execute_trade
 
-        request = TradeRequest(symbol="AAPL.US", side=TradeSide.BUY, quantity=10)
+        request = TradeRequest(symbol="US0378331005", side=TradeSide.BUY, quantity=10)
 
         mock_stock = MagicMock()
+        mock_stock.symbol = "AAPL.US"
         mock_stock_repo = AsyncMock()
-        mock_stock_repo.get_by_symbol = AsyncMock(return_value=mock_stock)
+        mock_stock_repo.get_by_isin = AsyncMock(return_value=mock_stock)
 
         mock_client = MagicMock()
         mock_client.place_order.return_value = None  # Trade failed
@@ -186,7 +192,7 @@ class TestExecuteTrade:
         mock_safety_service = AsyncMock()
 
         with patch(
-            "app.api.trades.ensure_tradernet_connected",
+            "app.modules.trading.api.trades.ensure_tradernet_connected",
             new_callable=AsyncMock,
             return_value=mock_client,
         ):
