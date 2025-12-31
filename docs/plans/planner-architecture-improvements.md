@@ -374,81 +374,279 @@ async def check_planner_health(bucket_id: str):
 
 ### 3.1 Configuration Versioning
 
-**Problem**: Can't track when/why configurations changed.
+**Problem**: Can't track when/why configurations changed, can't share configs between buckets.
 
-**Solution**: Version configurations, store history.
+**Solution**: Separate database for planner configurations with version history.
+
+**Design Rationale**:
+- Planner configurations are independent entities (not tied to buckets)
+- Buckets reference a configuration (can switch configurations easily)
+- Configurations have full version history for rollback
+- Can share/template configurations across buckets
 
 ```sql
--- Database schema
-CREATE TABLE satellite_config_history (
+-- Separate database: planner_configurations.db
+
+-- Main configurations table
+CREATE TABLE planner_configurations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    satellite_id TEXT NOT NULL,
+    name TEXT NOT NULL,  -- e.g., "Core Conservative", "Momentum Hunter v2"
+    description TEXT,
     config_toml TEXT NOT NULL,
-    version INTEGER NOT NULL,
-    changed_by TEXT,  -- 'user' or 'system'
-    change_reason TEXT,
+    version INTEGER NOT NULL,  -- Auto-incremented per configuration
+    is_active BOOLEAN DEFAULT 1,  -- Current active version
     created_at TEXT NOT NULL,
-    FOREIGN KEY (satellite_id) REFERENCES satellites(id)
+    created_by TEXT DEFAULT 'user',  -- 'user' or 'system'
+    parent_version_id INTEGER,  -- Previous version (for history chain)
+    FOREIGN KEY (parent_version_id) REFERENCES planner_configurations(id)
 );
 
-CREATE INDEX idx_config_history_satellite
-    ON satellite_config_history(satellite_id, version DESC);
+CREATE INDEX idx_config_name_version
+    ON planner_configurations(name, version DESC);
+CREATE INDEX idx_config_active
+    ON planner_configurations(name, is_active);
+
+-- Bucket → Configuration mapping (in main database)
+CREATE TABLE bucket_planner_configs (
+    bucket_id TEXT PRIMARY KEY,  -- 'core' or satellite ID
+    planner_config_id INTEGER NOT NULL,
+    assigned_at TEXT NOT NULL,
+    FOREIGN KEY (bucket_id) REFERENCES buckets(id)
+);
 ```
 
 ```python
 # services/config_manager.py
 class ConfigurationManager:
-    """Manage configuration versions."""
+    """Manage planner configuration versions."""
 
-    async def update_config(
+    def __init__(self, config_db_path: str = "planner_configurations.db"):
+        self.config_db = aiosqlite.connect(config_db_path)
+
+    async def create_new_version(
         self,
-        satellite_id: str,
-        new_config_toml: str,
-        change_reason: str = None
-    ):
-        """Update configuration and store in history."""
+        name: str,
+        config_toml: str,
+        description: str = None,
+        parent_version_id: int = None
+    ) -> int:
+        """Create new configuration version."""
 
-        # Get current version
-        current = await self.get_current_version(satellite_id)
-        next_version = (current['version'] + 1) if current else 1
+        # Get next version number for this config name
+        result = await self.config_db.fetchone(
+            "SELECT MAX(version) FROM planner_configurations WHERE name = ?",
+            (name,)
+        )
+        next_version = (result[0] + 1) if result[0] else 1
 
-        # Store in history
-        await self.db.execute(
-            """INSERT INTO satellite_config_history
-               (satellite_id, config_toml, version, changed_by, change_reason, created_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (satellite_id, new_config_toml, next_version, 'user', change_reason, datetime.now())
+        # Mark previous versions as inactive
+        await self.config_db.execute(
+            "UPDATE planner_configurations SET is_active = 0 WHERE name = ? AND is_active = 1",
+            (name,)
         )
 
-        # Update current config
-        await self.satellites_repo.update_config(satellite_id, new_config_toml)
+        # Insert new version
+        cursor = await self.config_db.execute(
+            """INSERT INTO planner_configurations
+               (name, description, config_toml, version, is_active, created_at, parent_version_id)
+               VALUES (?, ?, ?, ?, 1, ?, ?)""",
+            (name, description, config_toml, next_version, datetime.now().isoformat(), parent_version_id)
+        )
+        await self.config_db.commit()
+        return cursor.lastrowid
 
-    async def rollback_to_version(self, satellite_id: str, version: int):
-        """Rollback to a previous configuration version."""
+    async def assign_config_to_bucket(
+        self,
+        bucket_id: str,
+        planner_config_id: int
+    ):
+        """Assign a configuration version to a bucket."""
 
-        # Get historical config
-        row = await self.db.fetchone(
-            """SELECT config_toml FROM satellite_config_history
-               WHERE satellite_id = ? AND version = ?""",
-            (satellite_id, version)
+        await self.main_db.execute(
+            """INSERT OR REPLACE INTO bucket_planner_configs
+               (bucket_id, planner_config_id, assigned_at)
+               VALUES (?, ?, ?)""",
+            (bucket_id, planner_config_id, datetime.now().isoformat())
+        )
+        await self.main_db.commit()
+
+    async def rollback_to_version(
+        self,
+        bucket_id: str,
+        version: int,
+        config_name: str
+    ):
+        """Rollback a bucket to a previous configuration version."""
+
+        # Get the historical config
+        row = await self.config_db.fetchone(
+            """SELECT id, config_toml FROM planner_configurations
+               WHERE name = ? AND version = ?""",
+            (config_name, version)
         )
 
         if not row:
-            raise ValueError(f"Version {version} not found")
+            raise ValueError(f"Version {version} of '{config_name}' not found")
 
-        # Restore (creates new version)
-        await self.update_config(
-            satellite_id,
-            row['config_toml'],
-            change_reason=f"Rollback to version {version}"
+        config_id, config_toml = row
+
+        # Assign to bucket (or create new version marked as rollback)
+        await self.assign_config_to_bucket(bucket_id, config_id)
+
+    async def get_bucket_config(self, bucket_id: str) -> dict:
+        """Get current configuration for a bucket."""
+
+        row = await self.main_db.fetchone(
+            """SELECT pc.* FROM planner_configurations pc
+               JOIN bucket_planner_configs bpc ON pc.id = bpc.planner_config_id
+               WHERE bpc.bucket_id = ?""",
+            (bucket_id,)
         )
+
+        if not row:
+            raise ValueError(f"No configuration assigned to bucket '{bucket_id}'")
+
+        return dict(row)
+
+    async def get_version_history(self, config_name: str) -> list:
+        """Get version history for a configuration."""
+
+        rows = await self.config_db.fetchall(
+            """SELECT id, version, description, created_at, created_by, is_active
+               FROM planner_configurations
+               WHERE name = ?
+               ORDER BY version DESC""",
+            (config_name,)
+        )
+
+        return [dict(row) for row in rows]
 ```
 
 **Benefits**:
-- Audit trail
-- Easy rollback
+- Separate database keeps config history isolated
+- Configurations are reusable entities (share across buckets)
+- Full audit trail with version chains
+- Easy rollback by reassigning bucket to previous config
 - Compare configurations over time
-- Understand performance changes
+- Understand performance changes linked to config versions
+- Template/clone configurations
+
+**Usage Flow**:
+1. User creates/edits TOML config in UI → POST `/configs` (creates v1)
+2. System assigns config to bucket → POST `/buckets/core/assign-config`
+3. Planner factory reads config via `get_bucket_config('core')`
+4. User tweaks config → POST `/configs` (creates v2 of same name)
+5. System auto-assigns new version to bucket
+6. Performance issues? → POST `/buckets/core/rollback` to v1
+
+**API Endpoints**:
+```python
+# api/planner_config.py
+@router.post("/configs")
+async def create_config(
+    name: str,
+    config_toml: str,
+    description: str = None
+):
+    """Create new configuration or new version of existing."""
+    config_id = await config_manager.create_new_version(
+        name=name,
+        config_toml=config_toml,
+        description=description
+    )
+    return {"config_id": config_id}
+
+@router.post("/buckets/{bucket_id}/assign-config")
+async def assign_config(bucket_id: str, config_id: int):
+    """Assign configuration to a bucket."""
+    await config_manager.assign_config_to_bucket(bucket_id, config_id)
+    return {"status": "assigned"}
+
+@router.post("/buckets/{bucket_id}/rollback")
+async def rollback_config(
+    bucket_id: str,
+    config_name: str,
+    version: int
+):
+    """Rollback bucket to previous config version."""
+    await config_manager.rollback_to_version(bucket_id, version, config_name)
+    return {"status": "rolled_back"}
+
+@router.get("/configs/{name}/history")
+async def get_history(name: str):
+    """Get version history for a configuration."""
+    history = await config_manager.get_version_history(name)
+    return {"history": history}
+
+@router.get("/buckets/{bucket_id}/config")
+async def get_current_config(bucket_id: str):
+    """Get current configuration for bucket."""
+    config = await config_manager.get_bucket_config(bucket_id)
+    return config
+```
+
+**Example Workflow**:
+```python
+# User creates "Momentum Hunter" config
+config_id_v1 = await create_config(
+    name="Momentum Hunter",
+    config_toml="[core]\nmax_plan_depth = 3\n...",
+    description="Aggressive momentum strategy"
+)  # Returns config_id=1, version=1
+
+# Assign to satellite_a
+await assign_config("satellite_a", config_id_v1)
+
+# User tweaks parameters → creates v2
+config_id_v2 = await create_config(
+    name="Momentum Hunter",  # Same name
+    config_toml="[core]\nmax_plan_depth = 5\n...",  # Different params
+    description="Increased depth for better coverage"
+)  # Returns config_id=2, version=2
+
+# Auto-assign latest version to satellite_a
+await assign_config("satellite_a", config_id_v2)
+
+# Performance worse? Rollback to v1
+await rollback_config("satellite_a", "Momentum Hunter", version=1)
+```
+
+**Migration from Current System**:
+```python
+# One-time migration script
+async def migrate_existing_configs():
+    """Migrate satellite configs from settings to planner_configurations.db."""
+
+    # Get all satellites
+    satellites = await satellites_repo.get_all()
+
+    for satellite in satellites:
+        # Get current config from settings or satellite record
+        current_config = satellite.get('config_toml')
+
+        if current_config:
+            # Create v1 in new system
+            config_id = await config_manager.create_new_version(
+                name=f"{satellite['name']} Config",
+                config_toml=current_config,
+                description="Migrated from legacy system"
+            )
+
+            # Link bucket to config
+            await config_manager.assign_config_to_bucket(
+                satellite['id'],
+                config_id
+            )
+
+    # Create core config from current settings
+    core_config_toml = await build_toml_from_settings()
+    config_id = await config_manager.create_new_version(
+        name="Core Conservative",
+        config_toml=core_config_toml,
+        description="Migrated core planner settings"
+    )
+    await config_manager.assign_config_to_bucket("core", config_id)
+```
 
 **Implementation**: Phase 7
 
