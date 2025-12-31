@@ -1,7 +1,7 @@
 """Market hours module for checking exchange trading hours.
 
 This module provides functions to check if markets are open,
-filter stocks by open markets, and group stocks by geography.
+filter securities by open markets, and group securities by geography.
 Uses the exchange_calendars library for accurate market hours
 including holidays, early closes, and lunch breaks.
 """
@@ -77,10 +77,10 @@ def _get_current_time() -> datetime:
 
 async def get_exchanges_from_database() -> list[str]:
     """
-    Get distinct exchange names from the stocks table in the database.
+    Get distinct exchange names from the securities table in the database.
 
     Returns:
-        List of unique fullExchangeName values from active stocks
+        List of unique fullExchangeName values from active securities
     """
     try:
         from app.core.database import get_db_manager
@@ -234,7 +234,7 @@ def is_market_open(full_exchange_name: str) -> bool:
 
 async def get_open_markets() -> list[str]:
     """
-    Get list of currently open exchanges (only those where we have stocks).
+    Get list of currently open exchanges (only those where we have securities).
 
     Returns:
         List of exchange names that are currently open
@@ -245,7 +245,7 @@ async def get_open_markets() -> list[str]:
 
 async def get_market_status() -> dict[str, dict[str, Any]]:
     """
-    Get detailed status for all markets where we have stocks.
+    Get detailed status for all markets where we have securities.
 
     Returns:
         Dict mapping exchange name to status dict containing:
@@ -258,7 +258,7 @@ async def get_market_status() -> dict[str, dict[str, Any]]:
     status = {}
     now = _get_current_time()
 
-    # Get exchanges from database (only where we have stocks)
+    # Get exchanges from database (only where we have securities)
     exchange_names = await get_exchanges_from_database()
 
     for exchange_name in exchange_names:
@@ -347,38 +347,40 @@ async def get_market_status() -> dict[str, dict[str, Any]]:
     return status
 
 
-async def filter_stocks_by_open_markets(stocks: list) -> list:
+async def filter_stocks_by_open_markets(securities: list) -> list:
     """
-    Filter stocks to only those whose markets are currently open.
+    Filter securities to only those whose markets are currently open.
 
     Args:
-        stocks: List of stock objects with 'fullExchangeName' attribute
+        securities: List of security objects with 'fullExchangeName' attribute
 
     Returns:
-        Filtered list of stocks with open markets
+        Filtered list of securities with open markets
     """
     open_markets = await get_open_markets()
-    return [s for s in stocks if getattr(s, "fullExchangeName", None) in open_markets]
+    return [
+        s for s in securities if getattr(s, "fullExchangeName", None) in open_markets
+    ]
 
 
-def group_stocks_by_exchange(stocks: list) -> dict[str, list]:
+def group_stocks_by_exchange(securities: list) -> dict[str, list]:
     """
-    Group stocks by their exchange.
+    Group securities by their exchange.
 
     Args:
-        stocks: List of stock objects with 'fullExchangeName' attribute
+        securities: List of security objects with 'fullExchangeName' attribute
 
     Returns:
-        Dict mapping exchange name to list of stocks
+        Dict mapping exchange name to list of securities
     """
     grouped: dict[str, list] = {}
 
-    for stock in stocks:
-        exchange = getattr(stock, "fullExchangeName", None)
+    for security in securities:
+        exchange = getattr(security, "fullExchangeName", None)
         if exchange:
             if exchange not in grouped:
                 grouped[exchange] = []
-            grouped[exchange].append(stock)
+            grouped[exchange].append(security)
 
     return grouped
 

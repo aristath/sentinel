@@ -203,14 +203,14 @@ async def delete_industry_group(group_name: str, grouping_repo: GroupingReposito
 
 @router.get("/groups/available/countries")
 async def get_available_countries(grouping_repo: GroupingRepositoryDep):
-    """Get list of all available countries from stocks."""
+    """Get list of all available countries from securities."""
     countries = await grouping_repo.get_available_countries()
     return {"countries": countries}
 
 
 @router.get("/groups/available/industries")
 async def get_available_industries(grouping_repo: GroupingRepositoryDep):
-    """Get list of all available industries from stocks."""
+    """Get list of all available industries from securities."""
     industries = await grouping_repo.get_available_industries()
     return {"industries": industries}
 

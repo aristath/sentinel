@@ -39,7 +39,7 @@ def get_analyst_data(
     Get analyst recommendations and price targets.
 
     Args:
-        symbol: Stock symbol (Tradernet format)
+        symbol: Security symbol (Tradernet format)
         yahoo_symbol: Optional explicit Yahoo symbol override
 
     Returns:
@@ -100,7 +100,7 @@ def get_fundamental_data(
     Get fundamental analysis data.
 
     Args:
-        symbol: Stock symbol (Tradernet format)
+        symbol: Security symbol (Tradernet format)
         yahoo_symbol: Optional explicit Yahoo symbol override
 
     Returns:
@@ -142,7 +142,7 @@ def get_historical_prices(
     Get historical price data.
 
     Args:
-        symbol: Stock symbol (Tradernet format)
+        symbol: Security symbol (Tradernet format)
         yahoo_symbol: Optional explicit Yahoo symbol override
         period: Time period (1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max)
 
@@ -179,10 +179,10 @@ def get_current_price(
     symbol: str, yahoo_symbol: Optional[str] = None, max_retries: Optional[int] = None
 ) -> Optional[float]:
     """
-    Get current stock price with retry logic.
+    Get current security price with retry logic.
 
     Args:
-        symbol: Stock symbol (Tradernet format)
+        symbol: Security symbol (Tradernet format)
         yahoo_symbol: Optional explicit Yahoo symbol override
         max_retries: Maximum number of retry attempts (default: from config)
 
@@ -232,10 +232,10 @@ def get_security_industry(
     symbol: str, yahoo_symbol: Optional[str] = None
 ) -> Optional[str]:
     """
-    Get stock industry/sector from Yahoo Finance.
+    Get security industry/sector from Yahoo Finance.
 
     Args:
-        symbol: Stock symbol (Tradernet format)
+        symbol: Security symbol (Tradernet format)
         yahoo_symbol: Optional explicit Yahoo symbol override
 
     Returns:
@@ -261,10 +261,10 @@ def get_security_country_and_exchange(
     symbol: str, yahoo_symbol: Optional[str] = None
 ) -> tuple[Optional[str], Optional[str]]:
     """
-    Get stock country and exchange from Yahoo Finance.
+    Get security country and exchange from Yahoo Finance.
 
     Args:
-        symbol: Stock symbol (Tradernet format)
+        symbol: Security symbol (Tradernet format)
         yahoo_symbol: Optional explicit Yahoo symbol override
 
     Returns:
@@ -299,7 +299,7 @@ def get_product_type(
     - Some products return minimal/no data
 
     Args:
-        symbol: Stock symbol (Tradernet format)
+        symbol: Security symbol (Tradernet format)
         yahoo_symbol: Optional explicit Yahoo symbol override
         name: Optional product name for heuristic ETC detection
 

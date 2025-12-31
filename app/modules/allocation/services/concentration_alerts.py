@@ -23,7 +23,7 @@ class ConcentrationAlert:
     """Alert for approaching concentration limit."""
 
     type: str  # "country", "sector", "position"
-    name: str  # Country/sector name or stock symbol
+    name: str  # Country/sector name or security symbol
     current_pct: float
     limit_pct: float
     alert_threshold_pct: float

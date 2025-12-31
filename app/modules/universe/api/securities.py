@@ -1,4 +1,4 @@
-"""Stock universe API endpoints."""
+"""Security universe API endpoints."""
 
 import logging
 from typing import Any, Optional
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 class SecurityCreate(BaseModel):
-    """Request model for creating a stock."""
+    """Request model for creating a security."""
 
     symbol: str
     yahoo_symbol: Optional[str] = None
@@ -42,7 +42,7 @@ class SecurityCreate(BaseModel):
 
 
 class SecurityAddByIdentifier(BaseModel):
-    """Request model for adding a stock by identifier (symbol or ISIN)."""
+    """Request model for adding a security by identifier (symbol or ISIN)."""
 
     identifier: str  # Symbol or ISIN
     min_lot: Optional[int] = 1
@@ -51,7 +51,7 @@ class SecurityAddByIdentifier(BaseModel):
 
 
 class SecurityUpdate(BaseModel):
-    """Request model for updating a stock."""
+    """Request model for updating a security."""
 
     new_symbol: Optional[str] = None
     name: Optional[str] = None
@@ -105,13 +105,13 @@ async def get_stocks(
             # Cache looks valid, return it
             return cached
 
-    stocks_data = await security_repo.get_with_scores()
+    securities_data = await security_repo.get_with_scores()
 
     priority_inputs = []
     stock_dicts = []
 
-    for stock in stocks_data:
-        stock_dict = dict(stock)
+    for security in securities_data:
+        stock_dict = dict(security)
         stock_score = stock_dict.get("total_score") or 0
         volatility = stock_dict.get("volatility")
         multiplier = stock_dict.get("priority_multiplier") or 1.0
@@ -441,17 +441,17 @@ async def get_universe_suggestions(
                     if not client.connect():
                         check_delisted = False
 
-                for stock in stocks:
+                for security in stocks:
                     try:
                         # Get recent scores
                         scores = await score_repo.get_recent_scores(
-                            stock.symbol, months
+                            security.symbol, months
                         )
 
                         # Check minimum samples requirement
                         if len(scores) < min_samples:
                             logger.info(
-                                f"Stock {stock.symbol}: only {len(scores)} score(s), "
+                                f"Stock {security.symbol}: only {len(scores)} score(s), "
                                 f"below minimum {min_samples}, skipping"
                             )
                             continue
@@ -462,35 +462,37 @@ async def get_universe_suggestions(
                         ]
                         if not total_scores:
                             logger.info(
-                                f"Stock {stock.symbol}: no valid scores found, skipping"
+                                f"Stock {security.symbol}: no valid scores found, skipping"
                             )
                             continue
 
                         avg_score = sum(total_scores) / len(total_scores)
                         logger.info(
-                            f"Stock {stock.symbol}: average score {avg_score:.3f} "
+                            f"Stock {security.symbol}: average score {avg_score:.3f} "
                             f"(threshold: {score_threshold}, samples: {len(scores)})"
                         )
 
                         # Check if average score is below threshold
                         if avg_score >= score_threshold:
                             logger.info(
-                                f"Stock {stock.symbol}: average score {avg_score:.3f} "
+                                f"Stock {security.symbol}: average score {avg_score:.3f} "
                                 f"above threshold {score_threshold}, keeping"
                             )
                             continue
 
-                        # Check if stock is delisted (if enabled)
+                        # Check if security is delisted (if enabled)
                         is_delisted = False
                         reason = "low_score"
                         if check_delisted:
                             try:
-                                security_info = client.get_security_info(stock.symbol)
+                                security_info = client.get_security_info(
+                                    security.symbol
+                                )
                                 if security_info is None:
                                     is_delisted = True
                                     reason = "delisted"
                                 else:
-                                    quote = client.get_quote(stock.symbol)
+                                    quote = client.get_quote(security.symbol)
                                     if quote is None or not hasattr(quote, "price"):
                                         is_delisted = True
                                         reason = "delisted"
@@ -501,13 +503,13 @@ async def get_universe_suggestions(
                         # Add to prune list if criteria met
                         if is_delisted or avg_score < score_threshold:
                             logger.info(
-                                f"Stock {stock.symbol} meets pruning criteria: "
+                                f"Stock {security.symbol} meets pruning criteria: "
                                 f"avg_score={avg_score:.3f}, threshold={score_threshold}, "
                                 f"is_delisted={is_delisted}"
                             )
                             # Get current score
                             current_score_obj = await score_repo.get_by_symbol(
-                                stock.symbol
+                                security.symbol
                             )
                             current_score = (
                                 current_score_obj.total_score
@@ -517,10 +519,10 @@ async def get_universe_suggestions(
 
                             stocks_to_prune.append(
                                 {
-                                    "symbol": stock.symbol,
-                                    "name": stock.name,
-                                    "country": stock.country,
-                                    "industry": stock.industry,
+                                    "symbol": security.symbol,
+                                    "name": security.name,
+                                    "country": security.country,
+                                    "industry": security.industry,
                                     "average_score": round(avg_score, 3),
                                     "sample_count": len(scores),
                                     "months_analyzed": months,
@@ -534,13 +536,13 @@ async def get_universe_suggestions(
                             )
                     except Exception as e:
                         logger.warning(
-                            f"Error processing {stock.symbol} for pruning suggestions: {e}",
+                            f"Error processing {security.symbol} for pruning suggestions: {e}",
                             exc_info=True,
                         )
                         continue
 
                 logger.info(
-                    f"Pruning suggestions complete: {len(stocks_to_prune)} stock(s) "
+                    f"Pruning suggestions complete: {len(stocks_to_prune)} security(s) "
                     f"suggested for pruning out of {len(stocks)} checked"
                 )
 
@@ -567,7 +569,7 @@ async def get_stock(
     position_repo: PositionRepositoryDep,
     score_repo: ScoreRepositoryDep,
 ):
-    """Get detailed stock info with score breakdown.
+    """Get detailed security info with score breakdown.
 
     Args:
         isin: Stock ISIN (e.g., US0378331005)
@@ -577,30 +579,30 @@ async def get_stock(
     if not is_isin(isin):
         raise HTTPException(status_code=400, detail="Invalid ISIN format")
 
-    stock = await security_repo.get_by_isin(isin)
-    if not stock:
+    security = await security_repo.get_by_isin(isin)
+    if not security:
         raise HTTPException(status_code=404, detail="Stock not found")
 
     # Use the resolved symbol for other lookups
-    symbol = stock.symbol
+    symbol = security.symbol
     score = await score_repo.get_by_symbol(symbol)
     position = await position_repo.get_by_symbol(symbol)
 
     result: dict[str, Any] = {
-        "symbol": stock.symbol,
-        "isin": stock.isin,
-        "yahoo_symbol": stock.yahoo_symbol,
-        "name": stock.name,
-        "industry": stock.industry,
-        "country": stock.country,
-        "fullExchangeName": stock.fullExchangeName,
-        "priority_multiplier": stock.priority_multiplier,
-        "min_lot": stock.min_lot,
-        "active": stock.active,
-        "allow_buy": stock.allow_buy,
-        "allow_sell": stock.allow_sell,
-        "min_portfolio_target": stock.min_portfolio_target,
-        "max_portfolio_target": stock.max_portfolio_target,
+        "symbol": security.symbol,
+        "isin": security.isin,
+        "yahoo_symbol": security.yahoo_symbol,
+        "name": security.name,
+        "industry": security.industry,
+        "country": security.country,
+        "fullExchangeName": security.fullExchangeName,
+        "priority_multiplier": security.priority_multiplier,
+        "min_lot": security.min_lot,
+        "active": security.active,
+        "allow_buy": security.allow_buy,
+        "allow_sell": security.allow_sell,
+        "min_portfolio_target": security.min_portfolio_target,
+        "max_portfolio_target": security.max_portfolio_target,
     }
 
     if score:
@@ -648,7 +650,7 @@ async def create_stock(
     score_repo: ScoreRepositoryDep,
     scoring_service: ScoringServiceDep,
 ):
-    """Add a new stock to the universe."""
+    """Add a new security to the universe."""
 
     existing = await security_repo.get_by_symbol(security_data.symbol.upper())
     if existing:
@@ -664,7 +666,7 @@ async def create_stock(
         security_data.symbol, security_data.yahoo_symbol
     )
 
-    # Use factory to create stock
+    # Use factory to create security
     stock_dict = {
         "symbol": security_data.symbol,
         "name": security_data.name,
@@ -711,7 +713,7 @@ async def add_stock_by_identifier(
     stock_setup_service: SecuritySetupServiceDep,
     score_repo: ScoreRepositoryDep,
 ):
-    """Add a new stock to the universe by symbol or ISIN.
+    """Add a new security to the universe by symbol or ISIN.
 
     This endpoint accepts either:
     - Tradernet symbol (e.g., "AAPL.US")
@@ -721,9 +723,9 @@ async def add_stock_by_identifier(
     1. Resolve the identifier to get all necessary symbols
     2. Fetch data from Tradernet (symbol, name, currency, ISIN)
     3. Fetch data from Yahoo Finance (country, exchange, industry)
-    4. Create the stock in the database
+    4. Create the security in the database
     5. Fetch historical price data (10 years initial seed)
-    6. Calculate and save the initial stock score
+    6. Calculate and save the initial security score
 
     Args:
         security_data: Request containing identifier and optional settings
@@ -731,7 +733,7 @@ async def add_stock_by_identifier(
         score_repo: Score repository for retrieving calculated score
 
     Returns:
-        Created stock data with score
+        Created security data with score
     """
     try:
         # Validate identifier format (basic check)
@@ -742,8 +744,8 @@ async def add_stock_by_identifier(
         # Note: Stock existence check is handled in the service, but we do it here
         # to provide better error messages before starting the setup process
 
-        # Add the stock
-        stock = await stock_setup_service.add_security_by_identifier(
+        # Add the security
+        security = await stock_setup_service.add_security_by_identifier(
             identifier=identifier,
             min_lot=security_data.min_lot or 1,
             allow_buy=(
@@ -757,21 +759,21 @@ async def add_stock_by_identifier(
         )
 
         # Get the calculated score
-        score = await score_repo.get_by_symbol(stock.symbol)
+        score = await score_repo.get_by_symbol(security.symbol)
 
         cache.invalidate("stocks_with_scores")
 
         return {
-            "message": f"Stock {stock.symbol} added to universe",
-            "symbol": stock.symbol,
-            "yahoo_symbol": stock.yahoo_symbol,
-            "isin": stock.isin,
-            "name": stock.name,
-            "country": stock.country,
-            "fullExchangeName": stock.fullExchangeName,
-            "industry": stock.industry,
-            "currency": str(stock.currency) if stock.currency else None,
-            "min_lot": stock.min_lot,
+            "message": f"Stock {security.symbol} added to universe",
+            "symbol": security.symbol,
+            "yahoo_symbol": security.yahoo_symbol,
+            "isin": security.isin,
+            "name": security.name,
+            "country": security.country,
+            "fullExchangeName": security.fullExchangeName,
+            "industry": security.industry,
+            "currency": str(security.currency) if security.currency else None,
+            "min_lot": security.min_lot,
             "total_score": score.total_score if score else None,
         }
 
@@ -782,8 +784,8 @@ async def add_stock_by_identifier(
             status_code=503, detail=f"Tradernet connection failed: {str(e)}"
         )
     except Exception as e:
-        logger.error(f"Failed to add stock by identifier: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to add stock: {str(e)}")
+        logger.error(f"Failed to add security by identifier: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to add security: {str(e)}")
 
 
 @router.post("/refresh-all")
@@ -806,13 +808,15 @@ async def refresh_all_scores(
     try:
         stocks = await security_repo.get_all_active()
 
-        for stock in stocks:
-            if not stock.industry:
+        for security in stocks:
+            if not security.industry:
                 detected_industry = yahoo.get_security_industry(
-                    stock.symbol, stock.yahoo_symbol
+                    security.symbol, security.yahoo_symbol
                 )
                 if detected_industry:
-                    await security_repo.update(stock.symbol, industry=detected_industry)
+                    await security_repo.update(
+                        security.symbol, industry=detected_industry
+                    )
 
         scores = await scoring_service.score_all_stocks()
 
@@ -882,7 +886,7 @@ async def refresh_stock_score(
     security_repo: SecurityRepositoryDep,
     scoring_service: ScoringServiceDep,
 ):
-    """Trigger score recalculation for a stock (quick, no historical data sync).
+    """Trigger score recalculation for a security (quick, no historical data sync).
 
     Args:
         isin: Stock ISIN (e.g., US0378331005)
@@ -896,16 +900,16 @@ async def refresh_stock_score(
     recommendation_cache = get_recommendation_cache()
     await recommendation_cache.invalidate_all_recommendations()
 
-    stock = await security_repo.get_by_isin(isin)
-    if not stock:
+    security = await security_repo.get_by_isin(isin)
+    if not security:
         raise HTTPException(status_code=404, detail="Stock not found")
 
-    symbol = stock.symbol
+    symbol = security.symbol
     score = await scoring_service.calculate_and_save_score(
         symbol,
-        stock.yahoo_symbol,
-        country=stock.country,
-        industry=stock.industry,
+        security.yahoo_symbol,
+        country=security.country,
+        industry=security.industry,
     )
     if score:
         return {
@@ -1063,21 +1067,21 @@ def _build_update_dict(
     return updates
 
 
-def _format_stock_response(stock, score) -> dict:
-    """Format stock data for API response."""
+def _format_stock_response(security, score) -> dict:
+    """Format security data for API response."""
     security_data = {
-        "symbol": stock.symbol,
-        "isin": stock.isin,
-        "yahoo_symbol": stock.yahoo_symbol,
-        "name": stock.name,
-        "industry": stock.industry,
-        "country": stock.country,
-        "fullExchangeName": stock.fullExchangeName,
-        "priority_multiplier": stock.priority_multiplier,
-        "min_lot": stock.min_lot,
-        "active": stock.active,
-        "allow_buy": stock.allow_buy,
-        "allow_sell": stock.allow_sell,
+        "symbol": security.symbol,
+        "isin": security.isin,
+        "yahoo_symbol": security.yahoo_symbol,
+        "name": security.name,
+        "industry": security.industry,
+        "country": security.country,
+        "fullExchangeName": security.fullExchangeName,
+        "priority_multiplier": security.priority_multiplier,
+        "min_lot": security.min_lot,
+        "active": security.active,
+        "allow_buy": security.allow_buy,
+        "allow_sell": security.allow_sell,
     }
     if score:
         security_data["total_score"] = score.total_score
@@ -1091,7 +1095,7 @@ async def update_stock(
     security_repo: SecurityRepositoryDep,
     scoring_service: ScoringServiceDep,
 ):
-    """Update stock details.
+    """Update security details.
 
     Args:
         isin: Stock ISIN (e.g., US0378331005)
@@ -1102,11 +1106,11 @@ async def update_stock(
         if not is_isin(isin):
             raise HTTPException(status_code=400, detail="Invalid ISIN format")
 
-        stock = await security_repo.get_by_isin(isin)
-        if not stock:
+        security = await security_repo.get_by_isin(isin)
+        if not security:
             raise HTTPException(status_code=404, detail="Stock not found")
 
-        old_symbol = stock.symbol
+        old_symbol = security.symbol
 
         new_symbol = None
         if update.new_symbol is not None:
@@ -1148,8 +1152,10 @@ async def update_stock(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to update stock {isin}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to update stock: {str(e)}")
+        logger.error(f"Failed to update security {isin}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Failed to update security: {str(e)}"
+        )
 
 
 @router.delete("/{isin}")
@@ -1157,7 +1163,7 @@ async def delete_stock(
     isin: str,
     security_repo: SecurityRepositoryDep,
 ):
-    """Remove a stock from the universe (soft delete by setting active=0).
+    """Remove a security from the universe (soft delete by setting active=0).
 
     Args:
         isin: Stock ISIN (e.g., US0378331005)
@@ -1167,16 +1173,16 @@ async def delete_stock(
     if not is_isin(isin):
         raise HTTPException(status_code=400, detail="Invalid ISIN format")
 
-    logger.info(f"DELETE /api/securities/{isin} - Attempting to delete stock")
+    logger.info(f"DELETE /api/securities/{isin} - Attempting to delete security")
 
-    stock = await security_repo.get_by_isin(isin)
-    if not stock:
+    security = await security_repo.get_by_isin(isin)
+    if not security:
         logger.warning(f"DELETE /api/securities/{isin} - Stock not found")
         raise HTTPException(status_code=404, detail="Stock not found")
 
-    symbol = stock.symbol
+    symbol = security.symbol
     logger.info(
-        f"DELETE /api/securities/{isin} - Soft deleting stock {symbol} (setting active=0)"
+        f"DELETE /api/securities/{isin} - Soft deleting security {symbol} (setting active=0)"
     )
     await security_repo.delete(symbol)
 
@@ -1184,127 +1190,3 @@ async def delete_stock(
 
     logger.info(f"DELETE /api/securities/{isin} - Stock {symbol} successfully deleted")
     return {"message": f"Stock {symbol} removed from universe"}
-
-
-@router.post("/{isin}/add-from-suggestion")
-async def add_stock_from_suggestion(
-    isin: str,
-    stock_setup_service: SecuritySetupServiceDep,
-    score_repo: ScoreRepositoryDep,
-):
-    """Add a stock to the universe from a suggestion.
-
-    This endpoint is used to manually execute adding a stock that was suggested
-    by the universe suggestions endpoint.
-
-    Args:
-        isin: Stock ISIN (e.g., US0378331005) to add
-    """
-    try:
-        # Validate ISIN format
-        isin = isin.strip().upper()
-        if not is_isin(isin):
-            raise HTTPException(status_code=400, detail="Invalid ISIN format")
-
-        # Check if stock already exists
-        from app.infrastructure.dependencies import get_security_repository
-
-        concrete_stock_repo = get_security_repository()
-        existing = await concrete_stock_repo.get_by_isin(isin)
-        if existing:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Stock with ISIN {isin} already exists in universe",
-            )
-
-        # Add the stock
-        stock = await stock_setup_service.add_security_by_identifier(
-            identifier=isin,
-            min_lot=1,
-            allow_buy=True,
-            allow_sell=False,  # Conservative: don't allow selling initially
-        )
-
-        # Get the calculated score
-        score = await score_repo.get_by_symbol(stock.symbol)
-
-        cache.invalidate("stocks_with_scores")
-
-        return {
-            "message": f"Stock {stock.symbol} added to universe",
-            "symbol": stock.symbol,
-            "yahoo_symbol": stock.yahoo_symbol,
-            "isin": stock.isin,
-            "name": stock.name,
-            "country": stock.country,
-            "fullExchangeName": stock.fullExchangeName,
-            "industry": stock.industry,
-            "currency": str(stock.currency) if stock.currency else None,
-            "min_lot": stock.min_lot,
-            "total_score": score.total_score if score else None,
-        }
-
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except ConnectionError as e:
-        raise HTTPException(
-            status_code=503, detail=f"Tradernet connection failed: {str(e)}"
-        )
-    except Exception as e:
-        logger.error(f"Failed to add stock from suggestion: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to add stock: {str(e)}")
-
-
-@router.post("/{isin}/prune-from-suggestion")
-async def prune_stock_from_suggestion(
-    isin: str,
-    security_repo: SecurityRepositoryDep,
-):
-    """Prune a stock from the universe from a suggestion.
-
-    This endpoint is used to manually execute pruning a stock that was suggested
-    by the universe suggestions endpoint. Marks the stock as inactive.
-
-    Args:
-        isin: Stock ISIN (e.g., US0378331005) to prune
-    """
-    # Validate ISIN format
-    isin = isin.strip().upper()
-    if not is_isin(isin):
-        raise HTTPException(status_code=400, detail="Invalid ISIN format")
-
-    try:
-        # Check if stock exists
-        stock = await security_repo.get_by_isin(isin)
-        if not stock:
-            raise HTTPException(
-                status_code=404, detail=f"Stock with ISIN {isin} not found"
-            )
-
-        # Check if already inactive
-        if not stock.active:
-            raise HTTPException(
-                status_code=400, detail=f"Stock {stock.symbol} is already inactive"
-            )
-
-        # Mark as inactive (soft delete)
-        # Need concrete SecurityRepository for mark_inactive method
-        from app.infrastructure.dependencies import get_security_repository
-
-        concrete_stock_repo = get_security_repository()
-        symbol = stock.symbol
-        await concrete_stock_repo.mark_inactive(symbol)
-
-        cache.invalidate("stocks_with_scores")
-
-        logger.info(f"Stock {symbol} pruned from universe (marked inactive)")
-        return {
-            "message": f"Stock {symbol} pruned from universe",
-            "symbol": symbol,
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to prune stock from suggestion: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to prune stock: {str(e)}")

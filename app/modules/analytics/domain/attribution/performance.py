@@ -137,11 +137,11 @@ async def get_performance_attribution(
     if positions_df.empty:
         return {"country": {}, "industry": {}}
 
-    # Get stock info for country/industry
+    # Get security info for country/industry
     security_repo = SecurityRepository()
-    stocks = await security_repo.get_all()
+    securities = await security_repo.get_all()
     stock_info = {
-        s.symbol: {"country": s.country, "industry": s.industry} for s in stocks
+        s.symbol: {"country": s.country, "industry": s.industry} for s in securities
     }
 
     # Calculate returns by geography and industry
