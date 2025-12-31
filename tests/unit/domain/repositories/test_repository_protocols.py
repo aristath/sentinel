@@ -6,7 +6,7 @@ class TestRepositoryProtocols:
 
     def test_stock_repository_protocol(self):
         """Test that SecurityRepository implements ISecurityRepository."""
-        from app.repositories.security import SecurityRepository
+        from app.modules.universe.database.security_repository import SecurityRepository
 
         # Check that the class has the required protocol methods
         assert hasattr(SecurityRepository, "get_by_symbol")
@@ -18,7 +18,9 @@ class TestRepositoryProtocols:
 
     def test_position_repository_protocol(self):
         """Test that PositionRepository implements IPositionRepository."""
-        from app.repositories.position import PositionRepository
+        from app.modules.portfolio.database.position_repository import (
+            PositionRepository,
+        )
 
         # Check that the class has the required protocol methods
         assert hasattr(PositionRepository, "get_by_symbol")
