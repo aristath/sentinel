@@ -3,7 +3,7 @@
 import aiosqlite
 import pytest
 
-from app.infrastructure.database.schemas import init_config_schema
+from app.core.database.schemas import init_config_schema
 
 
 class ConnectionWrapper:

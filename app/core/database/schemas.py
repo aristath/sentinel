@@ -1159,11 +1159,6 @@ async def init_recommendations_schema(db):
 # DIVIDENDS.DB - Dividend history with DRIP tracking
 # =============================================================================
 # Note: init_dividends_schema is imported directly in manager.py where it's used
-            await db.execute("ALTER TABLE dividend_history ADD COLUMN isin TEXT")
-            await db.execute(
-                "CREATE INDEX IF NOT EXISTS idx_dividend_history_isin ON dividend_history(isin)"
-            )
-            logger.info("Added isin column to dividend_history table")
 
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",

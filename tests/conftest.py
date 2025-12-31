@@ -6,7 +6,7 @@ import tempfile
 import aiosqlite
 import pytest
 
-from app.infrastructure.database.schemas import (
+from app.core.database.schemas import (
     CACHE_SCHEMA,
     CALCULATIONS_SCHEMA,
     CONFIG_SCHEMA,

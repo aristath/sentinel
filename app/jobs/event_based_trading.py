@@ -446,7 +446,7 @@ async def _wait_for_planning_completion():
             f"Failed to trigger first batch via API: {e}, falling back to direct call"
         )
         # Fallback: call directly
-                from app.modules.planning.jobs.planner_batch import process_planner_batch_job
+        from app.modules.planning.jobs.planner_batch import process_planner_batch_job
 
         await process_planner_batch_job(max_depth=1, portfolio_hash=portfolio_hash)
 

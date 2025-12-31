@@ -8,7 +8,7 @@ from datetime import datetime
 
 import pytest
 
-from app.infrastructure.database.queue import Priority, QueryQueue, QueuedOperation
+from app.core.database.queue import Priority, QueryQueue, QueuedOperation
 
 
 class TestPriority:
@@ -337,7 +337,7 @@ class TestGetQueryQueue:
         module._query_queue = None
 
         try:
-            from app.infrastructure.database.queue import get_query_queue
+            from app.core.database.queue import get_query_queue
 
             with pytest.raises(RuntimeError, match="not initialized"):
                 get_query_queue()
@@ -356,7 +356,7 @@ class TestInitQueryQueue:
         original = module._query_queue
 
         try:
-            from app.infrastructure.database.queue import init_query_queue
+            from app.core.database.queue import init_query_queue
 
             queue = await init_query_queue()
 
@@ -380,7 +380,7 @@ class TestShutdownQueryQueue:
         original = module._query_queue
 
         try:
-            from app.infrastructure.database.queue import (
+            from app.core.database.queue import (
                 init_query_queue,
                 shutdown_query_queue,
             )
@@ -401,7 +401,7 @@ class TestShutdownQueryQueue:
         module._query_queue = None
 
         try:
-            from app.infrastructure.database.queue import shutdown_query_queue
+            from app.core.database.queue import shutdown_query_queue
 
             # Should not raise
             await shutdown_query_queue()
@@ -420,7 +420,7 @@ class TestEnqueueConvenienceFunction:
         original = module._query_queue
 
         try:
-            from app.infrastructure.database.queue import (
+            from app.core.database.queue import (
                 enqueue,
                 init_query_queue,
                 shutdown_query_queue,
