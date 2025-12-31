@@ -17,6 +17,14 @@ from app.shared.domain.value_objects.currency import Currency
 
 logger = logging.getLogger(__name__)
 
+try:
+    from app.modules.satellites.services.balance_service import BalanceService
+
+    BALANCE_SERVICE_AVAILABLE = True
+except ImportError:
+    BALANCE_SERVICE_AVAILABLE = False
+    logger.debug("BalanceService not available - bucket balance updates disabled")
+
 
 async def _check_duplicate_order(
     order_id: Optional[str], trade_repo: ITradeRepository
@@ -71,6 +79,56 @@ async def _update_position_after_sell(
             logger.warning(f"Failed to update last_sold_at: {e}")
 
 
+async def _update_bucket_balance(
+    trade: Trade,
+    balance_service: Optional["BalanceService"] = None,
+) -> None:
+    """Update virtual bucket balance after trade settlement.
+
+    Args:
+        trade: The recorded trade
+        balance_service: Optional balance service instance
+    """
+    if not BALANCE_SERVICE_AVAILABLE or not balance_service:
+        return
+
+    # Skip balance updates for research mode trades
+    if trade.mode == "research":
+        logger.debug(
+            f"Skipping balance update for research mode trade: {trade.order_id}"
+        )
+        return
+
+    try:
+        # Calculate trade amount (quantity * price)
+        trade_amount = trade.quantity * trade.price
+
+        # Determine currency (use trade currency or default to EUR)
+        currency = str(trade.currency) if trade.currency else "EUR"
+
+        # Determine if buy or sell
+        is_buy = trade.side.upper() == "BUY"
+
+        # Update bucket balance
+        await balance_service.record_trade_settlement(
+            bucket_id=trade.bucket_id,
+            amount=trade_amount,
+            currency=currency,
+            is_buy=is_buy,
+            description=f"{'Buy' if is_buy else 'Sell'} {trade.quantity} {trade.symbol} @ {trade.price}",
+        )
+        logger.info(
+            f"Updated bucket '{trade.bucket_id}' balance: "
+            f"{'bought' if is_buy else 'sold'} {trade_amount:.2f} {currency}"
+        )
+    except Exception as e:
+        # Log error but don't fail the trade - balance can be reconciled later
+        logger.error(
+            f"Failed to update bucket balance for trade {trade.order_id}: {e}",
+            exc_info=True,
+        )
+
+
 async def record_trade(
     symbol: str,
     side: str,
@@ -86,11 +144,13 @@ async def record_trade(
     isin: Optional[str] = None,
     bucket_id: str = "core",
     mode: str = "live",
+    balance_service: Optional["BalanceService"] = None,
 ) -> Optional[Trade]:
     """
     Record a trade in the database.
 
     Handles duplicate order_id checking and creates Trade record.
+    Optionally updates virtual bucket balance if balance_service is provided.
 
     Args:
         symbol: Security symbol
@@ -107,6 +167,7 @@ async def record_trade(
         isin: Security ISIN for broker-agnostic identification (optional)
         bucket_id: Which bucket owns this trade (default: "core")
         mode: Trading mode - 'live' or 'research' (default: "live")
+        balance_service: Optional balance service for updating virtual cash (default: None)
 
     Returns:
         Trade object if recorded successfully, None if duplicate or error
@@ -147,6 +208,9 @@ async def record_trade(
         logger.info(
             f"Stored order {order_id or '(no order_id)'} for {symbol} immediately"
         )
+
+        # Update virtual bucket balance
+        await _update_bucket_balance(trade_record, balance_service)
 
         event_bus = get_event_bus()
         event_bus.publish(TradeExecutedEvent(trade=trade_record))

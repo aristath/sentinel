@@ -28,6 +28,16 @@ from app.shared.utils import safe_parse_datetime_string
 
 logger = logging.getLogger(__name__)
 
+# Optional dependency on satellites module for bucket balance tracking
+try:
+    from app.modules.satellites.services.balance_service import BalanceService
+
+    BALANCE_SERVICE_AVAILABLE = True
+except ImportError:
+    BALANCE_SERVICE_AVAILABLE = False
+    BalanceService = None  # type: ignore
+    logger.debug("BalanceService not available - bucket balance updates disabled")
+
 
 async def _calculate_commission_in_trade_currency(
     trade_value: float,
@@ -665,6 +675,9 @@ class TradeExecutionService:
         self._exchange_rate_service = exchange_rate_service
         self._settings_repo = settings_repo
 
+        # Initialize balance service for bucket tracking (if available)
+        self._balance_service = BalanceService() if BALANCE_SERVICE_AVAILABLE else None
+
     async def record_trade(
         self,
         symbol: str,
@@ -715,6 +728,7 @@ class TradeExecutionService:
             isin=isin,
             bucket_id=bucket_id,
             mode=mode,
+            balance_service=self._balance_service,
         )
 
     async def execute_trades(
