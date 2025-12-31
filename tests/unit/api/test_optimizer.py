@@ -10,15 +10,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
-from app.application.services.optimization.portfolio_optimizer import (
-    OptimizationResult,
-    WeightChange,
-)
 from app.modules.optimization.api.optimizer import (
     _optimization_result_to_dict,
     get_optimizer_status,
     run_optimization,
     update_optimization_cache,
+)
+from app.modules.optimization.services.portfolio_optimizer import (
+    OptimizationResult,
+    WeightChange,
 )
 
 
