@@ -71,7 +71,7 @@ class ConstraintsManager:
         Calculate weight bounds for each security.
 
         Args:
-            securities: List of Stock objects
+            securities: List of Security objects
             positions: Dict mapping symbol to Position
             portfolio_value: Total portfolio value in EUR
             current_prices: Dict mapping symbol to current price
@@ -265,7 +265,7 @@ class ConstraintsManager:
         Maps securities to groups and creates constraints for groups with targets.
 
         Args:
-            securities: List of Stock objects
+            securities: List of Security objects
             country_targets: Dict mapping group name to target weight (already at group level)
             ind_targets: Dict mapping group name to target weight (already at group level)
 

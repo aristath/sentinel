@@ -128,8 +128,8 @@ def calculate_portfolio_balance_score(
     Args:
         position_value: Current position value in EUR
         total_portfolio_value: Total portfolio value in EUR
-        country: Stock's country (e.g., "United States", "Germany")
-        industry: Stock's industry
+        country: Security's country (e.g., "United States", "Germany")
+        industry: Security's industry
         country_allocations: Current country allocation percentages
         ind_allocations: Current industry allocation percentages
     """

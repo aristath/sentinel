@@ -46,7 +46,7 @@ def calculate_excess_gain(
     Args:
         current_gain: Current profit percentage (e.g., 0.80 = 80% gain)
         years_held: Number of years position has been held
-        historical_cagr: Stock's historical compound annual growth rate
+        historical_cagr: Security's historical compound annual growth rate
 
     Returns:
         Excess gain as decimal (can be negative if underperforming)
@@ -78,7 +78,7 @@ async def calculate_windfall_score(
     Higher score = more of a windfall = stronger signal to take profits.
 
     Args:
-        symbol: Stock symbol (for cache lookup)
+        symbol: Security symbol (for cache lookup)
         current_gain: Current profit percentage (optional)
         years_held: Years position held (optional)
         historical_cagr: Historical CAGR (optional, will fetch from cache)
@@ -226,7 +226,7 @@ async def get_windfall_recommendation(
     and returns a recommendation.
 
     Args:
-        symbol: Stock symbol
+        symbol: Security symbol
         current_price: Current market price
         avg_price: Average purchase price
         first_bought_at: ISO date string of first purchase (optional)

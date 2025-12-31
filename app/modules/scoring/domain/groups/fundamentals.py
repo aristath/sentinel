@@ -83,7 +83,7 @@ async def calculate_fundamentals_score(
     Calculate fundamentals score.
 
     Args:
-        symbol: Stock symbol (for cache lookup)
+        symbol: Security symbol (for cache lookup)
         monthly_prices: Monthly price data for consistency
         fundamentals: Yahoo fundamentals data
 

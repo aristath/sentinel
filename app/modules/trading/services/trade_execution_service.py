@@ -353,13 +353,15 @@ async def _check_market_hours(trade, security_repo) -> Optional[dict]:
         security = await security_repo.get_by_symbol(trade.symbol)
         if not security:
             logger.warning(
-                f"Stock {trade.symbol} not found, cannot check market hours. Allowing trade."
+                f"Security {trade.symbol} not found, cannot check market hours. Allowing trade."
             )
             return None
 
         exchange = getattr(security, "fullExchangeName", None)
         if not exchange:
-            logger.warning(f"Stock {trade.symbol} has no exchange set. Allowing trade.")
+            logger.warning(
+                f"Security {trade.symbol} has no exchange set. Allowing trade."
+            )
             return None
 
         # Check if market hours validation is required for this trade
@@ -660,7 +662,7 @@ class TradeExecutionService:
         Handles duplicate order_id checking and creates Trade record.
 
         Args:
-            symbol: Stock symbol
+            symbol: Security symbol
             side: Trade side (BUY or SELL)
             quantity: Trade quantity
             price: Execution price (use estimated_price if price <= 0)

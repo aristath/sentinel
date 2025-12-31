@@ -66,7 +66,7 @@ def detect_identifier_type(identifier: str) -> IdentifierType:
     """Detect the type of identifier.
 
     Args:
-        identifier: Stock identifier string
+        identifier: Security identifier string
 
     Returns:
         IdentifierType enum value
@@ -148,7 +148,7 @@ class SymbolResolver:
         1. Return as-is (no Tradernet symbol or ISIN known)
 
         Args:
-            identifier: Stock identifier (any format)
+            identifier: Security identifier (any format)
 
         Returns:
             SymbolInfo with resolved identifiers
@@ -282,7 +282,7 @@ class SymbolResolver:
         and don't need full SymbolInfo.
 
         Args:
-            identifier: Stock identifier (Tradernet symbol, Yahoo symbol, or ISIN)
+            identifier: Security identifier (Tradernet symbol, Yahoo symbol, or ISIN)
 
         Returns:
             ISIN string if resolvable, None otherwise

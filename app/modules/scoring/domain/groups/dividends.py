@@ -22,7 +22,7 @@ async def calculate_dividends_score(symbol: str, fundamentals) -> ScoreResult:
     Calculate dividends score.
 
     Args:
-        symbol: Stock symbol (for cache lookup)
+        symbol: Security symbol (for cache lookup)
         fundamentals: Yahoo fundamentals data
 
     Returns:

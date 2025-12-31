@@ -25,7 +25,7 @@ async def identify_rebalance_sell_opportunities(
 
     Args:
         positions: Current positions
-        stocks_by_symbol: Dict mapping symbol to Stock
+        stocks_by_symbol: Dict mapping symbol to Security
         portfolio_context: Portfolio context with weights
         country_allocations: Current country allocation percentages
         total_value: Total portfolio value

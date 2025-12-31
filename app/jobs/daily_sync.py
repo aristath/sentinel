@@ -640,7 +640,7 @@ async def _ensure_portfolio_securities_in_universe(
             )
             added_count += 1
         except ValueError as e:
-            # Stock already exists (race condition) or invalid identifier
+            # Security already exists (race condition) or invalid identifier
             logger.warning(f"Could not add {symbol}: {e}")
             failed_count += 1
         except Exception as e:

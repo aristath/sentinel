@@ -21,7 +21,7 @@ class PositionUpdatedEvent(DomainEvent):
 
     @property
     def symbol(self) -> str:
-        """Stock symbol for the position."""
+        """Security symbol for the position."""
         return self.position.symbol
 
     @property

@@ -53,7 +53,7 @@ async def calculate_short_term_score(
     Calculate short-term performance score.
 
     Args:
-        symbol: Stock symbol (for cache lookup)
+        symbol: Security symbol (for cache lookup)
         daily_prices: Daily price data
         pyfolio_drawdown: Current drawdown from PyFolio (optional)
 

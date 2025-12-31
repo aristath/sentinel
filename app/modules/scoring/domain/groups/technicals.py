@@ -29,7 +29,7 @@ async def calculate_technicals_score(
     Calculate technicals score.
 
     Args:
-        symbol: Stock symbol (for cache lookup)
+        symbol: Security symbol (for cache lookup)
         daily_prices: Daily price data
 
     Returns:

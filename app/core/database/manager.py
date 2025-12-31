@@ -145,7 +145,7 @@ class DatabaseManager:
     Single point of database access for the entire application.
 
     Databases:
-    - config: Stock universe, allocation targets, settings (rarely changes)
+    - config: Security universe, allocation targets, settings (rarely changes)
     - ledger: Trades, cash flows (append-only audit trail)
     - state: Positions (current state, rebuildable from ledger)
     - cache: Ephemeral computed aggregates (can be deleted)

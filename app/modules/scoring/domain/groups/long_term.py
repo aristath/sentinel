@@ -40,7 +40,7 @@ async def calculate_long_term_score(
     Calculate long-term performance score.
 
     Args:
-        symbol: Stock symbol (for cache lookup)
+        symbol: Security symbol (for cache lookup)
         monthly_prices: Monthly price data for CAGR
         daily_prices: Daily price data for Sharpe
         sortino_ratio: Pre-calculated Sortino from PyFolio (optional)

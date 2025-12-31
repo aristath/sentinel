@@ -25,7 +25,7 @@ class CalculationsRepository:
         Get latest metric value if not expired.
 
         Args:
-            symbol: Stock symbol
+            symbol: Security symbol
             metric: Metric name (e.g., 'RSI_14', 'SHARPE', 'CAGR_5Y')
 
         Returns:
@@ -57,7 +57,7 @@ class CalculationsRepository:
         Store or update a metric value with automatic TTL.
 
         Args:
-            symbol: Stock symbol
+            symbol: Security symbol
             metric: Metric name
             value: Metric value
             ttl_override: Optional TTL in seconds (overrides automatic lookup)
@@ -93,7 +93,7 @@ class CalculationsRepository:
         Batch get multiple metrics for a symbol.
 
         Args:
-            symbol: Stock symbol
+            symbol: Security symbol
             metrics: List of metric names
 
         Returns:
@@ -130,7 +130,7 @@ class CalculationsRepository:
         Batch set multiple metrics with per-metric TTL.
 
         Args:
-            symbol: Stock symbol
+            symbol: Security symbol
             metrics: Dict mapping metric name to value
             ttl_override: Optional TTL in seconds (applies to all metrics)
             source: Source of the metrics
@@ -170,7 +170,7 @@ class CalculationsRepository:
         Get all non-expired metrics for a symbol.
 
         Args:
-            symbol: Stock symbol
+            symbol: Security symbol
 
         Returns:
             Dict mapping metric name to value

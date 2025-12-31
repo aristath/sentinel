@@ -87,7 +87,7 @@ class PriorityCalculator:
         This function simply applies the manual multiplier.
 
         Args:
-            input_data: Stock data for priority calculation
+            input_data: Security data for priority calculation
 
         Returns:
             PriorityResult with calculated priority

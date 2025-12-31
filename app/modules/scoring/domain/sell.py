@@ -141,7 +141,7 @@ async def calculate_sell_score(
     Calculate complete sell score for a position.
 
     Args:
-        symbol: Stock symbol
+        symbol: Security symbol
         quantity: Current position quantity
         avg_price: Average purchase price
         current_price: Current market price
@@ -149,8 +149,8 @@ async def calculate_sell_score(
         allow_sell: Whether selling is enabled for this security
         first_bought_at: When position was first opened
         last_sold_at: When position was last sold (for cooldown)
-        country: Stock's country (e.g., "United States", "Germany")
-        industry: Stock's industry (comma-separated if multiple)
+        country: Security's country (e.g., "United States", "Germany")
+        industry: Security's industry (comma-separated if multiple)
         total_portfolio_value: Total portfolio value in EUR
         country_allocations: Current country allocation percentages
         ind_allocations: Current industry allocation percentages

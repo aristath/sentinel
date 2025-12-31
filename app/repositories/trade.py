@@ -258,7 +258,7 @@ class TradeRepository:
         Check if there's a recent SELL order for the given symbol (excluding RESEARCH trades).
 
         Args:
-            symbol: Stock symbol to check (e.g., "AAPL.US")
+            symbol: Security symbol to check (e.g., "AAPL.US")
             hours: Number of hours to look back (default: 2.0). Can be fractional (e.g., 0.083 for 5 minutes)
 
         Returns:
