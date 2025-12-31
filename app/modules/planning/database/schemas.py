@@ -47,6 +47,31 @@ CREATE TABLE IF NOT EXISTS best_result (
     best_score REAL NOT NULL,
     updated_at TEXT NOT NULL
 );
+
+-- Planner configurations: named TOML configurations for per-bucket planners
+CREATE TABLE IF NOT EXISTS planner_configs (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,              -- Display name/title (e.g., "Aggressive Growth")
+    toml_config TEXT NOT NULL,       -- TOML configuration string
+    bucket_id TEXT,                  -- Associated bucket (nullable for templates)
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_planner_configs_bucket ON planner_configs(bucket_id);
+
+-- Planner config history: version tracking and backup on every save
+CREATE TABLE IF NOT EXISTS planner_config_history (
+    id TEXT PRIMARY KEY,
+    planner_config_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    toml_config TEXT NOT NULL,
+    saved_at TEXT NOT NULL,
+    FOREIGN KEY (planner_config_id) REFERENCES planner_configs(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_planner_config_history_planner ON planner_config_history(planner_config_id);
+CREATE INDEX IF NOT EXISTS idx_planner_config_history_saved ON planner_config_history(saved_at DESC);
 """
 
 
