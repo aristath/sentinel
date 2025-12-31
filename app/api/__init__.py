@@ -9,11 +9,11 @@ from app.modules.planning.api import planner, recommendations
 from app.modules.portfolio.api import portfolio
 from app.modules.system.api import status
 from app.modules.trading.api import trades
-from app.modules.universe.api import stocks
+from app.modules.universe.api import securities
 
 __all__ = [
     "portfolio",
-    "stocks",
+    "securities",
     "trades",
     "status",
     "allocation",
