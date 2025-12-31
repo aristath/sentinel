@@ -29,7 +29,7 @@ from app.domain.services.exchange_rate_service import ExchangeRateService
 from app.domain.services.settings_service import SettingsService
 # Backward compatibility re-export (temporary - will be removed in Phase 5)
 from app.modules.universe.domain.ticker_content_service import TickerContentService
-from app.infrastructure.database.manager import DatabaseManager, get_db_manager
+from app.core.database.manager import DatabaseManager, get_db_manager
 from app.infrastructure.external.tradernet import TradernetClient, get_tradernet_client
 from app.modules.allocation.database.allocation_repository import AllocationRepository
 from app.modules.allocation.services.concentration_alerts import (

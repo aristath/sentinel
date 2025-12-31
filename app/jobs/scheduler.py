@@ -131,14 +131,14 @@ async def init_scheduler() -> AsyncIOScheduler:
         update_display_ticker,
     )
     from app.jobs.auto_deploy import run_auto_deploy
-    from app.jobs.dividend_reinvestment import auto_reinvest_dividends
     from app.jobs.event_based_trading import run_event_based_trading_loop
     from app.jobs.maintenance import run_daily_maintenance, run_weekly_maintenance
-    from app.jobs.planner_batch import process_planner_batch_job
-    from app.modules.universe.jobs.stock_discovery import discover_new_stocks
     from app.jobs.stocks_data_sync import run_stocks_data_sync
-    from app.modules.system.jobs.sync_cycle import run_sync_cycle
     from app.jobs.universe_pruning import prune_universe
+    from app.modules.dividends.jobs.dividend_reinvestment import auto_reinvest_dividends
+    from app.modules.planning.jobs.planner_batch import process_planner_batch_job
+    from app.modules.system.jobs.sync_cycle import run_sync_cycle
+    from app.modules.universe.jobs.stock_discovery import discover_new_stocks
 
     # Get settings
     job_settings = await _get_job_settings()
