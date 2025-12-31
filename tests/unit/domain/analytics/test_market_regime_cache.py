@@ -46,7 +46,7 @@ class TestRegimeCache:
 
         Bug caught: Cache not checked, recalculates unnecessarily.
         """
-        from app.domain.analytics.market_regime import detect_market_regime
+        from app.modules.analytics.domain.market_regime import detect_market_regime
 
         # Mock cache to return cached value
         mock_cache = AsyncMock()
@@ -54,15 +54,15 @@ class TestRegimeCache:
 
         with (
             patch(
-                "app.domain.analytics.market_regime.get_recommendation_cache",
+                "app.modules.analytics.domain.market_regime.get_recommendation_cache",
                 return_value=mock_cache,
             ),
             patch(
-                "app.domain.analytics.market_regime.SettingsRepository",
+                "app.modules.analytics.domain.market_regime.SettingsRepository",
                 return_value=AsyncMock(),
             ),
             patch(
-                "app.domain.analytics.market_regime.get_tradernet_client",
+                "app.modules.analytics.domain.market_regime.get_tradernet_client",
                 return_value=MagicMock(),
             ),
         ):
@@ -78,7 +78,7 @@ class TestRegimeCache:
 
         Bug caught: Cache not updated, subsequent calls recalculate.
         """
-        from app.domain.analytics.market_regime import detect_market_regime
+        from app.modules.analytics.domain.market_regime import detect_market_regime
 
         historical = create_historical_data(250, start_price=100.0, trend=0.0)
         current_price = 110.0
@@ -118,15 +118,15 @@ class TestRegimeCache:
 
         with (
             patch(
-                "app.domain.analytics.market_regime.get_recommendation_cache",
+                "app.modules.analytics.domain.market_regime.get_recommendation_cache",
                 return_value=mock_cache,
             ),
             patch(
-                "app.domain.analytics.market_regime.SettingsRepository",
+                "app.modules.analytics.domain.market_regime.SettingsRepository",
                 return_value=mock_settings_repo,
             ),
             patch(
-                "app.domain.analytics.market_regime.get_tradernet_client",
+                "app.modules.analytics.domain.market_regime.get_tradernet_client",
                 return_value=mock_client,
             ),
         ):
@@ -145,7 +145,7 @@ class TestRegimeCache:
 
         Bug caught: Cache always used even when explicitly disabled.
         """
-        from app.domain.analytics.market_regime import detect_market_regime
+        from app.modules.analytics.domain.market_regime import detect_market_regime
 
         historical = create_historical_data(250, start_price=100.0, trend=0.0)
         current_price = 100.0
@@ -183,15 +183,15 @@ class TestRegimeCache:
 
         with (
             patch(
-                "app.domain.analytics.market_regime.get_recommendation_cache",
+                "app.modules.analytics.domain.market_regime.get_recommendation_cache",
                 return_value=mock_cache,
             ),
             patch(
-                "app.domain.analytics.market_regime.SettingsRepository",
+                "app.modules.analytics.domain.market_regime.SettingsRepository",
                 return_value=mock_settings_repo,
             ),
             patch(
-                "app.domain.analytics.market_regime.get_tradernet_client",
+                "app.modules.analytics.domain.market_regime.get_tradernet_client",
                 return_value=mock_client,
             ),
         ):
@@ -207,7 +207,7 @@ class TestRegimeCache:
 
         Bug caught: Cache error crashes regime detection.
         """
-        from app.domain.analytics.market_regime import detect_market_regime
+        from app.modules.analytics.domain.market_regime import detect_market_regime
 
         historical = create_historical_data(250, start_price=100.0, trend=0.0)
         current_price = 100.0
@@ -248,15 +248,15 @@ class TestRegimeCache:
 
         with (
             patch(
-                "app.domain.analytics.market_regime.get_recommendation_cache",
+                "app.modules.analytics.domain.market_regime.get_recommendation_cache",
                 return_value=mock_cache,
             ),
             patch(
-                "app.domain.analytics.market_regime.SettingsRepository",
+                "app.modules.analytics.domain.market_regime.SettingsRepository",
                 return_value=mock_settings_repo,
             ),
             patch(
-                "app.domain.analytics.market_regime.get_tradernet_client",
+                "app.modules.analytics.domain.market_regime.get_tradernet_client",
                 return_value=mock_client,
             ),
         ):

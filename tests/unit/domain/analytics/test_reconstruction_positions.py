@@ -24,12 +24,12 @@ class TestReconstructHistoricalPositions:
     @pytest.mark.asyncio
     async def test_returns_empty_dataframe_when_no_history(self, mock_trade_repo):
         """Test that empty DataFrame is returned when no position history exists."""
-        from app.domain.analytics.reconstruction.positions import (
+        from app.modules.analytics.domain.reconstruction.positions import (
             reconstruct_historical_positions,
         )
 
         with patch(
-            "app.domain.analytics.reconstruction.positions.TradeRepository",
+            "app.modules.analytics.domain.reconstruction.positions.TradeRepository",
             return_value=mock_trade_repo,
         ):
             result = await reconstruct_historical_positions(
@@ -43,7 +43,7 @@ class TestReconstructHistoricalPositions:
     @pytest.mark.asyncio
     async def test_returns_dataframe_with_position_history(self, mock_trade_repo):
         """Test that DataFrame is returned with position history."""
-        from app.domain.analytics.reconstruction.positions import (
+        from app.modules.analytics.domain.reconstruction.positions import (
             reconstruct_historical_positions,
         )
 
@@ -55,7 +55,7 @@ class TestReconstructHistoricalPositions:
         mock_trade_repo.get_position_history.return_value = position_history
 
         with patch(
-            "app.domain.analytics.reconstruction.positions.TradeRepository",
+            "app.modules.analytics.domain.reconstruction.positions.TradeRepository",
             return_value=mock_trade_repo,
         ):
             result = await reconstruct_historical_positions(
@@ -73,7 +73,7 @@ class TestReconstructHistoricalPositions:
     @pytest.mark.asyncio
     async def test_converts_date_to_datetime(self, mock_trade_repo):
         """Test that date column is converted to datetime."""
-        from app.domain.analytics.reconstruction.positions import (
+        from app.modules.analytics.domain.reconstruction.positions import (
             reconstruct_historical_positions,
         )
 
@@ -81,7 +81,7 @@ class TestReconstructHistoricalPositions:
         mock_trade_repo.get_position_history.return_value = position_history
 
         with patch(
-            "app.domain.analytics.reconstruction.positions.TradeRepository",
+            "app.modules.analytics.domain.reconstruction.positions.TradeRepository",
             return_value=mock_trade_repo,
         ):
             result = await reconstruct_historical_positions(
@@ -93,7 +93,7 @@ class TestReconstructHistoricalPositions:
     @pytest.mark.asyncio
     async def test_handles_multiple_symbols(self, mock_trade_repo):
         """Test handling of multiple symbols in position history."""
-        from app.domain.analytics.reconstruction.positions import (
+        from app.modules.analytics.domain.reconstruction.positions import (
             reconstruct_historical_positions,
         )
 
@@ -105,7 +105,7 @@ class TestReconstructHistoricalPositions:
         mock_trade_repo.get_position_history.return_value = position_history
 
         with patch(
-            "app.domain.analytics.reconstruction.positions.TradeRepository",
+            "app.modules.analytics.domain.reconstruction.positions.TradeRepository",
             return_value=mock_trade_repo,
         ):
             result = await reconstruct_historical_positions(
@@ -121,7 +121,7 @@ class TestReconstructHistoricalPositions:
     @pytest.mark.asyncio
     async def test_handles_zero_quantities(self, mock_trade_repo):
         """Test handling of zero quantities (position closed)."""
-        from app.domain.analytics.reconstruction.positions import (
+        from app.modules.analytics.domain.reconstruction.positions import (
             reconstruct_historical_positions,
         )
 
@@ -132,7 +132,7 @@ class TestReconstructHistoricalPositions:
         mock_trade_repo.get_position_history.return_value = position_history
 
         with patch(
-            "app.domain.analytics.reconstruction.positions.TradeRepository",
+            "app.modules.analytics.domain.reconstruction.positions.TradeRepository",
             return_value=mock_trade_repo,
         ):
             result = await reconstruct_historical_positions(
@@ -145,7 +145,7 @@ class TestReconstructHistoricalPositions:
     @pytest.mark.asyncio
     async def test_handles_negative_quantities(self, mock_trade_repo):
         """Test handling of negative quantities (shouldn't happen, but handle gracefully)."""
-        from app.domain.analytics.reconstruction.positions import (
+        from app.modules.analytics.domain.reconstruction.positions import (
             reconstruct_historical_positions,
         )
 
@@ -155,7 +155,7 @@ class TestReconstructHistoricalPositions:
         mock_trade_repo.get_position_history.return_value = position_history
 
         with patch(
-            "app.domain.analytics.reconstruction.positions.TradeRepository",
+            "app.modules.analytics.domain.reconstruction.positions.TradeRepository",
             return_value=mock_trade_repo,
         ):
             result = await reconstruct_historical_positions(
@@ -168,12 +168,12 @@ class TestReconstructHistoricalPositions:
     @pytest.mark.asyncio
     async def test_calls_trade_repo_with_correct_parameters(self, mock_trade_repo):
         """Test that TradeRepository is called with correct date range."""
-        from app.domain.analytics.reconstruction.positions import (
+        from app.modules.analytics.domain.reconstruction.positions import (
             reconstruct_historical_positions,
         )
 
         with patch(
-            "app.domain.analytics.reconstruction.positions.TradeRepository",
+            "app.modules.analytics.domain.reconstruction.positions.TradeRepository",
             return_value=mock_trade_repo,
         ):
             await reconstruct_historical_positions(

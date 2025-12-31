@@ -420,7 +420,7 @@ class TestDatabaseStats:
         }
 
         with patch(
-            "app.jobs.health_check.get_database_stats",
+            "app.modules.system.jobs.health_check.get_database_stats",
             new_callable=AsyncMock,
             return_value=mock_stats,
         ):
@@ -435,7 +435,7 @@ class TestDatabaseStats:
         from app.modules.system.api.status import get_database_stats
 
         with patch(
-            "app.jobs.health_check.get_database_stats",
+            "app.modules.system.jobs.health_check.get_database_stats",
             new_callable=AsyncMock,
             side_effect=Exception("Database locked"),
         ):
