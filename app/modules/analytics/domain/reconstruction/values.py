@@ -86,11 +86,12 @@ async def reconstruct_portfolio_values(
 
         # Get positions on this date (latest position before or on date)
         date_positions = positions_df[positions_df["date"] <= date]
+        total_position_value = 0.0
+
         if not date_positions.empty:
             latest_positions = date_positions.groupby("symbol").last()
 
             # Calculate total position value
-            total_position_value = 0.0
             for symbol, row in latest_positions.iterrows():
                 quantity = row["quantity"]
                 if quantity <= 0:

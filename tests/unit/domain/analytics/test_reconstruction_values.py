@@ -26,7 +26,7 @@ class TestReconstructPortfolioValues:
     @pytest.mark.asyncio
     async def test_returns_series_with_initial_cash_only(self):
         """Test that series is returned with initial cash when no positions."""
-        from app.domain.analytics.reconstruction.values import (
+        from app.modules.analytics.domain.reconstruction.values import (
             reconstruct_portfolio_values,
         )
 
@@ -38,11 +38,11 @@ class TestReconstructPortfolioValues:
         )
 
         with patch(
-            "app.domain.analytics.reconstruction.values.reconstruct_historical_positions",
+            "app.modules.analytics.domain.reconstruction.values.reconstruct_historical_positions",
             return_value=empty_positions,
         ):
             with patch(
-                "app.domain.analytics.reconstruction.values.reconstruct_cash_balance",
+                "app.modules.analytics.domain.reconstruction.values.reconstruct_cash_balance",
                 return_value=cash_series,
             ):
                 result = await reconstruct_portfolio_values(
@@ -56,7 +56,7 @@ class TestReconstructPortfolioValues:
     @pytest.mark.asyncio
     async def test_calculates_portfolio_value_with_positions_and_prices(self):
         """Test that portfolio value is calculated from positions and prices."""
-        from app.domain.analytics.reconstruction.values import (
+        from app.modules.analytics.domain.reconstruction.values import (
             reconstruct_portfolio_values,
         )
 
@@ -81,15 +81,15 @@ class TestReconstructPortfolioValues:
         mock_history_repo.get_daily_range.return_value = [mock_price]
 
         with patch(
-            "app.domain.analytics.reconstruction.values.reconstruct_historical_positions",
+            "app.modules.analytics.domain.reconstruction.values.reconstruct_historical_positions",
             return_value=positions_df,
         ):
             with patch(
-                "app.domain.analytics.reconstruction.values.reconstruct_cash_balance",
+                "app.modules.analytics.domain.reconstruction.values.reconstruct_cash_balance",
                 return_value=cash_series,
             ):
                 with patch(
-                    "app.domain.analytics.reconstruction.values.HistoryRepository",
+                    "app.modules.analytics.domain.reconstruction.values.HistoryRepository",
                     return_value=mock_history_repo,
                 ):
                     result = await reconstruct_portfolio_values(
@@ -109,7 +109,7 @@ class TestReconstructPortfolioValues:
     @pytest.mark.asyncio
     async def test_handles_forward_fill_missing_prices(self):
         """Test that missing prices are forward-filled from previous dates."""
-        from app.domain.analytics.reconstruction.values import (
+        from app.modules.analytics.domain.reconstruction.values import (
             reconstruct_portfolio_values,
         )
 
@@ -133,15 +133,15 @@ class TestReconstructPortfolioValues:
         mock_history_repo.get_daily_range.return_value = [mock_price]
 
         with patch(
-            "app.domain.analytics.reconstruction.values.reconstruct_historical_positions",
+            "app.modules.analytics.domain.reconstruction.values.reconstruct_historical_positions",
             return_value=positions_df,
         ):
             with patch(
-                "app.domain.analytics.reconstruction.values.reconstruct_cash_balance",
+                "app.modules.analytics.domain.reconstruction.values.reconstruct_cash_balance",
                 return_value=cash_series,
             ):
                 with patch(
-                    "app.domain.analytics.reconstruction.values.HistoryRepository",
+                    "app.modules.analytics.domain.reconstruction.values.HistoryRepository",
                     return_value=mock_history_repo,
                 ):
                     result = await reconstruct_portfolio_values(
@@ -158,7 +158,7 @@ class TestReconstructPortfolioValues:
     @pytest.mark.asyncio
     async def test_handles_multiple_symbols(self):
         """Test handling of multiple symbols."""
-        from app.domain.analytics.reconstruction.values import (
+        from app.modules.analytics.domain.reconstruction.values import (
             reconstruct_portfolio_values,
         )
 
@@ -189,15 +189,15 @@ class TestReconstructPortfolioValues:
             return repo
 
         with patch(
-            "app.domain.analytics.reconstruction.values.reconstruct_historical_positions",
+            "app.modules.analytics.domain.reconstruction.values.reconstruct_historical_positions",
             return_value=positions_df,
         ):
             with patch(
-                "app.domain.analytics.reconstruction.values.reconstruct_cash_balance",
+                "app.modules.analytics.domain.reconstruction.values.reconstruct_cash_balance",
                 return_value=cash_series,
             ):
                 with patch(
-                    "app.domain.analytics.reconstruction.values.HistoryRepository",
+                    "app.modules.analytics.domain.reconstruction.values.HistoryRepository",
                     side_effect=mock_history_repo_factory,
                 ):
                     result = await reconstruct_portfolio_values(
@@ -212,7 +212,7 @@ class TestReconstructPortfolioValues:
     @pytest.mark.asyncio
     async def test_skips_zero_quantity_positions(self):
         """Test that zero quantity positions are skipped."""
-        from app.domain.analytics.reconstruction.values import (
+        from app.modules.analytics.domain.reconstruction.values import (
             reconstruct_portfolio_values,
         )
 
@@ -231,11 +231,11 @@ class TestReconstructPortfolioValues:
         )
 
         with patch(
-            "app.domain.analytics.reconstruction.values.reconstruct_historical_positions",
+            "app.modules.analytics.domain.reconstruction.values.reconstruct_historical_positions",
             return_value=positions_df,
         ):
             with patch(
-                "app.domain.analytics.reconstruction.values.reconstruct_cash_balance",
+                "app.modules.analytics.domain.reconstruction.values.reconstruct_cash_balance",
                 return_value=cash_series,
             ):
                 result = await reconstruct_portfolio_values(
@@ -250,7 +250,7 @@ class TestReconstructPortfolioValues:
     @pytest.mark.asyncio
     async def test_handles_missing_price_data_gracefully(self):
         """Test that missing price data doesn't crash (just skips that position value)."""
-        from app.domain.analytics.reconstruction.values import (
+        from app.modules.analytics.domain.reconstruction.values import (
             reconstruct_portfolio_values,
         )
 
@@ -272,15 +272,15 @@ class TestReconstructPortfolioValues:
         mock_history_repo.get_daily_range.return_value = []
 
         with patch(
-            "app.domain.analytics.reconstruction.values.reconstruct_historical_positions",
+            "app.modules.analytics.domain.reconstruction.values.reconstruct_historical_positions",
             return_value=positions_df,
         ):
             with patch(
-                "app.domain.analytics.reconstruction.values.reconstruct_cash_balance",
+                "app.modules.analytics.domain.reconstruction.values.reconstruct_cash_balance",
                 return_value=cash_series,
             ):
                 with patch(
-                    "app.domain.analytics.reconstruction.values.HistoryRepository",
+                    "app.modules.analytics.domain.reconstruction.values.HistoryRepository",
                     return_value=mock_history_repo,
                 ):
                     result = await reconstruct_portfolio_values(
@@ -295,7 +295,7 @@ class TestReconstructPortfolioValues:
     @pytest.mark.asyncio
     async def test_handles_exception_during_price_loading(self):
         """Test that exceptions during price loading are handled gracefully."""
-        from app.domain.analytics.reconstruction.values import (
+        from app.modules.analytics.domain.reconstruction.values import (
             reconstruct_portfolio_values,
         )
 
@@ -317,19 +317,19 @@ class TestReconstructPortfolioValues:
         mock_history_repo.get_daily_range.side_effect = Exception("Database error")
 
         with patch(
-            "app.domain.analytics.reconstruction.values.reconstruct_historical_positions",
+            "app.modules.analytics.domain.reconstruction.values.reconstruct_historical_positions",
             return_value=positions_df,
         ):
             with patch(
-                "app.domain.analytics.reconstruction.values.reconstruct_cash_balance",
+                "app.modules.analytics.domain.reconstruction.values.reconstruct_cash_balance",
                 return_value=cash_series,
             ):
                 with patch(
-                    "app.domain.analytics.reconstruction.values.HistoryRepository",
+                    "app.modules.analytics.domain.reconstruction.values.HistoryRepository",
                     return_value=mock_history_repo,
                 ):
                     with patch(
-                        "app.domain.analytics.reconstruction.values.logger"
+                        "app.modules.analytics.domain.reconstruction.values.logger"
                     ) as mock_logger:
                         result = await reconstruct_portfolio_values(
                             start_date="2024-01-01",
@@ -345,7 +345,7 @@ class TestReconstructPortfolioValues:
     @pytest.mark.asyncio
     async def test_uses_last_known_price_when_no_historical_price(self):
         """Test that _last known price is used when no historical price available."""
-        from app.domain.analytics.reconstruction.values import (
+        from app.modules.analytics.domain.reconstruction.values import (
             reconstruct_portfolio_values,
         )
 
@@ -369,15 +369,15 @@ class TestReconstructPortfolioValues:
         mock_history_repo.get_daily_range.return_value = []
 
         with patch(
-            "app.domain.analytics.reconstruction.values.reconstruct_historical_positions",
+            "app.modules.analytics.domain.reconstruction.values.reconstruct_historical_positions",
             return_value=positions_df,
         ):
             with patch(
-                "app.domain.analytics.reconstruction.values.reconstruct_cash_balance",
+                "app.modules.analytics.domain.reconstruction.values.reconstruct_cash_balance",
                 return_value=cash_series,
             ):
                 with patch(
-                    "app.domain.analytics.reconstruction.values.HistoryRepository",
+                    "app.modules.analytics.domain.reconstruction.values.HistoryRepository",
                     return_value=mock_history_repo,
                 ):
                     result = await reconstruct_portfolio_values(
