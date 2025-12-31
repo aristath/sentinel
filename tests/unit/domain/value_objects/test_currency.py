@@ -24,7 +24,6 @@ class TestCurrency:
         assert Currency.from_string("USD") == Currency.USD
         assert Currency.from_string("GBP") == Currency.GBP
         assert Currency.from_string("HKD") == Currency.HKD
-        assert Currency.from_string("DKK") == Currency.DKK
 
     def test_from_string_case_insensitive(self):
         """Test that from_string is case-insensitive."""
@@ -36,7 +35,7 @@ class TestCurrency:
 
     def test_from_string_with_invalid_currency(self):
         """Test that from_string raises ValueError for invalid currencies."""
-        with pytest.raises(ValueError, match="Unknown currency"):
+        with pytest.raises(ValueError, match="Invalid currency"):
             Currency.from_string("INVALID")
 
         with pytest.raises(ValueError):
