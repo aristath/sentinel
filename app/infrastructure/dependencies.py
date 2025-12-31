@@ -8,7 +8,6 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from app.application.services.concentration_alerts import ConcentrationAlertService
 from app.application.services.currency_exchange_service import CurrencyExchangeService
 from app.application.services.portfolio_service import PortfolioService
 from app.application.services.rebalancing_service import RebalancingService
@@ -33,6 +32,9 @@ from app.infrastructure.hardware.display_service import (
     _display_state_manager,
 )
 from app.modules.allocation.database.allocation_repository import AllocationRepository
+from app.modules.allocation.services.concentration_alerts import (
+    ConcentrationAlertService,
+)
 from app.modules.cash_flows.database.cash_flow_repository import CashFlowRepository
 from app.repositories import (
     CalculationsRepository,
