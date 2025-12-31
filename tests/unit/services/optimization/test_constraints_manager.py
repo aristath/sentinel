@@ -4,7 +4,7 @@ These tests verify the constraint translation logic for portfolio optimization,
 ensuring business rules are correctly converted to optimizer constraints.
 """
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -389,9 +389,18 @@ class TestSectorConstraintsBuilding:
         country_targets = {"United States": 0.60, "OTHER": 0.40}
         ind_targets = {}
 
-        country_constraints, ind_constraints = await manager.build_sector_constraints(
-            securities, country_targets, ind_targets
-        )
+        # Mock the country grouping to map "United States" to itself
+        with patch.object(
+            manager,
+            "_get_country_group_mapping",
+            new_callable=AsyncMock,
+            return_value={"United States": "United States"},
+        ):
+            country_constraints, ind_constraints = (
+                await manager.build_sector_constraints(
+                    securities, country_targets, ind_targets
+                )
+            )
 
         # Should have constraints for United States and OTHER
         assert len(country_constraints) == 2
@@ -414,9 +423,18 @@ class TestSectorConstraintsBuilding:
         country_targets = {}
         ind_targets = {"Consumer Electronics": 0.70, "OTHER": 0.30}
 
-        country_constraints, ind_constraints = await manager.build_sector_constraints(
-            securities, country_targets, ind_targets
-        )
+        # Mock the industry grouping to map "Consumer Electronics" to itself
+        with patch.object(
+            manager,
+            "_get_industry_group_mapping",
+            new_callable=AsyncMock,
+            return_value={"Consumer Electronics": "Consumer Electronics"},
+        ):
+            country_constraints, ind_constraints = (
+                await manager.build_sector_constraints(
+                    securities, country_targets, ind_targets
+                )
+            )
 
         # Should have constraints for Technology and OTHER
         assert len(ind_constraints) == 2
@@ -440,9 +458,18 @@ class TestSectorConstraintsBuilding:
         country_targets = {"United States": 1.0, "Germany": 0.0}
         ind_targets = {}
 
-        country_constraints, ind_constraints = await manager.build_sector_constraints(
-            securities, country_targets, ind_targets
-        )
+        # Mock country grouping
+        with patch.object(
+            manager,
+            "_get_country_group_mapping",
+            new_callable=AsyncMock,
+            return_value={"United States": "United States", "Germany": "Germany"},
+        ):
+            country_constraints, ind_constraints = (
+                await manager.build_sector_constraints(
+                    securities, country_targets, ind_targets
+                )
+            )
 
         # Should only have United States constraint
         assert len(country_constraints) == 1
@@ -460,9 +487,18 @@ class TestSectorConstraintsBuilding:
         country_targets = {"United States": 0.60}
         ind_targets = {}
 
-        country_constraints, ind_constraints = await manager.build_sector_constraints(
-            securities, country_targets, ind_targets
-        )
+        # Mock country grouping
+        with patch.object(
+            manager,
+            "_get_country_group_mapping",
+            new_callable=AsyncMock,
+            return_value={"United States": "United States", "Germany": "Germany"},
+        ):
+            country_constraints, ind_constraints = (
+                await manager.build_sector_constraints(
+                    securities, country_targets, ind_targets
+                )
+            )
 
         # Should only have United States constraint
         assert len(country_constraints) == 1
@@ -477,9 +513,18 @@ class TestSectorConstraintsBuilding:
         country_targets = {"United States": 0.95}
         ind_targets = {}
 
-        country_constraints, ind_constraints = await manager.build_sector_constraints(
-            securities, country_targets, ind_targets
-        )
+        # Mock country grouping
+        with patch.object(
+            manager,
+            "_get_country_group_mapping",
+            new_callable=AsyncMock,
+            return_value={"United States": "United States"},
+        ):
+            country_constraints, ind_constraints = (
+                await manager.build_sector_constraints(
+                    securities, country_targets, ind_targets
+                )
+            )
 
         us_constraint = country_constraints[0]
         # Lower: 0.95 - 0.30 = 0.65
@@ -498,9 +543,18 @@ class TestSectorConstraintsBuilding:
         country_targets = {"United States": 0.10}
         ind_targets = {}
 
-        country_constraints, ind_constraints = await manager.build_sector_constraints(
-            securities, country_targets, ind_targets
-        )
+        # Mock country grouping
+        with patch.object(
+            manager,
+            "_get_country_group_mapping",
+            new_callable=AsyncMock,
+            return_value={"United States": "United States"},
+        ):
+            country_constraints, ind_constraints = (
+                await manager.build_sector_constraints(
+                    securities, country_targets, ind_targets
+                )
+            )
 
         us_constraint = country_constraints[0]
         # Lower: max(0.0, 0.10 - 0.30) = 0.0
@@ -528,9 +582,26 @@ class TestSectorConstraintsBuilding:
         country_targets = {"United States": 1.0}
         ind_targets = {"Consumer Electronics": 1.0}
 
-        country_constraints, ind_constraints = await manager.build_sector_constraints(
-            securities, country_targets, ind_targets
-        )
+        # Mock both country and industry grouping
+        with (
+            patch.object(
+                manager,
+                "_get_country_group_mapping",
+                new_callable=AsyncMock,
+                return_value={"United States": "United States"},
+            ),
+            patch.object(
+                manager,
+                "_get_industry_group_mapping",
+                new_callable=AsyncMock,
+                return_value={"Consumer Electronics": "Consumer Electronics"},
+            ),
+        ):
+            country_constraints, ind_constraints = (
+                await manager.build_sector_constraints(
+                    securities, country_targets, ind_targets
+                )
+            )
 
         # United States should contain all 3 securities
         us_constraint = country_constraints[0]
@@ -558,9 +629,29 @@ class TestSectorConstraintsBuilding:
         country_targets = {"United States": 0.60, "Germany": 0.40}
         ind_targets = {"Consumer Electronics": 0.70, "Banks - Diversified": 0.30}
 
-        country_constraints, ind_constraints = await manager.build_sector_constraints(
-            securities, country_targets, ind_targets
-        )
+        # Mock both country and industry grouping
+        with (
+            patch.object(
+                manager,
+                "_get_country_group_mapping",
+                new_callable=AsyncMock,
+                return_value={"United States": "United States", "Germany": "Germany"},
+            ),
+            patch.object(
+                manager,
+                "_get_industry_group_mapping",
+                new_callable=AsyncMock,
+                return_value={
+                    "Consumer Electronics": "Consumer Electronics",
+                    "Banks - Diversified": "Banks - Diversified",
+                },
+            ),
+        ):
+            country_constraints, ind_constraints = (
+                await manager.build_sector_constraints(
+                    securities, country_targets, ind_targets
+                )
+            )
 
         assert len(country_constraints) == 2
         assert len(ind_constraints) == 2
@@ -1102,9 +1193,17 @@ class TestTargetNormalization:
         ind_targets = {"Technology": 0.8, "Software": 0.7}
         country_targets = {}
 
-        country_constraints, ind_constraints = await manager.build_sector_constraints(
-            securities, country_targets, ind_targets
-        )
+        with patch.object(
+            manager,
+            "_get_industry_group_mapping",
+            new_callable=AsyncMock,
+            return_value={"Technology": "Technology", "Software": "Software"},
+        ):
+            country_constraints, ind_constraints = (
+                await manager.build_sector_constraints(
+                    securities, country_targets, ind_targets
+                )
+            )
 
         # Should have 2 industry constraints
         assert len(ind_constraints) == 2
@@ -1133,9 +1232,17 @@ class TestTargetNormalization:
         }  # France has no securities
         ind_targets = {}
 
-        country_constraints, ind_constraints = await manager.build_sector_constraints(
-            securities, country_targets, ind_targets
-        )
+        with patch.object(
+            manager,
+            "_get_country_group_mapping",
+            new_callable=AsyncMock,
+            return_value={"United States": "United States", "Germany": "Germany"},
+        ):
+            country_constraints, ind_constraints = (
+                await manager.build_sector_constraints(
+                    securities, country_targets, ind_targets
+                )
+            )
 
         # Should have 2 country constraints (only US and Germany have securities)
         assert len(country_constraints) == 2
@@ -1160,9 +1267,17 @@ class TestTargetNormalization:
         ind_targets = {"Technology": 0.6, "Software": 0.4}  # Sums to 100%
         country_targets = {}
 
-        country_constraints, ind_constraints = await manager.build_sector_constraints(
-            securities, country_targets, ind_targets
-        )
+        with patch.object(
+            manager,
+            "_get_industry_group_mapping",
+            new_callable=AsyncMock,
+            return_value={"Technology": "Technology", "Software": "Software"},
+        ):
+            country_constraints, ind_constraints = (
+                await manager.build_sector_constraints(
+                    securities, country_targets, ind_targets
+                )
+            )
 
         tech_constraint = next(c for c in ind_constraints if c.name == "Technology")
         software_constraint = next(c for c in ind_constraints if c.name == "Software")
@@ -1183,9 +1298,17 @@ class TestTargetNormalization:
         ind_targets = {"Technology": 0.8, "Energy": 0.9}  # Energy has no securities
         country_targets = {}
 
-        country_constraints, ind_constraints = await manager.build_sector_constraints(
-            securities, country_targets, ind_targets
-        )
+        with patch.object(
+            manager,
+            "_get_industry_group_mapping",
+            new_callable=AsyncMock,
+            return_value={"Technology": "Technology"},
+        ):
+            country_constraints, ind_constraints = (
+                await manager.build_sector_constraints(
+                    securities, country_targets, ind_targets
+                )
+            )
 
         # Should only have Technology constraint (Energy has no securities)
         assert len(ind_constraints) == 1
@@ -1208,9 +1331,17 @@ class TestTargetNormalization:
         }  # France has no securities
         ind_targets = {}
 
-        country_constraints, ind_constraints = await manager.build_sector_constraints(
-            securities, country_targets, ind_targets
-        )
+        with patch.object(
+            manager,
+            "_get_country_group_mapping",
+            new_callable=AsyncMock,
+            return_value={"United States": "United States"},
+        ):
+            country_constraints, ind_constraints = (
+                await manager.build_sector_constraints(
+                    securities, country_targets, ind_targets
+                )
+            )
 
         # Should only have United States constraint (France has no securities)
         assert len(country_constraints) == 1
