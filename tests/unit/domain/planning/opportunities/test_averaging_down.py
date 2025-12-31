@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.domain.models import Security
+from app.domain.value_objects.product_type import ProductType
 from app.modules.planning.domain.opportunities.averaging_down import (
     identify_averaging_down_opportunities,
 )
@@ -23,6 +24,7 @@ class TestIdentifyAveragingDownOpportunities:
         return Security(
             symbol="AAPL.US",
             name="Apple Inc",
+            product_type=ProductType.EQUITY,
             min_lot=1,
             allow_buy=True,
             allow_sell=True,
@@ -66,6 +68,7 @@ class TestIdentifyAveragingDownOpportunities:
         security = Security(
             symbol="AAPL.US",
             name="Apple Inc",
+            product_type=ProductType.EQUITY,
             min_lot=1,
             allow_buy=False,
             allow_sell=True,
