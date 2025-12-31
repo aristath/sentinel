@@ -5,6 +5,7 @@ from datetime import datetime
 import pytest
 
 from app.domain.models import Position, Security, Trade
+from app.domain.value_objects.product_type import ProductType
 from app.repositories import PositionRepository, SecurityRepository
 from app.repositories.base import transaction_context
 
@@ -40,6 +41,7 @@ async def test_transaction_commit_on_success(db, security_repo, trade_repo):
             symbol=symbol,
             yahoo_symbol=symbol,
             name=f"{symbol} Inc.",
+            product_type=ProductType.EQUITY,
             industry="Consumer Electronics",
             country="United States",
             priority_multiplier=1.0,
@@ -88,6 +90,7 @@ async def test_multiple_repository_operations_in_transaction(db):
         symbol="AAPL",
         yahoo_symbol="AAPL",
         name="Apple Inc.",
+        product_type=ProductType.EQUITY,
         industry="Consumer Electronics",
         country="United States",
         priority_multiplier=1.0,
@@ -129,6 +132,7 @@ async def test_auto_commit_behavior(db, security_repo, trade_repo):
             symbol=symbol,
             yahoo_symbol=symbol,
             name=f"{symbol} Inc.",
+            product_type=ProductType.EQUITY,
             industry="Consumer Electronics",
             country="United States",
             priority_multiplier=1.0,
