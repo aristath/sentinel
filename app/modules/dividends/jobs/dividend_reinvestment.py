@@ -10,7 +10,7 @@ import logging
 from collections import defaultdict
 from typing import Dict, List
 
-from app.application.services.rebalancing_service import (
+from app.modules.rebalancing.services.rebalancing_service import (
     RebalancingService,
     calculate_min_trade_amount,
 )
