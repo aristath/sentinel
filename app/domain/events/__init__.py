@@ -19,5 +19,5 @@ __all__ = [
     "PositionUpdatedEvent",
     "RecommendationCreatedEvent",
     "SecurityAddedEvent",
-    "StockAddedEvent",  # Deprecated alias
+    "StockAddedEvent",  # DEPRECATED: Use SecurityAddedEvent (removal: June 2025)
 ]

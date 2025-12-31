@@ -351,8 +351,10 @@ class DividendRecord:
         object.__setattr__(self, "symbol", self.symbol.upper().strip())
 
 
-# Backward compatibility - these will be removed in a future phase
-# Using proper type annotations to keep mypy happy
+# Backward compatibility aliases - DEPRECATED
+# These aliases are deprecated as of January 2025 and will be removed in June 2025.
+# See docs/DEPRECATION.md for migration timeline and guidance.
+# Please use Security, SecurityScore, and SecurityPriority instead.
 Stock = Security
 StockScore = SecurityScore
 StockPriority = SecurityPriority
