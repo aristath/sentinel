@@ -46,7 +46,8 @@ class ReconciliationService:
     """
 
     # Threshold below which differences are auto-corrected (rounding errors)
-    AUTO_CORRECT_THRESHOLD = 1.0  # 1 EUR/USD
+    # Increased to €5 to handle accumulated rounding across multiple trades
+    AUTO_CORRECT_THRESHOLD = 5.0  # 5 EUR/USD
 
     def __init__(
         self,

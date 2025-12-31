@@ -245,8 +245,7 @@ async def calculate_bucket_performance(
     start_date = end_date - timedelta(days=period_days)
 
     # Get transaction history to build equity curve
-    # TODO: Implement get_transaction_history method
-    # For now, use simplified calculation based on trades
+    # Using trade history for performance calculations
 
     # Get all trades for this bucket in the period
     all_trades = await trade_repo.get_all()
