@@ -161,10 +161,10 @@ async def _process_single_security(symbol: str):
     1. Sync historical prices from Yahoo
     2. Detect and update industry from Yahoo Finance
     3. Calculate technical metrics (RSI, EMA, CAGR, etc.)
-    4. Refresh stock score
+    4. Refresh security score
 
     Args:
-        symbol: The stock symbol to process
+        symbol: The security symbol to process
     """
     logger.info(f"Processing {symbol}...")
     set_text(f"PROCESSING SINGLE STOCK ({symbol})")
@@ -213,7 +213,7 @@ async def _sync_historical_for_symbol(symbol: str):
 
     db_manager = get_db_manager()
 
-    # Get the stock's yahoo_symbol
+    # Get the security's yahoo_symbol
     cursor = await db_manager.config.execute(
         "SELECT yahoo_symbol FROM securities WHERE symbol = ?", (symbol,)
     )
@@ -291,7 +291,7 @@ async def _detect_and_update_industry(symbol: str):
 
     db_manager = get_db_manager()
 
-    # Get the stock's yahoo_symbol
+    # Get the security's yahoo_symbol
     cursor = await db_manager.config.execute(
         "SELECT yahoo_symbol FROM securities WHERE symbol = ?", (symbol,)
     )
@@ -362,7 +362,7 @@ async def _detect_and_update_country_and_exchange(symbol: str):
 
     db_manager = get_db_manager()
 
-    # Get the stock's yahoo_symbol
+    # Get the security's yahoo_symbol
     cursor = await db_manager.config.execute(
         "SELECT yahoo_symbol FROM securities WHERE symbol = ?", (symbol,)
     )

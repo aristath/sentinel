@@ -590,18 +590,18 @@ async def _can_execute_trade(
     from app.modules.universe.database.security_repository import SecurityRepository
 
     security_repo = SecurityRepository()
-    stock = await security_repo.get_by_symbol(recommendation.symbol)
+    security = await security_repo.get_by_symbol(recommendation.symbol)
 
-    if not stock:
+    if not security:
         logger.warning(
-            f"Stock {recommendation.symbol} not found, cannot check market hours. Allowing trade."
+            f"Security {recommendation.symbol} not found, cannot check market hours. Allowing trade."
         )
         return True, None
 
-    exchange = getattr(stock, "fullExchangeName", None)
+    exchange = getattr(security, "fullExchangeName", None)
     if not exchange:
         logger.warning(
-            f"Stock {recommendation.symbol} has no exchange set. Allowing trade."
+            f"Security {recommendation.symbol} has no exchange set. Allowing trade."
         )
         return True, None
 

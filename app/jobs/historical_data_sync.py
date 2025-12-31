@@ -1,4 +1,4 @@
-"""Historical data sync job for stock prices.
+"""Historical data sync job for security prices.
 
 Fetches historical prices from Yahoo and stores in per-symbol databases.
 """
@@ -20,10 +20,10 @@ logger = logging.getLogger(__name__)
 
 async def sync_historical_data():
     """
-    Sync historical stock prices.
+    Sync historical security prices.
 
     This job:
-    1. Fetches historical stock prices for all active stocks (1 year)
+    1. Fetches historical security prices for all active securities (1 year)
     2. Aggregates prices into monthly averages for long-term storage
 
     Uses file locking to prevent concurrent runs.
@@ -53,8 +53,8 @@ async def _sync_historical_data_internal():
 
 
 async def _sync_security_price_history():
-    """Fetch and store historical stock prices for all active stocks."""
-    logger.info("Starting stock price history sync (using Yahoo Finance)")
+    """Fetch and store historical security prices for all active securities."""
+    logger.info("Starting security price history sync (using Yahoo Finance)")
 
     set_text("SYNCING HISTORICAL PRICES...")
     set_led4(0, 255, 0)  # Green for processing
