@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.domain.models import AllocationTarget
-from app.repositories.allocation import AllocationRepository
+from app.modules.allocation.database.allocation_repository import AllocationRepository
 
 
 class TestAllocationRepository:

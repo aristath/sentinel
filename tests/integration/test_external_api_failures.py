@@ -183,7 +183,7 @@ async def test_exchange_rate_cache_fallback(db):
         mock_client.return_value = mock_instance
 
         # Create a mock database manager that uses the db fixture
-        from app.infrastructure.database.manager import DatabaseManager
+        from app.core.database.manager import DatabaseManager
 
         mock_db_manager = MagicMock(spec=DatabaseManager)
         mock_db_manager.cache = db  # Use the db fixture's cache connection

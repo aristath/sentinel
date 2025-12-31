@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.domain.models import PortfolioSnapshot
-from app.repositories.portfolio import PortfolioRepository
+from app.modules.portfolio.database.portfolio_repository import PortfolioRepository
 
 
 class TestPortfolioRepository:
