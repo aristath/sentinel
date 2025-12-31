@@ -3,8 +3,8 @@
 from datetime import datetime
 from typing import List, Optional
 
+from app.core.database.manager import get_db_manager
 from app.domain.models import Stock
-from app.infrastructure.database import get_db_manager
 from app.repositories.base import transaction_context
 
 
