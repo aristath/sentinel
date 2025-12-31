@@ -64,6 +64,7 @@ class SecurityFactory:
             allow_buy=data.get("allow_buy", True),
             allow_sell=data.get("allow_sell", False),
             currency=currency,
+            product_type=data.get("product_type"),
         )
 
     @classmethod
@@ -125,6 +126,7 @@ class SecurityFactory:
             allow_buy=data.get("allow_buy", True),
             allow_sell=data.get("allow_sell", False),
             currency=currency,
+            product_type=data.get("product_type"),
         )
 
 
