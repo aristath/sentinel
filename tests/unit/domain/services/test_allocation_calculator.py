@@ -68,14 +68,11 @@ class TestIsOutsideRebalanceBand:
         from app.domain.services.allocation_calculator import is_outside_rebalance_band
 
         # max(0.15, 0.5) = 0.5 > 0.10, so uses high priority band (5%)
-        # Deviation 0.05 is exactly at threshold, should be False
+        # deviation = abs(0.15 - 0.5) = 0.35 (35%)
+        # 0.35 > 0.05, so should return True
         result = is_outside_rebalance_band(current_weight=0.15, target_weight=0.5)
 
-        assert result is False  # Deviation 0.35, but wait... let me recalculate
-        # Actually: deviation = abs(0.15 - 0.5) = 0.35, band = 5% (0.05)
-        # So 0.35 > 0.05, should be True
-        result2 = is_outside_rebalance_band(current_weight=0.15, target_weight=0.5)
-        assert result2 is True
+        assert result is True
 
 
 class TestParseIndustries:
@@ -139,8 +136,13 @@ class TestCalculatePositionSize:
 
         candidate = SecurityPriority(
             symbol="AAPL",
+            name="AAPL",
+            industry="Technology",
             security_score=0.5,
             volatility=0.20,  # 20% volatility
+            multiplier=1.0,
+            min_lot=1,
+            combined_priority=0.5,
         )
 
         result = calculate_position_size(candidate, base_size=1000.0, min_size=100.0)
@@ -155,8 +157,13 @@ class TestCalculatePositionSize:
 
         candidate = SecurityPriority(
             symbol="AAPL",
+            name="AAPL",
+            industry="Technology",
             security_score=0.5,
             volatility=None,
+            multiplier=1.0,
+            min_lot=1,
+            combined_priority=0.5,
         )
 
         result = calculate_position_size(candidate, base_size=1000.0, min_size=100.0)
@@ -171,8 +178,13 @@ class TestCalculatePositionSize:
 
         candidate = SecurityPriority(
             symbol="AAPL",
+            name="AAPL",
+            industry="Technology",
             security_score=0.5,
             volatility=0.20,
+            multiplier=1.0,
+            min_lot=1,
+            combined_priority=0.5,
         )
 
         result = calculate_position_size(candidate, base_size=50.0, min_size=100.0)
@@ -186,14 +198,24 @@ class TestCalculatePositionSize:
 
         candidate_high_score = SecurityPriority(
             symbol="AAPL",
+            name="AAPL",
+            industry="Technology",
             security_score=1.0,  # High score
             volatility=0.20,
+            multiplier=1.0,
+            min_lot=1,
+            combined_priority=1.0,
         )
 
         candidate_low_score = SecurityPriority(
             symbol="MSFT",
+            name="MSFT",
+            industry="Technology",
             security_score=0.0,  # Low score
             volatility=0.20,
+            multiplier=1.0,
+            min_lot=1,
+            combined_priority=0.0,
         )
 
         high_result = calculate_position_size(
