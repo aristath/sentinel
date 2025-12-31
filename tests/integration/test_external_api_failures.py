@@ -50,7 +50,7 @@ async def test_yahoo_finance_timeout_handling():
 async def test_tradernet_api_connection_failure():
     """Test handling of Tradernet API connection failures."""
     with patch(
-        "app.infrastructure.external.tradernet.get_tradernet_client"
+        "tests.integration.test_external_api_failures.get_tradernet_client"
     ) as mock_get_client:
         mock_client = MagicMock()
         mock_client.is_connected = False
@@ -68,7 +68,7 @@ async def test_tradernet_api_connection_failure():
 async def test_tradernet_api_request_failure():
     """Test handling of Tradernet API request failures."""
     with patch(
-        "app.infrastructure.external.tradernet.get_tradernet_client"
+        "tests.integration.test_external_api_failures.get_tradernet_client"
     ) as mock_get_client:
         mock_client = MagicMock()
         mock_client.is_connected = True

@@ -11,12 +11,12 @@ from app.repositories import PositionRepository, SecurityRepository, TradeReposi
 
 
 @pytest.mark.asyncio
-async def test_trade_execution_rollback_on_database_error(db):
+async def test_trade_execution_rollback_on_database_error(db_manager):
     """Test that trade execution rolls back when database write fails."""
     from app.domain.models import Recommendation
     from app.repositories import TradeRepository
 
-    trade_repo = TradeRepository(db=db)
+    trade_repo = TradeRepository(db=db_manager.ledger)
 
     # Create a trade recommendation (what TradeExecutionService expects)
     trade_rec = Recommendation(
@@ -37,8 +37,8 @@ async def test_trade_execution_rollback_on_database_error(db):
         order_id="order1", price=150.0, status="filled"
     )
 
-    position_repo = PositionRepository(db=db)
-    security_repo = SecurityRepository(db=db)
+    position_repo = PositionRepository(db=db_manager.state)
+    security_repo = SecurityRepository(db=db_manager.config)
 
     # Create mock currency exchange service and exchange rate service
     from app.domain.services.exchange_rate_service import ExchangeRateService
@@ -81,11 +81,11 @@ async def test_trade_execution_rollback_on_database_error(db):
 
 
 @pytest.mark.asyncio
-async def test_trade_execution_handles_external_failure(db):
+async def test_trade_execution_handles_external_failure(db_manager):
     """Test that trade execution handles external API failures."""
     from app.domain.models import Recommendation
 
-    trade_repo = TradeRepository(db=db)
+    trade_repo = TradeRepository(db=db_manager.ledger)
 
     trade_rec = Recommendation(
         symbol="AAPL",
@@ -98,8 +98,8 @@ async def test_trade_execution_handles_external_failure(db):
         country="United States",
     )
 
-    position_repo = PositionRepository(db=db)
-    security_repo = SecurityRepository(db=db)
+    position_repo = PositionRepository(db=db_manager.state)
+    security_repo = SecurityRepository(db=db_manager.config)
 
     # Create mock client that fails on order placement
     mock_client = MagicMock()
@@ -136,13 +136,13 @@ async def test_trade_execution_handles_external_failure(db):
 
 
 @pytest.mark.asyncio
-async def test_position_sync_recovery_after_partial_failure(db):
+async def test_position_sync_recovery_after_partial_failure(db_manager):
     """Test that position sync handles errors gracefully.
 
     Note: With auto-commit repositories, each operation commits independently.
     This test verifies error handling without relying on transaction rollback.
     """
-    position_repo = PositionRepository(db=db)
+    position_repo = PositionRepository(db=db_manager.state)
 
     # Create initial position
     position1 = Position(
@@ -232,12 +232,12 @@ def test_price_fetch_fails_after_max_retries():
 
 
 @pytest.mark.asyncio
-async def test_allocation_target_upsert(db):
+async def test_allocation_target_upsert(db_manager):
     """Test that allocation targets can be created and retrieved."""
     from app.domain.models import AllocationTarget
     from app.repositories import AllocationRepository
 
-    allocation_repo = AllocationRepository(db=db)
+    allocation_repo = AllocationRepository(db=db_manager.config)
 
     # Create a valid allocation target
     target = AllocationTarget(
