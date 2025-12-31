@@ -8,7 +8,7 @@ from app.domain.scoring.constants import (
     MAX_SELL_PCT,
     MIN_SELL_PCT,
 )
-from app.domain.services.trade_sizing_service import TradeSizingService
+from app.modules.trading.domain.trade_sizing_service import TradeSizingService
 
 
 def determine_sell_quantity(
