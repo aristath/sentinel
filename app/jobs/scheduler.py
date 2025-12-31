@@ -137,7 +137,7 @@ async def init_scheduler() -> AsyncIOScheduler:
     from app.jobs.planner_batch import process_planner_batch_job
     from app.modules.universe.jobs.stock_discovery import discover_new_stocks
     from app.jobs.stocks_data_sync import run_stocks_data_sync
-    from app.jobs.sync_cycle import run_sync_cycle
+    from app.modules.system.jobs.sync_cycle import run_sync_cycle
     from app.jobs.universe_pruning import prune_universe
 
     # Get settings
