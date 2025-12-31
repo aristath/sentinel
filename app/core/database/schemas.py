@@ -26,8 +26,8 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 CONFIG_SCHEMA = """
--- Stock universe
-CREATE TABLE IF NOT EXISTS stocks (
+-- Security universe (stocks, ETFs, ETCs, mutual funds)
+CREATE TABLE IF NOT EXISTS securities (
     symbol TEXT PRIMARY KEY,
     yahoo_symbol TEXT,
     isin TEXT,                   -- International Securities Identification Number (12 chars)
@@ -42,16 +42,16 @@ CREATE TABLE IF NOT EXISTS stocks (
     allow_buy INTEGER DEFAULT 1,
     allow_sell INTEGER DEFAULT 0,
     currency TEXT,
-    last_synced TEXT,           -- When stock data was last fully synced (daily pipeline)
+    last_synced TEXT,           -- When security data was last fully synced (daily pipeline)
     min_portfolio_target REAL,  -- Minimum target portfolio allocation percentage (0-20)
     max_portfolio_target REAL,  -- Maximum target portfolio allocation percentage (0-30)
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_stocks_active ON stocks(active);
--- Note: idx_stocks_country is created in migration v5 when country column is added
--- Note: idx_stocks_isin is created in migration or init_config_schema for new databases
+CREATE INDEX IF NOT EXISTS idx_securities_active ON securities(active);
+-- Note: idx_securities_country is created in migration v5 when country column is added
+-- Note: idx_securities_isin is created in migration or init_config_schema for new databases
 
 -- Allocation targets (group-based weightings)
 CREATE TABLE IF NOT EXISTS allocation_targets (
@@ -213,21 +213,23 @@ async def init_config_schema(db):
         )
 
         # Create isin index for new installs
-        await db.execute("CREATE INDEX IF NOT EXISTS idx_stocks_isin ON stocks(isin)")
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_securities_isin ON securities(isin)"
+        )
 
         # Record schema version
         await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
             (
-                9,
+                10,
                 now,
-                "Initial config schema with portfolio_hash recommendations, last_synced, country, fullExchangeName, portfolio targets, custom grouping, isin, and product_type",
+                "Initial config schema with securities table, portfolio_hash recommendations, last_synced, country, fullExchangeName, portfolio targets, custom grouping, isin, and product_type",
             ),
         )
 
         await db.commit()
         logger.info(
-            "Config database initialized with schema version 9 (includes portfolio_hash, last_synced, portfolio targets, custom grouping, isin, and product_type)"
+            "Config database initialized with schema version 10 (securities table with product_type, portfolio_hash, last_synced, portfolio targets, custom grouping, isin)"
         )
     elif current_version == 1:
         # Migration: Add recommendations table (version 1 -> 2)
@@ -553,6 +555,82 @@ async def init_config_schema(db):
         await db.commit()
         logger.info(
             "Config database migrated to schema version 9 (product_type column)"
+        )
+        current_version = 9  # Continue to next migration
+
+    if current_version == 9:
+        # Migration: Rename stocks table to securities (version 9 -> 10)
+        now = datetime.now().isoformat()
+        logger.info(
+            "Migrating config database to schema version 10 (rename stocks to securities)..."
+        )
+
+        # Check if stocks table exists (not already migrated)
+        cursor = await db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='stocks'"
+        )
+        if await cursor.fetchone():
+            # Create securities table with new schema
+            await db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS securities (
+                    symbol TEXT PRIMARY KEY,
+                    yahoo_symbol TEXT,
+                    isin TEXT,
+                    name TEXT NOT NULL,
+                    product_type TEXT,
+                    industry TEXT,
+                    country TEXT,
+                    fullExchangeName TEXT,
+                    priority_multiplier REAL DEFAULT 1.0,
+                    min_lot INTEGER DEFAULT 1,
+                    active INTEGER DEFAULT 1,
+                    allow_buy INTEGER DEFAULT 1,
+                    allow_sell INTEGER DEFAULT 0,
+                    currency TEXT,
+                    last_synced TEXT,
+                    min_portfolio_target REAL,
+                    max_portfolio_target REAL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+
+            # Copy all data from stocks to securities
+            await db.execute(
+                """
+                INSERT INTO securities
+                SELECT * FROM stocks
+                """
+            )
+
+            # Create indexes on new table
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_securities_active ON securities(active)"
+            )
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_securities_country ON securities(country)"
+            )
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_securities_isin ON securities(isin)"
+            )
+
+            # Drop old table
+            await db.execute("DROP TABLE stocks")
+            logger.info("Renamed stocks table to securities, data preserved")
+
+        await db.execute(
+            "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
+            (
+                10,
+                now,
+                "Renamed stocks table to securities (architectural refactoring to support multiple product types)",
+            ),
+        )
+        await db.commit()
+        logger.info(
+            "Config database migrated to schema version 10 (stocks → securities)"
         )
 
 
