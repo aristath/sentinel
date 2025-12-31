@@ -54,7 +54,7 @@ class TestRegimeClassification:
 
         Bug caught: Wrong regime detected, wrong strategy used.
         """
-        from app.domain.analytics.market_regime import detect_market_regime
+        from app.modules.analytics.domain.market_regime import detect_market_regime
 
         # Create flat data where MA will be exactly 100.0
         historical = create_historical_data(250, start_price=100.0, trend=0.0)
@@ -91,15 +91,15 @@ class TestRegimeClassification:
 
         with (
             patch(
-                "app.domain.analytics.market_regime.SettingsRepository",
+                "app.modules.analytics.domain.market_regime.SettingsRepository",
                 return_value=mock_settings_repo,
             ),
             patch(
-                "app.domain.analytics.market_regime.get_tradernet_client",
+                "app.modules.analytics.domain.market_regime.get_tradernet_client",
                 return_value=mock_client,
             ),
             patch(
-                "app.domain.analytics.market_regime.get_recommendation_cache",
+                "app.modules.analytics.domain.market_regime.get_recommendation_cache",
                 return_value=create_mock_cache(),
             ),
         ):
@@ -114,7 +114,7 @@ class TestRegimeClassification:
 
         Bug caught: Wrong regime detected, wrong strategy used.
         """
-        from app.domain.analytics.market_regime import detect_market_regime
+        from app.modules.analytics.domain.market_regime import detect_market_regime
 
         # Create flat data where MA will be exactly 100.0
         historical = create_historical_data(250, start_price=100.0, trend=0.0)
@@ -150,15 +150,15 @@ class TestRegimeClassification:
 
         with (
             patch(
-                "app.domain.analytics.market_regime.SettingsRepository",
+                "app.modules.analytics.domain.market_regime.SettingsRepository",
                 return_value=mock_settings_repo,
             ),
             patch(
-                "app.domain.analytics.market_regime.get_tradernet_client",
+                "app.modules.analytics.domain.market_regime.get_tradernet_client",
                 return_value=mock_client,
             ),
             patch(
-                "app.domain.analytics.market_regime.get_recommendation_cache",
+                "app.modules.analytics.domain.market_regime.get_recommendation_cache",
                 return_value=create_mock_cache(),
             ),
         ):
@@ -173,7 +173,7 @@ class TestRegimeClassification:
 
         Bug caught: Wrong regime detected, wrong strategy used.
         """
-        from app.domain.analytics.market_regime import detect_market_regime
+        from app.modules.analytics.domain.market_regime import detect_market_regime
 
         # Create data where current price is close to 200-day MA (within thresholds)
         historical = create_historical_data(250, start_price=100.0, trend=0.0)
@@ -209,15 +209,15 @@ class TestRegimeClassification:
 
         with (
             patch(
-                "app.domain.analytics.market_regime.SettingsRepository",
+                "app.modules.analytics.domain.market_regime.SettingsRepository",
                 return_value=mock_settings_repo,
             ),
             patch(
-                "app.domain.analytics.market_regime.get_tradernet_client",
+                "app.modules.analytics.domain.market_regime.get_tradernet_client",
                 return_value=mock_client,
             ),
             patch(
-                "app.domain.analytics.market_regime.get_recommendation_cache",
+                "app.modules.analytics.domain.market_regime.get_recommendation_cache",
                 return_value=create_mock_cache(),
             ),
         ):
@@ -232,7 +232,7 @@ class TestRegimeClassification:
 
         Bug caught: Off-by-one at threshold.
         """
-        from app.domain.analytics.market_regime import detect_market_regime
+        from app.modules.analytics.domain.market_regime import detect_market_regime
 
         historical = create_historical_data(250, start_price=100.0, trend=0.0)
         # Current price exactly 5% above average
@@ -268,15 +268,15 @@ class TestRegimeClassification:
 
         with (
             patch(
-                "app.domain.analytics.market_regime.SettingsRepository",
+                "app.modules.analytics.domain.market_regime.SettingsRepository",
                 return_value=mock_settings_repo,
             ),
             patch(
-                "app.domain.analytics.market_regime.get_tradernet_client",
+                "app.modules.analytics.domain.market_regime.get_tradernet_client",
                 return_value=mock_client,
             ),
             patch(
-                "app.domain.analytics.market_regime.get_recommendation_cache",
+                "app.modules.analytics.domain.market_regime.get_recommendation_cache",
                 return_value=create_mock_cache(),
             ),
         ):
@@ -295,7 +295,7 @@ class TestMACalculation:
 
         Bug caught: Wrong MA calculation, wrong regime.
         """
-        from app.domain.analytics.market_regime import _calculate_200_day_ma
+        from app.modules.analytics.domain.market_regime import _calculate_200_day_ma
 
         # Create exactly 200 days of data with constant price
         historical = create_historical_data(200, start_price=100.0, trend=0.0)
@@ -311,7 +311,7 @@ class TestMACalculation:
 
         Bug caught: Crashes when <200 days of data.
         """
-        from app.domain.analytics.market_regime import _calculate_200_day_ma
+        from app.modules.analytics.domain.market_regime import _calculate_200_day_ma
 
         # Only 50 days of data
         historical = create_historical_data(50, start_price=100.0)
@@ -330,7 +330,9 @@ class TestDistanceCalculation:
 
         Bug caught: Wrong distance formula.
         """
-        from app.domain.analytics.market_regime import _calculate_distance_from_ma
+        from app.modules.analytics.domain.market_regime import (
+            _calculate_distance_from_ma,
+        )
 
         ma = 100.0
         current_price = 110.0
@@ -346,7 +348,9 @@ class TestDistanceCalculation:
 
         Bug caught: Division by zero.
         """
-        from app.domain.analytics.market_regime import _calculate_distance_from_ma
+        from app.modules.analytics.domain.market_regime import (
+            _calculate_distance_from_ma,
+        )
 
         ma = 0.0
         current_price = 100.0
@@ -366,7 +370,7 @@ class TestErrorHandling:
 
         Bug caught: Crashes on API failure.
         """
-        from app.domain.analytics.market_regime import detect_market_regime
+        from app.modules.analytics.domain.market_regime import detect_market_regime
 
         mock_client = MagicMock()
         mock_client.get_historical_prices.side_effect = Exception("API error")
@@ -384,15 +388,15 @@ class TestErrorHandling:
 
         with (
             patch(
-                "app.domain.analytics.market_regime.SettingsRepository",
+                "app.modules.analytics.domain.market_regime.SettingsRepository",
                 return_value=mock_settings_repo,
             ),
             patch(
-                "app.domain.analytics.market_regime.get_tradernet_client",
+                "app.modules.analytics.domain.market_regime.get_tradernet_client",
                 return_value=mock_client,
             ),
             patch(
-                "app.domain.analytics.market_regime.get_recommendation_cache",
+                "app.modules.analytics.domain.market_regime.get_recommendation_cache",
                 return_value=create_mock_cache(),
             ),
         ):
