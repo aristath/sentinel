@@ -41,13 +41,13 @@ class PortfolioScore:
 
     diversification_score: float  # Country + industry balance (0-100)
     dividend_score: float  # Weighted average dividend yield score (0-100)
-    quality_score: float  # Weighted average stock quality (0-100)
+    quality_score: float  # Weighted average security quality (0-100)
     total: float  # Combined score (0-100)
 
 
 @dataclass
-class CalculatedStockScore:
-    """Complete stock score with all components."""
+class CalculatedSecurityScore:
+    """Complete security score with all components."""
 
     symbol: str
     total_score: float  # Final weighted score
@@ -62,7 +62,7 @@ class CalculatedStockScore:
 
 
 @dataclass
-class PrefetchedStockData:
+class PrefetchedSecurityData:
     """Pre-fetched data to avoid duplicate API calls."""
 
     daily_prices: list  # List of dicts with date, close, high, low, open, volume
@@ -96,3 +96,8 @@ class SellScore:
     suggested_sell_value: float
     profit_pct: float
     days_held: int
+
+
+# Backward compatibility aliases
+CalculatedStockScore = CalculatedSecurityScore
+PrefetchedStockData = PrefetchedSecurityData
