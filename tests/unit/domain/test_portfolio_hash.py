@@ -11,6 +11,7 @@ from app.domain.portfolio_hash import (
     generate_recommendation_cache_key,
     generate_settings_hash,
 )
+from app.domain.value_objects.product_type import ProductType
 
 
 class TestApplyPendingOrdersToPortfolio:
@@ -212,6 +213,8 @@ class TestGeneratePortfolioHash:
         securities = [
             Security(
                 symbol="AAPL",
+                name="Apple Inc.",
+                product_type=ProductType.EQUITY,
                 allow_buy=True,
                 allow_sell=False,
                 min_portfolio_target=None,
@@ -221,6 +224,8 @@ class TestGeneratePortfolioHash:
             ),
             Security(
                 symbol="MSFT",
+                name="Microsoft Corp.",
+                product_type=ProductType.EQUITY,
                 allow_buy=True,
                 allow_sell=True,
                 min_portfolio_target=0.05,
@@ -412,6 +417,8 @@ class TestGenerateRecommendationCacheKey:
         securities = [
             Security(
                 symbol="AAPL",
+                name="Apple Inc.",
+                product_type=ProductType.EQUITY,
                 allow_buy=True,
                 allow_sell=False,
                 min_portfolio_target=None,
