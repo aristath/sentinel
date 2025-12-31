@@ -88,7 +88,7 @@ def calculate_time_held_score(
         return 0.6, 365
 
     try:
-        from app.repositories.base import safe_parse_datetime_string
+        from app.shared.utils import safe_parse_datetime_string
 
         bought_date = safe_parse_datetime_string(first_bought_at)
         if bought_date is None:

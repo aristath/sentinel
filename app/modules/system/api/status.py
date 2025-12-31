@@ -86,7 +86,7 @@ async def get_status(
         )
         if latest:
             # Parse ISO format and reformat to "YYYY-MM-DD HH:MM"
-            from app.repositories.base import safe_parse_datetime_string  # TODO: Move to shared utility
+            from app.shared.utils import safe_parse_datetime_string
 
             dt = safe_parse_datetime_string(latest)
             if dt:

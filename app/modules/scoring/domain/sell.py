@@ -178,7 +178,7 @@ async def calculate_sell_score(
     last_transaction_at = None
     if first_bought_at and last_sold_at:
         # Compare dates to find the most recent
-        from app.repositories.base import safe_parse_datetime_string
+        from app.shared.utils import safe_parse_datetime_string
 
         buy_date = safe_parse_datetime_string(first_bought_at)
         sell_date = safe_parse_datetime_string(last_sold_at)
@@ -212,7 +212,7 @@ async def calculate_sell_score(
 
     # Additional eligibility check: if last transaction was recent, block based on minimum hold
     if last_transaction_at:
-        from app.repositories.base import safe_parse_datetime_string
+        from app.shared.utils import safe_parse_datetime_string
 
         transaction_date = safe_parse_datetime_string(last_transaction_at)
         if transaction_date:

@@ -14,12 +14,8 @@ from app.modules.scoring.domain.constants import (
 
 
 def _parse_date_string(date_str: str) -> Optional[datetime]:
-    """Parse ISO date string, handling timezone.
-
-    Note: This function is kept for backward compatibility but should be replaced
-    with safe_parse_datetime_string() from app.repositories.base in the future.
-    """
-    from app.repositories.base import safe_parse_datetime_string
+    """Parse ISO date string, handling timezone."""
+    from app.shared.utils import safe_parse_datetime_string
 
     return safe_parse_datetime_string(date_str)
 
