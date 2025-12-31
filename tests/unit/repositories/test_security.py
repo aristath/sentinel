@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.domain.models import Security
+from app.domain.value_objects.product_type import ProductType
 
 
 class TestSecurityRepositoryInit:
@@ -179,6 +180,7 @@ class TestSecurityRepositoryCreate:
             symbol="AAPL.US",
             yahoo_symbol="AAPL",
             name="Apple Inc",
+            product_type=ProductType.EQUITY,
             industry="Consumer Electronics",
             country="United States",
             priority_multiplier=1.0,
@@ -208,6 +210,7 @@ class TestSecurityRepositoryCreate:
         security = Security(
             symbol="AAPL.US",
             name="Apple Inc",
+            product_type=ProductType.EQUITY,
             min_portfolio_target=5.0,
             max_portfolio_target=15.0,
         )
@@ -232,7 +235,9 @@ class TestSecurityRepositoryCreate:
 
         repo = SecurityRepository(db=mock_db)
 
-        security = Security(symbol="AAPL.US", name="Apple Inc")
+        security = Security(
+            symbol="AAPL.US", name="Apple Inc", product_type=ProductType.EQUITY
+        )
 
         await repo.create(security)
 
