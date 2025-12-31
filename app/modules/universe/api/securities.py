@@ -27,6 +27,16 @@ from app.modules.universe.domain.symbol_resolver import is_isin
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# Optional import for bucket validation
+try:
+    from app.modules.satellites.database.bucket_repository import BucketRepository
+
+    BUCKET_VALIDATION_AVAILABLE = True
+except ImportError:
+    BUCKET_VALIDATION_AVAILABLE = False
+    BucketRepository = None  # type: ignore
+    logger.debug("BucketRepository not available - bucket validation disabled")
+
 
 class SecurityCreate(BaseModel):
     """Request model for creating a security."""
@@ -68,6 +78,9 @@ class SecurityUpdate(BaseModel):
     allow_sell: Optional[bool] = None
     min_portfolio_target: Optional[float] = None
     max_portfolio_target: Optional[float] = None
+    bucket_id: Optional[str] = (
+        None  # Assign security to a bucket (core or satellite ID)
+    )
 
 
 @router.get("")
@@ -618,6 +631,7 @@ def _build_update_dict(
     _apply_string_update(updates, "country", update.country)
     _apply_string_update(updates, "industry", update.industry)
     _apply_string_update(updates, "fullExchangeName", update.fullExchangeName)
+    _apply_string_update(updates, "bucket_id", update.bucket_id)
 
     _apply_numeric_update(
         updates,
@@ -680,6 +694,36 @@ def _format_stock_response(security, score) -> dict:
     return security_data
 
 
+async def _validate_bucket_assignment(bucket_id: str) -> None:
+    """Validate that bucket exists before allowing security assignment.
+
+    Args:
+        bucket_id: The bucket ID to validate
+
+    Raises:
+        HTTPException: If bucket doesn't exist or validation fails
+    """
+    if not BUCKET_VALIDATION_AVAILABLE:
+        # If bucket module not available, only allow 'core'
+        if bucket_id != "core":
+            raise HTTPException(
+                status_code=400,
+                detail="Bucket validation not available. Only 'core' bucket is supported.",
+            )
+        return
+
+    # Validate bucket exists
+    bucket_repo = BucketRepository()
+    bucket = await bucket_repo.get_by_id(bucket_id)
+    if not bucket:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Bucket '{bucket_id}' does not exist",
+        )
+
+    logger.info(f"Validated bucket assignment: {bucket_id}")
+
+
 @router.put("/{isin}")
 async def update_stock(
     isin: str,
@@ -708,6 +752,10 @@ async def update_stock(
         if update.new_symbol is not None:
             new_symbol = update.new_symbol.upper()
             await _validate_symbol_change(old_symbol, new_symbol, security_repo)
+
+        # Validate bucket assignment if provided
+        if update.bucket_id is not None:
+            await _validate_bucket_assignment(update.bucket_id)
 
         updates = _build_update_dict(
             update, new_symbol if new_symbol != old_symbol else None
