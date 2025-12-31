@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.domain.models import Security
+from app.domain.value_objects.product_type import ProductType
 from app.modules.rebalancing.services.negative_balance_rebalancer import (
     NegativeBalanceRebalancer,
 )
@@ -95,18 +96,21 @@ class TestNegativeBalanceRebalancer:
             Security(
                 symbol="AAPL.US",
                 name="Apple Inc",
+                product_type=ProductType.EQUITY,
                 currency=Currency.USD,
                 active=True,
             ),
             Security(
                 symbol="SAP.DE",
                 name="SAP SE",
+                product_type=ProductType.EQUITY,
                 currency=Currency.EUR,
                 active=True,
             ),
             Security(
                 symbol="700.HK",
                 name="Tencent",
+                product_type=ProductType.EQUITY,
                 currency=Currency.HKD,
                 active=True,
             ),
@@ -129,6 +133,7 @@ class TestNegativeBalanceRebalancer:
             Security(
                 symbol="AAPL.US",
                 name="Apple Inc",
+                product_type=ProductType.EQUITY,
                 currency=Currency.USD,
                 active=True,
             ),
@@ -150,6 +155,7 @@ class TestNegativeBalanceRebalancer:
             Security(
                 symbol="AAPL.US",
                 name="Apple Inc",
+                product_type=ProductType.EQUITY,
                 currency=Currency.USD,
                 active=True,
             ),
@@ -172,6 +178,7 @@ class TestNegativeBalanceRebalancer:
             Security(
                 symbol="AAPL.US",
                 name="Apple Inc",
+                product_type=ProductType.EQUITY,
                 currency=Currency.USD,
                 active=True,
             ),
