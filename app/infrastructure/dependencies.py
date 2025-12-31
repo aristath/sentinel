@@ -40,16 +40,16 @@ from app.modules.display.services.display_service import (
     DisplayStateManager,
     _display_state_manager,
 )
+from app.modules.portfolio.database.portfolio_repository import PortfolioRepository
+from app.modules.portfolio.database.position_repository import PositionRepository
 from app.modules.scoring.services.scoring_service import ScoringService
+from app.modules.universe.database.stock_repository import StockRepository
 from app.repositories import (
     CalculationsRepository,
     GroupingRepository,
-    PortfolioRepository,
-    PositionRepository,
     RecommendationRepository,
     ScoreRepository,
     SettingsRepository,
-    StockRepository,
     TradeRepository,
 )
 
