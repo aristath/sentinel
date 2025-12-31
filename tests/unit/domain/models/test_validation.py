@@ -9,6 +9,7 @@ import pytest
 
 from app.domain.exceptions import ValidationError
 from app.domain.models import Position, Recommendation, Security, Trade
+from app.domain.value_objects.product_type import ProductType
 from app.domain.value_objects.trade_side import TradeSide
 
 
@@ -32,17 +33,23 @@ class TestSecurityValidation:
 
     def test_stock_normalizes_symbol_to_uppercase(self):
         """Test that Stock normalizes symbol to uppercase."""
-        stock = Security(symbol="aapl", name="Apple Inc.")
+        stock = Security(
+            symbol="aapl", name="Apple Inc.", product_type=ProductType.EQUITY
+        )
         assert stock.symbol == "AAPL"
 
     def test_stock_strips_symbol_whitespace(self):
         """Test that Stock strips whitespace from symbol."""
-        stock = Security(symbol="  AAPL  ", name="Apple Inc.")
+        stock = Security(
+            symbol="  AAPL  ", name="Apple Inc.", product_type=ProductType.EQUITY
+        )
         assert stock.symbol == "AAPL"
 
     def test_stock_validates_min_lot(self):
         """Test that Stock corrects min_lot to minimum 1."""
-        stock = Security(symbol="AAPL", name="Apple Inc.", min_lot=0)
+        stock = Security(
+            symbol="AAPL", name="Apple Inc.", min_lot=0, product_type=ProductType.EQUITY
+        )
         assert stock.min_lot == 1
 
     def test_stock_validates_min_portfolio_target_range(self):
@@ -50,20 +57,40 @@ class TestSecurityValidation:
         with pytest.raises(
             ValidationError, match="min_portfolio_target must be between 0 and 20"
         ):
-            Security(symbol="AAPL", name="Apple Inc.", min_portfolio_target=21.0)
+            Security(
+                symbol="AAPL",
+                name="Apple Inc.",
+                min_portfolio_target=21.0,
+                active=False,
+            )
 
         with pytest.raises(ValidationError):
-            Security(symbol="AAPL", name="Apple Inc.", min_portfolio_target=-0.1)
+            Security(
+                symbol="AAPL",
+                name="Apple Inc.",
+                min_portfolio_target=-0.1,
+                active=False,
+            )
 
     def test_stock_validates_max_portfolio_target_range(self):
         """Test that Stock validates max_portfolio_target is 0-30."""
         with pytest.raises(
             ValidationError, match="max_portfolio_target must be between 0 and 30"
         ):
-            Security(symbol="AAPL", name="Apple Inc.", max_portfolio_target=31.0)
+            Security(
+                symbol="AAPL",
+                name="Apple Inc.",
+                max_portfolio_target=31.0,
+                active=False,
+            )
 
         with pytest.raises(ValidationError):
-            Security(symbol="AAPL", name="Apple Inc.", max_portfolio_target=-0.1)
+            Security(
+                symbol="AAPL",
+                name="Apple Inc.",
+                max_portfolio_target=-0.1,
+                active=False,
+            )
 
     def test_stock_validates_max_greater_than_min(self):
         """Test that Stock validates max_portfolio_target >= min_portfolio_target."""
@@ -76,6 +103,7 @@ class TestSecurityValidation:
                 name="Apple Inc.",
                 min_portfolio_target=0.15,
                 max_portfolio_target=0.10,
+                active=False,
             )
 
 

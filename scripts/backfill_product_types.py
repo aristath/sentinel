@@ -1,17 +1,45 @@
-"""Backfill product_type for existing stocks in the database.
+"""Backfill product_type for existing securities in the database.
 
-This script:
-1. Queries all stocks without product_type set
-2. Fetches product type from Yahoo Finance for each
-3. Updates the database with detected types
-4. Reports statistics and stocks needing manual review
+WHEN TO RUN:
+- After deploying migration v9 (adds product_type column)
+- For existing installations upgrading from stocks-only to multi-product support
+- Fresh installations do NOT need this (product_type set on security creation)
 
-Usage:
+WHAT IT DOES:
+1. Queries all securities from the database
+2. For each security, fetches product type from Yahoo Finance
+3. Uses heuristics to classify ETCs vs ETFs (see ProductType.from_yahoo_quote_type)
+4. Updates the database with detected types
+5. Reports statistics and securities needing manual review
+
+SAFETY:
+- Safe to run multiple times (idempotent)
+- Does not modify securities that already have product_type set (unless --force flag)
+- Makes API calls to Yahoo Finance (rate limiting may apply)
+- Database updates are committed per security (partial progress preserved on failure)
+
+USAGE:
+    # Dry run (show what would be updated without changing database):
+    python scripts/backfill_product_types.py --dry-run
+
+    # Normal run (skip securities with product_type already set):
     python scripts/backfill_product_types.py
+
+    # Force update all securities (re-detect even if product_type set):
+    python scripts/backfill_product_types.py --force
+
+MANUAL REVIEW NEEDED:
+Some securities may return UNKNOWN or ambiguous types from Yahoo Finance.
+The script will list these at the end for manual classification via:
+    PUT /api/securities/{symbol} with {"product_type": "ETF"}
+
+See: docs/MIGRATION_GUIDE.md for deployment instructions
 """
 
+import argparse
 import asyncio
 import logging
+import sys
 from datetime import datetime
 
 from app.core.database.manager import DatabaseManager
@@ -24,8 +52,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def backfill_product_types():
-    """Backfill product types for all stocks in the database."""
+async def backfill_product_types(dry_run: bool = False, force: bool = False):
+    """Backfill product types for all stocks in the database.
+
+    Args:
+        dry_run: If True, show what would be updated without changing database
+        force: If True, re-detect product_type even for securities that already have it set
+    """
     db_manager = DatabaseManager()
     await db_manager.init()
 
@@ -42,6 +75,8 @@ async def backfill_product_types():
 
     total_stocks = len(stocks)
     logger.info(f"Found {total_stocks} stocks in database")
+    if dry_run:
+        logger.info("DRY RUN MODE - No database changes will be made")
 
     # Statistics
     stats = {
@@ -66,8 +101,8 @@ async def backfill_product_types():
         country = stock["country"]
         industry = stock["industry"]
 
-        # Skip if already has product_type
-        if current_product_type:
+        # Skip if already has product_type (unless force mode)
+        if current_product_type and not force:
             stats["already_set"] += 1
             logger.info(f"  {symbol}: Already set to {current_product_type}")
             try:
@@ -78,20 +113,23 @@ async def backfill_product_types():
             continue
 
         # Detect product type
-        logger.info(f"  {symbol}: Detecting product type...")
+        action = "Would detect" if dry_run else "Detecting"
+        logger.info(f"  {symbol}: {action} product type...")
         try:
             product_type = yahoo.get_product_type(symbol, yahoo_symbol, name)
 
-            # Update database
-            await config_db.execute(
-                "UPDATE securities SET product_type = ?, updated_at = ? WHERE symbol = ?",
-                (product_type.value, datetime.now().isoformat(), symbol),
-            )
-            await config_db.commit()
+            # Update database (unless dry run)
+            if not dry_run:
+                await config_db.execute(
+                    "UPDATE securities SET product_type = ?, updated_at = ? WHERE symbol = ?",
+                    (product_type.value, datetime.now().isoformat(), symbol),
+                )
+                await config_db.commit()
 
             stats[product_type] += 1
             stats["updated"] += 1
-            logger.info(f"  {symbol}: Set to {product_type.value}")
+            action = "Would set" if dry_run else "Set"
+            logger.info(f"  {symbol}: {action} to {product_type.value}")
 
             # Check if needs manual review
             if product_type == ProductType.UNKNOWN:
@@ -130,11 +168,15 @@ async def backfill_product_types():
 
     # Print summary
     print("\n" + "=" * 80)
-    print("BACKFILL SUMMARY")
+    if dry_run:
+        print("BACKFILL SUMMARY (DRY RUN - No Changes Made)")
+    else:
+        print("BACKFILL SUMMARY")
     print("=" * 80)
     print(f"Total stocks: {total_stocks}")
     print(f"Already had product_type: {stats['already_set']}")
-    print(f"Updated: {stats['updated']}")
+    action = "Would update" if dry_run else "Updated"
+    print(f"{action}: {stats['updated']}")
     print(f"Failed: {stats['failed']}")
     print()
     print("Product Type Distribution:")
@@ -163,4 +205,27 @@ async def backfill_product_types():
 
 
 if __name__ == "__main__":
-    asyncio.run(backfill_product_types())
+    parser = argparse.ArgumentParser(
+        description="Backfill product_type for existing securities in the database"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be updated without changing database",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-detect product_type even for securities that already have it set",
+    )
+
+    args = parser.parse_args()
+
+    try:
+        asyncio.run(backfill_product_types(dry_run=args.dry_run, force=args.force))
+    except KeyboardInterrupt:
+        print("\n\nBackfill interrupted by user")
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"Backfill failed: {e}")
+        sys.exit(1)

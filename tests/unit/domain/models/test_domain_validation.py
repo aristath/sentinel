@@ -6,6 +6,7 @@ import pytest
 
 from app.domain.exceptions import ValidationError
 from app.domain.models import Position, Recommendation, Security, Trade
+from app.domain.value_objects.product_type import ProductType
 from app.domain.value_objects.trade_side import TradeSide
 from app.shared.domain.value_objects.currency import Currency
 
@@ -25,18 +26,31 @@ class TestStockValidation:
 
     def test_stock_accepts_any_country(self):
         """Test that Stock accepts any non-empty country."""
-        stock = Security(symbol="AAPL.US", name="Test", country="Greece")
+        stock = Security(
+            symbol="AAPL.US",
+            name="Test",
+            country="Greece",
+            product_type=ProductType.EQUITY,
+        )
         assert stock.country == "Greece"
 
     def test_stock_validates_min_lot_positive(self):
         """Test that Stock validates min_lot is positive."""
         stock = Security(
-            symbol="AAPL.US", name="Test", country="United States", min_lot=0
+            symbol="AAPL.US",
+            name="Test",
+            country="United States",
+            min_lot=0,
+            product_type=ProductType.EQUITY,
         )
         assert stock.min_lot == 1  # Should default to 1
 
         stock = Security(
-            symbol="AAPL.US", name="Test", country="United States", min_lot=-5
+            symbol="AAPL.US",
+            name="Test",
+            country="United States",
+            min_lot=-5,
+            product_type=ProductType.EQUITY,
         )
         assert stock.min_lot == 1  # Should default to 1
 
@@ -47,6 +61,7 @@ class TestStockValidation:
             name="Apple Inc.",
             country="United States",
             currency=Currency.USD,
+            product_type=ProductType.EQUITY,
         )
         assert stock.symbol == "AAPL.US"
         assert stock.name == "Apple Inc."
@@ -54,13 +69,28 @@ class TestStockValidation:
 
     def test_stock_min_portfolio_target_accepts_valid_range(self):
         """Test that min_portfolio_target accepts values 0-20."""
-        stock = Security(symbol="AAPL.US", name="Test", min_portfolio_target=0.0)
+        stock = Security(
+            symbol="AAPL.US",
+            name="Test",
+            min_portfolio_target=0.0,
+            product_type=ProductType.EQUITY,
+        )
         assert stock.min_portfolio_target == 0.0
 
-        stock = Security(symbol="AAPL.US", name="Test", min_portfolio_target=10.0)
+        stock = Security(
+            symbol="AAPL.US",
+            name="Test",
+            min_portfolio_target=10.0,
+            product_type=ProductType.EQUITY,
+        )
         assert stock.min_portfolio_target == 10.0
 
-        stock = Security(symbol="AAPL.US", name="Test", min_portfolio_target=20.0)
+        stock = Security(
+            symbol="AAPL.US",
+            name="Test",
+            min_portfolio_target=20.0,
+            product_type=ProductType.EQUITY,
+        )
         assert stock.min_portfolio_target == 20.0
 
     def test_stock_min_portfolio_target_rejects_negative(self):
@@ -68,24 +98,49 @@ class TestStockValidation:
         with pytest.raises(
             ValidationError, match="min_portfolio_target must be between 0 and 20"
         ):
-            Security(symbol="AAPL.US", name="Test", min_portfolio_target=-1.0)
+            Security(
+                symbol="AAPL.US",
+                name="Test",
+                min_portfolio_target=-1.0,
+                active=False,
+            )
 
     def test_stock_min_portfolio_target_rejects_over_20(self):
         """Test that min_portfolio_target rejects values > 20."""
         with pytest.raises(
             ValidationError, match="min_portfolio_target must be between 0 and 20"
         ):
-            Security(symbol="AAPL.US", name="Test", min_portfolio_target=21.0)
+            Security(
+                symbol="AAPL.US",
+                name="Test",
+                min_portfolio_target=21.0,
+                active=False,
+            )
 
     def test_stock_max_portfolio_target_accepts_valid_range(self):
         """Test that max_portfolio_target accepts values 0-30."""
-        stock = Security(symbol="AAPL.US", name="Test", max_portfolio_target=0.0)
+        stock = Security(
+            symbol="AAPL.US",
+            name="Test",
+            max_portfolio_target=0.0,
+            product_type=ProductType.EQUITY,
+        )
         assert stock.max_portfolio_target == 0.0
 
-        stock = Security(symbol="AAPL.US", name="Test", max_portfolio_target=15.0)
+        stock = Security(
+            symbol="AAPL.US",
+            name="Test",
+            max_portfolio_target=15.0,
+            product_type=ProductType.EQUITY,
+        )
         assert stock.max_portfolio_target == 15.0
 
-        stock = Security(symbol="AAPL.US", name="Test", max_portfolio_target=30.0)
+        stock = Security(
+            symbol="AAPL.US",
+            name="Test",
+            max_portfolio_target=30.0,
+            product_type=ProductType.EQUITY,
+        )
         assert stock.max_portfolio_target == 30.0
 
     def test_stock_max_portfolio_target_rejects_negative(self):
@@ -93,14 +148,24 @@ class TestStockValidation:
         with pytest.raises(
             ValidationError, match="max_portfolio_target must be between 0 and 30"
         ):
-            Security(symbol="AAPL.US", name="Test", max_portfolio_target=-1.0)
+            Security(
+                symbol="AAPL.US",
+                name="Test",
+                max_portfolio_target=-1.0,
+                active=False,
+            )
 
     def test_stock_max_portfolio_target_rejects_over_30(self):
         """Test that max_portfolio_target rejects values > 30."""
         with pytest.raises(
             ValidationError, match="max_portfolio_target must be between 0 and 30"
         ):
-            Security(symbol="AAPL.US", name="Test", max_portfolio_target=31.0)
+            Security(
+                symbol="AAPL.US",
+                name="Test",
+                max_portfolio_target=31.0,
+                active=False,
+            )
 
     def test_stock_max_portfolio_target_greater_than_min(self):
         """Test that max_portfolio_target >= min_portfolio_target when both provided."""
@@ -109,6 +174,7 @@ class TestStockValidation:
             name="Test",
             min_portfolio_target=5.0,
             max_portfolio_target=15.0,
+            product_type=ProductType.EQUITY,
         )
         assert stock.min_portfolio_target == 5.0
         assert stock.max_portfolio_target == 15.0
@@ -124,23 +190,34 @@ class TestStockValidation:
                 name="Test",
                 min_portfolio_target=15.0,
                 max_portfolio_target=5.0,
+                active=False,
             )
 
     def test_stock_portfolio_targets_none_allowed(self):
         """Test that None values are allowed for portfolio targets."""
-        stock = Security(symbol="AAPL.US", name="Test")
+        stock = Security(symbol="AAPL.US", name="Test", product_type=ProductType.EQUITY)
         assert stock.min_portfolio_target is None
         assert stock.max_portfolio_target is None
 
     def test_stock_min_portfolio_target_without_max(self):
         """Test that only min_portfolio_target can be set without max."""
-        stock = Security(symbol="AAPL.US", name="Test", min_portfolio_target=5.0)
+        stock = Security(
+            symbol="AAPL.US",
+            name="Test",
+            min_portfolio_target=5.0,
+            product_type=ProductType.EQUITY,
+        )
         assert stock.min_portfolio_target == 5.0
         assert stock.max_portfolio_target is None
 
     def test_stock_max_portfolio_target_without_min(self):
         """Test that only max_portfolio_target can be set without min."""
-        stock = Security(symbol="AAPL.US", name="Test", max_portfolio_target=15.0)
+        stock = Security(
+            symbol="AAPL.US",
+            name="Test",
+            max_portfolio_target=15.0,
+            product_type=ProductType.EQUITY,
+        )
         assert stock.min_portfolio_target is None
         assert stock.max_portfolio_target == 15.0
 

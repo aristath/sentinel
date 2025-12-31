@@ -90,6 +90,19 @@ class Security:
                     "max_portfolio_target must be >= min_portfolio_target"
                 )
 
+        # Validate product_type for active securities
+        if self.active:
+            if self.product_type is None:
+                raise ValidationError(
+                    f"Active security {self.symbol} must have product_type set. "
+                    "Run backfill script or set manually via API."
+                )
+            if self.product_type == ProductType.UNKNOWN:
+                raise ValidationError(
+                    f"Active security {self.symbol} cannot have product_type=UNKNOWN. "
+                    "Product type must be classified before activating security."
+                )
+
 
 # Position moved to modules/portfolio/domain/models.py
 
