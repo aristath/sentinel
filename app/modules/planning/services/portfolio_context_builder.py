@@ -12,7 +12,7 @@ from app.domain.repositories.protocols import (
     IPositionRepository,
     IStockRepository,
 )
-from app.domain.scoring import PortfolioContext
+from app.modules.scoring.domain import PortfolioContext
 from app.repositories import GroupingRepository
 
 logger = logging.getLogger(__name__)
