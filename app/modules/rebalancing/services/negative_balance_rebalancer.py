@@ -7,7 +7,7 @@ import logging
 from typing import Dict, List, Optional, Set
 
 from app.api.settings import get_trading_mode
-from app.application.services.currency_exchange_service import CurrencyExchangeService
+from app.shared.services import CurrencyExchangeService
 from app.core.events import SystemEvent, emit
 from app.domain.models import Recommendation
 from app.domain.services.exchange_rate_service import ExchangeRateService

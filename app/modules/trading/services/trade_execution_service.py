@@ -7,9 +7,7 @@ import logging
 from datetime import datetime
 from typing import List, Optional
 
-from app.application.services.currency_exchange_service import (  # TODO: Keep in infrastructure or move to shared
-    CurrencyExchangeService,
-)
+from app.shared.services import CurrencyExchangeService
 from app.core.events import SystemEvent, emit
 from app.domain.models import Recommendation, Trade
 from app.domain.repositories.protocols import (

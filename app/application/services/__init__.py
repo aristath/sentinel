@@ -1,6 +1,9 @@
 """Application services - orchestrate domain services and repositories."""
 
-from app.application.services.currency_exchange_service import CurrencyExchangeService
+# Re-export for backward compatibility
+from app.shared.services.currency_exchange_service import (  # noqa: F401
+    CurrencyExchangeService,
+)
 
 __all__ = [
     "CurrencyExchangeService",
