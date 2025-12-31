@@ -120,7 +120,9 @@ async def _run_event_based_trading_loop_internal():
 
                 # Check and rebalance negative balances immediately after trade
                 # (trades can affect cash balances)
-                from app.jobs.emergency_rebalance import check_and_rebalance_immediately
+                from app.modules.rebalancing.jobs.emergency_rebalance import (
+                    check_and_rebalance_immediately,
+                )
 
                 await check_and_rebalance_immediately()
 

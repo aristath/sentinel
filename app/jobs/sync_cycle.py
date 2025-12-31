@@ -65,7 +65,9 @@ async def _run_sync_cycle_internal():
 
         # Step 3.5: Check and rebalance negative balances immediately (if any)
         # This executes immediately when detected, not waiting for next cycle
-        from app.jobs.emergency_rebalance import check_and_rebalance_immediately
+        from app.modules.rebalancing.jobs.emergency_rebalance import (
+            check_and_rebalance_immediately,
+        )
 
         await check_and_rebalance_immediately()
 
@@ -303,7 +305,9 @@ async def _get_holistic_recommendation():
     from app.application.services.currency_exchange_service import (
         CurrencyExchangeService,
     )
-    from app.application.services.rebalancing_service import RebalancingService
+    from app.modules.rebalancing.services.rebalancing_service import (
+        RebalancingService,
+    )
     from app.domain.models import Recommendation
     from app.domain.portfolio_hash import generate_recommendation_cache_key
     from app.domain.services.settings_service import SettingsService

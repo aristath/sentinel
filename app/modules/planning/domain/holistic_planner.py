@@ -529,7 +529,9 @@ async def identify_opportunities(
     Returns:
         Dict mapping category to list of ActionCandidate
     """
-    from app.application.services.rebalancing_service import calculate_min_trade_amount
+    from app.modules.rebalancing.services.rebalancing_service import (
+        calculate_min_trade_amount,
+    )
     from app.config import settings as app_settings
     from app.domain.constants import BUY_COOLDOWN_DAYS
     from app.infrastructure.external import yahoo_finance as yahoo

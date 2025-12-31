@@ -43,7 +43,9 @@ async def get_optimizer_status() -> Dict[str, Any]:
     settings = await settings_service.get_settings()
 
     # Calculate min trade amount from transaction costs
-    from app.application.services.rebalancing_service import calculate_min_trade_amount
+    from app.modules.rebalancing.services.rebalancing_service import (
+        calculate_min_trade_amount,
+    )
 
     min_trade_amount = calculate_min_trade_amount(
         settings.transaction_cost_fixed, settings.transaction_cost_percent
