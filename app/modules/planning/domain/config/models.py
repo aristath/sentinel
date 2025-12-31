@@ -55,6 +55,8 @@ class SequenceGeneratorsConfig:
 
     combinatorial: ModuleConfig = field(default_factory=ModuleConfig)
     enhanced_combinatorial: ModuleConfig = field(default_factory=ModuleConfig)
+    partial_execution: ModuleConfig = field(default_factory=ModuleConfig)
+    constraint_relaxation: ModuleConfig = field(default_factory=ModuleConfig)
 
 
 @dataclass
@@ -62,6 +64,9 @@ class FiltersConfig:
     """Configuration for sequence filters."""
 
     correlation_aware: ModuleConfig = field(default_factory=ModuleConfig)
+    diversity: ModuleConfig = field(default_factory=ModuleConfig)
+    eligibility: ModuleConfig = field(default_factory=ModuleConfig)
+    recently_traded: ModuleConfig = field(default_factory=ModuleConfig)
 
 
 @dataclass
@@ -143,7 +148,12 @@ class PlannerConfiguration:
     def get_enabled_generators(self) -> List[str]:
         """Get list of enabled sequence generator names."""
         enabled = []
-        for name in ["combinatorial", "enhanced_combinatorial"]:
+        for name in [
+            "combinatorial",
+            "enhanced_combinatorial",
+            "partial_execution",
+            "constraint_relaxation",
+        ]:
             config = getattr(self.sequence_generators, name)
             if config.enabled:
                 enabled.append(name)
@@ -152,7 +162,12 @@ class PlannerConfiguration:
     def get_enabled_filters(self) -> List[str]:
         """Get list of enabled filter names."""
         enabled = []
-        for name in ["correlation_aware"]:
+        for name in [
+            "correlation_aware",
+            "diversity",
+            "eligibility",
+            "recently_traded",
+        ]:
             config = getattr(self.filters, name)
             if config.enabled:
                 enabled.append(name)
