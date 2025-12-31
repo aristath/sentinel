@@ -207,7 +207,7 @@ async def get_dividend_analysis(
     Fetches dividend data and calculates stability metrics.
 
     Args:
-        symbol: Stock symbol
+        symbol: Security symbol
         portfolio_avg_yield: Average yield of portfolio for comparison
 
     Returns:
@@ -316,7 +316,7 @@ def is_dividend_consistent(
     Used by the holistic planner to identify reliable income securities.
 
     Args:
-        symbol_yield: Stock's current dividend yield
+        symbol_yield: Security's current dividend yield
         portfolio_avg_yield: Portfolio average yield
         stability_score: Pre-calculated stability score
         min_stability: Minimum stability to be considered consistent

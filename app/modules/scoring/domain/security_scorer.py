@@ -83,8 +83,8 @@ async def calculate_security_score(
         daily_prices: List of daily price dicts
         monthly_prices: List of monthly price dicts
         fundamentals: Yahoo fundamentals data
-        country: Stock country (e.g., "United States", "Germany")
-        industry: Stock industry
+        country: Security country (e.g., "United States", "Germany")
+        industry: Security industry
         portfolio_context: Portfolio context for diversification
         yahoo_symbol: Optional explicit Yahoo symbol override
         target_annual_return: Target annual return for scoring
@@ -234,8 +234,8 @@ async def calculate_security_score_from_prefetched(
     Args:
         symbol: Tradernet symbol
         prefetched: Pre-fetched data containing daily/monthly prices and fundamentals
-        country: Stock country (e.g., "United States", "Germany")
-        industry: Stock industry
+        country: Security country (e.g., "United States", "Germany")
+        industry: Security industry
         portfolio_context: Portfolio context for diversification
         yahoo_symbol: Optional explicit Yahoo symbol override
         target_annual_return: Target annual return for scoring

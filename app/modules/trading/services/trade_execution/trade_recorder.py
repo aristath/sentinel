@@ -90,7 +90,7 @@ async def record_trade(
     Handles duplicate order_id checking and creates Trade record.
 
     Args:
-        symbol: Stock symbol
+        symbol: Security symbol
         side: Trade side (BUY or SELL)
         quantity: Trade quantity
         price: Execution price (use estimated_price if price <= 0)

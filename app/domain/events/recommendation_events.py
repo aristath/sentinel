@@ -21,7 +21,7 @@ class RecommendationCreatedEvent(DomainEvent):
 
     @property
     def symbol(self) -> str:
-        """Stock symbol for the recommendation."""
+        """Security symbol for the recommendation."""
         return self.recommendation.symbol
 
     @property

@@ -97,11 +97,11 @@ def calculate_position_size(
     Calculate position size using inverse-volatility weighting (risk parity).
 
     Based on MOSEK Portfolio Cookbook principles: size positions so each
-    contributes roughly equal risk to the portfolio. Stock score provides
+    contributes roughly equal risk to the portfolio. Security score provides
     a ±20% adjustment on top for conviction expression.
 
     Args:
-        candidate: Stock priority data (must have volatility)
+        candidate: Security priority data (must have volatility)
         base_size: Base investment amount per trade
         min_size: Minimum trade size
 

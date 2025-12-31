@@ -170,7 +170,7 @@ async def _rebuild_symbol_history(db_path: Path, symbol: str):
 
     Args:
         db_path: Path to the corrupted database
-        symbol: Stock symbol
+        symbol: Security symbol
     """
     logger.info(f"Rebuilding history database for {symbol}")
 

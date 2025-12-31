@@ -120,7 +120,7 @@ def generate_portfolio_hash(
 
     Args:
         positions: List of position dicts with 'symbol' and 'quantity' keys
-        securities: Optional list of Stock objects in universe (to detect new securities and include config)
+        securities: Optional list of Security objects in universe (to detect new securities and include config)
         cash_balances: Optional dict of currency -> amount (e.g., {"EUR": 1500.0})
         pending_orders: Optional list of pending order dicts with keys: symbol, side, quantity, price, currency
 
@@ -129,7 +129,7 @@ def generate_portfolio_hash(
 
     Example:
         positions = [{"symbol": "AAPL", "quantity": 10}]
-        securities = [Stock(symbol="AAPL", ...), Stock(symbol="MSFT", ...)]
+        securities = [Security(symbol="AAPL", ...), Security(symbol="MSFT", ...)]
         cash = {"EUR": 1500.0, "USD": 200.0}
         orders = [{"symbol": "AAPL", "side": "buy", "quantity": 5, "price": 100.0, "currency": "EUR"}]
         hash = generate_portfolio_hash(positions, securities, cash, orders)
@@ -299,7 +299,7 @@ def generate_recommendation_cache_key(
     Args:
         positions: List of position dicts with 'symbol' and 'quantity' keys
         settings_dict: Dictionary of settings values
-        securities: Optional list of Stock objects in universe
+        securities: Optional list of Security objects in universe
         cash_balances: Optional dict of currency -> amount
         allocations_dict: Optional dict of allocation targets (e.g., {"country:US": 0.6})
         pending_orders: Optional list of pending order dicts with keys: symbol, side, quantity, price, currency
@@ -310,7 +310,7 @@ def generate_recommendation_cache_key(
     Example:
         positions = [{"symbol": "AAPL", "quantity": 10}]
         settings = {"min_security_score": 0.5}
-        securities = [Stock(symbol="AAPL", ...), Stock(symbol="MSFT", ...)]
+        securities = [Security(symbol="AAPL", ...), Security(symbol="MSFT", ...)]
         cash = {"EUR": 1500.0}
         allocations = {"country:United States": 0.6}
         orders = [{"symbol": "AAPL", "side": "buy", "quantity": 5, "price": 100.0, "currency": "EUR"}]

@@ -111,7 +111,7 @@ async def _sync_security_price_history():
             continue
 
     logger.info(
-        f"Stock price history sync complete: {processed} processed, {errors} errors"
+        f"Security price history sync complete: {processed} processed, {errors} errors"
     )
 
 

@@ -162,7 +162,7 @@ async def get_stock(
     """Get detailed security info with score breakdown.
 
     Args:
-        isin: Stock ISIN (e.g., US0378331005)
+        isin: Security ISIN (e.g., US0378331005)
     """
     # Validate ISIN format
     isin = isin.strip().upper()
@@ -171,7 +171,7 @@ async def get_stock(
 
     security = await security_repo.get_by_isin(isin)
     if not security:
-        raise HTTPException(status_code=404, detail="Stock not found")
+        raise HTTPException(status_code=404, detail="Security not found")
 
     # Use the resolved symbol for other lookups
     symbol = security.symbol
@@ -244,7 +244,7 @@ async def create_stock(
 
     existing = await security_repo.get_by_symbol(security_data.symbol.upper())
     if existing:
-        raise HTTPException(status_code=400, detail="Stock already exists")
+        raise HTTPException(status_code=400, detail="Security already exists")
 
     # Auto-detect country, exchange, and industry from Yahoo Finance
     from app.infrastructure.external import yahoo_finance as yahoo
@@ -284,7 +284,7 @@ async def create_stock(
     cache.invalidate("stocks_with_scores")
 
     return {
-        "message": f"Stock {security_data.symbol.upper()} added to universe",
+        "message": f"Security {security_data.symbol.upper()} added to universe",
         "symbol": security_data.symbol.upper(),
         "isin": new_stock.isin,
         "yahoo_symbol": security_data.yahoo_symbol,
@@ -319,7 +319,7 @@ async def add_stock_by_identifier(
 
     Args:
         security_data: Request containing identifier and optional settings
-        stock_setup_service: Stock setup service
+        stock_setup_service: Security setup service
         score_repo: Score repository for retrieving calculated score
 
     Returns:
@@ -331,7 +331,7 @@ async def add_stock_by_identifier(
         if not identifier:
             raise HTTPException(status_code=400, detail="Identifier cannot be empty")
 
-        # Note: Stock existence check is handled in the service, but we do it here
+        # Note: Security existence check is handled in the service, but we do it here
         # to provide better error messages before starting the setup process
 
         # Add the security
@@ -354,7 +354,7 @@ async def add_stock_by_identifier(
         cache.invalidate("stocks_with_scores")
 
         return {
-            "message": f"Stock {security.symbol} added to universe",
+            "message": f"Security {security.symbol} added to universe",
             "symbol": security.symbol,
             "yahoo_symbol": security.yahoo_symbol,
             "isin": security.isin,
@@ -479,7 +479,7 @@ async def refresh_stock_score(
     """Trigger score recalculation for a security (quick, no historical data sync).
 
     Args:
-        isin: Stock ISIN (e.g., US0378331005)
+        isin: Security ISIN (e.g., US0378331005)
     """
     # Validate ISIN format
     isin = isin.strip().upper()
@@ -492,7 +492,7 @@ async def refresh_stock_score(
 
     security = await security_repo.get_by_isin(isin)
     if not security:
-        raise HTTPException(status_code=404, detail="Stock not found")
+        raise HTTPException(status_code=404, detail="Security not found")
 
     symbol = security.symbol
     score = await scoring_service.calculate_and_save_score(
@@ -690,7 +690,7 @@ async def update_stock(
     """Update security details.
 
     Args:
-        isin: Stock ISIN (e.g., US0378331005)
+        isin: Security ISIN (e.g., US0378331005)
     """
     try:
         # Validate ISIN format
@@ -700,7 +700,7 @@ async def update_stock(
 
         security = await security_repo.get_by_isin(isin)
         if not security:
-            raise HTTPException(status_code=404, detail="Stock not found")
+            raise HTTPException(status_code=404, detail="Security not found")
 
         old_symbol = security.symbol
 
@@ -722,7 +722,9 @@ async def update_stock(
         )
         updated_stock = await security_repo.get_by_symbol(final_symbol)
         if not updated_stock:
-            raise HTTPException(status_code=404, detail="Stock not found after update")
+            raise HTTPException(
+                status_code=404, detail="Security not found after update"
+            )
 
         try:
             score = await scoring_service.calculate_and_save_score(
@@ -758,7 +760,7 @@ async def delete_stock(
     """Remove a security from the universe (soft delete by setting active=0).
 
     Args:
-        isin: Stock ISIN (e.g., US0378331005)
+        isin: Security ISIN (e.g., US0378331005)
     """
     # Validate ISIN format
     isin = isin.strip().upper()
@@ -769,8 +771,8 @@ async def delete_stock(
 
     security = await security_repo.get_by_isin(isin)
     if not security:
-        logger.warning(f"DELETE /api/securities/{isin} - Stock not found")
-        raise HTTPException(status_code=404, detail="Stock not found")
+        logger.warning(f"DELETE /api/securities/{isin} - Security not found")
+        raise HTTPException(status_code=404, detail="Security not found")
 
     symbol = security.symbol
     logger.info(
@@ -780,5 +782,7 @@ async def delete_stock(
 
     cache.invalidate("stocks_with_scores")
 
-    logger.info(f"DELETE /api/securities/{isin} - Stock {symbol} successfully deleted")
-    return {"message": f"Stock {symbol} removed from universe"}
+    logger.info(
+        f"DELETE /api/securities/{isin} - Security {symbol} successfully deleted"
+    )
+    return {"message": f"Security {symbol} removed from universe"}

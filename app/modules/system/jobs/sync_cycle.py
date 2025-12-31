@@ -224,11 +224,11 @@ async def _step_execute_trade(recommendation) -> dict[str, Any]:
         # Get the security to check its exchange
         security = await _get_stock_by_symbol(recommendation.symbol)
         if not security:
-            return {"status": "skipped", "reason": "Stock not found"}
+            return {"status": "skipped", "reason": "Security not found"}
 
         exchange = getattr(security, "fullExchangeName", None)
         if not exchange:
-            logger.warning(f"Stock {recommendation.symbol} has no exchange set")
+            logger.warning(f"Security {recommendation.symbol} has no exchange set")
             # Allow trade anyway - exchange might not be set
         elif should_check_market_hours(exchange, recommendation.side.value):
             # Market hours check is required for this trade

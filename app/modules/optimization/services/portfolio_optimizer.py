@@ -108,7 +108,7 @@ class PortfolioOptimizer:
         Optimize portfolio allocation.
 
         Args:
-            securities: List of Stock objects in universe
+            securities: List of Security objects in universe
             positions: Dict mapping symbol to current Position
             portfolio_value: Total portfolio value in EUR
             current_prices: Dict mapping symbol to current price
@@ -503,7 +503,7 @@ class PortfolioOptimizer:
                 # If security minimums are very high (>70%), scale them down first
                 # Otherwise, scale sector constraints
                 if total_stock_min > 0.70:
-                    # Stock minimums are too high - scale them down
+                    # Security minimums are too high - scale them down
                     stock_scale_factor = (
                         target_total_min - country_min_sum - ind_min_sum
                     ) / total_stock_min

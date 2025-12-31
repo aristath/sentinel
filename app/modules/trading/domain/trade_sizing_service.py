@@ -35,7 +35,7 @@ class TradeSizingService:
 
         Args:
             target_value_eur: Desired trade value in EUR
-            price: Stock price in native currency
+            price: Security price in native currency
             min_lot: Minimum lot size (default 1)
             exchange_rate: Native currency per 1 EUR (e.g., HKD/EUR ≈ 8.4)
 

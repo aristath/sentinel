@@ -47,7 +47,7 @@ class TickerContentService:
         Args:
             portfolio_repo: Portfolio repository
             position_repo: Position repository
-            security_repo: Stock repository
+            security_repo: Security repository
             settings_repo: Settings repository
             allocation_repo: Allocation repository
             tradernet_client: Tradernet client for cash balances

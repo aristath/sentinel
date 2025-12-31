@@ -140,7 +140,7 @@ class ScoreRepository:
         For proper historical tracking, we would need a score_history table.
 
         Args:
-            symbol: Stock symbol
+            symbol: Security symbol
             months: Number of months to look back
 
         Returns:

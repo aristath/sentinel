@@ -55,7 +55,7 @@ async def calculate_opportunity_score(
     Calculate opportunity score (value/dip signals).
 
     Args:
-        symbol: Stock symbol (for cache lookup)
+        symbol: Security symbol (for cache lookup)
         daily_prices: List of daily price dicts
         fundamentals: Yahoo fundamentals data
         market_avg_pe: Market average P/E for comparison

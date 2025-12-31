@@ -29,7 +29,7 @@ class CashBalance:
 
 @dataclass
 class Quote:
-    """Stock quote data."""
+    """Security quote data."""
 
     symbol: str
     price: float

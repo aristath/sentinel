@@ -27,7 +27,7 @@ class TradeFactory:
         """Create Trade from execution result.
 
         Args:
-            symbol: Stock symbol
+            symbol: Security symbol
             side: Trade side (BUY or SELL)
             quantity: Trade quantity
             price: Execution price
@@ -80,7 +80,7 @@ class TradeFactory:
         """Create Trade from broker sync data.
 
         Args:
-            symbol: Stock symbol
+            symbol: Security symbol
             side: Trade side (string or TradeSide enum)
             quantity: Trade quantity
             price: Execution price

@@ -71,7 +71,7 @@ async def _reinvest_in_same_stock(
     # Get security info for name and other details
     security = await security_repo.get_by_symbol(symbol)
     if not security:
-        logger.warning(f"Stock {symbol} not found in universe, skipping")
+        logger.warning(f"Security {symbol} not found in universe, skipping")
         return
 
     # Calculate shares to buy

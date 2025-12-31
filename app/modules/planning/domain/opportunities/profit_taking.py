@@ -22,7 +22,7 @@ async def identify_profit_taking_opportunities(
 
     Args:
         positions: Current positions
-        stocks_by_symbol: Dict mapping symbol to Stock
+        stocks_by_symbol: Dict mapping symbol to Security
         exchange_rate_service: Optional exchange rate service for currency conversion
 
     Returns:

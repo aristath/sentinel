@@ -25,7 +25,7 @@ router = APIRouter()
 
 class TradeRequest(BaseModel):
     symbol: str = Field(
-        ..., min_length=1, description="Stock ISIN (e.g., US0378331005)"
+        ..., min_length=1, description="Security ISIN (e.g., US0378331005)"
     )  # ISIN only
     side: TradeSide = Field(..., description="Trade side: BUY or SELL")
     quantity: float = Field(
@@ -120,7 +120,7 @@ async def execute_trade(
     # Check security exists - trade.symbol is validated as ISIN by the model
     security = await security_repo.get_by_isin(trade.symbol)
     if not security:
-        raise HTTPException(status_code=404, detail="Stock not found")
+        raise HTTPException(status_code=404, detail="Security not found")
 
     # Use the resolved symbol for trading
     symbol = security.symbol

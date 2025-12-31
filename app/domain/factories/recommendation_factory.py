@@ -29,15 +29,15 @@ class RecommendationFactory:
         """Create buy recommendation data.
 
         Args:
-            symbol: Stock symbol
-            name: Stock name
+            symbol: Security symbol
+            name: Security name
             quantity: Number of shares to buy
             estimated_price: Estimated price per share
             estimated_value: Total trade value in EUR
             reason: Reason for recommendation
-            country: Stock country (e.g., "United States", "Germany")
-            industry: Stock industry (optional)
-            currency: Stock currency (optional, defaults to EUR)
+            country: Security country (e.g., "United States", "Germany")
+            industry: Security industry (optional)
+            currency: Security currency (optional, defaults to EUR)
             priority: Priority score (optional)
             current_portfolio_score: Portfolio score before trade (optional)
             new_portfolio_score: Portfolio score after trade (optional)
@@ -88,15 +88,15 @@ class RecommendationFactory:
         """Create sell recommendation data.
 
         Args:
-            symbol: Stock symbol
-            name: Stock name
+            symbol: Security symbol
+            name: Security name
             quantity: Number of shares to sell
             estimated_price: Estimated price per share
             estimated_value: Total trade value in EUR
             reason: Reason for recommendation
-            country: Stock country (e.g., "United States", "Germany")
-            industry: Stock industry (optional)
-            currency: Stock currency (optional, defaults to EUR)
+            country: Security country (e.g., "United States", "Germany")
+            industry: Security industry (optional)
+            currency: Security currency (optional, defaults to EUR)
 
         Returns:
             Dictionary with recommendation data ready for repository
