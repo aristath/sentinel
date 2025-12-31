@@ -125,12 +125,13 @@ class TradeRepository:
             await conn.execute(
                 """
                 INSERT INTO trades
-                (symbol, side, quantity, price, executed_at, order_id,
-                 currency, currency_rate, value_eur, source, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (symbol, isin, side, quantity, price, executed_at, order_id,
+                 currency, currency_rate, value_eur, source, bucket_id, mode, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     trade.symbol.upper(),
+                    trade.isin,
                     trade.side.upper(),
                     trade.quantity,
                     trade.price,
@@ -140,6 +141,8 @@ class TradeRepository:
                     trade.currency_rate,
                     trade.value_eur,
                     trade.source,
+                    trade.bucket_id,
+                    trade.mode,
                     now,
                 ),
             )
@@ -473,4 +476,6 @@ class TradeRepository:
             currency_rate=row["currency_rate"] if "currency_rate" in keys else None,
             value_eur=row["value_eur"] if "value_eur" in keys else None,
             source=row["source"] if "source" in keys else "tradernet",
+            bucket_id=row["bucket_id"] if "bucket_id" in keys else "core",
+            mode=row["mode"] if "mode" in keys else "live",
         )
