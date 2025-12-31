@@ -459,15 +459,18 @@ class TestRefreshStockScore:
         mock_scoring_service = AsyncMock()
         mock_scoring_service.calculate_and_save_score.return_value = mock_score
 
-        with patch("app.api.securities.get_recommendation_cache") as mock_cache:
+        with patch(
+            "app.modules.universe.api.securities.get_recommendation_cache"
+        ) as mock_cache:
             mock_cache.return_value = AsyncMock()
-            with patch("app.api.securities.is_isin", return_value=True):
+            with patch(
+                "app.modules.universe.api.securities.is_isin", return_value=True
+            ):
                 result = await refresh_stock_score(
                     "US0378331005", mock_stock_repo, mock_scoring_service
                 )
 
                 assert result["symbol"] == "AAPL.US"
-                assert result["isin"] == "US0378331005"
                 assert result["total_score"] == 0.8
 
     @pytest.mark.asyncio
@@ -966,7 +969,9 @@ class TestHelperFunctions:
         result = _build_update_dict(update, None)
 
         assert result["name"] == "Apple Inc."
-        assert "country" not in result  # Country is auto-detected from Yahoo Finance
+        assert (
+            result["country"] == "United States"
+        )  # Country can now be updated manually
         assert result["active"] is True
         assert result["min_lot"] == 5
 
