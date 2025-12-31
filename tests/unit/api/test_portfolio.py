@@ -410,16 +410,16 @@ class TestGetPortfolioAnalytics:
         )
 
         with patch(
-            "app.domain.analytics.reconstruct_portfolio_values",
+            "app.modules.analytics.domain.reconstruct_portfolio_values",
             new_callable=AsyncMock,
             return_value=mock_values,
         ):
             with patch(
-                "app.domain.analytics.calculate_portfolio_returns",
+                "app.modules.analytics.domain.calculate_portfolio_returns",
                 return_value=mock_returns,
             ):
                 with patch(
-                    "app.domain.analytics.get_portfolio_metrics",
+                    "app.modules.analytics.domain.get_portfolio_metrics",
                     new_callable=AsyncMock,
                     return_value={
                         "annual_return": 0.15,
@@ -429,16 +429,16 @@ class TestGetPortfolioAnalytics:
                     },
                 ):
                     with patch(
-                        "app.domain.analytics.get_performance_attribution",
+                        "app.modules.analytics.domain.get_performance_attribution",
                         new_callable=AsyncMock,
                         return_value={"country": {}, "industry": {}},
                     ):
                         with patch(
-                            "app.api.portfolio.get_db_manager",
+                            "app.core.database.manager.get_db_manager",
                             return_value=mock_db_manager,
                         ):
                             with patch(
-                                "app.modules.turnover_tracker.TurnoverTracker",
+                                "app.application.services.turnover_tracker.TurnoverTracker",
                                 return_value=mock_turnover_tracker,
                             ):
                                 result = await get_portfolio_analytics(days=365)
@@ -457,7 +457,7 @@ class TestGetPortfolioAnalytics:
         from app.modules.portfolio.api.portfolio import get_portfolio_analytics
 
         with patch(
-            "app.domain.analytics.reconstruct_portfolio_values",
+            "app.modules.analytics.domain.reconstruct_portfolio_values",
             new_callable=AsyncMock,
             return_value=pd.Series(dtype=float),  # Empty series
         ):
@@ -473,7 +473,7 @@ class TestGetPortfolioAnalytics:
         from app.modules.portfolio.api.portfolio import get_portfolio_analytics
 
         with patch(
-            "app.domain.analytics.reconstruct_portfolio_values",
+            "app.modules.analytics.domain.reconstruct_portfolio_values",
             new_callable=AsyncMock,
             side_effect=Exception("Calculation error"),
         ):
