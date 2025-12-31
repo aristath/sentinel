@@ -61,23 +61,23 @@ async def _sync_security_price_history():
 
     db_manager = get_db_manager()
 
-    # Get all active stocks from config
+    # Get all active securities from config
     cursor = await db_manager.config.execute(
         "SELECT symbol, yahoo_symbol FROM securities WHERE active = 1"
     )
     rows = await cursor.fetchall()
-    stocks = [(row[0], row[1]) for row in rows]
+    securities = [(row[0], row[1]) for row in rows]
 
-    if not stocks:
-        logger.info("No active stocks to sync")
+    if not securities:
+        logger.info("No active securities to sync")
         return
 
-    logger.info(f"Syncing historical prices for {len(stocks)} stocks")
+    logger.info(f"Syncing historical prices for {len(securities)} securities")
 
     processed = 0
     errors = 0
 
-    for symbol, yahoo_symbol in stocks:
+    for symbol, yahoo_symbol in securities:
         try:
             # Get history database for this symbol
             history_db = await db_manager.history(symbol)
@@ -101,7 +101,7 @@ async def _sync_security_price_history():
 
             processed += 1
             if processed % 10 == 0:
-                logger.info(f"Processed {processed}/{len(stocks)} stocks")
+                logger.info(f"Processed {processed}/{len(securities)} securities")
 
             await asyncio.sleep(settings.external_api_rate_limit_delay)
 

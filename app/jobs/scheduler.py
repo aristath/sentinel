@@ -1,6 +1,6 @@
 """APScheduler setup for background jobs.
 
-The scheduler manages 9 scheduled jobs plus 1 background task, organized by category:
+The scheduler manages 7 scheduled jobs plus 1 background task, organized by category:
 
 DATA SYNC JOBS:
 1. sync_cycle - Every 5 minutes (configurable)
@@ -38,15 +38,11 @@ PORTFOLIO MANAGEMENT JOBS:
 5. dividend_reinvestment - Daily, 30 minutes after daily maintenance
    - Automatic reinvestment of dividend payments
 
-6. universe_pruning - Monthly on 1st at configured hour
-   - Removes low-quality securities from universe
-
-7. security_discovery - Monthly on 15th at 2:00
-   - Discovers and adds high-quality securities
-   - Checks security_discovery_enabled setting internally
-
 SYSTEM JOBS:
-9. auto_deploy - Every 5 minutes (configurable)
+6. display_ticker_update - Every 10 seconds
+   - Updates LED matrix display with current ticker text
+
+7. auto_deploy - Every 5 minutes (configurable)
    - Checks GitHub for updates
    - Deploys changes automatically
    - Compiles and uploads sketch if changed
@@ -131,14 +127,12 @@ async def init_scheduler() -> AsyncIOScheduler:
     from app.jobs.event_based_trading import run_event_based_trading_loop
     from app.jobs.maintenance import run_daily_maintenance, run_weekly_maintenance
     from app.jobs.securities_data_sync import run_securities_data_sync
-    from app.jobs.universe_pruning import prune_universe
     from app.modules.display.services.display_updater_service import (
         update_display_ticker,
     )
     from app.modules.dividends.jobs.dividend_reinvestment import auto_reinvest_dividends
     from app.modules.planning.jobs.planner_batch import process_planner_batch_job
     from app.modules.system.jobs.sync_cycle import run_sync_cycle
-    from app.modules.universe.jobs.security_discovery import discover_new_securities
 
     # Get settings
     job_settings = await _get_job_settings()
@@ -280,32 +274,11 @@ async def init_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 
-    # Job 6: Universe Pruning - monthly on first day of month
-    # Handles: automatic removal of low-quality securities
-    scheduler.add_job(
-        prune_universe,
-        CronTrigger(day=1, hour=maintenance_hour, minute=0),
-        id="universe_pruning",
-        name="Universe Pruning",
-        replace_existing=True,
-    )
-
-    # Job 7: Security Discovery - monthly on 15th of month at 2am
-    # Handles: automatic discovery and addition of high-quality securities
-    # Note: discover_new_securities checks security_discovery_enabled internally
-    scheduler.add_job(
-        discover_new_securities,
-        CronTrigger(day=15, hour=2, minute=0),
-        id="security_discovery",
-        name="Security Discovery",
-        replace_existing=True,
-    )
-
     # ============================================================================
     # SYSTEM JOBS
     # ============================================================================
 
-    # Job 9: Display Ticker Update - every 10 seconds
+    # Job 6: Display Ticker Update - every 10 seconds
     # Handles: updating LED matrix display with current ticker text
     # Lightweight job that only updates display, not full sync
     scheduler.add_job(
@@ -316,7 +289,7 @@ async def init_scheduler() -> AsyncIOScheduler:
         replace_existing=True,
     )
 
-    # Job 10: Auto-Deploy - every N minutes (configurable)
+    # Job 7: Auto-Deploy - every N minutes (configurable)
     # Handles: checking for updates from GitHub and deploying changes
     scheduler.add_job(
         run_auto_deploy,
@@ -349,11 +322,9 @@ async def init_scheduler() -> AsyncIOScheduler:
     logger.info("Started event-based trading loop as background task")
 
     logger.info(
-        f"Scheduler initialized with 10 scheduled jobs + 1 background task - "
+        f"Scheduler initialized with 7 scheduled jobs + 1 background task - "
         f"sync_cycle:{sync_cycle_minutes}m, securities_data_sync:1h, "
         f"maintenance:{maintenance_hour}:00, dividend_reinvestment:{maintenance_hour}:30, "
-        f"universe_pruning:1st of month {maintenance_hour}:00, "
-        f"security_discovery:15th of month 02:00, "
         f"planner_batch:{planner_batch_interval//60}m (fallback), "
         f"display_ticker_update:10s, auto_deploy:{auto_deploy_minutes}m, "
         f"event_based_trading:background"
@@ -391,11 +362,6 @@ async def reschedule_all_jobs():
         "dividend_reinvestment",
         trigger=CronTrigger(hour=maintenance_hour, minute=30),
     )
-    scheduler.reschedule_job(
-        "universe_pruning",
-        trigger=CronTrigger(day=1, hour=maintenance_hour, minute=0),
-    )
-    # Security discovery schedule is fixed (15th at 2am), no reschedule needed
 
     # Reschedule auto-deploy
     scheduler.reschedule_job(
@@ -405,8 +371,6 @@ async def reschedule_all_jobs():
     logger.info(
         f"Jobs rescheduled - sync_cycle:{sync_cycle_minutes}m, "
         f"maintenance:{maintenance_hour}:00, dividend_reinvestment:{maintenance_hour}:30, "
-        f"universe_pruning:1st of month {maintenance_hour}:00, "
-        f"security_discovery:15th of month 02:00, "
         f"auto_deploy:{auto_deploy_minutes}m"
     )
 

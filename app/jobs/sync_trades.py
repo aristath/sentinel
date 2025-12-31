@@ -54,7 +54,7 @@ def _validate_trade(
         # Currency conversions are valid
         pass
     elif symbol not in valid_symbols:
-        return False, f"symbol {symbol} not in stocks table"
+        return False, f"symbol {symbol} not in securities table"
 
     side = trade.get("side", "").upper()
     if side not in ("BUY", "SELL"):

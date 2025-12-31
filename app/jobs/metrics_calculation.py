@@ -1,5 +1,5 @@
 """
-Metrics Calculation Job - Batch calculate and store raw metrics for all active stocks.
+Metrics Calculation Job - Batch calculate and store raw metrics for all active securities.
 
 This job pre-calculates expensive metrics (RSI, EMA, Sharpe, CAGR, etc.) and stores
 them in calculations.db with appropriate TTLs. This improves scoring performance
@@ -214,7 +214,7 @@ async def calculate_all_metrics_for_symbol(symbol: str) -> int:
 
 async def calculate_metrics_for_all_stocks() -> dict:
     """
-    Calculate metrics for all active stocks.
+    Calculate metrics for all active securities.
 
     Returns:
         Dict with statistics: {"processed": int, "total_metrics": int, "errors": int}
@@ -230,19 +230,19 @@ async def calculate_metrics_for_all_stocks() -> dict:
         "errors": 0,
     }
 
-    logger.info(f"Calculating metrics for {len(active_stocks)} active stocks")
+    logger.info(f"Calculating metrics for {len(active_stocks)} active securities")
 
-    for stock in active_stocks:
+    for security in active_stocks:
         try:
-            metrics_count = await calculate_all_metrics_for_symbol(stock.symbol)
+            metrics_count = await calculate_all_metrics_for_symbol(security.symbol)
             stats["processed"] += 1
             stats["total_metrics"] += metrics_count
         except Exception as e:
-            logger.error(f"Error processing {stock.symbol}: {e}", exc_info=True)
+            logger.error(f"Error processing {security.symbol}: {e}", exc_info=True)
             stats["errors"] += 1
 
     logger.info(
-        f"Metrics calculation complete: {stats['processed']} stocks, "
+        f"Metrics calculation complete: {stats['processed']} securities, "
         f"{stats['total_metrics']} metrics, {stats['errors']} errors"
     )
 

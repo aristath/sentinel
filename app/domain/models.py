@@ -31,7 +31,7 @@ from app.shared.domain.value_objects.currency import Currency
 
 @dataclass
 class Security:
-    """Security in the investment universe (stocks, ETFs, ETCs, mutual funds)."""
+    """Security in the investment universe (equities, ETFs, ETCs, mutual funds)."""
 
     symbol: str
     name: str
@@ -141,7 +141,7 @@ class Trade:
 
 @dataclass
 class SecurityScore:
-    """Calculated score for a security (stock, ETF, ETC, mutual fund)."""
+    """Calculated score for a security (equity, ETF, ETC, mutual fund)."""
 
     symbol: str
     isin: Optional[str] = None  # ISIN for broker-agnostic identification
@@ -270,7 +270,7 @@ class Recommendation:
 
 @dataclass
 class SecurityPriority:
-    """Priority score for a security candidate (stock, ETF, ETC, mutual fund)."""
+    """Priority score for a security candidate (equity, ETF, ETC, mutual fund)."""
 
     symbol: str
     name: str
