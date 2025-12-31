@@ -804,6 +804,8 @@ CREATE TABLE IF NOT EXISTS trades (
     currency_rate REAL,
     value_eur REAL,              -- Calculated trade value in EUR
     source TEXT DEFAULT 'tradernet',
+    bucket_id TEXT DEFAULT 'core',  -- Which bucket owns this trade
+    mode TEXT DEFAULT 'live',       -- 'live' or 'research' mode
     created_at TEXT NOT NULL
 );
 
@@ -811,6 +813,7 @@ CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol);
 CREATE INDEX IF NOT EXISTS idx_trades_executed_at ON trades(executed_at);
 CREATE INDEX IF NOT EXISTS idx_trades_order_id ON trades(order_id);
 CREATE INDEX IF NOT EXISTS idx_trades_symbol_side ON trades(symbol, side);
+CREATE INDEX IF NOT EXISTS idx_trades_bucket ON trades(bucket_id);
 
 -- Cash flow transactions (append-only)
 CREATE TABLE IF NOT EXISTS cash_flows (
@@ -876,14 +879,17 @@ async def init_ledger_schema(db):
 
     if current_version == 0:
         now = datetime.now().isoformat()
-        # Create ISIN index for new databases
+        # Create indexes for new databases
         await db.execute("CREATE INDEX IF NOT EXISTS idx_trades_isin ON trades(isin)")
         await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_trades_bucket ON trades(bucket_id)"
+        )
+        await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (3, now, "Initial ledger schema with ISIN column"),
+            (4, now, "Initial ledger schema with ISIN column and multi-bucket support"),
         )
         await db.commit()
-        logger.info("Ledger database initialized with schema version 3")
+        logger.info("Ledger database initialized with schema version 4")
     elif current_version == 1:
         # Migration: Add dividend_history table (version 1 -> 2)
         now = datetime.now().isoformat()
@@ -921,6 +927,41 @@ async def init_ledger_schema(db):
         )
         await db.commit()
         logger.info("Ledger database migrated to schema version 3")
+        current_version = 3  # Continue to next migration
+
+    if current_version == 3:
+        # Migration: Add bucket_id and mode columns to trades (version 3 -> 4)
+        now = datetime.now().isoformat()
+        logger.info(
+            "Migrating ledger database to schema version 4 (bucket_id and mode for multi-bucket support)..."
+        )
+
+        cursor = await db.execute("PRAGMA table_info(trades)")
+        columns = [row[1] for row in await cursor.fetchall()]
+
+        if "bucket_id" not in columns:
+            await db.execute(
+                "ALTER TABLE trades ADD COLUMN bucket_id TEXT DEFAULT 'core'"
+            )
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_trades_bucket ON trades(bucket_id)"
+            )
+            logger.info("Added bucket_id column to trades table")
+
+        if "mode" not in columns:
+            await db.execute("ALTER TABLE trades ADD COLUMN mode TEXT DEFAULT 'live'")
+            logger.info("Added mode column to trades table (live vs research)")
+
+        await db.execute(
+            "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
+            (
+                4,
+                now,
+                "Added bucket_id and mode columns to trades for multi-bucket portfolio support",
+            ),
+        )
+        await db.commit()
+        logger.info("Ledger database migrated to schema version 4")
 
 
 # =============================================================================
@@ -943,10 +984,11 @@ CREATE TABLE IF NOT EXISTS positions (
     unrealized_pnl_pct REAL,
     last_updated TEXT,
     first_bought_at TEXT,
-    last_sold_at TEXT
+    last_sold_at TEXT,
+    bucket_id TEXT DEFAULT 'core'  -- Which bucket owns this position
 );
 
--- Note: idx_positions_isin is created in migration or init_state_schema for new databases
+-- Note: idx_positions_isin and idx_positions_bucket are created in migration or init_state_schema for new databases
 
 -- Security scores (cached calculations)
 CREATE TABLE IF NOT EXISTS scores (
@@ -1017,16 +1059,19 @@ async def init_state_schema(db):
 
     if current_version == 0:
         now = datetime.now().isoformat()
-        # Create ISIN index for new databases
+        # Create indexes for new databases
         await db.execute(
             "CREATE INDEX IF NOT EXISTS idx_positions_isin ON positions(isin)"
         )
         await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_positions_bucket ON positions(bucket_id)"
+        )
+        await db.execute(
             "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
-            (2, now, "Initial state schema with ISIN column"),
+            (4, now, "Initial state schema with ISIN column and multi-bucket support"),
         )
         await db.commit()
-        logger.info("State database initialized with schema version 2")
+        logger.info("State database initialized with schema version 4")
     elif current_version == 1:
         # Migration: Add ISIN column to positions (version 1 -> 2)
         now = datetime.now().isoformat()
@@ -1078,6 +1123,40 @@ async def init_state_schema(db):
             logger.info("State database migrated to schema version 3")
         except Exception as e:
             logger.error(f"Failed to migrate state schema to version 3: {e}")
+            await db.rollback()
+
+    # Migration: Add bucket_id column to positions (version 3 -> 4)
+    if current_version == 3:
+        now = datetime.now().isoformat()
+        logger.info(
+            "Migrating state database to schema version 4 (bucket_id for multi-bucket support)..."
+        )
+
+        try:
+            cursor = await db.execute("PRAGMA table_info(positions)")
+            columns = [row[1] for row in await cursor.fetchall()]
+
+            if "bucket_id" not in columns:
+                await db.execute(
+                    "ALTER TABLE positions ADD COLUMN bucket_id TEXT DEFAULT 'core'"
+                )
+                await db.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_positions_bucket ON positions(bucket_id)"
+                )
+                logger.info("Added bucket_id column to positions table")
+
+            await db.execute(
+                "INSERT INTO schema_version (version, applied_at, description) VALUES (?, ?, ?)",
+                (
+                    4,
+                    now,
+                    "Added bucket_id column to positions for multi-bucket portfolio support",
+                ),
+            )
+            await db.commit()
+            logger.info("State database migrated to schema version 4")
+        except Exception as e:
+            logger.error(f"Failed to migrate state schema to version 4: {e}")
             await db.rollback()
 
 
