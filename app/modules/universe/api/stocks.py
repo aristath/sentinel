@@ -162,8 +162,8 @@ async def get_universe_suggestions(
         - candidates_to_add: List of stocks suggested for addition
         - stocks_to_prune: List of stocks suggested for pruning
     """
-    from app.domain.services.stock_discovery import StockDiscoveryService
-    from app.domain.services.symbol_resolver import SymbolResolver
+    from app.modules.universe.domain.stock_discovery import StockDiscoveryService
+    from app.modules.universe.domain.symbol_resolver import SymbolResolver
     from app.infrastructure.external.tradernet import get_tradernet_client
     from app.repositories import ScoreRepository
 

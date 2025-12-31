@@ -5,7 +5,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
-from app.domain.services.symbol_resolver import is_isin
+from app.modules.universe.domain.symbol_resolver import is_isin
 from app.domain.value_objects.trade_side import TradeSide
 from app.infrastructure.cache_invalidation import get_cache_invalidation_service
 from app.infrastructure.dependencies import (

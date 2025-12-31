@@ -458,7 +458,7 @@ async def trigger_planner_batch(request: PlannerBatchRequest):
 @router.post("/jobs/stock-discovery")
 async def trigger_stock_discovery():
     """Manually trigger stock discovery (addition of high-quality stocks)."""
-    from app.jobs.stock_discovery import discover_new_stocks
+    from app.modules.universe.jobs.stock_discovery import discover_new_stocks
 
     try:
         await discover_new_stocks()

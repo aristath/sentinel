@@ -6,7 +6,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.domain.services.symbol_resolver import is_isin
+from app.modules.universe.domain.symbol_resolver import is_isin
 from app.infrastructure.cache import cache
 from app.infrastructure.database.manager import DatabaseManager
 from app.infrastructure.dependencies import DatabaseManagerDep, StockRepositoryDep

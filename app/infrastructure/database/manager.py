@@ -238,7 +238,7 @@ class DatabaseManager:
 
     async def _resolve_to_isin(self, identifier: str) -> Optional[str]:
         """Resolve identifier to ISIN if possible."""
-        from app.domain.services.symbol_resolver import is_isin
+        from app.modules.universe.domain.symbol_resolver import is_isin
 
         # If already an ISIN, return it
         if is_isin(identifier):
