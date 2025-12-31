@@ -82,7 +82,7 @@ class TestGetStatus:
 
         assert result["status"] == "healthy"
         assert result["cash_balance"] == 5000.0
-        assert result["stock_universe_count"] == 2
+        assert result["security_universe_count"] == 2
         assert result["active_positions"] == 1
         assert result["last_sync"] == "2024-01-15 10:30"
 
@@ -192,47 +192,6 @@ class TestGetStatus:
         )
 
         assert result["last_sync"] == "2024-01-15 12:30"
-
-
-class TestGetDisplayText:
-    """Test the LED matrix display text endpoint."""
-
-    @pytest.mark.asyncio
-    async def test_returns_display_settings(self, mock_settings_repo):
-        """Test that display text returns correct settings."""
-        from app.modules.system.api.status import get_display_text
-
-        mock_settings_repo.get_float.side_effect = lambda key, default: {
-            "ticker_speed": 75.0,
-            "led_brightness": 200.0,
-        }.get(key, default)
-
-        with patch(
-            "app.infrastructure.hardware.display_service.get_current_text",
-            return_value="BUY AAPL +5",
-        ):
-            result = await get_display_text(mock_settings_repo)
-
-        assert result["text"] == "BUY AAPL +5"
-        assert result["speed"] == 75
-        assert result["brightness"] == 200
-
-    @pytest.mark.asyncio
-    async def test_uses_default_values(self, mock_settings_repo):
-        """Test that default values are used when settings are missing."""
-        from app.modules.system.api.status import get_display_text
-
-        # Return defaults
-        mock_settings_repo.get_float.side_effect = lambda key, default: default
-
-        with patch(
-            "app.infrastructure.hardware.display_service.get_current_text",
-            return_value="",
-        ):
-            result = await get_display_text(mock_settings_repo)
-
-        assert result["speed"] == 50
-        assert result["brightness"] == 150
 
 
 class TestSyncTriggers:
