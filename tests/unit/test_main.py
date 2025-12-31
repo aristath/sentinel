@@ -298,7 +298,7 @@ class TestAppConfiguration:
         route_paths = [route.path for route in app.routes]
 
         assert any("/api/portfolio" in path for path in route_paths)
-        assert any("/api/stocks" in path for path in route_paths)
+        assert any("/api/securities" in path for path in route_paths)
         assert any("/api/trades" in path for path in route_paths)
         assert any("/api/status" in path for path in route_paths)
 

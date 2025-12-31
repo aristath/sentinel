@@ -39,7 +39,7 @@ The `get_yahoo_symbol()` function in `symbol_converter.py`:
 
 We cleared the `yahoo_symbol` field (set to `NULL`) for all three stocks using the API:
 ```bash
-curl -X PUT http://localhost:8000/api/stocks/{ISIN} -H 'Content-Type: application/json' -d '{"yahoo_symbol": ""}'
+curl -X PUT http://localhost:8000/api/securities/{ISIN} -H 'Content-Type: application/json' -d '{"yahoo_symbol": ""}'
 ```
 
 After clearing and running refresh:
@@ -79,22 +79,22 @@ To find the correct Yahoo Finance symbols:
 2. Check the URL - it typically shows the ticker symbol
 3. Update the `yahoo_symbol` field via API:
    ```bash
-   curl -X PUT http://localhost:8000/api/stocks/{ISIN} \
+   curl -X PUT http://localhost:8000/api/securities/{ISIN} \
      -H 'Content-Type: application/json' \
      -d '{"yahoo_symbol": "CORRECT.SYMBOL"}'
    ```
 4. Run refresh to populate country/industry:
    ```bash
-   curl -X POST http://localhost:8000/api/stocks/{ISIN}/refresh-data
+   curl -X POST http://localhost:8000/api/securities/{ISIN}/refresh-data
    ```
 
 ## Database Query to Check Incomplete Stocks
 
 ```sql
-SELECT symbol, name, country, industry, fullExchangeName, yahoo_symbol, isin 
-FROM stocks 
-WHERE country IS NULL OR industry IS NULL OR fullExchangeName IS NULL 
-   OR yahoo_symbol IS NULL OR isin IS NULL OR currency IS NULL 
+SELECT symbol, name, country, industry, fullExchangeName, yahoo_symbol, isin
+FROM stocks
+WHERE country IS NULL OR industry IS NULL OR fullExchangeName IS NULL
+   OR yahoo_symbol IS NULL OR isin IS NULL OR currency IS NULL
 ORDER BY symbol;
 ```
 
@@ -103,5 +103,4 @@ ORDER BY symbol;
 - `app/infrastructure/external/yahoo/symbol_converter.py` - Symbol conversion logic
 - `app/domain/services/symbol_resolver.py` - Sets `yahoo_symbol = isin` (line 174)
 - `app/jobs/stocks_data_sync.py` - `_detect_and_update_country_and_exchange()` function
-- `app/api/stocks.py` - Update endpoint (`PUT /api/stocks/{isin}`)
-
+- `app/api/securities.py` - Update endpoint (`PUT /api/securities/{isin}`)
