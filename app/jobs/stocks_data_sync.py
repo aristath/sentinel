@@ -430,7 +430,7 @@ async def _refresh_score_for_symbol(symbol: str):
     """
     from datetime import datetime
 
-    from app.domain.scoring import calculate_stock_score
+    from app.modules.scoring.domain.stock_scorer import calculate_stock_score
     from app.infrastructure.database.manager import get_db_manager
     from app.infrastructure.external import yahoo_finance as yahoo
 
@@ -536,7 +536,7 @@ async def _refresh_score_for_symbol(symbol: str):
 
 async def _build_portfolio_context(db_manager):
     """Build portfolio context for allocation fit calculations."""
-    from app.domain.scoring import PortfolioContext
+    from app.modules.scoring.domain.models import PortfolioContext
 
     # Get current positions
     cursor = await db_manager.state.execute(
