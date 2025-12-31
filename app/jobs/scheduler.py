@@ -127,7 +127,7 @@ async def init_scheduler() -> AsyncIOScheduler:
     scheduler.add_listener(job_listener, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
 
     # Import job functions
-    from app.infrastructure.hardware.display_updater_service import (
+    from app.modules.display.services.display_updater_service import (
         update_display_ticker,
     )
     from app.jobs.auto_deploy import run_auto_deploy

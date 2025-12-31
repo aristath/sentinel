@@ -15,7 +15,7 @@ from app.domain.repositories.protocols import (
     IStockRepository,
 )
 from app.domain.services.settings_service import SettingsService
-from app.infrastructure.cache import cache
+from app.core.cache.cache import cache
 from app.infrastructure.external.tradernet import TradernetClient
 from app.infrastructure.market_hours import format_market_status_for_display
 

@@ -97,7 +97,7 @@ async def lifespan(app: FastAPI):
         logger.warning("Tradernet not connected - check credentials")
 
     # Initialize display with startup message
-    from app.infrastructure.hardware.display_service import set_text
+    from app.modules.display.services.display_service import set_text
 
     set_text("SYSTEM STARTING...")
     logger.info("Display initialized with startup message")
@@ -105,7 +105,7 @@ async def lifespan(app: FastAPI):
     # Trigger initial display update in background
     async def update_display_on_startup():
         try:
-            from app.infrastructure.hardware.display_updater_service import (
+            from app.modules.display.services.display_updater_service import (
                 update_display_ticker,
             )
 

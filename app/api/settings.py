@@ -5,7 +5,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.infrastructure.cache import cache
+from app.core.cache.cache import cache
 from app.infrastructure.dependencies import (
     CalculationsRepositoryDep,
     DatabaseManagerDep,

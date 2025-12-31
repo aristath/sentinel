@@ -16,7 +16,7 @@ from typing import Any, Optional
 
 from app.core.events import SystemEvent, emit
 from app.infrastructure.external import yahoo_finance as yahoo
-from app.infrastructure.hardware.display_service import set_led3, set_text
+from app.modules.display.services.display_service import set_led3, set_text
 from app.infrastructure.locking import file_lock
 from app.infrastructure.market_hours import (
     get_open_markets,
@@ -248,7 +248,7 @@ async def _step_execute_trade(recommendation) -> dict[str, Any]:
 async def _step_update_display():
     """Step 8: Update the LED ticker display."""
     try:
-        from app.infrastructure.hardware.display_updater_service import (
+        from app.modules.display.services.display_updater_service import (
             update_display_ticker,
         )
 
@@ -314,7 +314,7 @@ async def _get_holistic_recommendation():
     from app.domain.value_objects.currency import Currency
     from app.domain.value_objects.recommendation_status import RecommendationStatus
     from app.domain.value_objects.trade_side import TradeSide
-    from app.infrastructure.cache import cache
+    from app.core.cache.cache import cache
     from app.core.database import get_db_manager
     from app.infrastructure.external.tradernet import TradernetClient
     from app.repositories import (

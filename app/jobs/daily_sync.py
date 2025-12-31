@@ -10,10 +10,10 @@ from app.domain.services.exchange_rate_service import ExchangeRateService
 from app.domain.value_objects.currency import Currency
 from app.core.database.manager import get_db_manager
 from app.infrastructure.dependencies import get_exchange_rate_service
-from app.infrastructure.events import SystemEvent, emit
+from app.core.events import SystemEvent, emit
 from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.external.tradernet import get_tradernet_client
-from app.infrastructure.hardware.display_service import set_led3, set_led4, set_text
+from app.modules.display.services.display_service import set_led3, set_led4, set_text
 from app.infrastructure.locking import file_lock
 from app.modules.universe.database.stock_repository import StockRepository
 

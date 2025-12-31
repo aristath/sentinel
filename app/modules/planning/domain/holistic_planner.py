@@ -2585,7 +2585,7 @@ async def process_planner_incremental(
 
         # Emit planner sequences generated event
         try:
-            from app.infrastructure.events import SystemEvent, emit
+            from app.core.events import SystemEvent, emit
 
             total_sequences = await repo.get_total_sequence_count(portfolio_hash)
             evaluated_count = await repo.get_evaluation_count(portfolio_hash)

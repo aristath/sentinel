@@ -10,7 +10,7 @@ from app.domain.events import StockAddedEvent, get_event_bus
 from app.modules.universe.domain.stock_factory import StockFactory
 from app.modules.universe.domain.priority_calculator import PriorityCalculator, PriorityInput
 from app.modules.universe.domain.symbol_resolver import is_isin
-from app.infrastructure.cache import cache
+from app.core.cache.cache import cache
 from app.infrastructure.dependencies import (
     PortfolioServiceDep,
     PositionRepositoryDep,

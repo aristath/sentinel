@@ -8,7 +8,7 @@ import asyncio
 import logging
 from typing import Any, AsyncGenerator, Dict, Optional
 
-from app.infrastructure.events import SystemEvent, subscribe
+from app.core.events import SystemEvent, subscribe
 
 logger = logging.getLogger(__name__)
 

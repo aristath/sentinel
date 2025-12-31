@@ -364,7 +364,7 @@ async def trigger_daily_maintenance():
 @router.post("/sync/recommendations")
 async def trigger_recommendation_sync():
     """Manually trigger recommendation generation and cache update."""
-    from app.infrastructure.cache import cache
+    from app.core.cache.cache import cache
     from app.infrastructure.recommendation_cache import get_recommendation_cache
     from app.modules.system.jobs.sync_cycle import (
         _step_get_recommendation,

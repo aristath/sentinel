@@ -11,7 +11,7 @@ from typing import AsyncIterator
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from app.infrastructure.cache import cache
+from app.core.cache.cache import cache
 from app.infrastructure.dependencies import (
     AllocationRepositoryDep,
     PositionRepositoryDep,

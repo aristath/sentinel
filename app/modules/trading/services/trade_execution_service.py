@@ -22,7 +22,7 @@ from app.domain.services.exchange_rate_service import ExchangeRateService
 from app.domain.services.settings_service import SettingsService
 from app.shared.domain.value_objects.currency import Currency
 from app.infrastructure.external.tradernet import TradernetClient
-from app.infrastructure.hardware.display_service import set_led4, set_text
+from app.modules.display.services.display_service import set_led4, set_text
 from app.infrastructure.market_hours import is_market_open, should_check_market_hours
 from app.repositories.base import safe_parse_datetime_string  # TODO: Move to shared utility
 

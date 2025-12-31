@@ -24,8 +24,8 @@ from app.domain.value_objects.currency import Currency
 from app.domain.value_objects.recommendation_status import RecommendationStatus
 from app.domain.value_objects.trade_side import TradeSide
 from app.infrastructure.cache_invalidation import get_cache_invalidation_service
-from app.infrastructure.events import SystemEvent, emit
-from app.infrastructure.hardware.display_service import set_led4, set_text
+from app.core.events import SystemEvent, emit
+from app.modules.display.services.display_service import set_led4, set_text
 from app.infrastructure.locking import file_lock
 from app.infrastructure.market_hours import is_market_open, should_check_market_hours
 from app.modules.system.jobs.sync_cycle import (

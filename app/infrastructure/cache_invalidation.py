@@ -2,7 +2,7 @@
 
 import logging
 
-from app.infrastructure.cache import SimpleCache
+from app.core.cache.cache import SimpleCache
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ class CacheInvalidationService:
 
         # Emit event for recommendation updates
         try:
-            from app.infrastructure.events import SystemEvent, emit
+            from app.core.events import SystemEvent, emit
 
             emit(SystemEvent.RECOMMENDATIONS_INVALIDATED)
         except Exception as e:
@@ -43,7 +43,7 @@ class CacheInvalidationService:
 
         # Emit event for recommendation updates
         try:
-            from app.infrastructure.events import SystemEvent, emit
+            from app.core.events import SystemEvent, emit
 
             emit(SystemEvent.RECOMMENDATIONS_INVALIDATED)
         except Exception as e:
@@ -75,7 +75,7 @@ def get_cache_invalidation_service(
         CacheInvalidationService instance
     """
     if cache is None:
-        from app.infrastructure.cache import cache as default_cache
+        from app.core.cache.cache import cache as default_cache
 
         cache = default_cache
 

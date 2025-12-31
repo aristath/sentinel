@@ -196,7 +196,7 @@ class RecommendationCache:
             )
             # Emit event for recommendation updates
             try:
-                from app.infrastructure.events import SystemEvent, emit
+                from app.core.events import SystemEvent, emit
 
                 emit(SystemEvent.RECOMMENDATIONS_INVALIDATED)
             except Exception as e:
@@ -223,7 +223,7 @@ class RecommendationCache:
             logger.info(f"Invalidated {count} recommendation cache entries")
             # Emit event for recommendation updates
             try:
-                from app.infrastructure.events import SystemEvent, emit
+                from app.core.events import SystemEvent, emit
 
                 emit(SystemEvent.RECOMMENDATIONS_INVALIDATED)
             except Exception as e:

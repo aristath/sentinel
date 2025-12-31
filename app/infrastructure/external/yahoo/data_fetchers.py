@@ -11,7 +11,7 @@ from typing import Optional
 import yfinance as yf
 
 from app.config import settings
-from app.infrastructure.events import SystemEvent, emit
+from app.core.events import SystemEvent, emit
 from app.infrastructure.external.yahoo.models import (
     AnalystData,
     FundamentalData,

@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 
 from app.modules.universe.domain.symbol_resolver import is_isin
-from app.infrastructure.cache import cache
+from app.core.cache.cache import cache
 from app.core.database.manager import DatabaseManager
 from app.infrastructure.dependencies import DatabaseManagerDep, StockRepositoryDep
 from app.infrastructure.external import yahoo_finance as yahoo

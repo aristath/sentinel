@@ -5,9 +5,9 @@ import logging
 
 from app.domain.models import DividendRecord
 from app.core.database.manager import get_db_manager
-from app.infrastructure.events import SystemEvent, emit
+from app.core.events import SystemEvent, emit
 from app.infrastructure.external.tradernet import get_tradernet_client
-from app.infrastructure.hardware.display_service import set_led4, set_text
+from app.modules.display.services.display_service import set_led4, set_text
 from app.infrastructure.locking import file_lock
 from app.repositories import DividendRepository
 

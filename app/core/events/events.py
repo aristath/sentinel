@@ -5,7 +5,7 @@ parts of the application to emit events without direct coupling to the
 LED display or other listeners.
 
 Example usage:
-    from app.infrastructure.events import emit, subscribe, SystemEvent
+    from app.core.events import emit, subscribe, SystemEvent
 
     # Subscribe to events
     subscribe(SystemEvent.SYNC_START, lambda e, **d: print("Sync started"))

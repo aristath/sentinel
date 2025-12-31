@@ -17,8 +17,8 @@ import logging
 from datetime import datetime, timedelta
 from typing import Any
 
-from app.infrastructure.events import SystemEvent, emit
-from app.infrastructure.hardware.display_service import set_led4, set_text
+from app.core.events import SystemEvent, emit
+from app.modules.display.services.display_service import set_led4, set_text
 from app.infrastructure.locking import file_lock
 
 logger = logging.getLogger(__name__)
