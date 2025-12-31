@@ -302,9 +302,7 @@ async def _update_position_prices(quotes: dict[str, float]):
 
 async def _get_holistic_recommendation():
     """Get next recommendation from the holistic planner."""
-    from app.application.services.currency_exchange_service import (
-        CurrencyExchangeService,  # TODO: Keep in infrastructure or move to shared
-    )
+    from app.shared.services import CurrencyExchangeService
     from app.modules.rebalancing.services.rebalancing_service import (
         RebalancingService,
     )

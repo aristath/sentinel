@@ -8,7 +8,7 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from app.application.services.currency_exchange_service import CurrencyExchangeService
+from app.shared.services import CurrencyExchangeService
 from app.modules.portfolio.services.portfolio_service import PortfolioService
 from app.modules.rebalancing.services.rebalancing_service import RebalancingService
 from app.modules.universe.services.stock_setup_service import StockSetupService
