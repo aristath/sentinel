@@ -627,7 +627,7 @@ class TestGetGroupAllocation:
 
     @pytest.mark.asyncio
     async def test_maps_to_other_when_no_group(
-        self, mock_portfolio_service, mock_grouping_repo
+        self, mock_portfolio_service, mock_grouping_repo, mock_allocation_repo
     ):
         """Test that countries without groups map to 'OTHER'."""
         from app.modules.allocation.api.allocation import get_group_allocation
@@ -651,7 +651,9 @@ class TestGetGroupAllocation:
         mock_grouping_repo.get_country_groups.return_value = {}
         mock_grouping_repo.get_industry_groups.return_value = {}
 
-        result = await get_group_allocation(mock_portfolio_service, mock_grouping_repo)
+        result = await get_group_allocation(
+            mock_portfolio_service, mock_grouping_repo, mock_allocation_repo
+        )
 
         # Should map to OTHER
         other_group = next((g for g in result["country"] if g["name"] == "OTHER"), None)
@@ -660,7 +662,7 @@ class TestGetGroupAllocation:
 
     @pytest.mark.asyncio
     async def test_handles_zero_total_value(
-        self, mock_portfolio_service, mock_grouping_repo
+        self, mock_portfolio_service, mock_grouping_repo, mock_allocation_repo
     ):
         """Test handling when total value is zero."""
         from app.modules.allocation.api.allocation import get_group_allocation
@@ -676,7 +678,9 @@ class TestGetGroupAllocation:
         mock_grouping_repo.get_country_groups.return_value = {}
         mock_grouping_repo.get_industry_groups.return_value = {}
 
-        result = await get_group_allocation(mock_portfolio_service, mock_grouping_repo)
+        result = await get_group_allocation(
+            mock_portfolio_service, mock_grouping_repo, mock_allocation_repo
+        )
 
         assert result["total_value"] == 0.0
         assert len(result["country"]) == 0
