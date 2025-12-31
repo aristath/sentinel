@@ -42,6 +42,9 @@ class TradeSizingService:
         Returns:
             SizedTrade with actual quantity and values
 
+        Raises:
+            ValueError: If price is negative or zero
+
         Example:
             target_value_eur=150, price=90 DKK, min_lot=5, exchange_rate=7.46 (DKK per EUR)
             -> lot_cost_native = 5 * 90 = 450 DKK
@@ -50,6 +53,19 @@ class TradeSizingService:
             -> quantity = 2 * 5 = 10 shares
             -> value_eur = (10 * 90) / 7.46 = 120.64 EUR
         """
+        # Validate inputs
+        if price <= 0:
+            raise ValueError(f"Price must be positive, got {price}")
+
+        # Handle zero target value
+        if target_value_eur <= 0:
+            return SizedTrade(
+                quantity=0,
+                value_native=0.0,
+                value_eur=0.0,
+                num_lots=0,
+            )
+
         min_lot = max(1, min_lot)  # Ensure at least 1
         exchange_rate = exchange_rate if exchange_rate > 0 else 1.0
 
@@ -108,6 +124,9 @@ class TradeSizingService:
         # Cap at current holdings
         if current_holdings > 0:
             quantity = min(quantity, current_holdings)
+            # Must round down to lot boundary again after capping
+            if min_lot > 1:
+                quantity = int(quantity // min_lot) * min_lot
 
         return quantity
 
