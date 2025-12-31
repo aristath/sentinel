@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.domain.models import Position, Security
+from app.domain.value_objects.product_type import ProductType
 from app.modules.planning.domain.holistic_planner import create_holistic_plan
 from app.modules.scoring.domain.models import PortfolioContext
 
@@ -78,6 +79,7 @@ async def test_metrics_prefetching_reduces_db_queries():
         Security(
             symbol="AAPL.US",
             name="Apple Inc",
+            product_type=ProductType.EQUITY,
             country="United States",
             industry="Technology",
             allow_buy=True,
@@ -87,6 +89,7 @@ async def test_metrics_prefetching_reduces_db_queries():
         Security(
             symbol="MSFT.US",
             name="Microsoft Corp",
+            product_type=ProductType.EQUITY,
             country="United States",
             industry="Technology",
             allow_buy=True,
@@ -96,6 +99,7 @@ async def test_metrics_prefetching_reduces_db_queries():
         Security(
             symbol="SAP.DE",
             name="SAP SE",
+            product_type=ProductType.EQUITY,
             country="Germany",
             industry="Technology",
             allow_buy=True,
@@ -183,6 +187,7 @@ async def test_parallel_evaluation_improves_performance():
         Security(
             symbol="AAPL.US",
             name="Apple Inc",
+            product_type=ProductType.EQUITY,
             country="United States",
             industry="Technology",
             allow_buy=True,
