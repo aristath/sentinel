@@ -71,9 +71,10 @@ def apply_pending_orders_to_portfolio(
 
         if side == "buy":
             # Reduce cash by the order value
+            # Note: This can go negative in hypothetical state for planning purposes
             order_value = quantity * price
             current_cash = adjusted_cash.get(currency, 0.0)
-            adjusted_cash[currency] = max(0.0, current_cash - order_value)
+            adjusted_cash[currency] = current_cash - order_value
 
             # Increase position quantity (assuming order will execute)
             current_quantity = position_map.get(symbol, 0.0)
