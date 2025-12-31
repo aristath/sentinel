@@ -25,6 +25,7 @@ class Position:
     last_updated: Optional[str] = None
     first_bought_at: Optional[str] = None
     last_sold_at: Optional[str] = None
+    bucket_id: str = "core"  # Which bucket owns this position (core or satellite)
 
     def __post_init__(self):
         """Validate position data."""

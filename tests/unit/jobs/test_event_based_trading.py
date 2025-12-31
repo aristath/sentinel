@@ -28,20 +28,35 @@ class TestWaitForPlanningCompletion:
         """Test that function waits until all sequences are evaluated."""
         from app.jobs.event_based_trading import _wait_for_planning_completion
 
-        mock_repo = MagicMock()
-        mock_repo.has_sequences = AsyncMock(return_value=True)
-        mock_repo.are_all_sequences_evaluated = AsyncMock(
+        mock_planner_repo = MagicMock()
+        mock_planner_repo.has_sequences = AsyncMock(return_value=True)
+        mock_planner_repo.are_all_sequences_evaluated = AsyncMock(
             side_effect=[False, False, True]
         )
 
+        mock_position_repo = MagicMock()
+        mock_position_repo.get_all = AsyncMock(return_value=[])
+
+        mock_security_repo = MagicMock()
+        mock_security_repo.get_all_active = AsyncMock(return_value=[])
+
         with (
             patch(
-                "app.jobs.event_based_trading.PlannerRepository", return_value=mock_repo
+                "app.modules.planning.database.planner_repository.PlannerRepository",
+                return_value=mock_planner_repo,
             ),
-            patch("app.jobs.event_based_trading.PositionRepository"),
-            patch("app.jobs.event_based_trading.SecurityRepository"),
             patch(
-                "app.jobs.planner_batch.process_planner_batch_job",
+                "app.repositories.PositionRepository", return_value=mock_position_repo
+            ),
+            patch(
+                "app.repositories.SecurityRepository", return_value=mock_security_repo
+            ),
+            patch("app.repositories.SettingsRepository"),
+            patch("app.repositories.AllocationRepository"),
+            patch("app.infrastructure.external.tradernet.TradernetClient"),
+            patch("app.core.database.manager.get_db_manager"),
+            patch(
+                "app.modules.planning.jobs.planner_batch.process_planner_batch_job",
                 new_callable=AsyncMock,
             ),
             patch("asyncio.sleep", new_callable=AsyncMock),
@@ -49,57 +64,85 @@ class TestWaitForPlanningCompletion:
             await _wait_for_planning_completion()
 
         # Should have checked completion 3 times (False, False, True)
-        assert mock_repo.are_all_sequences_evaluated.call_count == 3
+        assert mock_planner_repo.are_all_sequences_evaluated.call_count == 3
 
     @pytest.mark.asyncio
     async def test_generates_sequences_if_not_exist(self):
         """Test that sequences are generated if they don't exist."""
         from app.jobs.event_based_trading import _wait_for_planning_completion
 
-        mock_repo = MagicMock()
-        mock_repo.has_sequences = AsyncMock(return_value=False)
-        mock_repo.are_all_sequences_evaluated = AsyncMock(return_value=True)
+        mock_planner_repo = MagicMock()
+        mock_planner_repo.has_sequences = AsyncMock(return_value=False)
+        mock_planner_repo.are_all_sequences_evaluated = AsyncMock(return_value=True)
+
+        mock_position_repo = MagicMock()
+        mock_position_repo.get_all = AsyncMock(return_value=[])
+
+        mock_security_repo = MagicMock()
+        mock_security_repo.get_all_active = AsyncMock(return_value=[])
 
         with (
             patch(
-                "app.jobs.event_based_trading.PlannerRepository", return_value=mock_repo
+                "app.modules.planning.database.planner_repository.PlannerRepository",
+                return_value=mock_planner_repo,
             ),
-            patch("app.jobs.event_based_trading.PositionRepository"),
-            patch("app.jobs.event_based_trading.SecurityRepository"),
+            patch(
+                "app.repositories.PositionRepository", return_value=mock_position_repo
+            ),
+            patch(
+                "app.repositories.SecurityRepository", return_value=mock_security_repo
+            ),
+            patch("app.repositories.SettingsRepository"),
+            patch("app.repositories.AllocationRepository"),
+            patch("app.infrastructure.external.tradernet.TradernetClient"),
+            patch("app.core.database.manager.get_db_manager"),
             patch(
                 "app.modules.planning.services.portfolio_context_builder.build_portfolio_context",
                 new_callable=AsyncMock,
             ),
-            patch("app.infrastructure.external.tradernet.get_tradernet_client"),
             patch(
-                "app.domain.planning.holistic_planner.create_holistic_plan_incremental",
+                "app.modules.planning.domain.holistic_planner.create_holistic_plan_incremental",
                 new_callable=AsyncMock,
             ),
-            patch("app.jobs.event_based_trading.SettingsRepository"),
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
             await _wait_for_planning_completion()
 
         # Should have checked if sequences exist
-        mock_repo.has_sequences.assert_called_once()
+        mock_planner_repo.has_sequences.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_timeout_after_max_iterations(self):
         """Test that function times out after max iterations."""
         from app.jobs.event_based_trading import _wait_for_planning_completion
 
-        mock_repo = MagicMock()
-        mock_repo.has_sequences = AsyncMock(return_value=True)
-        mock_repo.are_all_sequences_evaluated = AsyncMock(return_value=False)
+        mock_planner_repo = MagicMock()
+        mock_planner_repo.has_sequences = AsyncMock(return_value=True)
+        mock_planner_repo.are_all_sequences_evaluated = AsyncMock(return_value=False)
+
+        mock_position_repo = MagicMock()
+        mock_position_repo.get_all = AsyncMock(return_value=[])
+
+        mock_security_repo = MagicMock()
+        mock_security_repo.get_all_active = AsyncMock(return_value=[])
 
         with (
             patch(
-                "app.jobs.event_based_trading.PlannerRepository", return_value=mock_repo
+                "app.modules.planning.database.planner_repository.PlannerRepository",
+                return_value=mock_planner_repo,
             ),
-            patch("app.jobs.event_based_trading.PositionRepository"),
-            patch("app.jobs.event_based_trading.SecurityRepository"),
             patch(
-                "app.jobs.planner_batch.process_planner_batch_job",
+                "app.repositories.PositionRepository", return_value=mock_position_repo
+            ),
+            patch(
+                "app.repositories.SecurityRepository", return_value=mock_security_repo
+            ),
+            patch("app.repositories.SettingsRepository"),
+            patch("app.repositories.AllocationRepository"),
+            patch("app.infrastructure.external.tradernet.TradernetClient"),
+            patch("app.core.database.manager.get_db_manager"),
+            patch(
+                "app.modules.planning.jobs.planner_batch.process_planner_batch_job",
                 new_callable=AsyncMock,
             ),
             patch("asyncio.sleep", new_callable=AsyncMock),
@@ -107,7 +150,7 @@ class TestWaitForPlanningCompletion:
             await _wait_for_planning_completion()
 
         # Should have checked completion max_iterations times (360)
-        assert mock_repo.are_all_sequences_evaluated.call_count == 360
+        assert mock_planner_repo.are_all_sequences_evaluated.call_count == 360
 
 
 class TestGetOptimalRecommendation:
@@ -151,15 +194,27 @@ class TestGetOptimalRecommendation:
             }
         )
 
+        mock_position_repo = MagicMock()
+        mock_position_repo.get_all = AsyncMock(return_value=[])
+
+        mock_security_repo = MagicMock()
+        mock_security_repo.get_all_active = AsyncMock(return_value=[])
+
         with (
             patch(
                 "app.jobs.event_based_trading.PlannerRepository", return_value=mock_repo
             ),
-            patch("app.jobs.event_based_trading.PositionRepository"),
-            patch("app.jobs.event_based_trading.SecurityRepository"),
+            patch(
+                "app.jobs.event_based_trading.PositionRepository",
+                return_value=mock_position_repo,
+            ),
+            patch(
+                "app.modules.universe.database.security_repository.SecurityRepository",
+                return_value=mock_security_repo,
+            ),
             patch.object(mock_repo, "_get_db", return_value=mock_db),
             patch(
-                "app.domain.scoring.portfolio_scorer.calculate_portfolio_score",
+                "app.modules.scoring.domain.diversification.calculate_portfolio_score",
                 new_callable=AsyncMock,
                 return_value=90.0,
             ),
@@ -179,12 +234,24 @@ class TestGetOptimalRecommendation:
         mock_repo = MagicMock()
         mock_repo.get_best_result = AsyncMock(return_value=None)
 
+        mock_position_repo = MagicMock()
+        mock_position_repo.get_all = AsyncMock(return_value=[])
+
+        mock_security_repo = MagicMock()
+        mock_security_repo.get_all_active = AsyncMock(return_value=[])
+
         with (
             patch(
                 "app.jobs.event_based_trading.PlannerRepository", return_value=mock_repo
             ),
-            patch("app.jobs.event_based_trading.PositionRepository"),
-            patch("app.jobs.event_based_trading.SecurityRepository"),
+            patch(
+                "app.jobs.event_based_trading.PositionRepository",
+                return_value=mock_position_repo,
+            ),
+            patch(
+                "app.modules.universe.database.security_repository.SecurityRepository",
+                return_value=mock_security_repo,
+            ),
         ):
             recommendation = await _get_optimal_recommendation()
 
@@ -219,7 +286,7 @@ class TestCanExecuteTrade:
 
         with (
             patch(
-                "app.jobs.event_based_trading.SecurityRepository",
+                "app.modules.universe.database.security_repository.SecurityRepository",
                 return_value=mock_repo,
             ),
             patch(
@@ -257,7 +324,7 @@ class TestCanExecuteTrade:
 
         with (
             patch(
-                "app.jobs.event_based_trading.SecurityRepository",
+                "app.modules.universe.database.security_repository.SecurityRepository",
                 return_value=mock_repo,
             ),
             patch(
@@ -296,7 +363,7 @@ class TestCanExecuteTrade:
 
         with (
             patch(
-                "app.jobs.event_based_trading.SecurityRepository",
+                "app.modules.universe.database.security_repository.SecurityRepository",
                 return_value=mock_repo,
             ),
             patch(
@@ -331,7 +398,8 @@ class TestCanExecuteTrade:
         mock_repo.get_by_symbol = AsyncMock(return_value=None)
 
         with patch(
-            "app.jobs.event_based_trading.SecurityRepository", return_value=mock_repo
+            "app.modules.universe.database.security_repository.SecurityRepository",
+            return_value=mock_repo,
         ):
             can_execute, reason = await _can_execute_trade(recommendation)
 
@@ -350,9 +418,21 @@ class TestMonitorPortfolioForChanges:
         initial_hash = "hash1"
         changed_hash = "hash2"
 
+        mock_position_repo = MagicMock()
+        mock_position_repo.get_all = AsyncMock(return_value=[])
+
+        mock_security_repo = MagicMock()
+        mock_security_repo.get_all_active = AsyncMock(return_value=[])
+
         with (
-            patch("app.jobs.event_based_trading.PositionRepository"),
-            patch("app.jobs.event_based_trading.SecurityRepository"),
+            patch(
+                "app.jobs.event_based_trading.PositionRepository",
+                return_value=mock_position_repo,
+            ),
+            patch(
+                "app.modules.universe.database.security_repository.SecurityRepository",
+                return_value=mock_security_repo,
+            ),
             patch("app.infrastructure.external.tradernet.get_tradernet_client"),
             patch(
                 "app.domain.portfolio_hash.generate_portfolio_hash",
@@ -382,12 +462,24 @@ class TestMonitorPortfolioForChanges:
         # Then phase 2 - change detected
         hash_sequence = [unchanged_hash] * 10 + [changed_hash]
 
+        mock_position_repo = MagicMock()
+        mock_position_repo.get_all = AsyncMock(return_value=[])
+
+        mock_security_repo = MagicMock()
+        mock_security_repo.get_all_active = AsyncMock(return_value=[])
+
         with (
-            patch("app.jobs.event_based_trading.PositionRepository"),
-            patch("app.jobs.event_based_trading.SecurityRepository"),
-            patch("app.jobs.event_based_trading.get_tradernet_client"),
             patch(
-                "app.jobs.event_based_trading.generate_portfolio_hash",
+                "app.jobs.event_based_trading.PositionRepository",
+                return_value=mock_position_repo,
+            ),
+            patch(
+                "app.modules.universe.database.security_repository.SecurityRepository",
+                return_value=mock_security_repo,
+            ),
+            patch("app.infrastructure.external.tradernet.get_tradernet_client"),
+            patch(
+                "app.domain.portfolio_hash.generate_portfolio_hash",
                 side_effect=[initial_hash] + hash_sequence,
             ),
             patch(
@@ -412,12 +504,24 @@ class TestMonitorPortfolioForChanges:
         # All iterations return same hash
         hash_sequence = [unchanged_hash] * 25  # 10 phase 1 + 15 phase 2
 
+        mock_position_repo = MagicMock()
+        mock_position_repo.get_all = AsyncMock(return_value=[])
+
+        mock_security_repo = MagicMock()
+        mock_security_repo.get_all_active = AsyncMock(return_value=[])
+
         with (
-            patch("app.jobs.event_based_trading.PositionRepository"),
-            patch("app.jobs.event_based_trading.SecurityRepository"),
-            patch("app.jobs.event_based_trading.get_tradernet_client"),
             patch(
-                "app.jobs.event_based_trading.generate_portfolio_hash",
+                "app.jobs.event_based_trading.PositionRepository",
+                return_value=mock_position_repo,
+            ),
+            patch(
+                "app.modules.universe.database.security_repository.SecurityRepository",
+                return_value=mock_security_repo,
+            ),
+            patch("app.infrastructure.external.tradernet.get_tradernet_client"),
+            patch(
+                "app.domain.portfolio_hash.generate_portfolio_hash",
                 side_effect=[initial_hash] + hash_sequence,
             ),
             patch(
@@ -460,7 +564,7 @@ class TestEventBasedTradingLoop:
                 side_effect=mock_get_recommendation,
             ),
             patch("app.jobs.event_based_trading.set_text"),
-            patch("pass  # LED cleared"),
+            patch("app.jobs.event_based_trading.set_led4"),
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
             try:
@@ -515,7 +619,7 @@ class TestEventBasedTradingLoop:
                 side_effect=mock_check_conditions,
             ),
             patch("app.jobs.event_based_trading.set_text"),
-            patch("pass  # LED cleared"),
+            patch("app.jobs.event_based_trading.set_led4"),
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
             try:
@@ -598,7 +702,7 @@ class TestEventBasedTradingLoop:
                 side_effect=mock_monitor,
             ),
             patch("app.jobs.event_based_trading.set_text"),
-            patch("pass  # LED cleared"),
+            patch("app.jobs.event_based_trading.set_led4"),
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
             try:
