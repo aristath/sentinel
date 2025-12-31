@@ -8,9 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.application.services.optimization.expected_returns import (
-    ExpectedReturnsCalculator,
-)
+from app.modules.optimization.services.expected_returns import ExpectedReturnsCalculator
 
 
 class TestExpectedReturnsCalculator:

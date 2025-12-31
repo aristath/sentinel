@@ -5,9 +5,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi import HTTPException
 
-from app.application.services.trade_safety_service import TradeSafetyService
 from app.domain.value_objects.trade_side import TradeSide
 from app.infrastructure.external.tradernet import TradernetClient
+from app.modules.trading.services.trade_safety_service import TradeSafetyService
 from app.repositories import PositionRepository, TradeRepository
 
 

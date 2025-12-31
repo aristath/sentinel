@@ -42,9 +42,7 @@ async def test_trade_execution_rollback_on_database_error(db):
 
     # Create mock currency exchange service and exchange rate service
     from app.domain.services.exchange_rate_service import ExchangeRateService
-    from app.modules.system.services.currency_exchange_service import (
-        CurrencyExchangeService,
-    )
+    from app.shared.services import CurrencyExchangeService
 
     mock_currency_service = MagicMock(spec=CurrencyExchangeService)
     mock_exchange_rate_service = MagicMock(spec=ExchangeRateService)
@@ -110,9 +108,7 @@ async def test_trade_execution_handles_external_failure(db):
 
     # Create mock currency exchange service and exchange rate service
     from app.domain.services.exchange_rate_service import ExchangeRateService
-    from app.modules.system.services.currency_exchange_service import (
-        CurrencyExchangeService,
-    )
+    from app.shared.services import CurrencyExchangeService
 
     mock_currency_service = MagicMock(spec=CurrencyExchangeService)
     mock_exchange_rate_service = MagicMock(spec=ExchangeRateService)

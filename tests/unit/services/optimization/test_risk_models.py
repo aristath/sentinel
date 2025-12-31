@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pandas as pd
 import pytest
 
-from app.application.services.optimization.risk_models import RiskModelBuilder
+from app.modules.optimization.services.risk_models import RiskModelBuilder
 
 
 class TestRiskModelBuilder:

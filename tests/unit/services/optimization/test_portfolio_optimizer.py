@@ -10,8 +10,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app.application.services.optimization.portfolio_optimizer import PortfolioOptimizer
 from app.domain.models import Position, Stock
+from app.modules.optimization.services.portfolio_optimizer import PortfolioOptimizer
 
 
 def create_optimizer() -> PortfolioOptimizer:
@@ -557,7 +557,7 @@ class TestPortfolioOptimizerSectorConstraints:
         """Test that add_sector_constraints() is called with country constraints."""
         from unittest.mock import patch
 
-        from app.application.services.optimization.constraints_manager import (
+        from app.modules.optimization.services.constraints_manager import (
             SectorConstraint,
         )
 
@@ -648,7 +648,7 @@ class TestPortfolioOptimizerSectorConstraints:
         """Test that add_sector_constraints() is called with industry constraints."""
         from unittest.mock import patch
 
-        from app.application.services.optimization.constraints_manager import (
+        from app.modules.optimization.services.constraints_manager import (
             SectorConstraint,
         )
 
@@ -737,7 +737,7 @@ class TestPortfolioOptimizerSectorConstraints:
 
         from pypfopt.exceptions import OptimizationError
 
-        from app.application.services.optimization.constraints_manager import (
+        from app.modules.optimization.services.constraints_manager import (
             SectorConstraint,
         )
 
@@ -798,7 +798,7 @@ class TestPortfolioOptimizerSectorConstraints:
         """Test that sector mappers are built correctly from constraints."""
         from unittest.mock import patch
 
-        from app.application.services.optimization.constraints_manager import (
+        from app.modules.optimization.services.constraints_manager import (
             SectorConstraint,
         )
 
@@ -871,7 +871,7 @@ class TestPortfolioOptimizerSectorConstraints:
         """Test that sector bounds (lower/upper) are built correctly from constraints."""
         from unittest.mock import patch
 
-        from app.application.services.optimization.constraints_manager import (
+        from app.modules.optimization.services.constraints_manager import (
             SectorConstraint,
         )
 

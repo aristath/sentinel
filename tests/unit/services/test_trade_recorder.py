@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.domain.models import Trade
-from app.modules.trading.services.trade_recorder import record_trade
+from app.modules.trading.services.trade_execution.trade_recorder import record_trade
 
 
 class TestRecordTrade:

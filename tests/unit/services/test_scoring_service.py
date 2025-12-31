@@ -12,9 +12,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.application.services.scoring_service import ScoringService, _to_domain_score
 from app.domain.models import StockScore
 from app.domain.scoring import CalculatedStockScore
+from app.modules.scoring.services.scoring_service import (
+    ScoringService,
+    _to_domain_score,
+)
 
 
 class TestToDomainScore:

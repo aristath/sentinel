@@ -6,7 +6,7 @@ These tests validate that DisplayStateManager emits events when state changes.
 from unittest.mock import patch
 
 from app.core.events import SystemEvent
-from app.infrastructure.hardware.display_service import DisplayStateManager
+from app.modules.display.services.display_service import DisplayStateManager
 
 
 class TestDisplayStateManagerEventEmission:

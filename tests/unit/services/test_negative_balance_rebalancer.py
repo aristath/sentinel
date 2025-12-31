@@ -4,10 +4,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.application.services.negative_balance_rebalancer import (
+from app.domain.models import Stock
+from app.modules.rebalancing.services.negative_balance_rebalancer import (
     NegativeBalanceRebalancer,
 )
-from app.domain.models import Stock
 from app.shared.domain.value_objects.currency import Currency
 
 

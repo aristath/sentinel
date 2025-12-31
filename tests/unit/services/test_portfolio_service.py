@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.application.services.portfolio_service import PortfolioService
+from app.modules.portfolio.services.portfolio_service import PortfolioService
 
 
 class TestPortfolioServiceCalculations:

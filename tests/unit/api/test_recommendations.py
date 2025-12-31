@@ -26,7 +26,7 @@ def mock_internal_repos():
         mock_settings_instance.get_float.return_value = 0.0  # Disable incremental mode
         mock_settings.return_value = mock_settings_instance
         with patch(
-            "app.repositories.planner_repository.PlannerRepository"
+            "app.modules.planning.database.planner_repository.PlannerRepository"
         ) as mock_planner:
             mock_planner_instance = AsyncMock()
             mock_planner_instance.get_best_result.return_value = None
