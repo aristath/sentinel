@@ -102,7 +102,7 @@ async def check_missing_data():
 async def main():
     """Main function."""
     print("Fixing missing country data...")
-    updated = await fix_missing_countries()
+    await fix_missing_countries()
 
     print("\nChecking for remaining missing data...")
     missing = await check_missing_data()

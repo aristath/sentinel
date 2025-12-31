@@ -135,6 +135,7 @@ async def _sync_cash_flows_internal():
                                     "ticker"
                                 ) or parsed_params.get("symbol")
                             except (json.JSONDecodeError, TypeError):
+                                # Invalid JSON or missing params - skip this cash flow
                                 pass
 
                         if symbol:

@@ -25,7 +25,6 @@ from app.infrastructure.dependencies import (
     StockRepositoryDep,
 )
 from app.infrastructure.external.tradernet_connection import ensure_tradernet_connected
-from app.modules.portfolio.database.portfolio_repository import PortfolioRepository
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

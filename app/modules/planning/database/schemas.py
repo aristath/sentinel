@@ -52,9 +52,6 @@ CREATE TABLE IF NOT EXISTS best_result (
 
 async def init_planner_schema(db):
     """Initialize planner database schema."""
-    import logging
-
-    logger = logging.getLogger(__name__)
     await db.executescript(PLANNER_SCHEMA)
     await db.commit()
     logger.info("Planner database schema initialized")

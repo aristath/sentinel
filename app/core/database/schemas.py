@@ -924,9 +924,7 @@ async def init_cache_schema(db):
 # =============================================================================
 # HISTORY/{SYMBOL}.DB - Per-symbol price data
 # =============================================================================
-
-# Import from portfolio module
-from app.modules.portfolio.database.schemas import init_history_schema
+# Note: init_history_schema is imported directly in manager.py where it's used
 
 
 # =============================================================================
@@ -1160,9 +1158,7 @@ async def init_recommendations_schema(db):
 # =============================================================================
 # DIVIDENDS.DB - Dividend history with DRIP tracking
 # =============================================================================
-
-# Import from dividends module
-from app.modules.dividends.database.schemas import init_dividends_schema
+# Note: init_dividends_schema is imported directly in manager.py where it's used
             await db.execute("ALTER TABLE dividend_history ADD COLUMN isin TEXT")
             await db.execute(
                 "CREATE INDEX IF NOT EXISTS idx_dividend_history_isin ON dividend_history(isin)"
@@ -1223,9 +1219,7 @@ async def init_rates_schema(db):
 # =============================================================================
 # SNAPSHOTS.DB - Portfolio snapshots (daily time-series)
 # =============================================================================
-
-# Import from portfolio module
-from app.modules.portfolio.database.schemas import init_snapshots_schema
+# Note: init_snapshots_schema is imported directly in manager.py where it's used
         try:
             # Check if column already exists
             cursor = await db.execute("PRAGMA table_info(portfolio_snapshots)")
