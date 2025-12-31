@@ -154,6 +154,9 @@ class StockSetupService:
         if not name:
             raise ValueError(f"Could not determine stock name for: {identifier}")
 
+        # Detect product type using Yahoo Finance with heuristics
+        product_type = yahoo.get_product_type(tradernet_symbol, yahoo_symbol, name)
+
         # Step 4: Create stock
         # Create stock using factory, but we need to handle ISIN separately
         # since factory doesn't support it directly. Create Stock directly instead.
@@ -163,6 +166,7 @@ class StockSetupService:
         stock = Stock(
             symbol=tradernet_symbol,
             name=name,
+            product_type=product_type,
             country=country,
             fullExchangeName=full_exchange_name,
             yahoo_symbol=yahoo_symbol,
