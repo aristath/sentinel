@@ -252,6 +252,19 @@ class ModularPlannerAdapter:
         Returns:
             Dict with configuration details
         """
+        if not self.config:
+            return {
+                "name": "unknown",
+                "description": "No configuration loaded",
+                "max_depth": 0,
+                "priority_threshold": 0.0,
+                "enabled_calculators": [],
+                "enabled_patterns": [],
+                "enabled_generators": [],
+                "enabled_filters": [],
+                "total_modules": 0,
+            }
+
         return {
             "name": self.config.name,
             "description": self.config.description,
