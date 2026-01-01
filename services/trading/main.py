@@ -1,4 +1,4 @@
-"""utrading service server entrypoint."""
+"""Trading service server entrypoint."""
 
 import asyncio
 import logging
@@ -9,6 +9,7 @@ import grpc
 
 from contracts import trading_pb2_grpc  # type: ignore[attr-defined]
 from app.infrastructure.service_discovery import load_device_config, get_service_locator
+from services.trading.grpc_servicer import TradingServicer
 
 # Configure logging
 logging.basicConfig(
@@ -30,19 +31,17 @@ async def serve():
         futures.ThreadPoolExecutor(max_workers=device_config.max_workers)
     )
 
-    # TODO: Add servicer to server
-    # trading_pb2_grpc.add_utradingServiceServicer_to_server(
-    #     utradingServicer(), server
-    # )
+    # Add servicer to server
+    trading_pb2_grpc.add_TradingServiceServicer_to_server(TradingServicer(), server)
 
     # Bind to address
     address = f"{device_config.bind_address}:{service_location.port}"
     server.add_insecure_port(address)
 
     # Start server
-    logger.info(f"Starting utrading service on {address}")
+    logger.info(f"Starting Trading service on {address}")
     await server.start()
-    logger.info("utrading service started successfully")
+    logger.info("Trading service started successfully")
 
     # Setup graceful shutdown
     async def shutdown(sig):

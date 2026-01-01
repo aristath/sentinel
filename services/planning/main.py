@@ -32,9 +32,7 @@ async def serve():
     )
 
     # Add servicer to server
-    planning_pb2_grpc.add_PlanningServiceServicer_to_server(
-        PlanningServicer(), server
-    )
+    planning_pb2_grpc.add_PlanningServiceServicer_to_server(PlanningServicer(), server)
 
     # Bind to address
     address = f"{device_config.bind_address}:{planning_location.port}"

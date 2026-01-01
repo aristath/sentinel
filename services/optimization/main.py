@@ -1,4 +1,4 @@
-"""uoptimization service server entrypoint."""
+"""Optimization service server entrypoint."""
 
 import asyncio
 import logging
@@ -9,6 +9,7 @@ import grpc
 
 from contracts import optimization_pb2_grpc  # type: ignore[attr-defined]
 from app.infrastructure.service_discovery import load_device_config, get_service_locator
+from services.optimization.grpc_servicer import OptimizationServicer
 
 # Configure logging
 logging.basicConfig(
@@ -30,19 +31,19 @@ async def serve():
         futures.ThreadPoolExecutor(max_workers=device_config.max_workers)
     )
 
-    # TODO: Add servicer to server
-    # optimization_pb2_grpc.add_uoptimizationServiceServicer_to_server(
-    #     uoptimizationServicer(), server
-    # )
+    # Add servicer to server
+    optimization_pb2_grpc.add_OptimizationServiceServicer_to_server(
+        OptimizationServicer(), server
+    )
 
     # Bind to address
     address = f"{device_config.bind_address}:{service_location.port}"
     server.add_insecure_port(address)
 
     # Start server
-    logger.info(f"Starting uoptimization service on {address}")
+    logger.info(f"Starting Optimization service on {address}")
     await server.start()
-    logger.info("uoptimization service started successfully")
+    logger.info("Optimization service started successfully")
 
     # Setup graceful shutdown
     async def shutdown(sig):

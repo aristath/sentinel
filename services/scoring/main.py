@@ -1,4 +1,4 @@
-"""uscoring service server entrypoint."""
+"""Scoring service server entrypoint."""
 
 import asyncio
 import logging
@@ -9,6 +9,7 @@ import grpc
 
 from contracts import scoring_pb2_grpc  # type: ignore[attr-defined]
 from app.infrastructure.service_discovery import load_device_config, get_service_locator
+from services.scoring.grpc_servicer import ScoringServicer
 
 # Configure logging
 logging.basicConfig(
@@ -30,19 +31,17 @@ async def serve():
         futures.ThreadPoolExecutor(max_workers=device_config.max_workers)
     )
 
-    # TODO: Add servicer to server
-    # scoring_pb2_grpc.add_uscoringServiceServicer_to_server(
-    #     uscoringServicer(), server
-    # )
+    # Add servicer to server
+    scoring_pb2_grpc.add_ScoringServiceServicer_to_server(ScoringServicer(), server)
 
     # Bind to address
     address = f"{device_config.bind_address}:{service_location.port}"
     server.add_insecure_port(address)
 
     # Start server
-    logger.info(f"Starting uscoring service on {address}")
+    logger.info(f"Starting Scoring service on {address}")
     await server.start()
-    logger.info("uscoring service started successfully")
+    logger.info("Scoring service started successfully")
 
     # Setup graceful shutdown
     async def shutdown(sig):

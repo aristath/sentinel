@@ -1,4 +1,4 @@
-"""uportfolio service server entrypoint."""
+"""Portfolio service server entrypoint."""
 
 import asyncio
 import logging
@@ -9,6 +9,7 @@ import grpc
 
 from contracts import portfolio_pb2_grpc  # type: ignore[attr-defined]
 from app.infrastructure.service_discovery import load_device_config, get_service_locator
+from services.portfolio.grpc_servicer import PortfolioServicer
 
 # Configure logging
 logging.basicConfig(
@@ -30,19 +31,19 @@ async def serve():
         futures.ThreadPoolExecutor(max_workers=device_config.max_workers)
     )
 
-    # TODO: Add servicer to server
-    # portfolio_pb2_grpc.add_uportfolioServiceServicer_to_server(
-    #     uportfolioServicer(), server
-    # )
+    # Add servicer to server
+    portfolio_pb2_grpc.add_PortfolioServiceServicer_to_server(
+        PortfolioServicer(), server
+    )
 
     # Bind to address
     address = f"{device_config.bind_address}:{service_location.port}"
     server.add_insecure_port(address)
 
     # Start server
-    logger.info(f"Starting uportfolio service on {address}")
+    logger.info(f"Starting Portfolio service on {address}")
     await server.start()
-    logger.info("uportfolio service started successfully")
+    logger.info("Portfolio service started successfully")
 
     # Setup graceful shutdown
     async def shutdown(sig):

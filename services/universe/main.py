@@ -1,4 +1,4 @@
-"""uuniverse service server entrypoint."""
+"""Universe service server entrypoint."""
 
 import asyncio
 import logging
@@ -9,6 +9,7 @@ import grpc
 
 from contracts import universe_pb2_grpc  # type: ignore[attr-defined]
 from app.infrastructure.service_discovery import load_device_config, get_service_locator
+from services.universe.grpc_servicer import UniverseServicer
 
 # Configure logging
 logging.basicConfig(
@@ -30,19 +31,17 @@ async def serve():
         futures.ThreadPoolExecutor(max_workers=device_config.max_workers)
     )
 
-    # TODO: Add servicer to server
-    # universe_pb2_grpc.add_uuniverseServiceServicer_to_server(
-    #     uuniverseServicer(), server
-    # )
+    # Add servicer to server
+    universe_pb2_grpc.add_UniverseServiceServicer_to_server(UniverseServicer(), server)
 
     # Bind to address
     address = f"{device_config.bind_address}:{service_location.port}"
     server.add_insecure_port(address)
 
     # Start server
-    logger.info(f"Starting uuniverse service on {address}")
+    logger.info(f"Starting Universe service on {address}")
     await server.start()
-    logger.info("uuniverse service started successfully")
+    logger.info("Universe service started successfully")
 
     # Setup graceful shutdown
     async def shutdown(sig):
