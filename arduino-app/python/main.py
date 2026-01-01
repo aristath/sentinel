@@ -8,7 +8,7 @@ import subprocess
 
 logger = Logger("trader-display")
 
-API_URL = "http://172.17.0.1:8000"
+API_URL = "http://host.docker.internal:8000"
 
 # Persistent HTTP session for connection pooling (reuses TCP connections)
 _http_session = requests.Session()
