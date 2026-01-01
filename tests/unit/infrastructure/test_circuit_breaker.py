@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from app.infrastructure.grpc_helpers.circuit_breaker import (
+from app.infrastructure.resilience.circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerConfig,
     CircuitBreakerError,

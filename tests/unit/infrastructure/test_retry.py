@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from app.infrastructure.grpc_helpers.retry import (
+from app.infrastructure.resilience.retry import (
     RetryConfig,
     RetryExhaustedError,
     RetryWithStats,
