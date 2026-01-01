@@ -231,9 +231,13 @@ universe_client = locator.create_http_client("universe")
 securities = await universe_client.get_securities(tradable_only=True)
 ```
 
-**Complete documentation:**
-- [REST API Migration Summary](REST_API_MIGRATION.md) - Implementation details
-- [Usage Examples](REST_API_USAGE_EXAMPLES.md) - API usage, workflows, examples
+**Resource Considerations:**
+
+For Arduino Uno Q deployment (2GB RAM, limited CPU):
+- **Local mode** (all services in main process): ~63MB memory, minimal overhead
+- **Distributed mode** (across multiple devices): ~476MB total (68MB per service)
+- Batch operations are optimized for constrained environments
+- Services use connection pooling and keep-alive optimization
 
 ## Quick Start
 
@@ -257,11 +261,10 @@ sudo ./install.sh
 
 Access the dashboard at `http://localhost:8000`
 
-**See [INSTALL.md](INSTALL.md) for:**
-- Complete installation guide
-- Distributed deployment
-- Modifying existing installations
-- Troubleshooting
+**Installation Options:**
+- **Single-device**: Select "all" services during installation
+- **Distributed**: Run installer on each device, select specific services
+- **Modifying existing**: Re-run installer to add/remove services
 
 ### Local Development (Monolith)
 
