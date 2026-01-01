@@ -847,6 +847,118 @@ document.addEventListener('alpine:init', () => {
       this.plannerError = null;
     },
 
+    loadPlannerTemplate(templateName) {
+      const templates = {
+        conservative: {
+          name: 'Conservative Strategy',
+          toml: `[planner]
+name = "Conservative Strategy"
+description = "Low-risk, value-focused investment strategy"
+
+[[calculators]]
+name = "value"
+type = "value"
+weight = 2.0
+
+[[calculators]]
+name = "quality"
+type = "quality"
+weight = 1.5
+
+[[calculators]]
+name = "low_volatility"
+type = "low_volatility"
+weight = 1.0
+
+[[patterns]]
+name = "diversification"
+type = "diversification"
+min_holdings = 15
+max_concentration = 0.15
+
+[[generators]]
+name = "incremental"
+type = "incremental"
+max_depth = 3
+`
+        },
+        balanced: {
+          name: 'Balanced Growth',
+          toml: `[planner]
+name = "Balanced Growth"
+description = "Balanced approach combining growth and value"
+
+[[calculators]]
+name = "momentum"
+type = "momentum"
+weight = 1.5
+
+[[calculators]]
+name = "value"
+type = "value"
+weight = 1.5
+
+[[calculators]]
+name = "growth"
+type = "growth"
+weight = 1.0
+
+[[patterns]]
+name = "sector_balance"
+type = "sector_balance"
+max_sector_weight = 0.30
+
+[[generators]]
+name = "combinatorial"
+type = "combinatorial"
+max_depth = 5
+max_candidates = 10
+`
+        },
+        aggressive: {
+          name: 'Aggressive Growth',
+          toml: `[planner]
+name = "Aggressive Growth"
+description = "High-growth, momentum-driven strategy"
+
+[[calculators]]
+name = "momentum"
+type = "momentum"
+weight = 2.5
+
+[[calculators]]
+name = "growth"
+type = "growth"
+weight = 2.0
+
+[[calculators]]
+name = "small_cap_premium"
+type = "size"
+weight = 1.0
+
+[[patterns]]
+name = "high_conviction"
+type = "concentration"
+min_holdings = 8
+max_concentration = 0.25
+
+[[generators]]
+name = "opportunistic"
+type = "opportunistic"
+max_depth = 7
+enable_combinatorial = true
+`
+        }
+      };
+
+      const template = templates[templateName];
+      if (template) {
+        this.plannerForm.name = template.name;
+        this.plannerForm.toml = template.toml;
+        this.showMessage(`Loaded ${template.name} template`, 'success');
+      }
+    },
+
     async savePlanner() {
       this.plannerLoading = true;
       this.plannerError = null;
