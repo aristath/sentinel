@@ -35,20 +35,22 @@ class Registry(Generic[T]):
 
 
 # Global registries (initialized by submodules)
+#
+# ARCHITECTURAL NOTE: These use global mutable state for pragmatic simplicity.
+# Each module type (opportunities/, patterns/, sequences/, filters/) creates
+# its own registry instance on import, and individual modules auto-register.
+#
+# Trade-offs:
+# - PRO: Simple, no boilerplate, easy to add new modules
+# - PRO: Import-time registration ensures all modules are available
+# - CON: Import order matters (but handled by __init__.py)
+# - CON: Testing requires careful setup (but registries are independent)
+#
+# This is a documented architectural decision prioritizing simplicity
+# over pure dependency injection for the Arduino's constrained environment.
+#
+# See: CLAUDE.md "Architecture Violations" section
 opportunity_calculator_registry: Optional[Registry] = None
 pattern_generator_registry: Optional[Registry] = None
 sequence_generator_registry: Optional[Registry] = None
 filter_registry: Optional[Registry] = None
-
-
-def init_registries():
-    """Initialize all global registries."""
-    global opportunity_calculator_registry
-    global pattern_generator_registry
-    global sequence_generator_registry
-    global filter_registry
-
-    opportunity_calculator_registry = Registry()
-    pattern_generator_registry = Registry()
-    sequence_generator_registry = Registry()
-    filter_registry = Registry()

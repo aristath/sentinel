@@ -160,7 +160,15 @@ app/
 
 ### Architecture Violations
 
-Some pragmatic violations exist for performance/convenience. These are documented in code comments.
+Some pragmatic violations exist for performance/convenience on the Arduino's constrained environment:
+
+1. **Global Module Registries** (`app/modules/planning/domain/calculations/base.py`)
+   - **Violation**: Uses global mutable state for module registration
+   - **Rationale**: Simplifies plugin architecture, reduces boilerplate
+   - **Trade-off**: Accepted for ease of adding new calculators/patterns/filters
+   - **Mitigation**: Each registry is independent; import order controlled by `__init__.py`
+
+Other violations are documented in code comments where they occur.
 
 ## Quick Start
 
