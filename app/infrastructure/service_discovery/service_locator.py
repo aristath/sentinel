@@ -3,11 +3,18 @@
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union, cast
 
 import grpc
 import yaml  # type: ignore[import-untyped]
 
+from app.infrastructure.http_clients.gateway_client import GatewayHTTPClient
+from app.infrastructure.http_clients.optimization_client import OptimizationHTTPClient
+from app.infrastructure.http_clients.planning_client import PlanningHTTPClient
+from app.infrastructure.http_clients.portfolio_client import PortfolioHTTPClient
+from app.infrastructure.http_clients.scoring_client import ScoringHTTPClient
+from app.infrastructure.http_clients.trading_client import TradingHTTPClient
+from app.infrastructure.http_clients.universe_client import UniverseHTTPClient
 from app.infrastructure.service_discovery.device_config import DeviceInfo
 
 
@@ -195,6 +202,65 @@ class ServiceLocator:
             channel = grpc.aio.insecure_channel(target, options=options)
 
         return channel
+
+    def create_http_client(self, service_name: str) -> Union[
+        UniverseHTTPClient,
+        PortfolioHTTPClient,
+        TradingHTTPClient,
+        ScoringHTTPClient,
+        OptimizationHTTPClient,
+        PlanningHTTPClient,
+        GatewayHTTPClient,
+    ]:
+        """
+        Create HTTP client for a service.
+
+        Args:
+            service_name: Name of service
+
+        Returns:
+            HTTP client instance for the service
+
+        Raises:
+            ValueError: If service name is unknown
+        """
+        location = self.get_service_location(service_name)
+
+        # Build base URL
+        base_url = f"http://{location.address}:{location.port}"
+
+        # Create appropriate client based on service name
+        client_classes = {
+            "universe": UniverseHTTPClient,
+            "portfolio": PortfolioHTTPClient,
+            "trading": TradingHTTPClient,
+            "scoring": ScoringHTTPClient,
+            "optimization": OptimizationHTTPClient,
+            "planning": PlanningHTTPClient,
+            "gateway": GatewayHTTPClient,
+        }
+
+        if service_name not in client_classes:
+            raise ValueError(f"Unknown service: {service_name}")
+
+        client_class = client_classes[service_name]
+        # Type cast is safe because we validate service_name above
+        return cast(
+            Union[
+                UniverseHTTPClient,
+                PortfolioHTTPClient,
+                TradingHTTPClient,
+                ScoringHTTPClient,
+                OptimizationHTTPClient,
+                PlanningHTTPClient,
+                GatewayHTTPClient,
+            ],
+            client_class(
+                base_url=base_url,
+                service_name=service_name,
+                timeout=float(location.timeout_seconds),
+            ),
+        )
 
     def _create_channel_credentials(self) -> grpc.ChannelCredentials:
         """
