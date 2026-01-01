@@ -12,7 +12,7 @@ import logging
 from datetime import datetime
 
 from app.core.events import SystemEvent, emit
-from app.modules.display.services.display_service import set_led4, set_text
+from app.modules.display.services.display_service import set_led4
 from app.modules.satellites.services.meta_allocator import MetaAllocator
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,6 @@ async def run_quarterly_evaluation(
     """
     logger.info(f"=== Starting quarterly evaluation (dry_run={dry_run}) ===")
 
-    set_text("EVALUATING SATELLITES...")
     set_led4(0, 255, 0)  # Green for processing
 
     try:
@@ -83,8 +82,6 @@ async def run_quarterly_evaluation(
                     f"(score: {rec.performance_score:.2f})"
                 )
 
-        set_text("EVALUATION COMPLETE")
-
         return {
             "success": True,
             "dry_run": dry_run,
@@ -99,7 +96,6 @@ async def run_quarterly_evaluation(
         logger.error(f"Quarterly evaluation failed: {e}", exc_info=True)
         error_msg = "EVALUATION FAILED"
         emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-        set_text(error_msg)
 
         return {
             "success": False,

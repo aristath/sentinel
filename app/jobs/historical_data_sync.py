@@ -13,7 +13,7 @@ from app.core.database.manager import get_db_manager
 from app.core.events import SystemEvent, emit
 from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.locking import file_lock
-from app.modules.display.services.display_service import set_led4, set_text
+from app.modules.display.services.display_service import set_led4
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,6 @@ async def _sync_historical_data_internal():
         logger.error(f"Historical data sync failed: {e}")
         error_msg = "HISTORICAL DATA SYNC CRASHES"
         emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-        set_text(error_msg)
         raise
     finally:
         set_led4(0, 0, 0)  # Clear LED when done
@@ -56,7 +55,6 @@ async def _sync_security_price_history():
     """Fetch and store historical security prices for all active securities."""
     logger.info("Starting security price history sync (using Yahoo Finance)")
 
-    set_text("SYNCING HISTORICAL PRICES...")
     set_led4(0, 255, 0)  # Green for processing
 
     db_manager = get_db_manager()

@@ -11,7 +11,7 @@ from app.core.database.manager import get_db_manager
 from app.core.events import SystemEvent, emit
 from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.locking import file_lock
-from app.modules.display.services.display_service import set_led4, set_text
+from app.modules.display.services.display_service import set_led4
 from app.modules.scoring.domain import PortfolioContext, calculate_security_score
 
 logger = logging.getLogger(__name__)
@@ -29,7 +29,6 @@ async def _refresh_all_scores_internal():
 
     emit(SystemEvent.SCORE_REFRESH_START)
     emit(SystemEvent.PROCESSING_START)
-    set_text("REFRESHING STOCK SCORES...")
     set_led4(0, 255, 0)  # Green for processing
 
     try:
@@ -122,7 +121,6 @@ async def _refresh_all_scores_internal():
         emit(SystemEvent.PROCESSING_END)
         error_msg = "SCORE REFRESH CRASHES"
         emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-        set_text(error_msg)
     finally:
         set_led4(0, 0, 0)  # Clear LED when done
 

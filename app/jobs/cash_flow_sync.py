@@ -8,7 +8,7 @@ from app.core.events import SystemEvent, emit
 from app.domain.models import DividendRecord
 from app.infrastructure.external.tradernet import get_tradernet_client
 from app.infrastructure.locking import file_lock
-from app.modules.display.services.display_service import set_led4, set_text
+from app.modules.display.services.display_service import set_led4
 from app.repositories import DividendRepository
 
 logger = logging.getLogger(__name__)
@@ -34,7 +34,6 @@ async def _sync_cash_flows_internal():
     logger.info("Starting cash flow sync")
 
     emit(SystemEvent.CASH_FLOW_SYNC_START)
-    set_text("SYNCING CASH FLOWS...")
     set_led4(0, 255, 0)  # Green for processing
 
     client = get_tradernet_client()
@@ -44,7 +43,6 @@ async def _sync_cash_flows_internal():
             logger.warning("Failed to connect to Tradernet, skipping cash flow sync")
             error_msg = "BROKER CONNECTION FAILED"
             emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-            set_text(error_msg)
             return
 
     try:
@@ -183,6 +181,5 @@ async def _sync_cash_flows_internal():
         logger.error(f"Cash flow sync failed: {e}", exc_info=True)
         error_msg = "CASH FLOW SYNC CRASHES"
         emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-        set_text(error_msg)
     finally:
         set_led4(0, 0, 0)  # Clear LED when done

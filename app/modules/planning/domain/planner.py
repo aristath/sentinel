@@ -5,8 +5,16 @@ It replaces the monolithic holistic_planner.py functions with a composable,
 registry-based approach.
 """
 
+import gc
 import logging
 from typing import Dict, List, Optional, Set, Tuple
+
+try:
+    import psutil
+
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
 
 from app.domain.models import Position, Security
 from app.modules.planning.domain.calculations.context import (
@@ -520,6 +528,23 @@ class HolisticPlanner:
         best_score = 0.0
         best_breakdown = {}
 
+        # Performance optimization: Fetch multi-timeframe setting once before loop
+        # instead of querying DB for every sequence (eliminates N queries)
+        enable_multi_timeframe = False
+        if self.settings_repo:
+            enable_multi_timeframe = (
+                await self.settings_repo.get_float("enable_multi_timeframe", 0.0) == 1.0
+            )
+
+        # Arduino-Q reliability: Monitor memory state to detect potential OOM issues
+        # on constrained hardware (2GB RAM). Logs baseline for comparison during evaluation.
+        if PSUTIL_AVAILABLE:
+            mem = psutil.virtual_memory()
+            logger.info(
+                f"Starting sequence evaluation: {len(sequences)} sequences, "
+                f"Memory: {mem.percent:.1f}% used ({mem.used / 1024**3:.2f}GB / {mem.total / 1024**3:.2f}GB)"
+            )
+
         for i, sequence in enumerate(sequences):
             # Simulate sequence
             end_context, end_cash = await simulate_sequence(
@@ -538,21 +563,16 @@ class HolisticPlanner:
                 metrics_cache=self.metrics_cache,
             )
 
-            # Apply multi-timeframe if enabled
-            if self.settings_repo:
-                enable_multi_timeframe = (
-                    await self.settings_repo.get_float("enable_multi_timeframe", 0.0)
-                    == 1.0
+            # Apply multi-timeframe if enabled (using pre-fetched setting)
+            if enable_multi_timeframe:
+                score, breakdown = await evaluate_with_multi_timeframe(
+                    end_context=end_context,
+                    sequence=sequence,
+                    base_score=score,
+                    breakdown=breakdown,
+                    transaction_cost_fixed=eval_context.transaction_cost_fixed,
+                    transaction_cost_percent=eval_context.transaction_cost_percent,
                 )
-                if enable_multi_timeframe:
-                    score, breakdown = await evaluate_with_multi_timeframe(
-                        end_context=end_context,
-                        sequence=sequence,
-                        base_score=score,
-                        breakdown=breakdown,
-                        transaction_cost_fixed=eval_context.transaction_cost_fixed,
-                        transaction_cost_percent=eval_context.transaction_cost_percent,
-                    )
 
             # Track best
             if score > best_score:
@@ -560,10 +580,50 @@ class HolisticPlanner:
                 best_sequence = sequence
                 best_breakdown = breakdown
 
-            if (i + 1) % 10 == 0:
-                logger.info(f"Evaluated {i + 1}/{len(sequences)} sequences...")
+            # Progress logging with memory monitoring
+            # Log every 100 sequences to reduce noise (was 50)
+            if (i + 1) % 100 == 0:
+                progress_pct = ((i + 1) / len(sequences)) * 100
+                if PSUTIL_AVAILABLE:
+                    mem = psutil.virtual_memory()
+                    logger.info(
+                        f"Progress: {i + 1}/{len(sequences)} ({progress_pct:.1f}%), "
+                        f"Best score: {best_score:.3f}, "
+                        f"Memory: {mem.percent:.1f}% ({mem.used / 1024**3:.2f}GB)"
+                    )
+                    # Warn if memory usage high on Arduino-Q
+                    if mem.percent > 75:
+                        logger.warning(
+                            f"High memory usage detected: {mem.percent:.1f}% "
+                            f"({mem.used / 1024**3:.2f}GB / {mem.total / 1024**3:.2f}GB)"
+                        )
+                else:
+                    logger.info(
+                        f"Progress: {i + 1}/{len(sequences)} ({progress_pct:.1f}%), "
+                        f"Best score: {best_score:.3f}"
+                    )
 
-        logger.info(f"Best sequence score: {best_score:.3f}")
+            # Arduino-Q reliability: Minor GC every 50 sequences to prevent memory creep.
+            # Use generation=0 (youngest objects only) to minimize latency spikes.
+            # Full collection happens at batch end.
+            if (i + 1) % 50 == 0:
+                gc.collect(generation=0)
+
+        logger.info(
+            f"Evaluation complete: Best sequence score: {best_score:.3f} "
+            f"(from {len(sequences)} sequences)"
+        )
+
+        # Final cleanup: Full GC (all generations) to reclaim all unreachable objects
+        gc.collect()
+
+        if PSUTIL_AVAILABLE:
+            mem = psutil.virtual_memory()
+            logger.info(
+                f"Final memory state: {mem.percent:.1f}% used "
+                f"({mem.used / 1024**3:.2f}GB / {mem.total / 1024**3:.2f}GB)"
+            )
+
         return best_sequence, best_score, best_breakdown
 
     async def _build_plan(

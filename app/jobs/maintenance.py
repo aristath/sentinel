@@ -17,7 +17,7 @@ from app.config import settings
 from app.core.database.manager import get_db_manager
 from app.core.events import SystemEvent, emit
 from app.infrastructure.locking import file_lock
-from app.modules.display.services.display_service import set_led4, set_text
+from app.modules.display.services.display_service import set_led4
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,6 @@ async def _create_backup_internal():
     logger.info("Starting database backup")
 
     emit(SystemEvent.BACKUP_START)
-    set_text("BACKING UP DATABASE...")
     set_led4(0, 255, 0)  # Green for processing
 
     try:
@@ -77,7 +76,6 @@ async def _create_backup_internal():
         logger.error(f"Database backup failed: {e}")
         error_msg = "BACKUP FAILED"
         emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-        set_text(error_msg)
         raise
     finally:
         set_led4(0, 0, 0)  # Clear LED when done
@@ -143,7 +141,6 @@ async def _checkpoint_wal_internal():
     """Internal WAL checkpoint implementation."""
     logger.info("Running WAL checkpoint on all databases")
 
-    set_text("CHECKPOINTING DATABASE...")
     set_led4(0, 255, 0)  # Green for processing
 
     try:
@@ -189,7 +186,6 @@ async def _integrity_check_internal():
     logger.info("Running database integrity check")
 
     emit(SystemEvent.INTEGRITY_CHECK_START)
-    set_text("CHECKING DATABASE INTEGRITY...")
     set_led4(0, 255, 0)  # Green for processing
 
     try:
@@ -222,13 +218,11 @@ async def _integrity_check_internal():
         else:
             error_msg = "INTEGRITY CHECK FAILED"
             emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-            set_text(error_msg)
 
     except Exception as e:
         logger.error(f"Database integrity check failed: {e}")
         error_msg = "INTEGRITY CHECK FAILED"
         emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-        set_text(error_msg)
         raise
     finally:
         set_led4(0, 0, 0)  # Clear LED when done
@@ -250,7 +244,6 @@ async def _cleanup_old_daily_prices_internal():
     logger.info("Cleaning up old daily prices")
 
     emit(SystemEvent.CLEANUP_START)
-    set_text("CLEANING OLD PRICES...")
     set_led4(0, 255, 0)  # Green for processing
 
     try:
@@ -299,7 +292,6 @@ async def _cleanup_old_daily_prices_internal():
         logger.error(f"Daily price cleanup failed: {e}")
         error_msg = "CLEANUP FAILED"
         emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-        set_text(error_msg)
         raise
 
 
@@ -317,8 +309,6 @@ async def cleanup_expired_caches():
 async def _cleanup_expired_caches_internal():
     """Internal cache cleanup implementation."""
     logger.info("Cleaning up expired caches")
-
-    set_text("CLEANING EXPIRED CACHES...")
 
     try:
         from app.infrastructure.recommendation_cache import get_recommendation_cache
@@ -361,8 +351,6 @@ async def _cleanup_old_snapshots_internal():
     """Internal snapshot cleanup implementation."""
     logger.info("Cleaning up old portfolio snapshots")
 
-    set_text("CLEANING OLD SNAPSHOTS...")
-
     try:
         db_manager = get_db_manager()
         cutoff = (
@@ -402,7 +390,6 @@ async def run_daily_maintenance():
     logger.info("Starting daily maintenance")
 
     emit(SystemEvent.MAINTENANCE_START)
-    set_text("RUNNING MAINTENANCE...")
 
     try:
         # 1. Create backup first (before any cleanup)
@@ -423,7 +410,6 @@ async def run_daily_maintenance():
         logger.error(f"Daily maintenance failed: {e}")
         error_msg = "MAINTENANCE FAILED"
         emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-        set_text(error_msg)
         raise
     finally:
         set_led4(0, 0, 0)  # Clear LED when done

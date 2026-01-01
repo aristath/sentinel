@@ -12,7 +12,7 @@ from app.core.database.manager import get_db_manager
 from app.core.events import SystemEvent, emit
 from app.infrastructure.external.tradernet import get_tradernet_client
 from app.infrastructure.locking import file_lock
-from app.modules.display.services.display_service import set_led4, set_text
+from app.modules.display.services.display_service import set_led4
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +105,6 @@ async def _sync_trades_internal():
     logger.info("Starting trade sync from Tradernet...")
 
     emit(SystemEvent.TRADE_SYNC_START)
-    set_text("SYNCING TRADES...")
     set_led4(0, 255, 0)  # Green for processing
 
     try:
@@ -160,7 +159,6 @@ async def _sync_trades_internal():
         logger.error(f"Trade sync failed: {e}", exc_info=True)
         error_msg = "TRADE SYNC CRASHES"
         emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-        set_text(error_msg)
     finally:
         set_led4(0, 0, 0)  # Clear LED when done
 

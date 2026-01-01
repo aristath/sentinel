@@ -26,7 +26,7 @@ from app.domain.value_objects.trade_side import TradeSide
 from app.infrastructure.cache_invalidation import get_cache_invalidation_service
 from app.infrastructure.locking import file_lock
 from app.infrastructure.market_hours import is_market_open, should_check_market_hours
-from app.modules.display.services.display_service import set_led4, set_text
+from app.modules.display.services.display_service import set_led4
 from app.modules.planning.database.planner_repository import PlannerRepository
 from app.modules.portfolio.database.position_repository import PositionRepository
 from app.modules.system.jobs.sync_cycle import (
@@ -60,7 +60,6 @@ async def _run_event_based_trading_loop_internal():
             await _wait_for_planning_completion()
 
             # Step 2: Get optimal recommendation
-            set_text("GETTING RECOMMENDATION...")
             set_led4(0, 255, 0)  # Green for processing
             recommendation = await _get_optimal_recommendation()
 
@@ -70,7 +69,6 @@ async def _run_event_based_trading_loop_internal():
                 continue
 
             # Step 3: Check trading conditions (P&L guardrails)
-            set_text("CHECKING CONDITIONS...")
             can_trade, pnl_status = await _step_check_trading_conditions()
 
             if not can_trade:
@@ -79,7 +77,6 @@ async def _run_event_based_trading_loop_internal():
                 continue
 
             # Step 3.5: Check trade frequency limits
-            set_text("CHECKING FREQUENCY LIMITS...")
             from app.modules.trading.services.trade_frequency_service import (
                 TradeFrequencyService,
             )
@@ -98,7 +95,6 @@ async def _run_event_based_trading_loop_internal():
                 continue
 
             # Step 4: Check if trade can execute (market hours)
-            set_text("CHECKING MARKET HOURS...")
             can_execute, reason = await _can_execute_trade(recommendation)
 
             if not can_execute:
@@ -107,7 +103,6 @@ async def _run_event_based_trading_loop_internal():
                 continue
 
             # Step 5: Execute trade
-            set_text(f"EXECUTING {recommendation.side} {recommendation.symbol}...")
             result = await _execute_trade_order(recommendation)
 
             if result.get("status") == "success":
@@ -115,7 +110,6 @@ async def _run_event_based_trading_loop_internal():
                     f"Trade executed: {recommendation.side} {recommendation.symbol}"
                 )
                 # Re-sync portfolio after trade
-                set_text("SYNCING PORTFOLIO...")
                 await _step_sync_portfolio()
 
                 # Check and rebalance negative balances immediately after trade
@@ -127,7 +121,6 @@ async def _run_event_based_trading_loop_internal():
                 await check_and_rebalance_immediately()
 
                 # Step 6: Monitor portfolio for changes
-                set_text("MONITORING PORTFOLIO...")
                 portfolio_changed = await _monitor_portfolio_for_changes()
 
                 if portfolio_changed:
@@ -153,7 +146,6 @@ async def _run_event_based_trading_loop_internal():
             logger.error(f"Event-based trading loop failed: {e}", exc_info=True)
             error_msg = "MAIN TRADING LOOP CRASHES"
             emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-            set_text(error_msg)
             set_led4(255, 0, 0)  # Red for error
             await asyncio.sleep(60)  # Wait 1 minute before retrying
         finally:
@@ -463,7 +455,6 @@ async def _wait_for_planning_completion():
 
         # Update planning progress display
         total_sequences = await planner_repo.get_total_sequence_count(portfolio_hash)
-        evaluated_count = await planner_repo.get_evaluation_count(portfolio_hash)
         is_finished = await planner_repo.are_all_sequences_evaluated(portfolio_hash)
 
         # Check if planning is active
@@ -484,11 +475,7 @@ async def _wait_for_planning_completion():
                 # If we can't check scheduler, assume planning is active if there's work to do
                 is_planning = total_sequences > 0 and not is_finished
 
-        if is_planning and total_sequences > 0:
-            set_text(
-                f"PLANNING ({evaluated_count}/{total_sequences} SCENARIOS SIMULATED)"
-            )
-        else:
+        if not is_planning or total_sequences == 0:
             set_led4(0, 0, 0)  # Clear LED when done
 
         # Check periodically (reduced interval since API-driven batches are faster)

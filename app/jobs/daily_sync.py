@@ -13,7 +13,7 @@ from app.infrastructure.dependencies import get_exchange_rate_service
 from app.infrastructure.external import yahoo_finance as yahoo
 from app.infrastructure.external.tradernet import get_tradernet_client
 from app.infrastructure.locking import file_lock
-from app.modules.display.services.display_service import set_led3, set_led4, set_text
+from app.modules.display.services.display_service import set_led3, set_led4
 from app.modules.universe.database.security_repository import SecurityRepository
 from app.shared.domain.value_objects.currency import Currency
 
@@ -231,7 +231,6 @@ async def _sync_portfolio_internal():
     """Internal portfolio sync implementation."""
     logger.info("Starting portfolio sync")
 
-    set_text("SYNCING PORTFOLIO...")
     set_led3(0, 0, 255)  # Blue for sync
     emit(SystemEvent.SYNC_START)
 
@@ -242,7 +241,6 @@ async def _sync_portfolio_internal():
             logger.error("Failed to connect to Tradernet, skipping sync")
             error_msg = "BROKER CONNECTION FAILED"
             emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-            set_text(error_msg)
             return
 
     try:
@@ -412,7 +410,6 @@ async def _sync_portfolio_internal():
         emit(SystemEvent.SYNC_COMPLETE)
         error_msg = "PORTFOLIO SYNC FAILED"
         emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-        set_text(error_msg)
         raise
     finally:
         set_led3(0, 0, 0)  # Clear LED when done
@@ -435,7 +432,6 @@ async def _sync_prices_internal():
 
     logger.info("Starting price sync")
 
-    set_text("UPDATING STOCK PRICES...")
     set_led3(0, 0, 255)  # Blue for sync
     emit(SystemEvent.SYNC_START)
 
@@ -498,7 +494,6 @@ async def _sync_prices_internal():
         emit(SystemEvent.SYNC_COMPLETE)
         error_msg = "PRICE SYNC FAILED"
         emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-        set_text(error_msg)
         raise
 
 
@@ -510,7 +505,6 @@ async def sync_security_currencies():
 
     logger.info("Starting security currency sync")
 
-    set_text("SYNCING SECURITY CURRENCIES...")
     set_led3(0, 0, 255)  # Blue for sync
 
     client = get_tradernet_client()

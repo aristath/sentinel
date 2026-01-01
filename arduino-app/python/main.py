@@ -73,6 +73,33 @@ def set_rgb4(r: int, g: int, b: int) -> bool:
         return False
 
 
+def handle_stats_mode(stats: dict) -> bool:
+    """Handle system stats visualization mode.
+
+    Args:
+        stats: Dict with cpu_percent, ram_percent, pixels_on, brightness
+
+    Returns:
+        True if successful, False otherwise
+    """
+    pixels_on = stats.get("pixels_on", 0)
+    brightness = stats.get("brightness", 100)
+    cpu_percent = stats.get("cpu_percent", 0)
+    ram_percent = stats.get("ram_percent", 0)
+
+    # Calculate animation interval: 2000ms - (load% × 19.9)
+    load_percent = (cpu_percent + ram_percent) / 2
+    interval_ms = max(10, int(2000 - (load_percent * 19.9)))
+
+    try:
+        Bridge.call("setSystemStats", pixels_on, brightness, interval_ms, timeout=2)
+        logger.debug(f"Stats mode: {pixels_on} pixels, brightness {brightness}, {interval_ms}ms interval")
+        return True
+    except Exception as e:
+        logger.debug(f"setSystemStats failed: {e}")
+        return False
+
+
 def fetch_display_state() -> dict | None:
     """Fetch display state from FastAPI backend.
 
@@ -128,8 +155,9 @@ def restart_bridge_if_needed() -> bool:
 def loop():
     """Main loop - fetch display state from API, update MCU.
 
-    Polls every 1 second. Always sends commands to Bridge (stateless).
-    Arduino queue handles deduplication with latest-wins strategy.
+    Polls every 2 seconds (0.5Hz). Handles two modes:
+    - STATS: System stats visualization (default)
+    - TICKER: Scrolling text when ticker data exists
     """
     try:
         state = fetch_display_state()
@@ -138,7 +166,7 @@ def loop():
             # API unreachable
             if not check_bridge_health():
                 restart_bridge_if_needed()
-            time.sleep(1)
+            time.sleep(2)  # Changed to 2s (0.5Hz)
             return
 
         # Update RGB LEDs (always send, let Arduino handle it)
@@ -147,21 +175,37 @@ def loop():
         set_rgb3(led3[0], led3[1], led3[2])
         set_rgb4(led4[0], led4[1], led4[2])
 
-        # Update display text (always send, Arduino queues with latest-wins)
-        display_text = state.get("display_text", "")
-        if display_text:
-            success = scroll_text(display_text, state.get("ticker_speed", DEFAULT_TICKER_SPEED))
-            if not success:
-                logger.warning(f"Failed to send display text to Arduino: '{display_text}'")
-        else:
-            logger.debug("Display text is empty, skipping scroll_text call")
+        # Handle display mode
+        mode = state.get("mode", "TICKER")
 
-        time.sleep(1)  # Poll every 1 second
+        if mode == "STATS":
+            # System stats mode (default when no ticker data)
+            stats = state.get("stats")
+            if stats:
+                success = handle_stats_mode(stats)
+                if not success:
+                    logger.warning("Failed to send stats to Arduino")
+            else:
+                logger.debug("Stats mode but no stats data")
+
+        elif mode == "TICKER":
+            # Ticker mode (when ticker data exists)
+            display_text = state.get("display_text", "")
+            if display_text:
+                ticker_speed = state.get("ticker_speed", DEFAULT_TICKER_SPEED)
+                success = scroll_text(display_text, ticker_speed)
+                if not success:
+                    logger.warning(f"Failed to send ticker to Arduino: '{display_text}'")
+            else:
+                logger.debug("Ticker mode but no display text")
+
+        # Poll at 0.5Hz (every 2 seconds)
+        time.sleep(2)
 
     except Exception as e:
         logger.error(f"Loop error: {e}")
-        time.sleep(1)
+        time.sleep(2)
 
 
-logger.info("LED Display starting (scrolling text mode)...")
+logger.info("LED Display starting (system stats + ticker mode)...")
 App.run(user_loop=loop)
