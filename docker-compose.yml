@@ -1,0 +1,112 @@
+version: '3.8'
+
+services:
+  planning:
+    build:
+      context: .
+      dockerfile: services/planning/Dockerfile
+    ports:
+      - "50051:50051"
+    volumes:
+      - ./app/config:/app/app/config:ro
+    environment:
+      - DEVICE_CONFIG_PATH=/app/app/config/device.yaml
+      - SERVICES_CONFIG_PATH=/app/app/config/services.yaml
+    networks:
+      - arduino-trader
+
+  scoring:
+    build:
+      context: .
+      dockerfile: services/scoring/Dockerfile
+    ports:
+      - "50052:50052"
+    volumes:
+      - ./app/config:/app/app/config:ro
+    environment:
+      - DEVICE_CONFIG_PATH=/app/app/config/device.yaml
+      - SERVICES_CONFIG_PATH=/app/app/config/services.yaml
+    networks:
+      - arduino-trader
+
+  optimization:
+    build:
+      context: .
+      dockerfile: services/optimization/Dockerfile
+    ports:
+      - "50053:50053"
+    volumes:
+      - ./app/config:/app/app/config:ro
+    environment:
+      - DEVICE_CONFIG_PATH=/app/app/config/device.yaml
+      - SERVICES_CONFIG_PATH=/app/app/config/services.yaml
+    networks:
+      - arduino-trader
+
+  portfolio:
+    build:
+      context: .
+      dockerfile: services/portfolio/Dockerfile
+    ports:
+      - "50054:50054"
+    volumes:
+      - ./app/config:/app/app/config:ro
+    environment:
+      - DEVICE_CONFIG_PATH=/app/app/config/device.yaml
+      - SERVICES_CONFIG_PATH=/app/app/config/services.yaml
+    networks:
+      - arduino-trader
+
+  trading:
+    build:
+      context: .
+      dockerfile: services/trading/Dockerfile
+    ports:
+      - "50055:50055"
+    volumes:
+      - ./app/config:/app/app/config:ro
+    environment:
+      - DEVICE_CONFIG_PATH=/app/app/config/device.yaml
+      - SERVICES_CONFIG_PATH=/app/app/config/services.yaml
+    networks:
+      - arduino-trader
+
+  universe:
+    build:
+      context: .
+      dockerfile: services/universe/Dockerfile
+    ports:
+      - "50056:50056"
+    volumes:
+      - ./app/config:/app/app/config:ro
+    environment:
+      - DEVICE_CONFIG_PATH=/app/app/config/device.yaml
+      - SERVICES_CONFIG_PATH=/app/app/config/services.yaml
+    networks:
+      - arduino-trader
+
+  gateway:
+    build:
+      context: .
+      dockerfile: services/gateway/Dockerfile
+    ports:
+      - "50057:50057"
+      - "8000:8000"  # HTTP API
+    volumes:
+      - ./app/config:/app/app/config:ro
+    environment:
+      - DEVICE_CONFIG_PATH=/app/app/config/device.yaml
+      - SERVICES_CONFIG_PATH=/app/app/config/services.yaml
+    networks:
+      - arduino-trader
+    depends_on:
+      - planning
+      - scoring
+      - optimization
+      - portfolio
+      - trading
+      - universe
+
+networks:
+  arduino-trader:
+    driver: bridge
