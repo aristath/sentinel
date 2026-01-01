@@ -100,10 +100,29 @@ class GatewayServicer(gateway_pb2_grpc.GatewayServiceServicer):
         context,
     ) -> gateway_pb2.GetServiceHealthResponse:
         """Get health of a specific service."""
-        # TODO: Implement specific service health check
-        return gateway_pb2.GetServiceHealthResponse(
-            found=False,
-        )
+        # Get system status and find the requested service
+        status = await self.local_service.get_system_status()
+
+        service_status = None
+        for service in status.services:
+            if service["service_name"] == request.service_name:
+                service_status = service
+                break
+
+        if service_status:
+            grpc_status = gateway_pb2.ServiceStatus(
+                service_name=service_status["service_name"],
+                healthy=service_status["healthy"],
+                version=service_status.get("version", ""),
+                status_message=service_status.get("status_message", ""),
+            )
+
+            return gateway_pb2.GetServiceHealthResponse(
+                found=True,
+                status=grpc_status,
+            )
+        else:
+            return gateway_pb2.GetServiceHealthResponse(found=False)
 
     async def HealthCheck(
         self,

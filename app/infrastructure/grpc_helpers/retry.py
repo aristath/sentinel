@@ -4,7 +4,7 @@ import asyncio
 import logging
 import random
 from dataclasses import dataclass
-from typing import Awaitable, Callable, Type, TypeVar
+from typing import Awaitable, Callable, Optional, Type, TypeVar
 
 T = TypeVar("T")
 
@@ -34,7 +34,7 @@ class RetryExhaustedError(Exception):
 
 
 async def retry_with_backoff(
-    func: Callable[[], Awaitable[T]], config: RetryConfig | None = None
+    func: Callable[[], Awaitable[T]], config: Optional[RetryConfig] = None
 ) -> T:
     """
     Retry an async function with exponential backoff.
@@ -50,7 +50,7 @@ async def retry_with_backoff(
         RetryExhaustedError: If all retry attempts fail
     """
     config = config or RetryConfig()
-    last_exception: Exception | None = None
+    last_exception: Optional[Exception] = None
 
     for attempt in range(config.max_attempts):
         try:
@@ -95,7 +95,7 @@ async def retry_with_backoff(
     ) from last_exception
 
 
-def with_retry(config: RetryConfig | None = None):
+def with_retry(config: Optional[RetryConfig] = None):
     """
     Decorator to add retry logic to async functions.
 
@@ -130,7 +130,7 @@ class RetryStats:
 class RetryWithStats:
     """Retry wrapper that collects statistics."""
 
-    def __init__(self, config: RetryConfig | None = None):
+    def __init__(self, config: Optional[RetryConfig] = None):
         """Initialize retry with stats tracking."""
         self.config = config or RetryConfig()
         self.stats = RetryStats()
@@ -138,7 +138,7 @@ class RetryWithStats:
     async def call(self, func: Callable[[], Awaitable[T]]) -> T:
         """Execute function with retry and collect stats."""
         self.stats.total_calls += 1
-        last_exception: Exception | None = None
+        last_exception: Optional[Exception] = None
         retry_count = 0
 
         for attempt in range(self.config.max_attempts):
@@ -205,7 +205,7 @@ class RetryRegistry:
         self._handlers: dict[str, RetryWithStats] = {}
 
     def get_or_create(
-        self, name: str, config: RetryConfig | None = None
+        self, name: str, config: Optional[RetryConfig] = None
     ) -> RetryWithStats:
         """Get or create a retry handler by name."""
         if name not in self._handlers:
@@ -221,7 +221,9 @@ class RetryRegistry:
 _registry = RetryRegistry()
 
 
-def get_retry_handler(name: str, config: RetryConfig | None = None) -> RetryWithStats:
+def get_retry_handler(
+    name: str, config: Optional[RetryConfig] = None
+) -> RetryWithStats:
     """Get or create a retry handler from global registry."""
     return _registry.get_or_create(name, config)
 

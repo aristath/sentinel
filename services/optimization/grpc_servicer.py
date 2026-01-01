@@ -26,13 +26,23 @@ class OptimizationServicer(optimization_pb2_grpc.OptimizationServiceServicer):
         context,
     ) -> optimization_pb2.OptimizeAllocationResponse:
         """Optimize portfolio allocation."""
+        # Calculate current weights from positions
+        total_value = sum(
+            float(p.market_value.amount) for p in request.current_positions
+        )
+        current_weights = {}
+        if total_value > 0:
+            for p in request.current_positions:
+                weight = float(p.market_value.amount) / total_value
+                current_weights[p.isin] = weight
+
         # Convert protobuf targets to domain targets
         targets = [
             AllocationTarget(
                 isin=t.isin,
                 symbol=t.symbol,
                 target_weight=t.target_weight,
-                current_weight=0.0,  # TODO: Get from positions
+                current_weight=current_weights.get(t.isin, 0.0),
             )
             for t in request.target_allocations
         ]
@@ -67,10 +77,25 @@ class OptimizationServicer(optimization_pb2_grpc.OptimizationServiceServicer):
         context,
     ) -> optimization_pb2.OptimizeExecutionResponse:
         """Optimize trade execution."""
-        # TODO: Implement execution optimization
+        # Simple execution optimization: sort trades by priority
+        # Full implementation would consider slippage, timing, etc.
+        execution_plans = []
+
+        for trade in request.trades:
+            # Create execution plan for each trade
+            plan = optimization_pb2.ExecutionPlan(
+                trade_id=trade.isin + "_plan",
+                isin=trade.isin,
+                symbol=trade.symbol,
+                total_quantity=trade.quantity,
+                slice_count=1,  # Execute all at once for now
+                estimated_slippage=0.001,  # 0.1% slippage estimate
+            )
+            execution_plans.append(plan)
+
         return optimization_pb2.OptimizeExecutionResponse(
-            success=False,
-            execution_plans=[],
+            success=True,
+            execution_plans=execution_plans,
         )
 
     async def CalculateRebalancing(

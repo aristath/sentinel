@@ -4,7 +4,7 @@ import asyncio
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Awaitable, Callable, TypeVar
+from typing import Awaitable, Callable, Optional, TypeVar
 
 T = TypeVar("T")
 
@@ -50,13 +50,13 @@ class CircuitBreaker:
             return await some_grpc_call()
     """
 
-    def __init__(self, config: CircuitBreakerConfig | None = None):
+    def __init__(self, config: Optional[CircuitBreakerConfig] = None):
         """Initialize circuit breaker."""
         self.config = config or CircuitBreakerConfig()
         self.state = CircuitState.CLOSED
         self.failure_count = 0
         self.success_count = 0
-        self.last_failure_time: float | None = None
+        self.last_failure_time: Optional[float] = None
         self._lock = asyncio.Lock()
         self._half_open_call_in_progress = False
 
@@ -180,14 +180,14 @@ class CircuitBreakerRegistry:
         self._breakers: dict[str, CircuitBreaker] = {}
 
     def get_or_create(
-        self, name: str, config: CircuitBreakerConfig | None = None
+        self, name: str, config: Optional[CircuitBreakerConfig] = None
     ) -> CircuitBreaker:
         """Get or create a circuit breaker by name."""
         if name not in self._breakers:
             self._breakers[name] = CircuitBreaker(config)
         return self._breakers[name]
 
-    def get(self, name: str) -> CircuitBreaker | None:
+    def get(self, name: str) -> Optional[CircuitBreaker]:
         """Get circuit breaker by name."""
         return self._breakers.get(name)
 
@@ -201,7 +201,7 @@ _registry = CircuitBreakerRegistry()
 
 
 def get_circuit_breaker(
-    name: str, config: CircuitBreakerConfig | None = None
+    name: str, config: Optional[CircuitBreakerConfig] = None
 ) -> CircuitBreaker:
     """Get or create a circuit breaker from global registry."""
     return _registry.get_or_create(name, config)

@@ -115,8 +115,13 @@ class TradingServicer(trading_pb2_grpc.TradingServiceServicer):
         context,
     ) -> trading_pb2.GetTradeStatusResponse:
         """Get trade status."""
-        # TODO: Implement trade status lookup
-        return trading_pb2.GetTradeStatusResponse(found=False)
+        # In full implementation, would query trade status from database/broker
+        # For now, return not found (trades are executed immediately in current implementation)
+        return trading_pb2.GetTradeStatusResponse(
+            found=False,
+            status=trading_pb2.UNKNOWN,
+            message="Trade status tracking not yet implemented",
+        )
 
     async def GetTradeHistory(
         self,
@@ -124,10 +129,30 @@ class TradingServicer(trading_pb2_grpc.TradingServiceServicer):
         context,
     ) -> trading_pb2.GetTradeHistoryResponse:
         """Get trade history."""
-        # TODO: Implement trade history
+        # Get trade history from local service
+        # In full implementation, would have pagination and filtering
+        history = await self.local_service.get_trade_history(
+            account_id=request.account_id,
+            limit=request.limit if request.limit > 0 else 100,
+        )
+
+        # Convert to protobuf
+        grpc_executions = [
+            trading_pb2.TradeExecution(
+                trade_id=str(trade.id) if trade.id else "",
+                isin=trade.isin or "",
+                symbol=trade.symbol,
+                side=trading_pb2.BUY if trade.side == "BUY" else trading_pb2.SELL,
+                quantity_requested=trade.quantity,
+                quantity_filled=trade.quantity,
+                average_price=common_pb2.Money(amount=str(trade.price), currency="USD"),
+            )
+            for trade in history
+        ]
+
         return trading_pb2.GetTradeHistoryResponse(
-            executions=[],
-            total=0,
+            executions=grpc_executions,
+            total=len(history),
         )
 
     async def CancelTrade(
@@ -136,10 +161,11 @@ class TradingServicer(trading_pb2_grpc.TradingServiceServicer):
         context,
     ) -> trading_pb2.CancelTradeResponse:
         """Cancel a pending trade."""
-        # TODO: Implement trade cancellation
+        # Current implementation executes trades immediately, so cancellation not applicable
+        # In full implementation with pending orders, would call broker API to cancel
         return trading_pb2.CancelTradeResponse(
             success=False,
-            message="Trade cancellation not yet implemented",
+            message="Trade cancellation not supported - trades execute immediately",
         )
 
     async def ValidateTrade(
@@ -148,11 +174,28 @@ class TradingServicer(trading_pb2_grpc.TradingServiceServicer):
         context,
     ) -> trading_pb2.ValidateTradeResponse:
         """Validate trade (pre-execution check)."""
-        # TODO: Implement trade validation
+        errors = []
+        warnings = []
+
+        # Basic validation
+        if request.quantity <= 0:
+            errors.append("Quantity must be positive")
+
+        if not request.symbol and not request.isin:
+            errors.append("Either symbol or ISIN must be provided")
+
+        # Check if sufficient cash (simplified - full implementation would check actual balance)
+        if request.side == trading_pb2.BUY:
+            estimated_cost = request.quantity * float(
+                request.limit_price.amount if request.limit_price.amount else 0
+            )
+            if estimated_cost > 10000:  # Placeholder limit
+                warnings.append("Trade value exceeds typical limit")
+
         return trading_pb2.ValidateTradeResponse(
-            valid=True,
-            errors=[],
-            warnings=[],
+            valid=len(errors) == 0,
+            errors=errors,
+            warnings=warnings,
         )
 
     async def HealthCheck(
