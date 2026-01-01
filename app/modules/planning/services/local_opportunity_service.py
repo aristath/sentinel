@@ -48,6 +48,12 @@ class LocalOpportunityService:
         positions = self._to_positions(request.positions)
         securities = self._to_securities(request.securities)
 
+        # Convert recently_sold and ineligible_symbols to sets if provided
+        recently_sold = set(request.recently_sold) if request.recently_sold else None
+        ineligible_symbols = (
+            set(request.ineligible_symbols) if request.ineligible_symbols else None
+        )
+
         # Call domain logic
         if request.target_weights:
             opportunities = await identify_opportunities_from_weights(
@@ -59,6 +65,8 @@ class LocalOpportunityService:
                 current_prices=request.current_prices or {},
                 transaction_cost_fixed=request.transaction_cost_fixed,
                 transaction_cost_percent=request.transaction_cost_percent,
+                recently_sold=recently_sold,
+                ineligible_symbols=ineligible_symbols,
             )
         else:
             opportunities = await identify_opportunities(

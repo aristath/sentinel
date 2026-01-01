@@ -80,6 +80,12 @@ class IdentifyOpportunitiesRequest(BaseModel):
     transaction_cost_percent: float = Field(
         default=0.002, description="Percentage cost (0.002 = 0.2%)"
     )
+    recently_sold: Optional[List[str]] = Field(
+        default=None, description="Recently sold symbols (for cooldown)"
+    )
+    ineligible_symbols: Optional[List[str]] = Field(
+        default=None, description="Symbols ineligible for selling"
+    )
 
 
 class IdentifyOpportunitiesResponse(BaseModel):
