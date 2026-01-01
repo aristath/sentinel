@@ -5,6 +5,30 @@ deployment:
   # Deployment mode: "local", "distributed", "load_balanced"
   mode: "local"
 
+# TLS/mTLS Configuration
+# Enable for secure communication in distributed mode
+tls:
+  # Enable TLS encryption (recommended for dual-device deployment)
+  enabled: false
+
+  # Enable mutual TLS (mTLS) for client authentication
+  # Requires enabled: true
+  mutual: false
+
+  # Certificate paths (relative to project root or absolute)
+  # Generate using: ./scripts/generate_certs.sh [--mtls]
+  ca_cert: "certs/ca-cert.pem"
+  server_cert: "certs/server-cert.pem"
+  server_key: "certs/server-key.pem"
+
+  # Client certificates (required when mutual: true)
+  # Use device-specific certificates (device1-client-cert.pem, device2-client-cert.pem, etc.)
+  client_cert: "certs/device1-client-cert.pem"
+  client_key: "certs/device1-client-key.pem"
+
+  # Server hostname for certificate validation (must match server cert CN/SAN)
+  server_hostname_override: "arduino-trader-server"
+
 services:
   planning:
     # Service mode: "local" (in-process) or "remote" (gRPC)

@@ -24,7 +24,6 @@ async def serve():
     # Load configuration
     device_config = load_device_config()
     service_locator = get_service_locator()
-    service_location = service_locator.get_service_location("scoring")
 
     # Create gRPC server
     server = grpc.aio.server(
@@ -34,12 +33,12 @@ async def serve():
     # Add servicer to server
     scoring_pb2_grpc.add_ScoringServiceServicer_to_server(ScoringServicer(), server)
 
-    # Bind to address
-    address = f"{device_config.bind_address}:{service_location.port}"
-    server.add_insecure_port(address)
+    # Bind to address (with TLS support if configured)
+    address = service_locator.add_server_port(server, "scoring")
 
     # Start server
-    logger.info(f"Starting Scoring service on {address}")
+    tls_status = "with TLS" if service_locator.tls_config else "without TLS"
+    logger.info(f"Starting Scoring service on {address} ({tls_status})")
     await server.start()
     logger.info("Scoring service started successfully")
 

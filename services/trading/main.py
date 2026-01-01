@@ -24,7 +24,6 @@ async def serve():
     # Load configuration
     device_config = load_device_config()
     service_locator = get_service_locator()
-    service_location = service_locator.get_service_location("trading")
 
     # Create gRPC server
     server = grpc.aio.server(
@@ -34,12 +33,12 @@ async def serve():
     # Add servicer to server
     trading_pb2_grpc.add_TradingServiceServicer_to_server(TradingServicer(), server)
 
-    # Bind to address
-    address = f"{device_config.bind_address}:{service_location.port}"
-    server.add_insecure_port(address)
+    # Bind to address (with TLS support if configured)
+    address = service_locator.add_server_port(server, "trading")
 
     # Start server
-    logger.info(f"Starting Trading service on {address}")
+    tls_status = "with TLS" if service_locator.tls_config else "without TLS"
+    logger.info(f"Starting Trading service on {address} ({tls_status})")
     await server.start()
     logger.info("Trading service started successfully")
 
