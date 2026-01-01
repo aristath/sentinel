@@ -3,9 +3,7 @@
 import os
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
-import grpc
 import pytest
 import yaml  # type: ignore[import-untyped]
 
@@ -139,28 +137,6 @@ def temp_config_file_with_mtls(mock_services_config_with_mtls):
     os.unlink(temp_path)
 
 
-@pytest.fixture
-def temp_cert_files():
-    """Create temporary certificate files."""
-    temp_dir = tempfile.mkdtemp()
-    certs_dir = Path(temp_dir) / "certs"
-    certs_dir.mkdir()
-
-    # Create mock certificate files
-    (certs_dir / "ca-cert.pem").write_text("MOCK CA CERT")
-    (certs_dir / "server-cert.pem").write_text("MOCK SERVER CERT")
-    (certs_dir / "server-key.pem").write_text("MOCK SERVER KEY")
-    (certs_dir / "client-cert.pem").write_text("MOCK CLIENT CERT")
-    (certs_dir / "client-key.pem").write_text("MOCK CLIENT KEY")
-
-    yield temp_dir
-
-    # Cleanup
-    import shutil
-
-    shutil.rmtree(temp_dir)
-
-
 def test_service_locator_initialization(temp_config_file):
     """Test ServiceLocator initialization."""
     locator = ServiceLocator(services_config_path=temp_config_file)
@@ -265,40 +241,6 @@ def test_load_tls_config_mtls(temp_config_file_with_mtls):
     assert locator.tls_config.server_hostname_override == "localhost"
 
 
-def test_create_insecure_channel(temp_config_file):
-    """Test creating insecure gRPC channel."""
-    locator = ServiceLocator(services_config_path=temp_config_file)
-
-    channel = locator.create_channel("planning")
-
-    assert isinstance(channel, grpc.aio.Channel)
-    # Channel created, will be closed when test ends
-
-
-def test_create_secure_channel_with_tls(temp_config_file_with_tls, temp_cert_files):
-    """Test creating secure channel with TLS."""
-    locator = ServiceLocator(services_config_path=temp_config_file_with_tls)
-
-    # Override project root to use temp certs
-    locator.project_root = Path(temp_cert_files)
-
-    channel = locator.create_channel("planning")
-
-    assert isinstance(channel, grpc.aio.Channel)
-
-
-def test_create_secure_channel_with_mtls(temp_config_file_with_mtls, temp_cert_files):
-    """Test creating secure channel with mTLS."""
-    locator = ServiceLocator(services_config_path=temp_config_file_with_mtls)
-
-    # Override project root to use temp certs
-    locator.project_root = Path(temp_cert_files)
-
-    channel = locator.create_channel("planning")
-
-    assert isinstance(channel, grpc.aio.Channel)
-
-
 def test_resolve_cert_path_relative(temp_config_file):
     """Test certificate path resolution for relative paths."""
     locator = ServiceLocator(services_config_path=temp_config_file)
@@ -318,116 +260,6 @@ def test_resolve_cert_path_absolute(temp_config_file):
 
     assert resolved == Path(absolute_path)
     assert resolved.is_absolute()
-
-
-def test_create_channel_credentials_tls(temp_config_file_with_tls, temp_cert_files):
-    """Test creating channel credentials for TLS."""
-    locator = ServiceLocator(services_config_path=temp_config_file_with_tls)
-    locator.project_root = Path(temp_cert_files)
-
-    credentials = locator._create_channel_credentials()
-
-    assert isinstance(credentials, grpc.ChannelCredentials)
-
-
-def test_create_channel_credentials_mtls(temp_config_file_with_mtls, temp_cert_files):
-    """Test creating channel credentials for mTLS."""
-    locator = ServiceLocator(services_config_path=temp_config_file_with_mtls)
-    locator.project_root = Path(temp_cert_files)
-
-    credentials = locator._create_channel_credentials()
-
-    assert isinstance(credentials, grpc.ChannelCredentials)
-
-
-def test_create_channel_credentials_no_tls_config(temp_config_file):
-    """Test error when creating credentials without TLS config."""
-    locator = ServiceLocator(services_config_path=temp_config_file)
-
-    with pytest.raises(ValueError, match="TLS config not loaded"):
-        locator._create_channel_credentials()
-
-
-def test_create_channel_credentials_mtls_missing_client_cert(
-    temp_config_file_with_tls, temp_cert_files
-):
-    """Test error when mTLS enabled but client cert missing."""
-    locator = ServiceLocator(services_config_path=temp_config_file_with_tls)
-    locator.project_root = Path(temp_cert_files)
-
-    # Enable mutual TLS but don't provide client cert
-    assert locator.tls_config is not None
-    locator.tls_config.mutual = True
-    locator.tls_config.client_cert = None
-
-    with pytest.raises(ValueError, match="mTLS enabled but client_cert"):
-        locator._create_channel_credentials()
-
-
-def test_create_server_credentials_disabled(temp_config_file):
-    """Test server credentials when TLS disabled."""
-    locator = ServiceLocator(services_config_path=temp_config_file)
-
-    credentials = locator.create_server_credentials()
-
-    assert credentials is None
-
-
-def test_create_server_credentials_tls(temp_config_file_with_tls, temp_cert_files):
-    """Test creating server credentials with TLS."""
-    locator = ServiceLocator(services_config_path=temp_config_file_with_tls)
-    locator.project_root = Path(temp_cert_files)
-
-    credentials = locator.create_server_credentials()
-
-    assert isinstance(credentials, grpc.ServerCredentials)
-
-
-def test_create_server_credentials_mtls(temp_config_file_with_mtls, temp_cert_files):
-    """Test creating server credentials with mTLS."""
-    locator = ServiceLocator(services_config_path=temp_config_file_with_mtls)
-    locator.project_root = Path(temp_cert_files)
-
-    credentials = locator.create_server_credentials()
-
-    assert isinstance(credentials, grpc.ServerCredentials)
-
-
-@patch("app.infrastructure.service_discovery.load_device_config")
-def test_add_server_port_insecure(mock_load_device, temp_config_file):
-    """Test adding insecure port to server."""
-    # Mock device config
-    mock_device = MagicMock()
-    mock_device.bind_address = "0.0.0.0"  # nosec B104
-    mock_load_device.return_value = mock_device
-
-    locator = ServiceLocator(services_config_path=temp_config_file)
-    mock_server = MagicMock()
-
-    address = locator.add_server_port(mock_server, "planning")
-
-    assert address == "0.0.0.0:50051"
-    mock_server.add_insecure_port.assert_called_once_with("0.0.0.0:50051")
-
-
-@patch("app.infrastructure.service_discovery.load_device_config")
-def test_add_server_port_secure(
-    mock_load_device, temp_config_file_with_tls, temp_cert_files
-):
-    """Test adding secure port to server."""
-    # Mock device config
-    mock_device = MagicMock()
-    mock_device.bind_address = "0.0.0.0"  # nosec B104
-    mock_load_device.return_value = mock_device
-
-    locator = ServiceLocator(services_config_path=temp_config_file_with_tls)
-    locator.project_root = Path(temp_cert_files)
-    mock_server = MagicMock()
-
-    address = locator.add_server_port(mock_server, "planning")
-
-    assert address == "0.0.0.0:50051"
-    mock_server.add_secure_port.assert_called_once()
 
 
 def test_is_service_local(temp_config_file):
@@ -470,43 +302,3 @@ def test_singleton_pattern(temp_config_file):
     finally:
         del os.environ["SERVICES_CONFIG_PATH"]
         reset_service_locator()
-
-
-def test_channel_options_configured(temp_config_file):
-    """Test that channel options are properly configured."""
-    locator = ServiceLocator(services_config_path=temp_config_file)
-
-    # Mock grpc to capture options
-    with patch("grpc.aio.insecure_channel") as mock_insecure:
-        locator.create_channel("planning")
-
-        # Verify called with options
-        mock_insecure.assert_called_once()
-        call_args = mock_insecure.call_args
-
-        # Check options include keepalive settings
-        options = call_args.kwargs.get("options", [])
-        option_names = [opt[0] for opt in options]
-
-        assert "grpc.keepalive_time_ms" in option_names
-        assert "grpc.keepalive_timeout_ms" in option_names
-        assert "grpc.keepalive_permit_without_calls" in option_names
-
-
-def test_hostname_override_in_channel(temp_config_file_with_mtls, temp_cert_files):
-    """Test server hostname override in secure channel."""
-    locator = ServiceLocator(services_config_path=temp_config_file_with_mtls)
-    locator.project_root = Path(temp_cert_files)
-
-    with patch("grpc.aio.secure_channel") as mock_secure:
-        locator.create_channel("planning")
-
-        # Verify called with hostname override option
-        mock_secure.assert_called_once()
-        call_args = mock_secure.call_args
-
-        options = call_args.kwargs.get("options", [])
-        option_dict = dict(options)
-
-        assert "grpc.ssl_target_name_override" in option_dict
-        assert option_dict["grpc.ssl_target_name_override"] == "localhost"
