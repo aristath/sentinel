@@ -819,7 +819,6 @@ document.addEventListener('alpine:init', () => {
 
     // Planner Management
     async openPlannerManagement() {
-    async openPlannerManagement() {
       this.showPlannerManagementModal = true;
       this.plannerFormMode = 'none';
       this.selectedPlannerId = '';
@@ -1144,6 +1143,7 @@ enable_combinatorial = true
       this.plannerError = null;
       this.showPlannerHistory = false;
       this.plannerHistory = [];
+    },
 
     // Bucket/Universe Management
     async createUniverse() {
