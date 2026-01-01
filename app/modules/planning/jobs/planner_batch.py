@@ -12,9 +12,6 @@ from app.domain.portfolio_hash import generate_portfolio_hash
 from app.domain.services.exchange_rate_service import ExchangeRateService
 from app.infrastructure.external.tradernet import TradernetClient
 from app.modules.planning.database.planner_repository import PlannerRepository
-from app.modules.planning.domain.holistic_planner import (
-    create_holistic_plan_incremental,
-)
 from app.modules.planning.domain.planner import HolisticPlanner
 from app.modules.planning.services.planner_factory import PlannerFactoryService
 from app.modules.planning.services.planner_loader import get_planner_loader
@@ -329,32 +326,6 @@ async def process_planner_batch_job(
         except Exception as e:
             logger.debug(f"Could not get optimizer weights: {e}")
 
-        # Get planner settings
-        max_plan_depth = int(await settings_repo.get_float("max_plan_depth", 5.0))
-        max_opportunities_per_category = int(
-            await settings_repo.get_float("max_opportunities_per_category", 5.0)
-        )
-        enable_combinatorial = (
-            await settings_repo.get_float("enable_combinatorial_generation", 1.0) == 1.0
-        )
-        priority_threshold = await settings_repo.get_float(
-            "priority_threshold_for_combinations", 0.3
-        )
-        combinatorial_max_combinations_per_depth = int(
-            await settings_repo.get_float(
-                "combinatorial_max_combinations_per_depth", 50.0
-            )
-        )
-        combinatorial_max_sells = int(
-            await settings_repo.get_float("combinatorial_max_sells", 4.0)
-        )
-        combinatorial_max_buys = int(
-            await settings_repo.get_float("combinatorial_max_buys", 4.0)
-        )
-        combinatorial_max_candidates = int(
-            await settings_repo.get_float("combinatorial_max_candidates", 12.0)
-        )
-
         logger.info(f"Processing planner batch for bucket: {bucket_id}")
 
         # Use factory service for satellite buckets to leverage bucket-specific configurations
@@ -378,6 +349,13 @@ async def process_planner_batch_job(
                         bucket_id, satellite_settings
                     )
 
+                    # Check if batch generation is enabled
+                    if not planner.config.enable_batch_generation:
+                        logger.info(
+                            f"Batch generation disabled for satellite {bucket_id}, skipping"
+                        )
+                        return
+
                     # Use modular planner's incremental method
                     plan = await planner.create_plan_incremental(
                         portfolio_context=portfolio_context,
@@ -394,71 +372,110 @@ async def process_planner_batch_job(
                         f"Used modular planner with factory for satellite {bucket_id}"
                     )
                 else:
-                    # Fallback to core planner if settings not found
+                    # Fallback: Load from default TOML if settings not found
                     logger.warning(
-                        f"Satellite settings not found for {bucket_id}, using core planner"
+                        f"Satellite settings not found for {bucket_id}, loading default.toml"
                     )
-                    plan = await create_holistic_plan_incremental(
-                        portfolio_context=portfolio_context,
-                        available_cash=available_cash,
-                        securities=stocks,
-                        positions=positions,
-                        exchange_rate_service=exchange_rate_service,
-                        target_weights=target_weights,
-                        current_prices=current_prices,
-                        transaction_cost_fixed=await settings_repo.get_float(
-                            "transaction_cost_fixed", 2.0
-                        ),
-                        transaction_cost_percent=await settings_repo.get_float(
-                            "transaction_cost_percent", 0.002
-                        ),
-                        max_plan_depth=max_plan_depth,
-                        max_opportunities_per_category=max_opportunities_per_category,
-                        enable_combinatorial=enable_combinatorial,
-                        priority_threshold=priority_threshold,
-                        combinatorial_max_combinations_per_depth=combinatorial_max_combinations_per_depth,
-                        combinatorial_max_sells=combinatorial_max_sells,
-                        combinatorial_max_buys=combinatorial_max_buys,
-                        combinatorial_max_candidates=combinatorial_max_candidates,
-                        batch_size=batch_size,
+                    from pathlib import Path
+
+                    from app.modules.planning.domain.config.factory import (
+                        ModularPlannerFactory,
                     )
+
+                    config_path = Path("config/planner/default.toml")
+                    if config_path.exists():
+                        factory_fallback = ModularPlannerFactory.from_config_file(
+                            config_path
+                        )
+                        if factory_fallback.config:
+                            # Check if batch generation is enabled
+                            if not factory_fallback.config.enable_batch_generation:
+                                logger.info(
+                                    f"Batch generation disabled in default.toml for satellite {bucket_id}, skipping"
+                                )
+                                return
+
+                            planner_fallback = HolisticPlanner(
+                                config=factory_fallback.config,
+                                settings_repo=settings_repo,
+                                trade_repo=TradeRepository(),
+                            )
+                            plan = await planner_fallback.create_plan_incremental(
+                                portfolio_context=portfolio_context,
+                                positions=positions,
+                                securities=stocks,
+                                available_cash=available_cash,
+                                current_prices=current_prices,
+                                target_weights=target_weights,
+                                exchange_rate_service=exchange_rate_service,
+                                batch_size=batch_size,
+                            )
+                        else:
+                            logger.error("Failed to load default.toml, skipping batch")
+                            return
+                    else:
+                        logger.error(
+                            f"default.toml not found at {config_path}, skipping batch"
+                        )
+                        return
             except Exception as e:
                 logger.error(
                     f"Failed to create satellite planner for {bucket_id}: {e}",
                     exc_info=True,
                 )
-                # Fallback to core planner
-                logger.info(f"Falling back to core planner for {bucket_id}")
-                plan = await create_holistic_plan_incremental(
-                    portfolio_context=portfolio_context,
-                    available_cash=available_cash,
-                    securities=stocks,
-                    positions=positions,
-                    exchange_rate_service=exchange_rate_service,
-                    target_weights=target_weights,
-                    current_prices=current_prices,
-                    transaction_cost_fixed=await settings_repo.get_float(
-                        "transaction_cost_fixed", 2.0
-                    ),
-                    transaction_cost_percent=await settings_repo.get_float(
-                        "transaction_cost_percent", 0.002
-                    ),
-                    max_plan_depth=max_plan_depth,
-                    max_opportunities_per_category=max_opportunities_per_category,
-                    enable_combinatorial=enable_combinatorial,
-                    priority_threshold=priority_threshold,
-                    combinatorial_max_combinations_per_depth=combinatorial_max_combinations_per_depth,
-                    combinatorial_max_sells=combinatorial_max_sells,
-                    combinatorial_max_buys=combinatorial_max_buys,
-                    combinatorial_max_candidates=combinatorial_max_candidates,
-                    batch_size=batch_size,
+                # Fallback: Load from default TOML
+                logger.info(f"Falling back to default.toml for {bucket_id}")
+                from pathlib import Path
+
+                from app.modules.planning.domain.config.factory import (
+                    ModularPlannerFactory,
                 )
+
+                config_path = Path("config/planner/default.toml")
+                if config_path.exists():
+                    factory_exc_fallback = ModularPlannerFactory.from_config_file(
+                        config_path
+                    )
+                    if factory_exc_fallback.config:
+                        # Check if batch generation is enabled
+                        if not factory_exc_fallback.config.enable_batch_generation:
+                            logger.info(
+                                f"Batch generation disabled in default.toml for satellite {bucket_id}, skipping"
+                            )
+                            return
+
+                        planner_exc_fallback = HolisticPlanner(
+                            config=factory_exc_fallback.config,
+                            settings_repo=settings_repo,
+                            trade_repo=TradeRepository(),
+                        )
+                        plan = await planner_exc_fallback.create_plan_incremental(
+                            portfolio_context=portfolio_context,
+                            positions=positions,
+                            securities=stocks,
+                            available_cash=available_cash,
+                            current_prices=current_prices,
+                            target_weights=target_weights,
+                            exchange_rate_service=exchange_rate_service,
+                            batch_size=batch_size,
+                        )
+                    else:
+                        logger.error("Failed to load default.toml in exception handler")
+                        return
+                else:
+                    logger.error(f"default.toml not found at {config_path}")
+                    return
         else:
             # Core bucket: Try database config first, fall back to file-based config
             planner_loader = get_planner_loader()
             modular_factory = await planner_loader.load_planner_for_bucket("core")
 
             if modular_factory and modular_factory.config:
+                # Check if batch generation is enabled for this bucket
+                if not modular_factory.config.enable_batch_generation:
+                    logger.info("Batch generation disabled for core bucket, skipping")
+                    return
+
                 # Use database-configured modular planner
                 logger.info("Using database planner config for core bucket")
                 planner = HolisticPlanner(
@@ -479,33 +496,47 @@ async def process_planner_batch_job(
                 )
             else:
                 # Fallback to file-based config
-                logger.info(
-                    "No database config for core bucket, using file-based default.toml"
+                logger.info("No database config for core bucket, loading default.toml")
+                from pathlib import Path
+
+                from app.modules.planning.domain.config.factory import (
+                    ModularPlannerFactory,
                 )
-                plan = await create_holistic_plan_incremental(
-                    portfolio_context=portfolio_context,
-                    available_cash=available_cash,
-                    securities=stocks,
-                    positions=positions,
-                    exchange_rate_service=exchange_rate_service,
-                    target_weights=target_weights,
-                    current_prices=current_prices,
-                    transaction_cost_fixed=await settings_repo.get_float(
-                        "transaction_cost_fixed", 2.0
-                    ),
-                    transaction_cost_percent=await settings_repo.get_float(
-                        "transaction_cost_percent", 0.002
-                    ),
-                    max_plan_depth=max_plan_depth,
-                    max_opportunities_per_category=max_opportunities_per_category,
-                    enable_combinatorial=enable_combinatorial,
-                    priority_threshold=priority_threshold,
-                    combinatorial_max_combinations_per_depth=combinatorial_max_combinations_per_depth,
-                    combinatorial_max_sells=combinatorial_max_sells,
-                    combinatorial_max_buys=combinatorial_max_buys,
-                    combinatorial_max_candidates=combinatorial_max_candidates,
-                    batch_size=batch_size,
-                )
+
+                config_path = Path("config/planner/default.toml")
+                if config_path.exists():
+                    factory_core_fallback = ModularPlannerFactory.from_config_file(
+                        config_path
+                    )
+                    if factory_core_fallback.config:
+                        # Check if batch generation is enabled
+                        if not factory_core_fallback.config.enable_batch_generation:
+                            logger.info(
+                                "Batch generation disabled in default.toml for core bucket, skipping"
+                            )
+                            return
+
+                        planner_core_fallback = HolisticPlanner(
+                            config=factory_core_fallback.config,
+                            settings_repo=settings_repo,
+                            trade_repo=TradeRepository(),
+                        )
+                        plan = await planner_core_fallback.create_plan_incremental(
+                            portfolio_context=portfolio_context,
+                            positions=positions,
+                            securities=stocks,
+                            available_cash=available_cash,
+                            current_prices=current_prices,
+                            target_weights=target_weights,
+                            exchange_rate_service=exchange_rate_service,
+                            batch_size=batch_size,
+                        )
+                    else:
+                        logger.error("Failed to load default.toml for core fallback")
+                        return
+                else:
+                    logger.error(f"default.toml not found at {config_path}")
+                    return
 
         if plan:
             logger.debug(
