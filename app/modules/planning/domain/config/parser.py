@@ -136,6 +136,7 @@ def load_planner_config(config_path: Path) -> PlannerConfiguration:
     config = PlannerConfiguration(
         name=planner.get("name", "default"),
         description=planner.get("description", ""),
+        enable_batch_generation=planner.get("enable_batch_generation", True),
         max_depth=planner.get("max_depth", 5),
         max_opportunities_per_category=planner.get("max_opportunities_per_category", 5),
         priority_threshold=planner.get("priority_threshold", 0.3),
@@ -193,6 +194,7 @@ def load_planner_config_from_string(toml_content: str) -> PlannerConfiguration:
     return PlannerConfiguration(
         name=planner.get("name", "default"),
         description=planner.get("description", ""),
+        enable_batch_generation=planner.get("enable_batch_generation", True),
         max_depth=planner.get("max_depth", 5),
         max_opportunities_per_category=planner.get("max_opportunities_per_category", 5),
         priority_threshold=planner.get("priority_threshold", 0.3),

@@ -80,6 +80,9 @@ class PlannerConfiguration:
     # Planner identification
     name: str = "default"
     description: str = ""
+    enable_batch_generation: bool = (
+        True  # Enable continuous sequence generation in background
+    )
 
     # Global planner settings
     max_depth: int = 5
