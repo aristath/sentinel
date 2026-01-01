@@ -111,3 +111,73 @@ class LocalUniverseService:
                 continue
 
         return synced_count
+
+    async def add_security(
+        self,
+        isin: str,
+        symbol: str,
+        name: str,
+        exchange: Optional[str] = None,
+    ) -> bool:
+        """
+        Add a security to the universe.
+
+        Args:
+            isin: Security ISIN
+            symbol: Trading symbol
+            name: Security name
+            exchange: Exchange name
+
+        Returns:
+            True if added successfully, False otherwise
+        """
+        try:
+            from app.domain.models import Security
+            from app.domain.value_objects.product_type import ProductType
+            from app.shared.domain.value_objects.currency import Currency
+
+            # Create security instance
+            security = Security(
+                isin=isin,
+                symbol=symbol,
+                name=name,
+                fullExchangeName=exchange,
+                product_type=ProductType.EQUITY,
+                currency=Currency.EUR,
+                active=True,
+                allow_buy=True,
+                allow_sell=True,
+                priority_multiplier=1.0,
+                min_lot=1,
+            )
+
+            # Add to repository
+            self.security_repo.save(security)
+            return True
+        except Exception:
+            return False
+
+    async def remove_security(self, isin: str) -> bool:
+        """
+        Remove a security from the universe.
+
+        Args:
+            isin: Security ISIN
+
+        Returns:
+            True if removed successfully, False otherwise
+        """
+        try:
+            # Get security
+            security = self.security_repo.get_by_isin(isin)
+            if not security:
+                return False
+
+            # Mark as inactive rather than deleting
+            security.active = False
+            security.allow_buy = False
+            security.allow_sell = False
+            self.security_repo.update(security)
+            return True
+        except Exception:
+            return False

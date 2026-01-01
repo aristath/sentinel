@@ -1,15 +1,11 @@
-"""Trading service server entrypoint."""
+"""Trading service REST API application."""
 
-import asyncio
 import logging
-import signal
-from concurrent import futures
 
-import grpc
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-from contracts import trading_pb2_grpc  # type: ignore[attr-defined]
-from app.infrastructure.service_discovery import load_device_config, get_service_locator
-from services.trading.grpc_servicer import TradingServicer
+from services.trading.routes import router
 
 # Configure logging
 logging.basicConfig(
@@ -18,55 +14,46 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Create FastAPI application
+app = FastAPI(
+    title="Trading Service",
+    description="Trade execution service",
+    version="1.0.0",
+)
 
-async def serve():
-    """Start the gRPC server."""
-    # Load configuration
-    device_config = load_device_config()
-    service_locator = get_service_locator()
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Configure based on deployment
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    # Create gRPC server
-    server = grpc.aio.server(
-        futures.ThreadPoolExecutor(max_workers=device_config.max_workers)
-    )
-
-    # Add servicer to server
-    trading_pb2_grpc.add_TradingServiceServicer_to_server(TradingServicer(), server)
-
-    # Bind to address (with TLS support if configured)
-    address = service_locator.add_server_port(server, "trading")
-
-    # Start server
-    tls_status = "with TLS" if service_locator.tls_config else "without TLS"
-    logger.info(f"Starting Trading service on {address} ({tls_status})")
-    await server.start()
-    logger.info("Trading service started successfully")
-
-    # Setup graceful shutdown
-    async def shutdown(sig):
-        logger.info(f"Received signal {sig}, shutting down...")
-        await server.stop(grace=5)
-        logger.info("Server stopped")
-
-    # Register signal handlers
-    loop = asyncio.get_event_loop()
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, lambda s=sig: asyncio.create_task(shutdown(s)))
-
-    # Wait for termination
-    await server.wait_for_termination()
+# Include router
+app.include_router(router, prefix="/trading", tags=["trading"])
 
 
-def main():
-    """Main entry point."""
-    try:
-        asyncio.run(serve())
-    except KeyboardInterrupt:
-        logger.info("Interrupted by user")
-    except Exception as e:
-        logger.error(f"Server error: {e}", exc_info=True)
-        raise
+@app.on_event("startup")
+async def startup_event():
+    """Initialize service on startup."""
+    logger.info("Trading service starting up...")
+    logger.info("Service ready on port 8003")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown."""
+    logger.info("Trading service shutting down...")
 
 
 if __name__ == "__main__":
-    main()
+    import uvicorn
+
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",  # nosec B104
+        port=8003,
+        reload=True,
+        log_level="info",
+    )
