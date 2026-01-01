@@ -1,10 +1,16 @@
 """Local Evaluator Service - Domain service wrapper for sequence evaluation."""
 
+from typing import List
+
+from app.domain.models import Security
+from app.modules.planning.domain.holistic_planner import simulate_sequence
 from app.modules.planning.domain.models import ActionCandidate
+from app.modules.scoring.domain.models import PortfolioContext
 from services.evaluator.models import (
     ActionCandidateModel,
     EvaluateSequencesRequest,
     EvaluateSequencesResponse,
+    SequenceEvaluationResult,
 )
 
 
@@ -35,27 +41,98 @@ class LocalEvaluatorService:
 
         Returns:
             Top K evaluated sequences with scores
-
-        TODO: Extract logic from holistic_planner.py:
-            - simulate_sequence() (lines 2245-2329) - Core simulation
-            - Evaluation loop from create_holistic_plan (lines 3207-3649):
-              - Metrics pre-fetching (lines 3207-3247)
-              - _evaluate_sequence() helper (lines 3292-3400)
-              - Batch evaluation with beam search (lines 3402-3649)
-              - Monte Carlo evaluation (lines 3470-3570) - optional
-              - Stochastic scenario evaluation (lines 3578-3633) - optional
-            - _calculate_transaction_cost() (lines 46-68)
-            - _update_beam() helper (lines 3418-3468)
-            - calculate_portfolio_score() from diversification.py
-            - calculate_portfolio_end_state_score() from end_state.py
         """
-        # TODO: Implement evaluation logic
-        # For now, return empty results
+        # Convert Pydantic models to domain models
+        portfolio_context = self._to_portfolio_context(request)
+        securities = self._to_securities(request.securities)
+
+        # Evaluate each sequence
+        evaluated = []
+        for pydantic_sequence in request.sequences:
+            # Convert to domain models
+            sequence = [self._action_candidate_from_model(a) for a in pydantic_sequence]
+
+            # Simulate sequence
+            final_context, final_cash = await simulate_sequence(
+                sequence=sequence,
+                portfolio_context=portfolio_context,
+                available_cash=request.portfolio_context.total_value_eur
+                * 0.05,  # Assume 5% cash
+                securities=securities,
+            )
+
+            # Calculate scores (simplified for now - can be enhanced with full scoring logic)
+            # TODO: Implement full scoring with diversification, risk, and end-state metrics
+            end_state_score = 0.75  # Placeholder
+
+            # Calculate transaction costs
+            total_cost = sum(
+                request.settings.transaction_cost_fixed
+                + action.value_eur * request.settings.transaction_cost_percent
+                for action in pydantic_sequence
+            )
+
+            # Calculate cash required
+            cash_required = sum(
+                action.value_eur
+                + request.settings.transaction_cost_fixed
+                + action.value_eur * request.settings.transaction_cost_percent
+                for action in pydantic_sequence
+                if action.side == "BUY"
+            )
+
+            # Simple scoring (can be enhanced)
+            total_score = end_state_score
+
+            evaluated.append(
+                SequenceEvaluationResult(
+                    sequence=pydantic_sequence,
+                    end_state_score=end_state_score,
+                    diversification_score=0.7,  # Placeholder
+                    risk_score=0.8,  # Placeholder
+                    total_score=total_score,
+                    total_cost=total_cost,
+                    cash_required=cash_required,
+                    feasible=cash_required <= request.portfolio_context.total_value_eur,
+                    metrics={},
+                )
+            )
+
+        # Beam search: keep top K by total_score
+        evaluated.sort(key=lambda x: x.total_score, reverse=True)
+        top_k = evaluated[: request.settings.beam_width]
+
         return EvaluateSequencesResponse(
-            top_sequences=[],
+            top_sequences=top_k,
             total_evaluated=len(request.sequences),
             beam_width=request.settings.beam_width,
         )
+
+    def _to_portfolio_context(
+        self, request: EvaluateSequencesRequest
+    ) -> PortfolioContext:
+        """Convert request to PortfolioContext."""
+        # Build positions dict from request
+        positions_dict = {p.symbol: p.value_eur for p in request.positions}
+
+        return PortfolioContext(
+            total_value=request.portfolio_context.total_value_eur,
+            positions=positions_dict,
+            country_weights={},
+            industry_weights={},
+        )
+
+    def _to_securities(self, securities_input: List) -> List[Security]:
+        """Convert Pydantic security models to domain Security models."""
+        return [
+            Security(
+                symbol=s.symbol,
+                name=s.name,
+                country=s.country,
+                industry=s.industry,
+            )
+            for s in securities_input
+        ]
 
     def _action_candidate_to_model(
         self, action: ActionCandidate
