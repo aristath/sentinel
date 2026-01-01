@@ -67,7 +67,6 @@ class HolisticPlanner:
         settings_repo=None,
         trade_repo=None,
         metrics_cache=None,
-        risk_profile=None,
     ):
         """
         Initialize the planner with configuration.
@@ -77,13 +76,11 @@ class HolisticPlanner:
             settings_repo: Repository for settings lookup
             trade_repo: Repository for trade history
             metrics_cache: Optional cache for metrics
-            risk_profile: Optional risk profile for scoring
         """
         self.config = config
         self.settings_repo = settings_repo
         self.trade_repo = trade_repo
         self.metrics_cache = metrics_cache
-        self.risk_profile = risk_profile
 
         # Load enabled modules from registries
         self._load_modules()
@@ -539,7 +536,6 @@ class HolisticPlanner:
                 transaction_cost_fixed=eval_context.transaction_cost_fixed,
                 transaction_cost_percent=eval_context.transaction_cost_percent,
                 metrics_cache=self.metrics_cache,
-                risk_profile=self.risk_profile,
             )
 
             # Apply multi-timeframe if enabled

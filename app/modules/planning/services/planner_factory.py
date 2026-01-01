@@ -85,7 +85,6 @@ class PlannerFactoryService:
             settings_repo=self.settings_repo,
             trade_repo=self.trade_repo,
             metrics_cache=None,  # TODO: Add metrics cache support
-            risk_profile=None,  # TODO: Add risk profile support
         )
 
     def create_for_satellite_bucket(
@@ -148,7 +147,6 @@ class PlannerFactoryService:
             settings_repo=self.settings_repo,
             trade_repo=self.trade_repo,
             metrics_cache=None,
-            risk_profile=None,
         )
 
     def create_for_bucket(

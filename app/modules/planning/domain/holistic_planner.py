@@ -3277,17 +3277,6 @@ async def create_holistic_plan(
     monte_carlo_paths = await settings_repo.get_int("monte_carlo_path_count", 100)
     monte_carlo_paths = max(10, min(500, monte_carlo_paths))  # Clamp to 10-500
 
-    # Get risk profile setting
-    risk_profile_str = await settings_repo.get("risk_profile")
-    if not risk_profile_str or risk_profile_str not in (
-        "conservative",
-        "balanced",
-        "aggressive",
-    ):
-        risk_profile = "balanced"
-    else:
-        risk_profile = str(risk_profile_str)
-
     # Build price adjustment maps for stochastic scenarios
     # Map each symbol in sequences to its base price
     symbol_prices: Dict[str, float] = {}
@@ -3312,13 +3301,12 @@ async def create_holistic_plan(
         # Calculate diversification score for end state
         div_score = await calculate_portfolio_score(end_context)
 
-        # Calculate full end-state score with risk profile
+        # Calculate full end-state score (uses default "balanced" risk profile)
         end_score, breakdown = await calculate_portfolio_end_state_score(
             positions=end_context.positions,
             total_value=end_context.total_value,
             diversification_score=div_score.total / 100,  # Normalize to 0-1
             metrics_cache=metrics_cache,
-            risk_profile=risk_profile,
         )
 
         # Get multi-timeframe optimization setting
