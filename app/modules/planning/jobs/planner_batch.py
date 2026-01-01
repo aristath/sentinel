@@ -15,7 +15,9 @@ from app.modules.planning.database.planner_repository import PlannerRepository
 from app.modules.planning.domain.holistic_planner import (
     create_holistic_plan_incremental,
 )
+from app.modules.planning.domain.planner import HolisticPlanner
 from app.modules.planning.services.planner_factory import PlannerFactoryService
+from app.modules.planning.services.planner_loader import get_planner_loader
 from app.modules.planning.services.portfolio_context_builder import (
     build_portfolio_context,
 )
@@ -24,6 +26,7 @@ from app.repositories import (
     PositionRepository,
     SecurityRepository,
     SettingsRepository,
+    TradeRepository,
 )
 
 logger = logging.getLogger(__name__)
@@ -361,7 +364,6 @@ async def process_planner_batch_job(
                 from app.modules.satellites.database.satellite_repository import (
                     SatelliteRepository,
                 )
-                from app.repositories import TradeRepository
 
                 # Load satellite settings
                 satellite_repo = SatelliteRepository()
@@ -452,31 +454,58 @@ async def process_planner_batch_job(
                     batch_size=batch_size,
                 )
         else:
-            # Core bucket: use existing incremental planner
-            plan = await create_holistic_plan_incremental(
-                portfolio_context=portfolio_context,
-                available_cash=available_cash,
-                securities=stocks,
-                positions=positions,
-                exchange_rate_service=exchange_rate_service,
-                target_weights=target_weights,
-                current_prices=current_prices,
-                transaction_cost_fixed=await settings_repo.get_float(
-                    "transaction_cost_fixed", 2.0
-                ),
-                transaction_cost_percent=await settings_repo.get_float(
-                    "transaction_cost_percent", 0.002
-                ),
-                max_plan_depth=max_plan_depth,
-                max_opportunities_per_category=max_opportunities_per_category,
-                enable_combinatorial=enable_combinatorial,
-                priority_threshold=priority_threshold,
-                combinatorial_max_combinations_per_depth=combinatorial_max_combinations_per_depth,
-                combinatorial_max_sells=combinatorial_max_sells,
-                combinatorial_max_buys=combinatorial_max_buys,
-                combinatorial_max_candidates=combinatorial_max_candidates,
-                batch_size=batch_size,
-            )
+            # Core bucket: Try database config first, fall back to file-based config
+            planner_loader = get_planner_loader()
+            modular_factory = await planner_loader.load_planner_for_bucket("core")
+
+            if modular_factory and modular_factory.config:
+                # Use database-configured modular planner
+                logger.info("Using database planner config for core bucket")
+                planner = HolisticPlanner(
+                    config=modular_factory.config,
+                    settings_repo=settings_repo,
+                    trade_repo=TradeRepository(),
+                )
+
+                plan = await planner.create_plan_incremental(
+                    portfolio_context=portfolio_context,
+                    positions=positions,
+                    securities=stocks,
+                    available_cash=available_cash,
+                    current_prices=current_prices,
+                    target_weights=target_weights,
+                    exchange_rate_service=exchange_rate_service,
+                    batch_size=batch_size,
+                )
+            else:
+                # Fallback to file-based config
+                logger.info(
+                    "No database config for core bucket, using file-based default.toml"
+                )
+                plan = await create_holistic_plan_incremental(
+                    portfolio_context=portfolio_context,
+                    available_cash=available_cash,
+                    securities=stocks,
+                    positions=positions,
+                    exchange_rate_service=exchange_rate_service,
+                    target_weights=target_weights,
+                    current_prices=current_prices,
+                    transaction_cost_fixed=await settings_repo.get_float(
+                        "transaction_cost_fixed", 2.0
+                    ),
+                    transaction_cost_percent=await settings_repo.get_float(
+                        "transaction_cost_percent", 0.002
+                    ),
+                    max_plan_depth=max_plan_depth,
+                    max_opportunities_per_category=max_opportunities_per_category,
+                    enable_combinatorial=enable_combinatorial,
+                    priority_threshold=priority_threshold,
+                    combinatorial_max_combinations_per_depth=combinatorial_max_combinations_per_depth,
+                    combinatorial_max_sells=combinatorial_max_sells,
+                    combinatorial_max_buys=combinatorial_max_buys,
+                    combinatorial_max_candidates=combinatorial_max_candidates,
+                    batch_size=batch_size,
+                )
 
         if plan:
             logger.debug(
