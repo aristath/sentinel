@@ -31,6 +31,14 @@ name = "default"
 # Description shown in logs and UI
 description = "Standard planner with all features enabled"
 
+# Enable continuous batch generation of trading sequences
+# When true, sequences are pre-generated in background by batch job
+# When false, sequences are generated on-demand only
+# [TYPE: boolean, DEFAULT: true]
+# - true: Pre-compute sequences for faster recommendations (recommended)
+# - false: On-demand generation only (saves computation but slower responses)
+enable_batch_generation = true
+
 # -----------------------------------------------------------------------------
 # SEARCH DEPTH AND BREADTH
 # -----------------------------------------------------------------------------

@@ -34,6 +34,10 @@
 name = "conservative"
 description = "Conservative strategy with minimal intervention"
 
+# Enable continuous batch generation (true = pre-compute sequences in background)
+# [TYPE: boolean, DEFAULT: true]
+enable_batch_generation = true
+
 # -----------------------------------------------------------------------------
 # SEARCH DEPTH AND BREADTH - Conservative = Simpler Strategies
 # -----------------------------------------------------------------------------

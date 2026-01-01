@@ -41,6 +41,10 @@
 name = "aggressive"
 description = "Aggressive strategy with active trading and rebalancing"
 
+# Enable continuous batch generation (true = pre-compute sequences in background)
+# [TYPE: boolean, DEFAULT: true]
+enable_batch_generation = true
+
 # -----------------------------------------------------------------------------
 # SEARCH DEPTH AND BREADTH - Aggressive = Complex Strategies
 # -----------------------------------------------------------------------------
