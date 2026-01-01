@@ -5,6 +5,7 @@ This service wraps the existing holistic planner but applies satellite-specific 
 2. Applies satellite-specific trading parameters (from settings)
 3. Scales position sizes based on aggression level
 4. Respects satellite cash balances (not total portfolio cash)
+5. Uses per-bucket planner configurations when available
 """
 
 import logging
@@ -17,6 +18,8 @@ from app.modules.planning.domain.holistic_planner import (
     ActionCandidate,
     create_holistic_plan,
 )
+from app.modules.planning.domain.planner import HolisticPlanner
+from app.modules.planning.services.planner_loader import get_planner_loader
 from app.modules.satellites.domain.aggression_calculator import (
     calculate_aggression,
     scale_position_size,
@@ -161,7 +164,7 @@ class SatellitePlannerService:
             trading_params = None
             aggression_result = None
 
-        # Generate plan using holistic planner
+        # Generate plan using bucket-specific planner configuration if available
         logger.info(
             f"Generating plan for bucket {bucket_id} with "
             f"{len(bucket_securities)} securities, "
@@ -169,18 +172,51 @@ class SatellitePlannerService:
             f"€{available_cash_eur:.2f} cash"
         )
 
-        holistic_plan = await create_holistic_plan(
-            portfolio_context=portfolio_context,
-            available_cash=available_cash_eur,
-            securities=bucket_securities,
-            positions=bucket_positions,
-            exchange_rate_service=exchange_rate_service,
-            target_weights=target_weights,
-            current_prices=current_prices,
-            transaction_cost_fixed=transaction_cost_fixed,
-            transaction_cost_percent=transaction_cost_percent,
-            max_plan_depth=max_steps,
-        )
+        # Try to load bucket-specific planner configuration
+        planner_loader = get_planner_loader()
+        factory = await planner_loader.load_planner_for_bucket(bucket_id)
+
+        if factory and factory.config:
+            # Use modular planner with bucket-specific configuration
+            logger.info(
+                f"Using custom planner configuration for bucket {bucket_id}: "
+                f"{factory.config.name}"
+            )
+
+            modular_planner = HolisticPlanner(
+                config=factory.config,
+                settings_repo=settings_repo,
+                trade_repo=trade_repo,
+            )
+
+            holistic_plan = await modular_planner.create_plan(
+                portfolio_context=portfolio_context,
+                positions=bucket_positions,
+                securities=bucket_securities,
+                available_cash=available_cash_eur,
+                current_prices=current_prices,
+                target_weights=target_weights,
+                exchange_rate_service=exchange_rate_service,
+            )
+        else:
+            # Fallback to default holistic planner if no custom config
+            logger.info(
+                f"No custom planner configuration for bucket {bucket_id}, "
+                "using default planner"
+            )
+
+            holistic_plan = await create_holistic_plan(
+                portfolio_context=portfolio_context,
+                available_cash=available_cash_eur,
+                securities=bucket_securities,
+                positions=bucket_positions,
+                exchange_rate_service=exchange_rate_service,
+                target_weights=target_weights,
+                current_prices=current_prices,
+                transaction_cost_fixed=transaction_cost_fixed,
+                transaction_cost_percent=transaction_cost_percent,
+                max_plan_depth=max_steps,
+            )
 
         if not holistic_plan or not holistic_plan.steps:
             logger.info(f"No plan generated for bucket {bucket_id}")
