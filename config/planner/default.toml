@@ -1,89 +1,379 @@
-# Default Planner Configuration
-# This is the standard configuration with all features enabled.
+# =============================================================================
+# DEFAULT PLANNER CONFIGURATION
+# =============================================================================
+#
+# This file controls how the portfolio planner generates trading recommendations.
+# The planner analyzes your portfolio and suggests sequences of buy/sell actions
+# to improve diversification, rebalance positions, and take advantage of opportunities.
+#
+# HOW IT WORKS:
+# 1. Identifies opportunities (profit taking, averaging down, rebalancing, etc.)
+# 2. Generates action sequences (patterns like "sell X, then buy Y")
+# 3. Filters out bad sequences (too correlated, ineligible positions, etc.)
+# 4. Evaluates remaining sequences (simulates and scores each one)
+# 5. Selects the best sequence and presents it as a plan
+#
+# PRESET CONFIGURATIONS:
+# - default.toml (this file): Balanced strategy with all features
+# - conservative.toml: Minimal intervention, only high-priority actions
+# - aggressive.toml: Active trading with advanced features enabled
+#
+# CUSTOMIZATION:
+# You can create your own TOML file by copying this and adjusting values.
+# Each setting includes [MIN-MAX] range and default value documentation.
+#
+# =============================================================================
 
 [planner]
+# Human-readable name for this configuration
 name = "default"
+
+# Description shown in logs and UI
 description = "Standard planner with all features enabled"
 
-# Global settings
-max_depth = 5                           # Maximum actions per sequence
-max_opportunities_per_category = 5      # Max opportunities per category
-priority_threshold = 0.3                # Minimum priority to include
-enable_diverse_selection = true         # Enable diversity in selection
-diversity_weight = 0.3                  # Weight for diversity vs priority
+# -----------------------------------------------------------------------------
+# SEARCH DEPTH AND BREADTH
+# -----------------------------------------------------------------------------
 
-# Transaction costs (match old planner defaults)
-transaction_cost_fixed = 2.0            # Fixed cost per trade (EUR)
-transaction_cost_percent = 0.002        # Variable cost (0.2%)
+# Maximum number of actions in a sequence
+# Example: max_depth=3 allows sequences like "sell A, buy B, buy C"
+# Higher values find more complex opportunities but take longer to compute
+# [MIN: 1, MAX: 10, DEFAULT: 5]
+# - 1-2: Simple strategies (sell one, buy one)
+# - 3-5: Moderate complexity (recommended)
+# - 6-10: Very complex multi-step strategies (slow)
+max_depth = 5
 
-# Trade permissions
+# Maximum opportunities to identify per category
+# Categories: profit_taking, averaging_down, rebalance_sell, rebalance_buy, etc.
+# Higher values give more options but increase computation time
+# [MIN: 1, MAX: 20, DEFAULT: 5]
+# - 1-3: Quick decisions with fewer options
+# - 4-6: Good balance (recommended)
+# - 7+: Comprehensive search (slower)
+max_opportunities_per_category = 5
+
+# Minimum priority score to consider an opportunity
+# Opportunities are scored 0.0-1.0 based on potential improvement
+# Higher threshold = fewer but higher-quality opportunities
+# [MIN: 0.0, MAX: 1.0, DEFAULT: 0.3]
+# - 0.0-0.2: Very permissive, many opportunities
+# - 0.3-0.5: Balanced (recommended)
+# - 0.6-1.0: Only the very best opportunities
+priority_threshold = 0.3
+
+# -----------------------------------------------------------------------------
+# DIVERSITY VS PRIORITY
+# -----------------------------------------------------------------------------
+
+# Enable diverse selection (vs pure priority ranking)
+# When true, selects a diverse set of opportunities across categories
+# When false, only selects highest-priority opportunities
+# [TYPE: boolean, DEFAULT: true]
+# - true: Better portfolio balance, more varied strategies
+# - false: Laser-focused on highest-priority actions only
+enable_diverse_selection = true
+
+# Weight given to diversity vs priority (when diverse selection enabled)
+# 0.0 = pure priority, 1.0 = pure diversity
+# [MIN: 0.0, MAX: 1.0, DEFAULT: 0.3]
+# - 0.0-0.2: Mostly priority-driven
+# - 0.3-0.5: Balanced (recommended)
+# - 0.6-1.0: Heavily favor diversity
+diversity_weight = 0.3
+
+# -----------------------------------------------------------------------------
+# TRANSACTION COSTS
+# -----------------------------------------------------------------------------
+
+# Fixed cost per trade in EUR
+# This is charged for every buy or sell, regardless of size
+# [MIN: 0.0, MAX: 100.0, DEFAULT: 2.0]
+# Examples: Interactive Brokers ~1-2 EUR, Traditional brokers ~5-10 EUR
+transaction_cost_fixed = 2.0
+
+# Variable cost as a percentage of trade value
+# 0.002 = 0.2% of trade value
+# [MIN: 0.0, MAX: 0.05, DEFAULT: 0.002]
+# Examples:
+# - 0.001 = 0.1% (low-cost brokers)
+# - 0.002 = 0.2% (typical)
+# - 0.005 = 0.5% (higher-cost brokers)
+transaction_cost_percent = 0.002
+
+# -----------------------------------------------------------------------------
+# TRADE PERMISSIONS
+# -----------------------------------------------------------------------------
+
+# Allow selling existing positions
+# [TYPE: boolean, DEFAULT: true]
+# - true: Can sell to rebalance or take profits
+# - false: Buy-only mode (useful for accumulation phase)
 allow_sell = true
+
+# Allow buying new positions
+# [TYPE: boolean, DEFAULT: true]
+# - true: Can buy to rebalance or invest cash
+# - false: Sell-only mode (useful for liquidation phase)
 allow_buy = true
 
-# Eligibility and risk management
-min_hold_days = 90                      # Minimum days before selling
-sell_cooldown_days = 180                # Days to wait after selling
-max_loss_threshold = -0.20              # Maximum loss before forced sell (-20%)
+# -----------------------------------------------------------------------------
+# ELIGIBILITY AND RISK MANAGEMENT
+# -----------------------------------------------------------------------------
 
-# Search and optimization
-beam_width = 10                         # Beam search width (1-50)
-cost_penalty_factor = 0.1               # Transaction cost penalty factor (0.0-1.0)
+# Minimum days a position must be held before selling
+# Prevents churning and gives positions time to perform
+# [MIN: 0, MAX: 365, DEFAULT: 90]
+# - 0: No restriction (day trading allowed)
+# - 30-90: Short-term holding (recommended for active trading)
+# - 90-180: Medium-term holding (default)
+# - 180+: Long-term holding (conservative)
+min_hold_days = 90
 
-# Advanced evaluation features
-enable_multi_objective = false          # Multi-objective Pareto optimization
-enable_stochastic_scenarios = false     # Stochastic price scenarios
-enable_monte_carlo_paths = false        # Monte Carlo path simulation
-monte_carlo_path_count = 100            # Number of MC paths (10-500)
-enable_multi_timeframe = false          # Multi-timeframe evaluation
-enable_market_regime_scenarios = false  # Market regime scenarios
+# Days to wait after selling a symbol before buying it again
+# Prevents "wash sale" patterns and emotional re-buying
+# [MIN: 0, MAX: 365, DEFAULT: 180]
+# - 0: Can immediately rebuy (not recommended)
+# - 90-180: Moderate cooldown (recommended)
+# - 180-365: Long cooldown (conservative)
+sell_cooldown_days = 180
 
-# ============================================================================
+# Maximum loss threshold before forced selling consideration
+# -0.20 = -20% loss triggers eligibility for selling
+# Protects against holding losers too long
+# [MIN: -1.0, MAX: 0.0, DEFAULT: -0.20]
+# - -0.10 to -0.15: Tight stop loss (aggressive risk management)
+# - -0.20 to -0.30: Moderate stop loss (recommended)
+# - -0.40+: Loose stop loss (value investing, long-term)
+max_loss_threshold = -0.20
+
+# -----------------------------------------------------------------------------
+# SEARCH ALGORITHM PARAMETERS
+# -----------------------------------------------------------------------------
+
+# Beam search width (number of top sequences to keep at each depth)
+# Higher values explore more possibilities but use more memory
+# [MIN: 1, MAX: 50, DEFAULT: 10]
+# - 1-5: Fast, focused search
+# - 10-20: Good balance (recommended)
+# - 20-50: Exhaustive search (slow, high memory)
+beam_width = 10
+
+# Transaction cost penalty factor
+# Penalizes sequences with high transaction costs
+# 0.0 = ignore costs, 1.0 = heavily penalize costs
+# [MIN: 0.0, MAX: 1.0, DEFAULT: 0.1]
+# - 0.0: Pure end-state optimization (ignore costs)
+# - 0.1: Light cost awareness (recommended)
+# - 0.3-0.5: Moderate cost-consciousness
+# - 0.8-1.0: Very cost-averse (minimal trading)
+cost_penalty_factor = 0.1
+
+# -----------------------------------------------------------------------------
+# ADVANCED EVALUATION FEATURES
+# -----------------------------------------------------------------------------
+
+# Enable multi-objective Pareto optimization
+# Finds solutions that balance multiple objectives (return, risk, diversity, cost)
+# When false, uses single-objective end-state score only
+# [TYPE: boolean, DEFAULT: false]
+# - false: Simpler, faster, single-objective optimization
+# - true: More sophisticated, considers trade-offs (slower)
+enable_multi_objective = false
+
+# Enable stochastic price scenarios
+# Tests sequences under different price movements (±5%, ±10%)
+# Finds sequences that work well across multiple scenarios
+# [TYPE: boolean, DEFAULT: false]
+# - false: Faster, assumes current prices
+# - true: More robust to price changes (slower)
+enable_stochastic_scenarios = false
+
+# Enable Monte Carlo path simulation
+# Simulates random price paths to test sequence robustness
+# Very computationally expensive
+# [TYPE: boolean, DEFAULT: false]
+# - false: Deterministic evaluation (fast)
+# - true: Stochastic robustness testing (very slow)
+enable_monte_carlo_paths = false
+
+# Number of Monte Carlo simulation paths (if enabled)
+# More paths = more accurate but slower
+# [MIN: 10, MAX: 500, DEFAULT: 100]
+# - 10-50: Quick sampling
+# - 100-200: Good statistical significance (recommended)
+# - 200-500: High confidence (very slow)
+monte_carlo_path_count = 100
+
+# Enable multi-timeframe evaluation
+# Evaluates sequences across 1-year, 3-year, and 5-year horizons
+# [TYPE: boolean, DEFAULT: false]
+# - false: Focus on medium-term outcomes only
+# - true: Balance short-term and long-term goals
+enable_multi_timeframe = false
+
+# Enable market regime scenarios (bull/bear/sideways)
+# Tests sequences under different market conditions
+# Requires market regime detection to be enabled
+# [TYPE: boolean, DEFAULT: false]
+# - false: Assumes current market regime continues
+# - true: Plans for regime changes (more robust)
+enable_market_regime_scenarios = false
+
+# =============================================================================
 # OPPORTUNITY CALCULATORS
-# Calculate different types of trading opportunities
-# ============================================================================
+# =============================================================================
+# These modules identify different types of trading opportunities in your portfolio.
+# Each calculator looks for specific patterns (windfalls, dips, imbalances, etc.)
+# and assigns priority scores to potential actions.
+#
+# You can enable/disable calculators and adjust their parameters below.
+# =============================================================================
 
+# -----------------------------------------------------------------------------
+# PROFIT TAKING CALCULATOR
+# -----------------------------------------------------------------------------
+# Identifies positions with windfall gains that should be sold
+# Example: A stock up 35% might be sold to lock in profits
 [opportunity_calculators.profit_taking]
 enabled = true
+
 [opportunity_calculators.profit_taking.params]
-windfall_threshold = 0.30               # 30% gain threshold
+# Minimum gain percentage to consider selling
+# 0.30 = 30% gain required
+# [MIN: 0.0, MAX: 2.0, DEFAULT: 0.30]
+# - 0.10-0.20: Quick profit taking
+# - 0.30-0.50: Moderate (recommended)
+# - 0.60+: Let winners run
+windfall_threshold = 0.30
+
+# Priority multiplier for this calculator's opportunities
+# Higher values give more weight to profit-taking actions
+# [MIN: 0.0, MAX: 2.0, DEFAULT: 1.2]
 priority_weight = 1.2
 
+# -----------------------------------------------------------------------------
+# AVERAGING DOWN CALCULATOR
+# -----------------------------------------------------------------------------
+# Identifies quality positions that have dipped and should be bought more
+# Example: A highly-rated stock down 25% might be a buy opportunity
 [opportunity_calculators.averaging_down]
 enabled = true
+
 [opportunity_calculators.averaging_down.params]
-dip_threshold = -0.20                   # 20% loss threshold
+# Minimum loss percentage to consider averaging down
+# -0.20 = 20% loss required
+# [MIN: -1.0, MAX: 0.0, DEFAULT: -0.20]
+# - -0.10 to -0.15: Quick averaging (aggressive)
+# - -0.20 to -0.30: Moderate (recommended)
+# - -0.40+: Deep value (patient)
+dip_threshold = -0.20
+
+# Minimum quality score to average down into a position
+# Only average down on high-quality positions (avoid "catching a falling knife")
+# [MIN: 0.0, MAX: 1.0, DEFAULT: 0.6]
+# - 0.4-0.5: Lower quality threshold
+# - 0.6-0.7: Good quality only (recommended)
+# - 0.8+: Excellent quality only
 min_quality_score = 0.6
+
+# Priority weight for averaging down opportunities
+# [MIN: 0.0, MAX: 2.0, DEFAULT: 1.0]
 priority_weight = 1.0
 
+# -----------------------------------------------------------------------------
+# OPPORTUNITY BUYS CALCULATOR
+# -----------------------------------------------------------------------------
+# Identifies high-quality securities not yet in portfolio that should be bought
+# Example: A highly-rated stock you don't own yet
 [opportunity_calculators.opportunity_buys]
 enabled = true
+
 [opportunity_calculators.opportunity_buys.params]
+# Minimum quality score to consider buying
+# [MIN: 0.0, MAX: 1.0, DEFAULT: 0.7]
+# - 0.5-0.6: Accept moderate quality
+# - 0.7-0.8: Good quality only (recommended)
+# - 0.8+: Excellent quality only
 min_quality_score = 0.7
+
+# Priority weight for new buy opportunities
+# [MIN: 0.0, MAX: 2.0, DEFAULT: 1.1]
 priority_weight = 1.1
 
+# -----------------------------------------------------------------------------
+# REBALANCE SELLS CALCULATOR
+# -----------------------------------------------------------------------------
+# Identifies overweight positions that should be trimmed
+# Example: A position that's grown to 12% when target is 8%
 [opportunity_calculators.rebalance_sells]
 enabled = true
+
 [opportunity_calculators.rebalance_sells.params]
-overweight_threshold = 0.02             # 2% overweight
+# Minimum overweight percentage to trigger sell
+# 0.02 = 2% above target triggers rebalancing
+# [MIN: 0.0, MAX: 0.20, DEFAULT: 0.02]
+# - 0.01: Tight rebalancing
+# - 0.02-0.03: Moderate (recommended)
+# - 0.05+: Loose rebalancing (less frequent)
+overweight_threshold = 0.02
+
+# Priority weight for rebalancing sells
+# [MIN: 0.0, MAX: 2.0, DEFAULT: 0.8]
 priority_weight = 0.8
 
+# -----------------------------------------------------------------------------
+# REBALANCE BUYS CALCULATOR
+# -----------------------------------------------------------------------------
+# Identifies underweight areas that need more investment
+# Example: Technology sector is 8% when target is 12%
 [opportunity_calculators.rebalance_buys]
 enabled = true
+
 [opportunity_calculators.rebalance_buys.params]
-underweight_threshold = 0.02            # 2% underweight
+# Minimum underweight percentage to trigger buy
+# 0.02 = 2% below target triggers rebalancing
+# [MIN: 0.0, MAX: 0.20, DEFAULT: 0.02]
+# - 0.01: Tight rebalancing
+# - 0.02-0.03: Moderate (recommended)
+# - 0.05+: Loose rebalancing (less frequent)
+underweight_threshold = 0.02
+
+# Priority weight for rebalancing buys
+# [MIN: 0.0, MAX: 2.0, DEFAULT: 0.9]
 priority_weight = 0.9
 
+# -----------------------------------------------------------------------------
+# WEIGHT-BASED CALCULATOR
+# -----------------------------------------------------------------------------
+# Uses portfolio optimizer target weights (if available)
+# More sophisticated than simple rebalancing
 [opportunity_calculators.weight_based]
 enabled = true
-[opportunity_calculators.weight_based.params]
-min_gap_threshold = 0.01
-transaction_cost_fixed = 5.0
-transaction_cost_percent = 0.001
 
-# ============================================================================
+[opportunity_calculators.weight_based.params]
+# Minimum gap between current and target weight
+# 0.01 = 1% gap triggers action
+# [MIN: 0.0, MAX: 0.10, DEFAULT: 0.01]
+min_gap_threshold = 0.01
+
+# Transaction costs for this calculator (overrides global)
+transaction_cost_fixed = 2.0
+transaction_cost_percent = 0.002
+
+# =============================================================================
 # PATTERN GENERATORS
-# Generate different trading patterns from opportunities
-# ============================================================================
+# =============================================================================
+# These modules generate different trading patterns from identified opportunities.
+# A pattern is a specific way of combining buy/sell actions into sequences.
+#
+# Examples:
+# - "direct_buy": Just buy with available cash
+# - "profit_taking": Sell a winner, reinvest the proceeds
+# - "rebalance": Sell overweight, buy underweight
+#
+# You can enable/disable patterns to control the types of strategies considered.
+# =============================================================================
 
 [pattern_generators.direct_buy]
 enabled = true
@@ -141,47 +431,194 @@ enabled = true
 max_depth = 5
 
 [pattern_generators.adaptive]
-enabled = false                         # Requires portfolio_context
+# Adaptive patterns adjust based on portfolio state
+# Requires portfolio_context to be available
+enabled = false
 [pattern_generators.adaptive.params]
 max_depth = 5
 
 [pattern_generators.market_regime]
-enabled = false                         # Requires market_regime detection
+# Market regime patterns (bull/bear/sideways strategies)
+# Requires market regime detection to be enabled
+enabled = false
 [pattern_generators.market_regime.params]
 max_depth = 5
 market_regime = "sideways"
 
-# ============================================================================
+# =============================================================================
 # SEQUENCE GENERATORS
-# Combine opportunities into sequences using different strategies
-# ============================================================================
+# =============================================================================
+# These modules create additional sequences by combining opportunities in
+# sophisticated ways (combinatorial search, partial fills, constraint relaxation).
+#
+# WARNING: Combinatorial generators are computationally expensive!
+# They can create thousands of sequences. Only enable if you need them.
+# =============================================================================
 
+# -----------------------------------------------------------------------------
+# BASIC COMBINATORIAL GENERATOR
+# -----------------------------------------------------------------------------
+# Creates all possible combinations of buy/sell opportunities
+# Very expensive - disabled by default
 [sequence_generators.combinatorial]
-enabled = false                         # Disabled by default (expensive)
+enabled = false
 [sequence_generators.combinatorial.params]
-max_sells = 4                           # Match old planner default
-max_buys = 4                            # Match old planner default
+# Maximum number of sells in a sequence
+# [MIN: 1, MAX: 10, DEFAULT: 4]
+max_sells = 4
+
+# Maximum number of buys in a sequence
+# [MIN: 1, MAX: 10, DEFAULT: 4]
+max_buys = 4
+
+# Minimum priority for opportunities to include in combinations
+# [MIN: 0.0, MAX: 1.0, DEFAULT: 0.3]
 priority_threshold = 0.3
+
+# Maximum actions per sequence
+# [MIN: 1, MAX: 10, DEFAULT: 5]
 max_steps = 5
+
+# Maximum number of combinations to generate per depth
+# [MIN: 10, MAX: 1000, DEFAULT: 50]
 max_combinations = 50
+
+# Maximum number of candidate opportunities to combine
+# [MIN: 5, MAX: 50, DEFAULT: 12]
 max_candidates = 12
 
+# -----------------------------------------------------------------------------
+# ENHANCED COMBINATORIAL GENERATOR
+# -----------------------------------------------------------------------------
+# Like basic combinatorial but with diversity awareness
+# Still expensive but produces better-balanced sequences
 [sequence_generators.enhanced_combinatorial]
 enabled = true
 [sequence_generators.enhanced_combinatorial.params]
-max_sells = 4                           # Match old planner default
-max_buys = 4                            # Match old planner default
+max_sells = 4
+max_buys = 4
 priority_threshold = 0.3
 max_steps = 5
 max_combinations = 50
 max_candidates = 12
 
-# ============================================================================
-# FILTERS
-# Filter and refine generated sequences
-# ============================================================================
+# -----------------------------------------------------------------------------
+# PARTIAL EXECUTION GENERATOR
+# -----------------------------------------------------------------------------
+# Creates scenarios with partial fills (50%, 75%, 100% execution)
+# Useful for planning under uncertainty
+[sequence_generators.partial_execution]
+enabled = false
+[sequence_generators.partial_execution.params]
+# Fill percentages to simulate
+# [0.5, 0.75, 1.0] = 50%, 75%, 100% fills
+fill_percentages = [0.5, 0.75, 1.0]
 
+# -----------------------------------------------------------------------------
+# CONSTRAINT RELAXATION GENERATOR
+# -----------------------------------------------------------------------------
+# Creates "what if" scenarios by relaxing constraints
+# Example: "What if I could sell positions I normally can't?"
+[sequence_generators.constraint_relaxation]
+enabled = false
+[sequence_generators.constraint_relaxation.params]
+# Relax the allow_sell constraint
+relax_allow_sell = true
+
+# Relax minimum lot size requirements
+relax_min_lot = true
+
+# Relax maximum position size limits
+relax_max_position = false
+
+# Relax cooldown periods
+relax_cooldown = false
+
+# =============================================================================
+# FILTERS
+# =============================================================================
+# These modules filter out undesirable sequences before evaluation.
+# Filtering reduces computation time by eliminating bad sequences early.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# CORRELATION-AWARE FILTER
+# -----------------------------------------------------------------------------
+# Removes sequences with highly correlated actions
+# Example: Selling two tech stocks that move together anyway
 [filters.correlation_aware]
 enabled = true
 [filters.correlation_aware.params]
-correlation_threshold = 0.7             # Filter if correlation > 0.7
+# Correlation threshold for filtering
+# 0.7 = filter out sequences where actions are 70%+ correlated
+# [MIN: 0.0, MAX: 1.0, DEFAULT: 0.7]
+# - 0.5-0.6: Aggressive correlation filtering
+# - 0.7-0.8: Moderate (recommended)
+# - 0.9+: Only filter extremely correlated actions
+correlation_threshold = 0.7
+
+# -----------------------------------------------------------------------------
+# DIVERSITY FILTER
+# -----------------------------------------------------------------------------
+# Selects diverse sequences across countries, industries, and securities
+# Prevents portfolios from becoming too concentrated
+[filters.diversity]
+enabled = true
+[filters.diversity.params]
+# Weight given to diversity in selection
+# 0.0 = pure priority, 1.0 = pure diversity
+# [MIN: 0.0, MAX: 1.0, DEFAULT: 0.3]
+diversity_weight = 0.3
+
+# Maximum number of sequences to keep after diversity filtering
+# [MIN: 1, MAX: 1000, DEFAULT: 50]
+max_sequences = 50
+
+# -----------------------------------------------------------------------------
+# ELIGIBILITY FILTER
+# -----------------------------------------------------------------------------
+# Enforces trading rules (holding periods, cooldowns, max loss)
+# Removes sequences that violate eligibility constraints
+[filters.eligibility]
+enabled = true
+[filters.eligibility.params]
+# Minimum holding period (overrides global if set)
+# Leave commented to use global setting
+# min_hold_days = 90
+
+# Sell cooldown period (overrides global if set)
+# sell_cooldown_days = 180
+
+# Maximum loss threshold (overrides global if set)
+# max_loss_threshold = -0.20
+
+# -----------------------------------------------------------------------------
+# RECENTLY TRADED FILTER
+# -----------------------------------------------------------------------------
+# Prevents over-trading by filtering recently traded symbols
+# Separate cooldowns for buys and sells
+[filters.recently_traded]
+enabled = true
+[filters.recently_traded.params]
+# Days to wait before buying again after a buy
+# [MIN: 0, MAX: 365, DEFAULT: 30]
+# - 0: No restriction
+# - 30-60: Moderate cooldown (recommended)
+# - 90+: Long cooldown
+buy_cooldown_days = 30
+
+# Days to wait before buying again after a sell
+# [MIN: 0, MAX: 365, DEFAULT: 180]
+# - 0: Can rebuy immediately (not recommended)
+# - 90-180: Moderate cooldown (recommended)
+# - 180+: Long cooldown
+sell_cooldown_days = 180
+
+# =============================================================================
+# END OF CONFIGURATION
+# =============================================================================
+# For more information, see:
+# - docs/MODULAR_PLANNER_STATUS.md (implementation status)
+# - app/modules/planning/domain/MODULAR_PLANNER.md (technical documentation)
+# - app/modules/planning/domain/USAGE_GUIDE.md (usage examples)
+# =============================================================================
