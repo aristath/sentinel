@@ -70,6 +70,10 @@ class OpportunityCalculator(ABC):
         """
         pass
 
+    def __repr__(self) -> str:
+        """Return string representation for debugging."""
+        return f"{self.__class__.__name__}(name='{self.name}')"
+
 
 # Registry instance (initialized on first import)
 from app.modules.planning.domain.calculations.base import Registry  # noqa: E402

@@ -33,6 +33,12 @@ class Registry(Generic[T]):
         """List all registered module names."""
         return list(self._modules.keys())
 
+    def __repr__(self) -> str:
+        """Return string representation for debugging."""
+        count = len(self._modules)
+        names = ", ".join(sorted(self._modules.keys()))
+        return f"Registry({count} modules: {names})"
+
 
 # Global registries (initialized by submodules)
 #
