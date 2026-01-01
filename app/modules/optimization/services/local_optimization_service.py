@@ -2,10 +2,12 @@
 
 from typing import List
 
+from app.modules.allocation.database.allocation_repository import AllocationRepository
 from app.modules.optimization.services.optimization_service_interface import (
     AllocationTarget,
     OptimizationResult,
 )
+from app.modules.portfolio.database.position_repository import PositionRepository
 
 
 class LocalOptimizationService:
@@ -17,7 +19,8 @@ class LocalOptimizationService:
 
     def __init__(self):
         """Initialize local optimization service."""
-        pass
+        self.allocation_repo = AllocationRepository()
+        self.position_repo = PositionRepository()
 
     async def optimize_allocation(
         self,
@@ -34,11 +37,34 @@ class LocalOptimizationService:
         Returns:
             Optimization result
         """
-        # TODO: Implement using existing optimization logic
+        # Simple allocation optimization
+        # Calculate suggested changes based on targets
+        changes = []
+
+        for target in targets:
+            # Get current allocation
+            current_allocation = self.allocation_repo.get_by_symbol(target.symbol)
+            current_weight = (
+                current_allocation.target_weight if current_allocation else 0.0
+            )
+
+            # Calculate weight diff
+            weight_diff = target.target_weight - current_weight
+
+            if abs(weight_diff) > 0.01:  # 1% threshold
+                # Note: Dict values must be float per OptimizationResult interface
+                changes.append(
+                    {
+                        "current_weight": current_weight,
+                        "target_weight": target.target_weight,
+                        "weight_change": weight_diff,
+                    }
+                )
+
         return OptimizationResult(
-            success=False,
-            message="Optimization logic to be implemented",
-            recommended_changes=[],
+            success=True,
+            message=f"Generated {len(changes)} allocation changes",
+            recommended_changes=changes,
         )
 
     async def calculate_rebalancing(
@@ -56,9 +82,5 @@ class LocalOptimizationService:
         Returns:
             Rebalancing result
         """
-        # TODO: Implement rebalancing calculation
-        return OptimizationResult(
-            success=False,
-            message="Rebalancing logic to be implemented",
-            recommended_changes=[],
-        )
+        # Rebalancing uses same logic as optimization
+        return await self.optimize_allocation(targets, available_cash)
