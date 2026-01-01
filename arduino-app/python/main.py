@@ -1,5 +1,5 @@
 # Arduino Trader LED Display
-# Simple scrolling text display for 8x13 LED matrix and RGB LEDs 3 & 4
+# System stats visualization with random pixel density and microservice health
 
 from arduino.app_utils import App, Bridge, Logger
 import time
@@ -13,30 +13,26 @@ API_URL = "http://192.168.1.11:8000"
 # Persistent HTTP session for connection pooling (reuses TCP connections)
 _http_session = requests.Session()
 
-# Default ticker speed in ms (can be overridden by API)
-DEFAULT_TICKER_SPEED = 50
 
-
-def scroll_text(text: str, speed: int = 50) -> bool:
-    """Scroll text across LED matrix using native ArduinoGraphics.
+def set_fill_percentage(percentage: float) -> bool:
+    """Set LED matrix fill percentage for system stats visualization.
 
     Args:
-        text: Text to scroll (uses Euro symbol € directly)
-        speed: Milliseconds per scroll step (lower = faster)
+        percentage: Fill percentage (0.0-100.0)
 
     Returns:
         True if successful, False otherwise
     """
     try:
-        Bridge.call("scrollText", text, speed, timeout=5)
+        Bridge.call("setFillPercentage", percentage, timeout=2)
         return True
     except Exception as e:
-        logger.debug(f"scrollText failed: {e}")
+        logger.debug(f"setFillPercentage failed: {e}")
         return False
 
 
 def set_rgb3(r: int, g: int, b: int) -> bool:
-    """Set RGB LED 3 color (sync indicator).
+    """Set RGB LED 3 color (microservice health indicator).
 
     Args:
         r: Red value (0-255, 0 = off, >0 = on)
@@ -55,7 +51,7 @@ def set_rgb3(r: int, g: int, b: int) -> bool:
 
 
 def set_rgb4(r: int, g: int, b: int) -> bool:
-    """Set RGB LED 4 color (processing indicator).
+    """Set RGB LED 4 color (microservice health indicator).
 
     Args:
         r: Red value (0-255, 0 = off, >0 = on)
@@ -82,7 +78,7 @@ def fetch_display_state() -> dict | None:
         with _http_session.get(f"{API_URL}/api/status/led/display", timeout=2) as resp:
             if resp.status_code == 200:
                 state = resp.json()
-                logger.debug(f"Fetched display state: text='{state.get('display_text', '')}', led3={state.get('led3')}, led4={state.get('led4')}")
+                logger.debug(f"Fetched display state: fill={state.get('fill_percentage', 0.0):.1f}%, led3={state.get('led3')}, led4={state.get('led4')}")
                 return state
             else:
                 logger.warning(f"API returned status {resp.status_code}")
@@ -147,14 +143,11 @@ def loop():
         set_rgb3(led3[0], led3[1], led3[2])
         set_rgb4(led4[0], led4[1], led4[2])
 
-        # Update display text (always send, Arduino queues with latest-wins)
-        display_text = state.get("display_text", "")
-        if display_text:
-            success = scroll_text(display_text, state.get("ticker_speed", DEFAULT_TICKER_SPEED))
-            if not success:
-                logger.warning(f"Failed to send display text to Arduino: '{display_text}'")
-        else:
-            logger.debug("Display text is empty, skipping scroll_text call")
+        # Update fill percentage for LED matrix (always send, Arduino queues with latest-wins)
+        fill_percentage = state.get("fill_percentage", 0.0)
+        success = set_fill_percentage(fill_percentage)
+        if not success:
+            logger.warning(f"Failed to send fill percentage to Arduino: {fill_percentage:.1f}%")
 
         time.sleep(1)  # Poll every 1 second
 
@@ -163,5 +156,5 @@ def loop():
         time.sleep(1)
 
 
-logger.info("LED Display starting (scrolling text mode)...")
+logger.info("LED Display starting (system stats visualization mode)...")
 App.run(user_loop=loop)
