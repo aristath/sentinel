@@ -87,6 +87,22 @@ async def lifespan(app: FastAPI):
     # Initialize database manager (creates all databases with schemas)
     await init_databases(settings.data_dir)
 
+    # Initialize planner configurations from TOML files
+    try:
+        from app.modules.planning.services.planner_initializer import (
+            initialize_planner_configs,
+        )
+
+        result = await initialize_planner_configs()
+        if result["created"]:
+            logger.info(f"Initialized planner configs: {', '.join(result['created'])}")
+        if result["errors"]:
+            logger.warning(
+                f"Errors initializing planner configs: {', '.join(result['errors'])}"
+            )
+    except Exception as e:
+        logger.warning(f"Failed to initialize planner configs: {e}", exc_info=True)
+
     # Initialize and start scheduler
     await init_scheduler()
     start_scheduler()
