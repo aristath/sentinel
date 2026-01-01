@@ -25,8 +25,8 @@ COPY services/scoring /app/services/scoring/
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-# Expose gRPC port
-EXPOSE 5005X
+# Expose HTTP port
+EXPOSE 8004
 
 # Run the service
 CMD ["python", "-m", "services.scoring.main"]

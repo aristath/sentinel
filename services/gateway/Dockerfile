@@ -25,8 +25,8 @@ COPY services/gateway /app/services/gateway/
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-# Expose gRPC port
-EXPOSE 5005X
+# Expose HTTP port
+EXPOSE 8007
 
 # Run the service
 CMD ["python", "-m", "services.gateway.main"]

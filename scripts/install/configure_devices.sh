@@ -105,14 +105,14 @@ configure_device_addresses() {
 
 get_service_port() {
     case $1 in
-        "planning") echo "8000" ;;
-        "scoring") echo "8004" ;;
-        "optimization") echo "8005" ;;
+        "universe") echo "8001" ;;
         "portfolio") echo "8002" ;;
         "trading") echo "8003" ;;
-        "universe") echo "8001" ;;
+        "scoring") echo "8004" ;;
+        "optimization") echo "8005" ;;
+        "planning") echo "8006" ;;
         "gateway") echo "8007" ;;
-        *) echo "8000" ;;
+        *) echo "8001" ;;
     esac
 }
 

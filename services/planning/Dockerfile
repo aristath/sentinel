@@ -25,8 +25,8 @@ COPY services/planning /app/services/planning/
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-# Expose gRPC port (default: 50051)
-EXPOSE 50051
+# Expose HTTP port
+EXPOSE 8006
 
 # Run the service
 CMD ["python", "-m", "services.planning.main"]

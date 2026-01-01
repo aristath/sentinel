@@ -6,7 +6,7 @@
 
 select_services() {
     local all_services=("planning" "scoring" "optimization" "portfolio" "trading" "universe" "gateway")
-    local service_ports=("8000" "8004" "8005" "8002" "8003" "8001" "8007")
+    local service_ports=("8006" "8004" "8005" "8002" "8003" "8001" "8007")
     local current_services=()
 
     # If existing install, read current services
@@ -54,7 +54,7 @@ select_services() {
             SELECTED_SERVICES=("${all_services[@]}")
             echo ""
             print_msg "${GREEN}" "→ Running ALL services on this device (single-device mode)"
-            print_msg "${GREEN}" "→ Ports 8000-8007 will be used"
+            print_msg "${GREEN}" "→ Ports 8001-8007 will be used (Gateway also exposed on 8000)"
             break
         else
             # Parse comma-separated numbers

@@ -25,8 +25,8 @@ COPY services/portfolio /app/services/portfolio/
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-# Expose gRPC port
-EXPOSE 5005X
+# Expose HTTP port
+EXPOSE 8002
 
 # Run the service
 CMD ["python", "-m", "services.portfolio.main"]

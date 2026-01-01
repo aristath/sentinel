@@ -25,8 +25,8 @@ COPY services/trading /app/services/trading/
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-# Expose gRPC port
-EXPOSE 5005X
+# Expose HTTP port
+EXPOSE 8003
 
 # Run the service
 CMD ["python", "-m", "services.trading.main"]

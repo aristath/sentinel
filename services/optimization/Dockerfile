@@ -25,8 +25,8 @@ COPY services/optimization /app/services/optimization/
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-# Expose gRPC port
-EXPOSE 5005X
+# Expose HTTP port
+EXPOSE 8005
 
 # Run the service
 CMD ["python", "-m", "services.optimization.main"]

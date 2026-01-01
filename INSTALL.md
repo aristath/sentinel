@@ -271,7 +271,8 @@ docker compose up -d
 
 **Test individual service**:
 ```bash
-curl http://localhost:8000/health  # Planning
+curl http://localhost:8000/health  # Gateway (exposed on 8000)
+curl http://localhost:8006/health  # Planning
 curl http://localhost:8004/health  # Scoring
 curl http://localhost:8001/health  # Universe
 ```
@@ -386,13 +387,13 @@ docker compose restart
 ### Q: What ports are used?
 
 **A**:
-- Planning: 8000
 - Universe: 8001
 - Portfolio: 8002
 - Trading: 8003
 - Scoring: 8004
 - Optimization: 8005
-- Gateway: 8007 (+ 8000 for web dashboard)
+- Planning: 8006
+- Gateway: 8007 (exposed on host port 8000 for web dashboard)
 
 ### Q: How do I monitor service health?
 

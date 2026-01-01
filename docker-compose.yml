@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: services/planning/Dockerfile
     ports:
-      - "50051:50051"
+      - "8006:8006"
     volumes:
       - ./app/config:/app/app/config:ro
     environment:
@@ -20,7 +20,7 @@ services:
       context: .
       dockerfile: services/scoring/Dockerfile
     ports:
-      - "50052:50052"
+      - "8004:8004"
     volumes:
       - ./app/config:/app/app/config:ro
     environment:
@@ -34,7 +34,7 @@ services:
       context: .
       dockerfile: services/optimization/Dockerfile
     ports:
-      - "50053:50053"
+      - "8005:8005"
     volumes:
       - ./app/config:/app/app/config:ro
     environment:
@@ -48,7 +48,7 @@ services:
       context: .
       dockerfile: services/portfolio/Dockerfile
     ports:
-      - "50054:50054"
+      - "8002:8002"
     volumes:
       - ./app/config:/app/app/config:ro
     environment:
@@ -62,7 +62,7 @@ services:
       context: .
       dockerfile: services/trading/Dockerfile
     ports:
-      - "50055:50055"
+      - "8003:8003"
     volumes:
       - ./app/config:/app/app/config:ro
     environment:
@@ -76,7 +76,7 @@ services:
       context: .
       dockerfile: services/universe/Dockerfile
     ports:
-      - "50056:50056"
+      - "8001:8001"
     volumes:
       - ./app/config:/app/app/config:ro
     environment:
@@ -90,8 +90,8 @@ services:
       context: .
       dockerfile: services/gateway/Dockerfile
     ports:
-      - "50057:50057"
-      - "8000:8000"  # HTTP API
+      - "8007:8007"
+      - "8000:8007"  # Expose gateway on port 8000 for backward compatibility
     volumes:
       - ./app/config:/app/app/config:ro
     environment:
