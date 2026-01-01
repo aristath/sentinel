@@ -1,4 +1,4 @@
-# ugateway Service Dependencies
+# Gateway Service Dependencies
 
 # gRPC
 grpcio>=1.60.0

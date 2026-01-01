@@ -1,4 +1,4 @@
-# utrading Service Dependencies
+# Trading Service Dependencies
 
 # gRPC
 grpcio>=1.60.0

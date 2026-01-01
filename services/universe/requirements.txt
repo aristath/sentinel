@@ -1,4 +1,4 @@
-# uuniverse Service Dependencies
+# Universe Service Dependencies
 
 # gRPC
 grpcio>=1.60.0

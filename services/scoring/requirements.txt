@@ -1,4 +1,4 @@
-# uscoring Service Dependencies
+# Scoring Service Dependencies
 
 # gRPC
 grpcio>=1.60.0

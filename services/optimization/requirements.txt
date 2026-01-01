@@ -1,4 +1,4 @@
-# uoptimization Service Dependencies
+# Optimization Service Dependencies
 
 # gRPC
 grpcio>=1.60.0
