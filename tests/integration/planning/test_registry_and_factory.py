@@ -161,8 +161,7 @@ class TestModularPlannerFactory:
 
         config = load_planner_config(config_path)
 
-        factory = ModularPlannerFactory(config=config)
-        factory.instantiate_modules()
+        factory = ModularPlannerFactory.from_config(config)
 
         # Should have loaded modules
         assert len(factory.calculators) > 0
@@ -175,8 +174,7 @@ class TestModularPlannerFactory:
 
         config = load_planner_config(config_path)
 
-        factory = ModularPlannerFactory(config=config)
-        factory.instantiate_modules()
+        factory = ModularPlannerFactory.from_config(config)
 
         # Conservative should have fewer modules enabled
         assert len(factory.calculators) >= 0
@@ -189,8 +187,7 @@ class TestModularPlannerFactory:
 
         config = load_planner_config(config_path)
 
-        factory = ModularPlannerFactory(config=config)
-        factory.instantiate_modules()
+        factory = ModularPlannerFactory.from_config(config)
 
         # Aggressive should have many modules enabled
         assert len(factory.calculators) > 0
@@ -223,10 +220,8 @@ class TestModularPlannerFactory:
             opportunity_calculators=calc_config,
         )
 
-        factory = ModularPlannerFactory(config=config)
-
-        # Should work for existing module
-        factory.instantiate_modules()
+        # Should work for existing module (profit_taking exists in registry)
+        factory = ModularPlannerFactory.from_config(config)
         assert "profit_taking" in factory.calculators
 
     def test_factory_from_config_file_helper(self):
@@ -234,7 +229,6 @@ class TestModularPlannerFactory:
         config_path = Path("config/planner/default.toml")
 
         factory = ModularPlannerFactory.from_config_file(config_path)
-        factory.instantiate_modules()
 
         assert factory.config is not None
         assert factory.config.name == "default"
@@ -244,21 +238,20 @@ class TestModularPlannerFactory:
         """Test factory getter methods."""
         config_path = Path("config/planner/default.toml")
         factory = ModularPlannerFactory.from_config_file(config_path)
-        factory.instantiate_modules()
 
         # Test getters
         calculators = factory.get_calculators()
-        assert isinstance(calculators, dict)
+        assert isinstance(calculators, list)
         assert len(calculators) > 0
 
         patterns = factory.get_patterns()
-        assert isinstance(patterns, dict)
+        assert isinstance(patterns, list)
 
         generators = factory.get_generators()
-        assert isinstance(generators, dict)
+        assert isinstance(generators, list)
 
         filters = factory.get_filters()
-        assert isinstance(filters, dict)
+        assert isinstance(filters, list)
 
 
 class TestModuleIntegration:
