@@ -28,7 +28,7 @@ class CorrelationAwareFilter(SequenceFilter):
         return {
             "correlation_threshold": 0.7,
             "securities": None,  # List[Security] for symbol lookup
-            "max_steps": 5,
+            "correlation_matrix": None,  # Optional[Dict[str, float]]
         }
 
     async def filter(
@@ -39,66 +39,39 @@ class CorrelationAwareFilter(SequenceFilter):
         """
         Filter sequences to avoid highly correlated positions.
 
-        Uses correlation data from risk models to identify and filter out
+        Uses provided correlation data to identify and filter out
         sequences that would create highly correlated positions.
 
         Args:
             sequences: List of candidate sequences to filter
-            params: Filter parameters (must include securities)
+            params: Filter parameters including:
+                - securities: List[Security] for symbol lookup
+                - correlation_matrix: Optional[Dict[str, float]] with
+                  keys in "symbol1:symbol2" format
+                - correlation_threshold: float (default 0.7)
 
         Returns:
             Filtered list of sequences with reduced correlation
+
+        Note:
+            If correlation_matrix is not provided, all sequences are
+            returned unfiltered. The caller (holistic_planner) is
+            responsible for providing correlation data if available.
         """
         securities: List[Security] = params.get("securities", [])
         correlation_threshold = params.get("correlation_threshold", 0.7)
+        correlations: Dict[str, float] = params.get("correlation_matrix") or {}
 
         if not sequences or not securities:
             return sequences
 
-        # Build correlation data
-        try:
-            from app.modules.optimization.services.risk_models import RiskModelBuilder
-
-            # Get all buy symbols from sequences
-            all_buy_symbols = set()
-            for sequence in sequences:
-                for action in sequence:
-                    if action.side == TradeSide.BUY:
-                        all_buy_symbols.add(action.symbol)
-
-            if not all_buy_symbols:
-                return sequences  # No buys to check
-
-            # Build returns DataFrame for correlation calculation
-            risk_builder = RiskModelBuilder()
-            lookback_days = 252  # 1 year
-            prices_df = await risk_builder._fetch_prices(
-                list(all_buy_symbols), lookback_days
+        # If no correlation data provided, return all sequences
+        if not correlations:
+            logger.debug(
+                "Correlation filter: No correlation data provided, "
+                "returning all sequences"
             )
-
-            if prices_df.empty:
-                return sequences  # No price data available
-
-            # Calculate returns and correlation matrix
-            returns_df = prices_df.pct_change().dropna()
-            if returns_df.empty:
-                return sequences
-
-            corr_matrix = returns_df.corr()
-
-            # Build correlation dict for quick lookup
-            correlations: Dict[str, float] = {}
-            symbols = list(corr_matrix.columns)
-            for i, sym1 in enumerate(symbols):
-                for sym2 in symbols[i + 1 :]:
-                    corr = corr_matrix.loc[sym1, sym2]
-                    # Store both directions
-                    correlations[f"{sym1}:{sym2}"] = corr
-                    correlations[f"{sym2}:{sym1}"] = corr
-
-        except Exception as e:
-            logger.warning(f"Failed to build correlations for filtering: {e}")
-            return sequences  # Return all if correlation check fails
+            return sequences
 
         # Build symbol set from securities
         stock_symbols = {s.symbol for s in securities}
