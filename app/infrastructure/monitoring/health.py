@@ -4,7 +4,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Awaitable, Callable, Dict, Optional
+from typing import Any, Awaitable, Callable, Dict, Optional, cast
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +115,7 @@ class HealthCheckRegistry:
                     message=f"Exception: {result}",
                 )
             else:
-                results[name] = result  # type: ignore[assignment]
+                results[name] = cast(HealthCheckResult, result)
 
         return results
 

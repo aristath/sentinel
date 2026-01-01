@@ -4,7 +4,7 @@ import asyncio
 import time
 from dataclasses import dataclass
 from enum import Enum
-from typing import Awaitable, Callable, Optional, TypeVar
+from typing import Awaitable, Callable, Optional, Type, TypeVar
 
 T = TypeVar("T")
 
@@ -24,7 +24,7 @@ class CircuitBreakerConfig:
     failure_threshold: int = 5  # Number of failures before opening
     success_threshold: int = 2  # Number of successes to close from half-open
     timeout: float = 60.0  # Seconds to wait before trying half-open
-    expected_exception: type = Exception  # Exception type to catch
+    expected_exception: Type[Exception] = Exception  # Exception type to catch
 
 
 class CircuitBreakerError(Exception):
@@ -118,7 +118,7 @@ class CircuitBreaker:
 
             return result
 
-        except self.config.expected_exception as e:  # type: ignore[misc]
+        except self.config.expected_exception as e:
             # Record failure
             async with self._lock:
                 await self._on_failure()
