@@ -125,6 +125,8 @@ document.addEventListener('alpine:init', () => {
     showPlannerHistory: false,             // History viewer visibility
     plannerHistory: [],                    // Version history entries
     plannerHistoryLoading: false,          // History loading state
+    showPlannerDiffModal: false,           // Diff modal visibility
+    plannerDiffHtml: '',                   // Rendered diff HTML
 
     // Universe/Bucket Management
     newUniverseName: '',
@@ -1109,6 +1111,30 @@ enable_combinatorial = true
       this.plannerForm.toml = historyEntry.toml_config;
       this.showMessage('Historical version loaded. Click Save to apply.', 'success');
       this.showPlannerHistory = false;
+    },
+
+    showPlannerDiff(historyEntry) {
+      // Show diff between historical version and current version
+      if (!window.createDiffViewer) {
+        this.showMessage('Diff viewer not available', 'error');
+        return;
+      }
+
+      const oldText = historyEntry.toml_config || '';
+      const newText = this.plannerForm.toml || '';
+      const oldLabel = `${historyEntry.name} (${new Date(historyEntry.saved_at).toLocaleString()})`;
+      const newLabel = 'Current version';
+
+      const diffHtml = window.createDiffViewer(oldText, newText, oldLabel, newLabel);
+
+      // Store diff HTML to be displayed in modal
+      this.plannerDiffHtml = diffHtml;
+      this.showPlannerDiffModal = true;
+    },
+
+    closePlannerDiff() {
+      this.showPlannerDiffModal = false;
+      this.plannerDiffHtml = '';
     },
 
     closePlannerManagement() {

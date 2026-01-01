@@ -139,10 +139,16 @@ class PlannerManagementModal extends HTMLElement {
                         <span class="text-gray-300 font-semibold" x-text="entry.name"></span>
                         <span class="text-gray-500" x-text="new Date(entry.saved_at).toLocaleString()"></span>
                       </div>
-                      <button @click="$store.app.restorePlannerVersion(entry)"
-                              class="text-blue-400 hover:text-blue-300 text-xs">
-                        Restore this version
-                      </button>
+                      <div class="flex gap-3">
+                        <button @click="$store.app.showPlannerDiff(entry)"
+                                class="text-green-400 hover:text-green-300 text-xs">
+                          Compare with current
+                        </button>
+                        <button @click="$store.app.restorePlannerVersion(entry)"
+                                class="text-blue-400 hover:text-blue-300 text-xs">
+                          Restore this version
+                        </button>
+                      </div>
                     </div>
                   </template>
                 </div>
@@ -214,6 +220,33 @@ class PlannerManagementModal extends HTMLElement {
                 Close
               </button>
             </template>
+          </div>
+        </div>
+      </div>
+
+      <!-- Diff Viewer Modal -->
+      <div x-data x-show="$store.app.showPlannerDiffModal"
+           class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+           x-transition>
+        <div class="bg-gray-800 border border-gray-700 rounded-lg w-full max-w-5xl modal-content max-h-[90vh] flex flex-col" @click.stop>
+          <!-- Header -->
+          <div class="flex items-center justify-between p-4 border-b border-gray-700">
+            <h2 class="text-lg font-semibold text-gray-100">Version Comparison</h2>
+            <button @click="$store.app.closePlannerDiff()"
+                    class="text-gray-400 hover:text-gray-200 text-2xl leading-none">&times;</button>
+          </div>
+
+          <!-- Body -->
+          <div class="p-4 overflow-y-auto flex-1">
+            <div x-html="$store.app.plannerDiffHtml"></div>
+          </div>
+
+          <!-- Footer -->
+          <div class="flex justify-end gap-2 p-4 border-t border-gray-700">
+            <button @click="$store.app.closePlannerDiff()"
+                    class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded transition-colors">
+              Close
+            </button>
           </div>
         </div>
       </div>
