@@ -3,7 +3,7 @@
 Pure calculation functions for Bollinger Bands using pandas-ta.
 """
 
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple, cast
 
 import numpy as np
 import pandas as pd
@@ -30,8 +30,8 @@ def calculate_bollinger_bands(
         return None
 
     series = pd.Series(closes)
-    # Type ignore: pandas-ta bbands accepts float for std, but stubs may be incorrect
-    bb = ta.bbands(series, length=length, std=std)  # type: ignore[arg-type]
+    # pandas-ta bbands accepts float for std, but type stubs are incorrect
+    bb = cast(Any, ta.bbands)(series, length=length, std=std)
 
     if bb is None or len(bb) == 0:
         return None

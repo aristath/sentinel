@@ -10,7 +10,7 @@ without selling consistent performers prematurely.
 """
 
 import logging
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from app.modules.scoring.domain.constants import (
     CONSISTENT_DOUBLE_SELL_PCT,
@@ -71,7 +71,7 @@ async def calculate_windfall_score(
     current_gain: Optional[float] = None,
     years_held: Optional[float] = None,
     historical_cagr: Optional[float] = None,
-) -> Tuple[float, Dict[str, float]]:
+) -> Tuple[float, Dict[str, Any]]:
     """
     Calculate windfall score (0-1) based on excess gain.
 
@@ -103,7 +103,7 @@ async def calculate_windfall_score(
     # If we don't have current gain or years held, return neutral
     if current_gain is None or years_held is None:
         return 0.0, {
-            "status": "insufficient_data",  # type: ignore[dict-item]
+            "status": "insufficient_data",
             "historical_cagr": round(historical_cagr, 4),
         }
 

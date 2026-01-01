@@ -11,7 +11,7 @@ Used by the holistic planner to evaluate and compare action sequences.
 """
 
 import logging
-from typing import Dict, Tuple
+from typing import Any, Dict, Tuple
 
 # Import scorer from dedicated module
 from app.modules.scoring.domain.scorers.end_state import score_total_return
@@ -310,7 +310,7 @@ async def calculate_portfolio_end_state_score(
     metrics_cache: Dict[str, Dict[str, float]],
     opinion_score: float = 0.5,
     risk_profile: str = "balanced",
-) -> Tuple[float, Dict[str, float]]:
+) -> Tuple[float, Dict[str, Any]]:
     """
     Calculate end-state score for an entire portfolio.
 
@@ -328,7 +328,7 @@ async def calculate_portfolio_end_state_score(
         Tuple of (total_score, detailed_breakdown)
     """
     if total_value <= 0 or not positions:
-        return 0.5, {"error": "Invalid portfolio data"}  # type: ignore[dict-item]
+        return 0.5, {"error": "Invalid portfolio data"}
 
     # Calculate weighted averages across all positions
     weighted_total_return = 0.0
@@ -409,4 +409,4 @@ async def calculate_portfolio_end_state_score(
         "risk_profile": risk_profile,
     }
 
-    return round(min(1.0, end_state_score), 3), detailed_breakdown  # type: ignore[return-value]
+    return round(min(1.0, end_state_score), 3), detailed_breakdown
