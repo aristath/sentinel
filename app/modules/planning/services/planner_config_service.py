@@ -72,6 +72,7 @@ class PlannerConfigService:
             return {"valid": True, "error": None, "config": config}
 
         except Exception as e:
+            logger.exception("Configuration validation failed")
             return {
                 "valid": False,
                 "error": f"Configuration validation failed: {str(e)}",
@@ -107,7 +108,7 @@ class PlannerConfigService:
             return {"success": True, "config": config, "error": None}
 
         except Exception as e:
-            logger.error(f"Failed to create planner config: {e}")
+            logger.exception("Failed to create planner config")
             return {"success": False, "config": None, "error": str(e)}
 
     async def update(
@@ -161,7 +162,7 @@ class PlannerConfigService:
             return {"success": True, "config": config, "error": None}
 
         except Exception as e:
-            logger.error(f"Failed to update planner config: {e}")
+            logger.exception("Failed to update planner config")
             return {"success": False, "config": None, "error": str(e)}
 
     async def delete(self, config_id: str) -> dict:
@@ -190,7 +191,7 @@ class PlannerConfigService:
             return {"success": True, "error": None}
 
         except Exception as e:
-            logger.error(f"Failed to delete planner config: {e}")
+            logger.exception("Failed to delete planner config")
             return {"success": False, "error": str(e)}
 
     async def get_history(self, config_id: str) -> List[PlannerConfigHistory]:

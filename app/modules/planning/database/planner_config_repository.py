@@ -142,9 +142,15 @@ class PlannerConfigRepository:
             # Empty string means unassign (set to NULL)
             updates["bucket_id"] = bucket_id if bucket_id else None
 
-        # Build dynamic UPDATE query
-        set_clause = ", ".join(f"{k} = ?" for k in updates.keys())
-        values = list(updates.values()) + [config_id]
+        # Build dynamic UPDATE query with whitelisted columns
+        ALLOWED_FIELDS = {"name", "toml_config", "bucket_id", "updated_at"}
+        validated_updates = {k: v for k, v in updates.items() if k in ALLOWED_FIELDS}
+
+        if not validated_updates:
+            return await self.get_by_id(config_id)  # No valid fields to update
+
+        set_clause = ", ".join(f"{k} = ?" for k in validated_updates.keys())
+        values = list(validated_updates.values()) + [config_id]
 
         await db.execute(
             f"UPDATE planner_configs SET {set_clause} WHERE id = ?",
