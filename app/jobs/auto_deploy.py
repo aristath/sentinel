@@ -71,6 +71,8 @@ async def _run_auto_deploy_internal():
             )
             if result.sketch_deployed:
                 logger.info("Sketch also deployed successfully")
+            if result.go_evaluator_deployed:
+                logger.info("Go evaluator also deployed successfully")
         else:
             logger.debug("No changes to deploy")
     else:

@@ -12,6 +12,10 @@ from app.infrastructure.deployment.git_checker import (
     GitFetchError,
     GitPullError,
 )
+from app.infrastructure.deployment.go_evaluator_deployer import (
+    GoDeploymentError,
+    GoEvaluatorDeployer,
+)
 from app.infrastructure.deployment.service_manager import (
     HealthCheckError,
     ServiceManager,
@@ -36,6 +40,7 @@ class DeploymentResult:
     commit_after: Optional[str] = None
     error: Optional[str] = None
     sketch_deployed: bool = False
+    go_evaluator_deployed: bool = False
     duration_seconds: float = 0.0
 
 
@@ -78,6 +83,9 @@ class DeploymentManager:
             self.sketch_deployer: Optional[SketchDeployer] = SketchDeployer(sketch_dir)
         else:
             self.sketch_deployer = None
+
+        # Go evaluator deployer
+        self.go_evaluator_deployer = GoEvaluatorDeployer(repo_dir)
 
     async def deploy(self) -> DeploymentResult:
         """Run deployment process.
@@ -190,6 +198,21 @@ class DeploymentManager:
                     # Sketch deployment failure is non-fatal
                     logger.warning(f"Sketch deployment failed (non-fatal): {e}")
                     result.error = f"Main app deployed but sketch failed: {e}"
+
+            # Step 8: Deploy Go evaluator if changed
+            if categories["go_evaluator"]:
+                try:
+                    logger.info("Go evaluator files changed - deploying binary...")
+                    await self.go_evaluator_deployer.deploy()
+                    result.go_evaluator_deployed = True
+                    logger.info("Go evaluator deployed successfully")
+                except GoDeploymentError as e:
+                    # Go deployment failure is non-fatal
+                    logger.warning(f"Go evaluator deployment failed (non-fatal): {e}")
+                    if result.error:
+                        result.error += f"; Go evaluator: {e}"
+                    else:
+                        result.error = f"Go evaluator deployment failed: {e}"
 
             # Get final commit
             _, _, final_commit = self.git_checker.has_changes()
