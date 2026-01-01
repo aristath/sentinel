@@ -322,6 +322,31 @@ services:
   # ... etc
 ```
 
+## Legacy Code Cleanup
+
+### gRPC Cleanup (✅ COMPLETE)
+
+All legacy gRPC/protobuf code has been removed:
+
+**Removed (58 files):**
+- ✅ `contracts/` directory (47 files) - All protobuf definitions and generated code
+- ✅ 7 gRPC servicer files (`services/{service}/grpc_servicer.py`)
+- ✅ 7 gRPC client files (`app/modules/{service}/services/grpc_{service}_client.py`)
+- ✅ `app/infrastructure/grpc_helpers/protobuf_converters.py`
+- ✅ `scripts/generate_protos.sh`
+
+**Cleaned:**
+- ✅ Removed unused dependency injection code from `app/infrastructure/dependencies.py`
+- ✅ Removed unused service interface imports
+
+**Validation:**
+- ✅ All 7 REST services still working
+- ✅ All 7 HTTP clients validated
+- ✅ Service locator validated
+- ✅ No breaking changes
+
+The codebase is now fully transitioned to REST with no legacy gRPC code remaining.
+
 ## Future Work
 
 ### Optional Enhancements
@@ -333,23 +358,26 @@ services:
 6. **Monitoring** - Prometheus metrics, health dashboards
 7. **WebSocket** - For real-time updates (if needed)
 
-### gRPC Cleanup
-- Remove `contracts/` protobuf definitions
-- Remove gRPC servicers
-- Remove protobuf converters
-- Update CI/CD to remove protobuf generation
-
 ## Conclusion
 
-**Migration Status: ✅ COMPLETE**
+**Migration Status: ✅ COMPLETE + CLEANED**
 
+**Migration:**
 - **7/7 services** converted to REST
 - **52 files created**, 14 modified
-- **~900MB memory saved** (worst case)
 - **36 REST endpoints** fully functional
 - **HTTP client infrastructure** with resilience
+
+**Cleanup:**
+- **58 legacy files** removed
+- **Zero gRPC code** remaining
+- **Cleaner codebase** with only active infrastructure
+
+**Benefits:**
+- **~900MB memory saved** (worst case)
+- **Simple HTTP/JSON** architecture
+- **Production ready** for Arduino Uno Q deployment
 - **All tests passing**
-- **Ready for deployment**
 
 The system is now significantly more memory-efficient, simpler, and better suited for the 2GB Arduino Uno Q deployment while maintaining full functionality and clean architecture principles.
 
