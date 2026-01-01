@@ -2702,6 +2702,36 @@ async def process_planner_incremental(
     best_in_batch = None
     best_score_in_batch = 0.0
 
+    # Pre-fetch all metrics for symbols in all sequences (memory optimization)
+    # Collect all unique symbols from all sequences in this batch
+    all_symbols_in_batch = set()
+    for seq_data in next_sequences:
+        try:
+            sequence_data = json.loads(seq_data["sequence_json"])
+            for action_dict in sequence_data:
+                all_symbols_in_batch.add(action_dict["symbol"])
+        except Exception:
+            # Skip if we can't parse - will be handled later in main loop
+            pass
+
+    # Pre-fetch metrics for all symbols in one go
+    for symbol in all_symbols_in_batch:
+        if symbol not in metrics_cache:
+            try:
+                metrics = await calc_repo.get_metrics(symbol, required_metrics)
+                metrics_cache[symbol] = {
+                    k: (v if v is not None else 0.0) for k, v in metrics.items()
+                }
+            except Exception as e:
+                logger.warning(f"Failed to pre-fetch metrics for {symbol}: {e}")
+                # Set empty dict to avoid re-fetching
+                metrics_cache[symbol] = {}
+
+    logger.info(
+        f"Pre-fetched metrics for {len(all_symbols_in_batch)} unique symbols "
+        f"in batch of {len(next_sequences)} sequences"
+    )
+
     for seq_data in next_sequences:
         sequence_hash = seq_data["sequence_hash"]
 
@@ -2754,13 +2784,7 @@ async def process_planner_incremental(
                 sequence, portfolio_context, available_cash, securities
             )
 
-            # Fetch metrics for symbols in end_context if not cached
-            for symbol in end_context.positions.keys():
-                if symbol not in metrics_cache:
-                    metrics = await calc_repo.get_metrics(symbol, required_metrics)
-                    metrics_cache[symbol] = {
-                        k: (v if v is not None else 0.0) for k, v in metrics.items()
-                    }
+            # Metrics already pre-fetched before loop - no need to fetch per sequence
 
             # Evaluate sequence
             div_score = await calculate_portfolio_score(end_context)
