@@ -35,6 +35,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Generate protobuf files
+        run: |
+          chmod +x scripts/generate_protos.sh
+          ./scripts/generate_protos.sh
+
       - name: Verify Python syntax (compile all modules)
         run: python -m compileall -q app/ tests/
 

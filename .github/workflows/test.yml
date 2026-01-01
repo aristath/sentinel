@@ -35,6 +35,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Generate protobuf files
+        run: |
+          chmod +x scripts/generate_protos.sh
+          ./scripts/generate_protos.sh
+
       - name: Run tests with pytest
         run: pytest tests/ -v --tb=short
 
