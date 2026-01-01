@@ -528,14 +528,16 @@ class HolisticPlanner:
         best_score = 0.0
         best_breakdown = {}
 
-        # Fetch multi-timeframe setting once before loop (memory optimization)
+        # Performance optimization: Fetch multi-timeframe setting once before loop
+        # instead of querying DB for every sequence (eliminates N queries)
         enable_multi_timeframe = False
         if self.settings_repo:
             enable_multi_timeframe = (
                 await self.settings_repo.get_float("enable_multi_timeframe", 0.0) == 1.0
             )
 
-        # Log initial memory state for Arduino-Q monitoring
+        # Arduino-Q reliability: Monitor memory state to detect potential OOM issues
+        # on constrained hardware (2GB RAM). Logs baseline for comparison during evaluation.
         if PSUTIL_AVAILABLE:
             mem = psutil.virtual_memory()
             logger.info(
@@ -600,8 +602,9 @@ class HolisticPlanner:
                         f"Best score: {best_score:.3f}"
                     )
 
-                # Explicit garbage collection every 50 sequences to free memory
-                # Critical for Arduino-Q's 2GB RAM constraint
+                # Arduino-Q reliability: Explicit GC to prevent memory creep during long runs.
+                # Python's GC is generational and may not run frequently enough on Arduino-Q.
+                # Force collection every 50 sequences to free simulation/evaluation objects.
                 gc.collect()
 
         logger.info(
