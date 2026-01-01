@@ -41,10 +41,18 @@ fi
 if ! command -v arduino-cli &> /dev/null; then
     log "Arduino CLI not found, installing..."
 
-    # Install Arduino CLI
-    curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh || {
+    # Install Arduino CLI (download first, don't pipe to shell - security risk)
+    INSTALL_SCRIPT=$(mktemp)
+    if ! curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh -o "$INSTALL_SCRIPT"; then
+        rm -f "$INSTALL_SCRIPT"
+        error_exit "Failed to download Arduino CLI installer"
+    fi
+
+    bash "$INSTALL_SCRIPT" || {
+        rm -f "$INSTALL_SCRIPT"
         error_exit "Failed to install Arduino CLI"
     }
+    rm -f "$INSTALL_SCRIPT"
 
     # Add to PATH if installed to ~/bin
     if [ -f "$HOME/bin/arduino-cli" ]; then

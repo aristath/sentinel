@@ -85,9 +85,12 @@ MONTHLY_DEPOSIT=1000.0
 EOF
     fi
 
-    # Replace API credentials
-    sed -i "s/^TRADERNET_API_KEY=.*/TRADERNET_API_KEY=${API_KEY}/" "$env_file"
-    sed -i "s/^TRADERNET_API_SECRET=.*/TRADERNET_API_SECRET=${API_SECRET}/" "$env_file"
+    # Replace API credentials (escape special characters to prevent injection)
+    API_KEY_ESCAPED=$(printf '%s\n' "$API_KEY" | sed 's/[\/&]/\\&/g')
+    API_SECRET_ESCAPED=$(printf '%s\n' "$API_SECRET" | sed 's/[\/&]/\\&/g')
+
+    sed -i "s/^TRADERNET_API_KEY=.*/TRADERNET_API_KEY=${API_KEY_ESCAPED}/" "$env_file"
+    sed -i "s/^TRADERNET_API_SECRET=.*/TRADERNET_API_SECRET=${API_SECRET_ESCAPED}/" "$env_file"
 
     chmod 600 "$env_file"
 }

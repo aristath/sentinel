@@ -104,9 +104,21 @@ install_arduino_cli() {
 
     local install_dir="/usr/local/bin"
     local tmp_dir=$(mktemp -d)
+    local install_script="${tmp_dir}/arduino-install.sh"
 
     cd "$tmp_dir"
-    curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
+
+    # Download install script (don't pipe to shell - security risk)
+    print_msg "${BLUE}" "Downloading Arduino CLI installer..."
+    if ! curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh -o "$install_script"; then
+        print_warning "Failed to download Arduino CLI installer"
+        cd - > /dev/null
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    # Execute downloaded script
+    bash "$install_script"
 
     if [ -f "bin/arduino-cli" ]; then
         sudo mv bin/arduino-cli "$install_dir/"
