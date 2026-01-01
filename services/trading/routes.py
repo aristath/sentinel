@@ -1,6 +1,6 @@
 """REST API routes for Trading service."""
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Path
 
 from app.modules.trading.services.local_trading_service import LocalTradingService
 from app.modules.trading.services.trading_service_interface import TradeRequest
@@ -122,7 +122,15 @@ async def batch_execute_trades(
 
 @router.get("/status/{trade_id}", response_model=TradeStatusResponse)
 async def get_trade_status(
-    trade_id: str,
+    trade_id: str = Path(
+
+        ...,
+
+        pattern=r'^[a-zA-Z0-9_-]{1,64}$',
+
+        description="Trade ID (alphanumeric with hyphens/underscores)",
+
+    ),
     service: LocalTradingService = Depends(get_trading_service),
 ):
     """
@@ -189,7 +197,15 @@ async def get_trade_history(
 
 @router.post("/cancel/{trade_id}", response_model=CancelTradeResponse)
 async def cancel_trade(
-    trade_id: str,
+    trade_id: str = Path(
+
+        ...,
+
+        pattern=r'^[a-zA-Z0-9_-]{1,64}$',
+
+        description="Trade ID (alphanumeric with hyphens/underscores)",
+
+    ),
     service: LocalTradingService = Depends(get_trading_service),
 ):
     """

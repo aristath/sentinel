@@ -2,7 +2,7 @@
 
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Path
 
 from app.modules.universe.services.local_universe_service import LocalUniverseService
 from services.universe.dependencies import get_universe_service
@@ -64,7 +64,15 @@ async def get_securities(
 
 @router.get("/securities/{isin}", response_model=SecurityResponse)
 async def get_security(
-    isin: str,
+    isin: str = Path(
+
+        ...,
+
+        pattern=r'^[A-Z]{2}[A-Z0-9]{9}[0-9]$',
+
+        description="ISIN code (ISO 6166 format)",
+
+    ),
     service: LocalUniverseService = Depends(get_universe_service),
 ):
     """
@@ -214,7 +222,15 @@ async def sync_fundamentals(
 
 @router.get("/market-data/{isin}", response_model=MarketDataResponse)
 async def get_market_data(
-    isin: str,
+    isin: str = Path(
+
+        ...,
+
+        pattern=r'^[A-Z]{2}[A-Z0-9]{9}[0-9]$',
+
+        description="ISIN code (ISO 6166 format)",
+
+    ),
     days: int = Query(default=365, ge=1, le=3650, description="Number of days of historical data"),
     service: LocalUniverseService = Depends(get_universe_service),
 ):
@@ -294,7 +310,15 @@ async def add_security(
 
 @router.delete("/securities/{isin}", response_model=RemoveSecurityResponse)
 async def remove_security(
-    isin: str,
+    isin: str = Path(
+
+        ...,
+
+        pattern=r'^[A-Z]{2}[A-Z0-9]{9}[0-9]$',
+
+        description="ISIN code (ISO 6166 format)",
+
+    ),
     service: LocalUniverseService = Depends(get_universe_service),
 ):
     """

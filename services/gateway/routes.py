@@ -1,6 +1,6 @@
 """REST API routes for Gateway service."""
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Path, Query
 
 from app.modules.gateway.services.local_gateway_service import LocalGatewayService
 from services.gateway.dependencies import get_gateway_service
@@ -149,7 +149,11 @@ async def process_deposit(
 
 @router.get("/services/{service_name}/health", response_model=ServiceHealthResponse)
 async def get_service_health(
-    service_name: str,
+    service_name: str = Path(
+        ...,
+        pattern=r'^[a-z][a-z0-9_-]*$',
+        description="Service name (lowercase alphanumeric with hyphens/underscores)",
+    ),
     service: LocalGatewayService = Depends(get_gateway_service),
 ):
     """

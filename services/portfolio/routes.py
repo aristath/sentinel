@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
 from app.modules.portfolio.services.local_portfolio_service import LocalPortfolioService
 from services.portfolio.dependencies import get_portfolio_service
@@ -68,9 +68,21 @@ async def get_positions(
 
 @router.get("/positions/{symbol}", response_model=PositionResponse)
 async def get_position(
-    symbol: str,
-    account_id: str = Query(default="default", description="Account identifier"),
-    isin: Optional[str] = Query(default=None, description="Optional ISIN filter"),
+    symbol: str = Path(
+        ...,
+        pattern=r'^[A-Z0-9][A-Z0-9.-]{0,19}$',
+        description="Stock symbol (uppercase alphanumeric with dots/hyphens)",
+    ),
+    account_id: str = Query(
+        default="default",
+        pattern=r'^[a-z0-9_-]{1,50}$',
+        description="Account identifier",
+    ),
+    isin: Optional[str] = Query(
+        default=None,
+        pattern=r'^[A-Z]{2}[A-Z0-9]{9}[0-9]$',
+        description="Optional ISIN filter (ISO 6166 format)",
+    ),
     service: LocalPortfolioService = Depends(get_portfolio_service),
 ):
     """
