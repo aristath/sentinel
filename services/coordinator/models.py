@@ -65,6 +65,10 @@ class PlanningParameters(BaseModel):
     transaction_cost_percent: float = Field(default=0.002, ge=0.0, le=0.1)
     enable_monte_carlo: bool = False
     enable_correlation_aware: bool = True
+    # Early termination settings
+    enable_early_termination: bool = True
+    min_batches_to_evaluate: int = Field(default=2, ge=1, le=20)
+    plateau_threshold: int = Field(default=3, ge=1, le=10)
 
 
 class EvaluatorConfig(BaseModel):

@@ -139,6 +139,10 @@ class LocalCoordinatorService:
         sequences_generated = 0
         sequences_evaluated = 0
 
+        # Early termination tracking
+        best_end_score = 0.0
+        plateau_count = 0
+
         async for batch in generator_client.generate_sequences_streaming(gen_request):
             batches_processed += 1
             sequences_generated += len(batch.sequences)
@@ -183,11 +187,51 @@ class LocalCoordinatorService:
                 batch_results = await evaluator.evaluate_sequences(eval_request)
                 sequences_evaluated += batch_results.total_evaluated
 
+                # Track beam before update for early termination
+                old_beam_size = len(global_beam)
+
                 # Merge into global beam
                 global_beam.extend(batch_results.top_sequences)
                 global_beam.sort(key=lambda x: x.total_score, reverse=True)
                 if len(global_beam) > request.parameters.beam_width:
                     global_beam = global_beam[: request.parameters.beam_width]
+
+                # Check if beam improved (for early termination)
+                beam_improved = False
+                if global_beam:
+                    new_best_score = global_beam[0].total_score
+                    if new_best_score > best_end_score:
+                        best_end_score = new_best_score
+                        plateau_count = 0
+                        beam_improved = True
+                        print(
+                            f"Batch {batches_processed} -> NEW BEST (score: {new_best_score:.3f}, "
+                            f"beam size: {len(global_beam)})"
+                        )
+                    elif len(global_beam) > old_beam_size:
+                        # Beam grew, so improvement
+                        beam_improved = True
+                        plateau_count = 0
+                        print(
+                            f"Batch {batches_processed} added to beam "
+                            f"(score: {new_best_score:.3f}, beam size: {len(global_beam)})"
+                        )
+
+                # Early termination check
+                if not beam_improved:
+                    plateau_count += 1
+
+                if (
+                    request.parameters.enable_early_termination
+                    and batches_processed >= request.parameters.min_batches_to_evaluate
+                    and plateau_count >= request.parameters.plateau_threshold
+                ):
+                    print(
+                        f"Early termination: Beam converged (no improvement in {plateau_count} "
+                        f"consecutive batches, evaluated {batches_processed} batches, "
+                        f"beam size: {len(global_beam)})"
+                    )
+                    break
 
             except Exception as e:
                 # Log error but continue with other batches

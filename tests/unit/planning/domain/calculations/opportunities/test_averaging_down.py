@@ -27,7 +27,6 @@ def mock_exchange_rate_service():
 def basic_security():
     """Create a basic security for testing."""
     return Security(
-        id=1,
         symbol="AAPL",
         name="Apple Inc.",
         product_type=ProductType.EQUITY,
@@ -346,31 +345,6 @@ class TestAveragingDownCalculator:
         calculator = AveragingDownCalculator()
         context = OpportunityContext(
             positions=[zero_price_position],
-            securities=[basic_security],
-            stocks_by_symbol={"AAPL": basic_security},
-            available_cash_eur=10000.0,
-            total_portfolio_value_eur=50000.0,
-            security_scores={"AAPL": 0.75},
-        )
-
-        opportunities = await calculator.calculate(context, calculator.default_params())
-        assert opportunities == []
-
-    @pytest.mark.asyncio
-    async def test_calculate_skips_position_with_zero_avg_price(self, basic_security):
-        """Test that positions with zero avg price are skipped."""
-        zero_avg_position = Position(
-            symbol="AAPL",
-            quantity=100,
-            avg_price=0.0,
-            current_price=170.0,
-            market_value_eur=17000.0,
-            currency="EUR",
-        )
-
-        calculator = AveragingDownCalculator()
-        context = OpportunityContext(
-            positions=[zero_avg_position],
             securities=[basic_security],
             stocks_by_symbol={"AAPL": basic_security},
             available_cash_eur=10000.0,

@@ -35,10 +35,12 @@ class CombinatorialSettings(BaseModel):
 
     max_depth: int = Field(default=4, ge=1, le=10)
     max_combinations: int = Field(default=1000, ge=10, le=10000)
+    max_opportunities_per_category: int = Field(default=5, ge=1, le=20)
     enable_weighted_combinations: bool = True
     enable_adaptive_patterns: bool = True
     enable_partial_execution: bool = True
     enable_constraint_relaxation: bool = True
+    enable_market_regime: bool = False
 
 
 class FilterSettings(BaseModel):
@@ -101,6 +103,9 @@ class GenerateSequencesRequest(BaseModel):
     portfolio_context: Optional[PortfolioContextInput] = None
     positions: List[PositionInput] = Field(default_factory=list)
     securities: List[SecurityInput] = Field(default_factory=list)
+    market_regime: Optional[str] = Field(
+        default=None, description="Market regime: 'bull', 'bear', or 'sideways'"
+    )
 
 
 class SequenceBatch(BaseModel):

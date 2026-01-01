@@ -59,12 +59,24 @@ class EvaluationSettings(BaseModel):
     """Settings for sequence evaluation."""
 
     beam_width: int = Field(default=10, ge=1, le=100)
-    enable_monte_carlo: bool = False
-    monte_carlo_iterations: int = Field(default=100, ge=10, le=1000)
-    enable_stochastic_scenarios: bool = False
-    stochastic_scenarios_count: int = Field(default=5, ge=1, le=20)
+    # Transaction costs
     transaction_cost_fixed: float = Field(default=2.0, ge=0.0)
     transaction_cost_percent: float = Field(default=0.002, ge=0.0, le=0.1)
+    cost_penalty_factor: float = Field(default=0.1, ge=0.0, le=1.0)
+    # Multi-objective optimization
+    enable_multi_objective: bool = False
+    # Stochastic scenarios
+    enable_stochastic_scenarios: bool = False
+    stochastic_scenario_shifts: List[float] = Field(
+        default=[-0.10, -0.05, 0.0, 0.05, 0.10], description="Price shift percentages"
+    )
+    # Monte Carlo paths
+    enable_monte_carlo: bool = False
+    monte_carlo_paths: int = Field(default=100, ge=10, le=500)
+    # Multi-timeframe optimization
+    enable_multi_timeframe: bool = False
+    # Priority sorting
+    enable_priority_sorting: bool = True
 
 
 class EvaluateSequencesRequest(BaseModel):
@@ -74,7 +86,67 @@ class EvaluateSequencesRequest(BaseModel):
     portfolio_context: PortfolioContextInput
     positions: List[PositionInput]
     securities: List[SecurityInput]
+    current_prices: Optional[Dict[str, float]] = Field(
+        default=None, description="Symbol -> current price for stochastic/MC scenarios"
+    )
     settings: EvaluationSettings = Field(default_factory=EvaluationSettings)
+
+
+class SequenceEvaluation(BaseModel):
+    """
+    Multi-objective sequence evaluation for Pareto frontier.
+
+    Used when enable_multi_objective is True.
+    """
+
+    sequence: List[ActionCandidateModel]
+    end_score: float
+    diversification_score: float
+    risk_score: float
+    transaction_cost: float
+    breakdown: Dict = Field(default_factory=dict)
+
+    def is_dominated_by(self, other: "SequenceEvaluation") -> bool:
+        """
+        Check if this evaluation is dominated by another.
+
+        One sequence dominates another if it's better in all objectives.
+        Objectives: maximize end_score, maximize diversification, maximize risk, minimize cost
+        """
+        # Convert to comparable objectives (all maximize)
+        cost_score_self = -self.transaction_cost  # Minimize cost = maximize negative cost
+        cost_score_other = -other.transaction_cost
+
+        # Check if other is better or equal in all objectives
+        better_or_equal_count = 0
+        strictly_better_count = 0
+
+        # End score
+        if other.end_score >= self.end_score:
+            better_or_equal_count += 1
+            if other.end_score > self.end_score:
+                strictly_better_count += 1
+
+        # Diversification
+        if other.diversification_score >= self.diversification_score:
+            better_or_equal_count += 1
+            if other.diversification_score > self.diversification_score:
+                strictly_better_count += 1
+
+        # Risk
+        if other.risk_score >= self.risk_score:
+            better_or_equal_count += 1
+            if other.risk_score > self.risk_score:
+                strictly_better_count += 1
+
+        # Cost (inverted)
+        if cost_score_other >= cost_score_self:
+            better_or_equal_count += 1
+            if cost_score_other > cost_score_self:
+                strictly_better_count += 1
+
+        # Dominated if other is better-or-equal in all AND strictly better in at least one
+        return better_or_equal_count == 4 and strictly_better_count > 0
 
 
 class SequenceEvaluationResult(BaseModel):
@@ -88,7 +160,7 @@ class SequenceEvaluationResult(BaseModel):
     total_cost: float
     cash_required: float
     feasible: bool
-    metrics: Dict[str, float] = Field(default_factory=dict)
+    metrics: Dict = Field(default_factory=dict)
 
 
 class EvaluateSequencesResponse(BaseModel):

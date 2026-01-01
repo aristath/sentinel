@@ -129,6 +129,8 @@ def test_get_enabled_generators():
     generators_config = SequenceGeneratorsConfig(
         combinatorial=ModuleConfig(enabled=False),
         enhanced_combinatorial=ModuleConfig(enabled=True),
+        partial_execution=ModuleConfig(enabled=False),
+        constraint_relaxation=ModuleConfig(enabled=False),
     )
     config = PlannerConfiguration(sequence_generators=generators_config)
     enabled = config.get_enabled_generators()
@@ -141,6 +143,9 @@ def test_get_enabled_filters():
     """Test getting enabled filters."""
     filters_config = FiltersConfig(
         correlation_aware=ModuleConfig(enabled=True),
+        diversity=ModuleConfig(enabled=False),
+        eligibility=ModuleConfig(enabled=False),
+        recently_traded=ModuleConfig(enabled=False),
     )
     config = PlannerConfiguration(filters=filters_config)
     enabled = config.get_enabled_filters()

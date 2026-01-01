@@ -27,7 +27,6 @@ def mock_exchange_rate_service():
 def basic_security():
     """Create a basic security for testing."""
     return Security(
-        id=1,
         symbol="AAPL",
         name="Apple Inc.",
         product_type=ProductType.EQUITY,

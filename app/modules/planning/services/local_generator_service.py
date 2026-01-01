@@ -7,6 +7,7 @@ from app.modules.planning.domain.holistic_planner import (
     _filter_correlation_aware_sequences,
     _generate_adaptive_patterns,
     _generate_constraint_relaxation_scenarios,
+    _generate_market_regime_patterns,
     _generate_partial_execution_scenarios,
     generate_action_sequences,
 )
@@ -99,10 +100,21 @@ class LocalGeneratorService:
                 portfolio_context=portfolio_context,
                 available_cash=request.feasibility.available_cash,
                 max_steps=request.combinatorial.max_depth,
-                max_opportunities_per_category=5,
+                max_opportunities_per_category=request.combinatorial.max_opportunities_per_category,
                 securities_by_symbol=securities_by_symbol,
             )
             all_sequences.extend(adaptive_patterns)
+
+        # Generate market regime patterns if enabled and market_regime provided
+        if request.combinatorial.enable_market_regime and request.market_regime:
+            regime_patterns = _generate_market_regime_patterns(
+                opportunities=opportunities,
+                market_regime=request.market_regime,
+                available_cash=request.feasibility.available_cash,
+                max_steps=request.combinatorial.max_depth,
+                max_opportunities_per_category=request.combinatorial.max_opportunities_per_category,
+            )
+            all_sequences.extend(regime_patterns)
 
         # Filter sequences for correlation if enabled and securities provided
         if request.filters.enable_correlation_aware and securities:

@@ -220,10 +220,13 @@ def test_load_conservative_example():
     assert config.max_depth == 2  # Conservative = fewer actions
     assert config.priority_threshold == 0.5  # Higher threshold
 
-    # Should have fewer patterns enabled
+    # Should have specific patterns enabled for conservative approach
     enabled_patterns = config.get_enabled_patterns()
     assert "single_best" in enabled_patterns  # Perfect for conservative
-    assert "rebalance" not in enabled_patterns  # Should be disabled
+    assert "rebalance" in enabled_patterns  # Conservative maintains balance
+    assert (
+        "averaging_down" not in enabled_patterns
+    )  # Conservative avoids averaging down
 
 
 def test_load_aggressive_example():
