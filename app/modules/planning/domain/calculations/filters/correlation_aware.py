@@ -29,6 +29,7 @@ class CorrelationAwareFilter(SequenceFilter):
             "correlation_threshold": 0.7,
             "securities": None,  # List[Security] for symbol lookup
             "correlation_matrix": None,  # Optional[Dict[str, float]]
+            "lookback_days": 252,  # Trading days for correlation calculation
         }
 
     async def filter(
