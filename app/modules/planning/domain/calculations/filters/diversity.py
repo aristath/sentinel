@@ -11,7 +11,7 @@ from app.modules.planning.domain.calculations.filters.base import (
     SequenceFilter,
     sequence_filter_registry,
 )
-from app.modules.planning.domain.holistic_planner import ActionCandidate
+from app.modules.planning.domain.models import ActionCandidate
 
 
 class DiversitySelectionFilter(SequenceFilter):

@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Set
 
 from app.domain.models import Position, Security
 from app.domain.value_objects.trade_side import TradeSide
-from app.modules.planning.domain.holistic_planner import ActionCandidate
+from app.modules.planning.domain.models import ActionCandidate
 
 logger = logging.getLogger(__name__)
 

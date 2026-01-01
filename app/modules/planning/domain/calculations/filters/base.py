@@ -9,7 +9,7 @@ Filters process and refine action sequences based on various criteria:
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List
 
-from app.modules.planning.domain.holistic_planner import ActionCandidate
+from app.modules.planning.domain.models import ActionCandidate
 
 
 class SequenceFilter(ABC):

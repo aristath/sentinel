@@ -35,6 +35,7 @@ from typing import Dict, List, Optional, Set, Tuple
 from app.domain.models import Position, Security
 from app.domain.portfolio_hash import generate_portfolio_hash
 from app.domain.value_objects.trade_side import TradeSide
+from app.modules.planning.domain.models import ActionCandidate
 from app.modules.scoring.domain.diversification import calculate_portfolio_score
 from app.modules.scoring.domain.end_state import calculate_portfolio_end_state_score
 from app.modules.scoring.domain.models import PortfolioContext
@@ -43,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 
 def _calculate_transaction_cost(
-    sequence: List["ActionCandidate"],
+    sequence: List[ActionCandidate],
     transaction_cost_fixed: float,
     transaction_cost_percent: float,
 ) -> float:
@@ -67,7 +68,7 @@ def _calculate_transaction_cost(
     return total_cost
 
 
-def _hash_sequence(sequence: List["ActionCandidate"]) -> str:
+def _hash_sequence(sequence: List[ActionCandidate]) -> str:
     """
     Generate a deterministic hash for a sequence of actions.
 
@@ -341,7 +342,7 @@ class HolisticPlan:
 class SequenceEvaluation:
     """Multi-objective evaluation of a sequence."""
 
-    sequence: List["ActionCandidate"]
+    sequence: List[ActionCandidate]
     end_score: float  # Primary objective (0-1)
     diversification_score: float  # Diversification (0-1)
     risk_score: float  # Risk (0-1, higher = lower risk)
@@ -376,22 +377,6 @@ class SequenceEvaluation:
             or other.transaction_cost < self.transaction_cost
         )
         return better_or_equal and strictly_better
-
-
-@dataclass
-class ActionCandidate:
-    """A candidate action for sequence generation."""
-
-    side: str
-    symbol: str
-    name: str
-    quantity: int
-    price: float
-    value_eur: float
-    currency: str
-    priority: float  # Higher = more important
-    reason: str
-    tags: List[str]  # e.g., ["windfall", "averaging_down", "underweight_asia"]
 
 
 async def identify_opportunities_from_weights(

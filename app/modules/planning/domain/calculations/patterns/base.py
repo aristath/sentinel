@@ -7,7 +7,7 @@ different trading strategies and patterns.
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List
 
-from app.modules.planning.domain.holistic_planner import ActionCandidate
+from app.modules.planning.domain.models import ActionCandidate
 
 
 class PatternGenerator(ABC):

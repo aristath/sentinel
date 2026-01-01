@@ -13,7 +13,7 @@ from app.modules.planning.domain.calculations.opportunities.base import (
     OpportunityContext,
     opportunity_calculator_registry,
 )
-from app.modules.planning.domain.holistic_planner import ActionCandidate
+from app.modules.planning.domain.models import ActionCandidate
 
 
 class WeightBasedCalculator(OpportunityCalculator):

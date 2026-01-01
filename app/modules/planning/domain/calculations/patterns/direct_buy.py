@@ -9,7 +9,7 @@ from app.modules.planning.domain.calculations.patterns.base import (
     PatternGenerator,
     pattern_generator_registry,
 )
-from app.modules.planning.domain.holistic_planner import ActionCandidate
+from app.modules.planning.domain.models import ActionCandidate
 
 
 class DirectBuyPattern(PatternGenerator):

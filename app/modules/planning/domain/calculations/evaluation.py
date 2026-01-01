@@ -10,7 +10,7 @@ Evaluates action sequences using various scoring methods:
 from typing import Any, Dict, List, Tuple
 
 from app.modules.planning.domain.calculations.utils import calculate_transaction_cost
-from app.modules.planning.domain.holistic_planner import ActionCandidate
+from app.modules.planning.domain.models import ActionCandidate
 from app.modules.scoring.domain.diversification import calculate_portfolio_score
 from app.modules.scoring.domain.end_state import calculate_portfolio_end_state_score
 from app.modules.scoring.domain.models import PortfolioContext

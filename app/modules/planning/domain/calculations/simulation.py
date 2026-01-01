@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Tuple
 from app.domain.models import Security
 from app.domain.value_objects.trade_side import TradeSide
 from app.modules.planning.domain.calculations.context import EvaluationContext
-from app.modules.planning.domain.holistic_planner import ActionCandidate
+from app.modules.planning.domain.models import ActionCandidate
 from app.modules.scoring.domain.models import PortfolioContext
 
 

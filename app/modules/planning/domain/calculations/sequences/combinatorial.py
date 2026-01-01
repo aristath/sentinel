@@ -10,7 +10,7 @@ from app.modules.planning.domain.calculations.sequences.base import (
     SequenceGenerator,
     sequence_generator_registry,
 )
-from app.modules.planning.domain.holistic_planner import ActionCandidate
+from app.modules.planning.domain.models import ActionCandidate
 
 
 class CombinatorialGenerator(SequenceGenerator):
