@@ -25,7 +25,7 @@ from app.modules.allocation.api import allocation
 from app.modules.cash_flows.api import cash_flows
 from app.modules.optimization.api import optimizer
 from app.modules.planning import events as planner_events  # noqa: F401
-from app.modules.planning.api import planner, recommendations
+from app.modules.planning.api import planner, planners, recommendations
 from app.modules.portfolio.api import portfolio
 from app.modules.satellites.api import satellites
 from app.modules.system.api import status
@@ -180,6 +180,7 @@ app.include_router(charts.router, prefix="/api/charts", tags=["Charts"])
 app.include_router(settings_api.router, prefix="/api/settings", tags=["Settings"])
 app.include_router(optimizer.router, prefix="/api/optimizer", tags=["Optimizer"])
 app.include_router(planner.router, prefix="/api/planner", tags=["Planner"])
+app.include_router(planners.router, prefix="/api/planners", tags=["Planners"])
 app.include_router(satellites.router, prefix="/api/satellites", tags=["Satellites"])
 
 

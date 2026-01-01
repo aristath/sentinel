@@ -343,7 +343,7 @@ class TestGenerateSettingsHash:
 
     def test_generate_hash_with_missing_settings(self):
         """Test generating hash with missing settings (uses empty string)."""
-        settings = {"min_stock_score": 0.5}
+        settings = {"min_security_score": 0.5}
 
         hash1 = generate_settings_hash(settings)
         hash2 = generate_settings_hash({})
@@ -353,8 +353,8 @@ class TestGenerateSettingsHash:
 
     def test_generate_hash_changes_with_settings(self):
         """Test that hash changes when settings change."""
-        settings1 = {"min_stock_score": 0.5, "min_hold_days": 90}
-        settings2 = {"min_stock_score": 0.6, "min_hold_days": 90}
+        settings1 = {"min_security_score": 0.5, "min_hold_days": 90}
+        settings2 = {"min_security_score": 0.6, "min_hold_days": 90}
 
         hash1 = generate_settings_hash(settings1)
         hash2 = generate_settings_hash(settings2)

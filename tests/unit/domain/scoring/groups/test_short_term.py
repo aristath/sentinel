@@ -79,7 +79,7 @@ class TestCalculateShortTermScore:
                 return_value=mock_repo,
             ),
             patch(
-                "app.domain.scoring.caching.get_max_drawdown",
+                "app.modules.scoring.domain.caching.get_max_drawdown",
                 new_callable=AsyncMock,
                 return_value=-0.05,
             ),
@@ -139,7 +139,7 @@ class TestCalculateShortTermScore:
                 return_value=mock_repo,
             ),
             patch(
-                "app.domain.scoring.caching.get_max_drawdown",
+                "app.modules.scoring.domain.caching.get_max_drawdown",
                 new_callable=AsyncMock,
                 return_value=-0.05,
             ),
@@ -166,7 +166,7 @@ class TestCalculateShortTermScore:
                 return_value=mock_repo,
             ),
             patch(
-                "app.domain.scoring.caching.get_max_drawdown",
+                "app.modules.scoring.domain.caching.get_max_drawdown",
                 new_callable=AsyncMock,
                 return_value=-0.02,
             ),

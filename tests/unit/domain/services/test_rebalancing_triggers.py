@@ -24,7 +24,9 @@ class TestCheckRebalanceTriggers:
     @pytest.mark.asyncio
     async def test_returns_false_when_no_triggers(self, mock_settings_repo):
         """Test that False is returned when no rebalancing triggers are met."""
-        from app.domain.services.rebalancing_triggers import check_rebalance_triggers
+        from app.modules.rebalancing.domain.rebalancing_triggers import (
+            check_rebalance_triggers,
+        )
 
         positions = []
         target_allocations = {}
@@ -40,12 +42,14 @@ class TestCheckRebalanceTriggers:
         )
 
         assert should_rebalance is False
-        assert reason == "no triggers met"
+        assert reason == "event-driven rebalancing disabled"
 
     @pytest.mark.asyncio
     async def test_triggers_on_position_drift(self, mock_settings_repo):
         """Test that rebalance is triggered when positions drift from targets."""
-        from app.domain.services.rebalancing_triggers import check_rebalance_triggers
+        from app.modules.rebalancing.domain.rebalancing_triggers import (
+            check_rebalance_triggers,
+        )
 
         # Create a position that's significantly overweight
         positions = [
@@ -83,7 +87,9 @@ class TestCheckRebalanceTriggers:
     @pytest.mark.asyncio
     async def test_triggers_on_cash_threshold_exceeded(self, mock_settings_repo):
         """Test that rebalance is triggered when cash exceeds threshold."""
-        from app.domain.services.rebalancing_triggers import check_rebalance_triggers
+        from app.modules.rebalancing.domain.rebalancing_triggers import (
+            check_rebalance_triggers,
+        )
 
         positions = []
         target_allocations = {}
@@ -113,7 +119,9 @@ class TestCheckRebalanceTriggers:
     @pytest.mark.asyncio
     async def test_no_trigger_when_cash_below_threshold(self, mock_settings_repo):
         """Test that rebalance is not triggered when cash is below threshold."""
-        from app.domain.services.rebalancing_triggers import check_rebalance_triggers
+        from app.modules.rebalancing.domain.rebalancing_triggers import (
+            check_rebalance_triggers,
+        )
 
         positions = []
         target_allocations = {}
@@ -137,12 +145,14 @@ class TestCheckRebalanceTriggers:
 
         # Should not trigger when cash < threshold
         assert should_rebalance is False
-        assert reason == "no triggers met"
+        assert reason == "event-driven rebalancing disabled"
 
     @pytest.mark.asyncio
     async def test_handles_zero_portfolio_value(self, mock_settings_repo):
         """Test handling when portfolio value is zero."""
-        from app.domain.services.rebalancing_triggers import check_rebalance_triggers
+        from app.modules.rebalancing.domain.rebalancing_triggers import (
+            check_rebalance_triggers,
+        )
 
         positions = []
         target_allocations = {}
@@ -164,7 +174,9 @@ class TestCheckRebalanceTriggers:
     @pytest.mark.asyncio
     async def test_handles_zero_cash_balance(self, mock_settings_repo):
         """Test handling when cash balance is zero."""
-        from app.domain.services.rebalancing_triggers import check_rebalance_triggers
+        from app.modules.rebalancing.domain.rebalancing_triggers import (
+            check_rebalance_triggers,
+        )
 
         positions = []
         target_allocations = {}
@@ -186,7 +198,9 @@ class TestCheckRebalanceTriggers:
     @pytest.mark.asyncio
     async def test_handles_missing_settings_repo(self):
         """Test handling when settings_repo is None."""
-        from app.domain.services.rebalancing_triggers import check_rebalance_triggers
+        from app.modules.rebalancing.domain.rebalancing_triggers import (
+            check_rebalance_triggers,
+        )
 
         positions = []
         target_allocations = {}
@@ -208,7 +222,9 @@ class TestCheckRebalanceTriggers:
     @pytest.mark.asyncio
     async def test_handles_empty_positions_and_targets(self, mock_settings_repo):
         """Test handling when positions and targets are empty."""
-        from app.domain.services.rebalancing_triggers import check_rebalance_triggers
+        from app.modules.rebalancing.domain.rebalancing_triggers import (
+            check_rebalance_triggers,
+        )
 
         positions = []
         target_allocations = {}
@@ -229,7 +245,9 @@ class TestCheckRebalanceTriggers:
     @pytest.mark.asyncio
     async def test_handles_positions_without_market_value(self, mock_settings_repo):
         """Test handling when positions have None market_value_eur."""
-        from app.domain.services.rebalancing_triggers import check_rebalance_triggers
+        from app.modules.rebalancing.domain.rebalancing_triggers import (
+            check_rebalance_triggers,
+        )
 
         positions = [
             Position(

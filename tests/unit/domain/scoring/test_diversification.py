@@ -132,6 +132,7 @@ class TestCalculateIndustryGapScore:
             industry_weights={"Consumer Electronics": 0.5},
             positions={},
             total_value=0,
+            industry_to_group={"Consumer Electronics": "Consumer Electronics"},
         )
 
         score = _calculate_industry_gap_score("Consumer Electronics", context)

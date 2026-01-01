@@ -78,6 +78,17 @@ class EditSecurityModal extends HTMLElement {
               </div>
 
               <div>
+                <label class="block text-sm text-gray-300 mb-1">Universe / Bucket</label>
+                <select x-model="$store.app.editingSecurity.bucket_id"
+                        class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-sm text-gray-100 focus:border-blue-500 focus:outline-none">
+                  <template x-for="bucket in $store.app.buckets" :key="bucket.id">
+                    <option :value="bucket.id" x-text="bucket.name"></option>
+                  </template>
+                </select>
+                <p class="text-xs text-gray-300 mt-1">Assign this security to a specific universe/bucket. Each security can only belong to one universe.</p>
+              </div>
+
+              <div>
                 <label class="block text-sm text-gray-300 mb-1">Min Lot Size</label>
                 <input type="number"
                        x-model="$store.app.editingSecurity.min_lot"

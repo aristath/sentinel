@@ -39,11 +39,12 @@ class TestCalculateBuyQuantity:
             target_value_eur=1000.0, price=100.0, min_lot=1, exchange_rate=1.1
         )
 
-        # 1000 EUR / 1.1 = 909.09 USD value
-        # 909.09 / 100 = 9.09 shares, rounded down to 9
-        assert result.quantity == 9
-        assert result.value_native == pytest.approx(900.0, rel=0.01)  # 9 * 100
-        assert result.value_eur == pytest.approx(990.0, rel=0.01)  # 900 * 1.1
+        # exchange_rate=1.1 means 1.1 native per 1 EUR
+        # 1000 EUR * 1.1 = 1100 native value
+        # 1100 / 100 = 11 shares
+        assert result.quantity == 11
+        assert result.value_native == pytest.approx(1100.0, rel=0.01)  # 11 * 100
+        assert result.value_eur == pytest.approx(1000.0, rel=0.01)  # 1100 / 1.1
 
     def test_rounds_down_to_whole_shares(self):
         """Test that quantity is rounded down to whole shares."""

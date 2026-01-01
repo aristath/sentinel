@@ -11,7 +11,7 @@ import logging
 from typing import Optional
 
 from app.domain.models import Position, Security
-from app.modules.planning.domain.holistic_planner import ActionCandidate
+from app.modules.planning.domain.models import ActionCandidate
 from app.modules.satellites.database.bucket_repository import BucketRepository
 from app.modules.satellites.planning.satellite_planner_service import (
     SatellitePlannerService,

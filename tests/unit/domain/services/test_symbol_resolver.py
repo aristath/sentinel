@@ -265,7 +265,11 @@ class TestSymbolResolver:
         from app.domain.models import Security
 
         mock_stock = Security(
-            symbol="AAPL.US", name="Apple", isin="US0378331005", country="US"
+            symbol="AAPL.US",
+            name="Apple",
+            product_type=ProductType.EQUITY,
+            isin="US0378331005",
+            country="US",
         )
         mock_stock_repo.get_by_isin.return_value = mock_stock
 
@@ -308,7 +312,11 @@ class TestSymbolResolver:
         from app.domain.models import Security
 
         mock_stock = Security(
-            symbol="AAPL.US", name="Apple", isin="US0378331005", country="US"
+            symbol="AAPL.US",
+            name="Apple",
+            product_type=ProductType.EQUITY,
+            isin="US0378331005",
+            country="US",
         )
         mock_stock_repo.get_by_symbol.return_value = mock_stock
 

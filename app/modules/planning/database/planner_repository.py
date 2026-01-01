@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 from app.core.database.manager import get_db_manager
-from app.modules.planning.domain.holistic_planner import ActionCandidate
+from app.modules.planning.domain.models import ActionCandidate
 
 logger = logging.getLogger(__name__)
 
