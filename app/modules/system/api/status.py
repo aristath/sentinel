@@ -5,6 +5,7 @@ import shutil
 from pathlib import Path
 from typing import Optional
 
+import psutil
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
@@ -119,22 +120,58 @@ async def get_led_display_state(
 ):
     """Get LED display state for Arduino App Framework Docker app.
 
-    Returns display text and RGB LED states in the format expected
-    by the trader-display Arduino app.
+    Returns display mode (STATS or TICKER), system stats, and RGB LED states.
+
+    - STATS mode: Default, shows CPU/RAM visualization
+    - TICKER mode: When ticker data exists (portfolio/recommendations)
     """
+    # Get display text and settings
     display_text = display_manager.get_current_text()
     ticker_speed = int(await settings_repo.get_float("ticker_speed", 50.0))
     led3 = display_manager.get_led3()
     led4 = display_manager.get_led4()
 
-    logger.debug(
-        f"LED display state requested: text='{display_text}', speed={ticker_speed}, "
-        f"led3={led3}, led4={led4}"
-    )
+    # Determine mode based on display text
+    if display_text:
+        # Ticker mode - display text exists
+        mode = "TICKER"
+        stats_data = None
+
+        logger.debug(
+            f"LED display state: mode=TICKER, text='{display_text}', speed={ticker_speed}"
+        )
+    else:
+        # Stats mode - no ticker data, show system stats
+        mode = "STATS"
+
+        # Collect system stats with 1% minimum floor
+        cpu_percent = max(1.0, psutil.cpu_percent(interval=0))  # Average across cores
+        ram_percent = max(1.0, psutil.virtual_memory().percent)
+
+        # Calculate total load and pixels
+        load_percent = (cpu_percent + ram_percent) / 2
+        pixels_on = round((load_percent / 100) * 104)
+
+        # Calculate brightness (100-220 range)
+        brightness = int(100 + (load_percent * 1.2))
+
+        stats_data = {
+            "cpu_percent": cpu_percent,
+            "ram_percent": ram_percent,
+            "pixels_on": pixels_on,
+            "brightness": brightness,
+        }
+
+        logger.debug(
+            f"LED display state: mode=STATS, load={load_percent:.1f}%, "
+            f"pixels={pixels_on}, brightness={brightness}"
+        )
 
     return {
+        "mode": mode,
         "display_text": display_text,
         "ticker_speed": ticker_speed,
+        "stats": stats_data,
         "led3": led3,
         "led4": led4,
     }

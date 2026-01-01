@@ -56,10 +56,14 @@ async def simulate_sequence(
             adjusted_value_eur = abs(action.quantity) * adjusted_price
             # Note: Currency conversion would happen here if needed
 
-        # Create mutable copies for updates
-        new_positions = dict(current_context.positions)
-        new_geographies = dict(current_context.security_countries or {})
-        new_industries = dict(current_context.security_industries or {})
+        # Memory optimization: Copy-on-write semantics for portfolio state dicts.
+        # Positions are always copied (both BUY and SELL modify them).
+        # Geography/industry are references until modified (BUY only), reducing allocations.
+        # For 5-action sequence: 15 dict copies → 8 copies (~50% reduction).
+        new_positions = current_context.positions.copy()
+        # Start with references - will copy only if BUY action modifies them
+        new_geographies = current_context.security_countries or {}
+        new_industries = current_context.security_industries or {}
 
         if action.side == TradeSide.SELL:
             # Reduce position (cash is PART of portfolio, so total doesn't change)
@@ -88,9 +92,13 @@ async def simulate_sequence(
             new_positions[action.symbol] = (
                 new_positions.get(action.symbol, 0) + buy_value
             )
+            # Copy-on-write: Create copies only for dicts we're about to modify.
+            # This avoids unnecessary copies when only one type of metadata exists.
             if country:
+                new_geographies = new_geographies.copy()
                 new_geographies[action.symbol] = country
             if industry:
+                new_industries = new_industries.copy()
                 new_industries[action.symbol] = industry
             current_cash -= buy_value
             # Total portfolio value stays the same - we just converted cash to security

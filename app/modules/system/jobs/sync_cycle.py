@@ -23,7 +23,7 @@ from app.infrastructure.market_hours import (
     is_market_open,
     should_check_market_hours,
 )
-from app.modules.display.services.display_service import set_led3, set_text
+from app.modules.display.services.display_service import set_led3
 
 logger = logging.getLogger(__name__)
 
@@ -51,16 +51,13 @@ async def _run_sync_cycle_internal():
 
     try:
         # Step 1: Sync trades
-        set_text("SYNCING TRADES...")
         set_led3(0, 0, 255)  # Blue for sync
         await _step_sync_trades()
 
         # Step 2: Sync cash flows
-        set_text("SYNCING CASH FLOWS...")
         await _step_sync_cash_flows()
 
         # Step 3: Sync portfolio
-        set_text("SYNCING PORTFOLIO...")
         await _step_sync_portfolio()
 
         # Step 3.5: Check and rebalance negative balances immediately (if any)
@@ -72,7 +69,6 @@ async def _run_sync_cycle_internal():
         await check_and_rebalance_immediately()
 
         # Step 4: Sync prices (market-aware)
-        set_text("SYNCING PRICES...")
         await _step_sync_prices()
 
         # Step 5: Update display
@@ -83,9 +79,7 @@ async def _run_sync_cycle_internal():
 
     except Exception as e:
         logger.error(f"Sync cycle failed: {e}", exc_info=True)
-        error_msg = "SYNC CYCLE CRASHES"
-        emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-        set_text(error_msg)
+        emit(SystemEvent.ERROR_OCCURRED, message="Sync cycle failed")
         set_led3(255, 0, 0)  # Red for error
     finally:
         set_led3(0, 0, 0)  # Clear LED when done

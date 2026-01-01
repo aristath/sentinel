@@ -19,7 +19,7 @@ from typing import Any
 
 from app.core.events import SystemEvent, emit
 from app.infrastructure.locking import file_lock
-from app.modules.display.services.display_service import set_led4, set_text
+from app.modules.display.services.display_service import set_led4
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,6 @@ async def _run_securities_data_sync_internal():
         logger.error(f"Securities data sync failed: {e}", exc_info=True)
         error_msg = "SECURITIES DATA SYNC CRASHES"
         emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-        set_text(error_msg)
     finally:
         set_led4(0, 0, 0)  # Clear LED when done
 
@@ -94,8 +93,6 @@ async def refresh_single_security(symbol: str) -> dict[str, Any]:
     logger.info(f"Force refreshing data for {symbol}")
 
     try:
-        set_text(f"PROCESSING SINGLE SECURITY ({symbol})")
-
         # Run the full pipeline for this security
         await _sync_historical_for_symbol(symbol)
         await _detect_and_update_country_and_exchange(symbol)
@@ -109,7 +106,6 @@ async def refresh_single_security(symbol: str) -> dict[str, Any]:
 
     except Exception as e:
         logger.error(f"Force refresh failed for {symbol}: {e}")
-        set_text(f"SECURITY REFRESH FAILED ({symbol})")
         return {"status": "error", "symbol": symbol, "reason": str(e)}
     finally:
         set_led4(0, 0, 0)  # Clear LED when done
@@ -167,7 +163,6 @@ async def _process_single_security(symbol: str):
         symbol: The security symbol to process
     """
     logger.info(f"Processing {symbol}...")
-    set_text(f"PROCESSING SINGLE SECURITY ({symbol})")
     set_led4(0, 255, 0)  # Green for processing
 
     try:
@@ -194,7 +189,6 @@ async def _process_single_security(symbol: str):
 
     except Exception as e:
         logger.error(f"Pipeline error for {symbol}: {e}", exc_info=True)
-        set_text(f"SECURITY REFRESH FAILED ({symbol})")
         # Don't update last_synced on error - will retry next hour
         raise
     finally:

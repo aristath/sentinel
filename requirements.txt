@@ -9,6 +9,7 @@ exchange-calendars>=4.5.0
 apscheduler>=3.10.4
 aiosqlite>=0.19.0
 pyserial>=3.5
+psutil>=5.9.0  # System stats (CPU/RAM) for LED display
 tradernet-sdk>=2.0.0
 pandas>=2.0.0
 numpy>=1.24.0

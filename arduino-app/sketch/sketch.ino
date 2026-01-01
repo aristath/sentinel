@@ -23,6 +23,21 @@ bool isScrolling = false;
 unsigned long scrollStartTime = 0;
 unsigned long estimatedScrollDuration = 0;
 
+// LED Matrix dimensions
+const int MATRIX_WIDTH = 13;
+const int MATRIX_HEIGHT = 8;
+const int TOTAL_PIXELS = MATRIX_WIDTH * MATRIX_HEIGHT;  // 104 pixels
+
+// System stats mode state
+bool inStatsMode = false;
+uint8_t pixelBrightness[MATRIX_HEIGHT][MATRIX_WIDTH];  // 0-255 per pixel
+int targetPixelsOn = 0;          // Target number of lit pixels (0-104)
+uint8_t targetBrightness = 100;  // Target brightness for lit pixels (100-220)
+
+// Animation timing
+int pixelUpdateInterval = 2000;         // Dynamic 10ms-2000ms
+unsigned long lastPixelUpdate = 0;
+
 // Set RGB LED 3 color (active-low, digital only)
 void setRGB3(uint8_t r, uint8_t g, uint8_t b) {
   digitalWrite(LED_BUILTIN, r > 0 ? LOW : HIGH);
@@ -47,13 +62,89 @@ void scrollText(String text, int speed) {
   hasPendingText = true;
 }
 
+// System stats visualization: pixels_on (0-104), brightness (100-220), interval (10-2000)
+void setSystemStats(int pixels_on, int brightness, int interval_ms) {
+  targetPixelsOn = constrain(pixels_on, 0, TOTAL_PIXELS);
+  targetBrightness = constrain(brightness, 100, 220);
+  pixelUpdateInterval = constrain(interval_ms, 10, 2000);
+  inStatsMode = true;
+}
+
+// Update pixel pattern - add or remove pixels to match target
+void updatePixelPattern() {
+  // Count currently lit pixels
+  int currentLit = 0;
+  for (int y = 0; y < MATRIX_HEIGHT; y++) {
+    for (int x = 0; x < MATRIX_WIDTH; x++) {
+      if (pixelBrightness[y][x] > 0) currentLit++;
+    }
+  }
+
+  // Add or remove pixels to match target
+  if (currentLit < targetPixelsOn) {
+    // Add pixels with targetBrightness
+    int attempts = 0;
+    while (currentLit < targetPixelsOn && attempts < targetPixelsOn * 10) {
+      int x = random(MATRIX_WIDTH);
+      int y = random(MATRIX_HEIGHT);
+      if (pixelBrightness[y][x] == 0) {
+        pixelBrightness[y][x] = targetBrightness;
+        currentLit++;
+      }
+      attempts++;
+    }
+  } else if (currentLit > targetPixelsOn) {
+    // Remove pixels
+    int attempts = 0;
+    while (currentLit > targetPixelsOn && attempts < currentLit * 10) {
+      int x = random(MATRIX_WIDTH);
+      int y = random(MATRIX_HEIGHT);
+      if (pixelBrightness[y][x] > 0) {
+        pixelBrightness[y][x] = 0;
+        currentLit--;
+      }
+      attempts++;
+    }
+  }
+
+  // Render updated pattern
+  renderBrightnessFrame();
+}
+
+// Render brightness frame to LED matrix
+void renderBrightnessFrame() {
+  // After setGrayscaleBits(8), we can load brightness values directly
+  // TODO: Test which method works for loading brightness values
+  //
+  // For now, using binary on/off as fallback until brightness method is found
+  // This will at least show pixel count correctly
+
+  uint32_t frame[3] = {0, 0, 0};
+
+  // Convert brightness array to binary frame (pixels with brightness > 0 are ON)
+  int pixel_idx = 0;
+  for (int y = 0; y < MATRIX_HEIGHT; y++) {
+    for (int x = 0; x < MATRIX_WIDTH && x < 12; x++) {  // Matrix is 12 wide
+      if (pixel_idx < 96 && pixelBrightness[y][x] > 0) {
+        frame[pixel_idx / 32] |= (1UL << (pixel_idx % 32));
+      }
+      pixel_idx++;
+    }
+  }
+
+  matrix.loadFrame(frame);
+}
+
 void setup() {
   // Initialize LED matrix
   matrix.begin();
   // Note: Serial.begin() removed - Router Bridge uses its own serial communication
   // and Serial can conflict with Bridge message processing
-  matrix.setGrayscaleBits(8);  // For 0-255 brightness values
+  matrix.setGrayscaleBits(8);  // Enable hardware brightness support (0-255 values)
   matrix.clear();
+
+  // Initialize pixel brightness array (all OFF)
+  memset(pixelBrightness, 0, sizeof(pixelBrightness));
 
   // Initialize RGB LED 3 & 4 pins
   pinMode(LED_BUILTIN, OUTPUT);
@@ -72,19 +163,33 @@ void setup() {
   Bridge.provide("setRGB3", setRGB3);
   Bridge.provide("setRGB4", setRGB4);
   Bridge.provide("scrollText", scrollText);
+  Bridge.provide("setSystemStats", setSystemStats);  // NEW: System stats mode
+
+  // Seed random number generator for pixel randomization
+  randomSeed(analogRead(0));
 }
 
 void loop() {
   // Bridge handles RPC messages automatically in background thread
   // No need to call Bridge.loop() - it's handled by __loopHook()
 
-  // Check if scrolling has completed
-  if (isScrolling && (millis() - scrollStartTime >= estimatedScrollDuration)) {
+  unsigned long currentMillis = millis();
+
+  // Pixel pattern updates at dynamic rate (stats mode only)
+  if (inStatsMode && currentMillis - lastPixelUpdate >= pixelUpdateInterval) {
+    lastPixelUpdate = currentMillis;
+    updatePixelPattern();
+  }
+
+  // Check if scrolling has completed (ticker mode)
+  if (isScrolling && (currentMillis - scrollStartTime >= estimatedScrollDuration)) {
     isScrolling = false;
   }
 
-  // Process pending text - always show the latest message
+  // Process pending text - exits stats mode, enters ticker mode
   if (hasPendingText && !isScrolling) {
+    inStatsMode = false;  // Exit stats mode when ticker arrives
+
     // Start scrolling with the latest message
     matrix.textScrollSpeed(pendingSpeed);
     matrix.textFont(Font_5x7);
@@ -94,7 +199,7 @@ void loop() {
 
     // Track scrolling state manually
     isScrolling = true;
-    scrollStartTime = millis();
+    scrollStartTime = currentMillis;
     // Estimate duration: matrix width (13) + text width (5 pixels per char) + buffer
     estimatedScrollDuration = (13 + (pendingText.length() * 5) + 10) * pendingSpeed;
 

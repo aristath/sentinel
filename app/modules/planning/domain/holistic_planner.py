@@ -25,12 +25,20 @@ All sequences enforce rigid ordering: sells first, then buys.
 """
 
 import asyncio
+import gc
 import hashlib
 import json
 import logging
 from dataclasses import dataclass, field
 from itertools import combinations
 from typing import Dict, List, Optional, Set, Tuple
+
+try:
+    import psutil
+
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
 
 from app.domain.models import Position, Security
 from app.domain.portfolio_hash import generate_portfolio_hash
@@ -41,6 +49,66 @@ from app.modules.scoring.domain.end_state import calculate_portfolio_end_state_s
 from app.modules.scoring.domain.models import PortfolioContext
 
 logger = logging.getLogger(__name__)
+
+
+def _calculate_adaptive_batch_size(
+    base_batch_size: int,
+    min_batch_size: int = 10,
+    max_batch_size: int = 200,
+) -> int:
+    """
+    Calculate adaptive batch size based on current memory usage.
+
+    Adjusts batch size to prevent OOM on Arduino-Q (2GB RAM):
+    - Memory >80%: Use minimum batch size (conservative)
+    - Memory 70-80%: Reduce batch size by 50%
+    - Memory 50-70%: Use base batch size
+    - Memory <50%: Increase batch size by 20% (up to max) - conservative
+
+    Args:
+        base_batch_size: Requested batch size
+        min_batch_size: Minimum allowed batch size (default 10)
+        max_batch_size: Maximum allowed batch size (default 200)
+
+    Returns:
+        Adjusted batch size based on current memory pressure
+    """
+    if not PSUTIL_AVAILABLE:
+        # No psutil, use base batch size
+        return base_batch_size
+
+    mem = psutil.virtual_memory()
+    mem_percent = mem.percent
+
+    if mem_percent > 80:
+        # Critical memory pressure - use minimum
+        adjusted = min_batch_size
+        logger.warning(
+            f"High memory pressure ({mem_percent:.1f}%), "
+            f"reducing batch size to minimum: {adjusted}"
+        )
+    elif mem_percent > 70:
+        # High memory - reduce by 50%
+        adjusted = max(min_batch_size, base_batch_size // 2)
+        logger.info(
+            f"Elevated memory usage ({mem_percent:.1f}%), "
+            f"reducing batch size: {base_batch_size} -> {adjusted}"
+        )
+    elif mem_percent < 50:
+        # Low memory - can increase for efficiency
+        # Conservative 1.2x increase (was 1.5x) to avoid overshooting memory capacity
+        increased = int(base_batch_size * 1.2)
+        adjusted = max(min_batch_size, min(max_batch_size, increased))
+        if adjusted > base_batch_size:
+            logger.info(
+                f"Low memory usage ({mem_percent:.1f}%), "
+                f"increasing batch size for efficiency: {base_batch_size} -> {adjusted}"
+            )
+    else:
+        # Normal range (50-70%) - use base
+        adjusted = max(min_batch_size, base_batch_size)
+
+    return adjusted
 
 
 def _calculate_transaction_cost(
@@ -2617,8 +2685,13 @@ async def process_planner_incremental(
         except Exception as e:
             logger.debug(f"Could not emit planner sequences generated event: {e}")
 
+    # Adaptive batch sizing based on current memory (Arduino-Q optimization)
+    adaptive_batch_size = _calculate_adaptive_batch_size(batch_size)
+
     # Get next batch of sequences
-    next_sequences = await repo.get_next_sequences(portfolio_hash, limit=batch_size)
+    next_sequences = await repo.get_next_sequences(
+        portfolio_hash, limit=adaptive_batch_size
+    )
 
     if not next_sequences:
         # No more sequences to process, return best result
@@ -2702,6 +2775,46 @@ async def process_planner_incremental(
     best_in_batch = None
     best_score_in_batch = 0.0
 
+    # Performance optimization: Pre-fetch all metrics before evaluation loop.
+    # Eliminates N+1 query pattern by batch-fetching metrics for all symbols upfront.
+    # Collect all unique symbols: current portfolio + all actions in sequences.
+    # This ensures we have metrics for both unchanged positions and new trades.
+    all_symbols_in_batch = set(portfolio_context.positions.keys())
+    for seq_data in next_sequences:
+        try:
+            sequence_data = json.loads(seq_data["sequence_json"])
+            for action_dict in sequence_data:
+                all_symbols_in_batch.add(action_dict["symbol"])
+        except Exception:
+            # Skip unparseable sequences - will be handled in main evaluation loop
+            pass
+
+    # Batch fetch metrics for all symbols in one pass (reduces DB roundtrips)
+    for symbol in all_symbols_in_batch:
+        if symbol not in metrics_cache:
+            try:
+                metrics = await calc_repo.get_metrics(symbol, required_metrics)
+                metrics_cache[symbol] = {
+                    k: (v if v is not None else 0.0) for k, v in metrics.items()
+                }
+            except Exception as e:
+                logger.warning(f"Failed to pre-fetch metrics for {symbol}: {e}")
+                # Cache empty dict to prevent repeated failed fetches
+                metrics_cache[symbol] = {}
+
+    logger.info(
+        f"Pre-fetched metrics for {len(all_symbols_in_batch)} unique symbols "
+        f"in batch of {len(next_sequences)} sequences"
+    )
+
+    # Log memory state before batch processing (Arduino-Q monitoring)
+    if PSUTIL_AVAILABLE:
+        mem = psutil.virtual_memory()
+        logger.info(
+            f"Starting batch evaluation: {len(next_sequences)} sequences, "
+            f"Memory: {mem.percent:.1f}% used ({mem.used / 1024**3:.2f}GB / {mem.total / 1024**3:.2f}GB)"
+        )
+
     for seq_data in next_sequences:
         sequence_hash = seq_data["sequence_hash"]
 
@@ -2754,13 +2867,7 @@ async def process_planner_incremental(
                 sequence, portfolio_context, available_cash, securities
             )
 
-            # Fetch metrics for symbols in end_context if not cached
-            for symbol in end_context.positions.keys():
-                if symbol not in metrics_cache:
-                    metrics = await calc_repo.get_metrics(symbol, required_metrics)
-                    metrics_cache[symbol] = {
-                        k: (v if v is not None else 0.0) for k, v in metrics.items()
-                    }
+            # Metrics already pre-fetched before loop - no need to fetch per sequence
 
             # Evaluate sequence
             div_score = await calculate_portfolio_score(end_context)
@@ -2812,6 +2919,23 @@ async def process_planner_incremental(
                 )
             # Continue processing other sequences
             continue
+
+    # Explicit garbage collection after batch to free memory (Arduino-Q optimization)
+    gc.collect()
+
+    # Log memory state after batch processing
+    if PSUTIL_AVAILABLE:
+        mem = psutil.virtual_memory()
+        logger.info(
+            f"Batch complete: {len(next_sequences)} sequences evaluated, "
+            f"Best score: {best_score_in_batch:.3f}, "
+            f"Memory: {mem.percent:.1f}% ({mem.used / 1024**3:.2f}GB)"
+        )
+        if mem.percent > 75:
+            logger.warning(
+                f"High memory usage after batch: {mem.percent:.1f}% "
+                f"({mem.used / 1024**3:.2f}GB / {mem.total / 1024**3:.2f}GB)"
+            )
 
     # Update best result if better found
     if best_in_batch:

@@ -17,7 +17,7 @@ from pathlib import Path
 from app.config import settings
 from app.core.events import SystemEvent, emit
 from app.infrastructure.locking import file_lock
-from app.modules.display.services.display_service import set_led4, set_text
+from app.modules.display.services.display_service import set_led4
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,6 @@ async def _run_health_check_internal():
     """Internal health check implementation."""
     logger.info("Starting database health check...")
 
-    set_text("CHECKING DATABASE HEALTH...")
     set_led4(0, 255, 0)  # Green for processing
 
     issues = []
@@ -101,7 +100,6 @@ async def _run_health_check_internal():
             await _report_issues(issues)
             error_msg = f"DB HEALTH: {len(issues)} ISSUE(S)"
             emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-            set_text(error_msg)
         else:
             logger.info("Database health check passed: all databases healthy")
 
@@ -109,7 +107,6 @@ async def _run_health_check_internal():
         logger.error(f"Health check failed: {e}", exc_info=True)
         error_msg = "HEALTH CHECK CRASHES"
         emit(SystemEvent.ERROR_OCCURRED, message=error_msg)
-        set_text(error_msg)
     finally:
         set_led4(0, 0, 0)  # Clear LED when done
 
