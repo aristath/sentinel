@@ -30,6 +30,7 @@ import hashlib
 import json
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime
 from itertools import combinations
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -44,6 +45,10 @@ from app.domain.models import Position, Security
 from app.domain.portfolio_hash import generate_portfolio_hash
 from app.domain.value_objects.trade_side import TradeSide
 from app.modules.planning.domain.models import ActionCandidate
+from app.modules.planning.infrastructure.go_evaluation_client import (
+    GoEvaluationClient,
+    GoEvaluationError,
+)
 from app.modules.scoring.domain.diversification import calculate_portfolio_score
 from app.modules.scoring.domain.end_state import calculate_portfolio_end_state_score
 from app.modules.scoring.domain.models import PortfolioContext
@@ -2451,8 +2456,6 @@ async def process_planner_incremental(
     Returns:
         HolisticPlan with best sequence found so far, or None if no sequences evaluated yet
     """
-    from datetime import datetime
-
     from app.modules.planning.database.planner_repository import PlannerRepository
     from app.modules.planning.domain.narrative import (
         generate_plan_narrative,
@@ -2815,28 +2818,14 @@ async def process_planner_incremental(
             f"Memory: {mem.percent:.1f}% used ({mem.used / 1024**3:.2f}GB / {mem.total / 1024**3:.2f}GB)"
         )
 
+    # Separate sequences into already-evaluated and need-evaluation groups
+    sequences_to_evaluate = []
+    sequence_hashes_to_evaluate = []
+
     for seq_data in next_sequences:
         sequence_hash = seq_data["sequence_hash"]
 
         try:
-            # Deserialize sequence
-            sequence_data = json.loads(seq_data["sequence_json"])
-            sequence = [
-                ActionCandidate(
-                    side=c["side"],
-                    symbol=c["symbol"],
-                    name=c["name"],
-                    quantity=c["quantity"],
-                    price=c["price"],
-                    value_eur=c["value_eur"],
-                    currency=c["currency"],
-                    priority=c["priority"],
-                    reason=c["reason"],
-                    tags=c["tags"],
-                )
-                for c in sequence_data
-            ]
-
             # Check if evaluation already exists (from previous generation)
             if await repo.has_evaluation(sequence_hash, portfolio_hash):
                 logger.debug(
@@ -2862,50 +2851,29 @@ async def process_planner_incremental(
                         best_in_batch = sequence_hash
                 continue
 
-            # Simulate sequence
-            end_context, end_cash = await simulate_sequence(
-                sequence, portfolio_context, available_cash, securities
-            )
-
-            # Metrics already pre-fetched before loop - no need to fetch per sequence
-
-            # Evaluate sequence
-            div_score = await calculate_portfolio_score(end_context)
-            end_score, breakdown = await calculate_portfolio_end_state_score(
-                positions=end_context.positions,
-                total_value=end_context.total_value,
-                diversification_score=div_score.total / 100,
-                metrics_cache=metrics_cache,
-            )
-
-            # Insert evaluation
-            await repo.insert_evaluation(
-                sequence_hash=sequence_hash,
-                portfolio_hash=portfolio_hash,
-                end_score=end_score,
-                breakdown=breakdown,
-                end_cash=end_cash,
-                end_context_positions=end_context.positions,
-                div_score=div_score.total,
-                total_value=end_context.total_value,
-            )
-
-            # Mark sequence as completed
-            evaluated_at = datetime.now().isoformat()
-            await repo.mark_sequence_completed(
-                sequence_hash, portfolio_hash, evaluated_at
-            )
-
-            # Update best if better
-            if end_score > best_score_in_batch:
-                best_score_in_batch = end_score
-                best_in_batch = sequence_hash
+            # Deserialize sequence for evaluation
+            sequence_data = json.loads(seq_data["sequence_json"])
+            sequence = [
+                ActionCandidate(
+                    side=c["side"],
+                    symbol=c["symbol"],
+                    name=c["name"],
+                    quantity=c["quantity"],
+                    price=c["price"],
+                    value_eur=c["value_eur"],
+                    currency=c["currency"],
+                    priority=c["priority"],
+                    reason=c["reason"],
+                    tags=c["tags"],
+                )
+                for c in sequence_data
+            ]
+            sequences_to_evaluate.append(sequence)
+            sequence_hashes_to_evaluate.append(sequence_hash)
 
         except Exception as e:
-            # If evaluation fails, mark sequence as completed anyway so it doesn't block planning
-            # This allows trades to proceed even if some scenarios fail
             logger.warning(
-                f"Failed to evaluate sequence {sequence_hash[:8]}: {e}. "
+                f"Failed to deserialize sequence {sequence_hash[:8]}: {e}. "
                 f"Marking as examined to prevent blocking planning."
             )
             try:
@@ -2917,8 +2885,166 @@ async def process_planner_incremental(
                 logger.error(
                     f"Failed to mark sequence {sequence_hash[:8]} as completed: {mark_error}"
                 )
-            # Continue processing other sequences
             continue
+
+    # Evaluate sequences via Go service (10-100x faster) with Python fallback
+    if sequences_to_evaluate:
+        logger.info(
+            f"Evaluating {len(sequences_to_evaluate)} sequences "
+            f"({len(next_sequences) - len(sequences_to_evaluate)} already evaluated)"
+        )
+
+        use_go_evaluation = True
+        go_results = []
+
+        # Try Go evaluation first (parallel, much faster)
+        try:
+            logger.info(
+                f"Using Go evaluation service (parallel) for {len(sequences_to_evaluate)} sequences..."
+            )
+
+            async with GoEvaluationClient() as client:
+                go_results = await client.evaluate_batch(
+                    sequences=sequences_to_evaluate,
+                    portfolio_context=portfolio_context,
+                    available_cash_eur=available_cash,
+                    securities=securities,
+                    transaction_cost_fixed=transaction_cost_fixed,
+                    transaction_cost_percent=transaction_cost_percent,
+                )
+
+            logger.info(
+                f"Go evaluation complete: {len(go_results)} sequences evaluated"
+            )
+
+        except GoEvaluationError as e:
+            logger.warning(
+                f"Go evaluation failed ({e}), falling back to Python evaluation (slower)"
+            )
+            use_go_evaluation = False
+
+        # Store results from Go or evaluate with Python fallback
+        for i, (sequence, sequence_hash) in enumerate(
+            zip(sequences_to_evaluate, sequence_hashes_to_evaluate)
+        ):
+            try:
+                if use_go_evaluation and i < len(go_results):
+                    # Use Go results
+                    result = go_results[i]
+
+                    if not result["feasible"]:
+                        # Infeasible sequence - mark as completed with score 0
+                        await repo.insert_evaluation(
+                            sequence_hash=sequence_hash,
+                            portfolio_hash=portfolio_hash,
+                            end_score=0.0,
+                            breakdown={"go_evaluation": True, "feasible": False},
+                            end_cash=available_cash,
+                            end_context_positions={},
+                            div_score=0.0,
+                            total_value=0.0,
+                        )
+                        evaluated_at = datetime.now().isoformat()
+                        await repo.mark_sequence_completed(
+                            sequence_hash, portfolio_hash, evaluated_at
+                        )
+                        continue
+
+                    # Store Go evaluation result
+                    # Go returns normalized score (0-1), convert to percentage
+                    end_score = result["score"]
+                    breakdown = {
+                        "go_evaluation": True,
+                        "transaction_costs": result["transaction_costs"],
+                        "feasible": result["feasible"],
+                    }
+
+                    # Note: Go doesn't return detailed end_context or div_score
+                    # For incremental mode, we only need end_score for ranking
+                    await repo.insert_evaluation(
+                        sequence_hash=sequence_hash,
+                        portfolio_hash=portfolio_hash,
+                        end_score=end_score,
+                        breakdown=breakdown,
+                        end_cash=result["end_cash_eur"],
+                        end_context_positions={},  # Not needed for ranking
+                        div_score=0.0,  # Not needed for ranking
+                        total_value=0.0,  # Not needed for ranking
+                    )
+
+                    evaluated_at = datetime.now().isoformat()
+                    await repo.mark_sequence_completed(
+                        sequence_hash, portfolio_hash, evaluated_at
+                    )
+
+                    # Update best if better
+                    if end_score > best_score_in_batch:
+                        best_score_in_batch = end_score
+                        best_in_batch = sequence_hash
+
+                else:
+                    # Python fallback evaluation (original sequential logic)
+                    from app.modules.planning.domain.calculations.simulation import (
+                        simulate_sequence,
+                    )
+
+                    # Simulate sequence
+                    end_context, end_cash = await simulate_sequence(
+                        sequence, portfolio_context, available_cash, securities
+                    )
+
+                    # Metrics already pre-fetched before loop - no need to fetch per sequence
+
+                    # Evaluate sequence
+                    div_score = await calculate_portfolio_score(end_context)
+                    end_score, breakdown = await calculate_portfolio_end_state_score(
+                        positions=end_context.positions,
+                        total_value=end_context.total_value,
+                        diversification_score=div_score.total / 100,
+                        metrics_cache=metrics_cache,
+                    )
+
+                    # Insert evaluation
+                    await repo.insert_evaluation(
+                        sequence_hash=sequence_hash,
+                        portfolio_hash=portfolio_hash,
+                        end_score=end_score,
+                        breakdown=breakdown,
+                        end_cash=end_cash,
+                        end_context_positions=end_context.positions,
+                        div_score=div_score.total,
+                        total_value=end_context.total_value,
+                    )
+
+                    # Mark sequence as completed
+                    evaluated_at = datetime.now().isoformat()
+                    await repo.mark_sequence_completed(
+                        sequence_hash, portfolio_hash, evaluated_at
+                    )
+
+                    # Update best if better
+                    if end_score > best_score_in_batch:
+                        best_score_in_batch = end_score
+                        best_in_batch = sequence_hash
+
+            except Exception as e:
+                # If evaluation fails, mark sequence as completed anyway so it doesn't block planning
+                # This allows trades to proceed even if some scenarios fail
+                logger.warning(
+                    f"Failed to evaluate sequence {sequence_hash[:8]}: {e}. "
+                    f"Marking as examined to prevent blocking planning."
+                )
+                try:
+                    evaluated_at = datetime.now().isoformat()
+                    await repo.mark_sequence_completed(
+                        sequence_hash, portfolio_hash, evaluated_at
+                    )
+                except Exception as mark_error:
+                    logger.error(
+                        f"Failed to mark sequence {sequence_hash[:8]} as completed: {mark_error}"
+                    )
+                # Continue processing other sequences
+                continue
 
     # Explicit garbage collection after batch to free memory (Arduino-Q optimization)
     gc.collect()
