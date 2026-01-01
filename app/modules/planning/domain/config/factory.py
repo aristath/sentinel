@@ -99,38 +99,46 @@ class ModularPlannerFactory:
         # Load opportunity calculators
         for name in self.config.get_enabled_calculators():
             calculator = opportunity_calculator_registry.get(name)
-            if calculator:
-                self.calculators[name] = calculator
-                logger.debug(f"Enabled calculator: {name}")
-            else:
-                logger.warning(f"Calculator '{name}' not found in registry")
+            if calculator is None:
+                raise ValueError(
+                    f"Calculator '{name}' is enabled in config but not registered. "
+                    f"Available calculators: {opportunity_calculator_registry.list_names()}"
+                )
+            self.calculators[name] = calculator
+            logger.debug(f"Enabled calculator: {name}")
 
         # Load pattern generators
         for name in self.config.get_enabled_patterns():
             pattern = pattern_generator_registry.get(name)
-            if pattern:
-                self.patterns[name] = pattern
-                logger.debug(f"Enabled pattern: {name}")
-            else:
-                logger.warning(f"Pattern '{name}' not found in registry")
+            if pattern is None:
+                raise ValueError(
+                    f"Pattern '{name}' is enabled in config but not registered. "
+                    f"Available patterns: {pattern_generator_registry.list_names()}"
+                )
+            self.patterns[name] = pattern
+            logger.debug(f"Enabled pattern: {name}")
 
         # Load sequence generators
         for name in self.config.get_enabled_generators():
             generator = sequence_generator_registry.get(name)
-            if generator:
-                self.generators[name] = generator
-                logger.debug(f"Enabled generator: {name}")
-            else:
-                logger.warning(f"Generator '{name}' not found in registry")
+            if generator is None:
+                raise ValueError(
+                    f"Generator '{name}' is enabled in config but not registered. "
+                    f"Available generators: {sequence_generator_registry.list_names()}"
+                )
+            self.generators[name] = generator
+            logger.debug(f"Enabled generator: {name}")
 
         # Load filters
         for name in self.config.get_enabled_filters():
             filter_instance = sequence_filter_registry.get(name)
-            if filter_instance:
-                self.filters[name] = filter_instance
-                logger.debug(f"Enabled filter: {name}")
-            else:
-                logger.warning(f"Filter '{name}' not found in registry")
+            if filter_instance is None:
+                raise ValueError(
+                    f"Filter '{name}' is enabled in config but not registered. "
+                    f"Available filters: {sequence_filter_registry.list_names()}"
+                )
+            self.filters[name] = filter_instance
+            logger.debug(f"Enabled filter: {name}")
 
         logger.info(
             f"Instantiated modules: "
