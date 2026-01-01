@@ -146,21 +146,16 @@ CREATE TABLE IF NOT EXISTS schema_version (
 DEFAULT_ALLOCATION_TARGETS: list[tuple[str, str, float]] = []
 
 # Default settings for new database installations
-# NOTE: min_trade_size and recommendation_depth replaced by optimizer-based settings
+# NOTE: Planner settings moved to TOML configuration.
+# Transaction costs and trading constraints are now per-bucket in config/planner/*.toml
 DEFAULT_SETTINGS = [
     ("min_cash_threshold", "500", "Minimum EUR cash reserve"),
     ("max_trades_per_cycle", "5", "Maximum trades per rebalance cycle"),
     ("min_security_score", "0.5", "Minimum score to consider buying"),
-    ("min_hold_days", "90", "Minimum days before selling"),
-    ("sell_cooldown_days", "180", "Days between sells of same security"),
-    ("max_loss_threshold", "-0.20", "Don't sell if loss exceeds this"),
     ("target_annual_return", "0.11", "Target CAGR for scoring (11%)"),
     # Optimizer settings
     ("optimizer_blend", "0.5", "0.0 = pure Mean-Variance, 1.0 = pure HRP"),
     ("optimizer_target_return", "0.11", "Target annual return for optimizer"),
-    # Transaction costs (Freedom24)
-    ("transaction_cost_fixed", "2.0", "Fixed cost per trade in EUR"),
-    ("transaction_cost_percent", "0.002", "Variable cost as fraction (0.2%)"),
     # Cash management
     ("min_cash_reserve", "500.0", "Minimum cash to keep (never fully deploy)"),
     # Job scheduling (simplified - only 2 configurable settings)
