@@ -232,7 +232,7 @@ class TestCalculateSellScore:
     async def test_returns_ineligible_when_sell_not_allowed(self):
         """Test returning ineligible when allow_sell is False."""
         with patch(
-            "app.domain.scoring.sell._calculate_drawdown_score",
+            "app.modules.scoring.domain.sell._calculate_drawdown_score",
             new_callable=AsyncMock,
             return_value=0.3,
         ):
@@ -262,7 +262,7 @@ class TestCalculateSellScore:
     async def test_returns_ineligible_for_big_loss(self):
         """Test returning ineligible when loss exceeds threshold."""
         with patch(
-            "app.domain.scoring.sell._calculate_drawdown_score",
+            "app.modules.scoring.domain.sell._calculate_drawdown_score",
             new_callable=AsyncMock,
             return_value=0.3,
         ):
@@ -292,7 +292,7 @@ class TestCalculateSellScore:
     async def test_returns_eligible_for_profitable_position(self):
         """Test returning eligible for profitable long-held position."""
         with patch(
-            "app.domain.scoring.sell._calculate_drawdown_score",
+            "app.modules.scoring.domain.sell._calculate_drawdown_score",
             new_callable=AsyncMock,
             return_value=0.3,
         ):
@@ -325,7 +325,7 @@ class TestCalculateSellScore:
         )
 
         with patch(
-            "app.domain.scoring.sell._calculate_drawdown_score",
+            "app.modules.scoring.domain.sell._calculate_drawdown_score",
             new_callable=AsyncMock,
             return_value=0.3,
         ):
@@ -406,7 +406,7 @@ class TestCalculateAllSellScores:
         ]
 
         with patch(
-            "app.domain.scoring.sell._calculate_drawdown_score",
+            "app.modules.scoring.domain.sell._calculate_drawdown_score",
             new_callable=AsyncMock,
             return_value=0.3,
         ):
@@ -434,7 +434,7 @@ class TestCalculateAllSellScores:
         ]
 
         with patch(
-            "app.domain.scoring.sell._calculate_drawdown_score",
+            "app.modules.scoring.domain.sell._calculate_drawdown_score",
             new_callable=AsyncMock,
             return_value=0.3,
         ):
@@ -463,7 +463,7 @@ class TestCalculateAllSellScores:
         ]
 
         with patch(
-            "app.domain.scoring.sell._calculate_drawdown_score",
+            "app.modules.scoring.domain.sell._calculate_drawdown_score",
             new_callable=AsyncMock,
             return_value=0.3,
         ):
@@ -501,7 +501,7 @@ class TestCalculateAllSellScores:
         }
 
         with patch(
-            "app.domain.scoring.sell._calculate_drawdown_score",
+            "app.modules.scoring.domain.sell._calculate_drawdown_score",
             new_callable=AsyncMock,
             return_value=0.3,
         ):
@@ -538,7 +538,7 @@ class TestCalculateAllSellScores:
         }
 
         with patch(
-            "app.domain.scoring.sell._calculate_drawdown_score",
+            "app.modules.scoring.domain.sell._calculate_drawdown_score",
             new_callable=AsyncMock,
             return_value=0.3,
         ):

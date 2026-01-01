@@ -1,4 +1,7 @@
-"""Planner batch job - processes next batch of sequences every N seconds."""
+"""Planner batch job - processes next batch of sequences every N seconds.
+
+Supports both core and satellite buckets with bucket-specific configurations.
+"""
 
 import logging
 from typing import Optional
@@ -12,6 +15,7 @@ from app.modules.planning.database.planner_repository import PlannerRepository
 from app.modules.planning.domain.holistic_planner import (
     create_holistic_plan_incremental,
 )
+from app.modules.planning.services.planner_factory import PlannerFactoryService
 from app.modules.planning.services.portfolio_context_builder import (
     build_portfolio_context,
 )
@@ -41,7 +45,9 @@ async def _trigger_next_batch_via_api(portfolio_hash: str, next_depth: int):
 
 
 async def process_planner_batch_job(
-    max_depth: int = 0, portfolio_hash: Optional[str] = None
+    max_depth: int = 0,
+    portfolio_hash: Optional[str] = None,
+    bucket_id: str = "core",
 ):
     """
     Process next batch of sequences for holistic planner.
@@ -50,10 +56,15 @@ async def process_planner_batch_job(
     1. API-driven mode (max_depth > 0): Triggered by event-based trading loop, self-triggers next batches
     2. Scheduled fallback mode (max_depth = 0): Runs every 30 minutes as fallback, only if API-driven batches are not active
 
+    Supports both core and satellite buckets:
+    - Core bucket: Uses existing settings from SettingsRepository
+    - Satellite buckets: Uses bucket-specific configuration via PlannerFactoryService
+
     Args:
         max_depth: Recursion depth (for API-driven mode, prevents infinite loops)
                    If 0, this is scheduled fallback mode
         portfolio_hash: Portfolio hash being processed (for API-driven mode)
+        bucket_id: ID of bucket to plan for ('core' or satellite ID, default 'core')
     """
     try:
         # Get dependencies
@@ -189,9 +200,13 @@ async def process_planner_batch_job(
             ]
 
             # Apply pending orders
+            # Allow negative cash for hypothetical planning scenarios
             adjusted_position_dicts, adjusted_cash_balances = (
                 apply_pending_orders_to_portfolio(
-                    position_dicts_for_adjustment, cash_balances_dict, pending_orders
+                    position_dicts_for_adjustment,
+                    cash_balances_dict,
+                    pending_orders,
+                    allow_negative_cash=True,
                 )
             )
 
@@ -337,31 +352,131 @@ async def process_planner_batch_job(
             await settings_repo.get_float("combinatorial_max_candidates", 12.0)
         )
 
-        # Process batch
-        plan = await create_holistic_plan_incremental(
-            portfolio_context=portfolio_context,
-            available_cash=available_cash,
-            securities=stocks,
-            positions=positions,
-            exchange_rate_service=exchange_rate_service,
-            target_weights=target_weights,
-            current_prices=current_prices,
-            transaction_cost_fixed=await settings_repo.get_float(
-                "transaction_cost_fixed", 2.0
-            ),
-            transaction_cost_percent=await settings_repo.get_float(
-                "transaction_cost_percent", 0.002
-            ),
-            max_plan_depth=max_plan_depth,
-            max_opportunities_per_category=max_opportunities_per_category,
-            enable_combinatorial=enable_combinatorial,
-            priority_threshold=priority_threshold,
-            combinatorial_max_combinations_per_depth=combinatorial_max_combinations_per_depth,
-            combinatorial_max_sells=combinatorial_max_sells,
-            combinatorial_max_buys=combinatorial_max_buys,
-            combinatorial_max_candidates=combinatorial_max_candidates,
-            batch_size=batch_size,
-        )
+        logger.info(f"Processing planner batch for bucket: {bucket_id}")
+
+        # Use factory service for satellite buckets to leverage bucket-specific configurations
+        if bucket_id != "core":
+            try:
+                # Import satellite repository
+                from app.modules.satellites.database.satellite_repository import (
+                    SatelliteRepository,
+                )
+                from app.repositories import TradeRepository
+
+                # Load satellite settings
+                satellite_repo = SatelliteRepository()
+                satellite_settings = await satellite_repo.get_settings(bucket_id)
+
+                if satellite_settings:
+                    # Create planner using factory service
+                    factory = PlannerFactoryService(
+                        settings_repo=settings_repo, trade_repo=TradeRepository()
+                    )
+                    planner = factory.create_for_satellite_bucket(
+                        bucket_id, satellite_settings
+                    )
+
+                    # Use modular planner's incremental method
+                    plan = await planner.create_plan_incremental(
+                        portfolio_context=portfolio_context,
+                        positions=positions,
+                        securities=stocks,
+                        available_cash=available_cash,
+                        current_prices=current_prices,
+                        target_weights=target_weights,
+                        exchange_rate_service=exchange_rate_service,
+                        batch_size=batch_size,
+                    )
+
+                    logger.info(
+                        f"Used modular planner with factory for satellite {bucket_id}"
+                    )
+                else:
+                    # Fallback to core planner if settings not found
+                    logger.warning(
+                        f"Satellite settings not found for {bucket_id}, using core planner"
+                    )
+                    plan = await create_holistic_plan_incremental(
+                        portfolio_context=portfolio_context,
+                        available_cash=available_cash,
+                        securities=stocks,
+                        positions=positions,
+                        exchange_rate_service=exchange_rate_service,
+                        target_weights=target_weights,
+                        current_prices=current_prices,
+                        transaction_cost_fixed=await settings_repo.get_float(
+                            "transaction_cost_fixed", 2.0
+                        ),
+                        transaction_cost_percent=await settings_repo.get_float(
+                            "transaction_cost_percent", 0.002
+                        ),
+                        max_plan_depth=max_plan_depth,
+                        max_opportunities_per_category=max_opportunities_per_category,
+                        enable_combinatorial=enable_combinatorial,
+                        priority_threshold=priority_threshold,
+                        combinatorial_max_combinations_per_depth=combinatorial_max_combinations_per_depth,
+                        combinatorial_max_sells=combinatorial_max_sells,
+                        combinatorial_max_buys=combinatorial_max_buys,
+                        combinatorial_max_candidates=combinatorial_max_candidates,
+                        batch_size=batch_size,
+                    )
+            except Exception as e:
+                logger.error(
+                    f"Failed to create satellite planner for {bucket_id}: {e}",
+                    exc_info=True,
+                )
+                # Fallback to core planner
+                logger.info(f"Falling back to core planner for {bucket_id}")
+                plan = await create_holistic_plan_incremental(
+                    portfolio_context=portfolio_context,
+                    available_cash=available_cash,
+                    securities=stocks,
+                    positions=positions,
+                    exchange_rate_service=exchange_rate_service,
+                    target_weights=target_weights,
+                    current_prices=current_prices,
+                    transaction_cost_fixed=await settings_repo.get_float(
+                        "transaction_cost_fixed", 2.0
+                    ),
+                    transaction_cost_percent=await settings_repo.get_float(
+                        "transaction_cost_percent", 0.002
+                    ),
+                    max_plan_depth=max_plan_depth,
+                    max_opportunities_per_category=max_opportunities_per_category,
+                    enable_combinatorial=enable_combinatorial,
+                    priority_threshold=priority_threshold,
+                    combinatorial_max_combinations_per_depth=combinatorial_max_combinations_per_depth,
+                    combinatorial_max_sells=combinatorial_max_sells,
+                    combinatorial_max_buys=combinatorial_max_buys,
+                    combinatorial_max_candidates=combinatorial_max_candidates,
+                    batch_size=batch_size,
+                )
+        else:
+            # Core bucket: use existing incremental planner
+            plan = await create_holistic_plan_incremental(
+                portfolio_context=portfolio_context,
+                available_cash=available_cash,
+                securities=stocks,
+                positions=positions,
+                exchange_rate_service=exchange_rate_service,
+                target_weights=target_weights,
+                current_prices=current_prices,
+                transaction_cost_fixed=await settings_repo.get_float(
+                    "transaction_cost_fixed", 2.0
+                ),
+                transaction_cost_percent=await settings_repo.get_float(
+                    "transaction_cost_percent", 0.002
+                ),
+                max_plan_depth=max_plan_depth,
+                max_opportunities_per_category=max_opportunities_per_category,
+                enable_combinatorial=enable_combinatorial,
+                priority_threshold=priority_threshold,
+                combinatorial_max_combinations_per_depth=combinatorial_max_combinations_per_depth,
+                combinatorial_max_sells=combinatorial_max_sells,
+                combinatorial_max_buys=combinatorial_max_buys,
+                combinatorial_max_candidates=combinatorial_max_candidates,
+                batch_size=batch_size,
+            )
 
         if plan:
             logger.debug(

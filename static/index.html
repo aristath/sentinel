@@ -17,6 +17,8 @@
   <script src="/static/js/utils.js"></script>
   <script src="/static/js/api.js"></script>
   <script src="/static/js/store.js"></script>
+  <script src="/static/js/toml-highlight.js"></script>
+  <script src="/static/js/toml-diff.js"></script>
 </head>
 <body x-data x-init="setTimeout(() => { $store.app.fetchAll(); $store.app.startRecommendationStream(); }, 0)">
   <div class="max-w-7xl mx-auto px-4 py-4 space-y-4">
@@ -72,6 +74,32 @@
            x-transition:leave="transition ease-in duration-150"
            x-transition:leave-start="opacity-100"
            x-transition:leave-end="opacity-0">
+        <!-- Universe Filter Buttons -->
+        <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <div class="flex items-center gap-2 flex-wrap">
+            <template x-for="bucket in $store.app.buckets" :key="bucket.id">
+              <button @click="$store.app.openBucketHealth(bucket)"
+                      :class="{
+                        'px-4 py-2 rounded text-sm font-medium transition-colors border': true,
+                        'bg-blue-600 text-white border-blue-600': bucket.type === 'core',
+                        'bg-purple-600 text-white border-purple-600': bucket.type === 'satellite'
+                      }">
+                <span x-text="bucket.name"></span>
+                <span class="ml-2 text-xs opacity-75">
+                  (<span x-text="$store.app.getSecurityCountForBucket(bucket.id)"></span>)
+                </span>
+              </button>
+            </template>
+          </div>
+          <button @click="$store.app.showUniverseManagementModal = true"
+                  class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm rounded font-medium transition-colors border border-gray-600">
+            ⚙️ Manage Universes
+          </button>
+          <button @click="$store.app.openPlannerManagement()"
+                  class="px-4 py-2 bg-green-600 hover:bg-green-500 text-white text-sm rounded font-medium transition-colors">
+            ⚙️ Configure Planners
+          </button>
+        </div>
         <security-table></security-table>
       </div>
 
@@ -107,6 +135,7 @@
   <edit-security-modal></edit-security-modal>
   <security-chart-modal></security-chart-modal>
   <settings-modal></settings-modal>
+  <planner-management-modal></planner-management-modal>
   <universe-management-modal></universe-management-modal>
   <bucket-health-modal></bucket-health-modal>
 
@@ -130,6 +159,7 @@
   <script src="/static/components/edit-security-modal.js"></script>
   <script src="/static/components/security-chart.js"></script>
   <script src="/static/components/settings-modal.js"></script>
+  <script src="/static/components/planner-management-modal.js"></script>
   <script src="/static/components/universe-management-modal.js"></script>
   <script src="/static/components/bucket-health-modal.js"></script>
   <script src="/static/components/job-footer.js"></script>

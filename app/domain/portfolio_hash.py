@@ -24,6 +24,7 @@ def apply_pending_orders_to_portfolio(
     positions: List[Dict[str, Any]],
     cash_balances: Dict[str, float],
     pending_orders: List[Dict[str, Any]],
+    allow_negative_cash: bool = False,
 ) -> tuple[List[Dict[str, Any]], Dict[str, float]]:
     """
     Apply pending orders to positions and cash balances to get hypothetical future state.
@@ -35,6 +36,8 @@ def apply_pending_orders_to_portfolio(
         positions: List of position dicts with 'symbol' and 'quantity' keys
         cash_balances: Dict of currency -> amount (e.g., {"EUR": 1500.0, "USD": 200.0})
         pending_orders: List of pending order dicts with keys: symbol, side, quantity, price, currency
+        allow_negative_cash: If True, allows cash to go negative for hypothetical planning.
+                            If False (default), clamps cash at 0 for safety.
 
     Returns:
         Tuple of (adjusted_positions, adjusted_cash_balances)
@@ -73,7 +76,13 @@ def apply_pending_orders_to_portfolio(
             # Reduce cash by the order value
             order_value = quantity * price
             current_cash = adjusted_cash.get(currency, 0.0)
-            adjusted_cash[currency] = max(0.0, current_cash - order_value)
+            new_cash = current_cash - order_value
+
+            # Clamp to zero unless negative cash is explicitly allowed
+            if allow_negative_cash:
+                adjusted_cash[currency] = new_cash
+            else:
+                adjusted_cash[currency] = max(0.0, new_cash)
 
             # Increase position quantity (assuming order will execute)
             current_quantity = position_map.get(symbol, 0.0)
@@ -136,8 +145,9 @@ def generate_portfolio_hash(
     """
     # Apply pending orders to get hypothetical future state
     if pending_orders:
+        # Allow negative cash for hypothetical portfolio state
         positions, cash_balances = apply_pending_orders_to_portfolio(
-            positions, cash_balances or {}, pending_orders
+            positions, cash_balances or {}, pending_orders, allow_negative_cash=True
         )
 
     # Build a dict of symbol -> quantity from positions

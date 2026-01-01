@@ -55,7 +55,7 @@ class TestCalculatePriority:
         input_data = PriorityInput(
             symbol="AAPL",
             name="Apple",
-            security_score=0.75,
+            stock_score=0.75,
             multiplier=1.5,
         )
 
@@ -64,7 +64,7 @@ class TestCalculatePriority:
         assert isinstance(result, PriorityResult)
         assert result.symbol == "AAPL"
         assert result.name == "Apple"
-        assert result.security_score == 0.75
+        assert result.stock_score == 0.75
         assert result.multiplier == 1.5
         assert result.combined_priority == pytest.approx(0.75 * 1.5, abs=0.0001)
         assert result.combined_priority == pytest.approx(1.125, abs=0.0001)
@@ -74,7 +74,7 @@ class TestCalculatePriority:
         input_data = PriorityInput(
             symbol="AAPL",
             name="Apple",
-            security_score=0.333333,
+            stock_score=0.333333,
             multiplier=1.5,
         )
 
@@ -89,7 +89,7 @@ class TestCalculatePriority:
         input_data = PriorityInput(
             symbol="AAPL",
             name="Apple",
-            security_score=0.75,
+            stock_score=0.75,
             multiplier=1.0,
             country="US",
             industry="Technology",
@@ -113,7 +113,7 @@ class TestCalculatePriority:
         input_data = PriorityInput(
             symbol="AAPL",
             name="Apple",
-            security_score=0.75,
+            stock_score=0.75,
             multiplier=1.0,
         )
 
@@ -131,7 +131,7 @@ class TestCalculatePriority:
         input_data = PriorityInput(
             symbol="AAPL",
             name="Apple",
-            security_score=0.0,
+            stock_score=0.0,
             multiplier=1.5,
         )
 
@@ -144,7 +144,7 @@ class TestCalculatePriority:
         input_data = PriorityInput(
             symbol="AAPL",
             name="Apple",
-            security_score=0.75,
+            stock_score=0.75,
             multiplier=0.0,
         )
 
@@ -157,7 +157,7 @@ class TestCalculatePriority:
         input_data = PriorityInput(
             symbol="AAPL",
             name="Apple",
-            security_score=1.0,
+            stock_score=1.0,
             multiplier=2.0,  # Maximum reasonable multiplier
         )
 
@@ -175,13 +175,13 @@ class TestCalculatePriorities:
             PriorityInput(
                 symbol="AAPL",
                 name="Apple",
-                security_score=0.8,
+                stock_score=0.8,
                 multiplier=1.0,
             ),
             PriorityInput(
                 symbol="MSFT",
                 name="Microsoft",
-                security_score=0.7,
+                stock_score=0.7,
                 multiplier=1.0,
             ),
         ]
@@ -199,19 +199,19 @@ class TestCalculatePriorities:
             PriorityInput(
                 symbol="LOW",
                 name="Low Priority",
-                security_score=0.5,
+                stock_score=0.5,
                 multiplier=1.0,  # combined = 0.5
             ),
             PriorityInput(
                 symbol="HIGH",
                 name="High Priority",
-                security_score=0.8,
+                stock_score=0.8,
                 multiplier=1.5,  # combined = 1.2
             ),
             PriorityInput(
                 symbol="MED",
                 name="Medium Priority",
-                security_score=0.6,
+                stock_score=0.6,
                 multiplier=1.0,  # combined = 0.6
             ),
         ]
@@ -235,7 +235,7 @@ class TestCalculatePriorities:
             PriorityInput(
                 symbol="AAPL",
                 name="Apple",
-                security_score=0.75,
+                stock_score=0.75,
                 multiplier=1.0,
             )
         ]
@@ -252,7 +252,7 @@ class TestCalculatePriorities:
             PriorityInput(
                 symbol="AAPL",
                 name="Apple",
-                security_score=0.75,
+                stock_score=0.75,
                 multiplier=1.5,
                 country="US",
                 industry="Technology",

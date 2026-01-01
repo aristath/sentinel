@@ -116,6 +116,16 @@ const API = {
   // Planner
   regenerateSequences: () => API._post('/api/planner/regenerate-sequences'),
 
+  // Planner Configuration Management
+  fetchPlanners: () => fetch('/api/planners').then(r => r.json()),
+  fetchPlannerById: (id) => fetch(`/api/planners/${id}`).then(r => r.json()),
+  createPlanner: (data) => API._post('/api/planners', data),
+  updatePlanner: (id, data) => API._put(`/api/planners/${id}`, data),
+  deletePlanner: (id) => API._delete(`/api/planners/${id}`),
+  validatePlannerToml: (toml) => API._post('/api/planners/validate', { toml }),
+  applyPlanner: (id) => API._post(`/api/planners/${id}/apply`),
+  fetchPlannerHistory: (id) => fetch(`/api/planners/${id}/history`).then(r => r.json()),
+
   // Satellites/Buckets
   fetchBuckets: () => fetch('/api/satellites/buckets').then(r => r.json()),
   fetchBucketBalances: (bucketId) => fetch(`/api/satellites/buckets/${bucketId}/balances`).then(r => r.json()),

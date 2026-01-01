@@ -108,6 +108,26 @@ document.addEventListener('alpine:init', () => {
     newSecurity: { identifier: '' },
     addingSecurity: false,
 
+    // Planner Management
+    planners: [],                          // List of all planner configs
+    plannerBuckets: [],                    // List of buckets for assignment
+    selectedPlannerId: '',                 // Currently selected planner ID
+    plannerFormMode: 'none',               // 'none', 'edit', 'create'
+    plannerForm: {                         // Form data
+      id: '',
+      name: '',
+      toml: '',
+      bucket_id: null
+    },
+    showPlannerManagementModal: false,     // Modal visibility
+    plannerLoading: false,                 // Loading state
+    plannerError: null,                    // Validation/save errors
+    showPlannerHistory: false,             // History viewer visibility
+    plannerHistory: [],                    // Version history entries
+    plannerHistoryLoading: false,          // History loading state
+    showPlannerDiffModal: false,           // Diff modal visibility
+    plannerDiffHtml: '',                   // Rendered diff HTML
+
     // Universe/Bucket Management
     newUniverseName: '',
     creatingUniverse: false,
@@ -796,6 +816,334 @@ document.addEventListener('alpine:init', () => {
         this.showMessage('Failed to update multiplier', 'error');
       }
     },
+
+    // Planner Management
+    async openPlannerManagement() {
+    async openPlannerManagement() {
+      this.showPlannerManagementModal = true;
+      this.plannerFormMode = 'none';
+      this.selectedPlannerId = '';
+      this.plannerError = null;
+      await Promise.all([
+        this.fetchPlanners(),
+        this.fetchPlannerBuckets()
+      ]);
+    },
+
+    async fetchPlannerBuckets() {
+      try {
+        this.plannerBuckets = await API.fetchBuckets();
+      } catch (e) {
+        console.error('Failed to fetch buckets:', e);
+        this.plannerBuckets = [];
+      }
+    },
+
+    async fetchPlanners() {
+      this.plannerLoading = true;
+      try {
+        this.planners = await API.fetchPlanners();
+      } catch (e) {
+        this.plannerError = e.message || 'Failed to fetch planners';
+        console.error('Failed to fetch planners:', e);
+      } finally {
+        this.plannerLoading = false;
+      }
+    },
+
+    async loadSelectedPlanner() {
+      if (!this.selectedPlannerId) {
+        this.plannerFormMode = 'none';
+        return;
+      }
+      this.plannerLoading = true;
+      this.plannerError = null;
+      try {
+        const planner = await API.fetchPlannerById(this.selectedPlannerId);
+        this.plannerForm = {
+          id: planner.id,
+          name: planner.name,
+          toml: planner.toml_config,
+          bucket_id: planner.bucket_id
+        };
+        this.plannerFormMode = 'edit';
+      } catch (e) {
+        this.plannerError = e.message || 'Failed to load planner';
+        console.error('Failed to load planner:', e);
+      } finally {
+        this.plannerLoading = false;
+      }
+    },
+
+    startCreatePlanner() {
+      this.selectedPlannerId = '';
+      this.plannerForm = {
+        id: '',
+        name: '',
+        toml: '# New planner configuration\n',
+        bucket_id: null
+      };
+      this.plannerFormMode = 'create';
+      this.plannerError = null;
+    },
+
+    loadPlannerTemplate(templateName) {
+      const templates = {
+        conservative: {
+          name: 'Conservative Strategy',
+          toml: `[planner]
+name = "Conservative Strategy"
+description = "Low-risk, value-focused investment strategy"
+
+[[calculators]]
+name = "value"
+type = "value"
+weight = 2.0
+
+[[calculators]]
+name = "quality"
+type = "quality"
+weight = 1.5
+
+[[calculators]]
+name = "low_volatility"
+type = "low_volatility"
+weight = 1.0
+
+[[patterns]]
+name = "diversification"
+type = "diversification"
+min_holdings = 15
+max_concentration = 0.15
+
+[[generators]]
+name = "incremental"
+type = "incremental"
+max_depth = 3
+`
+        },
+        balanced: {
+          name: 'Balanced Growth',
+          toml: `[planner]
+name = "Balanced Growth"
+description = "Balanced approach combining growth and value"
+
+[[calculators]]
+name = "momentum"
+type = "momentum"
+weight = 1.5
+
+[[calculators]]
+name = "value"
+type = "value"
+weight = 1.5
+
+[[calculators]]
+name = "growth"
+type = "growth"
+weight = 1.0
+
+[[patterns]]
+name = "sector_balance"
+type = "sector_balance"
+max_sector_weight = 0.30
+
+[[generators]]
+name = "combinatorial"
+type = "combinatorial"
+max_depth = 5
+max_candidates = 10
+`
+        },
+        aggressive: {
+          name: 'Aggressive Growth',
+          toml: `[planner]
+name = "Aggressive Growth"
+description = "High-growth, momentum-driven strategy"
+
+[[calculators]]
+name = "momentum"
+type = "momentum"
+weight = 2.5
+
+[[calculators]]
+name = "growth"
+type = "growth"
+weight = 2.0
+
+[[calculators]]
+name = "small_cap_premium"
+type = "size"
+weight = 1.0
+
+[[patterns]]
+name = "high_conviction"
+type = "concentration"
+min_holdings = 8
+max_concentration = 0.25
+
+[[generators]]
+name = "opportunistic"
+type = "opportunistic"
+max_depth = 7
+enable_combinatorial = true
+`
+        }
+      };
+
+      const template = templates[templateName];
+      if (template) {
+        this.plannerForm.name = template.name;
+        this.plannerForm.toml = template.toml;
+        this.showMessage(`Loaded ${template.name} template`, 'success');
+      }
+    },
+
+    async savePlanner() {
+      this.plannerLoading = true;
+      this.plannerError = null;
+      try {
+        // Validate TOML first
+        const validation = await API.validatePlannerToml(this.plannerForm.toml);
+        if (!validation.valid) {
+          this.plannerError = validation.error;
+          this.plannerLoading = false;
+          return;
+        }
+
+        if (this.plannerFormMode === 'create') {
+          await API.createPlanner({
+            name: this.plannerForm.name,
+            toml_config: this.plannerForm.toml,
+            bucket_id: this.plannerForm.bucket_id
+          });
+          this.showMessage('Planner created successfully', 'success');
+        } else {
+          await API.updatePlanner(this.plannerForm.id, {
+            name: this.plannerForm.name,
+            toml_config: this.plannerForm.toml,
+            bucket_id: this.plannerForm.bucket_id || ''
+          });
+          this.showMessage('Planner updated successfully', 'success');
+        }
+
+        // Reload planners list
+        await this.fetchPlanners();
+
+        // Reset form
+        this.plannerFormMode = 'none';
+        this.selectedPlannerId = '';
+      } catch (e) {
+        this.plannerError = e.message || 'Failed to save planner';
+        console.error('Failed to save planner:', e);
+      } finally {
+        this.plannerLoading = false;
+      }
+    },
+
+    async deletePlanner() {
+      if (!confirm('Are you sure you want to delete this planner configuration?')) {
+        return;
+      }
+      this.plannerLoading = true;
+      this.plannerError = null;
+      try {
+        await API.deletePlanner(this.plannerForm.id);
+        this.showMessage('Planner deleted successfully', 'success');
+        await this.fetchPlanners();
+        this.plannerFormMode = 'none';
+        this.selectedPlannerId = '';
+      } catch (e) {
+        this.plannerError = e.message || 'Failed to delete planner';
+        console.error('Failed to delete planner:', e);
+      } finally {
+        this.plannerLoading = false;
+      }
+    },
+
+    async applyPlannerConfig() {
+      if (!this.plannerForm.id || !this.plannerForm.bucket_id) {
+        this.plannerError = 'Cannot apply: planner has no associated bucket';
+        return;
+      }
+      this.plannerLoading = true;
+      this.plannerError = null;
+      try {
+        const result = await API.applyPlanner(this.plannerForm.id);
+        this.showMessage(
+          `Planner applied successfully for bucket ${result.bucket_id}`,
+          'success'
+        );
+      } catch (e) {
+        this.plannerError = e.message || 'Failed to apply planner';
+        console.error('Failed to apply planner:', e);
+      } finally {
+        this.plannerLoading = false;
+      }
+    },
+
+    async togglePlannerHistory() {
+      this.showPlannerHistory = !this.showPlannerHistory;
+      if (this.showPlannerHistory && this.plannerHistory.length === 0) {
+        await this.fetchPlannerHistory();
+      }
+    },
+
+    async fetchPlannerHistory() {
+      if (!this.plannerForm.id) return;
+      this.plannerHistoryLoading = true;
+      try {
+        this.plannerHistory = await API.fetchPlannerHistory(this.plannerForm.id);
+      } catch (e) {
+        console.error('Failed to fetch planner history:', e);
+        this.plannerHistory = [];
+      } finally {
+        this.plannerHistoryLoading = false;
+      }
+    },
+
+    restorePlannerVersion(historyEntry) {
+      if (!confirm(`Restore configuration from ${new Date(historyEntry.saved_at).toLocaleString()}?`)) {
+        return;
+      }
+      // Update form with historical values
+      this.plannerForm.name = historyEntry.name;
+      this.plannerForm.toml = historyEntry.toml_config;
+      this.showMessage('Historical version loaded. Click Save to apply.', 'success');
+      this.showPlannerHistory = false;
+    },
+
+    showPlannerDiff(historyEntry) {
+      // Show diff between historical version and current version
+      if (!window.createDiffViewer) {
+        this.showMessage('Diff viewer not available', 'error');
+        return;
+      }
+
+      const oldText = historyEntry.toml_config || '';
+      const newText = this.plannerForm.toml || '';
+      const oldLabel = `${historyEntry.name} (${new Date(historyEntry.saved_at).toLocaleString()})`;
+      const newLabel = 'Current version';
+
+      const diffHtml = window.createDiffViewer(oldText, newText, oldLabel, newLabel);
+
+      // Store diff HTML to be displayed in modal
+      this.plannerDiffHtml = diffHtml;
+      this.showPlannerDiffModal = true;
+    },
+
+    closePlannerDiff() {
+      this.showPlannerDiffModal = false;
+      this.plannerDiffHtml = '';
+    },
+
+    closePlannerManagement() {
+      this.showPlannerManagementModal = false;
+      this.plannerFormMode = 'none';
+      this.selectedPlannerId = '';
+      this.plannerError = null;
+      this.showPlannerHistory = false;
+      this.plannerHistory = [];
 
     // Bucket/Universe Management
     async createUniverse() {

@@ -155,7 +155,9 @@ async def _check_cash_accumulation(
     )
 
     # Calculate min_trade_size using same logic as rebalancing service
-    from app.application.services.rebalancing_service import calculate_min_trade_amount
+    from app.modules.rebalancing.services.rebalancing_service import (
+        calculate_min_trade_amount,
+    )
 
     min_trade_size = calculate_min_trade_amount(
         transaction_cost_fixed=transaction_cost_fixed,

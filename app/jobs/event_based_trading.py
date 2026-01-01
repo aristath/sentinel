@@ -258,6 +258,7 @@ async def _wait_for_planning_completion():
             )
 
             # Apply pending orders
+            # Use default allow_negative_cash=False for safety in production
             adjusted_position_dicts, adjusted_cash_balances = (
                 apply_pending_orders_to_portfolio(
                     position_dicts_for_adjustment, cash_balances_dict, pending_orders
