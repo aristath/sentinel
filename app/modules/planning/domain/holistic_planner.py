@@ -25,12 +25,20 @@ All sequences enforce rigid ordering: sells first, then buys.
 """
 
 import asyncio
+import gc
 import hashlib
 import json
 import logging
 from dataclasses import dataclass, field
 from itertools import combinations
 from typing import Dict, List, Optional, Set, Tuple
+
+try:
+    import psutil
+
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
 
 from app.domain.models import Position, Security
 from app.domain.portfolio_hash import generate_portfolio_hash
@@ -2732,6 +2740,14 @@ async def process_planner_incremental(
         f"in batch of {len(next_sequences)} sequences"
     )
 
+    # Log memory state before batch processing (Arduino-Q monitoring)
+    if PSUTIL_AVAILABLE:
+        mem = psutil.virtual_memory()
+        logger.info(
+            f"Starting batch evaluation: {len(next_sequences)} sequences, "
+            f"Memory: {mem.percent:.1f}% used ({mem.used / 1024**3:.2f}GB / {mem.total / 1024**3:.2f}GB)"
+        )
+
     for seq_data in next_sequences:
         sequence_hash = seq_data["sequence_hash"]
 
@@ -2836,6 +2852,23 @@ async def process_planner_incremental(
                 )
             # Continue processing other sequences
             continue
+
+    # Explicit garbage collection after batch to free memory (Arduino-Q optimization)
+    gc.collect()
+
+    # Log memory state after batch processing
+    if PSUTIL_AVAILABLE:
+        mem = psutil.virtual_memory()
+        logger.info(
+            f"Batch complete: {len(next_sequences)} sequences evaluated, "
+            f"Best score: {best_score_in_batch:.3f}, "
+            f"Memory: {mem.percent:.1f}% ({mem.used / 1024**3:.2f}GB)"
+        )
+        if mem.percent > 75:
+            logger.warning(
+                f"High memory usage after batch: {mem.percent:.1f}% "
+                f"({mem.used / 1024**3:.2f}GB / {mem.total / 1024**3:.2f}GB)"
+            )
 
     # Update best result if better found
     if best_in_batch:

@@ -5,8 +5,16 @@ It replaces the monolithic holistic_planner.py functions with a composable,
 registry-based approach.
 """
 
+import gc
 import logging
 from typing import Dict, List, Optional, Set, Tuple
+
+try:
+    import psutil
+
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    PSUTIL_AVAILABLE = False
 
 from app.domain.models import Position, Security
 from app.modules.planning.domain.calculations.context import (
@@ -527,6 +535,14 @@ class HolisticPlanner:
                 await self.settings_repo.get_float("enable_multi_timeframe", 0.0) == 1.0
             )
 
+        # Log initial memory state for Arduino-Q monitoring
+        if PSUTIL_AVAILABLE:
+            mem = psutil.virtual_memory()
+            logger.info(
+                f"Starting sequence evaluation: {len(sequences)} sequences, "
+                f"Memory: {mem.percent:.1f}% used ({mem.used / 1024**3:.2f}GB / {mem.total / 1024**3:.2f}GB)"
+            )
+
         for i, sequence in enumerate(sequences):
             # Simulate sequence
             end_context, end_cash = await simulate_sequence(
@@ -562,10 +578,47 @@ class HolisticPlanner:
                 best_sequence = sequence
                 best_breakdown = breakdown
 
-            if (i + 1) % 10 == 0:
-                logger.info(f"Evaluated {i + 1}/{len(sequences)} sequences...")
+            # Progress logging with memory monitoring (every 50 sequences)
+            if (i + 1) % 50 == 0:
+                progress_pct = ((i + 1) / len(sequences)) * 100
+                if PSUTIL_AVAILABLE:
+                    mem = psutil.virtual_memory()
+                    logger.info(
+                        f"Progress: {i + 1}/{len(sequences)} ({progress_pct:.1f}%), "
+                        f"Best score: {best_score:.3f}, "
+                        f"Memory: {mem.percent:.1f}% ({mem.used / 1024**3:.2f}GB)"
+                    )
+                    # Warn if memory usage high on Arduino-Q
+                    if mem.percent > 75:
+                        logger.warning(
+                            f"High memory usage detected: {mem.percent:.1f}% "
+                            f"({mem.used / 1024**3:.2f}GB / {mem.total / 1024**3:.2f}GB)"
+                        )
+                else:
+                    logger.info(
+                        f"Progress: {i + 1}/{len(sequences)} ({progress_pct:.1f}%), "
+                        f"Best score: {best_score:.3f}"
+                    )
 
-        logger.info(f"Best sequence score: {best_score:.3f}")
+                # Explicit garbage collection every 50 sequences to free memory
+                # Critical for Arduino-Q's 2GB RAM constraint
+                gc.collect()
+
+        logger.info(
+            f"Evaluation complete: Best sequence score: {best_score:.3f} "
+            f"(from {len(sequences)} sequences)"
+        )
+
+        # Final cleanup
+        gc.collect()
+
+        if PSUTIL_AVAILABLE:
+            mem = psutil.virtual_memory()
+            logger.info(
+                f"Final memory state: {mem.percent:.1f}% used "
+                f"({mem.used / 1024**3:.2f}GB / {mem.total / 1024**3:.2f}GB)"
+            )
+
         return best_sequence, best_score, best_breakdown
 
     async def _build_plan(
