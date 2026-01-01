@@ -520,6 +520,13 @@ class HolisticPlanner:
         best_score = 0.0
         best_breakdown = {}
 
+        # Fetch multi-timeframe setting once before loop (memory optimization)
+        enable_multi_timeframe = False
+        if self.settings_repo:
+            enable_multi_timeframe = (
+                await self.settings_repo.get_float("enable_multi_timeframe", 0.0) == 1.0
+            )
+
         for i, sequence in enumerate(sequences):
             # Simulate sequence
             end_context, end_cash = await simulate_sequence(
@@ -538,21 +545,16 @@ class HolisticPlanner:
                 metrics_cache=self.metrics_cache,
             )
 
-            # Apply multi-timeframe if enabled
-            if self.settings_repo:
-                enable_multi_timeframe = (
-                    await self.settings_repo.get_float("enable_multi_timeframe", 0.0)
-                    == 1.0
+            # Apply multi-timeframe if enabled (using pre-fetched setting)
+            if enable_multi_timeframe:
+                score, breakdown = await evaluate_with_multi_timeframe(
+                    end_context=end_context,
+                    sequence=sequence,
+                    base_score=score,
+                    breakdown=breakdown,
+                    transaction_cost_fixed=eval_context.transaction_cost_fixed,
+                    transaction_cost_percent=eval_context.transaction_cost_percent,
                 )
-                if enable_multi_timeframe:
-                    score, breakdown = await evaluate_with_multi_timeframe(
-                        end_context=end_context,
-                        sequence=sequence,
-                        base_score=score,
-                        breakdown=breakdown,
-                        transaction_cost_fixed=eval_context.transaction_cost_fixed,
-                        transaction_cost_percent=eval_context.transaction_cost_percent,
-                    )
 
             # Track best
             if score > best_score:
