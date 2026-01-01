@@ -108,7 +108,9 @@ class PlannerManagementModal extends HTMLElement {
                   </div>
                 </div>
                 <textarea
+                  id="planner-toml-textarea"
                   x-model="$store.app.plannerForm.toml"
+                  x-init="setTimeout(() => { if (window.initTOMLHighlighter && $el.offsetParent) { $el._highlighter = initTOMLHighlighter($el); } }, 100)"
                   class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-xs text-gray-100 font-mono focus:border-blue-500 focus:outline-none resize-none"
                   rows="25"
                   placeholder="# Planner configuration in TOML format&#10;# Example:&#10;[planner]&#10;name = &quot;My Strategy&quot;&#10;&#10;[[calculators]]&#10;name = &quot;momentum&quot;&#10;# ... calculator configuration"
