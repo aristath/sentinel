@@ -84,6 +84,10 @@ class PlanningParameters(BaseModel):
 
     # Filtering
     enable_correlation_aware: bool = True
+    # Early termination settings
+    enable_early_termination: bool = True
+    min_batches_to_evaluate: int = Field(default=2, ge=1, le=20)
+    plateau_threshold: int = Field(default=3, ge=1, le=10)
 
     # Evaluation features
     enable_multi_objective: bool = False
