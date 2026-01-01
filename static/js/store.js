@@ -117,6 +117,9 @@ document.addEventListener('alpine:init', () => {
     showPlannerManagementModal: false,     // Modal visibility
     plannerLoading: false,                 // Loading state
     plannerError: null,                    // Validation/save errors
+    showPlannerHistory: false,             // History viewer visibility
+    plannerHistory: [],                    // Version history entries
+    plannerHistoryLoading: false,          // History loading state
 
     // Fetch All Data
     async fetchAll() {
@@ -927,11 +930,44 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
+    async togglePlannerHistory() {
+      this.showPlannerHistory = !this.showPlannerHistory;
+      if (this.showPlannerHistory && this.plannerHistory.length === 0) {
+        await this.fetchPlannerHistory();
+      }
+    },
+
+    async fetchPlannerHistory() {
+      if (!this.plannerForm.id) return;
+      this.plannerHistoryLoading = true;
+      try {
+        this.plannerHistory = await API.fetchPlannerHistory(this.plannerForm.id);
+      } catch (e) {
+        console.error('Failed to fetch planner history:', e);
+        this.plannerHistory = [];
+      } finally {
+        this.plannerHistoryLoading = false;
+      }
+    },
+
+    restorePlannerVersion(historyEntry) {
+      if (!confirm(`Restore configuration from ${new Date(historyEntry.saved_at).toLocaleString()}?`)) {
+        return;
+      }
+      // Update form with historical values
+      this.plannerForm.name = historyEntry.name;
+      this.plannerForm.toml = historyEntry.toml_config;
+      this.showMessage('Historical version loaded. Click Save to apply.', 'success');
+      this.showPlannerHistory = false;
+    },
+
     closePlannerManagement() {
       this.showPlannerManagementModal = false;
       this.plannerFormMode = 'none';
       this.selectedPlannerId = '';
       this.plannerError = null;
+      this.showPlannerHistory = false;
+      this.plannerHistory = [];
     },
 
     // Trading Mode

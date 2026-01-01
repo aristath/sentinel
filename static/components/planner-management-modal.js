@@ -74,7 +74,14 @@ class PlannerManagementModal extends HTMLElement {
 
               <!-- TOML Configuration Textarea -->
               <div>
-                <label class="block text-sm text-gray-300 mb-1">TOML Configuration *</label>
+                <div class="flex items-center justify-between mb-1">
+                  <label class="block text-sm text-gray-300">TOML Configuration *</label>
+                  <button x-show="$store.app.plannerFormMode === 'edit'"
+                          @click="$store.app.togglePlannerHistory()"
+                          class="text-xs text-blue-400 hover:text-blue-300 transition-colors">
+                    <span x-text="$store.app.showPlannerHistory ? '▼ Hide History' : '▶ View History'"></span>
+                  </button>
+                </div>
                 <textarea
                   x-model="$store.app.plannerForm.toml"
                   class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-xs text-gray-100 font-mono focus:border-blue-500 focus:outline-none resize-none"
@@ -82,6 +89,36 @@ class PlannerManagementModal extends HTMLElement {
                   placeholder="# Planner configuration in TOML format&#10;# Example:&#10;[planner]&#10;name = &quot;My Strategy&quot;&#10;&#10;[[calculators]]&#10;name = &quot;momentum&quot;&#10;# ... calculator configuration"
                   spellcheck="false"></textarea>
                 <p class="text-xs text-gray-500 mt-1">Configure planner modules, calculators, patterns, and generators in TOML format</p>
+              </div>
+
+              <!-- Version History -->
+              <div x-show="$store.app.showPlannerHistory && $store.app.plannerFormMode === 'edit'"
+                   x-transition
+                   class="border border-gray-700 rounded p-3 bg-gray-800/50">
+                <h4 class="text-sm font-semibold text-gray-200 mb-2">Version History</h4>
+                <div x-show="$store.app.plannerHistoryLoading" class="text-center py-4">
+                  <span class="inline-block animate-spin text-lg">&#9696;</span>
+                  <p class="text-xs text-gray-400 mt-1">Loading history...</p>
+                </div>
+                <div x-show="!$store.app.plannerHistoryLoading && $store.app.plannerHistory.length === 0"
+                     class="text-sm text-gray-400 py-2">
+                  No version history yet. History is created automatically when you save changes.
+                </div>
+                <div x-show="!$store.app.plannerHistoryLoading && $store.app.plannerHistory.length > 0"
+                     class="space-y-2 max-h-60 overflow-y-auto">
+                  <template x-for="(entry, index) in $store.app.plannerHistory" :key="entry.id">
+                    <div class="bg-gray-900 border border-gray-700 rounded p-2 text-xs">
+                      <div class="flex items-center justify-between mb-1">
+                        <span class="text-gray-300 font-semibold" x-text="entry.name"></span>
+                        <span class="text-gray-500" x-text="new Date(entry.saved_at).toLocaleString()"></span>
+                      </div>
+                      <button @click="$store.app.restorePlannerVersion(entry)"
+                              class="text-blue-400 hover:text-blue-300 text-xs">
+                        Restore this version
+                      </button>
+                    </div>
+                  </template>
+                </div>
               </div>
 
               <!-- Validation Errors -->
