@@ -53,9 +53,9 @@ backup_existing_configs() {
 generate_env_file() {
     local app_dir="/home/arduino/arduino-trader"
     local env_file="${app_dir}/.env"
-    local env_example="${SCRIPT_DIR}/.env.example"
+    local env_example="${SCRIPT_DIR}/.env.example.microservices"
 
-    # Copy from .env.example and replace API credentials
+    # Copy from .env.example.microservices and replace API credentials
     if [ -f "$env_example" ]; then
         cp "$env_example" "$env_file"
     else
