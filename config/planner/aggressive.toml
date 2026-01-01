@@ -1,89 +1,234 @@
-# Aggressive Planner Configuration
-# Active trading strategy with all features enabled.
+# =============================================================================
+# AGGRESSIVE PLANNER CONFIGURATION
+# =============================================================================
+#
+# PHILOSOPHY:
+# This configuration implements an active trading strategy focused on:
+# - Maximum opportunity exploitation
+# - More frequent trading and rebalancing
+# - Advanced evaluation features
+# - Complex multi-step strategies
+# - Wider risk tolerance for higher potential returns
+# - Sophisticated optimization techniques
+#
+# WHEN TO USE:
+# - During bull markets or trending conditions
+# - When you can actively monitor and manage the portfolio
+# - For taxable accounts where you can harvest losses
+# - When transaction costs are low (discount brokers)
+# - For satellite/tactical portfolios
+# - When you want maximum portfolio optimization
+# - For shorter time horizons (1-3 years)
+#
+# COMPARED TO DEFAULT:
+# - More opportunities identified (lower priority threshold)
+# - Relaxed eligibility rules (shorter hold periods)
+# - Complex strategies (higher max depth)
+# - Wider risk tolerance (looser stop loss)
+# - Less cost-conscious (lower cost penalty)
+# - Advanced features enabled (multi-objective, stochastic, etc.)
+#
+# WARNING:
+# This configuration generates significantly more trading activity.
+# Ensure you understand the tax implications and transaction costs.
+# Not suitable for retirement accounts or buy-and-hold strategies.
+#
+# For detailed explanations of each setting, see default.toml
+#
+# =============================================================================
 
 [planner]
 name = "aggressive"
 description = "Aggressive strategy with active trading and rebalancing"
 
-# Global settings
-max_depth = 7                           # More actions per sequence
-max_opportunities_per_category = 10     # More opportunities
-priority_threshold = 0.2                # Lower threshold (more opportunities)
+# -----------------------------------------------------------------------------
+# SEARCH DEPTH AND BREADTH - Aggressive = Complex Strategies
+# -----------------------------------------------------------------------------
+
+# Up to 7 actions per sequence (vs 5 in default)
+# Aggressive approach exploits complex multi-step opportunities
+# Example: "sell A, sell B, buy C, buy D, buy E, buy F, buy G"
+# [MIN: 1, MAX: 10, DEFAULT: 7]
+max_depth = 7
+
+# More opportunities to choose from (vs 5 in default)
+# Aggressive approach considers many possibilities
+# [MIN: 1, MAX: 20, DEFAULT: 10]
+max_opportunities_per_category = 10
+
+# Lower threshold = more opportunities (vs 0.3 in default)
+# Aggressive approach acts on weaker signals
+# [MIN: 0.0, MAX: 1.0, DEFAULT: 0.2]
+# At 0.2, opportunities with 20%+ priority are considered
+priority_threshold = 0.2
+
+# -----------------------------------------------------------------------------
+# DIVERSITY VS PRIORITY - Aggressive = Diversity-Focused
+# -----------------------------------------------------------------------------
+
+# Enable diversity to avoid over-concentration
 enable_diverse_selection = true
-diversity_weight = 0.4                  # Higher diversity weight
 
-# Transaction costs
-transaction_cost_fixed = 2.0            # Match old planner defaults
-transaction_cost_percent = 0.002        # Match old planner defaults
+# Higher diversity weight = favor portfolio balance (vs 0.3 in default)
+# Aggressive investors want diverse exposure for risk management
+# [MIN: 0.0, MAX: 1.0, DEFAULT: 0.4]
+diversity_weight = 0.4
 
-# Trade permissions
+# -----------------------------------------------------------------------------
+# TRANSACTION COSTS - Same as Default
+# -----------------------------------------------------------------------------
+
+# Standard transaction costs
+# (Aggressive traders should use low-cost brokers!)
+transaction_cost_fixed = 2.0
+transaction_cost_percent = 0.002
+
+# -----------------------------------------------------------------------------
+# TRADE PERMISSIONS
+# -----------------------------------------------------------------------------
+
 allow_sell = true
 allow_buy = true
 
-# Eligibility and risk management (aggressive = relaxed)
-min_hold_days = 60                      # Shorter hold period
-sell_cooldown_days = 120                # Shorter cooldown
-max_loss_threshold = -0.25              # Wider stop loss (-25%)
+# -----------------------------------------------------------------------------
+# ELIGIBILITY AND RISK MANAGEMENT - Aggressive = Relaxed Rules
+# -----------------------------------------------------------------------------
 
-# Search and optimization (aggressive = larger search)
-beam_width = 20                         # Wider beam
-cost_penalty_factor = 0.05              # Lower cost penalty
+# Shorter minimum hold period (vs 90 in default)
+# Aggressive traders can trade more frequently
+# Higher tax burden but more responsive to opportunities
+# [MIN: 0, MAX: 365, DEFAULT: 60]
+min_hold_days = 60
 
-# Advanced evaluation features (enabled for aggressive)
-enable_multi_objective = true           # Multi-objective optimization
-enable_stochastic_scenarios = true      # Stochastic price scenarios
-enable_monte_carlo_paths = false        # Monte Carlo (too expensive)
-monte_carlo_path_count = 200            # More paths if enabled
-enable_multi_timeframe = true           # Multi-timeframe evaluation
-enable_market_regime_scenarios = true   # Market regime scenarios
+# Shorter cooldown after selling (vs 180 in default)
+# Can re-enter positions faster if conditions change
+# [MIN: 0, MAX: 365, DEFAULT: 120]
+sell_cooldown_days = 120
 
-# ============================================================================
-# OPPORTUNITY CALCULATORS
-# All enabled with aggressive parameters
-# ============================================================================
+# Looser stop loss (vs -0.20 in default)
+# Aggressive investors tolerate higher drawdowns
+# -0.25 = sell if position loses 25% (vs 20% in default)
+# Allows positions more room to fluctuate
+# [MIN: -1.0, MAX: 0.0, DEFAULT: -0.25]
+max_loss_threshold = -0.25
 
+# -----------------------------------------------------------------------------
+# SEARCH ALGORITHM PARAMETERS - Aggressive = Exhaustive Search
+# -----------------------------------------------------------------------------
+
+# Wider beam search (vs 10 in default)
+# Explores many more possibilities
+# Higher memory usage and computation time
+# [MIN: 1, MAX: 50, DEFAULT: 20]
+beam_width = 20
+
+# Lower cost penalty (vs 0.1 in default)
+# Aggressive traders focus on returns over costs
+# More willing to trade frequently if profitable
+# [MIN: 0.0, MAX: 1.0, DEFAULT: 0.05]
+cost_penalty_factor = 0.05
+
+# -----------------------------------------------------------------------------
+# ADVANCED EVALUATION FEATURES - Mostly Enabled for Aggressive
+# -----------------------------------------------------------------------------
+
+# Enable multi-objective Pareto optimization
+# Finds solutions balancing return, risk, diversity, and cost
+# More sophisticated than single-objective optimization
+enable_multi_objective = true
+
+# Enable stochastic price scenarios
+# Tests sequences under ±5% and ±10% price movements
+# Finds robust sequences that work across scenarios
+# Computationally expensive but more robust
+enable_stochastic_scenarios = true
+
+# Disable Monte Carlo (too expensive even for aggressive)
+# Would require hundreds of random price path simulations
+# Enable only for critical decisions or research
+enable_monte_carlo_paths = false
+
+# Number of MC paths if ever enabled
+# Higher for aggressive = more confidence in results
+# [MIN: 10, MAX: 500, DEFAULT: 200]
+monte_carlo_path_count = 200
+
+# Enable multi-timeframe evaluation
+# Balances short-term (1y), medium-term (3y), and long-term (5y) outcomes
+# Prevents purely short-term thinking
+enable_multi_timeframe = true
+
+# Enable market regime scenarios
+# Plans for bull/bear/sideways market transitions
+# More robust to changing market conditions
+enable_market_regime_scenarios = true
+
+# =============================================================================
+# OPPORTUNITY CALCULATORS - All Enabled with Aggressive Parameters
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# PROFIT TAKING - Lower threshold for aggressive approach
+# -----------------------------------------------------------------------------
 [opportunity_calculators.profit_taking]
 enabled = true
 [opportunity_calculators.profit_taking.params]
-windfall_threshold = 0.20               # Lower threshold (20%)
-priority_weight = 1.0
+windfall_threshold = 0.20              # 20% gain triggers consideration (vs 30% default)
+priority_weight = 1.3                  # Higher weight than default
 
+# -----------------------------------------------------------------------------
+# AVERAGING DOWN - Enabled for aggressive approach
+# -----------------------------------------------------------------------------
+# Aggressive investors actively average down on quality dips
 [opportunity_calculators.averaging_down]
 enabled = true
 [opportunity_calculators.averaging_down.params]
-dip_threshold = -0.15                   # Smaller dips
-min_quality_score = 0.5
-priority_weight = 0.9
+dip_threshold = -0.15                  # 15% loss triggers consideration (vs 20% default)
+min_quality_score = 0.6                # Moderate quality threshold
+priority_weight = 1.1                  # Higher weight than default
 
+# -----------------------------------------------------------------------------
+# OPPORTUNITY BUYS - Lower quality threshold
+# -----------------------------------------------------------------------------
 [opportunity_calculators.opportunity_buys]
 enabled = true
 [opportunity_calculators.opportunity_buys.params]
-min_quality_score = 0.6
-priority_weight = 1.0
+min_quality_score = 0.6                # Accept moderate quality (vs 0.7 default)
+priority_weight = 1.2                  # Higher weight than default
 
+# -----------------------------------------------------------------------------
+# REBALANCE SELLS - Enabled with tight bands
+# -----------------------------------------------------------------------------
 [opportunity_calculators.rebalance_sells]
 enabled = true
 [opportunity_calculators.rebalance_sells.params]
-overweight_threshold = 0.01             # 1% overweight (aggressive)
-priority_weight = 0.9
+overweight_threshold = 0.01            # 1% overweight triggers action (vs 2% default)
+priority_weight = 1.0                  # Higher weight than default
 
+# -----------------------------------------------------------------------------
+# REBALANCE BUYS - Enabled with tight bands
+# -----------------------------------------------------------------------------
 [opportunity_calculators.rebalance_buys]
 enabled = true
 [opportunity_calculators.rebalance_buys.params]
-underweight_threshold = 0.01            # 1% underweight (aggressive)
-priority_weight = 0.9
+underweight_threshold = 0.01           # 1% underweight triggers action (vs 2% default)
+priority_weight = 1.0                  # Higher weight than default
 
+# -----------------------------------------------------------------------------
+# WEIGHT-BASED - Enabled with tight threshold
+# -----------------------------------------------------------------------------
 [opportunity_calculators.weight_based]
 enabled = true
 [opportunity_calculators.weight_based.params]
-min_gap_threshold = 0.005               # Smaller gaps
-transaction_cost_fixed = 5.0
-transaction_cost_percent = 0.001
+min_gap_threshold = 0.005              # 0.5% gap triggers action (vs 1% default)
+transaction_cost_fixed = 2.0
+transaction_cost_percent = 0.002
 
-# ============================================================================
-# PATTERN GENERATORS
-# All patterns enabled
-# ============================================================================
+# =============================================================================
+# PATTERN GENERATORS - All Enabled for Maximum Flexibility
+# =============================================================================
+
+# Aggressive approach uses all available patterns
 
 [pattern_generators.direct_buy]
 enabled = true
@@ -141,34 +286,115 @@ enabled = true
 max_depth = 7
 
 [pattern_generators.adaptive]
-enabled = false                         # Requires portfolio_context
+enabled = true                         # Enabled for aggressive
+[pattern_generators.adaptive.params]
+max_depth = 7
 
 [pattern_generators.market_regime]
-enabled = false                         # Requires market_regime detection
+enabled = true                         # Enabled for aggressive
+[pattern_generators.market_regime.params]
+max_depth = 7
+market_regime = "bull"                 # Assume bull market for aggressive
 
-# ============================================================================
-# SEQUENCE GENERATORS
-# Enhanced combinatorial enabled for more exploration
-# ============================================================================
+# =============================================================================
+# SEQUENCE GENERATORS - Enhanced Combinatorial Enabled
+# =============================================================================
+
+# Aggressive approach uses sophisticated sequence generation
+# WARNING: This can create many sequences and slow down planning
 
 [sequence_generators.combinatorial]
-enabled = false                         # Too expensive even for aggressive
-
-[sequence_generators.enhanced_combinatorial]
-enabled = true
-[sequence_generators.enhanced_combinatorial.params]
-max_sells = 4
+# Basic combinatorial disabled - use enhanced version instead
+enabled = false
+[sequence_generators.combinatorial.params]
+max_sells = 5
 max_buys = 5
 priority_threshold = 0.2
 max_steps = 7
-max_combinations = 100                  # More combinations
-max_candidates = 15
+max_combinations = 100
+max_candidates = 20
 
-# ============================================================================
-# FILTERS
-# ============================================================================
+[sequence_generators.enhanced_combinatorial]
+enabled = true                         # Enabled for aggressive
+[sequence_generators.enhanced_combinatorial.params]
+max_sells = 5                          # More than default (4)
+max_buys = 5                           # More than default (4)
+priority_threshold = 0.2               # Lower than default (0.3)
+max_steps = 7                          # More than default (5)
+max_combinations = 100                 # More than default (50)
+max_candidates = 20                    # More than default (12)
+
+[sequence_generators.partial_execution]
+enabled = true                         # Enabled for aggressive
+[sequence_generators.partial_execution.params]
+fill_percentages = [0.5, 0.75, 1.0]   # Test partial fills
+
+[sequence_generators.constraint_relaxation]
+enabled = true                         # Enabled for aggressive
+[sequence_generators.constraint_relaxation.params]
+# Test "what if" scenarios by relaxing constraints
+relax_allow_sell = true
+relax_min_lot = true
+relax_max_position = true
+relax_cooldown = true
+
+# =============================================================================
+# FILTERS - Enabled with Relaxed Parameters
+# =============================================================================
+
+# Aggressive approach still filters but less strictly
 
 [filters.correlation_aware]
 enabled = true
 [filters.correlation_aware.params]
-correlation_threshold = 0.75            # More lenient (higher threshold)
+correlation_threshold = 0.8            # Relaxed correlation filter (vs 0.7 default)
+
+[filters.diversity]
+enabled = true
+[filters.diversity.params]
+diversity_weight = 0.4                 # Match global diversity_weight
+max_sequences = 100                    # More sequences (vs 50 default)
+
+[filters.eligibility]
+enabled = true
+[filters.eligibility.params]
+# Uses global settings (relaxed from default)
+
+[filters.recently_traded]
+enabled = true
+[filters.recently_traded.params]
+buy_cooldown_days = 15                 # Shorter cooldown (vs 30 default)
+sell_cooldown_days = 120               # Match sell_cooldown_days
+
+# =============================================================================
+# END OF AGGRESSIVE CONFIGURATION
+# =============================================================================
+#
+# SUMMARY:
+# This configuration trades frequently, exploits many opportunities, and uses
+# advanced optimization techniques. It maximizes portfolio performance at the
+# cost of higher turnover, transaction costs, and tax implications.
+#
+# Expected behavior:
+# - Plans generated 2-3x more frequently than default
+# - Complex 3-7 step sequences common
+# - Many opportunities identified (lower quality threshold)
+# - Higher transaction costs due to frequent trading
+# - Better portfolio optimization through active management
+# - Requires active monitoring and management
+#
+# IDEAL FOR:
+# - Taxable accounts with tax-loss harvesting
+# - Satellite/tactical allocations
+# - Bull markets or trending conditions
+# - Low-cost brokerage accounts
+# - Active traders who can monitor daily
+#
+# NOT SUITABLE FOR:
+# - Retirement accounts (tax-deferred)
+# - Buy-and-hold long-term investors
+# - High transaction cost environments
+# - Investors who prefer passive management
+# - Uncertain or volatile market conditions
+#
+# =============================================================================

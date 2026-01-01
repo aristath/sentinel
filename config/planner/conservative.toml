@@ -1,78 +1,204 @@
-# Conservative Planner Configuration
-# Minimal intervention strategy - only the highest priority actions.
+# =============================================================================
+# CONSERVATIVE PLANNER CONFIGURATION
+# =============================================================================
+#
+# PHILOSOPHY:
+# This configuration implements a minimal intervention strategy focused on:
+# - Only the highest-priority opportunities
+# - Longer holding periods and stricter rules
+# - Lower transaction costs through less frequent trading
+# - Simple, straightforward strategies
+# - Risk reduction through tighter stop losses
+#
+# WHEN TO USE:
+# - During uncertain market conditions
+# - When you prefer a hands-off approach
+# - For tax-advantaged accounts (minimize turnover)
+# - When transaction costs are high
+# - For retirement accounts with long time horizons
+# - When you want to reduce portfolio churn
+#
+# COMPARED TO DEFAULT:
+# - Fewer opportunities identified (higher priority threshold)
+# - Stricter eligibility rules (longer hold periods)
+# - Simpler strategies (lower max depth)
+# - Tighter risk management (tighter stop loss)
+# - More cost-conscious (higher cost penalty)
+# - Disabled advanced features (no multi-objective, stochastic, etc.)
+#
+# For detailed explanations of each setting, see default.toml
+#
+# =============================================================================
 
 [planner]
 name = "conservative"
 description = "Conservative strategy with minimal intervention"
 
-# Global settings
-max_depth = 2                           # Only 1-2 actions per sequence
-max_opportunities_per_category = 3      # Fewer opportunities
-priority_threshold = 0.5                # Higher threshold (only best opportunities)
+# -----------------------------------------------------------------------------
+# SEARCH DEPTH AND BREADTH - Conservative = Simpler Strategies
+# -----------------------------------------------------------------------------
+
+# Only 1-2 actions per sequence (vs 5 in default)
+# Conservative investors prefer simple, easy-to-understand plans
+# [MIN: 1, MAX: 10, DEFAULT: 2]
+max_depth = 2
+
+# Fewer opportunities to choose from (vs 5 in default)
+# Only the very best opportunities per category
+# [MIN: 1, MAX: 20, DEFAULT: 3]
+max_opportunities_per_category = 3
+
+# Higher threshold = only the best opportunities (vs 0.3 in default)
+# Conservative approach waits for clear, high-conviction signals
+# [MIN: 0.0, MAX: 1.0, DEFAULT: 0.5]
+# At 0.5, only opportunities with 50%+ priority are considered
+priority_threshold = 0.5
+
+# -----------------------------------------------------------------------------
+# DIVERSITY VS PRIORITY - Conservative = Priority-Focused
+# -----------------------------------------------------------------------------
+
+# Still enable diversity to maintain balanced portfolio
 enable_diverse_selection = true
-diversity_weight = 0.2                  # Prioritize priority over diversity
 
-# Transaction costs
-transaction_cost_fixed = 2.0            # Match old planner defaults
-transaction_cost_percent = 0.002        # Match old planner defaults
+# Lower diversity weight = prioritize best opportunities over balance (vs 0.3 in default)
+# Conservative investors prefer the best trades, even if less diverse
+# [MIN: 0.0, MAX: 1.0, DEFAULT: 0.2]
+diversity_weight = 0.2
 
-# Trade permissions
+# -----------------------------------------------------------------------------
+# TRANSACTION COSTS - Same as Default
+# -----------------------------------------------------------------------------
+
+# Standard transaction costs
+transaction_cost_fixed = 2.0
+transaction_cost_percent = 0.002
+
+# -----------------------------------------------------------------------------
+# TRADE PERMISSIONS
+# -----------------------------------------------------------------------------
+
 allow_sell = true
 allow_buy = true
 
-# Eligibility and risk management (conservative = stricter)
-min_hold_days = 120                     # Longer hold period
-sell_cooldown_days = 240                # Longer cooldown
-max_loss_threshold = -0.15              # Tighter stop loss (-15%)
+# -----------------------------------------------------------------------------
+# ELIGIBILITY AND RISK MANAGEMENT - Conservative = Stricter Rules
+# -----------------------------------------------------------------------------
 
-# Search and optimization (conservative = smaller search)
-beam_width = 5                          # Narrower beam
-cost_penalty_factor = 0.15              # Higher cost penalty
+# Longer minimum hold period (vs 90 in default)
+# Conservative investors give positions more time to work
+# Reduces tax burden and transaction costs
+# [MIN: 0, MAX: 365, DEFAULT: 120]
+min_hold_days = 120
 
-# Advanced evaluation features (disabled for conservative)
+# Longer cooldown after selling (vs 180 in default)
+# Prevents emotional re-buying, enforces patience
+# [MIN: 0, MAX: 365, DEFAULT: 240]
+sell_cooldown_days = 240
+
+# Tighter stop loss (vs -0.20 in default)
+# Conservative investors protect capital more aggressively
+# -0.15 = sell if position loses 15% (vs 20% in default)
+# [MIN: -1.0, MAX: 0.0, DEFAULT: -0.15]
+max_loss_threshold = -0.15
+
+# -----------------------------------------------------------------------------
+# SEARCH ALGORITHM PARAMETERS - Conservative = Focused Search
+# -----------------------------------------------------------------------------
+
+# Narrower beam search (vs 10 in default)
+# Focuses on fewer, higher-quality sequences
+# Faster execution, less memory usage
+# [MIN: 1, MAX: 50, DEFAULT: 5]
+beam_width = 5
+
+# Higher cost penalty (vs 0.1 in default)
+# Conservative investors are more cost-conscious
+# Strongly discourages frequent trading
+# [MIN: 0.0, MAX: 1.0, DEFAULT: 0.15]
+cost_penalty_factor = 0.15
+
+# -----------------------------------------------------------------------------
+# ADVANCED EVALUATION FEATURES - All Disabled for Conservative
+# -----------------------------------------------------------------------------
+
+# Conservative strategy uses simple, fast evaluation
+# Disable all computationally expensive features
 enable_multi_objective = false
 enable_stochastic_scenarios = false
 enable_monte_carlo_paths = false
-monte_carlo_path_count = 50
+monte_carlo_path_count = 50            # Lower count if ever enabled
 enable_multi_timeframe = false
 enable_market_regime_scenarios = false
 
-# ============================================================================
-# OPPORTUNITY CALCULATORS
-# ============================================================================
+# =============================================================================
+# OPPORTUNITY CALCULATORS - Enabled with Conservative Parameters
+# =============================================================================
 
+# -----------------------------------------------------------------------------
+# PROFIT TAKING - Higher threshold for conservative approach
+# -----------------------------------------------------------------------------
 [opportunity_calculators.profit_taking]
 enabled = true
 [opportunity_calculators.profit_taking.params]
-windfall_threshold = 0.40               # Higher threshold (40%)
-priority_weight = 1.5
-
-[opportunity_calculators.averaging_down]
-enabled = true
-[opportunity_calculators.averaging_down.params]
-dip_threshold = -0.25                   # Deeper dips only
-min_quality_score = 0.7                 # Higher quality only
+windfall_threshold = 0.40              # 40% gain required (vs 30% default)
 priority_weight = 1.2
 
+# -----------------------------------------------------------------------------
+# AVERAGING DOWN - Disabled for conservative approach
+# -----------------------------------------------------------------------------
+# Conservative investors typically avoid averaging down
+# Prefer to cut losses rather than add to losing positions
+[opportunity_calculators.averaging_down]
+enabled = false
+[opportunity_calculators.averaging_down.params]
+dip_threshold = -0.30                  # Would need 30% loss if enabled
+min_quality_score = 0.8                # Would need very high quality
+priority_weight = 0.8
+
+# -----------------------------------------------------------------------------
+# OPPORTUNITY BUYS - Higher quality threshold
+# -----------------------------------------------------------------------------
 [opportunity_calculators.opportunity_buys]
 enabled = true
 [opportunity_calculators.opportunity_buys.params]
-min_quality_score = 0.8                 # Very high quality only
-priority_weight = 1.3
+min_quality_score = 0.8                # Only excellent quality (vs 0.7 default)
+priority_weight = 1.0
 
+# -----------------------------------------------------------------------------
+# REBALANCE SELLS - Enabled with wider bands
+# -----------------------------------------------------------------------------
 [opportunity_calculators.rebalance_sells]
-enabled = false                         # Disable aggressive rebalancing
+enabled = true
+[opportunity_calculators.rebalance_sells.params]
+overweight_threshold = 0.05            # 5% overweight required (vs 2% default)
+priority_weight = 0.8
 
+# -----------------------------------------------------------------------------
+# REBALANCE BUYS - Enabled with wider bands
+# -----------------------------------------------------------------------------
 [opportunity_calculators.rebalance_buys]
-enabled = false                         # Disable aggressive rebalancing
+enabled = true
+[opportunity_calculators.rebalance_buys.params]
+underweight_threshold = 0.05           # 5% underweight required (vs 2% default)
+priority_weight = 0.9
 
+# -----------------------------------------------------------------------------
+# WEIGHT-BASED - Disabled for conservative approach
+# -----------------------------------------------------------------------------
+# Conservative approach relies on simpler rebalancing
 [opportunity_calculators.weight_based]
-enabled = false                         # Disable weight-based optimization
+enabled = false
+[opportunity_calculators.weight_based.params]
+min_gap_threshold = 0.03
+transaction_cost_fixed = 2.0
+transaction_cost_percent = 0.002
 
-# ============================================================================
-# PATTERN GENERATORS
-# Only simple, focused patterns
-# ============================================================================
+# =============================================================================
+# PATTERN GENERATORS - Only Simple Patterns Enabled
+# =============================================================================
+
+# Conservative approach uses straightforward patterns only
 
 [pattern_generators.direct_buy]
 enabled = true
@@ -85,62 +211,147 @@ enabled = true
 max_depth = 2
 
 [pattern_generators.rebalance]
-enabled = false
-
-[pattern_generators.averaging_down]
 enabled = true
+[pattern_generators.rebalance.params]
+max_depth = 2
+
+# Disabled - conservative doesn't average down
+[pattern_generators.averaging_down]
+enabled = false
 [pattern_generators.averaging_down.params]
 max_depth = 2
 
 [pattern_generators.single_best]
-enabled = true                          # Perfect for conservative approach
+enabled = true
 [pattern_generators.single_best.params]
 max_depth = 1
 
+# Disabled - too complex for conservative approach
 [pattern_generators.multi_sell]
 enabled = false
+[pattern_generators.multi_sell.params]
+max_depth = 2
 
+# Disabled - too complex for conservative approach
 [pattern_generators.mixed_strategy]
 enabled = false
+[pattern_generators.mixed_strategy.params]
+max_depth = 2
 
 [pattern_generators.opportunity_first]
 enabled = true
 [pattern_generators.opportunity_first.params]
 max_depth = 2
 
+# Disabled - too complex for conservative approach
 [pattern_generators.deep_rebalance]
 enabled = false
+[pattern_generators.deep_rebalance.params]
+max_depth = 2
 
 [pattern_generators.cash_generation]
-enabled = false
+enabled = true
+[pattern_generators.cash_generation.params]
+max_depth = 2
 
 [pattern_generators.cost_optimized]
-enabled = true                          # Minimize transaction costs
+enabled = true                         # Conservative values cost optimization
 [pattern_generators.cost_optimized.params]
 max_depth = 2
 
 [pattern_generators.adaptive]
 enabled = false
+[pattern_generators.adaptive.params]
+max_depth = 2
 
 [pattern_generators.market_regime]
 enabled = false
+[pattern_generators.market_regime.params]
+max_depth = 2
+market_regime = "sideways"
 
-# ============================================================================
-# SEQUENCE GENERATORS
-# Disable combinatorial (too many sequences)
-# ============================================================================
+# =============================================================================
+# SEQUENCE GENERATORS - All Disabled for Conservative
+# =============================================================================
+
+# Conservative approach doesn't need sophisticated sequence generation
+# Simple patterns are sufficient
 
 [sequence_generators.combinatorial]
 enabled = false
+[sequence_generators.combinatorial.params]
+max_sells = 2
+max_buys = 2
+priority_threshold = 0.5
+max_steps = 2
+max_combinations = 20
+max_candidates = 6
 
 [sequence_generators.enhanced_combinatorial]
-enabled = false
+enabled = false                        # Disabled for conservative
+[sequence_generators.enhanced_combinatorial.params]
+max_sells = 2
+max_buys = 2
+priority_threshold = 0.5
+max_steps = 2
+max_combinations = 20
+max_candidates = 6
 
-# ============================================================================
-# FILTERS
-# ============================================================================
+[sequence_generators.partial_execution]
+enabled = false
+[sequence_generators.partial_execution.params]
+fill_percentages = [1.0]               # Only full fills if enabled
+
+[sequence_generators.constraint_relaxation]
+enabled = false
+[sequence_generators.constraint_relaxation.params]
+relax_allow_sell = false
+relax_min_lot = false
+relax_max_position = false
+relax_cooldown = false
+
+# =============================================================================
+# FILTERS - All Enabled for Conservative Protection
+# =============================================================================
+
+# Conservative approach applies strict filtering
 
 [filters.correlation_aware]
 enabled = true
 [filters.correlation_aware.params]
-correlation_threshold = 0.6             # Stricter (lower threshold)
+correlation_threshold = 0.6            # Stricter correlation filter (vs 0.7 default)
+
+[filters.diversity]
+enabled = true
+[filters.diversity.params]
+diversity_weight = 0.2                 # Match global diversity_weight
+max_sequences = 20                     # Fewer sequences (vs 50 default)
+
+[filters.eligibility]
+enabled = true
+[filters.eligibility.params]
+# Uses global settings (stricter than default)
+
+[filters.recently_traded]
+enabled = true
+[filters.recently_traded.params]
+buy_cooldown_days = 60                 # Longer cooldown (vs 30 default)
+sell_cooldown_days = 240               # Match sell_cooldown_days
+
+# =============================================================================
+# END OF CONSERVATIVE CONFIGURATION
+# =============================================================================
+#
+# SUMMARY:
+# This configuration trades infrequently, holds positions longer, and only
+# acts on the highest-conviction opportunities. It minimizes costs, reduces
+# portfolio turnover, and implements stricter risk management.
+#
+# Expected behavior:
+# - Plans generated 50-70% less frequently than default
+# - Simple 1-2 step sequences
+# - Higher quality opportunities only
+# - Lower transaction costs due to less frequent trading
+# - Better tax efficiency due to longer holding periods
+#
+# =============================================================================
