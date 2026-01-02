@@ -49,8 +49,8 @@ async def update_display_ticker() -> None:
             logger.debug(f"Generated ticker text: '{ticker_text}'")
             set_text(ticker_text)
         else:
-            logger.warning("Ticker service returned empty text, setting fallback")
-            set_text("READY")
+            logger.debug("Ticker service returned empty text (will use STATS mode)")
+            set_text("")  # Empty string triggers STATS mode
     except Exception as e:
         logger.error(f"Failed to update display ticker: {e}", exc_info=True)
-        set_text("DISPLAY ERROR")
+        set_text("")  # Empty string triggers STATS mode

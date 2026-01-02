@@ -45,4 +45,8 @@ tailwindcss
 node_modules/
 package-lock.json
 
+# Go
+services/evaluator-go/evaluator-go
+services/evaluator-go/evaluator-go.exe
+
 .claude/

@@ -1,0 +1,52 @@
+name: Build Go Evaluator
+
+on:
+  push:
+    paths:
+      - 'services/evaluator-go/**'
+      - '.github/workflows/build-go.yml'
+    branches:
+      - main
+      - GO  # Also build on GO branch for testing
+
+jobs:
+  build:
+    name: Build ARM64 Binary
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'  # Use latest Go version
+
+      - name: Run tests
+        working-directory: services/evaluator-go
+        run: go test ./... -v
+
+      - name: Build ARM64 binary for Arduino Uno Q
+        working-directory: services/evaluator-go
+        run: |
+          GOOS=linux GOARCH=arm64 go build -o evaluator-go ./cmd/server
+          chmod +x evaluator-go
+
+      - name: Upload ARM64 binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: evaluator-arm64
+          path: services/evaluator-go/evaluator-go
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Create build summary
+        run: |
+          echo "### Go Evaluator Build Summary :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Platform:** Linux ARM64 (Arduino Uno Q)" >> $GITHUB_STEP_SUMMARY
+          echo "**Binary:** \`evaluator-go\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Size:** $(du -h services/evaluator-go/evaluator-go | cut -f1)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Download artifact from Actions tab to deploy to Arduino Uno Q" >> $GITHUB_STEP_SUMMARY
