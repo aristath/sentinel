@@ -13,6 +13,7 @@ import (
 
 	"github.com/aristath/arduino-trader/internal/config"
 	"github.com/aristath/arduino-trader/internal/database"
+	"github.com/aristath/arduino-trader/internal/modules/allocation"
 )
 
 // Config holds server configuration
@@ -101,6 +102,9 @@ func (s *Server) setupRoutes() {
 			r.Get("/status", s.handleSystemStatus)
 		})
 
+		// Allocation module (MIGRATED TO GO!)
+		s.setupAllocationRoutes(r)
+
 		// TODO: Add more routes as modules are migrated
 		// r.Route("/portfolio", func(r chi.Router) { ... })
 		// r.Route("/trading", func(r chi.Router) { ... })
@@ -109,6 +113,39 @@ func (s *Server) setupRoutes() {
 
 	// Serve static files (for dashboard)
 	// s.router.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
+}
+
+// setupAllocationRoutes configures allocation module routes
+func (s *Server) setupAllocationRoutes(r chi.Router) {
+	// Initialize allocation module components
+	allocRepo := allocation.NewRepository(s.db.Conn(), s.log)
+	groupingRepo := allocation.NewGroupingRepository(s.db.Conn(), s.log)
+	alertService := allocation.NewConcentrationAlertService(s.db.Conn(), s.log)
+	handler := allocation.NewHandler(allocRepo, groupingRepo, alertService, s.log, s.cfg.PythonServiceURL)
+
+	// Allocation routes (faithful translation of Python routes)
+	r.Route("/allocation", func(r chi.Router) {
+		r.Get("/targets", handler.HandleGetTargets)
+		r.Get("/current", handler.HandleGetCurrentAllocation)
+		r.Get("/deviations", handler.HandleGetDeviations)
+
+		// Group management
+		r.Get("/groups/country", handler.HandleGetCountryGroups)
+		r.Get("/groups/industry", handler.HandleGetIndustryGroups)
+		r.Put("/groups/country", handler.HandleUpdateCountryGroup)
+		r.Put("/groups/industry", handler.HandleUpdateIndustryGroup)
+		r.Delete("/groups/country/{group_name}", handler.HandleDeleteCountryGroup)
+		r.Delete("/groups/industry/{group_name}", handler.HandleDeleteIndustryGroup)
+
+		// Available options
+		r.Get("/groups/available/countries", handler.HandleGetAvailableCountries)
+		r.Get("/groups/available/industries", handler.HandleGetAvailableIndustries)
+
+		// Group allocation and targets
+		r.Get("/groups/allocation", handler.HandleGetGroupAllocation)
+		r.Put("/groups/targets/country", handler.HandleUpdateCountryGroupTargets)
+		r.Put("/groups/targets/industry", handler.HandleUpdateIndustryGroupTargets)
+	})
 }
 
 // Start starts the HTTP server
