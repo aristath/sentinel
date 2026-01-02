@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"runtime"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -16,6 +17,7 @@ import (
 	"github.com/aristath/arduino-trader/internal/modules/allocation"
 	"github.com/aristath/arduino-trader/internal/modules/display"
 	"github.com/aristath/arduino-trader/internal/modules/dividends"
+	"github.com/aristath/arduino-trader/internal/modules/evaluation"
 	"github.com/aristath/arduino-trader/internal/modules/portfolio"
 	"github.com/aristath/arduino-trader/internal/modules/trading"
 	"github.com/aristath/arduino-trader/internal/modules/universe"
@@ -143,6 +145,10 @@ func (s *Server) setupRoutes() {
 		// TODO: Add more routes as modules are migrated
 		// r.Route("/planning", func(r chi.Router) { ... })
 	})
+
+	// Evaluation module routes (MIGRATED TO GO!)
+	// Mounted directly under /api/v1 for Python client compatibility
+	s.setupEvaluationRoutes(s.router)
 
 	// Serve static files (for dashboard)
 	fileServer := http.FileServer(http.Dir("./static"))
@@ -333,6 +339,34 @@ func (s *Server) setupDisplayRoutes(r chi.Router) {
 		r.Post("/text", handler.HandleSetText)          // Set display text
 		r.Post("/led3", handler.HandleSetLED3)          // Set LED3 color
 		r.Post("/led4", handler.HandleSetLED4)          // Set LED4 color
+	})
+}
+
+// setupEvaluationRoutes configures evaluation module routes
+func (s *Server) setupEvaluationRoutes(r chi.Router) {
+	// Initialize evaluation service
+	numWorkers := runtime.NumCPU()
+	if numWorkers < 2 {
+		numWorkers = 2
+	}
+
+	evalService := evaluation.NewService(numWorkers, s.log)
+	handler := evaluation.NewHandler(evalService, s.log)
+
+	// Mount routes under /api/v1 for Python client compatibility
+	r.Route("/api/v1", func(r chi.Router) {
+		// Increase timeout for heavy evaluation operations
+		r.Use(middleware.Timeout(120 * time.Second))
+
+		r.Route("/evaluate", func(r chi.Router) {
+			r.Post("/batch", handler.HandleEvaluateBatch)
+			r.Post("/monte-carlo", handler.HandleMonteCarlo)
+			r.Post("/stochastic", handler.HandleStochastic)
+		})
+
+		r.Route("/simulate", func(r chi.Router) {
+			r.Post("/batch", handler.HandleSimulateBatch)
+		})
 	})
 }
 
