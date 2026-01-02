@@ -184,10 +184,10 @@ void loop() {
   // Bridge handles RPC messages automatically in background thread
   // No need to call Bridge.loop() - it's handled by __loopHook()
 
-  // Render in stats mode at ~60 FPS for smooth animation without overwhelming hardware
+  // Render in stats mode with minimal pacing to prevent hardware overflow
   if (inStatsMode) {
     updatePixelPattern();
-    delay(16);  // ~60 FPS (16ms per frame) - smooth and responsive
+    delay(1);  // 1ms minimum delay prevents hardware overflow while maximizing frame rate
   }
 
   unsigned long currentMillis = millis();
