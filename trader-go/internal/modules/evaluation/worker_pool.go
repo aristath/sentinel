@@ -84,14 +84,14 @@ func (wp *WorkerPool) EvaluateBatch(
 
 // jobItem represents a single evaluation job
 type jobItem struct {
-	index    int
 	sequence []ActionCandidate
+	index    int
 }
 
 // resultItem represents the result of an evaluation job
 type resultItem struct {
-	index      int
 	evalResult SequenceEvaluationResult
+	index      int
 }
 
 // worker is the worker goroutine that processes evaluation jobs
@@ -177,14 +177,14 @@ func (wp *WorkerPool) SimulateBatch(
 
 // simJobItem represents a single simulation job
 type simJobItem struct {
-	index    int
 	sequence []ActionCandidate
+	index    int
 }
 
 // simResultItem represents the result of a simulation job
 type simResultItem struct {
-	index     int
 	simResult SimulationResult
+	index     int
 }
 
 // simWorker is the worker goroutine that processes simulation jobs

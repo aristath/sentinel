@@ -75,7 +75,7 @@ func SimulateSequence(
 			}
 
 			currentValue := newPositions[action.Symbol]
-			newValue := max(0, currentValue-sellValue)
+			newValue := maxFloat64(0, currentValue-sellValue)
 			if newValue <= 0 {
 				delete(newPositions, action.Symbol)
 			} else {
@@ -96,7 +96,7 @@ func SimulateSequence(
 				continue // Skip if can't afford
 			}
 
-			newPositions[action.Symbol] = newPositions[action.Symbol] + buyValue
+			newPositions[action.Symbol] += buyValue
 
 			// Copy-on-write: Create copies only for maps we're about to modify.
 			// This avoids unnecessary copies when only one type of metadata exists.
@@ -243,7 +243,7 @@ func copyStringMap(m map[string]string) map[string]string {
 	return result
 }
 
-func max(a, b float64) float64 {
+func maxFloat64(a, b float64) float64 {
 	if a > b {
 		return a
 	}

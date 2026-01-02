@@ -12,8 +12,8 @@ type DividendScorer struct{}
 
 // DividendScore represents the result of dividend scoring
 type DividendScore struct {
-	Score      float64            `json:"score"`      // Total score (0-1)
-	Components map[string]float64 `json:"components"` // Individual component scores
+	Components map[string]float64 `json:"components"`
+	Score      float64            `json:"score"`
 }
 
 // NewDividendScorer creates a new dividend scorer

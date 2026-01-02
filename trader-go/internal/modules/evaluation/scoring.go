@@ -95,7 +95,7 @@ func calculateGeoDiversification(portfolioContext PortfolioContext, totalValue f
 			group = "OTHER"
 		}
 
-		groupValues[group] = groupValues[group] + value
+		groupValues[group] += value
 	}
 
 	// Calculate deviations from target weights
@@ -147,7 +147,7 @@ func calculateIndustryDiversification(portfolioContext PortfolioContext, totalVa
 			group = "OTHER"
 		}
 
-		groupValues[group] = groupValues[group] + value
+		groupValues[group] += value
 	}
 
 	// Calculate deviations from target weights

@@ -573,8 +573,8 @@ type PositionHistoryEntry struct {
 type tradeRow struct {
 	Symbol     string
 	Side       string
-	Quantity   float64
 	ExecutedAt string
+	Quantity   float64
 }
 
 // GetPositionHistory retrieves historical position quantities by date for portfolio reconstruction

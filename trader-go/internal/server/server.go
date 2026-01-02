@@ -26,14 +26,14 @@ import (
 
 // Config holds server configuration
 type Config struct {
-	Port        int
 	Log         zerolog.Logger
-	ConfigDB    *database.DB // config.db - securities, allocation data
-	StateDB     *database.DB // state.db - positions, scores
-	SnapshotsDB *database.DB // snapshots.db - portfolio snapshots
-	LedgerDB    *database.DB // ledger.db - trades (append-only ledger)
-	DividendsDB *database.DB // dividends.db - dividend records with DRIP tracking
+	ConfigDB    *database.DB
+	StateDB     *database.DB
+	SnapshotsDB *database.DB
+	LedgerDB    *database.DB
+	DividendsDB *database.DB
 	Config      *config.Config
+	Port        int
 	DevMode     bool
 }
 

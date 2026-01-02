@@ -19,10 +19,10 @@ type SecurityFetcher interface {
 
 // TradingHandlers contains HTTP handlers for trading API
 type TradingHandlers struct {
-	tradeRepo       *TradeRepository
-	securityFetcher SecurityFetcher
-	pythonURL       string
 	log             zerolog.Logger
+	securityFetcher SecurityFetcher
+	tradeRepo       *TradeRepository
+	pythonURL       string
 }
 
 // NewTradingHandlers creates a new trading handlers instance

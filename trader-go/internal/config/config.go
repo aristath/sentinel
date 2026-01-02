@@ -10,22 +10,13 @@ import (
 
 // Config holds application configuration
 type Config struct {
-	// Server
-	Port    int
-	DevMode bool
-
-	// Database
-	DatabasePath string
-
-	// Python Services (temporary during migration)
-	PythonServiceURL string
-
-	// Tradernet API
+	DatabasePath       string
+	PythonServiceURL   string
 	TradernetAPIKey    string
 	TradernetAPISecret string
-
-	// Logging
-	LogLevel string
+	LogLevel           string
+	Port               int
+	DevMode            bool
 }
 
 // Load reads configuration from environment variables

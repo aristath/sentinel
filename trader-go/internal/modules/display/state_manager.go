@@ -23,11 +23,11 @@ type DisplayState struct {
 // StateManager handles thread-safe display state management
 // Faithful translation from Python: app/modules/display/services/display_service.py
 type StateManager struct {
-	mu          sync.RWMutex
+	log         zerolog.Logger
 	currentText string
 	led3        LEDColor
 	led4        LEDColor
-	log         zerolog.Logger
+	mu          sync.RWMutex
 }
 
 // NewStateManager creates a new display state manager

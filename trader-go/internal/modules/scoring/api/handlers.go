@@ -26,33 +26,23 @@ func NewHandlers(log zerolog.Logger) *Handlers {
 
 // ScoreRequest represents a request to score a security
 type ScoreRequest struct {
-	Symbol string `json:"symbol"`
-
-	// Price data
-	DailyPrices   []float64                 `json:"daily_prices"`
-	MonthlyPrices []formulas.MonthlyPrice   `json:"monthly_prices"`
-
-	// Configuration
-	TargetAnnualReturn float64 `json:"target_annual_return,omitempty"`
-	MarketAvgPE        float64 `json:"market_avg_pe,omitempty"`
-
-	// Fundamental data
-	PERatio             *float64 `json:"pe_ratio,omitempty"`
-	ForwardPE           *float64 `json:"forward_pe,omitempty"`
-	DividendYield       *float64 `json:"dividend_yield,omitempty"`
-	PayoutRatio         *float64 `json:"payout_ratio,omitempty"`
-	FiveYearAvgDivYield *float64 `json:"five_year_avg_div_yield,omitempty"`
-	ProfitMargin        *float64 `json:"profit_margin,omitempty"`
-	DebtToEquity        *float64 `json:"debt_to_equity,omitempty"`
-	CurrentRatio        *float64 `json:"current_ratio,omitempty"`
-
-	// Analyst data
-	AnalystRecommendation *float64 `json:"analyst_recommendation,omitempty"`
-	UpsidePct             *float64 `json:"upside_pct,omitempty"`
-
-	// Technical data
-	SortinoRatio *float64 `json:"sortino_ratio,omitempty"`
-	MaxDrawdown  *float64 `json:"max_drawdown,omitempty"`
+	CurrentRatio          *float64                `json:"current_ratio,omitempty"`
+	FiveYearAvgDivYield   *float64                `json:"five_year_avg_div_yield,omitempty"`
+	MaxDrawdown           *float64                `json:"max_drawdown,omitempty"`
+	SortinoRatio          *float64                `json:"sortino_ratio,omitempty"`
+	UpsidePct             *float64                `json:"upside_pct,omitempty"`
+	PERatio               *float64                `json:"pe_ratio,omitempty"`
+	ForwardPE             *float64                `json:"forward_pe,omitempty"`
+	DividendYield         *float64                `json:"dividend_yield,omitempty"`
+	AnalystRecommendation *float64                `json:"analyst_recommendation,omitempty"`
+	ProfitMargin          *float64                `json:"profit_margin,omitempty"`
+	PayoutRatio           *float64                `json:"payout_ratio,omitempty"`
+	DebtToEquity          *float64                `json:"debt_to_equity,omitempty"`
+	Symbol                string                  `json:"symbol"`
+	DailyPrices           []float64               `json:"daily_prices"`
+	MonthlyPrices         []formulas.MonthlyPrice `json:"monthly_prices"`
+	MarketAvgPE           float64                 `json:"market_avg_pe,omitempty"`
+	TargetAnnualReturn    float64                 `json:"target_annual_return,omitempty"`
 }
 
 // ScoreResponse represents the response from scoring
