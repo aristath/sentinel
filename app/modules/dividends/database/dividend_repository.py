@@ -25,13 +25,14 @@ class DividendRepository:
             cursor = await conn.execute(
                 """
                 INSERT INTO dividend_history
-                (symbol, cash_flow_id, amount, currency, amount_eur, payment_date,
+                (symbol, isin, cash_flow_id, amount, currency, amount_eur, payment_date,
                  reinvested, reinvested_at, reinvested_quantity, pending_bonus,
                  bonus_cleared, cleared_at, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     dividend.symbol,
+                    dividend.isin,
                     dividend.cash_flow_id,
                     dividend.amount,
                     dividend.currency,
