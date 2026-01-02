@@ -184,12 +184,13 @@ void loop() {
   // Bridge handles RPC messages automatically in background thread
   // No need to call Bridge.loop() - it's handled by __loopHook()
 
-  unsigned long currentMillis = millis();
-
-  // Render next frame continuously in stats mode (no delay)
+  // Render in stats mode at ~60 FPS for smooth animation without overwhelming hardware
   if (inStatsMode) {
     updatePixelPattern();
+    delay(16);  // ~60 FPS (16ms per frame) - smooth and responsive
   }
+
+  unsigned long currentMillis = millis();
 
   // Check if scrolling has completed (ticker mode)
   if (isScrolling && (currentMillis - scrollStartTime >= estimatedScrollDuration)) {
