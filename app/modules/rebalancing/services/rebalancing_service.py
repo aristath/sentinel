@@ -4,6 +4,7 @@ Orchestrates rebalancing operations using domain services and repositories.
 Uses long-term value scoring with portfolio-aware allocation fit.
 """
 
+import asyncio
 import json
 import logging
 from typing import Dict, List, Optional
@@ -416,17 +417,50 @@ class RebalancingService:
         }
         current_prices = yahoo.get_batch_quotes(yahoo_symbols)
 
-        # Calculate total portfolio value (positions + cash)
-        def _get_position_value(p) -> float:
+        # Build security lookup for currency conversion
+        securities_by_symbol = {s.symbol: s for s in securities}
+
+        # Calculate total portfolio value (positions + cash) - prices must be converted to EUR!
+        position_values = []
+
+        async def _get_position_value(p) -> float:
             price = current_prices.get(p.symbol)
             if price is not None:
-                return float(p.quantity) * float(price)
+                security = securities_by_symbol.get(p.symbol)
+                if security and security.currency:
+                    # Convert price from native currency to EUR
+                    price_eur = await self._exchange_rate_service.convert(
+                        float(price), security.currency, "EUR"
+                    )
+                    value = float(p.quantity) * price_eur
+                    position_values.append(
+                        f"{p.symbol}: qty={p.quantity}, price={price} {security.currency} "
+                        f"(€{price_eur:.2f}), value=€{value:.2f}"
+                    )
+                else:
+                    # No currency info, assume EUR
+                    value = float(p.quantity) * float(price)
+                    position_values.append(
+                        f"{p.symbol}: qty={p.quantity}, price=€{price}, value=€{value:.2f}"
+                    )
+                return value
             elif p.quantity > 0 and p.market_value_eur is not None:
-                return float(p.market_value_eur)
+                value = float(p.market_value_eur)
+                position_values.append(f"{p.symbol}: market_value=€{value:.2f}")
+                return value
             return 0.0
 
-        total_position_value = sum(_get_position_value(p) for p in positions)
+        # Calculate position values (async due to currency conversion)
+        position_value_tasks = [_get_position_value(p) for p in positions]
+        position_value_results = await asyncio.gather(*position_value_tasks)
+        total_position_value = sum(position_value_results)
         portfolio_value = total_position_value + available_cash
+        logger.info(
+            f"Portfolio value calculation: positions=€{total_position_value:.2f}, "
+            f"cash=€{available_cash:.2f}, total=€{portfolio_value:.2f}"
+        )
+        for pv in position_values[:10]:  # Log first 10 positions
+            logger.info(f"  {pv}")
 
         # Adjust cash reserve based on market regime (if enabled)
         regime_enabled = await self._settings_repo.get_float(
