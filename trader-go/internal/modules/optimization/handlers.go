@@ -158,8 +158,12 @@ func (h *Handler) HandleRun(w http.ResponseWriter, r *http.Request) {
 		industryTargets = make(map[string]float64)
 	}
 
-	// 8. Get dividend bonuses (stub - would fetch from dividend_payouts table)
-	dividendBonuses := make(map[string]float64)
+	// 8. Get dividend bonuses
+	dividendBonuses, err := h.getDividendBonuses()
+	if err != nil {
+		h.log.Warn().Err(err).Msg("Failed to get dividend bonuses")
+		dividendBonuses = make(map[string]float64)
+	}
 
 	// 9. Build portfolio state
 	state := PortfolioState{
@@ -382,6 +386,17 @@ func (h *Handler) getCashBalance() (float64, error) {
 	}
 
 	return totalEUR, nil
+}
+
+func (h *Handler) getDividendBonuses() (map[string]float64, error) {
+	// Get pending dividend bonuses from dividend repository
+	bonuses, err := h.dividendRepo.GetPendingBonuses()
+	if err != nil {
+		h.log.Warn().Err(err).Msg("Failed to get dividend bonuses")
+		return make(map[string]float64), nil // Return empty map on error
+	}
+
+	return bonuses, nil
 }
 
 func (h *Handler) getCountryTargets() (map[string]float64, error) {
