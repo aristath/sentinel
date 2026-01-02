@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/rs/zerolog"
 
+	"github.com/aristath/arduino-trader/internal/clients/tradernet"
 	"github.com/aristath/arduino-trader/internal/config"
 	"github.com/aristath/arduino-trader/internal/database"
 	"github.com/aristath/arduino-trader/internal/modules/allocation"
@@ -165,7 +166,19 @@ func (s *Server) setupAllocationRoutes(r chi.Router) {
 	allocRepo := allocation.NewRepository(s.configDB.Conn(), s.log)
 	groupingRepo := allocation.NewGroupingRepository(s.configDB.Conn(), s.log)
 	alertService := allocation.NewConcentrationAlertService(s.stateDB.Conn(), s.log)
-	handler := allocation.NewHandler(allocRepo, groupingRepo, alertService, s.log, s.cfg.PythonServiceURL)
+
+	// Portfolio service (needed for allocation calculations)
+	positionRepo := portfolio.NewPositionRepository(s.stateDB.Conn(), s.configDB.Conn(), s.log)
+	portfolioRepo := portfolio.NewPortfolioRepository(s.snapshotsDB.Conn(), s.log)
+	portfolioService := portfolio.NewPortfolioService(
+		portfolioRepo,
+		positionRepo,
+		allocRepo,
+		s.configDB.Conn(),
+		s.log,
+	)
+
+	handler := allocation.NewHandler(allocRepo, groupingRepo, alertService, portfolioService, s.log, s.cfg.PythonServiceURL)
 
 	// Allocation routes (faithful translation of Python routes)
 	r.Route("/allocation", func(r chi.Router) {
@@ -205,10 +218,15 @@ func (s *Server) setupPortfolioRoutes(r chi.Router) {
 		s.configDB.Conn(),
 		s.log,
 	)
+
+	// Tradernet microservice client
+	tradernetClient := tradernet.NewClient(s.cfg.TradernetServiceURL, s.log)
+
 	handler := portfolio.NewHandler(
 		positionRepo,
 		portfolioRepo,
 		portfolioService,
+		tradernetClient,
 		s.log,
 		s.cfg.PythonServiceURL,
 	)
@@ -218,9 +236,9 @@ func (s *Server) setupPortfolioRoutes(r chi.Router) {
 		r.Get("/", handler.HandleGetPortfolio)                   // List positions (same as GET /portfolio)
 		r.Get("/summary", handler.HandleGetSummary)              // Portfolio summary
 		r.Get("/history", handler.HandleGetHistory)              // Historical snapshots
-		r.Get("/transactions", handler.HandleGetTransactions)    // Proxy to Python (Tradernet)
-		r.Get("/cash-breakdown", handler.HandleGetCashBreakdown) // Proxy to Python (Tradernet)
-		r.Get("/analytics", handler.HandleGetAnalytics)          // Proxy to Python (analytics)
+		r.Get("/transactions", handler.HandleGetTransactions)    // Transaction history (via Tradernet microservice)
+		r.Get("/cash-breakdown", handler.HandleGetCashBreakdown) // Cash breakdown (via Tradernet microservice)
+		r.Get("/analytics", handler.HandleGetAnalytics)          // Proxy to Python (analytics - requires PyFolio)
 	})
 }
 
@@ -287,18 +305,38 @@ func (s *Server) setupTradingRoutes(r chi.Router) {
 	securityRepo := universe.NewSecurityRepository(s.configDB.Conn(), s.log)
 	securityFetcher := &securityFetcherAdapter{repo: securityRepo}
 
+	// Portfolio service (needed for allocation endpoint)
+	allocRepo := allocation.NewRepository(s.configDB.Conn(), s.log)
+	positionRepo := portfolio.NewPositionRepository(s.stateDB.Conn(), s.configDB.Conn(), s.log)
+	portfolioRepo := portfolio.NewPortfolioRepository(s.snapshotsDB.Conn(), s.log)
+	portfolioService := portfolio.NewPortfolioService(
+		portfolioRepo,
+		positionRepo,
+		allocRepo,
+		s.configDB.Conn(),
+		s.log,
+	)
+
+	// Concentration alert service (needed for allocation endpoint)
+	alertService := allocation.NewConcentrationAlertService(s.stateDB.Conn(), s.log)
+
+	// Tradernet microservice client
+	tradernetClient := tradernet.NewClient(s.cfg.TradernetServiceURL, s.log)
+
 	handler := trading.NewTradingHandlers(
 		tradeRepo,
 		securityFetcher,
-		s.cfg.PythonServiceURL,
+		portfolioService,
+		alertService,
+		tradernetClient,
 		s.log,
 	)
 
 	// Trading routes (faithful translation of Python routes)
 	r.Route("/trades", func(r chi.Router) {
 		r.Get("/", handler.HandleGetTrades)               // Trade history
-		r.Post("/execute", handler.HandleExecuteTrade)    // Execute trade (proxy to Python)
-		r.Get("/allocation", handler.HandleGetAllocation) // Portfolio allocation (proxy to Python)
+		r.Post("/execute", handler.HandleExecuteTrade)    // Execute trade (via Tradernet microservice)
+		r.Get("/allocation", handler.HandleGetAllocation) // Portfolio allocation
 	})
 }
 

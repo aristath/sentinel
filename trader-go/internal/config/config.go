@@ -10,13 +10,14 @@ import (
 
 // Config holds application configuration
 type Config struct {
-	DatabasePath       string
-	PythonServiceURL   string
-	TradernetAPIKey    string
-	TradernetAPISecret string
-	LogLevel           string
-	Port               int
-	DevMode            bool
+	DatabasePath        string
+	PythonServiceURL    string
+	TradernetServiceURL string
+	TradernetAPIKey     string
+	TradernetAPISecret  string
+	LogLevel            string
+	Port                int
+	DevMode             bool
 }
 
 // Load reads configuration from environment variables
@@ -25,13 +26,14 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	cfg := &Config{
-		Port:               getEnvAsInt("GO_PORT", 8001), // Default 8001 (Python uses 8000)
-		DevMode:            getEnvAsBool("DEV_MODE", false),
-		DatabasePath:       getEnv("DATABASE_PATH", "./data/portfolio.db"),
-		PythonServiceURL:   getEnv("PYTHON_SERVICE_URL", "http://localhost:8000"), // Python on 8000
-		TradernetAPIKey:    getEnv("TRADERNET_API_KEY", ""),
-		TradernetAPISecret: getEnv("TRADERNET_API_SECRET", ""),
-		LogLevel:           getEnv("LOG_LEVEL", "info"),
+		Port:                getEnvAsInt("GO_PORT", 8001), // Default 8001 (Python uses 8000)
+		DevMode:             getEnvAsBool("DEV_MODE", false),
+		DatabasePath:        getEnv("DATABASE_PATH", "./data/portfolio.db"),
+		PythonServiceURL:    getEnv("PYTHON_SERVICE_URL", "http://localhost:8000"),    // Python on 8000
+		TradernetServiceURL: getEnv("TRADERNET_SERVICE_URL", "http://localhost:9001"), // Tradernet microservice on 9001
+		TradernetAPIKey:     getEnv("TRADERNET_API_KEY", ""),
+		TradernetAPISecret:  getEnv("TRADERNET_API_SECRET", ""),
+		LogLevel:            getEnv("LOG_LEVEL", "info"),
 	}
 
 	// Validate required fields

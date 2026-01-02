@@ -1,14 +1,15 @@
 package trading
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/aristath/arduino-trader/internal/clients/tradernet"
+	"github.com/aristath/arduino-trader/internal/modules/allocation"
+	"github.com/aristath/arduino-trader/internal/modules/portfolio"
 	"github.com/rs/zerolog"
 )
 
@@ -19,24 +20,30 @@ type SecurityFetcher interface {
 
 // TradingHandlers contains HTTP handlers for trading API
 type TradingHandlers struct {
-	log             zerolog.Logger
-	securityFetcher SecurityFetcher
-	tradeRepo       *TradeRepository
-	pythonURL       string
+	log              zerolog.Logger
+	securityFetcher  SecurityFetcher
+	tradeRepo        *TradeRepository
+	portfolioService *portfolio.PortfolioService
+	alertService     *allocation.ConcentrationAlertService
+	tradernetClient  *tradernet.Client
 }
 
 // NewTradingHandlers creates a new trading handlers instance
 func NewTradingHandlers(
 	tradeRepo *TradeRepository,
 	securityFetcher SecurityFetcher,
-	pythonURL string,
+	portfolioService *portfolio.PortfolioService,
+	alertService *allocation.ConcentrationAlertService,
+	tradernetClient *tradernet.Client,
 	log zerolog.Logger,
 ) *TradingHandlers {
 	return &TradingHandlers{
-		tradeRepo:       tradeRepo,
-		securityFetcher: securityFetcher,
-		pythonURL:       pythonURL,
-		log:             log.With().Str("handler", "trading").Logger(),
+		tradeRepo:        tradeRepo,
+		securityFetcher:  securityFetcher,
+		portfolioService: portfolioService,
+		alertService:     alertService,
+		tradernetClient:  tradernetClient,
+		log:              log.With().Str("handler", "trading").Logger(),
 	}
 }
 
@@ -106,21 +113,146 @@ func (h *TradingHandlers) HandleGetTrades(w http.ResponseWriter, r *http.Request
 	_ = json.NewEncoder(w).Encode(response) // Ignore encode error - already committed response
 }
 
-// HandleExecuteTrade proxies trade execution to Python
+// HandleExecuteTrade executes a trade via Tradernet microservice
 // POST /api/trades/execute
 func (h *TradingHandlers) HandleExecuteTrade(w http.ResponseWriter, r *http.Request) {
-	// Proxy to Python - requires Tradernet SDK
-	h.proxyToPython(w, r, "/api/trades/execute")
+	// Parse request body
+	var req struct {
+		Symbol   string  `json:"symbol"`
+		Side     string  `json:"side"`
+		Quantity float64 `json:"quantity"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Execute trade via Tradernet microservice
+	result, err := h.tradernetClient.PlaceOrder(req.Symbol, req.Side, req.Quantity)
+	if err != nil {
+		h.log.Error().Err(err).Msg("Failed to place order")
+		h.writeError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to place order: %v", err))
+		return
+	}
+
+	// Return success response matching Python format
+	response := map[string]interface{}{
+		"status":   "success",
+		"order_id": result.OrderID,
+		"symbol":   result.Symbol,
+		"side":     result.Side,
+		"quantity": result.Quantity,
+		"price":    result.Price,
+	}
+
+	h.writeJSON(w, http.StatusOK, response)
 }
 
-// HandleGetAllocation proxies allocation request to Python
+// HandleGetAllocation returns current portfolio allocation vs targets
+// Faithful translation from Python: @router.get("/allocation")
 // GET /api/trades/allocation
 func (h *TradingHandlers) HandleGetAllocation(w http.ResponseWriter, r *http.Request) {
-	// Proxy to Python - uses portfolio service and concentration alert service
-	h.proxyToPython(w, r, "/api/trades/allocation")
+	// Get portfolio summary
+	portfolioSummary, err := h.portfolioService.GetPortfolioSummary()
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Convert to allocation types for alert service
+	summary := convertPortfolioSummary(portfolioSummary)
+
+	// Detect concentration alerts
+	alerts, err := h.alertService.DetectAlerts(summary)
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Build response matching Python structure
+	response := map[string]interface{}{
+		"total_value":  summary.TotalValue,
+		"cash_balance": summary.CashBalance,
+		"country":      buildAllocationArray(summary.CountryAllocations),
+		"industry":     buildAllocationArray(summary.IndustryAllocations),
+		"alerts":       buildAlertsArray(alerts),
+	}
+
+	h.writeJSON(w, http.StatusOK, response)
 }
 
 // Helper methods
+
+// convertPortfolioSummary converts portfolio.PortfolioSummary to allocation.PortfolioSummary
+func convertPortfolioSummary(src portfolio.PortfolioSummary) allocation.PortfolioSummary {
+	return allocation.PortfolioSummary{
+		CountryAllocations:  convertAllocations(src.CountryAllocations),
+		IndustryAllocations: convertAllocations(src.IndustryAllocations),
+		TotalValue:          src.TotalValue,
+		CashBalance:         src.CashBalance,
+	}
+}
+
+// convertAllocations converts []portfolio.AllocationStatus to []allocation.PortfolioAllocation
+func convertAllocations(src []portfolio.AllocationStatus) []allocation.PortfolioAllocation {
+	result := make([]allocation.PortfolioAllocation, len(src))
+	for i, a := range src {
+		result[i] = allocation.PortfolioAllocation{
+			Name:         a.Name,
+			TargetPct:    a.TargetPct,
+			CurrentPct:   a.CurrentPct,
+			CurrentValue: a.CurrentValue,
+			Deviation:    a.Deviation,
+		}
+	}
+	return result
+}
+
+// buildAllocationArray converts allocation slice to response format
+func buildAllocationArray(allocations []allocation.PortfolioAllocation) []map[string]interface{} {
+	result := make([]map[string]interface{}, len(allocations))
+	for i, a := range allocations {
+		result[i] = map[string]interface{}{
+			"name":          a.Name,
+			"target_pct":    a.TargetPct,
+			"current_pct":   a.CurrentPct,
+			"current_value": a.CurrentValue,
+			"deviation":     a.Deviation,
+		}
+	}
+	return result
+}
+
+// buildAlertsArray converts ConcentrationAlert slice to response format
+func buildAlertsArray(alerts []allocation.ConcentrationAlert) []map[string]interface{} {
+	result := make([]map[string]interface{}, len(alerts))
+	for i, alert := range alerts {
+		result[i] = map[string]interface{}{
+			"type":                alert.Type,
+			"name":                alert.Name,
+			"current_pct":         alert.CurrentPct,
+			"limit_pct":           alert.LimitPct,
+			"alert_threshold_pct": alert.AlertThresholdPct,
+			"severity":            alert.Severity,
+		}
+	}
+	return result
+}
+
+// writeJSON writes a JSON response
+func (h *TradingHandlers) writeJSON(w http.ResponseWriter, status int, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		h.log.Error().Err(err).Msg("Failed to encode JSON response")
+	}
+}
+
+// writeError writes an error response
+func (h *TradingHandlers) writeError(w http.ResponseWriter, status int, message string) {
+	h.writeJSON(w, status, map[string]string{"error": message})
+}
 
 // isCurrencyConversion checks if symbol is a currency conversion pair
 func isCurrencyConversion(symbol string) bool {
@@ -134,66 +266,4 @@ func getCurrencyConversionName(symbol string) string {
 		return fmt.Sprintf("%s → %s", parts[0], parts[1])
 	}
 	return symbol
-}
-
-// proxyToPython forwards the request to the Python service
-func (h *TradingHandlers) proxyToPython(w http.ResponseWriter, r *http.Request, path string) {
-	url := h.pythonURL + path
-
-	// Read request body if present
-	var body []byte
-	var err error
-	if r.Body != nil {
-		body, err = io.ReadAll(r.Body)
-		if err != nil {
-			h.log.Error().Err(err).Msg("Failed to read request body")
-			http.Error(w, "Failed to read request body", http.StatusInternalServerError)
-			return
-		}
-	}
-
-	// Create new request with same method and body
-	req, err := http.NewRequest(r.Method, url, bytes.NewReader(body))
-	if err != nil {
-		h.log.Error().Err(err).Str("url", url).Msg("Failed to create proxy request")
-		http.Error(w, "Failed to create proxy request", http.StatusInternalServerError)
-		return
-	}
-
-	// Copy headers
-	req.Header.Set("Content-Type", "application/json")
-	for key, values := range r.Header {
-		for _, value := range values {
-			req.Header.Add(key, value)
-		}
-	}
-
-	// Execute request
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		h.log.Error().Err(err).Str("url", url).Msg("Failed to contact Python service")
-		http.Error(w, "Failed to contact Python service", http.StatusBadGateway)
-		return
-	}
-	defer resp.Body.Close()
-
-	// Read response body
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		h.log.Error().Err(err).Msg("Failed to read Python response")
-		http.Error(w, "Failed to read Python response", http.StatusInternalServerError)
-		return
-	}
-
-	// Copy response headers
-	for key, values := range resp.Header {
-		for _, value := range values {
-			w.Header().Add(key, value)
-		}
-	}
-
-	// Write response
-	w.WriteHeader(resp.StatusCode)
-	_, _ = w.Write(respBody) // Ignore write error - already committed response
 }

@@ -6,17 +6,19 @@ import (
 	"sort"
 	"strconv"
 
+	"github.com/aristath/arduino-trader/internal/clients/tradernet"
 	"github.com/rs/zerolog"
 )
 
 // Handler handles portfolio HTTP requests
 // Faithful translation from Python: app/modules/portfolio/api/portfolio.py
 type Handler struct {
-	positionRepo  *PositionRepository
-	portfolioRepo *PortfolioRepository
-	service       *PortfolioService
-	log           zerolog.Logger
-	pythonURL     string // URL of Python service for proxied endpoints
+	positionRepo    *PositionRepository
+	portfolioRepo   *PortfolioRepository
+	service         *PortfolioService
+	tradernetClient *tradernet.Client
+	log             zerolog.Logger
+	pythonURL       string // URL of Python service for analytics endpoint
 }
 
 // NewHandler creates a new portfolio handler
@@ -24,15 +26,17 @@ func NewHandler(
 	positionRepo *PositionRepository,
 	portfolioRepo *PortfolioRepository,
 	service *PortfolioService,
+	tradernetClient *tradernet.Client,
 	log zerolog.Logger,
 	pythonURL string,
 ) *Handler {
 	return &Handler{
-		positionRepo:  positionRepo,
-		portfolioRepo: portfolioRepo,
-		service:       service,
-		log:           log.With().Str("handler", "portfolio").Logger(),
-		pythonURL:     pythonURL,
+		positionRepo:    positionRepo,
+		portfolioRepo:   portfolioRepo,
+		service:         service,
+		tradernetClient: tradernetClient,
+		log:             log.With().Str("handler", "portfolio").Logger(),
+		pythonURL:       pythonURL,
 	}
 }
 
@@ -134,18 +138,47 @@ func (h *Handler) HandleGetHistory(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, http.StatusOK, result)
 }
 
-// HandleGetTransactions proxies to Python for Tradernet transaction history
+// HandleGetTransactions gets withdrawal transaction history from Tradernet microservice
 // Faithful translation of Python: @router.get("/transactions")
 func (h *Handler) HandleGetTransactions(w http.ResponseWriter, r *http.Request) {
-	// TODO: Proxy to Python service (requires Tradernet SDK)
-	h.proxyToPython(w, r, "/api/portfolio/transactions")
+	movements, err := h.tradernetClient.GetCashMovements()
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "Failed to get transaction history")
+		return
+	}
+
+	response := map[string]interface{}{
+		"total_withdrawals": movements.TotalWithdrawals,
+		"withdrawals":       movements.Withdrawals,
+		"note":              movements.Note,
+	}
+
+	h.writeJSON(w, http.StatusOK, response)
 }
 
-// HandleGetCashBreakdown proxies to Python for cash breakdown by currency
+// HandleGetCashBreakdown gets cash balance breakdown by currency from Tradernet microservice
 // Faithful translation of Python: @router.get("/cash-breakdown")
 func (h *Handler) HandleGetCashBreakdown(w http.ResponseWriter, r *http.Request) {
-	// TODO: Proxy to Python service (requires Tradernet SDK)
-	h.proxyToPython(w, r, "/api/portfolio/cash-breakdown")
+	balances, err := h.tradernetClient.GetCashBalances()
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, "Failed to get cash breakdown")
+		return
+	}
+
+	// Calculate total in EUR (simplified - real implementation would use exchange rates)
+	totalEUR := 0.0
+	for _, b := range balances {
+		if b.Currency == "EUR" {
+			totalEUR += b.Amount
+		}
+	}
+
+	response := map[string]interface{}{
+		"balances":  balances,
+		"total_eur": totalEUR,
+	}
+
+	h.writeJSON(w, http.StatusOK, response)
 }
 
 // HandleGetAnalytics proxies to Python for portfolio analytics
