@@ -34,10 +34,10 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	cfg := &Config{
-		Port:               getEnvAsInt("PORT", 8000),
+		Port:               getEnvAsInt("GO_PORT", 8001),        // Default 8001 (Python uses 8000)
 		DevMode:            getEnvAsBool("DEV_MODE", false),
 		DatabasePath:       getEnv("DATABASE_PATH", "./data/portfolio.db"),
-		PythonServiceURL:   getEnv("PYTHON_SERVICE_URL", "http://localhost:5000"),
+		PythonServiceURL:   getEnv("PYTHON_SERVICE_URL", "http://localhost:8000"), // Python on 8000
 		TradernetAPIKey:    getEnv("TRADERNET_API_KEY", ""),
 		TradernetAPISecret: getEnv("TRADERNET_API_SECRET", ""),
 		LogLevel:           getEnv("LOG_LEVEL", "info"),

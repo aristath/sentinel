@@ -108,6 +108,9 @@ func (s *Server) setupMiddleware(devMode bool) {
 
 // setupRoutes configures all routes
 func (s *Server) setupRoutes() {
+	// Dashboard root route - serve index.html
+	s.router.Get("/", s.handleDashboard)
+
 	// Health check
 	s.router.Get("/health", s.handleHealth)
 
@@ -138,7 +141,8 @@ func (s *Server) setupRoutes() {
 	})
 
 	// Serve static files (for dashboard)
-	// s.router.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
+	fileServer := http.FileServer(http.Dir("./static"))
+	s.router.Handle("/static/*", http.StripPrefix("/static/", fileServer))
 }
 
 // setupAllocationRoutes configures allocation module routes
@@ -323,6 +327,11 @@ func (s *Server) Start() error {
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.log.Info().Msg("Shutting down HTTP server")
 	return s.server.Shutdown(ctx)
+}
+
+// handleDashboard serves the main dashboard HTML
+func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "./static/index.html")
 }
 
 // loggingMiddleware logs HTTP requests
