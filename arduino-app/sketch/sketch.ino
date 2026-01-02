@@ -24,9 +24,9 @@ unsigned long scrollStartTime = 0;
 unsigned long estimatedScrollDuration = 0;
 
 // LED Matrix dimensions
-const int MATRIX_WIDTH = 13;
+const int MATRIX_WIDTH = 12;  // Actual hardware is 12x8, not 13x8
 const int MATRIX_HEIGHT = 8;
-const int TOTAL_PIXELS = MATRIX_WIDTH * MATRIX_HEIGHT;  // 104 pixels
+const int TOTAL_PIXELS = MATRIX_WIDTH * MATRIX_HEIGHT;  // 96 pixels
 
 // System stats mode state
 bool inStatsMode = false;
@@ -122,8 +122,8 @@ void renderBrightnessFrame() {
   // Convert brightness array to binary frame (pixels with brightness > 0 are ON)
   int pixel_idx = 0;
   for (int y = 0; y < MATRIX_HEIGHT; y++) {
-    for (int x = 0; x < MATRIX_WIDTH && x < 12; x++) {  // Matrix is 12 wide
-      if (pixel_idx < 96 && pixelBrightness[y][x] > 0) {
+    for (int x = 0; x < MATRIX_WIDTH; x++) {
+      if (pixelBrightness[y][x] > 0) {
         frame[pixel_idx / 32] |= (1UL << (pixel_idx % 32));
       }
       pixel_idx++;
