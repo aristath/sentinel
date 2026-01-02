@@ -641,6 +641,13 @@ func (h *UniverseHandlers) HandleDeleteStock(w http.ResponseWriter, r *http.Requ
 	_ = json.NewEncoder(w).Encode(response) // Ignore encode error - already committed response
 }
 
+// CalculateAndSaveScore is the public interface implementation for ScoreCalculator
+// Wraps the private calculateAndSaveScore method
+func (h *UniverseHandlers) CalculateAndSaveScore(symbol string, yahooSymbol string, country string, industry string) error {
+	_, err := h.calculateAndSaveScore(symbol, yahooSymbol, country, industry)
+	return err
+}
+
 // calculateAndSaveScore calculates and saves security score
 // Faithful translation from Python: app/modules/scoring/services/scoring_service.py -> calculate_and_save_score
 func (h *UniverseHandlers) calculateAndSaveScore(symbol string, yahooSymbol string, country string, industry string) (*SecurityScore, error) {
@@ -866,4 +873,64 @@ func (h *UniverseHandlers) proxyToPython(w http.ResponseWriter, r *http.Request,
 	// Write response
 	w.WriteHeader(resp.StatusCode)
 	_, _ = w.Write(respBody) // Ignore write error - already committed response
+}
+
+// HandleSyncPrices triggers manual price sync for all active securities
+// Endpoint: POST /api/universe/sync/prices
+func (h *UniverseHandlers) HandleSyncPrices(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	h.log.Info().Msg("Manual price sync triggered")
+
+	// Delegate to Python service for now
+	// Full Go implementation will be in Phase 4 (sync_cycle.go)
+	h.proxyToPython(w, r, "/api/system/sync/prices")
+}
+
+// HandleSyncHistorical triggers manual historical data sync
+// Endpoint: POST /api/universe/sync/historical
+func (h *UniverseHandlers) HandleSyncHistorical(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	h.log.Info().Msg("Manual historical data sync triggered")
+
+	// Delegate to Python service for now
+	// Full Go implementation will be in Phase 4 (sync_cycle.go)
+	h.proxyToPython(w, r, "/api/system/sync/historical")
+}
+
+// HandleRebuildUniverse rebuilds universe from portfolio and populates all databases
+// Endpoint: POST /api/universe/sync/rebuild-universe
+func (h *UniverseHandlers) HandleRebuildUniverse(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	h.log.Info().Msg("Universe rebuild from portfolio triggered")
+
+	// Delegate to Python service for now
+	// Full Go implementation will be in Phase 4 (sync_cycle.go)
+	h.proxyToPython(w, r, "/api/system/sync/rebuild-universe")
+}
+
+// HandleSyncSecuritiesData triggers securities data sync (historical, industry, metrics, scores)
+// Endpoint: POST /api/universe/sync/securities-data
+func (h *UniverseHandlers) HandleSyncSecuritiesData(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	h.log.Info().Msg("Manual securities data sync triggered")
+
+	// Delegate to Python service for now
+	// Full Go implementation will be in Phase 4 (sync_cycle.go)
+	h.proxyToPython(w, r, "/api/system/sync/securities-data")
 }
