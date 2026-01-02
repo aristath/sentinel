@@ -74,7 +74,7 @@ void setSystemStats(int pixels_on, int brightness, int interval_ms) {
 void updatePixelPattern() {
   // Smooth animation: swap a few positions to gradually change pattern
   // Adjust pixelsToChange (3-10) for animation speed - lower = smoother, higher = more chaotic
-  int pixelsToChange = 5;
+  int pixelsToChange = 15;  // Increased for more visible animation
 
   // Only animate if we have pixels to work with
   if (targetPixelsOn > 0 && targetPixelsOn < TOTAL_PIXELS) {
@@ -184,10 +184,10 @@ void loop() {
   // Bridge handles RPC messages automatically in background thread
   // No need to call Bridge.loop() - it's handled by __loopHook()
 
-  // Render in stats mode at 20 FPS - fast but safe
+  // Render in stats mode at 40 FPS - fast and visible
   if (inStatsMode) {
     updatePixelPattern();
-    delay(50);  // 50ms = 20 FPS - smooth animation, proven stable
+    delay(25);  // 25ms = 40 FPS - faster, more visible animation
   }
 
   unsigned long currentMillis = millis();
