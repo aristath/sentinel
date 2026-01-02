@@ -13,6 +13,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/aristath/arduino-trader/internal/clients/tradernet"
+	"github.com/aristath/arduino-trader/internal/clients/yahoo"
 	"github.com/aristath/arduino-trader/internal/config"
 	"github.com/aristath/arduino-trader/internal/database"
 	"github.com/aristath/arduino-trader/internal/modules/allocation"
@@ -21,6 +22,7 @@ import (
 	"github.com/aristath/arduino-trader/internal/modules/evaluation"
 	"github.com/aristath/arduino-trader/internal/modules/portfolio"
 	"github.com/aristath/arduino-trader/internal/modules/scoring/api"
+	"github.com/aristath/arduino-trader/internal/modules/scoring/scorers"
 	"github.com/aristath/arduino-trader/internal/modules/trading"
 	"github.com/aristath/arduino-trader/internal/modules/universe"
 )
@@ -250,11 +252,23 @@ func (s *Server) setupUniverseRoutes(r chi.Router) {
 	// Position repo for joining position data (optional for now)
 	positionRepo := portfolio.NewPositionRepository(s.stateDB.Conn(), s.configDB.Conn(), s.log)
 
+	// Yahoo Finance client for fundamental data
+	yahooClient := yahoo.NewClient(s.log)
+
+	// Security scorer for score calculation
+	securityScorer := scorers.NewSecurityScorer()
+
+	// History database for historical price data
+	historyDB := universe.NewHistoryDB("../data/history", s.log)
+
 	handler := universe.NewUniverseHandlers(
 		securityRepo,
 		scoreRepo,
 		s.stateDB.Conn(), // Pass stateDB for GetWithScores
 		positionRepo,
+		securityScorer,
+		yahooClient,
+		historyDB,
 		s.cfg.PythonServiceURL,
 		s.log,
 	)

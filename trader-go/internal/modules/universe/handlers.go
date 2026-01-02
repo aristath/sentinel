@@ -11,6 +11,10 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/aristath/arduino-trader/internal/clients/yahoo"
+	"github.com/aristath/arduino-trader/internal/modules/scoring/domain"
+	"github.com/aristath/arduino-trader/internal/modules/scoring/scorers"
+	"github.com/aristath/arduino-trader/pkg/formulas"
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog"
 )
@@ -108,12 +112,15 @@ func roundFloat(val float64, precision int) float64 {
 
 // UniverseHandlers contains HTTP handlers for universe API
 type UniverseHandlers struct {
-	log          zerolog.Logger
-	stateDB      interface{}
-	positionRepo interface{}
-	securityRepo *SecurityRepository
-	scoreRepo    *ScoreRepository
-	pythonURL    string
+	log            zerolog.Logger
+	stateDB        interface{}
+	positionRepo   interface{}
+	securityRepo   *SecurityRepository
+	scoreRepo      *ScoreRepository
+	securityScorer *scorers.SecurityScorer
+	yahooClient    *yahoo.Client
+	historyDB      *HistoryDB
+	pythonURL      string
 }
 
 // NewUniverseHandlers creates a new universe handlers instance
@@ -122,16 +129,22 @@ func NewUniverseHandlers(
 	scoreRepo *ScoreRepository,
 	stateDB interface{},
 	positionRepo interface{},
+	securityScorer *scorers.SecurityScorer,
+	yahooClient *yahoo.Client,
+	historyDB *HistoryDB,
 	pythonURL string,
 	log zerolog.Logger,
 ) *UniverseHandlers {
 	return &UniverseHandlers{
-		securityRepo: securityRepo,
-		scoreRepo:    scoreRepo,
-		stateDB:      stateDB,
-		positionRepo: positionRepo,
-		pythonURL:    pythonURL,
-		log:          log.With().Str("module", "universe_handlers").Logger(),
+		securityRepo:   securityRepo,
+		scoreRepo:      scoreRepo,
+		stateDB:        stateDB,
+		positionRepo:   positionRepo,
+		securityScorer: securityScorer,
+		yahooClient:    yahooClient,
+		historyDB:      historyDB,
+		pythonURL:      pythonURL,
+		log:            log.With().Str("module", "universe_handlers").Logger(),
 	}
 }
 
@@ -370,11 +383,57 @@ func (h *UniverseHandlers) HandleAddStockByIdentifier(w http.ResponseWriter, r *
 	h.proxyToPython(w, r, "/api/securities/add-by-identifier")
 }
 
-// HandleRefreshAllScores proxies to Python for score recalculation
+// HandleRefreshAllScores recalculates scores for all active securities
 // POST /api/securities/refresh-all
 func (h *UniverseHandlers) HandleRefreshAllScores(w http.ResponseWriter, r *http.Request) {
-	// Proxy to Python - requires scoring service
-	h.proxyToPython(w, r, "/api/securities/refresh-all")
+	h.log.Info().Msg("Refreshing all security scores")
+
+	// Get all active securities
+	securities, err := h.securityRepo.GetAllActive()
+	if err != nil {
+		h.log.Error().Err(err).Msg("Failed to get active securities")
+		http.Error(w, "Failed to get securities", http.StatusInternalServerError)
+		return
+	}
+
+	// Score all securities
+	var scoredCount int
+	var scores []map[string]interface{}
+
+	for _, security := range securities {
+		// Update industry if missing
+		if security.Industry == "" {
+			if industry, err := h.yahooClient.GetSecurityIndustry(security.Symbol, &security.YahooSymbol); err == nil && industry != nil {
+				_ = h.securityRepo.Update(security.Symbol, map[string]interface{}{"industry": *industry})
+				h.log.Info().Str("symbol", security.Symbol).Str("industry", *industry).Msg("Updated missing industry")
+			}
+		}
+
+		// Calculate score
+		score, err := h.calculateAndSaveScore(security.Symbol, security.YahooSymbol, security.Country, security.Industry)
+		if err != nil {
+			h.log.Warn().Err(err).Str("symbol", security.Symbol).Msg("Failed to calculate score")
+			continue
+		}
+
+		if score != nil {
+			scoredCount++
+			scores = append(scores, map[string]interface{}{
+				"symbol":      security.Symbol,
+				"total_score": score.TotalScore,
+			})
+		}
+	}
+
+	h.log.Info().Int("scored_count", scoredCount).Int("total_securities", len(securities)).Msg("Score refresh complete")
+
+	response := map[string]interface{}{
+		"message": fmt.Sprintf("Refreshed scores for %d stocks", scoredCount),
+		"scores":  scores,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(response)
 }
 
 // HandleRefreshSecurityData proxies to Python for full data refresh
@@ -386,22 +445,152 @@ func (h *UniverseHandlers) HandleRefreshSecurityData(w http.ResponseWriter, r *h
 	h.proxyToPython(w, r, fmt.Sprintf("/api/securities/%s/refresh-data", isin))
 }
 
-// HandleRefreshStockScore proxies to Python for single score refresh
+// HandleRefreshStockScore recalculates score for a single security
 // POST /api/securities/{isin}/refresh
 func (h *UniverseHandlers) HandleRefreshStockScore(w http.ResponseWriter, r *http.Request) {
 	isin := chi.URLParam(r, "isin")
-	h.log.Info().Str("isin", isin).Msg("Proxying refresh score request to Python")
-	// Proxy to Python - requires scoring service
-	h.proxyToPython(w, r, fmt.Sprintf("/api/securities/%s/refresh", isin))
+	isin = strings.TrimSpace(strings.ToUpper(isin))
+
+	// Validate ISIN format
+	if !isISIN(isin) {
+		http.Error(w, "Invalid ISIN format", http.StatusBadRequest)
+		return
+	}
+
+	h.log.Info().Str("isin", isin).Msg("Refreshing security score")
+
+	// Get security by ISIN
+	security, err := h.securityRepo.GetByISIN(isin)
+	if err != nil {
+		h.log.Error().Err(err).Str("isin", isin).Msg("Failed to fetch security")
+		http.Error(w, "Failed to fetch security", http.StatusInternalServerError)
+		return
+	}
+	if security == nil {
+		http.Error(w, "Security not found", http.StatusNotFound)
+		return
+	}
+
+	symbol := security.Symbol
+
+	// Calculate and save score
+	score, err := h.calculateAndSaveScore(symbol, security.YahooSymbol, security.Country, security.Industry)
+	if err != nil {
+		h.log.Error().Err(err).Str("symbol", symbol).Msg("Failed to calculate score")
+		http.Error(w, "Failed to calculate score", http.StatusInternalServerError)
+		return
+	}
+
+	if score == nil {
+		http.Error(w, "Failed to calculate score", http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"symbol":            symbol,
+		"total_score":       score.TotalScore,
+		"quality":           score.QualityScore,
+		"opportunity":       score.OpportunityScore,
+		"analyst":           score.AnalystScore,
+		"allocation_fit":    score.AllocationFitScore,
+		"volatility":        score.Volatility,
+		"cagr_score":        score.CAGRScore,
+		"consistency_score": score.ConsistencyScore,
+		"history_years":     score.HistoryYears,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(response)
 }
 
-// HandleUpdateStock proxies to Python for security update
+// HandleUpdateStock updates security details and recalculates score
 // PUT /api/securities/{isin}
 func (h *UniverseHandlers) HandleUpdateStock(w http.ResponseWriter, r *http.Request) {
 	isin := chi.URLParam(r, "isin")
-	h.log.Info().Str("isin", isin).Msg("Proxying update request to Python")
-	// Proxy to Python - requires score recalculation
-	h.proxyToPython(w, r, fmt.Sprintf("/api/securities/%s", isin))
+	isin = strings.TrimSpace(strings.ToUpper(isin))
+
+	// Validate ISIN format
+	if !isISIN(isin) {
+		http.Error(w, "Invalid ISIN format", http.StatusBadRequest)
+		return
+	}
+
+	h.log.Info().Str("isin", isin).Msg("Updating security")
+
+	// Get security by ISIN
+	security, err := h.securityRepo.GetByISIN(isin)
+	if err != nil {
+		h.log.Error().Err(err).Str("isin", isin).Msg("Failed to fetch security")
+		http.Error(w, "Failed to fetch security", http.StatusInternalServerError)
+		return
+	}
+	if security == nil {
+		http.Error(w, "Security not found", http.StatusNotFound)
+		return
+	}
+
+	oldSymbol := security.Symbol
+
+	// Parse update request
+	var updates map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if len(updates) == 0 {
+		http.Error(w, "No updates provided", http.StatusBadRequest)
+		return
+	}
+
+	// Apply updates
+	if err := h.securityRepo.Update(oldSymbol, updates); err != nil {
+		h.log.Error().Err(err).Str("symbol", oldSymbol).Msg("Failed to update security")
+		http.Error(w, "Failed to update security", http.StatusInternalServerError)
+		return
+	}
+
+	// Get updated security
+	finalSymbol := oldSymbol
+	if newSymbol, ok := updates["symbol"].(string); ok && newSymbol != oldSymbol {
+		finalSymbol = newSymbol
+	}
+
+	updatedSecurity, err := h.securityRepo.GetBySymbol(finalSymbol)
+	if err != nil || updatedSecurity == nil {
+		h.log.Error().Err(err).Str("symbol", finalSymbol).Msg("Failed to fetch updated security")
+		http.Error(w, "Security not found after update", http.StatusNotFound)
+		return
+	}
+
+	// Recalculate score
+	score, err := h.calculateAndSaveScore(finalSymbol, updatedSecurity.YahooSymbol, updatedSecurity.Country, updatedSecurity.Industry)
+	if err != nil {
+		h.log.Warn().Err(err).Str("symbol", finalSymbol).Msg("Failed to recalculate score after update")
+		// Continue without score rather than failing the update
+	}
+
+	response := map[string]interface{}{
+		"symbol":              updatedSecurity.Symbol,
+		"isin":                updatedSecurity.ISIN,
+		"yahoo_symbol":        updatedSecurity.YahooSymbol,
+		"name":                updatedSecurity.Name,
+		"industry":            updatedSecurity.Industry,
+		"country":             updatedSecurity.Country,
+		"fullExchangeName":    updatedSecurity.FullExchangeName,
+		"priority_multiplier": updatedSecurity.PriorityMultiplier,
+		"min_lot":             updatedSecurity.MinLot,
+		"active":              updatedSecurity.Active,
+		"allow_buy":           updatedSecurity.AllowBuy,
+		"allow_sell":          updatedSecurity.AllowSell,
+	}
+
+	if score != nil {
+		response["total_score"] = score.TotalScore
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(response)
 }
 
 // HandleDeleteStock soft-deletes a security (sets active=0)
@@ -450,6 +639,168 @@ func (h *UniverseHandlers) HandleDeleteStock(w http.ResponseWriter, r *http.Requ
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(response) // Ignore encode error - already committed response
+}
+
+// calculateAndSaveScore calculates and saves security score
+// Faithful translation from Python: app/modules/scoring/services/scoring_service.py -> calculate_and_save_score
+func (h *UniverseHandlers) calculateAndSaveScore(symbol string, yahooSymbol string, country string, industry string) (*SecurityScore, error) {
+	// Fetch price data from history database
+	dailyPrices, err := h.historyDB.GetDailyPrices(symbol, 400)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get daily prices: %w", err)
+	}
+
+	if len(dailyPrices) < 50 {
+		return nil, fmt.Errorf("insufficient daily data: %d days (need at least 50)", len(dailyPrices))
+	}
+
+	monthlyPrices, err := h.historyDB.GetMonthlyPrices(symbol, 150)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get monthly prices: %w", err)
+	}
+
+	if len(monthlyPrices) < 12 {
+		return nil, fmt.Errorf("insufficient monthly data: %d months (need at least 12)", len(monthlyPrices))
+	}
+
+	// Fetch fundamentals from Yahoo Finance
+	var yahooSymPtr *string
+	if yahooSymbol != "" {
+		yahooSymPtr = &yahooSymbol
+	}
+
+	fundamentalsData, err := h.yahooClient.GetFundamentalData(symbol, yahooSymPtr)
+	if err != nil {
+		h.log.Warn().Err(err).Str("symbol", symbol).Msg("Failed to get fundamental data, continuing without it")
+		// Continue without fundamentals - scoring can work with just price data
+	}
+
+	// Convert data formats for scoring service
+	// Extract close prices from daily data
+	closePrices := make([]float64, len(dailyPrices))
+	for i, dp := range dailyPrices {
+		closePrices[i] = dp.Close
+	}
+
+	// Convert monthly prices to formulas.MonthlyPrice format
+	monthlyPricesConverted := make([]formulas.MonthlyPrice, len(monthlyPrices))
+	for i, mp := range monthlyPrices {
+		monthlyPricesConverted[i] = formulas.MonthlyPrice{
+			YearMonth:   mp.YearMonth,
+			AvgAdjClose: mp.AvgAdjClose,
+		}
+	}
+
+	// Build scoring input
+	scoringInput := scorers.ScoreSecurityInput{
+		Symbol:        symbol,
+		DailyPrices:   closePrices,
+		MonthlyPrices: monthlyPricesConverted,
+	}
+
+	// Add fundamentals if available
+	if fundamentalsData != nil {
+		scoringInput.PERatio = fundamentalsData.PERatio
+		scoringInput.ForwardPE = fundamentalsData.ForwardPE
+		scoringInput.DividendYield = fundamentalsData.DividendYield
+		scoringInput.FiveYearAvgDivYield = fundamentalsData.FiveYearAvgDividendYield
+		scoringInput.ProfitMargin = fundamentalsData.ProfitMargin
+		scoringInput.DebtToEquity = fundamentalsData.DebtToEquity
+		scoringInput.CurrentRatio = fundamentalsData.CurrentRatio
+	}
+
+	// Add country and industry for allocation fit scoring
+	if country != "" {
+		scoringInput.Country = &country
+	}
+	if industry != "" {
+		scoringInput.Industry = &industry
+	}
+
+	// Call scoring service
+	calculatedScore := h.securityScorer.ScoreSecurityWithDefaults(scoringInput)
+
+	// Convert calculated score to SecurityScore for database storage
+	score := convertToSecurityScore(symbol, calculatedScore)
+
+	// Save score to database
+	if err := h.scoreRepo.Upsert(score); err != nil {
+		return nil, fmt.Errorf("failed to save score: %w", err)
+	}
+
+	h.log.Info().Str("symbol", symbol).Float64("score", score.TotalScore).Msg("Score calculated and saved")
+	return &score, nil
+}
+
+// convertToSecurityScore converts domain.CalculatedSecurityScore to SecurityScore
+func convertToSecurityScore(symbol string, calculated *domain.CalculatedSecurityScore) SecurityScore {
+	// Extract group scores
+	groupScores := calculated.GroupScores
+	if groupScores == nil {
+		groupScores = make(map[string]float64)
+	}
+
+	// Calculate quality score as average of long_term and fundamentals
+	qualityScore := 0.0
+	if longTerm, ok := groupScores["long_term"]; ok {
+		if fundamentals, ok2 := groupScores["fundamentals"]; ok2 {
+			qualityScore = (longTerm + fundamentals) / 2
+		} else {
+			qualityScore = longTerm
+		}
+	} else if fundamentals, ok := groupScores["fundamentals"]; ok {
+		qualityScore = fundamentals
+	}
+
+	// Extract sub-scores
+	subScores := calculated.SubScores
+	var cagrScore, consistencyScore float64
+	if subScores != nil {
+		if longTermSubs, ok := subScores["long_term"]; ok {
+			if cagr, ok := longTermSubs["cagr"]; ok {
+				cagrScore = cagr
+			}
+		}
+		if fundamentalsSubs, ok := subScores["fundamentals"]; ok {
+			if consistency, ok := fundamentalsSubs["consistency"]; ok {
+				consistencyScore = consistency
+			}
+		}
+	}
+
+	// Approximate history years
+	historyYears := 0.0
+	if cagrScore > 0 {
+		historyYears = 5.0
+	}
+
+	volatility := 0.0
+	if calculated.Volatility != nil {
+		volatility = *calculated.Volatility
+	}
+
+	return SecurityScore{
+		Symbol:                 symbol,
+		QualityScore:           qualityScore,
+		OpportunityScore:       groupScores["opportunity"],
+		AnalystScore:           groupScores["opinion"],
+		AllocationFitScore:     groupScores["diversification"],
+		CAGRScore:              cagrScore,
+		ConsistencyScore:       consistencyScore,
+		HistoryYears:           historyYears,
+		TechnicalScore:         groupScores["technicals"],
+		FundamentalScore:       groupScores["fundamentals"],
+		TotalScore:             calculated.TotalScore,
+		Volatility:             volatility,
+		FinancialStrengthScore: 0, // Not in current domain model
+		SharpeScore:            0, // Not in current domain model
+		DrawdownScore:          0, // Not in current domain model
+		DividendBonus:          0, // Not in current domain model
+		RSI:                    0, // Not in current domain model
+		EMA200:                 0, // Not in current domain model
+		Below52wHighPct:        0, // Not in current domain model
+		SellScore:              0, // Not in current domain model
+	}
 }
 
 // Helper methods
