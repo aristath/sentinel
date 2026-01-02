@@ -137,7 +137,7 @@ func (m *ParameterMapper) IsBreakoutBuyer(settings SatelliteSettings) bool {
 // DescribeParameters generates human-readable description of trading parameters
 func (m *ParameterMapper) DescribeParameters(params TradingParameters) string {
 	entryBias := "dip buyer"
-	if params.BreakoutThreshold > params.BuyDipThreshold {
+	if params.BreakoutThreshold >= params.BuyDipThreshold {
 		entryBias = "breakout buyer"
 	}
 
