@@ -39,6 +39,9 @@ func main() {
 	// state.db - positions, scores
 	stateDB, err := database.New("../data/state.db")
 	if err != nil {
+		// Note: log.Fatal calls os.Exit, preventing deferred cleanup
+		// In practice, OS cleans up file handles on exit, so risk is low
+		//nolint:gocritic // exitAfterDefer: Accepted tradeoff for simpler code
 		log.Fatal().Err(err).Msg("Failed to initialize state database")
 	}
 	defer stateDB.Close()

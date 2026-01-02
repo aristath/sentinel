@@ -20,11 +20,11 @@ type EndStateScorer struct{}
 
 // EndStateWeights represents risk-adjusted weights for end-state scoring
 type EndStateWeights struct {
-	WeightTotalReturn      float64 `json:"weight_total_return"`
-	WeightDiversification  float64 `json:"weight_diversification"`
-	WeightLongTermPromise  float64 `json:"weight_long_term_promise"`
-	WeightStability        float64 `json:"weight_stability"`
-	WeightOpinion          float64 `json:"weight_opinion"`
+	WeightTotalReturn     float64 `json:"weight_total_return"`
+	WeightDiversification float64 `json:"weight_diversification"`
+	WeightLongTermPromise float64 `json:"weight_long_term_promise"`
+	WeightStability       float64 `json:"weight_stability"`
+	WeightOpinion         float64 `json:"weight_opinion"`
 }
 
 // TotalReturnScore represents total return scoring components
@@ -86,17 +86,17 @@ type PortfolioEndStateScore struct {
 
 // End-state scoring weights (default/balanced profile)
 const (
-	weightTotalReturnDefault      = 0.35
-	weightDiversificationDefault  = 0.25
-	weightLongTermPromiseDefault  = 0.20
-	weightStabilityDefault        = 0.15
-	weightOpinionDefault          = 0.05
+	weightTotalReturnDefault     = 0.35
+	weightDiversificationDefault = 0.25
+	weightLongTermPromiseDefault = 0.20
+	weightStabilityDefault       = 0.15
+	weightOpinionDefault         = 0.05
 
 	// Long-term promise sub-weights
-	promiseWeightConsistency        = 0.35
-	promiseWeightFinancials         = 0.25
-	promiseWeightDividendStability  = 0.25
-	promiseWeightSortino            = 0.15
+	promiseWeightConsistency       = 0.35
+	promiseWeightFinancials        = 0.25
+	promiseWeightDividendStability = 0.25
+	promiseWeightSortino           = 0.15
 
 	// Stability sub-weights
 	stabilityWeightVolatility = 0.50
@@ -112,10 +112,12 @@ func NewEndStateScorer() *EndStateScorer {
 // GetRiskProfileWeights returns scoring weights adjusted for risk profile
 //
 // Args:
-//     riskProfile: "conservative", "balanced", or "aggressive"
+//
+//	riskProfile: "conservative", "balanced", or "aggressive"
 //
 // Returns:
-//     EndStateWeights with weights that sum to 1.0
+//
+//	EndStateWeights with weights that sum to 1.0
 func (es *EndStateScorer) GetRiskProfileWeights(riskProfile string) EndStateWeights {
 	switch riskProfile {
 	case "conservative":
@@ -152,11 +154,13 @@ func (es *EndStateScorer) GetRiskProfileWeights(riskProfile string) EndStateWeig
 // Peak at target (default 12%). Uses asymmetric Gaussian.
 //
 // Args:
-//     totalReturn: Total return value
-//     target: Target return (default 12%)
+//
+//	totalReturn: Total return value
+//	target: Target return (default 12%)
 //
 // Returns:
-//     Score from 0.15 to 1.0
+//
+//	Score from 0.15 to 1.0
 func (es *EndStateScorer) ScoreTotalReturn(totalReturn, target float64) float64 {
 	if totalReturn <= 0 {
 		return scoring.BellCurveFloor
@@ -178,10 +182,12 @@ func (es *EndStateScorer) ScoreTotalReturn(totalReturn, target float64) float64 
 // CalculateTotalReturnScore calculates total return score (CAGR + dividend yield combined)
 //
 // Args:
-//     metrics: Pre-fetched metrics dict containing CAGR_5Y and DIVIDEND_YIELD
+//
+//	metrics: Pre-fetched metrics dict containing CAGR_5Y and DIVIDEND_YIELD
 //
 // Returns:
-//     TotalReturnScore with all components
+//
+//	TotalReturnScore with all components
 func (es *EndStateScorer) CalculateTotalReturnScore(metrics map[string]float64) TotalReturnScore {
 	// Get CAGR from metrics dict
 	cagr, hasCagr := metrics["CAGR_5Y"]
@@ -244,11 +250,13 @@ func convertSortinoToScore(sortino float64) float64 {
 // - Sortino (15%): Good returns with low downside risk
 //
 // Args:
-//     metrics: Pre-fetched metrics dict containing CONSISTENCY_SCORE, FINANCIAL_STRENGTH,
-//              DIVIDEND_CONSISTENCY (or PAYOUT_RATIO), and SORTINO
+//
+//	metrics: Pre-fetched metrics dict containing CONSISTENCY_SCORE, FINANCIAL_STRENGTH,
+//	         DIVIDEND_CONSISTENCY (or PAYOUT_RATIO), and SORTINO
 //
 // Returns:
-//     LongTermPromiseScore with all components
+//
+//	LongTermPromiseScore with all components
 func (es *EndStateScorer) CalculateLongTermPromise(metrics map[string]float64) LongTermPromiseScore {
 	// Get consistency score from metrics
 	consistencyScore, hasConsistency := metrics["CONSISTENCY_SCORE"]
@@ -343,10 +351,12 @@ func convertSharpeToScore(sharpe float64) float64 {
 // - Sharpe Score (20%): Higher risk-adjusted returns = higher score
 //
 // Args:
-//     metrics: Pre-fetched metrics dict containing VOLATILITY_ANNUAL, MAX_DRAWDOWN, and SHARPE
+//
+//	metrics: Pre-fetched metrics dict containing VOLATILITY_ANNUAL, MAX_DRAWDOWN, and SHARPE
 //
 // Returns:
-//     StabilityScore with all components
+//
+//	StabilityScore with all components
 func (es *EndStateScorer) CalculateStabilityScore(metrics map[string]float64) StabilityScore {
 	// Get volatility and convert to score
 	volatilityScore := 0.5
@@ -387,15 +397,17 @@ func (es *EndStateScorer) CalculateStabilityScore(metrics map[string]float64) St
 // the quality of a portfolio after executing a sequence of trades.
 //
 // Args:
-//     positions: Map of symbol -> position value in EUR
-//     totalValue: Total portfolio value in EUR
-//     diversificationScore: Pre-calculated diversification score (0-1)
-//     metricsCache: Pre-fetched metrics dict mapping symbol -> metrics dict
-//     opinionScore: Average analyst opinion score (default 0.5)
-//     riskProfile: "conservative", "balanced", or "aggressive"
+//
+//	positions: Map of symbol -> position value in EUR
+//	totalValue: Total portfolio value in EUR
+//	diversificationScore: Pre-calculated diversification score (0-1)
+//	metricsCache: Pre-fetched metrics dict mapping symbol -> metrics dict
+//	opinionScore: Average analyst opinion score (default 0.5)
+//	riskProfile: "conservative", "balanced", or "aggressive"
 //
 // Returns:
-//     PortfolioEndStateScore with detailed breakdown
+//
+//	PortfolioEndStateScore with detailed breakdown
 func (es *EndStateScorer) CalculatePortfolioEndStateScore(
 	positions map[string]float64,
 	totalValue float64,

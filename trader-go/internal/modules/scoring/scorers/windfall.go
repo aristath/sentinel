@@ -20,33 +20,33 @@ type WindfallScorer struct{}
 
 // WindfallScore represents the result of windfall scoring
 type WindfallScore struct {
+	Status         string  `json:"status,omitempty"`
 	CurrentGain    float64 `json:"current_gain"`
 	YearsHeld      float64 `json:"years_held"`
 	HistoricalCAGR float64 `json:"historical_cagr"`
 	ExpectedGain   float64 `json:"expected_gain"`
 	ExcessGain     float64 `json:"excess_gain"`
 	WindfallScore  float64 `json:"windfall_score"`
-	Status         string  `json:"status,omitempty"`
 }
 
 // ProfitTakingRecommendation represents whether and how much to sell
 type ProfitTakingRecommendation struct {
-	ShouldSell       bool    `json:"should_sell"`
-	SuggestedSellPct float64 `json:"suggested_sell_pct"`
 	Reason           string  `json:"reason"`
+	SuggestedSellPct float64 `json:"suggested_sell_pct"`
+	ShouldSell       bool    `json:"should_sell"`
 }
 
 // WindfallAnalysis represents complete windfall analysis for a position
 type WindfallAnalysis struct {
-	Symbol            string                      `json:"symbol"`
-	CurrentGainPct    float64                     `json:"current_gain_pct"`
-	YearsHeld         float64                     `json:"years_held"`
-	WindfallScore     float64                     `json:"windfall_score"`
-	ExcessGainPct     float64                     `json:"excess_gain_pct"`
-	ExpectedGainPct   float64                     `json:"expected_gain_pct"`
-	HistoricalCAGRPct float64                     `json:"historical_cagr_pct"`
-	Recommendation    ProfitTakingRecommendation  `json:"recommendation"`
-	Error             string                      `json:"error,omitempty"`
+	Symbol            string                     `json:"symbol"`
+	Error             string                     `json:"error,omitempty"`
+	Recommendation    ProfitTakingRecommendation `json:"recommendation"`
+	CurrentGainPct    float64                    `json:"current_gain_pct"`
+	YearsHeld         float64                    `json:"years_held"`
+	WindfallScore     float64                    `json:"windfall_score"`
+	ExcessGainPct     float64                    `json:"excess_gain_pct"`
+	ExpectedGainPct   float64                    `json:"expected_gain_pct"`
+	HistoricalCAGRPct float64                    `json:"historical_cagr_pct"`
 }
 
 // NewWindfallScorer creates a new windfall scorer
@@ -59,22 +59,26 @@ func NewWindfallScorer() *WindfallScorer {
 // Excess gain = actual gain - expected gain from historical growth
 //
 // Example 1: Consistent grower
-//     held 3 years, up 61%, historical CAGR = 17%
-//     expected = (1.17^3) - 1 = 60%
-//     excess = 61% - 60% = 1%  -> No windfall
+//
+//	held 3 years, up 61%, historical CAGR = 17%
+//	expected = (1.17^3) - 1 = 60%
+//	excess = 61% - 60% = 1%  -> No windfall
 //
 // Example 2: Sudden spike
-//     held 1 year, up 80%, historical CAGR = 10%
-//     expected = 10%
-//     excess = 80% - 10% = 70%  -> Windfall!
+//
+//	held 1 year, up 80%, historical CAGR = 10%
+//	expected = 10%
+//	excess = 80% - 10% = 70%  -> Windfall!
 //
 // Args:
-//     currentGain: Current profit percentage (e.g., 0.80 = 80% gain)
-//     yearsHeld: Number of years position has been held
-//     historicalCAGR: Security's historical compound annual growth rate
+//
+//	currentGain: Current profit percentage (e.g., 0.80 = 80% gain)
+//	yearsHeld: Number of years position has been held
+//	historicalCAGR: Security's historical compound annual growth rate
 //
 // Returns:
-//     Excess gain as decimal (can be negative if underperforming)
+//
+//	Excess gain as decimal (can be negative if underperforming)
 func (ws *WindfallScorer) CalculateExcessGain(currentGain, yearsHeld, historicalCAGR float64) float64 {
 	if yearsHeld <= 0 {
 		return currentGain // No history = all excess
@@ -97,12 +101,14 @@ func (ws *WindfallScorer) CalculateExcessGain(currentGain, yearsHeld, historical
 // Higher score = more of a windfall = stronger signal to take profits.
 //
 // Args:
-//     currentGain: Current profit percentage (optional, use nil if unknown)
-//     yearsHeld: Years position held (optional, use nil if unknown)
-//     historicalCAGR: Historical CAGR (optional, will default to 0.10 if nil)
+//
+//	currentGain: Current profit percentage (optional, use nil if unknown)
+//	yearsHeld: Years position held (optional, use nil if unknown)
+//	historicalCAGR: Historical CAGR (optional, will default to 0.10 if nil)
 //
 // Returns:
-//     WindfallScore with all components
+//
+//	WindfallScore with all components
 func (ws *WindfallScorer) CalculateWindfallScore(
 	currentGain *float64,
 	yearsHeld *float64,
@@ -165,19 +171,22 @@ func (ws *WindfallScorer) CalculateWindfallScore(
 //
 // Rules:
 // 1. If doubled money (100%+ gain):
-//    - Windfall doubler (excess > 30%): sell 50%
-//    - Consistent doubler: sell 30%
+//   - Windfall doubler (excess > 30%): sell 50%
+//   - Consistent doubler: sell 30%
+//
 // 2. If excess gain > 50%: sell 40%
 // 3. If excess gain > 25%: sell 20%
 // 4. Otherwise: don't sell based on gains
 //
 // Args:
-//     currentGain: Current profit percentage
-//     yearsHeld: Years position held
-//     historicalCAGR: Historical CAGR
+//
+//	currentGain: Current profit percentage
+//	yearsHeld: Years position held
+//	historicalCAGR: Historical CAGR
 //
 // Returns:
-//     ProfitTakingRecommendation with decision, percentage, and reason
+//
+//	ProfitTakingRecommendation with decision, percentage, and reason
 func (ws *WindfallScorer) ShouldTakeProfits(currentGain, yearsHeld, historicalCAGR float64) ProfitTakingRecommendation {
 	excess := ws.CalculateExcessGain(currentGain, yearsHeld, historicalCAGR)
 
@@ -235,14 +244,16 @@ func (ws *WindfallScorer) ShouldTakeProfits(currentGain, yearsHeld, historicalCA
 // and returns a recommendation.
 //
 // Args:
-//     symbol: Security symbol
-//     currentPrice: Current market price
-//     avgPrice: Average purchase price
-//     firstBoughtAt: Time of first purchase (optional)
-//     historicalCAGR: Historical CAGR (optional, defaults to 0.10)
+//
+//	symbol: Security symbol
+//	currentPrice: Current market price
+//	avgPrice: Average purchase price
+//	firstBoughtAt: Time of first purchase (optional)
+//	historicalCAGR: Historical CAGR (optional, defaults to 0.10)
 //
 // Returns:
-//     WindfallAnalysis with complete analysis and recommendation
+//
+//	WindfallAnalysis with complete analysis and recommendation
 func (ws *WindfallScorer) GetWindfallRecommendation(
 	symbol string,
 	currentPrice float64,
