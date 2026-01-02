@@ -74,13 +74,20 @@ class PlannerInitializer:
                 # Check if config already exists
                 existing = None
                 if config_def["bucket_id"]:
+                    # Check by bucket for assigned configs
                     existing = await self.config_service.get_by_bucket(
                         config_def["bucket_id"]
+                    )
+                else:
+                    # Check by name for templates (no bucket assignment)
+                    all_configs = await self.config_service.get_all()
+                    existing = next(
+                        (c for c in all_configs if c.name == config_def["name"]), None
                     )
 
                 if existing:
                     logger.info(
-                        f"Planner config already exists for bucket {config_def['bucket_id']}, skipping"
+                        f"Planner config '{config_def['name']}' already exists, skipping"
                     )
                     result["skipped"].append(config_def["name"])
                     continue
