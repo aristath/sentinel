@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/aristath/arduino-trader/internal/clients/yahoo"
 	"github.com/rs/zerolog"
 )
 
@@ -33,15 +34,17 @@ const (
 
 // ReturnsCalculator calculates expected returns for portfolio optimization.
 type ReturnsCalculator struct {
-	db  *sql.DB
-	log zerolog.Logger
+	db          *sql.DB
+	yahooClient *yahoo.Client
+	log         zerolog.Logger
 }
 
 // NewReturnsCalculator creates a new returns calculator.
-func NewReturnsCalculator(db *sql.DB, log zerolog.Logger) *ReturnsCalculator {
+func NewReturnsCalculator(db *sql.DB, yahooClient *yahoo.Client, log zerolog.Logger) *ReturnsCalculator {
 	return &ReturnsCalculator{
-		db:  db,
-		log: log.With().Str("component", "returns").Logger(),
+		db:          db,
+		yahooClient: yahooClient,
+		log:         log.With().Str("component", "returns").Logger(),
 	}
 }
 
@@ -53,8 +56,8 @@ func (rc *ReturnsCalculator) CalculateExpectedReturns(
 ) (map[string]float64, error) {
 	expectedReturns := make(map[string]float64)
 
-	// Calculate forward-looking adjustment (simplified - can be extended)
-	forwardAdjustment := 0.0 // TODO: Implement market indicator integration
+	// Calculate forward-looking market indicator adjustment
+	forwardAdjustment := rc.calculateForwardAdjustment()
 
 	targetReturn := OptimizerTargetReturn
 
@@ -86,6 +89,83 @@ func (rc *ReturnsCalculator) CalculateExpectedReturns(
 		Msg("Calculated expected returns")
 
 	return expectedReturns, nil
+}
+
+// calculateForwardAdjustment calculates forward-looking market indicator adjustment.
+// Combines adjustments from VIX, yield curve, and market P/E.
+// Returns adjustment factor (e.g., -0.05 = reduce by 5%).
+func (rc *ReturnsCalculator) calculateForwardAdjustment() float64 {
+	var totalAdjustment float64
+
+	// 1. VIX adjustment (volatility/fear indicator)
+	vixPrice, err := rc.yahooClient.GetCurrentPrice("^VIX", nil, 2)
+	if err == nil && vixPrice != nil {
+		vix := *vixPrice
+		var vixAdj float64
+
+		if vix >= VIXHigh { // >= 25 (high volatility)
+			// Very high volatility: reduce by up to 10%
+			normalized := math.Min(1.0, (vix-VIXHigh)/20.0)
+			vixAdj = -VIXAdjustmentMax * normalized
+		} else if vix <= VIXLow { // <= 12 (low volatility)
+			// Low volatility: increase by up to 5%
+			normalized := 1.0 - (vix / VIXLow)
+			vixAdj = VIXAdjustmentMax * 0.5 * normalized
+		} else {
+			// Normal range: no adjustment
+			vixAdj = 0.0
+		}
+
+		totalAdjustment += vixAdj
+		rc.log.Debug().
+			Float64("vix", vix).
+			Float64("vix_adjustment", vixAdj).
+			Msg("VIX adjustment calculated")
+	} else {
+		rc.log.Debug().Msg("VIX not available, skipping VIX adjustment")
+	}
+
+	// 2. Market P/E adjustment (valuation indicator)
+	fundamentals, err := rc.yahooClient.GetFundamentalData("^GSPC", nil)
+	if err == nil && fundamentals != nil && fundamentals.PERatio != nil {
+		marketPE := *fundamentals.PERatio
+		var peAdj float64
+
+		if marketPE >= PEExpensive { // >= 25 (expensive market)
+			// Expensive market: reduce by up to 10%
+			normalized := math.Min(1.0, (marketPE-PEExpensive)/(PEExpensive*0.5))
+			peAdj = -PEAdjustmentMax * normalized
+		} else if marketPE <= PECheap { // <= 15 (cheap market)
+			// Cheap market: increase by up to 5%
+			normalized := 1.0 - ((marketPE - PECheap) / (PEFair - PECheap))
+			peAdj = PEAdjustmentMax * 0.5 * normalized
+		} else {
+			// Fair value range: no adjustment
+			peAdj = 0.0
+		}
+
+		totalAdjustment += peAdj
+		rc.log.Debug().
+			Float64("market_pe", marketPE).
+			Float64("pe_adjustment", peAdj).
+			Msg("Market P/E adjustment calculated")
+	} else {
+		rc.log.Debug().Msg("Market P/E not available, skipping P/E adjustment")
+	}
+
+	// 3. Yield curve adjustment (recession signal)
+	// Note: Treasury yields would require an external API (not implemented yet)
+	// When implemented, this would fetch 3M and 10Y yields and calculate slope
+	rc.log.Debug().Msg("Yield curve adjustment not implemented, skipping")
+
+	// Cap total adjustment at ±20%
+	totalAdjustment = math.Max(-0.20, math.Min(0.20, totalAdjustment))
+
+	rc.log.Info().
+		Float64("total_adjustment", totalAdjustment).
+		Msg("Calculated forward-looking market adjustment")
+
+	return totalAdjustment
 }
 
 // calculateSingle calculates expected return for a single security.

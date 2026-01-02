@@ -459,14 +459,19 @@ func (s *Server) setupScoringRoutes(r chi.Router) {
 
 // setupOptimizationRoutes configures optimization module routes
 func (s *Server) setupOptimizationRoutes(r chi.Router) {
+	// Initialize shared clients
+	yahooClient := yahoo.NewClient(s.log)
+	tradernetClient := tradernet.NewClient(s.cfg.TradernetServiceURL, s.log)
+	dividendRepo := dividends.NewRepository(s.ledgerDB.Conn(), s.log)
+
 	// Initialize PyPFOpt client
 	pypfoptClient := optimization.NewPyPFOptClient(s.cfg.PyPFOptServiceURL, s.log)
 
 	// Initialize constraints manager
 	constraintsMgr := optimization.NewConstraintsManager(s.log)
 
-	// Initialize returns calculator
-	returnsCalc := optimization.NewReturnsCalculator(s.configDB.Conn(), s.log)
+	// Initialize returns calculator with Yahoo client for market indicators
+	returnsCalc := optimization.NewReturnsCalculator(s.configDB.Conn(), yahooClient, s.log)
 
 	// Initialize risk model builder
 	riskBuilder := optimization.NewRiskModelBuilder(s.configDB.Conn(), pypfoptClient, s.log)
@@ -479,15 +484,6 @@ func (s *Server) setupOptimizationRoutes(r chi.Router) {
 		riskBuilder,
 		s.log,
 	)
-
-	// Initialize Yahoo Finance client for current prices
-	yahooClient := yahoo.NewClient(s.log)
-
-	// Initialize Tradernet client for cash balance
-	tradernetClient := tradernet.NewClient(s.cfg.TradernetServiceURL, s.log)
-
-	// Initialize dividend repository for pending bonuses
-	dividendRepo := dividends.NewRepository(s.ledgerDB.Conn(), s.log)
 
 	// Initialize handler
 	handler := optimization.NewHandler(
