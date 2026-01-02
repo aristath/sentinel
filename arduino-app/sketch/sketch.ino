@@ -74,7 +74,7 @@ void setSystemStats(int pixels_on, int brightness, int interval_ms) {
 void updatePixelPattern() {
   // Smooth animation: swap a few positions to gradually change pattern
   // Adjust pixelsToChange (3-10) for animation speed - lower = smoother, higher = more chaotic
-  int pixelsToChange = 2;  // Subtle, smooth animation
+  int pixelsToChange = 1;  // Subtle, smooth animation
 
   // Only animate if we have pixels to work with
   if (targetPixelsOn > 0 && targetPixelsOn < TOTAL_PIXELS) {
