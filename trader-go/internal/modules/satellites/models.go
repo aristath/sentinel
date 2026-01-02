@@ -41,21 +41,21 @@ const (
 // Bucket represents a portfolio bucket (core or satellite)
 // Faithful translation from Python: app/modules/satellites/domain/models.py -> Bucket
 type Bucket struct {
-	ID                    string       `json:"id"`
-	Name                  string       `json:"name"`
-	Type                  BucketType   `json:"type"`
-	Status                BucketStatus `json:"status"`
-	Notes                 *string      `json:"notes,omitempty"`
-	TargetPct             *float64     `json:"target_pct,omitempty"`             // Target allocation percentage (0.0-1.0)
-	MinPct                *float64     `json:"min_pct,omitempty"`                // Minimum percentage before hibernation
-	MaxPct                *float64     `json:"max_pct,omitempty"`                // Maximum allowed percentage
-	ConsecutiveLosses     int          `json:"consecutive_losses"`               // Count of consecutive losing trades
-	MaxConsecutiveLosses  int          `json:"max_consecutive_losses"`           // Circuit breaker threshold
-	HighWaterMark         float64      `json:"high_water_mark"`                  // Peak bucket value
-	HighWaterMarkDate     *string      `json:"high_water_mark_date,omitempty"`   // When high water mark was set
-	LossStreakPausedAt    *string      `json:"loss_streak_paused_at,omitempty"`  // When circuit breaker triggered
-	CreatedAt             string       `json:"created_at"`
-	UpdatedAt             string       `json:"updated_at"`
+	ID                   string       `json:"id"`
+	Name                 string       `json:"name"`
+	Type                 BucketType   `json:"type"`
+	Status               BucketStatus `json:"status"`
+	Notes                *string      `json:"notes,omitempty"`
+	TargetPct            *float64     `json:"target_pct,omitempty"`            // Target allocation percentage (0.0-1.0)
+	MinPct               *float64     `json:"min_pct,omitempty"`               // Minimum percentage before hibernation
+	MaxPct               *float64     `json:"max_pct,omitempty"`               // Maximum allowed percentage
+	ConsecutiveLosses    int          `json:"consecutive_losses"`              // Count of consecutive losing trades
+	MaxConsecutiveLosses int          `json:"max_consecutive_losses"`          // Circuit breaker threshold
+	HighWaterMark        float64      `json:"high_water_mark"`                 // Peak bucket value
+	HighWaterMarkDate    *string      `json:"high_water_mark_date,omitempty"`  // When high water mark was set
+	LossStreakPausedAt   *string      `json:"loss_streak_paused_at,omitempty"` // When circuit breaker triggered
+	CreatedAt            string       `json:"created_at"`
+	UpdatedAt            string       `json:"updated_at"`
 }
 
 // IsActive checks if bucket is in an active trading state
@@ -103,10 +103,10 @@ type BucketBalance struct {
 // BucketTransaction represents an audit trail entry for bucket cash flow
 // Faithful translation from Python: app/modules/satellites/domain/models.py -> BucketTransaction
 type BucketTransaction struct {
-	ID          *int64          `json:"id,omitempty"`    // Database ID (set after insert)
+	ID          *int64          `json:"id,omitempty"` // Database ID (set after insert)
 	BucketID    string          `json:"bucket_id"`
 	Type        TransactionType `json:"type"`
-	Amount      float64         `json:"amount"`          // Positive for inflow, negative for outflow
+	Amount      float64         `json:"amount"` // Positive for inflow, negative for outflow
 	Currency    string          `json:"currency"`
 	Description *string         `json:"description,omitempty"`
 	CreatedAt   string          `json:"created_at"`
@@ -133,17 +133,17 @@ func NewBucketTransaction(bucketID string, txType TransactionType, amount float6
 // - 1.0 = Aggressive/Right option
 type SatelliteSettings struct {
 	SatelliteID         string  `json:"satellite_id"`
-	Preset              *string `json:"preset,omitempty"`              // Strategy preset name
-	RiskAppetite        float64 `json:"risk_appetite"`                 // 0=Conservative, 1=Aggressive
-	HoldDuration        float64 `json:"hold_duration"`                 // 0=Quick flips, 1=Patient holds
-	EntryStyle          float64 `json:"entry_style"`                   // 0=Buy dips, 1=Buy breakouts
-	PositionSpread      float64 `json:"position_spread"`               // 0=Concentrated, 1=Diversified
-	ProfitTaking        float64 `json:"profit_taking"`                 // 0=Let winners run, 1=Take profits early
-	TrailingStops       bool    `json:"trailing_stops"`                // Enable trailing stops
-	FollowRegime        bool    `json:"follow_regime"`                 // Follow market regime signals
-	AutoHarvest         bool    `json:"auto_harvest"`                  // Auto-harvest gains to core
-	PauseHighVolatility bool    `json:"pause_high_volatility"`         // Pause during high volatility
-	DividendHandling    string  `json:"dividend_handling"`             // reinvest_same, send_to_core, accumulate_cash
+	Preset              *string `json:"preset,omitempty"`      // Strategy preset name
+	RiskAppetite        float64 `json:"risk_appetite"`         // 0=Conservative, 1=Aggressive
+	HoldDuration        float64 `json:"hold_duration"`         // 0=Quick flips, 1=Patient holds
+	EntryStyle          float64 `json:"entry_style"`           // 0=Buy dips, 1=Buy breakouts
+	PositionSpread      float64 `json:"position_spread"`       // 0=Concentrated, 1=Diversified
+	ProfitTaking        float64 `json:"profit_taking"`         // 0=Let winners run, 1=Take profits early
+	TrailingStops       bool    `json:"trailing_stops"`        // Enable trailing stops
+	FollowRegime        bool    `json:"follow_regime"`         // Follow market regime signals
+	AutoHarvest         bool    `json:"auto_harvest"`          // Auto-harvest gains to core
+	PauseHighVolatility bool    `json:"pause_high_volatility"` // Pause during high volatility
+	DividendHandling    string  `json:"dividend_handling"`     // reinvest_same, send_to_core, accumulate_cash
 }
 
 // NewSatelliteSettings creates a new SatelliteSettings with default values
@@ -166,11 +166,11 @@ func NewSatelliteSettings(satelliteID string) *SatelliteSettings {
 // Validate validates slider values are in range
 func (s *SatelliteSettings) Validate() error {
 	sliders := map[string]float64{
-		"risk_appetite":  s.RiskAppetite,
-		"hold_duration":  s.HoldDuration,
-		"entry_style":    s.EntryStyle,
+		"risk_appetite":   s.RiskAppetite,
+		"hold_duration":   s.HoldDuration,
+		"entry_style":     s.EntryStyle,
 		"position_spread": s.PositionSpread,
-		"profit_taking":  s.ProfitTaking,
+		"profit_taking":   s.ProfitTaking,
 	}
 
 	for name, value := range sliders {
