@@ -28,6 +28,12 @@ const int MATRIX_WIDTH = 13;
 const int MATRIX_HEIGHT = 8;
 const int TOTAL_PIXELS = MATRIX_WIDTH * MATRIX_HEIGHT;  // 104 pixels
 
+// Clustering strength: number of candidates to check per swap
+// 1 = pure random (no clustering)
+// 3-5 = moderate organic clustering
+// 10+ = strong clustering
+const int CLUSTERING_STRENGTH = 4;
+
 // System stats mode state
 bool inStatsMode = false;
 uint8_t pixelBrightness[MATRIX_HEIGHT][MATRIX_WIDTH];  // 0-255 per pixel
@@ -70,27 +76,62 @@ void setSystemStats(int pixels_on, int brightness, int interval_ms) {
   inStatsMode = true;
 }
 
-// Update pixel pattern - smooth gradual animation (only changes a few pixels)
-void updatePixelPattern() {
-  // Smooth animation: swap a few positions to gradually change pattern
-  // Adjust pixelsToChange (3-10) for animation speed - lower = smoother, higher = more chaotic
-  int pixelsToChange = 1;  // Subtle, smooth animation
+// Count lit neighbors for a given pixel position (8 surrounding pixels)
+int countLitNeighbors(uint8_t x, uint8_t y) {
+  int count = 0;
+  for (int dy = -1; dy <= 1; dy++) {
+    for (int dx = -1; dx <= 1; dx++) {
+      if (dx == 0 && dy == 0) continue;  // Skip center pixel
+      int nx = x + dx;
+      int ny = y + dy;
+      if (nx >= 0 && nx < MATRIX_WIDTH && ny >= 0 && ny < MATRIX_HEIGHT) {
+        if (pixelBrightness[ny][nx] > 0) count++;
+      }
+    }
+  }
+  return count;
+}
 
+// Update pixel pattern - organic clustering with gravity
+void updatePixelPattern() {
   // Only animate if we have pixels to work with
   if (targetPixelsOn > 0 && targetPixelsOn < TOTAL_PIXELS) {
-    // Randomly swap elements from "lit" section with "dark" section
-    for (int i = 0; i < pixelsToChange; i++) {
-      // Pick a random lit pixel (first targetPixelsOn elements)
-      int litIdx = random(targetPixelsOn);
+    // Find most isolated lit pixel (check CLUSTERING_STRENGTH candidates)
+    int bestLitIdx = random(targetPixelsOn);  // Fallback
+    int minNeighbors = 9;
 
-      // Pick a random dark pixel (remaining elements)
-      int darkIdx = targetPixelsOn + random(TOTAL_PIXELS - targetPixelsOn);
-
-      // Swap them
-      uint8_t temp = pixelIndices[litIdx];
-      pixelIndices[litIdx] = pixelIndices[darkIdx];
-      pixelIndices[darkIdx] = temp;
+    for (int i = 0; i < CLUSTERING_STRENGTH; i++) {
+      int idx = random(targetPixelsOn);
+      uint8_t pos = pixelIndices[idx];
+      uint8_t x = pos % MATRIX_WIDTH;
+      uint8_t y = pos / MATRIX_WIDTH;
+      int neighbors = countLitNeighbors(x, y);
+      if (neighbors < minNeighbors) {
+        minNeighbors = neighbors;
+        bestLitIdx = idx;
+      }
     }
+
+    // Find dark pixel closest to clusters (check CLUSTERING_STRENGTH candidates)
+    int bestDarkIdx = targetPixelsOn + random(TOTAL_PIXELS - targetPixelsOn);  // Fallback
+    int maxNeighbors = -1;
+
+    for (int i = 0; i < CLUSTERING_STRENGTH; i++) {
+      int idx = targetPixelsOn + random(TOTAL_PIXELS - targetPixelsOn);
+      uint8_t pos = pixelIndices[idx];
+      uint8_t x = pos % MATRIX_WIDTH;
+      uint8_t y = pos / MATRIX_WIDTH;
+      int neighbors = countLitNeighbors(x, y);
+      if (neighbors > maxNeighbors) {
+        maxNeighbors = neighbors;
+        bestDarkIdx = idx;
+      }
+    }
+
+    // Swap isolated lit pixel with dark pixel near clusters
+    uint8_t temp = pixelIndices[bestLitIdx];
+    pixelIndices[bestLitIdx] = pixelIndices[bestDarkIdx];
+    pixelIndices[bestDarkIdx] = temp;
   }
 
   // Update brightness array efficiently
