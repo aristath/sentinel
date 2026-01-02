@@ -381,12 +381,12 @@ func TestBucketRepository_Settings_Validation(t *testing.T) {
 
 	// Invalid settings (risk_appetite out of range)
 	settings := &SatelliteSettings{
-		SatelliteID:  "sat1",
-		RiskAppetite: 1.5, // Invalid
-		HoldDuration: 0.5,
-		EntryStyle:   0.5,
-		PositionSpread: 0.5,
-		ProfitTaking:   0.5,
+		SatelliteID:      "sat1",
+		RiskAppetite:     1.5, // Invalid
+		HoldDuration:     0.5,
+		EntryStyle:       0.5,
+		PositionSpread:   0.5,
+		ProfitTaking:     0.5,
 		DividendHandling: "reinvest_same",
 	}
 
