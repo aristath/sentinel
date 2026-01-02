@@ -34,10 +34,6 @@ uint8_t pixelBrightness[MATRIX_HEIGHT][MATRIX_WIDTH];  // 0-255 per pixel
 int targetPixelsOn = 0;          // Target number of lit pixels (0-104)
 uint8_t targetBrightness = 100;  // Target brightness for lit pixels (100-220)
 
-// Animation timing
-int pixelUpdateInterval = 2000;         // Dynamic 10ms-2000ms
-unsigned long lastPixelUpdate = 0;
-
 // Efficient random pixel selection - smooth animation
 uint8_t pixelIndices[TOTAL_PIXELS];  // Array of pixel positions [0, 1, 2, ..., 103]
 
@@ -65,11 +61,12 @@ void scrollText(String text, int speed) {
   hasPendingText = true;
 }
 
-// System stats visualization: pixels_on (0-104), brightness (100-220), interval (10-2000)
+// System stats visualization: pixels_on (0-104), brightness (100-220)
+// Note: interval_ms parameter kept for backwards compatibility but ignored (renders continuously)
 void setSystemStats(int pixels_on, int brightness, int interval_ms) {
   targetPixelsOn = constrain(pixels_on, 0, TOTAL_PIXELS);
   targetBrightness = constrain(brightness, 100, 220);
-  pixelUpdateInterval = constrain(interval_ms, 10, 2000);
+  // interval_ms ignored - Arduino renders frames continuously without delay
   inStatsMode = true;
 }
 
@@ -189,9 +186,8 @@ void loop() {
 
   unsigned long currentMillis = millis();
 
-  // Pixel pattern updates at dynamic rate (stats mode only)
-  if (inStatsMode && currentMillis - lastPixelUpdate >= pixelUpdateInterval) {
-    lastPixelUpdate = currentMillis;
+  // Render next frame continuously in stats mode (no delay)
+  if (inStatsMode) {
     updatePixelPattern();
   }
 
