@@ -11,8 +11,8 @@ func TestGetRiskProfileWeights(t *testing.T) {
 	tests := []struct {
 		name        string
 		riskProfile string
-		wantSum     float64
 		description string
+		wantSum     float64
 	}{
 		{
 			name:        "Conservative profile",
@@ -75,10 +75,10 @@ func TestScoreTotalReturn(t *testing.T) {
 
 	tests := []struct {
 		name        string
+		description string
 		totalReturn float64
 		target      float64
 		wantScore   float64
-		description string
 	}{
 		{
 			name:        "At target (12%)",
@@ -153,10 +153,10 @@ func TestCalculateTotalReturnScore(t *testing.T) {
 	scorer := NewEndStateScorer()
 
 	tests := []struct {
-		name        string
 		metrics     map[string]float64
-		wantScore   float64
+		name        string
 		description string
+		wantScore   float64
 	}{
 		{
 			name: "Good total return (12%)",
@@ -222,10 +222,10 @@ func TestCalculateLongTermPromise(t *testing.T) {
 	scorer := NewEndStateScorer()
 
 	tests := []struct {
-		name        string
 		metrics     map[string]float64
-		wantScore   float64
+		name        string
 		description string
+		wantScore   float64
 	}{
 		{
 			name: "Excellent long-term promise",
@@ -311,10 +311,10 @@ func TestCalculateStabilityScore(t *testing.T) {
 	scorer := NewEndStateScorer()
 
 	tests := []struct {
-		name        string
 		metrics     map[string]float64
-		wantScore   float64
+		name        string
 		description string
+		wantScore   float64
 	}{
 		{
 			name: "Excellent stability",
@@ -385,16 +385,16 @@ func TestCalculatePortfolioEndStateScore(t *testing.T) {
 	scorer := NewEndStateScorer()
 
 	tests := []struct {
-		name                 string
 		positions            map[string]float64
+		metricsCache         map[string]map[string]float64
+		name                 string
+		riskProfile          string
+		description          string
 		totalValue           float64
 		diversificationScore float64
-		metricsCache         map[string]map[string]float64
 		opinionScore         float64
-		riskProfile          string
 		wantScore            float64
 		wantError            bool
-		description          string
 	}{
 		{
 			name: "Excellent portfolio",

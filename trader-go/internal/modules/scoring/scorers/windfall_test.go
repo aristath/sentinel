@@ -11,11 +11,11 @@ func TestCalculateExcessGain(t *testing.T) {
 
 	tests := []struct {
 		name           string
+		description    string
 		currentGain    float64
 		yearsHeld      float64
 		historicalCAGR float64
 		wantExcess     float64
-		description    string
 	}{
 		{
 			name:           "Consistent grower - Python example",
@@ -83,13 +83,13 @@ func TestCalculateWindfallScore(t *testing.T) {
 	scorer := NewWindfallScorer()
 
 	tests := []struct {
-		name           string
 		currentGain    *float64
 		yearsHeld      *float64
 		historicalCAGR *float64
-		wantScore      float64
+		name           string
 		wantStatus     string
 		description    string
+		wantScore      float64
 	}{
 		{
 			name:           "High windfall (50%+ excess)",
@@ -178,13 +178,13 @@ func TestShouldTakeProfits(t *testing.T) {
 
 	tests := []struct {
 		name           string
+		reasonContains string
+		description    string
 		currentGain    float64
 		yearsHeld      float64
 		historicalCAGR float64
-		wantSell       bool
 		wantPct        float64
-		reasonContains string
-		description    string
+		wantSell       bool
 	}{
 		{
 			name:           "Windfall doubler (100%+ gain, 30%+ excess)",
@@ -295,15 +295,15 @@ func TestGetWindfallRecommendation(t *testing.T) {
 	scorer := NewWindfallScorer()
 
 	tests := []struct {
-		name           string
-		currentPrice   float64
-		avgPrice       float64
 		firstBoughtAt  *time.Time
 		historicalCAGR *float64
+		name           string
+		description    string
+		currentPrice   float64
+		avgPrice       float64
 		wantError      bool
 		checkSell      bool
 		wantSell       bool
-		description    string
 	}{
 		{
 			name:           "Valid recommendation - windfall",

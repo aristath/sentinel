@@ -11,10 +11,10 @@ func TestCalculatePortfolioScore(t *testing.T) {
 	scorer := NewDiversificationScorer()
 
 	tests := []struct {
-		name        string
 		context     *domain.PortfolioContext
-		wantScore   float64
+		name        string
 		description string
+		wantScore   float64
 	}{
 		{
 			name: "Well-balanced portfolio",
@@ -147,16 +147,16 @@ func TestCalculatePostTransactionScore(t *testing.T) {
 	scorer := NewDiversificationScorer()
 
 	tests := []struct {
+		industry        *string
+		context         *domain.PortfolioContext
 		name            string
 		symbol          string
 		country         string
-		industry        *string
+		description     string
 		proposedValue   float64
 		stockQuality    float64
 		stockDividend   float64
-		context         *domain.PortfolioContext
 		wantImprovement bool
-		description     string
 	}{
 		{
 			name:          "Adding to underweight region improves score",
@@ -292,11 +292,11 @@ func TestCalculatePostTransactionScore(t *testing.T) {
 
 func TestCalculateDividendScore(t *testing.T) {
 	tests := []struct {
-		name        string
 		context     *domain.PortfolioContext
+		name        string
+		description string
 		totalValue  float64
 		wantScore   float64
-		description string
 	}{
 		{
 			name: "No dividends",
@@ -373,11 +373,11 @@ func TestCalculateDividendScore(t *testing.T) {
 
 func TestCalculateQualityScore(t *testing.T) {
 	tests := []struct {
-		name        string
 		context     *domain.PortfolioContext
+		name        string
+		description string
 		totalValue  float64
 		wantScore   float64
-		description string
 	}{
 		{
 			name: "High quality portfolio",

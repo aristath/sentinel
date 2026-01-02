@@ -46,7 +46,7 @@ func (h *Handler) HandleGetPortfolio(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Convert to response format
-	var result []map[string]interface{}
+	result := make([]map[string]interface{}, 0, len(positions))
 	for _, pos := range positions {
 		result = append(result, map[string]interface{}{
 			"symbol":           pos.Symbol,
@@ -118,7 +118,7 @@ func (h *Handler) HandleGetHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Convert to response format
-	var result []map[string]interface{}
+	result := make([]map[string]interface{}, 0, len(snapshots))
 	for _, s := range snapshots {
 		result = append(result, map[string]interface{}{
 			"id":           nil, // Not in domain model

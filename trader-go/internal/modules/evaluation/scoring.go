@@ -99,7 +99,7 @@ func calculateGeoDiversification(portfolioContext PortfolioContext, totalValue f
 	}
 
 	// Calculate deviations from target weights
-	var deviations []float64
+	deviations := make([]float64, 0, len(portfolioContext.CountryWeights))
 	for group, targetWeight := range portfolioContext.CountryWeights {
 		currentValue := groupValues[group]
 		currentPct := currentValue / totalValue
@@ -151,7 +151,7 @@ func calculateIndustryDiversification(portfolioContext PortfolioContext, totalVa
 	}
 
 	// Calculate deviations from target weights
-	var deviations []float64
+	deviations := make([]float64, 0, len(portfolioContext.IndustryWeights))
 	for group, targetWeight := range portfolioContext.IndustryWeights {
 		currentValue := groupValues[group]
 		currentPct := currentValue / totalValue

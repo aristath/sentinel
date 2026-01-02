@@ -54,6 +54,8 @@ type StabilityScore struct {
 
 // PortfolioEndStateScore represents complete end-state analysis
 type PortfolioEndStateScore struct {
+	RiskProfile string `json:"risk_profile"`
+	Error       string `json:"error,omitempty"`
 	TotalReturn struct {
 		WeightedScore float64 `json:"weighted_score"`
 		Weight        float64 `json:"weight"`
@@ -80,8 +82,6 @@ type PortfolioEndStateScore struct {
 		Contribution float64 `json:"contribution"`
 	} `json:"opinion"`
 	EndStateScore float64 `json:"end_state_score"`
-	RiskProfile   string  `json:"risk_profile"`
-	Error         string  `json:"error,omitempty"`
 }
 
 // End-state scoring weights (default/balanced profile)
