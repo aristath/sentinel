@@ -3,6 +3,7 @@ package planning
 import (
 	"github.com/aristath/arduino-trader/internal/modules/opportunities"
 	"github.com/aristath/arduino-trader/internal/modules/planning/domain"
+	"github.com/aristath/arduino-trader/internal/modules/planning/evaluation"
 	"github.com/aristath/arduino-trader/internal/modules/planning/planner"
 	"github.com/aristath/arduino-trader/internal/modules/sequences"
 	"github.com/rs/zerolog"
@@ -13,9 +14,9 @@ type Service struct {
 	log     zerolog.Logger
 }
 
-func NewService(opportunitiesService *opportunities.Service, sequencesService *sequences.Service, log zerolog.Logger) *Service {
+func NewService(opportunitiesService *opportunities.Service, sequencesService *sequences.Service, evaluationClient *evaluation.Client, log zerolog.Logger) *Service {
 	return &Service{
-		planner: planner.NewPlanner(opportunitiesService, sequencesService, log),
+		planner: planner.NewPlanner(opportunitiesService, sequencesService, evaluationClient, log),
 		log:     log.With().Str("module", "planning").Logger(),
 	}
 }
