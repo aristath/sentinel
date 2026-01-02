@@ -18,6 +18,7 @@ type Security struct {
 	Symbol      string    `json:"symbol"`
 	Name        string    `json:"name"`
 	Exchange    string    `json:"exchange"`
+	Country     string    `json:"country"`
 	Currency    Currency  `json:"currency"`
 	ISIN        string    `json:"isin"`
 	ID          int64     `json:"id"`

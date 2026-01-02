@@ -38,8 +38,8 @@ func (c *RebalanceBuysCalculator) Calculate(
 	// Parameters with defaults
 	minUnderweightThreshold := GetFloatParam(params, "min_underweight_threshold", 0.05) // 5% underweight
 	maxValuePerPosition := GetFloatParam(params, "max_value_per_position", 500.0)
-	minScore := GetFloatParam(params, "min_score", 0.6)                                  // Minimum security score
-	maxPositions := GetIntParam(params, "max_positions", 0)                              // 0 = unlimited
+	minScore := GetFloatParam(params, "min_score", 0.6)     // Minimum security score
+	maxPositions := GetIntParam(params, "max_positions", 0) // 0 = unlimited
 
 	if !ctx.AllowBuy {
 		c.log.Debug().Msg("Buying not allowed, skipping rebalance buys")
@@ -84,10 +84,10 @@ func (c *RebalanceBuysCalculator) Calculate(
 
 	// Build candidates for securities in underweight countries
 	type scoredCandidate struct {
-		symbol     string
-		country    string
+		symbol      string
+		group       string
 		underweight float64
-		score      float64
+		score       float64
 	}
 	var scoredCandidates []scoredCandidate
 
@@ -97,11 +97,25 @@ func (c *RebalanceBuysCalculator) Calculate(
 			continue
 		}
 
-		// Get country (placeholder - would extract from security metadata)
-		country := "DEFAULT"
+		// Get security and extract country
+		security := ctx.StocksBySymbol[symbol]
+		country := security.Country
+		if country == "" {
+			continue // Skip securities without country
+		}
 
-		// Check if this country is underweight
-		underweight, ok := underweightCountries[country]
+		// Map country to group
+		group := country
+		if ctx.CountryToGroup != nil {
+			if mappedGroup, ok := ctx.CountryToGroup[country]; ok {
+				group = mappedGroup
+			} else {
+				group = "OTHER"
+			}
+		}
+
+		// Check if this group is underweight
+		underweight, ok := underweightCountries[group]
 		if !ok {
 			continue
 		}
@@ -121,7 +135,7 @@ func (c *RebalanceBuysCalculator) Calculate(
 
 		scoredCandidates = append(scoredCandidates, scoredCandidate{
 			symbol:      symbol,
-			country:     country,
+			group:       group,
 			underweight: underweight,
 			score:       score,
 		})
@@ -182,7 +196,7 @@ func (c *RebalanceBuysCalculator) Calculate(
 
 		// Build reason
 		reason := fmt.Sprintf("Rebalance: %s underweight by %.1f%% (score: %.2f)",
-			scored.country, scored.underweight*100, scored.score)
+			scored.group, scored.underweight*100, scored.score)
 
 		// Build tags
 		tags := []string{"rebalance", "buy", "underweight"}

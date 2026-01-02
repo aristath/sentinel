@@ -36,7 +36,7 @@ func (c *RebalanceSellsCalculator) Calculate(
 ) ([]domain.ActionCandidate, error) {
 	// Parameters with defaults
 	minOverweightThreshold := GetFloatParam(params, "min_overweight_threshold", 0.05) // 5% overweight
-	maxPositions := GetIntParam(params, "max_positions", 0)                            // 0 = unlimited
+	maxPositions := GetIntParam(params, "max_positions", 0)                           // 0 = unlimited
 
 	if !ctx.AllowSell {
 		c.log.Debug().Msg("Selling not allowed, skipping rebalance sells")
@@ -102,11 +102,24 @@ func (c *RebalanceSellsCalculator) Calculate(
 			continue
 		}
 
-		// Get country (placeholder - would extract from security metadata)
-		country := "DEFAULT"
+		// Get country from security
+		country := security.Country
+		if country == "" {
+			continue // Skip securities without country
+		}
 
-		// Check if this security is in an overweight country
-		overweight, ok := overweightCountries[country]
+		// Map country to group
+		group := country
+		if ctx.CountryToGroup != nil {
+			if mappedGroup, ok := ctx.CountryToGroup[country]; ok {
+				group = mappedGroup
+			} else {
+				group = "OTHER"
+			}
+		}
+
+		// Check if this group is overweight
+		overweight, ok := overweightCountries[group]
 		if !ok {
 			continue
 		}
@@ -144,7 +157,7 @@ func (c *RebalanceSellsCalculator) Calculate(
 
 		// Build reason
 		reason := fmt.Sprintf("Rebalance: %s overweight by %.1f%%",
-			country, overweight*100)
+			group, overweight*100)
 
 		// Build tags
 		tags := []string{"rebalance", "sell", "overweight"}
