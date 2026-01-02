@@ -50,9 +50,9 @@ func TestBucket_IsTradingAllowed(t *testing.T) {
 
 func TestBucket_IsCore(t *testing.T) {
 	tests := []struct {
-		name     string
+		name       string
 		bucketType BucketType
-		expected bool
+		expected   bool
 	}{
 		{"core bucket", BucketTypeCore, true},
 		{"satellite bucket", BucketTypeSatellite, false},
@@ -68,9 +68,9 @@ func TestBucket_IsCore(t *testing.T) {
 
 func TestBucket_IsSatellite(t *testing.T) {
 	tests := []struct {
-		name     string
+		name       string
 		bucketType BucketType
-		expected bool
+		expected   bool
 	}{
 		{"core bucket", BucketTypeCore, false},
 		{"satellite bucket", BucketTypeSatellite, true},
