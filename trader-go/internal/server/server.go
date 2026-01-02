@@ -14,33 +14,41 @@ import (
 	"github.com/aristath/arduino-trader/internal/config"
 	"github.com/aristath/arduino-trader/internal/database"
 	"github.com/aristath/arduino-trader/internal/modules/allocation"
+	"github.com/aristath/arduino-trader/internal/modules/portfolio"
+	"github.com/aristath/arduino-trader/internal/modules/universe"
 )
 
 // Config holds server configuration
 type Config struct {
-	Port    int
-	Log     zerolog.Logger
-	DB      *database.DB
-	Config  *config.Config
-	DevMode bool
+	Port        int
+	Log         zerolog.Logger
+	ConfigDB    *database.DB // config.db - securities, allocation data
+	StateDB     *database.DB // state.db - positions, scores
+	SnapshotsDB *database.DB // snapshots.db - portfolio snapshots
+	Config      *config.Config
+	DevMode     bool
 }
 
 // Server represents the HTTP server
 type Server struct {
-	router *chi.Mux
-	server *http.Server
-	log    zerolog.Logger
-	db     *database.DB
-	cfg    *config.Config
+	router      *chi.Mux
+	server      *http.Server
+	log         zerolog.Logger
+	configDB    *database.DB
+	stateDB     *database.DB
+	snapshotsDB *database.DB
+	cfg         *config.Config
 }
 
 // New creates a new HTTP server
 func New(cfg Config) *Server {
 	s := &Server{
-		router: chi.NewRouter(),
-		log:    cfg.Log.With().Str("component", "server").Logger(),
-		db:     cfg.DB,
-		cfg:    cfg.Config,
+		router:      chi.NewRouter(),
+		log:         cfg.Log.With().Str("component", "server").Logger(),
+		configDB:    cfg.ConfigDB,
+		stateDB:     cfg.StateDB,
+		snapshotsDB: cfg.SnapshotsDB,
+		cfg:         cfg.Config,
 	}
 
 	s.setupMiddleware(cfg.DevMode)
@@ -105,8 +113,13 @@ func (s *Server) setupRoutes() {
 		// Allocation module (MIGRATED TO GO!)
 		s.setupAllocationRoutes(r)
 
+		// Portfolio module (MIGRATED TO GO!)
+		s.setupPortfolioRoutes(r)
+
+		// Universe module (MIGRATED TO GO!)
+		s.setupUniverseRoutes(r)
+
 		// TODO: Add more routes as modules are migrated
-		// r.Route("/portfolio", func(r chi.Router) { ... })
 		// r.Route("/trading", func(r chi.Router) { ... })
 		// r.Route("/planning", func(r chi.Router) { ... })
 	})
@@ -118,9 +131,9 @@ func (s *Server) setupRoutes() {
 // setupAllocationRoutes configures allocation module routes
 func (s *Server) setupAllocationRoutes(r chi.Router) {
 	// Initialize allocation module components
-	allocRepo := allocation.NewRepository(s.db.Conn(), s.log)
-	groupingRepo := allocation.NewGroupingRepository(s.db.Conn(), s.log)
-	alertService := allocation.NewConcentrationAlertService(s.db.Conn(), s.log)
+	allocRepo := allocation.NewRepository(s.configDB.Conn(), s.log)
+	groupingRepo := allocation.NewGroupingRepository(s.configDB.Conn(), s.log)
+	alertService := allocation.NewConcentrationAlertService(s.stateDB.Conn(), s.log)
 	handler := allocation.NewHandler(allocRepo, groupingRepo, alertService, s.log, s.cfg.PythonServiceURL)
 
 	// Allocation routes (faithful translation of Python routes)
@@ -145,6 +158,76 @@ func (s *Server) setupAllocationRoutes(r chi.Router) {
 		r.Get("/groups/allocation", handler.HandleGetGroupAllocation)
 		r.Put("/groups/targets/country", handler.HandleUpdateCountryGroupTargets)
 		r.Put("/groups/targets/industry", handler.HandleUpdateIndustryGroupTargets)
+	})
+}
+
+// setupPortfolioRoutes configures portfolio module routes
+func (s *Server) setupPortfolioRoutes(r chi.Router) {
+	// Initialize portfolio module components
+	positionRepo := portfolio.NewPositionRepository(s.stateDB.Conn(), s.configDB.Conn(), s.log)
+	portfolioRepo := portfolio.NewPortfolioRepository(s.snapshotsDB.Conn(), s.log)
+	allocRepo := allocation.NewRepository(s.configDB.Conn(), s.log)
+	portfolioService := portfolio.NewPortfolioService(
+		portfolioRepo,
+		positionRepo,
+		allocRepo,
+		s.configDB.Conn(),
+		s.log,
+	)
+	handler := portfolio.NewHandler(
+		positionRepo,
+		portfolioRepo,
+		portfolioService,
+		s.log,
+		s.cfg.PythonServiceURL,
+	)
+
+	// Portfolio routes (faithful translation of Python routes)
+	r.Route("/portfolio", func(r chi.Router) {
+		r.Get("/", handler.HandleGetPortfolio)                  // List positions (same as GET /portfolio)
+		r.Get("/summary", handler.HandleGetSummary)             // Portfolio summary
+		r.Get("/history", handler.HandleGetHistory)             // Historical snapshots
+		r.Get("/transactions", handler.HandleGetTransactions)   // Proxy to Python (Tradernet)
+		r.Get("/cash-breakdown", handler.HandleGetCashBreakdown) // Proxy to Python (Tradernet)
+		r.Get("/analytics", handler.HandleGetAnalytics)         // Proxy to Python (analytics)
+	})
+}
+
+// setupUniverseRoutes configures universe/securities module routes
+func (s *Server) setupUniverseRoutes(r chi.Router) {
+	// Initialize universe module components
+	securityRepo := universe.NewSecurityRepository(s.configDB.Conn(), s.log)
+	scoreRepo := universe.NewScoreRepository(s.stateDB.Conn(), s.log)
+	// Position repo for joining position data (optional for now)
+	positionRepo := portfolio.NewPositionRepository(s.stateDB.Conn(), s.configDB.Conn(), s.log)
+
+	handler := universe.NewUniverseHandlers(
+		securityRepo,
+		scoreRepo,
+		s.stateDB.Conn(), // Pass stateDB for GetWithScores
+		positionRepo,
+		s.cfg.PythonServiceURL,
+		s.log,
+	)
+
+	// Universe/Securities routes (faithful translation of Python routes)
+	r.Route("/securities", func(r chi.Router) {
+		// GET endpoints (implemented in Go)
+		r.Get("/", handler.HandleGetStocks)         // List all securities with scores
+		r.Get("/{isin}", handler.HandleGetStock)    // Get security detail by ISIN
+
+		// POST endpoints (proxied to Python for complex operations)
+		r.Post("/", handler.HandleCreateStock)                       // Create security (requires Yahoo Finance)
+		r.Post("/add-by-identifier", handler.HandleAddStockByIdentifier) // Auto-setup by symbol/ISIN
+		r.Post("/refresh-all", handler.HandleRefreshAllScores)       // Recalculate all scores
+
+		// Security-specific POST endpoints
+		r.Post("/{isin}/refresh-data", handler.HandleRefreshSecurityData) // Full data refresh
+		r.Post("/{isin}/refresh", handler.HandleRefreshStockScore)         // Quick score refresh
+
+		// PUT/DELETE endpoints
+		r.Put("/{isin}", handler.HandleUpdateStock)    // Update security (requires score recalc)
+		r.Delete("/{isin}", handler.HandleDeleteStock) // Soft delete (implemented in Go)
 	})
 }
 
