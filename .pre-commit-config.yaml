@@ -59,9 +59,9 @@ repos:
       # Format Go code
       - id: go-fmt
         args: [-w]
-      # Fix imports
-      - id: go-imports
-        args: [-w]
+      # Fix imports - disabled: goimports not in PATH for pre-commit environment
+      # - id: go-imports
+      #   args: [-w]
       # Run go vet
       - id: go-vet-mod
       # Build project
@@ -77,4 +77,4 @@ repos:
     rev: v1.62.2
     hooks:
       - id: golangci-lint
-        args: [--timeout=5m]
+        args: [--timeout=5m, ./trader-go/...]

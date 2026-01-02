@@ -249,15 +249,6 @@ func (rc *ReturnsCalculator) getScore(symbol string) (float64, error) {
 	return score.Float64, nil
 }
 
-// calculateForwardLookingAdjustment calculates forward-looking market indicator adjustment.
-// TODO: Implement market indicator integration (VIX, yield curve, P/E)
-func (rc *ReturnsCalculator) calculateForwardLookingAdjustment() float64 {
-	// Placeholder for future implementation
-	// This would fetch VIX, treasury yields, and market P/E
-	// and calculate adjustments based on the Python logic
-	return 0.0
-}
-
 // Helper functions
 
 // clamp restricts a value to a given range.

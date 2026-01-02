@@ -42,11 +42,10 @@ func SimulateSequence(
 		}
 
 		// Apply price adjustment if provided (for stochastic scenarios)
-		adjustedPrice := action.Price
 		adjustedValueEUR := action.ValueEUR
 		if priceAdjustments != nil {
 			if multiplier, hasPriceAdj := priceAdjustments[action.Symbol]; hasPriceAdj {
-				adjustedPrice = action.Price * multiplier
+				adjustedPrice := action.Price * multiplier
 				// Recalculate value with adjusted price (maintain same quantity)
 				adjustedValueEUR = float64(action.Quantity) * adjustedPrice
 				// Note: Currency conversion would happen here if needed
