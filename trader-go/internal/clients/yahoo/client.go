@@ -367,3 +367,140 @@ func getStringPtr(m map[string]interface{}, key string) *string {
 	}
 	return nil
 }
+
+// GetHistoricalPrices fetches historical OHLCV data from Yahoo Finance
+// Faithful translation from Python: app/infrastructure/external/yahoo/data_fetchers.py -> get_historical_prices()
+//
+// Supports periods: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max
+func (c *Client) GetHistoricalPrices(symbol string, yahooSymbolOverride *string, period string) ([]HistoricalPrice, error) {
+	yfSymbol := GetYahooSymbol(symbol, yahooSymbolOverride)
+
+	// Yahoo Finance historical data endpoint
+	// Uses chart API which returns JSON (more reliable than CSV download)
+	baseURL := "https://query1.finance.yahoo.com/v8/finance/chart/" + url.QueryEscape(yfSymbol)
+
+	// Convert period to interval and range
+	// For daily data, use 1d interval
+	params := url.Values{}
+	params.Add("interval", "1d")
+	params.Add("range", period)
+
+	reqURL := baseURL + "?" + params.Encode()
+
+	req, err := http.NewRequest("GET", reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set headers to mimic browser
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch historical data: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("Yahoo Finance API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// Parse response
+	var result struct {
+		Chart struct {
+			Result []struct {
+				Timestamp  []int64 `json:"timestamp"`
+				Indicators struct {
+					Quote []struct {
+						Open   []float64 `json:"open"`
+						High   []float64 `json:"high"`
+						Low    []float64 `json:"low"`
+						Close  []float64 `json:"close"`
+						Volume []int64   `json:"volume"`
+					} `json:"quote"`
+					AdjClose []struct {
+						AdjClose []float64 `json:"adjclose"`
+					} `json:"adjclose"`
+				} `json:"indicators"`
+			} `json:"result"`
+			Error interface{} `json:"error"`
+		} `json:"chart"`
+	}
+
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if result.Chart.Error != nil {
+		return nil, fmt.Errorf("Yahoo Finance API error: %v", result.Chart.Error)
+	}
+
+	if len(result.Chart.Result) == 0 {
+		c.log.Warn().Str("symbol", symbol).Msg("No historical data returned")
+		return []HistoricalPrice{}, nil
+	}
+
+	chartData := result.Chart.Result[0]
+	timestamps := chartData.Timestamp
+	if len(chartData.Indicators.Quote) == 0 {
+		c.log.Warn().Str("symbol", symbol).Msg("No quote data in response")
+		return []HistoricalPrice{}, nil
+	}
+
+	quote := chartData.Indicators.Quote[0]
+
+	// Extract adj close if available
+	var adjCloseData []float64
+	if len(chartData.Indicators.AdjClose) > 0 {
+		adjCloseData = chartData.Indicators.AdjClose[0].AdjClose
+	}
+
+	// Build price array
+	var prices []HistoricalPrice
+	for i := range timestamps {
+		// Skip null values
+		if i >= len(quote.Open) || i >= len(quote.High) || i >= len(quote.Low) || i >= len(quote.Close) {
+			continue
+		}
+
+		// Yahoo sometimes returns null values
+		if quote.Open[i] == 0 && quote.High[i] == 0 && quote.Low[i] == 0 && quote.Close[i] == 0 {
+			continue
+		}
+
+		adjClose := quote.Close[i] // default to close
+		if i < len(adjCloseData) && adjCloseData[i] != 0 {
+			adjClose = adjCloseData[i]
+		}
+
+		volume := int64(0)
+		if i < len(quote.Volume) {
+			volume = quote.Volume[i]
+		}
+
+		prices = append(prices, HistoricalPrice{
+			Date:     time.Unix(timestamps[i], 0),
+			Open:     quote.Open[i],
+			High:     quote.High[i],
+			Low:      quote.Low[i],
+			Close:    quote.Close[i],
+			Volume:   volume,
+			AdjClose: adjClose,
+		})
+	}
+
+	c.log.Info().
+		Str("symbol", symbol).
+		Str("period", period).
+		Int("count", len(prices)).
+		Msg("Fetched historical prices")
+
+	return prices, nil
+}

@@ -125,6 +125,104 @@ func (h *HistoryDB) GetMonthlyPrices(symbol string, limit int) ([]MonthlyPrice, 
 	return prices, nil
 }
 
+// HasMonthlyData checks if the history database has monthly price data
+// Used to determine if initial 10-year seed has been done
+func (h *HistoryDB) HasMonthlyData(symbol string) (bool, error) {
+	db, err := h.openHistoryDB(symbol)
+	if err != nil {
+		return false, err
+	}
+	defer db.Close()
+
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM monthly_prices").Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("failed to check monthly data: %w", err)
+	}
+
+	return count > 0, nil
+}
+
+// SyncHistoricalPrices writes historical price data to the database
+// Faithful translation from Python: app/jobs/securities_data_sync.py -> _sync_historical_for_symbol()
+//
+// Inserts/replaces daily prices and aggregates to monthly prices in a single transaction
+func (h *HistoryDB) SyncHistoricalPrices(symbol string, prices []DailyPrice) error {
+	db, err := h.openHistoryDB(symbol)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	// Begin transaction
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback() // Will be no-op if Commit succeeds
+
+	// Insert/replace daily prices
+	stmt, err := tx.Prepare(`
+		INSERT OR REPLACE INTO daily_prices
+		(date, open_price, high_price, low_price, close_price, volume, source, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, 'yahoo', datetime('now'))
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, price := range prices {
+		volume := sql.NullInt64{}
+		if price.Volume != nil {
+			volume.Int64 = *price.Volume
+			volume.Valid = true
+		}
+
+		_, err = stmt.Exec(
+			price.Date,
+			price.Open,
+			price.High,
+			price.Low,
+			price.Close,
+			volume,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to insert daily price for %s: %w", price.Date, err)
+		}
+	}
+
+	// Aggregate to monthly prices
+	// This matches the Python SQL exactly
+	_, err = tx.Exec(`
+		INSERT OR REPLACE INTO monthly_prices
+		(year_month, avg_close, avg_adj_close, source, created_at)
+		SELECT
+			strftime('%Y-%m', date) as year_month,
+			AVG(close_price) as avg_close,
+			AVG(close_price) as avg_adj_close,
+			'calculated',
+			datetime('now')
+		FROM daily_prices
+		GROUP BY strftime('%Y-%m', date)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to aggregate monthly prices: %w", err)
+	}
+
+	// Commit transaction
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	h.log.Info().
+		Str("symbol", symbol).
+		Int("count", len(prices)).
+		Msg("Synced historical prices")
+
+	return nil
+}
+
 // openHistoryDB opens the history database for a symbol
 func (h *HistoryDB) openHistoryDB(symbol string) (*sql.DB, error) {
 	// Convert symbol format: AAPL.US -> AAPL_US
