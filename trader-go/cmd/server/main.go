@@ -29,15 +29,29 @@ func main() {
 		log.Fatal().Err(err).Msg("Failed to load configuration")
 	}
 
-	// Initialize database
-	db, err := database.New(cfg.DatabasePath)
+	// Initialize databases (Python uses multiple SQLite databases)
+	configDB, err := database.New(cfg.DatabasePath) // config.db
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to initialize database")
+		log.Fatal().Err(err).Msg("Failed to initialize config database")
 	}
-	defer db.Close()
+	defer configDB.Close()
+
+	// state.db - positions, scores
+	stateDB, err := database.New("../data/state.db")
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to initialize state database")
+	}
+	defer stateDB.Close()
+
+	// snapshots.db - portfolio snapshots
+	snapshotsDB, err := database.New("../data/snapshots.db")
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to initialize snapshots database")
+	}
+	defer snapshotsDB.Close()
 
 	// Run migrations
-	if err := db.Migrate(); err != nil {
+	if err := configDB.Migrate(); err != nil {
 		log.Fatal().Err(err).Msg("Failed to run migrations")
 	}
 
@@ -47,17 +61,19 @@ func main() {
 	defer sched.Stop()
 
 	// Register background jobs
-	if err := registerJobs(sched, db, cfg); err != nil {
+	if err := registerJobs(sched, configDB, cfg); err != nil {
 		log.Fatal().Err(err).Msg("Failed to register jobs")
 	}
 
 	// Initialize HTTP server
 	srv := server.New(server.Config{
-		Port:     cfg.Port,
-		Log:      log,
-		DB:       db,
-		Config:   cfg,
-		DevMode:  cfg.DevMode,
+		Port:        cfg.Port,
+		Log:         log,
+		ConfigDB:    configDB,
+		StateDB:     stateDB,
+		SnapshotsDB: snapshotsDB,
+		Config:      cfg,
+		DevMode:     cfg.DevMode,
 	})
 
 	// Start server in goroutine
