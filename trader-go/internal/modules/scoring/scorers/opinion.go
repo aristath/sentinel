@@ -8,8 +8,8 @@ type OpinionScorer struct{}
 
 // OpinionScore represents the result of opinion scoring
 type OpinionScore struct {
-	Score      float64            `json:"score"`      // Total score (0-1)
-	Components map[string]float64 `json:"components"` // Individual component scores
+	Components map[string]float64 `json:"components"`
+	Score      float64            `json:"score"`
 }
 
 // NewOpinionScorer creates a new opinion scorer

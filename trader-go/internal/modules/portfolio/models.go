@@ -3,21 +3,21 @@ package portfolio
 // Position represents current position in a security
 // Faithful translation from Python: app/modules/portfolio/domain/models.py
 type Position struct {
+	LastUpdated      string  `json:"last_updated,omitempty"`
+	BucketID         string  `json:"bucket_id"`
+	LastSoldAt       string  `json:"last_sold_at,omitempty"`
+	ISIN             string  `json:"isin,omitempty"`
+	Currency         string  `json:"currency"`
+	FirstBoughtAt    string  `json:"first_bought_at,omitempty"`
 	Symbol           string  `json:"symbol"`
-	Quantity         float64 `json:"quantity"`
-	AvgPrice         float64 `json:"avg_price"`
-	ISIN             string  `json:"isin,omitempty"` // ISIN for broker-agnostic identification
-	Currency         string  `json:"currency"`       // EUR, USD, etc.
-	CurrencyRate     float64 `json:"currency_rate"`
 	CurrentPrice     float64 `json:"current_price,omitempty"`
-	MarketValueEUR   float64 `json:"market_value_eur,omitempty"`
 	CostBasisEUR     float64 `json:"cost_basis_eur,omitempty"`
 	UnrealizedPnL    float64 `json:"unrealized_pnl,omitempty"`
 	UnrealizedPnLPct float64 `json:"unrealized_pnl_pct,omitempty"`
-	LastUpdated      string  `json:"last_updated,omitempty"`    // ISO datetime
-	FirstBoughtAt    string  `json:"first_bought_at,omitempty"` // ISO datetime
-	LastSoldAt       string  `json:"last_sold_at,omitempty"`    // ISO datetime
-	BucketID         string  `json:"bucket_id"`                 // core or satellite
+	MarketValueEUR   float64 `json:"market_value_eur,omitempty"`
+	CurrencyRate     float64 `json:"currency_rate"`
+	AvgPrice         float64 `json:"avg_price"`
+	Quantity         float64 `json:"quantity"`
 }
 
 // PortfolioSnapshot represents daily portfolio summary
@@ -49,26 +49,26 @@ type AllocationStatus struct {
 // PortfolioSummary represents complete portfolio allocation summary
 // Faithful translation from Python: app/domain/models.py
 type PortfolioSummary struct {
-	TotalValue          float64            `json:"total_value"`
-	CashBalance         float64            `json:"cash_balance"`
 	CountryAllocations  []AllocationStatus `json:"country_allocations"`
 	IndustryAllocations []AllocationStatus `json:"industry_allocations"`
+	TotalValue          float64            `json:"total_value"`
+	CashBalance         float64            `json:"cash_balance"`
 }
 
 // PositionWithSecurity represents position with security information
 // Used by get_with_security_info() - combines Position + Security data
 type PositionWithSecurity struct {
-	Symbol           string  `db:"symbol"`
-	Quantity         float64 `db:"quantity"`
-	AvgPrice         float64 `db:"avg_price"`
-	CurrentPrice     float64 `db:"current_price"`
-	Currency         string  `db:"currency"`
-	CurrencyRate     float64 `db:"currency_rate"`
-	MarketValueEUR   float64 `db:"market_value_eur"`
-	LastUpdated      string  `db:"last_updated"`
 	Country          string  `db:"country"`
-	Industry         string  `db:"industry"`
-	FullExchangeName string  `db:"fullExchangeName"`
-	StockName        string  `db:"name"` // Security name
 	BucketID         string  `db:"bucket_id"`
+	StockName        string  `db:"name"`
+	Symbol           string  `db:"symbol"`
+	Currency         string  `db:"currency"`
+	FullExchangeName string  `db:"fullExchangeName"`
+	Industry         string  `db:"industry"`
+	LastUpdated      string  `db:"last_updated"`
+	CurrentPrice     float64 `db:"current_price"`
+	MarketValueEUR   float64 `db:"market_value_eur"`
+	CurrencyRate     float64 `db:"currency_rate"`
+	AvgPrice         float64 `db:"avg_price"`
+	Quantity         float64 `db:"quantity"`
 }

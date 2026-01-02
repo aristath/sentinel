@@ -31,32 +31,32 @@ func isISIN(identifier string) bool {
 // PriorityInput represents input data for priority calculation
 // Faithful translation from Python: app/modules/universe/domain/priority_calculator.py -> PriorityInput
 type PriorityInput struct {
-	Symbol             string
-	Name               string
-	StockScore         float64
-	Multiplier         float64
-	Country            string
-	Industry           string
 	Volatility         *float64
 	QualityScore       *float64
 	OpportunityScore   *float64
 	AllocationFitScore *float64
+	Symbol             string
+	Name               string
+	Country            string
+	Industry           string
+	StockScore         float64
+	Multiplier         float64
 }
 
 // PriorityResult represents the result of priority calculation
 // Faithful translation from Python: app/modules/universe/domain/priority_calculator.py -> PriorityResult
 type PriorityResult struct {
-	Symbol             string
-	Name               string
-	StockScore         float64
-	Multiplier         float64
-	CombinedPriority   float64
-	Country            string
-	Industry           string
 	Volatility         *float64
 	QualityScore       *float64
 	OpportunityScore   *float64
 	AllocationFitScore *float64
+	Symbol             string
+	Name               string
+	Country            string
+	Industry           string
+	StockScore         float64
+	Multiplier         float64
+	CombinedPriority   float64
 }
 
 // calculatePriority calculates priority score for a security
@@ -108,12 +108,12 @@ func roundFloat(val float64, precision int) float64 {
 
 // UniverseHandlers contains HTTP handlers for universe API
 type UniverseHandlers struct {
+	log          zerolog.Logger
+	stateDB      interface{}
+	positionRepo interface{}
 	securityRepo *SecurityRepository
 	scoreRepo    *ScoreRepository
-	stateDB      interface{} // sql.DB for state.db (passed to GetWithScores)
-	positionRepo interface{} // Will be *portfolio.PositionRepository when wired
-	pythonURL    string      // URL of Python service for proxied endpoints
-	log          zerolog.Logger
+	pythonURL    string
 }
 
 // NewUniverseHandlers creates a new universe handlers instance

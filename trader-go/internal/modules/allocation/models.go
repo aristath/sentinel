@@ -5,23 +5,23 @@ import "time"
 // AllocationTarget represents target allocation for country_group or industry_group
 // Faithful translation from Python: app/modules/allocation/domain/models.py
 type AllocationTarget struct {
-	ID        int64     `json:"id"`
-	Type      string    `json:"type"`       // 'country_group' or 'industry_group'
-	Name      string    `json:"name"`       // Group name (e.g., 'US', 'EU', 'Technology')
-	TargetPct float64   `json:"target_pct"` // Weight from -1.0 to 1.0
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	Type      string    `json:"type"`
+	Name      string    `json:"name"`
+	ID        int64     `json:"id"`
+	TargetPct float64   `json:"target_pct"`
 }
 
 // ConcentrationAlert represents alert for approaching concentration limit
 // Faithful translation from Python: app/modules/allocation/services/concentration_alerts.py
 type ConcentrationAlert struct {
-	Type              string  `json:"type"` // "country", "sector", "position"
-	Name              string  `json:"name"` // Country/sector name or security symbol
+	Type              string  `json:"type"`
+	Name              string  `json:"name"`
+	Severity          string  `json:"severity"`
 	CurrentPct        float64 `json:"current_pct"`
 	LimitPct          float64 `json:"limit_pct"`
 	AlertThresholdPct float64 `json:"alert_threshold_pct"`
-	Severity          string  `json:"severity"` // "warning" (80-90% of limit), "critical" (90-100% of limit)
 }
 
 // AllocationInfo represents allocation status for display
@@ -35,9 +35,9 @@ type AllocationInfo struct {
 
 // DeviationInfo represents allocation deviation for a group
 type DeviationInfo struct {
+	Status    string  `json:"status"`
 	Deviation float64 `json:"deviation"`
 	Need      float64 `json:"need"`
-	Status    string  `json:"status"` // "underweight", "overweight", "balanced"
 }
 
 // CountryGroup represents a country group definition

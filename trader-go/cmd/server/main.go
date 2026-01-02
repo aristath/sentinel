@@ -39,8 +39,7 @@ func main() {
 	// state.db - positions, scores
 	stateDB, err := database.New("../data/state.db")
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to initialize state database")
-		os.Exit(1)
+		log.Fatal().Err(err).Msg("Failed to initialize state database")
 	}
 	defer stateDB.Close()
 

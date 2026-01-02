@@ -51,21 +51,21 @@ func TradeSideFromString(value string) (TradeSide, error) {
 // Trade represents an executed trade record
 // Faithful translation from Python: app/domain/models.py -> Trade
 type Trade struct {
-	ID           int        `json:"id"`
-	Symbol       string     `json:"symbol"`
-	ISIN         string     `json:"isin,omitempty"`
-	Side         TradeSide  `json:"side"`
-	Quantity     float64    `json:"quantity"`
-	Price        float64    `json:"price"`
 	ExecutedAt   time.Time  `json:"executed_at"`
-	OrderID      string     `json:"order_id,omitempty"`
-	Currency     string     `json:"currency,omitempty"`
 	CurrencyRate *float64   `json:"currency_rate,omitempty"`
 	ValueEUR     *float64   `json:"value_eur,omitempty"`
-	Source       string     `json:"source"`    // "tradernet", etc.
-	BucketID     string     `json:"bucket_id"` // "core" or satellite ID
-	Mode         string     `json:"mode"`      // "live" or "research"
 	CreatedAt    *time.Time `json:"created_at,omitempty"`
+	Source       string     `json:"source"`
+	Symbol       string     `json:"symbol"`
+	OrderID      string     `json:"order_id,omitempty"`
+	Currency     string     `json:"currency,omitempty"`
+	ISIN         string     `json:"isin,omitempty"`
+	BucketID     string     `json:"bucket_id"`
+	Mode         string     `json:"mode"`
+	Side         TradeSide  `json:"side"`
+	Price        float64    `json:"price"`
+	ID           int        `json:"id"`
+	Quantity     float64    `json:"quantity"`
 }
 
 // Validate validates trade data and normalizes symbol

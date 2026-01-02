@@ -408,9 +408,9 @@ func (h *Handler) writeError(w http.ResponseWriter, status int, message string) 
 func (h *Handler) proxyToPython(w http.ResponseWriter, r *http.Request, path string) {
 	// Simple proxy to Python service during migration
 	// pythonURL is configured internally and path is from trusted internal routes
-	//nolint:gosec // G107: URL is internal service proxy, not user-controlled
 	url := h.pythonURL + path
 
+	//nolint:gosec // G107: URL is internal service proxy, not user-controlled
 	resp, err := http.Get(url)
 	if err != nil {
 		h.writeError(w, http.StatusBadGateway, "Failed to contact Python service")

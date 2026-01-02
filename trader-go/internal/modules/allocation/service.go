@@ -25,10 +25,10 @@ type PortfolioAllocation struct {
 
 // PortfolioSummary represents complete portfolio summary (from Python: app/domain/models.py)
 type PortfolioSummary struct {
-	TotalValue          float64
-	CashBalance         float64
 	CountryAllocations  []PortfolioAllocation
 	IndustryAllocations []PortfolioAllocation
+	TotalValue          float64
+	CashBalance         float64
 }
 
 // ConcentrationAlertService detects concentration limit alerts

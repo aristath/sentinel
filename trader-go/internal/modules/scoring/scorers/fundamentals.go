@@ -12,8 +12,8 @@ type FundamentalsScorer struct{}
 
 // FundamentalsScore represents the result of fundamentals scoring
 type FundamentalsScore struct {
-	Score      float64            `json:"score"`      // Total score (0-1)
-	Components map[string]float64 `json:"components"` // Individual component scores
+	Components map[string]float64 `json:"components"`
+	Score      float64            `json:"score"`
 }
 
 // NewFundamentalsScorer creates a new fundamentals scorer

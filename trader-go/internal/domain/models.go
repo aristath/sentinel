@@ -14,49 +14,49 @@ const (
 
 // Security represents a tradable security
 type Security struct {
-	ID          int64     `json:"id"`
+	LastUpdated time.Time `json:"last_updated"`
 	Symbol      string    `json:"symbol"`
 	Name        string    `json:"name"`
 	Exchange    string    `json:"exchange"`
 	Currency    Currency  `json:"currency"`
 	ISIN        string    `json:"isin"`
+	ID          int64     `json:"id"`
 	Active      bool      `json:"active"`
-	LastUpdated time.Time `json:"last_updated"`
 }
 
 // Position represents a portfolio position
 type Position struct {
+	LastUpdated  time.Time `json:"last_updated"`
+	Symbol       string    `json:"symbol"`
+	Currency     Currency  `json:"currency"`
 	ID           int64     `json:"id"`
 	SecurityID   int64     `json:"security_id"`
-	Symbol       string    `json:"symbol"`
 	Quantity     float64   `json:"quantity"`
 	AverageCost  float64   `json:"average_cost"`
 	CurrentPrice float64   `json:"current_price"`
 	MarketValue  float64   `json:"market_value"`
 	UnrealizedPL float64   `json:"unrealized_pl"`
-	Currency     Currency  `json:"currency"`
-	LastUpdated  time.Time `json:"last_updated"`
 }
 
 // Trade represents an executed trade
 type Trade struct {
+	ExecutedAt time.Time `json:"executed_at"`
+	CreatedAt  time.Time `json:"created_at"`
+	Symbol     string    `json:"symbol"`
+	Side       string    `json:"side"`
+	Currency   Currency  `json:"currency"`
 	ID         int64     `json:"id"`
 	SecurityID int64     `json:"security_id"`
-	Symbol     string    `json:"symbol"`
-	Side       string    `json:"side"` // BUY or SELL
 	Quantity   float64   `json:"quantity"`
 	Price      float64   `json:"price"`
 	Fees       float64   `json:"fees"`
 	Total      float64   `json:"total"`
-	Currency   Currency  `json:"currency"`
-	ExecutedAt time.Time `json:"executed_at"`
-	CreatedAt  time.Time `json:"created_at"`
 }
 
 // Money represents a monetary value with currency
 type Money struct {
-	Amount   float64  `json:"amount"`
 	Currency Currency `json:"currency"`
+	Amount   float64  `json:"amount"`
 }
 
 // NewMoney creates a new Money value
