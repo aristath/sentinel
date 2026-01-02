@@ -24,6 +24,7 @@ import (
 	"github.com/aristath/arduino-trader/internal/modules/evaluation"
 	"github.com/aristath/arduino-trader/internal/modules/optimization"
 	"github.com/aristath/arduino-trader/internal/modules/portfolio"
+	"github.com/aristath/arduino-trader/internal/modules/rebalancing"
 	"github.com/aristath/arduino-trader/internal/modules/satellites"
 	"github.com/aristath/arduino-trader/internal/modules/scoring/api"
 	"github.com/aristath/arduino-trader/internal/modules/scoring/scorers"
@@ -162,6 +163,9 @@ func (s *Server) setupRoutes() {
 
 		// Satellites module (MIGRATED TO GO!)
 		s.setupSatellitesRoutes(r)
+
+		// Rebalancing module (MIGRATED TO GO!)
+		s.setupRebalancingRoutes(r)
 
 		// TODO: Add more routes as modules are migrated
 		// r.Route("/planning", func(r chi.Router) { ... })
@@ -590,6 +594,43 @@ func (s *Server) setupSatellitesRoutes(r chi.Router) {
 		bucketService,
 		balanceService,
 		reconciliationService,
+		s.log,
+	)
+
+	// Register routes
+	handlers.RegisterRoutes(r)
+}
+
+// setupRebalancingRoutes configures rebalancing module routes
+func (s *Server) setupRebalancingRoutes(r chi.Router) {
+	// Initialize Tradernet client
+	tradernetClient := tradernet.NewClient(s.cfg.TradernetServiceURL, s.log)
+
+	// Initialize portfolio service (needed for rebalancing)
+	positionRepo := portfolio.NewPositionRepository(s.stateDB.Conn(), s.configDB.Conn(), s.log)
+	portfolioRepo := portfolio.NewPortfolioRepository(s.snapshotsDB.Conn(), s.log)
+	allocRepo := allocation.NewRepository(s.configDB.Conn(), s.log)
+	turnoverTracker := portfolio.NewTurnoverTracker(s.ledgerDB.Conn(), s.snapshotsDB.Conn(), s.log)
+	tradeRepo := portfolio.NewTradeRepository(s.ledgerDB.Conn(), s.log)
+	attributionCalc := portfolio.NewAttributionCalculator(tradeRepo, s.configDB.Conn(), s.cfg.HistoryPath, s.log)
+	portfolioService := portfolio.NewPortfolioService(
+		portfolioRepo,
+		positionRepo,
+		allocRepo,
+		turnoverTracker,
+		attributionCalc,
+		s.configDB.Conn(),
+		s.log,
+	)
+
+	// Initialize rebalancing service
+	rebalancingService := rebalancing.NewService(s.log)
+
+	// Initialize handlers
+	handlers := rebalancing.NewHandlers(
+		rebalancingService,
+		portfolioService,
+		tradernetClient,
 		s.log,
 	)
 
