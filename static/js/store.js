@@ -1104,8 +1104,12 @@ enable_combinatorial = true
       this.plannerError = null;
       try {
         const result = await API.applyPlanner(this.plannerForm.id);
+
+        // Clear old sequences so new ones are generated with updated config
+        await API.regenerateSequences();
+
         this.showMessage(
-          `Planner applied successfully for bucket ${result.bucket_id}`,
+          `Planner applied and sequences regenerated for bucket ${result.bucket_id}`,
           'success'
         );
       } catch (e) {

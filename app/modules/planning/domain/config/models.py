@@ -88,6 +88,7 @@ class PlannerConfiguration:
     max_depth: int = 5
     max_opportunities_per_category: int = 5
     priority_threshold: float = 0.3
+    beam_width: int = 10
     enable_diverse_selection: bool = True
     diversity_weight: float = 0.3
 

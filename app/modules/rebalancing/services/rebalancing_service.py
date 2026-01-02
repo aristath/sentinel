@@ -222,30 +222,62 @@ class RebalancingService:
         from app.modules.optimization.services.portfolio_optimizer import (
             PortfolioOptimizer,
         )
+        from app.modules.planning.services.planner_loader import get_planner_loader
+
+        # Load planner configuration from TOML (for core bucket)
+        planner_loader = get_planner_loader()
+        planner_factory = await planner_loader.load_planner_for_bucket("core")
+        planner_config = planner_factory.config if planner_factory else None
 
         # Get optimizer settings
         optimizer_blend = await self._settings_repo.get_float("optimizer_blend", 0.5)
         optimizer_target = await self._settings_repo.get_float(
             "optimizer_target_return", 0.11
         )
-        transaction_fixed = await self._settings_repo.get_float(
-            "transaction_cost_fixed", 2.0
-        )
-        transaction_pct = await self._settings_repo.get_float(
-            "transaction_cost_percent", 0.002
-        )
+
+        # Get planner settings from TOML config (fallback to old settings for backwards compatibility)
+        if planner_config:
+            transaction_fixed = planner_config.transaction_cost_fixed
+            transaction_pct = planner_config.transaction_cost_percent
+            max_plan_depth = planner_config.max_depth
+            max_opportunities_per_category = (
+                planner_config.max_opportunities_per_category
+            )
+            priority_threshold = planner_config.priority_threshold
+            beam_width = planner_config.beam_width
+            # Note: enable_combinatorial and combinatorial settings are in legacy settings
+            # These will be migrated to TOML in a future update
+            enable_combinatorial = True  # Always enabled in modular planner
+            logger.info(
+                f"Using TOML config: max_depth={max_plan_depth}, max_opp={max_opportunities_per_category}, beam_width={beam_width}"
+            )
+        else:
+            # Fallback to old settings if no TOML config found
+            transaction_fixed = await self._settings_repo.get_float(
+                "transaction_cost_fixed", 2.0
+            )
+            transaction_pct = await self._settings_repo.get_float(
+                "transaction_cost_percent", 0.002
+            )
+            max_plan_depth = await self._settings_repo.get_int("max_plan_depth", 5)
+            max_opportunities_per_category = await self._settings_repo.get_int(
+                "max_opportunities_per_category", 5
+            )
+            priority_threshold = await self._settings_repo.get_float(
+                "priority_threshold_for_combinations", 0.3
+            )
+            enable_combinatorial = (
+                await self._settings_repo.get_float(
+                    "enable_combinatorial_generation", 1.0
+                )
+                == 1.0
+            )
+            beam_width = await self._settings_repo.get_int("beam_width", 10)
+            logger.warning(
+                "No TOML planner config found for core bucket, using legacy settings"
+            )
+
         min_cash = await self._settings_repo.get_float("min_cash_reserve", 500.0)
-        max_plan_depth = await self._settings_repo.get_int("max_plan_depth", 5)
-        max_opportunities_per_category = await self._settings_repo.get_int(
-            "max_opportunities_per_category", 5
-        )
-        enable_combinatorial = (
-            await self._settings_repo.get_float("enable_combinatorial_generation", 1.0)
-            == 1.0
-        )
-        priority_threshold = await self._settings_repo.get_float(
-            "priority_threshold_for_combinations", 0.3
-        )
         combinatorial_max_combinations_per_depth = await self._settings_repo.get_int(
             "combinatorial_max_combinations_per_depth", 50
         )
@@ -258,7 +290,6 @@ class RebalancingService:
         combinatorial_max_candidates = await self._settings_repo.get_int(
             "combinatorial_max_candidates", 12
         )
-        beam_width = await self._settings_repo.get_int("beam_width", 10)
 
         # Get positions and securities (needed for portfolio value calculation)
         positions = await self._position_repo.get_all()
@@ -782,6 +813,8 @@ class RebalancingService:
                 security_industries=new_industries,
                 security_scores=current_context.security_scores,
                 security_dividends=current_context.security_dividends,
+                country_to_group=current_context.country_to_group,
+                industry_to_group=current_context.industry_to_group,
             )
 
             # Calculate portfolio score after this step

@@ -369,19 +369,47 @@ async def _wait_for_planning_completion():
         except Exception as e:
             logger.debug(f"Could not get optimizer weights: {e}")
 
-        # Get planner settings
-        # API-driven mode uses small batches (5) for faster processing
-        batch_size = 5
-        max_plan_depth = int(await settings_repo.get_float("max_plan_depth", 5.0))
-        max_opportunities_per_category = int(
-            await settings_repo.get_float("max_opportunities_per_category", 5.0)
-        )
-        enable_combinatorial = (
-            await settings_repo.get_float("enable_combinatorial_generation", 1.0) == 1.0
-        )
-        priority_threshold = await settings_repo.get_float(
-            "priority_threshold_for_combinations", 0.3
-        )
+        # Load planner configuration from TOML (for core bucket)
+        from app.modules.planning.services.planner_loader import get_planner_loader
+
+        planner_loader = get_planner_loader()
+        planner_factory = await planner_loader.load_planner_for_bucket("core")
+        planner_config = planner_factory.config if planner_factory else None
+
+        # Get planner settings from TOML config (fallback to old settings)
+        batch_size = 5  # API-driven mode uses small batches for faster processing
+        if planner_config:
+            max_plan_depth = planner_config.max_depth
+            max_opportunities_per_category = (
+                planner_config.max_opportunities_per_category
+            )
+            priority_threshold = planner_config.priority_threshold
+            transaction_cost_fixed = planner_config.transaction_cost_fixed
+            transaction_cost_percent = planner_config.transaction_cost_percent
+            enable_combinatorial = True  # Always enabled in modular planner
+            logger.info(
+                f"Event-based trading: Using TOML config with max_depth={max_plan_depth}"
+            )
+        else:
+            max_plan_depth = int(await settings_repo.get_float("max_plan_depth", 5.0))
+            max_opportunities_per_category = int(
+                await settings_repo.get_float("max_opportunities_per_category", 5.0)
+            )
+            enable_combinatorial = (
+                await settings_repo.get_float("enable_combinatorial_generation", 1.0)
+                == 1.0
+            )
+            priority_threshold = await settings_repo.get_float(
+                "priority_threshold_for_combinations", 0.3
+            )
+            transaction_cost_fixed = await settings_repo.get_float(
+                "transaction_cost_fixed", 2.0
+            )
+            transaction_cost_percent = await settings_repo.get_float(
+                "transaction_cost_percent", 0.002
+            )
+            logger.warning("Event-based trading: No TOML config, using legacy settings")
+
         combinatorial_max_combinations_per_depth = int(
             await settings_repo.get_float(
                 "combinatorial_max_combinations_per_depth", 50.0
@@ -406,12 +434,8 @@ async def _wait_for_planning_completion():
             exchange_rate_service=exchange_rate_service,
             target_weights=target_weights,
             current_prices=current_prices,
-            transaction_cost_fixed=await settings_repo.get_float(
-                "transaction_cost_fixed", 2.0
-            ),
-            transaction_cost_percent=await settings_repo.get_float(
-                "transaction_cost_percent", 0.002
-            ),
+            transaction_cost_fixed=transaction_cost_fixed,
+            transaction_cost_percent=transaction_cost_percent,
             max_plan_depth=max_plan_depth,
             max_opportunities_per_category=max_opportunities_per_category,
             enable_combinatorial=enable_combinatorial,

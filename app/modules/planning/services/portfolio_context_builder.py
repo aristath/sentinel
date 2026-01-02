@@ -65,8 +65,8 @@ async def build_portfolio_context(
     security_industries = {s.symbol: s.industry for s in securities if s.industry}
     security_scores: Dict[str, float] = {}
 
-    # Get existing scores
-    score_rows = await db_manager.state.fetchall(
+    # Get existing scores from calculations.db (not state.db)
+    score_rows = await db_manager.calculations.fetchall(
         "SELECT symbol, quality_score FROM scores"
     )
     for row in score_rows:

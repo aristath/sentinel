@@ -54,19 +54,31 @@ class AllocationRepository:
         """Get country group allocation targets.
 
         Returns group name -> target_pct mapping.
-        No normalization - groups should sum to 100% at user level.
+        Normalizes weights to sum to 1.0 (100%).
         """
         targets = await self.get_by_type("country_group")
-        return {t.name: t.target_pct for t in targets}
+        raw_weights = {t.name: t.target_pct for t in targets}
+
+        # Normalize weights to sum to 1.0
+        total_weight = sum(raw_weights.values())
+        if total_weight > 0:
+            return {name: weight / total_weight for name, weight in raw_weights.items()}
+        return raw_weights
 
     async def get_industry_group_targets(self) -> Dict[str, float]:
         """Get industry group allocation targets.
 
         Returns group name -> target_pct mapping.
-        No normalization - groups should sum to 100% at user level.
+        Normalizes weights to sum to 1.0 (100%).
         """
         targets = await self.get_by_type("industry_group")
-        return {t.name: t.target_pct for t in targets}
+        raw_weights = {t.name: t.target_pct for t in targets}
+
+        # Normalize weights to sum to 1.0
+        total_weight = sum(raw_weights.values())
+        if total_weight > 0:
+            return {name: weight / total_weight for name, weight in raw_weights.items()}
+        return raw_weights
 
     async def upsert(self, target: AllocationTarget) -> None:
         """Insert or update an allocation target."""
