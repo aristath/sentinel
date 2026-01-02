@@ -14,6 +14,7 @@ import (
 	"github.com/aristath/arduino-trader/internal/config"
 	"github.com/aristath/arduino-trader/internal/database"
 	"github.com/aristath/arduino-trader/internal/modules/allocation"
+	"github.com/aristath/arduino-trader/internal/modules/dividends"
 	"github.com/aristath/arduino-trader/internal/modules/portfolio"
 	"github.com/aristath/arduino-trader/internal/modules/trading"
 	"github.com/aristath/arduino-trader/internal/modules/universe"
@@ -27,6 +28,7 @@ type Config struct {
 	StateDB     *database.DB // state.db - positions, scores
 	SnapshotsDB *database.DB // snapshots.db - portfolio snapshots
 	LedgerDB    *database.DB // ledger.db - trades (append-only ledger)
+	DividendsDB *database.DB // dividends.db - dividend records with DRIP tracking
 	Config      *config.Config
 	DevMode     bool
 }
@@ -40,6 +42,7 @@ type Server struct {
 	stateDB     *database.DB
 	snapshotsDB *database.DB
 	ledgerDB    *database.DB
+	dividendsDB *database.DB
 	cfg         *config.Config
 }
 
@@ -52,6 +55,7 @@ func New(cfg Config) *Server {
 		stateDB:     cfg.StateDB,
 		snapshotsDB: cfg.SnapshotsDB,
 		ledgerDB:    cfg.LedgerDB,
+		dividendsDB: cfg.DividendsDB,
 		cfg:         cfg.Config,
 	}
 
@@ -125,6 +129,9 @@ func (s *Server) setupRoutes() {
 
 		// Trading module (MIGRATED TO GO!)
 		s.setupTradingRoutes(r)
+
+		// Dividends module (MIGRATED TO GO!)
+		s.setupDividendRoutes(r)
 
 		// TODO: Add more routes as modules are migrated
 		// r.Route("/planning", func(r chi.Router) { ... })
@@ -274,6 +281,35 @@ func (s *Server) setupTradingRoutes(r chi.Router) {
 		r.Get("/", handler.HandleGetTrades)                // Trade history
 		r.Post("/execute", handler.HandleExecuteTrade)     // Execute trade (proxy to Python)
 		r.Get("/allocation", handler.HandleGetAllocation)  // Portfolio allocation (proxy to Python)
+	})
+}
+
+// setupDividendRoutes configures dividend module routes
+func (s *Server) setupDividendRoutes(r chi.Router) {
+	// Initialize dividend module components
+	dividendRepo := dividends.NewDividendRepository(s.dividendsDB.Conn(), s.log)
+	handler := dividends.NewDividendHandlers(dividendRepo, s.log)
+
+	// Dividend routes (faithful translation of Python repository to HTTP API)
+	r.Route("/dividends", func(r chi.Router) {
+		// List endpoints
+		r.Get("/", handler.HandleGetDividends)                            // List all dividends
+		r.Get("/{id}", handler.HandleGetDividendByID)                     // Get dividend by ID
+		r.Get("/symbol/{symbol}", handler.HandleGetDividendsBySymbol)     // Get dividends by symbol
+
+		// CRITICAL: Endpoints used by dividend_reinvestment.py job
+		r.Get("/unreinvested", handler.HandleGetUnreinvestedDividends)    // Get unreinvested dividends
+		r.Post("/{id}/pending-bonus", handler.HandleSetPendingBonus)      // Set pending bonus
+		r.Post("/{id}/mark-reinvested", handler.HandleMarkReinvested)     // Mark as reinvested
+
+		// Management endpoints
+		r.Post("/", handler.HandleCreateDividend)                         // Create dividend
+		r.Post("/clear-bonus/{symbol}", handler.HandleClearBonus)         // Clear bonus by symbol
+		r.Get("/pending-bonuses", handler.HandleGetPendingBonuses)        // Get all pending bonuses
+
+		// Analytics endpoints
+		r.Get("/analytics/total", handler.HandleGetTotalDividendsBySymbol)       // Total dividends by symbol
+		r.Get("/analytics/reinvestment-rate", handler.HandleGetReinvestmentRate) // Overall reinvestment rate
 	})
 }
 

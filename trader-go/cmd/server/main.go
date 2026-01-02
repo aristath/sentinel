@@ -57,6 +57,13 @@ func main() {
 	}
 	defer ledgerDB.Close()
 
+	// dividends.db - dividend records with DRIP tracking
+	dividendsDB, err := database.New("../data/dividends.db")
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to initialize dividends database")
+	}
+	defer dividendsDB.Close()
+
 	// Run migrations
 	if err := configDB.Migrate(); err != nil {
 		log.Fatal().Err(err).Msg("Failed to run migrations")
@@ -80,6 +87,7 @@ func main() {
 		StateDB:     stateDB,
 		SnapshotsDB: snapshotsDB,
 		LedgerDB:    ledgerDB,
+		DividendsDB: dividendsDB,
 		Config:      cfg,
 		DevMode:     cfg.DevMode,
 	})
