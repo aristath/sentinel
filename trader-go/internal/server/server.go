@@ -20,6 +20,7 @@ import (
 	"github.com/aristath/arduino-trader/internal/modules/display"
 	"github.com/aristath/arduino-trader/internal/modules/dividends"
 	"github.com/aristath/arduino-trader/internal/modules/evaluation"
+	"github.com/aristath/arduino-trader/internal/modules/optimization"
 	"github.com/aristath/arduino-trader/internal/modules/portfolio"
 	"github.com/aristath/arduino-trader/internal/modules/scoring/api"
 	"github.com/aristath/arduino-trader/internal/modules/scoring/scorers"
@@ -148,6 +149,9 @@ func (s *Server) setupRoutes() {
 
 		// Scoring module (MIGRATED TO GO!)
 		s.setupScoringRoutes(r)
+
+		// Optimization module (MIGRATED TO GO!)
+		s.setupOptimizationRoutes(r)
 
 		// TODO: Add more routes as modules are migrated
 		// r.Route("/planning", func(r chi.Router) { ... })
@@ -406,6 +410,39 @@ func (s *Server) setupScoringRoutes(r chi.Router) {
 	// Scoring routes
 	r.Route("/scoring", func(r chi.Router) {
 		r.Post("/score", handler.HandleScoreSecurity) // Calculate security score
+	})
+}
+
+// setupOptimizationRoutes configures optimization module routes
+func (s *Server) setupOptimizationRoutes(r chi.Router) {
+	// Initialize PyPFOpt client
+	pypfoptClient := optimization.NewPyPFOptClient(s.cfg.PyPFOptServiceURL, s.log)
+
+	// Initialize constraints manager
+	constraintsMgr := optimization.NewConstraintsManager(s.log)
+
+	// Initialize returns calculator
+	returnsCalc := optimization.NewReturnsCalculator(s.configDB.Conn(), s.log)
+
+	// Initialize risk model builder
+	riskBuilder := optimization.NewRiskModelBuilder(s.configDB.Conn(), pypfoptClient, s.log)
+
+	// Initialize optimization service
+	optimizerService := optimization.NewOptimizerService(
+		pypfoptClient,
+		constraintsMgr,
+		returnsCalc,
+		riskBuilder,
+		s.log,
+	)
+
+	// Initialize handler
+	handler := optimization.NewHandler(optimizerService, s.configDB.Conn(), s.log)
+
+	// Optimization routes (faithful translation of Python routes)
+	r.Route("/optimizer", func(r chi.Router) {
+		r.Get("/", handler.HandleGetStatus) // Get optimizer status and last run
+		r.Post("/run", handler.HandleRun)   // Run optimization
 	})
 }
 

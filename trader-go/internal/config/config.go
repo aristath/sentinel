@@ -13,6 +13,7 @@ type Config struct {
 	DatabasePath        string
 	PythonServiceURL    string
 	TradernetServiceURL string
+	PyPFOptServiceURL   string
 	TradernetAPIKey     string
 	TradernetAPISecret  string
 	LogLevel            string
@@ -31,6 +32,7 @@ func Load() (*Config, error) {
 		DatabasePath:        getEnv("DATABASE_PATH", "./data/portfolio.db"),
 		PythonServiceURL:    getEnv("PYTHON_SERVICE_URL", "http://localhost:8000"),    // Python on 8000
 		TradernetServiceURL: getEnv("TRADERNET_SERVICE_URL", "http://localhost:9001"), // Tradernet microservice on 9001
+		PyPFOptServiceURL:   getEnv("PYPFOPT_SERVICE_URL", "http://localhost:9002"),   // PyPFOpt microservice on 9002
 		TradernetAPIKey:     getEnv("TRADERNET_API_KEY", ""),
 		TradernetAPISecret:  getEnv("TRADERNET_API_SECRET", ""),
 		LogLevel:            getEnv("LOG_LEVEL", "info"),

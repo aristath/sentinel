@@ -552,12 +552,12 @@ func buildAlertsArray(alerts []ConcentrationAlert) []map[string]interface{} {
 	result := make([]map[string]interface{}, len(alerts))
 	for i, alert := range alerts {
 		result[i] = map[string]interface{}{
-			"type":                  alert.Type,
-			"name":                  alert.Name,
-			"current_pct":           alert.CurrentPct,
-			"limit_pct":             alert.LimitPct,
-			"alert_threshold_pct":   alert.AlertThresholdPct,
-			"severity":              alert.Severity,
+			"type":                alert.Type,
+			"name":                alert.Name,
+			"current_pct":         alert.CurrentPct,
+			"limit_pct":           alert.LimitPct,
+			"alert_threshold_pct": alert.AlertThresholdPct,
+			"severity":            alert.Severity,
 		}
 	}
 	return result
