@@ -132,7 +132,7 @@ func (r *ScoreRepository) Upsert(score SecurityScore) error {
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	query := `
 		INSERT OR REPLACE INTO scores
@@ -186,7 +186,7 @@ func (r *ScoreRepository) Delete(symbol string) error {
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	query := "DELETE FROM scores WHERE symbol = ?"
 	result, err := tx.Exec(query, symbol)
@@ -211,7 +211,7 @@ func (r *ScoreRepository) DeleteAll() error {
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	query := "DELETE FROM scores"
 	result, err := tx.Exec(query)

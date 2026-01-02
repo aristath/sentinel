@@ -2,6 +2,7 @@ package portfolio
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -31,7 +32,7 @@ func (r *PortfolioRepository) GetLatestCashBalance() (float64, error) {
 
 	var cashBalance sql.NullFloat64
 	err := r.db.QueryRow(query).Scan(&cashBalance)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return 0.0, nil
 	}
 	if err != nil {
@@ -206,11 +207,11 @@ func (r *PortfolioRepository) scanSnapshot(rows *sql.Rows) (PortfolioSnapshot, e
 
 // ValueChange represents portfolio value change over time
 type ValueChange struct {
-	Change      float64 `json:"change"`
-	ChangePct   float64 `json:"change_pct"`
-	Days        int     `json:"days"`
-	StartValue  float64 `json:"start_value"`
-	EndValue    float64 `json:"end_value"`
+	Change     float64 `json:"change"`
+	ChangePct  float64 `json:"change_pct"`
+	Days       int     `json:"days"`
+	StartValue float64 `json:"start_value"`
+	EndValue   float64 `json:"end_value"`
 }
 
 // GetValueChange calculates portfolio value change over N days
@@ -260,7 +261,7 @@ func (r *PortfolioRepository) Upsert(snapshot PortfolioSnapshot) error {
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	query := `
 		INSERT OR REPLACE INTO portfolio_snapshots
@@ -314,7 +315,7 @@ func (r *PortfolioRepository) DeleteBefore(date string) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	query := "DELETE FROM portfolio_snapshots WHERE date < ?"
 	_, err = tx.Exec(query, date)

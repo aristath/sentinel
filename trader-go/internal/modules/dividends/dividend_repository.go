@@ -2,6 +2,7 @@ package dividends
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -82,7 +83,7 @@ func (r *DividendRepository) GetByID(id int) (*DividendRecord, error) {
 
 	row := r.dividendsDB.QueryRow(query, id)
 	dividend, err := r.scanDividend(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -99,7 +100,7 @@ func (r *DividendRepository) GetByCashFlowID(cashFlowID int) (*DividendRecord, e
 
 	row := r.dividendsDB.QueryRow(query, cashFlowID)
 	dividend, err := r.scanDividend(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -116,7 +117,7 @@ func (r *DividendRepository) ExistsForCashFlow(cashFlowID int) (bool, error) {
 
 	var exists int
 	err := r.dividendsDB.QueryRow(query, cashFlowID).Scan(&exists)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {

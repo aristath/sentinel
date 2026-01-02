@@ -271,7 +271,7 @@ func (h *UniverseHandlers) HandleGetStocks(w http.ResponseWriter, r *http.Reques
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	_ = json.NewEncoder(w).Encode(response) // Ignore encode error - already committed response
 }
 
 // HandleGetStock returns detailed security info with score breakdown
@@ -353,7 +353,7 @@ func (h *UniverseHandlers) HandleGetStock(w http.ResponseWriter, r *http.Request
 	result["position"] = nil
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	_ = json.NewEncoder(w).Encode(result) // Ignore encode error - already committed response
 }
 
 // HandleCreateStock proxies to Python for security creation
@@ -449,7 +449,7 @@ func (h *UniverseHandlers) HandleDeleteStock(w http.ResponseWriter, r *http.Requ
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	_ = json.NewEncoder(w).Encode(response) // Ignore encode error - already committed response
 }
 
 // Helper methods
@@ -514,5 +514,5 @@ func (h *UniverseHandlers) proxyToPython(w http.ResponseWriter, r *http.Request,
 
 	// Write response
 	w.WriteHeader(resp.StatusCode)
-	w.Write(respBody)
+	_, _ = w.Write(respBody) // Ignore write error - already committed response
 }

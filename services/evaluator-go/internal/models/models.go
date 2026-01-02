@@ -80,15 +80,15 @@ type PortfolioContext struct {
 // EvaluationContext contains all data needed to simulate and score action sequences
 type EvaluationContext struct {
 	// Portfolio state
-	PortfolioContext      PortfolioContext `json:"portfolio_context"`
-	Positions             []Position       `json:"positions"`
-	Securities            []Security       `json:"securities"`
-	AvailableCashEUR      float64          `json:"available_cash_eur"`
-	TotalPortfolioValueEUR float64         `json:"total_portfolio_value_eur"`
+	PortfolioContext       PortfolioContext `json:"portfolio_context"`
+	Positions              []Position       `json:"positions"`
+	Securities             []Security       `json:"securities"`
+	AvailableCashEUR       float64          `json:"available_cash_eur"`
+	TotalPortfolioValueEUR float64          `json:"total_portfolio_value_eur"`
 
 	// Market data
-	CurrentPrices    map[string]float64 `json:"current_prices"`     // symbol -> current price
-	StocksBySymbol   map[string]Security `json:"stocks_by_symbol"`  // symbol -> Security (computed)
+	CurrentPrices  map[string]float64  `json:"current_prices"`   // symbol -> current price
+	StocksBySymbol map[string]Security `json:"stocks_by_symbol"` // symbol -> Security (computed)
 
 	// Configuration
 	TransactionCostFixed   float64 `json:"transaction_cost_fixed"`   // Fixed transaction cost (EUR)
@@ -111,8 +111,8 @@ type SequenceEvaluationResult struct {
 
 // BatchEvaluationRequest represents a request to evaluate multiple sequences
 type BatchEvaluationRequest struct {
-	Sequences        [][]ActionCandidate `json:"sequences"`         // List of sequences to evaluate
-	EvaluationContext EvaluationContext  `json:"evaluation_context"` // Context for evaluation
+	Sequences         [][]ActionCandidate `json:"sequences"`          // List of sequences to evaluate
+	EvaluationContext EvaluationContext   `json:"evaluation_context"` // Context for evaluation
 }
 
 // BatchEvaluationResponse represents the response from batch evaluation
@@ -148,10 +148,10 @@ type MonteCarloResult struct {
 
 // StochasticRequest represents a stochastic price scenario request
 type StochasticRequest struct {
-	Sequence          []ActionCandidate   `json:"sequence"`           // Sequence to evaluate
-	EvaluationContext EvaluationContext   `json:"evaluation_context"` // Context for evaluation
-	Shifts            []float64           `json:"shifts"`             // Price shift scenarios (e.g., [-0.10, -0.05, 0.0, 0.05, 0.10])
-	Weights           map[string]float64  `json:"weights"`            // Weights per scenario (e.g., {"0.0": 0.40, "-0.10": 0.15})
+	Sequence          []ActionCandidate  `json:"sequence"`           // Sequence to evaluate
+	EvaluationContext EvaluationContext  `json:"evaluation_context"` // Context for evaluation
+	Shifts            []float64          `json:"shifts"`             // Price shift scenarios (e.g., [-0.10, -0.05, 0.0, 0.05, 0.10])
+	Weights           map[string]float64 `json:"weights"`            // Weights per scenario (e.g., {"0.0": 0.40, "-0.10": 0.15})
 }
 
 // StochasticResult represents the result of stochastic scenario evaluation

@@ -105,7 +105,7 @@ func (r *GroupingRepository) SetCountryGroup(groupName string, countryNames []st
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// Delete existing mappings for this group
 	_, err = tx.Exec("DELETE FROM country_groups WHERE group_name = ?", groupName)
@@ -158,7 +158,7 @@ func (r *GroupingRepository) SetIndustryGroup(groupName string, industryNames []
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// Delete existing mappings for this group
 	_, err = tx.Exec("DELETE FROM industry_groups WHERE group_name = ?", groupName)

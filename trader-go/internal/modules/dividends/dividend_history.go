@@ -14,14 +14,14 @@ const (
 // DividendStabilityScore represents the result of dividend stability analysis
 // Faithful translation from Python: calculate_dividend_stability_score return type
 type DividendStabilityScore struct {
-	Score                  float64  `json:"score"`
-	HasBigCut              bool     `json:"has_big_cut"`
-	YearsSinceCut          *int     `json:"years_since_cut,omitempty"`
-	DividendGrowthRate     *float64 `json:"dividend_growth_rate,omitempty"`
-	AbovePortfolioAverage  bool     `json:"above_portfolio_avg"`
-	CutPenalty             float64  `json:"cut_penalty"`
-	GrowthBonus            float64  `json:"growth_bonus"`
-	YieldBonus             float64  `json:"yield_bonus"`
+	Score                 float64  `json:"score"`
+	HasBigCut             bool     `json:"has_big_cut"`
+	YearsSinceCut         *int     `json:"years_since_cut,omitempty"`
+	DividendGrowthRate    *float64 `json:"dividend_growth_rate,omitempty"`
+	AbovePortfolioAverage bool     `json:"above_portfolio_avg"`
+	CutPenalty            float64  `json:"cut_penalty"`
+	GrowthBonus           float64  `json:"growth_bonus"`
+	YieldBonus            float64  `json:"yield_bonus"`
 }
 
 // HasBigDividendCut checks for significant dividend cuts (>20% year-over-year)

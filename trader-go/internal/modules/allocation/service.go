@@ -10,8 +10,8 @@ import (
 
 // Position represents a portfolio position (from Python: app/domain/models.py)
 type Position struct {
-	Symbol          string
-	MarketValueEUR  float64
+	Symbol         string
+	MarketValueEUR float64
 }
 
 // PortfolioAllocation represents allocation info (from Python: app/domain/models.py)
@@ -25,10 +25,10 @@ type PortfolioAllocation struct {
 
 // PortfolioSummary represents complete portfolio summary (from Python: app/domain/models.py)
 type PortfolioSummary struct {
-	TotalValue           float64
-	CashBalance          float64
-	CountryAllocations   []PortfolioAllocation
-	IndustryAllocations  []PortfolioAllocation
+	TotalValue          float64
+	CashBalance         float64
+	CountryAllocations  []PortfolioAllocation
+	IndustryAllocations []PortfolioAllocation
 }
 
 // ConcentrationAlertService detects concentration limit alerts

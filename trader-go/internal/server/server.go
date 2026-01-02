@@ -19,6 +19,7 @@ import (
 	"github.com/aristath/arduino-trader/internal/modules/dividends"
 	"github.com/aristath/arduino-trader/internal/modules/evaluation"
 	"github.com/aristath/arduino-trader/internal/modules/portfolio"
+	"github.com/aristath/arduino-trader/internal/modules/scoring/api"
 	"github.com/aristath/arduino-trader/internal/modules/trading"
 	"github.com/aristath/arduino-trader/internal/modules/universe"
 )
@@ -142,6 +143,9 @@ func (s *Server) setupRoutes() {
 		// Display module (MIGRATED TO GO!)
 		s.setupDisplayRoutes(r)
 
+		// Scoring module (MIGRATED TO GO!)
+		s.setupScoringRoutes(r)
+
 		// TODO: Add more routes as modules are migrated
 		// r.Route("/planning", func(r chi.Router) { ... })
 	})
@@ -211,12 +215,12 @@ func (s *Server) setupPortfolioRoutes(r chi.Router) {
 
 	// Portfolio routes (faithful translation of Python routes)
 	r.Route("/portfolio", func(r chi.Router) {
-		r.Get("/", handler.HandleGetPortfolio)                  // List positions (same as GET /portfolio)
-		r.Get("/summary", handler.HandleGetSummary)             // Portfolio summary
-		r.Get("/history", handler.HandleGetHistory)             // Historical snapshots
-		r.Get("/transactions", handler.HandleGetTransactions)   // Proxy to Python (Tradernet)
+		r.Get("/", handler.HandleGetPortfolio)                   // List positions (same as GET /portfolio)
+		r.Get("/summary", handler.HandleGetSummary)              // Portfolio summary
+		r.Get("/history", handler.HandleGetHistory)              // Historical snapshots
+		r.Get("/transactions", handler.HandleGetTransactions)    // Proxy to Python (Tradernet)
 		r.Get("/cash-breakdown", handler.HandleGetCashBreakdown) // Proxy to Python (Tradernet)
-		r.Get("/analytics", handler.HandleGetAnalytics)         // Proxy to Python (analytics)
+		r.Get("/analytics", handler.HandleGetAnalytics)          // Proxy to Python (analytics)
 	})
 }
 
@@ -240,17 +244,17 @@ func (s *Server) setupUniverseRoutes(r chi.Router) {
 	// Universe/Securities routes (faithful translation of Python routes)
 	r.Route("/securities", func(r chi.Router) {
 		// GET endpoints (implemented in Go)
-		r.Get("/", handler.HandleGetStocks)         // List all securities with scores
-		r.Get("/{isin}", handler.HandleGetStock)    // Get security detail by ISIN
+		r.Get("/", handler.HandleGetStocks)      // List all securities with scores
+		r.Get("/{isin}", handler.HandleGetStock) // Get security detail by ISIN
 
 		// POST endpoints (proxied to Python for complex operations)
-		r.Post("/", handler.HandleCreateStock)                       // Create security (requires Yahoo Finance)
+		r.Post("/", handler.HandleCreateStock)                           // Create security (requires Yahoo Finance)
 		r.Post("/add-by-identifier", handler.HandleAddStockByIdentifier) // Auto-setup by symbol/ISIN
-		r.Post("/refresh-all", handler.HandleRefreshAllScores)       // Recalculate all scores
+		r.Post("/refresh-all", handler.HandleRefreshAllScores)           // Recalculate all scores
 
 		// Security-specific POST endpoints
 		r.Post("/{isin}/refresh-data", handler.HandleRefreshSecurityData) // Full data refresh
-		r.Post("/{isin}/refresh", handler.HandleRefreshStockScore)         // Quick score refresh
+		r.Post("/{isin}/refresh", handler.HandleRefreshStockScore)        // Quick score refresh
 
 		// PUT/DELETE endpoints
 		r.Put("/{isin}", handler.HandleUpdateStock)    // Update security (requires score recalc)
@@ -292,9 +296,9 @@ func (s *Server) setupTradingRoutes(r chi.Router) {
 
 	// Trading routes (faithful translation of Python routes)
 	r.Route("/trades", func(r chi.Router) {
-		r.Get("/", handler.HandleGetTrades)                // Trade history
-		r.Post("/execute", handler.HandleExecuteTrade)     // Execute trade (proxy to Python)
-		r.Get("/allocation", handler.HandleGetAllocation)  // Portfolio allocation (proxy to Python)
+		r.Get("/", handler.HandleGetTrades)               // Trade history
+		r.Post("/execute", handler.HandleExecuteTrade)    // Execute trade (proxy to Python)
+		r.Get("/allocation", handler.HandleGetAllocation) // Portfolio allocation (proxy to Python)
 	})
 }
 
@@ -307,19 +311,19 @@ func (s *Server) setupDividendRoutes(r chi.Router) {
 	// Dividend routes (faithful translation of Python repository to HTTP API)
 	r.Route("/dividends", func(r chi.Router) {
 		// List endpoints
-		r.Get("/", handler.HandleGetDividends)                            // List all dividends
-		r.Get("/{id}", handler.HandleGetDividendByID)                     // Get dividend by ID
-		r.Get("/symbol/{symbol}", handler.HandleGetDividendsBySymbol)     // Get dividends by symbol
+		r.Get("/", handler.HandleGetDividends)                        // List all dividends
+		r.Get("/{id}", handler.HandleGetDividendByID)                 // Get dividend by ID
+		r.Get("/symbol/{symbol}", handler.HandleGetDividendsBySymbol) // Get dividends by symbol
 
 		// CRITICAL: Endpoints used by dividend_reinvestment.py job
-		r.Get("/unreinvested", handler.HandleGetUnreinvestedDividends)    // Get unreinvested dividends
-		r.Post("/{id}/pending-bonus", handler.HandleSetPendingBonus)      // Set pending bonus
-		r.Post("/{id}/mark-reinvested", handler.HandleMarkReinvested)     // Mark as reinvested
+		r.Get("/unreinvested", handler.HandleGetUnreinvestedDividends) // Get unreinvested dividends
+		r.Post("/{id}/pending-bonus", handler.HandleSetPendingBonus)   // Set pending bonus
+		r.Post("/{id}/mark-reinvested", handler.HandleMarkReinvested)  // Mark as reinvested
 
 		// Management endpoints
-		r.Post("/", handler.HandleCreateDividend)                         // Create dividend
-		r.Post("/clear-bonus/{symbol}", handler.HandleClearBonus)         // Clear bonus by symbol
-		r.Get("/pending-bonuses", handler.HandleGetPendingBonuses)        // Get all pending bonuses
+		r.Post("/", handler.HandleCreateDividend)                  // Create dividend
+		r.Post("/clear-bonus/{symbol}", handler.HandleClearBonus)  // Clear bonus by symbol
+		r.Get("/pending-bonuses", handler.HandleGetPendingBonuses) // Get all pending bonuses
 
 		// Analytics endpoints
 		r.Get("/analytics/total", handler.HandleGetTotalDividendsBySymbol)       // Total dividends by symbol
@@ -335,10 +339,21 @@ func (s *Server) setupDisplayRoutes(r chi.Router) {
 
 	// Display routes (faithful translation of Python display service)
 	r.Route("/display", func(r chi.Router) {
-		r.Get("/state", handler.HandleGetState)         // Get current display state
-		r.Post("/text", handler.HandleSetText)          // Set display text
-		r.Post("/led3", handler.HandleSetLED3)          // Set LED3 color
-		r.Post("/led4", handler.HandleSetLED4)          // Set LED4 color
+		r.Get("/state", handler.HandleGetState) // Get current display state
+		r.Post("/text", handler.HandleSetText)  // Set display text
+		r.Post("/led3", handler.HandleSetLED3)  // Set LED3 color
+		r.Post("/led4", handler.HandleSetLED4)  // Set LED4 color
+	})
+}
+
+// setupScoringRoutes configures scoring module routes
+func (s *Server) setupScoringRoutes(r chi.Router) {
+	// Initialize scoring module components
+	handler := api.NewHandlers(s.log)
+
+	// Scoring routes
+	r.Route("/scoring", func(r chi.Router) {
+		r.Post("/score", handler.HandleScoreSecurity) // Calculate security score
 	})
 }
 

@@ -270,21 +270,21 @@ func (r *PositionRepository) scanPosition(rows *sql.Rows) (Position, error) {
 	var bucketID sql.NullString
 
 	err := rows.Scan(
-		&pos.Symbol,        // 1
-		&pos.Quantity,      // 2
-		&pos.AvgPrice,      // 3
-		&currentPrice,      // 4
-		&pos.Currency,      // 5
-		&pos.CurrencyRate,  // 6
-		&marketValueEUR,    // 7
-		&costBasisEUR,      // 8
-		&unrealizedPnL,     // 9
-		&unrealizedPnLPct,  // 10
-		&lastUpdated,       // 11
-		&firstBoughtAt,     // 12
-		&lastSoldAt,        // 13
-		&isin,              // 14
-		&bucketID,          // 15
+		&pos.Symbol,       // 1
+		&pos.Quantity,     // 2
+		&pos.AvgPrice,     // 3
+		&currentPrice,     // 4
+		&pos.Currency,     // 5
+		&pos.CurrencyRate, // 6
+		&marketValueEUR,   // 7
+		&costBasisEUR,     // 8
+		&unrealizedPnL,    // 9
+		&unrealizedPnLPct, // 10
+		&lastUpdated,      // 11
+		&firstBoughtAt,    // 12
+		&lastSoldAt,       // 13
+		&isin,             // 14
+		&bucketID,         // 15
 	)
 	if err != nil {
 		return pos, err
@@ -364,7 +364,7 @@ func (r *PositionRepository) Upsert(position Position) error {
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	query := `
 		INSERT OR REPLACE INTO positions
@@ -414,7 +414,7 @@ func (r *PositionRepository) Delete(symbol string) error {
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	query := "DELETE FROM positions WHERE symbol = ?"
 	result, err := tx.Exec(query, symbol)
@@ -439,7 +439,7 @@ func (r *PositionRepository) DeleteAll() error {
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	query := "DELETE FROM positions"
 	result, err := tx.Exec(query)
@@ -471,7 +471,7 @@ func (r *PositionRepository) UpdatePrice(symbol string, price float64, currencyR
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// SQL matches Python exactly - calculates market_value_eur, unrealized_pnl, unrealized_pnl_pct
 	query := `
@@ -488,14 +488,14 @@ func (r *PositionRepository) UpdatePrice(symbol string, price float64, currencyR
 	`
 
 	result, err := tx.Exec(query,
-		price,           // current_price
-		price,           // for market_value_eur calculation
-		currencyRate,    // for market_value_eur calculation
-		price,           // for unrealized_pnl calculation
-		currencyRate,    // for unrealized_pnl calculation
-		price,           // for unrealized_pnl_pct calculation
-		now,             // last_updated
-		symbol,          // WHERE symbol
+		price,        // current_price
+		price,        // for market_value_eur calculation
+		currencyRate, // for market_value_eur calculation
+		price,        // for unrealized_pnl calculation
+		currencyRate, // for unrealized_pnl calculation
+		price,        // for unrealized_pnl_pct calculation
+		now,          // last_updated
+		symbol,       // WHERE symbol
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update price: %w", err)
@@ -527,7 +527,7 @@ func (r *PositionRepository) UpdateLastSoldAt(symbol string) error {
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	query := "UPDATE positions SET last_sold_at = ? WHERE symbol = ?"
 	result, err := tx.Exec(query, now, symbol)

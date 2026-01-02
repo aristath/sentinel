@@ -6,9 +6,9 @@ import "time"
 type Currency string
 
 const (
-	CurrencyEUR Currency = "EUR"
-	CurrencyUSD Currency = "USD"
-	CurrencyGBP Currency = "GBP"
+	CurrencyEUR  Currency = "EUR"
+	CurrencyUSD  Currency = "USD"
+	CurrencyGBP  Currency = "GBP"
 	CurrencyTEST Currency = "TEST" // For research mode
 )
 

@@ -132,12 +132,12 @@ func (sm *StateManager) GetState() DisplayState {
 }
 
 // clamp restricts a value to be within a given range
-func clamp(value, min, max int) int {
-	if value < min {
-		return min
+func clamp(value, minVal, maxVal int) int {
+	if value < minVal {
+		return minVal
 	}
-	if value > max {
-		return max
+	if value > maxVal {
+		return maxVal
 	}
 	return value
 }

@@ -2,6 +2,7 @@ package trading
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -74,7 +75,7 @@ func (r *TradeRepository) GetByOrderID(orderID string) (*Trade, error) {
 
 	row := r.ledgerDB.QueryRow(query, orderID)
 	trade, err := r.scanTrade(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -91,7 +92,7 @@ func (r *TradeRepository) Exists(orderID string) (bool, error) {
 
 	var exists int
 	err := r.ledgerDB.QueryRow(query, orderID).Scan(&exists)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {
@@ -322,7 +323,7 @@ func (r *TradeRepository) HasRecentSellOrder(symbol string, hours float64) (bool
 
 	var exists int
 	err := r.ledgerDB.QueryRow(query, strings.ToUpper(symbol), cutoff).Scan(&exists)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
 	if err != nil {
@@ -502,7 +503,7 @@ func (r *TradeRepository) GetLastTradeTimestamp() (*time.Time, error) {
 
 	var executedAt sql.NullString
 	err := r.ledgerDB.QueryRow(query).Scan(&executedAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {

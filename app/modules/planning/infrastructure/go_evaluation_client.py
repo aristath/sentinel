@@ -87,7 +87,7 @@ class GoEvaluationClient:
             )
 
         try:
-            response = await self._client.get(f"{self.base_url}/api/v1/health")
+            response = await self._client.get(f"{self.base_url}/health")
             response.raise_for_status()
             return response.json()
         except httpx.TimeoutException:

@@ -225,8 +225,8 @@ func TestCheckSequenceFeasibility_NotFeasible(t *testing.T) {
 
 func TestCheckSequenceFeasibility_SellThenBuy(t *testing.T) {
 	sequence := []models.ActionCandidate{
-		{Side: models.TradeSideSell, ValueEUR: 500.0},  // Adds 500
-		{Side: models.TradeSideBuy, ValueEUR: 1200.0},  // Needs 1200, have 500+500=1000
+		{Side: models.TradeSideSell, ValueEUR: 500.0}, // Adds 500
+		{Side: models.TradeSideBuy, ValueEUR: 1200.0}, // Needs 1200, have 500+500=1000
 	}
 
 	feasible := CheckSequenceFeasibility(

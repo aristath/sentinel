@@ -49,18 +49,18 @@ func (h *Handler) HandleGetPortfolio(w http.ResponseWriter, r *http.Request) {
 	var result []map[string]interface{}
 	for _, pos := range positions {
 		result = append(result, map[string]interface{}{
-			"symbol":            pos.Symbol,
-			"quantity":          pos.Quantity,
-			"avg_price":         pos.AvgPrice,
-			"current_price":     pos.CurrentPrice,
-			"currency":          pos.Currency,
-			"currency_rate":     pos.CurrencyRate,
-			"market_value_eur":  pos.MarketValueEUR,
-			"last_updated":      pos.LastUpdated,
-			"stock_name":        pos.StockName,
-			"industry":          pos.Industry,
-			"country":           pos.Country,
-			"fullExchangeName":  pos.FullExchangeName,
+			"symbol":           pos.Symbol,
+			"quantity":         pos.Quantity,
+			"avg_price":        pos.AvgPrice,
+			"current_price":    pos.CurrentPrice,
+			"currency":         pos.Currency,
+			"currency_rate":    pos.CurrencyRate,
+			"market_value_eur": pos.MarketValueEUR,
+			"last_updated":     pos.LastUpdated,
+			"stock_name":       pos.StockName,
+			"industry":         pos.Industry,
+			"country":          pos.Country,
+			"fullExchangeName": pos.FullExchangeName,
 		})
 	}
 
@@ -121,13 +121,13 @@ func (h *Handler) HandleGetHistory(w http.ResponseWriter, r *http.Request) {
 	var result []map[string]interface{}
 	for _, s := range snapshots {
 		result = append(result, map[string]interface{}{
-			"id":            nil, // Not in domain model
-			"date":          s.Date,
-			"total_value":   s.TotalValue,
-			"cash_balance":  s.CashBalance,
-			"geo_eu_pct":    s.GeoEUPct,
-			"geo_asia_pct":  s.GeoAsiaPct,
-			"geo_us_pct":    s.GeoUSPct,
+			"id":           nil, // Not in domain model
+			"date":         s.Date,
+			"total_value":  s.TotalValue,
+			"cash_balance": s.CashBalance,
+			"geo_eu_pct":   s.GeoEUPct,
+			"geo_asia_pct": s.GeoAsiaPct,
+			"geo_us_pct":   s.GeoUSPct,
 		})
 	}
 

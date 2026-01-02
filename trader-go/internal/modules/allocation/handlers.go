@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sort"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -158,7 +157,7 @@ func (h *Handler) HandleUpdateIndustryGroup(w http.ResponseWriter, r *http.Reque
 	}
 
 	h.writeJSON(w, http.StatusOK, map[string]interface{}{
-		"group_name":      groupName,
+		"group_name":     groupName,
 		"industry_names": industryNames,
 	})
 }
@@ -408,6 +407,8 @@ func (h *Handler) writeError(w http.ResponseWriter, status int, message string) 
 
 func (h *Handler) proxyToPython(w http.ResponseWriter, r *http.Request, path string) {
 	// Simple proxy to Python service during migration
+	// pythonURL is configured internally and path is from trusted internal routes
+	//nolint:gosec // G107: URL is internal service proxy, not user-controlled
 	url := h.pythonURL + path
 
 	resp, err := http.Get(url)
@@ -426,28 +427,5 @@ func (h *Handler) proxyToPython(w http.ResponseWriter, r *http.Request, path str
 		return
 	}
 
-	json.NewEncoder(w).Encode(result)
-}
-
-// deduplicate removes duplicate strings from slice while preserving order
-func deduplicate(items []string) []string {
-	seen := make(map[string]bool)
-	var result []string
-	for _, item := range items {
-		if !seen[item] {
-			seen[item] = true
-			result = append(result, item)
-		}
-	}
-	return result
-}
-
-// sortedKeys returns sorted keys from a map
-func sortedKeys(m map[string][]string) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
+	_ = json.NewEncoder(w).Encode(result) // Ignore encode error - already committed response
 }

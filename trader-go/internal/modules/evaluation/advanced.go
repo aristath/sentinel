@@ -5,7 +5,6 @@ import (
 	"math"
 	"math/rand"
 	"sort"
-	"strconv"
 
 	"gonum.org/v1/gonum/floats"
 	"gonum.org/v1/gonum/stat"
@@ -112,6 +111,8 @@ func generateRandomPrices(symbols []string, volatilities map[string]float64) map
 		dailyVol := vol / math.Sqrt(252)
 
 		// Generate random normal (mean=0, stddev=1)
+		// Using math/rand is acceptable for Monte Carlo simulation (not crypto)
+		//nolint:gosec // G404: Monte Carlo simulation doesn't require crypto-grade randomness
 		randomNormal := rand.NormFloat64()
 
 		// Price multiplier: exp(daily_vol * random_normal)
@@ -251,7 +252,3 @@ func formatShift(shift float64) string {
 	}
 }
 
-// Helper function to convert string shift keys back to float
-func parseShift(shiftStr string) (float64, error) {
-	return strconv.ParseFloat(shiftStr, 64)
-}

@@ -87,8 +87,8 @@ type EvaluationContext struct {
 	TotalPortfolioValueEUR float64          `json:"total_portfolio_value_eur"`
 
 	// Market data
-	CurrentPrices  map[string]float64  `json:"current_prices"`    // symbol -> current price
-	StocksBySymbol map[string]Security `json:"stocks_by_symbol"`  // symbol -> Security (computed)
+	CurrentPrices  map[string]float64  `json:"current_prices"`   // symbol -> current price
+	StocksBySymbol map[string]Security `json:"stocks_by_symbol"` // symbol -> Security (computed)
 
 	// Configuration
 	TransactionCostFixed   float64 `json:"transaction_cost_fixed"`   // Fixed transaction cost (EUR)

@@ -193,7 +193,7 @@ func (r *SecurityRepository) Create(security Security) error {
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	query := `
 		INSERT INTO securities
@@ -290,8 +290,10 @@ func (r *SecurityRepository) Update(symbol string, updates map[string]interface{
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
+	// Safe: all keys are validated against whitelist above, values use parameterized query
+	//nolint:gosec // G201: Field names are whitelisted, values are parameterized
 	query := fmt.Sprintf("UPDATE securities SET %s WHERE symbol = ?", strings.Join(setClauses, ", "))
 	result, err := tx.Exec(query, values...)
 	if err != nil {

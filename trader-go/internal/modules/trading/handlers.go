@@ -103,7 +103,7 @@ func (h *TradingHandlers) HandleGetTrades(w http.ResponseWriter, r *http.Request
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	_ = json.NewEncoder(w).Encode(response) // Ignore encode error - already committed response
 }
 
 // HandleExecuteTrade proxies trade execution to Python
@@ -195,5 +195,5 @@ func (h *TradingHandlers) proxyToPython(w http.ResponseWriter, r *http.Request, 
 
 	// Write response
 	w.WriteHeader(resp.StatusCode)
-	w.Write(respBody)
+	_, _ = w.Write(respBody) // Ignore write error - already committed response
 }
