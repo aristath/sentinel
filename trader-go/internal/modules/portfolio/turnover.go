@@ -12,9 +12,9 @@ import (
 // TurnoverTracker tracks and calculates portfolio turnover rate
 // Faithful translation from Python: app/application/services/turnover_tracker.py
 type TurnoverTracker struct {
-	ledgerDB      *sql.DB // For trades
-	snapshotsDB   *sql.DB // For portfolio snapshots
-	log           zerolog.Logger
+	ledgerDB    *sql.DB // For trades
+	snapshotsDB *sql.DB // For portfolio snapshots
+	log         zerolog.Logger
 }
 
 // NewTurnoverTracker creates a new turnover tracker

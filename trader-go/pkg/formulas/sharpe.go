@@ -62,22 +62,24 @@ func CalculateSharpeFromPrices(prices []float64, riskFreeRate float64) *float64 
 }
 
 // CalculateSortinoRatio calculates the Sortino Ratio (downside deviation version of Sharpe)
-// Only considers downside volatility (negative returns)
+// Only considers downside volatility (returns below the target/MAR)
 //
 // Sortino Formula:
 //
 //	Sortino = (Portfolio Return - Risk-free Rate) / Downside Deviation
+//	Downside Deviation = sqrt(mean of squared deviations below MAR)
 //
 // Args:
 //
 //	returns: Array of periodic returns
 //	riskFreeRate: Risk-free rate (annual, as decimal)
+//	targetReturn: Minimum Acceptable Return / MAR (annual, as decimal)
 //	periodsPerYear: Number of periods per year
 //
 // Returns:
 //
 //	Sortino ratio or nil if insufficient data
-func CalculateSortinoRatio(returns []float64, riskFreeRate float64, periodsPerYear int) *float64 {
+func CalculateSortinoRatio(returns []float64, riskFreeRate float64, targetReturn float64, periodsPerYear int) *float64 {
 	if len(returns) < 2 {
 		return nil
 	}
@@ -85,19 +87,23 @@ func CalculateSortinoRatio(returns []float64, riskFreeRate float64, periodsPerYe
 	// Calculate mean return
 	meanReturn := Mean(returns)
 
-	// Calculate downside deviation (only negative returns)
+	// Calculate periodic MAR (Minimum Acceptable Return)
+	periodicMAR := targetReturn / float64(periodsPerYear)
+
+	// Calculate downside deviation (returns below MAR)
 	var downsideSquaredSum float64
 	downsideCount := 0
 
 	for _, ret := range returns {
-		if ret < 0 {
-			downsideSquaredSum += ret * ret
+		if ret < periodicMAR {
+			deviation := ret - periodicMAR
+			downsideSquaredSum += deviation * deviation
 			downsideCount++
 		}
 	}
 
 	if downsideCount == 0 {
-		// No downside, return nil (or could return infinity)
+		// No downside below MAR, return nil (or could return infinity)
 		return nil
 	}
 

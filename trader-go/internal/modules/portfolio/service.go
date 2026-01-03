@@ -21,13 +21,13 @@ type AllocationTargetProvider interface {
 // PortfolioService orchestrates portfolio operations
 // Faithful translation from Python: app/modules/portfolio/services/portfolio_service.py
 type PortfolioService struct {
-	portfolioRepo        *PortfolioRepository
-	positionRepo         *PositionRepository
-	allocRepo            AllocationTargetProvider
-	turnoverTracker      *TurnoverTracker
-	attributionCalc      *AttributionCalculator
-	configDB             *sql.DB // For querying securities
-	log                  zerolog.Logger
+	portfolioRepo   *PortfolioRepository
+	positionRepo    *PositionRepository
+	allocRepo       AllocationTargetProvider
+	turnoverTracker *TurnoverTracker
+	attributionCalc *AttributionCalculator
+	configDB        *sql.DB // For querying securities
+	log             zerolog.Logger
 }
 
 // NewPortfolioService creates a new portfolio service
@@ -41,13 +41,13 @@ func NewPortfolioService(
 	log zerolog.Logger,
 ) *PortfolioService {
 	return &PortfolioService{
-		portfolioRepo:        portfolioRepo,
-		positionRepo:         positionRepo,
-		allocRepo:            allocRepo,
-		turnoverTracker:      turnoverTracker,
-		attributionCalc:      attributionCalc,
-		configDB:             configDB,
-		log:                  log.With().Str("service", "portfolio").Logger(),
+		portfolioRepo:   portfolioRepo,
+		positionRepo:    positionRepo,
+		allocRepo:       allocRepo,
+		turnoverTracker: turnoverTracker,
+		attributionCalc: attributionCalc,
+		configDB:        configDB,
+		log:             log.With().Str("service", "portfolio").Logger(),
 	}
 }
 
@@ -305,13 +305,17 @@ func round(val float64, decimals int) float64 {
 // GetAnalytics calculates portfolio analytics for the specified period
 // Faithful translation from Python: app/modules/portfolio/api/portfolio.py -> get_portfolio_analytics()
 func (s *PortfolioService) GetAnalytics(days int) (PortfolioAnalyticsResponse, error) {
-	// 1. Calculate date range
+	// 1. Load risk parameters (use defaults for main portfolio)
+	riskParams := NewDefaultRiskParameters()
+	// TODO: Load from configuration if custom risk parameters are needed for main portfolio
+
+	// 2. Calculate date range
 	endDate := time.Now()
 	startDate := endDate.AddDate(0, 0, -days)
 	startDateStr := startDate.Format("2006-01-02")
 	endDateStr := endDate.Format("2006-01-02")
 
-	// 2. Get portfolio value series from snapshots
+	// 3. Get portfolio value series from snapshots
 	snapshots, err := s.portfolioRepo.GetRange(startDateStr, endDateStr)
 	if err != nil {
 		return s.buildErrorResponse("Failed to get portfolio history", startDateStr, endDateStr, days), fmt.Errorf("failed to get snapshots: %w", err)
@@ -321,7 +325,7 @@ func (s *PortfolioService) GetAnalytics(days int) (PortfolioAnalyticsResponse, e
 		return s.buildErrorResponse("Insufficient data", startDateStr, endDateStr, days), nil
 	}
 
-	// 3. Extract values and calculate returns
+	// 4. Extract values and calculate returns
 	values := make([]float64, len(snapshots))
 	for i, snap := range snapshots {
 		values[i] = snap.TotalValue
@@ -332,9 +336,9 @@ func (s *PortfolioService) GetAnalytics(days int) (PortfolioAnalyticsResponse, e
 		return s.buildErrorResponse("Could not calculate returns", startDateStr, endDateStr, days), nil
 	}
 
-	// 4. Calculate annual return and metrics
+	// 5. Calculate annual return and metrics (with parameterized risk calculations)
 	annualReturn := formulas.CalculateAnnualReturn(returns)
-	metrics := s.calculateMetrics(returns, annualReturn)
+	metrics := s.calculateMetrics(returns, annualReturn, riskParams)
 
 	// 5. Format returns data (daily, monthly, annual)
 	returnsData := s.formatReturnsData(returns, snapshots, annualReturn)
@@ -388,17 +392,15 @@ func (s *PortfolioService) GetAnalytics(days int) (PortfolioAnalyticsResponse, e
 
 // calculateMetrics computes all risk metrics from returns
 // Faithful translation from Python: app/modules/analytics/domain/metrics/portfolio.py -> get_portfolio_metrics()
-func (s *PortfolioService) calculateMetrics(returns []float64, annualReturn float64) RiskMetrics {
-	const riskFreeRate = 0.0 // Match Python default
-
+func (s *PortfolioService) calculateMetrics(returns []float64, annualReturn float64, riskParams RiskParameters) RiskMetrics {
 	// Volatility (annualized)
 	volatility := formulas.AnnualizedVolatility(returns)
 	if math.IsInf(volatility, 0) || math.IsNaN(volatility) {
 		volatility = 0.0
 	}
 
-	// Sharpe ratio
-	sharpe := formulas.CalculateSharpeRatio(returns, riskFreeRate, 252)
+	// Sharpe ratio - uses risk-free rate from parameters
+	sharpe := formulas.CalculateSharpeRatio(returns, riskParams.RiskFreeRate, 252)
 	sharpeVal := 0.0
 	if sharpe != nil {
 		sharpeVal = *sharpe
@@ -407,8 +409,8 @@ func (s *PortfolioService) calculateMetrics(returns []float64, annualReturn floa
 		}
 	}
 
-	// Sortino ratio
-	sortino := formulas.CalculateSortinoRatio(returns, riskFreeRate, 252)
+	// Sortino ratio - uses risk-free rate and MAR from parameters
+	sortino := formulas.CalculateSortinoRatio(returns, riskParams.RiskFreeRate, riskParams.SortinoMAR, 252)
 	sortinoVal := 0.0
 	if sortino != nil {
 		sortinoVal = *sortino

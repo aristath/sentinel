@@ -105,6 +105,22 @@ type RiskMetrics struct {
 	MaxDrawdown  float64 `json:"max_drawdown"`
 }
 
+// RiskParameters holds configurable parameters for risk metric calculations
+// Allows each agent (main, satellites) to have different risk assessment criteria
+type RiskParameters struct {
+	RiskFreeRate float64 `json:"risk_free_rate"` // Annual risk-free rate (e.g., 0.035 for 3.5%)
+	SortinoMAR   float64 `json:"sortino_mar"`    // Minimum Acceptable Return for Sortino (e.g., 0.05 for 5%)
+}
+
+// NewDefaultRiskParameters returns sensible defaults for portfolio risk calculations
+// Suitable for main/core portfolio (retirement-focused)
+func NewDefaultRiskParameters() RiskParameters {
+	return RiskParameters{
+		RiskFreeRate: 0.035, // 3.5% annual risk-free rate
+		SortinoMAR:   0.05,  // 5% minimum acceptable return (inflation + modest real return)
+	}
+}
+
 // AttributionData holds performance attribution by category
 type AttributionData struct {
 	Country  map[string]float64 `json:"country"`
