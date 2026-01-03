@@ -366,8 +366,12 @@ func (c *Client) getBatchQuoteInfo(symbols []string) (map[string]map[string]inte
 		}
 	}
 
-	if lastErr != nil {
-		return nil, fmt.Errorf("failed after %d attempts: %w", maxRetries, lastErr)
+	// Check if we got a successful response
+	if resp == nil || resp.StatusCode != http.StatusOK {
+		if lastErr != nil {
+			return nil, fmt.Errorf("failed after %d attempts: %w", maxRetries, lastErr)
+		}
+		return nil, fmt.Errorf("failed after %d attempts with no error details", maxRetries)
 	}
 
 	defer resp.Body.Close()

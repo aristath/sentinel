@@ -73,8 +73,11 @@ repos:
       - id: go-mod-tidy
 
   # golangci-lint - comprehensive linter
-  - repo: https://github.com/golangci/golangci-lint
-    rev: v1.62.2
+  - repo: local
     hooks:
       - id: golangci-lint
-        args: [--timeout=5m, ./trader-go/...]
+        name: golangci-lint
+        entry: bash -c 'cd trader-go && golangci-lint run --timeout=5m ./...'
+        language: system
+        files: ^trader-go/.*\.go$
+        pass_filenames: false
