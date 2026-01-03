@@ -8,7 +8,7 @@
 - **Endpoint Migration:** 86+ of 111 (77%)
 - **Operational Capability:** ~80%
 - **Critical Blockers:** 0 (All P0 blockers resolved!)
-- **Latest Session:** Emergency Rebalancing complete - full autonomous execution operational
+- **Latest Session:** Satellites Planner Integration complete - multi-bucket strategies operational
 
 ---
 
@@ -338,6 +338,42 @@
 - trader-go/internal/services/trade_execution_service.go (176 lines)
 - trader-go/internal/modules/planning/recommendation_repository.go (267 lines)
 
+**3. Satellites Planner Integration** ✅ **100% COMPLETE**
+- **Impact:** Multi-bucket planner strategies now fully operational
+- **Status:** Per-bucket configurations, caching, and API endpoints implemented
+- **Completed** (commit df43953):
+
+**Database & Domain:**
+- ✅ BucketID field added to domain.PlannerConfiguration (nullable, TOML-serializable)
+- ✅ BucketID field added to repository.ConfigRecord
+- ✅ All SQL queries updated to include bucket_id column
+- ✅ GetByBucket() repository method for bucket-specific configs
+
+**PlannerLoader Service (NEW):**
+- ✅ Per-bucket planner caching with thread-safe map
+- ✅ LoadPlannerForBucket() - retrieve or create cached instance
+- ✅ ReloadPlannerForBucket() - hot-reload on config changes
+- ✅ ClearCache() - system-wide cache invalidation
+- ✅ GetDefaultPlanner() - main portfolio planner
+- ✅ Automatic fallback to default config when no bucket config exists
+
+**API Handlers:**
+- ✅ BucketID added to ConfigSummary response
+- ✅ New endpoint: GET /api/planning/configs/bucket/:bucket_id
+- ✅ handleGetByBucket() - retrieve config by bucket with proper 404
+
+**Integration:**
+- ✅ Satellites module can now have dedicated planner configurations
+- ✅ Each bucket can customize enabled modules and parameters
+- ✅ Template configs (bucket_id=NULL) for reuse across buckets
+- ✅ Configuration hot-reload without service restart
+
+**Files:**
+- trader-go/internal/modules/planning/domain/config.go (updated)
+- trader-go/internal/modules/planning/repository/config_repository.go (updated)
+- trader-go/internal/modules/planning/handlers/config.go (updated)
+- trader-go/internal/modules/planning/planner_loader.go (NEW, 159 lines)
+
 ---
 
 ## High Priority (P1)
@@ -357,10 +393,11 @@
 
 ## Medium Priority (P2)
 
-**5. Satellites Module Completion**
-- **Impact:** Background automation and planner integration remaining
-- **Estimated Work:** 3-5 days
-- Background jobs (maintenance, reconciliation) + planner integration
+**5. Satellites Module Completion** ⚠️ PARTIAL (80% COMPLETE)
+- **Impact:** Background automation remaining
+- **Estimated Work:** 2-3 days
+- ✅ Planner integration **COMPLETE** (per-bucket configs, PlannerLoader, API endpoints)
+- ⏳ Background jobs (maintenance, reconciliation) - remaining
 
 **6. Settings Module (9 endpoints)** ✅ **COMPLETE**
 - **Status:** Fully implemented with 80+ settings
@@ -440,9 +477,9 @@
    - GET /api/charts/securities/{isin}
 
 **Remaining:**
-1. ⚠️ Satellites completion (jobs + planner integration) - 3-5 days
+1. ⚠️ Satellites completion (background jobs only) - 2-3 days
    - Background jobs (maintenance, reconciliation)
-   - Planner integration for multi-bucket strategies
+   - ✅ Planner integration for multi-bucket strategies **COMPLETE**
 2. ⚠️ Analytics module completion - 3-5 days
    - Position risk metrics (beta, correlation matrix)
 
