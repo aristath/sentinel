@@ -48,10 +48,14 @@ type Service struct {
 }
 
 // NewService creates a new rebalancing service
-func NewService(log zerolog.Logger) *Service {
+func NewService(
+	triggerChecker *TriggerChecker,
+	negativeRebalancer *NegativeBalanceRebalancer,
+	log zerolog.Logger,
+) *Service {
 	return &Service{
-		triggerChecker:     NewTriggerChecker(log),
-		negativeRebalancer: NewNegativeBalanceRebalancer(log),
+		triggerChecker:     triggerChecker,
+		negativeRebalancer: negativeRebalancer,
 		log:                log.With().Str("service", "rebalancing").Logger(),
 	}
 }

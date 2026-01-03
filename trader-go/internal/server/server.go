@@ -32,6 +32,7 @@ import (
 	"github.com/aristath/arduino-trader/internal/modules/satellites"
 	"github.com/aristath/arduino-trader/internal/modules/scoring/api"
 	"github.com/aristath/arduino-trader/internal/modules/scoring/scorers"
+	"github.com/aristath/arduino-trader/internal/modules/settings"
 	"github.com/aristath/arduino-trader/internal/modules/trading"
 	"github.com/aristath/arduino-trader/internal/modules/universe"
 )
@@ -690,8 +691,27 @@ func (s *Server) setupRebalancingRoutes(r chi.Router) {
 		s.log,
 	)
 
+	// Initialize rebalancing components
+	triggerChecker := rebalancing.NewTriggerChecker(s.log)
+
+	// Initialize repositories for negative balance rebalancer
+	securityRepo := universe.NewSecurityRepository(s.configDB.Conn(), s.log)
+	settingsRepo := settings.NewRepository(s.configDB.Conn(), s.log)
+
+	negativeRebalancer := rebalancing.NewNegativeBalanceRebalancer(
+		s.log,
+		tradernetClient,
+		securityRepo,
+		positionRepo,
+		settingsRepo,
+	)
+
 	// Initialize rebalancing service
-	rebalancingService := rebalancing.NewService(s.log)
+	rebalancingService := rebalancing.NewService(
+		triggerChecker,
+		negativeRebalancer,
+		s.log,
+	)
 
 	// Initialize handlers
 	handlers := rebalancing.NewHandlers(

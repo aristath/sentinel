@@ -223,7 +223,12 @@ func (h *Handlers) CheckNegativeBalances(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Check currency minimums
-	shortfalls := h.service.GetNegativeBalanceRebalancer().CheckCurrencyMinimums(balanceMap)
+	shortfalls, err := h.service.GetNegativeBalanceRebalancer().CheckCurrencyMinimums(balanceMap)
+	if err != nil {
+		h.log.Error().Err(err).Msg("Failed to check currency minimums")
+		http.Error(w, "Failed to check currency minimums", http.StatusInternalServerError)
+		return
+	}
 	belowMinimum := len(shortfalls) > 0
 
 	// Calculate total shortfall in EUR
