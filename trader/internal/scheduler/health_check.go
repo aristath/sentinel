@@ -205,8 +205,9 @@ func (j *HealthCheckJob) checkWALCheckpoints() {
 		}
 
 		// Check WAL checkpoint status
-		var mode, busy, log, checkpointed int
-		err := db.Conn().QueryRow("PRAGMA wal_checkpoint(PASSIVE)").Scan(&mode, &busy, &log, &checkpointed)
+		// PRAGMA wal_checkpoint returns: busy, log, checkpointed
+		var busy, log, checkpointed int
+		err := db.Conn().QueryRow("PRAGMA wal_checkpoint(PASSIVE)").Scan(&busy, &log, &checkpointed)
 		if err != nil {
 			j.log.Warn().
 				Err(err).
