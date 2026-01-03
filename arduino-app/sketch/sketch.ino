@@ -5,6 +5,7 @@
 #include <Arduino_RouterBridge.h>
 #include "ArduinoGraphics.h"
 #include "Arduino_LED_Matrix.h"
+#include "portfolio_mode.h"
 
 ArduinoLEDMatrix matrix;
 
@@ -174,6 +175,31 @@ void renderBrightnessFrame() {
   matrix.loadFrame(frame);
 }
 
+// Render portfolio mode frame with per-cluster brightness
+void renderPortfolioFrame() {
+  // Update brightness array based on cluster assignments
+  memset(pixelBrightness, 0, sizeof(pixelBrightness));
+
+  // Map each pixel to its cluster's brightness
+  for (int y = 0; y < MATRIX_HEIGHT; y++) {
+    for (int x = 0; x < MATRIX_WIDTH; x++) {
+      uint8_t clusterID = pixelClusterID[y][x];
+      if (clusterID > 0) {
+        // Find cluster by ID and apply its brightness
+        for (int c = 0; c < numClusters; c++) {
+          if (clusters[c].clusterID == clusterID) {
+            pixelBrightness[y][x] = clusters[c].brightness;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  // Render the frame
+  renderBrightnessFrame();
+}
+
 void setup() {
   // Initialize LED matrix
   matrix.begin();
@@ -218,15 +244,22 @@ void setup() {
   Bridge.provide("setRGB3", setRGB3);
   Bridge.provide("setRGB4", setRGB4);
   Bridge.provide("scrollText", scrollText);
-  Bridge.provide("setSystemStats", setSystemStats);  // NEW: System stats mode
+  Bridge.provide("setSystemStats", setSystemStats);  // System stats mode
+  Bridge.provide("setPortfolioMode", setPortfolioMode);  // Portfolio mode
 }
 
 void loop() {
   // Bridge handles RPC messages automatically in background thread
   // No need to call Bridge.loop() - it's handled by __loopHook()
 
+  // Render in portfolio mode at 40 FPS
+  if (inPortfolioMode) {
+    updatePortfolioPattern();
+    renderPortfolioFrame();
+    delay(25);  // 25ms = 40 FPS - fast and visible animation
+  }
   // Render in stats mode at 40 FPS - fast and visible
-  if (inStatsMode) {
+  else if (inStatsMode) {
     updatePixelPattern();
     delay(25);  // 25ms = 40 FPS - faster, more visible animation
   }
@@ -238,9 +271,10 @@ void loop() {
     isScrolling = false;
   }
 
-  // Process pending text - exits stats mode, enters ticker mode
+  // Process pending text - exits stats/portfolio mode, enters ticker mode
   if (hasPendingText && !isScrolling) {
     inStatsMode = false;  // Exit stats mode when ticker arrives
+    inPortfolioMode = false;  // Exit portfolio mode when ticker arrives
 
     // Start scrolling with the latest message
     matrix.textScrollSpeed(pendingSpeed);

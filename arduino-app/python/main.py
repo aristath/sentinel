@@ -5,6 +5,7 @@ from arduino.app_utils import App, Bridge, Logger
 import time
 import requests
 import subprocess
+import json
 
 logger = Logger("trader-display")
 
@@ -103,6 +104,30 @@ def handle_stats_mode(stats: dict) -> bool:
         return False
 
 
+def handle_portfolio_mode(clusters: list) -> bool:
+    """Handle portfolio visualization mode.
+
+    Args:
+        clusters: List of cluster dicts with cluster_id, pixels, brightness, clustering, speed, symbol
+
+    Returns:
+        True if successful, False otherwise
+    """
+    if not clusters:
+        logger.debug("Portfolio mode but no clusters data")
+        return False
+
+    try:
+        # Convert clusters to JSON string for Arduino
+        clusters_json = json.dumps(clusters)
+        Bridge.call("setPortfolioMode", clusters_json, timeout=2)
+        logger.debug(f"Portfolio mode: {len(clusters)} clusters")
+        return True
+    except Exception as e:
+        logger.debug(f"setPortfolioMode failed: {e}")
+        return False
+
+
 def fetch_display_state() -> dict | None:
     """Fetch display state from FastAPI backend.
 
@@ -181,7 +206,17 @@ def loop():
         # Handle display mode
         mode = state.get("mode", "TICKER")
 
-        if mode == "STATS":
+        if mode == "PORTFOLIO":
+            # Portfolio visualization mode (multi-cluster display)
+            clusters = state.get("clusters")
+            if clusters:
+                success = handle_portfolio_mode(clusters)
+                if not success:
+                    logger.warning("Failed to send portfolio clusters to Arduino")
+            else:
+                logger.debug("Portfolio mode but no clusters data")
+
+        elif mode == "STATS":
             # System stats mode (default when no ticker data)
             stats = state.get("stats")
             if stats:
@@ -210,5 +245,5 @@ def loop():
         time.sleep(2)
 
 
-logger.info("LED Display starting (system stats + ticker mode)...")
+logger.info("LED Display starting (portfolio + stats + ticker modes)...")
 App.run(user_loop=loop)
