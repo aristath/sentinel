@@ -1,7 +1,7 @@
 #!/bin/bash
 # Arduino LED Display Setup Script
 # Run this as the arduino user (not root) after running deploy/setup.sh
-# Usage: ./arduino-app/deploy/setup.sh
+# Usage: ./display/deploy/setup.sh
 
 set -e
 
@@ -31,13 +31,13 @@ fi
 
 # Copy deploy script
 echo "Installing deploy script..."
-cp "$REPO_DIR/arduino-app/deploy/auto-deploy.sh" /home/arduino/bin/
+cp "$REPO_DIR/display/deploy/auto-deploy.sh" /home/arduino/bin/
 chmod +x /home/arduino/bin/auto-deploy.sh
 
 # Sync app files (using cp since rsync may not be available)
 echo "Syncing app files..."
 rm -rf "$APP_DIR"/* 2>/dev/null || true
-cp -r "$REPO_DIR/arduino-app/"* "$APP_DIR/"
+cp -r "$REPO_DIR/display/"* "$APP_DIR/"
 
 # Note: Auto-deploy is now handled by the main app scheduler (configurable via settings UI)
 # Remove any existing cron job to avoid duplicate executions

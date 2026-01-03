@@ -16,27 +16,27 @@ repos:
     rev: 24.10.0
     hooks:
       - id: black
-        files: ^(app|tests)/
+        files: ^(legacy/app|legacy/tests|microservices)/
 
   - repo: https://github.com/pycqa/isort
     rev: 5.13.2
     hooks:
       - id: isort
         args: ["--profile", "black"]
-        files: ^(app|tests)/
+        files: ^(legacy/app|legacy/tests|microservices)/
 
   - repo: https://github.com/pycqa/flake8
     rev: 7.1.1
     hooks:
       - id: flake8
-        files: ^(app|tests)/
+        files: ^(legacy/app|legacy/tests|microservices)/
 
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.13.0
     hooks:
       - id: mypy
         args: ['--ignore-missing-imports', '--no-error-summary']
-        files: ^(app|tests)/
+        files: ^(legacy/app|legacy/tests|microservices)/
         additional_dependencies:
           - types-python-dateutil
           - types-requests
@@ -49,7 +49,7 @@ repos:
       - id: bandit
         # B101: assert, B108: /tmp in tests, B324: MD5 for cache, B601: shell, B608: dynamic SQL (false positive)
         args: ['-ll', '--skip', 'B101,B108,B324,B601,B608']
-        files: ^(app|tests)/
+        files: ^(legacy/app|legacy/tests|microservices)/
         exclude: ^(venv|\.venv|node_modules|build|dist)/
 
   # Go hooks - using TekWizely's pre-commit-golang which is actively maintained
@@ -77,7 +77,7 @@ repos:
     hooks:
       - id: golangci-lint
         name: golangci-lint
-        entry: bash -c 'cd trader-go && golangci-lint run --timeout=5m ./...'
+        entry: bash -c 'cd trader && golangci-lint run --timeout=5m ./...'
         language: system
-        files: ^trader-go/.*\.go$
+        files: ^trader/.*\.go$
         pass_filenames: false

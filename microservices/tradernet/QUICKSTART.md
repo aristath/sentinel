@@ -4,7 +4,7 @@
 
 - Docker & Docker Compose installed
 - Python 3.11+ (for local development without Docker)
-- Go 1.21+ (for trader-go service)
+- Go 1.21+ (for trader service)
 - Tradernet API credentials
 
 ---
@@ -13,7 +13,7 @@
 
 ### 1. Configure Environment Variables
 
-Create `.env` file in `services/tradernet/`:
+Create `.env` file in `microservices/tradernet/`:
 
 ```bash
 # Tradernet API Credentials
@@ -30,7 +30,7 @@ LOG_LEVEL=INFO
 #### Option A: Using Docker (Recommended)
 
 ```bash
-cd services/tradernet
+cd microservices/tradernet
 docker-compose up -d
 ```
 
@@ -53,7 +53,7 @@ Expected response:
 #### Option B: Local Development (Without Docker)
 
 ```bash
-cd services/tradernet
+cd microservices/tradernet
 
 # Install dependencies
 pip install -r requirements.txt
@@ -64,7 +64,7 @@ uvicorn app.main:app --reload --port 9001
 
 ### 3. Configure Go Service
 
-Update `trader-go/.env`:
+Update `trader/.env`:
 
 ```bash
 # Add Tradernet microservice URL
@@ -80,7 +80,7 @@ LOG_LEVEL=info
 ### 4. Start Go Service
 
 ```bash
-cd trader-go
+cd trader
 go run cmd/server/main.go
 ```
 
@@ -159,9 +159,9 @@ curl http://localhost:8001/api/trades/pending-orders
    curl http://localhost:9001/health
    ```
 
-2. Check TRADERNET_SERVICE_URL in trader-go/.env:
+2. Check TRADERNET_SERVICE_URL in trader/.env:
    ```bash
-   grep TRADERNET_SERVICE_URL trader-go/.env
+   grep TRADERNET_SERVICE_URL trader/.env
    ```
 
 3. Verify network connectivity:
@@ -204,7 +204,7 @@ curl http://localhost:8001/health
 ### Stop Microservice
 
 ```bash
-cd services/tradernet
+cd microservices/tradernet
 docker-compose down
 ```
 
@@ -219,7 +219,7 @@ Press `Ctrl+C` in terminal where it's running
 ### Build Docker Image
 
 ```bash
-cd services/tradernet
+cd microservices/tradernet
 docker build -t tradernet-service:1.0.0 .
 ```
 
@@ -256,7 +256,7 @@ Add to your monitoring stack:
 ### Run Unit Tests
 
 ```bash
-cd services/tradernet
+cd microservices/tradernet
 pytest
 ```
 
@@ -290,9 +290,9 @@ http://localhost:9001/redoc
 
 ## Getting Help
 
-- **Microservice README**: `services/tradernet/README.md`
-- **API Design Doc**: `services/tradernet/DESIGN.md`
-- **Migration Status**: `services/tradernet/MIGRATION_STATUS.md`
+- **Microservice README**: `microservices/tradernet/README.md`
+- **API Design Doc**: `microservices/tradernet/DESIGN.md`
+- **Migration Status**: `microservices/tradernet/MIGRATION_STATUS.md`
 - **GitHub Issues**: https://github.com/anthropics/claude-code/issues
 
 ---
