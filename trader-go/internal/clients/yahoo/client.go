@@ -239,6 +239,159 @@ func (c *Client) GetCurrentPrice(symbol string, yahooSymbolOverride *string, max
 	return nil, fmt.Errorf("failed to get valid price after %d attempts", maxRetries)
 }
 
+// GetBatchQuotes fetches current prices for multiple symbols efficiently
+// Faithful translation from Python: app/infrastructure/external/yahoo/data_fetchers.py -> get_batch_quotes()
+func (c *Client) GetBatchQuotes(symbolOverrides map[string]*string) (map[string]*float64, error) {
+	if len(symbolOverrides) == 0 {
+		return map[string]*float64{}, nil
+	}
+
+	// Build lists: tradernet symbols and their yahoo equivalents
+	tradernetSymbols := make([]string, 0, len(symbolOverrides))
+	yahooSymbols := make([]string, 0, len(symbolOverrides))
+	symbolMap := make(map[string]string) // yahoo -> tradernet
+
+	for tradernetSymbol, yahooOverride := range symbolOverrides {
+		yahooSymbol := GetYahooSymbol(tradernetSymbol, yahooOverride)
+		tradernetSymbols = append(tradernetSymbols, tradernetSymbol)
+		yahooSymbols = append(yahooSymbols, yahooSymbol)
+		symbolMap[yahooSymbol] = tradernetSymbol
+	}
+
+	// Batch symbols (Yahoo API limit: ~100 symbols per request)
+	const batchSize = 100
+	result := make(map[string]*float64)
+
+	for i := 0; i < len(yahooSymbols); i += batchSize {
+		end := i + batchSize
+		if end > len(yahooSymbols) {
+			end = len(yahooSymbols)
+		}
+
+		batch := yahooSymbols[i:end]
+		batchQuotes, err := c.getBatchQuoteInfo(batch)
+		if err != nil {
+			c.log.Warn().Err(err).Int("batch_size", len(batch)).Msg("Failed to fetch batch quotes")
+			// Don't fail the whole operation - continue with partial results
+			continue
+		}
+
+		// Extract prices and map back to tradernet symbols
+		for yahooSymbol, info := range batchQuotes {
+			tradernetSymbol := symbolMap[yahooSymbol]
+
+			// Try currentPrice first, then regularMarketPrice
+			var price *float64
+			if p := getFloat64(info, "currentPrice"); p != nil && *p > 0 {
+				price = p
+			} else if p := getFloat64(info, "regularMarketPrice"); p != nil && *p > 0 {
+				price = p
+			}
+
+			if price != nil {
+				result[tradernetSymbol] = price
+			} else {
+				c.log.Debug().
+					Str("symbol", tradernetSymbol).
+					Str("yahoo_symbol", yahooSymbol).
+					Msg("No valid price data in batch response")
+			}
+		}
+	}
+
+	c.log.Info().
+		Int("requested", len(symbolOverrides)).
+		Int("fetched", len(result)).
+		Msg("Batch quote fetch complete")
+
+	return result, nil
+}
+
+// getBatchQuoteInfo fetches quote information for multiple symbols
+func (c *Client) getBatchQuoteInfo(symbols []string) (map[string]map[string]interface{}, error) {
+	if len(symbols) == 0 {
+		return map[string]map[string]interface{}{}, nil
+	}
+
+	// Yahoo Finance query API endpoint
+	baseURL := "https://query1.finance.yahoo.com/v7/finance/quote"
+
+	// Join symbols with commas
+	symbolsParam := strings.Join(symbols, ",")
+
+	params := url.Values{}
+	params.Add("symbols", symbolsParam)
+	params.Add("fields", "symbol,regularMarketPrice,currentPrice")
+
+	reqURL := baseURL + "?" + params.Encode()
+
+	req, err := http.NewRequest("GET", reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set headers to mimic browser
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
+	req.Header.Set("Accept", "application/json")
+
+	// Retry logic with exponential backoff
+	var resp *http.Response
+	var lastErr error
+	maxRetries := 3
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		resp, err = c.client.Do(req)
+		if err == nil && resp.StatusCode == http.StatusOK {
+			break
+		}
+
+		lastErr = err
+		if resp != nil && resp.StatusCode != http.StatusOK {
+			lastErr = fmt.Errorf("status %d", resp.StatusCode)
+		}
+
+		if attempt < maxRetries-1 {
+			waitTime := time.Duration(1<<uint(attempt)) * time.Second
+			c.log.Warn().
+				Err(lastErr).
+				Int("attempt", attempt+1).
+				Dur("wait", waitTime).
+				Msg("Batch quote request failed, retrying")
+			time.Sleep(waitTime)
+		}
+	}
+
+	if lastErr != nil {
+		return nil, fmt.Errorf("failed after %d attempts: %w", maxRetries, lastErr)
+	}
+
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	var result yahooQuoteResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if result.QuoteResponse.Error != nil {
+		return nil, fmt.Errorf("Yahoo Finance API error: %v", result.QuoteResponse.Error)
+	}
+
+	// Build map of symbol -> quote info
+	quotes := make(map[string]map[string]interface{})
+	for _, quote := range result.QuoteResponse.Result {
+		if symbol, ok := quote["symbol"].(string); ok {
+			quotes[symbol] = quote
+		}
+	}
+
+	return quotes, nil
+}
+
 // getQuoteInfo fetches quote information from Yahoo Finance API
 func (c *Client) getQuoteInfo(symbol string) (map[string]interface{}, error) {
 	// Yahoo Finance query API endpoint
