@@ -52,7 +52,3 @@ func (p *MultiSellPattern) Generate(
 
 	return sequences, nil
 }
-
-func init() {
-	DefaultPatternRegistry.Register(NewMultiSellPattern(zerolog.Nop()))
-}

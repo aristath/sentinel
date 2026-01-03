@@ -59,8 +59,3 @@ func (p *AveragingDownPattern) Generate(
 
 	return sequences, nil
 }
-
-func init() {
-	// Auto-register on import
-	DefaultPatternRegistry.Register(NewAveragingDownPattern(zerolog.Nop()))
-}

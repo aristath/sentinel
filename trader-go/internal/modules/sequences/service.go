@@ -17,9 +17,9 @@ type Service struct {
 
 func NewService(log zerolog.Logger) *Service {
 	return &Service{
-		patternRegistry:   patterns.NewPatternRegistry(log),
-		generatorRegistry: generators.NewGeneratorRegistry(log),
-		filterRegistry:    filters.NewFilterRegistry(log),
+		patternRegistry:   patterns.NewPopulatedPatternRegistry(log),
+		generatorRegistry: generators.NewPopulatedGeneratorRegistry(log),
+		filterRegistry:    filters.NewPopulatedFilterRegistry(log),
 		log:               log.With().Str("module", "sequences").Logger(),
 	}
 }

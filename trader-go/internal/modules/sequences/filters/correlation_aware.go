@@ -21,7 +21,3 @@ func (f *CorrelationAwareFilter) Filter(sequences []domain.ActionSequence, param
 	// Placeholder: filter highly correlated securities
 	return sequences, nil
 }
-
-func init() {
-	DefaultFilterRegistry.Register(NewCorrelationAwareFilter(zerolog.Nop()))
-}

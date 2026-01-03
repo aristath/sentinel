@@ -21,7 +21,3 @@ func (g *ConstraintRelaxationGenerator) Generate(sequences []domain.ActionSequen
 	// Pass through - constraint relaxation would be applied at evaluation time
 	return sequences, nil
 }
-
-func init() {
-	DefaultGeneratorRegistry.Register(NewConstraintRelaxationGenerator(zerolog.Nop()))
-}

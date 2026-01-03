@@ -33,7 +33,3 @@ func (g *PartialExecutionGenerator) Generate(sequences []domain.ActionSequence, 
 
 	return result, nil
 }
-
-func init() {
-	DefaultGeneratorRegistry.Register(NewPartialExecutionGenerator(zerolog.Nop()))
-}

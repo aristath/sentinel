@@ -48,7 +48,3 @@ func (p *MixedStrategyPattern) Generate(
 
 	return sequences, nil
 }
-
-func init() {
-	DefaultPatternRegistry.Register(NewMixedStrategyPattern(zerolog.Nop()))
-}

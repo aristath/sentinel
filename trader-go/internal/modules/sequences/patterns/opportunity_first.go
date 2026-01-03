@@ -43,7 +43,3 @@ func (p *OpportunityFirstPattern) Generate(
 
 	return sequences, nil
 }
-
-func init() {
-	DefaultPatternRegistry.Register(NewOpportunityFirstPattern(zerolog.Nop()))
-}

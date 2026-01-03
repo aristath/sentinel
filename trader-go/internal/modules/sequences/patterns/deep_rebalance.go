@@ -40,7 +40,3 @@ func (p *DeepRebalancePattern) Generate(
 
 	return sequences, nil
 }
-
-func init() {
-	DefaultPatternRegistry.Register(NewDeepRebalancePattern(zerolog.Nop()))
-}

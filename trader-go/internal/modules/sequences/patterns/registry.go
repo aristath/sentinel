@@ -126,10 +126,28 @@ func (r *PatternRegistry) GenerateSequences(
 	return allSequences, nil
 }
 
-// DefaultPatternRegistry is the global pattern registry.
-var DefaultPatternRegistry *PatternRegistry
+// NewPopulatedPatternRegistry creates a new pattern registry with all patterns registered.
+func NewPopulatedPatternRegistry(log zerolog.Logger) *PatternRegistry {
+	registry := NewPatternRegistry(log)
 
-func init() {
-	// Initialize with a no-op logger; will be replaced by actual logger in main
-	DefaultPatternRegistry = NewPatternRegistry(zerolog.Nop())
+	// Register all pattern generators
+	registry.Register(NewAdaptivePattern(log))
+	registry.Register(NewAveragingDownPattern(log))
+	registry.Register(NewCashGenerationPattern(log))
+	registry.Register(NewCostOptimizedPattern(log))
+	registry.Register(NewDeepRebalancePattern(log))
+	registry.Register(NewDirectBuyPattern(log))
+	registry.Register(NewMarketRegimePattern(log))
+	registry.Register(NewMixedStrategyPattern(log))
+	registry.Register(NewMultiSellPattern(log))
+	registry.Register(NewOpportunityFirstPattern(log))
+	registry.Register(NewProfitTakingPattern(log))
+	registry.Register(NewRebalancePattern(log))
+	registry.Register(NewSingleBestPattern(log))
+
+	log.Info().
+		Int("patterns", len(registry.patterns)).
+		Msg("Pattern registry initialized")
+
+	return registry
 }

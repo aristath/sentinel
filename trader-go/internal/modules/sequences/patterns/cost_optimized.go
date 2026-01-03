@@ -47,7 +47,3 @@ func (p *CostOptimizedPattern) Generate(
 	sequence := CreateSequence(allCandidates[:end], "cost_optimized")
 	return []domain.ActionSequence{sequence}, nil
 }
-
-func init() {
-	DefaultPatternRegistry.Register(NewCostOptimizedPattern(zerolog.Nop()))
-}

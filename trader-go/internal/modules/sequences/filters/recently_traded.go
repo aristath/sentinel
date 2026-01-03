@@ -22,7 +22,3 @@ func (f *RecentlyTradedFilter) Filter(sequences []domain.ActionSequence, params 
 	// Would check against recently bought/sold maps from context
 	return sequences, nil
 }
-
-func init() {
-	DefaultFilterRegistry.Register(NewRecentlyTradedFilter(zerolog.Nop()))
-}

@@ -47,7 +47,3 @@ func (g *EnhancedCombinatorialGenerator) generateDepth(sequences []domain.Action
 		}
 	}
 }
-
-func init() {
-	DefaultGeneratorRegistry.Register(NewEnhancedCombinatorialGenerator(zerolog.Nop()))
-}

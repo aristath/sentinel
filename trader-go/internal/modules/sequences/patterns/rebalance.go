@@ -103,8 +103,3 @@ func (p *RebalancePattern) Generate(
 
 	return sequences, nil
 }
-
-func init() {
-	// Auto-register on import
-	DefaultPatternRegistry.Register(NewRebalancePattern(zerolog.Nop()))
-}

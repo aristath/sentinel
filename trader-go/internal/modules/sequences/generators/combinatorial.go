@@ -38,7 +38,3 @@ func (g *CombinatorialGenerator) Generate(sequences []domain.ActionSequence, par
 
 	return result, nil
 }
-
-func init() {
-	DefaultGeneratorRegistry.Register(NewCombinatorialGenerator(zerolog.Nop()))
-}

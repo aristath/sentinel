@@ -66,8 +66,19 @@ func (r *GeneratorRegistry) ApplyGenerators(sequences []domain.ActionSequence, c
 	return result, nil
 }
 
-var DefaultGeneratorRegistry *GeneratorRegistry
+// NewPopulatedGeneratorRegistry creates a new generator registry with all generators registered.
+func NewPopulatedGeneratorRegistry(log zerolog.Logger) *GeneratorRegistry {
+	registry := NewGeneratorRegistry(log)
 
-func init() {
-	DefaultGeneratorRegistry = NewGeneratorRegistry(zerolog.Nop())
+	// Register all sequence generators
+	registry.Register(NewCombinatorialGenerator(log))
+	registry.Register(NewEnhancedCombinatorialGenerator(log))
+	registry.Register(NewPartialExecutionGenerator(log))
+	registry.Register(NewConstraintRelaxationGenerator(log))
+
+	log.Info().
+		Int("generators", len(registry.generators)).
+		Msg("Generator registry initialized")
+
+	return registry
 }

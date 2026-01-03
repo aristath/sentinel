@@ -45,7 +45,3 @@ func (p *CashGenerationPattern) Generate(
 	sequence := CreateSequence(allSells[:end], "cash_generation")
 	return []domain.ActionSequence{sequence}, nil
 }
-
-func init() {
-	DefaultPatternRegistry.Register(NewCashGenerationPattern(zerolog.Nop()))
-}

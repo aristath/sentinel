@@ -101,8 +101,3 @@ func (p *ProfitTakingPattern) Generate(
 
 	return sequences, nil
 }
-
-func init() {
-	// Auto-register on import
-	DefaultPatternRegistry.Register(NewProfitTakingPattern(zerolog.Nop()))
-}

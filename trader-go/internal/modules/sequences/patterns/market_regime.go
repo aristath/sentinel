@@ -64,7 +64,3 @@ func (p *MarketRegimePattern) Generate(
 
 	return sequences, nil
 }
-
-func init() {
-	DefaultPatternRegistry.Register(NewMarketRegimePattern(zerolog.Nop()))
-}

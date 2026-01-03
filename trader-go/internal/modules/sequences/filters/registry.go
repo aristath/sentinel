@@ -67,8 +67,19 @@ func (r *FilterRegistry) ApplyFilters(sequences []domain.ActionSequence, config 
 	return result, nil
 }
 
-var DefaultFilterRegistry *FilterRegistry
+// NewPopulatedFilterRegistry creates a new filter registry with all filters registered.
+func NewPopulatedFilterRegistry(log zerolog.Logger) *FilterRegistry {
+	registry := NewFilterRegistry(log)
 
-func init() {
-	DefaultFilterRegistry = NewFilterRegistry(zerolog.Nop())
+	// Register all filters
+	registry.Register(NewCorrelationAwareFilter(log))
+	registry.Register(NewDiversityFilter(log))
+	registry.Register(NewEligibilityFilter(log))
+	registry.Register(NewRecentlyTradedFilter(log))
+
+	log.Info().
+		Int("filters", len(registry.filters)).
+		Msg("Filter registry initialized")
+
+	return registry
 }

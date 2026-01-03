@@ -87,8 +87,3 @@ func (p *DirectBuyPattern) Generate(
 
 	return sequences, nil
 }
-
-func init() {
-	// Auto-register on import
-	DefaultPatternRegistry.Register(NewDirectBuyPattern(zerolog.Nop()))
-}

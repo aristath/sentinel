@@ -38,7 +38,3 @@ func (f *DiversityFilter) Filter(sequences []domain.ActionSequence, params map[s
 
 	return result, nil
 }
-
-func init() {
-	DefaultFilterRegistry.Register(NewDiversityFilter(zerolog.Nop()))
-}

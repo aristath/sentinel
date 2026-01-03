@@ -65,8 +65,3 @@ func (p *SingleBestPattern) Generate(
 
 	return sequences, nil
 }
-
-func init() {
-	// Auto-register on import
-	DefaultPatternRegistry.Register(NewSingleBestPattern(zerolog.Nop()))
-}

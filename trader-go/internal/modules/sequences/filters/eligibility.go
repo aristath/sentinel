@@ -22,7 +22,3 @@ func (f *EligibilityFilter) Filter(sequences []domain.ActionSequence, params map
 	// Would check against ineligible symbols list from context
 	return sequences, nil
 }
-
-func init() {
-	DefaultFilterRegistry.Register(NewEligibilityFilter(zerolog.Nop()))
-}

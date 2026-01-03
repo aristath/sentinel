@@ -66,7 +66,3 @@ func (p *AdaptivePattern) Generate(
 
 	return sequences, nil
 }
-
-func init() {
-	DefaultPatternRegistry.Register(NewAdaptivePattern(zerolog.Nop()))
-}
