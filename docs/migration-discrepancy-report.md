@@ -211,17 +211,27 @@
 - ✅ **Database schema (satellites.db with 5 tables)**
 - ✅ **Event system (13 satellite event types)**
 
-**Completed** (Simplified):
-- ✅ Background jobs (maintenance, reconciliation, evaluation) - Structured but pending position integration
-  - satellite_maintenance.go - Daily high water mark updates and hibernation checks
-  - satellite_reconciliation.go - Daily balance reconciliation
-  - satellite_evaluation.go - Quarterly performance evaluation
+**Completed** (commit 518295a8):
+- ✅ Background jobs - Fully functional with position tracking
+  - satellite_maintenance.go - ✅ Calculates real bucket values (positions + cash)
+    - ✅ Updates high water marks when value exceeds peak
+    - ✅ Checks for 35% drawdowns and triggers hibernation
+    - ✅ Resets consecutive losses on new highs
+    - ⚠️ Only counts EUR cash (USD/GBP/HKD need ExchangeRateService)
+  - satellite_reconciliation.go - ⚠️ Structured but needs actual brokerage balance integration
+  - satellite_evaluation.go - ✅ Fully functional with MetaAllocator integration
+
+**Completed** (bucket value calculation):
+- ✅ BucketService.CalculateBucketValue() - Sums positions + cash for bucket value
+- ✅ BucketService.ResetConsecutiveLosses() - Wrapper for repository method
+- ✅ Position tracking integration for maintenance job
 
 **Missing**:
-- ❌ Planner integration
-- ❌ Position tracking integration for jobs (required for full HWM updates and reconciliation)
+- ❌ Planner integration for multi-bucket strategies
+- ❌ ExchangeRateService for multi-currency cash conversion
+- ❌ Reconciliation job needs actual brokerage balance fetching
 
-**Impact:** API operational, multi-bucket strategies available via API, background job structure complete (needs position integration for full functionality)
+**Impact:** Background maintenance operational, high water marks and hibernation working, multi-bucket API available
 
 ---
 
