@@ -98,6 +98,7 @@ func (s *Server) setupPlanningRoutes(r chi.Router) {
 
 	// Trade recommendations endpoints (aliases for compatibility)
 	r.Route("/api/trades", func(r chi.Router) {
+		r.Get("/recommendations", recommendationsHandler.ServeHTTP)
 		r.Post("/recommendations", recommendationsHandler.ServeHTTP)
 		r.Post("/recommendations/execute", executeHandler.ServeHTTP)
 	})
