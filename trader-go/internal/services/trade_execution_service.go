@@ -5,11 +5,21 @@ import (
 	"time"
 
 	"github.com/aristath/arduino-trader/internal/clients/tradernet"
-	"github.com/aristath/arduino-trader/internal/domain"
 	"github.com/aristath/arduino-trader/internal/modules/portfolio"
 	"github.com/aristath/arduino-trader/internal/modules/trading"
 	"github.com/rs/zerolog"
 )
+
+// TradeRecommendation represents a simplified trade recommendation for execution
+// Minimal implementation for emergency rebalancing
+type TradeRecommendation struct {
+	Symbol         string
+	Side           string // "BUY" or "SELL"
+	Quantity       float64
+	EstimatedPrice float64
+	Currency       string
+	Reason         string
+}
 
 // TradeExecutionService executes trade recommendations
 //
@@ -57,7 +67,7 @@ func NewTradeExecutionService(
 //
 // Simplified version for emergency rebalancing. Bypasses most validations.
 // Returns list of execution results.
-func (s *TradeExecutionService) ExecuteTrades(recommendations []domain.Recommendation) []ExecuteResult {
+func (s *TradeExecutionService) ExecuteTrades(recommendations []TradeRecommendation) []ExecuteResult {
 	results := make([]ExecuteResult, 0, len(recommendations))
 
 	if !s.tradernetClient.IsConnected() {
@@ -83,7 +93,7 @@ func (s *TradeExecutionService) ExecuteTrades(recommendations []domain.Recommend
 }
 
 // executeSingleTrade executes a single trade recommendation
-func (s *TradeExecutionService) executeSingleTrade(rec domain.Recommendation) ExecuteResult {
+func (s *TradeExecutionService) executeSingleTrade(rec TradeRecommendation) ExecuteResult {
 	s.log.Info().
 		Str("symbol", rec.Symbol).
 		Str("side", rec.Side).
@@ -134,45 +144,33 @@ func (s *TradeExecutionService) executeSingleTrade(rec domain.Recommendation) Ex
 }
 
 // recordTrade records a trade in the database
-func (s *TradeExecutionService) recordTrade(orderResult *tradernet.OrderResult, rec domain.Recommendation) error {
-	trade := &trading.Trade{
-		Symbol:        orderResult.Symbol,
-		Side:          orderResult.Side,
-		Quantity:      orderResult.Quantity,
-		Price:         orderResult.Price,
-		EstimatedPrice: rec.EstimatedPrice,
-		Currency:      rec.Currency,
-		Source:        "emergency_rebalancing",
-		BucketID:      "core", // Default to core bucket
-		ExecutedAt:    time.Now(),
-		OrderID:       &orderResult.OrderID,
+func (s *TradeExecutionService) recordTrade(orderResult *tradernet.OrderResult, rec TradeRecommendation) error {
+	// Convert side string to TradeSide
+	side, err := trading.TradeSideFromString(orderResult.Side)
+	if err != nil {
+		return fmt.Errorf("invalid trade side: %w", err)
 	}
 
-	if err := s.tradeRepo.Insert(trade); err != nil {
-		return fmt.Errorf("failed to insert trade: %w", err)
+	trade := trading.Trade{
+		Symbol:     orderResult.Symbol,
+		Side:       side,
+		Quantity:   orderResult.Quantity,
+		Price:      orderResult.Price,
+		Currency:   rec.Currency,
+		Source:     "emergency_rebalancing",
+		BucketID:   "core", // Default to core bucket
+		Mode:       "live",
+		ExecutedAt: time.Now(),
+		OrderID:    orderResult.OrderID,
 	}
 
-	// Update position after trade
-	// TODO: This should be more sophisticated, but for emergency sells it's straightforward
-	if orderResult.Side == "SELL" {
-		// Decrease position quantity
-		position, err := s.positionRepo.GetBySymbol(orderResult.Symbol)
-		if err == nil && position != nil {
-			newQuantity := position.Quantity - orderResult.Quantity
-			if newQuantity <= 0 {
-				// Position fully closed
-				if err := s.positionRepo.Delete(orderResult.Symbol); err != nil {
-					s.log.Warn().Err(err).Msg("Failed to delete closed position")
-				}
-			} else {
-				// Update position quantity
-				position.Quantity = newQuantity
-				if err := s.positionRepo.Update(position); err != nil {
-					s.log.Warn().Err(err).Msg("Failed to update position")
-				}
-			}
-		}
+	if err := s.tradeRepo.Create(trade); err != nil {
+		return fmt.Errorf("failed to create trade: %w", err)
 	}
+
+	// Position updates will be handled by the regular sync cycle
+	// For emergency trades, the critical part is execution and recording
+	// TODO: Consider updating position immediately for better consistency
 
 	return nil
 }
