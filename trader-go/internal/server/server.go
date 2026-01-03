@@ -196,7 +196,15 @@ func (s *Server) setupSystemRoutes(r chi.Router) {
 	// Initialize system handlers
 	// Data directory is the parent of DatabasePath (e.g., "./data" from "./data/portfolio.db")
 	dataDir := filepath.Dir(s.cfg.DatabasePath)
-	systemHandlers := NewSystemHandlers(s.log, dataDir, s.stateDB, nil) // TODO: Pass scheduler when available
+	systemHandlers := NewSystemHandlers(
+		s.log,
+		dataDir,
+		s.stateDB,
+		s.configDB, // Settings are stored in config.db
+		s.snapshotsDB,
+		s.configDB, // Config DB also used for securities data
+		nil,        // TODO: Pass scheduler when available
+	)
 	logHandlers := NewLogHandlers(s.log, dataDir)
 
 	// Initialize universe handlers for sync operations

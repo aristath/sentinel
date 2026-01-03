@@ -408,7 +408,7 @@ func (h *LogHandlers) lineMatchesLevel(line string, level string) bool {
 	upperLine := strings.ToUpper(line)
 	upperLevel := strings.ToUpper(level)
 
-	return strings.Contains(upperLine, upperLevel+":")  ||
-	       strings.Contains(upperLine, "["+upperLevel+"]") ||
-	       strings.Contains(upperLine, " "+upperLevel+" ")
+	return strings.Contains(upperLine, upperLevel+":") ||
+		strings.Contains(upperLine, "["+upperLevel+"]") ||
+		strings.Contains(upperLine, " "+upperLevel+" ")
 }

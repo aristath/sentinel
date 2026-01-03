@@ -9,17 +9,22 @@ import (
 	"time"
 
 	"github.com/aristath/arduino-trader/internal/database"
+	"github.com/aristath/arduino-trader/internal/modules/display"
 	"github.com/aristath/arduino-trader/internal/scheduler"
 	"github.com/rs/zerolog"
 )
 
 // SystemHandlers handles system-wide monitoring and operations endpoints
 type SystemHandlers struct {
-	log         zerolog.Logger
-	dataDir     string
-	stateDB     *database.DB
-	marketHours *scheduler.MarketHoursService
-	scheduler   *scheduler.Scheduler
+	log                  zerolog.Logger
+	dataDir              string
+	stateDB              *database.DB
+	settingsDB           *database.DB
+	snapshotsDB          *database.DB
+	configDB             *database.DB
+	marketHours          *scheduler.MarketHoursService
+	scheduler            *scheduler.Scheduler
+	portfolioDisplayCalc *display.PortfolioDisplayCalculator
 	// Jobs (will be set after job registration in main.go)
 	syncCycleJob         scheduler.Job
 	weeklyMaintenanceJob scheduler.Job
@@ -29,13 +34,39 @@ type SystemHandlers struct {
 }
 
 // NewSystemHandlers creates a new system handlers instance
-func NewSystemHandlers(log zerolog.Logger, dataDir string, stateDB *database.DB, sched *scheduler.Scheduler) *SystemHandlers {
+func NewSystemHandlers(
+	log zerolog.Logger,
+	dataDir string,
+	stateDB, settingsDB, snapshotsDB, configDB *database.DB,
+	sched *scheduler.Scheduler,
+) *SystemHandlers {
+	// Create portfolio performance service
+	portfolioPerf := display.NewPortfolioPerformanceService(
+		snapshotsDB.Conn(),
+		settingsDB.Conn(),
+		log,
+	)
+
+	// Create portfolio display calculator
+	portfolioDisplayCalc := display.NewPortfolioDisplayCalculator(
+		configDB.Conn(),
+		stateDB.Conn(),
+		snapshotsDB.Conn(),
+		settingsDB.Conn(),
+		portfolioPerf,
+		log,
+	)
+
 	return &SystemHandlers{
-		log:         log.With().Str("component", "system_handlers").Logger(),
-		dataDir:     dataDir,
-		stateDB:     stateDB,
-		marketHours: scheduler.NewMarketHoursService(log),
-		scheduler:   sched,
+		log:                  log.With().Str("component", "system_handlers").Logger(),
+		dataDir:              dataDir,
+		stateDB:              stateDB,
+		settingsDB:           settingsDB,
+		snapshotsDB:          snapshotsDB,
+		configDB:             configDB,
+		marketHours:          scheduler.NewMarketHoursService(log),
+		scheduler:            sched,
+		portfolioDisplayCalc: portfolioDisplayCalc,
 	}
 }
 
@@ -66,9 +97,10 @@ type SystemStatusResponse struct {
 
 // LEDDisplayResponse represents the LED display state
 type LEDDisplayResponse struct {
-	Mode         string                 `json:"mode"`          // "STATS" or "TICKER"
-	CurrentPanel int                    `json:"current_panel"` // For TICKER mode
-	SystemStats  map[string]interface{} `json:"system_stats,omitempty"`
+	Mode           string                 `json:"mode"`                      // "STATS", "TICKER", or "PORTFOLIO"
+	CurrentPanel   int                    `json:"current_panel"`             // For TICKER mode
+	SystemStats    map[string]interface{} `json:"system_stats,omitempty"`    // For STATS mode
+	PortfolioState interface{}            `json:"portfolio_state,omitempty"` // For PORTFOLIO mode
 }
 
 // TradernetStatusResponse represents Tradernet connection status
@@ -193,16 +225,46 @@ func (h *SystemHandlers) HandleSystemStatus(w http.ResponseWriter, r *http.Reque
 func (h *SystemHandlers) HandleLEDDisplay(w http.ResponseWriter, r *http.Request) {
 	h.log.Debug().Msg("Getting LED display state")
 
-	// TODO: Integrate with actual display module
-	// For now, return basic status
+	// Get display mode from settings
+	var displayMode string
+	err := h.settingsDB.Conn().QueryRow("SELECT value FROM settings WHERE key = 'display_mode'").Scan(&displayMode)
+	if err != nil {
+		// Default to STATS if setting not found
+		displayMode = "STATS"
+		h.log.Debug().Err(err).Msg("display_mode setting not found, defaulting to STATS")
+	}
+
 	response := LEDDisplayResponse{
-		Mode:         "STATS",
+		Mode:         displayMode,
 		CurrentPanel: 0,
-		SystemStats: map[string]interface{}{
+	}
+
+	// Return appropriate data based on mode
+	switch displayMode {
+	case "PORTFOLIO":
+		// Calculate portfolio display state
+		portfolioState, err := h.portfolioDisplayCalc.CalculateDisplayState()
+		if err != nil {
+			h.log.Error().Err(err).Msg("Failed to calculate portfolio display state")
+			// Fallback to STATS mode
+			response.Mode = "STATS"
+			response.SystemStats = map[string]interface{}{
+				"error": "Failed to calculate portfolio state",
+			}
+		} else {
+			response.PortfolioState = portfolioState
+		}
+
+	case "TICKER":
+		// TODO: Implement ticker mode
+		h.log.Debug().Msg("TICKER mode not yet implemented")
+
+	default: // STATS mode
+		response.SystemStats = map[string]interface{}{
 			"uptime_hours": 0, // TODO: Calculate actual uptime
 			"cpu_percent":  0,
 			"ram_percent":  0,
-		},
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
