@@ -297,7 +297,7 @@ func CalculateBucketPerformance(
 ) (*PerformanceMetrics, error) {
 	// TODO: Integrate with trading module repository to get actual trade data
 	// For now, return nil to indicate insufficient data
-	// This needs to be wired up to: trader-go/internal/modules/trading/repository.go
+	// This needs to be wired up to: trader/internal/modules/trading/repository.go
 	//
 	// Example integration:
 	// allTrades, err := tradeRepo.GetAll()

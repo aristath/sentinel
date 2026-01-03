@@ -135,7 +135,7 @@
 #### `app/jobs/scheduler.py`
 - **Purpose:** Python APScheduler wrapper
 - **Lines:** ~200
-- **Go Equivalent:** `trader-go/internal/scheduler/scheduler.go` (different architecture)
+- **Go Equivalent:** `trader/internal/scheduler/scheduler.go` (different architecture)
 - **Dependencies:**
   - APScheduler library
   - Job registration
@@ -232,7 +232,7 @@
 #### `app/jobs/sync_cycle.py`
 - **Purpose:** Unified 5-minute sync orchestrator (trades, cash flows, portfolio, prices, display)
 - **Lines:** ~200
-- **Go Equivalent:** `SyncCycleJob` in `trader-go/internal/scheduler/sync_cycle.go`
+- **Go Equivalent:** `SyncCycleJob` in `trader/internal/scheduler/sync_cycle.go`
 - **Dependencies:**
   - Trade sync coordination
   - Cash flow sync coordination
@@ -318,7 +318,7 @@
 #### `app/domain/events/base.py`
 - **Purpose:** Event bus and base DomainEvent class
 - **Lines:** ~150
-- **Go Equivalent:** `trader-go/internal/events/manager.go` (simpler implementation)
+- **Go Equivalent:** `trader/internal/events/manager.go` (simpler implementation)
 - **Dependencies:**
   - Event subscriber pattern
   - Async event dispatch
@@ -446,7 +446,7 @@
 #### `app/domain/models.py`
 - **Purpose:** Core domain models (Security, Trade, SecurityScore, Recommendation, etc.)
 - **Lines:** ~800
-- **Go Equivalent:** `trader-go/internal/domain/models.go` (basic models only)
+- **Go Equivalent:** `trader/internal/domain/models.go` (basic models only)
 - **Models in Python:**
   - Security, Position, Trade, Money (in Go)
   - SecurityScore, Recommendation, AllocationStatus (NOT in Go)
@@ -488,7 +488,7 @@
 #### `app/modules/analytics/domain/market_regime.py`
 - **Purpose:** Detect market regime (bull/bear/sideways) using SPY/QQQ 200-day MA
 - **Lines:** ~150
-- **Go Equivalent:** `trader-go/internal/modules/portfolio/market_regime.go` (DIFFERENT LOGIC)
+- **Go Equivalent:** `trader/internal/modules/portfolio/market_regime.go` (DIFFERENT LOGIC)
 - **Used By:**
   - `app/modules/rebalancing/services/rebalancing_service.py` (line 503) - Cash reserve adjustment
   - `app/modules/planning/domain/holistic_planner.py` (line 3267) - Market-aware planning
@@ -532,7 +532,7 @@
 #### `app/modules/analytics/domain/attribution/performance.py`
 - **Purpose:** Performance attribution by category (country, industry, sector)
 - **Lines:** ~250
-- **Go Equivalent:** `trader-go/internal/modules/portfolio/attribution.go` (FULLY MIGRATED)
+- **Go Equivalent:** `trader/internal/modules/portfolio/attribution.go` (FULLY MIGRATED)
 - **Migration Priority:** MEDIUM - Update imports
 - **Action Items:** Update any Python code importing this to use Go API
 
@@ -545,13 +545,13 @@
 #### `app/modules/analytics/domain/metrics/portfolio.py`
 - **Purpose:** Portfolio metrics (Sharpe, Sortino, Calmar, volatility, max drawdown)
 - **Lines:** ~200
-- **Go Equivalent:** `trader-go/internal/modules/portfolio/service.go` (lines 393-454)
+- **Go Equivalent:** `trader/internal/modules/portfolio/service.go` (lines 393-454)
 - **Migration Priority:** MEDIUM - Update imports
 
 #### `app/modules/analytics/domain/metrics/returns.py`
 - **Purpose:** Portfolio returns calculation
 - **Lines:** ~100
-- **Go Equivalent:** `trader-go/pkg/formulas/` (risk metrics)
+- **Go Equivalent:** `trader/pkg/formulas/` (risk metrics)
 - **Migration Priority:** MEDIUM - Update imports
 
 #### `app/modules/analytics/domain/reconstruction/cash.py`
@@ -671,7 +671,7 @@
 - **Methods:**
   - `calculate_bucket_performance()` - Comprehensive metrics (90-day default)
   - Sharpe, Sortino, Calmar, max drawdown, win rate, profit factor
-- **Go Equivalent:** `trader-go/internal/modules/satellites/performance_metrics.go`
+- **Go Equivalent:** `trader/internal/modules/satellites/performance_metrics.go`
 - **Dependencies:**
   - Trade repository integration (MISSING in Go)
   - Position history
@@ -738,7 +738,7 @@
 #### `app/application/services/turnover_tracker.py`
 - **Purpose:** Calculate annual portfolio turnover rate
 - **Lines:** ~150
-- **Go Equivalent:** `trader-go/internal/modules/portfolio/turnover.go` (FULLY MIGRATED)
+- **Go Equivalent:** `trader/internal/modules/portfolio/turnover.go` (FULLY MIGRATED)
 - **Used By:** `app/jobs/daily_sync.py` (line 200-206)
 - **Migration Priority:** MEDIUM
 - **Action Items:**
@@ -999,7 +999,7 @@
 #### `app/core/database/manager.py`
 - **Purpose:** Database connection management
 - **Lines:** ~400
-- **Go Equivalent:** Partial in `trader-go/internal/database/`
+- **Go Equivalent:** Partial in `trader/internal/database/`
 - **Migration Priority:** CRITICAL
 - **Action Items:**
   - Complete Go database manager
@@ -1052,7 +1052,7 @@
 #### `app/config.py`
 - **Purpose:** Application configuration (paths, settings, environment)
 - **Lines:** ~200
-- **Go Equivalent:** `trader-go/internal/config/`
+- **Go Equivalent:** `trader/internal/config/`
 - **Migration Priority:** MEDIUM
 - **Action Items:**
   - Verify all config values ported to Go

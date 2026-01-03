@@ -45,11 +45,14 @@ tailwindcss
 node_modules/
 package-lock.json
 
-# Go
-services/evaluator-go/evaluator-go
-services/evaluator-go/evaluator-go.exe
+# Go binaries
+microservices/evaluator-go/evaluator-go
+microservices/evaluator-go/evaluator-go.exe
 trader/server
+trader/trader
 trader/trader-go
 trader/trader-go-arm64
+display/bridge/bridge
+display/bridge/display-bridge
 
 .claude/
