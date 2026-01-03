@@ -17,7 +17,7 @@ type PlannerLoader struct {
 	configRepo           *repository.ConfigRepository
 	opportunitiesService *opportunities.Service
 	sequencesService     *sequences.Service
-	evaluationClient     *evaluation.Client
+	evaluationService    *evaluation.Service
 	log                  zerolog.Logger
 
 	mu    sync.RWMutex
@@ -29,14 +29,14 @@ func NewPlannerLoader(
 	configRepo *repository.ConfigRepository,
 	opportunitiesService *opportunities.Service,
 	sequencesService *sequences.Service,
-	evaluationClient *evaluation.Client,
+	evaluationService *evaluation.Service,
 	log zerolog.Logger,
 ) *PlannerLoader {
 	return &PlannerLoader{
 		configRepo:           configRepo,
 		opportunitiesService: opportunitiesService,
 		sequencesService:     sequencesService,
-		evaluationClient:     evaluationClient,
+		evaluationService:    evaluationService,
 		log:                  log.With().Str("component", "planner_loader").Logger(),
 		cache:                make(map[string]*planner.Planner),
 	}
@@ -110,7 +110,7 @@ func (l *PlannerLoader) createAndCachePlanner(bucketID string) (*planner.Planner
 	p := planner.NewPlanner(
 		l.opportunitiesService,
 		l.sequencesService,
-		l.evaluationClient,
+		l.evaluationService,
 		l.log,
 	)
 
@@ -143,7 +143,7 @@ func (l *PlannerLoader) GetDefaultPlanner() (*planner.Planner, error) {
 	p := planner.NewPlanner(
 		l.opportunitiesService,
 		l.sequencesService,
-		l.evaluationClient,
+		l.evaluationService,
 		l.log,
 	)
 

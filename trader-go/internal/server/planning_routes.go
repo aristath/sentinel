@@ -20,8 +20,8 @@ func (s *Server) setupPlanningRoutes(r chi.Router) {
 	// Initialize sequences service
 	sequencesService := sequences.NewService(s.log)
 
-	// Initialize evaluation client (microservice)
-	evaluationClient := evaluation.NewClient(s.cfg.EvaluatorServiceURL, s.log)
+	// Initialize evaluation service (in-process, no HTTP overhead)
+	evaluationClient := evaluation.NewService(4, s.log) // 4 workers for parallel evaluation
 
 	// Initialize planning service
 	planningService := planning.NewService(

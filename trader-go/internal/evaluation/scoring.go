@@ -3,7 +3,7 @@ package evaluation
 import (
 	"math"
 
-	"github.com/aristath/arduino-trader/services/evaluator-go/internal/models"
+	"github.com/aristath/arduino-trader/internal/evaluation/models"
 )
 
 // Scoring weight constants

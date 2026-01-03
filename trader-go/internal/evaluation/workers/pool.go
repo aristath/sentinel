@@ -3,8 +3,8 @@ package workers
 import (
 	"sync"
 
-	"github.com/aristath/arduino-trader/services/evaluator-go/internal/evaluation"
-	"github.com/aristath/arduino-trader/services/evaluator-go/internal/models"
+	"github.com/aristath/arduino-trader/internal/evaluation"
+	"github.com/aristath/arduino-trader/internal/evaluation/models"
 )
 
 // WorkerPool manages a pool of worker goroutines for parallel sequence evaluation

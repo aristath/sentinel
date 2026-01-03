@@ -1,7 +1,7 @@
 package evaluation
 
 import (
-	"github.com/aristath/arduino-trader/services/evaluator-go/internal/models"
+	"github.com/aristath/arduino-trader/internal/evaluation/models"
 )
 
 // SimulateSequence simulates executing a sequence and returns the resulting portfolio state.

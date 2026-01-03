@@ -42,28 +42,29 @@ Arduino Trader is a production-ready autonomous trading system that manages a re
 │  │  • Market Regime Detection                             │   │
 │  │  • Cash Flow Processing                                │   │
 │  │  • Background Job Scheduler                            │   │
+│  │  • Planning Evaluation (built-in)                      │   │
 │  │                                                         │   │
 │  │  Port: 8080 (HTTP API)                                 │   │
 │  │  Databases: SQLite (portfolio.db, state.db, etc.)     │   │
-│  └───────────┬─────────────┬───────────────┬─────────────┘   │
-│              │             │               │                  │
-└──────────────┼─────────────┼───────────────┼──────────────────┘
-               │             │               │
-               │ HTTP        │ HTTP          │ HTTP
-               ▼             ▼               ▼
-       ┌──────────────┐ ┌──────────────┐ ┌─────────────────┐
-       │ evaluator │ │   pypfopt    │ │   tradernet     │
-       │   (Go)       │ │   (Python)   │ │    (Python)     │
-       │              │ │              │ │                 │
-       │ Planning     │ │ Portfolio    │ │ Broker API      │
-       │ Evaluation   │ │ Optimization │ │ Trading Gateway │
-       │ Simulation   │ │              │ │                 │
-       │ Monte Carlo  │ │ Mean-Variance│ │ Market Data     │
-       │              │ │ HRP          │ │ Order Execution │
-       │              │ │ Covariance   │ │                 │
-       │              │ │              │ │                 │
-       │ Port: 9000   │ │ Port: 9001   │ │ Port: 9002      │
-       └──────────────┘ └──────────────┘ └─────────────────┘
+│  └───────────┬─────────────────────────┬──────────────────┘   │
+│              │                         │                       │
+└──────────────┼─────────────────────────┼───────────────────────┘
+               │                         │
+               │ HTTP                    │ HTTP
+               ▼                         ▼
+       ┌──────────────┐          ┌─────────────────┐
+       │   pypfopt    │          │   tradernet     │
+       │   (Python)   │          │    (Python)     │
+       │              │          │                 │
+       │ Portfolio    │          │ Broker API      │
+       │ Optimization │          │ Trading Gateway │
+       │              │          │                 │
+       │ Mean-Variance│          │ Market Data     │
+       │ HRP          │          │ Order Execution │
+       │ Covariance   │          │                 │
+       │              │          │                 │
+       │ Port: 9001   │          │ Port: 9002      │
+       └──────────────┘          └─────────────────┘
 ```
 
 ### Design Principles
@@ -111,20 +112,17 @@ Arduino Trader is a production-ready autonomous trading system that manages a re
 
 ### Microservices
 
-1. **evaluator** (Go) - Planning evaluation service
-   - Port: 9000
-   - Purpose: High-performance sequence evaluation (10-100x faster than Python)
-   - Features: Worker pools, Monte Carlo simulation, batch processing
-
-2. **pypfopt** (Python/FastAPI) - Portfolio optimization service
+1. **pypfopt** (Python/FastAPI) - Portfolio optimization service
    - Port: 9001
    - Purpose: Mean-Variance Optimization, Hierarchical Risk Parity
    - Library: PyPortfolioOpt
 
-3. **tradernet** (Python/FastAPI) - Broker API gateway
+2. **tradernet** (Python/FastAPI) - Broker API gateway
    - Port: 9002
    - Purpose: Trading execution, portfolio sync, market data
    - Library: Tradernet SDK v1.0.5
+
+**Note:** Planning evaluation is now built into the main trader-go application (no separate microservice needed).
 
 ### Hardware
 
@@ -221,18 +219,15 @@ docker-compose down
 **Option B: Manual Start**
 
 ```bash
-# Terminal 1: evaluator
-cd services/evaluator
-go run main.go
 
-# Terminal 2: pypfopt
+# Terminal 1: pypfopt
 cd services/pypfopt
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --port 9001
 
-# Terminal 3: tradernet
+# Terminal 2: tradernet
 cd services/tradernet
 python3 -m venv venv
 source venv/bin/activate
@@ -255,8 +250,6 @@ cd trader-go
 # Check main app health
 curl http://localhost:8080/health
 
-# Check evaluator
-curl http://localhost:9000/health
 
 # Check pypfopt
 curl http://localhost:9001/health
@@ -272,38 +265,8 @@ curl http://localhost:8080/api/portfolio/summary
 
 ## Microservices
 
-### 1. evaluator (Planning Evaluation Service)
 
-**Purpose:** High-performance sequence evaluation and simulation for the planning module.
-
-**Port:** 9000
-
-**Technology:** Go with worker pools for parallel evaluation
-
-**Key Features:**
-- Batch sequence evaluation (100+ sequences/second)
-- Monte Carlo simulation (100x faster than Python)
-- Stochastic evaluation (10x faster)
-- Low memory footprint (<50MB)
-- Graceful degradation (Python fallback if unavailable)
-
-**API Endpoints:**
-- `POST /api/v1/evaluate/batch` - Batch evaluate trade sequences
-- `POST /api/v1/evaluate/monte-carlo` - Monte Carlo simulation
-- `POST /api/v1/evaluate/stochastic` - Stochastic evaluation
-- `POST /api/v1/simulate/batch` - Batch portfolio simulation
-- `GET /health` - Health check
-
-**Performance:**
-- Evaluation: 10-20x faster than Python
-- Monte Carlo: 100x faster than Python
-- Memory: <50MB vs 500MB+ Python
-
-**Documentation:** See `services/evaluator/README.md`
-
----
-
-### 2. pypfopt (Portfolio Optimization Service)
+### 1. pypfopt (Portfolio Optimization Service)
 
 **Purpose:** Mean-Variance Optimization and Hierarchical Risk Parity using PyPortfolioOpt library.
 
@@ -332,7 +295,7 @@ Used by the planning module to optimize portfolio allocations based on expected 
 
 ---
 
-### 3. tradernet (Broker API Gateway)
+### 2. tradernet (Broker API Gateway)
 
 **Purpose:** Trading execution, portfolio synchronization, and market data via Tradernet broker API.
 
@@ -1081,7 +1044,6 @@ sudo systemctl enable docker
 curl http://localhost:8080/health
 
 # Microservices
-curl http://localhost:9000/health  # evaluator
 curl http://localhost:9001/health  # pypfopt
 curl http://localhost:9002/health  # tradernet
 ```

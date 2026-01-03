@@ -14,15 +14,15 @@ import (
 type Planner struct {
 	opportunitiesService *opportunities.Service
 	sequencesService     *sequences.Service
-	evaluationClient     *evaluation.Client
+	evaluationService    *evaluation.Service
 	log                  zerolog.Logger
 }
 
-func NewPlanner(opportunitiesService *opportunities.Service, sequencesService *sequences.Service, evaluationClient *evaluation.Client, log zerolog.Logger) *Planner {
+func NewPlanner(opportunitiesService *opportunities.Service, sequencesService *sequences.Service, evaluationService *evaluation.Service, log zerolog.Logger) *Planner {
 	return &Planner{
 		opportunitiesService: opportunitiesService,
 		sequencesService:     sequencesService,
-		evaluationClient:     evaluationClient,
+		evaluationService:    evaluationService,
 		log:                  log.With().Str("component", "planner").Logger(),
 	}
 }
@@ -60,7 +60,7 @@ func (p *Planner) CreatePlan(ctx *domain.OpportunityContext, config *domain.Plan
 
 	// Call evaluation service
 	evalCtx := context.Background()
-	results, err := p.evaluationClient.BatchEvaluate(evalCtx, sequences, portfolioHash)
+	results, err := p.evaluationService.BatchEvaluate(evalCtx, sequences, portfolioHash)
 	if err != nil {
 		p.log.Error().Err(err).Msg("Evaluation failed, falling back to priority-based selection")
 		// Fallback: use priority-based selection if evaluation fails

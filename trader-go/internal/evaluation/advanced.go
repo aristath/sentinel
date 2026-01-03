@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/aristath/arduino-trader/services/evaluator-go/internal/models"
+	"github.com/aristath/arduino-trader/internal/evaluation/models"
 	"gonum.org/v1/gonum/floats"
 	"gonum.org/v1/gonum/stat"
 )

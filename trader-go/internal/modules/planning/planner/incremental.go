@@ -140,7 +140,7 @@ func (ip *IncrementalPlanner) GenerateBatch(
 
 		// Evaluate batch
 		evalCtx := context.Background()
-		batchResults, err := ip.planner.evaluationClient.BatchEvaluate(
+		batchResults, err := ip.planner.evaluationService.BatchEvaluate(
 			evalCtx,
 			batchSequences,
 			result.PortfolioHash,

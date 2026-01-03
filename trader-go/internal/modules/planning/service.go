@@ -14,9 +14,9 @@ type Service struct {
 	log     zerolog.Logger
 }
 
-func NewService(opportunitiesService *opportunities.Service, sequencesService *sequences.Service, evaluationClient *evaluation.Client, log zerolog.Logger) *Service {
+func NewService(opportunitiesService *opportunities.Service, sequencesService *sequences.Service, evaluationService *evaluation.Service, log zerolog.Logger) *Service {
 	return &Service{
-		planner: planner.NewPlanner(opportunitiesService, sequencesService, evaluationClient, log),
+		planner: planner.NewPlanner(opportunitiesService, sequencesService, evaluationService, log),
 		log:     log.With().Str("module", "planning").Logger(),
 	}
 }
