@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arduino Trader</title>
+  <link rel="icon" href="data:,">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="/static/css/output.css">
+
+  <!-- Libraries (local, no CDN) -->
+  <script defer src="/static/lib/alpine.min.js"></script>
+  <script src="/static/lib/lightweight-charts.standalone.production.js"></script>
+
+  <!-- Application -->
+  <script src="/static/js/utils.js"></script>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/store.js"></script>
+  <script src="/static/js/toml-highlight.js"></script>
+  <script src="/static/js/toml-diff.js"></script>
+</head>
+<body x-data x-init="setTimeout(() => { $store.app.fetchAll(); $store.app.startRecommendationStream(); }, 0)">
+  <div class="max-w-7xl mx-auto px-4 py-4 space-y-4">
+    <!-- Header -->
+    <app-header></app-header>
+
+    <!-- Market Status Indicators -->
+    <market-status></market-status>
+
+    <!-- Status Bar -->
+    <status-bar></status-bar>
+
+    <!-- Tab Navigation -->
+    <tab-navigation></tab-navigation>
+
+    <!-- Tab Content -->
+    <div x-data>
+      <!-- Next Actions Tab (Default) -->
+      <div x-show="$store.app.activeTab === 'next-actions'"
+           x-transition:enter="transition ease-out duration-200"
+           x-transition:enter-start="opacity-0"
+           x-transition:enter-end="opacity-100"
+           x-transition:leave="transition ease-in duration-150"
+           x-transition:leave-start="opacity-100"
+           x-transition:leave-end="opacity-0">
+        <next-actions-card></next-actions-card>
+      </div>
+
+      <!-- Diversification Tab -->
+      <div x-show="$store.app.activeTab === 'diversification'"
+           x-transition:enter="transition ease-out duration-200"
+           x-transition:enter-start="opacity-0"
+           x-transition:enter-end="opacity-100"
+           x-transition:leave="transition ease-in duration-150"
+           x-transition:leave-start="opacity-100"
+           x-transition:leave-end="opacity-0"
+           class="space-y-4">
+        <!-- Concentration Alerts -->
+        <concentration-alerts></concentration-alerts>
+
+        <!-- Radar Charts Row -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <country-radar-card></country-radar-card>
+          <industry-radar-card></industry-radar-card>
+        </div>
+      </div>
+
+      <!-- Security Universe Tab -->
+      <div x-show="$store.app.activeTab === 'security-universe'"
+           x-transition:enter="transition ease-out duration-200"
+           x-transition:enter-start="opacity-0"
+           x-transition:enter-end="opacity-100"
+           x-transition:leave="transition ease-in duration-150"
+           x-transition:leave-start="opacity-100"
+           x-transition:leave-end="opacity-0">
+        <!-- Universe Filter Buttons -->
+        <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <div class="flex items-center gap-2 flex-wrap">
+            <template x-for="bucket in $store.app.buckets" :key="bucket.id">
+              <button @click="$store.app.openBucketHealth(bucket)"
+                      :class="{
+                        'px-4 py-2 rounded text-sm font-medium transition-colors border': true,
+                        'bg-blue-600 text-white border-blue-600': bucket.type === 'core',
+                        'bg-purple-600 text-white border-purple-600': bucket.type === 'satellite'
+                      }">
+                <span x-text="bucket.name"></span>
+                <span class="ml-2 text-xs opacity-75">
+                  (<span x-text="$store.app.getSecurityCountForBucket(bucket.id)"></span>)
+                </span>
+              </button>
+            </template>
+          </div>
+          <button @click="$store.app.showUniverseManagementModal = true"
+                  class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm rounded font-medium transition-colors border border-gray-600">
+            ⚙️ Manage Universes
+          </button>
+          <button @click="$store.app.openPlannerManagement()"
+                  class="px-4 py-2 bg-green-600 hover:bg-green-500 text-white text-sm rounded font-medium transition-colors">
+            ⚙️ Configure Planners
+          </button>
+        </div>
+        <security-table></security-table>
+      </div>
+
+      <!-- Recent Trades Tab -->
+      <div x-show="$store.app.activeTab === 'recent-trades'"
+           x-transition:enter="transition ease-out duration-200"
+           x-transition:enter-start="opacity-0"
+           x-transition:enter-end="opacity-100"
+           x-transition:leave="transition ease-in duration-150"
+           x-transition:leave-start="opacity-100"
+           x-transition:leave-end="opacity-0">
+        <trades-table></trades-table>
+      </div>
+
+      <!-- Logs Tab -->
+      <div x-show="$store.app.activeTab === 'logs'"
+           x-transition:enter="transition ease-out duration-200"
+           x-transition:enter-start="opacity-0"
+           x-transition:enter-end="opacity-100"
+           x-transition:leave="transition ease-in duration-150"
+           x-transition:leave-start="opacity-100"
+           x-transition:leave-end="opacity-0">
+        <logs-viewer></logs-viewer>
+      </div>
+    </div>
+
+    <!-- Job Footer -->
+    <job-footer></job-footer>
+  </div>
+
+  <!-- Modals -->
+  <add-security-modal></add-security-modal>
+  <edit-security-modal></edit-security-modal>
+  <security-chart-modal></security-chart-modal>
+  <settings-modal></settings-modal>
+  <planner-management-modal></planner-management-modal>
+  <universe-management-modal></universe-management-modal>
+  <bucket-health-modal></bucket-health-modal>
+
+  <!-- Load Components -->
+  <script src="/static/components/app-header.js"></script>
+  <script src="/static/components/market-status.js"></script>
+  <script src="/static/components/status-bar.js"></script>
+  <script src="/static/components/tab-navigation.js"></script>
+  <script src="/static/components/geo-chart.js"></script>
+  <script src="/static/components/industry-chart.js"></script>
+  <script src="/static/components/radar-chart.js"></script>
+  <script src="/static/components/allocation-radar.js"></script>
+  <script src="/static/components/country-radar-card.js"></script>
+  <script src="/static/components/industry-radar-card.js"></script>
+  <script src="/static/components/quick-actions.js"></script>
+  <script src="/static/components/security-sparkline.js"></script>
+  <script src="/static/components/security-table.js"></script>
+  <script src="/static/components/trades-table.js"></script>
+  <script src="/static/components/next-actions-card.js"></script>
+  <script src="/static/components/add-security-modal.js"></script>
+  <script src="/static/components/edit-security-modal.js"></script>
+  <script src="/static/components/security-chart.js"></script>
+  <script src="/static/components/settings-modal.js"></script>
+  <script src="/static/components/planner-management-modal.js"></script>
+  <script src="/static/components/universe-management-modal.js"></script>
+  <script src="/static/components/bucket-health-modal.js"></script>
+  <script src="/static/components/job-footer.js"></script>
+  <script src="/static/components/concentration-alerts.js"></script>
+  <script src="/static/components/grouping-manager.js"></script>
+  <script src="/static/components/logs-viewer.js"></script>
+</body>
+</html>
