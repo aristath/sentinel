@@ -7,7 +7,9 @@ import (
 	"github.com/aristath/arduino-trader/internal/modules/opportunities"
 	"github.com/aristath/arduino-trader/internal/modules/planning/domain"
 	"github.com/aristath/arduino-trader/internal/modules/planning/evaluation"
+	"github.com/aristath/arduino-trader/internal/modules/planning/hash"
 	"github.com/aristath/arduino-trader/internal/modules/sequences"
+	"github.com/aristath/arduino-trader/internal/modules/universe"
 	"github.com/rs/zerolog"
 )
 
@@ -130,9 +132,40 @@ func (p *Planner) convertToPlan(sequence domain.ActionSequence, currentScore flo
 
 // generatePortfolioHash creates a hash representing the portfolio state.
 func (p *Planner) generatePortfolioHash(ctx *domain.OpportunityContext) string {
-	// Simplified hash generation - in production would use crypto/md5 or similar
-	// and hash all relevant portfolio state
-	return fmt.Sprintf("portfolio_%d_positions", len(ctx.Positions))
+	// Convert domain.Position to hash.Position
+	positions := make([]hash.Position, 0, len(ctx.Positions))
+	for _, pos := range ctx.Positions {
+		positions = append(positions, hash.Position{
+			Symbol:   pos.Symbol,
+			Quantity: int(pos.Quantity),
+		})
+	}
+
+	// Convert domain.Security to universe.Security for hashing
+	// Note: We use ctx.StocksBySymbol which has the full Security objects
+	securities := make([]*universe.Security, 0, len(ctx.Securities))
+	for _, sec := range ctx.Securities {
+		securities = append(securities, &universe.Security{
+			Symbol:             sec.Symbol,
+			Country:            sec.Country,
+			AllowBuy:           sec.Active, // Use Active as default for AllowBuy
+			AllowSell:          false,      // Default to false for safety
+			MinPortfolioTarget: 0,
+			MaxPortfolioTarget: 0,
+		})
+	}
+
+	// Get cash balances from context (EUR only for now)
+	cashBalances := make(map[string]float64)
+	if ctx.AvailableCashEUR > 0 {
+		cashBalances["EUR"] = ctx.AvailableCashEUR
+	}
+
+	// No pending orders in this context
+	pendingOrders := []hash.PendingOrder{}
+
+	// Generate the hash using the proper hash package
+	return hash.GeneratePortfolioHash(positions, securities, cashBalances, pendingOrders)
 }
 
 // selectByPriority selects the sequence with highest priority (fallback when evaluation fails).
