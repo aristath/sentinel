@@ -345,6 +345,11 @@ func (c *Client) getBatchQuoteInfo(symbols []string) (map[string]map[string]inte
 			break
 		}
 
+		// Close failed response bodies to prevent resource leaks
+		if resp != nil {
+			resp.Body.Close()
+		}
+
 		lastErr = err
 		if resp != nil && resp.StatusCode != http.StatusOK {
 			lastErr = fmt.Errorf("status %d", resp.StatusCode)
