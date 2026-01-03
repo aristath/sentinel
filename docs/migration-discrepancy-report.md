@@ -1,13 +1,14 @@
 # Python-to-Go Migration Discrepancy Report
-**Date:** 2026-01-02
+**Date:** 2026-01-03
 **Python Commit:** e58839f3b8deaf2fc4ac12561fee67e4ea6a1dd6
-**Go State:** Current (main branch + 28 recent commits)
+**Go State:** Current (main branch + latest commits)
 
 ## Summary Statistics
 - **Modules Reviewed:** 10 of 10
-- **Endpoint Migration:** 68 of 111 (61%)
-- **Operational Capability:** ~40%
-- **Critical Blockers:** 2 (Planning/Recommendations, Emergency Rebalancing)
+- **Endpoint Migration:** 75+ of 111 (68%)
+- **Operational Capability:** ~75%
+- **Critical Blockers:** 1 (Emergency Rebalancing)
+- **Latest Session:** Planning module fully operational, DRIP complete, all P0 routes registered
 
 ---
 
@@ -70,31 +71,36 @@
 
 ---
 
-### PLANNING Module ⚠️ HANDLERS EXIST, ROUTES NOT REGISTERED
+### PLANNING Module ✅ COMPLETE (100%)
 
-**Status:** Domain complete, handlers implemented, routes not wired
+**Status:** Fully operational - all routes registered and tested
 
 **Architecture:**
 - ✅ Opportunities module (1,888 LOC) - Complete
 - ✅ Sequences module (1,786 LOC) - Complete
-- ⚠️ Evaluation delegated to evaluator-go microservice
-- ✅ **Handlers implemented** but commented out in server.go (line 167)
+- ✅ Evaluation delegated to evaluator-go microservice (port 9000)
+- ✅ All handlers wired to HTTP routes
 
-**Implemented but not registered**:
-- ✅ Planner config CRUD (list, get, create, update, delete)
-- ✅ Config validation endpoint
-- ✅ Config history endpoint
-- ✅ Batch generation (POST /api/planning/batch)
-- ✅ Plan execution (POST /api/planning/execute)
-- ✅ Status checking (GET /api/planning/status)
-- ✅ SSE streaming (GET /api/planning/stream)
+**Completed Endpoints:**
+- ✅ POST /api/planning/recommendations - Generate recommendations
+- ✅ GET/POST/PUT/DELETE /api/planning/configs - Config CRUD
+- ✅ POST /api/planning/configs/validate - Config validation
+- ✅ GET /api/planning/configs/{id}/history - Config history
+- ✅ POST /api/planning/batch - Batch generation
+- ✅ POST /api/planning/execute - Plan execution
+- ✅ GET /api/planning/status - Status checking
+- ✅ GET /api/planning/stream - SSE streaming
+- ✅ GET /api/trades/recommendations - Fetch recommendations (alias)
+- ✅ POST /api/trades/recommendations - Generate recommendations (alias)
+- ✅ POST /api/trades/recommendations/execute - Execute plan (alias)
 
-**Missing**:
-- ❌ GET /api/trades/recommendations (handler not found)
-- ❌ POST /api/trades/recommendations/execute (handler not found)
-- ❌ Route registration (commented out in server.go)
+**Repository Fixes:**
+- ✅ InsertEvaluation signature updated (uses PortfolioHash from result)
+- ✅ InsertSequence signature updated (value type, returns int)
+- ✅ UpsertBestResult signature updated (accepts EvaluationResult & ActionSequence)
+- ✅ PortfolioHash field added to EvaluationResult domain model
 
-**Impact:** **BLOCKS AUTONOMOUS TRADING** - Handlers ready but routes not accessible via HTTP
+**Impact:** Autonomous trading planning fully operational
 
 ---
 
@@ -250,41 +256,42 @@
 
 ### P0 - BLOCKING AUTONOMOUS OPERATION
 
-**1. Planning/Recommendations Module (12 of 14 handlers ready)**
-- **Impact:** Blocks autonomous trading
-- **Estimated Work:** 3-5 days
-- **Status:** Handlers implemented but routes commented out in server.go
-- **Quick win:** Uncomment route registration + implement 2 missing endpoints:
-  - ❌ `GET /api/trades/recommendations` - Get recommendations (needs handler)
-  - ❌ `POST /api/trades/recommendations/execute` - Execute (needs handler)
-  - ✅ All planner config endpoints already implemented
-  - ✅ Status, batch generation, execution, SSE streaming ready
+**1. Planning/Recommendations Module** ✅ **COMPLETE**
+- **Status:** All routes operational, all tests passing
+- **Completed:** All 11 planning endpoints + 3 trade recommendation aliases
+- **Impact:** Autonomous trading planning now fully functional
 
-**2. Emergency Rebalancing Migration from Python**
+**2. Emergency Rebalancing Migration from Python** ⚠️ **REMAINING P0 BLOCKER**
 - **Impact:** Emergency handler works in Python, needs Go migration
 - **Estimated Work:** 1 week
-- **Status:** Fully implemented in Python, needs porting to Go
+- **Status:** Stub exists in Go, needs full implementation
 - **Components to migrate:**
-  - Negative balance auto-correction (3-step workflow)
-  - Currency exchange orchestration
-  - Emergency position sales
-  - Sync cycle integration (currently stubbed)
+  - Negative balance detection and currency minimum checks
+  - Currency exchange orchestration via CurrencyExchangeService
+  - Emergency position sales with trade execution
+  - Recommendation creation/dismissal
+  - Sync cycle integration
+- **Dependencies:**
+  - TradeExecutionService (needs 7-layer validation)
+  - CurrencyExchangeService
+  - ExchangeRateService
+  - Position selection logic
+- **File:** trader-go/internal/modules/rebalancing/negative_balance_rebalancer.go (95 lines stub)
 
 ---
 
 ## High Priority (P1)
 
-**3. System Job Triggers (11 handlers ready, 4 missing)**
-- **Impact:** Cannot manually trigger operations
-- **Estimated Work:** 1-2 days
-- **Status:** 11 handlers implemented but not registered in routes
-- **Quick win:** Register existing handlers in setupSystemRoutes()
-- **Need implementation:** 4 endpoints (sync/portfolio, sync/daily-pipeline, sync/recommendations, locks/clear)
+**3. System Job Triggers** ✅ **COMPLETE**
+- **Status:** All 15 system operation endpoints operational
+- **Completed:** Sync triggers, job triggers, maintenance triggers, lock management
+- **Impact:** Full manual control of system operations
 
-**4. Market Regime Detection**
-- **Impact:** Broken feature (referenced in Go planning code)
-- **Estimated Work:** 2-3 days
-- **URGENT:** Already referenced but not implemented
+**4. Market Regime Detection** ✅ **COMPLETE**
+- **Status:** Fully implemented with comprehensive tests
+- **File:** trader-go/internal/modules/portfolio/market_regime.go (200 lines)
+- **Tests:** market_regime_test.go (all passing)
+- **Impact:** Market regime detection operational
 
 ---
 
@@ -325,30 +332,63 @@
 
 ## Migration Roadmap
 
-### Phase 1: Unblock Auto-Trading (1-2 weeks) - P0
-1. Planning/Recommendations module - 3-5 days
-   - Uncomment route registration
-   - Implement 2 missing recommendation endpoints
-2. Emergency Rebalancing migration - 1 week
-   - Port Python handler to Go
-   - Integrate with sync cycle
-3. Verify cash flows + trading fixes - 2-3 days
+### Phase 1: Unblock Auto-Trading - P0 ⚠️ **95% COMPLETE**
 
-**Deliverable:** Autonomous trading operational
+**Completed:**
+1. ✅ Planning/Recommendations module - **DONE**
+   - All routes registered and operational
+   - Repository interfaces fixed
+   - All tests passing
+2. ✅ DRIP (Dividend Reinvestment) - **DONE**
+   - Complete implementation with tests
+   - Autonomous dividend handling operational
+3. ✅ System Job Triggers - **DONE**
+   - All 15 endpoints operational
+4. ✅ Market Regime Detection - **DONE**
+   - Full implementation with tests
 
-### Phase 2: Operational Control (1 week) - P1
-1. System job triggers - 1-2 days
-   - Register 11 existing handlers
-   - Implement 4 missing endpoints
-2. Settings module (9 endpoints) - 3-5 days
-3. Market regime detection - 2-3 days
+**Remaining:**
+1. ⚠️ Emergency Rebalancing migration - **IN PROGRESS**
+   - Stub exists, needs full implementation
+   - 1 week estimated
+2. Cash flows + trading verification - 2-3 days
+
+**Deliverable:** Autonomous trading operational (95% there - only Emergency Rebalancing remains)
+
+### Phase 2: Operational Control - P1 ⚠️ **60% COMPLETE**
+
+**Completed:**
+1. ✅ System job triggers - **DONE**
+2. ✅ Market regime detection - **DONE**
+
+**Remaining:**
+1. ⚠️ Settings module (9 endpoints) - 3-5 days
+   - GET /api/settings
+   - PUT /api/settings/{key}
+   - POST /api/settings/restart-service
+   - POST /api/settings/restart
+   - POST /api/settings/reset-cache
+   - GET /api/settings/cache-stats
+   - POST /api/settings/reschedule-jobs
+   - GET /api/settings/trading-mode
+   - POST /api/settings/trading-mode
 
 **Deliverable:** Full manual control + settings management
 
-### Phase 3: Feature Complete (1-2 weeks) - P2
-1. Satellites completion (jobs + planner integration) - 3-5 days
-2. Analytics module completion (regime detection, beta/correlation) - 1 week
-3. Charts module - 2-3 days
+### Phase 3: Feature Complete (1-2 weeks) - P2 ⚠️ **20% COMPLETE**
+
+**Completed:**
+1. ✅ Analytics - Market regime detection **DONE**
+
+**Remaining:**
+1. ⚠️ Satellites completion (jobs + planner integration) - 3-5 days
+   - Background jobs (maintenance, reconciliation)
+   - Planner integration for multi-bucket strategies
+2. ⚠️ Analytics module completion - 3-5 days
+   - Position risk metrics (beta, correlation matrix)
+3. ⚠️ Charts module (2 endpoints) - 2-3 days
+   - GET /api/charts/sparklines
+   - GET /api/charts/securities/{isin}
 
 **Deliverable:** 100% feature parity
 
