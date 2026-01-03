@@ -193,9 +193,6 @@ TRADERNET_URL=http://localhost:9002
 TRADERNET_API_KEY=your_api_key
 TRADERNET_API_SECRET=your_api_secret
 
-# Trading mode
-TRADING_MODE=research  # or 'live'
-
 # Server
 PORT=8080
 LOG_LEVEL=info
@@ -344,7 +341,6 @@ TRADERNET_API_KEY=your_api_key
 TRADERNET_API_SECRET=your_api_secret
 PORT=9002
 LOG_LEVEL=INFO
-TRADING_MODE=production  # or 'research'
 ```
 
 **Documentation:** See `services/tradernet/README.md`
@@ -1110,9 +1106,6 @@ TRADERNET_URL=http://localhost:9002
 # Tradernet API
 TRADERNET_API_KEY=your_api_key
 TRADERNET_API_SECRET=your_api_secret
-
-# Trading mode
-TRADING_MODE=research  # or 'live'
 
 # Server
 PORT=8080
