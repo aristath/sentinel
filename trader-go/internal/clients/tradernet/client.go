@@ -328,3 +328,34 @@ func (c *Client) IsConnected() bool {
 	}
 	return resp.Success
 }
+
+// Quote represents a security quote
+type Quote struct {
+	Symbol    string  `json:"symbol"`
+	Price     float64 `json:"price"`
+	Change    float64 `json:"change"`
+	ChangePct float64 `json:"change_pct"`
+	Volume    int64   `json:"volume"`
+	Timestamp string  `json:"timestamp"`
+}
+
+// QuoteResponse is the response for GetQuote
+type QuoteResponse struct {
+	Quote Quote `json:"quote"`
+}
+
+// GetQuote gets current quote for a symbol
+func (c *Client) GetQuote(symbol string) (*Quote, error) {
+	url := fmt.Sprintf("/api/quotes/%s", symbol)
+	resp, err := c.get(url)
+	if err != nil {
+		return nil, err
+	}
+
+	var result QuoteResponse
+	if err := json.Unmarshal(resp.Data, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse quote: %w", err)
+	}
+
+	return &result.Quote, nil
+}
