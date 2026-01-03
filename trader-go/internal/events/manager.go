@@ -19,23 +19,23 @@ const (
 	SecurityAdded        EventType = "SECURITY_ADDED"
 
 	// Satellite bucket events
-	SatelliteCreated     EventType = "SATELLITE_CREATED"
-	SatelliteActivated   EventType = "SATELLITE_ACTIVATED"
-	SatellitePaused      EventType = "SATELLITE_PAUSED"
-	SatelliteResumed     EventType = "SATELLITE_RESUMED"
-	SatelliteRetired     EventType = "SATELLITE_RETIRED"
-	SatelliteHibernated  EventType = "SATELLITE_HIBERNATED"
-	SatelliteReawakened  EventType = "SATELLITE_REAWAKENED"
-	BucketUpdated        EventType = "BUCKET_UPDATED"
+	SatelliteCreated    EventType = "SATELLITE_CREATED"
+	SatelliteActivated  EventType = "SATELLITE_ACTIVATED"
+	SatellitePaused     EventType = "SATELLITE_PAUSED"
+	SatelliteResumed    EventType = "SATELLITE_RESUMED"
+	SatelliteRetired    EventType = "SATELLITE_RETIRED"
+	SatelliteHibernated EventType = "SATELLITE_HIBERNATED"
+	SatelliteReawakened EventType = "SATELLITE_REAWAKENED"
+	BucketUpdated       EventType = "BUCKET_UPDATED"
 
 	// Satellite balance events
-	BalanceTransferred   EventType = "BALANCE_TRANSFERRED"
-	DepositAllocated     EventType = "DEPOSIT_ALLOCATED"
-	BalancesReconciled   EventType = "BALANCES_RECONCILED"
+	BalanceTransferred EventType = "BALANCE_TRANSFERRED"
+	DepositAllocated   EventType = "DEPOSIT_ALLOCATED"
+	BalancesReconciled EventType = "BALANCES_RECONCILED"
 
 	// Satellite settings events
-	SettingsUpdated      EventType = "SETTINGS_UPDATED"
-	PresetApplied        EventType = "PRESET_APPLIED"
+	SettingsUpdated EventType = "SETTINGS_UPDATED"
+	PresetApplied   EventType = "PRESET_APPLIED"
 )
 
 // Event represents a system event

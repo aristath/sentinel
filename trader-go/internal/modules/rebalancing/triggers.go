@@ -33,14 +33,16 @@ func NewTriggerChecker(log zerolog.Logger) *TriggerChecker {
 // 2. Cash accumulation: Cash >= threshold_multiplier × min_trade_size
 //
 // Args:
-//   positions: Current portfolio positions
-//   targetAllocations: Target allocation weights per symbol (0.0 to 1.0)
-//   totalPortfolioValue: Total portfolio value in EUR (positions + cash)
-//   cashBalance: Available cash in EUR
-//   enabled: Whether event-driven rebalancing is enabled (default true)
+//
+//	positions: Current portfolio positions
+//	targetAllocations: Target allocation weights per symbol (0.0 to 1.0)
+//	totalPortfolioValue: Total portfolio value in EUR (positions + cash)
+//	cashBalance: Available cash in EUR
+//	enabled: Whether event-driven rebalancing is enabled (default true)
 //
 // Returns:
-//   TriggerResult with should_rebalance flag and reason
+//
+//	TriggerResult with should_rebalance flag and reason
 func (tc *TriggerChecker) CheckRebalanceTriggers(
 	positions []*portfolio.Position,
 	targetAllocations map[string]float64,

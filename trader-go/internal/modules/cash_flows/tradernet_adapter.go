@@ -28,8 +28,8 @@ func (a *TradernetAdapter) GetAllCashFlows(limit int) ([]APITransaction, error) 
 	for i, tcf := range tradernetCashFlows {
 		apiTransactions[i] = APITransaction{
 			// Handle flexible field names from Tradernet API
-			TransactionID: getTransactionID(tcf),
-			TypeDocID:     tcf.TypeDocID,
+			TransactionID:   getTransactionID(tcf),
+			TypeDocID:       tcf.TypeDocID,
 			TransactionType: getTransactionType(tcf),
 			Date:            getDate(tcf),
 			Amount:          getAmount(tcf),

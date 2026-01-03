@@ -100,13 +100,13 @@ func (s *MarketHoursService) initializeCalendars() {
 			{OpenHour: 10, OpenMinute: 0, CloseHour: 15, CloseMinute: 0}, // Conservative core hours
 		},
 		Holidays2026: []time.Time{
-			time.Date(2026, 1, 1, 0, 0, 0, 0, torontoLoc),  // New Year's Day
-			time.Date(2026, 2, 16, 0, 0, 0, 0, torontoLoc), // Family Day
-			time.Date(2026, 4, 10, 0, 0, 0, 0, torontoLoc), // Good Friday
-			time.Date(2026, 5, 18, 0, 0, 0, 0, torontoLoc), // Victoria Day
-			time.Date(2026, 7, 1, 0, 0, 0, 0, torontoLoc),  // Canada Day
-			time.Date(2026, 8, 3, 0, 0, 0, 0, torontoLoc),  // Civic Holiday
-			time.Date(2026, 9, 7, 0, 0, 0, 0, torontoLoc),  // Labour Day
+			time.Date(2026, 1, 1, 0, 0, 0, 0, torontoLoc),   // New Year's Day
+			time.Date(2026, 2, 16, 0, 0, 0, 0, torontoLoc),  // Family Day
+			time.Date(2026, 4, 10, 0, 0, 0, 0, torontoLoc),  // Good Friday
+			time.Date(2026, 5, 18, 0, 0, 0, 0, torontoLoc),  // Victoria Day
+			time.Date(2026, 7, 1, 0, 0, 0, 0, torontoLoc),   // Canada Day
+			time.Date(2026, 8, 3, 0, 0, 0, 0, torontoLoc),   // Civic Holiday
+			time.Date(2026, 9, 7, 0, 0, 0, 0, torontoLoc),   // Labour Day
 			time.Date(2026, 10, 12, 0, 0, 0, 0, torontoLoc), // Thanksgiving
 			time.Date(2026, 12, 25, 0, 0, 0, 0, torontoLoc), // Christmas
 			time.Date(2026, 12, 26, 0, 0, 0, 0, torontoLoc), // Boxing Day
@@ -304,13 +304,13 @@ func (s *MarketHoursService) initializeCalendars() {
 			{OpenHour: 10, OpenMinute: 0, CloseHour: 15, CloseMinute: 0}, // Conservative 5-hour core window
 		},
 		Holidays2026: []time.Time{
-			time.Date(2026, 1, 1, 0, 0, 0, 0, copenhagenLoc),  // New Year's Day
-			time.Date(2026, 4, 9, 0, 0, 0, 0, copenhagenLoc),  // Maundy Thursday
-			time.Date(2026, 4, 10, 0, 0, 0, 0, copenhagenLoc), // Good Friday
-			time.Date(2026, 4, 13, 0, 0, 0, 0, copenhagenLoc), // Easter Monday
-			time.Date(2026, 5, 8, 0, 0, 0, 0, copenhagenLoc),  // Store Bededag
-			time.Date(2026, 5, 21, 0, 0, 0, 0, copenhagenLoc), // Ascension Day
-			time.Date(2026, 6, 1, 0, 0, 0, 0, copenhagenLoc),  // Whit Monday
+			time.Date(2026, 1, 1, 0, 0, 0, 0, copenhagenLoc),   // New Year's Day
+			time.Date(2026, 4, 9, 0, 0, 0, 0, copenhagenLoc),   // Maundy Thursday
+			time.Date(2026, 4, 10, 0, 0, 0, 0, copenhagenLoc),  // Good Friday
+			time.Date(2026, 4, 13, 0, 0, 0, 0, copenhagenLoc),  // Easter Monday
+			time.Date(2026, 5, 8, 0, 0, 0, 0, copenhagenLoc),   // Store Bededag
+			time.Date(2026, 5, 21, 0, 0, 0, 0, copenhagenLoc),  // Ascension Day
+			time.Date(2026, 6, 1, 0, 0, 0, 0, copenhagenLoc),   // Whit Monday
 			time.Date(2026, 12, 24, 0, 0, 0, 0, copenhagenLoc), // Christmas Eve
 			time.Date(2026, 12, 25, 0, 0, 0, 0, copenhagenLoc), // Christmas
 			time.Date(2026, 12, 26, 0, 0, 0, 0, copenhagenLoc), // Boxing Day
@@ -413,7 +413,7 @@ func (s *MarketHoursService) initializeCalendars() {
 		TimezoneStr: "Asia/Tokyo",
 		Timezone:    tokyoLoc,
 		TradingWindows: []TradingWindow{
-			{OpenHour: 10, OpenMinute: 0, CloseHour: 11, CloseMinute: 0},   // Morning session (1h core)
+			{OpenHour: 10, OpenMinute: 0, CloseHour: 11, CloseMinute: 0},  // Morning session (1h core)
 			{OpenHour: 13, OpenMinute: 0, CloseHour: 14, CloseMinute: 30}, // Afternoon session (1.5h core)
 		},
 		Holidays2026: []time.Time{
@@ -453,15 +453,15 @@ func (s *MarketHoursService) initializeCalendars() {
 			{OpenHour: 10, OpenMinute: 0, CloseHour: 16, CloseMinute: 0}, // Conservative 6-hour core window
 		},
 		Holidays2026: []time.Time{
-			time.Date(2026, 1, 1, 0, 0, 0, 0, singaporeLoc),  // New Year's Day
-			time.Date(2026, 1, 29, 0, 0, 0, 0, singaporeLoc), // Chinese New Year
-			time.Date(2026, 1, 30, 0, 0, 0, 0, singaporeLoc), // Chinese New Year
-			time.Date(2026, 4, 10, 0, 0, 0, 0, singaporeLoc), // Good Friday
-			time.Date(2026, 5, 1, 0, 0, 0, 0, singaporeLoc),  // Labor Day
-			time.Date(2026, 5, 21, 0, 0, 0, 0, singaporeLoc), // Vesak Day
-			time.Date(2026, 6, 25, 0, 0, 0, 0, singaporeLoc), // Hari Raya Puasa
-			time.Date(2026, 8, 9, 0, 0, 0, 0, singaporeLoc),  // National Day
-			time.Date(2026, 9, 1, 0, 0, 0, 0, singaporeLoc),  // Hari Raya Haji
+			time.Date(2026, 1, 1, 0, 0, 0, 0, singaporeLoc),   // New Year's Day
+			time.Date(2026, 1, 29, 0, 0, 0, 0, singaporeLoc),  // Chinese New Year
+			time.Date(2026, 1, 30, 0, 0, 0, 0, singaporeLoc),  // Chinese New Year
+			time.Date(2026, 4, 10, 0, 0, 0, 0, singaporeLoc),  // Good Friday
+			time.Date(2026, 5, 1, 0, 0, 0, 0, singaporeLoc),   // Labor Day
+			time.Date(2026, 5, 21, 0, 0, 0, 0, singaporeLoc),  // Vesak Day
+			time.Date(2026, 6, 25, 0, 0, 0, 0, singaporeLoc),  // Hari Raya Puasa
+			time.Date(2026, 8, 9, 0, 0, 0, 0, singaporeLoc),   // National Day
+			time.Date(2026, 9, 1, 0, 0, 0, 0, singaporeLoc),   // Hari Raya Haji
 			time.Date(2026, 10, 21, 0, 0, 0, 0, singaporeLoc), // Deepavali
 			time.Date(2026, 12, 25, 0, 0, 0, 0, singaporeLoc), // Christmas
 		},
@@ -560,15 +560,15 @@ func (s *MarketHoursService) initializeCalendars() {
 			{OpenHour: 10, OpenMinute: 30, CloseHour: 14, CloseMinute: 30}, // Conservative 4-hour core window
 		},
 		Holidays2026: []time.Time{
-			time.Date(2026, 1, 26, 0, 0, 0, 0, mumbaiLoc), // Republic Day
-			time.Date(2026, 3, 14, 0, 0, 0, 0, mumbaiLoc), // Holi
-			time.Date(2026, 3, 30, 0, 0, 0, 0, mumbaiLoc), // Ram Navami
-			time.Date(2026, 4, 2, 0, 0, 0, 0, mumbaiLoc),  // Mahavir Jayanti
-			time.Date(2026, 4, 10, 0, 0, 0, 0, mumbaiLoc), // Good Friday
-			time.Date(2026, 4, 14, 0, 0, 0, 0, mumbaiLoc), // Ambedkar Jayanti
-			time.Date(2026, 5, 1, 0, 0, 0, 0, mumbaiLoc),  // Maharashtra Day
-			time.Date(2026, 7, 7, 0, 0, 0, 0, mumbaiLoc),  // Bakri Id
-			time.Date(2026, 8, 15, 0, 0, 0, 0, mumbaiLoc), // Independence Day
+			time.Date(2026, 1, 26, 0, 0, 0, 0, mumbaiLoc),  // Republic Day
+			time.Date(2026, 3, 14, 0, 0, 0, 0, mumbaiLoc),  // Holi
+			time.Date(2026, 3, 30, 0, 0, 0, 0, mumbaiLoc),  // Ram Navami
+			time.Date(2026, 4, 2, 0, 0, 0, 0, mumbaiLoc),   // Mahavir Jayanti
+			time.Date(2026, 4, 10, 0, 0, 0, 0, mumbaiLoc),  // Good Friday
+			time.Date(2026, 4, 14, 0, 0, 0, 0, mumbaiLoc),  // Ambedkar Jayanti
+			time.Date(2026, 5, 1, 0, 0, 0, 0, mumbaiLoc),   // Maharashtra Day
+			time.Date(2026, 7, 7, 0, 0, 0, 0, mumbaiLoc),   // Bakri Id
+			time.Date(2026, 8, 15, 0, 0, 0, 0, mumbaiLoc),  // Independence Day
 			time.Date(2026, 10, 2, 0, 0, 0, 0, mumbaiLoc),  // Gandhi Jayanti
 			time.Date(2026, 10, 23, 0, 0, 0, 0, mumbaiLoc), // Dussehra
 			time.Date(2026, 11, 11, 0, 0, 0, 0, mumbaiLoc), // Diwali

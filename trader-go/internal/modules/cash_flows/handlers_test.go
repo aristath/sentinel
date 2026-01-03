@@ -14,8 +14,8 @@ import (
 
 // MockTradernetClient for testing
 type MockTradernetClient struct {
-	connected      bool
-	cashFlows      []APITransaction
+	connected       bool
+	cashFlows       []APITransaction
 	shouldFailFetch bool
 }
 
@@ -372,7 +372,7 @@ func TestHandleSyncCashFlows_FetchError(t *testing.T) {
 	repo := NewRepository(db, zerolog.Nop())
 
 	mockClient := &MockTradernetClient{
-		connected:      true,
+		connected:       true,
 		shouldFailFetch: true,
 	}
 
