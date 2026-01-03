@@ -145,7 +145,7 @@ func (j *SyncJob) SyncCashFlows() error {
 		if j.depositProcessor.ShouldProcessCashFlow(created) {
 			_, err := j.depositProcessor.ProcessDeposit(
 				created.AmountEUR,
-				created.Currency,
+				"EUR", // Always allocate in EUR (amount is already converted)
 				&created.TransactionID,
 				created.Description,
 			)
@@ -194,10 +194,10 @@ func (j *SyncJob) SyncCashFlows() error {
 
 	// 7. Emit CASH_FLOW_SYNC_COMPLETE event
 	j.eventManager.Emit(events.CashFlowSyncComplete, "cash_flows", map[string]interface{}{
-		"synced_count":          syncedCount,
-		"deposits_processed":    depositCount,
-		"dividends_created":     dividendCount,
-		"total_from_api":        len(transactions),
+		"synced_count":         syncedCount,
+		"deposits_processed":   depositCount,
+		"dividends_created":    dividendCount,
+		"total_from_api":       len(transactions),
 		"completion_timestamp": time.Now().Format(time.RFC3339),
 	})
 

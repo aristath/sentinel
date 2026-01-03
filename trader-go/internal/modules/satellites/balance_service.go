@@ -527,7 +527,20 @@ func (s *BalanceService) AllocateDeposit(
 				share := (d.deficit / totalDeficit) * remaining
 				allocations[d.bucketID] = share
 			}
+			remaining = 0 // All distributed to satellites
 		}
+	}
+
+	// Fallback: If any remaining amount wasn't allocated, give it to core
+	if remaining > 0 {
+		if existing, ok := allocations["core"]; ok {
+			allocations["core"] = existing + remaining
+		} else {
+			allocations["core"] = remaining
+		}
+		s.log.Debug().
+			Float64("fallback_amount", remaining).
+			Msg("Allocated remaining deposit to core bucket (no satellites needed funds)")
 	}
 
 	// Record the allocations atomically
