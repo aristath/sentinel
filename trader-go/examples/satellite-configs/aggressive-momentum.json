@@ -1,0 +1,17 @@
+{
+  "preset": "momentum_hunter",
+  "risk_appetite": 0.85,
+  "hold_duration": 0.2,
+  "entry_style": 0.9,
+  "position_spread": 0.3,
+  "profit_taking": 0.7,
+  "trailing_stops": true,
+  "follow_regime": true,
+  "auto_harvest": false,
+  "pause_high_volatility": true,
+  "dividend_handling": "send_to_core",
+  "risk_free_rate": 0.035,
+  "sortino_mar": 0.09,
+  "evaluation_period_days": 60,
+  "volatility_window": 30
+}
