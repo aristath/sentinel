@@ -173,6 +173,9 @@ func (s *Server) setupRoutes() {
 
 		// Planning module (MIGRATED TO GO!)
 		s.setupPlanningRoutes(r)
+
+		// Charts module (MIGRATED TO GO!)
+		s.setupChartsRoutes(r)
 	})
 
 	// Evaluation module routes (MIGRATED TO GO!)
