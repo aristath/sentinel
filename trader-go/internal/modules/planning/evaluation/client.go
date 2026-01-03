@@ -13,7 +13,7 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// Client communicates with the Go evaluation service (evaluator-go on port 8001).
+// Client communicates with the Go evaluation service (evaluator on port 8001).
 type Client struct {
 	baseURL    string
 	httpClient *http.Client

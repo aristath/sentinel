@@ -52,7 +52,7 @@ Arduino Trader is a production-ready autonomous trading system that manages a re
                │ HTTP        │ HTTP          │ HTTP
                ▼             ▼               ▼
        ┌──────────────┐ ┌──────────────┐ ┌─────────────────┐
-       │ evaluator-go │ │   pypfopt    │ │   tradernet     │
+       │ evaluator │ │   pypfopt    │ │   tradernet     │
        │   (Go)       │ │   (Python)   │ │    (Python)     │
        │              │ │              │ │                 │
        │ Planning     │ │ Portfolio    │ │ Broker API      │
@@ -111,7 +111,7 @@ Arduino Trader is a production-ready autonomous trading system that manages a re
 
 ### Microservices
 
-1. **evaluator-go** (Go) - Planning evaluation service
+1. **evaluator** (Go) - Planning evaluation service
    - Port: 9000
    - Purpose: High-performance sequence evaluation (10-100x faster than Python)
    - Features: Worker pools, Monte Carlo simulation, batch processing
@@ -221,8 +221,8 @@ docker-compose down
 **Option B: Manual Start**
 
 ```bash
-# Terminal 1: evaluator-go
-cd services/evaluator-go
+# Terminal 1: evaluator
+cd services/evaluator
 go run main.go
 
 # Terminal 2: pypfopt
@@ -255,7 +255,7 @@ cd trader-go
 # Check main app health
 curl http://localhost:8080/health
 
-# Check evaluator-go
+# Check evaluator
 curl http://localhost:9000/health
 
 # Check pypfopt
@@ -272,7 +272,7 @@ curl http://localhost:8080/api/portfolio/summary
 
 ## Microservices
 
-### 1. evaluator-go (Planning Evaluation Service)
+### 1. evaluator (Planning Evaluation Service)
 
 **Purpose:** High-performance sequence evaluation and simulation for the planning module.
 
@@ -299,7 +299,7 @@ curl http://localhost:8080/api/portfolio/summary
 - Monte Carlo: 100x faster than Python
 - Memory: <50MB vs 500MB+ Python
 
-**Documentation:** See `services/evaluator-go/README.md`
+**Documentation:** See `services/evaluator/README.md`
 
 ---
 
@@ -829,7 +829,7 @@ arduino-trader/
 │   │   └── logger/           # Structured logging
 │   └── scripts/              # Build & deployment scripts
 ├── services/                  # Microservices
-│   ├── evaluator-go/         # Planning evaluation (Go)
+│   ├── evaluator/         # Planning evaluation (Go)
 │   ├── pypfopt/              # Portfolio optimization (Python)
 │   └── tradernet/            # Broker API gateway (Python)
 ├── docs/                     # Documentation (if needed)
@@ -876,7 +876,7 @@ go build -o trader-go ./cmd/server
 #### Microservices
 
 See individual service READMEs:
-- `services/evaluator-go/README.md`
+- `services/evaluator/README.md`
 - `services/pypfopt/README.md`
 - `services/tradernet/README.md`
 
@@ -958,8 +958,8 @@ go test ./...
 
 **Microservices:**
 ```bash
-# evaluator-go
-cd services/evaluator-go
+# evaluator
+cd services/evaluator
 go test ./...
 
 # pypfopt
@@ -1081,7 +1081,7 @@ sudo systemctl enable docker
 curl http://localhost:8080/health
 
 # Microservices
-curl http://localhost:9000/health  # evaluator-go
+curl http://localhost:9000/health  # evaluator
 curl http://localhost:9001/health  # pypfopt
 curl http://localhost:9002/health  # tradernet
 ```

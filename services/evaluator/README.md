@@ -19,16 +19,16 @@ High-performance evaluation service for Arduino Trader's planning module.
 
 ```bash
 # Local development (macOS/Linux)
-go build -o evaluator-go ./cmd/server
+go build -o evaluator ./cmd/server
 
 # Cross-compile for Arduino Uno Q (ARM64)
-GOOS=linux GOARCH=arm64 go build -o evaluator-go ./cmd/server
+GOOS=linux GOARCH=arm64 go build -o evaluator ./cmd/server
 ```
 
 ## Running
 
 ```bash
-./evaluator-go
+./evaluator
 # Server starts on :9000
 ```
 
@@ -40,5 +40,5 @@ go test ./...
 
 ## Deployment
 
-Binary is automatically built by GitHub Actions on push to `services/evaluator-go/**`.
+Binary is automatically built by GitHub Actions on push to `services/evaluator/**`.
 Download artifact and deploy to Arduino Uno Q.
