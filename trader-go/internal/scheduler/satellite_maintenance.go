@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/aristath/arduino-trader/internal/locking"
+	"github.com/aristath/arduino-trader/internal/modules/portfolio"
 	"github.com/aristath/arduino-trader/internal/modules/satellites"
 	"github.com/rs/zerolog"
 )
@@ -21,6 +22,7 @@ type SatelliteMaintenanceJob struct {
 	log           zerolog.Logger
 	lockManager   *locking.Manager
 	bucketService *satellites.BucketService
+	positionRepo  *portfolio.PositionRepository
 }
 
 // NewSatelliteMaintenanceJob creates a new satellite maintenance job
@@ -28,11 +30,13 @@ func NewSatelliteMaintenanceJob(
 	log zerolog.Logger,
 	lockManager *locking.Manager,
 	bucketService *satellites.BucketService,
+	positionRepo *portfolio.PositionRepository,
 ) *SatelliteMaintenanceJob {
 	return &SatelliteMaintenanceJob{
 		log:           log.With().Str("job", "satellite_maintenance").Logger(),
 		lockManager:   lockManager,
 		bucketService: bucketService,
+		positionRepo:  positionRepo,
 	}
 }
 
@@ -115,20 +119,81 @@ func (j *SatelliteMaintenanceJob) processBucketMaintenanceTask(
 	bucket *satellites.Bucket,
 	result *HighWaterMarkResult,
 ) error {
-	// TODO: Calculate current bucket value from positions + cash
-	// For now, skip HWM updates until position tracking is integrated
-	// This is a placeholder that logs the need for integration
-	j.log.Debug().
-		Str("bucket_id", bucket.ID).
-		Float64("current_hwm", bucket.HighWaterMark).
-		Int("consecutive_losses", bucket.ConsecutiveLosses).
-		Msg("Bucket status check (value calculation pending position integration)")
+	// Calculate current bucket value (positions + cash)
+	currentValue, err := j.bucketService.CalculateBucketValue(bucket.ID, j.positionRepo)
+	if err != nil {
+		return fmt.Errorf("failed to calculate bucket value: %w", err)
+	}
 
-	// Note: Full implementation requires:
-	// 1. Position repository to get bucket positions and their market values
-	// 2. Balance service to get cash in all currencies
-	// 3. Exchange rate service to convert to EUR
-	// This will be added when position tracking is migrated
+	// Check if this is a new high water mark
+	if bucket.HighWaterMark == 0 || currentValue > bucket.HighWaterMark {
+		oldHWM := bucket.HighWaterMark
+		_, err := j.bucketService.UpdateHighWaterMark(bucket.ID, currentValue)
+		if err != nil {
+			return fmt.Errorf("failed to update high water mark: %w", err)
+		}
+
+		result.UpdatedCount++
+
+		pctIncrease := 0.0
+		if oldHWM > 0 {
+			pctIncrease = ((currentValue - oldHWM) / oldHWM) * 100
+		}
+
+		j.log.Info().
+			Str("bucket_id", bucket.ID).
+			Float64("old_hwm", oldHWM).
+			Float64("new_hwm", currentValue).
+			Float64("pct_increase", pctIncrease).
+			Msgf("%s: New high water mark €%.2f (+%.1f%% from €%.2f)",
+				bucket.ID, currentValue, pctIncrease, oldHWM)
+
+		// Reset consecutive losses on new high
+		if bucket.ConsecutiveLosses > 0 {
+			if err := j.bucketService.ResetConsecutiveLosses(bucket.ID); err != nil {
+				j.log.Warn().
+					Err(err).
+					Str("bucket_id", bucket.ID).
+					Msg("Failed to reset consecutive losses")
+			} else {
+				result.RecoveredCount++
+				j.log.Info().
+					Str("bucket_id", bucket.ID).
+					Int("was_consecutive_losses", bucket.ConsecutiveLosses).
+					Msg("Reset consecutive losses on new high water mark")
+			}
+		}
+	}
+
+	// Check for severe drawdown (>35% = hibernation threshold)
+	if bucket.HighWaterMark > 0 && currentValue > 0 {
+		drawdown := (bucket.HighWaterMark - currentValue) / bucket.HighWaterMark
+		const hibernationThreshold = 0.35 // 35%
+
+		if drawdown > hibernationThreshold &&
+			bucket.Status != satellites.BucketStatusHibernating &&
+			bucket.Status != satellites.BucketStatusRetired {
+
+			_, err := j.bucketService.HibernateBucket(bucket.ID)
+			if err != nil {
+				j.log.Error().
+					Err(err).
+					Str("bucket_id", bucket.ID).
+					Msg("Failed to hibernate bucket")
+				return fmt.Errorf("failed to hibernate bucket: %w", err)
+			}
+
+			result.HibernatedCount++
+
+			j.log.Warn().
+				Str("bucket_id", bucket.ID).
+				Float64("drawdown", drawdown*100).
+				Float64("high_water_mark", bucket.HighWaterMark).
+				Float64("current_value", currentValue).
+				Msgf("%s: HIBERNATING due to %.1f%% drawdown (€%.2f → €%.2f)",
+					bucket.ID, drawdown*100, bucket.HighWaterMark, currentValue)
+		}
+	}
 
 	return nil
 }

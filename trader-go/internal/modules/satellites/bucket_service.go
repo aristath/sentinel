@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/aristath/arduino-trader/internal/modules/portfolio"
 	"github.com/rs/zerolog"
 )
 
@@ -71,16 +72,19 @@ func (s *BucketService) GetSettings(satelliteID string) (*SatelliteSettings, err
 // paper trading until the user is ready to activate.
 //
 // Args:
-//   satelliteID: Unique identifier for the satellite
-//   name: Human-readable name
-//   notes: Optional documentation/description
-//   startInResearch: If true, start in research mode (default)
+//
+//	satelliteID: Unique identifier for the satellite
+//	name: Human-readable name
+//	notes: Optional documentation/description
+//	startInResearch: If true, start in research mode (default)
 //
 // Returns:
-//   The created bucket
+//
+//	The created bucket
 //
 // Errors:
-//   Returns error if satellite_id already exists
+//
+//	Returns error if satellite_id already exists
 func (s *BucketService) CreateSatellite(
 	satelliteID string,
 	name string,
@@ -412,8 +416,8 @@ func (s *BucketService) RecordTradeResult(bucketID string, isWin bool, tradePnL 
 		if newCount >= bucket.MaxConsecutiveLosses {
 			lossStreakPausedAt := time.Now().Format(time.RFC3339)
 			_, err := s.bucketRepo.Update(bucketID, map[string]interface{}{
-				"status":                  BucketStatusPaused,
-				"loss_streak_paused_at":   lossStreakPausedAt,
+				"status":                BucketStatusPaused,
+				"loss_streak_paused_at": lossStreakPausedAt,
 			})
 			if err != nil {
 				return nil, fmt.Errorf("failed to trigger circuit breaker: %w", err)
@@ -467,6 +471,11 @@ func (s *BucketService) UpdateHighWaterMark(bucketID string, currentValue float6
 	return bucket, nil
 }
 
+// ResetConsecutiveLosses resets consecutive losses counter to zero
+func (s *BucketService) ResetConsecutiveLosses(bucketID string) error {
+	return s.bucketRepo.ResetConsecutiveLosses(bucketID)
+}
+
 // --- Update Methods ---
 
 // UpdateBucket updates bucket fields
@@ -500,4 +509,76 @@ func (s *BucketService) UpdateAllocation(bucketID string, targetPct float64) (*B
 	return s.bucketRepo.Update(bucketID, map[string]interface{}{
 		"target_pct": targetPct,
 	})
+}
+
+// CalculateBucketValue calculates total bucket value (positions + cash)
+//
+// Faithful translation from Python: app/modules/satellites/jobs/bucket_maintenance.py
+//
+// Calculates current bucket value by:
+// 1. Summing market_value_eur for all positions in the bucket
+// 2. Summing cash balances for the bucket (EUR only for now)
+//
+// Args:
+//
+//	bucketID: Bucket to calculate value for
+//	positionRepo: Position repository for getting positions
+//
+// Returns:
+//
+//	Total bucket value in EUR
+//
+// Note: Currently only counts EUR cash. For full multi-currency support,
+// this needs ExchangeRateService to convert USD/GBP/HKD to EUR.
+func (s *BucketService) CalculateBucketValue(
+	bucketID string,
+	positionRepo *portfolio.PositionRepository,
+) (float64, error) {
+	// Get all positions and filter by bucket
+	positions, err := positionRepo.GetAll()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get positions: %w", err)
+	}
+
+	// Sum position values for this bucket
+	positionsValue := 0.0
+	for _, pos := range positions {
+		if pos.BucketID == bucketID {
+			positionsValue += pos.MarketValueEUR
+		}
+	}
+
+	// Get cash balances for bucket
+	balances, err := s.balanceRepo.GetAllBalances(bucketID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get balances: %w", err)
+	}
+
+	// Sum EUR cash (simplified - full version needs exchange rate service)
+	cashEUR := 0.0
+	for _, balance := range balances {
+		if balance.Currency == "EUR" {
+			cashEUR += balance.Balance
+		}
+		// TODO: Convert USD/GBP/HKD to EUR using ExchangeRateService
+		// For now, log that non-EUR balances exist but aren't counted
+		if balance.Currency != "EUR" && balance.Balance > 0 {
+			s.log.Debug().
+				Str("bucket_id", bucketID).
+				Str("currency", balance.Currency).
+				Float64("balance", balance.Balance).
+				Msg("Non-EUR balance not converted (needs ExchangeRateService)")
+		}
+	}
+
+	totalValue := positionsValue + cashEUR
+
+	s.log.Debug().
+		Str("bucket_id", bucketID).
+		Float64("positions_value", positionsValue).
+		Float64("cash_eur", cashEUR).
+		Float64("total_value", totalValue).
+		Msg("Calculated bucket value")
+
+	return totalValue, nil
 }
