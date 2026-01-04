@@ -10,7 +10,7 @@ import './styles/animations.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <MantineProvider theme={theme} defaultColorScheme="light">
+    <MantineProvider theme={theme}>
       <Notifications />
       <App />
     </MantineProvider>

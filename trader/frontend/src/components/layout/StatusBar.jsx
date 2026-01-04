@@ -8,7 +8,7 @@ export function StatusBar() {
   const { allocation, cashBreakdown } = usePortfolioStore();
 
   return (
-    <Paper p="md" style={{ backgroundColor: 'var(--mantine-color-dark-7)' }}>
+    <Paper p="md">
       {/* System Status Row */}
       <Group justify="space-between" mb="xs">
         <Group gap="md">
@@ -27,7 +27,7 @@ export function StatusBar() {
           </Group>
           <Text size="xs" c="dimmed">|</Text>
           <Text size="xs" c="dimmed">
-            Last sync: <span style={{ color: 'var(--mantine-color-dark-2)' }}>{status.last_sync || 'Never'}</span>
+            Last sync: <span>{status.last_sync || 'Never'}</span>
           </Text>
         </Group>
       </Group>
@@ -42,7 +42,7 @@ export function StatusBar() {
           </Text>
           <Text size="xs" c="dimmed">|</Text>
           <Text size="xs" c="dimmed">
-            Cash: <span style={{ color: 'var(--mantine-color-dark-2)', fontFamily: 'monospace' }}>
+            Cash: <span style={{ fontFamily: 'monospace' }}>
               {formatCurrency(allocation.cash_balance)}
             </span>
           </Text>
@@ -71,7 +71,7 @@ export function StatusBar() {
           )}
           <Text size="xs" c="dimmed">|</Text>
           <Text size="xs" c="dimmed">
-            Positions: <span style={{ color: 'var(--mantine-color-dark-2)', fontFamily: 'monospace' }}>
+            Positions: <span style={{ fontFamily: 'monospace' }}>
               {status.active_positions || 0}
             </span>
           </Text>

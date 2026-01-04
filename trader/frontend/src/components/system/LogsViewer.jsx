@@ -79,7 +79,7 @@ export function LogsViewer() {
     <Card p="md">
       <Stack gap="md">
         {/* Controls */}
-        <Card p="md" style={{ backgroundColor: 'var(--mantine-color-dark-7)' }}>
+        <Card p="md">
           <Group gap="md" wrap="wrap">
             <Select
               label="Log File"
@@ -156,7 +156,7 @@ export function LogsViewer() {
 
         {/* Log Entries */}
         <ScrollArea h={600} ref={scrollAreaRef}>
-          <Code block style={{ backgroundColor: 'var(--mantine-color-dark-8)', padding: '12px' }}>
+          <Code block style={{ padding: '12px' }}>
             {entries.length === 0 ? (
               <Text c="dimmed" size="sm">No log entries</Text>
             ) : (
@@ -179,4 +179,3 @@ export function LogsViewer() {
     </Card>
   );
 }
-

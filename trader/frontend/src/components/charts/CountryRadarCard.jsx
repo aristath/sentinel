@@ -1,5 +1,6 @@
-import { Card, Group, Text, Badge, Stack, Alert } from '@mantine/core';
+import { Card, Group, Text, Badge, Stack, Alert, Divider } from '@mantine/core';
 import { AllocationRadar } from './AllocationRadar';
+import { GeoChart } from './GeoChart';
 import { usePortfolioStore } from '../../stores/portfolioStore';
 import { formatPercent } from '../../utils/formatters';
 
@@ -28,9 +29,13 @@ export function CountryRadarCard() {
 
       <AllocationRadar type="country" />
 
+      <Divider my="md" />
+
+      <GeoChart />
+
       {/* Country Alerts */}
       {countryAlerts.length > 0 && (
-        <Stack gap="xs" mt="md" pt="md" style={{ borderTop: '1px solid var(--mantine-color-dark-6)' }}>
+        <Stack gap="xs" mt="md" pt="md" style={{ borderTop: '1px solid var(--mantine-color-gray-3)' }}>
           {countryAlerts.map((alert) => (
             <Alert
               key={alert.name}
@@ -61,4 +66,3 @@ export function CountryRadarCard() {
     </Card>
   );
 }
-

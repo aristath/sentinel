@@ -61,7 +61,7 @@ export function JobFooter() {
   };
 
   return (
-    <Paper p="md" mt="xl" style={{ borderTop: '1px solid var(--mantine-color-dark-6)' }}>
+    <Paper p="md" mt="xl" style={{ borderTop: '1px solid var(--mantine-color-gray-3)' }}>
       <Text size="xs" tt="uppercase" c="dimmed" fw={600} mb="md">
         Manual Job Triggers
       </Text>
@@ -92,4 +92,3 @@ export function JobFooter() {
     </Paper>
   );
 }
-

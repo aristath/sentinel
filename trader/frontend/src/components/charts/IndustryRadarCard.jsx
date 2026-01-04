@@ -1,5 +1,6 @@
-import { Card, Group, Text, Badge, Stack, Alert } from '@mantine/core';
+import { Card, Group, Text, Badge, Stack, Alert, Divider } from '@mantine/core';
 import { AllocationRadar } from './AllocationRadar';
+import { IndustryChart } from './IndustryChart';
 import { usePortfolioStore } from '../../stores/portfolioStore';
 import { formatPercent } from '../../utils/formatters';
 
@@ -28,9 +29,13 @@ export function IndustryRadarCard() {
 
       <AllocationRadar type="industry" />
 
+      <Divider my="md" />
+
+      <IndustryChart />
+
       {/* Industry Alerts */}
       {industryAlerts.length > 0 && (
-        <Stack gap="xs" mt="md" pt="md" style={{ borderTop: '1px solid var(--mantine-color-dark-6)' }}>
+        <Stack gap="xs" mt="md" pt="md" style={{ borderTop: '1px solid var(--mantine-color-gray-3)' }}>
           {industryAlerts.map((alert) => (
             <Alert
               key={alert.name}
@@ -61,4 +66,3 @@ export function IndustryRadarCard() {
     </Card>
   );
 }
-

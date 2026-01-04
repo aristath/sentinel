@@ -29,9 +29,9 @@ export class ErrorBoundary extends Component {
                   <summary style={{ cursor: 'pointer', marginBottom: '0.5rem' }}>
                     Error Details
                   </summary>
-                  <pre style={{ 
-                    backgroundColor: 'var(--mantine-color-dark-7)', 
-                    padding: '1rem', 
+                  <pre style={{
+                    backgroundColor: 'var(--mantine-color-default)',
+                    padding: '1rem',
                     borderRadius: '4px',
                     overflow: 'auto',
                     fontSize: '12px'
@@ -58,4 +58,3 @@ export class ErrorBoundary extends Component {
     return this.props.children;
   }
 }
-

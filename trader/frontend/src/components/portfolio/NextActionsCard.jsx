@@ -41,7 +41,6 @@ export function NextActionsCard() {
       p="lg"
       style={{
         border: '2px solid rgba(59, 130, 246, 0.3)',
-        backgroundColor: 'var(--mantine-color-dark-7)',
       }}
     >
       <Group justify="space-between" mb="md">
@@ -60,7 +59,7 @@ export function NextActionsCard() {
               {formatCurrency(allocation.total_value)}
             </Text>
           </div>
-          <div style={{ width: '1px', height: '32px', backgroundColor: 'var(--mantine-color-dark-6)' }} />
+          <div style={{ width: '1px', height: '32px', backgroundColor: 'var(--mantine-color-gray-3)' }} />
           <div style={{ textAlign: 'right' }}>
             <Text size="xs" c="dimmed">Cash</Text>
             <Text size="sm" fw={600} c="dimmed" ff="monospace">
@@ -91,7 +90,7 @@ export function NextActionsCard() {
 
       {/* Planner Status */}
       {plannerStatus && (
-        <Paper p="md" mb="md" style={{ backgroundColor: 'var(--mantine-color-dark-8)', border: '2px solid rgba(59, 130, 246, 0.3)' }}>
+        <Paper p="md" mb="md" style={{ border: '2px solid rgba(59, 130, 246, 0.3)' }}>
           <Group gap="xs" mb="sm">
             {plannerStatus.is_planning && <Text c="blue">⏳</Text>}
             {!plannerStatus.is_planning && !plannerStatus.is_finished && plannerStatus.has_sequences && <Text c="dimmed">⏸</Text>}
@@ -183,7 +182,7 @@ export function NextActionsCard() {
                     : step.side === 'SELL'
                     ? 'rgba(127, 29, 29, 0.5)'
                     : 'rgba(20, 83, 45, 0.5)',
-                  backgroundColor: 'var(--mantine-color-dark-8)',
+                  backgroundColor: 'var(--mantine-color-default)',
                 }}
               >
                 <Group justify="space-between" align="flex-start">
@@ -269,4 +268,3 @@ export function NextActionsCard() {
     </Card>
   );
 }
-

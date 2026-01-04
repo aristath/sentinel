@@ -118,8 +118,10 @@ export const usePortfolioStore = create((set, get) => ({
       await get().fetchTargets();
       await get().fetchAllocation();
       set({ editingCountry: false });
+      // Notification will be shown via appStore.showMessage if needed
     } catch (e) {
       console.error('Failed to save country targets:', e);
+      throw e; // Re-throw so components can handle it
     } finally {
       set({ loading: { ...get().loading, countrySave: false } });
     }
@@ -138,8 +140,10 @@ export const usePortfolioStore = create((set, get) => ({
       await get().fetchTargets();
       await get().fetchAllocation();
       set({ editingIndustry: false });
+      // Notification will be shown via appStore.showMessage if needed
     } catch (e) {
       console.error('Failed to save industry targets:', e);
+      throw e; // Re-throw so components can handle it
     } finally {
       set({ loading: { ...get().loading, industrySave: false } });
     }

@@ -136,7 +136,7 @@ export function SecurityTable() {
         <Table highlightOnHover>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th style={{ position: 'sticky', left: 0, backgroundColor: 'var(--mantine-color-dark-7)', zIndex: 10 }}>
+              <Table.Th style={{ position: 'sticky', left: 0, backgroundColor: 'var(--mantine-color-body)', zIndex: 10 }}>
                 <Text
                   size="xs"
                   style={{ cursor: 'pointer' }}
@@ -240,7 +240,7 @@ export function SecurityTable() {
                       : undefined,
                   }}
                 >
-                  <Table.Td style={{ position: 'sticky', left: 0, backgroundColor: 'var(--mantine-color-dark-7)', zIndex: 5 }}>
+                  <Table.Td style={{ position: 'sticky', left: 0, backgroundColor: 'var(--mantine-color-body)', zIndex: 5 }}>
                     <Text
                       size="sm"
                       ff="monospace"
@@ -378,4 +378,3 @@ export function SecurityTable() {
     </Card>
   );
 }
-

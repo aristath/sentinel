@@ -163,4 +163,24 @@ export const api = {
 
   // Cash Breakdown
   fetchCashBreakdown: () => fetchJSON('/api/portfolio/cash-breakdown'),
+
+  // Grouping
+  fetchAvailableCountries: () => fetchJSON('/api/allocation/groups/available/countries'),
+  fetchAvailableIndustries: () => fetchJSON('/api/allocation/groups/available/industries'),
+  fetchCountryGroups: () => fetchJSON('/api/allocation/groups/country'),
+  fetchIndustryGroups: () => fetchJSON('/api/allocation/groups/industry'),
+  updateCountryGroup: (data) => fetchJSON('/api/allocation/groups/country', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
+  updateIndustryGroup: (data) => fetchJSON('/api/allocation/groups/industry', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
+  deleteCountryGroup: (groupName) => fetchJSON(`/api/allocation/groups/country/${encodeURIComponent(groupName)}`, {
+    method: 'DELETE',
+  }),
+  deleteIndustryGroup: (groupName) => fetchJSON(`/api/allocation/groups/industry/${encodeURIComponent(groupName)}`, {
+    method: 'DELETE',
+  }),
 };

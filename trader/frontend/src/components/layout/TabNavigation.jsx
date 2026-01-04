@@ -76,8 +76,8 @@ export function TabNavigation() {
         <Tabs.Tab value="security-universe">Security Universe</Tabs.Tab>
         <Tabs.Tab value="recent-trades">Recent Trades</Tabs.Tab>
         <Tabs.Tab value="logs">Logs</Tabs.Tab>
-        <div style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--mantine-color-dark-2)' }}>
-          Press <kbd style={{ padding: '2px 6px', backgroundColor: 'var(--mantine-color-dark-6)', borderRadius: '4px' }}>1-5</kbd>
+        <div style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--mantine-color-dimmed)' }}>
+          Press <kbd style={{ padding: '2px 6px', backgroundColor: 'var(--mantine-color-gray-2)', borderRadius: '4px' }}>1-5</kbd>
         </div>
       </Tabs.List>
     </Tabs>

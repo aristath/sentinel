@@ -8,13 +8,13 @@ export function AppHeader() {
   const { tradingMode, toggleTradingMode } = useSettingsStore();
 
   return (
-    <header style={{ padding: '12px 0', borderBottom: '1px solid var(--mantine-color-dark-6)' }}>
+    <header style={{ padding: '12px 0', borderBottom: '1px solid var(--mantine-color-gray-3)' }}>
       <Group justify="space-between" align="center">
         <div>
-          <h1 style={{ margin: 0, fontSize: '20px', fontWeight: 'bold', color: 'var(--mantine-color-blue-4)' }}>
+          <h1 style={{ margin: 0, fontSize: '20px', fontWeight: 'bold', color: 'var(--mantine-color-blue-6)' }}>
             Arduino Trader
           </h1>
-          <p style={{ margin: 0, fontSize: '12px', color: 'var(--mantine-color-dark-2)' }}>
+          <p style={{ margin: 0, fontSize: '12px', color: 'var(--mantine-color-dimmed)' }}>
             Automated Portfolio Management
           </p>
         </div>

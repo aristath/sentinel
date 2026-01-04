@@ -20,6 +20,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { useTradesStore } from '../../stores/tradesStore';
 import { useLogsStore } from '../../stores/logsStore';
 import { useNotifications } from '../../hooks/useNotifications';
+import { ColorSchemeToggle } from './ColorSchemeToggle';
 
 export function Layout() {
   // Display notifications from app store
@@ -62,7 +63,7 @@ export function Layout() {
   }, []);
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-dark-8)' }}>
+    <div style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-body)' }}>
       <Container size="xl" py="md">
         <AppHeader />
         <MarketStatus />
@@ -82,6 +83,9 @@ export function Layout() {
       <UniverseManagementModal />
       <BucketHealthModal />
       <PlannerManagementModal />
+
+      {/* Color Scheme Toggle */}
+      <ColorSchemeToggle />
     </div>
   );
 }
