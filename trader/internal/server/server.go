@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -84,6 +85,13 @@ type Server struct {
 
 // New creates a new HTTP server
 func New(cfg Config) *Server {
+	// Register common MIME types to ensure correct Content-Type headers
+	_ = mime.AddExtensionType(".js", "application/javascript")
+	_ = mime.AddExtensionType(".mjs", "application/javascript")
+	_ = mime.AddExtensionType(".css", "text/css")
+	_ = mime.AddExtensionType(".woff2", "font/woff2")
+	_ = mime.AddExtensionType(".woff", "font/woff")
+
 	// Initialize system handlers early
 	dataDir := filepath.Dir(cfg.Config.DatabasePath)
 
@@ -262,7 +270,9 @@ func (s *Server) setupRoutes() {
 	// Files are at frontend/dist/assets/, so serve from frontendDir/assets and strip /assets/ prefix
 	assetsDir := filepath.Join(frontendDir, "assets")
 	fileServer := http.FileServer(http.Dir(assetsDir))
-	s.router.Handle("/assets/*", http.StripPrefix("/assets/", fileServer))
+	// Wrap file server with MIME type handler to ensure correct Content-Type headers
+	assetsHandler := s.assetsHandler(fileServer, assetsDir)
+	s.router.Handle("/assets/*", http.StripPrefix("/assets/", assetsHandler))
 
 	// Serve index.html for root and all non-API routes (SPA routing)
 	s.router.Get("/", s.handleDashboard)
@@ -1047,6 +1057,49 @@ func (s *Server) Start() error {
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.log.Info().Msg("Shutting down HTTP server")
 	return s.server.Shutdown(ctx)
+}
+
+// assetsHandler wraps the file server to set correct MIME types
+func (s *Server) assetsHandler(next http.Handler, baseDir string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Get the file path from the request
+		filePath := r.URL.Path
+
+		// Get file extension
+		ext := filepath.Ext(filePath)
+
+		// Set MIME type based on extension
+		contentType := mime.TypeByExtension(ext)
+		if contentType == "" {
+			// Fallback for common extensions
+			switch ext {
+			case ".js":
+				contentType = "application/javascript"
+			case ".mjs":
+				contentType = "application/javascript"
+			case ".css":
+				contentType = "text/css"
+			case ".json":
+				contentType = "application/json"
+			case ".woff", ".woff2":
+				contentType = "font/woff2"
+			case ".ttf":
+				contentType = "font/ttf"
+			case ".svg":
+				contentType = "image/svg+xml"
+			default:
+				contentType = "application/octet-stream"
+			}
+		}
+
+		// Set Content-Type header
+		if contentType != "" {
+			w.Header().Set("Content-Type", contentType)
+		}
+
+		// Serve the file
+		next.ServeHTTP(w, r)
+	})
 }
 
 // handleDashboard serves the main dashboard HTML
