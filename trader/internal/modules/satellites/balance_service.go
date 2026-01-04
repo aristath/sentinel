@@ -135,13 +135,18 @@ func (s *BalanceService) GetAllCurrencies() ([]string, error) {
 // Returns:
 //
 //	Map of bucket_id to map of currency -> balance
+//	Returns empty map if no buckets exist (fresh installation)
 func (s *BalanceService) GetPortfolioSummary() (map[string]map[string]float64, error) {
 	buckets, err := s.bucketRepo.GetAll()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get buckets: %w", err)
 	}
 
+	// Handle empty buckets (fresh installation)
 	summary := make(map[string]map[string]float64)
+	if len(buckets) == 0 {
+		return summary, nil
+	}
 
 	for _, bucket := range buckets {
 		balances, err := s.cashManager.GetAllCashBalances(bucket.ID)
@@ -149,6 +154,10 @@ func (s *BalanceService) GetPortfolioSummary() (map[string]map[string]float64, e
 			return nil, fmt.Errorf("failed to get balances for bucket %s: %w", bucket.ID, err)
 		}
 
+		// Initialize map for bucket if it doesn't exist
+		if summary[bucket.ID] == nil {
+			summary[bucket.ID] = make(map[string]float64)
+		}
 		summary[bucket.ID] = balances
 	}
 
