@@ -467,6 +467,45 @@ class SettingsModal extends HTMLElement {
                   </div>
                 </div>
 
+                <!-- API Credentials -->
+                <div class="bg-gray-800 border border-gray-700 rounded p-4">
+                  <h3 class="text-sm font-medium text-gray-300 uppercase tracking-wide mb-3">API Credentials</h3>
+                  <p class="text-xs text-gray-300 mb-4">Tradernet API credentials for trading and portfolio operations. Credentials are stored securely and passed with each request.</p>
+                  <div class="space-y-4">
+                    <div>
+                      <label class="block text-sm text-gray-300 mb-1">API Key</label>
+                      <input type="password"
+                             :value="$store.app.settings.tradernet_api_key || ''"
+                             @change="$store.app.updateSetting('tradernet_api_key', $event.target.value)"
+                             placeholder="Enter API key"
+                             class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500 font-mono">
+                    </div>
+                    <div>
+                      <label class="block text-sm text-gray-300 mb-1">API Secret</label>
+                      <input type="password"
+                             :value="$store.app.settings.tradernet_api_secret || ''"
+                             @change="$store.app.updateSetting('tradernet_api_secret', $event.target.value)"
+                             placeholder="Enter API secret"
+                             class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-blue-500 font-mono">
+                    </div>
+                    <div class="flex items-center gap-3">
+                      <button @click="$store.app.testTradernetConnection()"
+                              :disabled="$store.app.loading.tradernetTest"
+                              class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded transition-colors disabled:opacity-50">
+                        <span x-show="$store.app.loading.tradernetTest" class="inline-block animate-spin mr-1">&#9696;</span>
+                        <span x-text="$store.app.loading.tradernetTest ? 'Testing...' : 'Test Connection'"></span>
+                      </button>
+                      <div x-show="$store.app.tradernetConnectionStatus !== null" class="text-sm"
+                           :class="$store.app.tradernetConnectionStatus ? 'text-green-400' : 'text-red-400'">
+                        <span x-text="$store.app.tradernetConnectionStatus ? '✓ Connected' : '✗ Disconnected'"></span>
+                      </div>
+                    </div>
+                    <div class="mt-3 pt-3 border-t border-gray-700/50">
+                      <p class="text-xs text-gray-300">Credentials are automatically saved when changed. They will be used for all Tradernet API requests.</p>
+                    </div>
+                  </div>
+                </div>
+
                 <!-- Custom Grouping -->
                 <div class="bg-gray-800 border border-gray-700 rounded p-4">
                   <h3 class="text-sm font-medium text-gray-300 uppercase tracking-wide mb-3">Custom Grouping</h3>

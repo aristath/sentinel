@@ -21,6 +21,7 @@ document.addEventListener('alpine:init', () => {
     bucketBalances: {},  // {bucket_id: {EUR: 1000, USD: 500, ...}}
     selectedBucket: null,  // Currently selected bucket for health modal
     tradernet: { connected: false },
+    tradernetConnectionStatus: null,  // null, true, or false
     markets: {},  // {EU: {open: bool, ...}, US: {...}, ASIA: {...}}
     recommendations: null,  // Unified recommendations: {depth: int, steps: [], total_score_improvement: float, final_available_cash: float}
     plannerStatus: null,  // {has_sequences: bool, total_sequences: int, evaluated_count: int, is_planning: bool, is_finished: bool, progress_percentage: float}
@@ -90,7 +91,8 @@ document.addEventListener('alpine:init', () => {
       industrySave: false,
       securitySave: false,
       refreshData: false,
-      logs: false
+      logs: false,
+      tradernetTest: false
     },
 
     // SSE connections
@@ -405,6 +407,20 @@ document.addEventListener('alpine:init', () => {
 
 
     async updateSetting(key, value) {
+      // Handle string settings (like credentials)
+      const stringSettings = ['tradernet_api_key', 'tradernet_api_secret', 'trading_mode', 'display_mode'];
+      if (stringSettings.includes(key)) {
+        try {
+          await API.updateSetting(key, value);
+          this.settings[key] = value;
+          this.showMessage(`Setting "${key}" updated`, 'success');
+        } catch (e) {
+          this.showMessage(`Failed to update ${key}`, 'error');
+        }
+        return;
+      }
+
+      // Handle numeric settings
       const numValue = parseFloat(value);
       if (isNaN(numValue)) return;
       try {
@@ -413,6 +429,25 @@ document.addEventListener('alpine:init', () => {
         this.showMessage(`Setting "${key}" updated`, 'success');
       } catch (e) {
         this.showMessage(`Failed to update ${key}`, 'error');
+      }
+    },
+
+    async testTradernetConnection() {
+      this.loading.tradernetTest = true;
+      this.tradernetConnectionStatus = null;
+      try {
+        const result = await API.testTradernetConnection();
+        this.tradernetConnectionStatus = result.connected || false;
+        if (this.tradernetConnectionStatus) {
+          this.showMessage('Tradernet connection successful', 'success');
+        } else {
+          this.showMessage('Tradernet connection failed - check credentials', 'error');
+        }
+      } catch (e) {
+        this.tradernetConnectionStatus = false;
+        this.showMessage('Failed to test Tradernet connection', 'error');
+      } finally {
+        this.loading.tradernetTest = false;
       }
     },
 

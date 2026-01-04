@@ -105,13 +105,19 @@ const API = {
 
   // Settings
   fetchSettings: () => fetch('/api/settings').then(r => r.json()),
-  updateSetting: (key, value) => API._put(`/api/settings/${key}`, { value: parseFloat(value) }),
+  updateSetting: (key, value) => {
+    // Handle string settings vs numeric settings
+    const stringSettings = ['tradernet_api_key', 'tradernet_api_secret', 'trading_mode', 'display_mode'];
+    const finalValue = stringSettings.includes(key) ? value : parseFloat(value);
+    return API._put(`/api/settings/${key}`, { value: finalValue });
+  },
   getTradingMode: () => fetch('/api/settings/trading-mode').then(r => r.json()),
   toggleTradingMode: () => API._post('/api/settings/trading-mode'),
   restartService: () => API._post('/api/settings/restart-service'),
   restartSystem: () => API._post('/api/settings/restart'),
   resetCache: () => API._post('/api/settings/reset-cache'),
   rescheduleJobs: () => API._post('/api/settings/reschedule-jobs'),
+  testTradernetConnection: () => fetch('/api/status/tradernet').then(r => r.json()),
 
   // Planner
   regenerateSequences: () => API._post('/api/planner/regenerate-sequences'),
