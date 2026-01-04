@@ -149,9 +149,6 @@ func (s *Server) SetJobs(
 	healthCheck scheduler.Job,
 	syncCycle scheduler.Job,
 	dividendReinvest scheduler.Job,
-	satelliteMaintenance scheduler.Job,
-	satelliteReconciliation scheduler.Job,
-	satelliteEvaluation scheduler.Job,
 	plannerBatch scheduler.Job,
 	eventBasedTrading scheduler.Job,
 ) {
@@ -159,9 +156,6 @@ func (s *Server) SetJobs(
 		healthCheck,
 		syncCycle,
 		dividendReinvest,
-		satelliteMaintenance,
-		satelliteReconciliation,
-		satelliteEvaluation,
 		plannerBatch,
 		eventBasedTrading,
 	)
@@ -383,9 +377,6 @@ func (s *Server) setupSystemRoutes(r chi.Router) {
 			r.Post("/health-check", systemHandlers.HandleTriggerHealthCheck)
 			r.Post("/sync-cycle", systemHandlers.HandleTriggerSyncCycle)
 			r.Post("/dividend-reinvestment", systemHandlers.HandleTriggerDividendReinvestment)
-			r.Post("/satellite-maintenance", systemHandlers.HandleTriggerSatelliteMaintenance)
-			r.Post("/satellite-reconciliation", systemHandlers.HandleTriggerSatelliteReconciliation)
-			r.Post("/satellite-evaluation", systemHandlers.HandleTriggerSatelliteEvaluation)
 			r.Post("/planner-batch", systemHandlers.HandleTriggerPlannerBatch)
 			r.Post("/event-based-trading", systemHandlers.HandleTriggerEventBasedTrading)
 		})

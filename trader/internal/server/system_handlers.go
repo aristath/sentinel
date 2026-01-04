@@ -32,14 +32,11 @@ type SystemHandlers struct {
 	tradernetClient         *tradernet.Client
 	currencyExchangeService *services.CurrencyExchangeService
 	// Jobs (will be set after job registration in main.go)
-	healthCheckJob             scheduler.Job
-	syncCycleJob               scheduler.Job
-	dividendReinvestJob        scheduler.Job
-	satelliteMaintenanceJob    scheduler.Job
-	satelliteReconciliationJob scheduler.Job
-	satelliteEvaluationJob     scheduler.Job
-	plannerBatchJob            scheduler.Job
-	eventBasedTradingJob       scheduler.Job
+	healthCheckJob       scheduler.Job
+	syncCycleJob         scheduler.Job
+	dividendReinvestJob  scheduler.Job
+	plannerBatchJob      scheduler.Job
+	eventBasedTradingJob scheduler.Job
 }
 
 // NewSystemHandlers creates a new system handlers instance
@@ -89,18 +86,12 @@ func (h *SystemHandlers) SetJobs(
 	healthCheck scheduler.Job,
 	syncCycle scheduler.Job,
 	dividendReinvest scheduler.Job,
-	satelliteMaintenance scheduler.Job,
-	satelliteReconciliation scheduler.Job,
-	satelliteEvaluation scheduler.Job,
 	plannerBatch scheduler.Job,
 	eventBasedTrading scheduler.Job,
 ) {
 	h.healthCheckJob = healthCheck
 	h.syncCycleJob = syncCycle
 	h.dividendReinvestJob = dividendReinvest
-	h.satelliteMaintenanceJob = satelliteMaintenance
-	h.satelliteReconciliationJob = satelliteReconciliation
-	h.satelliteEvaluationJob = satelliteEvaluation
 	h.plannerBatchJob = plannerBatch
 	h.eventBasedTradingJob = eventBasedTrading
 }
@@ -1003,99 +994,6 @@ func (h *SystemHandlers) HandleTriggerDividendReinvestment(w http.ResponseWriter
 	h.writeJSON(w, map[string]string{
 		"status":  "success",
 		"message": "Dividend reinvestment triggered successfully",
-	})
-}
-
-// HandleTriggerSatelliteMaintenance triggers the satellite maintenance job immediately
-// POST /api/jobs/satellite-maintenance
-func (h *SystemHandlers) HandleTriggerSatelliteMaintenance(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	if h.satelliteMaintenanceJob == nil {
-		h.log.Warn().Msg("Satellite maintenance job not registered yet")
-		h.writeJSON(w, map[string]string{
-			"status":  "error",
-			"message": "Satellite maintenance job not registered",
-		})
-		return
-	}
-
-	h.log.Info().Msg("Manual satellite maintenance triggered")
-
-	if err := h.scheduler.RunNow(h.satelliteMaintenanceJob); err != nil {
-		h.log.Error().Err(err).Msg("Failed to trigger satellite maintenance")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	h.writeJSON(w, map[string]string{
-		"status":  "success",
-		"message": "Satellite maintenance triggered successfully",
-	})
-}
-
-// HandleTriggerSatelliteReconciliation triggers the satellite reconciliation job immediately
-// POST /api/jobs/satellite-reconciliation
-func (h *SystemHandlers) HandleTriggerSatelliteReconciliation(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	if h.satelliteReconciliationJob == nil {
-		h.log.Warn().Msg("Satellite reconciliation job not registered yet")
-		h.writeJSON(w, map[string]string{
-			"status":  "error",
-			"message": "Satellite reconciliation job not registered",
-		})
-		return
-	}
-
-	h.log.Info().Msg("Manual satellite reconciliation triggered")
-
-	if err := h.scheduler.RunNow(h.satelliteReconciliationJob); err != nil {
-		h.log.Error().Err(err).Msg("Failed to trigger satellite reconciliation")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	h.writeJSON(w, map[string]string{
-		"status":  "success",
-		"message": "Satellite reconciliation triggered successfully",
-	})
-}
-
-// HandleTriggerSatelliteEvaluation triggers the satellite evaluation job immediately
-// POST /api/jobs/satellite-evaluation
-func (h *SystemHandlers) HandleTriggerSatelliteEvaluation(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	if h.satelliteEvaluationJob == nil {
-		h.log.Warn().Msg("Satellite evaluation job not registered yet")
-		h.writeJSON(w, map[string]string{
-			"status":  "error",
-			"message": "Satellite evaluation job not registered",
-		})
-		return
-	}
-
-	h.log.Info().Msg("Manual satellite evaluation triggered")
-
-	if err := h.scheduler.RunNow(h.satelliteEvaluationJob); err != nil {
-		h.log.Error().Err(err).Msg("Failed to trigger satellite evaluation")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	h.writeJSON(w, map[string]string{
-		"status":  "success",
-		"message": "Satellite evaluation triggered successfully",
 	})
 }
 

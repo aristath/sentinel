@@ -225,9 +225,6 @@ func main() {
 		jobs.HealthCheck,
 		jobs.SyncCycle,
 		jobs.DividendReinvest,
-		jobs.SatelliteMaintenance,
-		jobs.SatelliteReconciliation,
-		jobs.SatelliteEvaluation,
 		jobs.PlannerBatch,
 		jobs.EventBasedTrading,
 	)
@@ -309,14 +306,11 @@ func (a *balanceServiceAdapter) AllocateDeposit(amount float64, currency, descri
 // JobInstances holds references to all registered jobs for manual triggering
 type JobInstances struct {
 	// Original jobs
-	HealthCheck             scheduler.Job
-	SyncCycle               scheduler.Job
-	DividendReinvest        scheduler.Job
-	SatelliteMaintenance    scheduler.Job
-	SatelliteReconciliation scheduler.Job
-	SatelliteEvaluation     scheduler.Job
-	PlannerBatch            scheduler.Job
-	EventBasedTrading       scheduler.Job
+	HealthCheck       scheduler.Job
+	SyncCycle         scheduler.Job
+	DividendReinvest  scheduler.Job
+	PlannerBatch      scheduler.Job
+	EventBasedTrading scheduler.Job
 
 	// Reliability jobs (Phase 11-15)
 	HistoryCleanup     scheduler.Job
@@ -354,12 +348,9 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 	// Cash security manager (cash-as-positions architecture)
 	cashManager := cash_flows.NewCashSecurityManager(securityRepo, positionRepo, bucketRepo, universeDB.Conn(), portfolioDB.Conn(), log)
 
-	// Satellite services
+	// Satellite services (still needed for cash flows and trade execution)
 	tradeRepo := trading.NewTradeRepository(ledgerDB.Conn(), log)
 	balanceService := satellites.NewBalanceService(cashManager, balanceRepo, bucketRepo, log)
-	bucketService := satellites.NewBucketService(bucketRepo, balanceService, balanceRepo, currencyExchangeService, log)
-	metaAllocator := satellites.NewMetaAllocator(bucketService, balanceService, balanceRepo, tradeRepo, log)
-	reconciliationService := satellites.NewReconciliationService(balanceService, balanceRepo, bucketRepo, log)
 
 	// Trading and portfolio services
 	// Trade safety service with all validation layers
@@ -573,24 +564,6 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 		return nil, fmt.Errorf("failed to register dividend_reinvestment job: %w", err)
 	}
 
-	// Register Job 4: Satellite Maintenance (daily at 11:00 AM)
-	satelliteMaintenance := scheduler.NewSatelliteMaintenanceJob(log, bucketService, positionRepo)
-	if err := sched.AddJob("0 0 11 * * *", satelliteMaintenance); err != nil {
-		return nil, fmt.Errorf("failed to register satellite_maintenance job: %w", err)
-	}
-
-	// Register Job 5: Satellite Reconciliation (daily at 11:30 PM)
-	satelliteReconciliation := scheduler.NewSatelliteReconciliationJob(log, tradernetClient, reconciliationService)
-	if err := sched.AddJob("0 30 23 * * *", satelliteReconciliation); err != nil {
-		return nil, fmt.Errorf("failed to register satellite_reconciliation job: %w", err)
-	}
-
-	// Register Job 6: Satellite Evaluation (weekly on Sunday at 3:00 AM)
-	satelliteEvaluation := scheduler.NewSatelliteEvaluationJob(log, metaAllocator)
-	if err := sched.AddJob("0 0 3 * * 0", satelliteEvaluation); err != nil {
-		return nil, fmt.Errorf("failed to register satellite_evaluation job: %w", err)
-	}
-
 	// Planning module repositories and services
 	plannerConfigRepo := planningrepo.NewConfigRepository(configDB, log)
 	opportunitiesService := opportunities.NewService(log)
@@ -716,18 +689,15 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 		return nil, fmt.Errorf("failed to register monthly_maintenance job: %w", err)
 	}
 
-	log.Info().Int("jobs", 16).Msg("Background jobs registered successfully")
+	log.Info().Int("jobs", 13).Msg("Background jobs registered successfully")
 
 	return &JobInstances{
 		// Original jobs
-		HealthCheck:             healthCheck,
-		SyncCycle:               syncCycle,
-		DividendReinvest:        dividendReinvest,
-		SatelliteMaintenance:    satelliteMaintenance,
-		SatelliteReconciliation: satelliteReconciliation,
-		SatelliteEvaluation:     satelliteEvaluation,
-		PlannerBatch:            plannerBatch,
-		EventBasedTrading:       eventBasedTrading,
+		HealthCheck:       healthCheck,
+		SyncCycle:         syncCycle,
+		DividendReinvest:  dividendReinvest,
+		PlannerBatch:      plannerBatch,
+		EventBasedTrading: eventBasedTrading,
 
 		// Reliability jobs
 		HistoryCleanup:     historyCleanup,
