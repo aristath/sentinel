@@ -12,6 +12,7 @@ import (
 	"github.com/aristath/arduino-trader/internal/database"
 	"github.com/aristath/arduino-trader/internal/modules/cash_utils"
 	"github.com/aristath/arduino-trader/internal/modules/display"
+	"github.com/aristath/arduino-trader/internal/modules/settings"
 	"github.com/aristath/arduino-trader/internal/scheduler"
 	"github.com/aristath/arduino-trader/internal/services"
 	"github.com/rs/zerolog"
@@ -436,6 +437,23 @@ func (h *SystemHandlers) HandleTradernetStatus(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// Get credentials from settings database to ensure we use the latest values
+	settingsRepo := settings.NewRepository(h.configDB.Conn(), h.log)
+	apiKey, err := settingsRepo.Get("tradernet_api_key")
+	if err != nil {
+		h.log.Warn().Err(err).Msg("Failed to get tradernet_api_key from settings")
+	}
+	apiSecret, err := settingsRepo.Get("tradernet_api_secret")
+	if err != nil {
+		h.log.Warn().Err(err).Msg("Failed to get tradernet_api_secret from settings")
+	}
+
+	// Update client credentials if available
+	if apiKey != nil && apiSecret != nil && *apiKey != "" && *apiSecret != "" {
+		h.tradernetClient.SetCredentials(*apiKey, *apiSecret)
+		h.log.Debug().Msg("Updated Tradernet client credentials from settings")
+	}
+
 	healthResult, err := h.tradernetClient.HealthCheck()
 	if err != nil {
 		h.log.Error().Err(err).Msg("Failed to check Tradernet health")
@@ -448,7 +466,13 @@ func (h *SystemHandlers) HandleTradernetStatus(w http.ResponseWriter, r *http.Re
 	response.Connected = healthResult.Connected
 	response.LastCheck = healthResult.Timestamp
 	if !healthResult.Connected {
-		response.Message = "Tradernet service is not connected"
+		if apiKey == nil || apiSecret == nil || *apiKey == "" || *apiSecret == "" {
+			response.Message = "Tradernet API credentials not configured"
+		} else {
+			response.Message = "Tradernet service is not connected - check credentials"
+		}
+	} else {
+		response.Message = "Tradernet service is connected"
 	}
 
 	w.Header().Set("Content-Type", "application/json")
