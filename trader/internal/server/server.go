@@ -813,9 +813,12 @@ func (s *Server) setupCashFlowsRoutes(r chi.Router) {
 	tradernetClient.SetCredentials(s.cfg.TradernetAPIKey, s.cfg.TradernetAPISecret)
 	tradernetAdapter := cash_flows.NewTradernetAdapter(tradernetClient)
 
-	// Initialize deposit processor (BalanceService integration will be added when satellites module is migrated)
-	// For now, using nil BalanceService - deposits won't be allocated but won't fail either
-	depositProcessor := cash_flows.NewDepositProcessor(nil, s.log)
+	// Initialize deposit processor (uses CashSecurityManager directly)
+	// Create a cash manager for cash flows routes
+	positionRepo := portfolio.NewPositionRepository(s.portfolioDB.Conn(), s.universeDB.Conn(), s.log)
+	securityRepoForCashFlows := universe.NewSecurityRepository(s.universeDB.Conn(), s.log)
+	cashManagerForCashFlows := cash_flows.NewCashSecurityManager(securityRepoForCashFlows, positionRepo, s.universeDB.Conn(), s.portfolioDB.Conn(), s.log)
+	depositProcessor := cash_flows.NewDepositProcessor(cashManagerForCashFlows, s.log)
 
 	// Note: DividendCreator and sync job will be set up separately when scheduling background jobs
 	// For now, the API endpoints are fully functional

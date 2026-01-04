@@ -347,9 +347,8 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 	// 3. Create dividend creator
 	dividendCreator := cash_flows.NewDividendCreator(dividendService, log)
 
-	// 4. Create deposit processor (simplified - no bucket allocation for now)
-	// TODO: Implement simplified deposit allocation using CashSecurityManager directly
-	depositProcessor := cash_flows.NewDepositProcessor(nil, log)
+	// 4. Create deposit processor (simplified - uses CashSecurityManager directly)
+	depositProcessor := cash_flows.NewDepositProcessor(cashManager, log)
 
 	// 6. Create Tradernet adapter (adapts tradernet.Client to cash_flows.TradernetClient)
 	tradernetAdapter := cash_flows.NewTradernetAdapter(tradernetClient)

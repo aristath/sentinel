@@ -7,49 +7,59 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// DepositProcessor processes deposits by allocating across satellite buckets
-// Faithful translation from Python: app/modules/cash_flows/services/deposit_processor.py
+// DepositProcessor processes deposits by updating cash positions
+// Simplified to use CashSecurityManager directly (no bucket allocation)
 type DepositProcessor struct {
-	balanceService BalanceService
-	log            zerolog.Logger
-}
-
-// BalanceService interface for dependency injection
-type BalanceService interface {
-	AllocateDeposit(amount float64, currency, description string) (map[string]interface{}, error)
+	cashManager *CashSecurityManager
+	log         zerolog.Logger
 }
 
 // NewDepositProcessor creates a new deposit processor
-func NewDepositProcessor(balanceService BalanceService, log zerolog.Logger) *DepositProcessor {
+func NewDepositProcessor(cashManager *CashSecurityManager, log zerolog.Logger) *DepositProcessor {
 	return &DepositProcessor{
-		balanceService: balanceService,
-		log:            log.With().Str("service", "deposit_processor").Logger(),
+		cashManager: cashManager,
+		log:         log.With().Str("service", "deposit_processor").Logger(),
 	}
 }
 
-// ProcessDeposit processes a deposit and allocates across buckets
+// ProcessDeposit processes a deposit by updating the cash position
+// Returns a simple map with the total amount for backward compatibility
 func (p *DepositProcessor) ProcessDeposit(
 	amount float64,
 	currency string,
 	transactionID *string,
 	description *string,
 ) (map[string]interface{}, error) {
-	desc := ""
-	if description != nil {
-		desc = *description
+	if p.cashManager == nil {
+		p.log.Warn().Msg("CashSecurityManager not available, skipping deposit processing")
+		return map[string]interface{}{"total": amount}, nil
 	}
 
-	result, err := p.balanceService.AllocateDeposit(amount, currency, desc)
+	// Get current balance
+	currentBalance, err := p.cashManager.GetCashBalance("core", currency)
 	if err != nil {
-		p.log.Error().Err(err).Msg("Failed to allocate deposit")
-		return nil, fmt.Errorf("failed to allocate deposit: %w", err)
+		p.log.Error().Err(err).Msg("Failed to get current cash balance")
+		return nil, fmt.Errorf("failed to get current cash balance: %w", err)
+	}
+
+	// Update cash position with new total
+	newBalance := currentBalance + amount
+	err = p.cashManager.UpdateCashPosition("core", currency, newBalance)
+	if err != nil {
+		p.log.Error().Err(err).Msg("Failed to update cash position")
+		return nil, fmt.Errorf("failed to update cash position: %w", err)
+	}
+
+	result := map[string]interface{}{
+		"total": newBalance,
 	}
 
 	p.log.Info().
 		Float64("amount", amount).
 		Str("currency", currency).
-		Interface("allocations", result).
-		Msg("Deposit processed and allocated")
+		Float64("previous_balance", currentBalance).
+		Float64("new_balance", newBalance).
+		Msg("Deposit processed and cash position updated")
 
 	return result, nil
 }
