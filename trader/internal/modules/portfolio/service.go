@@ -240,13 +240,119 @@ func (s *PortfolioService) aggregatePositionValues(positions []PositionWithSecur
 // Faithful translation of Python: def _calculate_position_value(self, pos: dict) -> float
 func (s *PortfolioService) calculatePositionValue(pos PositionWithSecurity) float64 {
 	eurValue := pos.MarketValueEUR
-	if eurValue == 0 {
+
+	// If market_value_eur is 0 or currency is not EUR, calculate from quantity and price
+	if eurValue == 0 || pos.Currency != "EUR" {
 		price := pos.CurrentPrice
 		if price == 0 {
 			price = pos.AvgPrice
 		}
-		eurValue = pos.Quantity * price
+
+		if price == 0 {
+			// Fallback to market_value_eur even if it might be in wrong currency
+			return eurValue
+		}
+
+		// Calculate value in position's currency
+		valueInCurrency := pos.Quantity * price
+
+		// If already EUR or no currency conversion needed
+		if pos.Currency == "EUR" || pos.Currency == "" {
+			return valueInCurrency
+		}
+
+		// Convert to EUR using currency_rate if available
+		if pos.CurrencyRate > 0 && pos.CurrencyRate != 1.0 {
+			eurValue = valueInCurrency / pos.CurrencyRate
+		} else {
+			// Try to get exchange rate from service
+			if s.currencyExchangeService != nil {
+				rate, err := s.currencyExchangeService.GetRate(pos.Currency, "EUR")
+				if err == nil && rate > 0 {
+					eurValue = valueInCurrency * rate
+				} else {
+					// Use fallback rates
+					switch pos.Currency {
+					case "USD":
+						eurValue = valueInCurrency * 0.9
+					case "GBP":
+						eurValue = valueInCurrency * 1.2
+					case "HKD":
+						eurValue = valueInCurrency * 0.11
+					default:
+						s.log.Warn().
+							Str("currency", pos.Currency).
+							Str("symbol", pos.Symbol).
+							Msg("Unknown currency, using market_value_eur as-is (may be incorrect)")
+						// Use stored market_value_eur if available, otherwise assume same as calculated
+						if eurValue == 0 {
+							eurValue = valueInCurrency
+						}
+					}
+				}
+			} else {
+				// No exchange service, use fallback rates
+				switch pos.Currency {
+				case "USD":
+					eurValue = valueInCurrency * 0.9
+				case "GBP":
+					eurValue = valueInCurrency * 1.2
+				case "HKD":
+					eurValue = valueInCurrency * 0.11
+				default:
+					s.log.Warn().
+						Str("currency", pos.Currency).
+						Str("symbol", pos.Symbol).
+						Msg("Unknown currency, using market_value_eur as-is (may be incorrect)")
+					if eurValue == 0 {
+						eurValue = valueInCurrency
+					}
+				}
+			}
+		}
+	} else if pos.Currency != "EUR" && pos.Currency != "" {
+		// market_value_eur exists but position is not EUR - need to convert
+		// This handles the case where market_value_eur is stored in wrong currency
+		if s.currencyExchangeService != nil {
+			rate, err := s.currencyExchangeService.GetRate(pos.Currency, "EUR")
+			if err == nil && rate > 0 {
+				eurValue = eurValue * rate
+			} else {
+				// Use fallback rates
+				switch pos.Currency {
+				case "USD":
+					eurValue = eurValue * 0.9
+				case "GBP":
+					eurValue = eurValue * 1.2
+				case "HKD":
+					eurValue = eurValue * 0.11
+				default:
+					s.log.Warn().
+						Str("currency", pos.Currency).
+						Str("symbol", pos.Symbol).
+						Float64("market_value_eur", eurValue).
+						Msg("Unknown currency, using market_value_eur as-is (may be incorrect)")
+				}
+			}
+		} else {
+			// No exchange service, use fallback rates
+			switch pos.Currency {
+			case "USD":
+				eurValue = eurValue * 0.9
+			case "GBP":
+				eurValue = eurValue * 1.2
+			case "HKD":
+				eurValue = eurValue * 0.11
+			default:
+				s.log.Warn().
+					Str("currency", pos.Currency).
+					Str("symbol", pos.Symbol).
+					Float64("market_value_eur", eurValue).
+					Msg("Unknown currency, using market_value_eur as-is (may be incorrect)")
+			}
+		}
 	}
+
 	return eurValue
 }
 
