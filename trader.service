@@ -1,0 +1,32 @@
+[Unit]
+Description=Arduino Trader Go Service
+Documentation=https://github.com/aristath/arduino-trader
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=arduino
+Group=arduino
+WorkingDirectory=/opt/arduino-trader
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=-/opt/arduino-trader/.env
+ExecStart=/opt/arduino-trader/trader
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=trader
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Resource limits (adjust as needed for your hardware)
+MemoryMax=2G
+CPUQuota=50%
+
+[Install]
+WantedBy=multi-user.target

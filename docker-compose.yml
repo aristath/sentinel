@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  pypfopt:
+    build:
+      context: ./microservices/pypfopt
+      dockerfile: Dockerfile
+    container_name: pypfopt-service
+    ports:
+      - "9001:9001"
+    environment:
+      - LOG_LEVEL=INFO
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9001/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  tradernet:
+    build:
+      context: ./microservices/tradernet
+      dockerfile: Dockerfile
+    container_name: tradernet-service
+    ports:
+      - "9002:9001"
+    environment:
+      - PORT=9001
+      - LOG_LEVEL=INFO
+      - TRADERNET_API_KEY=${TRADERNET_API_KEY:-}
+      - TRADERNET_API_SECRET=${TRADERNET_API_SECRET:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:9001/health').raise_for_status()"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
