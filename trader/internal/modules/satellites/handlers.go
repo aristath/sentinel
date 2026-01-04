@@ -221,7 +221,10 @@ func (h *Handlers) ListBuckets(w http.ResponseWriter, r *http.Request) {
 	buckets, err := h.bucketService.GetAllBuckets()
 	if err != nil {
 		h.log.Error().Err(err).Msg("Failed to list buckets")
-		respondError(w, http.StatusInternalServerError, "Failed to list buckets")
+		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"error":  "Failed to list buckets",
+			"detail": err.Error(),
+		})
 		return
 	}
 
@@ -503,7 +506,10 @@ func (h *Handlers) GetBalanceSummary(w http.ResponseWriter, r *http.Request) {
 	summary, err := h.balanceService.GetPortfolioSummary()
 	if err != nil {
 		h.log.Error().Err(err).Msg("Failed to get balance summary")
-		respondError(w, http.StatusInternalServerError, "Failed to get balance summary")
+		respondJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"error":  "Failed to get balance summary",
+			"detail": err.Error(),
+		})
 		return
 	}
 
