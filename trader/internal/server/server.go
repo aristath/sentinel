@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -254,9 +256,27 @@ func (s *Server) setupRoutes() {
 	// Mounted directly under /api/v1 for Python client compatibility
 	s.setupEvaluationRoutes(s.router)
 
-	// Serve static files (for dashboard)
-	fileServer := http.FileServer(http.Dir("./static"))
-	s.router.Handle("/static/*", http.StripPrefix("/static/", fileServer))
+	// Serve built frontend files (from frontend/dist)
+	// First try to serve from frontend/dist (built React app)
+	// Fall back to static/ for backwards compatibility during migration
+	frontendDir := "./frontend/dist"
+	if _, err := os.Stat(frontendDir); err == nil {
+		// Serve built frontend assets
+		fileServer := http.FileServer(http.Dir(frontendDir))
+		s.router.Handle("/assets/*", http.StripPrefix("/assets/", fileServer))
+		// Serve index.html for all non-API routes (SPA routing)
+		s.router.NotFound(func(w http.ResponseWriter, r *http.Request) {
+			if !strings.HasPrefix(r.URL.Path, "/api") {
+				http.ServeFile(w, r, filepath.Join(frontendDir, "index.html"))
+			} else {
+				http.NotFound(w, r)
+			}
+		})
+	} else {
+		// Fallback to old static directory during migration
+		fileServer := http.FileServer(http.Dir("./static"))
+		s.router.Handle("/static/*", http.StripPrefix("/static/", fileServer))
+	}
 }
 
 // setupSystemRoutes configures system monitoring and operations routes
@@ -1035,6 +1055,13 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 // handleDashboard serves the main dashboard HTML
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
+	// Try to serve from frontend/dist first (built React app)
+	frontendIndex := "./frontend/dist/index.html"
+	if _, err := os.Stat(frontendIndex); err == nil {
+		http.ServeFile(w, r, frontendIndex)
+		return
+	}
+	// Fallback to old static directory during migration
 	http.ServeFile(w, r, "./static/index.html")
 }
 
