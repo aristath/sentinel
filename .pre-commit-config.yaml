@@ -77,7 +77,7 @@ repos:
     hooks:
       - id: golangci-lint
         name: golangci-lint
-        entry: bash -c 'cd trader && golangci-lint run --timeout=5m ./...'
+        entry: bash -c 'export PATH="$(go env GOPATH)/bin:$PATH" && cd trader && golangci-lint run --timeout=5m ./...'
         language: system
         files: ^trader/.*\.go$
         pass_filenames: false

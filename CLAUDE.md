@@ -30,9 +30,9 @@ This is an autonomous portfolio management system that manages my retirement fun
 
 ### Clean Architecture - Strictly Enforced
 - **Domain layer is pure**: No imports from infrastructure, repositories, or external APIs
-- **Dependency flows inward**: API → Application → Domain
+- **Dependency flows inward**: Handlers → Services → Repositories → Domain
 - **Repository pattern**: All data access through interfaces
-- **Dependency injection**: FastAPI `Depends()` for dependencies
+- **Dependency injection**: Constructor injection only
 
 ### When Touching Existing Violations
 The codebase has documented violations in the README.md Architecture section. Before fixing or extending them, ask.
@@ -40,35 +40,42 @@ The codebase has documented violations in the README.md Architecture section. Be
 ## Code Style
 
 ### Types
-```python
-# Use Optional[T]
-def get_security(symbol: str) -> Optional[Security]:
+```go
+// Use explicit types, avoid interface{} when possible
+func GetSecurity(id int64) (*domain.Security, error) {
+    // ...
+}
 ```
 
-### I/O
-All I/O operations are async.
+### Error Handling
+- Return errors, don't panic
+- Wrap errors with context: `fmt.Errorf("failed to fetch security: %w", err)`
+- Use structured logging with zerolog
 
 ### Imports
 - Explicit only, no wildcards
-- isort with black profile
+- Group: stdlib, third-party, local
+- Use `goimports` for formatting
 
 ### Naming
 - Clarity over brevity
-- `calculate_portfolio_allocation` not `calc_alloc`
+- `CalculatePortfolioAllocation` not `CalcAlloc`
+- Use camelCase for unexported, PascalCase for exported
 
 ## Error Handling
 
-- Use `ServiceResult` / `CalculationResult` for operations that can fail
-- Raise domain exceptions, catch at API layer
-- Log with context
+- Return errors from functions, don't panic
+- Wrap errors with context using `fmt.Errorf` with `%w` verb
+- Log errors with structured logging (zerolog)
 - Degrade gracefully - partial results over total failure
 
 ## Testing
 
 - Unit tests for domain logic (no DB, no network)
-- Integration tests for APIs
+- Integration tests for APIs and repositories
 - Tests before implementation for new features
 - Never decrease coverage
+- Use `testify` for assertions
 
 ## Deployment
 
@@ -80,8 +87,9 @@ Runs on Arduino Uno Q:
 ## Commands
 
 ```bash
-pytest                 # Run tests
-make format           # Black + isort
-make lint             # Flake8 + mypy
-make check            # All checks
+go test ./...          # Run all tests
+go test -cover ./...   # Run tests with coverage
+go fmt ./...           # Format code
+go vet ./...           # Run go vet
+golangci-lint run      # Run linter
 ```
