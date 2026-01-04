@@ -2,6 +2,7 @@ package display
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -37,12 +38,12 @@ func (s *PortfolioPerformanceService) CalculateWeightedPerformance() (float64, e
 
 	// Calculate both metrics
 	trailing12mo, err := s.CalculateTrailing12MoReturn()
-	if err != nil && err != sql.ErrNoRows {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		s.log.Warn().Err(err).Msg("Error calculating trailing 12mo return")
 	}
 
 	sinceInception, err := s.CalculateSinceInceptionCAGR()
-	if err != nil && err != sql.ErrNoRows {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		s.log.Warn().Err(err).Msg("Error calculating since-inception CAGR")
 	}
 
