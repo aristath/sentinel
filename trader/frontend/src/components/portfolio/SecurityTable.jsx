@@ -75,9 +75,6 @@ export function SecurityTable() {
           Security Universe
         </Text>
         <Group gap="xs">
-          <Button size="xs" variant="light" onClick={openUniverseManagementModal}>
-            Manage Universe
-          </Button>
           <Button size="xs" onClick={openAddSecurityModal}>
             + Add Security
           </Button>
