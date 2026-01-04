@@ -139,7 +139,7 @@ export function PlannerManagementModal() {
             </Alert>
           )}
 
-          <Tabs value={activeTab} onTabChange={setActiveTab}>
+          <Tabs value={activeTab} onChange={setActiveTab}>
             <Tabs.List grow>
               <Tabs.Tab value="general">General</Tabs.Tab>
               <Tabs.Tab value="planner">Planner</Tabs.Tab>

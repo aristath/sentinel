@@ -84,7 +84,7 @@ export function SettingsModal() {
       size="xl"
       styles={{ body: { padding: 0 } }}
     >
-      <Tabs value={activeTab} onTabChange={setActiveTab}>
+      <Tabs value={activeTab} onChange={setActiveTab}>
         <Tabs.List grow>
           <Tabs.Tab value="trading">Trading</Tabs.Tab>
           <Tabs.Tab value="portfolio">Portfolio</Tabs.Tab>
