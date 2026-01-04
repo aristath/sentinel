@@ -4,6 +4,13 @@ export const theme = createTheme({
   primaryColor: 'blue',
   defaultRadius: 'md',
   fontFamily: 'system-ui, -apple-system, sans-serif',
+  fontSizes: {
+    xs: '0.875rem',   // 14px - minimum size
+    sm: '1rem',       // 16px - most text
+    md: '1.125rem',   // 18px
+    lg: '1.25rem',    // 20px
+    xl: '1.5rem',     // 24px
+  },
   headings: {
     fontFamily: 'system-ui, -apple-system, sans-serif',
   },

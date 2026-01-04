@@ -139,12 +139,12 @@ export function renderDiffHTML(diff, oldLabel, newLabel) {
   });
 
   let html = `
-    <div style="margin-bottom: 8px; font-size: 12px; display: flex; justify-content: space-between;">
+    <div style="margin-bottom: 8px; font-size: 0.875rem; display: flex; justify-content: space-between;">
       <span style="color: var(--mantine-color-red-4);">${escapeHtml(oldLabel)}</span>
       <span style="color: var(--mantine-color-dimmed);">→</span>
       <span style="color: var(--mantine-color-green-4);">${escapeHtml(newLabel)}</span>
     </div>
-    <div style="border: 1px solid var(--mantine-color-dark-4); border-radius: 4px; background: var(--mantine-color-dark-8); overflow: auto; max-height: 400px; font-family: monospace; font-size: 12px;">
+    <div style="border: 1px solid var(--mantine-color-dark-4); border-radius: 4px; background: var(--mantine-color-dark-8); overflow: auto; max-height: 400px; font-family: monospace; font-size: 0.875rem;">
   `;
 
   const sortedLines = Array.from(linesToShow).sort((a, b) => a - b);
@@ -183,7 +183,7 @@ export function renderDiffHTML(diff, oldLabel, newLabel) {
 
   html += `
     </div>
-    <div style="margin-top: 8px; font-size: 12px; color: var(--mantine-color-dimmed);">
+    <div style="margin-top: 8px; font-size: 0.875rem; color: var(--mantine-color-dimmed);">
       <span style="color: var(--mantine-color-green-4);">+</span> Added
       &nbsp;&nbsp;
       <span style="color: var(--mantine-color-red-4);">-</span> Removed

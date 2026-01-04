@@ -372,7 +372,7 @@ export function PlannerManagementModal() {
                   onChange={(e) => setPlannerForm({ ...plannerForm, toml: e.currentTarget.value })}
                   placeholder="# Planner configuration in TOML format&#10;# Example:&#10;[planner]&#10;name = &quot;My Strategy&quot;&#10;&#10;[[calculators]]&#10;name = &quot;momentum&quot;&#10;# ... calculator configuration"
                   minRows={20}
-                  styles={{ input: { fontFamily: 'monospace', fontSize: '12px' } }}
+                  styles={{ input: { fontFamily: 'monospace', fontSize: '0.875rem' } }}
                 />
                 <Text size="xs" c="dimmed" mt="xs">
                   Configure planner modules, calculators, patterns, and generators in TOML format

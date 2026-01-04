@@ -14,7 +14,7 @@ export function SecuritySparkline({ symbol, hasPosition = false }) {
 
     const data = sparklines[symbol];
     if (!data || data.length < 2) {
-      containerRef.current.innerHTML = '<span style="color: var(--mantine-color-dimmed); font-size: 12px;">-</span>';
+      containerRef.current.innerHTML = '<span style="color: var(--mantine-color-dimmed); font-size: 0.875rem;">-</span>';
       return;
     }
 
@@ -64,7 +64,7 @@ export function SecuritySparkline({ symbol, hasPosition = false }) {
   }, [symbol, hasPosition, sparklines]);
 
   if (!symbol) {
-    return <span style={{ color: 'var(--mantine-color-dimmed)', fontSize: '12px' }}>-</span>;
+    return <span style={{ color: 'var(--mantine-color-dimmed)', fontSize: '0.875rem' }}>-</span>;
   }
 
   return <div ref={containerRef} style={{ display: 'inline-block' }} />;

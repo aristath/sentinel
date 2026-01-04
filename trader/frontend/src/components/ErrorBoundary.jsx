@@ -34,7 +34,7 @@ export class ErrorBoundary extends Component {
                     padding: '1rem',
                     borderRadius: '4px',
                     overflow: 'auto',
-                    fontSize: '12px'
+                    fontSize: '0.875rem'
                   }}>
                     {this.state.error.toString()}
                     {this.state.error.stack && `\n${this.state.error.stack}`}
