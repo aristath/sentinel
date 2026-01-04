@@ -30,3 +30,10 @@ type YahooClientInterface interface {
 type DBExecutor interface {
 	Exec(query string, args ...interface{}) (sql.Result, error)
 }
+
+// CurrencyExchangeServiceInterface defines the contract for currency exchange operations
+// Used by UniverseHandlers to enable testing with mocks
+// This interface avoids import cycles with the services package
+type CurrencyExchangeServiceInterface interface {
+	GetRate(fromCurrency, toCurrency string) (float64, error)
+}

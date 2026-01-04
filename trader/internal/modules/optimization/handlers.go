@@ -212,22 +212,21 @@ func (h *Handler) HandleRun(w http.ResponseWriter, r *http.Request) {
 // Helper methods for data fetching
 
 func (h *Handler) getSettings() (Settings, error) {
-	// Query settings from database
+	// Query optimizer_blend from planner_settings (moved from global settings)
+	// Other settings still come from settings table
 	query := `
 		SELECT
-			COALESCE((SELECT value FROM settings WHERE key = 'optimizer_blend'), '0.5') as blend,
+			COALESCE((SELECT optimizer_blend FROM planner_settings WHERE id = 'main'), 0.5) as blend,
 			COALESCE((SELECT value FROM settings WHERE key = 'optimizer_target_return'), '0.11') as target_return,
 			COALESCE((SELECT value FROM settings WHERE key = 'min_cash_reserve'), '500.0') as min_cash_reserve
 	`
 
-	var blendStr, targetReturnStr, minCashReserveStr string
-	err := h.db.QueryRow(query).Scan(&blendStr, &targetReturnStr, &minCashReserveStr)
+	var blend float64
+	var targetReturnStr, minCashReserveStr string
+	err := h.db.QueryRow(query).Scan(&blend, &targetReturnStr, &minCashReserveStr)
 	if err != nil {
 		return Settings{}, fmt.Errorf("failed to query settings: %w", err)
 	}
-
-	blend := 0.5
-	fmt.Sscanf(blendStr, "%f", &blend)
 
 	targetReturn := OptimizerTargetReturn
 	fmt.Sscanf(targetReturnStr, "%f", &targetReturn)

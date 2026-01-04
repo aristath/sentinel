@@ -15,7 +15,7 @@ async function fetchJSON(url, options = {}) {
     let errorMessage = `Request failed with status ${res.status}`;
     try {
       const errorData = await res.json();
-      errorMessage = errorData.detail || errorData.message || errorMessage;
+      errorMessage = errorData.detail || errorData.message || errorData.error || errorMessage;
     } catch (e) {
       errorMessage = res.statusText || errorMessage;
     }

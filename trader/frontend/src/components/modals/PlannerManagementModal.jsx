@@ -17,6 +17,10 @@ const DEFAULT_CONFIG = {
   transaction_cost_percent: 0.001,
   allow_sell: true,
   allow_buy: true,
+  min_hold_days: 90,
+  sell_cooldown_days: 180,
+  max_loss_threshold: -0.20,
+  max_sell_percentage: 0.20,
   // Opportunity Calculators
   enable_profit_taking_calc: true,
   enable_averaging_down_calc: true,
@@ -24,6 +28,8 @@ const DEFAULT_CONFIG = {
   enable_rebalance_sells_calc: true,
   enable_rebalance_buys_calc: true,
   enable_weight_based_calc: true,
+  // Portfolio optimizer
+  optimizer_blend: 0.5,
   // Pattern Generators
   enable_direct_buy_pattern: true,
   enable_profit_taking_pattern: true,
@@ -267,6 +273,106 @@ export function PlannerManagementModal() {
                         mb="xs"
                       />
                       <Text size="xs" c="dimmed">Weight for diversity in sequence selection (0.0 - 1.0)</Text>
+                    </div>
+                  </Stack>
+                </Paper>
+
+                <Paper p="md" withBorder>
+                  <Text size="sm" fw={500} mb="xs" tt="uppercase">Portfolio Optimizer</Text>
+                  <Stack gap="md">
+                    <div>
+                      <Group justify="space-between" mb="xs">
+                        <Text size="sm">Strategy Blend</Text>
+                        <Text size="sm" fw={500}>
+                          {(getConfigValue('optimizer_blend', 0.5) * 100).toFixed(0)}%
+                        </Text>
+                      </Group>
+                      <Group gap="xs" mb="xs">
+                        <Text size="xs" c="dimmed">MV</Text>
+                        <Slider
+                          value={getConfigValue('optimizer_blend', 0.5)}
+                          onChange={(val) => updateConfig('optimizer_blend', val)}
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          style={{ flex: 1 }}
+                        />
+                        <Text size="xs" c="dimmed">HRP</Text>
+                      </Group>
+                      <Text size="xs" c="dimmed">0% = Goal-directed (Mean-Variance), 100% = Robust (HRP)</Text>
+                    </div>
+                  </Stack>
+                </Paper>
+
+                <Paper p="md" withBorder>
+                  <Text size="sm" fw={500} mb="xs" tt="uppercase">Risk Management</Text>
+                  <Stack gap="md">
+                    <Group justify="space-between">
+                      <div>
+                        <Text size="sm">Min Hold Days</Text>
+                        <Text size="xs" c="dimmed">Minimum days a position must be held before selling</Text>
+                      </div>
+                      <NumberInput
+                        value={getConfigValue('min_hold_days', 90)}
+                        onChange={(val) => updateConfig('min_hold_days', val)}
+                        min={0}
+                        max={365}
+                        step={1}
+                        w={80}
+                        size="sm"
+                      />
+                    </Group>
+
+                    <Group justify="space-between">
+                      <div>
+                        <Text size="sm">Sell Cooldown Days</Text>
+                        <Text size="xs" c="dimmed">Days to wait after selling before buying again</Text>
+                      </div>
+                      <NumberInput
+                        value={getConfigValue('sell_cooldown_days', 180)}
+                        onChange={(val) => updateConfig('sell_cooldown_days', val)}
+                        min={0}
+                        max={365}
+                        step={1}
+                        w={80}
+                        size="sm"
+                      />
+                    </Group>
+
+                    <div>
+                      <Group justify="space-between" mb="xs">
+                        <Text size="sm">Max Loss Threshold</Text>
+                        <Text size="sm" fw={500}>
+                          {(getConfigValue('max_loss_threshold', -0.20) * 100).toFixed(0)}%
+                        </Text>
+                      </Group>
+                      <Slider
+                        value={getConfigValue('max_loss_threshold', -0.20)}
+                        onChange={(val) => updateConfig('max_loss_threshold', val)}
+                        min={-1.0}
+                        max={0.0}
+                        step={0.01}
+                        mb="xs"
+                      />
+                      <Text size="xs" c="dimmed">Maximum loss threshold before forced selling consideration (-100% to 0%)</Text>
+                    </div>
+
+                    <div>
+                      <Group justify="space-between" mb="xs">
+                        <Text size="sm">Max Sell Percentage</Text>
+                        <Text size="sm" fw={500}>
+                          {(getConfigValue('max_sell_percentage', 0.20) * 100).toFixed(0)}%
+                        </Text>
+                      </Group>
+                      <Slider
+                        value={getConfigValue('max_sell_percentage', 0.20)}
+                        onChange={(val) => updateConfig('max_sell_percentage', val)}
+                        min={0.01}
+                        max={1.0}
+                        step={0.01}
+                        mb="xs"
+                      />
+                      <Text size="xs" c="dimmed">Maximum percentage of position allowed to sell per transaction (1% to 100%)</Text>
                     </div>
                   </Stack>
                 </Paper>

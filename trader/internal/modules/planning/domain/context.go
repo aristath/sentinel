@@ -71,6 +71,17 @@ func NewOpportunityContext(
 	}
 }
 
+// ApplyConfig applies configuration values to the OpportunityContext.
+func (ctx *OpportunityContext) ApplyConfig(config *PlannerConfiguration) {
+	if config == nil {
+		return
+	}
+	ctx.TransactionCostFixed = config.TransactionCostFixed
+	ctx.TransactionCostPercent = config.TransactionCostPercent
+	ctx.AllowSell = config.AllowSell
+	ctx.AllowBuy = config.AllowBuy
+}
+
 // EvaluationContext contains all data needed to simulate and score action sequences.
 type EvaluationContext struct {
 	// Portfolio state (same as OpportunityContext)
@@ -118,6 +129,15 @@ func NewEvaluationContext(
 		TransactionCostFixed:   2.0,
 		TransactionCostPercent: 0.002,
 	}
+}
+
+// ApplyConfig applies configuration values to the EvaluationContext.
+func (ctx *EvaluationContext) ApplyConfig(config *PlannerConfiguration) {
+	if config == nil {
+		return
+	}
+	ctx.TransactionCostFixed = config.TransactionCostFixed
+	ctx.TransactionCostPercent = config.TransactionCostPercent
 }
 
 // PlanningContext combines opportunity and evaluation contexts with planner-specific settings.

@@ -92,6 +92,34 @@ func (v *Validator) Validate(config *domain.PlannerConfiguration) error {
 		})
 	}
 
+	if config.MinHoldDays < 0 || config.MinHoldDays > 365 {
+		errors = append(errors, ValidationError{
+			Field:   "min_hold_days",
+			Message: "must be between 0 and 365",
+		})
+	}
+
+	if config.SellCooldownDays < 0 || config.SellCooldownDays > 365 {
+		errors = append(errors, ValidationError{
+			Field:   "sell_cooldown_days",
+			Message: "must be between 0 and 365",
+		})
+	}
+
+	if config.MaxLossThreshold < -1.0 || config.MaxLossThreshold > 0.0 {
+		errors = append(errors, ValidationError{
+			Field:   "max_loss_threshold",
+			Message: "must be between -1.0 and 0.0",
+		})
+	}
+
+	if config.MaxSellPercentage < 0.01 || config.MaxSellPercentage > 1.0 {
+		errors = append(errors, ValidationError{
+			Field:   "max_sell_percentage",
+			Message: "must be between 0.01 and 1.0",
+		})
+	}
+
 	// Validate that at least one module is enabled in each category
 	enabledCalculators := config.GetEnabledCalculators()
 	if len(enabledCalculators) == 0 {

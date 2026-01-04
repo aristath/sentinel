@@ -62,7 +62,7 @@ func hashSequence(actions []domain.ActionCandidate) string {
 }
 
 // BatchEvaluate evaluates a batch of sequences directly (no HTTP overhead).
-func (s *Service) BatchEvaluate(ctx context.Context, sequences []domain.ActionSequence, portfolioHash string) ([]domain.EvaluationResult, error) {
+func (s *Service) BatchEvaluate(ctx context.Context, sequences []domain.ActionSequence, portfolioHash string, config *domain.PlannerConfiguration) ([]domain.EvaluationResult, error) {
 	if len(sequences) == 0 {
 		return nil, fmt.Errorf("no sequences to evaluate")
 	}
@@ -93,11 +93,16 @@ func (s *Service) BatchEvaluate(ctx context.Context, sequences []domain.ActionSe
 		evalSequences[i] = evalActions
 	}
 
-	// Create evaluation context with default values
-	// TODO: These should be configurable or passed from the planner
+	// Create evaluation context with config values
+	transactionCostFixed := 2.0
+	transactionCostPercent := 0.002
+	if config != nil {
+		transactionCostFixed = config.TransactionCostFixed
+		transactionCostPercent = config.TransactionCostPercent
+	}
 	evalContext := models.EvaluationContext{
-		TransactionCostFixed:   0.0,
-		TransactionCostPercent: 0.001, // 0.1% default
+		TransactionCostFixed:   transactionCostFixed,
+		TransactionCostPercent: transactionCostPercent,
 		// Portfolio context would need to be passed in for full evaluation
 		// For now, worker pool will handle basic evaluation
 	}
@@ -159,8 +164,8 @@ func (s *Service) BatchEvaluate(ctx context.Context, sequences []domain.ActionSe
 }
 
 // EvaluateSingleSequence evaluates a single sequence.
-func (s *Service) EvaluateSingleSequence(ctx context.Context, sequence domain.ActionSequence, portfolioHash string) (*domain.EvaluationResult, error) {
-	results, err := s.BatchEvaluate(ctx, []domain.ActionSequence{sequence}, portfolioHash)
+func (s *Service) EvaluateSingleSequence(ctx context.Context, sequence domain.ActionSequence, portfolioHash string, config *domain.PlannerConfiguration) (*domain.EvaluationResult, error) {
+	results, err := s.BatchEvaluate(ctx, []domain.ActionSequence{sequence}, portfolioHash, config)
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +185,8 @@ func (s *Service) BatchEvaluateWithOptions(ctx context.Context, sequences []doma
 	}
 
 	// For now, just use standard batch evaluation
-	return s.BatchEvaluate(ctx, sequences, portfolioHash)
+	// Note: opts doesn't contain config, so we use nil (will use defaults)
+	return s.BatchEvaluate(ctx, sequences, portfolioHash, nil)
 }
 
 // HealthCheck is no longer needed (no external service) but kept for interface compatibility.

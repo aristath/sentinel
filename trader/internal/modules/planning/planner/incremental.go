@@ -144,6 +144,7 @@ func (ip *IncrementalPlanner) GenerateBatch(
 			evalCtx,
 			batchSequences,
 			result.PortfolioHash,
+			config,
 		)
 		if err != nil {
 			ip.log.Error().Err(err).Int("batch_num", batchNum).Msg("Batch evaluation failed")

@@ -23,6 +23,15 @@ type PlannerConfiguration struct {
 	AllowSell bool `json:"allow_sell"`
 	AllowBuy  bool `json:"allow_buy"`
 
+	// Risk management settings
+	MinHoldDays       int     `json:"min_hold_days"`        // Minimum days a position must be held before selling
+	SellCooldownDays  int     `json:"sell_cooldown_days"`   // Days to wait after selling before buying again
+	MaxLossThreshold  float64 `json:"max_loss_threshold"`   // Maximum loss threshold before forced selling consideration
+	MaxSellPercentage float64 `json:"max_sell_percentage"`  // Maximum percentage of position allowed to sell per transaction
+
+	// Portfolio optimizer settings
+	OptimizerBlend float64 `json:"optimizer_blend"` // 0.0 = pure Mean-Variance, 1.0 = pure HRP
+
 	// Opportunity Calculator enabled flags
 	EnableProfitTakingCalc    bool `json:"enable_profit_taking_calc"`
 	EnableAveragingDownCalc   bool `json:"enable_averaging_down_calc"`
@@ -72,6 +81,11 @@ func NewDefaultConfiguration() *PlannerConfiguration {
 		TransactionCostPercent:      0.001,
 		AllowSell:                   true,
 		AllowBuy:                    true,
+		MinHoldDays:                 90,
+		SellCooldownDays:            180,
+		MaxLossThreshold:            -0.20,
+		MaxSellPercentage:           0.20,
+		OptimizerBlend:              0.5, // 50% MV, 50% HRP
 		// All modules enabled by default
 		EnableProfitTakingCalc:               true,
 		EnableAveragingDownCalc:              true,
@@ -219,15 +233,23 @@ func (c *PlannerConfiguration) GetPatternParams(name string) map[string]interfac
 }
 
 // GetGeneratorParams returns parameters for a specific generator.
-// Simplified: Returns empty map since we no longer store module-specific parameters.
 func (c *PlannerConfiguration) GetGeneratorParams(name string) map[string]interface{} {
-	// Parameters removed in simplified version - return empty map
-	return make(map[string]interface{})
+	params := make(map[string]interface{})
+	// MaxDepth applies to all generators
+	params["max_depth"] = float64(c.MaxDepth)
+	return params
 }
 
 // GetFilterParams returns parameters for a specific filter.
-// Simplified: Returns empty map since we no longer store module-specific parameters.
 func (c *PlannerConfiguration) GetFilterParams(name string) map[string]interface{} {
-	// Parameters removed in simplified version - return empty map
-	return make(map[string]interface{})
+	params := make(map[string]interface{})
+	// Wire DiversityWeight to diversity filter
+	if name == "diversity" {
+		if c.EnableDiverseSelection {
+			// Use DiversityWeight as the minimum diversity score threshold
+			// DiversityWeight 0.0-1.0 maps to min_diversity_score
+			params["min_diversity_score"] = c.DiversityWeight
+		}
+	}
+	return params
 }

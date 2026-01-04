@@ -22,7 +22,28 @@ export function EditSecurityModal() {
 
     setLoading(true);
     try {
-      await api.updateSecurity(formData.isin, formData);
+      // Only send editable fields that are in the backend whitelist
+      // Filter out undefined/null values, but keep empty strings and false booleans
+      const updateData = {};
+      const editableFields = [
+        'symbol',
+        'yahoo_symbol',
+        'name',
+        'country',
+        'fullExchangeName',
+        'industry',
+        'min_lot',
+        'allow_buy',
+        'allow_sell',
+      ];
+      
+      editableFields.forEach(field => {
+        if (formData[field] !== undefined && formData[field] !== null) {
+          updateData[field] = formData[field];
+        }
+      });
+
+      await api.updateSecurity(formData.isin, updateData);
       await fetchSecurities();
       closeEditSecurityModal();
       notifications.show({

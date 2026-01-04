@@ -32,6 +32,9 @@ func NewPlanner(opportunitiesService *opportunities.Service, sequencesService *s
 func (p *Planner) CreatePlan(ctx *domain.OpportunityContext, config *domain.PlannerConfiguration) (*domain.HolisticPlan, error) {
 	p.log.Info().Msg("Creating holistic plan")
 
+	// Apply configuration to context
+	ctx.ApplyConfig(config)
+
 	// Step 1: Identify opportunities
 	opportunities, err := p.opportunitiesService.IdentifyOpportunities(ctx, config)
 	if err != nil {
@@ -62,7 +65,7 @@ func (p *Planner) CreatePlan(ctx *domain.OpportunityContext, config *domain.Plan
 
 	// Call evaluation service
 	evalCtx := context.Background()
-	results, err := p.evaluationService.BatchEvaluate(evalCtx, sequences, portfolioHash)
+	results, err := p.evaluationService.BatchEvaluate(evalCtx, sequences, portfolioHash, config)
 	if err != nil {
 		p.log.Error().Err(err).Msg("Evaluation failed, falling back to priority-based selection")
 		// Fallback: use priority-based selection if evaluation fails

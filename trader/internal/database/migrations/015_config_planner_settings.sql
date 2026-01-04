@@ -32,6 +32,12 @@ CREATE TABLE IF NOT EXISTS planner_settings (
     allow_sell INTEGER DEFAULT 1,  -- Boolean
     allow_buy INTEGER DEFAULT 1,   -- Boolean
 
+    -- Risk management settings
+    min_hold_days INTEGER DEFAULT 90,
+    sell_cooldown_days INTEGER DEFAULT 180,
+    max_loss_threshold REAL DEFAULT -0.20,
+    max_sell_percentage REAL DEFAULT 0.20,
+
     -- Opportunity Calculator enabled flags
     enable_profit_taking_calc INTEGER DEFAULT 1,
     enable_averaging_down_calc INTEGER DEFAULT 1,

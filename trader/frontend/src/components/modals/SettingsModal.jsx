@@ -266,30 +266,9 @@ export function SettingsModal() {
             <Paper p="md" withBorder>
               <Text size="sm" fw={500} mb="xs" tt="uppercase">Portfolio Optimizer</Text>
               <Text size="xs" c="dimmed" mb="md">
-                The optimizer calculates target portfolio weights using a blend of Mean-Variance and Hierarchical Risk Parity strategies.
+                Note: Strategy Blend has been moved to Planner Configuration.
               </Text>
               <Stack gap="md">
-                <div>
-                  <Group justify="space-between" mb="xs">
-                    <Text size="sm">Strategy Blend</Text>
-                    <Text size="sm" fw={500}>
-                      {(getSetting('optimizer_blend', 0.5) * 100).toFixed(0)}%
-                    </Text>
-                  </Group>
-                  <Group gap="xs" mb="xs">
-                    <Text size="xs" c="dimmed">MV</Text>
-                    <Slider
-                      value={getSetting('optimizer_blend', 0.5)}
-                      onChange={(val) => handleUpdateSetting('optimizer_blend', val)}
-                      min={0}
-                      max={1}
-                      step={0.05}
-                      style={{ flex: 1 }}
-                    />
-                    <Text size="xs" c="dimmed">HRP</Text>
-                  </Group>
-                  <Text size="xs" c="dimmed">0% = Goal-directed (Mean-Variance), 100% = Robust (HRP)</Text>
-                </div>
                 <Group justify="space-between">
                   <div>
                     <Text size="sm">Target Return</Text>

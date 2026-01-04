@@ -20,6 +20,10 @@ func TestNewDefaultConfiguration(t *testing.T) {
 	assert.Equal(t, 0.001, config.TransactionCostPercent)
 	assert.True(t, config.AllowSell)
 	assert.True(t, config.AllowBuy)
+	assert.Equal(t, 90, config.MinHoldDays)
+	assert.Equal(t, 180, config.SellCooldownDays)
+	assert.Equal(t, -0.20, config.MaxLossThreshold)
+	assert.Equal(t, 0.20, config.MaxSellPercentage)
 
 	// All modules should be enabled by default
 	assert.True(t, config.EnableProfitTakingCalc)
@@ -175,15 +179,26 @@ func TestGetGeneratorParams(t *testing.T) {
 }
 
 func TestGetFilterParams(t *testing.T) {
-	config := &PlannerConfiguration{}
+	config := &PlannerConfiguration{
+		EnableDiverseSelection: true,
+		DiversityWeight:         0.5,
+	}
 
-	// Simplified: Returns empty map (parameters removed)
+	// Diversity filter should return params with DiversityWeight
 	params := config.GetFilterParams("diversity")
 	assert.NotNil(t, params)
-	assert.Len(t, params, 0)
+	assert.Contains(t, params, "min_diversity_score")
+	assert.Equal(t, 0.5, params["min_diversity_score"])
 
 	// Non-existent filter should return empty map
 	params = config.GetFilterParams("non_existent")
 	assert.NotNil(t, params)
 	assert.Len(t, params, 0)
+
+	// If EnableDiverseSelection is false, should still return empty (filter disabled via GetEnabledFilters)
+	config.EnableDiverseSelection = false
+	params = config.GetFilterParams("diversity")
+	assert.NotNil(t, params)
+	// Even if disabled, we still return the param value (the filter won't run anyway)
+	assert.Contains(t, params, "min_diversity_score")
 }

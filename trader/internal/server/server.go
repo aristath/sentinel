@@ -320,6 +320,9 @@ func (s *Server) setupSystemRoutes(r chi.Router) {
 		s.log,
 	)
 
+	// Currency exchange service for position value conversion
+	currencyExchangeService1 := services.NewCurrencyExchangeService(tradernetClient, s.log)
+
 	universeHandlers := universe.NewUniverseHandlers(
 		securityRepo,
 		scoreRepo,
@@ -331,6 +334,7 @@ func (s *Server) setupSystemRoutes(r chi.Router) {
 		setupService1,
 		syncService1,
 		s.cfg.PythonServiceURL,
+		currencyExchangeService1,
 		s.log,
 	)
 
@@ -531,6 +535,9 @@ func (s *Server) setupUniverseRoutes(r chi.Router) {
 		s.log,
 	)
 
+	// Currency exchange service for position value conversion
+	currencyExchangeService := services.NewCurrencyExchangeService(tradernetClient, s.log)
+
 	handler := universe.NewUniverseHandlers(
 		securityRepo,
 		scoreRepo,
@@ -542,6 +549,7 @@ func (s *Server) setupUniverseRoutes(r chi.Router) {
 		setupService,
 		syncService,
 		s.cfg.PythonServiceURL,
+		currencyExchangeService,
 		s.log,
 	)
 

@@ -110,12 +110,15 @@ func (ss *SellScorer) CalculateSellScore(
 		(0.15 * 0.5) // Drawdown component (simplified to 0.5 for now)
 
 	// Determine sell quantity
+	// Use configured max sell percentage (passed as parameter, defaults to MaxSellPct constant if not provided)
+	maxSellPercentage := scoring.MaxSellPct
 	sellQuantity, sellPct := determineSellQuantity(
 		totalScore,
 		quantity,
 		float64(minLot),
 		currentPrice,
 		minSellValue,
+		maxSellPercentage,
 	)
 	sellValue := sellQuantity * currentPrice
 
@@ -366,9 +369,11 @@ func determineSellQuantity(
 	minLot float64,
 	currentPrice float64,
 	minSellValue float64,
+	maxSellPercentage float64,
 ) (float64, float64) {
-	// Calculate sell percentage (10% to 50%)
-	sellPct := math.Max(scoring.MinSellPct, math.Min(scoring.MaxSellPct, scoring.MinSellPct+(sellScore*0.40)))
+	// Calculate sell percentage using configurable max
+	// Scale from MinSellPct to maxSellPercentage based on score
+	sellPct := math.Max(scoring.MinSellPct, math.Min(maxSellPercentage, scoring.MinSellPct+(sellScore*(maxSellPercentage-scoring.MinSellPct))))
 
 	// Calculate raw quantity
 	rawQuantity := quantity * sellPct

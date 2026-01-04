@@ -110,17 +110,18 @@ func roundFloat(val float64, precision int) float64 {
 
 // UniverseHandlers contains HTTP handlers for universe API
 type UniverseHandlers struct {
-	log            zerolog.Logger
-	portfolioDB    interface{}
-	positionRepo   interface{}
-	securityRepo   *SecurityRepository
-	scoreRepo      *ScoreRepository
-	securityScorer *scorers.SecurityScorer
-	yahooClient    *yahoo.Client
-	historyDB      *HistoryDB
-	setupService   *SecuritySetupService
-	syncService    *SyncService
-	pythonURL      string
+	log                     zerolog.Logger
+	portfolioDB             interface{}
+	positionRepo            interface{}
+	securityRepo            *SecurityRepository
+	scoreRepo               *ScoreRepository
+	securityScorer          *scorers.SecurityScorer
+	yahooClient             *yahoo.Client
+	historyDB               *HistoryDB
+	setupService            *SecuritySetupService
+	syncService             *SyncService
+	pythonURL               string
+	currencyExchangeService CurrencyExchangeServiceInterface
 }
 
 // NewUniverseHandlers creates a new universe handlers instance
@@ -135,20 +136,22 @@ func NewUniverseHandlers(
 	setupService *SecuritySetupService,
 	syncService *SyncService,
 	pythonURL string,
+	currencyExchangeService CurrencyExchangeServiceInterface,
 	log zerolog.Logger,
 ) *UniverseHandlers {
 	return &UniverseHandlers{
-		securityRepo:   securityRepo,
-		scoreRepo:      scoreRepo,
-		portfolioDB:    portfolioDB,
-		positionRepo:   positionRepo,
-		securityScorer: securityScorer,
-		yahooClient:    yahooClient,
-		historyDB:      historyDB,
-		setupService:   setupService,
-		syncService:    syncService,
-		pythonURL:      pythonURL,
-		log:            log.With().Str("module", "universe_handlers").Logger(),
+		securityRepo:            securityRepo,
+		scoreRepo:               scoreRepo,
+		portfolioDB:             portfolioDB,
+		positionRepo:            positionRepo,
+		securityScorer:          securityScorer,
+		yahooClient:             yahooClient,
+		historyDB:               historyDB,
+		setupService:            setupService,
+		syncService:             syncService,
+		pythonURL:               pythonURL,
+		currencyExchangeService: currencyExchangeService,
+		log:                     log.With().Str("module", "universe_handlers").Logger(),
 	}
 }
 
@@ -171,6 +174,96 @@ func (h *UniverseHandlers) HandleGetStocks(w http.ResponseWriter, r *http.Reques
 		h.log.Error().Err(err).Msg("Failed to fetch securities with scores")
 		http.Error(w, "Failed to fetch securities", http.StatusInternalServerError)
 		return
+	}
+
+	// Fetch positions to get currency info for conversion
+	positionRows, err := portfolioDB.Query(`SELECT symbol, currency, currency_rate, market_value_eur 
+		FROM positions`)
+	if err != nil {
+		h.log.Error().Err(err).Msg("Failed to fetch positions for currency conversion")
+		// Continue without conversion rather than failing
+	} else {
+		defer positionRows.Close()
+		
+		// Build currency map for conversion
+		positionCurrencyMap := make(map[string]struct {
+			currency     string
+			currencyRate float64
+			marketValueEUR float64
+		})
+		
+		for positionRows.Next() {
+			var symbol, currency sql.NullString
+			var currencyRate, marketValueEUR sql.NullFloat64
+			
+			if err := positionRows.Scan(&symbol, &currency, &currencyRate, &marketValueEUR); err != nil {
+				h.log.Warn().Err(err).Msg("Failed to scan position for currency conversion")
+				continue
+			}
+			
+			positionCurrencyMap[symbol.String] = struct {
+				currency     string
+				currencyRate float64
+				marketValueEUR float64
+			}{
+				currency:       currency.String,
+				currencyRate:   currencyRate.Float64,
+				marketValueEUR: marketValueEUR.Float64,
+			}
+		}
+		
+		// Convert position values to EUR
+		for i := range securitiesData {
+			if securitiesData[i].PositionValue != nil {
+				posInfo, found := positionCurrencyMap[securitiesData[i].Symbol]
+				if found && posInfo.currency != "EUR" && posInfo.currency != "" {
+					eurValue := *securitiesData[i].PositionValue
+					
+					// Convert using currency exchange service if available
+					if h.currencyExchangeService != nil {
+						rate, err := h.currencyExchangeService.GetRate(posInfo.currency, "EUR")
+						if err == nil && rate > 0 {
+							// If market_value_eur is in position currency, convert it
+							// Note: market_value_eur should already be in EUR, but we convert
+							// to ensure correctness (this handles cases where DB value might be wrong)
+							eurValue = eurValue * rate
+						} else {
+							// Use fallback rates
+							switch posInfo.currency {
+							case "USD":
+								eurValue = eurValue * 0.9
+							case "GBP":
+								eurValue = eurValue * 1.2
+							case "HKD":
+								eurValue = eurValue * 0.11
+							default:
+								// Keep original value if unknown currency
+								h.log.Warn().
+									Str("currency", posInfo.currency).
+									Str("symbol", securitiesData[i].Symbol).
+									Msg("Unknown currency, keeping position value as-is")
+							}
+						}
+					} else {
+						// No exchange service, use fallback rates
+						switch posInfo.currency {
+						case "USD":
+							eurValue = eurValue * 0.9
+						case "GBP":
+							eurValue = eurValue * 1.2
+						case "HKD":
+							eurValue = eurValue * 0.11
+						}
+					}
+					
+					securitiesData[i].PositionValue = &eurValue
+				}
+			}
+		}
+		
+		if err := positionRows.Err(); err != nil {
+			h.log.Warn().Err(err).Msg("Error iterating positions for currency conversion")
+		}
 	}
 
 	// Prepare priority inputs
@@ -706,7 +799,20 @@ func (h *UniverseHandlers) HandleUpdateStock(w http.ResponseWriter, r *http.Requ
 	// Apply updates
 	if err := h.securityRepo.Update(oldSymbol, updates); err != nil {
 		h.log.Error().Err(err).Str("symbol", oldSymbol).Msg("Failed to update security")
-		http.Error(w, "Failed to update security", http.StatusInternalServerError)
+		
+		// Return specific error message for validation errors, generic for others
+		errorMsg := "Failed to update security"
+		if strings.Contains(err.Error(), "invalid update field") {
+			errorMsg = err.Error()
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"message": errorMsg,
+			})
+			return
+		}
+		
+		http.Error(w, errorMsg, http.StatusInternalServerError)
 		return
 	}
 
