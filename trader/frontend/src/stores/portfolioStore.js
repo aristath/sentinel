@@ -12,11 +12,6 @@ export const usePortfolioStore = create((set, get) => ({
   alerts: [],
   cashBreakdown: [],
 
-  // Buckets
-  buckets: [],
-  bucketBalances: {},
-  loadingBuckets: false,
-
   // Countries and industries
   countries: [],
   countryTargets: {},
@@ -58,22 +53,6 @@ export const usePortfolioStore = create((set, get) => ({
       set({ cashBreakdown: data.balances || [] });
     } catch (e) {
       console.error('Failed to fetch cash breakdown:', e);
-    }
-  },
-
-  fetchBuckets: async () => {
-    set({ loadingBuckets: true });
-    try {
-      const buckets = await api.fetchBuckets();
-      const balances = await api.fetchAllBucketBalances();
-      set({
-        buckets,
-        bucketBalances: balances,
-        loadingBuckets: false,
-      });
-    } catch (e) {
-      console.error('Failed to fetch buckets:', e);
-      set({ loadingBuckets: false });
     }
   },
 

@@ -9,8 +9,6 @@ import { AddSecurityModal } from '../modals/AddSecurityModal';
 import { EditSecurityModal } from '../modals/EditSecurityModal';
 import { SecurityChartModal } from '../modals/SecurityChartModal';
 import { SettingsModal } from '../modals/SettingsModal';
-import { UniverseManagementModal } from '../modals/UniverseManagementModal';
-import { BucketHealthModal } from '../modals/BucketHealthModal';
 import { PlannerManagementModal } from '../modals/PlannerManagementModal';
 import { useEffect } from 'react';
 import { useAppStore } from '../../stores/appStore';
@@ -26,7 +24,7 @@ export function Layout() {
   // Display notifications from app store
   useNotifications();
   const { fetchAll, startPlannerStatusStream, startRecommendationStream } = useAppStore();
-  const { fetchAllocation, fetchCashBreakdown, fetchBuckets, fetchTargets } = usePortfolioStore();
+  const { fetchAllocation, fetchCashBreakdown, fetchTargets } = usePortfolioStore();
   const { fetchSecurities, fetchSparklines } = useSecuritiesStore();
   const { fetchSettings } = useSettingsStore();
   const { fetchTrades } = useTradesStore();
@@ -40,7 +38,6 @@ export function Layout() {
         fetchAllocation(),
         fetchCashBreakdown(),
         fetchSecurities(),
-        fetchBuckets(),
         fetchTargets(),
         fetchSparklines(),
         fetchSettings(),
@@ -80,8 +77,6 @@ export function Layout() {
       <EditSecurityModal />
       <SecurityChartModal />
       <SettingsModal />
-      <UniverseManagementModal />
-      <BucketHealthModal />
       <PlannerManagementModal />
 
       {/* Color Scheme Toggle */}

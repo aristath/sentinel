@@ -27,8 +27,6 @@ export const useAppStore = create((set, get) => ({
   showEditSecurityModal: false,
   showSecurityChart: false,
   showSettingsModal: false,
-  showUniverseManagementModal: false,
-  showBucketHealthModal: false,
   showPlannerManagementModal: false,
 
   closeSecurityChartModal: () => set({
@@ -41,7 +39,6 @@ export const useAppStore = create((set, get) => ({
   selectedSecuritySymbol: null,
   selectedSecurityIsin: null,
   editingSecurity: null,
-  selectedBucket: null,
   selectedPlannerId: '',
 
   // Loading states
@@ -91,22 +88,10 @@ export const useAppStore = create((set, get) => ({
   openSettingsModal: () => set({ showSettingsModal: true }),
   closeSettingsModal: () => set({ showSettingsModal: false }),
 
-  openUniverseManagementModal: () => set({ showUniverseManagementModal: true }),
-  closeUniverseManagementModal: () => set({ showUniverseManagementModal: false }),
-
   openSecurityChart: (symbol, isin) => set({
     showSecurityChart: true,
     selectedSecuritySymbol: symbol,
     selectedSecurityIsin: isin,
-  }),
-
-  openBucketHealthModal: (bucket) => set({
-    showBucketHealthModal: true,
-    selectedBucket: bucket,
-  }),
-  closeBucketHealthModal: () => set({
-    showBucketHealthModal: false,
-    selectedBucket: null,
   }),
 
   openPlannerManagementModal: () => set({ showPlannerManagementModal: true }),

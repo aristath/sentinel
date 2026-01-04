@@ -144,20 +144,6 @@ export const api = {
   applyPlanner: (id) => fetchJSON(`/api/planners/${id}/apply`, { method: 'POST' }),
   fetchPlannerHistory: (id) => fetchJSON(`/api/planners/${id}/history`),
 
-  // Satellites/Buckets
-  fetchBuckets: () => fetchJSON('/api/satellites/buckets'),
-  fetchBucketBalances: (bucketId) => fetchJSON(`/api/satellites/buckets/${bucketId}/balances`),
-  fetchAllBucketBalances: () => fetchJSON('/api/satellites/balances/summary'),
-  createBucket: (data) => fetchJSON('/api/satellites/buckets', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  }),
-  retireBucket: (bucketId) => fetchJSON(`/api/satellites/buckets/${bucketId}/retire`, { method: 'POST' }),
-  transferCash: (data) => fetchJSON('/api/satellites/balances/transfer', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  }),
-
   // Markets
   fetchMarkets: () => fetchJSON('/api/system/markets'),
 
