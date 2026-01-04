@@ -1,11 +1,13 @@
 """Health check endpoint."""
 
+import logging
 from datetime import datetime
-from typing import Optional
 
 from app.config import settings
 from app.service import get_tradernet_service
 from fastapi import APIRouter, Request
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -25,13 +27,19 @@ async def health_check(request: Request):
 
     tradernet_connected = False
     if api_key and api_secret:
-        # Test connection with provided credentials by trying to get portfolio
+        # Test connection with provided credentials by calling user_info
         # This is a lightweight operation that verifies credentials work
         try:
-            # Use get_portfolio as a test - it requires valid credentials
-            positions = service.get_portfolio(api_key=api_key, api_secret=api_secret)
+            # Create a client and test with user_info
+            # This will raise on invalid credentials
+            from tradernet import TraderNetAPI
+
+            test_client = TraderNetAPI(api_key, api_secret)
+            # This will raise an exception if credentials are invalid
+            test_client.user_info()
             tradernet_connected = True
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Tradernet connection test failed: {e}")
             tradernet_connected = False
     else:
         # Fall back to startup connection status (backward compatibility)
