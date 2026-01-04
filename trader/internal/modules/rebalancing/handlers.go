@@ -6,31 +6,42 @@ import (
 	"strconv"
 
 	"github.com/aristath/arduino-trader/internal/clients/tradernet"
+	"github.com/aristath/arduino-trader/internal/modules/allocation"
 	"github.com/aristath/arduino-trader/internal/modules/portfolio"
+	"github.com/aristath/arduino-trader/internal/services"
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog"
 )
 
 // Handlers provides HTTP handlers for rebalancing endpoints
 type Handlers struct {
-	service          *Service
-	portfolioService *portfolio.PortfolioService
-	tradernetClient  *tradernet.Client
-	log              zerolog.Logger
+	service                 *Service
+	portfolioService        *portfolio.PortfolioService
+	tradernetClient         *tradernet.Client
+	currencyExchangeService *services.CurrencyExchangeService
+	allocRepo               *allocation.Repository
+	log                     zerolog.Logger
 }
 
-// NewHandlers creates a new rebalancing handlers instance
+// NewHandlers creates a new rebalancing handlers instance.
+//
+// currencyExchangeService is used to convert multi-currency cash and shortfalls to EUR.
+// allocRepo is used to load target allocations for trigger checking.
 func NewHandlers(
 	service *Service,
 	portfolioService *portfolio.PortfolioService,
 	tradernetClient *tradernet.Client,
+	currencyExchangeService *services.CurrencyExchangeService,
+	allocRepo *allocation.Repository,
 	log zerolog.Logger,
 ) *Handlers {
 	return &Handlers{
-		service:          service,
-		portfolioService: portfolioService,
-		tradernetClient:  tradernetClient,
-		log:              log.With().Str("module", "rebalancing_handlers").Logger(),
+		service:                 service,
+		portfolioService:        portfolioService,
+		tradernetClient:         tradernetClient,
+		currencyExchangeService: currencyExchangeService,
+		allocRepo:               allocRepo,
+		log:                     log.With().Str("module", "rebalancing_handlers").Logger(),
 	}
 }
 
@@ -98,15 +109,35 @@ func (h *Handlers) CheckTriggers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Calculate total cash in EUR
+	// Calculate total cash in EUR with proper currency conversion
 	totalCash := 0.0
 	for _, balance := range cashBalances {
-		// Simple assumption: if currency is EUR, add directly; otherwise assume 1:1
-		// TODO: Use proper exchange rate service
 		if balance.Currency == "EUR" {
 			totalCash += balance.Amount
 		} else {
-			totalCash += balance.Amount
+			// Convert to EUR using exchange rate service
+			rate, err := h.currencyExchangeService.GetRate(balance.Currency, "EUR")
+			if err != nil {
+				h.log.Warn().
+					Err(err).
+					Str("currency", balance.Currency).
+					Float64("amount", balance.Amount).
+					Msg("Failed to get exchange rate for cash balance, using fallback")
+
+				// Fallback conversion
+				eurValue := balance.Amount
+				switch balance.Currency {
+				case "USD":
+					eurValue = balance.Amount * 0.9
+				case "GBP":
+					eurValue = balance.Amount * 1.2
+				case "HKD":
+					eurValue = balance.Amount * 0.11
+				}
+				totalCash += eurValue
+			} else {
+				totalCash += balance.Amount * rate
+			}
 		}
 	}
 
@@ -116,9 +147,12 @@ func (h *Handlers) CheckTriggers(w http.ResponseWriter, r *http.Request) {
 		totalValue += pos.MarketValueEUR
 	}
 
-	// TODO: Get actual target allocations from allocation repository
-	// For now, use empty map to avoid nil panics
-	targetAllocations := make(map[string]float64)
+	// Get target allocations from allocation repository
+	targetAllocations, err := h.allocRepo.GetAll()
+	if err != nil {
+		h.log.Warn().Err(err).Msg("Failed to get target allocations, using empty map")
+		targetAllocations = make(map[string]float64)
+	}
 
 	// Check triggers
 	result := h.service.GetTriggerChecker().CheckRebalanceTriggers(
@@ -148,7 +182,7 @@ type CalculateTradesRequest struct {
 
 // CalculateTradesResponse is the response for calculating trades
 type CalculateTradesResponse struct {
-	Trades []interface{} `json:"trades"`
+	Trades []RebalanceRecommendation `json:"trades"`
 }
 
 // CalculateTrades calculates optimal rebalancing trades
@@ -231,10 +265,36 @@ func (h *Handlers) CheckNegativeBalances(w http.ResponseWriter, r *http.Request)
 	}
 	belowMinimum := len(shortfalls) > 0
 
-	// Calculate total shortfall in EUR
+	// Calculate total shortfall in EUR with proper currency conversion
 	totalShortfallEUR := 0.0
-	for _, shortfall := range shortfalls {
-		totalShortfallEUR += shortfall // Simple assumption: 1:1 for now
+	for currency, shortfall := range shortfalls {
+		if currency == "EUR" {
+			totalShortfallEUR += shortfall
+		} else {
+			// Convert shortfall to EUR
+			rate, err := h.currencyExchangeService.GetRate(currency, "EUR")
+			if err != nil {
+				h.log.Warn().
+					Err(err).
+					Str("currency", currency).
+					Float64("shortfall", shortfall).
+					Msg("Failed to get exchange rate for shortfall, using fallback")
+
+				// Use fallback rates
+				eurValue := shortfall
+				switch currency {
+				case "USD":
+					eurValue = shortfall * 0.9
+				case "GBP":
+					eurValue = shortfall * 1.2
+				case "HKD":
+					eurValue = shortfall * 0.11
+				}
+				totalShortfallEUR += eurValue
+			} else {
+				totalShortfallEUR += shortfall * rate
+			}
+		}
 	}
 
 	response := CheckNegativeBalancesResponse{
@@ -296,10 +356,17 @@ func (h *Handlers) ExecuteRebalance(w http.ResponseWriter, r *http.Request) {
 		totalValue += pos.MarketValueEUR
 	}
 
+	// Get target allocations from allocation repository
+	targetAllocations, err := h.allocRepo.GetAll()
+	if err != nil {
+		h.log.Warn().Err(err).Msg("Failed to get target allocations, using empty map")
+		targetAllocations = make(map[string]float64)
+	}
+
 	// Execute rebalancing
 	err = h.service.ExecuteRebalancing(
 		positions,
-		make(map[string]float64), // TODO: Get actual target allocations
+		targetAllocations,
 		totalValue,
 		availableCash,
 	)

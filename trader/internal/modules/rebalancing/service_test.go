@@ -55,7 +55,19 @@ func TestService_GetTriggerChecker(t *testing.T) {
 	log := logger.New(logger.Config{Level: "error", Pretty: false})
 	triggerChecker := NewTriggerChecker(log)
 	negativeRebalancer := &NegativeBalanceRebalancer{log: log}
-	service := NewService(triggerChecker, negativeRebalancer, log)
+	// Pass nil for dependencies not used by this test (only tests getter method)
+	service := NewService(
+		triggerChecker,
+		negativeRebalancer,
+		nil, // planningService
+		nil, // positionRepo
+		nil, // securityRepo
+		nil, // allocRepo
+		nil, // tradernetClient
+		nil, // configRepo
+		nil, // recommendationRepo
+		log,
+	)
 
 	checker := service.GetTriggerChecker()
 	if checker == nil {
@@ -67,7 +79,19 @@ func TestService_GetNegativeBalanceRebalancer(t *testing.T) {
 	log := logger.New(logger.Config{Level: "error", Pretty: false})
 	triggerChecker := NewTriggerChecker(log)
 	negativeRebalancer := &NegativeBalanceRebalancer{log: log}
-	service := NewService(triggerChecker, negativeRebalancer, log)
+	// Pass nil for dependencies not used by this test (only tests getter method)
+	service := NewService(
+		triggerChecker,
+		negativeRebalancer,
+		nil, // planningService
+		nil, // positionRepo
+		nil, // securityRepo
+		nil, // allocRepo
+		nil, // tradernetClient
+		nil, // configRepo
+		nil, // recommendationRepo
+		log,
+	)
 
 	rebalancer := service.GetNegativeBalanceRebalancer()
 	if rebalancer == nil {
@@ -79,7 +103,19 @@ func TestService_CalculateRebalanceTrades_InsufficientCash(t *testing.T) {
 	log := logger.New(logger.Config{Level: "error", Pretty: false})
 	triggerChecker := NewTriggerChecker(log)
 	negativeRebalancer := &NegativeBalanceRebalancer{log: log}
-	service := NewService(triggerChecker, negativeRebalancer, log)
+	// Pass nil for dependencies not used by this test (only tests getter method)
+	service := NewService(
+		triggerChecker,
+		negativeRebalancer,
+		nil, // planningService
+		nil, // positionRepo
+		nil, // securityRepo
+		nil, // allocRepo
+		nil, // tradernetClient
+		nil, // configRepo
+		nil, // recommendationRepo
+		log,
+	)
 
 	// With €100 cash and min trade of €250, should return empty
 	trades, err := service.CalculateRebalanceTrades(100.0)
