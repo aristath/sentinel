@@ -195,10 +195,7 @@ func (s *Server) setupMiddleware(devMode bool) {
 
 // setupRoutes configures all routes
 func (s *Server) setupRoutes() {
-	// Dashboard root route - serve index.html
-	s.router.Get("/", s.handleDashboard)
-
-	// Health check
+	// Health check (before SPA routing)
 	s.router.Get("/health", s.handleHealth)
 
 	// API routes
@@ -261,12 +258,14 @@ func (s *Server) setupRoutes() {
 	// Fall back to static/ for backwards compatibility during migration
 	frontendDir := "./frontend/dist"
 	if _, err := os.Stat(frontendDir); err == nil {
-		// Serve built frontend assets
+		// Serve built frontend assets (Vite outputs to /assets/)
 		fileServer := http.FileServer(http.Dir(frontendDir))
 		s.router.Handle("/assets/*", http.StripPrefix("/assets/", fileServer))
-		// Serve index.html for all non-API routes (SPA routing)
+
+		// Serve index.html for root and all non-API routes (SPA routing)
+		s.router.Get("/", s.handleDashboard)
 		s.router.NotFound(func(w http.ResponseWriter, r *http.Request) {
-			if !strings.HasPrefix(r.URL.Path, "/api") {
+			if !strings.HasPrefix(r.URL.Path, "/api") && !strings.HasPrefix(r.URL.Path, "/health") {
 				http.ServeFile(w, r, filepath.Join(frontendDir, "index.html"))
 			} else {
 				http.NotFound(w, r)
@@ -274,6 +273,7 @@ func (s *Server) setupRoutes() {
 		})
 	} else {
 		// Fallback to old static directory during migration
+		s.router.Get("/", s.handleDashboard)
 		fileServer := http.FileServer(http.Dir("./static"))
 		s.router.Handle("/static/*", http.StripPrefix("/static/", fileServer))
 	}
