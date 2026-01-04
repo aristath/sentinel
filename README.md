@@ -180,7 +180,6 @@ Edit `.env` file:
 STATE_DB_PATH=/path/to/state.db
 PORTFOLIO_DB_PATH=/path/to/portfolio.db
 LEDGER_DB_PATH=/path/to/ledger.db
-SATELLITES_DB_PATH=/path/to/satellites.db
 
 # Microservice URLs
 EVALUATOR_GO_URL=http://localhost:9000
@@ -345,9 +344,9 @@ LOG_LEVEL=INFO
 
 ---
 
-## Multi-Bucket Portfolio System
+## Portfolio Management
 
-The system implements a **core + satellite** portfolio architecture that enables independent trading strategies within a single portfolio.
+The system manages a single unified portfolio with a configurable trading strategy. Cash balances are represented as synthetic securities in the portfolio database, allowing for seamless integration with position tracking and portfolio calculations.
 
 ### Architecture
 
@@ -684,19 +683,6 @@ The system runs scheduled background jobs for autonomous operation:
 - Auto-reinvest high-yield dividends (DRIP)
 - Accumulate low-yield as pending bonuses
 
-**satellite_maintenance** (Daily at 11:00 AM)
-- Update high water marks
-- Check hibernation triggers (35%+ drawdown)
-- Check recovery opportunities (<30% drawdown)
-- Circuit breaker checks (5 consecutive losses)
-- Log aggression levels
-
-**satellite_reconciliation** (Daily at 11:30 PM)
-- Verify cash balance invariant
-- Auto-correct small drift (±€1)
-- Alert on large discrepancies
-- Generate reconciliation report
-
 **planning_generation** (Daily at 2:00 PM)
 - Generate trading recommendations
 - Evaluate sequences
@@ -725,7 +711,7 @@ All jobs can be manually triggered via API:
 POST /api/system/jobs/{job_name}/run
 ```
 
-Job names: `sync_cycle`, `dividend_reinvestment`, `satellite_maintenance`, `satellite_reconciliation`, `planning_generation`, `satellite_evaluation`, `satellite_reallocation`
+Job names: `sync_cycle`, `dividend_reinvestment`, `planning_generation`
 
 ---
 
@@ -1073,7 +1059,6 @@ curl -X POST http://localhost:8080/api/settings/trading-mode \
 STATE_DB_PATH=/path/to/state.db
 PORTFOLIO_DB_PATH=/path/to/portfolio.db
 LEDGER_DB_PATH=/path/to/ledger.db
-SATELLITES_DB_PATH=/path/to/satellites.db
 
 # Microservice URLs
 EVALUATOR_GO_URL=http://localhost:9000
