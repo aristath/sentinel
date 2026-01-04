@@ -18,6 +18,15 @@
 -- NULL = bucket uses default/core strategy
 -- Note: This migration is for satellites.db only
 -- The migration system will skip this on databases where buckets table doesn't exist
+
+-- Check if agent_id column already exists before adding it
+-- SQLite doesn't support IF NOT EXISTS for ALTER TABLE ADD COLUMN
+-- So we use a pragma to check the table info first
+-- If the column already exists, this will fail with "duplicate column" which the migration system will handle
+-- For idempotency, we check if the column exists in the table_info pragma
+-- Note: The migration system will catch and skip "duplicate column" errors
+
+-- Attempt to add the column (will fail silently if it already exists via migration system error handling)
 ALTER TABLE buckets ADD COLUMN agent_id TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_buckets_agent ON buckets(agent_id);

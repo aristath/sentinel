@@ -234,10 +234,10 @@ func (db *DB) Migrate() error {
 			_ = tx.Rollback()
 
 			// Some migrations are database-specific (e.g., satellites.db only)
-			// If error is "no such table" or "no such column", skip this migration for this database
+			// If error is "no such table", "no such column", or "duplicate column", skip this migration for this database
 			errStr := err.Error()
-			if strings.Contains(errStr, "no such table") || strings.Contains(errStr, "no such column") {
-				// This migration is not applicable to this database, skip it
+			if strings.Contains(errStr, "no such table") || strings.Contains(errStr, "no such column") || strings.Contains(errStr, "duplicate column") {
+				// This migration is not applicable to this database or already applied, skip it
 				continue
 			}
 
