@@ -32,8 +32,7 @@ type ConfigRecord struct {
 	ID          int64
 	Name        string
 	Description string
-	BucketID    *string // Always nil now (no buckets)
-	IsDefault   bool    // Always true (only one config exists)
+	IsDefault   bool // Always true (only one config exists)
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
@@ -278,7 +277,6 @@ func (r *ConfigRepository) ListConfigs() ([]ConfigRecord, error) {
 		ID:          1,
 		Name:        cfg.Name,
 		Description: cfg.Description,
-		BucketID:    nil,
 		IsDefault:   true,
 		CreatedAt:   time.Now(), // Not stored, use current time
 		UpdatedAt:   time.Now(), // Not stored, use current time

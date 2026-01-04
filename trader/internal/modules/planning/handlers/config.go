@@ -42,11 +42,10 @@ type ConfigListResponse struct {
 
 // ConfigSummary provides a summary of a configuration.
 type ConfigSummary struct {
-	ID        int64   `json:"id"`
-	Name      string  `json:"name"`
-	BucketID  *string `json:"bucket_id,omitempty"`
-	CreatedAt string  `json:"created_at"`
-	UpdatedAt string  `json:"updated_at"`
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
 }
 
 // ConfigResponse wraps a single configuration.
@@ -157,7 +156,6 @@ func (h *ConfigHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		summaries[i] = ConfigSummary{
 			ID:        cfg.ID,
 			Name:      cfg.Name,
-			BucketID:  cfg.BucketID,
 			CreatedAt: cfg.CreatedAt.Format(time.RFC3339),
 			UpdatedAt: cfg.UpdatedAt.Format(time.RFC3339),
 		}
