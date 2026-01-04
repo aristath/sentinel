@@ -310,7 +310,7 @@ document.addEventListener('alpine:init', () => {
       }
 
       // Connect to SSE stream for planner status updates
-      const eventSource = new EventSource('/api/planner/status/stream');
+      const eventSource = new EventSource('/api/planning/stream');
       this.plannerStatusEventSource = eventSource;
 
       eventSource.onmessage = (event) => {
@@ -343,7 +343,7 @@ document.addEventListener('alpine:init', () => {
       }
 
       // Connect to SSE stream for recommendation updates
-      const eventSource = new EventSource('/api/trades/recommendations/stream');
+      const eventSource = new EventSource('/api/planning/stream');
       this.recommendationEventSource = eventSource;
 
       eventSource.onmessage = (event) => {
