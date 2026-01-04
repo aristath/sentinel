@@ -6,15 +6,15 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net"
 	"net/http"
-	"net/rpc"
 	"os"
 	"time"
 
-	"github.com/hashicorp/net-rpc-msgpackrpc"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/vmihailenco/msgpack/v5"
 )
 
 const (
@@ -83,10 +83,12 @@ type ClusterData struct {
 	PortfolioPct float64 `json:"portfolio_pct"`
 }
 
-// Bridge wraps the RPC client for arduino-router communication
+// Bridge wraps the connection to arduino-router for MessagePack RPC communication
 type Bridge struct {
-	client *rpc.Client
+	conn   net.Conn
 	log    zerolog.Logger
+	msgID  int64
+	random *rand.Rand
 }
 
 // NewBridge creates a connection to arduino-router via Unix socket
@@ -98,64 +100,119 @@ func NewBridge(socketPath string) (*Bridge, error) {
 		return nil, fmt.Errorf("failed to connect to arduino-router: %w", err)
 	}
 
-	// Create MessagePack RPC client
-	client := msgpackrpc.NewClient(conn)
-
 	return &Bridge{
-		client: client,
+		conn:   conn,
 		log:    log.With().Str("component", "bridge").Logger(),
+		msgID:  0,
+		random: rand.New(rand.NewSource(time.Now().UnixNano())),
 	}, nil
 }
 
-// Call makes an RPC call to the Arduino sketch
+// Call makes an RPC call to the Arduino sketch using RPClite protocol format
+// Request format: [1, msgid, method, params]
+// Response format: [2, msgid, error, result]
 func (br *Bridge) Call(method string, args interface{}, reply interface{}) error {
-	// Use Call with timeout
-	done := make(chan error, 1)
-	go func() {
-		done <- br.client.Call(method, args, reply)
-	}()
+	// Generate random message ID to avoid conflicts
+	msgID := br.random.Int63n(999999) + 1
 
-	select {
-	case err := <-done:
-		return err
-	case <-time.After(RPCTimeout):
-		return fmt.Errorf("RPC call timeout: %s", method)
+	// Convert args to array format
+	// args should already be []interface{} as passed from calling code
+	params, ok := args.([]interface{})
+	if !ok {
+		return fmt.Errorf("args must be []interface{}, got %T", args)
 	}
+
+	// Build request message: [type, id, method, params]
+	// type=1 for request
+	request := []interface{}{
+		int64(1), // type: 1 = request
+		msgID,    // message ID
+		method,   // method name
+		params,   // parameters array
+	}
+
+	// Encode request to MessagePack
+	encoder := msgpack.NewEncoder(br.conn)
+	if err := encoder.Encode(request); err != nil {
+		return fmt.Errorf("failed to encode request: %w", err)
+	}
+
+	// Set read timeout
+	deadline := time.Now().Add(RPCTimeout)
+	if err := br.conn.SetReadDeadline(deadline); err != nil {
+		return fmt.Errorf("failed to set read deadline: %w", err)
+	}
+
+	// Read response using Unpacker for proper streaming
+	unpacker := msgpack.NewDecoder(br.conn)
+	var response []interface{}
+	if err := unpacker.Decode(&response); err != nil {
+		return fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	// Validate response format: [type, id, error, result]
+	if len(response) != 4 {
+		return fmt.Errorf("invalid response format: expected 4 elements, got %d: %v", len(response), response)
+	}
+
+	respType, ok := response[0].(int64)
+	if !ok {
+		return fmt.Errorf("invalid response type: expected int64, got %T", response[0])
+	}
+	if respType != 2 {
+		return fmt.Errorf("invalid response type: expected 2 (response), got %d", respType)
+	}
+
+	respID, ok := response[1].(int64)
+	if !ok {
+		return fmt.Errorf("invalid response ID type: expected int64, got %T", response[1])
+	}
+	if respID != msgID {
+		return fmt.Errorf("response ID mismatch: expected %d, got %d", msgID, respID)
+	}
+
+	// Check for error
+	if response[2] != nil {
+		return fmt.Errorf("RPC error: %v", response[2])
+	}
+
+	// Decode result
+	if reply != nil && response[3] != nil {
+		// Use msgpack to decode the result into the reply type
+		data, err := msgpack.Marshal(response[3])
+		if err != nil {
+			return fmt.Errorf("failed to marshal result: %w", err)
+		}
+		if err := msgpack.Unmarshal(data, reply); err != nil {
+			return fmt.Errorf("failed to unmarshal result: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // ScrollText sends text to scroll on LED matrix
 func (br *Bridge) ScrollText(text string, speed int) error {
-	type Args struct {
-		Text  string
-		Speed int
-	}
 	var reply interface{}
-	args := Args{Text: text, Speed: speed}
-	return br.Call("scrollText", args, &reply)
+	// RPClite format: params should be array [text, speed]
+	params := []interface{}{text, speed}
+	return br.Call("scrollText", params, &reply)
 }
 
 // SetRGB3 sets RGB LED 3 color
 func (br *Bridge) SetRGB3(r, g, b int) error {
-	type Args struct {
-		R uint8
-		G uint8
-		B uint8
-	}
 	var reply interface{}
-	args := Args{R: uint8(r), G: uint8(g), B: uint8(b)}
-	return br.Call("setRGB3", args, &reply)
+	// RPClite format: params should be array [r, g, b]
+	params := []interface{}{r, g, b}
+	return br.Call("setRGB3", params, &reply)
 }
 
 // SetRGB4 sets RGB LED 4 color
 func (br *Bridge) SetRGB4(r, g, b int) error {
-	type Args struct {
-		R uint8
-		G uint8
-		B uint8
-	}
 	var reply interface{}
-	args := Args{R: uint8(r), G: uint8(g), B: uint8(b)}
-	return br.Call("setRGB4", args, &reply)
+	// RPClite format: params should be array [r, g, b]
+	params := []interface{}{r, g, b}
+	return br.Call("setRGB4", params, &reply)
 }
 
 // SetBlink3 sets LED3 to blink mode
@@ -232,30 +289,24 @@ func (br *Bridge) StopBlink4() error {
 
 // SetSystemStats sets system stats visualization
 func (br *Bridge) SetSystemStats(pixelsOn, brightness, intervalMs int) error {
-	type Args struct {
-		PixelsOn   int
-		Brightness int
-		IntervalMs int
-	}
 	var reply interface{}
-	args := Args{PixelsOn: pixelsOn, Brightness: brightness, IntervalMs: intervalMs}
-	return br.Call("setSystemStats", args, &reply)
+	// RPClite format: params should be array [pixelsOn, brightness, intervalMs]
+	params := []interface{}{pixelsOn, brightness, intervalMs}
+	return br.Call("setSystemStats", params, &reply)
 }
 
 // SetPortfolioMode sets portfolio visualization mode
 func (br *Bridge) SetPortfolioMode(clustersJSON string) error {
-	type Args struct {
-		ClustersJSON string
-	}
 	var reply interface{}
-	args := Args{ClustersJSON: clustersJSON}
-	return br.Call("setPortfolioMode", args, &reply)
+	// RPClite format: params should be array [clustersJSON]
+	params := []interface{}{clustersJSON}
+	return br.Call("setPortfolioMode", params, &reply)
 }
 
 // Close closes the RPC connection
 func (br *Bridge) Close() error {
-	if br.client != nil {
-		return br.client.Close()
+	if br.conn != nil {
+		return br.conn.Close()
 	}
 	return nil
 }

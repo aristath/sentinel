@@ -34,8 +34,8 @@ func (r *TradeRepository) Create(trade Trade) error {
 	query := `
 		INSERT INTO trades
 		(symbol, isin, side, quantity, price, executed_at, order_id,
-		 currency, currency_rate, value_eur, source, bucket_id, mode, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 currency, currency_rate, value_eur, source, mode, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	_, err := r.ledgerDB.Exec(query,
@@ -50,7 +50,6 @@ func (r *TradeRepository) Create(trade Trade) error {
 		nullFloat64Ptr(trade.CurrencyRate),
 		nullFloat64Ptr(trade.ValueEUR),
 		trade.Source,
-		trade.BucketID,
 		trade.Mode,
 		now,
 	)
@@ -781,7 +780,6 @@ func (r *TradeRepository) scanTrade(row *sql.Row) (Trade, error) {
 		&trade.Source,
 		&createdAt,
 		&isin,
-		&trade.BucketID,
 		&trade.Mode,
 	)
 
@@ -868,7 +866,6 @@ func (r *TradeRepository) scanTradeFromRows(rows *sql.Rows) (Trade, error) {
 		&trade.Source,
 		&createdAt,
 		&isin,
-		&trade.BucketID,
 		&trade.Mode,
 	)
 

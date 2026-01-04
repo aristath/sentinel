@@ -542,7 +542,6 @@ func TestSyncFromTradernet_SourceTracking(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(mockRepo.trades))
 	assert.Equal(t, "tradernet", mockRepo.trades[0].Source)
-	assert.Equal(t, "", mockRepo.trades[0].BucketID) // Empty for automatic sync
 }
 
 // TestSyncFromTradernet_LargeQuantity tests handling of large trade quantities

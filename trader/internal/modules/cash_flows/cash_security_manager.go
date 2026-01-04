@@ -281,8 +281,8 @@ func (m *CashSecurityManager) GetAllCashBalances() (map[string]float64, error) {
 	return balances, nil
 }
 
-// GetTotalByCurrency returns the total cash balance across all buckets for a currency
-// This sums up cash positions for the same currency in different buckets
+// GetTotalByCurrency returns the total cash balance for a currency
+// This sums up cash positions for the same currency
 func (m *CashSecurityManager) GetTotalByCurrency(currency string) (float64, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -318,7 +318,7 @@ func (m *CashSecurityManager) GetTotalByCurrency(currency string) (float64, erro
 	return total, nil
 }
 
-// GetAllCashPositions returns all cash positions across all buckets
+// GetAllCashPositions returns all cash positions
 // Returns a map of symbol -> position
 func (m *CashSecurityManager) GetAllCashPositions() (map[string]portfolio.Position, error) {
 	m.mu.RLock()
@@ -340,7 +340,7 @@ func (m *CashSecurityManager) GetAllCashPositions() (map[string]portfolio.Positi
 	return cashPositions, nil
 }
 
-// GetAllCashSymbols returns all cash position symbols across all buckets
+// GetAllCashSymbols returns all cash position symbols
 // This is a lighter-weight alternative to GetAllCashPositions when you only need symbols
 func (m *CashSecurityManager) GetAllCashSymbols() ([]string, error) {
 	m.mu.RLock()

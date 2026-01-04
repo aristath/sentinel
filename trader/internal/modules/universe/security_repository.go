@@ -394,12 +394,12 @@ func (r *SecurityRepository) GetWithScores(portfolioDB *sql.DB) ([]SecurityWithS
 		var avgPrice, currentPrice, currencyRate sql.NullFloat64
 		var currency, lastUpdated sql.NullString
 		var costBasis, unrealizedPnL, unrealizedPnLPct sql.NullFloat64
-		var firstBought, lastSold, isin, bucketID sql.NullString
+		var firstBought, lastSold, isin sql.NullString
 
 		err := positionRows.Scan(
 			&symbol, &quantity, &avgPrice, &currentPrice, &currency, &currencyRate,
 			&marketValueEUR, &costBasis, &unrealizedPnL, &unrealizedPnLPct,
-			&lastUpdated, &firstBought, &lastSold, &isin, &bucketID,
+			&lastUpdated, &firstBought, &lastSold, &isin,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan position: %w", err)

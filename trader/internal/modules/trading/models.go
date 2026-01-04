@@ -60,7 +60,6 @@ type Trade struct {
 	OrderID      string     `json:"order_id,omitempty"`
 	Currency     string     `json:"currency,omitempty"`
 	ISIN         string     `json:"isin,omitempty"`
-	BucketID     string     `json:"bucket_id"`
 	Mode         string     `json:"mode"`
 	Side         TradeSide  `json:"side"`
 	Price        float64    `json:"price"`

@@ -198,7 +198,6 @@ func (s *TradeExecutionService) recordTrade(orderResult *tradernet.OrderResult, 
 		Price:      orderResult.Price,
 		Currency:   rec.Currency,
 		Source:     "emergency_rebalancing",
-		BucketID:   "", // Empty - buckets removed, single portfolio
 		Mode:       "live",
 		ExecutedAt: time.Now(),
 		OrderID:    orderResult.OrderID,

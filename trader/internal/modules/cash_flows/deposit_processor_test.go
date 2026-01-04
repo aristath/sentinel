@@ -135,7 +135,7 @@ func TestProcessDeposit_LargeAmount(t *testing.T) {
 	t.Skip("Test needs to be updated to use mock CashSecurityManager")
 }
 
-// TestProcessDeposit_MultipleAllocations tests complex allocation across multiple buckets
+// TestProcessDeposit_MultipleAllocations tests complex allocation
 // NOTE: Test removed - no longer applicable with single portfolio (no buckets)
 func TestProcessDeposit_MultipleAllocations(t *testing.T) {
 	t.Skip("Test removed - no longer applicable with single portfolio (no buckets)")

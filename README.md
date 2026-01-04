@@ -889,9 +889,6 @@ POST /api/settings/{key}
 | Setting | Default | Description |
 |---------|---------|-------------|
 | trading_mode | research | Trading mode (live/research) |
-| satellite_budget_pct | 0.20 | Total satellite allocation (20%) |
-| satellite_min_pct | 0.03 | Minimum per satellite (3%) |
-| satellite_max_pct | 0.12 | Maximum per satellite (12%) |
 | buy_cooldown_days | 30 | Days before re-buying same security |
 | min_hold_days | 90 | Minimum hold time before selling |
 | drip_enabled | true | Auto-reinvest dividends ≥3% yield |
@@ -920,13 +917,6 @@ POST /api/securities/add-by-identifier
 }
 ```
 
-**Assign to Bucket:**
-```bash
-PUT /api/securities/{isin}
-{
-  "bucket_id": "satellite_1"
-}
-```
 
 ---
 

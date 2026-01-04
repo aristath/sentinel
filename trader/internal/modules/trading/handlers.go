@@ -30,6 +30,12 @@ type TradingHandlers struct {
 	tradernetClient            *tradernet.Client
 	safetyService              *TradeSafetyService
 	settingsService            *settings.Service
+	recommendationRepo         RecommendationRepositoryInterface
+}
+
+// RecommendationRepositoryInterface defines the interface for recommendation repository
+type RecommendationRepositoryInterface interface {
+	GetRecommendationsAsPlan() (map[string]interface{}, error)
 }
 
 // NewTradingHandlers creates a new trading handlers instance
@@ -41,6 +47,7 @@ func NewTradingHandlers(
 	tradernetClient *tradernet.Client,
 	safetyService *TradeSafetyService,
 	settingsService *settings.Service,
+	recommendationRepo RecommendationRepositoryInterface,
 	log zerolog.Logger,
 ) *TradingHandlers {
 	return &TradingHandlers{
@@ -51,6 +58,7 @@ func NewTradingHandlers(
 		tradernetClient:            tradernetClient,
 		safetyService:              safetyService,
 		settingsService:            settingsService,
+		recommendationRepo:         recommendationRepo,
 		log:                        log.With().Str("handler", "trading").Logger(),
 	}
 }
@@ -214,7 +222,6 @@ func (h *TradingHandlers) recordTrade(
 		ExecutedAt: now,
 		OrderID:    result.OrderID,
 		Source:     "manual",
-		BucketID:   "core",
 		Mode:       tradingMode,
 		CreatedAt:  &now,
 	}
@@ -263,6 +270,27 @@ func (h *TradingHandlers) HandleGetAllocation(w http.ResponseWriter, r *http.Req
 	}
 
 	h.writeJSON(w, http.StatusOK, response)
+}
+
+// HandleGetRecommendations returns current trade recommendations
+// GET /api/trades/recommendations
+func (h *TradingHandlers) HandleGetRecommendations(w http.ResponseWriter, r *http.Request) {
+	if h.recommendationRepo == nil {
+		h.log.Warn().Msg("Recommendation repository not available")
+		h.writeJSON(w, http.StatusOK, map[string]interface{}{
+			"steps": []interface{}{},
+		})
+		return
+	}
+
+	plan, err := h.recommendationRepo.GetRecommendationsAsPlan()
+	if err != nil {
+		h.log.Error().Err(err).Msg("Failed to get recommendations")
+		h.writeError(w, http.StatusInternalServerError, "Failed to get recommendations")
+		return
+	}
+
+	h.writeJSON(w, http.StatusOK, plan)
 }
 
 // Helper methods

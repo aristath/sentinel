@@ -30,12 +30,10 @@ CREATE TABLE IF NOT EXISTS securities (
     min_portfolio_target REAL,
     max_portfolio_target REAL,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    bucket_id TEXT DEFAULT 'core'  -- References buckets table in satellites.db
+    updated_at TEXT NOT NULL
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_securities_active ON securities(active);
-CREATE INDEX IF NOT EXISTS idx_securities_bucket ON securities(bucket_id);
 CREATE INDEX IF NOT EXISTS idx_securities_country ON securities(country);
 CREATE INDEX IF NOT EXISTS idx_securities_industry ON securities(industry);
 CREATE INDEX IF NOT EXISTS idx_securities_isin ON securities(isin);

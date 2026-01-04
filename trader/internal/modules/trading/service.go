@@ -89,7 +89,6 @@ func (s *TradingService) SyncFromTradernet() error {
 			ExecutedAt: executedAt,
 			Source:     "tradernet",
 			Currency:   "EUR", // Default, should be from trade data
-			BucketID:   "",    // Empty for automatic sync
 		}
 
 		// Insert trade to database (idempotent via order_id unique constraint)
@@ -185,7 +184,6 @@ func (s *TradingService) ExecuteTrade(req TradeRequest) (*TradeResult, error) {
 		ExecutedAt: time.Now(),
 		Source:     "autonomous",
 		Currency:   "EUR",
-		BucketID:   "",
 		Mode:       "live",
 	}
 
