@@ -42,8 +42,6 @@ type DeploymentConfig struct {
 	GitBranch              string
 	TraderBinaryName       string
 	TraderServiceName      string
-	BridgeBinaryName       string
-	BridgeServiceName      string
 	DockerComposePath      string
 	MicroservicesEnabled   bool
 }
