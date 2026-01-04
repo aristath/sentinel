@@ -77,19 +77,21 @@ func (s *Service) Get(key string) (interface{}, error) {
 }
 
 // Set updates a setting value with validation
-func (s *Service) Set(key string, value interface{}) error {
+// Returns true if this is a first-time credential setup (both key and secret were previously empty)
+func (s *Service) Set(key string, value interface{}) (bool, error) {
 	// Check if setting exists in defaults
 	if _, exists := SettingDefaults[key]; !exists {
-		return fmt.Errorf("unknown setting: %s", key)
+		return false, fmt.Errorf("unknown setting: %s", key)
 	}
 
 	// Special handling for trading_mode
 	if key == "trading_mode" {
 		mode, ok := value.(string)
 		if !ok {
-			return fmt.Errorf("trading_mode must be a string")
+			return false, fmt.Errorf("trading_mode must be a string")
 		}
-		return s.SetTradingMode(mode)
+		err := s.SetTradingMode(mode)
+		return false, err
 	}
 
 	// Special validation for market regime cash reserves
@@ -98,10 +100,10 @@ func (s *Service) Set(key string, value interface{}) error {
 		key == "market_regime_sideways_cash_reserve" {
 		floatVal, ok := value.(float64)
 		if !ok {
-			return fmt.Errorf("%s must be a float", key)
+			return false, fmt.Errorf("%s must be a float", key)
 		}
 		if floatVal < 0.01 || floatVal > 0.40 {
-			return fmt.Errorf("%s must be between 1%% (0.01) and 40%% (0.40)", key)
+			return false, fmt.Errorf("%s must be between 1%% (0.01) and 40%% (0.40)", key)
 		}
 	}
 
@@ -109,10 +111,40 @@ func (s *Service) Set(key string, value interface{}) error {
 	if key == "virtual_test_cash" {
 		floatVal, ok := value.(float64)
 		if !ok {
-			return fmt.Errorf("virtual_test_cash must be a float")
+			return false, fmt.Errorf("virtual_test_cash must be a float")
 		}
 		if floatVal < 0 {
-			return fmt.Errorf("virtual_test_cash must be non-negative")
+			return false, fmt.Errorf("virtual_test_cash must be non-negative")
+		}
+	}
+
+	// Check if this is a first-time credential setup
+	// We'll determine this after saving, by checking if both credentials are now set
+	// and at least one was previously empty
+	isFirstTimeSetup := false
+	if key == "tradernet_api_key" || key == "tradernet_api_secret" {
+		// Get previous values before saving
+		prevKey, _ := s.repo.Get("tradernet_api_key")
+		prevSecret, _ := s.repo.Get("tradernet_api_secret")
+
+		wasKeyEmpty := prevKey == nil || *prevKey == ""
+		wasSecretEmpty := prevSecret == nil || *prevSecret == ""
+
+		// Get the new value as string
+		var newValueStr string
+		switch v := value.(type) {
+		case string:
+			newValueStr = v
+		default:
+			// For non-string values, convert to string
+			newValueStr = fmt.Sprintf("%v", v)
+		}
+
+		// Only proceed with first-time check if we're setting a non-empty value
+		if newValueStr != "" {
+			// This could be first-time setup if at least one credential was empty
+			// We'll verify after saving that both are now set
+			isFirstTimeSetup = wasKeyEmpty || wasSecretEmpty
 		}
 	}
 
@@ -126,10 +158,30 @@ func (s *Service) Set(key string, value interface{}) error {
 	case int:
 		strValue = fmt.Sprintf("%d", v)
 	default:
-		return fmt.Errorf("unsupported value type for setting %s", key)
+		return false, fmt.Errorf("unsupported value type for setting %s", key)
 	}
 
-	return s.repo.Set(key, strValue, nil)
+	err := s.repo.Set(key, strValue, nil)
+	if err != nil {
+		return false, err
+	}
+
+	// Final check: if this was a credential update, verify both are now set
+	// Onboarding should only trigger when BOTH credentials are set for the first time
+	if (key == "tradernet_api_key" || key == "tradernet_api_secret") && isFirstTimeSetup {
+		// Verify both credentials are now set
+		currentKey, _ := s.repo.Get("tradernet_api_key")
+		currentSecret, _ := s.repo.Get("tradernet_api_secret")
+
+		keySet := currentKey != nil && *currentKey != ""
+		secretSet := currentSecret != nil && *currentSecret != ""
+
+		// Only return true if both are now set (this means the second credential was just set)
+		// This ensures onboarding triggers only once, when the second credential is saved
+		isFirstTimeSetup = keySet && secretSet
+	}
+
+	return isFirstTimeSetup, nil
 }
 
 // GetTradingMode retrieves the current trading mode
@@ -151,10 +203,32 @@ func (s *Service) GetTradingMode() (string, error) {
 	return defaultMode, nil
 }
 
+// SetWithOnboarding updates a setting and returns whether onboarding should be triggered
+// This is a convenience method that wraps Set() for handlers that need onboarding detection
+func (s *Service) SetWithOnboarding(key string, value interface{}) (bool, error) {
+	return s.Set(key, value)
+}
+
 // SetTradingMode sets the trading mode with validation
 func (s *Service) SetTradingMode(mode string) error {
 	if mode != "live" && mode != "research" {
 		return fmt.Errorf("invalid trading mode: %s. Must be 'live' or 'research'", mode)
+	}
+
+	// Validate credentials when switching to live mode
+	if mode == "live" {
+		apiKey, err := s.repo.Get("tradernet_api_key")
+		if err != nil {
+			return fmt.Errorf("failed to check tradernet_api_key: %w", err)
+		}
+		apiSecret, err := s.repo.Get("tradernet_api_secret")
+		if err != nil {
+			return fmt.Errorf("failed to check tradernet_api_secret: %w", err)
+		}
+
+		if apiKey == nil || *apiKey == "" || apiSecret == nil || *apiSecret == "" {
+			return fmt.Errorf("tradernet API credentials must be configured before switching to live mode")
+		}
 	}
 
 	desc := "Trading mode: 'live' or 'research'"

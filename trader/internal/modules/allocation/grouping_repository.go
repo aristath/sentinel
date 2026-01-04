@@ -239,7 +239,7 @@ func (r *GroupingRepository) DeleteIndustryGroup(groupName string) error {
 // GetAvailableCountries returns list of all unique countries from securities table
 // Faithful translation of Python: async def get_available_countries(self) -> List[str]
 func (r *GroupingRepository) GetAvailableCountries() ([]string, error) {
-	query := "SELECT DISTINCT country FROM securities WHERE country IS NOT NULL AND country != '' ORDER BY country"
+	query := "SELECT DISTINCT country FROM securities WHERE country IS NOT NULL AND country != '' AND product_type != 'CASH' ORDER BY country"
 
 	rows, err := r.db.Query(query)
 	if err != nil {
@@ -266,7 +266,7 @@ func (r *GroupingRepository) GetAvailableCountries() ([]string, error) {
 // GetAvailableIndustries returns list of all unique industries from securities table
 // Faithful translation of Python: async def get_available_industries(self) -> List[str]
 func (r *GroupingRepository) GetAvailableIndustries() ([]string, error) {
-	query := "SELECT DISTINCT industry FROM securities WHERE industry IS NOT NULL AND industry != '' ORDER BY industry"
+	query := "SELECT DISTINCT industry FROM securities WHERE industry IS NOT NULL AND industry != '' AND product_type != 'CASH' ORDER BY industry"
 
 	rows, err := r.db.Query(query)
 	if err != nil {

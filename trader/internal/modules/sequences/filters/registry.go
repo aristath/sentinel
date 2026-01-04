@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/aristath/arduino-trader/internal/modules/optimization"
 	"github.com/aristath/arduino-trader/internal/modules/planning/domain"
 	"github.com/rs/zerolog"
 )
@@ -68,11 +69,11 @@ func (r *FilterRegistry) ApplyFilters(sequences []domain.ActionSequence, config 
 }
 
 // NewPopulatedFilterRegistry creates a new filter registry with all filters registered.
-func NewPopulatedFilterRegistry(log zerolog.Logger) *FilterRegistry {
+func NewPopulatedFilterRegistry(log zerolog.Logger, riskBuilder *optimization.RiskModelBuilder) *FilterRegistry {
 	registry := NewFilterRegistry(log)
 
 	// Register all filters
-	registry.Register(NewCorrelationAwareFilter(log))
+	registry.Register(NewCorrelationAwareFilter(log, riskBuilder))
 	registry.Register(NewDiversityFilter(log))
 	registry.Register(NewEligibilityFilter(log))
 	registry.Register(NewRecentlyTradedFilter(log))

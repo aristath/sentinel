@@ -11,6 +11,10 @@ var SettingDefaults = map[string]interface{}{
 	// Trading mode
 	"trading_mode": "research", // "live" or "research" - blocks trades in research mode
 
+	// Tradernet API credentials
+	"tradernet_api_key":    "", // Tradernet API key
+	"tradernet_api_secret": "", // Tradernet API secret
+
 	// Portfolio Optimizer settings
 	"optimizer_blend":         0.5,  // 0.0 = pure Mean-Variance, 1.0 = pure HRP
 	"optimizer_target_return": 0.11, // Target annual return for MV component
@@ -143,6 +147,8 @@ var StringSettings = map[string]bool{
 	"security_discovery_exchanges":   true,
 	"risk_profile":                   true,
 	"display_mode":                   true,
+	"tradernet_api_key":              true,
+	"tradernet_api_secret":           true,
 }
 
 // SettingUpdate represents a setting value update request

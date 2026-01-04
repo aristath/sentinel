@@ -323,6 +323,24 @@ func (rb *RiskModelBuilder) getCorrelations(
 	return correlations
 }
 
+// BuildCorrelationMap converts a slice of CorrelationPair to a map for efficient lookups.
+// The map uses keys in "SYMBOL1:SYMBOL2" format and stores both orderings for symmetric access.
+// This format matches the Python implementation and enables O(1) correlation lookups.
+func BuildCorrelationMap(pairs []CorrelationPair) map[string]float64 {
+	correlationMap := make(map[string]float64, len(pairs)*2)
+
+	for _, pair := range pairs {
+		// Store both orderings for symmetric lookup
+		key1 := pair.Symbol1 + ":" + pair.Symbol2
+		key2 := pair.Symbol2 + ":" + pair.Symbol1
+
+		correlationMap[key1] = pair.Correlation
+		correlationMap[key2] = pair.Correlation
+	}
+
+	return correlationMap
+}
+
 // buildPlaceholders builds SQL placeholders for IN clause.
 func (rb *RiskModelBuilder) buildPlaceholders(n int) string {
 	if n == 0 {

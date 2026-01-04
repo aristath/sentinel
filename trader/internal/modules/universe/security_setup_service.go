@@ -513,30 +513,49 @@ func (s *SecuritySetupService) getSecurityNameFromYahoo(symbol string, yahooSymb
 		return nil, fmt.Errorf("Yahoo client not available")
 	}
 
-	// The Yahoo client's getQuoteInfo is not exposed, but we can use GetFundamentalData
-	// which internally calls getQuoteInfo and can extract the name
-	// Actually, looking at the Go client, there's no direct method to get just the name.
-	// We need to add this functionality or use a workaround.
-	// For now, let's return nil and rely on Tradernet name
-	// TODO: Add GetQuoteName method to Yahoo client or extract from existing calls
-	s.log.Debug().Str("symbol", symbol).Msg("Yahoo name fetch not yet implemented, using Tradernet name")
-	return nil, nil
+	name, err := s.yahooClient.GetQuoteName(symbol, yahooSymbol)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get quote name from Yahoo: %w", err)
+	}
+
+	return name, nil
 }
 
 // detectProductType detects product type using Yahoo Finance quoteType
 // Faithful translation from Python: yahoo.get_product_type()
 func (s *SecuritySetupService) detectProductType(symbol string, yahooSymbol *string, name string) (ProductType, error) {
-	// For now, we don't have a direct quoteType endpoint in the Go Yahoo client
-	// We can infer from the name as a fallback
-	// TODO: Add GetQuoteType method to Yahoo client
-	s.log.Debug().Str("symbol", symbol).Msg("Product type detection using name heuristics")
+	if s.yahooClient == nil {
+		// Fallback to name heuristics if Yahoo client not available
+		s.log.Debug().Str("symbol", symbol).Msg("Yahoo client not available, using name heuristics")
+		return s.detectProductTypeFromName(name), nil
+	}
 
-	// Use heuristics based on name
+	// Get quoteType from Yahoo Finance
+	quoteType, err := s.yahooClient.GetQuoteType(symbol, yahooSymbol)
+	if err != nil {
+		s.log.Warn().Err(err).Str("symbol", symbol).Msg("Failed to get quote type from Yahoo, using name heuristics")
+		return s.detectProductTypeFromName(name), nil
+	}
+
+	// Get name from Yahoo if not provided (matching Python behavior)
+	yahooName := name
+	if yahooName == "" {
+		if namePtr, err := s.yahooClient.GetQuoteName(symbol, yahooSymbol); err == nil && namePtr != nil {
+			yahooName = *namePtr
+		}
+	}
+
+	// Use FromYahooQuoteType which matches Python's ProductType.from_yahoo_quote_type()
+	return FromYahooQuoteType(quoteType, yahooName), nil
+}
+
+// detectProductTypeFromName uses heuristics based on name as fallback
+func (s *SecuritySetupService) detectProductTypeFromName(name string) ProductType {
 	nameUpper := strings.ToUpper(name)
 
 	// ETF indicators
 	if strings.Contains(nameUpper, "ETF") {
-		return ProductTypeETF, nil
+		return ProductTypeETF
 	}
 
 	// ETC indicators
@@ -546,12 +565,12 @@ func (s *SecuritySetupService) detectProductType(symbol string, yahooSymbol *str
 	}
 	for _, indicator := range etcIndicators {
 		if strings.Contains(nameUpper, indicator) {
-			return ProductTypeETC, nil
+			return ProductTypeETC
 		}
 	}
 
-	// Default to EQUITY for now
-	return ProductTypeEquity, nil
+	// Default to EQUITY
+	return ProductTypeEquity
 }
 
 // RefreshSecurityData triggers full data refresh for a security

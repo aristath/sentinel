@@ -9,10 +9,16 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// OnboardingServiceInterface defines the interface for onboarding service
+type OnboardingServiceInterface interface {
+	RunOnboarding() error
+}
+
 // Handler provides HTTP handlers for settings endpoints
 type Handler struct {
-	service *Service
-	log     zerolog.Logger
+	service           *Service
+	onboardingService OnboardingServiceInterface
+	log               zerolog.Logger
 }
 
 // NewHandler creates a new settings handler
@@ -21,6 +27,11 @@ func NewHandler(service *Service, log zerolog.Logger) *Handler {
 		service: service,
 		log:     log.With().Str("handler", "settings").Logger(),
 	}
+}
+
+// SetOnboardingService sets the onboarding service (for dependency injection)
+func (h *Handler) SetOnboardingService(onboardingService OnboardingServiceInterface) {
+	h.onboardingService = onboardingService
 }
 
 // HandleGetAll handles GET /api/settings
@@ -56,7 +67,8 @@ func (h *Handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.Set(key, update.Value); err != nil {
+	isFirstTimeSetup, err := h.service.Set(key, update.Value)
+	if err != nil {
 		h.log.Error().
 			Err(err).
 			Str("key", key).
@@ -64,6 +76,18 @@ func (h *Handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 			Msg("Failed to update setting")
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
+	}
+
+	// Trigger onboarding if this is first-time credential setup
+	if isFirstTimeSetup && h.onboardingService != nil {
+		h.log.Info().Msg("First-time credential setup detected, triggering onboarding")
+		go func() {
+			if err := h.onboardingService.RunOnboarding(); err != nil {
+				h.log.Error().Err(err).Msg("Onboarding failed")
+			} else {
+				h.log.Info().Msg("Onboarding completed successfully")
+			}
+		}()
 	}
 
 	// Return updated value

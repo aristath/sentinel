@@ -121,6 +121,33 @@ func (r *SecurityRepository) GetAllActive() ([]Security, error) {
 	return securities, nil
 }
 
+// GetAllActiveTradable returns all active securities excluding cash
+// Used for scoring and trading operations where cash should not be included
+func (r *SecurityRepository) GetAllActiveTradable() ([]Security, error) {
+	query := "SELECT * FROM securities WHERE active = 1 AND product_type != 'CASH'"
+
+	rows, err := r.universeDB.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query tradable securities: %w", err)
+	}
+	defer rows.Close()
+
+	var securities []Security
+	for rows.Next() {
+		security, err := r.scanSecurity(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan security: %w", err)
+		}
+		securities = append(securities, security)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating securities: %w", err)
+	}
+
+	return securities, nil
+}
+
 // GetAll returns all securities (active and inactive)
 // Faithful translation of Python: async def get_all(self) -> List[Security]
 func (r *SecurityRepository) GetAll() ([]Security, error) {
@@ -319,8 +346,8 @@ func (r *SecurityRepository) Delete(symbol string) error {
 // Faithful translation of Python: async def get_with_scores(self) -> List[dict]
 // Note: This method accesses multiple databases (universe.db and portfolio.db) - architecture violation
 func (r *SecurityRepository) GetWithScores(portfolioDB *sql.DB) ([]SecurityWithScore, error) {
-	// Fetch securities from universe.db
-	securityRows, err := r.universeDB.Query("SELECT * FROM securities WHERE active = 1")
+	// Fetch securities from universe.db (excluding cash - cash doesn't have scores)
+	securityRows, err := r.universeDB.Query("SELECT * FROM securities WHERE active = 1 AND product_type != 'CASH'")
 	if err != nil {
 		return nil, fmt.Errorf("failed to query securities: %w", err)
 	}
@@ -582,4 +609,25 @@ func boolToInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// GetGroupedByExchange returns active securities grouped by exchange
+func (r *SecurityRepository) GetGroupedByExchange() (map[string][]Security, error) {
+	securities, err := r.GetAllActive()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active securities: %w", err)
+	}
+
+	grouped := make(map[string][]Security)
+	for _, security := range securities {
+		// Use FullExchangeName as the grouping key
+		exchange := security.FullExchangeName
+		if exchange == "" {
+			exchange = "UNKNOWN"
+		}
+		grouped[exchange] = append(grouped[exchange], security)
+	}
+
+	r.log.Debug().Int("exchanges", len(grouped)).Msg("Grouped securities by exchange")
+	return grouped, nil
 }

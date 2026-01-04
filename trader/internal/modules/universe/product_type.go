@@ -15,6 +15,8 @@ const (
 	ProductTypeETC ProductType = "ETC"
 	// ProductTypeMutualFund represents mutual funds (some UCITS products)
 	ProductTypeMutualFund ProductType = "MUTUALFUND"
+	// ProductTypeCash represents cash positions (synthetic securities for currency balances)
+	ProductTypeCash ProductType = "CASH"
 	// ProductTypeUnknown represents unknown type
 	ProductTypeUnknown ProductType = "UNKNOWN"
 )

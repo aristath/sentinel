@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/aristath/arduino-trader/internal/modules/portfolio"
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog"
 )
@@ -15,12 +14,12 @@ import (
 // Handler handles allocation HTTP requests
 // Faithful translation from Python: app/modules/allocation/api/allocation.py
 type Handler struct {
-	allocRepo        *Repository
-	groupingRepo     *GroupingRepository
-	alertService     *ConcentrationAlertService
-	portfolioService *portfolio.PortfolioService
-	log              zerolog.Logger
-	pythonURL        string // URL of Python service (temporary during migration)
+	allocRepo                *Repository
+	groupingRepo             *GroupingRepository
+	alertService             *ConcentrationAlertService
+	portfolioSummaryProvider PortfolioSummaryProvider
+	log                      zerolog.Logger
+	pythonURL                string // URL of Python service (temporary during migration)
 }
 
 // NewHandler creates a new allocation handler
@@ -28,17 +27,17 @@ func NewHandler(
 	allocRepo *Repository,
 	groupingRepo *GroupingRepository,
 	alertService *ConcentrationAlertService,
-	portfolioService *portfolio.PortfolioService,
+	portfolioSummaryProvider PortfolioSummaryProvider,
 	log zerolog.Logger,
 	pythonURL string,
 ) *Handler {
 	return &Handler{
-		allocRepo:        allocRepo,
-		groupingRepo:     groupingRepo,
-		alertService:     alertService,
-		portfolioService: portfolioService,
-		log:              log.With().Str("handler", "allocation").Logger(),
-		pythonURL:        pythonURL,
+		allocRepo:                allocRepo,
+		groupingRepo:             groupingRepo,
+		alertService:             alertService,
+		portfolioSummaryProvider: portfolioSummaryProvider,
+		log:                      log.With().Str("handler", "allocation").Logger(),
+		pythonURL:                pythonURL,
 	}
 }
 
@@ -375,14 +374,11 @@ func (h *Handler) HandleUpdateIndustryGroupTargets(w http.ResponseWriter, r *htt
 // Faithful translation of Python: @router.get("/groups/allocation")
 func (h *Handler) HandleGetGroupAllocation(w http.ResponseWriter, r *http.Request) {
 	// Get portfolio summary
-	portfolioSummary, err := h.portfolioService.GetPortfolioSummary()
+	summary, err := h.portfolioSummaryProvider.GetPortfolioSummary()
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-
-	// Convert to allocation types
-	summary := convertPortfolioSummary(portfolioSummary)
 
 	// Get group mappings
 	countryGroups, err := h.groupingRepo.GetCountryGroups()
@@ -433,14 +429,11 @@ func (h *Handler) HandleGetGroupAllocation(w http.ResponseWriter, r *http.Reques
 // Faithful translation of Python: @router.get("/current")
 func (h *Handler) HandleGetCurrentAllocation(w http.ResponseWriter, r *http.Request) {
 	// Get portfolio summary
-	portfolioSummary, err := h.portfolioService.GetPortfolioSummary()
+	summary, err := h.portfolioSummaryProvider.GetPortfolioSummary()
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-
-	// Convert to allocation types
-	summary := convertPortfolioSummary(portfolioSummary)
 
 	// Detect concentration alerts
 	alerts, err := h.alertService.DetectAlerts(summary)
@@ -465,14 +458,11 @@ func (h *Handler) HandleGetCurrentAllocation(w http.ResponseWriter, r *http.Requ
 // Faithful translation of Python: @router.get("/deviations")
 func (h *Handler) HandleGetDeviations(w http.ResponseWriter, r *http.Request) {
 	// Get portfolio summary
-	portfolioSummary, err := h.portfolioService.GetPortfolioSummary()
+	summary, err := h.portfolioSummaryProvider.GetPortfolioSummary()
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-
-	// Convert to allocation types
-	summary := convertPortfolioSummary(portfolioSummary)
 
 	// Calculate deviations
 	response := map[string]interface{}{
@@ -484,31 +474,6 @@ func (h *Handler) HandleGetDeviations(w http.ResponseWriter, r *http.Request) {
 }
 
 // Helper methods
-
-// convertPortfolioSummary converts portfolio.PortfolioSummary to allocation.PortfolioSummary
-func convertPortfolioSummary(src portfolio.PortfolioSummary) PortfolioSummary {
-	return PortfolioSummary{
-		CountryAllocations:  convertAllocations(src.CountryAllocations),
-		IndustryAllocations: convertAllocations(src.IndustryAllocations),
-		TotalValue:          src.TotalValue,
-		CashBalance:         src.CashBalance,
-	}
-}
-
-// convertAllocations converts []portfolio.AllocationStatus to []PortfolioAllocation
-func convertAllocations(src []portfolio.AllocationStatus) []PortfolioAllocation {
-	result := make([]PortfolioAllocation, len(src))
-	for i, a := range src {
-		result[i] = PortfolioAllocation{
-			Name:         a.Name,
-			TargetPct:    a.TargetPct,
-			CurrentPct:   a.CurrentPct,
-			CurrentValue: a.CurrentValue,
-			Deviation:    a.Deviation,
-		}
-	}
-	return result
-}
 
 // calculateDeviationMap converts allocations to deviation status map
 func calculateDeviationMap(allocations []PortfolioAllocation) map[string]interface{} {

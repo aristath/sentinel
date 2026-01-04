@@ -1,12 +1,10 @@
 package universe
 
 import (
-	"database/sql"
 	"fmt"
 	"time"
 
 	"github.com/aristath/arduino-trader/internal/clients/tradernet"
-	"github.com/aristath/arduino-trader/internal/clients/yahoo"
 	"github.com/rs/zerolog"
 )
 
@@ -15,11 +13,11 @@ import (
 type SyncService struct {
 	securityRepo    *SecurityRepository
 	historicalSync  *HistoricalSyncService
-	yahooClient     *yahoo.Client
+	yahooClient     YahooClientInterface
 	scoreCalculator ScoreCalculator
 	tradernetClient *tradernet.Client
 	setupService    *SecuritySetupService
-	db              *sql.DB
+	db              DBExecutor
 	log             zerolog.Logger
 }
 
@@ -27,11 +25,11 @@ type SyncService struct {
 func NewSyncService(
 	securityRepo *SecurityRepository,
 	historicalSync *HistoricalSyncService,
-	yahooClient *yahoo.Client,
+	yahooClient YahooClientInterface,
 	scoreCalculator ScoreCalculator,
 	tradernetClient *tradernet.Client,
 	setupService *SecuritySetupService,
-	db *sql.DB,
+	db DBExecutor,
 	log zerolog.Logger,
 ) *SyncService {
 	return &SyncService{
@@ -532,4 +530,58 @@ func (s *SyncService) RebuildUniverseFromPortfolio() (int, error) {
 		Msg("Universe rebuild complete")
 
 	return added, nil
+}
+
+// SyncPricesForSymbols syncs prices for a filtered set of symbols
+// Similar to SyncAllPrices but accepts a pre-filtered symbol map
+func (s *SyncService) SyncPricesForSymbols(symbolMap map[string]*string) (int, error) {
+	s.log.Info().Int("symbols", len(symbolMap)).Msg("Starting filtered price sync")
+
+	if len(symbolMap) == 0 {
+		s.log.Info().Msg("No symbols to sync prices for")
+		return 0, nil
+	}
+
+	// Fetch batch quotes from Yahoo
+	quotes, err := s.yahooClient.GetBatchQuotes(symbolMap)
+	if err != nil {
+		return 0, fmt.Errorf("failed to fetch batch quotes: %w", err)
+	}
+
+	// Update position prices in state.db
+	updated := 0
+	now := time.Now()
+
+	for symbol, price := range quotes {
+		if price == nil {
+			s.log.Warn().Str("symbol", symbol).Msg("No price data received")
+			continue
+		}
+
+		// Update positions table
+		result, err := s.db.Exec(`
+			UPDATE positions
+			SET current_price = ?,
+				market_value_eur = quantity * ? / currency_rate,
+				last_updated = ?
+			WHERE symbol = ?
+		`, *price, *price, now, symbol)
+
+		if err != nil {
+			s.log.Error().Err(err).Str("symbol", symbol).Msg("Failed to update position price")
+			continue
+		}
+
+		rowsAffected, _ := result.RowsAffected()
+		if rowsAffected > 0 {
+			updated++
+		}
+	}
+
+	s.log.Info().
+		Int("requested", len(symbolMap)).
+		Int("updated", updated).
+		Msg("Filtered price sync complete")
+
+	return updated, nil
 }

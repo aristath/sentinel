@@ -1,6 +1,7 @@
 package sequences
 
 import (
+	"github.com/aristath/arduino-trader/internal/modules/optimization"
 	"github.com/aristath/arduino-trader/internal/modules/planning/domain"
 	"github.com/aristath/arduino-trader/internal/modules/sequences/filters"
 	"github.com/aristath/arduino-trader/internal/modules/sequences/generators"
@@ -15,11 +16,11 @@ type Service struct {
 	log               zerolog.Logger
 }
 
-func NewService(log zerolog.Logger) *Service {
+func NewService(log zerolog.Logger, riskBuilder *optimization.RiskModelBuilder) *Service {
 	return &Service{
 		patternRegistry:   patterns.NewPopulatedPatternRegistry(log),
 		generatorRegistry: generators.NewPopulatedGeneratorRegistry(log),
-		filterRegistry:    filters.NewPopulatedFilterRegistry(log),
+		filterRegistry:    filters.NewPopulatedFilterRegistry(log, riskBuilder),
 		log:               log.With().Str("module", "sequences").Logger(),
 	}
 }

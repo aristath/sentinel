@@ -22,14 +22,14 @@ type SecurityFetcher interface {
 
 // TradingHandlers contains HTTP handlers for trading API
 type TradingHandlers struct {
-	log              zerolog.Logger
-	securityFetcher  SecurityFetcher
-	tradeRepo        *TradeRepository
-	portfolioService *portfolio.PortfolioService
-	alertService     *allocation.ConcentrationAlertService
-	tradernetClient  *tradernet.Client
-	safetyService    *TradeSafetyService
-	settingsService  *settings.Service
+	log                        zerolog.Logger
+	securityFetcher            SecurityFetcher
+	tradeRepo                  *TradeRepository
+	portfolioService           *portfolio.PortfolioService
+	concentrationAlertProvider allocation.ConcentrationAlertProvider
+	tradernetClient            *tradernet.Client
+	safetyService              *TradeSafetyService
+	settingsService            *settings.Service
 }
 
 // NewTradingHandlers creates a new trading handlers instance
@@ -37,21 +37,21 @@ func NewTradingHandlers(
 	tradeRepo *TradeRepository,
 	securityFetcher SecurityFetcher,
 	portfolioService *portfolio.PortfolioService,
-	alertService *allocation.ConcentrationAlertService,
+	concentrationAlertProvider allocation.ConcentrationAlertProvider,
 	tradernetClient *tradernet.Client,
 	safetyService *TradeSafetyService,
 	settingsService *settings.Service,
 	log zerolog.Logger,
 ) *TradingHandlers {
 	return &TradingHandlers{
-		tradeRepo:        tradeRepo,
-		securityFetcher:  securityFetcher,
-		portfolioService: portfolioService,
-		alertService:     alertService,
-		tradernetClient:  tradernetClient,
-		safetyService:    safetyService,
-		settingsService:  settingsService,
-		log:              log.With().Str("handler", "trading").Logger(),
+		tradeRepo:                  tradeRepo,
+		securityFetcher:            securityFetcher,
+		portfolioService:           portfolioService,
+		concentrationAlertProvider: concentrationAlertProvider,
+		tradernetClient:            tradernetClient,
+		safetyService:              safetyService,
+		settingsService:            settingsService,
+		log:                        log.With().Str("handler", "trading").Logger(),
 	}
 }
 
@@ -247,7 +247,7 @@ func (h *TradingHandlers) HandleGetAllocation(w http.ResponseWriter, r *http.Req
 	summary := convertPortfolioSummary(portfolioSummary)
 
 	// Detect concentration alerts
-	alerts, err := h.alertService.DetectAlerts(summary)
+	alerts, err := h.concentrationAlertProvider.DetectAlerts(summary)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, err.Error())
 		return

@@ -2,9 +2,13 @@ package evaluation
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"time"
 
+	"github.com/aristath/arduino-trader/internal/evaluation"
 	"github.com/aristath/arduino-trader/internal/evaluation/models"
 	"github.com/aristath/arduino-trader/internal/evaluation/workers"
 	"github.com/aristath/arduino-trader/internal/modules/planning/domain"
@@ -23,6 +27,38 @@ func NewService(numWorkers int, log zerolog.Logger) *Service {
 		workerPool: workers.NewWorkerPool(numWorkers),
 		log:        log.With().Str("component", "evaluation_service").Logger(),
 	}
+}
+
+// hashSequence generates a deterministic MD5 hash for a sequence
+// Matches legacy Python implementation: (symbol, side, quantity) tuples, order-dependent
+// Based on legacy/app/modules/planning/domain/calculations/utils.py:43-60
+func hashSequence(actions []domain.ActionCandidate) string {
+	type tuple struct {
+		Symbol   string `json:"symbol"`
+		Side     string `json:"side"`
+		Quantity int    `json:"quantity"`
+	}
+
+	// Create tuples matching Python: [(c.symbol, c.side, c.quantity) for c in sequence]
+	tuples := make([]tuple, len(actions))
+	for i, action := range actions {
+		tuples[i] = tuple{
+			Symbol:   action.Symbol,
+			Side:     action.Side,
+			Quantity: action.Quantity,
+		}
+	}
+
+	// JSON marshal (Go's json.Marshal preserves order by default, like sort_keys=False)
+	jsonBytes, err := json.Marshal(tuples)
+	if err != nil {
+		// Fallback: should not happen, but handle gracefully
+		return ""
+	}
+
+	// MD5 hash and return hex digest (matches hashlib.md5().hexdigest())
+	hash := md5.Sum(jsonBytes)
+	return hex.EncodeToString(hash[:])
 }
 
 // BatchEvaluate evaluates a batch of sequences directly (no HTTP overhead).
@@ -81,20 +117,41 @@ func (s *Service) BatchEvaluate(ctx context.Context, sequences []domain.ActionSe
 	// Convert results back to domain models
 	domainResults := make([]domain.EvaluationResult, len(results))
 	for i, result := range results {
-		domainResults[i] = domain.EvaluationResult{
-			SequenceHash:        fmt.Sprintf("seq_%d", i), // TODO: Use actual hash
-			PortfolioHash:       portfolioHash,
-			EndScore:            result.Score,
-			ScoreBreakdown:      make(map[string]float64), // TODO: Map from evaluation
-			EndCash:             result.EndCashEUR,
-			EndContextPositions: make(map[string]float64), // TODO: Extract from end portfolio
-			TotalValue:          0.0,                      // TODO: Calculate from end portfolio
-			Feasible:            result.Feasible,
+		// Get sequence hash - use pre-computed hash if available, otherwise compute it
+		sequenceHash := sequences[i].SequenceHash
+		if sequenceHash == "" {
+			// Fallback: compute hash from actions
+			sequenceHash = hashSequence(sequences[i].Actions)
 		}
 
-		// Extract positions from end portfolio
+		// Calculate diversification score for breakdown
+		divScore := evaluation.CalculateDiversificationScore(result.EndPortfolio)
+
+		// Build score breakdown map
+		breakdown := make(map[string]float64)
+		breakdown["diversification"] = divScore
+		breakdown["transaction_cost"] = result.TransactionCosts
+		breakdown["final_score"] = result.Score
+
+		// Extract positions from end portfolio (ensure we have a map even if nil)
+		endPositions := make(map[string]float64)
 		if result.EndPortfolio.Positions != nil {
-			domainResults[i].EndContextPositions = result.EndPortfolio.Positions
+			// Copy positions to avoid sharing the same map reference
+			for symbol, value := range result.EndPortfolio.Positions {
+				endPositions[symbol] = value
+			}
+		}
+
+		domainResults[i] = domain.EvaluationResult{
+			SequenceHash:         sequenceHash,
+			PortfolioHash:        portfolioHash,
+			EndScore:             result.Score,
+			ScoreBreakdown:       breakdown,
+			EndCash:              result.EndCashEUR,
+			EndContextPositions:  endPositions,
+			DiversificationScore: divScore,
+			TotalValue:           result.EndPortfolio.TotalValue,
+			Feasible:             result.Feasible,
 		}
 	}
 

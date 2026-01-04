@@ -9,18 +9,29 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// TradeRepositoryInterface defines the interface for trade persistence
+type TradeRepositoryInterface interface {
+	Create(trade Trade) error
+}
+
+// TradernetClientInterface defines the interface for Tradernet operations
+type TradernetClientInterface interface {
+	GetExecutedTrades(limit int) ([]tradernet.Trade, error)
+	PlaceOrder(symbol, side string, quantity float64) (*tradernet.OrderResult, error)
+}
+
 // TradingService handles trade-related business logic
 type TradingService struct {
 	log             zerolog.Logger
-	tradeRepo       *TradeRepository
-	tradernetClient *tradernet.Client
+	tradeRepo       TradeRepositoryInterface
+	tradernetClient TradernetClientInterface
 	safetyService   *TradeSafetyService
 }
 
 // NewTradingService creates a new trading service
 func NewTradingService(
-	tradeRepo *TradeRepository,
-	tradernetClient *tradernet.Client,
+	tradeRepo TradeRepositoryInterface,
+	tradernetClient TradernetClientInterface,
 	safetyService *TradeSafetyService,
 	log zerolog.Logger,
 ) *TradingService {
