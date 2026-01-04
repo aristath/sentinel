@@ -25,18 +25,18 @@ CREATE TABLE IF NOT EXISTS settings (
 
 -- Allocation targets table: group-based allocation rules
 -- Defines target percentages for country/industry groups
+-- Schema matches repository expectations: id, type, name, target_pct
 CREATE TABLE IF NOT EXISTS allocation_targets (
-    group_type TEXT NOT NULL CHECK (group_type IN ('country', 'industry', 'bucket')),
-    group_name TEXT NOT NULL,
-    target_percentage REAL NOT NULL CHECK (target_percentage >= 0 AND target_percentage <= 100),
-    min_percentage REAL CHECK (min_percentage >= 0 AND min_percentage <= 100),
-    max_percentage REAL CHECK (max_percentage >= 0 AND max_percentage <= 100),
+    id INTEGER PRIMARY KEY,
+    type TEXT NOT NULL,      -- 'geography', 'industry', 'country_group', 'industry_group'
+    name TEXT NOT NULL,
+    target_pct REAL NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    PRIMARY KEY (group_type, group_name)
+    UNIQUE(type, name)
 ) STRICT;
 
-CREATE INDEX IF NOT EXISTS idx_allocation_group_type ON allocation_targets(group_type);
+CREATE INDEX IF NOT EXISTS idx_allocation_type ON allocation_targets(type);
 
 -- Database health tracking table
 CREATE TABLE IF NOT EXISTS _database_health (

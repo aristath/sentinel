@@ -16,6 +16,8 @@
 -- Add agent_id column to buckets table
 -- This references agent_configs.id in agents.db
 -- NULL = bucket uses default/core strategy
+-- Note: This migration is for satellites.db only
+-- The migration system will skip this on databases where buckets table doesn't exist
 ALTER TABLE buckets ADD COLUMN agent_id TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_buckets_agent ON buckets(agent_id);
