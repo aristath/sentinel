@@ -1,1 +1,0 @@
-"""Display domain module."""

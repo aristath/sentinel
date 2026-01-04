@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  pypfopt:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pypfopt-service
+    ports:
+      - "9001:9001"
+    environment:
+      - LOG_LEVEL=INFO
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9001/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s

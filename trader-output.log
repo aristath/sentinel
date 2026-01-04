@@ -1,0 +1,59 @@
+03:05:13 INF cmd/server/main.go:60 > Starting Arduino Trader
+03:05:13 INF internal/scheduler/scheduler.go:36 > Scheduler started component=scheduler
+03:05:13 INF cmd/server/main.go:180 > Display manager initialized
+03:05:13 INF internal/scheduler/market_hours.go:582 > Market hours calendars initialized calendars=26 component=market_hours
+03:05:13 INF cmd/server/main.go:447 > Ticker content service initialized
+03:05:13 INF internal/scheduler/scheduler.go:73 > Job registered component=scheduler job=health_check schedule="0 0 4 * * *"
+03:05:13 INF internal/scheduler/scheduler.go:73 > Job registered component=scheduler job=sync_cycle schedule="0 */5 * * * *"
+03:05:13 INF internal/scheduler/scheduler.go:73 > Job registered component=scheduler job=dividend_reinvestment schedule="0 0 10 * * *"
+03:05:13 INF internal/scheduler/scheduler.go:73 > Job registered component=scheduler job=satellite_maintenance schedule="0 0 11 * * *"
+03:05:13 INF internal/scheduler/scheduler.go:73 > Job registered component=scheduler job=satellite_reconciliation schedule="0 30 23 * * *"
+03:05:13 INF internal/scheduler/scheduler.go:73 > Job registered component=scheduler job=satellite_evaluation schedule="0 0 3 * * 0"
+03:05:13 INF internal/modules/opportunities/calculators/registry.go:156 > Calculator registry initialized calculators=6
+03:05:13 INF internal/modules/sequences/patterns/registry.go:150 > Pattern registry initialized patterns=13
+03:05:13 INF internal/modules/sequences/generators/registry.go:81 > Generator registry initialized generators=4
+03:05:13 INF internal/modules/sequences/filters/registry.go:83 > Filter registry initialized filters=4
+03:05:13 INF internal/scheduler/scheduler.go:73 > Job registered component=scheduler job=planner_batch schedule="0 */15 * * * *"
+03:05:13 INF internal/scheduler/scheduler.go:73 > Job registered component=scheduler job=event_based_trading schedule="0 */5 * * * *"
+03:05:13 INF internal/scheduler/scheduler.go:73 > Job registered component=scheduler job=history_cleanup schedule="0 0 0 * * *"
+03:05:13 INF internal/scheduler/scheduler.go:73 > Job registered component=scheduler job=hourly_backup schedule="0 0 * * * *"
+03:05:13 INF internal/scheduler/scheduler.go:73 > Job registered component=scheduler job=daily_backup schedule="0 0 1 * * *"
+03:05:13 INF internal/scheduler/scheduler.go:73 > Job registered component=scheduler job=daily_maintenance schedule="0 0 2 * * *"
+03:05:13 INF internal/scheduler/scheduler.go:73 > Job registered component=scheduler job=weekly_backup schedule="0 0 1 * * 0"
+03:05:13 INF internal/scheduler/scheduler.go:73 > Job registered component=scheduler job=weekly_maintenance schedule="0 30 3 * * 0"
+03:05:13 INF internal/scheduler/scheduler.go:73 > Job registered component=scheduler job=monthly_backup schedule="0 0 1 1 * *"
+03:05:13 INF internal/scheduler/scheduler.go:73 > Job registered component=scheduler job=monthly_maintenance schedule="0 0 4 1 * *"
+03:05:13 INF cmd/server/main.go:702 > Background jobs registered successfully jobs=16
+03:05:13 INF internal/scheduler/scheduler.go:73 > Job registered component=scheduler job=deployment schedule="0 */5 * * * *"
+03:05:13 INF cmd/server/main.go:201 > Deployment job registered (every 5 minutes)
+03:05:13 INF internal/scheduler/market_hours.go:582 > Market hours calendars initialized calendars=26 component=market_hours
+03:05:13 INF internal/scheduler/market_hours.go:582 > Market hours calendars initialized calendars=26 component=market_hours
+03:05:13 INF internal/scheduler/market_hours.go:582 > Market hours calendars initialized calendars=26 component=market_hours
+03:05:13 INF internal/modules/opportunities/calculators/registry.go:156 > Calculator registry initialized calculators=6 component=server
+03:05:13 INF internal/modules/sequences/patterns/registry.go:150 > Pattern registry initialized component=server patterns=13
+03:05:13 INF internal/modules/sequences/generators/registry.go:81 > Generator registry initialized component=server generators=4
+03:05:13 INF internal/modules/sequences/filters/registry.go:83 > Filter registry initialized component=server filters=4
+03:05:13 INF internal/modules/opportunities/calculators/registry.go:156 > Calculator registry initialized calculators=6 component=server
+03:05:13 INF internal/modules/sequences/patterns/registry.go:150 > Pattern registry initialized component=server patterns=13
+03:05:13 INF internal/modules/sequences/generators/registry.go:81 > Generator registry initialized component=server generators=4
+03:05:13 INF internal/modules/sequences/filters/registry.go:83 > Filter registry initialized component=server filters=4
+03:05:13 INF internal/scheduler/scheduler.go:43 > Scheduler stopped component=scheduler
+panic: chi: attempting to Mount() a handler on an existing path, '/trades'
+
+goroutine 1 [running]:
+github.com/go-chi/chi/v5.(*Mux).Mount(0x1400018ce40, {0x102a1206c, 0x7}, {0x102c5e600, 0x1400018dd40})
+	/Users/aristath/go/pkg/mod/github.com/go-chi/chi/v5@v5.0.11/mux.go:291 +0x3a8
+github.com/go-chi/chi/v5.(*Mux).Route(0x1400018ce40, {0x102a1206c, 0x7}, 0x14000183548)
+	/Users/aristath/go/pkg/mod/github.com/go-chi/chi/v5@v5.0.11/mux.go:272 +0xf4
+github.com/aristath/arduino-trader/internal/server.(*Server).setupPlanningRoutes(0x14000506700, {0x102c67d30, 0x1400018ce40})
+	/Users/aristath/arduino-trader/trader/internal/server/planning_routes.go:105 +0x680
+github.com/aristath/arduino-trader/internal/server.(*Server).setupRoutes.func1({0x102c67d30, 0x1400018ce40})
+	/Users/aristath/arduino-trader/trader/internal/server/server.go:241 +0xf8
+github.com/go-chi/chi/v5.(*Mux).Route(0x1400018cd80, {0x102a0fa35, 0x4}, 0x1400003b738)
+	/Users/aristath/go/pkg/mod/github.com/go-chi/chi/v5@v5.0.11/mux.go:271 +0xd8
+github.com/aristath/arduino-trader/internal/server.(*Server).setupRoutes(0x14000506700)
+	/Users/aristath/arduino-trader/trader/internal/server/server.go:203 +0x118
+github.com/aristath/arduino-trader/internal/server.New({{{0x102c60928, 0x14000022410}, 0xff, {0x0, 0x0}, {0x140000f6800, 0x1, 0x1f4}, {0x14000612260, 0x2, ...}, ...}, ...})
+	/Users/aristath/arduino-trader/trader/internal/server/server.go:125 +0x578
+main.main()
+	/Users/aristath/arduino-trader/trader/cmd/server/main.go:206 +0xe8c

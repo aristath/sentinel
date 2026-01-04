@@ -1,0 +1,58 @@
+name: Python Code Quality
+
+on:
+  push:
+    branches: [ main, go2 ]
+    paths:
+      - 'app/**'
+      - 'tests/**'
+      - '**.py'
+      - 'requirements.txt'
+      - '.github/workflows/python-checks.yml'
+  pull_request:
+    branches: [ main, go2 ]
+    paths:
+      - 'app/**'
+      - 'tests/**'
+      - '**.py'
+      - 'requirements.txt'
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.11']
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install black isort flake8 mypy bandit pytest pytest-cov
+
+    - name: Check code formatting with Black
+      run: black --check app/ tests/
+
+    - name: Check import ordering with isort
+      run: isort --check-only --profile black app/ tests/
+
+    - name: Lint with flake8
+      run: flake8 app/ tests/
+
+    - name: Type check with mypy
+      run: mypy --ignore-missing-imports --no-error-summary app/ tests/
+
+    - name: Security check with Bandit
+      run: bandit -r app/ tests/ -ll --skip B101,B108,B324,B601,B608
+
+    - name: Run tests with pytest
+      run: pytest tests/ -v --cov=app --cov-report=term-missing

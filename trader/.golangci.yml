@@ -1,0 +1,148 @@
+# golangci-lint configuration for Arduino Trader
+# See https://golangci-lint.run/usage/configuration/
+
+run:
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    # Default linters
+    - errcheck      # Check for unchecked errors
+    - govet         # Vet examines Go source code
+    - unused        # Check for unused constants, variables, functions, types
+  disable:
+    - gosimple      # Disabled: too many style suggestions
+    - ineffassign   # Disabled: many false positives
+    - staticcheck   # Disabled: too many style suggestions
+    # Note: unused and unusedwrite are enabled - we want clean code
+
+    # Additional recommended linters
+    - gofmt         # Check code is formatted
+    - goimports     # Check imports are formatted
+    - misspell      # Find commonly misspelled English words
+    - revive        # Fast, configurable, extensible, flexible linter
+    - unconvert     # Remove unnecessary type conversions
+    # - unparam       # Disabled: too many false positives with interface methods
+    - gosec         # Security checker (like bandit for Python)
+    - bodyclose     # Check HTTP response body is closed
+    - errname       # Check error naming conventions
+    # - errorlint     # Disabled: too strict, many false positives with sql.ErrNoRows
+    - gocritic      # Opinionated Go linter
+    - goprintffuncname  # Check printf-like function names
+    # - nilerr        # Disabled: many false positives
+    # - nolintlint    # Disabled: too strict
+    # - prealloc      # Disabled: optimization suggestions, not correctness issues
+    - predeclared   # Find code that shadows Go predeclared identifiers
+    # - thelper       # Disabled: test helper detection is too strict
+    # - wastedassign  # Disabled: many false positives with flag variables
+
+linters-settings:
+  errcheck:
+    # Don't check error return value for these functions
+    exclude-functions:
+      - (io.Closer).Close
+      - (*database/sql.Rows).Close
+      - (*database/sql.Stmt).Close
+      - (*encoding/json.Encoder).Encode  # JSON encoding errors are rare and handled by HTTP layer
+      - (*database/sql.Tx).Rollback      # Rollback errors in defer are typically ignored
+      - filepath.Walk                     # Walk callback errors are handled in callback
+      - (*database/sql.Row).Scan          # Scan errors for PRAGMA queries are typically ignored
+      - fmt.Sscanf                        # Sscanf errors for simple parsing are often ignored
+      - filepath.Walk                     # Walk errors are handled in callback function
+      - (filepath.WalkFunc)               # WalkFunc callback errors are handled in callback
+
+  govet:
+    enable-all: true
+    disable:
+      - shadow  # Can be overly strict
+      - fieldalignment  # Field ordering optimization, not critical for correctness
+
+  gosec:
+    # Security severity levels: LOW, MEDIUM, HIGH
+    severity: medium
+    confidence: medium
+    excludes:
+      - G104  # Unhandled errors (covered by errcheck)
+      - G115  # Integer overflow in bit shift (false positive for exponential backoff)
+      - G306  # File permissions (acceptable for deployment scripts)
+      - G404  # Weak random (acceptable for simulation/testing)
+      - G204  # Subprocess launched (acceptable for system commands)
+      - G201  # SQL string formatting (acceptable for dynamic queries)
+      - G202  # SQL string concatenation (acceptable for dynamic queries)
+      - G401  # Weak cryptographic primitive (acceptable for hashing, not encryption)
+      - G501  # Blocklisted import crypto/md5 (acceptable for hashing, not encryption)
+
+  revive:
+    rules:
+      # Enable specific rules
+      # - name: blank-imports  # Disabled: blank imports for SQL drivers are common
+      - name: context-as-argument
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      # Disable naming rules that are too strict
+      # - name: exported  # Disabled: too many false positives with package prefixes
+      - name: increment-decrement
+      # - name: var-naming  # Disabled: allows underscores in package names (cash_flows)
+      # - name: package-comments  # Disabled: not all packages need comments
+      - name: range
+      - name: receiver-naming
+      # - name: indent-error-flow  # Disabled: too strict, prefers else-less code
+      - name: errorf
+      # - name: empty-block  # Disabled: empty blocks are sometimes intentional
+      # - name: superfluous-else  # Disabled: else can improve readability
+      - name: unreachable-code
+      - name: redefines-builtin-id
+
+  goimports:
+    local-prefixes: github.com/yourusername/arduino-trader
+
+  gocritic:
+    disabled-checks:
+      - exitAfterDefer  # Common pattern in main() functions to exit on fatal errors
+      - ifElseChain     # Style suggestion, not correctness issue
+      - assignOp        # Style suggestion, not correctness issue
+      - appendAssign    # Style suggestion, not correctness issue
+      - dupBranchBody   # Style suggestion, not correctness issue
+      - deprecatedComment  # Style suggestion, not correctness issue
+
+issues:
+  # Maximum issues count per one linter (0 = unlimited)
+  max-issues-per-linter: 0
+  # Maximum count of issues with the same text (0 = unlimited)
+  max-same-issues: 0
+  # Exclude migration scripts directory (separate executables)
+  exclude-dirs:
+    - scripts/migration
+
+  # Exclude some linters from running on tests
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gosec
+        - unparam
+        # Note: unusedwrite is enabled - we want clean test code too
+
+    # Exclude known linters from partially hard-vendored code sources
+    - path: "internal/vendor/"
+      linters:
+        - gocritic
+        - staticcheck
+        - revive
+
+    # Exclude migration scripts (separate executables, can have duplicate main/function names)
+    - path: "scripts/migration/"
+      linters:
+        - govet
+        - typecheck
+
+output:
+  formats:
+    - format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+  sort-results: true

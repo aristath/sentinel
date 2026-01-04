@@ -1,1 +1,0 @@
-"""Cash flows database module."""

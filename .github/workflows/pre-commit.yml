@@ -1,0 +1,32 @@
+name: Pre-commit Checks
+
+on:
+  push:
+    branches: [ main, go2 ]
+  pull_request:
+    branches: [ main, go2 ]
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+
+    - name: Install Go tools
+      run: |
+        go install honnef.co/go/tools/cmd/staticcheck@latest
+        go install github.com/go-critic/go-critic/cmd/gocritic@latest
+
+    - name: Run pre-commit
+      uses: pre-commit/action@v3.0.1

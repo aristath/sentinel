@@ -1,0 +1,76 @@
+name: Go Code Quality
+
+on:
+  push:
+    branches: [ main, go2 ]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/go-checks.yml'
+      - '.golangci.yml'
+  pull_request:
+    branches: [ main, go2 ]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+        cache: true
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Verify dependencies
+      run: go mod verify
+
+    - name: Check go.mod is tidy
+      run: |
+        go mod tidy
+        git diff --exit-code go.mod go.sum
+
+    - name: Format check
+      run: |
+        if [ -n "$(gofmt -l .)" ]; then
+          echo "Go code is not formatted:"
+          gofmt -d .
+          exit 1
+        fi
+
+    - name: Run go vet
+      run: go vet ./...
+
+    - name: Run staticcheck
+      uses: dominikh/staticcheck-action@v1
+      with:
+        version: "latest"
+
+    - name: Run golangci-lint
+      uses: golangci/golangci-lint-action@v6
+      with:
+        version: latest
+        args: --timeout=5m
+
+    - name: Build
+      run: go build -v ./...
+
+    - name: Run tests
+      run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        files: ./coverage.out
+        flags: go
+        name: go-coverage

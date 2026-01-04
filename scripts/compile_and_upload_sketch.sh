@@ -6,7 +6,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-SKETCH_DIR="$REPO_DIR/arduino-app/sketch"
+SKETCH_DIR="$REPO_DIR/display/sketch"
 SKETCH_FILE="$SKETCH_DIR/sketch.ino"
 FQBN="arduino:zephyr:unoq"
 LOG_FILE="/home/arduino/logs/sketch-compile.log"
@@ -64,13 +64,9 @@ arduino-cli core install arduino:zephyr >> "$LOG_FILE" 2>&1 || {
     error_exit "Failed to install arduino:zephyr platform"
 }
 
-# Install required libraries
+# Install required libraries (only ArduinoGraphics needed now - no RouterBridge/MsgPack)
 log "Installing required libraries..."
 arduino-cli lib install "ArduinoGraphics" >> "$LOG_FILE" 2>&1 || log "WARNING: Failed to install ArduinoGraphics"
-arduino-cli lib install "MsgPack@0.4.2" >> "$LOG_FILE" 2>&1 || log "WARNING: Failed to install MsgPack"
-arduino-cli lib install "DebugLog@0.8.4" >> "$LOG_FILE" 2>&1 || log "WARNING: Failed to install DebugLog"
-arduino-cli lib install "ArxContainer@0.7.0" >> "$LOG_FILE" 2>&1 || log "WARNING: Failed to install ArxContainer"
-arduino-cli lib install "ArxTypeTraits@0.3.1" >> "$LOG_FILE" 2>&1 || log "WARNING: Failed to install ArxTypeTraits"
 
 # Compile sketch
 log "Compiling sketch: $SKETCH_FILE"

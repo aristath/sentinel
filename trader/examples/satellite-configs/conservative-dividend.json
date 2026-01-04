@@ -1,0 +1,17 @@
+{
+  "preset": "dividend_catcher",
+  "risk_appetite": 0.2,
+  "hold_duration": 0.9,
+  "entry_style": 0.1,
+  "position_spread": 0.7,
+  "profit_taking": 0.3,
+  "trailing_stops": false,
+  "follow_regime": true,
+  "auto_harvest": true,
+  "pause_high_volatility": false,
+  "dividend_handling": "reinvest_same",
+  "risk_free_rate": 0.035,
+  "sortino_mar": 0.05,
+  "evaluation_period_days": 120,
+  "volatility_window": 90
+}
