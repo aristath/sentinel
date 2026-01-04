@@ -4,7 +4,6 @@ import { useAppStore } from '../../stores/appStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { api } from '../../api/client';
 import { useNotifications } from '../../hooks/useNotifications';
-import { GroupingManager } from '../portfolio/GroupingManager';
 
 export function SettingsModal() {
   const { showSettingsModal, closeSettingsModal } = useAppStore();
@@ -582,15 +581,6 @@ export function SettingsModal() {
                   </Button>
                 </Group>
               </Stack>
-            </Paper>
-
-            {/* Custom Grouping */}
-            <Paper p="md" withBorder>
-              <Text size="sm" fw={500} mb="xs" tt="uppercase">Custom Grouping</Text>
-              <Text size="xs" c="dimmed" mb="md">
-                Create custom groups for countries and industries to simplify constraints and improve optimizer performance.
-              </Text>
-              <GroupingManager />
             </Paper>
           </Stack>
         </Tabs.Panel>
