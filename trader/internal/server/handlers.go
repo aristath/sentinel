@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/json"
 	"net/http"
-	"runtime"
 )
 
 // handleHealth handles health check requests
@@ -12,25 +11,6 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"status":  "healthy",
 		"version": "1.0.0",
 		"service": "arduino-trader",
-	}
-
-	s.writeJSON(w, http.StatusOK, response)
-}
-
-// handleSystemStatus handles system status requests
-func (s *Server) handleSystemStatus(w http.ResponseWriter, r *http.Request) {
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-
-	response := map[string]interface{}{
-		"status": "running",
-		"memory": map[string]interface{}{
-			"alloc_mb":       m.Alloc / 1024 / 1024,
-			"total_alloc_mb": m.TotalAlloc / 1024 / 1024,
-			"sys_mb":         m.Sys / 1024 / 1024,
-			"num_gc":         m.NumGC,
-		},
-		"goroutines": runtime.NumGoroutine(),
 	}
 
 	s.writeJSON(w, http.StatusOK, response)

@@ -78,7 +78,7 @@ func SimulateSequence(
 			}
 
 			currentValue := newPositions[action.Symbol]
-			newValue := max(0, currentValue-sellValue)
+			newValue := maxFloat(0, currentValue-sellValue)
 			if newValue <= 0 {
 				delete(newPositions, action.Symbol)
 			} else {
@@ -110,7 +110,7 @@ func SimulateSequence(
 					} else {
 						newGeographies = copyStringMap(newGeographies)
 					}
-					geographiesCopied = true
+					geographiesCopied = true //nolint:wastedassign // Flag tracks copy state for subsequent iterations
 				}
 				newGeographies[action.Symbol] = *country
 			}
@@ -121,7 +121,7 @@ func SimulateSequence(
 					} else {
 						newIndustries = copyStringMap(newIndustries)
 					}
-					industriesCopied = true
+					industriesCopied = true //nolint:wastedassign // Flag tracks copy state for subsequent iterations
 				}
 				newIndustries[action.Symbol] = *industry
 			}
@@ -246,7 +246,7 @@ func copyStringMap(m map[string]string) map[string]string {
 	return result
 }
 
-func max(a, b float64) float64 {
+func maxFloat(a, b float64) float64 { //nolint:redefines-builtin-id // Helper function for float64 max, not the builtin max
 	if a > b {
 		return a
 	}

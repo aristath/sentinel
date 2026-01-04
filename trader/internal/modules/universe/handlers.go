@@ -1,11 +1,9 @@
 package universe
 
 import (
-	"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"regexp"
 	"sort"
@@ -971,71 +969,6 @@ func convertToSecurityScore(symbol string, calculated *domain.CalculatedSecurity
 		Below52wHighPct:        0, // Not in current domain model
 		SellScore:              0, // Not in current domain model
 	}
-}
-
-// Helper methods
-
-// proxyToPython forwards the request to the Python service
-// Supports GET, POST, PUT, DELETE methods and forwards request body
-func (h *UniverseHandlers) proxyToPython(w http.ResponseWriter, r *http.Request, path string) {
-	url := h.pythonURL + path
-
-	// Read request body if present
-	var body []byte
-	var err error
-	if r.Body != nil {
-		body, err = io.ReadAll(r.Body)
-		if err != nil {
-			h.log.Error().Err(err).Msg("Failed to read request body")
-			http.Error(w, "Failed to read request body", http.StatusInternalServerError)
-			return
-		}
-	}
-
-	// Create new request with same method and body
-	req, err := http.NewRequest(r.Method, url, bytes.NewReader(body))
-	if err != nil {
-		h.log.Error().Err(err).Str("url", url).Msg("Failed to create proxy request")
-		http.Error(w, "Failed to create proxy request", http.StatusInternalServerError)
-		return
-	}
-
-	// Copy headers
-	req.Header.Set("Content-Type", "application/json")
-	for key, values := range r.Header {
-		for _, value := range values {
-			req.Header.Add(key, value)
-		}
-	}
-
-	// Execute request
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		h.log.Error().Err(err).Str("url", url).Msg("Failed to contact Python service")
-		http.Error(w, "Failed to contact Python service", http.StatusBadGateway)
-		return
-	}
-	defer resp.Body.Close()
-
-	// Read response body
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		h.log.Error().Err(err).Msg("Failed to read Python response")
-		http.Error(w, "Failed to read Python response", http.StatusInternalServerError)
-		return
-	}
-
-	// Copy response headers
-	for key, values := range resp.Header {
-		for _, value := range values {
-			w.Header().Add(key, value)
-		}
-	}
-
-	// Write response
-	w.WriteHeader(resp.StatusCode)
-	_, _ = w.Write(respBody) // Ignore write error - already committed response
 }
 
 // HandleSyncPrices triggers manual price sync for all active securities

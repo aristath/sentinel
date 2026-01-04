@@ -95,5 +95,5 @@ func (d *MicroserviceDeployer) GetMicroserviceHealthURL(serviceName string) stri
 		return url
 	}
 
-	return fmt.Sprintf("http://localhost:9001/health") // Default
+	return "http://localhost:9001/health" // Default
 }

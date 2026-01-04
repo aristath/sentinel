@@ -509,7 +509,7 @@ func (s *BackupService) findMostRecentBackup(baseDir, filename, pattern string) 
 	var mostRecent string
 	var mostRecentTime time.Time
 
-	filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
+	if err := filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -533,7 +533,9 @@ func (s *BackupService) findMostRecentBackup(baseDir, filename, pattern string) 
 		}
 
 		return nil
-	})
+	}); err != nil {
+		s.log.Warn().Err(err).Str("base_dir", baseDir).Msg("Error walking directory for backup search")
+	}
 
 	return mostRecent
 }

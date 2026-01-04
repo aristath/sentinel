@@ -193,9 +193,9 @@ func getEnvAsBool(key string, defaultValue bool) bool {
 // loadDeploymentConfig loads deployment configuration with hardcoded defaults
 func loadDeploymentConfig() *DeploymentConfig {
 	return &DeploymentConfig{
-		Enabled:                true, // Enabled by default
+		Enabled:                true,      // Enabled by default
 		RepoDir:                "../repo", // Relative to WorkingDirectory (/home/arduino/app/bin)
-		DeployDir:              ".",      // Current directory (app/bin)
+		DeployDir:              ".",       // Current directory (app/bin)
 		StaticDir:              "../static",
 		APIPort:                8001,
 		APIHost:                "localhost",

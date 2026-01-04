@@ -181,7 +181,7 @@ func (s *DatabaseHealthService) findMostRecentBackup() string {
 	var mostRecentTime time.Time
 
 	// Search for backups in subdirectories
-	filepath.Walk(backupDir, func(path string, info os.FileInfo, err error) error {
+	if err := filepath.Walk(backupDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -194,7 +194,9 @@ func (s *DatabaseHealthService) findMostRecentBackup() string {
 		}
 
 		return nil
-	})
+	}); err != nil {
+		s.log.Warn().Err(err).Str("backup_dir", backupDir).Msg("Error walking directory for backup search")
+	}
 
 	return mostRecent
 }

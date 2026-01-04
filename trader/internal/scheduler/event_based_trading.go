@@ -16,7 +16,6 @@ type EventBasedTradingJob struct {
 	log                  zerolog.Logger
 	recommendationRepo   *planning.RecommendationRepository
 	tradingService       *trading.TradingService
-	currentHash          string
 	lastExecutionTime    time.Time
 	minExecutionInterval int // Minimum minutes between trade executions
 }

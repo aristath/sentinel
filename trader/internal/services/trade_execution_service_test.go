@@ -773,17 +773,3 @@ func findSubstring(s, substr string) bool {
 	}
 	return false
 }
-
-// Helper to create a minimal service for testing
-func newTestService(balances map[string]float64, rates map[string]float64) *TradeExecutionService {
-	log := logger.New(logger.Config{Level: "error", Pretty: false})
-
-	return &TradeExecutionService{
-		tradernetClient: nil, // Not needed for validation tests
-		tradeRepo:       nil,
-		positionRepo:    nil,
-		balanceService:  newMockBalanceService(balances),
-		exchangeService: newMockCurrencyExchangeService(rates),
-		log:             log,
-	}
-}

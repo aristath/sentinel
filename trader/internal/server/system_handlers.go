@@ -111,7 +111,8 @@ type SystemStatusResponse struct {
 	CashBalanceTotal float64 `json:"cash_balance_total"` // Total cash in EUR (all currencies converted)
 	CashBalance      float64 `json:"cash_balance"`       // Backward compatibility: alias for cash_balance_total
 	SecurityCount    int     `json:"security_count"`
-	PositionCount    int     `json:"position_count"`
+	PositionCount    int     `json:"position_count"`   // All positions (including cash)
+	ActivePositions  int     `json:"active_positions"` // Non-cash positions only
 	LastSync         string  `json:"last_sync,omitempty"`
 	UniverseActive   int     `json:"universe_active"`
 }
@@ -175,17 +176,25 @@ type JobInfo struct {
 
 // MarketsStatusResponse represents market status
 type MarketsStatusResponse struct {
-	Markets     []MarketInfo `json:"markets"`
-	OpenCount   int          `json:"open_count"`
-	ClosedCount int          `json:"closed_count"`
-	LastUpdated string       `json:"last_updated"`
+	Markets     map[string]MarketRegionInfo `json:"markets"` // Key: "EU", "US", "ASIA"
+	OpenCount   int                         `json:"open_count"`
+	ClosedCount int                         `json:"closed_count"`
+	LastUpdated string                      `json:"last_updated"`
 }
 
-// MarketInfo represents status of a single market
+// MarketInfo represents status of a single market (legacy, kept for backward compatibility)
 type MarketInfo struct {
 	Exchange string `json:"exchange"` // "NASDAQ", "NYSE", "LSE", etc.
 	IsOpen   bool   `json:"is_open"`
 	Timezone string `json:"timezone"`
+}
+
+// MarketRegionInfo represents status of a geographic market region
+type MarketRegionInfo struct {
+	Open      bool   `json:"open"`
+	ClosesAt  string `json:"closes_at,omitempty"`  // Time when market closes (if open)
+	OpensAt   string `json:"opens_at,omitempty"`   // Time when market opens (if closed)
+	OpensDate string `json:"opens_date,omitempty"` // Date when market opens (if closed and opens tomorrow or later)
 }
 
 // DatabaseStatsResponse represents database statistics
@@ -220,15 +229,29 @@ func (h *SystemHandlers) HandleSystemStatus(w http.ResponseWriter, r *http.Reque
 
 	// Query positions to get last sync time and count
 	var lastSync string
-	var positionCount int
+	var totalPositionCount int
 
 	err := h.portfolioDB.Conn().QueryRow(`
 		SELECT COUNT(*), MAX(last_updated)
 		FROM positions
-	`).Scan(&positionCount, &lastSync)
+	`).Scan(&totalPositionCount, &lastSync)
 
 	if err != nil && err != sql.ErrNoRows {
 		h.log.Error().Err(err).Msg("Failed to query positions")
+	}
+
+	// Query non-cash positions count (active positions)
+	var activePositionCount int
+	err = h.portfolioDB.Conn().QueryRow(`
+		SELECT COUNT(*)
+		FROM positions
+		WHERE symbol NOT LIKE 'CASH:%'
+	`).Scan(&activePositionCount)
+
+	if err != nil && err != sql.ErrNoRows {
+		h.log.Error().Err(err).Msg("Failed to query active positions")
+		// Fallback to total count if query fails
+		activePositionCount = totalPositionCount
 	}
 
 	// Format last sync time if available
@@ -364,7 +387,8 @@ func (h *SystemHandlers) HandleSystemStatus(w http.ResponseWriter, r *http.Reque
 		CashBalanceTotal: totalCashEUR,
 		CashBalance:      totalCashEUR, // Backward compatibility
 		SecurityCount:    securityCount,
-		PositionCount:    positionCount,
+		PositionCount:    totalPositionCount,
+		ActivePositions:  activePositionCount,
 		LastSync:         lastSync,
 		UniverseActive:   securityCount,
 	}
@@ -581,25 +605,192 @@ func (h *SystemHandlers) HandleJobsStatus(w http.ResponseWriter, r *http.Request
 	json.NewEncoder(w).Encode(response)
 }
 
-// HandleMarketsStatus returns market open/close status
+// getExchangeGeography maps exchange names to geographic regions
+func getExchangeGeography(exchange string) string {
+	// US markets
+	usExchanges := map[string]bool{
+		"NYSE":     true,
+		"NASDAQ":   true,
+		"NasdaqGS": true,
+		"NasdaqCM": true,
+		"TSX":      true,
+	}
+	if usExchanges[exchange] {
+		return "US"
+	}
+
+	// EU markets
+	euExchanges := map[string]bool{
+		"LSE":        true,
+		"XETRA":      true,
+		"XETR":       true,
+		"Paris":      true,
+		"Amsterdam":  true,
+		"Milan":      true,
+		"SIX":        true,
+		"Athens":     true,
+		"Copenhagen": true,
+	}
+	if euExchanges[exchange] {
+		return "EU"
+	}
+
+	// Asia markets
+	asiaExchanges := map[string]bool{
+		"HKSE":     true,
+		"XHKG":     true,
+		"Shenzhen": true,
+		"XSHG":     true,
+		"TSE":      true,
+		"XTSE":     true,
+		"SGX":      true,
+		"KRX":      true,
+		"TWSE":     true,
+		"ASX":      true,
+		"XASX":     true,
+		"NSE":      true,
+	}
+	if asiaExchanges[exchange] {
+		return "ASIA"
+	}
+
+	// Default to US if unknown
+	return "US"
+}
+
+// calculateNextOpenCloseTimes calculates the next open/close times for a region
+func (h *SystemHandlers) calculateNextOpenCloseTimes(region string, exchanges []scheduler.MarketStatus) MarketRegionInfo {
+	now := time.Now()
+	var nextClose time.Time
+	var nextOpen time.Time
+	var nextOpenDate string
+	regionOpen := false
+
+	// Find the earliest next close time (if any exchange is open)
+	// and the earliest next open time (if all are closed)
+	for _, status := range exchanges {
+		cal := h.marketHours.GetCalendar(status.Exchange)
+		if cal == nil {
+			continue
+		}
+
+		nowInTz := now.In(cal.Timezone)
+
+		if status.IsOpen {
+			regionOpen = true
+			// Calculate when this exchange closes today
+			for _, window := range cal.TradingWindows {
+				closeTime := time.Date(nowInTz.Year(), nowInTz.Month(), nowInTz.Day(),
+					window.CloseHour, window.CloseMinute, 0, 0, cal.Timezone)
+				if nowInTz.Before(closeTime) {
+					if nextClose.IsZero() || closeTime.Before(nextClose) {
+						nextClose = closeTime
+					}
+				}
+			}
+		} else {
+			// Calculate when this exchange opens next
+			// First check if it opens today
+			foundToday := false
+			for _, window := range cal.TradingWindows {
+				openTime := time.Date(nowInTz.Year(), nowInTz.Month(), nowInTz.Day(),
+					window.OpenHour, window.OpenMinute, 0, 0, cal.Timezone)
+				if nowInTz.Before(openTime) {
+					// Opens today
+					if nextOpen.IsZero() || openTime.Before(nextOpen) {
+						nextOpen = openTime
+						nextOpenDate = ""
+						foundToday = true
+					}
+				}
+			}
+
+			// If not opening today, find next trading day
+			if !foundToday {
+				nextDay := nowInTz.AddDate(0, 0, 1)
+				// Skip weekends and holidays
+				for {
+					// Skip weekends
+					if nextDay.Weekday() == time.Saturday {
+						nextDay = nextDay.AddDate(0, 0, 1)
+						continue
+					}
+					if nextDay.Weekday() == time.Sunday {
+						nextDay = nextDay.AddDate(0, 0, 1)
+						continue
+					}
+
+					// Check if it's a holiday
+					today := time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 0, 0, 0, 0, cal.Timezone)
+					isHoliday := false
+					for _, holiday := range cal.Holidays2026 {
+						if holiday.Equal(today) {
+							isHoliday = true
+							break
+						}
+					}
+					if isHoliday {
+						nextDay = nextDay.AddDate(0, 0, 1)
+						continue
+					}
+
+					// Found next trading day, calculate open time
+					for _, window := range cal.TradingWindows {
+						openTime := time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(),
+							window.OpenHour, window.OpenMinute, 0, 0, cal.Timezone)
+						if nextOpen.IsZero() || openTime.Before(nextOpen) {
+							nextOpen = openTime
+							nextOpenDate = nextDay.Format("Jan 2")
+						}
+					}
+					break
+				}
+			}
+		}
+	}
+
+	info := MarketRegionInfo{
+		Open: regionOpen,
+	}
+
+	if regionOpen && !nextClose.IsZero() {
+		info.ClosesAt = nextClose.Format("15:04")
+	}
+
+	if !regionOpen && !nextOpen.IsZero() {
+		info.OpensAt = nextOpen.Format("15:04")
+		if nextOpenDate != "" {
+			info.OpensDate = nextOpenDate
+		}
+	}
+
+	return info
+}
+
+// HandleMarketsStatus returns market open/close status grouped by geography
 func (h *SystemHandlers) HandleMarketsStatus(w http.ResponseWriter, r *http.Request) {
 	h.log.Debug().Msg("Getting markets status")
 
 	// Get real-time market statuses
 	statuses := h.marketHours.GetAllMarketStatuses()
 
-	markets := make([]MarketInfo, 0, len(statuses))
+	// Group exchanges by geography
+	exchangesByRegion := make(map[string][]scheduler.MarketStatus)
+	for _, status := range statuses {
+		geo := getExchangeGeography(status.Exchange)
+		exchangesByRegion[geo] = append(exchangesByRegion[geo], status)
+	}
+
+	// Calculate status for each region
+	markets := make(map[string]MarketRegionInfo)
 	openCount := 0
 	closedCount := 0
 
-	for _, status := range statuses {
-		markets = append(markets, MarketInfo{
-			Exchange: status.Exchange,
-			IsOpen:   status.IsOpen,
-			Timezone: status.Timezone,
-		})
+	for region, exchanges := range exchangesByRegion {
+		info := h.calculateNextOpenCloseTimes(region, exchanges)
+		markets[region] = info
 
-		if status.IsOpen {
+		if info.Open {
 			openCount++
 		} else {
 			closedCount++

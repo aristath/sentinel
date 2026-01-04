@@ -16,6 +16,7 @@ linters:
     - gosimple      # Disabled: too many style suggestions
     - ineffassign   # Disabled: many false positives
     - staticcheck   # Disabled: too many style suggestions
+    # Note: unused and unusedwrite are enabled - we want clean code
 
     # Additional recommended linters
     - gofmt         # Check code is formatted
@@ -50,6 +51,7 @@ linters-settings:
       - (*database/sql.Row).Scan          # Scan errors for PRAGMA queries are typically ignored
       - fmt.Sscanf                        # Sscanf errors for simple parsing are often ignored
       - filepath.Walk                     # Walk errors are handled in callback function
+      - (filepath.WalkFunc)               # WalkFunc callback errors are handled in callback
 
   govet:
     enable-all: true
@@ -123,7 +125,7 @@ issues:
         - errcheck
         - gosec
         - unparam
-        - unusedwrite  # Test structs often have unused fields
+        # Note: unusedwrite is enabled - we want clean test code too
 
     # Exclude known linters from partially hard-vendored code sources
     - path: "internal/vendor/"

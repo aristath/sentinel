@@ -15,10 +15,8 @@ func TestCashConversion_AllEUR(t *testing.T) {
 	mockClient := tradernet.NewClient("", zerolog.Nop())
 	exchangeService := services.NewCurrencyExchangeService(mockClient, zerolog.Nop())
 
-	logger := zerolog.Nop()
 	handler := &Handlers{
 		currencyExchangeService: exchangeService,
-		log:                     logger,
 	}
 
 	// Simulate EUR-only cash balances
@@ -71,10 +69,8 @@ func TestCashConversion_MixedCurrencies(t *testing.T) {
 	mockClient := tradernet.NewClient("", zerolog.Nop())
 	exchangeService := services.NewCurrencyExchangeService(mockClient, zerolog.Nop())
 
-	logger := zerolog.Nop()
 	handler := &Handlers{
 		currencyExchangeService: exchangeService,
-		log:                     logger,
 	}
 
 	// Simulate mixed currency cash balances
@@ -128,10 +124,8 @@ func TestShortfallConversion_Mixed(t *testing.T) {
 	mockClient := tradernet.NewClient("", zerolog.Nop())
 	exchangeService := services.NewCurrencyExchangeService(mockClient, zerolog.Nop())
 
-	logger := zerolog.Nop()
 	handler := &Handlers{
 		currencyExchangeService: exchangeService,
-		log:                     logger,
 	}
 
 	// Simulate shortfalls map
@@ -180,10 +174,8 @@ func TestShortfallConversion_FallbackRates(t *testing.T) {
 	mockClient := tradernet.NewClient("", zerolog.Nop())
 	exchangeService := services.NewCurrencyExchangeService(mockClient, zerolog.Nop())
 
-	logger := zerolog.Nop()
 	handler := &Handlers{
 		currencyExchangeService: exchangeService,
-		log:                     logger,
 	}
 
 	// Simulate shortfalls map
@@ -232,10 +224,8 @@ func TestCashConversion_FallbackRates(t *testing.T) {
 	mockClient := tradernet.NewClient("", zerolog.Nop())
 	exchangeService := services.NewCurrencyExchangeService(mockClient, zerolog.Nop())
 
-	logger := zerolog.Nop()
 	handler := &Handlers{
 		currencyExchangeService: exchangeService,
-		log:                     logger,
 	}
 
 	// Simulate mixed currency cash balances
