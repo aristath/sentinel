@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aristath/arduino-trader/internal/modules/cash_utils"
 	"github.com/aristath/arduino-trader/pkg/formulas"
 	"github.com/rs/zerolog"
 )
@@ -18,26 +19,36 @@ type AllocationTargetProvider interface {
 	GetAll() (map[string]float64, error)
 }
 
+// CashManager interface defines operations for managing cash as securities and positions
+// This interface breaks the circular dependency between portfolio and cash_flows packages
+type CashManager interface {
+	UpdateCashPosition(bucketID string, currency string, balance float64) error
+}
+
 // PortfolioService orchestrates portfolio operations
 // Faithful translation from Python: app/modules/portfolio/services/portfolio_service.py
 type PortfolioService struct {
 	portfolioRepo   *PortfolioRepository
-	positionRepo    *PositionRepository
+	positionRepo    PositionRepositoryInterface
 	allocRepo       AllocationTargetProvider
 	turnoverTracker *TurnoverTracker
 	attributionCalc *AttributionCalculator
-	universeDB      *sql.DB // For querying securities (universe.db)
+	cashManager     CashManager // Interface to break circular dependency
+	universeDB      *sql.DB     // For querying securities (universe.db)
+	tradernetClient TradernetClientInterface
 	log             zerolog.Logger
 }
 
 // NewPortfolioService creates a new portfolio service
 func NewPortfolioService(
 	portfolioRepo *PortfolioRepository,
-	positionRepo *PositionRepository,
+	positionRepo PositionRepositoryInterface,
 	allocRepo AllocationTargetProvider,
 	turnoverTracker *TurnoverTracker,
 	attributionCalc *AttributionCalculator,
+	cashManager CashManager,
 	universeDB *sql.DB,
+	tradernetClient TradernetClientInterface,
 	log zerolog.Logger,
 ) *PortfolioService {
 	return &PortfolioService{
@@ -46,7 +57,9 @@ func NewPortfolioService(
 		allocRepo:       allocRepo,
 		turnoverTracker: turnoverTracker,
 		attributionCalc: attributionCalc,
+		cashManager:     cashManager,
 		universeDB:      universeDB,
+		tradernetClient: tradernetClient,
 		log:             log.With().Str("service", "portfolio").Logger(),
 	}
 }
@@ -104,6 +117,12 @@ func (s *PortfolioService) aggregatePositionValues(positions []PositionWithSecur
 	totalValue := 0.0
 
 	for _, pos := range positions {
+		// Skip cash positions - they don't participate in allocation targets
+		// Cash is managed separately via BalanceService
+		if cash_utils.IsCashSymbol(pos.Symbol) {
+			continue
+		}
+
 		eurValue := s.calculatePositionValue(pos)
 		totalValue += eurValue
 
@@ -555,4 +574,106 @@ func (s *PortfolioService) buildErrorResponse(
 		},
 		Turnover: nil,
 	}
+}
+
+// SyncFromTradernet synchronizes positions and cash balances from Tradernet brokerage
+func (s *PortfolioService) SyncFromTradernet() error {
+	s.log.Info().Msg("Starting portfolio sync from Tradernet")
+
+	if s.tradernetClient == nil {
+		return fmt.Errorf("tradernet client not available")
+	}
+
+	// Step 1: Fetch current positions from Tradernet
+	positions, err := s.tradernetClient.GetPortfolio()
+	if err != nil {
+		return fmt.Errorf("failed to fetch portfolio from Tradernet: %w", err)
+	}
+
+	s.log.Info().Int("positions", len(positions)).Msg("Fetched positions from Tradernet")
+
+	// Step 2: Get current positions from database for cleanup
+	currentPositions, err := s.positionRepo.GetAll()
+	if err != nil {
+		return fmt.Errorf("failed to get current positions: %w", err)
+	}
+
+	// Step 3: Build map of Tradernet symbols
+	tradernetSymbols := make(map[string]bool)
+	for _, pos := range positions {
+		tradernetSymbols[pos.Symbol] = true
+	}
+
+	// Step 4: Upsert positions from Tradernet
+	upserted := 0
+	for _, tradernetPos := range positions {
+		// Skip positions with zero quantity
+		if tradernetPos.Quantity == 0 {
+			continue
+		}
+
+		// Convert tradernet.Position to portfolio.Position
+		dbPos := Position{
+			Symbol:         tradernetPos.Symbol,
+			Quantity:       tradernetPos.Quantity,
+			AvgPrice:       tradernetPos.AvgPrice,
+			CurrentPrice:   tradernetPos.CurrentPrice,
+			Currency:       tradernetPos.Currency,
+			CurrencyRate:   tradernetPos.CurrencyRate,
+			MarketValueEUR: tradernetPos.MarketValueEUR,
+			LastUpdated:    time.Now().Format(time.RFC3339),
+			BucketID:       "core", // Default bucket
+		}
+
+		if err := s.positionRepo.Upsert(dbPos); err != nil {
+			s.log.Error().Err(err).Str("symbol", dbPos.Symbol).Msg("Failed to upsert position")
+			continue
+		}
+		upserted++
+	}
+
+	// Step 5: Delete stale positions (in DB but not in Tradernet)
+	deleted := 0
+	for _, currentPos := range currentPositions {
+		if !tradernetSymbols[currentPos.Symbol] {
+			if err := s.positionRepo.Delete(currentPos.Symbol); err != nil {
+				s.log.Error().Err(err).Str("symbol", currentPos.Symbol).Msg("Failed to delete stale position")
+				continue
+			}
+			s.log.Info().Str("symbol", currentPos.Symbol).Msg("Deleted stale position not in Tradernet")
+			deleted++
+		}
+	}
+
+	// Step 6: Sync cash balances as positions (cash-as-securities architecture)
+	balances, err := s.tradernetClient.GetCashBalances()
+	if err != nil {
+		s.log.Warn().Err(err).Msg("Failed to fetch cash balances from Tradernet")
+	} else {
+		// Update cash positions for each currency balance in the core bucket
+		cashUpdated := 0
+		for _, cashBalance := range balances {
+			if err := s.cashManager.UpdateCashPosition("core", cashBalance.Currency, cashBalance.Amount); err != nil {
+				s.log.Error().
+					Err(err).
+					Str("currency", cashBalance.Currency).
+					Float64("amount", cashBalance.Amount).
+					Msg("Failed to update cash position")
+				continue
+			}
+			cashUpdated++
+		}
+		s.log.Info().
+			Int("currencies", len(balances)).
+			Int("updated", cashUpdated).
+			Msg("Cash balances synced as positions")
+	}
+
+	s.log.Info().
+		Int("upserted", upserted).
+		Int("deleted", deleted).
+		Int("total", len(positions)).
+		Msg("Portfolio sync from Tradernet completed")
+
+	return nil
 }
