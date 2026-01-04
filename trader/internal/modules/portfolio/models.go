@@ -17,7 +17,6 @@ type Position struct {
 	CurrencyRate     float64 `json:"currency_rate"`
 	AvgPrice         float64 `json:"avg_price"`
 	Quantity         float64 `json:"quantity"`
-	BucketID         string  `json:"bucket_id,omitempty"`
 }
 
 // PortfolioSnapshot represents daily portfolio summary

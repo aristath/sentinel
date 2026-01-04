@@ -29,7 +29,10 @@ func NewPositionRepository(portfolioDB, universeDB *sql.DB, log zerolog.Logger) 
 // GetAll returns all positions
 // Faithful translation of Python: async def get_all(self) -> List[Position]
 func (r *PositionRepository) GetAll() ([]Position, error) {
-	query := "SELECT * FROM positions"
+	query := `SELECT symbol, quantity, avg_price, current_price, currency,
+		currency_rate, market_value_eur, cost_basis_eur, unrealized_pnl,
+		unrealized_pnl_pct, last_updated, first_bought_at, last_sold_at, isin
+		FROM positions`
 
 	rows, err := r.portfolioDB.Query(query)
 	if err != nil {
@@ -56,7 +59,10 @@ func (r *PositionRepository) GetAll() ([]Position, error) {
 // GetAllNonCash returns all non-cash positions (excludes cash positions)
 // Used for portfolio value calculations and trading operations
 func (r *PositionRepository) GetAllNonCash() ([]Position, error) {
-	query := "SELECT * FROM positions WHERE symbol NOT LIKE 'CASH:%'"
+	query := `SELECT symbol, quantity, avg_price, current_price, currency,
+		currency_rate, market_value_eur, cost_basis_eur, unrealized_pnl,
+		unrealized_pnl_pct, last_updated, first_bought_at, last_sold_at, isin
+		FROM positions WHERE symbol NOT LIKE 'CASH:%'`
 
 	rows, err := r.portfolioDB.Query(query)
 	if err != nil {
@@ -85,7 +91,10 @@ func (r *PositionRepository) GetAllNonCash() ([]Position, error) {
 // Note: This method accesses both state.db (positions) and config.db (securities)
 func (r *PositionRepository) GetWithSecurityInfo() ([]PositionWithSecurity, error) {
 	// Get positions from state.db
-	positionRows, err := r.portfolioDB.Query("SELECT * FROM positions")
+	positionRows, err := r.portfolioDB.Query(`SELECT symbol, quantity, avg_price, current_price, currency,
+		currency_rate, market_value_eur, cost_basis_eur, unrealized_pnl,
+		unrealized_pnl_pct, last_updated, first_bought_at, last_sold_at, isin
+		FROM positions`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query positions: %w", err)
 	}
@@ -196,7 +205,10 @@ func (r *PositionRepository) GetWithSecurityInfo() ([]PositionWithSecurity, erro
 // Used for portfolio analysis and allocation calculations (excludes cash positions)
 func (r *PositionRepository) GetWithSecurityInfoNonCash() ([]PositionWithSecurity, error) {
 	// Get non-cash positions from portfolio.db
-	positionRows, err := r.portfolioDB.Query("SELECT * FROM positions WHERE symbol NOT LIKE 'CASH:%'")
+	positionRows, err := r.portfolioDB.Query(`SELECT symbol, quantity, avg_price, current_price, currency,
+		currency_rate, market_value_eur, cost_basis_eur, unrealized_pnl,
+		unrealized_pnl_pct, last_updated, first_bought_at, last_sold_at, isin
+		FROM positions WHERE symbol NOT LIKE 'CASH:%'`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query non-cash positions: %w", err)
 	}
@@ -307,7 +319,10 @@ func (r *PositionRepository) GetWithSecurityInfoNonCash() ([]PositionWithSecurit
 // GetBySymbol returns a position by symbol
 // Faithful translation of Python: async def get_by_symbol(self, symbol: str) -> Optional[Position]
 func (r *PositionRepository) GetBySymbol(symbol string) (*Position, error) {
-	query := "SELECT * FROM positions WHERE symbol = ?"
+	query := `SELECT symbol, quantity, avg_price, current_price, currency,
+		currency_rate, market_value_eur, cost_basis_eur, unrealized_pnl,
+		unrealized_pnl_pct, last_updated, first_bought_at, last_sold_at, isin
+		FROM positions WHERE symbol = ?`
 
 	rows, err := r.portfolioDB.Query(query, strings.ToUpper(strings.TrimSpace(symbol)))
 	if err != nil {
@@ -330,7 +345,10 @@ func (r *PositionRepository) GetBySymbol(symbol string) (*Position, error) {
 // GetByISIN returns a position by ISIN
 // Faithful translation of Python: async def get_by_isin(self, isin: str) -> Optional[Position]
 func (r *PositionRepository) GetByISIN(isin string) (*Position, error) {
-	query := "SELECT * FROM positions WHERE isin = ?"
+	query := `SELECT symbol, quantity, avg_price, current_price, currency,
+		currency_rate, market_value_eur, cost_basis_eur, unrealized_pnl,
+		unrealized_pnl_pct, last_updated, first_bought_at, last_sold_at, isin
+		FROM positions WHERE isin = ?`
 
 	rows, err := r.portfolioDB.Query(query, strings.ToUpper(strings.TrimSpace(isin)))
 	if err != nil {
@@ -409,7 +427,6 @@ func (r *PositionRepository) scanPosition(rows *sql.Rows) (Position, error) {
 	var unrealizedPnL, unrealizedPnLPct sql.NullFloat64
 	var lastUpdated, firstBoughtAt, lastSoldAt sql.NullString
 	var isin sql.NullString
-	var bucketID sql.NullString
 
 	err := rows.Scan(
 		&pos.Symbol,       // 1
@@ -426,7 +443,6 @@ func (r *PositionRepository) scanPosition(rows *sql.Rows) (Position, error) {
 		&firstBoughtAt,    // 12
 		&lastSoldAt,       // 13
 		&isin,             // 14
-		&bucketID,         // 15
 	)
 	if err != nil {
 		return pos, err
@@ -459,9 +475,6 @@ func (r *PositionRepository) scanPosition(rows *sql.Rows) (Position, error) {
 	}
 	if isin.Valid {
 		pos.ISIN = isin.String
-	}
-	if bucketID.Valid {
-		pos.BucketID = bucketID.String
 	}
 
 	// Normalize symbol
@@ -501,19 +514,13 @@ func (r *PositionRepository) Upsert(position Position) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Set bucket_id default to 'core' if not provided
-	bucketID := position.BucketID
-	if bucketID == "" {
-		bucketID = "core"
-	}
-
 	query := `
 		INSERT OR REPLACE INTO positions
 		(symbol, quantity, avg_price, current_price, currency,
 		 currency_rate, market_value_eur, cost_basis_eur,
 		 unrealized_pnl, unrealized_pnl_pct, last_updated,
-		 first_bought_at, last_sold_at, isin, bucket_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 first_bought_at, last_sold_at, isin)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	_, err = tx.Exec(query,
@@ -531,7 +538,6 @@ func (r *PositionRepository) Upsert(position Position) error {
 		nullString(position.FirstBoughtAt),
 		nullString(position.LastSoldAt),
 		nullString(position.ISIN),
-		bucketID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to upsert position: %w", err)
