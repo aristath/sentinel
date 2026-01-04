@@ -4,22 +4,17 @@ import logging
 from datetime import datetime
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.middleware.cors import CORSMiddleware
-
 from app.config import settings
 from app.health import router as health_router
-from app.models import (
-    BatchQuotesRequest,
-    PlaceOrderRequest,
-    ServiceResponse,
-)
+from app.models import BatchQuotesRequest, PlaceOrderRequest, ServiceResponse
 from app.service import get_tradernet_service
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
 
 # Configure logging
 logging.basicConfig(
     level=settings.log_level,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
@@ -46,6 +41,20 @@ app.include_router(health_router)
 service = get_tradernet_service()
 
 
+def get_credentials(request: Request) -> tuple[Optional[str], Optional[str]]:
+    """Extract API credentials from request headers.
+
+    Args:
+        request: FastAPI request object
+
+    Returns:
+        Tuple of (api_key, api_secret) or (None, None) if not provided
+    """
+    api_key = request.headers.get("X-Tradernet-API-Key")
+    api_secret = request.headers.get("X-Tradernet-API-Secret")
+    return api_key, api_secret
+
+
 @app.on_event("startup")
 async def startup_event():
     """Startup event - connect to Tradernet."""
@@ -64,13 +73,18 @@ async def shutdown_event():
 
 # Trading endpoints
 @app.post("/api/trading/place-order", response_model=ServiceResponse)
-async def place_order(request: PlaceOrderRequest) -> ServiceResponse:
+async def place_order(
+    request: PlaceOrderRequest, http_request: Request
+) -> ServiceResponse:
     """Execute a trade order."""
     try:
+        api_key, api_secret = get_credentials(http_request)
         result = service.place_order(
             symbol=request.symbol,
             side=request.side,
             quantity=request.quantity,
+            api_key=api_key,
+            api_secret=api_secret,
         )
 
         if result:
@@ -92,10 +106,11 @@ async def place_order(request: PlaceOrderRequest) -> ServiceResponse:
 
 
 @app.get("/api/trading/pending-orders", response_model=ServiceResponse)
-async def get_pending_orders() -> ServiceResponse:
+async def get_pending_orders(request: Request) -> ServiceResponse:
     """Get all pending/active orders."""
     try:
-        orders = service.get_pending_orders()
+        api_key, api_secret = get_credentials(request)
+        orders = service.get_pending_orders(api_key=api_key, api_secret=api_secret)
         return ServiceResponse(
             success=True,
             data={"orders": [o.dict() for o in orders]},
@@ -109,10 +124,13 @@ async def get_pending_orders() -> ServiceResponse:
 
 
 @app.get("/api/trading/pending-orders/{symbol}", response_model=ServiceResponse)
-async def check_pending_order(symbol: str) -> ServiceResponse:
+async def check_pending_order(symbol: str, request: Request) -> ServiceResponse:
     """Check if symbol has any pending orders."""
     try:
-        has_pending = service.has_pending_order_for_symbol(symbol)
+        api_key, api_secret = get_credentials(request)
+        has_pending = service.has_pending_order_for_symbol(
+            symbol, api_key=api_key, api_secret=api_secret
+        )
         return ServiceResponse(
             success=True,
             data={
@@ -129,10 +147,13 @@ async def check_pending_order(symbol: str) -> ServiceResponse:
 
 
 @app.get("/api/trading/pending-totals", response_model=ServiceResponse)
-async def get_pending_totals() -> ServiceResponse:
+async def get_pending_totals(request: Request) -> ServiceResponse:
     """Get total value of pending BUY orders by currency."""
     try:
-        totals = service.get_pending_order_totals()
+        api_key, api_secret = get_credentials(request)
+        totals = service.get_pending_order_totals(
+            api_key=api_key, api_secret=api_secret
+        )
         return ServiceResponse(
             success=True,
             data={"totals": totals},
@@ -147,10 +168,11 @@ async def get_pending_totals() -> ServiceResponse:
 
 # Portfolio endpoints
 @app.get("/api/portfolio/positions", response_model=ServiceResponse)
-async def get_portfolio_positions() -> ServiceResponse:
+async def get_portfolio_positions(request: Request) -> ServiceResponse:
     """Get current portfolio positions."""
     try:
-        positions = service.get_portfolio()
+        api_key, api_secret = get_credentials(request)
+        positions = service.get_portfolio(api_key=api_key, api_secret=api_secret)
         return ServiceResponse(
             success=True,
             data={"positions": [p.dict() for p in positions]},
@@ -164,10 +186,11 @@ async def get_portfolio_positions() -> ServiceResponse:
 
 
 @app.get("/api/portfolio/cash-balances", response_model=ServiceResponse)
-async def get_cash_balances() -> ServiceResponse:
+async def get_cash_balances(request: Request) -> ServiceResponse:
     """Get cash balances in all currencies."""
     try:
-        balances = service.get_cash_balances()
+        api_key, api_secret = get_credentials(request)
+        balances = service.get_cash_balances(api_key=api_key, api_secret=api_secret)
         return ServiceResponse(
             success=True,
             data={"balances": [b.dict() for b in balances]},
@@ -181,10 +204,11 @@ async def get_cash_balances() -> ServiceResponse:
 
 
 @app.get("/api/portfolio/cash-total-eur", response_model=ServiceResponse)
-async def get_cash_total_eur() -> ServiceResponse:
+async def get_cash_total_eur(request: Request) -> ServiceResponse:
     """Get total cash balance in EUR."""
     try:
-        total = service.get_total_cash_eur()
+        api_key, api_secret = get_credentials(request)
+        total = service.get_total_cash_eur(api_key=api_key, api_secret=api_secret)
         return ServiceResponse(
             success=True,
             data={"total_eur": total},
@@ -199,10 +223,11 @@ async def get_cash_total_eur() -> ServiceResponse:
 
 # Transaction endpoints
 @app.get("/api/transactions/cash-movements", response_model=ServiceResponse)
-async def get_cash_movements() -> ServiceResponse:
+async def get_cash_movements(request: Request) -> ServiceResponse:
     """Get withdrawal history."""
     try:
-        movements = service.get_cash_movements()
+        api_key, api_secret = get_credentials(request)
+        movements = service.get_cash_movements(api_key=api_key, api_secret=api_secret)
         return ServiceResponse(
             success=True,
             data=movements,
@@ -217,11 +242,15 @@ async def get_cash_movements() -> ServiceResponse:
 
 @app.get("/api/transactions/cash-flows", response_model=ServiceResponse)
 async def get_cash_flows(
-    limit: int = Query(default=1000, ge=1, le=5000)
+    request: Request,
+    limit: int = Query(default=1000, ge=1, le=5000),
 ) -> ServiceResponse:
     """Get all cash flow transactions."""
     try:
-        transactions = service.get_all_cash_flows(limit=limit)
+        api_key, api_secret = get_credentials(request)
+        transactions = service.get_all_cash_flows(
+            limit=limit, api_key=api_key, api_secret=api_secret
+        )
         return ServiceResponse(
             success=True,
             data={"transactions": [t.dict() for t in transactions]},
@@ -236,11 +265,15 @@ async def get_cash_flows(
 
 @app.get("/api/transactions/executed-trades", response_model=ServiceResponse)
 async def get_executed_trades(
-    limit: int = Query(default=500, ge=1, le=1000)
+    request: Request,
+    limit: int = Query(default=500, ge=1, le=1000),
 ) -> ServiceResponse:
     """Get executed trade history."""
     try:
-        trades = service.get_executed_trades(limit=limit)
+        api_key, api_secret = get_credentials(request)
+        trades = service.get_executed_trades(
+            limit=limit, api_key=api_key, api_secret=api_secret
+        )
         return ServiceResponse(
             success=True,
             data={"trades": [t.dict() for t in trades]},
@@ -255,10 +288,11 @@ async def get_executed_trades(
 
 # Market data endpoints
 @app.get("/api/market-data/quote/{symbol}", response_model=ServiceResponse)
-async def get_quote(symbol: str) -> ServiceResponse:
+async def get_quote(symbol: str, request: Request) -> ServiceResponse:
     """Get current quote for a symbol."""
     try:
-        quote = service.get_quote(symbol)
+        api_key, api_secret = get_credentials(request)
+        quote = service.get_quote(symbol, api_key=api_key, api_secret=api_secret)
         if quote:
             return ServiceResponse(
                 success=True,
@@ -278,10 +312,15 @@ async def get_quote(symbol: str) -> ServiceResponse:
 
 
 @app.post("/api/market-data/quotes", response_model=ServiceResponse)
-async def get_quotes(request: BatchQuotesRequest) -> ServiceResponse:
+async def get_quotes(
+    request: BatchQuotesRequest, http_request: Request
+) -> ServiceResponse:
     """Get quotes for multiple symbols."""
     try:
-        quotes = service.get_quotes_raw(request.symbols)
+        api_key, api_secret = get_credentials(http_request)
+        quotes = service.get_quotes_raw(
+            request.symbols, api_key=api_key, api_secret=api_secret
+        )
         return ServiceResponse(
             success=True,
             data={"quotes": quotes},
@@ -297,16 +336,20 @@ async def get_quotes(request: BatchQuotesRequest) -> ServiceResponse:
 @app.get("/api/market-data/historical/{symbol}", response_model=ServiceResponse)
 async def get_historical(
     symbol: str,
+    request: Request,
     start: Optional[str] = Query(default=None, description="Start date YYYY-MM-DD"),
     end: Optional[str] = Query(default=None, description="End date YYYY-MM-DD"),
 ) -> ServiceResponse:
     """Get historical OHLC data."""
     try:
+        api_key, api_secret = get_credentials(request)
         # Parse dates
         start_dt = datetime.strptime(start, "%Y-%m-%d") if start else None
         end_dt = datetime.strptime(end, "%Y-%m-%d") if end else None
 
-        candles = service.get_historical_prices(symbol, start=start_dt, end=end_dt)
+        candles = service.get_historical_prices(
+            symbol, start=start_dt, end=end_dt, api_key=api_key, api_secret=api_secret
+        )
         return ServiceResponse(
             success=True,
             data={
@@ -330,12 +373,16 @@ async def get_historical(
 # Security lookup endpoints
 @app.get("/api/securities/find", response_model=ServiceResponse)
 async def find_symbol(
+    request: Request,
     symbol: str = Query(..., description="Symbol or ISIN to search"),
     exchange: Optional[str] = Query(default=None, description="Exchange filter"),
 ) -> ServiceResponse:
     """Find security by symbol or ISIN."""
     try:
-        result = service.find_symbol(symbol, exchange=exchange)
+        api_key, api_secret = get_credentials(request)
+        result = service.find_symbol(
+            symbol, exchange=exchange, api_key=api_key, api_secret=api_secret
+        )
         return ServiceResponse(
             success=True,
             data=result,
@@ -349,10 +396,11 @@ async def find_symbol(
 
 
 @app.get("/api/securities/info/{symbol}", response_model=ServiceResponse)
-async def get_security_info(symbol: str) -> ServiceResponse:
+async def get_security_info(symbol: str, request: Request) -> ServiceResponse:
     """Get security metadata (lot size, etc.)."""
     try:
-        info = service.get_security_info(symbol)
+        api_key, api_secret = get_credentials(request)
+        info = service.get_security_info(symbol, api_key=api_key, api_secret=api_secret)
         if info:
             return ServiceResponse(
                 success=True,
