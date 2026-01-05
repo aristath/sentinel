@@ -477,6 +477,23 @@ func (c *Client) getBatchQuoteInfo(symbols []string) (map[string]map[string]inte
 
 	// Check if we got a successful response
 	if resp == nil || resp.StatusCode != http.StatusOK {
+		// If we got a 401, read the response body for error details
+		if resp != nil && resp.StatusCode == http.StatusUnauthorized && resp.Body != nil {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			// Parse error message from Yahoo Finance
+			var errorResp struct {
+				Finance struct {
+					Error struct {
+						Code        string `json:"code"`
+						Description string `json:"description"`
+					} `json:"error"`
+				} `json:"finance"`
+			}
+			if err := json.Unmarshal(bodyBytes, &errorResp); err == nil && errorResp.Finance.Error.Description != "" {
+				return nil, fmt.Errorf("Yahoo Finance API unauthorized: %s (code: %s). This may indicate Yahoo Finance has restricted access to their query API. Consider using an alternative data source.", errorResp.Finance.Error.Description, errorResp.Finance.Error.Code)
+			}
+		}
 		if lastErr != nil {
 			return nil, fmt.Errorf("failed after %d attempts: %w", maxRetries, lastErr)
 		}
