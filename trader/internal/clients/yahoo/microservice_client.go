@@ -506,8 +506,26 @@ func (c *MicroserviceClient) GetSecurityInfo(
 
 	resp, err := c.get(url)
 	if err != nil {
-		// Fallback to direct client
-		return c.GetSecurityInfo(symbol, yahooSymbolOverride) // Recursive call will use direct client
+		// Fallback to direct client - construct SecurityInfo from direct client methods
+		industry, _ := c.directClient.GetSecurityIndustry(symbol, yahooSymbolOverride)
+		country, exchange, _ := c.directClient.GetSecurityCountryAndExchange(symbol, yahooSymbolOverride)
+		quoteType, _ := c.directClient.GetQuoteType(symbol, yahooSymbolOverride)
+		name, _ := c.directClient.GetQuoteName(symbol, yahooSymbolOverride)
+		
+		var productType *string
+		if quoteType != "" {
+			qt := quoteType
+			productType = &qt
+		}
+		
+		return &SecurityInfo{
+			Symbol:           symbol,
+			Industry:         industry,
+			Country:          country,
+			FullExchangeName: exchange,
+			ProductType:      productType,
+			Name:             name,
+		}, nil
 	}
 
 	var result SecurityInfo
