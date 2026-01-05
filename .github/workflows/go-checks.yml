@@ -81,6 +81,6 @@ jobs:
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v5
       with:
-        files: trader/coverage.out
+        file: trader/coverage.out
         flags: go
         name: go-coverage

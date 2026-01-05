@@ -7,6 +7,12 @@ on:
       - '.github/workflows/build-go.yml'
     branches:
       - main
+  pull_request:
+    paths:
+      - 'trader/**'
+      - '.github/workflows/build-go.yml'
+    branches:
+      - main
 
 jobs:
   build:

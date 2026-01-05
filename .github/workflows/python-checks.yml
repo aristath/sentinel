@@ -5,14 +5,14 @@ on:
     branches: [ main ]
     paths:
       - 'microservices/**'
-      - '**.py'
+      - 'microservices/**/*.py'
       - 'microservices/**/requirements.txt'
       - '.github/workflows/python-checks.yml'
   pull_request:
     branches: [ main ]
     paths:
       - 'microservices/**'
-      - '**.py'
+      - 'microservices/**/*.py'
       - 'microservices/**/requirements.txt'
 
 jobs:

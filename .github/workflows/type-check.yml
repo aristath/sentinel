@@ -3,8 +3,14 @@ name: Type Check
 on:
   push:
     branches: [main]
+    paths:
+      - 'microservices/**'
+      - '.github/workflows/type-check.yml'
   pull_request:
     branches: [main]
+    paths:
+      - 'microservices/**'
+      - '.github/workflows/type-check.yml'
 
 jobs:
   type-check:
