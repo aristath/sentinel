@@ -149,32 +149,34 @@ func (r *ScoreRepository) Upsert(score SecurityScore) error {
 
 	query := `
 		INSERT OR REPLACE INTO scores
-		(symbol, quality_score, opportunity_score, analyst_score,
-		 allocation_fit_score, cagr_score, consistency_score,
-		 financial_strength_score, sharpe_score, drawdown_score,
-		 dividend_bonus, rsi, ema_200, below_52w_high_pct,
-		 total_score, sell_score, history_years, calculated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(symbol, total_score, quality_score, opportunity_score, analyst_score,
+		 allocation_fit_score, volatility, cagr_score, consistency_score,
+		 history_years, technical_score, fundamental_score,
+		 sharpe_score, drawdown_score, dividend_bonus, financial_strength_score,
+		 rsi, ema_200, below_52w_high_pct, last_updated)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	_, err = tx.Exec(query,
 		score.Symbol,
+		nullFloat64(score.TotalScore),
 		nullFloat64(score.QualityScore),
 		nullFloat64(score.OpportunityScore),
 		nullFloat64(score.AnalystScore),
 		nullFloat64(score.AllocationFitScore),
+		nullFloat64(score.Volatility),
 		nullFloat64(score.CAGRScore),
 		nullFloat64(score.ConsistencyScore),
-		nullFloat64(score.FinancialStrengthScore),
+		nullInt64(score.HistoryYears),
+		nullFloat64(score.TechnicalScore),
+		nullFloat64(score.FundamentalScore),
 		nullFloat64(score.SharpeScore),
 		nullFloat64(score.DrawdownScore),
 		nullFloat64(score.DividendBonus),
+		nullFloat64(score.FinancialStrengthScore),
 		nullFloat64(score.RSI),
 		nullFloat64(score.EMA200),
 		nullFloat64(score.Below52wHighPct),
-		nullFloat64(score.TotalScore),
-		nullFloat64(score.SellScore),
-		nullFloat64(score.HistoryYears),
 		calculatedAt,
 	)
 	if err != nil {
@@ -354,4 +356,13 @@ func (r *ScoreRepository) scanScore(rows *sql.Rows) (SecurityScore, error) {
 	score.Symbol = strings.ToUpper(strings.TrimSpace(score.Symbol))
 
 	return score, nil
+}
+
+// nullInt64 converts a float64 to sql.NullInt64
+// Returns NULL (Valid: false) if value is 0.0
+func nullInt64(f float64) sql.NullInt64 {
+	if f == 0 {
+		return sql.NullInt64{Valid: false}
+	}
+	return sql.NullInt64{Int64: int64(f), Valid: true}
 }
