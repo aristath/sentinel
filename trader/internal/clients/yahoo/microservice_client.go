@@ -610,9 +610,34 @@ func (c *MicroserviceClient) HealthCheck() (bool, error) {
 		return false, fmt.Errorf("using direct client, microservice unavailable")
 	}
 
-	resp, err := c.get("/health")
+	// Health endpoint returns {"status": "healthy", ...} not standard ServiceResponse format
+	url := c.baseURL + "/health"
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("failed to create health check request: %w", err)
 	}
-	return resp.Success, nil
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("failed to connect to Yahoo Finance microservice: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("health check returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false, fmt.Errorf("failed to read health check response: %w", err)
+	}
+
+	var healthResp struct {
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(body, &healthResp); err != nil {
+		return false, fmt.Errorf("failed to parse health check response: %w", err)
+	}
+
+	return healthResp.Status == "healthy", nil
 }

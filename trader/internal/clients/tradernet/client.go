@@ -433,12 +433,49 @@ func (c *Client) HealthCheck() (*HealthCheckResult, error) {
 // IsConnected checks if the Tradernet microservice is reachable
 func (c *Client) IsConnected() bool {
 	// Try a simple health check endpoint
-	resp, err := c.get("/health")
+	// Note: /health endpoint returns {"status": "healthy", ...} not standard ServiceResponse
+	url := c.baseURL + "/health"
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		c.log.Debug().Err(err).Msg("Failed to create health check request")
+		return false
+	}
+
+	// Add credentials to headers if available
+	if c.apiKey != "" {
+		req.Header.Set("X-Tradernet-API-Key", c.apiKey)
+	}
+	if c.apiSecret != "" {
+		req.Header.Set("X-Tradernet-API-Secret", c.apiSecret)
+	}
+
+	resp, err := c.client.Do(req)
 	if err != nil {
 		c.log.Debug().Err(err).Msg("Tradernet microservice not connected")
 		return false
 	}
-	return resp.Success
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		c.log.Debug().Int("status_code", resp.StatusCode).Msg("Tradernet microservice health check returned non-200 status")
+		return false
+	}
+
+	// Health endpoint returns {"status": "healthy", ...} format
+	// Use the same HealthResponse struct as HealthCheck() for consistency
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.log.Debug().Err(err).Msg("Failed to read health check response")
+		return false
+	}
+
+	var healthResp HealthResponse
+	if err := json.Unmarshal(body, &healthResp); err != nil {
+		c.log.Debug().Err(err).Msg("Failed to parse health check response")
+		return false
+	}
+
+	return healthResp.Status == "healthy"
 }
 
 // Quote represents a security quote
