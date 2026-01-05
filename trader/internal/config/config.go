@@ -91,10 +91,10 @@ func Load() (*Config, error) {
 		Port:                getEnvAsInt("GO_PORT", 8001), // Default 8001 (Python uses 8000)
 		DevMode:             getEnvAsBool("DEV_MODE", false),
 		PythonServiceURL:    getEnv("PYTHON_SERVICE_URL", "http://localhost:8000"),    // Python on 8000
-		TradernetServiceURL: getEnv("TRADERNET_SERVICE_URL", "http://localhost:9002"), // Tradernet microservice on 9002
-		PyPFOptServiceURL:   getEnv("PYPFOPT_SERVICE_URL", "http://localhost:9001"),   // PyPFOpt microservice on 9001
-		EvaluatorServiceURL: getEnv("EVALUATOR_SERVICE_URL", "http://localhost:9000"), // Evaluator-go microservice on 9000
-		YahooFinanceServiceURL: getEnv("YAHOO_FINANCE_SERVICE_URL", "http://localhost:9003"), // Yahoo Finance microservice on 9003
+		TradernetServiceURL:    getEnv("TRADERNET_SERVICE_URL", "http://localhost:9002"),    // Tradernet microservice on 9002
+		PyPFOptServiceURL:      getEnv("PYPFOPT_SERVICE_URL", "http://localhost:9001"),      // PyPFOpt microservice on 9001
+		EvaluatorServiceURL:    getEnv("EVALUATOR_SERVICE_URL", "http://localhost:9000"),    // Evaluator-go microservice on 9000
+		YahooFinanceServiceURL: getEnv("YAHOO_FINANCE_SERVICE_URL", "http://localhost:9003"), // Yahoo Finance microservice on 9003 (default)
 		TradernetAPIKey:     getEnv("TRADERNET_API_KEY", ""),
 		TradernetAPISecret:  getEnv("TRADERNET_API_SECRET", ""),
 		LogLevel:            getEnv("LOG_LEVEL", "info"),

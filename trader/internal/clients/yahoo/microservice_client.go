@@ -12,10 +12,13 @@ import (
 )
 
 // MicroserviceClient is an HTTP client for the Yahoo Finance microservice
+// It automatically falls back to direct client if microservice is unavailable
 type MicroserviceClient struct {
-	baseURL string
-	client  *http.Client
-	log     zerolog.Logger
+	baseURL      string
+	client       *http.Client
+	log          zerolog.Logger
+	directClient *Client // Fallback direct client
+	useDirect    bool    // Flag to use direct client if microservice fails
 }
 
 // ServiceResponse is the standard response format from the microservice
@@ -27,18 +30,57 @@ type ServiceResponse struct {
 }
 
 // NewMicroserviceClient creates a new Yahoo Finance microservice client
+// Automatically falls back to direct client if microservice is unavailable
 func NewMicroserviceClient(baseURL string, log zerolog.Logger) *MicroserviceClient {
+	// Create fallback direct client
+	directClient := NewClient(log)
+	
 	return &MicroserviceClient{
-		baseURL: baseURL,
+		baseURL:      baseURL,
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		log: log.With().Str("client", "yahoo-microservice").Logger(),
+		log:          log.With().Str("client", "yahoo-microservice").Logger(),
+		directClient: directClient,
+		useDirect:    false, // Start with microservice, fall back if needed
 	}
+}
+
+// checkMicroserviceHealth checks if the microservice is available
+func (c *MicroserviceClient) checkMicroserviceHealth() bool {
+	if c.useDirect {
+		return false // Already using direct client
+	}
+	
+	resp, err := c.get("/health")
+	if err != nil {
+		c.log.Warn().Err(err).Msg("Yahoo Finance microservice unavailable, falling back to direct client")
+		c.useDirect = true
+		return false
+	}
+	
+	return resp.Success
+}
+
+// getClient returns the appropriate client (microservice or direct)
+func (c *MicroserviceClient) getClient() FullClientInterface {
+	if c.useDirect {
+		return c.directClient
+	}
+	
+	// Check health periodically (every 10 requests or on first use)
+	// For simplicity, we'll check on first failure instead
+	return c
 }
 
 // post makes a POST request to the microservice
 func (c *MicroserviceClient) post(endpoint string, request interface{}) (*ServiceResponse, error) {
+	if c.useDirect {
+		// Delegate to direct client - but direct client doesn't have post method
+		// So we'll handle this in individual methods
+		return nil, fmt.Errorf("microservice unavailable, using direct client")
+	}
+	
 	body, err := json.Marshal(request)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
@@ -54,15 +96,35 @@ func (c *MicroserviceClient) post(endpoint string, request interface{}) (*Servic
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
+		// Microservice unavailable, switch to direct client
+		c.log.Warn().Err(err).Msg("Yahoo Finance microservice request failed, falling back to direct client")
+		c.useDirect = true
+		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		// Non-200 response, might indicate microservice issue
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		c.log.Warn().
+			Int("status", resp.StatusCode).
+			Str("body", string(bodyBytes)).
+			Msg("Yahoo Finance microservice returned error, falling back to direct client")
+		c.useDirect = true
+		return nil, fmt.Errorf("microservice returned status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
 
 	return c.parseResponse(resp)
 }
 
 // get makes a GET request to the microservice
 func (c *MicroserviceClient) get(endpoint string) (*ServiceResponse, error) {
+	if c.useDirect {
+		// Delegate to direct client - but direct client doesn't have get method
+		// So we'll handle this in individual methods
+		return nil, fmt.Errorf("microservice unavailable, using direct client")
+	}
+	
 	url := c.baseURL + endpoint
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -71,9 +133,23 @@ func (c *MicroserviceClient) get(endpoint string) (*ServiceResponse, error) {
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
+		// Microservice unavailable, switch to direct client
+		c.log.Warn().Err(err).Msg("Yahoo Finance microservice request failed, falling back to direct client")
+		c.useDirect = true
+		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		// Non-200 response, might indicate microservice issue
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		c.log.Warn().
+			Int("status", resp.StatusCode).
+			Str("body", string(bodyBytes)).
+			Msg("Yahoo Finance microservice returned error, falling back to direct client")
+		c.useDirect = true
+		return nil, fmt.Errorf("microservice returned status %d: %s", resp.StatusCode, string(bodyBytes))
+	}
 
 	return c.parseResponse(resp)
 }
@@ -101,21 +177,14 @@ func (c *MicroserviceClient) parseResponse(resp *http.Response) (*ServiceRespons
 	return &result, nil
 }
 
-// BatchQuotesRequest is the request for batch quotes
-type BatchQuotesRequest struct {
-	Symbols        []string          `json:"symbols"`
-	YahooOverrides map[string]string `json:"yahoo_overrides,omitempty"`
-}
-
-// BatchQuotesResponse is the response for batch quotes
-type BatchQuotesResponse struct {
-	Quotes map[string]float64 `json:"quotes"`
-}
-
 // GetBatchQuotes fetches current prices for multiple symbols efficiently
 func (c *MicroserviceClient) GetBatchQuotes(
 	symbolOverrides map[string]*string,
 ) (map[string]*float64, error) {
+	if c.useDirect {
+		return c.directClient.GetBatchQuotes(symbolOverrides)
+	}
+	
 	// Convert to request format
 	symbols := make([]string, 0, len(symbolOverrides))
 	yahooOverrides := make(map[string]string)
@@ -134,7 +203,8 @@ func (c *MicroserviceClient) GetBatchQuotes(
 
 	resp, err := c.post("/api/quotes/batch", req)
 	if err != nil {
-		return nil, err
+		// Fallback to direct client
+		return c.directClient.GetBatchQuotes(symbolOverrides)
 	}
 
 	var result BatchQuotesResponse
@@ -158,6 +228,10 @@ func (c *MicroserviceClient) GetCurrentPrice(
 	yahooSymbolOverride *string,
 	maxRetries int,
 ) (*float64, error) {
+	if c.useDirect {
+		return c.directClient.GetCurrentPrice(symbol, yahooSymbolOverride, maxRetries)
+	}
+	
 	if maxRetries == 0 {
 		maxRetries = 3 // default
 	}
@@ -182,7 +256,8 @@ func (c *MicroserviceClient) GetCurrentPrice(
 				time.Sleep(waitTime)
 				continue
 			}
-			break
+			// Fallback to direct client on final failure
+			return c.directClient.GetCurrentPrice(symbol, yahooSymbolOverride, maxRetries)
 		}
 
 		// Parse response
@@ -197,7 +272,8 @@ func (c *MicroserviceClient) GetCurrentPrice(
 				time.Sleep(waitTime)
 				continue
 			}
-			break
+			// Fallback to direct client on final failure
+			return c.directClient.GetCurrentPrice(symbol, yahooSymbolOverride, maxRetries)
 		}
 
 		if quoteData.Price > 0 {
@@ -217,7 +293,8 @@ func (c *MicroserviceClient) GetCurrentPrice(
 	}
 
 	if lastErr != nil {
-		return nil, fmt.Errorf("failed after %d attempts: %w", maxRetries, lastErr)
+		// Fallback to direct client
+		return c.directClient.GetCurrentPrice(symbol, yahooSymbolOverride, maxRetries)
 	}
 
 	return nil, fmt.Errorf("failed to get valid price after %d attempts", maxRetries)
@@ -235,6 +312,10 @@ func (c *MicroserviceClient) GetHistoricalPrices(
 	yahooSymbolOverride *string,
 	period string,
 ) ([]HistoricalPrice, error) {
+	if c.useDirect {
+		return c.directClient.GetHistoricalPrices(symbol, yahooSymbolOverride, period)
+	}
+	
 	url := fmt.Sprintf("/api/historical/%s?period=%s&interval=1d", symbol, period)
 	if yahooSymbolOverride != nil && *yahooSymbolOverride != "" {
 		url += fmt.Sprintf("&yahoo_symbol=%s", *yahooSymbolOverride)
@@ -242,7 +323,8 @@ func (c *MicroserviceClient) GetHistoricalPrices(
 
 	resp, err := c.get(url)
 	if err != nil {
-		return nil, err
+		// Fallback to direct client
+		return c.directClient.GetHistoricalPrices(symbol, yahooSymbolOverride, period)
 	}
 
 	var result HistoricalPricesResponse
@@ -259,6 +341,10 @@ func (c *MicroserviceClient) GetFundamentalData(
 	symbol string,
 	yahooSymbolOverride *string,
 ) (*FundamentalData, error) {
+	if c.useDirect {
+		return c.directClient.GetFundamentalData(symbol, yahooSymbolOverride)
+	}
+	
 	url := fmt.Sprintf("/api/fundamentals/%s", symbol)
 	if yahooSymbolOverride != nil && *yahooSymbolOverride != "" {
 		url += fmt.Sprintf("?yahoo_symbol=%s", *yahooSymbolOverride)
@@ -266,7 +352,8 @@ func (c *MicroserviceClient) GetFundamentalData(
 
 	resp, err := c.get(url)
 	if err != nil {
-		return nil, err
+		// Fallback to direct client
+		return c.directClient.GetFundamentalData(symbol, yahooSymbolOverride)
 	}
 
 	var result FundamentalData
@@ -283,6 +370,10 @@ func (c *MicroserviceClient) GetAnalystData(
 	symbol string,
 	yahooSymbolOverride *string,
 ) (*AnalystData, error) {
+	if c.useDirect {
+		return c.directClient.GetAnalystData(symbol, yahooSymbolOverride)
+	}
+	
 	url := fmt.Sprintf("/api/analyst/%s", symbol)
 	if yahooSymbolOverride != nil && *yahooSymbolOverride != "" {
 		url += fmt.Sprintf("?yahoo_symbol=%s", *yahooSymbolOverride)
@@ -290,7 +381,8 @@ func (c *MicroserviceClient) GetAnalystData(
 
 	resp, err := c.get(url)
 	if err != nil {
-		return nil, err
+		// Fallback to direct client
+		return c.directClient.GetAnalystData(symbol, yahooSymbolOverride)
 	}
 
 	var result AnalystData
@@ -318,6 +410,10 @@ func (c *MicroserviceClient) GetSecurityIndustry(
 	symbol string,
 	yahooSymbolOverride *string,
 ) (*string, error) {
+	if c.useDirect {
+		return c.directClient.GetSecurityIndustry(symbol, yahooSymbolOverride)
+	}
+	
 	url := fmt.Sprintf("/api/security/industry/%s", symbol)
 	if yahooSymbolOverride != nil && *yahooSymbolOverride != "" {
 		url += fmt.Sprintf("?yahoo_symbol=%s", *yahooSymbolOverride)
@@ -325,7 +421,8 @@ func (c *MicroserviceClient) GetSecurityIndustry(
 
 	resp, err := c.get(url)
 	if err != nil {
-		return nil, err
+		// Fallback to direct client
+		return c.directClient.GetSecurityIndustry(symbol, yahooSymbolOverride)
 	}
 
 	var result SecurityInfo
@@ -342,6 +439,10 @@ func (c *MicroserviceClient) GetSecurityCountryAndExchange(
 	symbol string,
 	yahooSymbolOverride *string,
 ) (*string, *string, error) {
+	if c.useDirect {
+		return c.directClient.GetSecurityCountryAndExchange(symbol, yahooSymbolOverride)
+	}
+	
 	url := fmt.Sprintf("/api/security/country-exchange/%s", symbol)
 	if yahooSymbolOverride != nil && *yahooSymbolOverride != "" {
 		url += fmt.Sprintf("?yahoo_symbol=%s", *yahooSymbolOverride)
@@ -349,7 +450,8 @@ func (c *MicroserviceClient) GetSecurityCountryAndExchange(
 
 	resp, err := c.get(url)
 	if err != nil {
-		return nil, nil, err
+		// Fallback to direct client
+		return c.directClient.GetSecurityCountryAndExchange(symbol, yahooSymbolOverride)
 	}
 
 	var result SecurityInfo
@@ -365,6 +467,27 @@ func (c *MicroserviceClient) GetSecurityInfo(
 	symbol string,
 	yahooSymbolOverride *string,
 ) (*SecurityInfo, error) {
+	if c.useDirect {
+		// Direct client doesn't have GetSecurityInfo, so we'll construct it from other methods
+		industry, _ := c.directClient.GetSecurityIndustry(symbol, yahooSymbolOverride)
+		country, exchange, _ := c.directClient.GetSecurityCountryAndExchange(symbol, yahooSymbolOverride)
+		quoteType, _ := c.directClient.GetQuoteType(symbol, yahooSymbolOverride)
+		
+		var productType *string
+		if quoteType != "" {
+			qt := quoteType
+			productType = &qt
+		}
+		
+		return &SecurityInfo{
+			Symbol:           symbol,
+			Industry:         industry,
+			Country:          country,
+			FullExchangeName: exchange,
+			ProductType:      productType,
+		}, nil
+	}
+	
 	url := fmt.Sprintf("/api/security/info/%s", symbol)
 	if yahooSymbolOverride != nil && *yahooSymbolOverride != "" {
 		url += fmt.Sprintf("?yahoo_symbol=%s", *yahooSymbolOverride)
@@ -372,7 +495,8 @@ func (c *MicroserviceClient) GetSecurityInfo(
 
 	resp, err := c.get(url)
 	if err != nil {
-		return nil, err
+		// Fallback to direct client
+		return c.GetSecurityInfo(symbol, yahooSymbolOverride) // Recursive call will use direct client
 	}
 
 	var result SecurityInfo
@@ -385,11 +509,16 @@ func (c *MicroserviceClient) GetSecurityInfo(
 
 // LookupTickerFromISIN searches Yahoo Finance for a ticker symbol using an ISIN
 func (c *MicroserviceClient) LookupTickerFromISIN(isin string) (string, error) {
+	if c.useDirect {
+		return c.directClient.LookupTickerFromISIN(isin)
+	}
+	
 	url := fmt.Sprintf("/api/security/lookup-ticker/%s", isin)
 	
 	resp, err := c.get(url)
 	if err != nil {
-		return "", err
+		// Fallback to direct client
+		return c.directClient.LookupTickerFromISIN(isin)
 	}
 	
 	var result struct {
@@ -412,6 +541,10 @@ func (c *MicroserviceClient) GetQuoteName(
 	symbol string,
 	yahooSymbolOverride *string,
 ) (*string, error) {
+	if c.useDirect {
+		return c.directClient.GetQuoteName(symbol, yahooSymbolOverride)
+	}
+	
 	url := fmt.Sprintf("/api/security/quote-name/%s", symbol)
 	if yahooSymbolOverride != nil && *yahooSymbolOverride != "" {
 		url += fmt.Sprintf("?yahoo_symbol=%s", *yahooSymbolOverride)
@@ -419,7 +552,8 @@ func (c *MicroserviceClient) GetQuoteName(
 	
 	resp, err := c.get(url)
 	if err != nil {
-		return nil, err
+		// Fallback to direct client
+		return c.directClient.GetQuoteName(symbol, yahooSymbolOverride)
 	}
 	
 	var result struct {
@@ -442,6 +576,10 @@ func (c *MicroserviceClient) GetQuoteType(
 	symbol string,
 	yahooSymbolOverride *string,
 ) (string, error) {
+	if c.useDirect {
+		return c.directClient.GetQuoteType(symbol, yahooSymbolOverride)
+	}
+	
 	url := fmt.Sprintf("/api/security/quote-type/%s", symbol)
 	if yahooSymbolOverride != nil && *yahooSymbolOverride != "" {
 		url += fmt.Sprintf("?yahoo_symbol=%s", *yahooSymbolOverride)
@@ -449,7 +587,8 @@ func (c *MicroserviceClient) GetQuoteType(
 	
 	resp, err := c.get(url)
 	if err != nil {
-		return "", err
+		// Fallback to direct client
+		return c.directClient.GetQuoteType(symbol, yahooSymbolOverride)
 	}
 	
 	var result struct {
@@ -465,10 +604,13 @@ func (c *MicroserviceClient) GetQuoteType(
 
 // HealthCheck checks the health of the Yahoo Finance microservice
 func (c *MicroserviceClient) HealthCheck() (bool, error) {
+	if c.useDirect {
+		return false, fmt.Errorf("using direct client, microservice unavailable")
+	}
+	
 	resp, err := c.get("/health")
 	if err != nil {
 		return false, err
 	}
 	return resp.Success, nil
 }
-
