@@ -37,9 +37,12 @@ func (s *Server) setupSettingsRoutes(r chi.Router) {
 	positionRepo := portfolio.NewPositionRepository(s.portfolioDB.Conn(), s.universeDB.Conn(), s.log)
 	allocRepo := allocation.NewRepository(s.configDB.Conn(), s.log)
 
-	// Cash manager (needed for portfolio service)
+	// Security repository (needed for universe services)
 	securityRepo := universe.NewSecurityRepository(s.universeDB.Conn(), s.log)
-	cashManager := cash_flows.NewCashSecurityManager(securityRepo, positionRepo, s.universeDB.Conn(), s.portfolioDB.Conn(), s.log)
+
+	// Cash manager (needed for portfolio service)
+	cashRepo := cash_flows.NewCashRepository(s.portfolioDB.Conn(), s.log)
+	cashManager := cash_flows.NewCashManagerWithDualWrite(cashRepo, positionRepo, s.log)
 
 	portfolioService := portfolio.NewPortfolioService(
 		positionRepo,

@@ -16,6 +16,7 @@ type Handler struct {
 	service                 *PortfolioService
 	tradernetClient         *tradernet.Client
 	currencyExchangeService CurrencyExchangeServiceInterface
+	cashManager             CashManager
 	log                     zerolog.Logger
 }
 
@@ -25,6 +26,7 @@ func NewHandler(
 	service *PortfolioService,
 	tradernetClient *tradernet.Client,
 	currencyExchangeService CurrencyExchangeServiceInterface,
+	cashManager CashManager,
 	log zerolog.Logger,
 ) *Handler {
 	return &Handler{
@@ -32,6 +34,7 @@ func NewHandler(
 		service:                 service,
 		tradernetClient:         tradernetClient,
 		currencyExchangeService: currencyExchangeService,
+		cashManager:             cashManager,
 		log:                     log.With().Str("handler", "portfolio").Logger(),
 	}
 }
@@ -118,83 +121,92 @@ func (h *Handler) HandleGetTransactions(w http.ResponseWriter, r *http.Request) 
 	h.writeJSON(w, http.StatusOK, response)
 }
 
-// HandleGetCashBreakdown gets cash balance breakdown by currency from Tradernet microservice
+// HandleGetCashBreakdown gets cash balance breakdown by currency from CashManager
 // Faithful translation of Python: @router.get("/cash-breakdown")
 func (h *Handler) HandleGetCashBreakdown(w http.ResponseWriter, r *http.Request) {
-	balances, err := h.tradernetClient.GetCashBalances()
+	cashBalancesMap, err := h.cashManager.GetAllCashBalances()
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "Failed to get cash breakdown")
 		return
 	}
 
+	// Convert map to slice format for response (matching Tradernet API format)
+	balances := make([]map[string]interface{}, 0, len(cashBalancesMap))
+	for currency, amount := range cashBalancesMap {
+		balances = append(balances, map[string]interface{}{
+			"currency": currency,
+			"amount":   amount,
+		})
+	}
+
 	// Calculate total in EUR by converting all currencies
 	// Matches Python implementation: exchange_rate_service.batch_convert_to_eur()
 	var totalEUR float64
-	for _, balance := range balances {
-		if balance.Currency == "EUR" {
-			totalEUR += balance.Amount
+	for currency, balance := range cashBalancesMap {
+		if currency == "EUR" {
+			totalEUR += balance
 			h.log.Debug().
 				Str("currency", "EUR").
-				Float64("amount", balance.Amount).
+				Float64("amount", balance).
 				Msg("Added EUR balance")
 		} else {
 			// Convert non-EUR currency to EUR
 			if h.currencyExchangeService != nil {
-				rate, err := h.currencyExchangeService.GetRate(balance.Currency, "EUR")
+				rate, err := h.currencyExchangeService.GetRate(currency, "EUR")
 				if err != nil {
 					h.log.Warn().
 						Err(err).
-						Str("currency", balance.Currency).
-						Float64("amount", balance.Amount).
+						Str("currency", currency).
+						Float64("amount", balance).
 						Msg("Failed to get exchange rate, using fallback")
 
 					// Fallback rates for autonomous operation
 					// These rates allow the system to continue operating when exchange
 					// service is unavailable. Operator can review via logs.
-					eurValue := balance.Amount
-					switch balance.Currency {
+					eurValue := balance
+					switch currency {
 					case "USD":
-						eurValue = balance.Amount * 0.9
+						eurValue = balance * 0.9
 					case "GBP":
-						eurValue = balance.Amount * 1.2
+						eurValue = balance * 1.2
 					case "HKD":
-						eurValue = balance.Amount * 0.11
+						eurValue = balance * 0.11
 					default:
 						h.log.Warn().
-							Str("currency", balance.Currency).
+							Str("currency", currency).
 							Msg("Unknown currency, assuming 1:1 with EUR")
 					}
 					totalEUR += eurValue
 
 					h.log.Info().
-						Str("currency", balance.Currency).
-						Float64("amount", balance.Amount).
+						Str("currency", currency).
+						Float64("amount", balance).
 						Float64("eur_value", eurValue).
 						Msg("Converted to EUR using fallback rate")
 				} else {
-					eurValue := balance.Amount * rate
+					eurValue := balance * rate
 					totalEUR += eurValue
 
 					h.log.Debug().
-						Str("currency", balance.Currency).
+						Str("currency", currency).
 						Float64("rate", rate).
-						Float64("amount", balance.Amount).
+						Float64("amount", balance).
 						Float64("eur_value", eurValue).
 						Msg("Converted to EUR using live rate")
 				}
 			} else {
 				// No exchange service available, use fallback rates
-				eurValue := balance.Amount
-				switch balance.Currency {
+				eurValue := balance
+				switch currency {
 				case "USD":
-					eurValue = balance.Amount * 0.9
+					eurValue = balance * 0.9
 				case "GBP":
-					eurValue = balance.Amount * 1.2
+					eurValue = balance * 1.2
 				case "HKD":
-					eurValue = balance.Amount * 0.11
+					eurValue = balance * 0.11
 				default:
 					h.log.Warn().
-						Str("currency", balance.Currency).
+						Str("currency", currency).
 						Msg("Exchange service not available, assuming 1:1 with EUR")
 				}
 				totalEUR += eurValue

@@ -317,8 +317,9 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 	// Market hours service
 	marketHours := scheduler.NewMarketHoursService(log)
 
-	// Cash security manager (cash-as-positions architecture)
-	cashManager := cash_flows.NewCashSecurityManager(securityRepo, positionRepo, universeDB.Conn(), portfolioDB.Conn(), log)
+	// Cash repository and manager (cash-as-balances architecture)
+	cashRepo := cash_flows.NewCashRepository(portfolioDB.Conn(), log)
+	cashManager := cash_flows.NewCashManagerWithDualWrite(cashRepo, positionRepo, log)
 
 	// Trade repository
 	tradeRepo := trading.NewTradeRepository(ledgerDB.Conn(), log)
@@ -358,7 +359,7 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 	// 3. Create dividend creator
 	dividendCreator := cash_flows.NewDividendCreator(dividendService, log)
 
-	// 4. Create deposit processor (simplified - uses CashSecurityManager directly)
+	// 4. Create deposit processor (uses CashManager)
 	depositProcessor := cash_flows.NewDepositProcessor(cashManager, log)
 
 	// 6. Create Tradernet adapter (adapts tradernet.Client to cash_flows.TradernetClient)
@@ -417,6 +418,7 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 		portfolioDB.Conn(),
 		configDB.Conn(),
 		cacheDB.Conn(),
+		cashManager,
 		log,
 	)
 	log.Info().Msg("Ticker content service initialized")
@@ -426,7 +428,7 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 		tradernetClient,
 		tradeRepo,
 		positionRepo,
-		cashManager, // Use CashSecurityManager directly
+		cashManager, // Use CashManager
 		currencyExchangeService,
 		log,
 	)
@@ -434,6 +436,7 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 	// Negative balance rebalancer
 	negativeBalanceRebalancer := rebalancing.NewNegativeBalanceRebalancer(
 		log,
+		cashManager,
 		tradernetClient,
 		securityRepo,
 		positionRepo,
@@ -557,6 +560,7 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 		PositionRepo:           positionRepo,
 		SecurityRepo:           securityRepo,
 		AllocRepo:              allocRepo,
+		CashManager:            cashManager,
 		TradernetClient:        tradernetClient,
 		YahooClient:            yahooClient,
 		OptimizerService:       optimizerService, // Added for optimizer target weights

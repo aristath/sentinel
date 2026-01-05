@@ -23,6 +23,14 @@ func (m *MockCashManager) UpdateCashPosition(currency string, balance float64) e
 	return args.Error(0)
 }
 
+func (m *MockCashManager) GetAllCashBalances() (map[string]float64, error) {
+	args := m.Called()
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(map[string]float64), args.Error(1)
+}
+
 // MockTradernetClient is a mock Tradernet client for testing
 type MockTradernetClient struct {
 	mock.Mock

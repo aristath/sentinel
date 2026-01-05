@@ -7,15 +7,15 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// DepositProcessor processes deposits by updating cash positions
-// Simplified to use CashSecurityManager directly (no bucket allocation)
+// DepositProcessor processes deposits by updating cash balances
+// Uses CashManager to update cash balances in the cash_balances table
 type DepositProcessor struct {
-	cashManager *CashSecurityManager
+	cashManager *CashManager
 	log         zerolog.Logger
 }
 
 // NewDepositProcessor creates a new deposit processor
-func NewDepositProcessor(cashManager *CashSecurityManager, log zerolog.Logger) *DepositProcessor {
+func NewDepositProcessor(cashManager *CashManager, log zerolog.Logger) *DepositProcessor {
 	return &DepositProcessor{
 		cashManager: cashManager,
 		log:         log.With().Str("service", "deposit_processor").Logger(),
@@ -31,7 +31,7 @@ func (p *DepositProcessor) ProcessDeposit(
 	description *string,
 ) (map[string]interface{}, error) {
 	if p.cashManager == nil {
-		p.log.Warn().Msg("CashSecurityManager not available, skipping deposit processing")
+		p.log.Warn().Msg("CashManager not available, skipping deposit processing")
 		return map[string]interface{}{"total": amount}, nil
 	}
 
@@ -59,7 +59,7 @@ func (p *DepositProcessor) ProcessDeposit(
 		Str("currency", currency).
 		Float64("previous_balance", currentBalance).
 		Float64("new_balance", newBalance).
-		Msg("Deposit processed and cash position updated")
+		Msg("Deposit processed and cash balance updated")
 
 	return result, nil
 }

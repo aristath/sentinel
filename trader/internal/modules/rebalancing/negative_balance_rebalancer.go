@@ -26,6 +26,7 @@ const MinCurrencyReserve = 5.0
 // 3. Final currency exchange to ensure all currencies have minimum
 type NegativeBalanceRebalancer struct {
 	log                     zerolog.Logger
+	cashManager             portfolio.CashManager
 	tradernetClient         *tradernet.Client
 	securityRepo            *universe.SecurityRepository
 	positionRepo            *portfolio.PositionRepository
@@ -39,6 +40,7 @@ type NegativeBalanceRebalancer struct {
 // NewNegativeBalanceRebalancer creates a new negative balance rebalancer
 func NewNegativeBalanceRebalancer(
 	log zerolog.Logger,
+	cashManager portfolio.CashManager,
 	tradernetClient *tradernet.Client,
 	securityRepo *universe.SecurityRepository,
 	positionRepo *portfolio.PositionRepository,
@@ -50,6 +52,7 @@ func NewNegativeBalanceRebalancer(
 ) *NegativeBalanceRebalancer {
 	return &NegativeBalanceRebalancer{
 		log:                     log.With().Str("service", "negative_balance_rebalancer").Logger(),
+		cashManager:             cashManager,
 		tradernetClient:         tradernetClient,
 		securityRepo:            securityRepo,
 		positionRepo:            positionRepo,
@@ -127,21 +130,20 @@ func (r *NegativeBalanceRebalancer) CheckCurrencyMinimums(cashBalances map[strin
 
 // HasNegativeBalances checks if any currency has a negative balance
 func (r *NegativeBalanceRebalancer) HasNegativeBalances() (bool, error) {
-	if !r.tradernetClient.IsConnected() {
-		r.log.Warn().Msg("Tradernet not connected, cannot check balances")
-		return false, fmt.Errorf("tradernet not connected")
+	if r.cashManager == nil {
+		return false, fmt.Errorf("cash manager not available")
 	}
 
-	balances, err := r.tradernetClient.GetCashBalances()
+	balances, err := r.cashManager.GetAllCashBalances()
 	if err != nil {
 		return false, fmt.Errorf("failed to get cash balances: %w", err)
 	}
 
-	for _, balance := range balances {
-		if balance.Amount < 0 {
+	for currency, amount := range balances {
+		if amount < 0 {
 			r.log.Warn().
-				Str("currency", balance.Currency).
-				Float64("amount", balance.Amount).
+				Str("currency", currency).
+				Float64("amount", amount).
 				Msg("Negative balance detected")
 			return true, nil
 		}
@@ -152,19 +154,13 @@ func (r *NegativeBalanceRebalancer) HasNegativeBalances() (bool, error) {
 
 // HasCurrenciesBelowMinimum checks if any trading currency is below minimum reserve
 func (r *NegativeBalanceRebalancer) HasCurrenciesBelowMinimum() (bool, error) {
-	if !r.tradernetClient.IsConnected() {
-		r.log.Warn().Msg("Tradernet not connected, cannot check balances")
-		return false, fmt.Errorf("tradernet not connected")
+	if r.cashManager == nil {
+		return false, fmt.Errorf("cash manager not available")
 	}
 
-	balances, err := r.tradernetClient.GetCashBalances()
+	cashBalances, err := r.cashManager.GetAllCashBalances()
 	if err != nil {
 		return false, fmt.Errorf("failed to get cash balances: %w", err)
-	}
-
-	cashBalances := make(map[string]float64)
-	for _, balance := range balances {
-		cashBalances[balance.Currency] = balance.Amount
 	}
 
 	shortfalls, err := r.CheckCurrencyMinimums(cashBalances)
@@ -183,20 +179,24 @@ func (r *NegativeBalanceRebalancer) HasCurrenciesBelowMinimum() (bool, error) {
 //
 // Returns true if rebalancing completed, false otherwise
 func (r *NegativeBalanceRebalancer) RebalanceNegativeBalances() (bool, error) {
+	if r.cashManager == nil {
+		r.log.Error().Msg("Cash manager not available for rebalancing")
+		return false, fmt.Errorf("cash manager not available")
+	}
+
 	if !r.tradernetClient.IsConnected() {
 		r.log.Error().Msg("Cannot connect to Tradernet for rebalancing")
 		return false, fmt.Errorf("tradernet not connected")
 	}
 
 	// Get current cash balances
-	balancesRaw, err := r.tradernetClient.GetCashBalances()
-	if err != nil {
-		return false, fmt.Errorf("failed to get cash balances: %w", err)
+	if r.cashManager == nil {
+		return false, fmt.Errorf("cash manager not available")
 	}
 
-	cashBalances := make(map[string]float64)
-	for _, balance := range balancesRaw {
-		cashBalances[balance.Currency] = balance.Amount
+	cashBalances, err := r.cashManager.GetAllCashBalances()
+	if err != nil {
+		return false, fmt.Errorf("failed to get cash balances: %w", err)
 	}
 
 	// Check for currencies below minimum
@@ -299,14 +299,9 @@ func (r *NegativeBalanceRebalancer) step1CurrencyExchange(
 		progressMade := false
 
 		// Refresh balances at start of each iteration
-		balancesRaw, err := r.tradernetClient.GetCashBalances()
+		cashBalances, err := r.cashManager.GetAllCashBalances()
 		if err != nil {
 			return remainingShortfalls, fmt.Errorf("failed to refresh balances: %w", err)
-		}
-
-		cashBalances := make(map[string]float64)
-		for _, balance := range balancesRaw {
-			cashBalances[balance.Currency] = balance.Amount
 		}
 
 		// Check if there's any cash available to exchange
@@ -386,14 +381,9 @@ func (r *NegativeBalanceRebalancer) step1CurrencyExchange(
 				progressMade = true
 
 				// Refresh balances after successful exchange
-				balancesRaw, err = r.tradernetClient.GetCashBalances()
+				cashBalances, err = r.cashManager.GetAllCashBalances()
 				if err != nil {
 					return remainingShortfalls, fmt.Errorf("failed to refresh balances: %w", err)
-				}
-
-				cashBalances = make(map[string]float64)
-				for _, balance := range balancesRaw {
-					cashBalances[balance.Currency] = balance.Amount
 				}
 
 				// Check if shortfall is resolved
@@ -641,14 +631,9 @@ func (r *NegativeBalanceRebalancer) step3FinalExchange(tradingMode string) error
 	}
 
 	// Refresh balances after sales
-	balancesRaw, err := r.tradernetClient.GetCashBalances()
+	cashBalances, err := r.cashManager.GetAllCashBalances()
 	if err != nil {
 		return fmt.Errorf("failed to refresh balances: %w", err)
-	}
-
-	cashBalances := make(map[string]float64)
-	for _, balance := range balancesRaw {
-		cashBalances[balance.Currency] = balance.Amount
 	}
 
 	// Check for remaining shortfalls
@@ -669,14 +654,9 @@ func (r *NegativeBalanceRebalancer) step3FinalExchange(tradingMode string) error
 	}
 
 	// Final check
-	balancesRaw, err = r.tradernetClient.GetCashBalances()
+	cashBalances, err = r.cashManager.GetAllCashBalances()
 	if err != nil {
 		return fmt.Errorf("failed to refresh balances: %w", err)
-	}
-
-	cashBalances = make(map[string]float64)
-	for _, balance := range balancesRaw {
-		cashBalances[balance.Currency] = balance.Amount
 	}
 
 	finalShortfalls, err := r.CheckCurrencyMinimums(cashBalances)
@@ -697,18 +677,13 @@ func (r *NegativeBalanceRebalancer) step3FinalExchange(tradingMode string) error
 
 // CheckCurrencyMinimumsSafe is a safe wrapper for CheckCurrencyMinimums that handles errors
 func (r *NegativeBalanceRebalancer) CheckCurrencyMinimumsSafe() (map[string]float64, error) {
-	if !r.tradernetClient.IsConnected() {
-		return make(map[string]float64), fmt.Errorf("tradernet not connected")
+	if r.cashManager == nil {
+		return make(map[string]float64), fmt.Errorf("cash manager not available")
 	}
 
-	balances, err := r.tradernetClient.GetCashBalances()
+	cashBalances, err := r.cashManager.GetAllCashBalances()
 	if err != nil {
 		return make(map[string]float64), fmt.Errorf("failed to get cash balances: %w", err)
-	}
-
-	cashBalances := make(map[string]float64)
-	for _, balance := range balances {
-		cashBalances[balance.Currency] = balance.Amount
 	}
 
 	return r.CheckCurrencyMinimums(cashBalances)

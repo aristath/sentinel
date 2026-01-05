@@ -20,6 +20,7 @@ type Handlers struct {
 	tradernetClient         *tradernet.Client
 	currencyExchangeService *services.CurrencyExchangeService
 	allocRepo               *allocation.Repository
+	cashManager             portfolio.CashManager
 	log                     zerolog.Logger
 }
 
@@ -27,12 +28,14 @@ type Handlers struct {
 //
 // currencyExchangeService is used to convert multi-currency cash and shortfalls to EUR.
 // allocRepo is used to load target allocations for trigger checking.
+// cashManager is used to get cash balances.
 func NewHandlers(
 	service *Service,
 	portfolioService *portfolio.PortfolioService,
 	tradernetClient *tradernet.Client,
 	currencyExchangeService *services.CurrencyExchangeService,
 	allocRepo *allocation.Repository,
+	cashManager portfolio.CashManager,
 	log zerolog.Logger,
 ) *Handlers {
 	return &Handlers{
@@ -41,6 +44,7 @@ func NewHandlers(
 		tradernetClient:         tradernetClient,
 		currencyExchangeService: currencyExchangeService,
 		allocRepo:               allocRepo,
+		cashManager:             cashManager,
 		log:                     log.With().Str("module", "rebalancing_handlers").Logger(),
 	}
 }
@@ -101,8 +105,8 @@ func (h *Handlers) CheckTriggers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Get cash balances
-	cashBalances, err := h.tradernetClient.GetCashBalances()
+	// Get cash balances from CashManager
+	cashBalancesMap, err := h.cashManager.GetAllCashBalances()
 	if err != nil {
 		h.log.Error().Err(err).Msg("Failed to get cash balances")
 		http.Error(w, "Failed to get cash balances", http.StatusInternalServerError)
@@ -111,32 +115,32 @@ func (h *Handlers) CheckTriggers(w http.ResponseWriter, r *http.Request) {
 
 	// Calculate total cash in EUR with proper currency conversion
 	totalCash := 0.0
-	for _, balance := range cashBalances {
-		if balance.Currency == "EUR" {
-			totalCash += balance.Amount
+	for currency, balance := range cashBalancesMap {
+		if currency == "EUR" {
+			totalCash += balance
 		} else {
 			// Convert to EUR using exchange rate service
-			rate, err := h.currencyExchangeService.GetRate(balance.Currency, "EUR")
+			rate, err := h.currencyExchangeService.GetRate(currency, "EUR")
 			if err != nil {
 				h.log.Warn().
 					Err(err).
-					Str("currency", balance.Currency).
-					Float64("amount", balance.Amount).
+					Str("currency", currency).
+					Float64("amount", balance).
 					Msg("Failed to get exchange rate for cash balance, using fallback")
 
 				// Fallback conversion
-				eurValue := balance.Amount
-				switch balance.Currency {
+				eurValue := balance
+				switch currency {
 				case "USD":
-					eurValue = balance.Amount * 0.9
+					eurValue = balance * 0.9
 				case "GBP":
-					eurValue = balance.Amount * 1.2
+					eurValue = balance * 1.2
 				case "HKD":
-					eurValue = balance.Amount * 0.11
+					eurValue = balance * 0.11
 				}
 				totalCash += eurValue
 			} else {
-				totalCash += balance.Amount * rate
+				totalCash += balance * rate
 			}
 		}
 	}
@@ -191,8 +195,8 @@ func (h *Handlers) CalculateTrades(w http.ResponseWriter, r *http.Request) {
 	availableCashStr := r.URL.Query().Get("available_cash")
 	availableCash, err := strconv.ParseFloat(availableCashStr, 64)
 	if err != nil || availableCash <= 0 {
-		// Get cash from Tradernet client
-		cashBalances, err := h.tradernetClient.GetCashBalances()
+		// Get cash from CashManager
+		cashBalancesMap, err := h.cashManager.GetAllCashBalances()
 		if err != nil {
 			h.log.Error().Err(err).Msg("Failed to get cash balances")
 			http.Error(w, "Failed to get cash balances", http.StatusInternalServerError)
@@ -200,10 +204,8 @@ func (h *Handlers) CalculateTrades(w http.ResponseWriter, r *http.Request) {
 		}
 
 		availableCash = 0.0
-		for _, balance := range cashBalances {
-			if balance.Currency == "EUR" {
-				availableCash += balance.Amount
-			}
+		if eurBalance, ok := cashBalancesMap["EUR"]; ok {
+			availableCash = eurBalance
 		}
 	}
 
@@ -234,17 +236,11 @@ type CheckNegativeBalancesResponse struct {
 // CheckNegativeBalances checks for negative balances and currencies below minimum
 func (h *Handlers) CheckNegativeBalances(w http.ResponseWriter, r *http.Request) {
 	// Get cash balances
-	cashBalances, err := h.tradernetClient.GetCashBalances()
+	balanceMap, err := h.cashManager.GetAllCashBalances()
 	if err != nil {
 		h.log.Error().Err(err).Msg("Failed to get cash balances")
 		http.Error(w, "Failed to get cash balances", http.StatusInternalServerError)
 		return
-	}
-
-	// Convert to map
-	balanceMap := make(map[string]float64)
-	for _, balance := range cashBalances {
-		balanceMap[balance.Currency] = balance.Amount
 	}
 
 	// Check for negatives
@@ -335,7 +331,7 @@ func (h *Handlers) ExecuteRebalance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cashBalances, err := h.tradernetClient.GetCashBalances()
+	cashBalancesMap, err := h.cashManager.GetAllCashBalances()
 	if err != nil {
 		h.log.Error().Err(err).Msg("Failed to get cash balances")
 		http.Error(w, "Failed to get cash balances", http.StatusInternalServerError)
@@ -344,10 +340,8 @@ func (h *Handlers) ExecuteRebalance(w http.ResponseWriter, r *http.Request) {
 
 	availableCash := req.AvailableCash
 	if availableCash == 0 {
-		for _, balance := range cashBalances {
-			if balance.Currency == "EUR" {
-				availableCash += balance.Amount
-			}
+		if eurBalance, ok := cashBalancesMap["EUR"]; ok {
+			availableCash = eurBalance
 		}
 	}
 

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aristath/arduino-trader/internal/modules/cash_utils"
 	"github.com/rs/zerolog"
 )
 
@@ -18,10 +17,11 @@ type AllocationTargetProvider interface {
 	GetAll() (map[string]float64, error)
 }
 
-// CashManager interface defines operations for managing cash as securities and positions
+// CashManager interface defines operations for managing cash balances
 // This interface breaks the circular dependency between portfolio and cash_flows packages
 type CashManager interface {
 	UpdateCashPosition(currency string, balance float64) error
+	GetAllCashBalances() (map[string]float64, error)
 }
 
 // PortfolioService orchestrates portfolio operations
@@ -81,77 +81,76 @@ func (s *PortfolioService) GetPortfolioSummary() (PortfolioSummary, error) {
 		return PortfolioSummary{}, fmt.Errorf("failed to get securities: %w", err)
 	}
 
-	// Get cash balance from actual Tradernet balances
-	// If Tradernet is not available, cash balance will be 0
+	// Get cash balance from CashManager
 	cashBalance := 0.0
-	if s.tradernetClient != nil {
-		balances, err := s.tradernetClient.GetCashBalances()
+	if s.cashManager != nil {
+		balances, err := s.cashManager.GetAllCashBalances()
 		if err == nil && len(balances) > 0 {
 			// Convert all currencies to EUR
 			var totalEUR float64
-			for _, balance := range balances {
-				if balance.Currency == "EUR" {
-					totalEUR += balance.Amount
+			for currency, amount := range balances {
+				if currency == "EUR" {
+					totalEUR += amount
 					s.log.Debug().
 						Str("currency", "EUR").
-						Float64("amount", balance.Amount).
+						Float64("amount", amount).
 						Msg("Added EUR balance")
 				} else {
 					// Convert non-EUR currency to EUR
 					if s.currencyExchangeService != nil {
-						rate, err := s.currencyExchangeService.GetRate(balance.Currency, "EUR")
+						rate, err := s.currencyExchangeService.GetRate(currency, "EUR")
 						if err != nil {
 							s.log.Warn().
 								Err(err).
-								Str("currency", balance.Currency).
-								Float64("amount", balance.Amount).
+								Str("currency", currency).
+								Float64("amount", amount).
 								Msg("Failed to get exchange rate, using fallback")
 
 							// Fallback rates for autonomous operation
-							eurValue := balance.Amount
-							switch balance.Currency {
+							eurValue := amount
+							switch currency {
 							case "USD":
-								eurValue = balance.Amount * 0.9
+								eurValue = amount * 0.9
 							case "GBP":
-								eurValue = balance.Amount * 1.2
+								eurValue = amount * 1.2
 							case "HKD":
-								eurValue = balance.Amount * 0.11
+								eurValue = amount * 0.11
 							default:
 								s.log.Warn().
-									Str("currency", balance.Currency).
+									Str("currency", currency).
 									Msg("Unknown currency, assuming 1:1 with EUR")
 							}
 							totalEUR += eurValue
 
 							s.log.Info().
-								Str("currency", balance.Currency).
-								Float64("amount", balance.Amount).
+								Str("currency", currency).
+								Float64("amount", amount).
 								Float64("eur_value", eurValue).
 								Msg("Converted to EUR using fallback rate")
 						} else {
-							eurValue := balance.Amount * rate
+							eurValue := amount * rate
 							totalEUR += eurValue
 
 							s.log.Debug().
-								Str("currency", balance.Currency).
+								Str("currency", currency).
 								Float64("rate", rate).
-								Float64("amount", balance.Amount).
+								Float64("amount", amount).
 								Float64("eur_value", eurValue).
 								Msg("Converted to EUR using live rate")
 						}
 					} else {
 						// No exchange service available, use fallback rates
-						eurValue := balance.Amount
-						switch balance.Currency {
+						eurValue := amount
+						switch currency {
 						case "USD":
-							eurValue = balance.Amount * 0.9
+							eurValue = amount * 0.9
 						case "GBP":
-							eurValue = balance.Amount * 1.2
+							eurValue = amount * 1.2
 						case "HKD":
-							eurValue = balance.Amount * 0.11
+							eurValue = amount * 0.11
 						default:
 							s.log.Warn().
-								Str("currency", balance.Currency).
+								Str("currency", currency).
 								Msg("Exchange service not available, assuming 1:1 with EUR")
 						}
 						totalEUR += eurValue
@@ -159,9 +158,9 @@ func (s *PortfolioService) GetPortfolioSummary() (PortfolioSummary, error) {
 				}
 			}
 			cashBalance = totalEUR
-			s.log.Debug().Float64("cash_balance", cashBalance).Msg("Got cash balance from Tradernet")
-		} else {
-			s.log.Warn().Err(err).Msg("Failed to get cash balances from Tradernet, using 0")
+			s.log.Debug().Float64("cash_balance", cashBalance).Msg("Got cash balance from CashManager")
+		} else if err != nil {
+			s.log.Warn().Err(err).Msg("Failed to get cash balances from CashManager, using 0")
 		}
 	}
 
@@ -187,11 +186,9 @@ func (s *PortfolioService) aggregatePositionValues(positions []PositionWithSecur
 	totalValue := 0.0
 
 	for _, pos := range positions {
-		// Skip cash positions - they don't participate in allocation targets
-		// Cash is managed separately via BalanceService
-		if cash_utils.IsCashSymbol(pos.Symbol) {
-			continue
-		}
+		// Note: Cash positions should not exist in positions table after migration
+		// If they do (during dual-write phase), they will be filtered out naturally
+		// since they won't have matching securities in universe.db
 
 		eurValue := s.calculatePositionValue(pos)
 		totalValue += eurValue
@@ -538,17 +535,12 @@ func (s *PortfolioService) SyncFromTradernet() error {
 		existingPos, _ := s.positionRepo.GetBySymbol(tradernetPos.Symbol)
 
 		// Lookup ISIN from securities table (required for Upsert)
+		// Note: Cash positions should not come from Tradernet positions - they're synced separately
 		var isin string
-		if strings.HasPrefix(strings.ToUpper(tradernetPos.Symbol), "CASH:") {
-			// CASH positions use symbol as ISIN
-			isin = tradernetPos.Symbol
-		} else {
-			// Query securities table for ISIN
-			query := "SELECT isin FROM securities WHERE symbol = ?"
-			row := s.universeDB.QueryRow(query, strings.ToUpper(strings.TrimSpace(tradernetPos.Symbol)))
-			if err := row.Scan(&isin); err != nil {
-				s.log.Warn().Err(err).Str("symbol", tradernetPos.Symbol).Msg("Failed to lookup ISIN, position may not save correctly")
-			}
+		query := "SELECT isin FROM securities WHERE symbol = ?"
+		row := s.universeDB.QueryRow(query, strings.ToUpper(strings.TrimSpace(tradernetPos.Symbol)))
+		if err := row.Scan(&isin); err != nil {
+			s.log.Warn().Err(err).Str("symbol", tradernetPos.Symbol).Msg("Failed to lookup ISIN, position may not save correctly")
 		}
 
 		// Convert tradernet.Position to portfolio.Position
@@ -591,29 +583,26 @@ func (s *PortfolioService) SyncFromTradernet() error {
 	for _, currentPos := range currentPositions {
 		if !tradernetSymbols[currentPos.Symbol] {
 			// Delete by ISIN (primary identifier)
+			// Note: Cash positions should not be in positions table after migration
 			if currentPos.ISIN == "" {
-				// Fallback: use symbol for CASH positions (CASH positions use symbol as ISIN)
-				if err := s.positionRepo.Delete(currentPos.Symbol); err != nil {
-					s.log.Error().Err(err).Str("symbol", currentPos.Symbol).Msg("Failed to delete position")
-					continue
-				}
-			} else {
-				if err := s.positionRepo.Delete(currentPos.ISIN); err != nil {
-					s.log.Error().Err(err).Str("isin", currentPos.ISIN).Str("symbol", currentPos.Symbol).Msg("Failed to delete stale position")
-					continue
-				}
+				s.log.Warn().Str("symbol", currentPos.Symbol).Msg("Position has no ISIN, skipping deletion")
+				continue
+			}
+			if err := s.positionRepo.Delete(currentPos.ISIN); err != nil {
+				s.log.Error().Err(err).Str("isin", currentPos.ISIN).Str("symbol", currentPos.Symbol).Msg("Failed to delete stale position")
+				continue
 			}
 			s.log.Info().Str("symbol", currentPos.Symbol).Str("isin", currentPos.ISIN).Msg("Deleted stale position not in Tradernet")
 			deleted++
 		}
 	}
 
-	// Step 6: Sync cash balances as positions (cash-as-securities architecture)
+	// Step 6: Sync cash balances to cash_balances table
 	balances, err := s.tradernetClient.GetCashBalances()
 	if err != nil {
 		s.log.Warn().Err(err).Msg("Failed to fetch cash balances from Tradernet")
 	} else {
-		// Update cash positions for each currency balance
+		// Update cash balances for each currency
 		cashUpdated := 0
 		for _, cashBalance := range balances {
 			if err := s.cashManager.UpdateCashPosition(cashBalance.Currency, cashBalance.Amount); err != nil {
@@ -621,7 +610,7 @@ func (s *PortfolioService) SyncFromTradernet() error {
 					Err(err).
 					Str("currency", cashBalance.Currency).
 					Float64("amount", cashBalance.Amount).
-					Msg("Failed to update cash position")
+					Msg("Failed to update cash balance")
 				continue
 			}
 			cashUpdated++
@@ -629,7 +618,7 @@ func (s *PortfolioService) SyncFromTradernet() error {
 		s.log.Info().
 			Int("currencies", len(balances)).
 			Int("updated", cashUpdated).
-			Msg("Cash balances synced as positions")
+			Msg("Cash balances synced")
 	}
 
 	s.log.Info().

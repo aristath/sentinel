@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/aristath/arduino-trader/internal/modules/portfolio"
 	"github.com/rs/zerolog"
 )
 
@@ -13,18 +14,21 @@ type TickerContentService struct {
 	portfolioDB *sql.DB
 	configDB    *sql.DB
 	cacheDB     *sql.DB
+	cashManager portfolio.CashManager
 	log         zerolog.Logger
 }
 
 // NewTickerContentService creates a new ticker content service
 func NewTickerContentService(
 	portfolioDB, configDB, cacheDB *sql.DB,
+	cashManager portfolio.CashManager,
 	log zerolog.Logger,
 ) *TickerContentService {
 	return &TickerContentService{
 		portfolioDB: portfolioDB,
 		configDB:    configDB,
 		cacheDB:     cacheDB,
+		cashManager: cashManager,
 		log:         log.With().Str("service", "ticker_content").Logger(),
 	}
 }
@@ -96,22 +100,19 @@ func (s *TickerContentService) getPortfolioValue() (float64, error) {
 	return total, nil
 }
 
-// getCashBalance gets total cash balance for currency from portfolio database
+// getCashBalance gets total cash balance for currency from CashManager
 func (s *TickerContentService) getCashBalance(currency string) (float64, error) {
-	// Query balances table directly
-	var total float64
-	err := s.portfolioDB.QueryRow(`
-		SELECT COALESCE(SUM(balance), 0)
-		FROM balances
-		WHERE currency = ?
-	`).Scan(&total)
-
+	cashBalances, err := s.cashManager.GetAllCashBalances()
 	if err != nil {
 		s.log.Warn().Err(err).Str("currency", currency).Msg("Failed to get cash balance for ticker")
 		return 0, err
 	}
 
-	return total, nil
+	if balance, ok := cashBalances[currency]; ok {
+		return balance, nil
+	}
+
+	return 0, nil
 }
 
 // getRecommendationsText formats pending recommendations from cache database

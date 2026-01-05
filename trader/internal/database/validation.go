@@ -123,7 +123,7 @@ func (v *ISINValidator) ValidateForeignKeys() ([]string, error) {
 		SELECT p.isin
 		FROM positions p
 		LEFT JOIN securities sec ON p.isin = sec.isin
-		WHERE sec.isin IS NULL AND p.isin NOT LIKE 'CASH:%'
+		WHERE sec.isin IS NULL
 	`
 	rows, err = v.db.Query(positionQuery)
 	if err != nil {

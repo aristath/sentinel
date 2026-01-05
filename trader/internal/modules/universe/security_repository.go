@@ -132,9 +132,9 @@ func (r *SecurityRepository) GetAllActive() ([]Security, error) {
 }
 
 // GetAllActiveTradable returns all active securities excluding cash
-// Used for scoring and trading operations where cash should not be included
+// Used for scoring and trading operations
 func (r *SecurityRepository) GetAllActiveTradable() ([]Security, error) {
-	query := "SELECT " + securitiesColumns + " FROM securities WHERE active = 1 AND product_type != 'CASH'"
+	query := "SELECT " + securitiesColumns + " FROM securities WHERE active = 1"
 
 	rows, err := r.universeDB.Query(query)
 	if err != nil {
@@ -328,8 +328,8 @@ func (r *SecurityRepository) Delete(isin string) error {
 // Faithful translation of Python: async def get_with_scores(self) -> List[dict]
 // Note: This method accesses multiple databases (universe.db and portfolio.db) - architecture violation
 func (r *SecurityRepository) GetWithScores(portfolioDB *sql.DB) ([]SecurityWithScore, error) {
-	// Fetch securities from universe.db (excluding cash - cash doesn't have scores)
-	securityRows, err := r.universeDB.Query("SELECT " + securitiesColumns + " FROM securities WHERE active = 1 AND product_type != 'CASH'")
+	// Fetch securities from universe.db
+	securityRows, err := r.universeDB.Query("SELECT " + securitiesColumns + " FROM securities WHERE active = 1")
 	if err != nil {
 		return nil, fmt.Errorf("failed to query securities: %w", err)
 	}

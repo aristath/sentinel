@@ -98,6 +98,11 @@ func New(cfg Config) *Server {
 	// Create currency exchange service for cash balance calculations
 	currencyExchangeService := services.NewCurrencyExchangeService(tradernetClient, cfg.Log)
 
+	// Create CashManager for system handlers
+	positionRepoForSystem := portfolio.NewPositionRepository(cfg.PortfolioDB.Conn(), cfg.UniverseDB.Conn(), cfg.Log)
+	cashRepoForSystem := cash_flows.NewCashRepository(cfg.PortfolioDB.Conn(), cfg.Log)
+	cashManagerForSystem := cash_flows.NewCashManagerWithDualWrite(cashRepoForSystem, positionRepoForSystem, cfg.Log)
+
 	systemHandlers := NewSystemHandlers(
 		cfg.Log,
 		dataDir,
@@ -109,6 +114,7 @@ func New(cfg Config) *Server {
 		cfg.DisplayManager,
 		tradernetClient,
 		currencyExchangeService,
+		cashManagerForSystem,
 	)
 
 	s := &Server{
@@ -397,8 +403,8 @@ func (s *Server) setupAllocationRoutes(r chi.Router) {
 	currencyExchangeService := services.NewCurrencyExchangeService(tradernetClient, s.log)
 
 	// Cash manager (needed for portfolio service)
-	securityRepo := universe.NewSecurityRepository(s.universeDB.Conn(), s.log)
-	cashManager := cash_flows.NewCashSecurityManager(securityRepo, positionRepo, s.universeDB.Conn(), s.portfolioDB.Conn(), s.log)
+	cashRepo := cash_flows.NewCashRepository(s.portfolioDB.Conn(), s.log)
+	cashManager := cash_flows.NewCashManagerWithDualWrite(cashRepo, positionRepo, s.log)
 
 	portfolioService := portfolio.NewPortfolioService(
 		positionRepo,
@@ -454,8 +460,8 @@ func (s *Server) setupPortfolioRoutes(r chi.Router) {
 	currencyExchangeService := services.NewCurrencyExchangeService(tradernetClient, s.log)
 
 	// Cash manager (needed for portfolio service)
-	securityRepo := universe.NewSecurityRepository(s.universeDB.Conn(), s.log)
-	cashManager := cash_flows.NewCashSecurityManager(securityRepo, positionRepo, s.universeDB.Conn(), s.portfolioDB.Conn(), s.log)
+	cashRepo := cash_flows.NewCashRepository(s.portfolioDB.Conn(), s.log)
+	cashManager := cash_flows.NewCashManagerWithDualWrite(cashRepo, positionRepo, s.log)
 
 	portfolioService := portfolio.NewPortfolioService(
 		positionRepo,
@@ -472,6 +478,7 @@ func (s *Server) setupPortfolioRoutes(r chi.Router) {
 		portfolioService,
 		tradernetClient,
 		currencyExchangeService,
+		cashManager,
 		s.log,
 	)
 
@@ -616,8 +623,8 @@ func (s *Server) setupTradingRoutes(r chi.Router) {
 	currencyExchangeService := services.NewCurrencyExchangeService(tradernetClient, s.log)
 
 	// Cash manager (needed for portfolio service)
-	securityRepoForCash := universe.NewSecurityRepository(s.universeDB.Conn(), s.log)
-	cashManager := cash_flows.NewCashSecurityManager(securityRepoForCash, positionRepo, s.universeDB.Conn(), s.portfolioDB.Conn(), s.log)
+	cashRepo := cash_flows.NewCashRepository(s.portfolioDB.Conn(), s.log)
+	cashManager := cash_flows.NewCashManagerWithDualWrite(cashRepo, positionRepo, s.log)
 
 	portfolioService := portfolio.NewPortfolioService(
 		positionRepo,
@@ -740,6 +747,11 @@ func (s *Server) setupOptimizationRoutes(r chi.Router) {
 	// Initialize currency exchange service for multi-currency cash handling
 	currencyExchangeService := services.NewCurrencyExchangeService(tradernetClient, s.log)
 
+	// Create CashManager for optimization handlers
+	positionRepoForOptimization := portfolio.NewPositionRepository(s.portfolioDB.Conn(), s.universeDB.Conn(), s.log)
+	cashRepoForOptimization := cash_flows.NewCashRepository(s.portfolioDB.Conn(), s.log)
+	cashManagerForOptimization := cash_flows.NewCashManagerWithDualWrite(cashRepoForOptimization, positionRepoForOptimization, s.log)
+
 	// Initialize PyPFOpt client
 	pypfoptClient := optimization.NewPyPFOptClient(s.cfg.PyPFOptServiceURL, s.log)
 
@@ -769,6 +781,7 @@ func (s *Server) setupOptimizationRoutes(r chi.Router) {
 		tradernetClient,
 		currencyExchangeService,
 		dividendRepo,
+		cashManagerForOptimization,
 		s.log,
 	)
 
@@ -794,11 +807,11 @@ func (s *Server) setupCashFlowsRoutes(r chi.Router) {
 	tradernetClient.SetCredentials(s.cfg.TradernetAPIKey, s.cfg.TradernetAPISecret)
 	tradernetAdapter := cash_flows.NewTradernetAdapter(tradernetClient)
 
-	// Initialize deposit processor (uses CashSecurityManager directly)
+	// Initialize deposit processor (uses CashManager)
 	// Create a cash manager for cash flows routes
 	positionRepo := portfolio.NewPositionRepository(s.portfolioDB.Conn(), s.universeDB.Conn(), s.log)
-	securityRepoForCashFlows := universe.NewSecurityRepository(s.universeDB.Conn(), s.log)
-	cashManagerForCashFlows := cash_flows.NewCashSecurityManager(securityRepoForCashFlows, positionRepo, s.universeDB.Conn(), s.portfolioDB.Conn(), s.log)
+	cashRepoForCashFlows := cash_flows.NewCashRepository(s.portfolioDB.Conn(), s.log)
+	cashManagerForCashFlows := cash_flows.NewCashManagerWithDualWrite(cashRepoForCashFlows, positionRepo, s.log)
 	depositProcessor := cash_flows.NewDepositProcessor(cashManagerForCashFlows, s.log)
 
 	// Note: DividendCreator and sync job will be set up separately when scheduling background jobs
@@ -858,8 +871,8 @@ func (s *Server) setupRebalancingRoutes(r chi.Router) {
 	currencyExchangeService := services.NewCurrencyExchangeService(tradernetClient, s.log)
 
 	// Cash manager (needed for portfolio service)
-	securityRepoForRebalancing := universe.NewSecurityRepository(s.universeDB.Conn(), s.log)
-	cashManagerForRebalancing := cash_flows.NewCashSecurityManager(securityRepoForRebalancing, positionRepo, s.universeDB.Conn(), s.portfolioDB.Conn(), s.log)
+	cashRepoForRebalancing := cash_flows.NewCashRepository(s.portfolioDB.Conn(), s.log)
+	cashManagerForRebalancing := cash_flows.NewCashManagerWithDualWrite(cashRepoForRebalancing, positionRepo, s.log)
 
 	portfolioService := portfolio.NewPortfolioService(
 		positionRepo,
@@ -884,7 +897,7 @@ func (s *Server) setupRebalancingRoutes(r chi.Router) {
 		tradernetClient,
 		tradingRepo,
 		positionRepo,
-		cashManagerForRebalancing, // Use CashSecurityManager directly
+		cashManagerForRebalancing, // Use CashManager
 		currencyExchangeService,
 		s.log,
 	)
@@ -895,6 +908,7 @@ func (s *Server) setupRebalancingRoutes(r chi.Router) {
 
 	negativeRebalancer := rebalancing.NewNegativeBalanceRebalancer(
 		s.log,
+		cashManagerForRebalancing,
 		tradernetClient,
 		securityRepo,
 		positionRepo,
@@ -933,6 +947,7 @@ func (s *Server) setupRebalancingRoutes(r chi.Router) {
 		positionRepo,
 		securityRepo,
 		allocRepo,
+		cashManagerForRebalancing,
 		tradernetClient,
 		yahooClient,
 		plannerConfigRepo,
@@ -949,6 +964,7 @@ func (s *Server) setupRebalancingRoutes(r chi.Router) {
 		tradernetClient,
 		currencyExchangeService,
 		allocRepo,
+		cashManagerForRebalancing,
 		s.log,
 	)
 

@@ -180,26 +180,3 @@ func TestPositionRepository_UpdatePrice_ByISIN(t *testing.T) {
 	require.NotNil(t, position)
 	assert.Equal(t, 160.0, position.CurrentPrice)
 }
-
-func TestPositionRepository_CashPosition_HandledSpecially(t *testing.T) {
-	portfolioDB, universeDB := setupTestDBForPositionsWithISIN(t)
-	defer portfolioDB.Close()
-	defer universeDB.Close()
-
-	// Insert CASH position (CASH positions use symbol as ISIN)
-	_, err := portfolioDB.Exec(`
-		INSERT INTO positions (isin, symbol, quantity, avg_price, currency)
-		VALUES ('CASH:USD', 'CASH:USD', 1000.0, 1.0, 'USD')
-	`)
-	require.NoError(t, err)
-
-	log := zerolog.New(nil).Level(zerolog.Disabled)
-	repo := NewPositionRepository(portfolioDB, universeDB, log)
-
-	// CASH positions should be queryable by ISIN (which is the symbol)
-	position, err := repo.GetByISIN("CASH:USD")
-	require.NoError(t, err)
-	require.NotNil(t, position)
-	assert.Equal(t, "CASH:USD", position.ISIN)
-	assert.Equal(t, "CASH:USD", position.Symbol)
-}

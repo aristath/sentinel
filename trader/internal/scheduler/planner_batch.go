@@ -34,6 +34,7 @@ type PlannerBatchJob struct {
 	positionRepo           *portfolio.PositionRepository
 	securityRepo           *universe.SecurityRepository
 	allocRepo              *allocation.Repository
+	cashManager            portfolio.CashManager
 	tradernetClient        *tradernet.Client
 	yahooClient            yahoo.FullClientInterface
 	optimizerService       *optimization.OptimizerService // Added for optimizer target weights
@@ -57,6 +58,7 @@ type PlannerBatchConfig struct {
 	PositionRepo           *portfolio.PositionRepository
 	SecurityRepo           *universe.SecurityRepository
 	AllocRepo              *allocation.Repository
+	CashManager            portfolio.CashManager
 	TradernetClient        *tradernet.Client
 	YahooClient            yahoo.FullClientInterface
 	OptimizerService       *optimization.OptimizerService // Added for optimizer target weights
@@ -84,6 +86,7 @@ func NewPlannerBatchJob(cfg PlannerBatchConfig) *PlannerBatchJob {
 		positionRepo:           cfg.PositionRepo,
 		securityRepo:           cfg.SecurityRepo,
 		allocRepo:              cfg.AllocRepo,
+		cashManager:            cfg.CashManager,
 		tradernetClient:        cfg.TradernetClient,
 		yahooClient:            cfg.YahooClient,
 		optimizerService:       cfg.OptimizerService,
@@ -155,16 +158,14 @@ func (j *PlannerBatchJob) Run() error {
 		hashSecurities = append(hashSecurities, &securities[i])
 	}
 
-	// Get cash balances from Tradernet if available
+	// Get cash balances from CashManager
 	cashBalances := make(map[string]float64)
-	if j.tradernetClient != nil && j.tradernetClient.IsConnected() {
-		balances, err := j.tradernetClient.GetCashBalances()
+	if j.cashManager != nil {
+		balances, err := j.cashManager.GetAllCashBalances()
 		if err != nil {
-			j.log.Warn().Err(err).Msg("Failed to get cash balances from Tradernet, using empty")
+			j.log.Warn().Err(err).Msg("Failed to get cash balances from CashManager, using empty")
 		} else {
-			for _, bal := range balances {
-				cashBalances[bal.Currency] = bal.Amount
-			}
+			cashBalances = balances
 		}
 	}
 

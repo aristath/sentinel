@@ -2,7 +2,6 @@ package universe
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/aristath/arduino-trader/internal/clients/tradernet"
@@ -400,13 +399,8 @@ func (s *SyncService) SyncAllPrices() (int, error) {
 		// Lookup ISIN for this symbol
 		isin, hasISIN := symbolToISIN[symbol]
 		if !hasISIN || isin == "" {
-			// For CASH positions, symbol == ISIN
-			if strings.HasPrefix(strings.ToUpper(symbol), "CASH:") {
-				isin = symbol
-			} else {
-				s.log.Warn().Str("symbol", symbol).Msg("No ISIN found for symbol, skipping position update")
-				continue
-			}
+			s.log.Warn().Str("symbol", symbol).Msg("No ISIN found for symbol, skipping position update")
+			continue
 		}
 
 		// Update positions table (using ISIN as PRIMARY KEY)
@@ -586,13 +580,8 @@ func (s *SyncService) SyncPricesForSymbols(symbolMap map[string]*string) (int, e
 				continue
 			}
 		}
-		// Fallback: CASH positions use symbol as ISIN, or use symbol as ISIN if repo unavailable
-		if strings.HasPrefix(strings.ToUpper(symbol), "CASH:") {
-			symbolToISIN[symbol] = symbol
-		} else {
-			// If securityRepo is nil or lookup fails, use symbol as ISIN (for backward compatibility in tests)
-			symbolToISIN[symbol] = symbol
-		}
+		// Fallback: If securityRepo is nil or lookup fails, use symbol as ISIN (for backward compatibility in tests)
+		symbolToISIN[symbol] = symbol
 	}
 
 	// Fetch batch quotes from Yahoo

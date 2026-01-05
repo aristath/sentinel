@@ -12,6 +12,7 @@ import (
 	"github.com/aristath/arduino-trader/internal/clients/tradernet"
 	"github.com/aristath/arduino-trader/internal/clients/yahoo"
 	"github.com/aristath/arduino-trader/internal/modules/dividends"
+	"github.com/aristath/arduino-trader/internal/modules/portfolio"
 	"github.com/aristath/arduino-trader/internal/services"
 	"github.com/rs/zerolog"
 )
@@ -31,6 +32,7 @@ type Handler struct {
 	tradernetClient         TradernetClientInterface
 	currencyExchangeService CurrencyExchangeServiceInterface
 	dividendRepo            *dividends.DividendRepository
+	cashManager             portfolio.CashManager
 	cache                   *OptimizationCache
 	log                     zerolog.Logger
 }
@@ -38,6 +40,7 @@ type Handler struct {
 // NewHandler creates a new optimization handler.
 //
 // currencyExchangeService is used to convert non-EUR cash balances to EUR.
+// cashManager is used to get cash balances.
 func NewHandler(
 	service *OptimizerService,
 	db *sql.DB,
@@ -45,6 +48,7 @@ func NewHandler(
 	tradernetClient *tradernet.Client,
 	currencyExchangeService *services.CurrencyExchangeService,
 	dividendRepo *dividends.DividendRepository,
+	cashManager portfolio.CashManager,
 	log zerolog.Logger,
 ) *Handler {
 	return &Handler{
@@ -54,6 +58,7 @@ func NewHandler(
 		tradernetClient:         tradernetClient,
 		currencyExchangeService: currencyExchangeService,
 		dividendRepo:            dividendRepo,
+		cashManager:             cashManager,
 		cache: &OptimizationCache{
 			lastResult:  nil,
 			lastUpdated: time.Time{},
@@ -377,11 +382,11 @@ func (h *Handler) getCurrentPrices(securities []Security) (map[string]float64, e
 	return prices, nil
 }
 
-// getCashBalance retrieves total cash balance in EUR from Tradernet.
+// getCashBalance retrieves total cash balance in EUR from CashManager.
 //
 // Converts all non-EUR currencies to EUR using CurrencyExchangeService.
 // Falls back to hardcoded rates if exchange service is unavailable.
-// Returns 0.0 on Tradernet connection failure (graceful degradation).
+// Returns 0.0 on error (graceful degradation).
 //
 // Autonomous operation: Uses fallback rates when live rates unavailable:
 //   - USD: 0.9
@@ -389,62 +394,62 @@ func (h *Handler) getCurrentPrices(securities []Security) (map[string]float64, e
 //   - HKD: 0.11
 //   - Unknown: 1.0
 func (h *Handler) getCashBalance() (float64, error) {
-	// Get cash balances from Tradernet API
-	balances, err := h.tradernetClient.GetCashBalances()
+	// Get cash balances from CashManager
+	cashBalancesMap, err := h.cashManager.GetAllCashBalances()
 	if err != nil {
-		h.log.Warn().Err(err).Msg("Failed to get cash balances from Tradernet, returning 0")
+		h.log.Warn().Err(err).Msg("Failed to get cash balances, returning 0")
 		return 0.0, nil // Gracefully return 0 on error
 	}
 
 	var totalEUR float64
-	for _, balance := range balances {
-		if balance.Currency == "EUR" {
-			totalEUR += balance.Amount
+	for currency, balance := range cashBalancesMap {
+		if currency == "EUR" {
+			totalEUR += balance
 			h.log.Debug().
 				Str("currency", "EUR").
-				Float64("amount", balance.Amount).
+				Float64("amount", balance).
 				Msg("Added EUR balance")
 		} else {
 			// Convert non-EUR currency to EUR
-			rate, err := h.currencyExchangeService.GetRate(balance.Currency, "EUR")
+			rate, err := h.currencyExchangeService.GetRate(currency, "EUR")
 			if err != nil {
 				h.log.Warn().
 					Err(err).
-					Str("currency", balance.Currency).
-					Float64("amount", balance.Amount).
+					Str("currency", currency).
+					Float64("amount", balance).
 					Msg("Failed to get exchange rate, using fallback")
 
 				// Fallback rates for autonomous operation
 				// These rates allow the system to continue operating when exchange
 				// service is unavailable. Operator can review via logs.
-				eurValue := balance.Amount
-				switch balance.Currency {
+				eurValue := balance
+				switch currency {
 				case "USD":
-					eurValue = balance.Amount * 0.9
+					eurValue = balance * 0.9
 				case "GBP":
-					eurValue = balance.Amount * 1.2
+					eurValue = balance * 1.2
 				case "HKD":
-					eurValue = balance.Amount * 0.11
+					eurValue = balance * 0.11
 				default:
 					h.log.Warn().
-						Str("currency", balance.Currency).
+						Str("currency", currency).
 						Msg("Unknown currency, assuming 1:1 with EUR")
 				}
 				totalEUR += eurValue
 
 				h.log.Info().
-					Str("currency", balance.Currency).
-					Float64("amount", balance.Amount).
+					Str("currency", currency).
+					Float64("amount", balance).
 					Float64("eur_value", eurValue).
 					Msg("Converted to EUR using fallback rate")
 			} else {
-				eurValue := balance.Amount * rate
+				eurValue := balance * rate
 				totalEUR += eurValue
 
 				h.log.Debug().
-					Str("currency", balance.Currency).
+					Str("currency", currency).
 					Float64("rate", rate).
-					Float64("amount", balance.Amount).
+					Float64("amount", balance).
 					Float64("eur_value", eurValue).
 					Msg("Converted to EUR using live rate")
 			}
@@ -453,7 +458,7 @@ func (h *Handler) getCashBalance() (float64, error) {
 
 	h.log.Info().
 		Float64("total_eur", totalEUR).
-		Int("currency_count", len(balances)).
+		Int("currency_count", len(cashBalancesMap)).
 		Msg("Calculated total cash balance in EUR")
 
 	return totalEUR, nil

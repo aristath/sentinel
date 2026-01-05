@@ -39,7 +39,7 @@ type ScoreRequest struct {
 	PayoutRatio           *float64                `json:"payout_ratio,omitempty"`
 	DebtToEquity          *float64                `json:"debt_to_equity,omitempty"`
 	Symbol                string                  `json:"symbol"`
-	ProductType           string                  `json:"product_type,omitempty"` // Product type: EQUITY, ETF, MUTUALFUND, ETC, CASH, UNKNOWN
+	ProductType           string                  `json:"product_type,omitempty"` // Product type: EQUITY, ETF, MUTUALFUND, ETC, UNKNOWN
 	DailyPrices           []float64               `json:"daily_prices"`
 	MonthlyPrices         []formulas.MonthlyPrice `json:"monthly_prices"`
 	MarketAvgPE           float64                 `json:"market_avg_pe,omitempty"`

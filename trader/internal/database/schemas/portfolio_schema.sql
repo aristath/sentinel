@@ -62,3 +62,13 @@ CREATE TABLE IF NOT EXISTS calculated_metrics (
 
 CREATE INDEX IF NOT EXISTS idx_metrics_symbol ON calculated_metrics(symbol);
 CREATE INDEX IF NOT EXISTS idx_metrics_calculated ON calculated_metrics(calculated_at);
+
+-- Cash balances table: dedicated storage for cash balances
+-- This replaces the previous "cash-as-securities" approach where cash was stored
+-- as synthetic positions (CASH:EUR, CASH:USD, etc.) in the positions table.
+-- Cash is now managed separately via CashManager and stored in this dedicated table.
+CREATE TABLE IF NOT EXISTS cash_balances (
+    currency TEXT PRIMARY KEY,
+    balance REAL NOT NULL,
+    last_updated TEXT NOT NULL
+) STRICT;

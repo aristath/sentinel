@@ -4,22 +4,26 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/aristath/arduino-trader/internal/clients/tradernet"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/mock"
 )
 
-// MockTradernetClient is a mock Tradernet client for testing
-type MockTradernetClient struct {
+// MockCashManager is a mock cash manager for testing
+type MockCashManager struct {
 	mock.Mock
 }
 
-func (m *MockTradernetClient) GetCashBalances() ([]tradernet.CashBalance, error) {
+func (m *MockCashManager) UpdateCashPosition(currency string, balance float64) error {
+	args := m.Called(currency, balance)
+	return args.Error(0)
+}
+
+func (m *MockCashManager) GetAllCashBalances() (map[string]float64, error) {
 	args := m.Called()
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]tradernet.CashBalance), args.Error(1)
+	return args.Get(0).(map[string]float64), args.Error(1)
 }
 
 // MockCurrencyExchangeService is a mock currency exchange service for testing
@@ -34,18 +38,17 @@ func (m *MockCurrencyExchangeService) GetRate(fromCurrency, toCurrency string) (
 
 func TestGetCashBalance_AllEUR(t *testing.T) {
 	// Setup
-	mockTradernetClient := new(MockTradernetClient)
+	mockCashManager := new(MockCashManager)
 	mockExchangeService := new(MockCurrencyExchangeService)
 
-	cashBalances := []tradernet.CashBalance{
-		{Currency: "EUR", Amount: 1000.0},
-		{Currency: "EUR", Amount: 500.0},
+	cashBalances := map[string]float64{
+		"EUR": 1500.0, // Combined EUR balances
 	}
-	mockTradernetClient.On("GetCashBalances").Return(cashBalances, nil)
+	mockCashManager.On("GetAllCashBalances").Return(cashBalances, nil)
 
 	logger := zerolog.Nop()
 	handler := &Handler{
-		tradernetClient:         mockTradernetClient,
+		cashManager:             mockCashManager,
 		currencyExchangeService: mockExchangeService,
 		log:                     logger,
 	}
@@ -61,26 +64,26 @@ func TestGetCashBalance_AllEUR(t *testing.T) {
 	if totalEUR != expected {
 		t.Errorf("Expected total EUR to be %f, got %f", expected, totalEUR)
 	}
-	mockTradernetClient.AssertExpectations(t)
+	mockCashManager.AssertExpectations(t)
 }
 
 func TestGetCashBalance_MixedCurrencies(t *testing.T) {
 	// Setup
-	mockTradernetClient := new(MockTradernetClient)
+	mockCashManager := new(MockCashManager)
 	mockExchangeService := new(MockCurrencyExchangeService)
 
-	cashBalances := []tradernet.CashBalance{
-		{Currency: "EUR", Amount: 1000.0},
-		{Currency: "USD", Amount: 500.0},
-		{Currency: "GBP", Amount: 200.0},
+	cashBalances := map[string]float64{
+		"EUR": 1000.0,
+		"USD": 500.0,
+		"GBP": 200.0,
 	}
-	mockTradernetClient.On("GetCashBalances").Return(cashBalances, nil)
+	mockCashManager.On("GetAllCashBalances").Return(cashBalances, nil)
 	mockExchangeService.On("GetRate", "USD", "EUR").Return(0.92, nil)
 	mockExchangeService.On("GetRate", "GBP", "EUR").Return(1.17, nil)
 
 	logger := zerolog.Nop()
 	handler := &Handler{
-		tradernetClient:         mockTradernetClient,
+		cashManager:             mockCashManager,
 		currencyExchangeService: mockExchangeService,
 		log:                     logger,
 	}
@@ -97,22 +100,22 @@ func TestGetCashBalance_MixedCurrencies(t *testing.T) {
 	if totalEUR != expected {
 		t.Errorf("Expected total EUR to be %f, got %f", expected, totalEUR)
 	}
-	mockTradernetClient.AssertExpectations(t)
+	mockCashManager.AssertExpectations(t)
 	mockExchangeService.AssertExpectations(t)
 }
 
 func TestGetCashBalance_FallbackRates(t *testing.T) {
 	// Setup
-	mockTradernetClient := new(MockTradernetClient)
+	mockCashManager := new(MockCashManager)
 	mockExchangeService := new(MockCurrencyExchangeService)
 
-	cashBalances := []tradernet.CashBalance{
-		{Currency: "EUR", Amount: 1000.0},
-		{Currency: "USD", Amount: 500.0},
-		{Currency: "GBP", Amount: 200.0},
-		{Currency: "HKD", Amount: 1000.0},
+	cashBalances := map[string]float64{
+		"EUR": 1000.0,
+		"USD": 500.0,
+		"GBP": 200.0,
+		"HKD": 1000.0,
 	}
-	mockTradernetClient.On("GetCashBalances").Return(cashBalances, nil)
+	mockCashManager.On("GetAllCashBalances").Return(cashBalances, nil)
 	// Exchange service fails, should use fallback rates
 	mockExchangeService.On("GetRate", "USD", "EUR").Return(0.0, errors.New("exchange service unavailable"))
 	mockExchangeService.On("GetRate", "GBP", "EUR").Return(0.0, errors.New("exchange service unavailable"))
@@ -120,7 +123,7 @@ func TestGetCashBalance_FallbackRates(t *testing.T) {
 
 	logger := zerolog.Nop()
 	handler := &Handler{
-		tradernetClient:         mockTradernetClient,
+		cashManager:             mockCashManager,
 		currencyExchangeService: mockExchangeService,
 		log:                     logger,
 	}
@@ -138,20 +141,20 @@ func TestGetCashBalance_FallbackRates(t *testing.T) {
 	if totalEUR != expected {
 		t.Errorf("Expected total EUR to be %f, got %f", expected, totalEUR)
 	}
-	mockTradernetClient.AssertExpectations(t)
+	mockCashManager.AssertExpectations(t)
 	mockExchangeService.AssertExpectations(t)
 }
 
-func TestGetCashBalance_TradernetFailure(t *testing.T) {
+func TestGetCashBalance_CashManagerFailure(t *testing.T) {
 	// Setup
-	mockTradernetClient := new(MockTradernetClient)
+	mockCashManager := new(MockCashManager)
 	mockExchangeService := new(MockCurrencyExchangeService)
 
-	mockTradernetClient.On("GetCashBalances").Return(nil, errors.New("tradernet connection failed"))
+	mockCashManager.On("GetAllCashBalances").Return(nil, errors.New("cash manager connection failed"))
 
 	logger := zerolog.Nop()
 	handler := &Handler{
-		tradernetClient:         mockTradernetClient,
+		cashManager:             mockCashManager,
 		currencyExchangeService: mockExchangeService,
 		log:                     logger,
 	}
@@ -163,32 +166,32 @@ func TestGetCashBalance_TradernetFailure(t *testing.T) {
 	if err != nil {
 		t.Errorf("Expected no error (graceful degradation), got %v", err)
 	}
-	// Should return 0 on Tradernet failure
+	// Should return 0 on CashManager failure
 	expected := 0.0
 	if totalEUR != expected {
 		t.Errorf("Expected total EUR to be %f, got %f", expected, totalEUR)
 	}
-	mockTradernetClient.AssertExpectations(t)
+	mockCashManager.AssertExpectations(t)
 }
 
 func TestGetCashBalance_PartialFallback(t *testing.T) {
 	// Setup - one currency succeeds, one falls back
-	mockTradernetClient := new(MockTradernetClient)
+	mockCashManager := new(MockCashManager)
 	mockExchangeService := new(MockCurrencyExchangeService)
 
-	cashBalances := []tradernet.CashBalance{
-		{Currency: "EUR", Amount: 1000.0},
-		{Currency: "USD", Amount: 500.0},
-		{Currency: "GBP", Amount: 200.0},
+	cashBalances := map[string]float64{
+		"EUR": 1000.0,
+		"USD": 500.0,
+		"GBP": 200.0,
 	}
-	mockTradernetClient.On("GetCashBalances").Return(cashBalances, nil)
+	mockCashManager.On("GetAllCashBalances").Return(cashBalances, nil)
 	// USD rate available, GBP fails
 	mockExchangeService.On("GetRate", "USD", "EUR").Return(0.92, nil)
 	mockExchangeService.On("GetRate", "GBP", "EUR").Return(0.0, errors.New("rate not found"))
 
 	logger := zerolog.Nop()
 	handler := &Handler{
-		tradernetClient:         mockTradernetClient,
+		cashManager:             mockCashManager,
 		currencyExchangeService: mockExchangeService,
 		log:                     logger,
 	}
@@ -206,26 +209,26 @@ func TestGetCashBalance_PartialFallback(t *testing.T) {
 	if totalEUR != expected {
 		t.Errorf("Expected total EUR to be %f, got %f", expected, totalEUR)
 	}
-	mockTradernetClient.AssertExpectations(t)
+	mockCashManager.AssertExpectations(t)
 	mockExchangeService.AssertExpectations(t)
 }
 
 func TestGetCashBalance_UnknownCurrency(t *testing.T) {
 	// Setup
-	mockTradernetClient := new(MockTradernetClient)
+	mockCashManager := new(MockCashManager)
 	mockExchangeService := new(MockCurrencyExchangeService)
 
-	cashBalances := []tradernet.CashBalance{
-		{Currency: "EUR", Amount: 1000.0},
-		{Currency: "JPY", Amount: 10000.0}, // Unknown currency
+	cashBalances := map[string]float64{
+		"EUR": 1000.0,
+		"JPY": 10000.0, // Unknown currency
 	}
-	mockTradernetClient.On("GetCashBalances").Return(cashBalances, nil)
+	mockCashManager.On("GetAllCashBalances").Return(cashBalances, nil)
 	// Exchange service fails for JPY
 	mockExchangeService.On("GetRate", "JPY", "EUR").Return(0.0, errors.New("exchange service unavailable"))
 
 	logger := zerolog.Nop()
 	handler := &Handler{
-		tradernetClient:         mockTradernetClient,
+		cashManager:             mockCashManager,
 		currencyExchangeService: mockExchangeService,
 		log:                     logger,
 	}
@@ -242,6 +245,6 @@ func TestGetCashBalance_UnknownCurrency(t *testing.T) {
 	if totalEUR != expected {
 		t.Errorf("Expected total EUR to be %f, got %f", expected, totalEUR)
 	}
-	mockTradernetClient.AssertExpectations(t)
+	mockCashManager.AssertExpectations(t)
 	mockExchangeService.AssertExpectations(t)
 }

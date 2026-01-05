@@ -149,7 +149,7 @@ func ApplyPendingOrdersToPortfolio(
 //
 // The hash includes:
 //   - All positions (including zero quantities for securities in universe)
-//   - Cash balances as pseudo-positions (CASH.EUR, CASH.USD, etc.)
+//   - Cash balances by currency (EUR, USD, etc.)
 //   - The full securities universe to detect when new securities are added
 //   - Per-symbol configuration: allow_buy, allow_sell, min_portfolio_target, max_portfolio_target, country, industry
 //
@@ -218,15 +218,6 @@ func GeneratePortfolioHash(
 		}
 	}
 
-	// Add cash balances as pseudo-positions (filter out zero balances)
-	for currency, amount := range cashBalances {
-		if amount > 0 {
-			// Round to 2 decimal places for stability
-			rounded := math.Round(amount*100) / 100
-			positionMap[fmt.Sprintf("CASH.%s", strings.ToUpper(currency))] = rounded
-		}
-	}
-
 	// Sort by symbol for deterministic ordering
 	sortedSymbols := make([]string, 0, len(positionMap))
 	for symbol := range positionMap {
@@ -239,34 +230,46 @@ func GeneratePortfolioHash(
 	for _, symbol := range sortedSymbols {
 		quantity := positionMap[symbol]
 
-		// Use different format for cash vs securities
-		if strings.HasPrefix(symbol, "CASH.") {
-			parts = append(parts, fmt.Sprintf("%s:%v", symbol, quantity))
-		} else {
-			// Get config for this symbol (use defaults if not in securities list)
-			config := stockConfigMap[symbol]
-			if config == nil {
-				config = map[string]interface{}{
-					"allow_buy":            true,
-					"allow_sell":           false,
-					"min_portfolio_target": "",
-					"max_portfolio_target": "",
-					"country":              "",
-					"industry":             "",
-				}
+		// Get config for this symbol (use defaults if not in securities list)
+		config := stockConfigMap[symbol]
+		if config == nil {
+			config = map[string]interface{}{
+				"allow_buy":            true,
+				"allow_sell":           false,
+				"min_portfolio_target": "",
+				"max_portfolio_target": "",
+				"country":              "",
+				"industry":             "",
 			}
+		}
 
-			part := fmt.Sprintf("%s:%d:%v:%v:%s:%s:%s:%s",
-				symbol,
-				quantity,
-				config["allow_buy"],
-				config["allow_sell"],
-				config["min_portfolio_target"],
-				config["max_portfolio_target"],
-				config["country"],
-				config["industry"],
-			)
-			parts = append(parts, part)
+		part := fmt.Sprintf("%s:%d:%v:%v:%s:%s:%s:%s",
+			symbol,
+			quantity,
+			config["allow_buy"],
+			config["allow_sell"],
+			config["min_portfolio_target"],
+			config["max_portfolio_target"],
+			config["country"],
+			config["industry"],
+		)
+		parts = append(parts, part)
+	}
+
+	// Add cash balances to hash (sorted by currency for deterministic ordering)
+	if len(cashBalances) > 0 {
+		cashCurrencies := make([]string, 0, len(cashBalances))
+		for currency := range cashBalances {
+			if cashBalances[currency] > 0 {
+				cashCurrencies = append(cashCurrencies, currency)
+			}
+		}
+		sort.Strings(cashCurrencies)
+		for _, currency := range cashCurrencies {
+			amount := cashBalances[currency]
+			// Round to 2 decimal places for stability
+			rounded := math.Round(amount*100) / 100
+			parts = append(parts, fmt.Sprintf("CASH:%s:%v", strings.ToUpper(currency), rounded))
 		}
 	}
 

@@ -57,37 +57,6 @@ func (r *PositionRepository) GetAll() ([]Position, error) {
 	return positions, nil
 }
 
-// GetAllNonCash returns all non-cash positions (excludes cash positions)
-// Used for portfolio value calculations and trading operations
-func (r *PositionRepository) GetAllNonCash() ([]Position, error) {
-	// Column order after migration: isin, symbol, quantity, avg_price, ...
-	query := `SELECT isin, symbol, quantity, avg_price, current_price, currency,
-		currency_rate, market_value_eur, cost_basis_eur, unrealized_pnl,
-		unrealized_pnl_pct, last_updated, first_bought, last_sold
-		FROM positions WHERE symbol NOT LIKE 'CASH:%'`
-
-	rows, err := r.portfolioDB.Query(query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query non-cash positions: %w", err)
-	}
-	defer rows.Close()
-
-	var positions []Position
-	for rows.Next() {
-		pos, err := r.scanPosition(rows)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan position: %w", err)
-		}
-		positions = append(positions, pos)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating positions: %w", err)
-	}
-
-	return positions, nil
-}
-
 // GetWithSecurityInfo returns all positions with security info joined
 // Faithful translation of Python: async def get_with_security_info(self) -> List[Dict]
 // Note: This method accesses both state.db (positions) and config.db (securities)
@@ -114,7 +83,8 @@ func (r *PositionRepository) GetWithSecurityInfo() ([]PositionWithSecurity, erro
 		if pos.ISIN != "" {
 			positionsByISIN[pos.ISIN] = pos
 		} else {
-			// Fallback to symbol for CASH positions
+			// Fallback to symbol if ISIN is missing (shouldn't happen after migration)
+			r.log.Warn().Str("symbol", pos.Symbol).Msg("Position has no ISIN, using symbol as key")
 			positionsByISIN[pos.Symbol] = pos
 		}
 	}
@@ -128,6 +98,7 @@ func (r *PositionRepository) GetWithSecurityInfo() ([]PositionWithSecurity, erro
 	}
 
 	// Get securities from universe.db (by ISIN)
+	// Note: Cash securities should not exist in universe.db after migration
 	securityRows, err := r.universeDB.Query(`
 		SELECT isin, symbol, name, country, fullExchangeName, industry, currency, allow_sell
 		FROM securities
@@ -212,138 +183,9 @@ func (r *PositionRepository) GetWithSecurityInfo() ([]PositionWithSecurity, erro
 	return result, nil
 }
 
-// GetWithSecurityInfoNonCash returns non-cash positions with security info joined
-// Used for portfolio analysis and allocation calculations (excludes cash positions)
-func (r *PositionRepository) GetWithSecurityInfoNonCash() ([]PositionWithSecurity, error) {
-	// Get non-cash positions from portfolio.db
-	// Column order after migration: isin, symbol, quantity, avg_price, ...
-	positionRows, err := r.portfolioDB.Query(`SELECT isin, symbol, quantity, avg_price, current_price, currency,
-		currency_rate, market_value_eur, cost_basis_eur, unrealized_pnl,
-		unrealized_pnl_pct, last_updated, first_bought, last_sold
-		FROM positions WHERE symbol NOT LIKE 'CASH:%'`)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query non-cash positions: %w", err)
-	}
-	defer positionRows.Close()
-
-	// Read all positions into map (use ISIN as key)
-	positionsByISIN := make(map[string]Position)
-	for positionRows.Next() {
-		pos, err := r.scanPosition(positionRows)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan position: %w", err)
-		}
-		// Use ISIN as map key (primary identifier)
-		if pos.ISIN != "" {
-			positionsByISIN[pos.ISIN] = pos
-		} else {
-			// Fallback to symbol for CASH positions
-			positionsByISIN[pos.Symbol] = pos
-		}
-	}
-
-	if err := positionRows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating positions: %w", err)
-	}
-
-	if len(positionsByISIN) == 0 {
-		return []PositionWithSecurity{}, nil
-	}
-
-	// Get securities from universe.db (by ISIN, excluding cash)
-	securityRows, err := r.universeDB.Query(`
-		SELECT isin, symbol, name, country, fullExchangeName, industry, currency, allow_sell
-		FROM securities
-		WHERE active = 1 AND product_type != 'CASH'
-	`)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query securities: %w", err)
-	}
-	defer securityRows.Close()
-
-	// Read securities into map (keyed by ISIN)
-	type SecurityInfo struct {
-		ISIN             string
-		Symbol           string
-		Name             string
-		Country          sql.NullString
-		FullExchangeName sql.NullString
-		Industry         sql.NullString
-		Currency         sql.NullString
-		AllowSell        bool
-	}
-
-	securitiesByISIN := make(map[string]SecurityInfo)
-	for securityRows.Next() {
-		var sec SecurityInfo
-		err := securityRows.Scan(
-			&sec.ISIN,
-			&sec.Symbol,
-			&sec.Name,
-			&sec.Country,
-			&sec.FullExchangeName,
-			&sec.Industry,
-			&sec.Currency,
-			&sec.AllowSell,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan security: %w", err)
-		}
-		securitiesByISIN[sec.ISIN] = sec
-	}
-
-	if err := securityRows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating securities: %w", err)
-	}
-
-	// Merge position and security data
-	var result []PositionWithSecurity
-	for isin, pos := range positionsByISIN {
-		sec, found := securitiesByISIN[isin]
-
-		merged := PositionWithSecurity{
-			Symbol:         pos.Symbol,
-			Quantity:       pos.Quantity,
-			AvgPrice:       pos.AvgPrice,
-			CurrentPrice:   pos.CurrentPrice,
-			Currency:       pos.Currency,
-			CurrencyRate:   pos.CurrencyRate,
-			MarketValueEUR: pos.MarketValueEUR,
-			LastUpdated:    pos.LastUpdated,
-		}
-
-		if found {
-			merged.StockName = sec.Name
-			merged.AllowSell = sec.AllowSell
-			if sec.Country.Valid {
-				merged.Country = sec.Country.String
-			}
-			if sec.FullExchangeName.Valid {
-				merged.FullExchangeName = sec.FullExchangeName.String
-			}
-			if sec.Industry.Valid {
-				merged.Industry = sec.Industry.String
-			}
-		} else {
-			// Fallback: use symbol as name if security not found
-			merged.StockName = pos.Symbol
-			merged.AllowSell = false
-		}
-
-		result = append(result, merged)
-	}
-
-	return result, nil
-}
-
 // GetBySymbol returns a position by symbol (helper method - looks up ISIN first)
 // This requires universeDB to lookup ISIN from securities table
 func (r *PositionRepository) GetBySymbol(symbol string) (*Position, error) {
-	// Handle CASH positions specially (they use symbol as ISIN)
-	if strings.HasPrefix(strings.ToUpper(symbol), "CASH:") {
-		return r.GetByISIN(strings.ToUpper(strings.TrimSpace(symbol)))
-	}
-
 	// Lookup ISIN from securities table
 	query := "SELECT isin FROM securities WHERE symbol = ?"
 	rows, err := r.universeDB.Query(query, strings.ToUpper(strings.TrimSpace(symbol)))
@@ -534,13 +376,8 @@ func (r *PositionRepository) Upsert(position Position) error {
 	position.Symbol = strings.ToUpper(strings.TrimSpace(position.Symbol))
 
 	// ISIN is required (PRIMARY KEY)
-	// For CASH positions, ISIN is the symbol itself
 	if position.ISIN == "" {
-		if strings.HasPrefix(position.Symbol, "CASH:") {
-			position.ISIN = position.Symbol
-		} else {
-			return fmt.Errorf("ISIN is required for position upsert")
-		}
+		return fmt.Errorf("ISIN is required for position upsert")
 	}
 	position.ISIN = strings.ToUpper(strings.TrimSpace(position.ISIN))
 

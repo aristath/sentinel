@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"math"
-	"strings"
 
 	"github.com/aristath/arduino-trader/internal/clients/tradernet"
 	"github.com/aristath/arduino-trader/internal/clients/yahoo"
@@ -64,6 +63,7 @@ type Service struct {
 	positionRepo       *portfolio.PositionRepository
 	securityRepo       *universe.SecurityRepository
 	allocRepo          *allocation.Repository
+	cashManager        portfolio.CashManager
 	tradernetClient    *tradernet.Client
 	yahooClient        yahoo.FullClientInterface
 	configRepo         *planningrepo.ConfigRepository
@@ -82,6 +82,7 @@ func NewService(
 	positionRepo *portfolio.PositionRepository,
 	securityRepo *universe.SecurityRepository,
 	allocRepo *allocation.Repository,
+	cashManager portfolio.CashManager,
 	tradernetClient *tradernet.Client,
 	yahooClient yahoo.FullClientInterface,
 	configRepo *planningrepo.ConfigRepository,
@@ -97,6 +98,7 @@ func NewService(
 		positionRepo:       positionRepo,
 		securityRepo:       securityRepo,
 		allocRepo:          allocRepo,
+		cashManager:        cashManager,
 		tradernetClient:    tradernetClient,
 		yahooClient:        yahooClient,
 		configRepo:         configRepo,
@@ -364,10 +366,6 @@ func (s *Service) fetchCurrentPrices(securities []universe.Security) map[string]
 		isin, hasISIN := symbolToISIN[symbol]
 		if hasISIN && isin != "" {
 			prices[isin] = *price
-			successCount++
-		} else if strings.HasPrefix(strings.ToUpper(symbol), "CASH:") {
-			// CASH positions use symbol as ISIN
-			prices[symbol] = *price
 			successCount++
 		} else {
 			// Fallback: use symbol as key if ISIN not found (shouldn't happen after migration)
@@ -665,10 +663,10 @@ func (s *Service) storeRecommendations(recommendations []RebalanceRecommendation
 	securities, _ := s.securityRepo.GetAllActive()
 	cashBalances := make(map[string]float64)
 
-	if s.tradernetClient != nil && s.tradernetClient.IsConnected() {
-		balances, _ := s.tradernetClient.GetCashBalances()
-		for _, bal := range balances {
-			cashBalances[bal.Currency] = bal.Amount
+	if s.cashManager != nil {
+		balances, err := s.cashManager.GetAllCashBalances()
+		if err == nil {
+			cashBalances = balances
 		}
 	}
 
