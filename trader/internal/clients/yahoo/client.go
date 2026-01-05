@@ -447,17 +447,17 @@ func (c *Client) getBatchQuoteInfo(symbols []string) (map[string]map[string]inte
 			break
 		}
 
-		// Close failed response bodies to prevent resource leaks
-		if resp != nil {
-			resp.Body.Close()
-		}
-
 		lastErr = err
 		if resp != nil && resp.StatusCode != http.StatusOK {
-			// Read response body for better error details
+			// Read response body for better error details before closing
 			if resp.Body != nil {
 				bodyBytes, _ := io.ReadAll(resp.Body)
-				lastErr = fmt.Errorf("status %d: %s", resp.StatusCode, string(bodyBytes))
+				bodyStr := strings.TrimSpace(string(bodyBytes))
+				if bodyStr != "" {
+					lastErr = fmt.Errorf("status %d: %s", resp.StatusCode, bodyStr)
+				} else {
+					lastErr = fmt.Errorf("status %d", resp.StatusCode)
+				}
 				resp.Body.Close()
 			} else {
 				lastErr = fmt.Errorf("status %d", resp.StatusCode)
