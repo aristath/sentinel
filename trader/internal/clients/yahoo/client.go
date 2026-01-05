@@ -6,11 +6,24 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/rs/zerolog"
 )
+
+// ISIN validation pattern
+var isinPattern = regexp.MustCompile(`^[A-Z]{2}[A-Z0-9]{9}[0-9]$`)
+
+// isISIN checks if identifier is a valid ISIN
+func isISIN(identifier string) bool {
+	identifier = strings.TrimSpace(strings.ToUpper(identifier))
+	if len(identifier) != 12 {
+		return false
+	}
+	return isinPattern.MatchString(identifier)
+}
 
 // Client is a Yahoo Finance API client
 type Client struct {
@@ -30,9 +43,18 @@ func NewClient(log zerolog.Logger) *Client {
 
 // GetYahooSymbol converts a Tradernet symbol to Yahoo Finance symbol
 // Faithful translation from Python: app/infrastructure/external/yahoo/symbol_converter.py
+//
+// Note: If yahooSymbolOverride is an ISIN, it will be ignored and the Tradernet symbol
+// will be converted instead, because Yahoo Finance REST API doesn't support ISINs directly.
 func GetYahooSymbol(symbol string, yahooSymbolOverride *string) string {
+	// Check if override is provided and is NOT an ISIN
+	// Yahoo Finance REST API doesn't support ISINs, so we need to convert from Tradernet symbol
 	if yahooSymbolOverride != nil && *yahooSymbolOverride != "" {
-		return *yahooSymbolOverride
+		// If override is an ISIN, ignore it and fall through to Tradernet conversion
+		if !isISIN(*yahooSymbolOverride) {
+			return *yahooSymbolOverride
+		}
+		// ISIN detected - fall through to convert from Tradernet symbol
 	}
 
 	// Convert Tradernet format to Yahoo format
@@ -701,4 +723,93 @@ func (c *Client) GetHistoricalPrices(symbol string, yahooSymbolOverride *string,
 		Msg("Fetched historical prices")
 
 	return prices, nil
+}
+
+// yahooSearchResponse represents the response from Yahoo Finance search API
+// The API may return different structures, so we use a flexible map-based approach
+type yahooSearchResponse struct {
+	Quotes []map[string]interface{} `json:"quotes"`
+	Items  []map[string]interface{} `json:"items"`
+}
+
+// LookupTickerFromISIN searches Yahoo Finance for a ticker symbol using an ISIN
+// Uses Yahoo Finance's search API endpoint to find the corresponding ticker symbol
+func (c *Client) LookupTickerFromISIN(isin string) (string, error) {
+	// Yahoo Finance search API endpoint
+	// This endpoint supports searching by ISIN and returns matching securities
+	searchURL := fmt.Sprintf("https://query1.finance.yahoo.com/v1/finance/search?q=%s", url.QueryEscape(isin))
+
+	req, err := http.NewRequest("GET", searchURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create search request: %w", err)
+	}
+
+	// Set headers to mimic browser
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to search Yahoo Finance: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("Yahoo Finance search API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read search response: %w", err)
+	}
+
+	var result yahooSearchResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", fmt.Errorf("failed to parse search response: %w", err)
+	}
+
+	// Try to find ticker in quotes array first
+	items := result.Quotes
+	if len(items) == 0 {
+		items = result.Items
+	}
+
+	// Look for the first equity result (quoteType: "EQUITY")
+	for _, item := range items {
+		symbol, _ := item["symbol"].(string)
+		quoteType, _ := item["quoteType"].(string)
+		shortName, _ := item["shortname"].(string)
+		longName, _ := item["longname"].(string)
+
+		if symbol != "" && quoteType == "EQUITY" {
+			name := shortName
+			if name == "" {
+				name = longName
+			}
+			c.log.Info().
+				Str("isin", isin).
+				Str("ticker", symbol).
+				Str("name", name).
+				Msg("Found ticker symbol from ISIN")
+			return symbol, nil
+		}
+	}
+
+	// If no EQUITY found, try any result with a symbol
+	for _, item := range items {
+		symbol, _ := item["symbol"].(string)
+		quoteType, _ := item["quoteType"].(string)
+
+		if symbol != "" {
+			c.log.Info().
+				Str("isin", isin).
+				Str("ticker", symbol).
+				Str("quoteType", quoteType).
+				Msg("Found ticker symbol from ISIN (non-equity)")
+			return symbol, nil
+		}
+	}
+
+	return "", fmt.Errorf("no ticker symbol found for ISIN: %s", isin)
 }

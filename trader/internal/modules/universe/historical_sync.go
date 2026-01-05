@@ -78,6 +78,45 @@ func (s *HistoricalSyncService) SyncHistoricalPrices(symbol string) error {
 		yahooSymbolPtr = nil
 	}
 
+	// If yahoo_symbol is an ISIN, try to look it up and update the database
+	if yahooSymbolPtr != nil && IsISIN(*yahooSymbolPtr) {
+		s.log.Info().
+			Str("symbol", symbol).
+			Str("isin", *yahooSymbolPtr).
+			Msg("yahoo_symbol is an ISIN, attempting to look up ticker symbol")
+
+		ticker, err := s.yahooClient.LookupTickerFromISIN(*yahooSymbolPtr)
+		if err != nil {
+			s.log.Warn().
+				Err(err).
+				Str("symbol", symbol).
+				Str("isin", *yahooSymbolPtr).
+				Msg("Failed to look up ticker from ISIN, falling back to Tradernet conversion")
+			// Fall through to use Tradernet conversion
+			yahooSymbolPtr = nil
+		} else {
+			// Update the database with the found ticker symbol
+			err = s.securityRepo.Update(symbol, map[string]interface{}{
+				"yahoo_symbol": ticker,
+			})
+			if err != nil {
+				s.log.Warn().
+					Err(err).
+					Str("symbol", symbol).
+					Str("ticker", ticker).
+					Msg("Failed to update yahoo_symbol in database, but will use it for this request")
+			} else {
+				s.log.Info().
+					Str("symbol", symbol).
+					Str("isin", *yahooSymbolPtr).
+					Str("ticker", ticker).
+					Msg("Updated yahoo_symbol from ISIN to ticker symbol")
+			}
+			// Use the found ticker symbol
+			yahooSymbolPtr = &ticker
+		}
+	}
+
 	ohlcData, err := s.yahooClient.GetHistoricalPrices(symbol, yahooSymbolPtr, period)
 	if err != nil {
 		return fmt.Errorf("failed to fetch historical prices from Yahoo: %w", err)
