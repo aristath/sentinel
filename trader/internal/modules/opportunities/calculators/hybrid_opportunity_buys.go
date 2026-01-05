@@ -56,17 +56,23 @@ func (c *HybridOpportunityBuysCalculator) Calculate(
 	// Parameters with defaults
 	minScore := GetFloatParam(params, "min_score", 0.7)
 	maxValuePerPosition := GetFloatParam(params, "max_value_per_position", 500.0)
-	minValuePerPosition := GetFloatParam(params, "min_value_per_position", 100.0)
 	maxPositions := GetIntParam(params, "max_positions", 5)
 	excludeExisting := GetBoolParam(params, "exclude_existing", false)
+
+	// Calculate minimum trade amount based on transaction costs (default: 1% max cost ratio)
+	maxCostRatio := GetFloatParam(params, "max_cost_ratio", 0.01) // Default 1% max cost
+	minTradeAmount := ctx.CalculateMinTradeAmount(maxCostRatio)
 
 	if !ctx.AllowBuy {
 		c.log.Debug().Msg("Buying not allowed, skipping hybrid opportunity buys")
 		return nil, nil
 	}
 
-	if ctx.AvailableCashEUR <= minValuePerPosition {
-		c.log.Debug().Msg("Insufficient cash for opportunity buys")
+	if ctx.AvailableCashEUR <= minTradeAmount {
+		c.log.Debug().
+			Float64("available_cash", ctx.AvailableCashEUR).
+			Float64("min_trade_amount", minTradeAmount).
+			Msg("Insufficient cash for opportunity buys (below minimum trade amount)")
 		return nil, nil
 	}
 
@@ -135,6 +141,41 @@ func (c *HybridOpportunityBuysCalculator) Calculate(
 			continue
 		}
 
+		// Apply target return filtering with absolute minimum guardrail (if CAGR data available)
+		// Get target return and threshold (defaults: 11% target, 80% threshold = 8.8% minimum)
+		targetReturn := ctx.TargetReturn
+		if targetReturn == 0 {
+			targetReturn = 0.11 // Default 11%
+		}
+		thresholdPct := ctx.TargetReturnThresholdPct
+		if thresholdPct == 0 {
+			thresholdPct = 0.80 // Default 80%
+		}
+
+		// Absolute minimum guardrail: Never allow below 6% CAGR or 50% of target (whichever is higher)
+		absoluteMinCAGR := math.Max(0.06, targetReturn*0.50)
+
+		// Get CAGR if available (try ISIN first, fallback to symbol)
+		var cagr *float64
+		if ctx.CAGRs != nil {
+			if cagrVal, ok := ctx.CAGRs[isin]; ok {
+				cagr = &cagrVal
+			} else if cagrVal, ok := ctx.CAGRs[symbol]; ok {
+				cagr = &cagrVal
+			}
+		}
+
+		// Apply absolute minimum guardrail (hard filter) - only if CAGR data is available
+		if cagr != nil && *cagr < absoluteMinCAGR {
+			c.log.Debug().
+				Str("symbol", symbol).
+				Str("isin", isin).
+				Float64("cagr", *cagr).
+				Float64("absolute_min", absoluteMinCAGR).
+				Msg("Filtered out: below absolute minimum CAGR (hard filter)")
+			continue
+		}
+
 		// Quality gate: Exclude value traps and bubble risks
 		securityTags, err := c.securityRepo.GetTagsForSecurity(symbol)
 		if err == nil {
@@ -180,6 +221,16 @@ func (c *HybridOpportunityBuysCalculator) Calculate(
 		// Apply transaction costs
 		transactionCost := ctx.TransactionCostFixed + (valueEUR * ctx.TransactionCostPercent)
 		totalCostEUR := valueEUR + transactionCost
+
+		// Check if trade meets minimum trade amount (transaction cost efficiency)
+		if valueEUR < minTradeAmount {
+			c.log.Debug().
+				Str("symbol", symbol).
+				Float64("trade_value", valueEUR).
+				Float64("min_trade_amount", minTradeAmount).
+				Msg("Skipping trade below minimum trade amount")
+			continue
+		}
 
 		// Check if we have enough cash
 		if totalCostEUR > ctx.AvailableCashEUR {

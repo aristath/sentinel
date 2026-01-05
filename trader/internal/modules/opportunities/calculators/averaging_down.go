@@ -41,13 +41,20 @@ func (c *AveragingDownCalculator) Calculate(
 	maxValuePerPosition := GetFloatParam(params, "max_value_per_position", 500.0)
 	maxPositions := GetIntParam(params, "max_positions", 0) // 0 = unlimited
 
+	// Calculate minimum trade amount based on transaction costs (default: 1% max cost ratio)
+	maxCostRatio := GetFloatParam(params, "max_cost_ratio", 0.01) // Default 1% max cost
+	minTradeAmount := ctx.CalculateMinTradeAmount(maxCostRatio)
+
 	if !ctx.AllowBuy {
 		c.log.Debug().Msg("Buying not allowed, skipping averaging down")
 		return nil, nil
 	}
 
-	if ctx.AvailableCashEUR <= 0 {
-		c.log.Debug().Msg("No available cash, skipping averaging down")
+	if ctx.AvailableCashEUR <= minTradeAmount {
+		c.log.Debug().
+			Float64("available_cash", ctx.AvailableCashEUR).
+			Float64("min_trade_amount", minTradeAmount).
+			Msg("No available cash (below minimum trade amount), skipping averaging down")
 		return nil, nil
 	}
 
@@ -140,6 +147,16 @@ func (c *AveragingDownCalculator) Calculate(
 		// Apply transaction costs
 		transactionCost := ctx.TransactionCostFixed + (valueEUR * ctx.TransactionCostPercent)
 		totalCostEUR := valueEUR + transactionCost
+
+		// Check if trade meets minimum trade amount (transaction cost efficiency)
+		if valueEUR < minTradeAmount {
+			c.log.Debug().
+				Str("symbol", position.Symbol).
+				Float64("trade_value", valueEUR).
+				Float64("min_trade_amount", minTradeAmount).
+				Msg("Skipping trade below minimum trade amount")
+			continue
+		}
 
 		// Check if we have enough cash
 		if totalCostEUR > ctx.AvailableCashEUR {

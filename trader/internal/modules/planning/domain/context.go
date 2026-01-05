@@ -153,6 +153,34 @@ func (ctx *OpportunityContext) GetScoreByISINOrSymbol(isin, symbol string) (floa
 	return 0, false
 }
 
+// CalculateMinTradeAmount calculates the minimum trade amount where transaction costs are acceptable.
+// Uses the same formula as rebalancing.CalculateMinTradeAmount:
+//
+//	minTrade = fixedCost / (maxCostRatio - transactionCostPercent)
+//
+// With default 1% max cost ratio, 2 EUR fixed, 0.2% variable:
+//
+//	minTrade = 2 / (0.01 - 0.002) = 2 / 0.008 = 250 EUR
+//
+// Args:
+//
+//	maxCostRatio: Maximum acceptable cost-to-trade ratio (default 0.01 = 1%)
+//
+// Returns:
+//
+//	Minimum trade amount in EUR
+func (ctx *OpportunityContext) CalculateMinTradeAmount(maxCostRatio float64) float64 {
+	if maxCostRatio <= 0 {
+		maxCostRatio = 0.01 // Default 1%
+	}
+	denominator := maxCostRatio - ctx.TransactionCostPercent
+	if denominator <= 0 {
+		// If variable cost exceeds max ratio, return a high minimum
+		return 1000.0
+	}
+	return ctx.TransactionCostFixed / denominator
+}
+
 // EvaluationContext contains all data needed to simulate and score action sequences.
 type EvaluationContext struct {
 	// Portfolio state (same as OpportunityContext)

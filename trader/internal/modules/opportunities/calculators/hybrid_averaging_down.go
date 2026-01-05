@@ -51,6 +51,10 @@ func (c *HybridAveragingDownCalculator) Calculate(
 	maxValuePerPosition := GetFloatParam(params, "max_value_per_position", 500.0)
 	maxPositions := GetIntParam(params, "max_positions", 3) // Default to top 3
 
+	// Calculate minimum trade amount based on transaction costs (default: 1% max cost ratio)
+	maxCostRatio := GetFloatParam(params, "max_cost_ratio", 0.01) // Default 1% max cost
+	minTradeAmount := ctx.CalculateMinTradeAmount(maxCostRatio)
+
 	if !ctx.AllowBuy {
 		c.log.Debug().Msg("Buying not allowed, skipping hybrid averaging down")
 		return nil, nil
@@ -176,6 +180,16 @@ func (c *HybridAveragingDownCalculator) Calculate(
 		// Apply transaction costs
 		transactionCost := ctx.TransactionCostFixed + (valueEUR * ctx.TransactionCostPercent)
 		totalCostEUR := valueEUR + transactionCost
+
+		// Check if trade meets minimum trade amount (transaction cost efficiency)
+		if valueEUR < minTradeAmount {
+			c.log.Debug().
+				Str("symbol", position.Symbol).
+				Float64("trade_value", valueEUR).
+				Float64("min_trade_amount", minTradeAmount).
+				Msg("Skipping trade below minimum trade amount")
+			continue
+		}
 
 		// Check if we have enough cash
 		if totalCostEUR > ctx.AvailableCashEUR {

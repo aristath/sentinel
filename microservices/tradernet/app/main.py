@@ -289,9 +289,12 @@ async def get_executed_trades(
 
 
 # Market data endpoints
-@app.get("/api/market-data/quote/{symbol}", response_model=ServiceResponse)
+@app.get("/api/market-data/quote/{symbol:path}", response_model=ServiceResponse)
 async def get_quote(symbol: str, request: Request) -> ServiceResponse:
-    """Get current quote for a symbol."""
+    """Get current quote for a symbol.
+
+    Uses :path converter to allow symbols with slashes (e.g., HKD/EUR).
+    """
     try:
         api_key, api_secret = get_credentials(request)
         quote = service.get_quote(symbol, api_key=api_key, api_secret=api_secret)
@@ -335,7 +338,7 @@ async def get_quotes(
         )
 
 
-@app.get("/api/market-data/historical/{symbol}", response_model=ServiceResponse)
+@app.get("/api/market-data/historical/{symbol:path}", response_model=ServiceResponse)
 async def get_historical(
     symbol: str,
     request: Request,

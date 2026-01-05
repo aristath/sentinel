@@ -54,6 +54,10 @@ func (c *WeightBasedCalculator) Calculate(
 	maxBuyPositions := GetIntParam(params, "max_buy_positions", 5)
 	maxSellPositions := GetIntParam(params, "max_sell_positions", 5)
 
+	// Calculate minimum trade amount based on transaction costs (default: 1% max cost ratio)
+	maxCostRatio := GetFloatParam(params, "max_cost_ratio", 0.01) // Default 1% max cost
+	minTradeAmount := ctx.CalculateMinTradeAmount(maxCostRatio)
+
 	// Check if we have target weights
 	if len(ctx.TargetWeights) == 0 {
 		c.log.Debug().Msg("No target weights available")
@@ -219,6 +223,16 @@ func (c *WeightBasedCalculator) Calculate(
 			valueEUR := float64(quantity) * currentPrice
 			transactionCost := ctx.TransactionCostFixed + (valueEUR * ctx.TransactionCostPercent)
 			totalCostEUR := valueEUR + transactionCost
+
+			// Check if trade meets minimum trade amount (transaction cost efficiency)
+			if valueEUR < minTradeAmount {
+				c.log.Debug().
+					Str("symbol", symbol).
+					Float64("trade_value", valueEUR).
+					Float64("min_trade_amount", minTradeAmount).
+					Msg("Skipping trade below minimum trade amount")
+				continue
+			}
 
 			if totalCostEUR > ctx.AvailableCashEUR {
 				continue
