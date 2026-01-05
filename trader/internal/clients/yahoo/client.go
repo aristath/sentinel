@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"regexp"
 	"strings"
@@ -32,13 +33,50 @@ type Client struct {
 }
 
 // NewClient creates a new Yahoo Finance client
+// Yahoo Finance requires cookies from visiting finance.yahoo.com first
 func NewClient(log zerolog.Logger) *Client {
-	return &Client{
-		client: &http.Client{
-			Timeout: 30 * time.Second,
-		},
-		log: log.With().Str("client", "yahoo").Logger(),
+	// Create cookie jar to maintain session cookies
+	jar, _ := cookiejar.New(nil)
+	
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+		Jar:     jar,
 	}
+	
+	c := &Client{
+		client: client,
+		log:    log.With().Str("client", "yahoo").Logger(),
+	}
+	
+	// Initialize cookies by visiting finance.yahoo.com
+	// This is required to get session cookies for API access
+	go c.initializeCookies()
+	
+	return c
+}
+
+// initializeCookies visits finance.yahoo.com to get required session cookies
+// This must be done before making API requests to avoid 401 errors
+func (c *Client) initializeCookies() {
+	// Visit finance.yahoo.com to get cookies
+	req, err := http.NewRequest("GET", "https://finance.yahoo.com/", nil)
+	if err != nil {
+		c.log.Warn().Err(err).Msg("Failed to create cookie initialization request")
+		return
+	}
+	
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	
+	resp, err := c.client.Do(req)
+	if err != nil {
+		c.log.Warn().Err(err).Msg("Failed to initialize Yahoo Finance cookies")
+		return
+	}
+	defer resp.Body.Close()
+	
+	c.log.Debug().Msg("Yahoo Finance cookies initialized")
 }
 
 // GetYahooSymbol converts a Tradernet symbol to Yahoo Finance symbol
@@ -416,7 +454,14 @@ func (c *Client) getBatchQuoteInfo(symbols []string) (map[string]map[string]inte
 
 		lastErr = err
 		if resp != nil && resp.StatusCode != http.StatusOK {
-			lastErr = fmt.Errorf("status %d", resp.StatusCode)
+			// Read response body for better error details
+			if resp.Body != nil {
+				bodyBytes, _ := io.ReadAll(resp.Body)
+				lastErr = fmt.Errorf("status %d: %s", resp.StatusCode, string(bodyBytes))
+				resp.Body.Close()
+			} else {
+				lastErr = fmt.Errorf("status %d", resp.StatusCode)
+			}
 		}
 
 		if attempt < maxRetries-1 {
