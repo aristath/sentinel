@@ -30,12 +30,36 @@ func (ds *DividendScorer) Calculate(
 	payoutRatio *float64,
 	fiveYearAvgDivYield *float64,
 ) DividendScore {
+	return ds.CalculateEnhanced(dividendYield, payoutRatio, fiveYearAvgDivYield, nil)
+}
+
+// CalculateEnhanced calculates the dividend score with total return boost
+// Accounts for both growth (CAGR) and dividends for a holistic return perspective.
+//
+// Components:
+// - Dividend Yield (70%): Current yield level
+// - Dividend Consistency (30%): Payout ratio and growth
+// - Total Return Boost: Additional boost for high total return (growth + dividend)
+//
+// Example: 5% growth + 10% dividend = 15% total return gets boost
+func (ds *DividendScorer) CalculateEnhanced(
+	dividendYield *float64,
+	payoutRatio *float64,
+	fiveYearAvgDivYield *float64,
+	expectedCAGR *float64, // Optional: CAGR for total return calculation
+) DividendScore {
 	yieldScore := scoreDividendYield(dividendYield)
 	consistencyScore := scoreDividendConsistency(payoutRatio, fiveYearAvgDivYield)
 
-	// 70% yield, 30% consistency
-	totalScore := yieldScore*0.70 + consistencyScore*0.30
-	totalScore = math.Min(1.0, totalScore)
+	// Base score: 70% yield, 30% consistency
+	baseScore := yieldScore*0.70 + consistencyScore*0.30
+
+	// Calculate total return boost (growth + dividend)
+	totalReturnBoost := calculateTotalReturnBoost(dividendYield, expectedCAGR)
+
+	// Enhanced score: base + boost (capped at 1.0)
+	enhancedScore := baseScore + totalReturnBoost
+	enhancedScore = math.Min(1.0, enhancedScore)
 
 	// Build components map with both scored values and dividend bonus
 	components := map[string]float64{
@@ -48,10 +72,50 @@ func (ds *DividendScorer) Calculate(
 	dividendBonus := calculateDividendBonus(dividendYield)
 	components["dividend_bonus"] = dividendBonus
 
+	// Store total return boost in components
+	components["total_return_boost"] = round3(totalReturnBoost)
+
+	// Calculate and store total return value if CAGR is available
+	if expectedCAGR != nil && dividendYield != nil {
+		totalReturn := *expectedCAGR + *dividendYield
+		components["total_return"] = round3(totalReturn)
+	}
+
 	return DividendScore{
-		Score:      round3(totalScore),
+		Score:      round3(enhancedScore),
 		Components: components,
 	}
+}
+
+// calculateTotalReturnBoost calculates boost for high total return (growth + dividend)
+// Rewards securities with high total return, not just high dividend yield.
+//
+// Example: 5% growth + 10% dividend = 15% total (excellent)
+// vs 7% growth + 2% dividend = 9% total (lower)
+//
+// Boost thresholds:
+// - 15%+ total return: +0.20 boost
+// - 12-15% total return: +0.15 boost
+// - 10-12% total return: +0.10 boost
+// - Below 10%: no boost
+func calculateTotalReturnBoost(dividendYield *float64, expectedCAGR *float64) float64 {
+	if dividendYield == nil || expectedCAGR == nil {
+		return 0.0
+	}
+
+	// Calculate total return = growth + dividend
+	totalReturn := *expectedCAGR + *dividendYield
+
+	// Boost score for high total return
+	if totalReturn >= 0.15 {
+		return 0.20 // 20% boost for 15%+ total return
+	} else if totalReturn >= 0.12 {
+		return 0.15 // 15% boost for 12-15% total return
+	} else if totalReturn >= 0.10 {
+		return 0.10 // 10% boost for 10-12% total return
+	}
+
+	return 0.0 // No boost below 10% total return
 }
 
 // scoreDividendYield scores based on dividend yield

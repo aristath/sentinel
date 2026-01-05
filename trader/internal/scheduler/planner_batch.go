@@ -2,12 +2,14 @@ package scheduler
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/aristath/arduino-trader/internal/clients/tradernet"
 	"github.com/aristath/arduino-trader/internal/clients/yahoo"
 	"github.com/aristath/arduino-trader/internal/domain"
 	"github.com/aristath/arduino-trader/internal/modules/allocation"
+	"github.com/aristath/arduino-trader/internal/modules/optimization"
 	"github.com/aristath/arduino-trader/internal/modules/opportunities"
 	"github.com/aristath/arduino-trader/internal/modules/planning"
 	planningdomain "github.com/aristath/arduino-trader/internal/modules/planning/domain"
@@ -17,6 +19,7 @@ import (
 	"github.com/aristath/arduino-trader/internal/modules/planning/repository"
 	"github.com/aristath/arduino-trader/internal/modules/portfolio"
 	"github.com/aristath/arduino-trader/internal/modules/sequences"
+	scoringdomain "github.com/aristath/arduino-trader/internal/modules/scoring/domain"
 	"github.com/aristath/arduino-trader/internal/modules/universe"
 	"github.com/rs/zerolog"
 )
@@ -30,6 +33,7 @@ type PlannerBatchJob struct {
 	allocRepo              *allocation.Repository
 	tradernetClient        *tradernet.Client
 	yahooClient            *yahoo.Client
+	optimizerService       *optimization.OptimizerService // Added for optimizer target weights
 	opportunitiesService   *opportunities.Service
 	sequencesService       *sequences.Service
 	evaluationService      *evaluation.Service
@@ -49,6 +53,7 @@ type PlannerBatchConfig struct {
 	AllocRepo              *allocation.Repository
 	TradernetClient        *tradernet.Client
 	YahooClient            *yahoo.Client
+	OptimizerService       *optimization.OptimizerService // Added for optimizer target weights
 	OpportunitiesService   *opportunities.Service
 	SequencesService       *sequences.Service
 	EvaluationService      *evaluation.Service
@@ -72,6 +77,7 @@ func NewPlannerBatchJob(cfg PlannerBatchConfig) *PlannerBatchJob {
 		allocRepo:              cfg.AllocRepo,
 		tradernetClient:        cfg.TradernetClient,
 		yahooClient:            cfg.YahooClient,
+		optimizerService:       cfg.OptimizerService,
 		opportunitiesService:   cfg.OpportunitiesService,
 		sequencesService:       cfg.SequencesService,
 		evaluationService:      cfg.EvaluationService,
@@ -173,24 +179,38 @@ func (j *PlannerBatchJob) Run() error {
 		Str("prev_hash", j.lastPortfolioHash).
 		Msg("Portfolio changed, generating new plan")
 
-	// Step 3: Build opportunity context
-	opportunityContext := j.buildOpportunityContext(positions, securities, allocations, cashBalances)
+	// Step 3: Get optimizer target weights (if optimizer service is available)
+	var optimizerTargetWeights map[string]float64
+	if j.optimizerService != nil {
+		optimizerTargets, err := j.getOptimizerTargetWeights(positions, securities, cashBalances)
+		if err != nil {
+			j.log.Warn().Err(err).Msg("Failed to get optimizer target weights, continuing without them")
+		} else {
+			optimizerTargetWeights = optimizerTargets
+			j.log.Info().
+				Int("target_count", len(optimizerTargetWeights)).
+				Msg("Retrieved optimizer target weights")
+		}
+	}
 
-	// Step 4: Get planner configuration
+	// Step 4: Build opportunity context with complete PortfolioContext
+	opportunityContext := j.buildOpportunityContext(positions, securities, allocations, cashBalances, optimizerTargetWeights)
+
+	// Step 5: Get planner configuration
 	config, err := j.loadPlannerConfig()
 	if err != nil {
 		j.log.Error().Err(err).Msg("Failed to load planner config")
 		return fmt.Errorf("failed to load planner config: %w", err)
 	}
 
-	// Step 5: Create holistic plan
+	// Step 6: Create holistic plan
 	plan, err := j.plannerService.CreatePlan(opportunityContext, config)
 	if err != nil {
 		j.log.Error().Err(err).Msg("Failed to create plan")
 		return fmt.Errorf("failed to create plan: %w", err)
 	}
 
-	// Step 6: Store plan as recommendations
+	// Step 7: Store plan as recommendations
 	if err := j.storePlan(plan, portfolioHash); err != nil {
 		j.log.Error().Err(err).Msg("Failed to store plan")
 		return fmt.Errorf("failed to store plan: %w", err)
@@ -215,15 +235,124 @@ func (j *PlannerBatchJob) Run() error {
 	return nil
 }
 
+// getOptimizerTargetWeights calls the optimizer service to get target weights
+func (j *PlannerBatchJob) getOptimizerTargetWeights(
+	positions []portfolio.Position,
+	securities []universe.Security,
+	cashBalances map[string]float64,
+) (map[string]float64, error) {
+	if j.optimizerService == nil {
+		return nil, fmt.Errorf("optimizer service not available")
+	}
+
+	// Fetch current prices
+	currentPrices := j.fetchCurrentPrices(securities)
+
+	// Calculate portfolio value
+	portfolioValue := cashBalances["EUR"]
+	for _, pos := range positions {
+		if price, ok := currentPrices[pos.Symbol]; ok {
+			portfolioValue += price * float64(pos.Quantity)
+		}
+	}
+
+	// Get allocation targets
+	allocations, err := j.allocRepo.GetAll()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get allocations: %w", err)
+	}
+
+	// Extract country and industry targets
+	countryTargets := make(map[string]float64)
+	industryTargets := make(map[string]float64)
+	for key, value := range allocations {
+		if strings.HasPrefix(key, "country_group:") {
+			country := strings.TrimPrefix(key, "country_group:")
+			countryTargets[country] = value
+		} else if strings.HasPrefix(key, "industry_group:") {
+			industry := strings.TrimPrefix(key, "industry_group:")
+			industryTargets[industry] = value
+		}
+	}
+
+	// Convert positions to optimizer format
+	optimizerPositions := make(map[string]optimization.Position)
+	for _, pos := range positions {
+		valueEUR := 0.0
+		if price, ok := currentPrices[pos.Symbol]; ok {
+			valueEUR = price * float64(pos.Quantity)
+		}
+		optimizerPositions[pos.Symbol] = optimization.Position{
+			Symbol:   pos.Symbol,
+			Quantity: float64(pos.Quantity),
+			ValueEUR: valueEUR,
+		}
+	}
+
+	// Convert securities to optimizer format
+	optimizerSecurities := make([]optimization.Security, 0, len(securities))
+	for _, sec := range securities {
+		optimizerSecurities = append(optimizerSecurities, optimization.Security{
+			Symbol:             sec.Symbol,
+			Country:            sec.Country,
+			Industry:           sec.Industry,
+			MinPortfolioTarget: 0.0, // Could be from security settings
+			MaxPortfolioTarget: 1.0, // Could be from security settings
+			AllowBuy:           sec.Active,
+			AllowSell:          true, // Default to true
+			MinLot:             1.0,
+			PriorityMultiplier: 1.0,
+			TargetPriceEUR:     0.0, // Not used
+		})
+	}
+
+	// Build portfolio state
+	state := optimization.PortfolioState{
+		Securities:      optimizerSecurities,
+		Positions:       optimizerPositions,
+		PortfolioValue:  portfolioValue,
+		CurrentPrices:   currentPrices,
+		CashBalance:     cashBalances["EUR"],
+		CountryTargets:  countryTargets,
+		IndustryTargets: industryTargets,
+		DividendBonuses: make(map[string]float64), // Could fetch from dividend repo if needed
+	}
+
+	// Get optimizer settings
+	settings := optimization.Settings{
+		Blend:              0.5,  // Default blend
+		TargetReturn:       0.11, // 11% target
+		MinCashReserve:     500.0,
+		MinTradeAmount:     0.0,
+		TransactionCostPct: 0.002,
+		MaxConcentration:  0.25,
+	}
+
+	// Run optimization
+	result, err := j.optimizerService.Optimize(state, settings)
+	if err != nil {
+		return nil, fmt.Errorf("optimizer failed: %w", err)
+	}
+
+	if !result.Success {
+		return nil, fmt.Errorf("optimizer returned unsuccessful result")
+	}
+
+	return result.TargetWeights, nil
+}
+
 // buildOpportunityContext creates an opportunity context from current portfolio state
+// with complete PortfolioContext including optimizer target weights
 func (j *PlannerBatchJob) buildOpportunityContext(
 	positions []portfolio.Position,
 	securities []universe.Security,
 	allocations map[string]float64,
 	cashBalances map[string]float64,
+	optimizerTargetWeights map[string]float64,
 ) *planningdomain.OpportunityContext {
 	// Convert positions to domain format
 	domainPositions := make([]domain.Position, 0, len(positions))
+	positionValues := make(map[string]float64) // For PortfolioContext
 	for _, pos := range positions {
 		domainPositions = append(domainPositions, domain.Position{
 			Symbol:   pos.Symbol,
@@ -235,15 +364,28 @@ func (j *PlannerBatchJob) buildOpportunityContext(
 	// Convert securities to domain format
 	domainSecurities := make([]domain.Security, 0, len(securities))
 	stocksBySymbol := make(map[string]domain.Security)
+	stocksByISIN := make(map[string]domain.Security)
+	securityCountries := make(map[string]string)
+	securityIndustries := make(map[string]string)
 	for _, sec := range securities {
 		domainSec := domain.Security{
 			Symbol:  sec.Symbol,
+			ISIN:    sec.ISIN,
 			Active:  sec.Active,
-			Country: sec.Country,
+			Country: sec.Country, // universe.Security.Country is string, domain.Security.Country is string
 			Name:    sec.Name,
 		}
 		domainSecurities = append(domainSecurities, domainSec)
 		stocksBySymbol[sec.Symbol] = domainSec
+		if sec.ISIN != "" {
+			stocksByISIN[sec.ISIN] = domainSec
+		}
+		if sec.Country != "" {
+			securityCountries[sec.Symbol] = sec.Country
+		}
+		if sec.Industry != "" {
+			securityIndustries[sec.Symbol] = sec.Industry
+		}
 	}
 
 	// Get available cash in EUR (primary currency)
@@ -252,18 +394,88 @@ func (j *PlannerBatchJob) buildOpportunityContext(
 	// Fetch current prices for all securities
 	currentPrices := j.fetchCurrentPrices(securities)
 
-	// Create simplified opportunity context
-	// Note: This is a simplified version - full context would include:
-	// - PortfolioContext from scoring service
-	// - Security scores
-	// - Country allocations, etc.
+	// Calculate position values and total portfolio value
+	totalValue := availableCashEUR
+	positionAvgPrices := make(map[string]float64)
+	for _, pos := range positions {
+		if price, ok := currentPrices[pos.Symbol]; ok {
+			valueEUR := price * float64(pos.Quantity)
+			positionValues[pos.Symbol] = valueEUR
+			totalValue += valueEUR
+			// Use avg price from position if available, otherwise current price
+			if pos.AvgPrice > 0 {
+				positionAvgPrices[pos.Symbol] = pos.AvgPrice
+			} else {
+				positionAvgPrices[pos.Symbol] = price
+			}
+		}
+	}
+
+	// Build country and industry weights from allocations
+	countryWeights := make(map[string]float64)
+	industryWeights := make(map[string]float64)
+	countryToGroup := make(map[string]string)
+	industryToGroup := make(map[string]string)
+
+	for key, value := range allocations {
+		if strings.HasPrefix(key, "country_group:") {
+			country := strings.TrimPrefix(key, "country_group:")
+			countryWeights[country] = value
+			// Map individual countries to groups (simplified - would need actual mapping)
+			for _, sec := range securities {
+				if sec.Country != "" {
+					// Simple mapping: could be enhanced with actual country-to-group mapping
+					countryToGroup[sec.Country] = country
+				}
+			}
+		} else if strings.HasPrefix(key, "industry_group:") {
+			industry := strings.TrimPrefix(key, "industry_group:")
+			industryWeights[industry] = value
+			// Map individual industries to groups (simplified)
+			for _, sec := range securities {
+				if sec.Industry != "" {
+					industryToGroup[sec.Industry] = industry
+				}
+			}
+		}
+	}
+
+	// Build PortfolioContext (scoring domain)
+	portfolioCtx := &scoringdomain.PortfolioContext{
+		CountryWeights:     countryWeights,
+		IndustryWeights:    industryWeights,
+		Positions:          positionValues,
+		SecurityCountries:  securityCountries,
+		SecurityIndustries: securityIndustries,
+		SecurityScores:     make(map[string]float64), // Could fetch from score repo if needed
+		SecurityDividends: make(map[string]float64), // Could fetch from dividend repo if needed
+		CountryToGroup:     countryToGroup,
+		IndustryToGroup:    industryToGroup,
+		PositionAvgPrices:  positionAvgPrices,
+		CurrentPrices:      currentPrices,
+		TotalValue:         totalValue,
+	}
+
+	// Use optimizer target weights if available, otherwise fall back to allocations
+	targetWeights := optimizerTargetWeights
+	if targetWeights == nil || len(targetWeights) == 0 {
+		// Fall back to allocations (but these are country/industry level, not security level)
+		targetWeights = make(map[string]float64)
+		j.log.Warn().Msg("No optimizer target weights available, using empty map")
+	}
+
 	return &planningdomain.OpportunityContext{
-		Positions:        domainPositions,
-		Securities:       domainSecurities,
-		StocksBySymbol:   stocksBySymbol,
-		AvailableCashEUR: availableCashEUR,
-		CurrentPrices:    currentPrices,
-		TargetWeights:    allocations,
+		PortfolioContext:       portfolioCtx,
+		Positions:              domainPositions,
+		Securities:             domainSecurities,
+		StocksByISIN:           stocksByISIN,
+		StocksBySymbol:         stocksBySymbol,
+		AvailableCashEUR:       availableCashEUR,
+		TotalPortfolioValueEUR: totalValue,
+		CurrentPrices:          currentPrices,
+		TargetWeights:          targetWeights, // Optimizer target weights (security-level)
+		CountryWeights:         countryWeights,
+		CountryToGroup:         countryToGroup,
 	}
 }
 

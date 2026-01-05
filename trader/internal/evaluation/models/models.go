@@ -75,6 +75,9 @@ type PortfolioContext struct {
 	// Cost basis data for averaging down
 	PositionAvgPrices map[string]float64 `json:"position_avg_prices,omitempty"` // symbol -> avg_purchase_price
 	CurrentPrices     map[string]float64 `json:"current_prices,omitempty"`      // symbol -> current_market_price
+
+	// Optimizer target allocations (for alignment scoring)
+	OptimizerTargetWeights map[string]float64 `json:"optimizer_target_weights,omitempty"` // symbol -> target_weight (0 to 1)
 }
 
 // EvaluationContext contains all data needed to simulate and score action sequences

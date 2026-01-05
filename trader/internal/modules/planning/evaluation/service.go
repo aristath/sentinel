@@ -12,6 +12,7 @@ import (
 	"github.com/aristath/arduino-trader/internal/evaluation/models"
 	"github.com/aristath/arduino-trader/internal/evaluation/workers"
 	"github.com/aristath/arduino-trader/internal/modules/planning/domain"
+	scoringdomain "github.com/aristath/arduino-trader/internal/modules/scoring/domain"
 	"github.com/rs/zerolog"
 )
 
@@ -62,7 +63,8 @@ func hashSequence(actions []domain.ActionCandidate) string {
 }
 
 // BatchEvaluate evaluates a batch of sequences directly (no HTTP overhead).
-func (s *Service) BatchEvaluate(ctx context.Context, sequences []domain.ActionSequence, portfolioHash string, config *domain.PlannerConfiguration) ([]domain.EvaluationResult, error) {
+// It accepts an optional OpportunityContext to extract optimizer targets and portfolio context.
+func (s *Service) BatchEvaluate(ctx context.Context, sequences []domain.ActionSequence, portfolioHash string, config *domain.PlannerConfiguration, opportunityCtx *domain.OpportunityContext) ([]domain.EvaluationResult, error) {
 	if len(sequences) == 0 {
 		return nil, fmt.Errorf("no sequences to evaluate")
 	}
@@ -100,11 +102,81 @@ func (s *Service) BatchEvaluate(ctx context.Context, sequences []domain.ActionSe
 		transactionCostFixed = config.TransactionCostFixed
 		transactionCostPercent = config.TransactionCostPercent
 	}
+
+	// Build PortfolioContext from OpportunityContext if available
+	var portfolioCtx models.PortfolioContext
+	if opportunityCtx != nil && opportunityCtx.PortfolioContext != nil {
+		portfolioCtx = convertPortfolioContext(opportunityCtx.PortfolioContext, opportunityCtx.TargetWeights)
+	}
+
+	// Build complete EvaluationContext with all required data
+	var evalSecurities []models.Security
+	var evalPositions []models.Position
+	var stocksBySymbol map[string]models.Security
+	var availableCashEUR float64
+	var totalPortfolioValueEUR float64
+
+	if opportunityCtx != nil {
+		// Convert securities
+		evalSecurities = make([]models.Security, 0, len(opportunityCtx.Securities))
+		stocksBySymbol = make(map[string]models.Security)
+		for _, sec := range opportunityCtx.Securities {
+			// Convert Country from string to *string
+			var countryPtr *string
+			if sec.Country != "" {
+				countryPtr = &sec.Country
+			}
+			// Note: domain.Security doesn't have Industry field, so we can't include it
+			// This is acceptable as Industry is optional in evaluation models
+			evalSec := models.Security{
+				Symbol:   sec.Symbol,
+				Name:     sec.Name,
+				Country:  countryPtr,
+				Industry: nil, // domain.Security doesn't have Industry field
+				Currency: string(sec.Currency),
+			}
+			evalSecurities = append(evalSecurities, evalSec)
+			stocksBySymbol[sec.Symbol] = evalSec
+		}
+
+		// Convert positions
+		evalPositions = make([]models.Position, 0, len(opportunityCtx.Positions))
+		for _, pos := range opportunityCtx.Positions {
+			// Get current price for position value calculation
+			currentPrice := 0.0
+			if opportunityCtx.CurrentPrices != nil {
+				if price, ok := opportunityCtx.CurrentPrices[pos.Symbol]; ok {
+					currentPrice = price
+				}
+			}
+
+			evalPositions = append(evalPositions, models.Position{
+				Symbol:         pos.Symbol,
+				Quantity:       pos.Quantity,
+				AvgPrice:       currentPrice, // Could be enhanced with actual avg price
+				Currency:       string(pos.Currency),
+				CurrencyRate:   1.0, // Default to 1.0 for EUR
+				CurrentPrice:   currentPrice,
+				MarketValueEUR: currentPrice * pos.Quantity,
+			})
+		}
+
+		availableCashEUR = opportunityCtx.AvailableCashEUR
+		totalPortfolioValueEUR = opportunityCtx.TotalPortfolioValueEUR
+	}
+
+	// Build evaluation context with all required data
 	evalContext := models.EvaluationContext{
+		PortfolioContext:       portfolioCtx,
+		Positions:              evalPositions,
+		Securities:             evalSecurities,
+		AvailableCashEUR:       availableCashEUR,
+		TotalPortfolioValueEUR: totalPortfolioValueEUR,
+		CurrentPrices:          portfolioCtx.CurrentPrices,
+		StocksBySymbol:         stocksBySymbol,
 		TransactionCostFixed:   transactionCostFixed,
 		TransactionCostPercent: transactionCostPercent,
-		// Portfolio context would need to be passed in for full evaluation
-		// For now, worker pool will handle basic evaluation
+		CostPenaltyFactor:      0.1, // Default cost penalty factor
 	}
 
 	// Evaluate using worker pool
@@ -163,9 +235,44 @@ func (s *Service) BatchEvaluate(ctx context.Context, sequences []domain.ActionSe
 	return domainResults, nil
 }
 
+// convertPortfolioContext converts scoringdomain.PortfolioContext to evaluation models.PortfolioContext,
+// including optimizer target weights.
+func convertPortfolioContext(
+	scoringCtx *scoringdomain.PortfolioContext,
+	optimizerTargets map[string]float64,
+) models.PortfolioContext {
+	if scoringCtx == nil {
+		return models.PortfolioContext{}
+	}
+
+	// Copy optimizer targets if available
+	optimizerTargetWeights := make(map[string]float64)
+	if optimizerTargets != nil {
+		for symbol, weight := range optimizerTargets {
+			optimizerTargetWeights[symbol] = weight
+		}
+	}
+
+	return models.PortfolioContext{
+		CountryWeights:        scoringCtx.CountryWeights,
+		IndustryWeights:       scoringCtx.IndustryWeights,
+		Positions:             scoringCtx.Positions,
+		SecurityCountries:     scoringCtx.SecurityCountries,
+		SecurityIndustries:    scoringCtx.SecurityIndustries,
+		SecurityScores:        scoringCtx.SecurityScores,
+		SecurityDividends:     scoringCtx.SecurityDividends,
+		CountryToGroup:        scoringCtx.CountryToGroup,
+		IndustryToGroup:       scoringCtx.IndustryToGroup,
+		PositionAvgPrices:     scoringCtx.PositionAvgPrices,
+		CurrentPrices:         scoringCtx.CurrentPrices,
+		OptimizerTargetWeights: optimizerTargetWeights,
+		TotalValue:            scoringCtx.TotalValue,
+	}
+}
+
 // EvaluateSingleSequence evaluates a single sequence.
-func (s *Service) EvaluateSingleSequence(ctx context.Context, sequence domain.ActionSequence, portfolioHash string, config *domain.PlannerConfiguration) (*domain.EvaluationResult, error) {
-	results, err := s.BatchEvaluate(ctx, []domain.ActionSequence{sequence}, portfolioHash, config)
+func (s *Service) EvaluateSingleSequence(ctx context.Context, sequence domain.ActionSequence, portfolioHash string, config *domain.PlannerConfiguration, opportunityCtx *domain.OpportunityContext) (*domain.EvaluationResult, error) {
+	results, err := s.BatchEvaluate(ctx, []domain.ActionSequence{sequence}, portfolioHash, config, opportunityCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +285,7 @@ func (s *Service) EvaluateSingleSequence(ctx context.Context, sequence domain.Ac
 }
 
 // BatchEvaluateWithOptions provides more control over evaluation parameters.
-func (s *Service) BatchEvaluateWithOptions(ctx context.Context, sequences []domain.ActionSequence, portfolioHash string, opts EvaluationOptions) ([]domain.EvaluationResult, error) {
+func (s *Service) BatchEvaluateWithOptions(ctx context.Context, sequences []domain.ActionSequence, portfolioHash string, opts EvaluationOptions, opportunityCtx *domain.OpportunityContext) ([]domain.EvaluationResult, error) {
 	// TODO: Implement Monte Carlo and stochastic when worker pool supports it
 	if opts.UseMonteCarlo || opts.UseStochastic {
 		s.log.Warn().Msg("Monte Carlo and stochastic evaluation not yet implemented in direct mode")
@@ -186,7 +293,7 @@ func (s *Service) BatchEvaluateWithOptions(ctx context.Context, sequences []doma
 
 	// For now, just use standard batch evaluation
 	// Note: opts doesn't contain config, so we use nil (will use defaults)
-	return s.BatchEvaluate(ctx, sequences, portfolioHash, nil)
+	return s.BatchEvaluate(ctx, sequences, portfolioHash, nil, opportunityCtx)
 }
 
 // HealthCheck is no longer needed (no external service) but kept for interface compatibility.

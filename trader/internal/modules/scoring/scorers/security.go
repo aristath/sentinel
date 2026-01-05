@@ -23,16 +23,25 @@ type SecurityScorer struct {
 }
 
 // ScoreWeights defines the weight for each scoring group
-// Fixed weights (no longer configurable) - optimizer handles portfolio decisions
+// Quality-focused weights for 15-20 year retirement fund strategy
+// Emphasizes quality (long-term + fundamentals = 45%) and dividends (18%)
 var ScoreWeights = map[string]float64{
-	"long_term":       0.20, // CAGR, Sortino, Sharpe
-	"fundamentals":    0.15, // Financial strength, Consistency
-	"opportunity":     0.15, // 52W high distance, P/E ratio
-	"dividends":       0.12, // Yield, Dividend consistency
-	"short_term":      0.10, // Recent momentum, Drawdown
-	"technicals":      0.10, // RSI, Bollinger, EMA
-	"opinion":         0.10, // Analyst recommendations, Price targets
-	"diversification": 0.08, // Geography, Industry, Averaging down
+	"long_term":       0.25, // CAGR, Sortino, Sharpe (↑ from 20%)
+	"fundamentals":    0.20, // Financial strength, Consistency (↑ from 15%)
+	"dividends":       0.18, // Yield, Consistency, Growth (↑ from 12%)
+	"opportunity":     0.12, // 52W high distance, P/E ratio (↓ from 15%)
+	"short_term":      0.08, // Recent momentum, Drawdown (↓ from 10%)
+	"technicals":      0.07, // RSI, Bollinger, EMA (↓ from 10%)
+	"opinion":         0.05, // Analyst recommendations, Price targets (↓ from 10%)
+	"diversification": 0.05, // Geography, Industry, Averaging down (↓ from 8%)
+	// Total: 100%
+	//
+	// Rationale:
+	// - Quality focus: Long-term + Fundamentals = 45% (vs 35% before)
+	// - Dividend emphasis: 18% (vs 12%) - accounts for total return (growth + dividend)
+	// - Opportunity reduced: 12% (vs 15%) - use as filter, not primary driver
+	// - Technicals reduced: 7% (vs 10%) - less important for long-term
+	// - Opinion reduced: 5% (vs 10%) - external forecasts less reliable
 }
 
 // NewSecurityScorer creates a new security scorer
@@ -91,7 +100,7 @@ func (ss *SecurityScorer) ScoreSecurity(input ScoreSecurityInput) *domain.Calcul
 	groupScores := make(map[string]float64)
 	subScores := make(map[string]map[string]float64)
 
-	// 1. Long-term Performance (20%)
+	// 1. Long-term Performance (25%) - CAGR, Sortino, Sharpe
 	longTermScore := ss.longTerm.Calculate(
 		input.MonthlyPrices,
 		input.DailyPrices,
@@ -101,7 +110,7 @@ func (ss *SecurityScorer) ScoreSecurity(input ScoreSecurityInput) *domain.Calcul
 	groupScores["long_term"] = longTermScore.Score
 	subScores["long_term"] = longTermScore.Components
 
-	// 2. Fundamentals (15%)
+	// 2. Fundamentals (20%) - Financial strength, Consistency
 	fundamentalsScore := ss.fundamentals.Calculate(
 		input.ProfitMargin,
 		input.DebtToEquity,
@@ -111,26 +120,34 @@ func (ss *SecurityScorer) ScoreSecurity(input ScoreSecurityInput) *domain.Calcul
 	groupScores["fundamentals"] = fundamentalsScore.Score
 	subScores["fundamentals"] = fundamentalsScore.Components
 
-	// 3. Opportunity (15%)
-	opportunityScore := ss.opportunity.Calculate(
+	// 3. Opportunity (12%) - 52W high distance, P/E ratio (with quality gates)
+	opportunityScore := ss.opportunity.CalculateWithQualityGate(
 		input.DailyPrices,
 		input.PERatio,
 		input.ForwardPE,
 		input.MarketAvgPE,
+		&fundamentalsScore.Score, // Pass fundamentals score for quality gate
+		&longTermScore.Score,     // Pass long-term score for quality gate
 	)
 	groupScores["opportunity"] = opportunityScore.Score
 	subScores["opportunity"] = opportunityScore.Components
 
-	// 4. Dividends (12%)
-	dividendScore := ss.dividend.Calculate(
+	// 4. Dividends (18%) - Yield, Consistency, Growth (with total return boost)
+	// Extract CAGR from long-term components for total return calculation
+	var expectedCAGR *float64
+	if cagrRaw, hasCAGR := longTermScore.Components["cagr_raw"]; hasCAGR && cagrRaw > 0 {
+		expectedCAGR = &cagrRaw
+	}
+	dividendScore := ss.dividend.CalculateEnhanced(
 		input.DividendYield,
 		input.PayoutRatio,
 		input.FiveYearAvgDivYield,
+		expectedCAGR,
 	)
 	groupScores["dividends"] = dividendScore.Score
 	subScores["dividends"] = dividendScore.Components
 
-	// 5. Short-term Performance (10%)
+	// 5. Short-term Performance (8%) - Recent momentum, Drawdown
 	shortTermScore := ss.shortTerm.Calculate(
 		input.DailyPrices,
 		input.MaxDrawdown,
@@ -138,12 +155,12 @@ func (ss *SecurityScorer) ScoreSecurity(input ScoreSecurityInput) *domain.Calcul
 	groupScores["short_term"] = shortTermScore.Score
 	subScores["short_term"] = shortTermScore.Components
 
-	// 6. Technicals (10%)
+	// 6. Technicals (7%) - RSI, Bollinger, EMA
 	technicalsScore := ss.technicals.Calculate(input.DailyPrices)
 	groupScores["technicals"] = technicalsScore.Score
 	subScores["technicals"] = technicalsScore.Components
 
-	// 7. Opinion (10%)
+	// 7. Opinion (5%) - Analyst recommendations, Price targets
 	opinionScore := ss.opinion.Calculate(
 		input.AnalystRecommendation,
 		input.UpsidePct,
@@ -151,7 +168,7 @@ func (ss *SecurityScorer) ScoreSecurity(input ScoreSecurityInput) *domain.Calcul
 	groupScores["opinion"] = opinionScore.Score
 	subScores["opinion"] = opinionScore.Components
 
-	// 8. Diversification (8%) - DYNAMIC, portfolio-aware
+	// 8. Diversification (5%) - DYNAMIC, portfolio-aware
 	if input.PortfolioContext != nil && input.Country != nil {
 		// Need quality and opportunity for averaging down calculation
 		qualityApprox := (groupScores["long_term"] + groupScores["fundamentals"]) / 2

@@ -108,7 +108,34 @@ func (j *TagUpdateJob) Run() error {
 }
 
 // updateTagsForSecurity updates tags for a single security
+// Enhanced with per-tag update frequencies - only updates tags that need updating
 func (j *TagUpdateJob) updateTagsForSecurity(security universe.Security) error {
+	// Get current tags with their update times
+	currentTagsWithTimes, err := j.securityRepo.GetTagsWithUpdateTimes(security.Symbol)
+	if err != nil {
+		j.log.Debug().
+			Err(err).
+			Str("symbol", security.Symbol).
+			Msg("Failed to get current tags with update times, will update all tags")
+		currentTagsWithTimes = make(map[string]time.Time) // Empty map - will update all
+	}
+
+	// Determine which tags need updating based on frequency
+	now := time.Now()
+	tagsNeedingUpdate := GetTagsNeedingUpdate(currentTagsWithTimes, now)
+
+	if len(tagsNeedingUpdate) == 0 {
+		// All tags are fresh - skip update
+		j.log.Debug().
+			Str("symbol", security.Symbol).
+			Msg("All tags are fresh, skipping update")
+		return nil
+	}
+
+	j.log.Debug().
+		Str("symbol", security.Symbol).
+		Int("tags_needing_update", len(tagsNeedingUpdate)).
+		Msg("Tags need updating")
 	// Get current score
 	score, err := j.scoreRepo.GetBySymbol(security.Symbol)
 	if err != nil {
@@ -136,6 +163,11 @@ func (j *TagUpdateJob) updateTagsForSecurity(security universe.Security) error {
 		subScores["long_term"] = map[string]float64{
 			"cagr": score.CAGRScore,
 		}
+		// Note: Sortino ratio is not currently stored in SecurityScore or sub-scores.
+		// The LongTermScorer stores "sortino" (scored value) but not "sortino_raw" (raw ratio).
+		// For bubble detection tags, Sortino will default to 0.0 when not available,
+		// which means bubble detection will rely more on Sharpe ratio. This is acceptable
+		// as Sharpe alone is sufficient for bubble detection.
 	}
 
 	// Get daily prices for technical analysis using ISIN
@@ -315,21 +347,50 @@ func (j *TagUpdateJob) updateTagsForSecurity(security universe.Security) error {
 		DaysHeld:            daysHeld,
 	}
 
-	// Assign tags
-	tagIDs, err := j.tagAssigner.AssignTagsForSecurity(tagInput)
+	// Assign all tags (fast operation - just calculation)
+	allTagIDs, err := j.tagAssigner.AssignTagsForSecurity(tagInput)
 	if err != nil {
 		return fmt.Errorf("failed to assign tags: %w", err)
 	}
 
-	// Update tags in database
-	if err := j.securityRepo.SetTagsForSecurity(security.Symbol, tagIDs); err != nil {
-		return fmt.Errorf("failed to set tags: %w", err)
+	// Filter to only tags that need updating
+	tagsToUpdate := make([]string, 0)
+	for _, tagID := range allTagIDs {
+		if tagsNeedingUpdate[tagID] {
+			tagsToUpdate = append(tagsToUpdate, tagID)
+		}
+	}
+
+	// Also include any new tags that weren't in current tags
+	currentTagSet := make(map[string]bool)
+	for tagID := range currentTagsWithTimes {
+		currentTagSet[tagID] = true
+	}
+	for _, tagID := range allTagIDs {
+		if !currentTagSet[tagID] {
+			// New tag - add it
+			tagsToUpdate = append(tagsToUpdate, tagID)
+		}
+	}
+
+	if len(tagsToUpdate) == 0 {
+		// No tags need updating (shouldn't happen, but handle gracefully)
+		j.log.Debug().
+			Str("symbol", security.Symbol).
+			Msg("No tags need updating after filtering")
+		return nil
+	}
+
+	// Update only the tags that need updating (preserves other tags)
+	if err := j.securityRepo.UpdateSpecificTags(security.Symbol, tagsToUpdate); err != nil {
+		return fmt.Errorf("failed to update specific tags: %w", err)
 	}
 
 	j.log.Debug().
 		Str("symbol", security.Symbol).
-		Strs("tags", tagIDs).
-		Msg("Tags updated for security")
+		Int("tags_updated", len(tagsToUpdate)).
+		Strs("updated_tags", tagsToUpdate).
+		Msg("Tags updated for security (per-tag frequency)")
 
 	return nil
 }

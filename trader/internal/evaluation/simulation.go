@@ -132,18 +132,19 @@ func SimulateSequence(
 
 		// Create new context with updated positions
 		currentContext = models.PortfolioContext{
-			CountryWeights:     currentContext.CountryWeights,
-			IndustryWeights:    currentContext.IndustryWeights,
-			Positions:          newPositions,
-			TotalValue:         currentContext.TotalValue,
-			SecurityCountries:  newGeographies,
-			SecurityIndustries: newIndustries,
-			SecurityScores:     currentContext.SecurityScores,
-			SecurityDividends:  currentContext.SecurityDividends,
-			CountryToGroup:     currentContext.CountryToGroup,
-			IndustryToGroup:    currentContext.IndustryToGroup,
-			PositionAvgPrices:  currentContext.PositionAvgPrices,
-			CurrentPrices:      currentContext.CurrentPrices,
+			CountryWeights:        currentContext.CountryWeights,
+			IndustryWeights:       currentContext.IndustryWeights,
+			Positions:             newPositions,
+			TotalValue:            currentContext.TotalValue,
+			SecurityCountries:     newGeographies,
+			SecurityIndustries:    newIndustries,
+			SecurityScores:        currentContext.SecurityScores,
+			SecurityDividends:     currentContext.SecurityDividends,
+			CountryToGroup:        currentContext.CountryToGroup,
+			IndustryToGroup:       currentContext.IndustryToGroup,
+			PositionAvgPrices:     currentContext.PositionAvgPrices,
+			CurrentPrices:         currentContext.CurrentPrices,
+			OptimizerTargetWeights: currentContext.OptimizerTargetWeights, // Preserve optimizer targets
 		}
 	}
 

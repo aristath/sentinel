@@ -517,9 +517,20 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 	plannerConfigRepo := planningrepo.NewConfigRepository(configDB, log)
 	opportunitiesService := opportunities.NewService(log)
 
-	// Optimization services for correlation filtering
+	// Optimization services for correlation filtering and optimizer target weights
 	pypfoptClient := optimization.NewPyPFOptClient(cfg.PyPFOptServiceURL, log)
 	riskBuilder := optimization.NewRiskModelBuilder(historyDB.Conn(), pypfoptClient, log)
+
+	// Initialize optimizer service for target weights
+	constraintsMgr := optimization.NewConstraintsManager(log)
+	returnsCalc := optimization.NewReturnsCalculator(configDB.Conn(), yahooClient, log)
+	optimizerService := optimization.NewOptimizerService(
+		pypfoptClient,
+		constraintsMgr,
+		returnsCalc,
+		riskBuilder,
+		log,
+	)
 
 	sequencesService := sequences.NewService(log, riskBuilder)
 	evaluationService := planningevaluation.NewService(4, log) // 4 workers
@@ -533,6 +544,7 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 		AllocRepo:              allocRepo,
 		TradernetClient:        tradernetClient,
 		YahooClient:            yahooClient,
+		OptimizerService:       optimizerService, // Added for optimizer target weights
 		OpportunitiesService:   opportunitiesService,
 		SequencesService:       sequencesService,
 		EvaluationService:      evaluationService,
@@ -612,7 +624,8 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 		return nil, fmt.Errorf("failed to register daily_maintenance job: %w", err)
 	}
 
-	// Register Tag Update Job (daily at 3:00 AM, after maintenance)
+	// Register Tag Update Jobs with per-tag update frequencies
+	// The job intelligently updates only tags that need updating based on their frequency
 	tagUpdateJob := scheduler.NewTagUpdateJob(scheduler.TagUpdateConfig{
 		Log:          log,
 		SecurityRepo: securityRepo,
@@ -623,8 +636,26 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 		PortfolioDB:  portfolioDB.Conn(),
 		PositionRepo: positionRepo,
 	})
+
+	// Register multiple tag update jobs for different frequency tiers
+	// Very Dynamic: Every 10 minutes (price/technical tags)
+	if err := sched.AddJob("0 */10 * * * *", tagUpdateJob); err != nil {
+		return nil, fmt.Errorf("failed to register tag_update (10min) job: %w", err)
+	}
+
+	// Dynamic: Every hour (opportunity/risk tags)
+	if err := sched.AddJob("0 0 * * * *", tagUpdateJob); err != nil {
+		return nil, fmt.Errorf("failed to register tag_update (hourly) job: %w", err)
+	}
+
+	// Stable: Daily at 3:00 AM (quality/characteristic tags)
 	if err := sched.AddJob("0 0 3 * * *", tagUpdateJob); err != nil {
-		return nil, fmt.Errorf("failed to register tag_update job: %w", err)
+		return nil, fmt.Errorf("failed to register tag_update (daily) job: %w", err)
+	}
+
+	// Very Stable: Weekly on Sunday at 3:00 AM (long-term tags)
+	if err := sched.AddJob("0 0 3 * * 0", tagUpdateJob); err != nil {
+		return nil, fmt.Errorf("failed to register tag_update (weekly) job: %w", err)
 	}
 
 	// Register Job 13: Weekly Backup (Sunday at 1:00 AM)

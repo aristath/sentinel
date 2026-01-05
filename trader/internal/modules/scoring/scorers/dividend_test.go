@@ -362,3 +362,134 @@ func TestDividendScorer_YieldThresholds(t *testing.T) {
 		})
 	}
 }
+
+// ============================================================================
+// Total Return Boost Tests (Enhanced Dividend Scoring)
+// ============================================================================
+
+func TestDividendScorer_CalculateEnhanced_HighTotalReturn(t *testing.T) {
+	scorer := NewDividendScorer()
+
+	// Example from document: 5% growth + 10% dividend = 15% total return
+	dividendYield := 0.10  // 10% dividend
+	expectedCAGR := 0.05    // 5% growth
+	payoutRatio := 0.50
+	fiveYearAvgDivYield := 0.08
+
+	result := scorer.CalculateEnhanced(&dividendYield, &payoutRatio, &fiveYearAvgDivYield, &expectedCAGR)
+
+	// Should get boost for 15%+ total return
+	assert.Greater(t, result.Score, 0.8, "High total return should boost score")
+	assert.Contains(t, result.Components, "total_return_boost")
+	assert.GreaterOrEqual(t, result.Components["total_return_boost"], 0.15, "15%+ total return should get 0.15-0.20 boost")
+	assert.Contains(t, result.Components, "total_return")
+	assert.InDelta(t, 0.15, result.Components["total_return"], 0.001, "Total return should be 15%")
+}
+
+func TestDividendScorer_CalculateEnhanced_ExcellentTotalReturn(t *testing.T) {
+	scorer := NewDividendScorer()
+
+	// 20%+ total return (very high)
+	dividendYield := 0.12  // 12% dividend
+	expectedCAGR := 0.10   // 10% growth
+	payoutRatio := 0.50
+	fiveYearAvgDivYield := 0.10
+
+	result := scorer.CalculateEnhanced(&dividendYield, &payoutRatio, &fiveYearAvgDivYield, &expectedCAGR)
+
+	// Should get maximum boost (0.20) for 15%+ total return
+	assert.Greater(t, result.Score, 0.8)
+	assert.GreaterOrEqual(t, result.Components["total_return_boost"], 0.20, "15%+ total return should get 0.20 boost")
+	assert.InDelta(t, 0.22, result.Components["total_return"], 0.001, "Total return should be 22%")
+}
+
+func TestDividendScorer_CalculateEnhanced_ModerateTotalReturn(t *testing.T) {
+	scorer := NewDividendScorer()
+
+	// 12% total return (moderate-high)
+	dividendYield := 0.06  // 6% dividend
+	expectedCAGR := 0.06   // 6% growth
+	payoutRatio := 0.50
+	fiveYearAvgDivYield := 0.05
+
+	result := scorer.CalculateEnhanced(&dividendYield, &payoutRatio, &fiveYearAvgDivYield, &expectedCAGR)
+
+	// Should get boost for 12-15% total return
+	assert.Greater(t, result.Score, 0.7)
+	assert.GreaterOrEqual(t, result.Components["total_return_boost"], 0.15, "12-15% total return should get 0.15 boost")
+	assert.InDelta(t, 0.12, result.Components["total_return"], 0.001, "Total return should be 12%")
+}
+
+func TestDividendScorer_CalculateEnhanced_LowTotalReturn(t *testing.T) {
+	scorer := NewDividendScorer()
+
+	// 8% total return (below 10% threshold)
+	dividendYield := 0.03  // 3% dividend
+	expectedCAGR := 0.05   // 5% growth
+	payoutRatio := 0.50
+	fiveYearAvgDivYield := 0.03
+
+	result := scorer.CalculateEnhanced(&dividendYield, &payoutRatio, &fiveYearAvgDivYield, &expectedCAGR)
+
+	// Should not get boost (below 10% threshold)
+	assert.Equal(t, 0.0, result.Components["total_return_boost"], "Below 10% total return should get no boost")
+	assert.InDelta(t, 0.08, result.Components["total_return"], 0.001, "Total return should be 8%")
+}
+
+func TestDividendScorer_CalculateEnhanced_NoCAGR(t *testing.T) {
+	scorer := NewDividendScorer()
+
+	// No CAGR available (nil)
+	dividendYield := 0.10
+	payoutRatio := 0.50
+	fiveYearAvgDivYield := 0.08
+
+	result := scorer.CalculateEnhanced(&dividendYield, &payoutRatio, &fiveYearAvgDivYield, nil)
+
+	// Should work without CAGR (no boost)
+	assert.NotNil(t, result.Score)
+	assert.Equal(t, 0.0, result.Components["total_return_boost"], "No CAGR should result in no boost")
+	assert.NotContains(t, result.Components, "total_return", "Total return should not be calculated without CAGR")
+}
+
+func TestCalculateTotalReturnBoost_Thresholds(t *testing.T) {
+	testCases := []struct {
+		name        string
+		dividend    float64
+		cagr        float64
+		expectedMin float64
+		expectedMax float64
+	}{
+		{"15%+ total return", 0.10, 0.05, 0.20, 0.20},   // 15% total
+		{"12-15% total return", 0.06, 0.06, 0.15, 0.15}, // 12% total
+		{"10-12% total return", 0.05, 0.05, 0.10, 0.10}, // 10% total
+		{"Below 10% total return", 0.03, 0.05, 0.0, 0.0}, // 8% total
+		{"Exactly 15% total return", 0.10, 0.05, 0.20, 0.20},
+		{"Exactly 12% total return", 0.07, 0.05, 0.15, 0.15},
+		{"Exactly 10% total return", 0.05, 0.05, 0.10, 0.10},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			boost := calculateTotalReturnBoost(&tc.dividend, &tc.cagr)
+			assert.GreaterOrEqual(t, boost, tc.expectedMin, "Boost should be >= %f", tc.expectedMin)
+			assert.LessOrEqual(t, boost, tc.expectedMax, "Boost should be <= %f", tc.expectedMax)
+		})
+	}
+}
+
+func TestCalculateTotalReturnBoost_NilValues(t *testing.T) {
+	// Nil dividend
+	cagr := 0.10
+	boost := calculateTotalReturnBoost(nil, &cagr)
+	assert.Equal(t, 0.0, boost, "Nil dividend should result in no boost")
+
+	// Nil CAGR
+	dividend := 0.05
+	boost = calculateTotalReturnBoost(&dividend, nil)
+	assert.Equal(t, 0.0, boost, "Nil CAGR should result in no boost")
+
+	// Both nil
+	boost = calculateTotalReturnBoost(nil, nil)
+	assert.Equal(t, 0.0, boost, "Both nil should result in no boost")
+}

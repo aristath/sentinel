@@ -33,7 +33,20 @@ func (lts *LongTermScorer) Calculate(
 	sortinoRatio *float64,
 	targetAnnualReturn float64,
 ) LongTermScore {
-	// CAGR Score (40% weight)
+	// Sharpe Score (25% weight) - calculate first for bubble detection
+	var sharpeRatio *float64
+	if len(dailyPrices) >= 50 {
+		sharpeRatio = formulas.CalculateSharpeFromPrices(dailyPrices, 0.02) // 2% risk-free rate
+	}
+	sharpeScore := scoreSharpe(sharpeRatio)
+
+	// Calculate volatility for bubble detection
+	var volatility *float64
+	if len(dailyPrices) >= 2 {
+		volatility = formulas.CalculateVolatility(dailyPrices)
+	}
+
+	// CAGR Score (40% weight) - with bubble detection
 	cagr5y := formulas.CalculateCAGR(monthlyPrices, 60) // 5 years
 	if cagr5y == nil && len(monthlyPrices) > 0 {
 		// Fallback to all available data
@@ -43,14 +56,8 @@ func (lts *LongTermScorer) Calculate(
 	if cagr5y != nil {
 		cagrValue = *cagr5y
 	}
-	cagrScore := scoreCAGR(cagrValue, targetAnnualReturn)
-
-	// Sharpe Score (25% weight)
-	var sharpeRatio *float64
-	if len(dailyPrices) >= 50 {
-		sharpeRatio = formulas.CalculateSharpeFromPrices(dailyPrices, 0.02) // 2% risk-free rate
-	}
-	sharpeScore := scoreSharpe(sharpeRatio)
+	// Enhanced CAGR scoring with bubble detection
+	cagrScore := scoreCAGRWithBubbleDetection(cagrValue, targetAnnualReturn, sharpeRatio, sortinoRatio, volatility)
 
 	// Sortino Score (35% weight)
 	// Note: Sortino is passed in if available from PyFolio analytics
@@ -74,6 +81,9 @@ func (lts *LongTermScorer) Calculate(
 		components["sharpe_raw"] = 0.0
 	}
 
+	// Store raw CAGR value for total return calculation (growth + dividend)
+	components["cagr_raw"] = round3(cagrValue)
+
 	return LongTermScore{
 		Score:      round3(totalScore),
 		Components: components,
@@ -82,6 +92,7 @@ func (lts *LongTermScorer) Calculate(
 
 // scoreCAGR scores CAGR using a bell curve
 // Peak at target (default 11%), uses asymmetric Gaussian
+// DEPRECATED: Use scoreCAGRWithBubbleDetection instead for enhanced scoring
 func scoreCAGR(cagr, target float64) float64 {
 	if cagr <= 0 {
 		return scoring.BellCurveFloor
@@ -94,6 +105,91 @@ func scoreCAGR(cagr, target float64) float64 {
 	}
 
 	// Gaussian bell curve centered at target
+	rawScore := math.Exp(-math.Pow(cagr-target, 2) / (2 * math.Pow(sigma, 2)))
+
+	// Scale to range [BellCurveFloor, 1.0]
+	return scoring.BellCurveFloor + rawScore*(1-scoring.BellCurveFloor)
+}
+
+// scoreCAGRWithBubbleDetection scores CAGR with risk-adjusted monotonic scoring above target
+// and bubble detection to avoid unsustainable growth.
+//
+// Algorithm:
+// - Below target: Bell curve (penalize being too low)
+// - Above target: Monotonic (reward higher CAGR) IF quality (good risk metrics)
+// - Bubble detection: High CAGR + poor risk metrics = cap at 0.6
+//
+// Args:
+//   - cagr: Compound Annual Growth Rate
+//   - target: Target CAGR (default 11%)
+//   - sharpeRatio: Sharpe ratio for bubble detection (optional)
+//   - sortinoRatio: Sortino ratio for bubble detection (optional)
+//   - volatility: Annualized volatility for bubble detection (optional)
+//
+// Returns:
+//   - Score from 0.15 to 1.0
+func scoreCAGRWithBubbleDetection(
+	cagr float64,
+	target float64,
+	sharpeRatio *float64,
+	sortinoRatio *float64,
+	volatility *float64,
+) float64 {
+	if cagr <= 0 {
+		return scoring.BellCurveFloor
+	}
+
+	// Bubble detection: High CAGR with poor risk metrics = bubble
+	// Threshold: CAGR > 1.5x target (e.g., 16.5% for 11% target)
+	isBubble := false
+	if cagr > target*1.5 {
+		// Check risk metrics - if multiple are poor, it's likely a bubble
+		poorRiskCount := 0
+
+		// Poor Sharpe ratio
+		if sharpeRatio != nil && *sharpeRatio < 0.5 {
+			poorRiskCount++
+		}
+
+		// Poor Sortino ratio
+		if sortinoRatio != nil && *sortinoRatio < 0.5 {
+			poorRiskCount++
+		}
+
+		// Extreme volatility
+		if volatility != nil && *volatility > 0.40 {
+			poorRiskCount++
+		}
+
+		// If 2+ risk metrics are poor, consider it a bubble
+		if poorRiskCount >= 2 {
+			isBubble = true
+		}
+	}
+
+	if isBubble {
+		// Penalize bubbles: cap score at 0.6 even if CAGR is high
+		return 0.6
+	}
+
+	// Quality high CAGR: reward it (monotonic scoring above target)
+	if cagr >= target {
+		excess := cagr - target
+
+		// 11% = 0.8, 15% = 0.95, 20%+ = 1.0
+		if excess >= 0.09 { // 20%+
+			return 1.0
+		} else if excess >= 0.04 { // 15%+
+			// Linear interpolation: 0.95 to 1.0 over 5% excess (15% to 20%)
+			return 0.95 + (excess-0.04)/0.05*0.05
+		} else { // 11-15%
+			// Linear interpolation: 0.8 to 0.95 over 4% excess (11% to 15%)
+			return 0.8 + excess/0.04*0.15
+		}
+	}
+
+	// Below target: use bell curve (penalize being too low)
+	sigma := scoring.BellCurveSigmaLeft
 	rawScore := math.Exp(-math.Pow(cagr-target, 2) / (2 * math.Pow(sigma, 2)))
 
 	// Scale to range [BellCurveFloor, 1.0]

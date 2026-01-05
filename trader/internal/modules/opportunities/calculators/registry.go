@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/aristath/arduino-trader/internal/modules/planning/domain"
+	"github.com/aristath/arduino-trader/internal/modules/universe"
 	"github.com/rs/zerolog"
 )
 
@@ -154,6 +155,44 @@ func NewPopulatedRegistry(log zerolog.Logger) *CalculatorRegistry {
 	log.Info().
 		Int("calculators", len(registry.calculators)).
 		Msg("Calculator registry initialized")
+
+	return registry
+}
+
+// NewPopulatedRegistryWithHybrid creates a new calculator registry with all calculators,
+// including hybrid calculators that use tag-based filtering.
+// Requires TagFilter and SecurityRepository for hybrid calculators.
+func NewPopulatedRegistryWithHybrid(
+	tagFilter TagFilter,
+	securityRepo *universe.SecurityRepository,
+	log zerolog.Logger,
+) *CalculatorRegistry {
+	registry := NewCalculatorRegistry(log)
+
+	// Register standard calculators
+	registry.Register(NewAveragingDownCalculator(log))
+	registry.Register(NewOpportunityBuysCalculator(log))
+	registry.Register(NewProfitTakingCalculator(log))
+	registry.Register(NewRebalanceBuysCalculator(log))
+	registry.Register(NewRebalanceSellsCalculator(log))
+	// Use WeightBasedCalculator with quality gates if securityRepo is available
+	if securityRepo != nil {
+		registry.Register(NewWeightBasedCalculatorWithQualityGates(securityRepo, log))
+	} else {
+		registry.Register(NewWeightBasedCalculator(log))
+	}
+
+	// Register hybrid calculators (with tag-based filtering)
+	if tagFilter != nil && securityRepo != nil {
+		registry.Register(NewHybridOpportunityBuysCalculator(tagFilter, securityRepo, log))
+		registry.Register(NewHybridProfitTakingCalculator(tagFilter, securityRepo, log))
+		registry.Register(NewHybridAveragingDownCalculator(tagFilter, securityRepo, log))
+		log.Info().Msg("Hybrid calculators registered with tag-based filtering")
+	}
+
+	log.Info().
+		Int("calculators", len(registry.calculators)).
+		Msg("Calculator registry initialized with hybrid calculators")
 
 	return registry
 }

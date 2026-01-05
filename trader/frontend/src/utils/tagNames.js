@@ -72,6 +72,40 @@ const TAG_NAMES = {
   // Characteristic Tags - Time Horizon
   'long-term': 'Long-Term Promise',
   'short-term-opportunity': 'Short-Term Opportunity',
+
+  // Enhanced Tags - Quality Gate
+  'quality-gate-pass': 'Quality Gate Pass',
+  'quality-gate-fail': 'Quality Gate Fail',
+  'quality-value': 'Quality Value',
+
+  // Enhanced Tags - Bubble Detection
+  'bubble-risk': 'Bubble Risk',
+  'quality-high-cagr': 'Quality High CAGR',
+  'poor-risk-adjusted': 'Poor Risk-Adjusted',
+  'high-sharpe': 'High Sharpe',
+  'high-sortino': 'High Sortino',
+
+  // Enhanced Tags - Value Trap
+  'value-trap': 'Value Trap',
+
+  // Enhanced Tags - Total Return
+  'high-total-return': 'High Total Return',
+  'excellent-total-return': 'Excellent Total Return',
+  'dividend-total-return': 'Dividend Total Return',
+  'moderate-total-return': 'Moderate Total Return',
+
+  // Enhanced Tags - Optimizer Alignment
+  'underweight': 'Underweight',
+  'target-aligned': 'Target Aligned',
+  'needs-rebalance': 'Needs Rebalance',
+  'slightly-overweight': 'Slightly Overweight',
+  'slightly-underweight': 'Slightly Underweight',
+
+  // Enhanced Tags - Regime-Specific
+  'regime-bear-safe': 'Bear Market Safe',
+  'regime-bull-growth': 'Bull Market Growth',
+  'regime-sideways-value': 'Sideways Value',
+  'regime-volatile': 'Regime Volatile',
 };
 
 /**
@@ -118,21 +152,41 @@ export function getTagColor(tagId) {
       tagId === 'deep-value' ||
       tagId === 'high-dividend' ||
       tagId === 'high-score' ||
-      tagId === 'good-opportunity') {
+      tagId === 'good-opportunity' ||
+      // Enhanced opportunity tags
+      tagId === 'quality-gate-pass' ||
+      tagId === 'quality-value' ||
+      tagId === 'quality-high-cagr' ||
+      tagId === 'high-sharpe' ||
+      tagId === 'high-sortino' ||
+      tagId === 'high-total-return' ||
+      tagId === 'excellent-total-return' ||
+      tagId === 'dividend-total-return' ||
+      tagId === 'moderate-total-return' ||
+      tagId === 'target-aligned' ||
+      tagId === 'regime-bear-safe' ||
+      tagId === 'regime-bull-growth' ||
+      tagId === 'regime-sideways-value') {
     return { color: 'green', variant: 'light' };
   }
 
   // Danger tags - red/orange
   if (tagId.startsWith('volatile') ||
       tagId.startsWith('over') ||
-      tagId.startsWith('under') ||
+      (tagId.startsWith('under') && tagId !== 'underweight') ||
       tagId === 'stagnant' ||
       tagId === 'high-drawdown' ||
       tagId === 'instability-warning' ||
       tagId === 'unsustainable-gains' ||
       tagId === 'valuation-stretch' ||
       tagId === 'concentration-risk' ||
-      tagId === 'overweight') {
+      tagId === 'overweight' ||
+      // Enhanced danger tags
+      tagId === 'quality-gate-fail' ||
+      tagId === 'bubble-risk' ||
+      tagId === 'poor-risk-adjusted' ||
+      tagId === 'value-trap' ||
+      tagId === 'regime-volatile') {
     return { color: 'red', variant: 'light' };
   }
 
@@ -144,7 +198,12 @@ export function getTagColor(tagId) {
       tagId === 'value' ||
       tagId === 'dividend-focused' ||
       tagId === 'long-term' ||
-      tagId === 'short-term-opportunity') {
+      tagId === 'short-term-opportunity' ||
+      // Enhanced characteristic tags
+      tagId === 'underweight' ||
+      tagId === 'needs-rebalance' ||
+      tagId === 'slightly-overweight' ||
+      tagId === 'slightly-underweight') {
     return { color: 'blue', variant: 'light' };
   }
 

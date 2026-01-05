@@ -5,6 +5,7 @@ import (
 
 	"github.com/aristath/arduino-trader/internal/modules/opportunities/calculators"
 	"github.com/aristath/arduino-trader/internal/modules/planning/domain"
+	"github.com/aristath/arduino-trader/internal/modules/universe"
 	"github.com/rs/zerolog"
 )
 
@@ -14,11 +15,28 @@ type Service struct {
 	log      zerolog.Logger
 }
 
-// NewService creates a new opportunities service.
+// NewService creates a new opportunities service with standard calculators.
+// For tag-based optimization, use NewServiceWithHybrid instead.
 func NewService(log zerolog.Logger) *Service {
 	return &Service{
 		registry: calculators.NewPopulatedRegistry(log),
 		log:      log.With().Str("module", "opportunities").Logger(),
+	}
+}
+
+// NewServiceWithHybrid creates a new opportunities service with hybrid calculators
+// that use tag-based pre-filtering for improved performance (5-7x faster).
+// Requires SecurityRepository for tag queries.
+func NewServiceWithHybrid(securityRepo *universe.SecurityRepository, log zerolog.Logger) *Service {
+	// Create tag-based filter
+	tagFilter := NewTagBasedFilter(securityRepo, log)
+
+	// Create registry with hybrid calculators
+	registry := calculators.NewPopulatedRegistryWithHybrid(tagFilter, securityRepo, log)
+
+	return &Service{
+		registry: registry,
+		log:      log.With().Str("module", "opportunities").Str("mode", "hybrid").Logger(),
 	}
 }
 

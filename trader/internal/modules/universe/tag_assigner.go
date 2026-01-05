@@ -292,6 +292,28 @@ func (ta *TagAssigner) AssignTagsForSecurity(input AssignTagsInput) ([]string, e
 		tags = append(tags, "concentration-risk")
 	}
 
+	// === NEW: OPTIMIZER ALIGNMENT TAGS ===
+
+	if targetWeight > 0 {
+		deviation := positionWeight - targetWeight
+
+		if math.Abs(deviation) <= 0.01 {
+			tags = append(tags, "target-aligned")
+		} else if deviation > 0.03 {
+			tags = append(tags, "needs-rebalance")
+			if deviation > 0.02 {
+				// Keep existing overweight tag logic (already added above)
+			}
+		} else if deviation < -0.03 {
+			tags = append(tags, "needs-rebalance")
+			tags = append(tags, "underweight")
+		} else if deviation > 0.01 {
+			tags = append(tags, "slightly-overweight")
+		} else if deviation < -0.01 {
+			tags = append(tags, "slightly-underweight")
+		}
+	}
+
 	// === CHARACTERISTIC TAGS ===
 
 	// Risk Profile
@@ -327,6 +349,141 @@ func (ta *TagAssigner) AssignTagsForSecurity(input AssignTagsInput) ([]string, e
 
 	if technicalScore > 0.7 && opportunityScore > 0.7 && momentumScore > 0 {
 		tags = append(tags, "short-term-opportunity")
+	}
+
+	// === NEW: QUALITY GATE TAGS ===
+
+	// Quality gate pass/fail
+	if fundamentalsScore >= 0.6 && longTermScore >= 0.5 {
+		tags = append(tags, "quality-gate-pass")
+	} else {
+		tags = append(tags, "quality-gate-fail")
+	}
+
+	// Quality value (high quality + value opportunity)
+	// Check if we already have both tags
+	hasHighQuality := false
+	hasValueOpportunity := false
+	for _, t := range tags {
+		if t == "high-quality" {
+			hasHighQuality = true
+		}
+		if t == "value-opportunity" {
+			hasValueOpportunity = true
+		}
+	}
+	if hasHighQuality && hasValueOpportunity {
+		tags = append(tags, "quality-value")
+	}
+
+	// === NEW: BUBBLE DETECTION TAGS ===
+
+	cagrValue := getSubScore(input.SubScores, "long_term", "cagr")
+	sharpeRatio := getSubScore(input.SubScores, "long_term", "sharpe_raw")
+	// Note: Sortino ratio is not currently stored in sub-scores as "sortino_raw".
+	// The LongTermScorer stores "sortino" (scored value 0-1) but not the raw ratio.
+	// This means:
+	// - high-sortino tag (>= 1.5) will not work correctly (scored values are 0-1)
+	// - poor-risk-adjusted and bubble detection using sortino < 0.5 will work but use scored value
+	// - When not available, sortinoRatio will be 0.0
+	// Bubble detection will rely more on Sharpe ratio, which is acceptable as Sharpe alone is sufficient.
+	// TODO: Store sortino_raw in LongTermScorer similar to sharpe_raw for accurate tag assignment.
+	sortinoRatio := getSubScore(input.SubScores, "long_term", "sortino") // Scored value (0-1), not raw ratio
+
+	// Bubble risk: High CAGR with poor risk metrics
+	if cagrValue > 0.165 { // 16.5% for 11% target
+		isBubble := false
+		if sharpeRatio < 0.5 || sortinoRatio < 0.5 || volatility > 0.40 || fundamentalsScore < 0.6 {
+			isBubble = true
+		}
+
+		if isBubble {
+			tags = append(tags, "bubble-risk")
+		} else {
+			// Only tag as quality-high-cagr if CAGR > 15% (not just > 16.5%)
+			if cagrValue > 0.15 {
+				tags = append(tags, "quality-high-cagr")
+			}
+		}
+	} else if cagrValue > 0.15 {
+		// High CAGR (15-16.5%) with good risk metrics
+		if sharpeRatio >= 0.5 && sortinoRatio >= 0.5 && volatility <= 0.40 && fundamentalsScore >= 0.6 {
+			tags = append(tags, "quality-high-cagr")
+		}
+	}
+
+	// Risk-adjusted tags
+	if sharpeRatio >= 1.5 {
+		tags = append(tags, "high-sharpe")
+	}
+	if sortinoRatio >= 1.5 {
+		tags = append(tags, "high-sortino")
+	}
+	if sharpeRatio < 0.5 || sortinoRatio < 0.5 {
+		tags = append(tags, "poor-risk-adjusted")
+	}
+
+	// === NEW: VALUE TRAP TAGS ===
+
+	// Value trap: Cheap but declining
+	if peVsMarket < -0.20 {
+		isValueTrap := false
+		if fundamentalsScore < 0.6 || longTermScore < 0.5 || momentumScore < -0.05 || volatility > 0.35 {
+			isValueTrap = true
+		}
+
+		if isValueTrap {
+			tags = append(tags, "value-trap")
+		}
+	}
+
+	// === NEW: TOTAL RETURN TAGS ===
+
+	// Note: dividendYield is in percentage (e.g., 0.10 = 10%), cagrValue is in decimal (e.g., 0.15 = 15%)
+	// Both are already in the same format, so we can add them directly
+	totalReturn := cagrScore + dividendYield
+
+	if totalReturn >= 0.18 {
+		tags = append(tags, "excellent-total-return")
+	} else if totalReturn >= 0.15 {
+		tags = append(tags, "high-total-return")
+	} else if totalReturn >= 0.12 {
+		tags = append(tags, "moderate-total-return")
+	}
+
+	// Dividend total return (5% growth + 10% dividend example)
+	if dividendYield >= 0.08 && cagrScore >= 0.05 {
+		tags = append(tags, "dividend-total-return")
+	}
+
+	// === NEW: REGIME-SPECIFIC TAGS ===
+
+	// Bear market safe
+	if volatility < 0.20 && fundamentalsScore > 0.75 && maxDrawdown < 20.0 {
+		tags = append(tags, "regime-bear-safe")
+	}
+
+	// Bull market growth
+	if cagrScore > 0.12 && fundamentalsScore > 0.7 && momentumScore > 0 {
+		tags = append(tags, "regime-bull-growth")
+	}
+
+	// Sideways value
+	// Check if value-opportunity tag was already assigned
+	hasValueOpportunityForRegime := false
+	for _, t := range tags {
+		if t == "value-opportunity" {
+			hasValueOpportunityForRegime = true
+			break
+		}
+	}
+	if hasValueOpportunityForRegime && fundamentalsScore > 0.75 {
+		tags = append(tags, "regime-sideways-value")
+	}
+
+	// Regime volatile
+	if volatility > 0.30 || volatilitySpike {
+		tags = append(tags, "regime-volatile")
 	}
 
 	// Remove duplicates

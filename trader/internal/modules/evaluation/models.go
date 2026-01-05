@@ -56,18 +56,19 @@ type Position struct {
 
 // PortfolioContext contains portfolio state for allocation fit calculations
 type PortfolioContext struct {
-	CountryWeights     map[string]float64 `json:"country_weights"`
-	IndustryWeights    map[string]float64 `json:"industry_weights"`
-	Positions          map[string]float64 `json:"positions"`
-	SecurityCountries  map[string]string  `json:"security_countries,omitempty"`
-	SecurityIndustries map[string]string  `json:"security_industries,omitempty"`
-	SecurityScores     map[string]float64 `json:"security_scores,omitempty"`
-	SecurityDividends  map[string]float64 `json:"security_dividends,omitempty"`
-	CountryToGroup     map[string]string  `json:"country_to_group,omitempty"`
-	IndustryToGroup    map[string]string  `json:"industry_to_group,omitempty"`
-	PositionAvgPrices  map[string]float64 `json:"position_avg_prices,omitempty"`
-	CurrentPrices      map[string]float64 `json:"current_prices,omitempty"`
-	TotalValue         float64            `json:"total_value"`
+	CountryWeights        map[string]float64 `json:"country_weights"`
+	IndustryWeights       map[string]float64 `json:"industry_weights"`
+	Positions             map[string]float64 `json:"positions"`
+	SecurityCountries     map[string]string  `json:"security_countries,omitempty"`
+	SecurityIndustries    map[string]string  `json:"security_industries,omitempty"`
+	SecurityScores        map[string]float64 `json:"security_scores,omitempty"`
+	SecurityDividends     map[string]float64 `json:"security_dividends,omitempty"`
+	CountryToGroup        map[string]string  `json:"country_to_group,omitempty"`
+	IndustryToGroup      map[string]string  `json:"industry_to_group,omitempty"`
+	PositionAvgPrices     map[string]float64 `json:"position_avg_prices,omitempty"`
+	CurrentPrices         map[string]float64 `json:"current_prices,omitempty"`
+	OptimizerTargetWeights map[string]float64 `json:"optimizer_target_weights,omitempty"` // Optimizer target allocations
+	TotalValue            float64            `json:"total_value"`
 }
 
 // EvaluationContext contains all data needed to simulate and score action sequences

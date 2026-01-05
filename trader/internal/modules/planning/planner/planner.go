@@ -63,9 +63,9 @@ func (p *Planner) CreatePlan(ctx *domain.OpportunityContext, config *domain.Plan
 	// Generate portfolio hash (simplified - would use actual portfolio state hash)
 	portfolioHash := p.generatePortfolioHash(ctx)
 
-	// Call evaluation service
+	// Call evaluation service (pass OpportunityContext for optimizer targets)
 	evalCtx := context.Background()
-	results, err := p.evaluationService.BatchEvaluate(evalCtx, sequences, portfolioHash, config)
+	results, err := p.evaluationService.BatchEvaluate(evalCtx, sequences, portfolioHash, config, ctx)
 	if err != nil {
 		p.log.Error().Err(err).Msg("Evaluation failed, falling back to priority-based selection")
 		// Fallback: use priority-based selection if evaluation fails

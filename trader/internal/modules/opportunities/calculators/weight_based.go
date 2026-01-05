@@ -6,18 +6,30 @@ import (
 
 	"github.com/aristath/arduino-trader/internal/domain"
 	planningdomain "github.com/aristath/arduino-trader/internal/modules/planning/domain"
+	"github.com/aristath/arduino-trader/internal/modules/universe"
 	"github.com/rs/zerolog"
 )
 
 // WeightBasedCalculator identifies buy/sell opportunities based on optimizer target weights.
+// Enhanced with quality gates to prevent buying low-quality securities even if optimizer says so.
 type WeightBasedCalculator struct {
 	*BaseCalculator
+	securityRepo *universe.SecurityRepository // Added for quality gate filtering
 }
 
 // NewWeightBasedCalculator creates a new weight-based calculator.
 func NewWeightBasedCalculator(log zerolog.Logger) *WeightBasedCalculator {
 	return &WeightBasedCalculator{
 		BaseCalculator: NewBaseCalculator(log, "weight_based"),
+		securityRepo:    nil, // Optional - quality gates only work if provided
+	}
+}
+
+// NewWeightBasedCalculatorWithQualityGates creates a new weight-based calculator with quality gate support.
+func NewWeightBasedCalculatorWithQualityGates(securityRepo *universe.SecurityRepository, log zerolog.Logger) *WeightBasedCalculator {
+	return &WeightBasedCalculator{
+		BaseCalculator: NewBaseCalculator(log, "weight_based"),
+		securityRepo:   securityRepo,
 	}
 }
 
@@ -151,6 +163,45 @@ func (c *WeightBasedCalculator) Calculate(
 				continue
 			}
 
+			// CRITICAL: Quality gate filtering (if securityRepo is available)
+			if c.securityRepo != nil {
+				securityTags, err := c.securityRepo.GetTagsForSecurity(symbol)
+				if err == nil {
+					// Skip value traps
+					if contains(securityTags, "value-trap") {
+						c.log.Debug().
+							Str("symbol", symbol).
+							Msg("Skipping value trap (quality gate)")
+						continue
+					}
+
+					// Skip bubble risks (unless it's quality-high-cagr)
+					if contains(securityTags, "bubble-risk") && !contains(securityTags, "quality-high-cagr") {
+						c.log.Debug().
+							Str("symbol", symbol).
+							Msg("Skipping bubble risk (quality gate)")
+						continue
+					}
+
+					// Require quality gate pass for new positions
+					// Check if this is a new position (not in current positions)
+					isNewPosition := true
+					for _, pos := range ctx.Positions {
+						if pos.Symbol == symbol {
+							isNewPosition = false
+							break
+						}
+					}
+
+					if isNewPosition && !contains(securityTags, "quality-gate-pass") {
+						c.log.Debug().
+							Str("symbol", symbol).
+							Msg("Skipping - quality gate failed (new position)")
+						continue
+					}
+				}
+			}
+
 			// Calculate target value
 			targetValue := diff * ctx.TotalPortfolioValueEUR
 			if targetValue > maxValuePerTrade {
@@ -175,10 +226,27 @@ func (c *WeightBasedCalculator) Calculate(
 
 			priority := abs(diff) * 0.8
 
+			// Boost priority if also has opportunity tags (opportunistic deviation)
+			if c.securityRepo != nil {
+				securityTags, err := c.securityRepo.GetTagsForSecurity(symbol)
+				if err == nil {
+					// Boost if also a value opportunity or quality value
+					if contains(securityTags, "quality-value") {
+						priority *= 1.3 // 30% boost for quality value + optimizer alignment
+					} else if contains(securityTags, "value-opportunity") || contains(securityTags, "high-quality") {
+						priority *= 1.15 // 15% boost for opportunity + optimizer alignment
+					}
+					// Add optimizer-aligned tag if underweight
+					if contains(securityTags, "underweight") || contains(securityTags, "slightly-underweight") {
+						// Already underweight - this is optimizer-aligned
+					}
+				}
+			}
+
 			reason := fmt.Sprintf("Target weight: %.1f%%, current: %.1f%% (underweight by %.1f%%)",
 				d.target*100, d.current*100, diff*100)
 
-			tags := []string{"weight_based", "buy", "underweight"}
+			tags := []string{"weight_based", "buy", "underweight", "optimizer-aligned"}
 
 			candidate := planningdomain.ActionCandidate{
 				Side:     "BUY",

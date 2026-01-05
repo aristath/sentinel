@@ -32,6 +32,30 @@ func (os *OpportunityScorer) Calculate(
 	forwardPE *float64,
 	marketAvgPE float64,
 ) OpportunityScore {
+	return os.CalculateWithQualityGate(dailyPrices, peRatio, forwardPE, marketAvgPE, nil, nil)
+}
+
+// CalculateWithQualityGate calculates opportunity score with quality gates to prevent value traps
+// Quality gates ensure we don't buy cheap but declining quality securities.
+//
+// Args:
+//   - dailyPrices: Daily price history
+//   - peRatio: Current P/E ratio
+//   - forwardPE: Forward P/E ratio (optional)
+//   - marketAvgPE: Market average P/E ratio
+//   - fundamentalsScore: Fundamentals score (optional, for quality gate)
+//   - longTermScore: Long-term score (optional, for quality gate)
+//
+// Returns:
+//   - OpportunityScore with quality gate applied
+func (os *OpportunityScorer) CalculateWithQualityGate(
+	dailyPrices []float64,
+	peRatio *float64,
+	forwardPE *float64,
+	marketAvgPE float64,
+	fundamentalsScore *float64,
+	longTermScore *float64,
+) OpportunityScore {
 	if len(dailyPrices) < scoring.MinDaysForOpportunity {
 		// Insufficient data - return neutral score
 		return OpportunityScore{
@@ -53,14 +77,24 @@ func (os *OpportunityScorer) Calculate(
 	// Calculate P/E ratio score
 	peScore := scorePERatio(peRatio, forwardPE, marketAvgPE)
 
-	// Combined score (50/50 split)
-	totalScore := below52wScore*0.50 + peScore*0.50
-	totalScore = math.Min(1.0, totalScore)
+	// Base combined score (50/50 split)
+	baseScore := below52wScore*0.50 + peScore*0.50
+
+	// Apply quality gate: if opportunity score is high but quality is low, reduce score
+	// This prevents buying value traps (cheap but declining quality)
+	qualityPenalty := calculateQualityPenalty(baseScore, fundamentalsScore, longTermScore)
+	finalScore := baseScore * (1.0 - qualityPenalty)
+	finalScore = math.Min(1.0, finalScore)
 
 	// Build components map with both scored and raw values
 	components := map[string]float64{
 		"below_52w_high": round3(below52wScore),
 		"pe_ratio":       round3(peScore),
+	}
+
+	// Store quality gate penalty if applied
+	if qualityPenalty > 0 {
+		components["quality_penalty"] = round3(qualityPenalty)
 	}
 
 	// Store raw below_52w_high percentage for database storage
@@ -73,9 +107,59 @@ func (os *OpportunityScorer) Calculate(
 	}
 
 	return OpportunityScore{
-		Score:      round3(totalScore),
+		Score:      round3(finalScore),
 		Components: components,
 	}
+}
+
+// calculateQualityPenalty calculates penalty for low quality when opportunity score is high
+// Prevents buying value traps: cheap but declining quality securities.
+//
+// Quality gate thresholds:
+//   - minFundamentalsThreshold: 0.6 (fundamentals must be decent)
+//   - minLongTermThreshold: 0.5 (long-term must be acceptable)
+//
+// Penalty logic:
+//   - If opportunity score > 0.7 and quality is below thresholds: apply 30% penalty
+//   - If opportunity score > 0.5 and quality is very low: apply 15% penalty
+//
+// Returns:
+//   - Penalty factor (0.0 to 0.3)
+func calculateQualityPenalty(
+	opportunityScore float64,
+	fundamentalsScore *float64,
+	longTermScore *float64,
+) float64 {
+	// If no quality data available, don't penalize (can't detect value trap)
+	if fundamentalsScore == nil && longTermScore == nil {
+		return 0.0
+	}
+
+	// Quality gate thresholds
+	minFundamentalsThreshold := 0.6
+	minLongTermThreshold := 0.5
+
+	// Check if quality is below thresholds
+	fundamentalsBelowThreshold := fundamentalsScore != nil && *fundamentalsScore < minFundamentalsThreshold
+	longTermBelowThreshold := longTermScore != nil && *longTermScore < minLongTermThreshold
+
+	// If both are below threshold, it's likely a value trap
+	isValueTrap := fundamentalsBelowThreshold || longTermBelowThreshold
+
+	if !isValueTrap {
+		return 0.0 // Quality is acceptable, no penalty
+	}
+
+	// Apply penalty based on opportunity score level
+	if opportunityScore > 0.7 {
+		// High opportunity score but low quality = value trap
+		return 0.30 // 30% penalty
+	} else if opportunityScore > 0.5 {
+		// Moderate opportunity score but low quality = potential value trap
+		return 0.15 // 15% penalty
+	}
+
+	return 0.0 // Low opportunity score, no penalty needed
 }
 
 // scoreBelow52WeekHigh scores based on distance below 52-week high

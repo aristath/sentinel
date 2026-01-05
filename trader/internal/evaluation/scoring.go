@@ -35,9 +35,53 @@ func CalculateTransactionCost(
 	transactionCostFixed float64,
 	transactionCostPercent float64,
 ) float64 {
+	return CalculateTransactionCostEnhanced(
+		sequence,
+		transactionCostFixed,
+		transactionCostPercent,
+		0.001,  // Default spread cost: 0.1%
+		0.0015, // Default slippage: 0.15%
+		0.0,    // Market impact: disabled by default
+	)
+}
+
+// CalculateTransactionCostEnhanced calculates total transaction cost with spread, slippage, and market impact.
+//
+// Args:
+//   - sequence: List of actions in the sequence
+//   - transactionCostFixed: Fixed cost per trade in EUR
+//   - transactionCostPercent: Variable cost as fraction
+//   - spreadCostPercent: Bid-ask spread cost as fraction (default 0.1%)
+//   - slippagePercent: Slippage cost as fraction (default 0.15%)
+//   - marketImpactPercent: Market impact cost as fraction (default 0.0, disabled)
+//
+// Returns:
+//   - Total transaction cost in EUR
+func CalculateTransactionCostEnhanced(
+	sequence []models.ActionCandidate,
+	transactionCostFixed float64,
+	transactionCostPercent float64,
+	spreadCostPercent float64,
+	slippagePercent float64,
+	marketImpactPercent float64,
+) float64 {
 	totalCost := 0.0
 	for _, action := range sequence {
-		tradeCost := transactionCostFixed + math.Abs(action.ValueEUR)*transactionCostPercent
+		// Base costs (fixed + variable)
+		fixedCost := transactionCostFixed
+		variableCost := math.Abs(action.ValueEUR) * transactionCostPercent
+
+		// Spread cost (bid-ask spread)
+		spreadCost := math.Abs(action.ValueEUR) * spreadCostPercent
+
+		// Slippage (price movement between order and execution)
+		slippageCost := math.Abs(action.ValueEUR) * slippagePercent
+
+		// Market impact (for large trades)
+		impactCost := math.Abs(action.ValueEUR) * marketImpactPercent
+
+		// Total cost for this action
+		tradeCost := fixedCost + variableCost + spreadCost + slippageCost + impactCost
 		totalCost += tradeCost
 	}
 	return totalCost
