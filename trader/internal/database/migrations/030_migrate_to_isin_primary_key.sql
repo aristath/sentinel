@@ -222,7 +222,7 @@ CREATE INDEX IF NOT EXISTS idx_dividends_symbol ON dividend_history(symbol); -- 
 
 -- Step 8: Update recommendations table (add isin column, keep uuid as PRIMARY KEY)
 -- First, add isin column if it doesn't exist
--- SQLite doesn't support ALTER TABLE ADD COLUMN IF NOT EXISTS, so we check first
+-- SQLite doesn't support ALTER TABLE ADD COLUMN, so we check first
 -- For now, we'll assume it might not exist and handle it
 
 -- Update existing recommendations - ensure symbol references are valid

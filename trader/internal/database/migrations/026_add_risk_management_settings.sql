@@ -7,8 +7,10 @@
 -- - max_sell_percentage: Maximum percentage of position allowed to sell per transaction
 
 -- Add risk management columns
-ALTER TABLE planner_settings ADD COLUMN IF NOT EXISTS min_hold_days INTEGER DEFAULT 90;
-ALTER TABLE planner_settings ADD COLUMN IF NOT EXISTS sell_cooldown_days INTEGER DEFAULT 180;
-ALTER TABLE planner_settings ADD COLUMN IF NOT EXISTS max_loss_threshold REAL DEFAULT -0.20;
-ALTER TABLE planner_settings ADD COLUMN IF NOT EXISTS max_sell_percentage REAL DEFAULT 0.20;
+-- Note: SQLite doesn't support ADD COLUMN in older versions.
+-- Migration handler will skip if column already exists (duplicate column error)
+ALTER TABLE planner_settings ADD COLUMN min_hold_days INTEGER DEFAULT 90;
+ALTER TABLE planner_settings ADD COLUMN sell_cooldown_days INTEGER DEFAULT 180;
+ALTER TABLE planner_settings ADD COLUMN max_loss_threshold REAL DEFAULT -0.20;
+ALTER TABLE planner_settings ADD COLUMN max_sell_percentage REAL DEFAULT 0.20;
 
