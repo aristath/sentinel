@@ -116,7 +116,7 @@ TRADERNET_API_KEY=your_api_key_here
 TRADERNET_API_SECRET=your_api_secret_here
 
 # Server
-PORT=8080
+GO_PORT=8001
 LOG_LEVEL=info
 
 # Background Jobs
@@ -140,10 +140,27 @@ fi
 
 # Step 7: Build and deploy binaries
 log_header "Step 7: Building binaries"
-"${SCRIPT_DIR}/build.sh"
+log_info "Building ARM64 binary for Arduino Uno Q..."
+cd trader
+if [ -f "./scripts/build.sh" ]; then
+    ./scripts/build.sh arm64
+    log_success "Binary built: trader-go-arm64"
+else
+    log_error "Build script not found: trader/scripts/build.sh"
+    exit 1
+fi
+cd ..
 
 log_header "Step 8: Deploying binaries"
-"${SCRIPT_DIR}/deploy.sh"
+log_info "Copying binary to device..."
+if [ -f "trader/trader-go-arm64" ]; then
+    scp trader/trader-go-arm64 "${ARDUINO_SSH}:${ARDUINO_DEPLOY_PATH}/trader"
+    ssh "${ARDUINO_SSH}" "chmod +x ${ARDUINO_DEPLOY_PATH}/trader"
+    log_success "Binary deployed to ${ARDUINO_DEPLOY_PATH}/trader"
+else
+    log_error "Built binary not found: trader/trader-go-arm64"
+    exit 1
+fi
 
 # Step 9: Build microservices Docker images
 log_header "Step 9: Building microservice Docker images"

@@ -79,7 +79,7 @@ credentials-file: /root/.cloudflared/$TUNNEL_ID.json
 
 ingress:
   - hostname: $DOMAIN
-    service: http://localhost:8000
+    service: http://localhost:8001
   - service: http_status:404
 EOF
 

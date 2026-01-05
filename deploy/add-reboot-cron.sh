@@ -47,7 +47,7 @@ LOG_FILE="/home/arduino/logs/reboot.log"
 echo "$(date '+%Y-%m-%d %H:%M:%S'): Starting graceful reboot..." >> "$LOG_FILE"
 
 # Stop services gracefully
-systemctl stop arduino-trader 2>&1 | tee -a "$LOG_FILE"
+systemctl stop trader 2>&1 | tee -a "$LOG_FILE"
 # Note: LED display runs as Docker app (managed by Arduino App Framework)
 
 # Wait a moment for services to stop
