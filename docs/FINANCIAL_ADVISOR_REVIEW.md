@@ -1,7 +1,7 @@
 # Financial Advisor Review: Product Type Differentiation Strategy
 
-**Review Date:** 2026-01-05  
-**Context:** Retirement fund (15-20 year horizon), autonomous operation, quality-focused strategy  
+**Review Date:** 2026-01-05
+**Context:** Retirement fund (15-20 year horizon), autonomous operation, quality-focused strategy
 **Target Return:** 11% (configurable)
 
 ## Overall Assessment: ✅ **SOUND STRATEGY WITH MINOR REFINEMENTS NEEDED**
@@ -45,7 +45,7 @@ The document demonstrates thoughtful consideration of product-type differences a
 
 **Recommendation:**
 - **Consider 80-85% threshold** (11% → 8.8-9.35%) for retirement funds
-- **Rationale**: 
+- **Rationale**:
   - Still allows flexibility for high-quality securities
   - But tighter guardrails for retirement capital preservation
   - 80% threshold: 11% → 8.8% (20% shortfall, more acceptable)
@@ -95,7 +95,7 @@ if qualityScore > 0.80 {  // Higher threshold (0.80 vs 0.75)
 
 **Recommendation:**
 - **Consider 10-12% max for ETCs** in retirement fund context
-- **Rationale**: 
+- **Rationale**:
   - Still allows meaningful commodity diversification
   - But reduces volatility exposure for retirement capital
   - Commodities are for diversification, not core holdings
@@ -217,4 +217,3 @@ Key modifications:
 - Reduce quality override to 30-40%
 - Add absolute minimum guardrail (6-7% CAGR)
 - Lower ETC limit to 10-12%
-

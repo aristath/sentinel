@@ -76,7 +76,7 @@ Product types are determined from **Yahoo Finance's `quoteType` field**, with he
 
 **Note:** Tradernet is NOT used for product type detection. It's only used for:
 - ISIN lookup
-- Symbol resolution  
+- Symbol resolution
 - Trading execution
 
 ### Current Implementation
@@ -302,23 +302,23 @@ func (cm *ConstraintsManager) getMaxConcentration(productType string) float64 {
   // Get target return and threshold from settings (passed as parameter)
   thresholdPct := config.TargetReturnThresholdPct // Default: 0.80 = 80%
   minExpectedReturnThreshold := targetReturn * thresholdPct // 80% of target (default)
-  
+
   // Absolute minimum: Never allow below 6% or 50% of target (whichever is higher)
   absoluteMinReturn := math.Max(0.06, targetReturn * 0.50)
-  
+
   // After calculating expected return
   if clamped < absoluteMinReturn {
       // Hard filter: Exclude regardless of quality
       return nil, nil
   }
-  
+
   if clamped < minExpectedReturnThreshold {
       // Filter out securities below threshold
       return nil, nil
       // Or apply penalty: clamped = clamped * 0.5
   }
   ```
-- **Rationale**: 
+- **Rationale**:
   - 80% of target provides proportional scaling with tighter guardrails for retirement funds (e.g., 11% target → 8.8% minimum, 15% target → 12% minimum)
   - Absolute minimum (6% or 50% of target) prevents extremely low returns regardless of quality
   - Prevents choosing low-return ETFs just for diversification
@@ -364,10 +364,10 @@ func (cm *ConstraintsManager) getMaxConcentration(productType string) float64 {
   targetReturn := config.TargetAnnualReturn // From settings
   thresholdPct := config.TargetReturnThresholdPct // Default: 0.80 = 80%
   minCAGRThreshold := targetReturn * thresholdPct // 80% of target (default)
-  
+
   // Absolute minimum: Never allow below 6% or 50% of target (whichever is higher)
   absoluteMinCAGR := math.Max(0.06, targetReturn * 0.50)
-  
+
   // Before adding to candidates, check CAGR
   cagr, err := getCAGR(symbol) // Get from calculations table
   if err == nil && cagr != nil {
@@ -382,7 +382,7 @@ func (cm *ConstraintsManager) getMaxConcentration(productType string) float64 {
   }
   ```
 - **Rationale**: Ensures planner doesn't recommend low-return ETFs/Mutual Funds, with tighter guardrails for retirement funds
-- **Note**: 
+- **Note**:
   - Target return comes from `target_annual_return` setting (configurable via UI)
   - Threshold percentage comes from `target_return_threshold_pct` setting (configurable, default: 0.80 = 80%)
 - **Proportional scaling**: 80% of target adapts to different target values (e.g., 11% → 8.8%, 15% → 12%)
@@ -412,16 +412,16 @@ func (os *OpportunityScorer) CalculateWithQualityGate(
     } else {
         peWeight = 0.50 // 50% weight (normal for stocks)
     }
-    
+
     below52wWeight := 1.0 - peWeight
-    
+
     // Calculate scores
     below52wScore := scoreBelow52WeekHigh(currentPrice, high52w)
     peScore := scorePERatio(peRatio, forwardPE, marketAvgPE)
-    
+
     // Weighted combination
     baseScore := below52wScore*below52wWeight + peScore*peWeight
-    
+
     // ... rest of calculation
 }
 ```
@@ -443,10 +443,10 @@ func (os *OpportunityScorer) CalculateWithQualityGate(
 func (ss *SecurityScorer) ScoreSecurity(input ScoreSecurityInput) *domain.CalculatedSecurityScore {
     // Get product type from security
     productType := input.ProductType // NEW field in ScoreSecurityInput
-    
+
     // Adjust weights based on product type
     weights := ss.getScoreWeights(productType)
-    
+
     // ... rest of calculation using adjusted weights
 }
 
@@ -465,7 +465,7 @@ func (ss *SecurityScorer) getScoreWeights(productType string) map[string]float64
             "diversification": 0.05, // Same
         }
     }
-    
+
     // Default weights for stocks (EQUITY)
     return ScoreWeights // Current weights
 }
@@ -499,11 +499,11 @@ func (c *ETFQualityGateChecker) CheckQuality(security Security) bool {
     if security.ProductType != "ETF" && security.ProductType != "MUTUALFUND" {
         return true // Not applicable
     }
-    
+
     // Simplified: Check if diversified product has reasonable fundamentals
     // (Even ETFs/Mutual Funds should have some basic quality metrics)
     // Future: Add tracking error, expense ratio checks
-    
+
     return true // Default pass for now
 }
 ```
@@ -779,7 +779,7 @@ The proposed improvements (concentration limits, scoring weights, opportunity sc
        - **Rationale**: 80% threshold (11% → 8.8%) provides tighter guardrails for retirement funds while still allowing flexibility
        - Penalty: Reduce opportunity score by penalty factor (0.0-0.3) based on how far below threshold
        - **Absolute minimum guardrail**: Never allow securities below 6% CAGR or 50% of target (whichever is higher), regardless of quality
-       - Quality override: 
+       - Quality override:
          - If (long_term_score + fundamentals_score) / 2 > 0.80, reduce penalty by 35%
          - If (long_term_score + fundamentals_score) / 2 > 0.75, reduce penalty by 20%
          - **Rationale**: Only exceptional quality (0.80+) gets significant penalty reduction, tighter control for retirement funds
@@ -790,14 +790,14 @@ The proposed improvements (concentration limits, scoring weights, opportunity sc
          // Get threshold from settings (configurable, default 0.80 = 80%)
          thresholdPct := config.TargetReturnThresholdPct // Default: 0.80
          minCAGRThreshold := targetAnnualReturn * thresholdPct
-         
+
          // Absolute minimum: Never allow below 6% CAGR or 50% of target (whichever is higher)
          absoluteMinCAGR := math.Max(0.06, targetAnnualReturn * 0.50)
          if cagr < absoluteMinCAGR {
              // Hard filter: Exclude regardless of quality
              continue
          }
-         
+
          // Calculate penalty for low CAGR (if below threshold)
          penalty := 0.0
          if cagr < minCAGRThreshold {
@@ -805,7 +805,7 @@ The proposed improvements (concentration limits, scoring weights, opportunity sc
              // Max penalty: 30% reduction
              shortfallRatio := (minCAGRThreshold - cagr) / minCAGRThreshold
              penalty = math.Min(0.3, shortfallRatio * 0.5) // Up to 30% penalty
-             
+
              // Quality override: Only exceptional quality gets significant reduction
              qualityScore := (longTermScore + fundamentalsScore) / 2.0
              if qualityScore > 0.80 {
@@ -822,7 +822,7 @@ The proposed improvements (concentration limits, scoring weights, opportunity sc
        - Low CAGR + low quality = penalized (may not be chosen)
        - Low CAGR + high quality = penalty reduced (can still be chosen)
        - High CAGR = no penalty (normal scoring)
-   - **Note**: 
+   - **Note**:
      - Target return is configurable via Settings UI, default is 11%
      - Threshold percentage is configurable via `target_return_threshold_pct` setting (default: 0.80 = 80%)
      - Default threshold: 11% → 8.8% (80% of target)
@@ -832,7 +832,7 @@ The proposed improvements (concentration limits, scoring weights, opportunity sc
 
 5. **Quality Gates for ETFs:**
    - ✅ **Decision**: Keep it simple for now - use existing quality gates
-   - **Current Approach**: 
+   - **Current Approach**:
      - Use existing quality gates (fundamentals, consistency, long-term performance)
      - ETFs still need to meet minimum quality thresholds
      - Lower fundamentals weight (10% vs 20%) accounts for less relevance
@@ -841,7 +841,7 @@ The proposed improvements (concentration limits, scoring weights, opportunity sc
      - **Expense Ratio**: Lower is better (fees reduce returns)
      - **AUM (Assets Under Management)**: Higher is better (liquidity, stability)
      - **Data Source**: Would need to fetch from ETF provider or financial data API
-   - **For Now**: 
+   - **For Now**:
      - Ensure ETFs meet minimum CAGR threshold (target * threshold_pct, default 80% as per #4 above)
      - Target comes from `target_annual_return` setting (configurable, default 11%)
      - Threshold comes from `target_return_threshold_pct` setting (configurable, default 0.80 = 80%)
@@ -872,7 +872,7 @@ The proposed improvements (concentration limits, scoring weights, opportunity sc
    - 80% of target provides proportional scaling with tighter guardrails (e.g., 11% → 8.8%, 15% → 12%)
    - **Flexible approach**: Securities at 80% of target but with excellent long-term scores can still be chosen
    - **Absolute minimum guardrail**: Never allow securities below 6% CAGR or 50% of target (whichever is higher), regardless of quality
-   - Quality override: 
+   - Quality override:
      - If (long_term + fundamentals) / 2 > 0.80, penalty is reduced by 35% (exceptional quality)
      - If (long_term + fundamentals) / 2 > 0.75, penalty is reduced by 20% (high quality)
      - Tighter control for retirement funds
@@ -904,4 +904,3 @@ The proposed improvements (concentration limits, scoring weights, opportunity sc
 2. Monitor optimizer behavior with real portfolio
 3. Verify product type detection accuracy
 4. Adjust thresholds if needed based on production data
-
