@@ -19,9 +19,15 @@ type ScoreRepository struct {
 // scoresColumns is the list of columns for the scores table
 // Used to avoid SELECT * which can break when schema changes
 // Column order must match scanScore() function expectations
-const scoresColumns = `symbol, quality_score, opportunity_score, analyst_score, allocation_fit_score,
-cagr_score, consistency_score, financial_strength_score, sharpe_score, drawdown_score,
-dividend_bonus, rsi, ema_200, below_52w_high_pct, total_score, sell_score, history_years, calculated_at`
+// Order matches database schema (migration 004 + 029):
+// symbol, total_score, quality_score, opportunity_score, analyst_score, allocation_fit_score,
+// volatility, cagr_score, consistency_score, history_years, technical_score, fundamental_score,
+// sharpe_score, drawdown_score, dividend_bonus, financial_strength_score,
+// rsi, ema_200, below_52w_high_pct, last_updated
+const scoresColumns = `symbol, total_score, quality_score, opportunity_score, analyst_score, allocation_fit_score,
+volatility, cagr_score, consistency_score, history_years, technical_score, fundamental_score,
+sharpe_score, drawdown_score, dividend_bonus, financial_strength_score,
+rsi, ema_200, below_52w_high_pct, last_updated`
 
 // NewScoreRepository creates a new score repository
 func NewScoreRepository(portfolioDB *sql.DB, log zerolog.Logger) *ScoreRepository {
@@ -236,40 +242,51 @@ func (r *ScoreRepository) DeleteAll() error {
 }
 
 // scanScore scans a database row into a SecurityScore struct
+// Column order matches database schema: symbol, total_score, quality_score, opportunity_score,
+// analyst_score, allocation_fit_score, volatility, cagr_score, consistency_score, history_years,
+// technical_score, fundamental_score, sharpe_score, drawdown_score, dividend_bonus,
+// financial_strength_score, rsi, ema_200, below_52w_high_pct, last_updated
 func (r *ScoreRepository) scanScore(rows *sql.Rows) (SecurityScore, error) {
 	var score SecurityScore
-	var qualityScore, opportunityScore, analystScore, allocationFitScore sql.NullFloat64
-	var cagrScore, consistencyScore, financialStrengthScore sql.NullFloat64
+	var totalScore, qualityScore, opportunityScore, analystScore, allocationFitScore sql.NullFloat64
+	var volatility, cagrScore, consistencyScore sql.NullFloat64
+	var historyYears sql.NullInt64
+	var technicalScore, fundamentalScore sql.NullFloat64
 	var sharpeScore, drawdownScore, dividendBonus sql.NullFloat64
+	var financialStrengthScore sql.NullFloat64
 	var rsi, ema200, below52wHighPct sql.NullFloat64
-	var totalScore, sellScore, historyYears sql.NullFloat64
-	var calculatedAt sql.NullString
+	var lastUpdated sql.NullString
 
 	err := rows.Scan(
 		&score.Symbol,
+		&totalScore,
 		&qualityScore,
 		&opportunityScore,
 		&analystScore,
 		&allocationFitScore,
+		&volatility,
 		&cagrScore,
 		&consistencyScore,
-		&financialStrengthScore,
+		&historyYears,
+		&technicalScore,
+		&fundamentalScore,
 		&sharpeScore,
 		&drawdownScore,
 		&dividendBonus,
+		&financialStrengthScore,
 		&rsi,
 		&ema200,
 		&below52wHighPct,
-		&totalScore,
-		&sellScore,
-		&historyYears,
-		&calculatedAt,
+		&lastUpdated,
 	)
 	if err != nil {
 		return score, err
 	}
 
 	// Handle nullable fields
+	if totalScore.Valid {
+		score.TotalScore = totalScore.Float64
+	}
 	if qualityScore.Valid {
 		score.QualityScore = qualityScore.Float64
 	}
@@ -282,14 +299,23 @@ func (r *ScoreRepository) scanScore(rows *sql.Rows) (SecurityScore, error) {
 	if allocationFitScore.Valid {
 		score.AllocationFitScore = allocationFitScore.Float64
 	}
+	if volatility.Valid {
+		score.Volatility = volatility.Float64
+	}
 	if cagrScore.Valid {
 		score.CAGRScore = cagrScore.Float64
 	}
 	if consistencyScore.Valid {
 		score.ConsistencyScore = consistencyScore.Float64
 	}
-	if financialStrengthScore.Valid {
-		score.FinancialStrengthScore = financialStrengthScore.Float64
+	if historyYears.Valid {
+		score.HistoryYears = float64(historyYears.Int64)
+	}
+	if technicalScore.Valid {
+		score.TechnicalScore = technicalScore.Float64
+	}
+	if fundamentalScore.Valid {
+		score.FundamentalScore = fundamentalScore.Float64
 	}
 	if sharpeScore.Valid {
 		score.SharpeScore = sharpeScore.Float64
@@ -300,6 +326,9 @@ func (r *ScoreRepository) scanScore(rows *sql.Rows) (SecurityScore, error) {
 	if dividendBonus.Valid {
 		score.DividendBonus = dividendBonus.Float64
 	}
+	if financialStrengthScore.Valid {
+		score.FinancialStrengthScore = financialStrengthScore.Float64
+	}
 	if rsi.Valid {
 		score.RSI = rsi.Float64
 	}
@@ -309,18 +338,15 @@ func (r *ScoreRepository) scanScore(rows *sql.Rows) (SecurityScore, error) {
 	if below52wHighPct.Valid {
 		score.Below52wHighPct = below52wHighPct.Float64
 	}
-	if totalScore.Valid {
-		score.TotalScore = totalScore.Float64
-	}
-	if sellScore.Valid {
-		score.SellScore = sellScore.Float64
-	}
-	if historyYears.Valid {
-		score.HistoryYears = historyYears.Float64
-	}
-	if calculatedAt.Valid && calculatedAt.String != "" {
-		if t, err := time.Parse(time.RFC3339, calculatedAt.String); err == nil {
+	// Map last_updated to calculated_at
+	if lastUpdated.Valid && lastUpdated.String != "" {
+		if t, err := time.Parse(time.RFC3339, lastUpdated.String); err == nil {
 			score.CalculatedAt = &t
+		} else {
+			// Try parsing as other common formats
+			if t, err := time.Parse("2006-01-02 15:04:05", lastUpdated.String); err == nil {
+				score.CalculatedAt = &t
+			}
 		}
 	}
 
