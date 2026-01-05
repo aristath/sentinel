@@ -97,45 +97,45 @@ func (v *ISINValidator) ValidateNoDuplicateISINs() ([]string, error) {
 func (v *ISINValidator) ValidateForeignKeys() ([]string, error) {
 	var errors []string
 
-	// Check scores table
+	// Check scores table (now uses isin as PRIMARY KEY)
 	scoreQuery := `
-		SELECT s.symbol
+		SELECT s.isin
 		FROM scores s
-		LEFT JOIN securities sec ON s.symbol = sec.symbol
-		WHERE sec.symbol IS NULL
+		LEFT JOIN securities sec ON s.isin = sec.isin
+		WHERE sec.isin IS NULL
 	`
 	rows, err := v.db.Query(scoreQuery)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query orphaned scores: %w", err)
 	}
 	for rows.Next() {
-		var symbol string
-		if err := rows.Scan(&symbol); err != nil {
+		var isin string
+		if err := rows.Scan(&isin); err != nil {
 			rows.Close()
 			return nil, fmt.Errorf("failed to scan orphaned score: %w", err)
 		}
-		errors = append(errors, fmt.Sprintf("scores:symbol:%s", symbol))
+		errors = append(errors, fmt.Sprintf("scores:isin:%s", isin))
 	}
 	rows.Close()
 
-	// Check positions table
+	// Check positions table (now uses isin as PRIMARY KEY)
 	positionQuery := `
-		SELECT p.symbol
+		SELECT p.isin
 		FROM positions p
-		LEFT JOIN securities sec ON p.symbol = sec.symbol
-		WHERE sec.symbol IS NULL AND p.symbol NOT LIKE 'CASH:%'
+		LEFT JOIN securities sec ON p.isin = sec.isin
+		WHERE sec.isin IS NULL AND p.isin NOT LIKE 'CASH:%'
 	`
 	rows, err = v.db.Query(positionQuery)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query orphaned positions: %w", err)
 	}
 	for rows.Next() {
-		var symbol string
-		if err := rows.Scan(&symbol); err != nil {
+		var isin string
+		if err := rows.Scan(&isin); err != nil {
 			rows.Close()
 			return nil, fmt.Errorf("failed to scan orphaned position: %w", err)
 		}
-		errors = append(errors, fmt.Sprintf("positions:symbol:%s", symbol))
+		errors = append(errors, fmt.Sprintf("positions:isin:%s", isin))
 	}
 	rows.Close()
 
