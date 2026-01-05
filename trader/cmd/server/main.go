@@ -440,7 +440,7 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 		AgentsDB:    agentsDB,
 		HistoryDB:   historyDB,
 		CacheDB:     cacheDB,
-		HistoryPath: cfg.HistoryPath,
+		HistoryPath: cfg.DataDir + "/history", // Per-symbol databases (legacy, will be migrated)
 	})
 	if err := sched.AddJob("0 0 4 * * *", healthCheck); err != nil {
 		return nil, fmt.Errorf("failed to register health_check job: %w", err)

@@ -13,7 +13,7 @@ func (s *Server) setupChartsRoutes(r chi.Router) {
 
 	// Initialize charts service
 	chartsService := charts.NewService(
-		s.cfg.HistoryPath,
+		s.cfg.DataDir+"/history", // Per-symbol databases (legacy, will be migrated)
 		securityRepo,
 		s.universeDB.Conn(),
 		s.log,

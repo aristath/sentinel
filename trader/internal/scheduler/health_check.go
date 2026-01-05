@@ -53,7 +53,7 @@ func NewHealthCheckJob(cfg HealthCheckConfig) *HealthCheckJob {
 		agentsDB:    cfg.AgentsDB,
 		historyDB:   cfg.HistoryDB,
 		cacheDB:     cfg.CacheDB,
-		historyPath: cfg.HistoryPath,
+		historyPath: cfg.DataDir + "/history", // Per-symbol databases (legacy, will be migrated)
 	}
 }
 
