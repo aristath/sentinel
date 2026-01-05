@@ -13,9 +13,9 @@ import (
 // TradeRepository handles trade database operations
 // Faithful translation from Python: app/repositories/trade.py
 type TradeRepository struct {
-	ledgerDB  *sql.DB // ledger.db - trades table
+	ledgerDB   *sql.DB // ledger.db - trades table
 	universeDB *sql.DB // universe.db - securities table (for symbol->ISIN lookup, optional)
-	log       zerolog.Logger
+	log        zerolog.Logger
 }
 
 // tradesColumns is the list of columns for the trades table

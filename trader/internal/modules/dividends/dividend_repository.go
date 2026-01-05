@@ -13,9 +13,9 @@ import (
 // DividendRepository handles dividend database operations
 // Faithful translation from Python: app/modules/dividends/database/dividend_repository.py
 type DividendRepository struct {
-	ledgerDB  *sql.DB // ledger.db - dividend_history table
+	ledgerDB   *sql.DB // ledger.db - dividend_history table
 	universeDB *sql.DB // universe.db - securities table (for symbol->ISIN lookup, optional)
-	log       zerolog.Logger
+	log        zerolog.Logger
 }
 
 // dividendHistoryColumns is the list of columns for the dividend_history table
