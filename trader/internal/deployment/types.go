@@ -30,17 +30,20 @@ type ChangeCategories struct {
 	DisplayApp    bool // Python display app (display/app/)
 	Frontend      bool
 	Sketch        bool
-	PyPFOpt       bool
-	PyPFOptDeps   bool
-	Tradernet     bool
-	TradernetDeps bool
-	Config        bool
+	PyPFOpt         bool
+	PyPFOptDeps     bool
+	Tradernet       bool
+	TradernetDeps   bool
+	YahooFinance    bool
+	YahooFinanceDeps bool
+	Config          bool
 }
 
 // HasAnyChanges returns true if any category has changes
 func (c *ChangeCategories) HasAnyChanges() bool {
 	return c.MainApp || c.DisplayApp || c.Frontend || c.Sketch ||
-		c.PyPFOpt || c.PyPFOptDeps || c.Tradernet || c.TradernetDeps || c.Config
+		c.PyPFOpt || c.PyPFOptDeps || c.Tradernet || c.TradernetDeps ||
+		c.YahooFinance || c.YahooFinanceDeps || c.Config
 }
 
 // GoServiceConfig holds configuration for a Go service
