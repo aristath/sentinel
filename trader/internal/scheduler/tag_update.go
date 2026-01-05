@@ -138,11 +138,18 @@ func (j *TagUpdateJob) updateTagsForSecurity(security universe.Security) error {
 		}
 	}
 
-	// Get daily prices for technical analysis
-	dailyPrices, err := j.historyDB.GetDailyPrices(security.Symbol, 400)
-	if err != nil {
-		j.log.Debug().Err(err).Str("symbol", security.Symbol).Msg("Failed to get daily prices, continuing without")
+	// Get daily prices for technical analysis using ISIN
+	var dailyPrices []universe.DailyPrice
+	if security.ISIN == "" {
+		j.log.Debug().Str("symbol", security.Symbol).Msg("Security has no ISIN, skipping daily prices")
 		dailyPrices = []universe.DailyPrice{} // Initialize empty slice to avoid nil
+	} else {
+		var err error
+		dailyPrices, err = j.historyDB.GetDailyPrices(security.ISIN, 400)
+		if err != nil {
+			j.log.Debug().Err(err).Str("symbol", security.Symbol).Str("isin", security.ISIN).Msg("Failed to get daily prices, continuing without")
+			dailyPrices = []universe.DailyPrice{} // Initialize empty slice to avoid nil
+		}
 	}
 
 	// Extract close prices
