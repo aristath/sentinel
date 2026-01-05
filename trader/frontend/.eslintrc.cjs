@@ -29,4 +29,3 @@ module.exports = {
     'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
   },
 };
-

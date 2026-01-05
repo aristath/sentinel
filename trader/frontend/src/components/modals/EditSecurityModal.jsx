@@ -36,7 +36,7 @@ export function EditSecurityModal() {
         'allow_buy',
         'allow_sell',
       ];
-      
+
       editableFields.forEach(field => {
         if (formData[field] !== undefined && formData[field] !== null) {
           updateData[field] = formData[field];

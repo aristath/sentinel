@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     service_version: str = "1.0.0"
 
     # Server configuration
-    host: str = "0.0.0.0"
+    host: str = "0.0.0.0"  # nosec B104 - Docker service needs to bind to all interfaces
     port: int = 9001
 
     # Logging

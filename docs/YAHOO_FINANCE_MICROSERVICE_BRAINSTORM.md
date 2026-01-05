@@ -126,10 +126,10 @@ from datetime import datetime
 
 class YahooFinanceService:
     """Service wrapping yfinance library."""
-    
+
     def get_current_price(
-        self, 
-        symbol: str, 
+        self,
+        symbol: str,
         yahoo_symbol: Optional[str] = None
     ) -> Optional[float]:
         """Get current price for a symbol."""
@@ -137,7 +137,7 @@ class YahooFinanceService:
         ticker = yf.Ticker(yf_symbol)
         info = ticker.info
         return info.get("currentPrice") or info.get("regularMarketPrice")
-    
+
     def get_batch_quotes(
         self,
         symbols: List[str],
@@ -147,15 +147,15 @@ class YahooFinanceService:
         # Convert symbols
         yf_symbols = []
         symbol_map = {}  # yf_symbol -> tradernet_symbol
-        
+
         for symbol in symbols:
             yf_symbol = self._convert_symbol(
-                symbol, 
+                symbol,
                 yahoo_overrides.get(symbol) if yahoo_overrides else None
             )
             yf_symbols.append(yf_symbol)
             symbol_map[yf_symbol] = symbol
-        
+
         # Use yfinance download for batch efficiency
         data = yf.download(
             tickers=" ".join(yf_symbols),
@@ -164,7 +164,7 @@ class YahooFinanceService:
             threads=True,
             auto_adjust=True,
         )
-        
+
         # Extract prices
         result = {}
         for yf_symbol, tradernet_symbol in symbol_map.items():
@@ -172,9 +172,9 @@ class YahooFinanceService:
                 close_series = data["Close"][yf_symbol].dropna()
                 if len(close_series) > 0:
                     result[tradernet_symbol] = float(close_series.iloc[-1].item())
-        
+
         return result
-    
+
     def get_historical_prices(
         self,
         symbol: str,
@@ -186,7 +186,7 @@ class YahooFinanceService:
         yf_symbol = self._convert_symbol(symbol, yahoo_symbol)
         ticker = yf.Ticker(yf_symbol)
         hist = ticker.history(period=period, interval=interval)
-        
+
         result = []
         for date, row in hist.iterrows():
             result.append(HistoricalPrice(
@@ -198,15 +198,15 @@ class YahooFinanceService:
                 volume=int(row["Volume"]),
                 adj_close=float(row.get("Adj Close", row["Close"])),
             ))
-        
+
         return result
-    
+
     def get_fundamental_data(self, symbol: str, yahoo_symbol: Optional[str] = None):
         """Get fundamental analysis data."""
         yf_symbol = self._convert_symbol(symbol, yahoo_symbol)
         ticker = yf.Ticker(yf_symbol)
         info = ticker.info
-        
+
         return {
             "symbol": symbol,
             "pe_ratio": info.get("trailingPE"),
@@ -224,21 +224,21 @@ class YahooFinanceService:
             "dividend_yield": info.get("dividendYield"),
             "five_year_avg_dividend_yield": info.get("fiveYearAvgDividendYield"),
         }
-    
+
     def get_analyst_data(self, symbol: str, yahoo_symbol: Optional[str] = None):
         """Get analyst recommendations and price targets."""
         yf_symbol = self._convert_symbol(symbol, yahoo_symbol)
         ticker = yf.Ticker(yf_symbol)
         info = ticker.info
-        
+
         recommendation = info.get("recommendationKey", "hold")
         target_price = info.get("targetMeanPrice", 0) or 0
         current_price = info.get("currentPrice") or info.get("regularMarketPrice", 0) or 0
-        
+
         upside_pct = 0.0
         if current_price > 0 and target_price > 0:
             upside_pct = ((target_price - current_price) / current_price) * 100
-        
+
         rec_scores = {
             "strongBuy": 1.0,
             "buy": 0.8,
@@ -247,7 +247,7 @@ class YahooFinanceService:
             "strongSell": 0.0,
         }
         recommendation_score = rec_scores.get(recommendation, 0.5)
-        
+
         return {
             "symbol": symbol,
             "recommendation": recommendation,
@@ -257,19 +257,19 @@ class YahooFinanceService:
             "num_analysts": info.get("numberOfAnalystOpinions", 0) or 0,
             "recommendation_score": recommendation_score,
         }
-    
+
     def get_security_industry(self, symbol: str, yahoo_symbol: Optional[str] = None):
         """Get security industry/sector."""
         yf_symbol = self._convert_symbol(symbol, yahoo_symbol)
         ticker = yf.Ticker(yf_symbol)
         info = ticker.info
-        
+
         return {
             "symbol": symbol,
             "industry": info.get("industry"),
             "sector": info.get("sector"),
         }
-    
+
     def get_security_country_exchange(
         self, symbol: str, yahoo_symbol: Optional[str] = None
     ):
@@ -277,25 +277,25 @@ class YahooFinanceService:
         yf_symbol = self._convert_symbol(symbol, yahoo_symbol)
         ticker = yf.Ticker(yf_symbol)
         info = ticker.info
-        
+
         return {
             "symbol": symbol,
             "country": info.get("country"),
             "full_exchange_name": info.get("fullExchangeName"),
         }
-    
+
     def _convert_symbol(self, symbol: str, yahoo_override: Optional[str] = None) -> str:
         """Convert Tradernet symbol to Yahoo symbol."""
         if yahoo_override:
             return yahoo_override
-        
+
         # Convert Tradernet format to Yahoo format
         if symbol.endswith(".US"):
             return symbol[:-3]  # Remove .US
         if symbol.endswith(".JP"):
             base = symbol[:-3]
             return f"{base}.T"  # Japanese stocks use .T
-        
+
         return symbol  # European stocks use as-is
 ```
 
@@ -336,36 +336,36 @@ func (c *Client) GetBatchQuotes(
     // Convert to request format
     symbols := make([]string, 0, len(symbolOverrides))
     yahooOverrides := make(map[string]string)
-    
+
     for symbol, yahooOverride := range symbolOverrides {
         symbols = append(symbols, symbol)
         if yahooOverride != nil {
             yahooOverrides[symbol] = *yahooOverride
         }
     }
-    
+
     req := BatchQuotesRequest{
         Symbols: symbols,
         YahooOverrides: yahooOverrides,
     }
-    
+
     resp, err := c.post("/api/quotes/batch", req)
     if err != nil {
         return nil, err
     }
-    
+
     var result BatchQuotesResponse
     if err := json.Unmarshal(resp.Data, &result); err != nil {
         return nil, fmt.Errorf("failed to parse quotes: %w", err)
     }
-    
+
     // Convert to map[string]*float64
     quotes := make(map[string]*float64)
     for symbol, price := range result.Quotes {
         p := price
         quotes[symbol] = &p
     }
-    
+
     return quotes, nil
 }
 ```
@@ -453,4 +453,3 @@ httpx==0.26.0
 4. Create Go HTTP client
 5. Update Go code to use new client
 6. Deploy and test
-

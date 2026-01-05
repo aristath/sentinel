@@ -46,16 +46,16 @@ set_led1() {
     local r="$1"
     local g="$2"
     local b="$3"
-    
+
     if ! check_led_available; then
         return 1
     fi
-    
+
     # Write brightness values (0-255)
     echo "$r" > "$LED1_RED" 2>/dev/null || return 1
     echo "$g" > "$LED1_GREEN" 2>/dev/null || return 1
     echo "$b" > "$LED1_BLUE" 2>/dev/null || return 1
-    
+
     return 0
 }
 
@@ -87,16 +87,16 @@ check_and_alert() {
     local home_usage
     # Explicitly check /home/arduino mount point (separate filesystem)
     home_usage=$(get_disk_usage "/home/arduino")
-    
+
     # Check if either exceeds threshold
     local alert_triggered=0
     local alert_reason=""
-    
+
     if [ "$root_usage" -ge "$THRESHOLD" ]; then
         alert_triggered=1
         alert_reason="root filesystem (${root_usage}%)"
     fi
-    
+
     if [ "$home_usage" -ge "$THRESHOLD" ]; then
         alert_triggered=1
         if [ -n "$alert_reason" ]; then
@@ -105,7 +105,7 @@ check_and_alert() {
             alert_reason="user filesystem (${home_usage}%)"
         fi
     fi
-    
+
     # Control LED based on alert status
     if [ "$alert_triggered" -eq 1 ]; then
         if check_led_available; then
@@ -132,9 +132,8 @@ main() {
         log_error "Usage: sudo $0"
         exit 1
     fi
-    
+
     check_and_alert
 }
 
 main "$@"
-

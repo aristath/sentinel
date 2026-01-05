@@ -5,4 +5,3 @@
 
 -- Add optimizer_blend column
 ALTER TABLE planner_settings ADD COLUMN optimizer_blend REAL DEFAULT 0.5;
-

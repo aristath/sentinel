@@ -8,7 +8,7 @@ This document compares lightweight alternatives to FastAPI/uvicorn for Python mi
 - **Server**: uvicorn 0.27.0
 - **Validation**: Pydantic 2.5.3
 - **Memory Limit**: 512MB per service
-- **Deployment**: 
+- **Deployment**:
   - **tradernet** (port 9002): Systemd + venv (native)
   - **yfinance** (port 9003): Systemd + venv (native)
   - **pypfopt** (port 9001): Docker (dockerized)
@@ -360,7 +360,7 @@ After migration, verify:
    # For venv services (systemd):
    systemctl status tradernet  # Check memory usage
    systemctl status yfinance
-   
+
    # For Docker service:
    docker stats pypfopt-service
    ```
@@ -410,4 +410,3 @@ CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:9001", "app.main:app"]
 - [Starlette Documentation](https://www.starlette.io/)
 - [Hypercorn Documentation](https://hypercorn.readthedocs.io/)
 - [Starlette vs FastAPI](https://www.starlette.io/applications/#fastapi)
-

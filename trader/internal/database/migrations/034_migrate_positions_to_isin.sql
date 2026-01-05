@@ -61,4 +61,3 @@ ALTER TABLE positions_new RENAME TO positions;
 -- Step 5: Recreate indexes
 CREATE INDEX IF NOT EXISTS idx_positions_value ON positions(market_value_eur DESC);
 CREATE INDEX IF NOT EXISTS idx_positions_symbol ON positions(symbol); -- Index symbol for lookups
-

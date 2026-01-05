@@ -49,4 +49,3 @@ INSERT OR IGNORE INTO tags (id, name, created_at, updated_at) VALUES
     ('regime-bull-growth', 'Bull Market Growth', datetime('now'), datetime('now')),
     ('regime-sideways-value', 'Sideways Value', datetime('now'), datetime('now')),
     ('regime-volatile', 'Regime Volatile', datetime('now'), datetime('now'));
-

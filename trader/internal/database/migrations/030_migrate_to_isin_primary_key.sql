@@ -23,7 +23,7 @@
 -- Cash positions (CASH:*) are special - they use symbol as ISIN
 -- This check will cause migration to fail if non-cash securities without ISIN exist
 CREATE TEMP TABLE _isin_validation AS
-SELECT symbol FROM securities 
+SELECT symbol FROM securities
 WHERE (isin IS NULL OR isin = '' OR TRIM(isin) = '')
   AND NOT (symbol LIKE 'CASH:%');
 
@@ -33,8 +33,8 @@ WHERE (isin IS NULL OR isin = '' OR TRIM(isin) = '')
 -- Step 2: Verify no duplicate ISINs (fail migration if duplicates exist)
 -- Include cash positions (which use symbol as ISIN) in the check
 CREATE TEMP TABLE _isin_duplicates AS
-SELECT 
-    CASE 
+SELECT
+    CASE
         WHEN isin IS NOT NULL AND isin != '' AND TRIM(isin) != '' THEN isin
         WHEN symbol LIKE 'CASH:%' THEN symbol
         ELSE symbol
@@ -71,7 +71,7 @@ CREATE TABLE securities_new (
 -- Copy data (securities with ISIN, or cash positions using symbol as ISIN)
 INSERT INTO securities_new
 SELECT
-    CASE 
+    CASE
         WHEN isin IS NOT NULL AND isin != '' AND TRIM(isin) != '' THEN isin
         WHEN symbol LIKE 'CASH:%' THEN symbol  -- Cash positions use symbol as ISIN
         ELSE symbol  -- Fallback: use symbol as ISIN if somehow missing
@@ -128,7 +128,7 @@ CREATE TABLE scores_new (
 -- Cash positions don't typically have scores, but handle them if they do
 INSERT INTO scores_new
 SELECT
-    CASE 
+    CASE
         WHEN s.isin IS NOT NULL AND s.isin != '' AND TRIM(s.isin) != '' THEN s.isin
         WHEN s.symbol LIKE 'CASH:%' THEN s.symbol  -- Cash positions use symbol as ISIN
         ELSE s.symbol  -- Fallback
@@ -180,8 +180,8 @@ INSERT INTO positions_new
 SELECT
     CASE
         WHEN p.symbol LIKE 'CASH:%' THEN p.symbol -- CASH positions keep symbol as isin
-        ELSE COALESCE(s.isin, 
-            CASE 
+        ELSE COALESCE(s.isin,
+            CASE
                 WHEN s.symbol LIKE 'CASH:%' THEN s.symbol
                 ELSE s.symbol
             END)
@@ -213,7 +213,7 @@ CREATE INDEX IF NOT EXISTS idx_positions_symbol ON positions(symbol); -- Index s
 -- Handle cash positions specially (use symbol as ISIN)
 UPDATE trades
 SET isin = (
-    SELECT CASE 
+    SELECT CASE
         WHEN s.isin IS NOT NULL AND s.isin != '' AND TRIM(s.isin) != '' THEN s.isin
         WHEN s.symbol LIKE 'CASH:%' THEN s.symbol
         ELSE s.symbol
@@ -233,7 +233,7 @@ CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol); -- Keep symbol i
 -- Cash positions don't have dividends, but handle them if they exist
 UPDATE dividend_history
 SET isin = (
-    SELECT CASE 
+    SELECT CASE
         WHEN s.isin IS NOT NULL AND s.isin != '' AND TRIM(s.isin) != '' THEN s.isin
         WHEN s.symbol LIKE 'CASH:%' THEN s.symbol
         ELSE s.symbol
@@ -276,7 +276,7 @@ CREATE TABLE security_tags_new (
 -- Handle cash positions specially (use symbol as ISIN)
 INSERT INTO security_tags_new
 SELECT
-    CASE 
+    CASE
         WHEN s.isin IS NOT NULL AND s.isin != '' AND TRIM(s.isin) != '' THEN s.isin
         WHEN s.symbol LIKE 'CASH:%' THEN s.symbol  -- Cash positions use symbol as ISIN
         ELSE s.symbol  -- Fallback

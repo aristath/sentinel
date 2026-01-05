@@ -65,4 +65,3 @@ ALTER TABLE scores_new RENAME TO scores;
 -- Step 4: Recreate indexes
 CREATE INDEX IF NOT EXISTS idx_scores_total ON scores(total_score DESC);
 CREATE INDEX IF NOT EXISTS idx_scores_updated ON scores(last_updated);
-

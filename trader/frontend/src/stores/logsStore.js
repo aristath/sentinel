@@ -104,4 +104,3 @@ export const useLogsStore = create((set, get) => ({
     }
   },
 }));
-

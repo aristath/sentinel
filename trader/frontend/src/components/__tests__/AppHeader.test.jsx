@@ -34,4 +34,3 @@ describe('AppHeader', () => {
     expect(screen.getByText('Arduino Trader')).toBeInTheDocument();
   });
 });
-

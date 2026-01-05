@@ -13,4 +13,3 @@ ALTER TABLE planner_settings ADD COLUMN min_hold_days INTEGER DEFAULT 90;
 ALTER TABLE planner_settings ADD COLUMN sell_cooldown_days INTEGER DEFAULT 180;
 ALTER TABLE planner_settings ADD COLUMN max_loss_threshold REAL DEFAULT -0.20;
 ALTER TABLE planner_settings ADD COLUMN max_sell_percentage REAL DEFAULT 0.20;
-

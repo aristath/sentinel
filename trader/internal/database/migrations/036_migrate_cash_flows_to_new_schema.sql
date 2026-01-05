@@ -54,4 +54,3 @@ ALTER TABLE cash_flows_new RENAME TO cash_flows;
 -- Step 4: Recreate indexes
 CREATE INDEX IF NOT EXISTS idx_cash_flows_date ON cash_flows(date);
 CREATE INDEX IF NOT EXISTS idx_cash_flows_type ON cash_flows(transaction_type);
-

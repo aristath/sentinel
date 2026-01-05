@@ -8,7 +8,7 @@ class Settings(BaseSettings):
 
     service_name: str = "tradernet-service"
     version: str = "1.0.0"
-    host: str = "0.0.0.0"
+    host: str = "0.0.0.0"  # nosec B104 - Docker service needs to bind to all interfaces
     port: int = 9001
     log_level: str = "INFO"
 

@@ -159,4 +159,3 @@ export function SecurityChart({ isin, symbol, onClose }) {
     </div>
   );
 }
-

@@ -51,7 +51,7 @@ SELECT
     'migrated-' || CAST(rowid AS TEXT) as uuid,
     symbol,
     COALESCE(symbol, 'Unknown') as name, -- Use symbol as name if name not available
-    CASE 
+    CASE
         WHEN action = 'BUY' OR action = 'buy' THEN 'buy'
         WHEN action = 'SELL' OR action = 'sell' THEN 'sell'
         ELSE 'buy' -- Default to buy
@@ -85,4 +85,3 @@ ON recommendations(portfolio_hash, status);
 
 CREATE INDEX IF NOT EXISTS idx_recommendations_executed_at
 ON recommendations(executed_at) WHERE executed_at IS NOT NULL;
-

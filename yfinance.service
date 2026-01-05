@@ -31,4 +31,3 @@ CPUQuota=25%
 
 [Install]
 WantedBy=multi-user.target
-

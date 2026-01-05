@@ -289,4 +289,3 @@ export function RadarChart({ labels = [], targetData = [], currentData = [], max
     </div>
   );
 }
-
