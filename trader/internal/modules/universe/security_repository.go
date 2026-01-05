@@ -594,23 +594,34 @@ func (r *SecurityRepository) scanSecurity(rows *sql.Rows) (Security, error) {
 	}
 
 	// Load tags for the security
-	tagIDs, err := r.getTagsForSecurity(security.Symbol)
-	if err != nil {
-		// Log error but don't fail - tags are optional
-		r.log.Warn().Str("symbol", security.Symbol).Err(err).Msg("Failed to load tags for security")
-		security.Tags = []string{} // Initialize to empty slice
+	// Use ISIN as primary identifier (security_tags table uses isin, not symbol)
+	if security.ISIN != "" {
+		tagIDs, err := r.getTagsForSecurity(security.ISIN)
+		if err != nil {
+			// Log error but don't fail - tags are optional
+			// Note: In test environments, this error might be silently ignored if logger is disabled
+			r.log.Warn().Str("isin", security.ISIN).Str("symbol", security.Symbol).Err(err).Msg("Failed to load tags for security")
+			security.Tags = []string{} // Initialize to empty slice
+		} else if len(tagIDs) > 0 {
+			// Make a copy of the slice to avoid potential issues with shared underlying array
+			security.Tags = make([]string, len(tagIDs))
+			copy(security.Tags, tagIDs)
+		} else {
+			// Empty result - no tags found (this is valid, not an error)
+			security.Tags = []string{}
+		}
 	} else {
-		security.Tags = tagIDs
+		security.Tags = []string{}
 	}
 
 	return security, nil
 }
 
-// getTagsForSecurity loads tag IDs for a security
-func (r *SecurityRepository) getTagsForSecurity(symbol string) ([]string, error) {
-	query := "SELECT tag_id FROM security_tags WHERE symbol = ? ORDER BY tag_id"
+// getTagsForSecurity loads tag IDs for a security by ISIN
+func (r *SecurityRepository) getTagsForSecurity(isin string) ([]string, error) {
+	query := "SELECT tag_id FROM security_tags WHERE isin = ? ORDER BY tag_id"
 
-	rows, err := r.universeDB.Query(query, strings.ToUpper(strings.TrimSpace(symbol)))
+	rows, err := r.universeDB.Query(query, strings.ToUpper(strings.TrimSpace(isin)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to query tags for security: %w", err)
 	}
@@ -634,9 +645,20 @@ func (r *SecurityRepository) getTagsForSecurity(symbol string) ([]string, error)
 }
 
 // SetTagsForSecurity replaces all tags for a security (deletes existing, inserts new)
+// symbol parameter is kept for backward compatibility, but we look up ISIN internally
 func (r *SecurityRepository) SetTagsForSecurity(symbol string, tagIDs []string) error {
 	// Normalize symbol
 	symbol = strings.ToUpper(strings.TrimSpace(symbol))
+
+	// Look up ISIN from symbol (security_tags table uses isin, not symbol)
+	security, err := r.GetBySymbol(symbol)
+	if err != nil {
+		return fmt.Errorf("failed to lookup security by symbol: %w", err)
+	}
+	if security == nil || security.ISIN == "" {
+		return fmt.Errorf("security not found or missing ISIN: %s", symbol)
+	}
+	isin := security.ISIN
 
 	// Ensure all tag IDs exist (create with default names if missing)
 	if err := r.tagRepo.EnsureTagsExist(tagIDs); err != nil {
@@ -650,13 +672,13 @@ func (r *SecurityRepository) SetTagsForSecurity(symbol string, tagIDs []string) 
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Delete all existing tags for this security
-	_, err = tx.Exec("DELETE FROM security_tags WHERE symbol = ?", symbol)
+	// Delete all existing tags for this security (using ISIN)
+	_, err = tx.Exec("DELETE FROM security_tags WHERE isin = ?", isin)
 	if err != nil {
 		return fmt.Errorf("failed to delete existing tags: %w", err)
 	}
 
-	// Insert new tags
+	// Insert new tags (using ISIN)
 	now := time.Now().Format(time.RFC3339)
 	for _, tagID := range tagIDs {
 		// Skip empty tag IDs
@@ -666,9 +688,9 @@ func (r *SecurityRepository) SetTagsForSecurity(symbol string, tagIDs []string) 
 		}
 
 		_, err = tx.Exec(`
-			INSERT INTO security_tags (symbol, tag_id, created_at, updated_at)
+			INSERT INTO security_tags (isin, tag_id, created_at, updated_at)
 			VALUES (?, ?, ?, ?)
-		`, symbol, tagID, now, now)
+		`, isin, tagID, now, now)
 		if err != nil {
 			return fmt.Errorf("failed to insert tag %s: %w", tagID, err)
 		}
@@ -678,8 +700,352 @@ func (r *SecurityRepository) SetTagsForSecurity(symbol string, tagIDs []string) 
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	r.log.Debug().Str("symbol", symbol).Int("tag_count", len(tagIDs)).Msg("Tags updated for security")
+	r.log.Debug().Str("isin", isin).Str("symbol", symbol).Int("tag_count", len(tagIDs)).Msg("Tags updated for security")
 	return nil
+}
+
+// GetTagsForSecurity returns all tag IDs for a security (public method)
+// symbol parameter is kept for backward compatibility, but we look up ISIN internally
+func (r *SecurityRepository) GetTagsForSecurity(symbol string) ([]string, error) {
+	// Look up ISIN from symbol (security_tags table uses isin, not symbol)
+	security, err := r.GetBySymbol(symbol)
+	if err != nil {
+		return nil, fmt.Errorf("failed to lookup security by symbol: %w", err)
+	}
+	if security == nil || security.ISIN == "" {
+		return nil, fmt.Errorf("security not found or missing ISIN: %s", symbol)
+	}
+	return r.getTagsForSecurity(security.ISIN)
+}
+
+// GetTagsWithUpdateTimes returns all tags for a security with their last update times
+func (r *SecurityRepository) GetTagsWithUpdateTimes(symbol string) (map[string]time.Time, error) {
+	query := "SELECT tag_id, updated_at FROM security_tags WHERE symbol = ? ORDER BY tag_id"
+
+	rows, err := r.universeDB.Query(query, strings.ToUpper(strings.TrimSpace(symbol)))
+	if err != nil {
+		return nil, fmt.Errorf("failed to query tags with update times: %w", err)
+	}
+	defer rows.Close()
+
+	tags := make(map[string]time.Time)
+	for rows.Next() {
+		var tagID string
+		var updatedAtStr string
+		err := rows.Scan(&tagID, &updatedAtStr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan tag update time: %w", err)
+		}
+
+		// Parse updated_at timestamp
+		updatedAt, err := time.Parse(time.RFC3339, updatedAtStr)
+		if err != nil {
+			// Try alternative formats
+			formats := []string{
+				"2006-01-02 15:04:05",
+				"2006-01-02T15:04:05Z",
+				"2006-01-02",
+			}
+			parsed := false
+			for _, format := range formats {
+				if t, parseErr := time.Parse(format, updatedAtStr); parseErr == nil {
+					updatedAt = t
+					parsed = true
+					break
+				}
+			}
+			if !parsed {
+				// If we can't parse, use zero time (will force update)
+				updatedAt = time.Time{}
+			}
+		}
+
+		tags[tagID] = updatedAt
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating tags: %w", err)
+	}
+
+	return tags, nil
+}
+
+// UpdateSpecificTags updates only the specified tags for a security, preserving other tags
+// symbol parameter is kept for backward compatibility, but we look up ISIN internally
+func (r *SecurityRepository) UpdateSpecificTags(symbol string, tagIDs []string) error {
+	// Normalize symbol
+	symbol = strings.ToUpper(strings.TrimSpace(symbol))
+
+	if len(tagIDs) == 0 {
+		return nil // Nothing to update
+	}
+
+	// Look up ISIN from symbol (security_tags table uses isin, not symbol)
+	security, err := r.GetBySymbol(symbol)
+	if err != nil {
+		return fmt.Errorf("failed to lookup security by symbol: %w", err)
+	}
+	if security == nil || security.ISIN == "" {
+		return fmt.Errorf("security not found or missing ISIN: %s", symbol)
+	}
+	isin := security.ISIN
+
+	// Ensure all tag IDs exist
+	if err := r.tagRepo.EnsureTagsExist(tagIDs); err != nil {
+		return fmt.Errorf("failed to ensure tags exist: %w", err)
+	}
+
+	// Begin transaction
+	tx, err := r.universeDB.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// Get current tags to determine which to delete and which to insert/update (using ISIN)
+	currentTags, err := r.getTagsForSecurity(isin)
+	if err != nil {
+		return fmt.Errorf("failed to get current tags: %w", err)
+	}
+
+	currentTagSet := make(map[string]bool)
+	for _, tagID := range currentTags {
+		currentTagSet[tagID] = true
+	}
+
+	now := time.Now().Format(time.RFC3339)
+	newTagSet := make(map[string]bool)
+
+	// Process each tag
+	for _, tagID := range tagIDs {
+		// Normalize tag ID
+		tagID = strings.ToLower(strings.TrimSpace(tagID))
+		if tagID == "" {
+			continue
+		}
+
+		newTagSet[tagID] = true
+
+		if currentTagSet[tagID] {
+			// Tag exists - update its updated_at timestamp (using ISIN)
+			_, err = tx.Exec(`
+				UPDATE security_tags
+				SET updated_at = ?
+				WHERE isin = ? AND tag_id = ?
+			`, now, isin, tagID)
+			if err != nil {
+				return fmt.Errorf("failed to update tag %s: %w", tagID, err)
+			}
+		} else {
+			// Tag doesn't exist - insert it (using ISIN)
+			_, err = tx.Exec(`
+				INSERT INTO security_tags (isin, tag_id, created_at, updated_at)
+				VALUES (?, ?, ?, ?)
+			`, isin, tagID, now, now)
+			if err != nil {
+				return fmt.Errorf("failed to insert tag %s: %w", tagID, err)
+			}
+		}
+	}
+
+	// Note: We don't delete tags that aren't in the new set - we only update the ones specified
+	// This allows partial updates while preserving other tags
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	r.log.Debug().
+		Str("symbol", symbol).
+		Int("tag_count", len(tagIDs)).
+		Msg("Specific tags updated for security")
+
+	return nil
+}
+
+// GetByTags returns active securities matching any of the provided tags
+// Uses indexed security_tags table for fast querying
+func (r *SecurityRepository) GetByTags(tagIDs []string) ([]Security, error) {
+	if len(tagIDs) == 0 {
+		return []Security{}, nil
+	}
+
+	// Normalize tag IDs
+	normalizedTags := make([]string, 0, len(tagIDs))
+	for _, tagID := range tagIDs {
+		normalized := strings.ToLower(strings.TrimSpace(tagID))
+		if normalized != "" {
+			normalizedTags = append(normalizedTags, normalized)
+		}
+	}
+
+	if len(normalizedTags) == 0 {
+		return []Security{}, nil
+	}
+
+	// Build query with placeholders
+	placeholders := strings.Repeat("?,", len(normalizedTags))
+	placeholders = placeholders[:len(placeholders)-1] // Remove trailing comma
+
+	query := fmt.Sprintf(`
+		SELECT DISTINCT s.isin, s.symbol, s.yahoo_symbol, s.name, s.product_type, s.industry, s.country, s.fullExchangeName,
+			s.priority_multiplier, s.min_lot, s.active, s.allow_buy, s.allow_sell, s.currency, s.last_synced,
+			s.min_portfolio_target, s.max_portfolio_target, s.created_at, s.updated_at
+		FROM securities s
+		INNER JOIN security_tags st ON s.isin = st.isin
+		WHERE st.tag_id IN (%s)
+		AND s.active = 1
+		ORDER BY s.symbol ASC
+	`, placeholders)
+
+	// Build args slice
+	args := make([]interface{}, len(normalizedTags))
+	for i, tagID := range normalizedTags {
+		args[i] = tagID
+	}
+
+	rows, err := r.universeDB.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query securities by tags: %w", err)
+	}
+	defer rows.Close()
+
+	var securities []Security
+	for rows.Next() {
+		security, err := r.scanSecurity(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan security: %w", err)
+		}
+
+		// Ensure tags are loaded (scanSecurity should load them, but reload to be safe)
+		// Use ISIN as primary identifier
+		if security.ISIN != "" {
+			tagIDs, tagErr := r.getTagsForSecurity(security.ISIN)
+			if tagErr == nil {
+				security.Tags = make([]string, len(tagIDs))
+				copy(security.Tags, tagIDs)
+			} else {
+				// If error, initialize to empty slice
+				security.Tags = []string{}
+			}
+		} else {
+			security.Tags = []string{}
+		}
+
+		securities = append(securities, security)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating securities: %w", err)
+	}
+
+	r.log.Debug().
+		Int("tag_count", len(normalizedTags)).
+		Int("securities_found", len(securities)).
+		Msg("Queried securities by tags")
+
+	return securities, nil
+}
+
+// GetPositionsByTags returns securities that are in the provided position symbols AND have the specified tags
+// This is useful for filtering portfolio positions by tags
+func (r *SecurityRepository) GetPositionsByTags(positionSymbols []string, tagIDs []string) ([]Security, error) {
+	if len(positionSymbols) == 0 || len(tagIDs) == 0 {
+		return []Security{}, nil
+	}
+
+	// Normalize symbols
+	normalizedSymbols := make([]string, 0, len(positionSymbols))
+	for _, symbol := range positionSymbols {
+		normalized := strings.ToUpper(strings.TrimSpace(symbol))
+		if normalized != "" {
+			normalizedSymbols = append(normalizedSymbols, normalized)
+		}
+	}
+
+	// Normalize tag IDs
+	normalizedTags := make([]string, 0, len(tagIDs))
+	for _, tagID := range tagIDs {
+		normalized := strings.ToLower(strings.TrimSpace(tagID))
+		if normalized != "" {
+			normalizedTags = append(normalizedTags, normalized)
+		}
+	}
+
+	if len(normalizedSymbols) == 0 || len(normalizedTags) == 0 {
+		return []Security{}, nil
+	}
+
+	// Build query with placeholders
+	symbolPlaceholders := strings.Repeat("?,", len(normalizedSymbols))
+	symbolPlaceholders = symbolPlaceholders[:len(symbolPlaceholders)-1]
+
+	tagPlaceholders := strings.Repeat("?,", len(normalizedTags))
+	tagPlaceholders = tagPlaceholders[:len(tagPlaceholders)-1]
+
+	query := fmt.Sprintf(`
+		SELECT DISTINCT s.isin, s.symbol, s.yahoo_symbol, s.name, s.product_type, s.industry, s.country, s.fullExchangeName,
+			s.priority_multiplier, s.min_lot, s.active, s.allow_buy, s.allow_sell, s.currency, s.last_synced,
+			s.min_portfolio_target, s.max_portfolio_target, s.created_at, s.updated_at
+		FROM securities s
+		INNER JOIN security_tags st ON s.isin = st.isin
+		WHERE s.symbol IN (%s)
+		AND st.tag_id IN (%s)
+		AND s.active = 1
+		ORDER BY s.symbol ASC
+	`, symbolPlaceholders, tagPlaceholders)
+
+	// Build args slice (symbols first, then tags)
+	args := make([]interface{}, 0, len(normalizedSymbols)+len(normalizedTags))
+	for _, symbol := range normalizedSymbols {
+		args = append(args, symbol)
+	}
+	for _, tagID := range normalizedTags {
+		args = append(args, tagID)
+	}
+
+	rows, err := r.universeDB.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query positions by tags: %w", err)
+	}
+	defer rows.Close()
+
+	var securities []Security
+	for rows.Next() {
+		security, err := r.scanSecurity(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan security: %w", err)
+		}
+
+		// Ensure tags are loaded (scanSecurity should load them, but reload to be safe)
+		if security.Symbol != "" {
+			tagIDs, tagErr := r.getTagsForSecurity(security.Symbol)
+			if tagErr != nil {
+				// Log error but don't fail - tags are optional
+				r.log.Warn().Str("symbol", security.Symbol).Err(tagErr).Msg("Failed to load tags for security in GetPositionsByTags")
+				security.Tags = []string{}
+			} else {
+				security.Tags = make([]string, len(tagIDs))
+				copy(security.Tags, tagIDs)
+			}
+		} else {
+			security.Tags = []string{}
+		}
+
+		securities = append(securities, security)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating securities: %w", err)
+	}
+
+	r.log.Debug().
+		Int("position_count", len(normalizedSymbols)).
+		Int("tag_count", len(normalizedTags)).
+		Int("securities_found", len(securities)).
+		Msg("Queried positions by tags")
+
+	return securities, nil
 }
 
 // Helper functions
