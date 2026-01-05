@@ -69,10 +69,10 @@ func TestSyncPricesForSymbols_Success(t *testing.T) {
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 
 	service := &SyncService{
-		yahooClient: mockYahooClient,
+		yahooClient:  mockYahooClient,
 		securityRepo: nil, // Optional - code handles nil gracefully
-		db:          mockDB,
-		log:         log,
+		db:           mockDB,
+		log:          log,
 	}
 
 	// Mock data
@@ -156,10 +156,10 @@ func TestSyncPricesForSymbols_NilPrice(t *testing.T) {
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 
 	service := &SyncService{
-		yahooClient: mockYahooClient,
+		yahooClient:  mockYahooClient,
 		securityRepo: nil, // Optional - code handles nil gracefully
-		db:          mockDB,
-		log:         log,
+		db:           mockDB,
+		log:          log,
 	}
 
 	// Mock data
@@ -197,10 +197,10 @@ func TestSyncPricesForSymbols_DatabaseError(t *testing.T) {
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 
 	service := &SyncService{
-		yahooClient: mockYahooClient,
+		yahooClient:  mockYahooClient,
 		securityRepo: nil, // Optional - code handles nil gracefully
-		db:          mockDB,
-		log:         log,
+		db:           mockDB,
+		log:          log,
 	}
 
 	// Mock data
@@ -235,10 +235,10 @@ func TestSyncPricesForSymbols_NoRowsAffected(t *testing.T) {
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 
 	service := &SyncService{
-		yahooClient: mockYahooClient,
+		yahooClient:  mockYahooClient,
 		securityRepo: nil, // Optional - code handles nil gracefully
-		db:          mockDB,
-		log:         log,
+		db:           mockDB,
+		log:          log,
 	}
 
 	// Mock data
