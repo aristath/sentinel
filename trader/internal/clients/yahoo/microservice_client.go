@@ -456,6 +456,7 @@ func (c *MicroserviceClient) GetSecurityInfo(
 		industry, _ := c.directClient.GetSecurityIndustry(symbol, yahooSymbolOverride)
 		country, exchange, _ := c.directClient.GetSecurityCountryAndExchange(symbol, yahooSymbolOverride)
 		quoteType, _ := c.directClient.GetQuoteType(symbol, yahooSymbolOverride)
+		name, _ := c.directClient.GetQuoteName(symbol, yahooSymbolOverride)
 		
 		var productType *string
 		if quoteType != "" {
@@ -469,6 +470,7 @@ func (c *MicroserviceClient) GetSecurityInfo(
 			Country:          country,
 			FullExchangeName: exchange,
 			ProductType:      productType,
+			Name:             name,
 		}, nil
 	}
 	
