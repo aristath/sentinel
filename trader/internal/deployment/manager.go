@@ -146,6 +146,7 @@ func NewManager(config *DeploymentConfig, version string, log zerolog.Logger) *M
 		config.GitHubWorkflowName,
 		config.GitHubArtifactName,
 		githubBranch,
+		config.RepoDir,
 		artifactTracker,
 		&logAdapter{log: log.With().Str("component", "github-artifact").Logger()},
 	)

@@ -78,16 +78,18 @@ type GitHubArtifactDeployer struct {
 	workflowName string
 	artifactName string
 	branch       string
+	repoDir      string
 	tracker      *ArtifactTracker
 }
 
 // NewGitHubArtifactDeployer creates a new GitHub artifact deployer
-func NewGitHubArtifactDeployer(workflowName, artifactName, branch string, tracker *ArtifactTracker, log Logger) *GitHubArtifactDeployer {
+func NewGitHubArtifactDeployer(workflowName, artifactName, branch, repoDir string, tracker *ArtifactTracker, log Logger) *GitHubArtifactDeployer {
 	return &GitHubArtifactDeployer{
 		log:          log,
 		workflowName: workflowName,
 		artifactName: artifactName,
 		branch:       branch,
+		repoDir:      repoDir,
 		tracker:      tracker,
 	}
 }
@@ -102,6 +104,7 @@ func (g *GitHubArtifactDeployer) CheckForNewBuild() (string, error) {
 	}
 
 	// Get latest successful run
+	// gh CLI needs to run from within a git repository to determine the repo context
 	cmd := exec.Command("gh", "run", "list",
 		"--workflow", g.workflowName,
 		"--branch", g.branch,
@@ -109,6 +112,7 @@ func (g *GitHubArtifactDeployer) CheckForNewBuild() (string, error) {
 		"--limit", "1",
 		"--json", "databaseId,status,conclusion,headSha,createdAt",
 	)
+	cmd.Dir = g.repoDir
 
 	output, err := cmd.Output()
 	if err != nil {
@@ -201,11 +205,13 @@ func (g *GitHubArtifactDeployer) DownloadArtifact(runID string, outputDir string
 		Msg("Downloading artifact from GitHub Actions")
 
 	// Download artifact using gh CLI
+	// gh CLI needs to run from within a git repository to determine the repo context
 	cmd := exec.Command("gh", "run", "download",
 		runID,
 		"--name", g.artifactName,
 		"--dir", outputDir,
 	)
+	cmd.Dir = g.repoDir
 
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
