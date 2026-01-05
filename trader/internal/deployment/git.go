@@ -163,12 +163,45 @@ func (g *GitChecker) CategorizeChanges(files []string) *ChangeCategories {
 }
 
 // PullChanges pulls latest changes from remote
+// It resets all local changes and cleans untracked files first
 func (g *GitChecker) PullChanges(branch string) error {
+	g.log.Info().
+		Str("branch", branch).
+		Msg("Resetting local changes before pulling")
+
+	// Reset all local changes
+	cmd := exec.Command("git", "reset", "--hard", "HEAD")
+	cmd.Dir = g.repoDir
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+
+	if err := cmd.Run(); err != nil {
+		g.log.Warn().
+			Err(err).
+			Msg("Failed to reset local changes (may not be necessary)")
+		// Continue anyway - reset might fail if already clean
+	}
+
+	// Clean untracked files and directories
+	g.log.Info().Msg("Cleaning untracked files")
+	cmd = exec.Command("git", "clean", "-fd")
+	cmd.Dir = g.repoDir
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+
+	if err := cmd.Run(); err != nil {
+		g.log.Warn().
+			Err(err).
+			Msg("Failed to clean untracked files (may not be necessary)")
+		// Continue anyway - clean might fail if nothing to clean
+	}
+
+	// Now pull changes
 	g.log.Info().
 		Str("branch", branch).
 		Msg("Pulling changes from remote")
 
-	cmd := exec.Command("git", "pull", "origin", branch)
+	cmd = exec.Command("git", "pull", "origin", branch)
 	cmd.Dir = g.repoDir
 	cmd.Stdout = nil
 	cmd.Stderr = nil
