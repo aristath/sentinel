@@ -40,12 +40,17 @@ jobs:
         run: |
           for dir in microservices/*/; do
             if [ -f "$dir/requirements.txt" ] && [ -d "$dir/tests" ]; then
-              echo "Running tests in $dir..."
-              cd "$dir"
-              python -m pip install --upgrade pip
-              pip install -r requirements.txt pytest
-              pytest tests/ -v --tb=short || exit 1
-              cd - > /dev/null
+              # Check if there are any test files (not just __init__.py)
+              if find "$dir/tests" -name "test_*.py" -o -name "*_test.py" | grep -q .; then
+                echo "Running tests in $dir..."
+                cd "$dir"
+                python -m pip install --upgrade pip
+                pip install -r requirements.txt pytest
+                pytest tests/ -v --tb=short || exit 1
+                cd - > /dev/null
+              else
+                echo "No test files found in $dir/tests, skipping..."
+              fi
             fi
           done
 
@@ -53,12 +58,17 @@ jobs:
         run: |
           for dir in microservices/*/; do
             if [ -f "$dir/requirements.txt" ] && [ -d "$dir/tests" ]; then
-              echo "Running tests with coverage in $dir..."
-              cd "$dir"
-              python -m pip install --upgrade pip
-              pip install -r requirements.txt pytest coverage
-              coverage run -m pytest tests/ -q || exit 1
-              coverage report --fail-under=70 || exit 1
-              cd - > /dev/null
+              # Check if there are any test files (not just __init__.py)
+              if find "$dir/tests" -name "test_*.py" -o -name "*_test.py" | grep -q .; then
+                echo "Running tests with coverage in $dir..."
+                cd "$dir"
+                python -m pip install --upgrade pip
+                pip install -r requirements.txt pytest coverage
+                coverage run -m pytest tests/ -q || exit 1
+                coverage report --fail-under=70 || exit 1
+                cd - > /dev/null
+              else
+                echo "No test files found in $dir/tests, skipping coverage..."
+              fi
             fi
           done

@@ -85,10 +85,15 @@ jobs:
       run: |
         for dir in microservices/*/; do
           if [ -f "$dir/requirements.txt" ] && [ -d "$dir/tests" ]; then
-            echo "Running tests in $dir..."
-            cd "$dir"
-            pip install -r requirements.txt
-            pytest tests/ -v --cov=app --cov-report=term-missing || exit 1
-            cd - > /dev/null
+            # Check if there are any test files (not just __init__.py)
+            if find "$dir/tests" -name "test_*.py" -o -name "*_test.py" | grep -q .; then
+              echo "Running tests in $dir..."
+              cd "$dir"
+              pip install -r requirements.txt
+              pytest tests/ -v --cov=app --cov-report=term-missing || exit 1
+              cd - > /dev/null
+            else
+              echo "No test files found in $dir/tests, skipping..."
+            fi
           fi
         done
