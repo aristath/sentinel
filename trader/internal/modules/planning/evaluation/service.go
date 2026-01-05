@@ -254,19 +254,19 @@ func convertPortfolioContext(
 	}
 
 	return models.PortfolioContext{
-		CountryWeights:        scoringCtx.CountryWeights,
-		IndustryWeights:       scoringCtx.IndustryWeights,
-		Positions:             scoringCtx.Positions,
-		SecurityCountries:     scoringCtx.SecurityCountries,
-		SecurityIndustries:    scoringCtx.SecurityIndustries,
-		SecurityScores:        scoringCtx.SecurityScores,
-		SecurityDividends:     scoringCtx.SecurityDividends,
-		CountryToGroup:        scoringCtx.CountryToGroup,
-		IndustryToGroup:       scoringCtx.IndustryToGroup,
-		PositionAvgPrices:     scoringCtx.PositionAvgPrices,
-		CurrentPrices:         scoringCtx.CurrentPrices,
+		CountryWeights:         scoringCtx.CountryWeights,
+		IndustryWeights:        scoringCtx.IndustryWeights,
+		Positions:              scoringCtx.Positions,
+		SecurityCountries:      scoringCtx.SecurityCountries,
+		SecurityIndustries:     scoringCtx.SecurityIndustries,
+		SecurityScores:         scoringCtx.SecurityScores,
+		SecurityDividends:      scoringCtx.SecurityDividends,
+		CountryToGroup:         scoringCtx.CountryToGroup,
+		IndustryToGroup:        scoringCtx.IndustryToGroup,
+		PositionAvgPrices:      scoringCtx.PositionAvgPrices,
+		CurrentPrices:          scoringCtx.CurrentPrices,
 		OptimizerTargetWeights: optimizerTargetWeights,
-		TotalValue:            scoringCtx.TotalValue,
+		TotalValue:             scoringCtx.TotalValue,
 	}
 }
 

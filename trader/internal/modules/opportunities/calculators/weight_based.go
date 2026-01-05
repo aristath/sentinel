@@ -21,7 +21,7 @@ type WeightBasedCalculator struct {
 func NewWeightBasedCalculator(log zerolog.Logger) *WeightBasedCalculator {
 	return &WeightBasedCalculator{
 		BaseCalculator: NewBaseCalculator(log, "weight_based"),
-		securityRepo:    nil, // Optional - quality gates only work if provided
+		securityRepo:   nil, // Optional - quality gates only work if provided
 	}
 }
 

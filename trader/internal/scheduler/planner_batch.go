@@ -9,8 +9,8 @@ import (
 	"github.com/aristath/arduino-trader/internal/clients/yahoo"
 	"github.com/aristath/arduino-trader/internal/domain"
 	"github.com/aristath/arduino-trader/internal/modules/allocation"
-	"github.com/aristath/arduino-trader/internal/modules/optimization"
 	"github.com/aristath/arduino-trader/internal/modules/opportunities"
+	"github.com/aristath/arduino-trader/internal/modules/optimization"
 	"github.com/aristath/arduino-trader/internal/modules/planning"
 	planningdomain "github.com/aristath/arduino-trader/internal/modules/planning/domain"
 	"github.com/aristath/arduino-trader/internal/modules/planning/evaluation"
@@ -18,8 +18,8 @@ import (
 	"github.com/aristath/arduino-trader/internal/modules/planning/planner"
 	"github.com/aristath/arduino-trader/internal/modules/planning/repository"
 	"github.com/aristath/arduino-trader/internal/modules/portfolio"
-	"github.com/aristath/arduino-trader/internal/modules/sequences"
 	scoringdomain "github.com/aristath/arduino-trader/internal/modules/scoring/domain"
+	"github.com/aristath/arduino-trader/internal/modules/sequences"
 	"github.com/aristath/arduino-trader/internal/modules/universe"
 	"github.com/rs/zerolog"
 )
@@ -325,7 +325,7 @@ func (j *PlannerBatchJob) getOptimizerTargetWeights(
 		MinCashReserve:     500.0,
 		MinTradeAmount:     0.0,
 		TransactionCostPct: 0.002,
-		MaxConcentration:  0.25,
+		MaxConcentration:   0.25,
 	}
 
 	// Run optimization
@@ -448,7 +448,7 @@ func (j *PlannerBatchJob) buildOpportunityContext(
 		SecurityCountries:  securityCountries,
 		SecurityIndustries: securityIndustries,
 		SecurityScores:     make(map[string]float64), // Could fetch from score repo if needed
-		SecurityDividends: make(map[string]float64), // Could fetch from dividend repo if needed
+		SecurityDividends:  make(map[string]float64), // Could fetch from dividend repo if needed
 		CountryToGroup:     countryToGroup,
 		IndustryToGroup:    industryToGroup,
 		PositionAvgPrices:  positionAvgPrices,
