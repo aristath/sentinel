@@ -16,7 +16,7 @@ type OpportunityContext struct {
 	TotalPortfolioValueEUR float64                         `json:"total_portfolio_value_eur"`
 
 	// Market data
-	CurrentPrices  map[string]float64         `json:"current_prices"`  // Key: ISIN (internal identifier)
+	CurrentPrices  map[string]float64         `json:"current_prices"`   // Key: ISIN (internal identifier)
 	StocksByISIN   map[string]domain.Security `json:"stocks_by_isin"`   // Key: ISIN (primary identifier)
 	StocksBySymbol map[string]domain.Security `json:"stocks_by_symbol"` // Key: Symbol (for backward compatibility, deprecated)
 
@@ -68,7 +68,7 @@ func NewOpportunityContext(
 		AvailableCashEUR:       availableCashEUR,
 		TotalPortfolioValueEUR: totalPortfolioValueEUR,
 		CurrentPrices:          currentPrices,
-		StocksByISIN:            stocksByISIN,
+		StocksByISIN:           stocksByISIN,
 		StocksBySymbol:         stocksBySymbol,
 		IneligibleSymbols:      make(map[string]bool),
 		RecentlySold:           make(map[string]bool),
@@ -156,7 +156,7 @@ type EvaluationContext struct {
 	TotalPortfolioValueEUR float64                         `json:"total_portfolio_value_eur"`
 
 	// Market data
-	CurrentPrices  map[string]float64         `json:"current_prices"`  // Key: ISIN (internal identifier)
+	CurrentPrices  map[string]float64         `json:"current_prices"`   // Key: ISIN (internal identifier)
 	StocksByISIN   map[string]domain.Security `json:"stocks_by_isin"`   // Key: ISIN (primary identifier)
 	StocksBySymbol map[string]domain.Security `json:"stocks_by_symbol"` // Key: Symbol (for backward compatibility, deprecated)
 
@@ -197,7 +197,7 @@ func NewEvaluationContext(
 		AvailableCashEUR:       availableCashEUR,
 		TotalPortfolioValueEUR: totalPortfolioValueEUR,
 		CurrentPrices:          currentPrices,
-		StocksByISIN:            stocksByISIN,
+		StocksByISIN:           stocksByISIN,
 		StocksBySymbol:         stocksBySymbol,
 		TransactionCostFixed:   2.0,
 		TransactionCostPercent: 0.002,
