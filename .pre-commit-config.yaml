@@ -84,6 +84,15 @@ repos:
   # golangci-lint - comprehensive linter
   - repo: local
     hooks:
+      # Ensure go.sum is up to date when go.mod or Go files change
+      - id: ensure-go-sum
+        name: Ensure go.sum is up to date
+        entry: bash -c 'cd trader && go mod tidy && git add go.sum go.mod 2>/dev/null || true'
+        language: system
+        files: ^trader/(go\.mod|.*\.go)$
+        pass_filenames: false
+        always_run: false
+
       - id: golangci-lint
         name: golangci-lint
         entry: bash -c 'export PATH="$(go env GOPATH)/bin:$PATH" && cd trader && golangci-lint run --timeout=5m --config .golangci.yml ./...'
