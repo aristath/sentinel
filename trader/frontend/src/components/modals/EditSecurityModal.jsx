@@ -1,4 +1,4 @@
-import { Modal, TextInput, NumberInput, Switch, Button, Group, Stack } from '@mantine/core';
+import { Modal, TextInput, NumberInput, Switch, Button, Group, Stack, Select } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useAppStore } from '../../stores/appStore';
 import { useSecuritiesStore } from '../../stores/securitiesStore';
@@ -32,6 +32,7 @@ export function EditSecurityModal() {
         'country',
         'fullExchangeName',
         'industry',
+        'product_type',
         'min_lot',
         'allow_buy',
         'allow_sell',
@@ -117,6 +118,20 @@ export function EditSecurityModal() {
           onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
           placeholder="e.g., Technology, Healthcare, Financial Services"
           description="Industry classification"
+        />
+        <Select
+          label="Product Type"
+          value={formData.product_type || 'UNKNOWN'}
+          onChange={(value) => setFormData({ ...formData, product_type: value })}
+          data={[
+            { value: 'EQUITY', label: 'EQUITY - Individual stocks/shares' },
+            { value: 'ETF', label: 'ETF - Exchange Traded Funds' },
+            { value: 'MUTUALFUND', label: 'MUTUALFUND - Mutual funds' },
+            { value: 'ETC', label: 'ETC - Exchange Traded Commodities' },
+            { value: 'CASH', label: 'CASH - Cash positions' },
+            { value: 'UNKNOWN', label: 'UNKNOWN - Unknown type' },
+          ]}
+          description="Product type (auto-detected from Yahoo Finance, can be manually overridden)"
         />
         <NumberInput
           label="Min Lot Size"

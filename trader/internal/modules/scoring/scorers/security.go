@@ -65,6 +65,7 @@ type ScoreSecurityInput struct {
 	PortfolioContext      *domain.PortfolioContext
 	Industry              *string
 	Country               *string
+	ProductType           string // Product type: EQUITY, ETF, MUTUALFUND, ETC, CASH, UNKNOWN
 	SortinoRatio          *float64
 	MaxDrawdown           *float64
 	PERatio               *float64
@@ -128,6 +129,7 @@ func (ss *SecurityScorer) ScoreSecurity(input ScoreSecurityInput) *domain.Calcul
 		input.MarketAvgPE,
 		&fundamentalsScore.Score, // Pass fundamentals score for quality gate
 		&longTermScore.Score,     // Pass long-term score for quality gate
+		input.ProductType,        // Pass product type for product-type-aware opportunity scoring
 	)
 	groupScores["opportunity"] = opportunityScore.Score
 	subScores["opportunity"] = opportunityScore.Components
@@ -192,8 +194,11 @@ func (ss *SecurityScorer) ScoreSecurity(input ScoreSecurityInput) *domain.Calcul
 		}
 	}
 
+	// Get product-type-aware weights
+	weights := ss.getScoreWeights(input.ProductType)
+
 	// Normalize weights
-	normalizedWeights := normalizeWeights(ScoreWeights)
+	normalizedWeights := normalizeWeights(weights)
 
 	// Calculate weighted total
 	totalScore := 0.0
@@ -237,6 +242,28 @@ func normalizeWeights(weights map[string]float64) map[string]float64 {
 	}
 
 	return normalized
+}
+
+// getScoreWeights returns score weights based on product type
+// Implements product-type-aware scoring weights as per PRODUCT_TYPE_DIFFERENTIATION.md
+func (ss *SecurityScorer) getScoreWeights(productType string) map[string]float64 {
+	// Treat ETFs and Mutual Funds identically (both are diversified products)
+	if productType == "ETF" || productType == "MUTUALFUND" {
+		// Diversified product weights (ETFs & Mutual Funds)
+		return map[string]float64{
+			"long_term":       0.35, // ↑ from 25% (tracking quality matters)
+			"fundamentals":    0.10, // ↓ from 20% (less relevant)
+			"dividends":       0.18, // Same
+			"opportunity":     0.12, // Same
+			"short_term":      0.08, // Same
+			"technicals":      0.07, // Same
+			"opinion":         0.05, // Same
+			"diversification": 0.05, // Same
+		}
+	}
+
+	// Default weights for stocks (EQUITY) and other types
+	return ScoreWeights
 }
 
 // round4 rounds to 4 decimal places

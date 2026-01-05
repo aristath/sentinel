@@ -566,7 +566,10 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 		PlannerService:         plannerService,
 		ConfigRepo:             plannerConfigRepo,
 		RecommendationRepo:     recommendationRepo,
-		MinPlanningIntervalMin: 15, // Minimum 15 minutes between planning cycles
+		PortfolioDB:            portfolioDB.Conn(), // For querying scores and calculations
+		ConfigDB:               configDB.Conn(),    // For querying settings
+		ScoreRepo:              scoreRepo,          // For querying quality scores
+		MinPlanningIntervalMin: 15,                 // Minimum 15 minutes between planning cycles
 	})
 	if err := sched.AddJob("0 */15 * * * *", plannerBatch); err != nil {
 		return nil, fmt.Errorf("failed to register planner_batch job: %w", err)

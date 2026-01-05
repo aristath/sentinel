@@ -32,11 +32,12 @@ func (os *OpportunityScorer) Calculate(
 	forwardPE *float64,
 	marketAvgPE float64,
 ) OpportunityScore {
-	return os.CalculateWithQualityGate(dailyPrices, peRatio, forwardPE, marketAvgPE, nil, nil)
+	return os.CalculateWithQualityGate(dailyPrices, peRatio, forwardPE, marketAvgPE, nil, nil, "UNKNOWN")
 }
 
 // CalculateWithQualityGate calculates opportunity score with quality gates to prevent value traps
 // Quality gates ensure we don't buy cheap but declining quality securities.
+// Product-type-aware: ETFs/Mutual Funds have less P/E emphasis (25% vs 50%)
 //
 // Args:
 //   - dailyPrices: Daily price history
@@ -45,6 +46,7 @@ func (os *OpportunityScorer) Calculate(
 //   - marketAvgPE: Market average P/E ratio
 //   - fundamentalsScore: Fundamentals score (optional, for quality gate)
 //   - longTermScore: Long-term score (optional, for quality gate)
+//   - productType: Product type (EQUITY, ETF, MUTUALFUND, ETC, CASH, UNKNOWN)
 //
 // Returns:
 //   - OpportunityScore with quality gate applied
@@ -55,6 +57,7 @@ func (os *OpportunityScorer) CalculateWithQualityGate(
 	marketAvgPE float64,
 	fundamentalsScore *float64,
 	longTermScore *float64,
+	productType string,
 ) OpportunityScore {
 	if len(dailyPrices) < scoring.MinDaysForOpportunity {
 		// Insufficient data - return neutral score
@@ -77,8 +80,20 @@ func (os *OpportunityScorer) CalculateWithQualityGate(
 	// Calculate P/E ratio score
 	peScore := scorePERatio(peRatio, forwardPE, marketAvgPE)
 
-	// Base combined score (50/50 split)
-	baseScore := below52wScore*0.50 + peScore*0.50
+	// Product-type-aware weights: ETFs/Mutual Funds have less P/E emphasis
+	var peWeight, below52wWeight float64
+	if productType == "ETF" || productType == "MUTUALFUND" {
+		// ETFs & Mutual Funds: 25% P/E, 75% 52W high (P/E less meaningful for diversified products)
+		peWeight = 0.25
+		below52wWeight = 0.75
+	} else {
+		// Stocks and others: 50/50 split (normal)
+		peWeight = 0.50
+		below52wWeight = 0.50
+	}
+
+	// Base combined score with product-type-aware weights
+	baseScore := below52wScore*below52wWeight + peScore*peWeight
 
 	// Apply quality gate: if opportunity score is high but quality is low, reduce score
 	// This prevents buying value traps (cheap but declining quality)

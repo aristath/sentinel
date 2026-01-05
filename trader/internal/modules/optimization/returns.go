@@ -53,18 +53,24 @@ func (rc *ReturnsCalculator) CalculateExpectedReturns(
 	securities []Security,
 	regime string,
 	dividendBonuses map[string]float64,
+	targetReturn float64,
+	targetReturnThresholdPct float64,
 ) (map[string]float64, error) {
 	expectedReturns := make(map[string]float64)
 
 	// Calculate forward-looking market indicator adjustment
 	forwardAdjustment := rc.calculateForwardAdjustment()
 
-	targetReturn := OptimizerTargetReturn
+	// Default threshold if not provided (0.80 = 80%)
+	if targetReturnThresholdPct <= 0 {
+		targetReturnThresholdPct = 0.80
+	}
 
 	for _, security := range securities {
 		expReturn, err := rc.calculateSingle(
 			security,
 			targetReturn,
+			targetReturnThresholdPct,
 			dividendBonuses[security.Symbol],
 			regime,
 			forwardAdjustment,
@@ -172,11 +178,13 @@ func (rc *ReturnsCalculator) calculateForwardAdjustment() float64 {
 func (rc *ReturnsCalculator) calculateSingle(
 	security Security,
 	targetReturn float64,
+	targetReturnThresholdPct float64,
 	dividendBonus float64,
 	regime string,
 	forwardAdjustment float64,
 ) (*float64, error) {
 	symbol := security.Symbol
+	isin := security.ISIN
 
 	// Get CAGR (prefer 5Y, fallback to 10Y)
 	cagr, dividendYield, err := rc.getCAGRAndDividend(symbol)
@@ -194,7 +202,7 @@ func (rc *ReturnsCalculator) calculateSingle(
 	totalReturnCAGR := *cagr + dividendYield
 
 	// Get security score (0-1 range)
-	score, err := rc.getScore(symbol)
+	score, err := rc.getScore(isin, symbol)
 	if err != nil {
 		rc.log.Warn().
 			Str("symbol", symbol).
@@ -256,6 +264,60 @@ func (rc *ReturnsCalculator) calculateSingle(
 	// Clamp to reasonable range
 	clamped := clamp(finalReturn, ExpectedReturnMin, ExpectedReturnMax)
 
+	// Apply target return filtering with absolute minimum guardrail
+	// Absolute minimum: Never allow below 6% or 50% of target (whichever is higher)
+	absoluteMinReturn := math.Max(0.06, targetReturn*0.50)
+	if clamped < absoluteMinReturn {
+		rc.log.Debug().
+			Str("symbol", symbol).
+			Float64("expected_return", clamped).
+			Float64("absolute_min", absoluteMinReturn).
+			Msg("Filtered out: below absolute minimum return (hard filter)")
+		return nil, nil // Hard filter: exclude regardless of quality
+	}
+
+	// Flexible penalty system: Apply penalty if below threshold, but allow quality to overcome it
+	// Minimum threshold: target * threshold_pct (default 80% of target)
+	minExpectedReturnThreshold := targetReturn * targetReturnThresholdPct
+	if clamped < minExpectedReturnThreshold {
+		// Calculate penalty based on how far below threshold
+		// Penalty increases as return gets further below threshold
+		// Max penalty: 30% reduction
+		shortfallRatio := (minExpectedReturnThreshold - clamped) / minExpectedReturnThreshold
+		penalty := math.Min(0.3, shortfallRatio*0.5) // Up to 30% penalty
+
+		// Quality override: Get quality scores for penalty reduction
+		longTermScore, fundamentalsScore := rc.getQualityScores(isin, symbol)
+		qualityScore := 0.0
+		if longTermScore != nil && fundamentalsScore != nil {
+			qualityScore = (*longTermScore + *fundamentalsScore) / 2.0
+		} else if longTermScore != nil {
+			qualityScore = *longTermScore
+		} else if fundamentalsScore != nil {
+			qualityScore = *fundamentalsScore
+		}
+
+		// Apply quality override: Only exceptional quality gets significant reduction
+		if qualityScore > 0.80 {
+			penalty *= 0.65 // Reduce penalty by 35% for exceptional quality (0.80+)
+		} else if qualityScore > 0.75 {
+			penalty *= 0.80 // Reduce penalty by 20% for high quality (0.75-0.80)
+		}
+		// Quality below 0.75 gets no override (full penalty applies)
+
+		// Apply penalty to expected return
+		clamped = clamped * (1.0 - penalty)
+
+		rc.log.Debug().
+			Str("symbol", symbol).
+			Float64("expected_return_before_penalty", finalReturn).
+			Float64("expected_return_after_penalty", clamped).
+			Float64("min_threshold", minExpectedReturnThreshold).
+			Float64("penalty", penalty).
+			Float64("quality_score", qualityScore).
+			Msg("Applied flexible penalty (quality-aware)")
+	}
+
 	rc.log.Debug().
 		Str("symbol", symbol).
 		Float64("cagr", *cagr).
@@ -304,17 +366,31 @@ func (rc *ReturnsCalculator) getCAGRAndDividend(symbol string) (*float64, float6
 }
 
 // getScore fetches security score from database.
-func (rc *ReturnsCalculator) getScore(symbol string) (float64, error) {
-	query := `
-		SELECT total_score
-		FROM scores
-		WHERE symbol = ?
-		ORDER BY timestamp DESC
-		LIMIT 1
-	`
+// Uses ISIN if available, falls back to symbol lookup via positions table.
+func (rc *ReturnsCalculator) getScore(isin string, symbol string) (float64, error) {
+	var query string
+	var arg interface{}
+
+	if isin != "" {
+		// Use ISIN (primary key in scores table)
+		query = `SELECT total_score FROM scores WHERE isin = ? ORDER BY last_updated DESC LIMIT 1`
+		arg = isin
+	} else {
+		// Fallback: Try to find ISIN via positions table, then query scores
+		// This is a workaround - ideally ISIN should always be available
+		query = `
+			SELECT s.total_score
+			FROM scores s
+			INNER JOIN positions p ON s.isin = p.isin
+			WHERE p.symbol = ?
+			ORDER BY s.last_updated DESC
+			LIMIT 1
+		`
+		arg = symbol
+	}
 
 	var score sql.NullFloat64
-	err := rc.db.QueryRow(query, symbol).Scan(&score)
+	err := rc.db.QueryRow(query, arg).Scan(&score)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return 0.5, nil // Default to neutral
@@ -327,6 +403,58 @@ func (rc *ReturnsCalculator) getScore(symbol string) (float64, error) {
 	}
 
 	return score.Float64, nil
+}
+
+// getQualityScores fetches long-term and fundamentals scores for quality override calculation.
+// Uses cagr_score as proxy for long-term and fundamental_score for fundamentals.
+// Uses ISIN if available, falls back to symbol lookup via positions table.
+func (rc *ReturnsCalculator) getQualityScores(isin string, symbol string) (*float64, *float64) {
+	var query string
+	var arg interface{}
+
+	if isin != "" {
+		// Use ISIN (primary key in scores table)
+		query = `SELECT cagr_score, fundamental_score FROM scores WHERE isin = ? ORDER BY last_updated DESC LIMIT 1`
+		arg = isin
+	} else {
+		// Fallback: Try to find ISIN via positions table, then query scores
+		query = `
+			SELECT s.cagr_score, s.fundamental_score
+			FROM scores s
+			INNER JOIN positions p ON s.isin = p.isin
+			WHERE p.symbol = ?
+			ORDER BY s.last_updated DESC
+			LIMIT 1
+		`
+		arg = symbol
+	}
+
+	var cagrScore, fundamentalScore sql.NullFloat64
+	err := rc.db.QueryRow(query, arg).Scan(&cagrScore, &fundamentalScore)
+	if err != nil {
+		if err != sql.ErrNoRows {
+			rc.log.Debug().
+				Str("isin", isin).
+				Str("symbol", symbol).
+				Err(err).
+				Msg("Failed to query quality scores")
+		}
+		return nil, nil
+	}
+
+	var longTermPtr, fundamentalsPtr *float64
+	if cagrScore.Valid {
+		// Use cagr_score as proxy for long-term (normalize to 0-1 range)
+		// CAGR scores are typically in 0-1 range already, but normalize if needed
+		normalized := math.Max(0.0, math.Min(1.0, cagrScore.Float64))
+		longTermPtr = &normalized
+	}
+	if fundamentalScore.Valid {
+		normalized := math.Max(0.0, math.Min(1.0, fundamentalScore.Float64))
+		fundamentalsPtr = &normalized
+	}
+
+	return longTermPtr, fundamentalsPtr
 }
 
 // Helper functions

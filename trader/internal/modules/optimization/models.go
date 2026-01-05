@@ -62,6 +62,8 @@ type PortfolioState struct {
 // Security represents a security in the portfolio (placeholder - actual definition elsewhere).
 type Security struct {
 	Symbol             string
+	ISIN               string // ISIN for score lookups (scores table uses ISIN as primary key)
+	ProductType        string // Product type: EQUITY, ETF, MUTUALFUND, ETC, CASH, UNKNOWN
 	Country            string
 	Industry           string
 	MinPortfolioTarget float64
@@ -84,12 +86,13 @@ type Position struct {
 
 // Settings contains optimizer configuration.
 type Settings struct {
-	Blend              float64 // 0.0 = pure MV, 1.0 = pure HRP
-	TargetReturn       float64
-	MinCashReserve     float64
-	MinTradeAmount     float64
-	TransactionCostPct float64
-	MaxConcentration   float64
+	Blend                    float64 // 0.0 = pure MV, 1.0 = pure HRP
+	TargetReturn             float64
+	TargetReturnThresholdPct float64 // Threshold percentage (default: 0.80 = 80% of target)
+	MinCashReserve           float64
+	MinTradeAmount           float64
+	TransactionCostPct       float64
+	MaxConcentration         float64
 }
 
 // Constraints

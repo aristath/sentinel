@@ -1,6 +1,7 @@
 package rebalancing
 
 import (
+	"database/sql"
 	"testing"
 
 	"github.com/aristath/arduino-trader/pkg/logger"
@@ -59,14 +60,16 @@ func TestService_GetTriggerChecker(t *testing.T) {
 	service := NewService(
 		triggerChecker,
 		negativeRebalancer,
-		nil, // planningService
-		nil, // positionRepo
-		nil, // securityRepo
-		nil, // allocRepo
-		nil, // tradernetClient
-		nil, // yahooClient
-		nil, // configRepo
-		nil, // recommendationRepo
+		nil,            // planningService
+		nil,            // positionRepo
+		nil,            // securityRepo
+		nil,            // allocRepo
+		nil,            // tradernetClient
+		nil,            // yahooClient
+		nil,            // configRepo
+		nil,            // recommendationRepo
+		(*sql.DB)(nil), // portfolioDB
+		(*sql.DB)(nil), // configDB
 		log,
 	)
 
@@ -84,14 +87,16 @@ func TestService_GetNegativeBalanceRebalancer(t *testing.T) {
 	service := NewService(
 		triggerChecker,
 		negativeRebalancer,
-		nil, // planningService
-		nil, // positionRepo
-		nil, // securityRepo
-		nil, // allocRepo
-		nil, // tradernetClient
-		nil, // yahooClient
-		nil, // configRepo
-		nil, // recommendationRepo
+		nil,            // planningService
+		nil,            // positionRepo
+		nil,            // securityRepo
+		nil,            // allocRepo
+		nil,            // tradernetClient
+		nil,            // yahooClient
+		nil,            // configRepo
+		nil,            // recommendationRepo
+		(*sql.DB)(nil), // portfolioDB
+		(*sql.DB)(nil), // configDB
 		log,
 	)
 
@@ -109,14 +114,16 @@ func TestService_CalculateRebalanceTrades_InsufficientCash(t *testing.T) {
 	service := NewService(
 		triggerChecker,
 		negativeRebalancer,
-		nil, // planningService
-		nil, // positionRepo
-		nil, // securityRepo
-		nil, // allocRepo
-		nil, // tradernetClient
-		nil, // yahooClient
-		nil, // configRepo
-		nil, // recommendationRepo
+		nil,            // planningService
+		nil,            // positionRepo
+		nil,            // securityRepo
+		nil,            // allocRepo
+		nil,            // tradernetClient
+		nil,            // yahooClient
+		nil,            // configRepo
+		nil,            // recommendationRepo
+		(*sql.DB)(nil), // portfolioDB
+		(*sql.DB)(nil), // configDB
 		log,
 	)
 

@@ -433,6 +433,7 @@ func (h *UniverseHandlers) HandleGetStock(w http.ResponseWriter, r *http.Request
 		"isin":                 security.ISIN,
 		"yahoo_symbol":         security.YahooSymbol,
 		"name":                 security.Name,
+		"product_type":         security.ProductType,
 		"industry":             security.Industry,
 		"country":              security.Country,
 		"fullExchangeName":     security.FullExchangeName,
@@ -877,6 +878,7 @@ func (h *UniverseHandlers) HandleUpdateStock(w http.ResponseWriter, r *http.Requ
 		"isin":                updatedSecurity.ISIN,
 		"yahoo_symbol":        updatedSecurity.YahooSymbol,
 		"name":                updatedSecurity.Name,
+		"product_type":        updatedSecurity.ProductType,
 		"industry":            updatedSecurity.Industry,
 		"country":             updatedSecurity.Country,
 		"fullExchangeName":    updatedSecurity.FullExchangeName,
@@ -1025,6 +1027,7 @@ func (h *UniverseHandlers) calculateAndSaveScore(isin string, yahooSymbol string
 	// Build scoring input
 	scoringInput := scorers.ScoreSecurityInput{
 		Symbol:        symbol,
+		ProductType:   security.ProductType, // Pass product type for product-type-aware scoring
 		DailyPrices:   closePrices,
 		MonthlyPrices: monthlyPricesConverted,
 	}

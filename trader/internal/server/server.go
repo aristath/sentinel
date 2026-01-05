@@ -937,6 +937,8 @@ func (s *Server) setupRebalancingRoutes(r chi.Router) {
 		yahooClient,
 		plannerConfigRepo,
 		recommendationRepo,
+		s.portfolioDB.Conn(), // For querying scores and calculations
+		s.configDB.Conn(),    // For querying settings
 		s.log,
 	)
 

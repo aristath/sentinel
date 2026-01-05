@@ -1,7 +1,9 @@
 package rebalancing
 
 import (
+	"database/sql"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/aristath/arduino-trader/internal/clients/tradernet"
@@ -13,6 +15,7 @@ import (
 	"github.com/aristath/arduino-trader/internal/modules/planning/hash"
 	planningrepo "github.com/aristath/arduino-trader/internal/modules/planning/repository"
 	"github.com/aristath/arduino-trader/internal/modules/portfolio"
+	"github.com/aristath/arduino-trader/internal/modules/settings"
 	"github.com/aristath/arduino-trader/internal/modules/universe"
 	"github.com/rs/zerolog"
 )
@@ -65,6 +68,8 @@ type Service struct {
 	yahooClient        yahoo.FullClientInterface
 	configRepo         *planningrepo.ConfigRepository
 	recommendationRepo *planning.RecommendationRepository
+	portfolioDB        *sql.DB // For querying scores and calculations
+	configDB           *sql.DB // For querying settings
 
 	log zerolog.Logger
 }
@@ -81,6 +86,8 @@ func NewService(
 	yahooClient yahoo.FullClientInterface,
 	configRepo *planningrepo.ConfigRepository,
 	recommendationRepo *planning.RecommendationRepository,
+	portfolioDB *sql.DB, // For querying scores and calculations
+	configDB *sql.DB, // For querying settings
 	log zerolog.Logger,
 ) *Service {
 	return &Service{
@@ -94,6 +101,8 @@ func NewService(
 		yahooClient:        yahooClient,
 		configRepo:         configRepo,
 		recommendationRepo: recommendationRepo,
+		portfolioDB:        portfolioDB,
+		configDB:           configDB,
 		log:                log.With().Str("service", "rebalancing").Logger(),
 	}
 }
@@ -237,6 +246,7 @@ func (s *Service) buildOpportunityContext(availableCash float64) (*planningdomai
 	// Convert securities to domain format
 	domainSecurities := make([]domain.Security, 0, len(securities))
 	stocksBySymbol := make(map[string]domain.Security)
+	stocksByISIN := make(map[string]domain.Security)
 	for _, sec := range securities {
 		domainSec := domain.Security{
 			Symbol:  sec.Symbol,
@@ -247,6 +257,9 @@ func (s *Service) buildOpportunityContext(availableCash float64) (*planningdomai
 		}
 		domainSecurities = append(domainSecurities, domainSec)
 		stocksBySymbol[sec.Symbol] = domainSec
+		if sec.ISIN != "" {
+			stocksByISIN[sec.ISIN] = domainSec
+		}
 	}
 
 	// Fetch current prices
@@ -263,22 +276,33 @@ func (s *Service) buildOpportunityContext(availableCash float64) (*planningdomai
 		}
 	}
 
+	// Populate target return filtering data (CAGR, quality scores, settings)
+	cagrs := s.populateCAGRs(securities)
+	longTermScores, fundamentalsScores := s.populateQualityScores(securities)
+	targetReturn, targetReturnThresholdPct := s.getTargetReturnSettings()
+
 	// Create OpportunityContext
 	ctx := &planningdomain.OpportunityContext{
-		Positions:              domainPositions,
-		Securities:             domainSecurities,
-		StocksBySymbol:         stocksBySymbol,
-		AvailableCashEUR:       availableCash,
-		TotalPortfolioValueEUR: totalValue,
-		CurrentPrices:          currentPrices,
-		TargetWeights:          allocations,
-		IneligibleSymbols:      make(map[string]bool),
-		RecentlySold:           make(map[string]bool),
-		RecentlyBought:         make(map[string]bool),
-		TransactionCostFixed:   2.0,
-		TransactionCostPercent: 0.002,
-		AllowSell:              false, // Rebalancing only buys
-		AllowBuy:               true,
+		Positions:                domainPositions,
+		Securities:               domainSecurities,
+		StocksByISIN:             stocksByISIN,
+		StocksBySymbol:           stocksBySymbol,
+		AvailableCashEUR:         availableCash,
+		TotalPortfolioValueEUR:   totalValue,
+		CurrentPrices:            currentPrices,
+		TargetWeights:            allocations,
+		IneligibleSymbols:        make(map[string]bool),
+		RecentlySold:             make(map[string]bool),
+		RecentlyBought:           make(map[string]bool),
+		TransactionCostFixed:     2.0,
+		TransactionCostPercent:   0.002,
+		AllowSell:                false, // Rebalancing only buys
+		AllowBuy:                 true,
+		CAGRs:                    cagrs,
+		LongTermScores:           longTermScores,
+		FundamentalsScores:       fundamentalsScores,
+		TargetReturn:             targetReturn,
+		TargetReturnThresholdPct: targetReturnThresholdPct,
 	}
 
 	s.log.Debug().
@@ -359,6 +383,218 @@ func (s *Service) fetchCurrentPrices(securities []universe.Security) map[string]
 		Msg("Fetched current prices from Yahoo")
 
 	return prices
+}
+
+// populateCAGRs fetches CAGR values from calculations table for all securities
+// Returns map keyed by both ISIN and symbol for flexible lookup
+func (s *Service) populateCAGRs(securities []universe.Security) map[string]float64 {
+	cagrs := make(map[string]float64)
+
+	if s.portfolioDB == nil {
+		s.log.Debug().Msg("PortfolioDB not available, skipping CAGR population")
+		return cagrs
+	}
+
+	// Query CAGR for all securities (prefer 5Y, fallback to 10Y)
+	query := `
+		SELECT
+			symbol,
+			COALESCE(
+				MAX(CASE WHEN metric_name = 'CAGR_5Y' THEN value END),
+				MAX(CASE WHEN metric_name = 'CAGR_10Y' THEN value END)
+			) as cagr
+		FROM calculations
+		WHERE metric_name IN ('CAGR_5Y', 'CAGR_10Y')
+		GROUP BY symbol
+	`
+
+	rows, err := s.portfolioDB.Query(query)
+	if err != nil {
+		s.log.Warn().Err(err).Msg("Failed to query CAGR from calculations table")
+		return cagrs
+	}
+	defer rows.Close()
+
+	// Build symbol -> ISIN map for securities
+	symbolToISIN := make(map[string]string)
+	for _, sec := range securities {
+		if sec.Symbol != "" && sec.ISIN != "" {
+			symbolToISIN[sec.Symbol] = sec.ISIN
+		}
+	}
+
+	for rows.Next() {
+		var symbol string
+		var cagr sql.NullFloat64
+		if err := rows.Scan(&symbol, &cagr); err != nil {
+			s.log.Warn().Err(err).Str("symbol", symbol).Msg("Failed to scan CAGR")
+			continue
+		}
+
+		if cagr.Valid && cagr.Float64 > 0 {
+			// Store by symbol
+			cagrs[symbol] = cagr.Float64
+			// Also store by ISIN if available
+			if isin, ok := symbolToISIN[symbol]; ok {
+				cagrs[isin] = cagr.Float64
+			}
+		}
+	}
+
+	s.log.Debug().Int("cagr_count", len(cagrs)).Msg("Populated CAGRs for target return filtering")
+	return cagrs
+}
+
+// populateQualityScores fetches quality scores (long-term and fundamentals) from scores table
+// Returns maps keyed by both ISIN and symbol for flexible lookup
+func (s *Service) populateQualityScores(securities []universe.Security) (map[string]float64, map[string]float64) {
+	longTermScores := make(map[string]float64)
+	fundamentalsScores := make(map[string]float64)
+
+	if s.portfolioDB == nil {
+		s.log.Debug().Msg("PortfolioDB not available, skipping quality scores population")
+		return longTermScores, fundamentalsScores
+	}
+
+	// Build ISIN -> symbol map for securities
+	isinToSymbol := make(map[string]string)
+	isinList := make([]string, 0)
+	for _, sec := range securities {
+		if sec.ISIN != "" && sec.Symbol != "" {
+			isinToSymbol[sec.ISIN] = sec.Symbol
+			isinList = append(isinList, sec.ISIN)
+		}
+	}
+
+	if len(isinList) == 0 {
+		s.log.Debug().Msg("No ISINs available, skipping quality scores population")
+		return longTermScores, fundamentalsScores
+	}
+
+	// Query scores for all securities by ISIN
+	query := `
+		SELECT isin, cagr_score, fundamental_score
+		FROM scores
+		WHERE isin != '' AND isin IS NOT NULL
+	`
+
+	rows, err := s.portfolioDB.Query(query)
+	if err != nil {
+		s.log.Warn().Err(err).Msg("Failed to query quality scores from scores table")
+		return longTermScores, fundamentalsScores
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var isin string
+		var cagrScore, fundamentalScore sql.NullFloat64
+		if err := rows.Scan(&isin, &cagrScore, &fundamentalScore); err != nil {
+			s.log.Warn().Err(err).Str("isin", isin).Msg("Failed to scan quality scores")
+			continue
+		}
+
+		// Only include scores for securities we care about
+		if _, ok := isinToSymbol[isin]; !ok {
+			continue
+		}
+
+		// Use cagr_score as proxy for long-term (normalize to 0-1 range)
+		if cagrScore.Valid {
+			normalized := math.Max(0.0, math.Min(1.0, cagrScore.Float64))
+			longTermScores[isin] = normalized
+			// Also store by symbol if available
+			if symbol, ok := isinToSymbol[isin]; ok {
+				longTermScores[symbol] = normalized
+			}
+		}
+
+		// Store fundamental_score
+		if fundamentalScore.Valid {
+			normalized := math.Max(0.0, math.Min(1.0, fundamentalScore.Float64))
+			fundamentalsScores[isin] = normalized
+			// Also store by symbol if available
+			if symbol, ok := isinToSymbol[isin]; ok {
+				fundamentalsScores[symbol] = normalized
+			}
+		}
+	}
+
+	s.log.Debug().
+		Int("long_term_count", len(longTermScores)).
+		Int("fundamentals_count", len(fundamentalsScores)).
+		Msg("Populated quality scores for target return filtering")
+	return longTermScores, fundamentalsScores
+}
+
+// getTargetReturnSettings fetches target return and threshold from settings table
+// Returns defaults if not found: 0.11 (11%) target, 0.80 (80%) threshold
+func (s *Service) getTargetReturnSettings() (float64, float64) {
+	targetReturn := 0.11 // Default: 11%
+	thresholdPct := 0.80 // Default: 80%
+
+	if s.configDB == nil {
+		s.log.Debug().Msg("ConfigDB not available, using default target return settings")
+		return targetReturn, thresholdPct
+	}
+
+	// Query target_annual_return
+	var targetReturnStr string
+	err := s.configDB.QueryRow("SELECT value FROM settings WHERE key = 'target_annual_return'").Scan(&targetReturnStr)
+	if err == nil {
+		if val, err := parseFloat(targetReturnStr); err == nil {
+			targetReturn = val
+		} else {
+			// Fallback to SettingDefaults
+			if val, ok := settings.SettingDefaults["target_annual_return"]; ok {
+				if fval, ok := val.(float64); ok {
+					targetReturn = fval
+				}
+			}
+		}
+	} else {
+		// Fallback to SettingDefaults
+		if val, ok := settings.SettingDefaults["target_annual_return"]; ok {
+			if fval, ok := val.(float64); ok {
+				targetReturn = fval
+			}
+		}
+	}
+
+	// Query target_return_threshold_pct
+	var thresholdStr string
+	err = s.configDB.QueryRow("SELECT value FROM settings WHERE key = 'target_return_threshold_pct'").Scan(&thresholdStr)
+	if err == nil {
+		if val, err := parseFloat(thresholdStr); err == nil {
+			thresholdPct = val
+		} else {
+			// Fallback to SettingDefaults
+			if val, ok := settings.SettingDefaults["target_return_threshold_pct"]; ok {
+				if fval, ok := val.(float64); ok {
+					thresholdPct = fval
+				}
+			}
+		}
+	} else {
+		// Fallback to SettingDefaults
+		if val, ok := settings.SettingDefaults["target_return_threshold_pct"]; ok {
+			if fval, ok := val.(float64); ok {
+				thresholdPct = fval
+			}
+		}
+	}
+
+	s.log.Debug().
+		Float64("target_return", targetReturn).
+		Float64("threshold_pct", thresholdPct).
+		Msg("Retrieved target return settings")
+	return targetReturn, thresholdPct
+}
+
+// parseFloat parses a string to float64, returns error if invalid
+func parseFloat(s string) (float64, error) {
+	var result float64
+	_, err := fmt.Sscanf(s, "%f", &result)
+	return result, err
 }
 
 // loadPlannerConfig loads planner configuration from repository or uses defaults

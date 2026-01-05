@@ -16,8 +16,9 @@ var SettingDefaults = map[string]interface{}{
 	"tradernet_api_secret": "", // Tradernet API secret
 
 	// Portfolio Optimizer settings
-	"optimizer_blend":         0.5,  // 0.0 = pure Mean-Variance, 1.0 = pure HRP
-	"optimizer_target_return": 0.11, // Target annual return for MV component
+	"optimizer_blend":             0.5,  // 0.0 = pure Mean-Variance, 1.0 = pure HRP
+	"optimizer_target_return":     0.11, // Target annual return for MV component
+	"target_return_threshold_pct": 0.80, // Threshold percentage for target return filtering (0.80 = 80% of target, default for retirement funds)
 
 	// Cash management
 	"min_cash_reserve": 500.0, // Minimum cash to keep (never fully deploy)

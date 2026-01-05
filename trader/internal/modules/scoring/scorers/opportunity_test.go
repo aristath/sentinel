@@ -31,6 +31,7 @@ func TestOpportunityScorer_CalculateWithQualityGate_HighOpportunityHighQuality(t
 		marketAvgPE,
 		&fundamentalsScore,
 		&longTermScore,
+		"EQUITY", // Product type for tests
 	)
 
 	// Should have high opportunity score without penalty
@@ -59,6 +60,7 @@ func TestOpportunityScorer_CalculateWithQualityGate_HighOpportunityLowQuality(t 
 		marketAvgPE,
 		&fundamentalsScore,
 		&longTermScore,
+		"EQUITY", // Product type for tests
 	)
 
 	// Should have penalty applied (30% reduction for high opportunity + low quality)
@@ -89,6 +91,7 @@ func TestOpportunityScorer_CalculateWithQualityGate_ModerateOpportunityLowQualit
 		marketAvgPE,
 		&fundamentalsScore,
 		&longTermScore,
+		"EQUITY", // Product type for tests
 	)
 
 	// Should have penalty (15% for moderate opportunity + low quality, or 30% if base score was high)
@@ -120,6 +123,7 @@ func TestOpportunityScorer_CalculateWithQualityGate_LowFundamentalsOnly(t *testi
 		marketAvgPE,
 		&fundamentalsScore,
 		&longTermScore,
+		"EQUITY", // Product type for tests
 	)
 
 	// Should still have penalty (one metric below threshold is enough)
@@ -147,6 +151,7 @@ func TestOpportunityScorer_CalculateWithQualityGate_LowLongTermOnly(t *testing.T
 		marketAvgPE,
 		&fundamentalsScore,
 		&longTermScore,
+		"EQUITY", // Product type for tests
 	)
 
 	// Should still have penalty (one metric below threshold is enough)
@@ -170,8 +175,9 @@ func TestOpportunityScorer_CalculateWithQualityGate_NoQualityData(t *testing.T) 
 		&peRatio,
 		&forwardPE,
 		marketAvgPE,
-		nil, // No fundamentals
-		nil, // No long-term
+		nil,      // No fundamentals
+		nil,      // No long-term
+		"EQUITY", // Product type for tests
 	)
 
 	// Should not have penalty (can't detect value trap without quality data)

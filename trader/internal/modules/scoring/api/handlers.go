@@ -39,6 +39,7 @@ type ScoreRequest struct {
 	PayoutRatio           *float64                `json:"payout_ratio,omitempty"`
 	DebtToEquity          *float64                `json:"debt_to_equity,omitempty"`
 	Symbol                string                  `json:"symbol"`
+	ProductType           string                  `json:"product_type,omitempty"` // Product type: EQUITY, ETF, MUTUALFUND, ETC, CASH, UNKNOWN
 	DailyPrices           []float64               `json:"daily_prices"`
 	MonthlyPrices         []formulas.MonthlyPrice `json:"monthly_prices"`
 	MarketAvgPE           float64                 `json:"market_avg_pe,omitempty"`
@@ -73,8 +74,14 @@ func (h *Handlers) HandleScoreSecurity(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build scorer input
+	productType := req.ProductType
+	if productType == "" {
+		productType = "UNKNOWN" // Default if not provided
+	}
+
 	input := scorers.ScoreSecurityInput{
 		Symbol:                req.Symbol,
+		ProductType:           productType,
 		DailyPrices:           req.DailyPrices,
 		MonthlyPrices:         req.MonthlyPrices,
 		TargetAnnualReturn:    req.TargetAnnualReturn,

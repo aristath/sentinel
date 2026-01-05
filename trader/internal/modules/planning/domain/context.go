@@ -27,6 +27,13 @@ type OpportunityContext struct {
 	CountryWeights     map[string]float64 `json:"country_weights,omitempty"`     // Target weights by country
 	TargetWeights      map[string]float64 `json:"target_weights,omitempty"`      // Optimizer target weights
 
+	// Target return filtering data (for flexible penalty system)
+	CAGRs                    map[string]float64 `json:"cagrs,omitempty"`                       // CAGR by ISIN (for target return filtering)
+	LongTermScores           map[string]float64 `json:"long_term_scores,omitempty"`            // Long-term scores by ISIN (for quality override)
+	FundamentalsScores       map[string]float64 `json:"fundamentals_scores,omitempty"`         // Fundamentals scores by ISIN (for quality override)
+	TargetReturn             float64            `json:"target_return,omitempty"`               // Target annual return (default: 0.11 = 11%)
+	TargetReturnThresholdPct float64            `json:"target_return_threshold_pct,omitempty"` // Threshold percentage (default: 0.80 = 80%)
+
 	// Constraints
 	IneligibleSymbols map[string]bool `json:"ineligible_symbols"` // Can't sell these
 	RecentlySold      map[string]bool `json:"recently_sold"`      // Recently sold (cooldown)

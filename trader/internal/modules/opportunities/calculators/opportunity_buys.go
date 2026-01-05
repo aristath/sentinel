@@ -2,6 +2,7 @@ package calculators
 
 import (
 	"fmt"
+	"math"
 	"sort"
 
 	"github.com/aristath/arduino-trader/internal/modules/planning/domain"
@@ -127,6 +128,101 @@ func (c *OpportunityBuysCalculator) Calculate(
 		isin := security.ISIN
 		if isin == "" {
 			isin = symbol // Fallback for CASH positions or securities without ISIN
+		}
+
+		// Apply target return filtering with flexible penalty system (if data available)
+		// Get target return and threshold (defaults: 11% target, 80% threshold = 8.8% minimum)
+		targetReturn := ctx.TargetReturn
+		if targetReturn == 0 {
+			targetReturn = 0.11 // Default 11%
+		}
+		thresholdPct := ctx.TargetReturnThresholdPct
+		if thresholdPct == 0 {
+			thresholdPct = 0.80 // Default 80%
+		}
+		minCAGRThreshold := targetReturn * thresholdPct
+
+		// Absolute minimum guardrail: Never allow below 6% CAGR or 50% of target (whichever is higher)
+		absoluteMinCAGR := math.Max(0.06, targetReturn*0.50)
+
+		// Get CAGR if available (try ISIN first, fallback to symbol)
+		var cagr *float64
+		if ctx.CAGRs != nil {
+			if cagrVal, ok := ctx.CAGRs[isin]; ok {
+				cagr = &cagrVal
+			} else if cagrVal, ok := ctx.CAGRs[symbol]; ok {
+				cagr = &cagrVal
+			}
+		}
+
+		// Apply absolute minimum guardrail (hard filter)
+		if cagr != nil && *cagr < absoluteMinCAGR {
+			c.log.Debug().
+				Str("symbol", symbol).
+				Str("isin", isin).
+				Float64("cagr", *cagr).
+				Float64("absolute_min", absoluteMinCAGR).
+				Msg("Filtered out: below absolute minimum CAGR (hard filter)")
+			continue
+		}
+
+		// Apply flexible penalty if below threshold (if CAGR available)
+		penalty := 0.0
+		if cagr != nil && *cagr < minCAGRThreshold {
+			// Calculate penalty based on how far below threshold
+			// Penalty increases as CAGR gets further below threshold
+			// Max penalty: 30% reduction
+			shortfallRatio := (minCAGRThreshold - *cagr) / minCAGRThreshold
+			penalty = math.Min(0.3, shortfallRatio*0.5) // Up to 30% penalty
+
+			// Quality override: Get quality scores for penalty reduction
+			var longTermScore, fundamentalsScore *float64
+			if ctx.LongTermScores != nil {
+				if lt, ok := ctx.LongTermScores[isin]; ok {
+					longTermScore = &lt
+				} else if lt, ok := ctx.LongTermScores[symbol]; ok {
+					longTermScore = &lt
+				}
+			}
+			if ctx.FundamentalsScores != nil {
+				if fund, ok := ctx.FundamentalsScores[isin]; ok {
+					fundamentalsScore = &fund
+				} else if fund, ok := ctx.FundamentalsScores[symbol]; ok {
+					fundamentalsScore = &fund
+				}
+			}
+
+			// Calculate quality score for override
+			qualityScore := 0.0
+			if longTermScore != nil && fundamentalsScore != nil {
+				qualityScore = (*longTermScore + *fundamentalsScore) / 2.0
+			} else if longTermScore != nil {
+				qualityScore = *longTermScore
+			} else if fundamentalsScore != nil {
+				qualityScore = *fundamentalsScore
+			}
+
+			// Apply quality override: Only exceptional quality gets significant reduction
+			if qualityScore > 0.80 {
+				penalty *= 0.65 // Reduce penalty by 35% for exceptional quality (0.80+)
+			} else if qualityScore > 0.75 {
+				penalty *= 0.80 // Reduce penalty by 20% for high quality (0.75-0.80)
+			}
+			// Quality below 0.75 gets no override (full penalty applies)
+
+			// Apply penalty to score
+			score = score * (1.0 - penalty)
+
+			c.log.Debug().
+				Str("symbol", symbol).
+				Str("isin", isin).
+				Float64("cagr", *cagr).
+				Float64("min_threshold", minCAGRThreshold).
+				Float64("penalty", penalty).
+				Float64("quality_score", qualityScore).
+				Float64("score_before_penalty", scored.score).
+				Float64("score_after_penalty", score).
+				Msg("Applied flexible penalty (quality-aware)")
 		}
 
 		// Get current price (try ISIN first, fallback to symbol)

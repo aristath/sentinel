@@ -218,12 +218,13 @@ func (h *Handler) getSettings() (Settings, error) {
 		SELECT
 			COALESCE((SELECT optimizer_blend FROM planner_settings WHERE id = 'main'), 0.5) as blend,
 			COALESCE((SELECT value FROM settings WHERE key = 'optimizer_target_return'), '0.11') as target_return,
+			COALESCE((SELECT value FROM settings WHERE key = 'target_return_threshold_pct'), '0.80') as target_return_threshold_pct,
 			COALESCE((SELECT value FROM settings WHERE key = 'min_cash_reserve'), '500.0') as min_cash_reserve
 	`
 
 	var blend float64
-	var targetReturnStr, minCashReserveStr string
-	err := h.db.QueryRow(query).Scan(&blend, &targetReturnStr, &minCashReserveStr)
+	var targetReturnStr, targetReturnThresholdPctStr, minCashReserveStr string
+	err := h.db.QueryRow(query).Scan(&blend, &targetReturnStr, &targetReturnThresholdPctStr, &minCashReserveStr)
 	if err != nil {
 		return Settings{}, fmt.Errorf("failed to query settings: %w", err)
 	}
@@ -231,16 +232,20 @@ func (h *Handler) getSettings() (Settings, error) {
 	targetReturn := OptimizerTargetReturn
 	fmt.Sscanf(targetReturnStr, "%f", &targetReturn)
 
+	targetReturnThresholdPct := 0.80 // Default: 80% of target
+	fmt.Sscanf(targetReturnThresholdPctStr, "%f", &targetReturnThresholdPct)
+
 	minCashReserve := DefaultMinCashReserve
 	fmt.Sscanf(minCashReserveStr, "%f", &minCashReserve)
 
 	return Settings{
-		Blend:              blend,
-		TargetReturn:       targetReturn,
-		MinCashReserve:     minCashReserve,
-		MinTradeAmount:     0.0, // Calculated separately
-		TransactionCostPct: DefaultTransactionCostPct,
-		MaxConcentration:   MaxConcentration,
+		Blend:                    blend,
+		TargetReturn:             targetReturn,
+		TargetReturnThresholdPct: targetReturnThresholdPct,
+		MinCashReserve:           minCashReserve,
+		MinTradeAmount:           0.0, // Calculated separately
+		TransactionCostPct:       DefaultTransactionCostPct,
+		MaxConcentration:         MaxConcentration,
 	}, nil
 }
 
@@ -248,6 +253,8 @@ func (h *Handler) getSecurities() ([]Security, error) {
 	query := `
 		SELECT
 			symbol,
+			COALESCE(isin, '') as isin,
+			COALESCE(product_type, 'UNKNOWN') as product_type,
 			COALESCE(country, 'OTHER') as country,
 			COALESCE(industry, 'OTHER') as industry,
 			COALESCE(min_portfolio_target, 0.0) as min_portfolio_target,
@@ -274,6 +281,8 @@ func (h *Handler) getSecurities() ([]Security, error) {
 
 		err := rows.Scan(
 			&sec.Symbol,
+			&sec.ISIN,
+			&sec.ProductType,
 			&sec.Country,
 			&sec.Industry,
 			&sec.MinPortfolioTarget,

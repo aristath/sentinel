@@ -76,6 +76,8 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 		activeSecurities,
 		"sideways", // Default regime - could be parameterized
 		state.DividendBonuses,
+		settings.TargetReturn,
+		settings.TargetReturnThresholdPct,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to calculate expected returns: %w", err)

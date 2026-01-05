@@ -87,9 +87,9 @@ func (cm *ConstraintsManager) calculateWeightBounds(
 			currentWeight = position.ValueEUR / portfolioValue
 		}
 
-		// Default bounds
+		// Default bounds - use product-type-aware concentration limit
 		lower := 0.0
-		upper := cm.maxConcentration
+		upper := cm.getMaxConcentration(security.ProductType)
 
 		// Apply user-defined portfolio targets (convert percentage to fraction)
 		if security.MinPortfolioTarget > 0 {
@@ -293,6 +293,24 @@ func (cm *ConstraintsManager) buildSectorConstraints(
 		Msg("Built sector constraints")
 
 	return countryConstraints, industryConstraints
+}
+
+// getMaxConcentration returns the maximum concentration limit based on product type
+// Implements product-type-aware concentration limits as per PRODUCT_TYPE_DIFFERENTIATION.md
+func (cm *ConstraintsManager) getMaxConcentration(productType string) float64 {
+	switch productType {
+	case "EQUITY":
+		return 0.20 // 20% max for individual stocks
+	case "ETF", "MUTUALFUND":
+		// Treat ETFs and Mutual Funds identically (both are diversified products)
+		// For now, use 0.30 (30%) for all diversified products
+		// Future: Detect broad-market vs sector/country ETFs
+		return 0.30
+	case "ETC":
+		return 0.12 // 12% max for commodities (different asset class, lower for retirement funds)
+	default:
+		return 0.20 // Default to 20% for UNKNOWN or other types
+	}
 }
 
 // scaleConstraints scales down minimums if too restrictive.
