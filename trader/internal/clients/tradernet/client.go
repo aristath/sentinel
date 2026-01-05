@@ -517,7 +517,7 @@ type QuoteResponse struct {
 
 // GetQuote gets current quote for a symbol
 func (c *Client) GetQuote(symbol string) (*Quote, error) {
-	url := fmt.Sprintf("/api/quotes/%s", symbol)
+	url := fmt.Sprintf("/api/market-data/quote/%s", symbol)
 	resp, err := c.get(url)
 	if err != nil {
 		return nil, err
