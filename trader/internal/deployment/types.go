@@ -26,17 +26,17 @@ type ServiceDeployment struct {
 
 // ChangeCategories categorizes what types of changes were detected
 type ChangeCategories struct {
-	MainApp       bool
-	DisplayApp    bool // Python display app (display/app/)
-	Frontend      bool
-	Sketch        bool
-	PyPFOpt         bool
-	PyPFOptDeps     bool
-	Tradernet       bool
-	TradernetDeps   bool
-	YahooFinance    bool
+	MainApp          bool
+	DisplayApp       bool // Python display app (display/app/)
+	Frontend         bool
+	Sketch           bool
+	PyPFOpt          bool
+	PyPFOptDeps      bool
+	Tradernet        bool
+	TradernetDeps    bool
+	YahooFinance     bool
 	YahooFinanceDeps bool
-	Config          bool
+	Config           bool
 }
 
 // HasAnyChanges returns true if any category has changes

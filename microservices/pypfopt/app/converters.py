@@ -1,7 +1,8 @@
 """Converters between JSON data structures and pandas DataFrames."""
 
+from typing import Dict, List, Tuple
+
 import pandas as pd
-from typing import List, Tuple, Dict
 from app.models import TimeSeriesData
 
 

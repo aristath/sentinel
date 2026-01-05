@@ -179,12 +179,12 @@ func (db *DB) Migrate() error {
 	// 1. Try relative to database path (for absolute paths)
 	dbDir := filepath.Dir(db.path)
 	candidates := []string{
-		filepath.Join(dbDir, "../trader/internal/database/migrations"), // From ../data to trader/internal/...
+		filepath.Join(dbDir, "../trader/internal/database/migrations"),      // From ../data to trader/internal/...
 		filepath.Join(dbDir, "../repo/trader/internal/database/migrations"), // From ../data to repo/trader/internal/...
-		filepath.Join(dbDir, "../internal/database/migrations"),        // From ../data to internal/...
-		filepath.Join(dbDir, "internal/database/migrations"),           // Same directory
-		"internal/database/migrations",                                 // Relative to CWD
-		"./internal/database/migrations",                               // Explicit relative
+		filepath.Join(dbDir, "../internal/database/migrations"),             // From ../data to internal/...
+		filepath.Join(dbDir, "internal/database/migrations"),                // Same directory
+		"internal/database/migrations",                                      // Relative to CWD
+		"./internal/database/migrations",                                    // Explicit relative
 	}
 
 	// Also try from executable directory if available
@@ -193,7 +193,7 @@ func (db *DB) Migrate() error {
 		candidates = append(candidates,
 			filepath.Join(execDir, "internal/database/migrations"),
 			filepath.Join(filepath.Dir(execDir), "internal/database/migrations"),
-			filepath.Join(execDir, "../repo/trader/internal/database/migrations"), // From bin/ to repo/trader/internal/...
+			filepath.Join(execDir, "../repo/trader/internal/database/migrations"),            // From bin/ to repo/trader/internal/...
 			filepath.Join(filepath.Dir(execDir), "repo/trader/internal/database/migrations"), // From app/ to repo/trader/internal/...
 		)
 	}
@@ -239,9 +239,9 @@ func (db *DB) Migrate() error {
 			// Some migrations are database-specific
 			// If error indicates migration doesn't apply to this database, skip it
 			errStr := err.Error()
-			if strings.Contains(errStr, "no such table") || 
-				strings.Contains(errStr, "no such column") || 
-				strings.Contains(errStr, "duplicate column") || 
+			if strings.Contains(errStr, "no such table") ||
+				strings.Contains(errStr, "no such column") ||
+				strings.Contains(errStr, "duplicate column") ||
 				strings.Contains(errStr, "near \"EXISTS\"") ||
 				strings.Contains(errStr, "constraint failed") {
 				// This migration is not applicable to this database or already applied, skip it
