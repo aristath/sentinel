@@ -37,8 +37,9 @@ func (os *OpportunityScorer) Calculate(
 		return OpportunityScore{
 			Score: 0.5,
 			Components: map[string]float64{
-				"below_52w_high": 0.5,
-				"pe_ratio":       0.5,
+				"below_52w_high":     0.5,
+				"pe_ratio":           0.5,
+				"below_52w_high_raw": 0.0,
 			},
 		}
 	}
@@ -56,12 +57,24 @@ func (os *OpportunityScorer) Calculate(
 	totalScore := below52wScore*0.50 + peScore*0.50
 	totalScore = math.Min(1.0, totalScore)
 
+	// Build components map with both scored and raw values
+	components := map[string]float64{
+		"below_52w_high": round3(below52wScore),
+		"pe_ratio":       round3(peScore),
+	}
+
+	// Store raw below_52w_high percentage for database storage
+	// Percentage below 52-week high: (high - current) / high
+	if high52w != nil && *high52w > 0 {
+		below52wPct := (*high52w - currentPrice) / *high52w
+		components["below_52w_high_raw"] = below52wPct
+	} else {
+		components["below_52w_high_raw"] = 0.0
+	}
+
 	return OpportunityScore{
-		Score: round3(totalScore),
-		Components: map[string]float64{
-			"below_52w_high": round3(below52wScore),
-			"pe_ratio":       round3(peScore),
-		},
+		Score:      round3(totalScore),
+		Components: components,
 	}
 }
 

@@ -1050,15 +1050,54 @@ func convertToSecurityScore(symbol string, calculated *domain.CalculatedSecurity
 	// Extract sub-scores
 	subScores := calculated.SubScores
 	var cagrScore, consistencyScore float64
+	var sharpeScore, drawdownScore, financialStrengthScore float64
+	var rsi, ema200, below52wHighPct, dividendBonus float64
+
 	if subScores != nil {
 		if longTermSubs, ok := subScores["long_term"]; ok {
 			if cagr, ok := longTermSubs["cagr"]; ok {
 				cagrScore = cagr
 			}
+			// Extract raw Sharpe ratio
+			if sharpeRaw, ok := longTermSubs["sharpe_raw"]; ok {
+				sharpeScore = sharpeRaw
+			}
 		}
 		if fundamentalsSubs, ok := subScores["fundamentals"]; ok {
 			if consistency, ok := fundamentalsSubs["consistency"]; ok {
 				consistencyScore = consistency
+			}
+			// Extract financial strength score
+			if financialStrength, ok := fundamentalsSubs["financial_strength"]; ok {
+				financialStrengthScore = financialStrength
+			}
+		}
+		if shortTermSubs, ok := subScores["short_term"]; ok {
+			// Extract raw drawdown percentage
+			if drawdownRaw, ok := shortTermSubs["drawdown_raw"]; ok {
+				drawdownScore = drawdownRaw
+			}
+		}
+		if technicalsSubs, ok := subScores["technicals"]; ok {
+			// Extract raw RSI value
+			if rsiRaw, ok := technicalsSubs["rsi_raw"]; ok {
+				rsi = rsiRaw
+			}
+			// Extract raw EMA200 value
+			if emaRaw, ok := technicalsSubs["ema_raw"]; ok {
+				ema200 = emaRaw
+			}
+		}
+		if opportunitySubs, ok := subScores["opportunity"]; ok {
+			// Extract raw below_52w_high percentage
+			if below52wRaw, ok := opportunitySubs["below_52w_high_raw"]; ok {
+				below52wHighPct = below52wRaw
+			}
+		}
+		if dividendsSubs, ok := subScores["dividends"]; ok {
+			// Extract dividend bonus value
+			if bonus, ok := dividendsSubs["dividend_bonus"]; ok {
+				dividendBonus = bonus
 			}
 		}
 	}
@@ -1087,14 +1126,14 @@ func convertToSecurityScore(symbol string, calculated *domain.CalculatedSecurity
 		FundamentalScore:       groupScores["fundamentals"],
 		TotalScore:             calculated.TotalScore,
 		Volatility:             volatility,
-		FinancialStrengthScore: 0, // Not in current domain model
-		SharpeScore:            0, // Not in current domain model
-		DrawdownScore:          0, // Not in current domain model
-		DividendBonus:          0, // Not in current domain model
-		RSI:                    0, // Not in current domain model
-		EMA200:                 0, // Not in current domain model
-		Below52wHighPct:        0, // Not in current domain model
-		SellScore:              0, // Not in current domain model
+		FinancialStrengthScore: financialStrengthScore,
+		SharpeScore:            sharpeScore,
+		DrawdownScore:          drawdownScore,
+		DividendBonus:          dividendBonus,
+		RSI:                    rsi,
+		EMA200:                 ema200,
+		Below52wHighPct:        below52wHighPct,
+		SellScore:              0, // Position-specific, not stored in scores table
 	}
 }
 

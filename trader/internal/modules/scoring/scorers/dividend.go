@@ -37,12 +37,20 @@ func (ds *DividendScorer) Calculate(
 	totalScore := yieldScore*0.70 + consistencyScore*0.30
 	totalScore = math.Min(1.0, totalScore)
 
+	// Build components map with both scored values and dividend bonus
+	components := map[string]float64{
+		"yield":       round3(yieldScore),
+		"consistency": round3(consistencyScore),
+	}
+
+	// Calculate dividend bonus for optimization returns calculation
+	// Based on yield thresholds: High (6%+) = 0.10, Mid (3-6%) = 0.07, Low (<3%) = 0.03
+	dividendBonus := calculateDividendBonus(dividendYield)
+	components["dividend_bonus"] = dividendBonus
+
 	return DividendScore{
-		Score: round3(totalScore),
-		Components: map[string]float64{
-			"yield":       round3(yieldScore),
-			"consistency": round3(consistencyScore),
-		},
+		Score:      round3(totalScore),
+		Components: components,
 	}
 }
 
@@ -95,4 +103,22 @@ func scoreDividendConsistency(payoutRatio, fiveYearAvgDivYield *float64) float64
 	}
 
 	return payoutScore*0.5 + growthScore*0.5
+}
+
+// calculateDividendBonus calculates dividend bonus value for optimization
+// Based on yield thresholds: High (6%+) = 0.10, Mid (3-6%) = 0.07, Low (<3%) = 0.03
+func calculateDividendBonus(dividendYield *float64) float64 {
+	if dividendYield == nil || *dividendYield <= 0 {
+		return 0.0
+	}
+
+	yield := *dividendYield
+
+	if yield >= scoring.HighDividendThreshold { // 6%+
+		return scoring.HighDividendBonus // 0.10
+	} else if yield >= scoring.MidDividendThreshold { // 3-6%
+		return scoring.MidDividendBonus // 0.07
+	} else {
+		return scoring.LowDividendBonus // 0.03
+	}
 }
