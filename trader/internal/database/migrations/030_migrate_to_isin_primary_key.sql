@@ -3,7 +3,8 @@
 -- This migration changes the primary identifier from symbol (Tradernet format)
 -- to ISIN (International Securities Identification Number) across all tables.
 --
--- CRITICAL: All securities MUST have ISIN before running this migration.
+-- CRITICAL: All non-cash securities MUST have ISIN before running this migration.
+-- Cash positions (CASH:*) will use their symbol as ISIN automatically.
 -- Run validation script first to verify: ValidateAllSecuritiesHaveISIN()
 --
 -- Tables affected:
@@ -19,18 +20,27 @@
 -- - security_tags: FOREIGN KEY (symbol) → FOREIGN KEY (isin)
 
 -- Step 1: Verify all securities have ISIN (fail migration if any missing)
--- This check will cause migration to fail if securities without ISIN exist
+-- Cash positions (CASH:*) are special - they use symbol as ISIN
+-- This check will cause migration to fail if non-cash securities without ISIN exist
 CREATE TEMP TABLE _isin_validation AS
-SELECT symbol FROM securities WHERE isin IS NULL OR isin = '' OR TRIM(isin) = '';
+SELECT symbol FROM securities 
+WHERE (isin IS NULL OR isin = '' OR TRIM(isin) = '')
+  AND NOT (symbol LIKE 'CASH:%');
 
 -- If validation table has rows, migration should fail
 -- (Application layer should check this before running migration)
 
 -- Step 2: Verify no duplicate ISINs (fail migration if duplicates exist)
+-- Include cash positions (which use symbol as ISIN) in the check
 CREATE TEMP TABLE _isin_duplicates AS
-SELECT isin, COUNT(*) as count
+SELECT 
+    CASE 
+        WHEN isin IS NOT NULL AND isin != '' AND TRIM(isin) != '' THEN isin
+        WHEN symbol LIKE 'CASH:%' THEN symbol
+        ELSE symbol
+    END as isin,
+    COUNT(*) as count
 FROM securities
-WHERE isin IS NOT NULL AND isin != '' AND TRIM(isin) != ''
 GROUP BY isin
 HAVING COUNT(*) > 1;
 
@@ -58,10 +68,14 @@ CREATE TABLE securities_new (
     updated_at TEXT NOT NULL
 ) STRICT;
 
--- Copy data (only securities with ISIN)
+-- Copy data (securities with ISIN, or cash positions using symbol as ISIN)
 INSERT INTO securities_new
 SELECT
-    isin,
+    CASE 
+        WHEN isin IS NOT NULL AND isin != '' AND TRIM(isin) != '' THEN isin
+        WHEN symbol LIKE 'CASH:%' THEN symbol  -- Cash positions use symbol as ISIN
+        ELSE symbol  -- Fallback: use symbol as ISIN if somehow missing
+    END as isin,
     symbol,
     yahoo_symbol,
     name,
@@ -80,8 +94,7 @@ SELECT
     max_portfolio_target,
     created_at,
     updated_at
-FROM securities
-WHERE isin IS NOT NULL AND isin != '' AND TRIM(isin) != '';
+FROM securities;
 
 -- Drop old table and rename new
 DROP TABLE securities;
@@ -112,9 +125,14 @@ CREATE TABLE scores_new (
 ) STRICT;
 
 -- Copy data, mapping symbol → isin
+-- Cash positions don't typically have scores, but handle them if they do
 INSERT INTO scores_new
 SELECT
-    s.isin,
+    CASE 
+        WHEN s.isin IS NOT NULL AND s.isin != '' AND TRIM(s.isin) != '' THEN s.isin
+        WHEN s.symbol LIKE 'CASH:%' THEN s.symbol  -- Cash positions use symbol as ISIN
+        ELSE s.symbol  -- Fallback
+    END as isin,
     sc.total_score,
     sc.quality_score,
     sc.opportunity_score,
@@ -128,8 +146,7 @@ SELECT
     sc.fundamental_score,
     sc.last_updated
 FROM scores sc
-INNER JOIN securities s ON sc.symbol = s.symbol
-WHERE s.isin IS NOT NULL AND s.isin != '' AND TRIM(s.isin) != '';
+INNER JOIN securities s ON sc.symbol = s.symbol;
 
 DROP TABLE scores;
 ALTER TABLE scores_new RENAME TO scores;
@@ -192,9 +209,14 @@ CREATE INDEX IF NOT EXISTS idx_positions_symbol ON positions(symbol); -- Index s
 
 -- Step 6: Update trades table (add isin column, keep id as PRIMARY KEY)
 -- Trades already has isin column, but we need to ensure it's populated from securities
+-- Handle cash positions specially (use symbol as ISIN)
 UPDATE trades
 SET isin = (
-    SELECT s.isin
+    SELECT CASE 
+        WHEN s.isin IS NOT NULL AND s.isin != '' AND TRIM(s.isin) != '' THEN s.isin
+        WHEN s.symbol LIKE 'CASH:%' THEN s.symbol
+        ELSE s.symbol
+    END
     FROM securities s
     WHERE s.symbol = trades.symbol
 )
@@ -207,9 +229,14 @@ CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol); -- Keep symbol i
 
 -- Step 7: Update dividend_history table (add isin column, keep id as PRIMARY KEY)
 -- Dividend history already has isin column, but we need to ensure it's populated
+-- Cash positions don't have dividends, but handle them if they exist
 UPDATE dividend_history
 SET isin = (
-    SELECT s.isin
+    SELECT CASE 
+        WHEN s.isin IS NOT NULL AND s.isin != '' AND TRIM(s.isin) != '' THEN s.isin
+        WHEN s.symbol LIKE 'CASH:%' THEN s.symbol
+        ELSE s.symbol
+    END
     FROM securities s
     WHERE s.symbol = dividend_history.symbol
 )
@@ -245,15 +272,19 @@ CREATE TABLE security_tags_new (
 ) STRICT;
 
 -- Copy data, mapping symbol → isin
+-- Handle cash positions specially (use symbol as ISIN)
 INSERT INTO security_tags_new
 SELECT
-    s.isin,
+    CASE 
+        WHEN s.isin IS NOT NULL AND s.isin != '' AND TRIM(s.isin) != '' THEN s.isin
+        WHEN s.symbol LIKE 'CASH:%' THEN s.symbol  -- Cash positions use symbol as ISIN
+        ELSE s.symbol  -- Fallback
+    END as isin,
     st.tag_id,
     st.created_at,
     st.updated_at
 FROM security_tags st
-INNER JOIN securities s ON st.symbol = s.symbol
-WHERE s.isin IS NOT NULL AND s.isin != '' AND TRIM(s.isin) != '';
+INNER JOIN securities s ON st.symbol = s.symbol;
 
 DROP TABLE security_tags;
 ALTER TABLE security_tags_new RENAME TO security_tags;
