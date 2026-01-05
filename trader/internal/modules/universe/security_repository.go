@@ -719,10 +719,24 @@ func (r *SecurityRepository) GetTagsForSecurity(symbol string) ([]string, error)
 }
 
 // GetTagsWithUpdateTimes returns all tags for a security with their last update times
+// symbol parameter is kept for backward compatibility, but we look up ISIN internally
 func (r *SecurityRepository) GetTagsWithUpdateTimes(symbol string) (map[string]time.Time, error) {
-	query := "SELECT tag_id, updated_at FROM security_tags WHERE symbol = ? ORDER BY tag_id"
+	// Normalize symbol
+	symbol = strings.ToUpper(strings.TrimSpace(symbol))
 
-	rows, err := r.universeDB.Query(query, strings.ToUpper(strings.TrimSpace(symbol)))
+	// Look up ISIN from symbol (security_tags table uses isin, not symbol)
+	security, err := r.GetBySymbol(symbol)
+	if err != nil {
+		return nil, fmt.Errorf("failed to lookup security by symbol: %w", err)
+	}
+	if security == nil || security.ISIN == "" {
+		return nil, fmt.Errorf("security not found or missing ISIN: %s", symbol)
+	}
+	isin := security.ISIN
+
+	query := "SELECT tag_id, updated_at FROM security_tags WHERE isin = ? ORDER BY tag_id"
+
+	rows, err := r.universeDB.Query(query, isin)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query tags with update times: %w", err)
 	}

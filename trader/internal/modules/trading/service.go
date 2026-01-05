@@ -89,6 +89,11 @@ func (s *TradingService) SyncFromTradernet() error {
 			}
 		}
 
+		// Calculate value in EUR (quantity * price)
+		// Note: This assumes price is already in EUR. If currency conversion is needed,
+		// it should be handled by looking up the security's currency and exchange rate.
+		valueEUR := trade.Quantity * trade.Price
+
 		// Convert tradernet.Trade to trading.Trade domain model
 		dbTrade := Trade{
 			OrderID:    trade.OrderID,
@@ -99,6 +104,7 @@ func (s *TradingService) SyncFromTradernet() error {
 			ExecutedAt: executedAt,
 			Source:     "tradernet",
 			Currency:   "EUR", // Default, should be from trade data
+			ValueEUR:   &valueEUR,
 		}
 
 		// Insert trade to database (idempotent via order_id unique constraint)
