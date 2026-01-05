@@ -395,14 +395,12 @@ func (r *SecurityRepository) GetWithScores(portfolioDB *sql.DB) ([]SecurityWithS
 	positionsMap := make(map[string]struct {
 		marketValueEUR float64
 		quantity       float64
-		currency       string
-		currencyRate   float64
 	})
 
 	for positionRows.Next() {
 		var symbol string
 		var quantity, marketValueEUR sql.NullFloat64
-		// We need currency and currency_rate for conversion to EUR
+		// We only need symbol, quantity, and market_value_eur - scan minimal fields
 		var avgPrice, currentPrice, currencyRate sql.NullFloat64
 		var currency, lastUpdated sql.NullString
 		var costBasis, unrealizedPnL, unrealizedPnLPct sql.NullFloat64
@@ -420,13 +418,9 @@ func (r *SecurityRepository) GetWithScores(portfolioDB *sql.DB) ([]SecurityWithS
 		positionsMap[symbol] = struct {
 			marketValueEUR float64
 			quantity       float64
-			currency       string
-			currencyRate   float64
 		}{
 			marketValueEUR: marketValueEUR.Float64,
 			quantity:       quantity.Float64,
-			currency:       currency.String,
-			currencyRate:   currencyRate.Float64,
 		}
 	}
 

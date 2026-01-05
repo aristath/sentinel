@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Modal, Text, Button, TextInput, Group, Stack, Paper, Badge, Loader } from '@mantine/core';
+import { Modal, Text, Button, TextInput, Group, Stack, Paper, Badge, Loader, ActionIcon } from '@mantine/core';
+import { IconTrash } from '@tabler/icons-react';
 import { api } from '../../api/client';
 import { useNotifications } from '../../hooks/useNotifications';
 
@@ -96,8 +97,19 @@ export function GroupingManager() {
 
       const countries = (countriesRes.countries || []).sort();
       const industries = (industriesRes.industries || []).sort();
-      const cGroups = countryGroupsRes.groups || {};
-      const iGroups = industryGroupsRes.groups || {};
+
+      // Ensure groups is an object, not an array
+      let cGroups = countryGroupsRes.groups || {};
+      if (Array.isArray(cGroups)) {
+        console.warn('countryGroups is an array, converting to object');
+        cGroups = {};
+      }
+
+      let iGroups = industryGroupsRes.groups || {};
+      if (Array.isArray(iGroups)) {
+        console.warn('industryGroups is an array, converting to object');
+        iGroups = {};
+      }
 
       setAvailableCountries(countries);
       setAvailableIndustries(industries);
@@ -170,9 +182,13 @@ export function GroupingManager() {
 
   const getExistingGroups = () => {
     if (modalType === 'country') {
-      return Object.keys(countryGroups);
+      // Ensure countryGroups is an object, not an array
+      const groups = countryGroups && !Array.isArray(countryGroups) ? countryGroups : {};
+      return Object.keys(groups).sort();
     } else {
-      return Object.keys(industryGroups);
+      // Ensure industryGroups is an object, not an array
+      const groups = industryGroups && !Array.isArray(industryGroups) ? industryGroups : {};
+      return Object.keys(groups).sort();
     }
   };
 
@@ -245,6 +261,34 @@ export function GroupingManager() {
       closeModal();
     } catch (error) {
       showNotification(`Failed to create group: ${error.message}`, 'error');
+    }
+  };
+
+  const deleteGroup = async (groupName) => {
+    const groupType = modalType === 'country' ? 'country' : 'industry';
+    const confirmMessage = `Are you sure you want to delete the ${groupType} group "${groupName}"? This will remove all assignments in this group.`;
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      if (modalType === 'country') {
+        await api.deleteCountryGroup(groupName);
+      } else {
+        await api.deleteIndustryGroup(groupName);
+      }
+      showNotification(`Group "${groupName}" deleted successfully`, 'success');
+
+      // If the deleted group was the current group, close the modal
+      const currentGroup = getCurrentGroup();
+      if (currentGroup === groupName) {
+        closeModal();
+      }
+
+      await loadData();
+    } catch (error) {
+      showNotification(`Failed to delete group: ${error.message}`, 'error');
     }
   };
 
@@ -384,24 +428,36 @@ export function GroupingManager() {
                 </Text>
               ) : (
                 getExistingGroups().map((groupName) => (
-                  <Button
-                    key={groupName}
-                    onClick={() => assignToGroup(groupName)}
-                    variant={getCurrentGroup() === groupName ? 'filled' : 'light'}
-                    justify="flex-start"
-                    fullWidth
-                  >
-                    <div
-                      style={{
-                        width: '16px',
-                        height: '16px',
-                        borderRadius: '4px',
-                        backgroundColor: groupColorMap[groupName],
-                        marginRight: '8px',
+                  <Group key={groupName} justify="space-between" gap="xs">
+                    <Button
+                      onClick={() => assignToGroup(groupName)}
+                      variant={getCurrentGroup() === groupName ? 'filled' : 'light'}
+                      justify="flex-start"
+                      style={{ flex: 1 }}
+                    >
+                      <div
+                        style={{
+                          width: '16px',
+                          height: '16px',
+                          borderRadius: '4px',
+                          backgroundColor: groupColorMap[groupName],
+                          marginRight: '8px',
+                        }}
+                      />
+                      {groupName}
+                    </Button>
+                    <ActionIcon
+                      color="red"
+                      variant="light"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteGroup(groupName);
                       }}
-                    />
-                    {groupName}
-                  </Button>
+                      title={`Delete group "${groupName}"`}
+                    >
+                      <IconTrash size={16} />
+                    </ActionIcon>
+                  </Group>
                 ))
               )}
             </Stack>
