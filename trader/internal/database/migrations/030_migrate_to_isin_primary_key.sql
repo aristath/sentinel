@@ -170,17 +170,21 @@ CREATE TABLE positions_new (
     first_bought TEXT,
     last_sold TEXT,
     symbol TEXT, -- Keep symbol for display/API conversion
-    bucket_id TEXT DEFAULT 'core',
     FOREIGN KEY (isin) REFERENCES securities(isin) ON DELETE CASCADE
 ) STRICT;
 
 -- Copy data, mapping symbol → isin
 -- Handle CASH positions specially (they don't have ISIN)
+-- Note: bucket_id is legacy and has been removed - do not copy it
 INSERT INTO positions_new
 SELECT
     CASE
         WHEN p.symbol LIKE 'CASH:%' THEN p.symbol -- CASH positions keep symbol as isin
-        ELSE s.isin
+        ELSE COALESCE(s.isin, 
+            CASE 
+                WHEN s.symbol LIKE 'CASH:%' THEN s.symbol
+                ELSE s.symbol
+            END)
     END as isin,
     p.quantity,
     p.avg_price,
@@ -194,16 +198,13 @@ SELECT
     p.last_updated,
     p.first_bought,
     p.last_sold,
-    p.symbol,
-    p.bucket_id
+    p.symbol
 FROM positions p
 LEFT JOIN securities s ON p.symbol = s.symbol
-WHERE p.symbol LIKE 'CASH:%' OR (s.isin IS NOT NULL AND s.isin != '' AND TRIM(s.isin) != '');
+WHERE p.symbol LIKE 'CASH:%' OR s.symbol IS NOT NULL;
 
 DROP TABLE positions;
 ALTER TABLE positions_new RENAME TO positions;
-
-CREATE INDEX IF NOT EXISTS idx_positions_bucket ON positions(bucket_id);
 CREATE INDEX IF NOT EXISTS idx_positions_value ON positions(market_value_eur DESC);
 CREATE INDEX IF NOT EXISTS idx_positions_symbol ON positions(symbol); -- Index symbol for lookups
 

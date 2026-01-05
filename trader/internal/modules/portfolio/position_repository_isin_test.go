@@ -32,7 +32,6 @@ func setupTestDBForPositionsWithISIN(t *testing.T) (*sql.DB, *sql.DB) {
 			first_bought TEXT,
 			last_sold TEXT,
 			symbol TEXT,
-			bucket_id TEXT DEFAULT 'core'
 		)
 	`)
 	require.NoError(t, err)

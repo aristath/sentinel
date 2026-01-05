@@ -81,7 +81,6 @@ func setupPreMigrationDB(t *testing.T) *sql.DB {
 			first_bought TEXT,
 			last_sold TEXT,
 			isin TEXT,
-			bucket_id TEXT DEFAULT 'core'
 		)
 	`)
 	require.NoError(t, err)
