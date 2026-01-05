@@ -11,12 +11,6 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// MarketHoursChecker checks if market is open for a given exchange
-type MarketHoursChecker interface {
-	ShouldCheckMarketHours(exchange string, side string) bool
-	IsMarketOpen(exchange string) bool
-}
-
 // TradeSafetyService validates trades before execution
 // Faithful translation from Python: app/modules/trading/services/trade_safety_service.py
 type TradeSafetyService struct {
@@ -24,7 +18,6 @@ type TradeSafetyService struct {
 	positionRepo    *portfolio.PositionRepository
 	securityRepo    *universe.SecurityRepository
 	settingsService *settings.Service
-	marketHours     MarketHoursChecker
 	log             zerolog.Logger
 }
 
@@ -34,7 +27,6 @@ func NewTradeSafetyService(
 	positionRepo *portfolio.PositionRepository,
 	securityRepo *universe.SecurityRepository,
 	settingsService *settings.Service,
-	marketHours MarketHoursChecker,
 	log zerolog.Logger,
 ) *TradeSafetyService {
 	return &TradeSafetyService{
@@ -42,7 +34,6 @@ func NewTradeSafetyService(
 		positionRepo:    positionRepo,
 		securityRepo:    securityRepo,
 		settingsService: settingsService,
-		marketHours:     marketHours,
 		log:             log.With().Str("service", "trade_safety").Logger(),
 	}
 }
@@ -62,11 +53,6 @@ func (s *TradeSafetyService) ValidateTrade(
 
 	// Layer 7: Security lookup (validate security exists)
 	if err := s.validateSecurity(symbol); err != nil {
-		return err
-	}
-
-	// Layer 1: Market hours check
-	if err := s.checkMarketHours(symbol, side); err != nil {
 		return err
 	}
 
@@ -109,37 +95,7 @@ func (s *TradeSafetyService) validateSecurity(symbol string) error {
 	return nil
 }
 
-// checkMarketHours validates market is open for the trade
-// Layer 1: Market Hours Check
-// Faithful translation from Python: async def check_market_hours()
-func (s *TradeSafetyService) checkMarketHours(symbol string, side string) error {
-	// 1. Get security to extract exchange
-	security, err := s.securityRepo.GetBySymbol(symbol)
-	if err != nil || security == nil {
-		return nil // Fail open - allow if security not found
-	}
-
-	exchange := security.FullExchangeName
-	if exchange == "" {
-		return nil // Fail open - no exchange info
-	}
-
-	// 2. Check if validation required for this side/exchange
-	if s.marketHours == nil {
-		return nil // No market hours service available
-	}
-
-	if !s.marketHours.ShouldCheckMarketHours(exchange, side) {
-		return nil // Not required for this side/exchange
-	}
-
-	// 3. Verify market is open
-	if !s.marketHours.IsMarketOpen(exchange) {
-		return fmt.Errorf("market closed for %s", exchange)
-	}
-
-	return nil
-}
+// checkMarketHours removed - market hours functionality removed
 
 // checkBuyCooldown validates buy cooldown period
 // Layer 2: Buy Cooldown Check

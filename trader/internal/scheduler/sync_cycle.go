@@ -21,7 +21,6 @@ type SyncCycleJob struct {
 	universeService     UniverseServiceInterface
 	balanceService      BalanceServiceInterface
 	displayManager      *display.StateManager
-	marketHours         MarketHoursServiceInterface
 	emergencyRebalance  func() error // Callback for emergency rebalance
 	updateDisplayTicker func() error // Callback for display ticker update
 }
@@ -35,7 +34,6 @@ type SyncCycleConfig struct {
 	UniverseService     UniverseServiceInterface
 	BalanceService      BalanceServiceInterface
 	DisplayManager      *display.StateManager
-	MarketHours         MarketHoursServiceInterface
 	EmergencyRebalance  func() error
 	UpdateDisplayTicker func() error
 }
@@ -50,7 +48,6 @@ func NewSyncCycleJob(cfg SyncCycleConfig) *SyncCycleJob {
 		universeService:     cfg.UniverseService,
 		balanceService:      cfg.BalanceService,
 		displayManager:      cfg.DisplayManager,
-		marketHours:         cfg.MarketHours,
 		emergencyRebalance:  cfg.EmergencyRebalance,
 		updateDisplayTicker: cfg.UpdateDisplayTicker,
 	}
@@ -86,8 +83,8 @@ func (j *SyncCycleJob) Run() error {
 	// Step 4: Check for negative balances and trigger emergency rebalance
 	j.checkNegativeBalances()
 
-	// Step 5: Sync prices for open markets (market-aware)
-	j.syncPricesForOpenMarkets()
+	// Step 5: Sync prices for all securities
+	j.syncPrices()
 
 	// Step 6: Update LED display ticker
 	j.updateTicker()
@@ -210,49 +207,17 @@ func (j *SyncCycleJob) checkNegativeBalances() {
 	}
 }
 
-// syncPricesForOpenMarkets synchronizes prices for securities in currently open markets
-// Market-aware - only fetches prices during market hours
-func (j *SyncCycleJob) syncPricesForOpenMarkets() {
-	j.log.Debug().Msg("Syncing prices for open markets")
+// syncPrices synchronizes prices for all securities
+func (j *SyncCycleJob) syncPrices() {
+	j.log.Debug().Msg("Syncing prices for all securities")
 
 	if j.universeService == nil {
 		j.log.Warn().Msg("Universe service not available, skipping price sync")
 		return
 	}
 
-	if j.marketHours == nil {
-		j.log.Warn().Msg("Market hours service not available, syncing all prices")
-		// Fallback: sync all prices if market hours not available
-		if err := j.universeService.SyncPrices(); err != nil {
-			j.log.Error().Err(err).Msg("Price sync failed")
-		}
-		return
-	}
-
-	// Get market statuses for all exchanges
-	statuses := j.marketHours.GetAllMarketStatuses()
-
-	// Filter to open exchanges
-	var openExchanges []string
-	for _, status := range statuses {
-		if status.IsOpen {
-			openExchanges = append(openExchanges, status.Exchange)
-		}
-	}
-
-	if len(openExchanges) == 0 {
-		j.log.Debug().Msg("No markets currently open, skipping price sync")
-		return
-	}
-
-	j.log.Info().
-		Int("open_markets", len(openExchanges)).
-		Int("total_markets", len(statuses)).
-		Msg("Market hours filtering enabled")
-
-	// Sync prices only for open exchanges
-	if err := j.universeService.SyncPricesForExchanges(openExchanges); err != nil {
-		j.log.Error().Err(err).Msg("Market-aware price sync failed")
+	if err := j.universeService.SyncPrices(); err != nil {
+		j.log.Error().Err(err).Msg("Price sync failed")
 		// Continue - non-critical
 	} else {
 		j.log.Debug().Msg("Price sync completed")

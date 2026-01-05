@@ -4,14 +4,6 @@ package scheduler
 // Used by scheduler to enable testing with mocks
 type UniverseServiceInterface interface {
 	SyncPrices() error
-	SyncPricesForExchanges(exchangeNames []string) error
-}
-
-// MarketHoursServiceInterface defines the contract for market hours operations
-// Used by scheduler to enable testing with mocks
-type MarketHoursServiceInterface interface {
-	GetAllMarketStatuses() []MarketStatus
-	IsMarketOpen(exchangeName string) bool
 }
 
 // BalanceServiceInterface defines the contract for balance service operations

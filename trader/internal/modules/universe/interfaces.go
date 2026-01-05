@@ -16,7 +16,6 @@ type SyncServiceInterface interface {
 // SecurityRepositoryInterface defines the contract for security repository operations
 // Used by UniverseService to enable testing with mocks
 type SecurityRepositoryInterface interface {
-	GetGroupedByExchange() (map[string][]Security, error)
 	GetAllActive() ([]Security, error)
 	GetBySymbol(symbol string) (*Security, error)             // Helper method - looks up ISIN first
 	GetByISIN(isin string) (*Security, error)                 // Primary method

@@ -1112,24 +1112,3 @@ func boolToInt(b bool) int {
 	}
 	return 0
 }
-
-// GetGroupedByExchange returns active securities grouped by exchange
-func (r *SecurityRepository) GetGroupedByExchange() (map[string][]Security, error) {
-	securities, err := r.GetAllActive()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get active securities: %w", err)
-	}
-
-	grouped := make(map[string][]Security)
-	for _, security := range securities {
-		// Use FullExchangeName as the grouping key
-		exchange := security.FullExchangeName
-		if exchange == "" {
-			exchange = "UNKNOWN"
-		}
-		grouped[exchange] = append(grouped[exchange], security)
-	}
-
-	r.log.Debug().Int("exchanges", len(grouped)).Msg("Grouped securities by exchange")
-	return grouped, nil
-}

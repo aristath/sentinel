@@ -643,16 +643,12 @@ func (s *Server) setupTradingRoutes(r chi.Router) {
 	settingsRepo := settings.NewRepository(s.configDB.Conn(), s.log)
 	settingsService := settings.NewService(settingsRepo, s.log)
 
-	// Market hours service (needed for trade safety validation)
-	marketHoursService := scheduler.NewMarketHoursService(s.cacheDB.Conn(), s.log)
-
 	// Trade safety service (validates all manual trades)
 	safetyService := trading.NewTradeSafetyService(
 		tradeRepo,
 		positionRepo,
 		securityRepo,
 		settingsService,
-		marketHoursService,
 		s.log,
 	)
 
@@ -903,9 +899,6 @@ func (s *Server) setupRebalancingRoutes(r chi.Router) {
 	)
 	recommendationRepo := planning.NewRecommendationRepository(s.cacheDB.Conn(), s.log)
 
-	// Initialize market hours service for market open/close checking
-	marketHoursService := scheduler.NewMarketHoursService(s.cacheDB.Conn(), s.log)
-
 	negativeRebalancer := rebalancing.NewNegativeBalanceRebalancer(
 		s.log,
 		cashManagerForRebalancing,
@@ -916,7 +909,6 @@ func (s *Server) setupRebalancingRoutes(r chi.Router) {
 		currencyExchangeService,
 		tradeExecutionService,
 		recommendationRepo,
-		marketHoursService,
 	)
 
 	// Initialize planning service dependencies for rebalancing

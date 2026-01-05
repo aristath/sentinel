@@ -18,26 +18,6 @@ func (m *MockUniverseService) SyncPrices() error {
 	return args.Error(0)
 }
 
-func (m *MockUniverseService) SyncPricesForExchanges(exchangeNames []string) error {
-	args := m.Called(exchangeNames)
-	return args.Error(0)
-}
-
-// MockMarketHoursService is a mock for testing
-type MockMarketHoursService struct {
-	mock.Mock
-}
-
-func (m *MockMarketHoursService) GetAllMarketStatuses() []MarketStatus {
-	args := m.Called()
-	return args.Get(0).([]MarketStatus)
-}
-
-func (m *MockMarketHoursService) IsMarketOpen(exchangeName string) bool {
-	args := m.Called(exchangeName)
-	return args.Bool(0)
-}
-
 // MockBalanceService is a mock for testing
 type MockBalanceService struct {
 	mock.Mock
@@ -56,124 +36,28 @@ func (m *MockBalanceService) GetTotalByCurrency(currency string) (float64, error
 	return args.Get(0).(float64), args.Error(1)
 }
 
-func TestSyncPricesForOpenMarkets_AllMarketsOpen(t *testing.T) {
+func TestSyncPrices_Success(t *testing.T) {
 	// Setup
 	mockUniverseService := new(MockUniverseService)
-	mockMarketHours := new(MockMarketHoursService)
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 
 	job := &SyncCycleJob{
 		universeService: mockUniverseService,
-		marketHours:     mockMarketHours,
 		log:             log,
-	}
-
-	// Mock data - all markets open
-	statuses := []MarketStatus{
-		{Exchange: "NYSE", IsOpen: true},
-		{Exchange: "NASDAQ", IsOpen: true},
-		{Exchange: "LSE", IsOpen: true},
 	}
 
 	// Mock expectations
-	mockMarketHours.On("GetAllMarketStatuses").Return(statuses)
-	mockUniverseService.On("SyncPricesForExchanges", []string{"NYSE", "NASDAQ", "LSE"}).Return(nil)
-
-	// Execute
-	job.syncPricesForOpenMarkets()
-
-	// Assert
-	mockMarketHours.AssertExpectations(t)
-	mockUniverseService.AssertExpectations(t)
-}
-
-func TestSyncPricesForOpenMarkets_SomeMarketsClosed(t *testing.T) {
-	// Setup
-	mockUniverseService := new(MockUniverseService)
-	mockMarketHours := new(MockMarketHoursService)
-	log := zerolog.New(nil).Level(zerolog.Disabled)
-
-	job := &SyncCycleJob{
-		universeService: mockUniverseService,
-		marketHours:     mockMarketHours,
-		log:             log,
-	}
-
-	// Mock data - only NYSE and NASDAQ open
-	statuses := []MarketStatus{
-		{Exchange: "NYSE", IsOpen: true},
-		{Exchange: "NASDAQ", IsOpen: true},
-		{Exchange: "LSE", IsOpen: false},
-		{Exchange: "HKSE", IsOpen: false},
-	}
-
-	// Mock expectations - should only sync NYSE and NASDAQ
-	mockMarketHours.On("GetAllMarketStatuses").Return(statuses)
-	mockUniverseService.On("SyncPricesForExchanges", []string{"NYSE", "NASDAQ"}).Return(nil)
-
-	// Execute
-	job.syncPricesForOpenMarkets()
-
-	// Assert
-	mockMarketHours.AssertExpectations(t)
-	mockUniverseService.AssertExpectations(t)
-}
-
-func TestSyncPricesForOpenMarkets_AllMarketsClosed(t *testing.T) {
-	// Setup
-	mockUniverseService := new(MockUniverseService)
-	mockMarketHours := new(MockMarketHoursService)
-	log := zerolog.New(nil).Level(zerolog.Disabled)
-
-	job := &SyncCycleJob{
-		universeService: mockUniverseService,
-		marketHours:     mockMarketHours,
-		log:             log,
-	}
-
-	// Mock data - all markets closed
-	statuses := []MarketStatus{
-		{Exchange: "NYSE", IsOpen: false},
-		{Exchange: "NASDAQ", IsOpen: false},
-		{Exchange: "LSE", IsOpen: false},
-	}
-
-	// Mock expectations - should not call SyncPricesForExchanges
-	mockMarketHours.On("GetAllMarketStatuses").Return(statuses)
-
-	// Execute
-	job.syncPricesForOpenMarkets()
-
-	// Assert
-	mockMarketHours.AssertExpectations(t)
-	// SyncPricesForExchanges should not be called
-	mockUniverseService.AssertNotCalled(t, "SyncPricesForExchanges")
-}
-
-func TestSyncPricesForOpenMarkets_NoMarketHours(t *testing.T) {
-	// Setup
-	mockUniverseService := new(MockUniverseService)
-	log := zerolog.New(nil).Level(zerolog.Disabled)
-
-	job := &SyncCycleJob{
-		universeService: mockUniverseService,
-		marketHours:     nil, // No market hours service
-		log:             log,
-	}
-
-	// Mock expectations - should fall back to syncing all prices
 	mockUniverseService.On("SyncPrices").Return(nil)
 
 	// Execute
-	job.syncPricesForOpenMarkets()
+	job.syncPrices()
 
 	// Assert
 	mockUniverseService.AssertExpectations(t)
 	mockUniverseService.AssertCalled(t, "SyncPrices")
-	mockUniverseService.AssertNotCalled(t, "SyncPricesForExchanges")
 }
 
-func TestSyncPricesForOpenMarkets_NoUniverseService(t *testing.T) {
+func TestSyncPrices_NoUniverseService(t *testing.T) {
 	// Setup
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 
@@ -183,113 +67,28 @@ func TestSyncPricesForOpenMarkets_NoUniverseService(t *testing.T) {
 	}
 
 	// Execute - should not panic, just log warning
-	job.syncPricesForOpenMarkets()
+	job.syncPrices()
 
 	// No assertions needed - just verify it doesn't panic
 }
 
-func TestSyncPricesForOpenMarkets_SyncError(t *testing.T) {
+func TestSyncPrices_SyncError(t *testing.T) {
 	// Setup
 	mockUniverseService := new(MockUniverseService)
-	mockMarketHours := new(MockMarketHoursService)
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 
 	job := &SyncCycleJob{
 		universeService: mockUniverseService,
-		marketHours:     mockMarketHours,
 		log:             log,
-	}
-
-	// Mock data
-	statuses := []MarketStatus{
-		{Exchange: "NYSE", IsOpen: true},
 	}
 
 	// Mock expectations - sync fails
-	mockMarketHours.On("GetAllMarketStatuses").Return(statuses)
-	mockUniverseService.On("SyncPricesForExchanges", []string{"NYSE"}).Return(errors.New("yahoo api error"))
+	mockUniverseService.On("SyncPrices").Return(errors.New("yahoo api error"))
 
 	// Execute - should not panic, just log error
-	job.syncPricesForOpenMarkets()
+	job.syncPrices()
 
 	// Assert
-	mockMarketHours.AssertExpectations(t)
-	mockUniverseService.AssertExpectations(t)
-}
-
-func TestSyncPricesForOpenMarkets_FallbackSyncError(t *testing.T) {
-	// Setup
-	mockUniverseService := new(MockUniverseService)
-	log := zerolog.New(nil).Level(zerolog.Disabled)
-
-	job := &SyncCycleJob{
-		universeService: mockUniverseService,
-		marketHours:     nil, // No market hours - will fallback
-		log:             log,
-	}
-
-	// Mock expectations - fallback sync fails
-	mockUniverseService.On("SyncPrices").Return(errors.New("sync error"))
-
-	// Execute - should not panic, just log error
-	job.syncPricesForOpenMarkets()
-
-	// Assert
-	mockUniverseService.AssertExpectations(t)
-}
-
-func TestSyncPricesForOpenMarkets_EmptyStatuses(t *testing.T) {
-	// Setup
-	mockUniverseService := new(MockUniverseService)
-	mockMarketHours := new(MockMarketHoursService)
-	log := zerolog.New(nil).Level(zerolog.Disabled)
-
-	job := &SyncCycleJob{
-		universeService: mockUniverseService,
-		marketHours:     mockMarketHours,
-		log:             log,
-	}
-
-	// Mock data - no market statuses
-	statuses := []MarketStatus{}
-
-	// Mock expectations
-	mockMarketHours.On("GetAllMarketStatuses").Return(statuses)
-
-	// Execute
-	job.syncPricesForOpenMarkets()
-
-	// Assert - should not call sync since no markets
-	mockMarketHours.AssertExpectations(t)
-	mockUniverseService.AssertNotCalled(t, "SyncPricesForExchanges")
-}
-
-func TestSyncPricesForOpenMarkets_SingleMarketOpen(t *testing.T) {
-	// Setup
-	mockUniverseService := new(MockUniverseService)
-	mockMarketHours := new(MockMarketHoursService)
-	log := zerolog.New(nil).Level(zerolog.Disabled)
-
-	job := &SyncCycleJob{
-		universeService: mockUniverseService,
-		marketHours:     mockMarketHours,
-		log:             log,
-	}
-
-	// Mock data - only one market
-	statuses := []MarketStatus{
-		{Exchange: "NYSE", IsOpen: true},
-	}
-
-	// Mock expectations
-	mockMarketHours.On("GetAllMarketStatuses").Return(statuses)
-	mockUniverseService.On("SyncPricesForExchanges", []string{"NYSE"}).Return(nil)
-
-	// Execute
-	job.syncPricesForOpenMarkets()
-
-	// Assert
-	mockMarketHours.AssertExpectations(t)
 	mockUniverseService.AssertExpectations(t)
 }
 

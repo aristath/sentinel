@@ -9,7 +9,6 @@ import (
 	"github.com/aristath/arduino-trader/internal/modules/portfolio"
 	"github.com/aristath/arduino-trader/internal/modules/settings"
 	"github.com/aristath/arduino-trader/internal/modules/universe"
-	"github.com/aristath/arduino-trader/internal/scheduler"
 	"github.com/aristath/arduino-trader/internal/services"
 	"github.com/rs/zerolog"
 )
@@ -34,7 +33,6 @@ type NegativeBalanceRebalancer struct {
 	currencyExchangeService *services.CurrencyExchangeService
 	tradeExecutionService   *services.TradeExecutionService
 	recommendationRepo      *planning.RecommendationRepository
-	marketHoursService      *scheduler.MarketHoursService
 }
 
 // NewNegativeBalanceRebalancer creates a new negative balance rebalancer
@@ -48,7 +46,6 @@ func NewNegativeBalanceRebalancer(
 	currencyExchangeService *services.CurrencyExchangeService,
 	tradeExecutionService *services.TradeExecutionService,
 	recommendationRepo *planning.RecommendationRepository,
-	marketHoursService *scheduler.MarketHoursService,
 ) *NegativeBalanceRebalancer {
 	return &NegativeBalanceRebalancer{
 		log:                     log.With().Str("service", "negative_balance_rebalancer").Logger(),
@@ -60,7 +57,6 @@ func NewNegativeBalanceRebalancer(
 		currencyExchangeService: currencyExchangeService,
 		tradeExecutionService:   tradeExecutionService,
 		recommendationRepo:      recommendationRepo,
-		marketHoursService:      marketHoursService,
 	}
 }
 
@@ -437,17 +433,7 @@ func (r *NegativeBalanceRebalancer) step2PositionSales(
 			continue
 		}
 
-		// Check market hours for SELL orders
-		// ShouldCheckMarketHours returns true for all SELL orders
-		if r.marketHoursService != nil && r.marketHoursService.ShouldCheckMarketHours(pos.FullExchangeName, "SELL") {
-			if !r.marketHoursService.IsMarketOpen(pos.FullExchangeName) {
-				r.log.Debug().
-					Str("symbol", pos.Symbol).
-					Str("exchange", pos.FullExchangeName).
-					Msg("Skipping position - market closed")
-				continue
-			}
-		}
+		// Market hours check removed
 
 		sellablePositions = append(sellablePositions, pos)
 	}

@@ -314,9 +314,6 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 	// Currency exchange service
 	currencyExchangeService := services.NewCurrencyExchangeService(tradernetClient, log)
 
-	// Market hours service
-	marketHours := scheduler.NewMarketHoursService(cacheDB.Conn(), log)
-
 	// Cash repository and manager (cash-as-balances architecture)
 	cashRepo := cash_flows.NewCashRepository(portfolioDB.Conn(), log)
 	cashManager := cash_flows.NewCashManagerWithDualWrite(cashRepo, positionRepo, log)
@@ -331,7 +328,6 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 		positionRepo,
 		securityRepo,
 		nil, // settingsService - will use defaults
-		marketHours,
 		log,
 	)
 
@@ -444,7 +440,6 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 		currencyExchangeService,
 		tradeExecutionService,
 		recommendationRepo,
-		marketHours,
 	)
 
 	// Register Job 1: Health Check (daily at 4:00 AM)
@@ -509,7 +504,6 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 		UniverseService:     universeService,
 		BalanceService:      balanceAdapter,
 		DisplayManager:      displayManager,
-		MarketHours:         marketHours,
 		EmergencyRebalance:  emergencyRebalance,
 		UpdateDisplayTicker: updateDisplayTicker,
 	})

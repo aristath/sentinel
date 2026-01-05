@@ -13,7 +13,6 @@ import (
 	"github.com/aristath/arduino-trader/internal/modules/settings"
 	"github.com/aristath/arduino-trader/internal/modules/trading"
 	"github.com/aristath/arduino-trader/internal/modules/universe"
-	"github.com/aristath/arduino-trader/internal/scheduler"
 	"github.com/aristath/arduino-trader/internal/services"
 	"github.com/go-chi/chi/v5"
 )
@@ -112,14 +111,12 @@ func (s *Server) setupSettingsRoutes(r chi.Router) {
 	// Initialize trading service for onboarding
 	tradingRepo := trading.NewTradeRepository(s.ledgerDB.Conn(), s.log)
 	settingsServiceForTrading := settings.NewService(settingsRepo, s.log)
-	marketHoursService := scheduler.NewMarketHoursService(s.cacheDB.Conn(), s.log)
 
 	tradeSafetyService := trading.NewTradeSafetyService(
 		tradingRepo,
 		positionRepo,
 		securityRepo,
 		settingsServiceForTrading,
-		marketHoursService,
 		s.log,
 	)
 
