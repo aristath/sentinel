@@ -36,6 +36,8 @@ func (ts *TechnicalsScorer) Calculate(dailyPrices []float64) TechnicalsScore {
 				"rsi":       0.5,
 				"bollinger": 0.5,
 				"ema":       0.5,
+				"rsi_raw":   0.0,
+				"ema_raw":   0.0,
 			},
 		}
 	}
@@ -58,13 +60,30 @@ func (ts *TechnicalsScorer) Calculate(dailyPrices []float64) TechnicalsScore {
 	totalScore := rsiScore*0.35 + bbScore*0.35 + emaScore*0.30
 	totalScore = math.Min(1.0, totalScore)
 
+	// Build components map with both scored and raw values
+	components := map[string]float64{
+		"rsi":       round3(rsiScore),
+		"bollinger": round3(bbScore),
+		"ema":       round3(emaScore),
+	}
+
+	// Store raw RSI value (0-100) for database storage
+	if rsiValue != nil {
+		components["rsi_raw"] = *rsiValue
+	} else {
+		components["rsi_raw"] = 0.0
+	}
+
+	// Store raw EMA200 value (price) for database storage
+	if emaValue != nil {
+		components["ema_raw"] = *emaValue
+	} else {
+		components["ema_raw"] = 0.0
+	}
+
 	return TechnicalsScore{
-		Score: round3(totalScore),
-		Components: map[string]float64{
-			"rsi":       round3(rsiScore),
-			"bollinger": round3(bbScore),
-			"ema":       round3(emaScore),
-		},
+		Score:      round3(totalScore),
+		Components: components,
 	}
 }
 
