@@ -1,0 +1,34 @@
+[Unit]
+Description=Yahoo Finance Python Microservice
+Documentation=https://github.com/aristath/arduino-trader
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=arduino
+Group=arduino
+WorkingDirectory=/opt/arduino-trader/microservices/yfinance
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+Environment="PORT=9003"
+EnvironmentFile=-/opt/arduino-trader/.env
+ExecStart=/opt/arduino-trader/microservices/yfinance/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 9003
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=yfinance
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Resource limits (lighter than trader service)
+MemoryMax=512M
+CPUQuota=25%
+
+[Install]
+WantedBy=multi-user.target
+

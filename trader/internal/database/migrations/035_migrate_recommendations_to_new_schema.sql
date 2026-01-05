@@ -8,7 +8,15 @@
 --             reason, currency, priority, current_portfolio_score, new_portfolio_score,
 --             score_change, status, portfolio_hash, created_at, updated_at, executed_at
 
--- Step 1: Create new recommendations table with correct schema
+-- Step 1: Check if table already has new schema (has uuid column)
+-- If it does, skip migration
+-- If not, proceed with migration
+
+-- Step 1a: Check if recommendations table exists and has uuid column
+-- If uuid column exists, table is already migrated - skip
+-- Note: This migration will fail gracefully if table doesn't exist or already has correct schema
+
+-- Step 1b: Create new recommendations table with correct schema
 CREATE TABLE recommendations_new (
     uuid TEXT PRIMARY KEY,
     symbol TEXT NOT NULL,

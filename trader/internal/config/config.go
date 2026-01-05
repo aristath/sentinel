@@ -13,17 +13,18 @@ import (
 
 // Config holds application configuration
 type Config struct {
-	DataDir             string // Base directory for all databases (defaults to "../data" or "./data")
-	PythonServiceURL    string
-	TradernetServiceURL string
-	PyPFOptServiceURL   string
-	EvaluatorServiceURL string
-	TradernetAPIKey     string
-	TradernetAPISecret  string
-	LogLevel            string
-	Port                int
-	DevMode             bool
-	Deployment          *DeploymentConfig
+	DataDir                string // Base directory for all databases (defaults to "../data" or "./data")
+	PythonServiceURL       string
+	TradernetServiceURL    string
+	PyPFOptServiceURL      string
+	EvaluatorServiceURL    string
+	YahooFinanceServiceURL string
+	TradernetAPIKey        string
+	TradernetAPISecret     string
+	LogLevel               string
+	Port                   int
+	DevMode                bool
+	Deployment             *DeploymentConfig
 }
 
 // DeploymentConfig holds deployment automation configuration (config package version)
@@ -93,6 +94,7 @@ func Load() (*Config, error) {
 		TradernetServiceURL: getEnv("TRADERNET_SERVICE_URL", "http://localhost:9002"), // Tradernet microservice on 9002
 		PyPFOptServiceURL:   getEnv("PYPFOPT_SERVICE_URL", "http://localhost:9001"),   // PyPFOpt microservice on 9001
 		EvaluatorServiceURL: getEnv("EVALUATOR_SERVICE_URL", "http://localhost:9000"), // Evaluator-go microservice on 9000
+		YahooFinanceServiceURL: getEnv("YAHOO_FINANCE_SERVICE_URL", "http://localhost:9003"), // Yahoo Finance microservice on 9003
 		TradernetAPIKey:     getEnv("TRADERNET_API_KEY", ""),
 		TradernetAPISecret:  getEnv("TRADERNET_API_SECRET", ""),
 		LogLevel:            getEnv("LOG_LEVEL", "info"),

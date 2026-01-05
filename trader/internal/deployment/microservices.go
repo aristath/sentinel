@@ -26,7 +26,7 @@ func NewMicroserviceDeployer(dockerMgr *DockerManager, serviceMgr *ServiceManage
 
 // IsNativeService returns true if the service runs natively (not in Docker)
 func (d *MicroserviceDeployer) IsNativeService(serviceName string) bool {
-	return serviceName == "tradernet"
+	return serviceName == "tradernet" || serviceName == "yfinance"
 }
 
 // DeployMicroservice deploys a single microservice
