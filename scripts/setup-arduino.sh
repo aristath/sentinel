@@ -33,8 +33,10 @@ ssh "${ARDUINO_SSH}" "sudo mkdir -p ${ARDUINO_DEPLOY_PATH}/data"
 ssh "${ARDUINO_SSH}" "sudo chown -R ${ARDUINO_USER}:${ARDUINO_USER} ${ARDUINO_DEPLOY_PATH}"
 log_success "Directories created"
 
-# Step 2: Check Docker
-log_header "Step 2: Checking Docker"
+# Step 2: Check Docker and Python
+log_header "Step 2: Checking Docker and Python"
+
+# Check Docker (needed for pypfopt)
 if ssh "${ARDUINO_SSH}" "command -v docker" >/dev/null 2>&1; then
     log_success "Docker is installed"
     if ssh "${ARDUINO_SSH}" "sudo systemctl is-active docker" >/dev/null 2>&1; then
@@ -48,6 +50,29 @@ else
     log_info "Please install Docker on the Arduino device first"
     exit 1
 fi
+
+# Check Python 3.13
+log_info "Checking Python version..."
+PYTHON_VERSION=$(ssh "${ARDUINO_SSH}" "python3 --version 2>&1" | grep -oP 'Python \K[0-9]+\.[0-9]+' || echo "")
+if [ -z "$PYTHON_VERSION" ]; then
+    log_error "Python 3 not found on device"
+    exit 1
+fi
+
+if [[ "$PYTHON_VERSION" =~ ^3\.(1[3-9]|[2-9][0-9])$ ]] || [ "$PYTHON_VERSION" == "3.13" ]; then
+    log_success "Python ${PYTHON_VERSION} found (compatible)"
+else
+    log_warn "Python version is ${PYTHON_VERSION}, expected 3.13 or higher"
+    log_info "Continuing, but compatibility is not guaranteed"
+fi
+
+# Check python3-venv
+if ! ssh "${ARDUINO_SSH}" "python3 -m venv --help >/dev/null 2>&1"; then
+    log_error "python3-venv module not available"
+    log_info "Please install python3-venv on the device: sudo apt-get install python3-venv"
+    exit 1
+fi
+log_success "python3-venv available"
 
 # Step 3: Deploy systemd service files
 log_header "Step 3: Deploying systemd service files"
@@ -66,10 +91,22 @@ if [ -f "display/bridge/display-bridge.service" ]; then
     ssh "${ARDUINO_SSH}" "sudo chmod 644 /etc/systemd/system/display-bridge.service"
 fi
 
+# Deploy tradernet.service
+if [ -f "tradernet.service" ]; then
+    log_info "Deploying tradernet.service..."
+    scp tradernet.service "${ARDUINO_SSH}:/tmp/tradernet.service"
+    ssh "${ARDUINO_SSH}" "sudo mv /tmp/tradernet.service /etc/systemd/system/tradernet.service"
+    ssh "${ARDUINO_SSH}" "sudo chmod 644 /etc/systemd/system/tradernet.service"
+    log_success "tradernet.service deployed"
+else
+    log_warn "tradernet.service not found, skipping"
+fi
+
 # Reload systemd
 ssh "${ARDUINO_SSH}" "sudo systemctl daemon-reload"
 ssh "${ARDUINO_SSH}" "sudo systemctl enable trader" || log_warn "Failed to enable trader service"
 ssh "${ARDUINO_SSH}" "sudo systemctl enable display-bridge" 2>/dev/null || log_warn "display-bridge service not enabled (may not be needed)"
+ssh "${ARDUINO_SSH}" "sudo systemctl enable tradernet" 2>/dev/null || log_warn "tradernet service not enabled (venv setup may be needed first)"
 log_success "Systemd services installed"
 
 # Configure passwordless sudo for systemctl (for deploy-local.sh script)
@@ -92,6 +129,21 @@ ssh "${ARDUINO_SSH}" "mkdir -p ${ARDUINO_DEPLOY_PATH}/microservices"
 scp -r microservices/pypfopt "${ARDUINO_SSH}:${ARDUINO_DEPLOY_PATH}/microservices/" || log_error "Failed to copy pypfopt"
 scp -r microservices/tradernet "${ARDUINO_SSH}:${ARDUINO_DEPLOY_PATH}/microservices/" || log_error "Failed to copy tradernet"
 log_success "Microservices code deployed"
+
+# Setup tradernet virtual environment
+log_header "Step 4b: Setting up tradernet virtual environment"
+if [ -f "scripts/setup-tradernet-venv.sh" ]; then
+    log_info "Running tradernet venv setup script..."
+    bash scripts/setup-tradernet-venv.sh
+    if [ $? -eq 0 ]; then
+        log_success "Tradernet virtual environment setup complete"
+    else
+        log_error "Failed to setup tradernet virtual environment"
+        log_warn "You may need to run scripts/setup-tradernet-venv.sh manually"
+    fi
+else
+    log_warn "setup-tradernet-venv.sh not found, skipping venv setup"
+fi
 
 # Step 5: Deploy docker-compose.yml
 log_header "Step 5: Deploying docker-compose.yml"
@@ -164,8 +216,9 @@ fi
 
 # Step 9: Build microservices Docker images
 log_header "Step 9: Building microservice Docker images"
+log_info "Building pypfopt Docker image (tradernet is now a native systemd service)..."
 log_info "This may take a few minutes..."
-ssh "${ARDUINO_SSH}" "cd ${ARDUINO_DEPLOY_PATH} && docker-compose build" || log_warn "Docker compose build failed (you may need to set TRADERNET credentials first)"
+ssh "${ARDUINO_SSH}" "cd ${ARDUINO_DEPLOY_PATH} && docker-compose build" || log_warn "Docker compose build failed (you may need to set credentials first)"
 
 log_header "Setup Complete!"
 echo ""
@@ -175,7 +228,8 @@ log_info "   ssh ${ARDUINO_SSH}"
 log_info "   nano ${ARDUINO_DEPLOY_PATH}/.env"
 log_info ""
 log_info "2. Start microservices:"
-log_info "   ssh ${ARDUINO_SSH} 'cd ${ARDUINO_DEPLOY_PATH} && docker-compose up -d'"
+log_info "   ssh ${ARDUINO_SSH} 'cd ${ARDUINO_DEPLOY_PATH} && docker-compose up -d'  # Starts pypfopt"
+log_info "   ssh ${ARDUINO_SSH} 'sudo systemctl start tradernet'  # Starts tradernet (native service)"
 log_info ""
 log_info "3. Start trader service:"
 log_info "   ./scripts/restart.sh trader"

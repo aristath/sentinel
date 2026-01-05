@@ -98,6 +98,20 @@ if command -v systemctl >/dev/null 2>&1; then
     else
         log_warn "Failed to restart display-bridge service (may not be installed)"
     fi
+
+    # Restart tradernet service
+    if sudo systemctl restart tradernet 2>/dev/null; then
+        log_success "tradernet service restarted"
+        sleep 2
+        if sudo systemctl is-active tradernet >/dev/null 2>&1; then
+            log_success "tradernet service is running"
+        else
+            log_error "tradernet service failed to start"
+            sudo systemctl status tradernet --no-pager -l | head -15
+        fi
+    else
+        log_warn "Failed to restart tradernet service (may not be installed)"
+    fi
 else
     log_warn "systemctl not available, skipping service restart"
 fi

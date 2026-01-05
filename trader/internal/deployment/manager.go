@@ -102,6 +102,7 @@ func NewManager(config *DeploymentConfig, version string, log zerolog.Logger) *M
 
 	microDeployer := NewMicroserviceDeployer(
 		dockerManager,
+		serviceManager,
 		&logAdapter{log: log.With().Str("component", "microservices").Logger()},
 	)
 
@@ -397,8 +398,13 @@ func (m *Manager) HardUpdate() (*DeploymentResult, error) {
 		for serviceName, rebuildImage := range servicesToDeploy {
 			deployment := ServiceDeployment{
 				ServiceName: serviceName,
-				ServiceType: "docker",
+				ServiceType: "docker", // Default, will be updated for native services
 				Success:     true,
+			}
+
+			// Set correct service type
+			if m.microDeployer.IsNativeService(serviceName) {
+				deployment.ServiceType = "systemd"
 			}
 
 			if err := m.microDeployer.DeployMicroservice(serviceName, m.config.RepoDir, rebuildImage); err != nil {
@@ -533,8 +539,13 @@ func (m *Manager) deployServices(categories *ChangeCategories, result *Deploymen
 		for serviceName, rebuildImage := range servicesToDeploy {
 			deployment := ServiceDeployment{
 				ServiceName: serviceName,
-				ServiceType: "docker",
+				ServiceType: "docker", // Default, will be updated for native services
 				Success:     true,
+			}
+
+			// Set correct service type
+			if m.microDeployer.IsNativeService(serviceName) {
+				deployment.ServiceType = "systemd"
 			}
 
 			if err := m.microDeployer.DeployMicroservice(serviceName, m.config.RepoDir, rebuildImage); err != nil {
