@@ -11,13 +11,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 MAINTENANCE_DIR="$SCRIPT_DIR"
 
-# Default paths - use actual repo path if available, otherwise default
-if [ -d "$REPO_DIR" ]; then
-    REPO_PATH="$REPO_DIR"
-else
-    APP_DIR="${APP_DIR:-$HOME/app}"
-    REPO_PATH="${REPO_PATH:-${APP_DIR}/repo}"
-fi
+# Default paths
+APP_DIR="${APP_DIR:-$HOME/app}"
+REPO_PATH="${REPO_PATH:-${APP_DIR}/repo}"
 
 # Dry run mode
 DRY_RUN=0

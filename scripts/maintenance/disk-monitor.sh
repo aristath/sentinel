@@ -81,10 +81,12 @@ get_disk_usage() {
 # Check disk usage and control LED
 check_and_alert() {
     # Get disk usage for root and user home
+    # Use explicit path for user filesystem since script runs as root
     local root_usage
     root_usage=$(get_disk_usage "/")
     local home_usage
-    home_usage=$(get_disk_usage "$HOME")
+    # Explicitly check /home/arduino mount point (separate filesystem)
+    home_usage=$(get_disk_usage "/home/arduino")
     
     # Check if either exceeds threshold
     local alert_triggered=0
