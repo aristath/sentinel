@@ -1151,7 +1151,7 @@ func convertToSecurityScore(isin string, symbol string, calculated *domain.Calcu
 	}
 
 	return SecurityScore{
-		ISIN:                   isin, // Primary identifier after migration
+		ISIN:                   isin,   // Primary identifier after migration
 		Symbol:                 symbol, // Keep for display/backward compatibility
 		QualityScore:           qualityScore,
 		OpportunityScore:       groupScores["opportunity"],
