@@ -484,7 +484,7 @@ func calculateGrowthBoost(ctx PortfolioContext) float64 {
 func calculateValueBoost(ctx PortfolioContext) float64 {
 	// Simplified: Use quality scores as proxy for value
 	// In a real implementation, this would use opportunity scores or P/E ratios
-	if ctx.SecurityScores == nil || len(ctx.SecurityScores) == 0 {
+	if len(ctx.SecurityScores) == 0 {
 		return 0.0
 	}
 
