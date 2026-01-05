@@ -108,7 +108,7 @@ export const api = {
   // Settings
   fetchSettings: () => fetchJSON('/api/settings'),
   updateSetting: (key, value) => {
-    const stringSettings = ['tradernet_api_key', 'tradernet_api_secret', 'trading_mode', 'display_mode'];
+    const stringSettings = ['tradernet_api_key', 'tradernet_api_secret', 'trading_mode', 'display_mode', 'security_table_visible_columns'];
     const finalValue = stringSettings.includes(key) ? value : parseFloat(value);
     return fetchJSON(`/api/settings/${key}`, {
       method: 'PUT',

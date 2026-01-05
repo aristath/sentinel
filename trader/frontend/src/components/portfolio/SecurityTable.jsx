@@ -1,11 +1,12 @@
-import { Card, Table, TextInput, Select, Group, Button, Text, ActionIcon, Badge, NumberInput } from '@mantine/core';
-import { IconEdit, IconRefresh, IconTrash, IconChartLine } from '@tabler/icons-react';
+import { Card, Table, TextInput, Select, Group, Button, Text, ActionIcon, Badge, NumberInput, Menu } from '@mantine/core';
+import { IconEdit, IconRefresh, IconTrash, IconColumns, IconCheck } from '@tabler/icons-react';
 import { useSecuritiesStore } from '../../stores/securitiesStore';
 import { useAppStore } from '../../stores/appStore';
 import { usePortfolioStore } from '../../stores/portfolioStore';
 import { SecuritySparkline } from '../charts/SecuritySparkline';
 import { formatCurrency } from '../../utils/formatters';
 import { getTagName, getTagColor } from '../../utils/tagNames';
+import { useEffect } from 'react';
 
 export function SecurityTable() {
   const {
@@ -16,6 +17,7 @@ export function SecurityTable() {
     minScore,
     sortBy,
     sortDesc,
+    visibleColumns,
     setSecurityFilter,
     setIndustryFilter,
     setSearchQuery,
@@ -25,9 +27,17 @@ export function SecurityTable() {
     refreshScore,
     removeSecurity,
     updateMultiplier,
+    fetchColumnVisibility,
+    toggleColumnVisibility,
   } = useSecuritiesStore();
   const { openEditSecurityModal, openAddSecurityModal } = useAppStore();
   const { alerts } = usePortfolioStore();
+
+  // Load column visibility on mount
+  useEffect(() => {
+    fetchColumnVisibility();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const filteredSecurities = getFilteredSecurities();
   const countries = [...new Set(securities.map(s => s.country).filter(Boolean))].sort();
@@ -69,6 +79,25 @@ export function SecurityTable() {
     return priority.toFixed(0);
   };
 
+  // Calculate visible column count for colSpan
+  const getVisibleColumnCount = () => {
+    let count = 2; // Symbol and Actions are always visible
+    if (visibleColumns.chart) count++;
+    if (visibleColumns.company) count++;
+    if (visibleColumns.country) count++;
+    if (visibleColumns.exchange) count++;
+    if (visibleColumns.sector) count++;
+    if (visibleColumns.tags) count++;
+    if (visibleColumns.value) count++;
+    if (visibleColumns.score) count++;
+    if (visibleColumns.mult) count++;
+    if (visibleColumns.bs) count++;
+    if (visibleColumns.priority) count++;
+    return count;
+  };
+
+  const visibleColumnCount = getVisibleColumnCount();
+
   return (
     <Card p="md">
       <Group justify="space-between" mb="md">
@@ -76,6 +105,82 @@ export function SecurityTable() {
           Security Universe
         </Text>
         <Group gap="xs">
+          <Menu shadow="md" width={200}>
+            <Menu.Target>
+              <ActionIcon variant="subtle" size="sm" title="Column visibility">
+                <IconColumns size={16} />
+              </ActionIcon>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Label>Show Columns</Menu.Label>
+              <Menu.Item
+                leftSection={visibleColumns.chart ? <IconCheck size={14} /> : <span style={{ width: 14 }} />}
+                onClick={() => toggleColumnVisibility('chart')}
+              >
+                Chart
+              </Menu.Item>
+              <Menu.Item
+                leftSection={visibleColumns.company ? <IconCheck size={14} /> : <span style={{ width: 14 }} />}
+                onClick={() => toggleColumnVisibility('company')}
+              >
+                Company
+              </Menu.Item>
+              <Menu.Item
+                leftSection={visibleColumns.country ? <IconCheck size={14} /> : <span style={{ width: 14 }} />}
+                onClick={() => toggleColumnVisibility('country')}
+              >
+                Country
+              </Menu.Item>
+              <Menu.Item
+                leftSection={visibleColumns.exchange ? <IconCheck size={14} /> : <span style={{ width: 14 }} />}
+                onClick={() => toggleColumnVisibility('exchange')}
+              >
+                Exchange
+              </Menu.Item>
+              <Menu.Item
+                leftSection={visibleColumns.sector ? <IconCheck size={14} /> : <span style={{ width: 14 }} />}
+                onClick={() => toggleColumnVisibility('sector')}
+              >
+                Sector
+              </Menu.Item>
+              <Menu.Item
+                leftSection={visibleColumns.tags ? <IconCheck size={14} /> : <span style={{ width: 14 }} />}
+                onClick={() => toggleColumnVisibility('tags')}
+              >
+                Tags
+              </Menu.Item>
+              <Menu.Item
+                leftSection={visibleColumns.value ? <IconCheck size={14} /> : <span style={{ width: 14 }} />}
+                onClick={() => toggleColumnVisibility('value')}
+              >
+                Value
+              </Menu.Item>
+              <Menu.Item
+                leftSection={visibleColumns.score ? <IconCheck size={14} /> : <span style={{ width: 14 }} />}
+                onClick={() => toggleColumnVisibility('score')}
+              >
+                Score
+              </Menu.Item>
+              <Menu.Item
+                leftSection={visibleColumns.mult ? <IconCheck size={14} /> : <span style={{ width: 14 }} />}
+                onClick={() => toggleColumnVisibility('mult')}
+              >
+                Mult
+              </Menu.Item>
+              <Menu.Item
+                leftSection={visibleColumns.bs ? <IconCheck size={14} /> : <span style={{ width: 14 }} />}
+                onClick={() => toggleColumnVisibility('bs')}
+              >
+                B/S
+              </Menu.Item>
+              <Menu.Item
+                leftSection={visibleColumns.priority ? <IconCheck size={14} /> : <span style={{ width: 14 }} />}
+                onClick={() => toggleColumnVisibility('priority')}
+              >
+                Priority
+              </Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
           <Button size="xs" onClick={openAddSecurityModal}>
             + Add Security
           </Button>
@@ -143,87 +248,101 @@ export function SecurityTable() {
                   Symbol {sortBy === 'symbol' && (sortDesc ? '▼' : '▲')}
                 </Text>
               </Table.Th>
-              <Table.Th>Chart</Table.Th>
-              <Table.Th>
-                <Text
-                  size="xs"
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => handleSort('name')}
-                >
-                  Company {sortBy === 'name' && (sortDesc ? '▼' : '▲')}
-                </Text>
-              </Table.Th>
-              <Table.Th>
-                <Text
-                  size="xs"
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => handleSort('country')}
-                >
-                  Country {sortBy === 'country' && (sortDesc ? '▼' : '▲')}
-                </Text>
-              </Table.Th>
-              <Table.Th>
-                <Text
-                  size="xs"
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => handleSort('fullExchangeName')}
-                >
-                  Exchange {sortBy === 'fullExchangeName' && (sortDesc ? '▼' : '▲')}
-                </Text>
-              </Table.Th>
-              <Table.Th>
-                <Text
-                  size="xs"
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => handleSort('industry')}
-                >
-                  Sector {sortBy === 'industry' && (sortDesc ? '▼' : '▲')}
-                </Text>
-              </Table.Th>
-              <Table.Th>Tags</Table.Th>
-              <Table.Th ta="right">
-                <Text
-                  size="xs"
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => handleSort('position_value')}
-                >
-                  Value {sortBy === 'position_value' && (sortDesc ? '▼' : '▲')}
-                </Text>
-              </Table.Th>
-              <Table.Th ta="right">
-                <Text
-                  size="xs"
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => handleSort('total_score')}
-                >
-                  Score {sortBy === 'total_score' && (sortDesc ? '▼' : '▲')}
-                </Text>
-              </Table.Th>
-              <Table.Th ta="center">Mult</Table.Th>
-              <Table.Th ta="center">B/S</Table.Th>
-              <Table.Th ta="right">
-                <Text
-                  size="xs"
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => handleSort('priority_score')}
-                >
-                  Priority {sortBy === 'priority_score' && (sortDesc ? '▼' : '▲')}
-                </Text>
-              </Table.Th>
+              {visibleColumns.chart && <Table.Th>Chart</Table.Th>}
+              {visibleColumns.company && (
+                <Table.Th>
+                  <Text
+                    size="xs"
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => handleSort('name')}
+                  >
+                    Company {sortBy === 'name' && (sortDesc ? '▼' : '▲')}
+                  </Text>
+                </Table.Th>
+              )}
+              {visibleColumns.country && (
+                <Table.Th>
+                  <Text
+                    size="xs"
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => handleSort('country')}
+                  >
+                    Country {sortBy === 'country' && (sortDesc ? '▼' : '▲')}
+                  </Text>
+                </Table.Th>
+              )}
+              {visibleColumns.exchange && (
+                <Table.Th>
+                  <Text
+                    size="xs"
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => handleSort('fullExchangeName')}
+                  >
+                    Exchange {sortBy === 'fullExchangeName' && (sortDesc ? '▼' : '▲')}
+                  </Text>
+                </Table.Th>
+              )}
+              {visibleColumns.sector && (
+                <Table.Th>
+                  <Text
+                    size="xs"
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => handleSort('industry')}
+                  >
+                    Sector {sortBy === 'industry' && (sortDesc ? '▼' : '▲')}
+                  </Text>
+                </Table.Th>
+              )}
+              {visibleColumns.tags && <Table.Th>Tags</Table.Th>}
+              {visibleColumns.value && (
+                <Table.Th ta="right">
+                  <Text
+                    size="xs"
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => handleSort('position_value')}
+                  >
+                    Value {sortBy === 'position_value' && (sortDesc ? '▼' : '▲')}
+                  </Text>
+                </Table.Th>
+              )}
+              {visibleColumns.score && (
+                <Table.Th ta="right">
+                  <Text
+                    size="xs"
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => handleSort('total_score')}
+                  >
+                    Score {sortBy === 'total_score' && (sortDesc ? '▼' : '▲')}
+                  </Text>
+                </Table.Th>
+              )}
+              {visibleColumns.mult && <Table.Th ta="center">Mult</Table.Th>}
+              {visibleColumns.bs && <Table.Th ta="center">B/S</Table.Th>}
+              {visibleColumns.priority && (
+                <Table.Th ta="right">
+                  <Text
+                    size="xs"
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => handleSort('priority_score')}
+                  >
+                    Priority {sortBy === 'priority_score' && (sortDesc ? '▼' : '▲')}
+                  </Text>
+                </Table.Th>
+              )}
               <Table.Th ta="center">Actions</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
             {filteredSecurities.length === 0 && securities.length > 0 && (
               <Table.Tr>
-                <Table.Td colSpan={13} ta="center" py="xl">
+                <Table.Td colSpan={visibleColumnCount} ta="center" py="xl">
                   <Text c="dimmed" size="sm">No securities match your filters</Text>
                 </Table.Td>
               </Table.Tr>
             )}
             {securities.length === 0 && (
               <Table.Tr>
-                <Table.Td colSpan={13} ta="center" py="xl">
+                <Table.Td colSpan={visibleColumnCount} ta="center" py="xl">
                   <Text c="dimmed" size="sm">No securities in universe</Text>
                 </Table.Td>
               </Table.Tr>
@@ -252,111 +371,133 @@ export function SecurityTable() {
                       {security.symbol}
                     </Text>
                   </Table.Td>
-                  <Table.Td>
-                    <SecuritySparkline symbol={security.symbol} hasPosition={security.position_value > 0} />
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="sm" truncate style={{ maxWidth: '128px' }}>
-                      {security.name}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="sm" c="dimmed" truncate style={{ maxWidth: '96px' }}>
-                      {security.country || '-'}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="sm" c="dimmed" truncate style={{ maxWidth: '96px' }}>
-                      {security.fullExchangeName || '-'}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="sm" c="dimmed" truncate style={{ maxWidth: '96px' }}>
-                      {security.industry || '-'}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    {security.tags && security.tags.length > 0 ? (
-                      <Group gap="xs" wrap="wrap">
-                        {security.tags.map((tagId) => (
-                          <Badge
-                            key={tagId}
-                            size="xs"
-                            {...getTagColor(tagId)}
-                            title={tagId}
-                          >
-                            {getTagName(tagId)}
-                          </Badge>
-                        ))}
-                      </Group>
-                    ) : (
-                      <Text size="sm" c="dimmed">-</Text>
-                    )}
-                  </Table.Td>
-                  <Table.Td ta="right">
-                    <Group gap="xs" justify="flex-end">
-                      <Text size="sm" ff="monospace">
-                        {security.position_value ? formatCurrency(security.position_value) : '-'}
+                  {visibleColumns.chart && (
+                    <Table.Td>
+                      <SecuritySparkline symbol={security.symbol} hasPosition={security.position_value > 0} />
+                    </Table.Td>
+                  )}
+                  {visibleColumns.company && (
+                    <Table.Td>
+                      <Text size="sm" truncate style={{ maxWidth: '128px' }}>
+                        {security.name}
                       </Text>
-                      {alert && (
-                        <Text
-                          size="xs"
-                          c={alert.severity === 'critical' ? 'red' : 'yellow'}
-                          title={`Position concentration: ${(alert.current_pct * 100).toFixed(1)}% (Limit: ${(alert.limit_pct * 100).toFixed(0)}%)`}
-                        >
-                          {alert.severity === 'critical' ? '🔴' : '⚠️'}
+                    </Table.Td>
+                  )}
+                  {visibleColumns.country && (
+                    <Table.Td>
+                      <Text size="sm" c="dimmed" truncate style={{ maxWidth: '96px' }}>
+                        {security.country || '-'}
+                      </Text>
+                    </Table.Td>
+                  )}
+                  {visibleColumns.exchange && (
+                    <Table.Td>
+                      <Text size="sm" c="dimmed" truncate style={{ maxWidth: '96px' }}>
+                        {security.fullExchangeName || '-'}
+                      </Text>
+                    </Table.Td>
+                  )}
+                  {visibleColumns.sector && (
+                    <Table.Td>
+                      <Text size="sm" c="dimmed" truncate style={{ maxWidth: '96px' }}>
+                        {security.industry || '-'}
+                      </Text>
+                    </Table.Td>
+                  )}
+                  {visibleColumns.tags && (
+                    <Table.Td>
+                      {security.tags && security.tags.length > 0 ? (
+                        <Group gap="xs" wrap="wrap">
+                          {security.tags.map((tagId) => (
+                            <Badge
+                              key={tagId}
+                              size="xs"
+                              {...getTagColor(tagId)}
+                              title={tagId}
+                            >
+                              {getTagName(tagId)}
+                            </Badge>
+                          ))}
+                        </Group>
+                      ) : (
+                        <Text size="sm" c="dimmed">-</Text>
+                      )}
+                    </Table.Td>
+                  )}
+                  {visibleColumns.value && (
+                    <Table.Td ta="right">
+                      <Group gap="xs" justify="flex-end">
+                        <Text size="sm" ff="monospace">
+                          {security.position_value ? formatCurrency(security.position_value) : '-'}
                         </Text>
-                      )}
-                    </Group>
-                  </Table.Td>
-                  <Table.Td ta="right">
-                    <Badge size="sm" {...getScoreClass(security.total_score)}>
-                      {formatScore(security.total_score)}
-                    </Badge>
-                  </Table.Td>
-                  <Table.Td ta="center">
-                    <NumberInput
-                      size="xs"
-                      value={security.priority_multiplier || 1}
-                      min={0.1}
-                      max={3}
-                      step={0.1}
-                      onChange={(val) => updateMultiplier(security.isin, val)}
-                      style={{ width: '60px' }}
-                    />
-                  </Table.Td>
-                  <Table.Td ta="center">
-                    <Group gap="xs" justify="center">
-                      {security.allow_buy && (
-                        <div
-                          style={{
-                            width: '10px',
-                            height: '10px',
-                            borderRadius: '50%',
-                            backgroundColor: 'var(--mantine-color-green-5)',
-                          }}
-                          title="Buy enabled"
-                        />
-                      )}
-                      {security.allow_sell && (
-                        <div
-                          style={{
-                            width: '10px',
-                            height: '10px',
-                            borderRadius: '50%',
-                            backgroundColor: 'var(--mantine-color-red-5)',
-                          }}
-                          title="Sell enabled"
-                        />
-                      )}
-                      {!security.allow_buy && !security.allow_sell && <Text c="dimmed">-</Text>}
-                    </Group>
-                  </Table.Td>
-                  <Table.Td ta="right">
-                    <Badge size="sm" {...getPriorityClass(security.priority_score)}>
-                      {formatPriority(security.priority_score)}
-                    </Badge>
-                  </Table.Td>
+                        {alert && (
+                          <Text
+                            size="xs"
+                            c={alert.severity === 'critical' ? 'red' : 'yellow'}
+                            title={`Position concentration: ${(alert.current_pct * 100).toFixed(1)}% (Limit: ${(alert.limit_pct * 100).toFixed(0)}%)`}
+                          >
+                            {alert.severity === 'critical' ? '🔴' : '⚠️'}
+                          </Text>
+                        )}
+                      </Group>
+                    </Table.Td>
+                  )}
+                  {visibleColumns.score && (
+                    <Table.Td ta="right">
+                      <Badge size="sm" {...getScoreClass(security.total_score)}>
+                        {formatScore(security.total_score)}
+                      </Badge>
+                    </Table.Td>
+                  )}
+                  {visibleColumns.mult && (
+                    <Table.Td ta="center">
+                      <NumberInput
+                        size="xs"
+                        value={security.priority_multiplier || 1}
+                        min={0.1}
+                        max={3}
+                        step={0.1}
+                        onChange={(val) => updateMultiplier(security.isin, val)}
+                        style={{ width: '60px' }}
+                      />
+                    </Table.Td>
+                  )}
+                  {visibleColumns.bs && (
+                    <Table.Td ta="center">
+                      <Group gap="xs" justify="center">
+                        {security.allow_buy && (
+                          <div
+                            style={{
+                              width: '10px',
+                              height: '10px',
+                              borderRadius: '50%',
+                              backgroundColor: 'var(--mantine-color-green-5)',
+                            }}
+                            title="Buy enabled"
+                          />
+                        )}
+                        {security.allow_sell && (
+                          <div
+                            style={{
+                              width: '10px',
+                              height: '10px',
+                              borderRadius: '50%',
+                              backgroundColor: 'var(--mantine-color-red-5)',
+                            }}
+                            title="Sell enabled"
+                          />
+                        )}
+                        {!security.allow_buy && !security.allow_sell && <Text c="dimmed">-</Text>}
+                      </Group>
+                    </Table.Td>
+                  )}
+                  {visibleColumns.priority && (
+                    <Table.Td ta="right">
+                      <Badge size="sm" {...getPriorityClass(security.priority_score)}>
+                        {formatPriority(security.priority_score)}
+                      </Badge>
+                    </Table.Td>
+                  )}
                   <Table.Td ta="center">
                     <Group gap="xs" justify="center">
                       <ActionIcon

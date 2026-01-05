@@ -2,6 +2,21 @@ import { create } from 'zustand';
 import { notifications } from '@mantine/notifications';
 import { api } from '../api/client';
 
+// Default column visibility - all columns visible
+const DEFAULT_VISIBLE_COLUMNS = {
+  chart: true,
+  company: true,
+  country: true,
+  exchange: true,
+  sector: true,
+  tags: true,
+  value: true,
+  score: true,
+  mult: true,
+  bs: true,
+  priority: true,
+};
+
 export const useSecuritiesStore = create((set, get) => ({
   // Securities data
   securities: [],
@@ -14,6 +29,9 @@ export const useSecuritiesStore = create((set, get) => ({
   minScore: 0,
   sortBy: 'priority_score',
   sortDesc: true,
+
+  // Column visibility
+  visibleColumns: DEFAULT_VISIBLE_COLUMNS,
 
   // Loading states
   loading: {
@@ -146,6 +164,54 @@ export const useSecuritiesStore = create((set, get) => ({
       notifications.show({
         title: 'Error',
         message: 'Failed to update multiplier',
+        color: 'red',
+      });
+    }
+  },
+
+  // Column visibility actions
+  fetchColumnVisibility: async () => {
+    try {
+      const settings = await api.fetchSettings();
+      const columnsJson = settings.security_table_visible_columns;
+      if (columnsJson) {
+        try {
+          const parsed = JSON.parse(columnsJson);
+          // Merge with defaults to handle new columns
+          set({ visibleColumns: { ...DEFAULT_VISIBLE_COLUMNS, ...parsed } });
+        } catch (e) {
+          console.error('Failed to parse column visibility:', e);
+          set({ visibleColumns: DEFAULT_VISIBLE_COLUMNS });
+        }
+      } else {
+        set({ visibleColumns: DEFAULT_VISIBLE_COLUMNS });
+      }
+    } catch (e) {
+      console.error('Failed to fetch column visibility:', e);
+      set({ visibleColumns: DEFAULT_VISIBLE_COLUMNS });
+    }
+  },
+
+  toggleColumnVisibility: async (columnKey) => {
+    const { visibleColumns } = get();
+    const newVisibility = {
+      ...visibleColumns,
+      [columnKey]: !visibleColumns[columnKey],
+    };
+
+    // Update local state immediately
+    set({ visibleColumns: newVisibility });
+
+    // Persist to settings
+    try {
+      await api.updateSetting('security_table_visible_columns', JSON.stringify(newVisibility));
+    } catch (e) {
+      console.error('Failed to save column visibility:', e);
+      // Revert on error
+      set({ visibleColumns });
+      notifications.show({
+        title: 'Error',
+        message: 'Failed to save column visibility preference',
         color: 'red',
       });
     }

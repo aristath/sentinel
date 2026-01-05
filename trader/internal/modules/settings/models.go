@@ -138,6 +138,9 @@ var SettingDefaults = map[string]interface{}{
 	"display_transition_smoothing_seconds": 300.0, // 5min smooth transitions
 	"display_enable_vertical_bias":         1.0,   // Enable rising/sinking effect (1.0 = yes)
 	"display_momentum_sensitivity":         0.5,   // How much recent trend affects drift (0-1)
+
+	// UI Preferences
+	"security_table_visible_columns": `{"chart":true,"company":true,"country":true,"exchange":true,"sector":true,"tags":true,"value":true,"score":true,"mult":true,"bs":true,"priority":true}`, // JSON string with column visibility preferences
 }
 
 // StringSettings defines which settings should be treated as strings rather than floats
@@ -149,6 +152,7 @@ var StringSettings = map[string]bool{
 	"display_mode":                   true,
 	"tradernet_api_key":              true,
 	"tradernet_api_secret":           true,
+	"security_table_visible_columns": true,
 }
 
 // SettingUpdate represents a setting value update request
