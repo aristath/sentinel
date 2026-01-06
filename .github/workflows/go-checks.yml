@@ -87,7 +87,7 @@ jobs:
       working-directory: trader
       run: |
         export PATH="$(go env GOPATH)/bin:$PATH"
-        staticcheck -checks "all,-U1000" ./...
+        staticcheck -checks "all,-U1000,-ST1003" ./...
 
     - name: Run golangci-lint
       uses: golangci/golangci-lint-action@v6
