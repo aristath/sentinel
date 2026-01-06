@@ -18,7 +18,7 @@ type DeploymentResult struct {
 
 // ServiceDeployment represents the deployment status of a single service
 type ServiceDeployment struct {
-	ServiceName string // "trader", "pypfopt", "tradernet"
+	ServiceName string // "trader", "unified"
 	ServiceType string // "go", "docker"
 	Success     bool
 	Error       string

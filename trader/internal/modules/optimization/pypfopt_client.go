@@ -97,7 +97,7 @@ type CovarianceResult struct {
 // OptimizeProgressive calls the progressive optimization endpoint.
 // This endpoint tries multiple strategies with constraint relaxation.
 func (c *PyPFOptClient) OptimizeProgressive(req OptimizeRequest) (*OptimizationResult, error) {
-	resp, err := c.post("/optimize/progressive", req)
+	resp, err := c.post("/api/pypfopt/optimize/progressive", req)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func (c *PyPFOptClient) OptimizeProgressive(req OptimizeRequest) (*OptimizationR
 
 // OptimizeHRP calls the Hierarchical Risk Parity optimization endpoint.
 func (c *PyPFOptClient) OptimizeHRP(req HRPRequest) (map[string]float64, error) {
-	resp, err := c.post("/optimize/hrp", req)
+	resp, err := c.post("/api/pypfopt/optimize/hrp", req)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +133,7 @@ func (c *PyPFOptClient) OptimizeHRP(req HRPRequest) (map[string]float64, error) 
 
 // CalculateCovariance calls the covariance matrix calculation endpoint.
 func (c *PyPFOptClient) CalculateCovariance(req CovarianceRequest) (*CovarianceResult, error) {
-	resp, err := c.post("/risk-model/covariance", req)
+	resp, err := c.post("/api/pypfopt/risk-model/covariance", req)
 	if err != nil {
 		return nil, err
 	}

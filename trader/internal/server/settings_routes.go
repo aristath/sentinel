@@ -26,7 +26,7 @@ func (s *Server) setupSettingsRoutes(r chi.Router) {
 	settingsService := settings.NewService(settingsRepo, s.log)
 
 	// Initialize Tradernet client for onboarding
-	tradernetClient := tradernet.NewClient(s.cfg.TradernetServiceURL, s.log)
+	tradernetClient := tradernet.NewClient(s.cfg.UnifiedServiceURL, s.log)
 	tradernetClient.SetCredentials(s.cfg.TradernetAPIKey, s.cfg.TradernetAPISecret)
 
 	// Initialize currency exchange service for multi-currency cash handling
@@ -55,7 +55,7 @@ func (s *Server) setupSettingsRoutes(r chi.Router) {
 
 	// Initialize universe sync service for onboarding
 	scoreRepo := universe.NewScoreRepository(s.portfolioDB.Conn(), s.log)
-	yahooClient := yahoo.NewMicroserviceClient(s.cfg.YahooFinanceServiceURL, s.log)
+	yahooClient := yahoo.NewMicroserviceClient(s.cfg.UnifiedServiceURL, s.log)
 	historyDB := universe.NewHistoryDB(s.historyDB.Conn(), s.log)
 	symbolResolver := universe.NewSymbolResolver(tradernetClient, securityRepo, s.log)
 	historicalSync := universe.NewHistoricalSyncService(yahooClient, securityRepo, historyDB, 2*time.Second, s.log)

@@ -92,7 +92,7 @@ func New(cfg Config) *Server {
 	dataDir := cfg.Config.DataDir
 
 	// Create Tradernet client for system handlers
-	tradernetClient := tradernet.NewClient(cfg.Config.TradernetServiceURL, cfg.Log)
+	tradernetClient := tradernet.NewClient(cfg.Config.UnifiedServiceURL, cfg.Log)
 	tradernetClient.SetCredentials(cfg.Config.TradernetAPIKey, cfg.Config.TradernetAPISecret)
 
 	// Create currency exchange service for cash balance calculations
@@ -291,12 +291,12 @@ func (s *Server) setupSystemRoutes(r chi.Router) {
 	securityRepo := universe.NewSecurityRepository(s.universeDB.Conn(), s.log)
 	scoreRepo := universe.NewScoreRepository(s.portfolioDB.Conn(), s.log)
 	positionRepo := portfolio.NewPositionRepository(s.portfolioDB.Conn(), s.universeDB.Conn(), s.log)
-	yahooClient := yahoo.NewMicroserviceClient(s.cfg.YahooFinanceServiceURL, s.log)
+	yahooClient := yahoo.NewMicroserviceClient(s.cfg.UnifiedServiceURL, s.log)
 	securityScorer := scorers.NewSecurityScorer()
 	historyDB := universe.NewHistoryDB(s.historyDB.Conn(), s.log)
 
 	// Tradernet client for symbol resolution and data fetching
-	tradernetClient := tradernet.NewClient(s.cfg.TradernetServiceURL, s.log)
+	tradernetClient := tradernet.NewClient(s.cfg.UnifiedServiceURL, s.log)
 	tradernetClient.SetCredentials(s.cfg.TradernetAPIKey, s.cfg.TradernetAPISecret)
 
 	// Create SecuritySetupService for adding securities (system routes)
@@ -396,7 +396,7 @@ func (s *Server) setupAllocationRoutes(r chi.Router) {
 
 	// Portfolio service (needed for allocation calculations)
 	positionRepo := portfolio.NewPositionRepository(s.portfolioDB.Conn(), s.universeDB.Conn(), s.log)
-	tradernetClient := tradernet.NewClient(s.cfg.TradernetServiceURL, s.log)
+	tradernetClient := tradernet.NewClient(s.cfg.UnifiedServiceURL, s.log)
 	tradernetClient.SetCredentials(s.cfg.TradernetAPIKey, s.cfg.TradernetAPISecret)
 
 	// Initialize currency exchange service for multi-currency cash handling
@@ -453,7 +453,7 @@ func (s *Server) setupPortfolioRoutes(r chi.Router) {
 	allocRepo := allocation.NewRepository(s.configDB.Conn(), s.log)
 
 	// Tradernet microservice client
-	tradernetClient := tradernet.NewClient(s.cfg.TradernetServiceURL, s.log)
+	tradernetClient := tradernet.NewClient(s.cfg.UnifiedServiceURL, s.log)
 	tradernetClient.SetCredentials(s.cfg.TradernetAPIKey, s.cfg.TradernetAPISecret)
 
 	// Initialize currency exchange service for multi-currency cash handling
@@ -500,7 +500,7 @@ func (s *Server) setupUniverseRoutes(r chi.Router) {
 	positionRepo := portfolio.NewPositionRepository(s.portfolioDB.Conn(), s.universeDB.Conn(), s.log)
 
 	// Yahoo Finance client for fundamental data (use microservice to avoid 401 errors)
-	yahooClient := yahoo.NewMicroserviceClient(s.cfg.YahooFinanceServiceURL, s.log)
+	yahooClient := yahoo.NewMicroserviceClient(s.cfg.UnifiedServiceURL, s.log)
 
 	// Security scorer for score calculation
 	securityScorer := scorers.NewSecurityScorer()
@@ -509,7 +509,7 @@ func (s *Server) setupUniverseRoutes(r chi.Router) {
 	historyDB := universe.NewHistoryDB(s.historyDB.Conn(), s.log)
 
 	// Tradernet client for symbol resolution and data fetching
-	tradernetClient := tradernet.NewClient(s.cfg.TradernetServiceURL, s.log)
+	tradernetClient := tradernet.NewClient(s.cfg.UnifiedServiceURL, s.log)
 	tradernetClient.SetCredentials(s.cfg.TradernetAPIKey, s.cfg.TradernetAPISecret)
 
 	// Create SecuritySetupService for adding securities
@@ -616,7 +616,7 @@ func (s *Server) setupTradingRoutes(r chi.Router) {
 	positionRepo := portfolio.NewPositionRepository(s.portfolioDB.Conn(), s.universeDB.Conn(), s.log)
 
 	// Tradernet microservice client
-	tradernetClient := tradernet.NewClient(s.cfg.TradernetServiceURL, s.log)
+	tradernetClient := tradernet.NewClient(s.cfg.UnifiedServiceURL, s.log)
 	tradernetClient.SetCredentials(s.cfg.TradernetAPIKey, s.cfg.TradernetAPISecret)
 
 	// Initialize currency exchange service for multi-currency cash handling
@@ -735,8 +735,8 @@ func (s *Server) setupScoringRoutes(r chi.Router) {
 // setupOptimizationRoutes configures optimization module routes
 func (s *Server) setupOptimizationRoutes(r chi.Router) {
 	// Initialize shared clients
-	yahooClient := yahoo.NewMicroserviceClient(s.cfg.YahooFinanceServiceURL, s.log)
-	tradernetClient := tradernet.NewClient(s.cfg.TradernetServiceURL, s.log)
+	yahooClient := yahoo.NewMicroserviceClient(s.cfg.UnifiedServiceURL, s.log)
+	tradernetClient := tradernet.NewClient(s.cfg.UnifiedServiceURL, s.log)
 	tradernetClient.SetCredentials(s.cfg.TradernetAPIKey, s.cfg.TradernetAPISecret)
 	dividendRepo := dividends.NewDividendRepository(s.ledgerDB.Conn(), s.log)
 
@@ -749,7 +749,7 @@ func (s *Server) setupOptimizationRoutes(r chi.Router) {
 	cashManagerForOptimization := cash_flows.NewCashManagerWithDualWrite(cashRepoForOptimization, positionRepoForOptimization, s.log)
 
 	// Initialize PyPFOpt client
-	pypfoptClient := optimization.NewPyPFOptClient(s.cfg.PyPFOptServiceURL, s.log)
+	pypfoptClient := optimization.NewPyPFOptClient(s.cfg.UnifiedServiceURL, s.log)
 
 	// Initialize constraints manager
 	constraintsMgr := optimization.NewConstraintsManager(s.log)
@@ -799,7 +799,7 @@ func (s *Server) setupCashFlowsRoutes(r chi.Router) {
 	}
 
 	// Initialize Tradernet client and adapter
-	tradernetClient := tradernet.NewClient(s.cfg.TradernetServiceURL, s.log)
+	tradernetClient := tradernet.NewClient(s.cfg.UnifiedServiceURL, s.log)
 	tradernetClient.SetCredentials(s.cfg.TradernetAPIKey, s.cfg.TradernetAPISecret)
 	tradernetAdapter := cash_flows.NewTradernetAdapter(tradernetClient)
 
@@ -855,9 +855,9 @@ func (s *Server) setupEvaluationRoutes(r chi.Router) {
 // setupRebalancingRoutes configures rebalancing module routes
 func (s *Server) setupRebalancingRoutes(r chi.Router) {
 	// Initialize clients
-	tradernetClient := tradernet.NewClient(s.cfg.TradernetServiceURL, s.log)
+	tradernetClient := tradernet.NewClient(s.cfg.UnifiedServiceURL, s.log)
 	tradernetClient.SetCredentials(s.cfg.TradernetAPIKey, s.cfg.TradernetAPISecret)
-	yahooClient := yahoo.NewMicroserviceClient(s.cfg.YahooFinanceServiceURL, s.log)
+	yahooClient := yahoo.NewMicroserviceClient(s.cfg.UnifiedServiceURL, s.log)
 
 	// Initialize portfolio service (needed for rebalancing)
 	positionRepo := portfolio.NewPositionRepository(s.portfolioDB.Conn(), s.universeDB.Conn(), s.log)
@@ -915,7 +915,7 @@ func (s *Server) setupRebalancingRoutes(r chi.Router) {
 	planningOpportunitiesService := opportunities.NewService(s.log)
 
 	// Initialize risk builder for sequences service
-	pypfoptClient := optimization.NewPyPFOptClient(s.cfg.PyPFOptServiceURL, s.log)
+	pypfoptClient := optimization.NewPyPFOptClient(s.cfg.UnifiedServiceURL, s.log)
 	riskBuilder := optimization.NewRiskModelBuilder(s.historyDB.Conn(), pypfoptClient, s.log)
 
 	planningSequencesService := sequences.NewService(s.log, riskBuilder)

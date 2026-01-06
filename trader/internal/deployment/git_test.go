@@ -70,28 +70,16 @@ func TestGitChecker_CategorizeChanges(t *testing.T) {
 			description: "Display sketch changes should be detected",
 		},
 		{
-			name:        "pypfopt service code",
-			files:       []string{"microservices/pypfopt/app/main.py"},
-			want:        ChangeCategories{PyPFOpt: true},
-			description: "PyPFOpt service code changes should be detected",
+			name:        "unified service code",
+			files:       []string{"microservices/unified/app/main.py"},
+			want:        ChangeCategories{PyPFOpt: true, Tradernet: true, YahooFinance: true},
+			description: "Unified service code changes should be detected for all services",
 		},
 		{
-			name:        "pypfopt dependencies",
-			files:       []string{"microservices/pypfopt/requirements.txt"},
-			want:        ChangeCategories{PyPFOptDeps: true},
-			description: "PyPFOpt dependency changes should be detected",
-		},
-		{
-			name:        "tradernet service code",
-			files:       []string{"microservices/tradernet/app/main.py"},
-			want:        ChangeCategories{Tradernet: true},
-			description: "Tradernet service code changes should be detected",
-		},
-		{
-			name:        "tradernet dependencies",
-			files:       []string{"microservices/tradernet/requirements.txt"},
-			want:        ChangeCategories{TradernetDeps: true},
-			description: "Tradernet dependency changes should be detected",
+			name:        "unified dependencies",
+			files:       []string{"microservices/unified/requirements.txt"},
+			want:        ChangeCategories{PyPFOptDeps: true, TradernetDeps: true, YahooFinanceDeps: true},
+			description: "Unified dependency changes should be detected for all services",
 		},
 		{
 			name:        "config directory changes",
@@ -117,13 +105,15 @@ func TestGitChecker_CategorizeChanges(t *testing.T) {
 				"trader/internal/server/server.go",
 				"display/app/main.py",
 				"config/settings.toml",
-				"microservices/pypfopt/app/main.py",
+				"microservices/unified/app/main.py",
 			},
 			want: ChangeCategories{
-				MainApp:    true,
-				DisplayApp: true,
-				Config:     true,
-				PyPFOpt:    true,
+				MainApp:      true,
+				DisplayApp:   true,
+				Config:       true,
+				PyPFOpt:      true,
+				Tradernet:    true,
+				YahooFinance: true,
 			},
 			description: "Multiple change categories should be detected simultaneously",
 		},
@@ -386,13 +376,13 @@ func TestHealthCheckError(t *testing.T) {
 	t.Run("error with wrapped error", func(t *testing.T) {
 		originalErr := errors.New("connection refused")
 		err := &HealthCheckError{
-			ServiceName: "pypfopt",
+			ServiceName: "unified",
 			Message:     "health check failed",
 			Err:         originalErr,
 		}
 
 		errMsg := err.Error()
-		assert.Contains(t, errMsg, "health check error for pypfopt")
+		assert.Contains(t, errMsg, "health check error for unified")
 		assert.Contains(t, errMsg, "health check failed")
 		assert.Contains(t, errMsg, "connection refused")
 

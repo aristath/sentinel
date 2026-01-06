@@ -108,7 +108,6 @@ func NewManager(config *DeploymentConfig, version string, log zerolog.Logger) *M
 
 	microDeployer := NewMicroserviceDeployer(
 		dockerManager,
-		serviceManager,
 		&logAdapter{log: log.With().Str("component", "microservices").Logger()},
 	)
 
@@ -484,41 +483,31 @@ func (m *Manager) HardUpdate() (*DeploymentResult, error) {
 
 	wg.Wait()
 
-	// Deploy microservices (always, with rebuild)
+	// Deploy unified microservice (always, with rebuild)
 	if m.config.MicroservicesEnabled {
-		servicesToDeploy := map[string]bool{
-			"pypfopt":   true, // Always rebuild
-			"tradernet": true, // Always rebuild
-			"yfinance":  true, // Always rebuild
+		serviceName := "unified"
+		rebuildImage := true
+
+		deployment := ServiceDeployment{
+			ServiceName: serviceName,
+			ServiceType: "docker",
+			Success:     true,
 		}
 
-		for serviceName, rebuildImage := range servicesToDeploy {
-			deployment := ServiceDeployment{
-				ServiceName: serviceName,
-				ServiceType: "docker", // Default, will be updated for native services
-				Success:     true,
+		if err := m.microDeployer.DeployMicroservice(serviceName, m.config.RepoDir, rebuildImage); err != nil {
+			deployment.Success = false
+			deployment.Error = err.Error()
+			deploymentErrors[serviceName] = err
+			m.log.Error().Err(err).Str("service", serviceName).Msg("Failed to deploy unified microservice")
+		} else {
+			// Health check
+			healthURL := m.microDeployer.GetMicroserviceHealthURL(serviceName)
+			if err := m.microDeployer.CheckMicroserviceHealth(serviceName, m.config.RepoDir, healthURL); err != nil {
+				m.log.Warn().Err(err).Str("service", serviceName).Msg("Health check failed")
 			}
-
-			// Set correct service type
-			if m.microDeployer.IsNativeService(serviceName) {
-				deployment.ServiceType = "systemd"
-			}
-
-			if err := m.microDeployer.DeployMicroservice(serviceName, m.config.RepoDir, rebuildImage); err != nil {
-				deployment.Success = false
-				deployment.Error = err.Error()
-				deploymentErrors[serviceName] = err
-				m.log.Error().Err(err).Str("service", serviceName).Msg("Failed to deploy microservice")
-			} else {
-				// Health check
-				healthURL := m.microDeployer.GetMicroserviceHealthURL(serviceName)
-				if err := m.microDeployer.CheckMicroserviceHealth(serviceName, m.config.RepoDir, healthURL); err != nil {
-					m.log.Warn().Err(err).Str("service", serviceName).Msg("Health check failed")
-				}
-			}
-
-			result.ServicesDeployed = append(result.ServicesDeployed, deployment)
 		}
+
+		result.ServicesDeployed = append(result.ServicesDeployed, deployment)
 	}
 
 	// Deploy frontend (always)
@@ -611,32 +600,21 @@ func (m *Manager) deployServices(categories *ChangeCategories, result *Deploymen
 
 	wg.Wait()
 
-	// Deploy microservices (sequential to avoid resource conflicts)
+	// Deploy unified microservice (sequential to avoid resource conflicts)
 	if m.config.MicroservicesEnabled {
-		servicesToDeploy := make(map[string]bool)
+		// Deploy unified service if any Python microservice code changed
+		shouldDeploy := categories.PyPFOpt || categories.PyPFOptDeps ||
+			categories.Tradernet || categories.TradernetDeps ||
+			categories.YahooFinance || categories.YahooFinanceDeps
 
-		if categories.PyPFOpt || categories.PyPFOptDeps {
-			servicesToDeploy["pypfopt"] = categories.PyPFOptDeps
-		}
+		if shouldDeploy {
+			serviceName := "unified"
+			rebuildImage := categories.PyPFOptDeps || categories.TradernetDeps || categories.YahooFinanceDeps
 
-		if categories.Tradernet || categories.TradernetDeps {
-			servicesToDeploy["tradernet"] = categories.TradernetDeps
-		}
-
-		if categories.YahooFinance || categories.YahooFinanceDeps {
-			servicesToDeploy["yfinance"] = categories.YahooFinanceDeps
-		}
-
-		for serviceName, rebuildImage := range servicesToDeploy {
 			deployment := ServiceDeployment{
 				ServiceName: serviceName,
-				ServiceType: "docker", // Default, will be updated for native services
+				ServiceType: "docker",
 				Success:     true,
-			}
-
-			// Set correct service type
-			if m.microDeployer.IsNativeService(serviceName) {
-				deployment.ServiceType = "systemd"
 			}
 
 			if err := m.microDeployer.DeployMicroservice(serviceName, m.config.RepoDir, rebuildImage); err != nil {

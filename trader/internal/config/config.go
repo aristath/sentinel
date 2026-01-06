@@ -13,18 +13,16 @@ import (
 
 // Config holds application configuration
 type Config struct {
-	DataDir                string // Base directory for all databases (defaults to "../data" or "./data")
-	PythonServiceURL       string
-	TradernetServiceURL    string
-	PyPFOptServiceURL      string
-	EvaluatorServiceURL    string
-	YahooFinanceServiceURL string
-	TradernetAPIKey        string
-	TradernetAPISecret     string
-	LogLevel               string
-	Port                   int
-	DevMode                bool
-	Deployment             *DeploymentConfig
+	DataDir             string // Base directory for all databases (defaults to "../data" or "./data")
+	PythonServiceURL    string
+	UnifiedServiceURL   string // Unified microservice (pypfopt, tradernet, yfinance) on 9000
+	EvaluatorServiceURL string
+	TradernetAPIKey     string
+	TradernetAPISecret  string
+	LogLevel            string
+	Port                int
+	DevMode             bool
+	Deployment          *DeploymentConfig
 }
 
 // DeploymentConfig holds deployment automation configuration (config package version)
@@ -102,18 +100,16 @@ func Load() (*Config, error) {
 	}
 
 	cfg := &Config{
-		DataDir:                dataDir,
-		Port:                   getEnvAsInt("GO_PORT", 8001), // Default 8001 (Python uses 8000)
-		DevMode:                getEnvAsBool("DEV_MODE", false),
-		PythonServiceURL:       getEnv("PYTHON_SERVICE_URL", "http://localhost:8000"),        // Python on 8000
-		TradernetServiceURL:    getEnv("TRADERNET_SERVICE_URL", "http://localhost:9002"),     // Tradernet microservice on 9002
-		PyPFOptServiceURL:      getEnv("PYPFOPT_SERVICE_URL", "http://localhost:9001"),       // PyPFOpt microservice on 9001
-		EvaluatorServiceURL:    getEnv("EVALUATOR_SERVICE_URL", "http://localhost:9000"),     // Evaluator-go microservice on 9000
-		YahooFinanceServiceURL: getEnv("YAHOO_FINANCE_SERVICE_URL", "http://localhost:9003"), // Yahoo Finance microservice on 9003 (default)
-		TradernetAPIKey:        getEnv("TRADERNET_API_KEY", ""),
-		TradernetAPISecret:     getEnv("TRADERNET_API_SECRET", ""),
-		LogLevel:               getEnv("LOG_LEVEL", "info"),
-		Deployment:             loadDeploymentConfig(),
+		DataDir:             dataDir,
+		Port:                getEnvAsInt("GO_PORT", 8001), // Default 8001 (Python uses 8000)
+		DevMode:             getEnvAsBool("DEV_MODE", false),
+		PythonServiceURL:    getEnv("PYTHON_SERVICE_URL", "http://localhost:8000"),    // Python on 8000
+		UnifiedServiceURL:   getEnv("UNIFIED_SERVICE_URL", "http://localhost:9000"),   // Unified microservice on 9000
+		EvaluatorServiceURL: getEnv("EVALUATOR_SERVICE_URL", "http://localhost:9000"), // Evaluator-go microservice on 9000
+		TradernetAPIKey:     getEnv("TRADERNET_API_KEY", ""),
+		TradernetAPISecret:  getEnv("TRADERNET_API_SECRET", ""),
+		LogLevel:            getEnv("LOG_LEVEL", "info"),
+		Deployment:          loadDeploymentConfig(),
 	}
 
 	// Validate required fields

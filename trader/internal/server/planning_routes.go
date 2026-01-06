@@ -19,7 +19,7 @@ func (s *Server) setupPlanningRoutes(r chi.Router) {
 	opportunitiesService := opportunities.NewService(s.log)
 
 	// Initialize optimization services for correlation filtering
-	pypfoptClient := optimization.NewPyPFOptClient(s.cfg.PyPFOptServiceURL, s.log)
+	pypfoptClient := optimization.NewPyPFOptClient(s.cfg.UnifiedServiceURL, s.log)
 	riskBuilder := optimization.NewRiskModelBuilder(s.historyDB.Conn(), pypfoptClient, s.log)
 
 	// Initialize sequences service

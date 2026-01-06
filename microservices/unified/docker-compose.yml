@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  unified:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: unified-service
+    ports:
+      - "9000:9000"
+    environment:
+      - LOG_LEVEL=INFO
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s

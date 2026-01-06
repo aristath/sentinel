@@ -304,12 +304,12 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 	dividendRepo := dividends.NewDividendRepository(ledgerDB.Conn(), log)
 
 	// Clients
-	tradernetClient := tradernet.NewClient(cfg.TradernetServiceURL, log)
+	tradernetClient := tradernet.NewClient(cfg.UnifiedServiceURL, log)
 	tradernetClient.SetCredentials(cfg.TradernetAPIKey, cfg.TradernetAPISecret)
 	// Use Yahoo Finance microservice client (required - direct client removed)
 	// The microservice uses yfinance which has better browser impersonation and avoids 401 errors
-	yahooClient := yahoo.NewMicroserviceClient(cfg.YahooFinanceServiceURL, log)
-	log.Info().Str("url", cfg.YahooFinanceServiceURL).Msg("Using Yahoo Finance microservice")
+	yahooClient := yahoo.NewMicroserviceClient(cfg.UnifiedServiceURL, log)
+	log.Info().Str("url", cfg.UnifiedServiceURL).Msg("Using unified microservice")
 
 	// Currency exchange service
 	currencyExchangeService := services.NewCurrencyExchangeService(tradernetClient, log)
@@ -532,7 +532,7 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 	opportunitiesService := opportunities.NewService(log)
 
 	// Optimization services for correlation filtering and optimizer target weights
-	pypfoptClient := optimization.NewPyPFOptClient(cfg.PyPFOptServiceURL, log)
+	pypfoptClient := optimization.NewPyPFOptClient(cfg.UnifiedServiceURL, log)
 	riskBuilder := optimization.NewRiskModelBuilder(historyDB.Conn(), pypfoptClient, log)
 
 	// Initialize optimizer service for target weights

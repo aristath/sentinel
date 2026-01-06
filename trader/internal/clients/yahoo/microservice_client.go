@@ -144,7 +144,7 @@ func (c *MicroserviceClient) GetBatchQuotes(
 		YahooOverrides: yahooOverrides,
 	}
 
-	resp, err := c.post("/api/quotes/batch", req)
+	resp, err := c.post("/api/yfinance/api/quotes/batch", req)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +176,7 @@ func (c *MicroserviceClient) GetCurrentPrice(
 
 	var lastErr error
 	for attempt := 0; attempt < maxRetries; attempt++ {
-		url := fmt.Sprintf("/api/quotes/%s", symbol)
+		url := fmt.Sprintf("/api/yfinance/api/quotes/%s", symbol)
 		if yahooSymbolOverride != nil && *yahooSymbolOverride != "" {
 			url += fmt.Sprintf("?yahoo_symbol=%s", *yahooSymbolOverride)
 		}
@@ -247,7 +247,7 @@ func (c *MicroserviceClient) GetHistoricalPrices(
 	yahooSymbolOverride *string,
 	period string,
 ) ([]HistoricalPrice, error) {
-	url := fmt.Sprintf("/api/historical/%s?period=%s&interval=1d", symbol, period)
+	url := fmt.Sprintf("/api/yfinance/api/historical/%s?period=%s&interval=1d", symbol, period)
 	if yahooSymbolOverride != nil && *yahooSymbolOverride != "" {
 		url += fmt.Sprintf("&yahoo_symbol=%s", *yahooSymbolOverride)
 	}
@@ -270,7 +270,7 @@ func (c *MicroserviceClient) GetFundamentalData(
 	symbol string,
 	yahooSymbolOverride *string,
 ) (*FundamentalData, error) {
-	url := fmt.Sprintf("/api/fundamentals/%s", symbol)
+	url := fmt.Sprintf("/api/yfinance/api/fundamentals/%s", symbol)
 	if yahooSymbolOverride != nil && *yahooSymbolOverride != "" {
 		url += fmt.Sprintf("?yahoo_symbol=%s", *yahooSymbolOverride)
 	}
@@ -293,7 +293,7 @@ func (c *MicroserviceClient) GetAnalystData(
 	symbol string,
 	yahooSymbolOverride *string,
 ) (*AnalystData, error) {
-	url := fmt.Sprintf("/api/analyst/%s", symbol)
+	url := fmt.Sprintf("/api/yfinance/api/analyst/%s", symbol)
 	if yahooSymbolOverride != nil && *yahooSymbolOverride != "" {
 		url += fmt.Sprintf("?yahoo_symbol=%s", *yahooSymbolOverride)
 	}
@@ -328,7 +328,7 @@ func (c *MicroserviceClient) GetSecurityIndustry(
 	symbol string,
 	yahooSymbolOverride *string,
 ) (*string, error) {
-	url := fmt.Sprintf("/api/security/industry/%s", symbol)
+	url := fmt.Sprintf("/api/yfinance/api/security/industry/%s", symbol)
 	if yahooSymbolOverride != nil && *yahooSymbolOverride != "" {
 		url += fmt.Sprintf("?yahoo_symbol=%s", *yahooSymbolOverride)
 	}
@@ -352,7 +352,7 @@ func (c *MicroserviceClient) GetSecurityCountryAndExchange(
 	symbol string,
 	yahooSymbolOverride *string,
 ) (*string, *string, error) {
-	url := fmt.Sprintf("/api/security/country-exchange/%s", symbol)
+	url := fmt.Sprintf("/api/yfinance/api/security/country-exchange/%s", symbol)
 	if yahooSymbolOverride != nil && *yahooSymbolOverride != "" {
 		url += fmt.Sprintf("?yahoo_symbol=%s", *yahooSymbolOverride)
 	}
@@ -375,7 +375,7 @@ func (c *MicroserviceClient) GetSecurityInfo(
 	symbol string,
 	yahooSymbolOverride *string,
 ) (*SecurityInfo, error) {
-	url := fmt.Sprintf("/api/security/info/%s", symbol)
+	url := fmt.Sprintf("/api/yfinance/api/security/info/%s", symbol)
 	if yahooSymbolOverride != nil && *yahooSymbolOverride != "" {
 		url += fmt.Sprintf("?yahoo_symbol=%s", *yahooSymbolOverride)
 	}
@@ -395,7 +395,7 @@ func (c *MicroserviceClient) GetSecurityInfo(
 
 // LookupTickerFromISIN searches Yahoo Finance for a ticker symbol using an ISIN
 func (c *MicroserviceClient) LookupTickerFromISIN(isin string) (string, error) {
-	url := fmt.Sprintf("/api/security/lookup-ticker/%s", isin)
+	url := fmt.Sprintf("/api/yfinance/api/security/lookup-ticker/%s", isin)
 
 	resp, err := c.get(url)
 	if err != nil {
@@ -422,7 +422,7 @@ func (c *MicroserviceClient) GetQuoteName(
 	symbol string,
 	yahooSymbolOverride *string,
 ) (*string, error) {
-	url := fmt.Sprintf("/api/security/quote-name/%s", symbol)
+	url := fmt.Sprintf("/api/yfinance/api/security/quote-name/%s", symbol)
 	if yahooSymbolOverride != nil && *yahooSymbolOverride != "" {
 		url += fmt.Sprintf("?yahoo_symbol=%s", *yahooSymbolOverride)
 	}
@@ -452,7 +452,7 @@ func (c *MicroserviceClient) GetQuoteType(
 	symbol string,
 	yahooSymbolOverride *string,
 ) (string, error) {
-	url := fmt.Sprintf("/api/security/quote-type/%s", symbol)
+	url := fmt.Sprintf("/api/yfinance/api/security/quote-type/%s", symbol)
 	if yahooSymbolOverride != nil && *yahooSymbolOverride != "" {
 		url += fmt.Sprintf("?yahoo_symbol=%s", *yahooSymbolOverride)
 	}

@@ -31,5 +31,5 @@ func TestGetPendingOrders_CallsCorrectEndpoint(t *testing.T) {
 	_, err := client.GetPendingOrders()
 
 	assert.NoError(t, err)
-	assert.Equal(t, "/api/trading/pending-orders", capturedPath, "Client should call /api/trading/pending-orders endpoint")
+	assert.Equal(t, "/api/tradernet/api/trading/pending-orders", capturedPath, "Client should call /api/tradernet/api/trading/pending-orders endpoint")
 }

@@ -48,21 +48,20 @@ Arduino Trader is a production-ready autonomous trading system that manages a re
 │              │                         │                       │
 └──────────────┼─────────────────────────┼───────────────────────┘
                │                         │
-               │ HTTP                    │ HTTP
-               ▼                         ▼
-       ┌──────────────┐          ┌─────────────────┐
-       │   pypfopt    │          │   tradernet     │
-       │   (Python)   │          │    (Python)     │
-       │              │          │                 │
-       │ Portfolio    │          │ Broker API      │
-       │ Optimization │          │ Trading Gateway │
-       │              │          │                 │
-       │ Mean-Variance│          │ Market Data     │
-       │ HRP          │          │ Order Execution │
-       │ Covariance   │          │                 │
-       │              │          │                 │
-       │ Port: 9001   │          │ Port: 9002      │
-       └──────────────┘          └─────────────────┘
+               │ HTTP
+               ▼
+       ┌──────────────────────────────┐
+       │   unified (Python)           │
+       │                              │
+       │  • Portfolio Optimization    │
+       │    (PyPFOpt)                 │
+       │  • Broker API Gateway        │
+       │    (Tradernet)               │
+       │  • Market Data               │
+       │    (Yahoo Finance)           │
+       │                              │
+       │  Port: 9000                  │
+       └──────────────────────────────┘
 ```
 
 ### Design Principles
@@ -110,15 +109,18 @@ Arduino Trader is a production-ready autonomous trading system that manages a re
 
 ### Microservices
 
-1. **pypfopt** (Python/FastAPI) - Portfolio optimization service
-   - Port: 9001
-   - Purpose: Mean-Variance Optimization, Hierarchical Risk Parity
-   - Library: PyPortfolioOpt
-
-2. **tradernet** (Python/FastAPI) - Broker API gateway
-   - Port: 9002
-   - Purpose: Trading execution, portfolio sync, market data
-   - Library: Tradernet SDK v1.0.5
+1. **unified** (Python/FastAPI) - Unified microservice combining all Python services
+   - Port: 9000
+   - Purpose: Portfolio optimization, broker API gateway, and market data
+   - Libraries:
+     - PyPortfolioOpt (portfolio optimization)
+     - Tradernet SDK v2.0.0 (trading execution)
+     - yfinance (market data)
+   - Routes:
+     - `/api/pypfopt/*` - Portfolio optimization endpoints
+     - `/api/tradernet/api/*` - Broker API endpoints
+     - `/api/yfinance/api/*` - Market data endpoints
+     - `/health` - Unified health check
 
 **Note:** Planning evaluation is built into the main trader application using an in-process worker pool (no separate microservice).
 
@@ -211,21 +213,14 @@ docker-compose down
 
 ```bash
 
-# Terminal 1: pypfopt
-cd microservices/pypfopt
+# Unified microservice
+cd microservices/unified
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --port 9001
-
-# Terminal 2: tradernet
-cd microservices/tradernet
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-export TRADERNET_API_KEY="your_key"
-export TRADERNET_API_SECRET="your_secret"
-uvicorn app.main:app --port 9002
+export TRADERNET_API_KEY="your_key"  # Optional, can be passed via headers
+export TRADERNET_API_SECRET="your_secret"  # Optional, can be passed via headers
+uvicorn app.main:app --host 0.0.0.0 --port 9000
 ```
 
 #### 5. Run Main Application
@@ -241,11 +236,8 @@ cd trader
 # Check main app health
 curl http://localhost:8001/health
 
-# Check pypfopt
-curl http://localhost:9001/health
-
-# Check tradernet
-curl http://localhost:9002/health
+# Check unified microservice
+curl http://localhost:9000/health
 
 # Get portfolio summary
 curl http://localhost:8001/api/portfolio/summary
@@ -255,41 +247,29 @@ curl http://localhost:8001/api/portfolio/summary
 
 ## Microservices
 
+### unified (Unified Microservice)
 
-### 1. pypfopt (Portfolio Optimization Service)
+**Purpose:** Single Python service combining portfolio optimization, broker API gateway, and market data services.
 
-**Purpose:** Mean-Variance Optimization and Hierarchical Risk Parity using PyPortfolioOpt library.
+**Port:** 9000
 
-**Port:** 9001
-
-**Technology:** Python 3.10+ with FastAPI
+**Technology:** Python 3.11+ with FastAPI
 
 **Key Features:**
-- Progressive optimization (main endpoint)
-- Mean-Variance Optimization (Markowitz)
-- Hierarchical Risk Parity (HRP)
-- Covariance matrix calculation
-- Risk model computation
+- Portfolio optimization (PyPFOpt)
+- Trading execution and portfolio sync (Tradernet)
+- Market data and fundamentals (Yahoo Finance)
 
 **API Endpoints:**
-- `POST /optimize/progressive` - Progressive optimization (used by planner)
-- `POST /optimize/mean-variance` - Classic Markowitz optimization
-- `POST /optimize/hrp` - Hierarchical Risk Parity
-- `POST /risk-model/covariance` - Calculate covariance matrix
-- `GET /health` - Health check
 
-**Integration:**
-Used by the planning module to optimize portfolio allocations based on expected returns and risk constraints.
+**Portfolio Optimization (`/api/pypfopt/*`):**
+- `POST /api/pypfopt/optimize/progressive` - Progressive optimization (used by planner)
+- `POST /api/pypfopt/optimize/mean-variance` - Classic Markowitz optimization
+- `POST /api/pypfopt/optimize/hrp` - Hierarchical Risk Parity
+- `POST /api/pypfopt/risk-model/covariance` - Calculate covariance matrix
 
----
-
-### 2. tradernet (Broker API Gateway)
-
-**Purpose:** Trading execution, portfolio synchronization, and market data via Tradernet broker API.
-
-**Port:** 9002
-
-**Technology:** Python 3.10+ with FastAPI, Tradernet SDK v1.0.5
+**Broker API (`/api/tradernet/api/*`):**
+- Trading execution, portfolio sync, market data via Tradernet SDK v2.0.0
 
 **Key Features:**
 - Order execution (BUY/SELL)
@@ -326,11 +306,14 @@ Used by the planning module to optimize portfolio allocations based on expected 
 - `GET /api/securities/find` - Find security by symbol/ISIN
 - `GET /api/securities/info/{symbol}` - Security metadata
 
+**Market Data (`/api/yfinance/api/*`):**
+- Current prices, historical data, fundamentals, analyst data via yfinance
+
 **Environment Variables:**
 ```bash
-TRADERNET_API_KEY=your_api_key
-TRADERNET_API_SECRET=your_api_secret
-PORT=9002
+TRADERNET_API_KEY=your_api_key  # Optional, can be passed via headers
+TRADERNET_API_SECRET=your_api_secret  # Optional, can be passed via headers
+PORT=9000
 LOG_LEVEL=INFO
 ```
 
@@ -823,8 +806,7 @@ sudo systemctl enable docker
 curl http://localhost:8001/health
 
 # Microservices
-curl http://localhost:9001/health  # pypfopt
-curl http://localhost:9002/health  # tradernet
+curl http://localhost:9000/health  # unified microservice
 ```
 
 **System Status:**
@@ -938,8 +920,7 @@ POST /api/settings/{key}
 DATA_DIR=../data
 
 # Microservice URLs
-PYPFOPT_SERVICE_URL=http://localhost:9001
-TRADERNET_SERVICE_URL=http://localhost:9002
+UNIFIED_SERVICE_URL=http://localhost:9000
 
 # Tradernet API (DEPRECATED - use Settings UI instead)
 TRADERNET_API_KEY=your_api_key

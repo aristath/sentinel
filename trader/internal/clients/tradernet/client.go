@@ -176,7 +176,7 @@ func (c *Client) PlaceOrder(symbol, side string, quantity float64) (*OrderResult
 		Quantity: quantity,
 	}
 
-	resp, err := c.post("/api/trading/place-order", req)
+	resp, err := c.post("/api/tradernet/api/trading/place-order", req)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +210,7 @@ type PositionsResponse struct {
 // GetPortfolio gets current portfolio positions
 func (c *Client) GetPortfolio() ([]Position, error) {
 	c.log.Debug().Msg("GetPortfolio: calling c.get()")
-	resp, err := c.get("/api/portfolio/positions")
+	resp, err := c.get("/api/tradernet/api/portfolio/positions")
 	if err != nil {
 		c.log.Error().Err(err).Msg("GetPortfolio: c.get() failed")
 		return nil, err
@@ -240,7 +240,7 @@ type CashBalancesResponse struct {
 
 // GetCashBalances gets cash balances in all currencies
 func (c *Client) GetCashBalances() ([]CashBalance, error) {
-	resp, err := c.get("/api/portfolio/cash-balances")
+	resp, err := c.get("/api/tradernet/api/portfolio/cash-balances")
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +262,7 @@ type CashMovementsResponse struct {
 
 // GetCashMovements gets withdrawal history
 func (c *Client) GetCashMovements() (*CashMovementsResponse, error) {
-	resp, err := c.get("/api/transactions/cash-movements")
+	resp, err := c.get("/api/tradernet/api/transactions/cash-movements")
 	if err != nil {
 		return nil, err
 	}
@@ -292,7 +292,7 @@ type FindSymbolResponse struct {
 
 // FindSymbol finds security by symbol or ISIN
 func (c *Client) FindSymbol(symbol string, exchange *string) ([]SecurityInfo, error) {
-	url := fmt.Sprintf("/api/securities/find?symbol=%s", symbol)
+	url := fmt.Sprintf("/api/tradernet/api/securities/find?symbol=%s", symbol)
 	if exchange != nil {
 		url += fmt.Sprintf("&exchange=%s", *exchange)
 	}
@@ -327,7 +327,7 @@ type ExecutedTradesResponse struct {
 
 // GetExecutedTrades gets executed trade history
 func (c *Client) GetExecutedTrades(limit int) ([]Trade, error) {
-	url := fmt.Sprintf("/api/transactions/executed-trades?limit=%d", limit)
+	url := fmt.Sprintf("/api/tradernet/api/transactions/executed-trades?limit=%d", limit)
 	resp, err := c.get(url)
 	if err != nil {
 		return nil, err
@@ -370,7 +370,7 @@ type CashFlowsResponse struct {
 // GetAllCashFlows fetches all cash flows from Tradernet API
 // Combines multiple sources: transaction history, corporate actions, fees
 func (c *Client) GetAllCashFlows(limit int) ([]CashFlowTransaction, error) {
-	url := fmt.Sprintf("/api/transactions/cash-flows?limit=%d", limit)
+	url := fmt.Sprintf("/api/tradernet/api/transactions/cash-flows?limit=%d", limit)
 	resp, err := c.get(url)
 	if err != nil {
 		c.log.Error().Err(err).Msg("Failed to fetch cash flows from Tradernet")
@@ -530,7 +530,7 @@ type QuoteResponse struct {
 func (c *Client) GetQuote(symbol string) (*Quote, error) {
 	// URL-encode the symbol to handle special characters like slashes (e.g., "HKD/EUR")
 	encodedSymbol := url.PathEscape(symbol)
-	url := fmt.Sprintf("/api/market-data/quote/%s", encodedSymbol)
+	url := fmt.Sprintf("/api/tradernet/api/market-data/quote/%s", encodedSymbol)
 	resp, err := c.get(url)
 	if err != nil {
 		return nil, err
@@ -561,7 +561,7 @@ type PendingOrdersResponse struct {
 
 // GetPendingOrders retrieves all pending orders from the broker
 func (c *Client) GetPendingOrders() ([]PendingOrder, error) {
-	resp, err := c.get("/api/trading/pending-orders")
+	resp, err := c.get("/api/tradernet/api/trading/pending-orders")
 	if err != nil {
 		return nil, err
 	}

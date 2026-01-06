@@ -139,22 +139,15 @@ func (g *GitChecker) CategorizeChanges(files []string) *ChangeCategories {
 		}
 
 		// Microservice changes
-		if strings.HasPrefix(file, "microservices/pypfopt/app/") {
+		// Unified microservice combines pypfopt, tradernet, and yfinance
+		if strings.HasPrefix(file, "microservices/unified/app/") {
 			categories.PyPFOpt = true
-		}
-		if file == "microservices/pypfopt/requirements.txt" {
-			categories.PyPFOptDeps = true
-		}
-		if strings.HasPrefix(file, "microservices/tradernet/app/") {
 			categories.Tradernet = true
-		}
-		if file == "microservices/tradernet/requirements.txt" {
-			categories.TradernetDeps = true
-		}
-		if strings.HasPrefix(file, "microservices/yfinance/app/") {
 			categories.YahooFinance = true
 		}
-		if file == "microservices/yfinance/requirements.txt" {
+		if file == "microservices/unified/requirements.txt" {
+			categories.PyPFOptDeps = true
+			categories.TradernetDeps = true
 			categories.YahooFinanceDeps = true
 		}
 

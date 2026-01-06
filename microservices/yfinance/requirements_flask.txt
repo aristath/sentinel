@@ -1,9 +1,0 @@
-# Flask + Gunicorn version (lightweight synchronous alternative)
-yfinance>=0.2.28
-flask==3.0.0
-flask-cors==4.0.0
-gunicorn==21.2.0
-# Optional: Keep Pydantic if you want manual validation
-# pydantic==2.5.3
-python-dateutil==2.8.2
-httpx==0.26.0
