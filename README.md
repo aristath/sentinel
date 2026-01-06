@@ -439,7 +439,7 @@ arduino-trader/
 ├── display/                  # Display system (LED matrix)
 │   ├── sketch/              # Arduino C++ sketch
 │   └── app/                 # Python display app (Arduino App Framework)
-├── scripts/                 # Build & deployment scripts
+├── scripts/                 # Utility scripts (status, logs, restart, build)
 └── README.md                # This file
 ```
 
@@ -554,9 +554,36 @@ go test -cover ./...
 
 ## Deployment
 
+**Deployment is fully automated** by the Go trader service. The system automatically:
+- Checks for code changes every 5 minutes
+- Downloads pre-built binaries from GitHub Actions
+- Deploys Go services, frontend, display app, and sketch
+- Restarts services automatically
+- No manual deployment scripts required
+
+### Automated Deployment
+
+The trader service includes a built-in deployment manager that:
+- Monitors the git repository for changes
+- Downloads ARM64 binaries from GitHub Actions artifacts
+- Deploys all components (trader service, frontend, display app, sketch)
+- Handles service restarts gracefully
+- Provides API endpoints for manual triggers
+
+**Manual Deployment Trigger:**
+```bash
+# Trigger deployment manually via API
+curl -X POST http://localhost:8001/api/system/deployment/deploy
+
+# Check deployment status
+curl http://localhost:8001/api/system/deployment/status
+```
+
 ### Build for Production
 
 #### Main Application (ARM64 for Arduino Uno Q)
+
+Builds are handled automatically by GitHub Actions. For local builds:
 
 ```bash
 cd trader
@@ -606,10 +633,24 @@ docker-compose up -d
 sudo systemctl enable docker
 ```
 
-### Deployment Checklist
+### Initial Setup
+
+For the first-time setup on a new device:
+
+1. **Install systemd service** (see Systemd Services section below)
+2. **Start the trader service**: `sudo systemctl start trader`
+3. **Configure credentials** via Settings UI or API
+4. **Start microservices**: `docker-compose up -d`
+
+After initial setup, deployment is fully automated. The service will:
+- Automatically detect code changes
+- Download and deploy new versions
+- Restart services as needed
+
+### Deployment Checklist (Initial Setup Only)
 
 **Pre-Deployment:**
-- [ ] Backup all databases
+- [ ] Backup all databases (if upgrading existing installation)
 - [ ] Verify schema migrations applied
 - [ ] Test in research mode
 - [ ] Verify microservices running
@@ -617,12 +658,11 @@ sudo systemctl enable docker
 - [ ] Review settings and targets
 
 **Deployment:**
-1. Stop existing services
-2. Deploy new binary
-3. Start the trader service
-4. Start main application (systemctl start trader)
-5. Verify health endpoints
-6. Monitor logs for 24 hours
+1. Install systemd service (first time only)
+2. Start the trader service: `sudo systemctl start trader`
+3. Start microservices: `docker-compose up -d`
+4. Verify health endpoints
+5. Monitor logs for 24 hours
 
 **Post-Deployment:**
 - [ ] Verify first sync cycle completes
@@ -630,6 +670,8 @@ sudo systemctl enable docker
 - [ ] Monitor background jobs execution
 - [ ] Validate planning recommendations
 - [ ] Check cash balances are correct
+
+**Note:** After initial setup, all future deployments are automatic. No manual intervention required.
 
 ### Monitoring
 
@@ -830,6 +872,19 @@ docker-compose logs -f
 # Health checks
 curl http://localhost:8001/health
 ```
+
+### Utility Scripts
+
+The following utility scripts are available for manual operations:
+
+- `scripts/status.sh` - Check service status on Arduino device
+- `scripts/logs.sh [SERVICE]` - View service logs
+- `scripts/restart.sh [SERVICE]` - Restart services manually
+- `scripts/config.sh` - Configuration file (used by other scripts)
+- `scripts/pre-commit-build-frontend.sh` - Git pre-commit hook for frontend builds
+- `trader/scripts/build.sh [arch]` - Build script (used by Makefile)
+
+**Note:** Deployment is fully automated. These scripts are for monitoring and troubleshooting only.
 
 ---
 
