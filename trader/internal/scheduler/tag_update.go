@@ -9,6 +9,7 @@ import (
 	"github.com/aristath/arduino-trader/internal/clients/yahoo"
 	"github.com/aristath/arduino-trader/internal/modules/portfolio"
 	"github.com/aristath/arduino-trader/internal/modules/universe"
+	"github.com/aristath/arduino-trader/pkg/formulas"
 	"github.com/rs/zerolog"
 )
 
@@ -178,6 +179,14 @@ func (j *TagUpdateJob) updateTagsForSecurity(security universe.Security) error {
 			"cagr": score.CAGRScore,
 		}
 
+		// Get raw Sharpe ratio from scores table (sharpe_score column stores raw value)
+		if score.SharpeScore > 0 {
+			if subScores["long_term"] == nil {
+				subScores["long_term"] = make(map[string]float64)
+			}
+			subScores["long_term"]["sharpe_raw"] = score.SharpeScore
+		}
+
 		// Try to get raw CAGR from calculated_metrics for return-based tagging
 		if j.portfolioDB != nil {
 			var cagrRaw sql.NullFloat64
@@ -197,14 +206,10 @@ func (j *TagUpdateJob) updateTagsForSecurity(security universe.Security) error {
 				subScores["long_term"]["cagr_raw"] = cagrRaw.Float64
 			}
 		}
-		// Note: Sortino ratio is not currently stored in SecurityScore or sub-scores.
-		// The LongTermScorer stores "sortino" (scored value) but not "sortino_raw" (raw ratio).
-		// For bubble detection tags, Sortino will default to 0.0 when not available,
-		// which means bubble detection will rely more on Sharpe ratio. This is acceptable
-		// as Sharpe alone is sufficient for bubble detection.
 	}
 
 	// Get daily prices for technical analysis using ISIN
+	// We'll also use these to calculate Sortino ratio if needed
 	var dailyPrices []universe.DailyPrice
 	if security.ISIN == "" {
 		j.log.Debug().Str("symbol", security.Symbol).Msg("Security has no ISIN, skipping daily prices")
@@ -222,6 +227,25 @@ func (j *TagUpdateJob) updateTagsForSecurity(security universe.Security) error {
 	closePrices := make([]float64, len(dailyPrices))
 	for i, dp := range dailyPrices {
 		closePrices[i] = dp.Close
+	}
+
+	// Calculate Sortino ratio from daily prices if we have enough data
+	// This is needed for bubble detection tags which require sortino_raw
+	if len(closePrices) >= 50 {
+		// Calculate returns from prices
+		returns := formulas.CalculateReturns(closePrices)
+		if len(returns) >= 2 {
+			// Calculate Sortino ratio with 2% risk-free rate and 11% target return (0.11)
+			// Using 252 periods per year for daily data
+			sortinoRatio := formulas.CalculateSortinoRatio(returns, 0.02, 0.11, 252)
+			if sortinoRatio != nil && *sortinoRatio > 0 {
+				// Add sortino_raw to sub-scores
+				if subScores["long_term"] == nil {
+					subScores["long_term"] = make(map[string]float64)
+				}
+				subScores["long_term"]["sortino_raw"] = *sortinoRatio
+			}
+		}
 	}
 
 	// Get current price (latest close)
