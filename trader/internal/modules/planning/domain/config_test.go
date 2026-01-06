@@ -203,4 +203,29 @@ func TestGetFilterParams(t *testing.T) {
 	// When disabled, params are not returned
 	assert.NotContains(t, params, "min_diversity_score")
 	assert.Len(t, params, 0)
+
+	// Test with DiversityWeight at boundaries
+	config.EnableDiverseSelection = true
+	config.DiversityWeight = 0.0
+	params = config.GetFilterParams("diversity")
+	assert.Contains(t, params, "min_diversity_score")
+	assert.Equal(t, 0.0, params["min_diversity_score"])
+
+	config.DiversityWeight = 1.0
+	params = config.GetFilterParams("diversity")
+	assert.Contains(t, params, "min_diversity_score")
+	assert.Equal(t, 1.0, params["min_diversity_score"])
+
+	// Test other filters return empty map
+	params = config.GetFilterParams("correlation_aware")
+	assert.NotNil(t, params)
+	assert.Len(t, params, 0)
+
+	params = config.GetFilterParams("eligibility")
+	assert.NotNil(t, params)
+	assert.Len(t, params, 0)
+
+	params = config.GetFilterParams("recently_traded")
+	assert.NotNil(t, params)
+	assert.Len(t, params, 0)
 }
