@@ -909,6 +909,84 @@ func TestParseIndustries(t *testing.T) {
 	}
 }
 
+// TestRound tests the round helper function
+func TestRound(t *testing.T) {
+	tests := []struct {
+		name     string
+		val      float64
+		decimals int
+		expected float64
+	}{
+		{
+			name:     "round to 2 decimals",
+			val:      123.456789,
+			decimals: 2,
+			expected: 123.46,
+		},
+		{
+			name:     "round to 0 decimals",
+			val:      123.456789,
+			decimals: 0,
+			expected: 123.0,
+		},
+		{
+			name:     "round to 4 decimals",
+			val:      123.456789,
+			decimals: 4,
+			expected: 123.4568,
+		},
+		{
+			name:     "round negative number",
+			val:      -123.456789,
+			decimals: 2,
+			expected: -123.46,
+		},
+		{
+			name:     "round zero",
+			val:      0.0,
+			decimals: 2,
+			expected: 0.0,
+		},
+		{
+			name:     "round very small number",
+			val:      0.000001,
+			decimals: 6,
+			expected: 0.000001,
+		},
+		{
+			name:     "round large number",
+			val:      999999.123456,
+			decimals: 2,
+			expected: 999999.12,
+		},
+		{
+			name:     "round with exact decimal",
+			val:      123.45,
+			decimals: 2,
+			expected: 123.45,
+		},
+		{
+			name:     "round with 5 rounding up",
+			val:      123.445,
+			decimals: 2,
+			expected: 123.45,
+		},
+		{
+			name:     "round to negative decimals (edge case)",
+			val:      123.456,
+			decimals: -1,
+			expected: 120.0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := round(tt.val, tt.decimals)
+			assert.InDelta(t, tt.expected, result, 0.0001, "round(%v, %d) = %v, want %v", tt.val, tt.decimals, result, tt.expected)
+		})
+	}
+}
+
 // TestGetPortfolioSummary_AllocationTargetError tests error handling
 func TestGetPortfolioSummary_AllocationTargetError(t *testing.T) {
 	log := zerolog.New(nil).Level(zerolog.Disabled)

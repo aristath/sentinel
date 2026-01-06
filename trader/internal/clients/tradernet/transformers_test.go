@@ -478,3 +478,200 @@ func TestTransformQuote_ArrayFormat(t *testing.T) {
 	assert.Equal(t, int64(1000000), quote.Volume)
 	assert.Equal(t, "2024-01-15T10:00:00Z", quote.Timestamp)
 }
+
+// TestGetString tests the getString helper function
+func TestGetString(t *testing.T) {
+	tests := []struct {
+		name     string
+		m        map[string]interface{}
+		key      string
+		expected string
+	}{
+		{
+			name:     "string value",
+			m:        map[string]interface{}{"key": "value"},
+			key:      "key",
+			expected: "value",
+		},
+		{
+			name:     "missing key",
+			m:        map[string]interface{}{"other": "value"},
+			key:      "key",
+			expected: "",
+		},
+		{
+			name:     "int value converted to string",
+			m:        map[string]interface{}{"key": 123},
+			key:      "key",
+			expected: "123",
+		},
+		{
+			name:     "float value converted to string",
+			m:        map[string]interface{}{"key": 45.67},
+			key:      "key",
+			expected: "45.67",
+		},
+		{
+			name:     "bool value converted to string",
+			m:        map[string]interface{}{"key": true},
+			key:      "key",
+			expected: "true",
+		},
+		{
+			name:     "empty string",
+			m:        map[string]interface{}{"key": ""},
+			key:      "key",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getString(tt.m, tt.key)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestGetFloat64 tests the getFloat64 helper function
+func TestGetFloat64(t *testing.T) {
+	tests := []struct {
+		name     string
+		m        map[string]interface{}
+		key      string
+		expected float64
+	}{
+		{
+			name:     "float64 value",
+			m:        map[string]interface{}{"key": float64(123.45)},
+			key:      "key",
+			expected: 123.45,
+		},
+		{
+			name:     "float32 value",
+			m:        map[string]interface{}{"key": float32(123.45)},
+			key:      "key",
+			expected: 123.44999694824219, // float32 precision loss when converted to float64
+		},
+		{
+			name:     "int value",
+			m:        map[string]interface{}{"key": 123},
+			key:      "key",
+			expected: 123.0,
+		},
+		{
+			name:     "int64 value",
+			m:        map[string]interface{}{"key": int64(456)},
+			key:      "key",
+			expected: 456.0,
+		},
+		{
+			name:     "int32 value",
+			m:        map[string]interface{}{"key": int32(789)},
+			key:      "key",
+			expected: 789.0,
+		},
+		{
+			name:     "missing key",
+			m:        map[string]interface{}{"other": 123.0},
+			key:      "key",
+			expected: 0.0,
+		},
+		{
+			name:     "unsupported type",
+			m:        map[string]interface{}{"key": "not a number"},
+			key:      "key",
+			expected: 0.0,
+		},
+		{
+			name:     "zero value",
+			m:        map[string]interface{}{"key": float64(0)},
+			key:      "key",
+			expected: 0.0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getFloat64(tt.m, tt.key)
+			if tt.name == "float32 value" {
+				// Use InDelta for float32 due to precision loss
+				assert.InDelta(t, tt.expected, result, 0.0001)
+			} else {
+				assert.Equal(t, tt.expected, result)
+			}
+		})
+	}
+}
+
+// TestGetFloat64FromValue tests the getFloat64FromValue helper function
+func TestGetFloat64FromValue(t *testing.T) {
+	tests := []struct {
+		name     string
+		val      interface{}
+		expected float64
+	}{
+		{
+			name:     "float64",
+			val:      float64(123.45),
+			expected: 123.45,
+		},
+		{
+			name:     "float32",
+			val:      float32(123.45),
+			expected: 123.44999694824219, // float32 precision loss when converted to float64
+		},
+		{
+			name:     "int",
+			val:      123,
+			expected: 123.0,
+		},
+		{
+			name:     "int64",
+			val:      int64(456),
+			expected: 456.0,
+		},
+		{
+			name:     "int32",
+			val:      int32(789),
+			expected: 789.0,
+		},
+		{
+			name:     "string",
+			val:      "not a number",
+			expected: 0.0,
+		},
+		{
+			name:     "bool",
+			val:      true,
+			expected: 0.0,
+		},
+		{
+			name:     "nil",
+			val:      nil,
+			expected: 0.0,
+		},
+		{
+			name:     "zero float64",
+			val:      float64(0),
+			expected: 0.0,
+		},
+		{
+			name:     "negative int",
+			val:      -123,
+			expected: -123.0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getFloat64FromValue(tt.val)
+			if tt.name == "float32" {
+				// Use InDelta for float32 due to precision loss
+				assert.InDelta(t, tt.expected, result, 0.0001)
+			} else {
+				assert.Equal(t, tt.expected, result)
+			}
+		})
+	}
+}

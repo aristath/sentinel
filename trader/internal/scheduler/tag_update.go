@@ -189,23 +189,53 @@ func (j *TagUpdateJob) updateTagsForSecurity(security universe.Security) error {
 			subScores["long_term"]["sharpe_raw"] = score.SharpeScore
 		}
 
-		// Try to get raw CAGR from calculated_metrics for return-based tagging
+		// Try to get raw CAGR from scores table for return-based tagging
 		if j.portfolioDB != nil {
-			var cagrRaw sql.NullFloat64
+			var cagrScore sql.NullFloat64
 			err := j.portfolioDB.QueryRow(`
-				SELECT COALESCE(
-					MAX(CASE WHEN metric_name = 'CAGR_5Y' THEN metric_value END),
-					MAX(CASE WHEN metric_name = 'CAGR_10Y' THEN metric_value END)
-				) as cagr
-				FROM calculated_metrics
-				WHERE symbol = ? AND metric_name IN ('CAGR_5Y', 'CAGR_10Y')
-			`, security.Symbol).Scan(&cagrRaw)
-			if err == nil && cagrRaw.Valid && cagrRaw.Float64 > 0 {
-				// Add cagr_raw to sub-scores if not already present
-				if subScores["long_term"] == nil {
-					subScores["long_term"] = make(map[string]float64)
+				SELECT s.cagr_score
+				FROM scores s
+				INNER JOIN positions p ON s.isin = p.isin
+				WHERE p.symbol = ? AND s.cagr_score IS NOT NULL AND s.cagr_score > 0
+		ORDER BY s.last_updated DESC
+		LIMIT 1
+		`, security.Symbol).Scan(&cagrScore)
+			if err == nil && cagrScore.Valid && cagrScore.Float64 > 0 {
+				// Convert normalized cagr_score back to approximate CAGR percentage
+				// convertCAGRScoreToCAGR converts normalized cagr_score (0-1) back to approximate CAGR percentage.
+				// Reverse mapping based on scoreCAGRWithBubbleDetection logic:
+				// - cagr_score 1.0 → ~20% CAGR (excellent)
+				// - cagr_score 0.8 → ~11% CAGR (target)
+				// - cagr_score 0.5 → ~6-8% CAGR (below target)
+				// - cagr_score 0.15 → 0% CAGR (floor)
+				// Linear interpolation between key points
+				convertCAGRScoreToCAGR := func(cagrScore float64) float64 {
+					if cagrScore <= 0 {
+						return 0.0
+					}
+
+					var cagrValue float64
+					if cagrScore >= 0.8 {
+						// Above target: 0.8 (11%) to 1.0 (20%)
+						cagrValue = 0.11 + (cagrScore-0.8)*(0.20-0.11)/(1.0-0.8)
+					} else if cagrScore >= 0.15 {
+						// Below target: 0.15 (0%) to 0.8 (11%)
+						cagrValue = 0.0 + (cagrScore-0.15)*(0.11-0.0)/(0.8-0.15)
+					} else {
+						// At or below floor
+						cagrValue = 0.0
+					}
+
+					return cagrValue
 				}
-				subScores["long_term"]["cagr_raw"] = cagrRaw.Float64
+				cagrRaw := convertCAGRScoreToCAGR(cagrScore.Float64)
+				if cagrRaw > 0 {
+					// Add cagr_raw to sub-scores if not already present
+					if subScores["long_term"] == nil {
+						subScores["long_term"] = make(map[string]float64)
+					}
+					subScores["long_term"]["cagr_raw"] = cagrRaw
+				}
 			}
 		}
 	}
