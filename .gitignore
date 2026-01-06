@@ -63,3 +63,5 @@ build/
 trader/app/bin/.deploy.lock
 
 trader/tradernet-sdk
+
+trader-arm64
