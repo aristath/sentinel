@@ -9,6 +9,7 @@ import (
 	"gonum.org/v1/gonum/mat"
 	"gonum.org/v1/gonum/stat"
 
+	"github.com/aristath/arduino-trader/internal/modules/portfolio"
 	"github.com/rs/zerolog"
 )
 
@@ -22,6 +23,17 @@ const (
 type RiskModelBuilder struct {
 	db  *sql.DB
 	log zerolog.Logger
+}
+
+type marketIndexSpec struct {
+	Symbol string
+	Weight float64
+}
+
+type RegimeAwareRiskOptions struct {
+	RegimeWindowDays int
+	HalfLifeDays     float64
+	Bandwidth        float64
 }
 
 // NewRiskModelBuilder creates a new risk model builder.
@@ -87,6 +99,143 @@ func (rb *RiskModelBuilder) BuildCovarianceMatrix(
 	return covMatrix, returns, correlations, nil
 }
 
+// BuildRegimeAwareCovarianceMatrix builds a covariance matrix from historical prices using
+// regime-weighted observations (kernel on regime score + time decay).
+//
+// The regime score series is derived from a fixed set of market indices in history DB.
+func (rb *RiskModelBuilder) BuildRegimeAwareCovarianceMatrix(
+	symbols []string,
+	lookbackDays int,
+	currentRegimeScore float64,
+	opts RegimeAwareRiskOptions,
+) ([][]float64, map[string][]float64, []CorrelationPair, error) {
+	if lookbackDays <= 0 {
+		lookbackDays = DefaultLookbackDays
+	}
+
+	regimeWindowDays := opts.RegimeWindowDays
+	if regimeWindowDays <= 0 {
+		regimeWindowDays = 30
+	}
+	halfLifeDays := opts.HalfLifeDays
+	if halfLifeDays <= 0 {
+		halfLifeDays = 63
+	}
+	bandwidth := opts.Bandwidth
+	if bandwidth <= 0 {
+		bandwidth = 0.25
+	}
+
+	rb.log.Info().
+		Int("num_symbols", len(symbols)).
+		Int("lookback_days", lookbackDays).
+		Float64("current_regime_score", currentRegimeScore).
+		Int("regime_window_days", regimeWindowDays).
+		Float64("half_life_days", halfLifeDays).
+		Float64("bandwidth", bandwidth).
+		Msg("Building regime-aware covariance matrix")
+
+	// 1. Fetch price history for assets.
+	assetPriceData, err := rb.fetchPriceHistory(symbols, lookbackDays)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to fetch price history: %w", err)
+	}
+	if len(assetPriceData.Dates) < 30 {
+		return nil, nil, nil, fmt.Errorf("insufficient price history: only %d days available (need at least 30)", len(assetPriceData.Dates))
+	}
+
+	assetFilled := rb.handleMissingData(assetPriceData)
+	assetReturns := rb.calculateReturns(assetFilled)
+
+	// 2. Build a regime score series aligned to asset returns observations.
+	indices := []marketIndexSpec{
+		{Symbol: "SPX.US", Weight: 0.20},
+		{Symbol: "STOXX600.EU", Weight: 0.50},
+		{Symbol: "MSCIASIA.ASIA", Weight: 0.30},
+	}
+	indexSymbols := make([]string, 0, len(indices))
+	for _, idx := range indices {
+		indexSymbols = append(indexSymbols, idx.Symbol)
+	}
+
+	indexPriceData, err := rb.fetchPriceHistory(indexSymbols, lookbackDays)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to fetch index price history: %w", err)
+	}
+
+	alignedIndex := rb.alignToDates(indexPriceData, assetFilled.Dates)
+	alignedIndexFilled := rb.handleMissingData(alignedIndex)
+	indexReturns := rb.calculateReturns(alignedIndexFilled)
+
+	// Composite market returns (aligned to asset returns length).
+	numObs := len(assetFilled.Dates) - 1
+	marketReturns := make([]float64, numObs)
+	totalWeight := 0.0
+	for _, idx := range indices {
+		totalWeight += idx.Weight
+	}
+	if totalWeight <= 0 {
+		return nil, nil, nil, fmt.Errorf("invalid market index weights")
+	}
+
+	for t := 0; t < numObs; t++ {
+		composite := 0.0
+		usedWeight := 0.0
+		for _, idx := range indices {
+			r, ok := indexReturns[idx.Symbol]
+			if !ok || len(r) != numObs {
+				continue
+			}
+			composite += r[t] * idx.Weight
+			usedWeight += idx.Weight
+		}
+		if usedWeight > 0 {
+			marketReturns[t] = composite / usedWeight
+		} else {
+			marketReturns[t] = 0.0
+		}
+	}
+
+	// Regime score series per observation: use rolling window of market returns.
+	regimeScores := make([]float64, numObs)
+	detector := portfolio.NewMarketRegimeDetector(rb.log)
+	for t := 0; t < numObs; t++ {
+		start := t - (regimeWindowDays - 1)
+		if start < 0 {
+			start = 0
+		}
+		window := marketReturns[start : t+1]
+		regimeScores[t] = float64(detector.CalculateRegimeScoreFromReturns(window))
+	}
+
+	// 3. Compute observation weights and build weighted covariance.
+	obsWeights, err := regimeTimeDecayWeights(regimeScores, currentRegimeScore, halfLifeDays, bandwidth)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to build observation weights: %w", err)
+	}
+
+	weightedCov, err := weightedCovariance(assetReturns, symbols, obsWeights)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to calculate weighted covariance: %w", err)
+	}
+
+	// 4. Apply shrinkage for conditioning.
+	covMatrix, err := applyLedoitWolfShrinkage(weightedCov)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to apply shrinkage: %w", err)
+	}
+
+	// 5. Correlation diagnostics.
+	correlations := rb.getCorrelations(covMatrix, symbols, HighCorrelationThreshold)
+
+	rb.log.Info().
+		Float64("effective_sample_size", effectiveSampleSize(obsWeights)).
+		Int("high_correlations", len(correlations)).
+		Msg("Built regime-aware covariance matrix")
+
+	return covMatrix, assetReturns, correlations, nil
+}
+
 // fetchPriceHistory fetches historical prices from the database.
 func (rb *RiskModelBuilder) fetchPriceHistory(symbols []string, days int) (TimeSeriesData, error) {
 	// Calculate start date
@@ -103,7 +252,7 @@ func (rb *RiskModelBuilder) fetchPriceHistory(symbols []string, days int) (TimeS
 			symbol,
 			date,
 			close
-		FROM price_history
+		FROM daily_prices
 		WHERE symbol IN (` + rb.buildPlaceholders(len(symbols)) + `)
 			AND date >= ?
 		ORDER BY date ASC
@@ -185,6 +334,33 @@ func (rb *RiskModelBuilder) fetchPriceHistory(symbols []string, days int) (TimeS
 		Dates: dates,
 		Data:  data,
 	}, nil
+}
+
+func (rb *RiskModelBuilder) alignToDates(data TimeSeriesData, dates []string) TimeSeriesData {
+	aligned := TimeSeriesData{
+		Dates: dates,
+		Data:  make(map[string][]float64),
+	}
+
+	// Build date -> index mapping for the source series.
+	dateIndex := make(map[string]int, len(data.Dates))
+	for i, d := range data.Dates {
+		dateIndex[d] = i
+	}
+
+	for symbol, prices := range data.Data {
+		out := make([]float64, len(dates))
+		for i, d := range dates {
+			if j, ok := dateIndex[d]; ok && j < len(prices) {
+				out[i] = prices[j]
+			} else {
+				out[i] = math.NaN()
+			}
+		}
+		aligned.Data[symbol] = out
+	}
+
+	return aligned
 }
 
 // handleMissingData fills missing data using forward-fill and back-fill.
@@ -543,4 +719,126 @@ func calculateCovarianceLedoitWolf(returns map[string][]float64, symbols []strin
 	}
 
 	return shrunkCov, nil
+}
+
+func effectiveSampleSize(weights []float64) float64 {
+	sumSq := 0.0
+	for _, w := range weights {
+		sumSq += w * w
+	}
+	if sumSq <= 0 {
+		return 0.0
+	}
+	return 1.0 / sumSq
+}
+
+// regimeTimeDecayWeights returns normalized observation weights (oldest -> newest) using
+// an RBF kernel on regime score around currentRegime and an exponential time decay.
+func regimeTimeDecayWeights(
+	regimeScores []float64,
+	currentRegime float64,
+	halfLifeDays float64,
+	bandwidth float64,
+) ([]float64, error) {
+	n := len(regimeScores)
+	if n == 0 {
+		return nil, fmt.Errorf("empty regimeScores")
+	}
+	if halfLifeDays <= 0 {
+		return nil, fmt.Errorf("invalid halfLifeDays: %v", halfLifeDays)
+	}
+	if bandwidth <= 0 {
+		return nil, fmt.Errorf("invalid bandwidth: %v", bandwidth)
+	}
+
+	lambda := math.Ln2 / halfLifeDays
+	denomKernel := 2.0 * bandwidth * bandwidth
+
+	weights := make([]float64, n)
+	sum := 0.0
+	for i := 0; i < n; i++ {
+		age := float64((n - 1) - i) // 0 for newest
+		wTime := math.Exp(-lambda * age)
+
+		d := regimeScores[i] - currentRegime
+		wReg := math.Exp(-(d * d) / denomKernel)
+
+		w := wTime * wReg
+		weights[i] = w
+		sum += w
+	}
+
+	if sum <= 0 || math.IsNaN(sum) || math.IsInf(sum, 0) {
+		return nil, fmt.Errorf("invalid weight sum: %v", sum)
+	}
+	for i := range weights {
+		weights[i] /= sum
+	}
+	return weights, nil
+}
+
+// weightedCovariance computes a weighted covariance matrix (symbols order, oldest->newest observations).
+// Uses the effective-sample correction: denom = 1 - sum(w^2).
+func weightedCovariance(
+	returns map[string][]float64,
+	symbols []string,
+	weights []float64,
+) ([][]float64, error) {
+	n := len(symbols)
+	if n == 0 {
+		return nil, fmt.Errorf("no symbols provided")
+	}
+	if len(weights) == 0 {
+		return nil, fmt.Errorf("no weights provided")
+	}
+
+	// Validate lengths and compute means.
+	t := len(weights)
+	mu := make([]float64, n)
+	for i, sym := range symbols {
+		ri, ok := returns[sym]
+		if !ok {
+			return nil, fmt.Errorf("missing returns for symbol %s", sym)
+		}
+		if len(ri) != t {
+			return nil, fmt.Errorf("inconsistent return lengths")
+		}
+		sum := 0.0
+		for k := 0; k < t; k++ {
+			sum += weights[k] * ri[k]
+		}
+		mu[i] = sum
+	}
+
+	sumW2 := 0.0
+	for _, w := range weights {
+		sumW2 += w * w
+	}
+	denom := 1.0 - sumW2
+	if denom <= 0 {
+		return nil, fmt.Errorf("invalid effective-sample denominator: %v", denom)
+	}
+
+	cov := make([][]float64, n)
+	for i := range cov {
+		cov[i] = make([]float64, n)
+	}
+
+	for i := 0; i < n; i++ {
+		ri := returns[symbols[i]]
+		for j := i; j < n; j++ {
+			rj := returns[symbols[j]]
+			s := 0.0
+			for k := 0; k < t; k++ {
+				s += weights[k] * (ri[k] - mu[i]) * (rj[k] - mu[j])
+			}
+			val := s / denom
+			cov[i][j] = val
+			if i != j {
+				cov[j][i] = val
+			}
+		}
+	}
+
+	return cov, nil
 }

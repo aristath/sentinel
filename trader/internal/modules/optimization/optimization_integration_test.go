@@ -86,7 +86,7 @@ func TestOptimizationPipeline(t *testing.T) {
 
 	// Step 3: Run HRP optimization
 	hrpOptimizer := NewHRPOptimizer()
-	hrpWeights, err := hrpOptimizer.Optimize(returns, symbols)
+	hrpWeights, err := hrpOptimizer.Optimize(covMatrix, symbols)
 	require.NoError(t, err)
 	require.NotNil(t, hrpWeights)
 
@@ -117,13 +117,11 @@ func TestOptimizationPipeline(t *testing.T) {
 // TestOptimizationPipeline_EdgeCases tests edge cases in the optimization pipeline
 func TestOptimizationPipeline_EdgeCases(t *testing.T) {
 	t.Run("single_security", func(t *testing.T) {
-		returns := map[string][]float64{
-			"SINGLE": {0.01, 0.02, -0.01, 0.015},
-		}
 		symbols := []string{"SINGLE"}
+		cov := [][]float64{{0.01}}
 
 		hrpOptimizer := NewHRPOptimizer()
-		weights, err := hrpOptimizer.Optimize(returns, symbols)
+		weights, err := hrpOptimizer.Optimize(cov, symbols)
 		require.NoError(t, err)
 		assert.Equal(t, 1.0, weights["SINGLE"])
 	})

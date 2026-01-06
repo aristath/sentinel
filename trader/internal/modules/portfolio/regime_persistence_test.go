@@ -58,7 +58,7 @@ func TestGetCurrentRegimeScore(t *testing.T) {
 		_, err := db.Exec(`
 			INSERT INTO market_regime_history (recorded_at, raw_score, smoothed_score, discrete_regime)
 			VALUES (?, ?, ?, ?)
-		`, time.Now().Format(time.RFC3339), 0.5, 0.45, "bull")
+		`, time.Now().Format(time.RFC3339), 0.5, 0.45, "n/a")
 		require.NoError(t, err)
 
 		score, err := persistence.GetCurrentRegimeScore()
@@ -86,7 +86,7 @@ func TestRecordRegimeScore(t *testing.T) {
 
 		assert.Equal(t, 0.5, raw)
 		assert.Equal(t, 0.5, smoothed) // First score, no smoothing
-		assert.Equal(t, "bull", discrete)
+		assert.Equal(t, "n/a", discrete)
 	})
 
 	t.Run("Second score applies smoothing", func(t *testing.T) {
@@ -145,7 +145,7 @@ func TestGetScoreChange(t *testing.T) {
 		_, err := db.Exec(`
 			INSERT INTO market_regime_history (recorded_at, raw_score, smoothed_score, discrete_regime)
 			VALUES (?, ?, ?, ?)
-		`, time.Now().Format(time.RFC3339), 0.5, 0.5, "bull")
+		`, time.Now().Format(time.RFC3339), 0.5, 0.5, "n/a")
 		require.NoError(t, err)
 
 		change, err := persistence.GetScoreChange()
@@ -164,8 +164,8 @@ func TestGetScoreChange(t *testing.T) {
 			INSERT INTO market_regime_history (recorded_at, raw_score, smoothed_score, discrete_regime)
 			VALUES (?, ?, ?, ?), (?, ?, ?, ?)
 		`,
-			now.Add(-1*time.Hour).Format(time.RFC3339), 0.2, 0.2, "sideways",
-			now.Format(time.RFC3339), 0.8, 0.8, "bull")
+			now.Add(-1*time.Hour).Format(time.RFC3339), 0.2, 0.2, "n/a",
+			now.Format(time.RFC3339), 0.8, 0.8, "n/a")
 		require.NoError(t, err)
 
 		change, err := persistence.GetScoreChange()
@@ -192,7 +192,7 @@ func TestGetRegimeHistory(t *testing.T) {
 				INSERT INTO market_regime_history (recorded_at, raw_score, smoothed_score, discrete_regime)
 				VALUES (?, ?, ?, ?)
 			`, now.Add(time.Duration(i)*time.Hour).Format(time.RFC3339),
-				float64(i)*0.1, float64(i)*0.1, "bull")
+				float64(i)*0.1, float64(i)*0.1, "n/a")
 			require.NoError(t, err)
 		}
 

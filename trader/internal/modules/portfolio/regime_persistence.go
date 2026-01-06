@@ -17,11 +17,10 @@ type RegimePersistence struct {
 
 // RegimeHistoryEntry represents a single regime score record
 type RegimeHistoryEntry struct {
-	ID             int64
-	RecordedAt     time.Time
-	RawScore       float64 // Raw score before smoothing
-	SmoothedScore  float64 // Smoothed score (EMA)
-	DiscreteRegime string  // Discrete regime for reference
+	ID            int64
+	RecordedAt    time.Time
+	RawScore      float64 // Raw score before smoothing
+	SmoothedScore float64 // Smoothed score (EMA)
 }
 
 // NewRegimePersistence creates a new regime persistence manager
@@ -79,16 +78,15 @@ func (rp *RegimePersistence) RecordRegimeScore(rawScore MarketRegimeScore) error
 		smoothed = rp.ApplySmoothing(float64(rawScore), float64(lastSmoothed), rp.smoothingAlpha)
 	}
 
-	// Convert to discrete for reference
-	detector := NewMarketRegimeDetector(rp.log)
-	discrete := detector.ToDiscreteRegime(smoothed)
+	// Discrete regime support is intentionally removed. Keep column populated for schema compatibility.
+	discrete := "n/a"
 
 	// Insert into database
 	query := `INSERT INTO market_regime_history
 	          (recorded_at, raw_score, smoothed_score, discrete_regime)
 	          VALUES (?, ?, ?, ?)`
 
-	_, err = rp.db.Exec(query, time.Now(), float64(rawScore), smoothed, string(discrete))
+	_, err = rp.db.Exec(query, time.Now(), float64(rawScore), smoothed, discrete)
 	if err != nil {
 		return err
 	}
@@ -96,7 +94,7 @@ func (rp *RegimePersistence) RecordRegimeScore(rawScore MarketRegimeScore) error
 	rp.log.Debug().
 		Float64("raw_score", float64(rawScore)).
 		Float64("smoothed_score", smoothed).
-		Str("discrete_regime", string(discrete)).
+		Str("discrete_regime", discrete).
 		Msg("Recorded regime score")
 
 	return nil
@@ -140,7 +138,7 @@ func (rp *RegimePersistence) GetScoreChange() (float64, error) {
 
 // GetRegimeHistory returns recent regime history entries
 func (rp *RegimePersistence) GetRegimeHistory(limit int) ([]RegimeHistoryEntry, error) {
-	query := `SELECT id, recorded_at, raw_score, smoothed_score, discrete_regime
+	query := `SELECT id, recorded_at, raw_score, smoothed_score
 	          FROM market_regime_history
 	          ORDER BY recorded_at DESC
 	          LIMIT ?`
@@ -161,7 +159,6 @@ func (rp *RegimePersistence) GetRegimeHistory(limit int) ([]RegimeHistoryEntry, 
 			&recordedAtStr,
 			&entry.RawScore,
 			&entry.SmoothedScore,
-			&entry.DiscreteRegime,
 		); err != nil {
 			return nil, err
 		}

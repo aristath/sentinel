@@ -791,7 +791,7 @@ func (s *Server) setupOptimizationRoutes(r chi.Router) {
 	returnsCalc := optimization.NewReturnsCalculator(s.configDB.Conn(), yahooClient, s.log)
 
 	// Initialize risk model builder
-	riskBuilder := optimization.NewRiskModelBuilder(s.configDB.Conn(), s.log)
+	riskBuilder := optimization.NewRiskModelBuilder(s.historyDB.Conn(), s.log)
 
 	// Initialize optimization service
 	optimizerService := optimization.NewOptimizerService(
@@ -800,6 +800,11 @@ func (s *Server) setupOptimizationRoutes(r chi.Router) {
 		riskBuilder,
 		s.log,
 	)
+
+	// Wire regime score provider (continuous score) for regime-aware HRP and expected returns.
+	regimePersistence := portfolio.NewRegimePersistence(s.configDB.Conn(), s.log)
+	regimeScoreProvider := portfolio.NewRegimeScoreProviderAdapter(regimePersistence)
+	optimizerService.SetRegimeScoreProvider(regimeScoreProvider)
 
 	// Initialize handler with currency exchange service
 	handler := optimization.NewHandler(

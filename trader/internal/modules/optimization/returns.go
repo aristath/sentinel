@@ -51,7 +51,7 @@ func NewReturnsCalculator(db *sql.DB, yahooClient yahoo.FullClientInterface, log
 // CalculateExpectedReturns calculates expected returns for all securities.
 func (rc *ReturnsCalculator) CalculateExpectedReturns(
 	securities []Security,
-	regime string,
+	regimeScore float64,
 	dividendBonuses map[string]float64,
 	targetReturn float64,
 	targetReturnThresholdPct float64,
@@ -72,7 +72,7 @@ func (rc *ReturnsCalculator) CalculateExpectedReturns(
 			targetReturn,
 			targetReturnThresholdPct,
 			dividendBonuses[security.Symbol],
-			regime,
+			regimeScore,
 			forwardAdjustment,
 		)
 		if err != nil {
@@ -90,7 +90,7 @@ func (rc *ReturnsCalculator) CalculateExpectedReturns(
 
 	rc.log.Info().
 		Int("num_securities", len(expectedReturns)).
-		Str("regime", regime).
+		Float64("regime_score", regimeScore).
 		Float64("forward_adjustment", forwardAdjustment).
 		Msg("Calculated expected returns")
 
@@ -180,7 +180,7 @@ func (rc *ReturnsCalculator) calculateSingle(
 	targetReturn float64,
 	targetReturnThresholdPct float64,
 	dividendBonus float64,
-	regime string,
+	regimeScore float64,
 	forwardAdjustment float64,
 ) (*float64, error) {
 	symbol := security.Symbol
@@ -223,30 +223,31 @@ func (rc *ReturnsCalculator) calculateSingle(
 	}
 
 	// Adjust weights based on market regime
-	var cagrWeight, scoreWeight, regimelReduction float64
-	switch regime {
-	case "bull":
-		// Bull market: 80% CAGR, 20% score-adjusted (more optimistic)
-		cagrWeight = 0.80
-		scoreWeight = 0.20
-		regimelReduction = 1.0 // No reduction
-	case "bear":
-		// Bear market: 70% CAGR, 30% score-adjusted, then reduce by 25%
-		cagrWeight = ExpectedReturnsCAGRWeight   // 0.70
-		scoreWeight = ExpectedReturnsScoreWeight // 0.30
-		regimelReduction = 0.75                  // Reduce by 25%
-	default:
-		// Sideways or default: 70% CAGR, 30% score-adjusted
-		cagrWeight = ExpectedReturnsCAGRWeight   // 0.70
-		scoreWeight = ExpectedReturnsScoreWeight // 0.30
-		regimelReduction = 1.0                   // No reduction
+	regime := math.Max(-1.0, math.Min(1.0, regimeScore))
+
+	// Continuous regime adjustment:
+	// - Bull (score→+1): tilt more toward CAGR (0.80/0.20)
+	// - Neutral (score=0): baseline (0.70/0.30)
+	// - Bear (score→-1): keep weights, but apply a continuous reduction up to 25%
+	cagrWeight := ExpectedReturnsCAGRWeight   // 0.70 baseline
+	scoreWeight := ExpectedReturnsScoreWeight // 0.30 baseline
+	regimeReduction := 1.0
+
+	if regime >= 0 {
+		// interpolate 0.70 -> 0.80 as score goes 0 -> 1
+		cagrWeight = ExpectedReturnsCAGRWeight + (0.80-ExpectedReturnsCAGRWeight)*regime
+		scoreWeight = 1.0 - cagrWeight
+		regimeReduction = 1.0
+	} else {
+		// reduction 1.00 -> 0.75 as score goes 0 -> -1
+		regimeReduction = 1.0 - 0.25*math.Abs(regime)
 	}
 
 	// Calculate base expected return
 	baseReturn := (totalReturnCAGR * cagrWeight) + (targetReturn * scoreFactor * scoreWeight)
 
 	// Apply regime reduction (for bear markets)
-	baseReturn = baseReturn * regimelReduction
+	baseReturn = baseReturn * regimeReduction
 
 	// Apply forward-looking market indicator adjustment
 	baseReturn = baseReturn * (1.0 + forwardAdjustment)
@@ -324,8 +325,10 @@ func (rc *ReturnsCalculator) calculateSingle(
 		Float64("dividend_yield", dividendYield).
 		Float64("score", score).
 		Float64("multiplier", multiplier).
-		Str("regime", regime).
-		Float64("regime_reduction", regimelReduction).
+		Float64("regime_score", regimeScore).
+		Float64("regime_reduction", regimeReduction).
+		Float64("cagr_weight", cagrWeight).
+		Float64("score_weight", scoreWeight).
 		Float64("forward_adjustment", forwardAdjustment).
 		Float64("dividend_bonus", dividendBonus).
 		Float64("expected_return", clamped).

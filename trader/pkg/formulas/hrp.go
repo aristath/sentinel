@@ -3,68 +3,52 @@ package formulas
 import (
 	"fmt"
 	"math"
-
-	"gonum.org/v1/gonum/stat"
 )
 
-// CalculateCorrelationMatrix calculates the correlation matrix from returns.
+// CorrelationMatrixFromCovariance calculates the correlation matrix from a covariance matrix.
 //
-// Formula: correlation(i,j) = covariance(i,j) / sqrt(variance(i) * variance(j))
-//
-// Args:
-//   - returns: Map of symbol to returns array
-//   - symbols: Ordered list of symbols (determines matrix row/column order)
-//
-// Returns:
-//   - Correlation matrix [][]float64 where corrMatrix[i][j] is correlation between symbols[i] and symbols[j]
-//   - Error if calculation fails
-func CalculateCorrelationMatrix(returns map[string][]float64, symbols []string) ([][]float64, error) {
-	n := len(symbols)
+// Formula: corr(i,j) = cov(i,j) / sqrt(cov(i,i) * cov(j,j))
+func CorrelationMatrixFromCovariance(cov [][]float64) ([][]float64, error) {
+	n := len(cov)
 	if n == 0 {
-		return nil, fmt.Errorf("no symbols provided")
+		return nil, fmt.Errorf("empty covariance matrix")
 	}
-
-	// Find return length
-	var returnLength int
-	for _, symbol := range symbols {
-		ret, ok := returns[symbol]
-		if !ok {
-			return nil, fmt.Errorf("missing returns for symbol %s", symbol)
-		}
-		if returnLength == 0 {
-			returnLength = len(ret)
-		}
-		if len(ret) != returnLength {
-			return nil, fmt.Errorf("inconsistent return lengths")
+	for i := 0; i < n; i++ {
+		if len(cov[i]) != n {
+			return nil, fmt.Errorf("covariance matrix is not square")
 		}
 	}
 
-	// Calculate correlation matrix
-	corrMatrix := make([][]float64, n)
-	for i := range corrMatrix {
-		corrMatrix[i] = make([]float64, n)
+	vars := make([]float64, n)
+	for i := 0; i < n; i++ {
+		v := cov[i][i]
+		if v <= 0 || math.IsNaN(v) || math.IsInf(v, 0) {
+			return nil, fmt.Errorf("invalid variance on diagonal at %d: %v", i, v)
+		}
+		vars[i] = v
+	}
+
+	corr := make([][]float64, n)
+	for i := 0; i < n; i++ {
+		corr[i] = make([]float64, n)
 	}
 
 	for i := 0; i < n; i++ {
-		for j := i; j < n; j++ {
-			retI := returns[symbols[i]]
-			retJ := returns[symbols[j]]
-
-			// Calculate correlation
-			corr := stat.Correlation(retI, retJ, nil)
-
-			// Ensure correlation is in valid range [-1, 1]
-			corr = math.Max(-1.0, math.Min(1.0, corr))
-
-			corrMatrix[i][j] = corr
-			if i != j {
-				corrMatrix[j][i] = corr // Symmetry
+		corr[i][i] = 1.0
+		for j := i + 1; j < n; j++ {
+			den := math.Sqrt(vars[i] * vars[j])
+			val := 0.0
+			if den > 0 {
+				val = cov[i][j] / den
 			}
+			// Clamp to valid range.
+			val = math.Max(-1.0, math.Min(1.0, val))
+			corr[i][j] = val
+			corr[j][i] = val
 		}
-		corrMatrix[i][i] = 1.0 // Self-correlation
 	}
 
-	return corrMatrix, nil
+	return corr, nil
 }
 
 // CorrelationToDistance converts correlation matrix to distance matrix.

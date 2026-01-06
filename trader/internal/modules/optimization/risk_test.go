@@ -235,6 +235,81 @@ func TestGetCorrelations(t *testing.T) {
 	assert.True(t, foundBC, "Should find B-C correlation")
 }
 
+func TestRegimeTimeDecayWeights_NormalizedAndEffectiveSampleSize(t *testing.T) {
+	// 6 observations, oldest -> newest.
+	// Current regime is strongly bullish (+1), so weights should concentrate on bullish regime points.
+	regimeScores := []float64{-1, -1, -1, 1, 1, 1}
+	currentRegime := 1.0
+
+	halfLifeDays := 1e9 // effectively no time decay
+	bandwidth := 0.10   // strong regime conditioning
+
+	weights, err := regimeTimeDecayWeights(regimeScores, currentRegime, halfLifeDays, bandwidth)
+	require.NoError(t, err)
+	require.Len(t, weights, len(regimeScores))
+
+	sum := 0.0
+	for _, w := range weights {
+		require.GreaterOrEqual(t, w, 0.0)
+		sum += w
+	}
+	assert.InDelta(t, 1.0, sum, 1e-12)
+
+	neff := effectiveSampleSize(weights)
+	// With a tight regime kernel and 3 matching observations, neff should be close to ~3.
+	assert.Greater(t, neff, 2.0)
+	assert.Less(t, neff, 4.0)
+}
+
+func TestRegimeTimeDecayWeights_BandwidthInfinityRemovesRegimeEffect(t *testing.T) {
+	regimeScores := []float64{-1, 1, -1, 1, -1, 1} // alternating regimes
+	currentRegime := 1.0
+
+	halfLifeDays := 1e9 // no time decay
+	bandwidth := 1e12   // effectively infinite bandwidth
+	weights, err := regimeTimeDecayWeights(regimeScores, currentRegime, halfLifeDays, bandwidth)
+	require.NoError(t, err)
+
+	// With no time decay and infinite bandwidth, weights should be uniform.
+	for _, w := range weights {
+		assert.InDelta(t, 1.0/float64(len(weights)), w, 1e-9)
+	}
+}
+
+func TestRegimeTimeDecayWeights_HalfLifeInfinityRemovesTimeDecay(t *testing.T) {
+	// If there is no time decay, only the regime kernel matters.
+	// With symmetric regimes around current=0 and finite bandwidth, weights should be symmetric.
+	regimeScores := []float64{-0.5, 0.0, 0.5, 0.0, -0.5}
+	currentRegime := 0.0
+	halfLifeDays := 1e12 // effectively infinite half-life (no time decay)
+	bandwidth := 0.25
+
+	weights, err := regimeTimeDecayWeights(regimeScores, currentRegime, halfLifeDays, bandwidth)
+	require.NoError(t, err)
+
+	assert.InDelta(t, weights[0], weights[4], 1e-12)
+	assert.InDelta(t, weights[1], weights[3], 1e-12)
+}
+
+func TestWeightedCovariance_SymmetricAndPositiveDiagonal(t *testing.T) {
+	// Two assets, 4 observations.
+	returns := map[string][]float64{
+		"A": {0.01, 0.02, -0.01, 0.00},
+		"B": {0.02, 0.01, -0.02, 0.01},
+	}
+	symbols := []string{"A", "B"}
+	weights := []float64{0.25, 0.25, 0.25, 0.25}
+
+	cov, err := weightedCovariance(returns, symbols, weights)
+	require.NoError(t, err)
+	require.Len(t, cov, 2)
+	require.Len(t, cov[0], 2)
+
+	assert.InDelta(t, cov[0][1], cov[1][0], 1e-12)
+	assert.GreaterOrEqual(t, cov[0][0], 0.0)
+	assert.GreaterOrEqual(t, cov[1][1], 0.0)
+}
+
 // Helper function to calculate condition number (ratio of largest to smallest eigenvalue)
 func conditionNumber(matrix [][]float64) float64 {
 	// Simple approximation: use trace and determinant for 2x2

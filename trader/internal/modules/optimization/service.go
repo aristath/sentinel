@@ -94,26 +94,18 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 	}
 
 	// 1. Calculate expected returns
-	// Get current regime for returns calculation
-	regime := "sideways" // Default
+	regimeScore := 0.0
 	if os.regimeScoreProvider != nil {
-		regimeScore, err := os.regimeScoreProvider.GetCurrentRegimeScore()
+		current, err := os.regimeScoreProvider.GetCurrentRegimeScore()
 		if err == nil {
-			// Convert continuous score to discrete regime
-			if regimeScore <= -0.33 {
-				regime = "bear"
-			} else if regimeScore >= 0.33 {
-				regime = "bull"
-			} else {
-				regime = "sideways"
-			}
+			regimeScore = current
 		}
 	}
 
-	os.log.Info().Str("regime", regime).Msg("Calculating expected returns")
+	os.log.Info().Float64("regime_score", regimeScore).Msg("Calculating expected returns")
 	expectedReturns, err := os.returnsCalc.CalculateExpectedReturns(
 		activeSecurities,
-		regime,
+		regimeScore,
 		state.DividendBonuses,
 		settings.TargetReturn,
 		settings.TargetReturnThresholdPct,
@@ -140,7 +132,7 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 
 	// 3. Build covariance matrix
 	os.log.Info().Msg("Building covariance matrix")
-	covMatrix, returns, correlations, err := os.riskBuilder.BuildCovarianceMatrix(symbols, DefaultLookbackDays)
+	covMatrix, _, correlations, err := os.riskBuilder.BuildCovarianceMatrix(symbols, DefaultLookbackDays)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build covariance matrix: %w", err)
 	}
@@ -190,7 +182,22 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 
 	// 6. Run HRP optimization
 	os.log.Info().Msg("Running HRP optimization")
-	hrpWeights, hrpErr := os.runHRP(returns, symbols)
+	hrpCov := covMatrix
+	hrpCorrelations := correlations
+	regimeCov, _, regimeCorrs, regimeErr := os.riskBuilder.BuildRegimeAwareCovarianceMatrix(
+		symbols,
+		DefaultLookbackDays,
+		regimeScore,
+		RegimeAwareRiskOptions{},
+	)
+	if regimeErr == nil {
+		hrpCov = regimeCov
+		hrpCorrelations = regimeCorrs
+	} else {
+		os.log.Warn().Err(regimeErr).Msg("Regime-aware covariance unavailable, falling back to standard covariance for HRP")
+	}
+
+	hrpWeights, hrpErr := os.runHRP(hrpCov, symbols)
 	if hrpErr != nil {
 		os.log.Warn().Err(hrpErr).Msg("HRP optimization failed")
 	}
@@ -282,7 +289,7 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 		FallbackUsed:           fallbackUsed,
 		TargetWeights:          targetWeights,
 		WeightChanges:          weightChanges,
-		HighCorrelations:       correlations[:min(5, len(correlations))], // Top 5
+		HighCorrelations:       hrpCorrelations[:min(5, len(hrpCorrelations))], // Top 5 from HRP risk model
 		ConstraintsSummary:     constraintsSummary,
 		Success:                true,
 		Error:                  nil,
@@ -352,23 +359,15 @@ func (os *OptimizerService) runMeanVariance(
 
 // runHRP runs Hierarchical Risk Parity optimization using native Go implementation.
 func (os *OptimizerService) runHRP(
-	returns map[string][]float64,
+	covMatrix [][]float64,
 	symbols []string,
 ) (map[string]float64, error) {
-	// Filter returns to requested symbols
-	filteredReturns := make(map[string][]float64)
-	for _, symbol := range symbols {
-		if ret, ok := returns[symbol]; ok {
-			filteredReturns[symbol] = ret
-		}
-	}
-
-	if len(filteredReturns) < 2 {
-		return nil, fmt.Errorf("HRP needs at least 2 symbols, got %d", len(filteredReturns))
+	if len(symbols) < 2 {
+		return nil, fmt.Errorf("HRP needs at least 2 symbols, got %d", len(symbols))
 	}
 
 	// Call native HRP optimizer
-	weights, err := os.hrpOptimizer.Optimize(filteredReturns, symbols)
+	weights, err := os.hrpOptimizer.Optimize(covMatrix, symbols)
 	if err != nil {
 		return nil, fmt.Errorf("HRP optimization failed: %w", err)
 	}

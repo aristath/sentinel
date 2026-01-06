@@ -247,7 +247,7 @@ func TestAdaptationWithScoringIntegration(t *testing.T) {
 	securityScorer.SetAdaptiveService(adaptiveService)
 
 	// Create regime score provider adapter
-	regimeScoreProvider := &regimeScoreProviderAdapter{persistence: regimePersistence}
+	regimeScoreProvider := portfolio.NewRegimeScoreProviderAdapter(regimePersistence)
 	securityScorer.SetRegimeScoreProvider(regimeScoreProvider)
 
 	// Get current regime score
@@ -302,7 +302,7 @@ func TestAdaptationWithTagAssignerIntegration(t *testing.T) {
 	tagAssigner.SetAdaptiveService(qualityGatesAdapter)
 
 	// Create regime score provider adapter
-	regimeScoreProvider := &regimeScoreProviderAdapter{persistence: regimePersistence}
+	regimeScoreProvider := portfolio.NewRegimeScoreProviderAdapter(regimePersistence)
 	tagAssigner.SetRegimeScoreProvider(regimeScoreProvider)
 
 	// Get current regime score
@@ -500,17 +500,6 @@ func TestAdaptiveParametersPersistence(t *testing.T) {
 	err = json.Unmarshal([]byte(retrievedWeightsJSON), &retrievedWeights)
 	require.NoError(t, err)
 	assert.Equal(t, weights, retrievedWeights)
-}
-
-// Helper types for integration tests
-
-type regimeScoreProviderAdapter struct {
-	persistence *portfolio.RegimePersistence
-}
-
-func (a *regimeScoreProviderAdapter) GetCurrentRegimeScore() (float64, error) {
-	score, err := a.persistence.GetCurrentRegimeScore()
-	return float64(score), err
 }
 
 type qualityGatesAdapterForTest struct {

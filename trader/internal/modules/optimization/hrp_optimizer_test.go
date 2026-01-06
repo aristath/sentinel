@@ -40,15 +40,16 @@ func TestHRPOptimizer_DistanceMatrix(t *testing.T) {
 }
 
 func TestHRPOptimizer_BasicOptimization(t *testing.T) {
-	returns := map[string][]float64{
-		"A": {0.01, 0.02, -0.01, 0.015, 0.005, 0.01, 0.02, -0.005},
-		"B": {0.02, 0.03, -0.02, 0.025, 0.01, 0.015, 0.025, -0.01},
-		"C": {0.015, 0.025, -0.015, 0.02, 0.008, 0.012, 0.022, -0.008},
-	}
 	symbols := []string{"A", "B", "C"}
+	// Covariance with two correlated assets (A,B) and one diversifier (C)
+	cov := [][]float64{
+		{0.0400, 0.0300, 0.0000},
+		{0.0300, 0.0450, 0.0000},
+		{0.0000, 0.0000, 0.0100},
+	}
 
 	optimizer := NewHRPOptimizer()
-	weights, err := optimizer.Optimize(returns, symbols)
+	weights, err := optimizer.Optimize(cov, symbols)
 
 	require.NoError(t, err)
 	require.NotNil(t, weights)
@@ -65,14 +66,14 @@ func TestHRPOptimizer_BasicOptimization(t *testing.T) {
 }
 
 func TestHRPOptimizer_TwoAssets(t *testing.T) {
-	returns := map[string][]float64{
-		"A": {0.01, 0.02, -0.01, 0.015},
-		"B": {0.02, 0.03, -0.02, 0.025},
-	}
 	symbols := []string{"A", "B"}
+	cov := [][]float64{
+		{0.0100, 0.0000},
+		{0.0000, 0.0400},
+	}
 
 	optimizer := NewHRPOptimizer()
-	weights, err := optimizer.Optimize(returns, symbols)
+	weights, err := optimizer.Optimize(cov, symbols)
 
 	require.NoError(t, err)
 	require.NotNil(t, weights)
@@ -82,19 +83,30 @@ func TestHRPOptimizer_TwoAssets(t *testing.T) {
 		sum += w
 	}
 	assert.InDelta(t, 1.0, sum, 1e-4)
+
+	// For 2 assets, HRP reduces to inverse-variance weighting.
+	// Expected weights: wA = vB/(vA+vB), wB = vA/(vA+vB)
+	vA := cov[0][0]
+	vB := cov[1][1]
+	require.Greater(t, vA, 0.0)
+	require.Greater(t, vB, 0.0)
+	expectedA := vB / (vA + vB)
+	expectedB := vA / (vA + vB)
+	assert.InDelta(t, expectedA, weights["A"], 1e-6)
+	assert.InDelta(t, expectedB, weights["B"], 1e-6)
 }
 
 func TestHRPOptimizer_HighCorrelation(t *testing.T) {
-	// Two assets with very high correlation should get similar weights
-	returns := map[string][]float64{
-		"A": {0.01, 0.02, -0.01, 0.015, 0.005},
-		"B": {0.011, 0.021, -0.011, 0.016, 0.006}, // Very similar to A
-		"C": {0.05, 0.04, -0.05, 0.03, 0.02},      // Different pattern
-	}
 	symbols := []string{"A", "B", "C"}
+	// A and B are highly correlated; C is less correlated and lower variance.
+	cov := [][]float64{
+		{0.0400, 0.0380, 0.0020},
+		{0.0380, 0.0410, 0.0020},
+		{0.0020, 0.0020, 0.0100},
+	}
 
 	optimizer := NewHRPOptimizer()
-	weights, err := optimizer.Optimize(returns, symbols)
+	weights, err := optimizer.Optimize(cov, symbols)
 
 	require.NoError(t, err)
 
@@ -104,21 +116,24 @@ func TestHRPOptimizer_HighCorrelation(t *testing.T) {
 	assert.Less(t, weightDiff, 0.2, "highly correlated assets should have similar weights")
 }
 
-func TestHRPOptimizer_RecursiveBisection(t *testing.T) {
-	// Test that recursive bisection allocates correctly
-	// For a simple 2-asset case, weights should be inversely proportional to variance
-	returns := map[string][]float64{
-		"LOW_VOL":  {0.01, 0.01, 0.01, 0.01, 0.01},   // Low volatility
-		"HIGH_VOL": {0.05, -0.05, 0.05, -0.05, 0.05}, // High volatility
+func TestHRPOptimizer_Deterministic(t *testing.T) {
+	symbols := []string{"A", "B", "C", "D"}
+	cov := [][]float64{
+		{0.0400, 0.0350, 0.0000, 0.0000},
+		{0.0350, 0.0450, 0.0000, 0.0000},
+		{0.0000, 0.0000, 0.0200, 0.0150},
+		{0.0000, 0.0000, 0.0150, 0.0250},
 	}
-	symbols := []string{"LOW_VOL", "HIGH_VOL"}
 
 	optimizer := NewHRPOptimizer()
-	weights, err := optimizer.Optimize(returns, symbols)
-
+	w1, err := optimizer.Optimize(cov, symbols)
+	require.NoError(t, err)
+	w2, err := optimizer.Optimize(cov, symbols)
 	require.NoError(t, err)
 
-	// In risk parity, lower volatility should get higher weight
-	// HRP should allocate more to LOW_VOL
-	assert.Greater(t, weights["LOW_VOL"], weights["HIGH_VOL"], "lower volatility asset should get higher weight in HRP")
+	require.Len(t, w1, len(symbols))
+	require.Len(t, w2, len(symbols))
+	for _, s := range symbols {
+		assert.InDelta(t, w1[s], w2[s], 1e-12, "weights should be deterministic")
+	}
 }

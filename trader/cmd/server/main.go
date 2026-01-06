@@ -308,16 +308,6 @@ func (a *qualityGatesAdapter) CalculateAdaptiveQualityGates(regimeScore float64)
 	return thresholds // *adaptation.QualityGateThresholds implements the interface via GetFundamentals/GetLongTerm
 }
 
-// regimeScoreProviderAdapter adapts portfolio.RegimePersistence to RegimeScoreProvider interface
-type regimeScoreProviderAdapter struct {
-	persistence *portfolio.RegimePersistence
-}
-
-func (a *regimeScoreProviderAdapter) GetCurrentRegimeScore() (float64, error) {
-	score, err := a.persistence.GetCurrentRegimeScore()
-	return float64(score), err
-}
-
 func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, portfolioDB, agentsDB, historyDB, cacheDB *database.DB, cfg *config.Config, log zerolog.Logger, displayManager *display.StateManager) (*JobInstances, error) {
 	// Initialize required repositories and services for jobs
 
@@ -705,7 +695,7 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 	)
 
 	// Create regime score provider adapter
-	regimeScoreProvider := &regimeScoreProviderAdapter{persistence: regimePersistence}
+	regimeScoreProvider := portfolio.NewRegimeScoreProviderAdapter(regimePersistence)
 
 	// Wire up adaptive services to integration points
 	// OptimizerService: adaptive blend (available in registerJobs)

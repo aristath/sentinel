@@ -33,7 +33,7 @@ fmt: ## Format code
 	gofmt -s -w .
 
 lint: ## Run linter
-	golangci-lint run
+	@$(shell go env GOPATH)/bin/golangci-lint run
 
 clean: ## Clean build artifacts
 	rm -f trader-go trader-go-arm64 coverage.out

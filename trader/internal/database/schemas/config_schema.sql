@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS market_regime_history (
     recorded_at TEXT NOT NULL,           -- ISO 8601 timestamp
     raw_score REAL NOT NULL,             -- Raw regime score before smoothing (-1.0 to +1.0)
     smoothed_score REAL NOT NULL,         -- Exponentially smoothed score (-1.0 to +1.0)
-    discrete_regime TEXT NOT NULL,       -- Discrete regime for reference ('bull', 'bear', 'sideways')
+    discrete_regime TEXT NOT NULL,       -- Label (unused by code)
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
 ) STRICT;
 

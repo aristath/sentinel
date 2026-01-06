@@ -174,10 +174,12 @@ func (c *NativeClient) GetCurrentPrice(symbol string, yahooSymbolOverride *strin
 			}
 			// Try pre/post market prices
 			if quote.PreMarketPrice > 0 {
-				return &quote.PreMarketPrice, nil
+				preMarketPrice := quote.PreMarketPrice
+				return &preMarketPrice, nil
 			}
 			if quote.PostMarketPrice > 0 {
-				return &quote.PostMarketPrice, nil
+				postMarketPrice := quote.PostMarketPrice
+				return &postMarketPrice, nil
 			}
 		}
 
@@ -273,47 +275,63 @@ func (c *NativeClient) GetFundamentalData(symbol string, yahooSymbolOverride *st
 	}
 
 	// Map all fields (use pointers for optional fields)
+	// IMPORTANT: Copy values to local variables before taking addresses to avoid
+	// cross-contamination if the ticker library reuses internal buffers
 	if info.TrailingPE > 0 {
-		fundamental.PERatio = &info.TrailingPE
+		trailingPE := info.TrailingPE
+		fundamental.PERatio = &trailingPE
 	}
 	if info.ForwardPE > 0 {
-		fundamental.ForwardPE = &info.ForwardPE
+		forwardPE := info.ForwardPE
+		fundamental.ForwardPE = &forwardPE
 	}
 	if info.PegRatio > 0 {
-		fundamental.PEGRatio = &info.PegRatio
+		pegRatio := info.PegRatio
+		fundamental.PEGRatio = &pegRatio
 	}
 	if info.PriceToBook > 0 {
-		fundamental.PriceToBook = &info.PriceToBook
+		priceToBook := info.PriceToBook
+		fundamental.PriceToBook = &priceToBook
 	}
 	if info.RevenueGrowth != 0 {
-		fundamental.RevenueGrowth = &info.RevenueGrowth
+		revenueGrowth := info.RevenueGrowth
+		fundamental.RevenueGrowth = &revenueGrowth
 	}
 	if info.EarningsGrowth != 0 {
-		fundamental.EarningsGrowth = &info.EarningsGrowth
+		earningsGrowth := info.EarningsGrowth
+		fundamental.EarningsGrowth = &earningsGrowth
 	}
 	if info.ProfitMargins > 0 {
-		fundamental.ProfitMargin = &info.ProfitMargins
+		profitMargins := info.ProfitMargins
+		fundamental.ProfitMargin = &profitMargins
 	}
 	if info.OperatingMargins > 0 {
-		fundamental.OperatingMargin = &info.OperatingMargins
+		operatingMargins := info.OperatingMargins
+		fundamental.OperatingMargin = &operatingMargins
 	}
 	if info.ReturnOnEquity > 0 {
-		fundamental.ROE = &info.ReturnOnEquity
+		returnOnEquity := info.ReturnOnEquity
+		fundamental.ROE = &returnOnEquity
 	}
 	if info.DebtToEquity > 0 {
-		fundamental.DebtToEquity = &info.DebtToEquity
+		debtToEquity := info.DebtToEquity
+		fundamental.DebtToEquity = &debtToEquity
 	}
 	if info.CurrentRatio > 0 {
-		fundamental.CurrentRatio = &info.CurrentRatio
+		currentRatio := info.CurrentRatio
+		fundamental.CurrentRatio = &currentRatio
 	}
 	if info.MarketCap > 0 {
-		fundamental.MarketCap = &info.MarketCap
+		marketCap := info.MarketCap
+		fundamental.MarketCap = &marketCap
 	}
 	if info.DividendYield > 0 {
-		fundamental.DividendYield = &info.DividendYield
+		dividendYield := info.DividendYield
+		fundamental.DividendYield = &dividendYield
 	}
 	if info.FiveYearAvgDividendYield > 0 {
-		fundamental.FiveYearAvgDividendYield = &info.FiveYearAvgDividendYield
+		fiveYearAvgDividendYield := info.FiveYearAvgDividendYield
+		fundamental.FiveYearAvgDividendYield = &fiveYearAvgDividendYield
 	}
 
 	return fundamental, nil
@@ -435,7 +453,8 @@ func (c *NativeClient) GetSecurityIndustry(symbol string, yahooSymbolOverride *s
 	}
 
 	if info.Industry != "" {
-		return &info.Industry, nil
+		industry := info.Industry
+		return &industry, nil
 	}
 
 	return nil, nil
@@ -463,12 +482,14 @@ func (c *NativeClient) GetSecurityCountryAndExchange(symbol string, yahooSymbolO
 	var exchange *string
 
 	if info.Country != "" {
-		country = &info.Country
+		countryVal := info.Country
+		country = &countryVal
 	}
 
 	// Use Exchange from Info (full exchange name may not be available in Info struct)
 	if info.Exchange != "" {
-		exchange = &info.Exchange
+		exchangeVal := info.Exchange
+		exchange = &exchangeVal
 	}
 
 	return country, exchange, nil
@@ -493,10 +514,12 @@ func (c *NativeClient) GetQuoteName(symbol string, yahooSymbolOverride *string) 
 	}
 
 	if info.LongName != "" {
-		return &info.LongName, nil
+		longName := info.LongName
+		return &longName, nil
 	}
 	if info.ShortName != "" {
-		return &info.ShortName, nil
+		shortName := info.ShortName
+		return &shortName, nil
 	}
 
 	return nil, nil

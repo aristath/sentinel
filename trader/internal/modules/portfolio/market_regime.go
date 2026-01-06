@@ -3,18 +3,8 @@ package portfolio
 import (
 	"fmt"
 	"math"
-	"time"
 
 	"github.com/rs/zerolog"
-)
-
-// MarketRegime represents the current market condition (discrete, for backward compatibility)
-type MarketRegime string
-
-const (
-	MarketRegimeBull     MarketRegime = "bull"
-	MarketRegimeBear     MarketRegime = "bear"
-	MarketRegimeSideways MarketRegime = "sideways"
 )
 
 // MarketRegimeScore represents market condition as continuous score
@@ -61,31 +51,6 @@ func (d *MarketRegimeDetector) SetMarketIndexService(service *MarketIndexService
 // SetRegimePersistence sets the regime persistence for smoothing
 func (d *MarketRegimeDetector) SetRegimePersistence(persistence *RegimePersistence) {
 	d.regimePersistence = persistence
-}
-
-// DetectRegime analyzes portfolio performance to determine market regime (backward compatibility)
-// Uses continuous regime score internally, then converts to discrete
-//
-// Parameters assume DAILY returns (not annualized):
-// - portfolioReturn: average daily return over the window
-// - volatility: standard deviation of daily returns
-// - maxDrawdown: maximum drawdown as a negative fraction
-func (d *MarketRegimeDetector) DetectRegime(portfolioReturn, volatility, maxDrawdown float64) MarketRegime {
-	// Calculate continuous regime score
-	score := d.CalculateRegimeScoreFromMetrics(portfolioReturn, volatility, maxDrawdown)
-
-	// Convert to discrete for backward compatibility
-	regime := d.ToDiscreteRegime(float64(score))
-
-	d.log.Debug().
-		Float64("daily_return", portfolioReturn).
-		Float64("volatility", volatility).
-		Float64("drawdown", maxDrawdown).
-		Float64("regime_score", float64(score)).
-		Str("regime", string(regime)).
-		Msg("Detected market regime")
-
-	return regime
 }
 
 // CalculateRegimeScoreFromMetrics calculates continuous regime score from raw metrics
@@ -148,64 +113,6 @@ func (d *MarketRegimeDetector) CalculateRegimeScoreFromMetrics(portfolioReturn, 
 
 	// No bear conditions met - calculate normally
 	return d.CalculateRegimeScore(returnComp, volComp, ddComp)
-}
-
-// DetectRegimeFromHistory analyzes historical returns to determine regime
-// This method looks at the last N days of returns to determine the current regime
-func (d *MarketRegimeDetector) DetectRegimeFromHistory(returns []float64, window int) MarketRegime {
-	if len(returns) < window {
-		d.log.Warn().
-			Int("returns_len", len(returns)).
-			Int("window", window).
-			Msg("Insufficient data for regime detection, defaulting to sideways")
-		return MarketRegimeSideways
-	}
-
-	// Calculate metrics over the window
-	recentReturns := returns[len(returns)-window:]
-
-	avgReturn := calculateMean(recentReturns)
-	volatility := calculateStdDev(recentReturns)
-	drawdown := calculateMaxDrawdown(recentReturns)
-
-	return d.DetectRegime(avgReturn, volatility, drawdown)
-}
-
-// DetectRegimeFromTimeSeries analyzes time series data with timestamps
-func (d *MarketRegimeDetector) DetectRegimeFromTimeSeries(
-	timestamps []time.Time,
-	values []float64,
-	windowDays int,
-) MarketRegime {
-	if len(timestamps) != len(values) {
-		d.log.Error().
-			Int("timestamps_len", len(timestamps)).
-			Int("values_len", len(values)).
-			Msg("Mismatched timestamps and values length")
-		return MarketRegimeSideways
-	}
-
-	if len(values) == 0 {
-		d.log.Warn().Msg("No data provided for regime detection")
-		return MarketRegimeSideways
-	}
-
-	// Calculate daily returns
-	returns := make([]float64, 0, len(values)-1)
-	for i := 1; i < len(values); i++ {
-		if values[i-1] != 0 {
-			dailyReturn := (values[i] - values[i-1]) / values[i-1]
-			returns = append(returns, dailyReturn)
-		}
-	}
-
-	// Use the window for detection
-	window := windowDays
-	if window > len(returns) {
-		window = len(returns)
-	}
-
-	return d.DetectRegimeFromHistory(returns, window)
 }
 
 // Helper functions
@@ -406,24 +313,6 @@ func (d *MarketRegimeDetector) CalculateRegimeScoreFromReturns(returns []float64
 
 	// Calculate score
 	return d.CalculateRegimeScore(returnComp, volComp, ddComp)
-}
-
-// ToDiscreteRegime converts continuous score to discrete for backward compatibility
-// Uses thresholds that align with the original discrete detection logic
-func (d *MarketRegimeDetector) ToDiscreteRegime(score float64) MarketRegime {
-	// Use thresholds that account for tanh compression and OR logic
-	// Original logic: bull if return > 0.0005, bear if return < -0.0005 or high vol or large DD
-	// With normalization, tanh, and OR logic, these map roughly to:
-	// - Bull: score > 0.15 (moderate positive, accounting for tanh compression)
-	// - Bear: score < -0.15 (moderate negative, accounting for OR logic effects)
-	// - Sideways: everything else
-	// Slightly tighter than before to account for tanh compression making scores closer to 0
-	if score <= -0.15 {
-		return MarketRegimeBear
-	} else if score >= 0.15 {
-		return MarketRegimeBull
-	}
-	return MarketRegimeSideways
 }
 
 // CalculateRegimeScoreFromMarketIndices calculates regime score from market indices
