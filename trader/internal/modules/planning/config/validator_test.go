@@ -382,4 +382,120 @@ func TestValidator_ValidateParams(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "may filter too aggressively")
 	})
+
+	t.Run("invalid parameter types", func(t *testing.T) {
+		params := map[string]interface{}{
+			"gain_threshold": "not a number", // Invalid type
+			"windfall_score": 0.7,
+			"min_hold_days":  float64(90),
+			"sell_cooldown":  float64(180),
+		}
+		err := validator.ValidateParams("profit_taking", params)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "must be a number")
+	})
+
+	t.Run("validation errors formatting", func(t *testing.T) {
+		err := ValidationError{
+			Field:   "test_field",
+			Message: "test message",
+		}
+		assert.Equal(t, "test_field: test message", err.Error())
+
+		errors := ValidationErrors{
+			{Field: "field1", Message: "msg1"},
+			{Field: "field2", Message: "msg2"},
+		}
+		errStr := errors.Error()
+		assert.Contains(t, errStr, "field1: msg1")
+		assert.Contains(t, errStr, "field2: msg2")
+		assert.Contains(t, errStr, ";")
+	})
+
+	t.Run("ValidateParams edge cases", func(t *testing.T) {
+		t.Run("invalid threshold value", func(t *testing.T) {
+			params := map[string]interface{}{
+				"gain_threshold": 1.5, // > 1.0
+				"windfall_score": 0.7,
+				"min_hold_days":  float64(90),
+				"sell_cooldown":  float64(180),
+			}
+			err := validator.ValidateParams("profit_taking", params)
+			assert.Error(t, err)
+		})
+
+		t.Run("invalid weight value", func(t *testing.T) {
+			params := map[string]interface{}{
+				"scoring_weight":    1.5, // > 1.0
+				"max_opportunities": float64(5),
+			}
+			err := validator.ValidateParams("opportunity_buys", params)
+			assert.Error(t, err)
+		})
+
+		t.Run("invalid count as float zero", func(t *testing.T) {
+			params := map[string]interface{}{
+				"gain_threshold": 0.15,
+				"windfall_score": 0.7,
+				"min_hold_days":  float64(0), // Zero
+				"sell_cooldown":  float64(180),
+			}
+			err := validator.ValidateParams("profit_taking", params)
+			assert.Error(t, err)
+		})
+
+		t.Run("invalid count as negative int", func(t *testing.T) {
+			params := map[string]interface{}{
+				"max_combinations": -10,
+			}
+			err := validator.ValidateParams("combinatorial", params)
+			assert.Error(t, err)
+		})
+
+		t.Run("invalid percentage", func(t *testing.T) {
+			// Test with a module that uses percentage (if any)
+			// For now, just test that validators work
+			params := map[string]interface{}{
+				"correlation_threshold": 0.85,
+			}
+			err := validator.ValidateParams("correlation_aware", params)
+			assert.NoError(t, err) // Should pass with valid threshold
+		})
+
+		t.Run("invalid factor", func(t *testing.T) {
+			params := map[string]interface{}{
+				"adaptation_rate": 0.0, // Zero factor
+			}
+			err := validator.ValidateParams("adaptive", params)
+			assert.Error(t, err)
+		})
+	})
+
+	t.Run("ValidateParams all module types", func(t *testing.T) {
+		modules := []struct {
+			name   string
+			params map[string]interface{}
+			valid  bool
+		}{
+			{"rebalance_sells", map[string]interface{}{"over_weight_threshold": 0.05}, true},
+			{"rebalance_buys", map[string]interface{}{"under_weight_threshold": 0.05}, true},
+			{"weight_based", map[string]interface{}{"target_weight_tolerance": 0.02}, true},
+			{"combinatorial", map[string]interface{}{"max_combinations": float64(100)}, true},
+			{"constraint_relaxation", map[string]interface{}{"relaxation_factor": 1.5}, true},
+			{"diversity", map[string]interface{}{"diversity_threshold": 0.3}, true},
+			{"recently_traded", map[string]interface{}{"cooldown_days": float64(30)}, true},
+			{"market_regime", map[string]interface{}{"regime_threshold": 0.5}, true},
+		}
+
+		for _, tt := range modules {
+			t.Run(tt.name, func(t *testing.T) {
+				err := validator.ValidateParams(tt.name, tt.params)
+				if tt.valid {
+					assert.NoError(t, err, "Module %s should be valid", tt.name)
+				} else {
+					assert.Error(t, err, "Module %s should be invalid", tt.name)
+				}
+			})
+		}
+	})
 }
