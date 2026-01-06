@@ -400,8 +400,13 @@ func (r *SecurityRepository) GetWithScores(portfolioDB *sql.DB) ([]SecurityWithS
 			MaxPortfolioTarget: security.MaxPortfolioTarget,
 			Tags:               tagsCopy,
 		}
-		// Use ISIN as map key (primary identifier)
-		securitiesMap[security.ISIN] = sws
+		// Use normalized ISIN as map key (primary identifier) for consistent matching
+		normalizedISIN := strings.ToUpper(strings.TrimSpace(security.ISIN))
+		if normalizedISIN != "" {
+			securitiesMap[normalizedISIN] = sws
+		} else {
+			r.log.Warn().Str("symbol", security.Symbol).Msg("Security missing ISIN, skipping")
+		}
 	}
 
 	if err := securityRows.Err(); err != nil {
@@ -424,8 +429,10 @@ func (r *SecurityRepository) GetWithScores(portfolioDB *sql.DB) ([]SecurityWithS
 		}
 		// After migration: scores table uses ISIN as PRIMARY KEY
 		// Use ISIN directly as map key (no lookup needed)
-		if score.ISIN != "" {
-			scoresMap[score.ISIN] = score
+		// Normalize ISIN to uppercase for consistent matching
+		normalizedISIN := strings.ToUpper(strings.TrimSpace(score.ISIN))
+		if normalizedISIN != "" {
+			scoresMap[normalizedISIN] = score
 		} else {
 			// Fallback: if ISIN is missing (shouldn't happen), skip this score
 			r.log.Warn().Str("score_data", fmt.Sprintf("%+v", score)).Msg("Score missing ISIN, skipping")
@@ -527,8 +534,10 @@ func (r *SecurityRepository) GetWithScores(portfolioDB *sql.DB) ([]SecurityWithS
 	// Merge data
 	var result []SecurityWithScore
 	for isin, sws := range securitiesMap {
+		// Normalize ISIN to uppercase for consistent matching
+		normalizedISIN := strings.ToUpper(strings.TrimSpace(isin))
 		// Add score data (scoresMap now uses ISIN as key)
-		if score, found := scoresMap[isin]; found {
+		if score, found := scoresMap[normalizedISIN]; found {
 			sws.TotalScore = &score.TotalScore
 			sws.QualityScore = &score.QualityScore
 			sws.OpportunityScore = &score.OpportunityScore
