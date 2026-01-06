@@ -75,6 +75,7 @@ type SecurityWithScore struct {
 	PriorityScore      *float64 `json:"priority_score,omitempty"`
 	PositionQuantity   *float64 `json:"position_quantity,omitempty"`
 	PositionValue      *float64 `json:"position_value,omitempty"`
+	CurrentPrice       *float64 `json:"current_price,omitempty"`
 	FundamentalScore   *float64 `json:"fundamental_score,omitempty"`
 	AllocationFitScore *float64 `json:"allocation_fit_score,omitempty"`
 	Name               string   `json:"name"`

@@ -450,6 +450,7 @@ func (r *SecurityRepository) GetWithScores(portfolioDB *sql.DB) ([]SecurityWithS
 	positionsMap := make(map[string]struct {
 		marketValueEUR float64
 		quantity       float64
+		currentPrice   *float64
 	})
 
 	for positionRows.Next() {
@@ -504,12 +505,19 @@ func (r *SecurityRepository) GetWithScores(portfolioDB *sql.DB) ([]SecurityWithS
 			continue
 		}
 
+		var currentPricePtr *float64
+		if currentPrice.Valid {
+			currentPricePtr = &currentPrice.Float64
+		}
+
 		positionsMap[mapKey] = struct {
 			marketValueEUR float64
 			quantity       float64
+			currentPrice   *float64
 		}{
 			marketValueEUR: finalMarketValueEUR,
 			quantity:       quantity.Float64,
+			currentPrice:   currentPricePtr,
 		}
 	}
 
@@ -539,10 +547,12 @@ func (r *SecurityRepository) GetWithScores(portfolioDB *sql.DB) ([]SecurityWithS
 		if pos, found := positionsMap[isin]; found {
 			sws.PositionValue = &pos.marketValueEUR
 			sws.PositionQuantity = &pos.quantity
+			sws.CurrentPrice = pos.currentPrice
 		} else {
 			zero := 0.0
 			sws.PositionValue = &zero
 			sws.PositionQuantity = &zero
+			// CurrentPrice remains nil if no position
 		}
 
 		result = append(result, sws)

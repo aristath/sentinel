@@ -365,6 +365,9 @@ func (h *UniverseHandlers) HandleGetStocks(w http.ResponseWriter, r *http.Reques
 		if sec.PositionQuantity != nil {
 			stockDict["position_quantity"] = *sec.PositionQuantity
 		}
+		if sec.CurrentPrice != nil {
+			stockDict["current_price"] = *sec.CurrentPrice
+		}
 
 		// Add priority score
 		if priority, found := priorityMap[sec.Symbol]; found {
