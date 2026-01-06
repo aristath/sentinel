@@ -105,8 +105,10 @@ func (c *Client) authorizedRequest(cmd string, params interface{}) (interface{},
 	}
 
 	// Step 10: Parse JSON response
-	var result map[string]interface{}
-	if err := json.Unmarshal(body, &result); err != nil {
+	// Some endpoints return arrays directly, others return objects with "result" key
+	// We need to handle both cases and normalize to a consistent format
+	var rawResult interface{}
+	if err := json.Unmarshal(body, &rawResult); err != nil {
 		bodyStr := string(body)
 		if len(bodyStr) > 500 {
 			bodyStr = bodyStr[:500] + "..."
@@ -119,7 +121,35 @@ func (c *Client) authorizedRequest(cmd string, params interface{}) (interface{},
 		return nil, fmt.Errorf("failed to parse response: %w (body: %s)", err, bodyStr)
 	}
 
-	// Step 11: Check for error message (log but don't fail)
+	// Step 11: Normalize response format
+	// If the response is an array, wrap it in a map with "result" key
+	// This ensures transformers can always expect the same format
+	var result map[string]interface{}
+	switch v := rawResult.(type) {
+	case []interface{}:
+		// API returned an array directly - wrap it in a map
+		result = map[string]interface{}{
+			"result": v,
+		}
+		c.log.Debug().
+			Str("cmd", cmd).
+			Int("array_length", len(v)).
+			Msg("API returned array, wrapped in result key")
+	case map[string]interface{}:
+		// API returned a map - use as-is
+		result = v
+	default:
+		// Unexpected type - wrap it
+		result = map[string]interface{}{
+			"result": v,
+		}
+		c.log.Debug().
+			Str("cmd", cmd).
+			Str("type", fmt.Sprintf("%T", v)).
+			Msg("API returned unexpected type, wrapped in result key")
+	}
+
+	// Step 12: Check for error message (log but don't fail)
 	if errMsg, ok := result["errMsg"].(string); ok && errMsg != "" {
 		c.log.Warn().Str("err_msg", errMsg).Str("cmd", cmd).Msg("API returned error message")
 	}
@@ -196,9 +226,30 @@ func (c *Client) plainRequest(cmd string, params map[string]interface{}) (interf
 	}
 
 	// Parse JSON response
-	var result map[string]interface{}
-	if err := json.Unmarshal(body, &result); err != nil {
+	// Some endpoints return arrays directly, others return objects with "result" key
+	// We need to handle both cases and normalize to a consistent format
+	var rawResult interface{}
+	if err := json.Unmarshal(body, &rawResult); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	// Normalize response format
+	// If the response is an array, wrap it in a map with "result" key
+	var result map[string]interface{}
+	switch v := rawResult.(type) {
+	case []interface{}:
+		// API returned an array directly - wrap it in a map
+		result = map[string]interface{}{
+			"result": v,
+		}
+	case map[string]interface{}:
+		// API returned a map - use as-is
+		result = v
+	default:
+		// Unexpected type - wrap it
+		result = map[string]interface{}{
+			"result": v,
+		}
 	}
 
 	// Check for error message (log but don't fail)
