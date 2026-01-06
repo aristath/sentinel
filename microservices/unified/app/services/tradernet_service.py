@@ -496,7 +496,7 @@ class TradernetService:
                     )
                 )
 
-            return {"found": [s.dict() for s in securities]}
+            return {"found": [s.model_dump() for s in securities]}
         except Exception as e:
             logger.error(f"Failed to find symbol {symbol}: {e}")
             return {"found": []}

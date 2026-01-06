@@ -1,18 +1,23 @@
 """Tests for unified health check endpoint."""
 
+from typing import Optional
+
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 # Import will fail until we create main.py - that's expected in TDD
+app: Optional[FastAPI] = None
 try:
-    from app.main import app
-except ImportError:
-    app = None
+    from app.main import app as imported_app  # noqa: F401
 
-if app:
+    app = imported_app  # type: ignore[assignment]
+except ImportError:
+    pass
+
+client: Optional[TestClient] = None
+if app is not None:
     client = TestClient(app)
-else:
-    client = None
 
 
 @pytest.mark.skipif(client is None, reason="App not yet implemented")

@@ -1,10 +1,15 @@
 """Configuration management for unified microservice."""
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+    )
 
     # Service configuration
     service_name: str = "unified-microservice"
@@ -18,10 +23,6 @@ class Settings(BaseSettings):
     # Tradernet API credentials (optional, can be passed via headers)
     tradernet_api_key: str = ""
     tradernet_api_secret: str = ""
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
 
 
 settings = Settings()

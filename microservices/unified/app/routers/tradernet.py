@@ -53,7 +53,7 @@ async def place_order(
         if result:
             return ServiceResponse(
                 success=True,
-                data=result.dict(),
+                data=result.model_dump(),
             )
 
         return ServiceResponse(
@@ -76,7 +76,7 @@ async def get_pending_orders(request: Request) -> ServiceResponse:
         orders = service.get_pending_orders(api_key=api_key, api_secret=api_secret)
         return ServiceResponse(
             success=True,
-            data={"orders": [o.dict() for o in orders]},
+            data={"orders": [o.model_dump() for o in orders]},
         )
     except Exception as e:
         logger.exception("Error getting pending orders")
@@ -138,7 +138,7 @@ async def get_portfolio_positions(request: Request) -> ServiceResponse:
         positions = service.get_portfolio(api_key=api_key, api_secret=api_secret)
         return ServiceResponse(
             success=True,
-            data={"positions": [p.dict() for p in positions]},
+            data={"positions": [p.model_dump() for p in positions]},
         )
     except Exception as e:
         logger.exception("Error getting portfolio positions")
@@ -156,7 +156,7 @@ async def get_cash_balances(request: Request) -> ServiceResponse:
         balances = service.get_cash_balances(api_key=api_key, api_secret=api_secret)
         return ServiceResponse(
             success=True,
-            data={"balances": [b.dict() for b in balances]},
+            data={"balances": [b.model_dump() for b in balances]},
         )
     except Exception as e:
         logger.exception("Error getting cash balances")
@@ -216,7 +216,7 @@ async def get_cash_flows(
         )
         return ServiceResponse(
             success=True,
-            data={"transactions": [t.dict() for t in transactions]},
+            data={"transactions": [t.model_dump() for t in transactions]},
         )
     except Exception as e:
         logger.exception("Error getting cash flows")
@@ -239,7 +239,7 @@ async def get_executed_trades(
         )
         return ServiceResponse(
             success=True,
-            data={"trades": [t.dict() for t in trades]},
+            data={"trades": [t.model_dump() for t in trades]},
         )
     except Exception as e:
         logger.exception("Error getting executed trades")
@@ -262,7 +262,7 @@ async def get_quote(symbol: str, request: Request) -> ServiceResponse:
         if quote:
             return ServiceResponse(
                 success=True,
-                data=quote.dict(),
+                data=quote.model_dump(),
             )
 
         return ServiceResponse(
@@ -320,7 +320,7 @@ async def get_historical(
             success=True,
             data={
                 "symbol": symbol,
-                "candles": [c.dict() for c in candles],
+                "candles": [c.model_dump() for c in candles],
             },
         )
     except ValueError as e:

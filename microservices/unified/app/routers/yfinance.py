@@ -75,7 +75,9 @@ async def get_historical_prices(request: HistoricalPricesRequest) -> ServiceResp
         )
         return ServiceResponse(
             success=True,
-            data=HistoricalPricesResponse(symbol=request.symbol, prices=prices).dict(),
+            data=HistoricalPricesResponse(
+                symbol=request.symbol, prices=prices
+            ).model_dump(),
         )
     except Exception as e:
         logger.exception(f"Error getting historical prices for {request.symbol}")
@@ -97,7 +99,7 @@ async def get_historical_prices_get(
         prices = service.get_historical_prices(symbol, yahoo_symbol, period, interval)
         return ServiceResponse(
             success=True,
-            data=HistoricalPricesResponse(symbol=symbol, prices=prices).dict(),
+            data=HistoricalPricesResponse(symbol=symbol, prices=prices).model_dump(),
         )
     except Exception as e:
         logger.exception(f"Error getting historical prices for {symbol}")
@@ -118,7 +120,7 @@ async def get_fundamentals(
         if data:
             return ServiceResponse(
                 success=True,
-                data=data.dict(),
+                data=data.model_dump(),
             )
         return ServiceResponse(
             success=False,
@@ -143,7 +145,7 @@ async def get_analyst_data(
         if data:
             return ServiceResponse(
                 success=True,
-                data=data.dict(),
+                data=data.model_dump(),
             )
         return ServiceResponse(
             success=False,
@@ -168,7 +170,7 @@ async def get_security_industry(
         if data:
             return ServiceResponse(
                 success=True,
-                data=data.dict(),
+                data=data.model_dump(),
             )
         return ServiceResponse(
             success=False,
@@ -192,7 +194,7 @@ async def get_security_country_exchange(
         if data:
             return ServiceResponse(
                 success=True,
-                data=data.dict(),
+                data=data.model_dump(),
             )
         return ServiceResponse(
             success=False,
@@ -216,7 +218,7 @@ async def get_security_info(
         if data:
             return ServiceResponse(
                 success=True,
-                data=data.dict(),
+                data=data.model_dump(),
             )
         return ServiceResponse(
             success=False,
