@@ -171,19 +171,20 @@ func (c *WeightBasedCalculator) Calculate(
 			if c.securityRepo != nil {
 				securityTags, err := c.securityRepo.GetTagsForSecurity(symbol)
 				if err == nil {
-					// Skip value traps
-					if contains(securityTags, "value-trap") {
+					// Skip value traps (classical or ensemble)
+					if contains(securityTags, "value-trap") || contains(securityTags, "ensemble-value-trap") {
 						c.log.Debug().
 							Str("symbol", symbol).
-							Msg("Skipping value trap (quality gate)")
+							Msg("Skipping value trap (ensemble detection)")
 						continue
 					}
 
-					// Skip bubble risks (unless it's quality-high-cagr)
-					if contains(securityTags, "bubble-risk") && !contains(securityTags, "quality-high-cagr") {
+					// Skip bubble risks (classical or ensemble, unless it's quality-high-cagr)
+					if (contains(securityTags, "bubble-risk") || contains(securityTags, "ensemble-bubble-risk")) &&
+						!contains(securityTags, "quality-high-cagr") {
 						c.log.Debug().
 							Str("symbol", symbol).
-							Msg("Skipping bubble risk (quality gate)")
+							Msg("Skipping bubble risk (ensemble detection)")
 						continue
 					}
 
@@ -249,9 +250,18 @@ func (c *WeightBasedCalculator) Calculate(
 			priority := abs(diff) * 0.8
 
 			// Boost priority if also has opportunity tags (opportunistic deviation)
+			// Apply soft filters for quantum warnings (reduce priority, don't exclude)
 			if c.securityRepo != nil {
 				securityTags, err := c.securityRepo.GetTagsForSecurity(symbol)
 				if err == nil {
+					// Soft filter: reduce priority for quantum warnings
+					if contains(securityTags, "quantum-bubble-warning") {
+						priority *= 0.7 // Reduce by 30%
+					}
+					if contains(securityTags, "quantum-value-warning") {
+						priority *= 0.7 // Reduce by 30%
+					}
+
 					// Boost if also a value opportunity or quality value
 					if contains(securityTags, "quality-value") {
 						priority *= 1.3 // 30% boost for quality value + optimizer alignment

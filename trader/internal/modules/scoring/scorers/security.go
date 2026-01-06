@@ -4,6 +4,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/aristath/arduino-trader/internal/modules/quantum"
 	"github.com/aristath/arduino-trader/internal/modules/scoring"
 	"github.com/aristath/arduino-trader/internal/modules/scoring/domain"
 	"github.com/aristath/arduino-trader/internal/modules/symbolic_regression"
@@ -26,9 +27,10 @@ type SecurityScorer struct {
 	shortTerm           *ShortTermScorer
 	opinion             *OpinionScorer
 	diversification     *DiversificationScorer
-	adaptiveService     AdaptiveWeightsProvider             // Optional: adaptive market service
-	regimeScoreProvider RegimeScoreProvider                 // Optional: regime score provider
-	formulaStorage      *symbolic_regression.FormulaStorage // Optional: discovered formula storage
+	adaptiveService     AdaptiveWeightsProvider               // Optional: adaptive market service
+	regimeScoreProvider RegimeScoreProvider                   // Optional: regime score provider
+	formulaStorage      *symbolic_regression.FormulaStorage   // Optional: discovered formula storage
+	quantumCalculator   *quantum.QuantumProbabilityCalculator // Quantum probability calculator
 }
 
 // ScoreWeights defines the weight for each scoring group
@@ -56,14 +58,15 @@ var ScoreWeights = map[string]float64{
 // NewSecurityScorer creates a new security scorer
 func NewSecurityScorer() *SecurityScorer {
 	return &SecurityScorer{
-		technicals:      NewTechnicalsScorer(),
-		longTerm:        NewLongTermScorer(),
-		opportunity:     NewOpportunityScorer(),
-		dividend:        NewDividendScorer(),
-		fundamentals:    NewFundamentalsScorer(),
-		shortTerm:       NewShortTermScorer(),
-		opinion:         NewOpinionScorer(),
-		diversification: NewDiversificationScorer(),
+		technicals:        NewTechnicalsScorer(),
+		longTerm:          NewLongTermScorer(),
+		opportunity:       NewOpportunityScorer(),
+		dividend:          NewDividendScorer(),
+		fundamentals:      NewFundamentalsScorer(),
+		shortTerm:         NewShortTermScorer(),
+		opinion:           NewOpinionScorer(),
+		diversification:   NewDiversificationScorer(),
+		quantumCalculator: quantum.NewQuantumProbabilityCalculator(),
 	}
 }
 
@@ -292,10 +295,40 @@ func (ss *SecurityScorer) ScoreSecurity(input ScoreSecurityInput) *domain.Calcul
 
 	// Calculate volatility
 	var volatility *float64
+	var returns []float64
 	if len(input.DailyPrices) >= 30 {
-		returns := formulas.CalculateReturns(input.DailyPrices)
+		returns = formulas.CalculateReturns(input.DailyPrices)
 		vol := formulas.AnnualizedVolatility(returns)
 		volatility = &vol
+	}
+
+	// Calculate quantum metrics if we have sufficient data
+	if len(input.DailyPrices) >= 30 && volatility != nil {
+		// Get Sharpe and Sortino ratios from long-term components
+		var sharpe, sortino float64
+		if sharpeRaw, hasSharpe := subScores["long_term"]["sharpe_raw"]; hasSharpe {
+			sharpe = sharpeRaw
+		}
+		if sortinoRaw, hasSortino := subScores["long_term"]["sortino_raw"]; hasSortino {
+			sortino = sortinoRaw
+		}
+
+		// Calculate quantum metrics
+		quantumMetrics := ss.quantumCalculator.CalculateQuantumScore(
+			returns,
+			*volatility,
+			sharpe,
+			sortino,
+			nil, // kurtosis not available
+		)
+
+		// Add quantum metrics to subScores
+		if subScores["quantum"] == nil {
+			subScores["quantum"] = make(map[string]float64)
+		}
+		subScores["quantum"]["risk_adjusted"] = round3(quantumMetrics.RiskAdjusted)
+		subScores["quantum"]["interference"] = round3(quantumMetrics.Interference)
+		subScores["quantum"]["multimodal"] = round3(quantumMetrics.Multimodal)
 	}
 
 	return &domain.CalculatedSecurityScore{

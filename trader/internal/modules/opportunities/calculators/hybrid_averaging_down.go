@@ -147,11 +147,11 @@ func (c *HybridAveragingDownCalculator) Calculate(
 			securityTags = []string{}
 		}
 
-		// CRITICAL: Exclude value traps
-		if contains(securityTags, "value-trap") {
+		// CRITICAL: Exclude value traps (classical or ensemble)
+		if contains(securityTags, "value-trap") || contains(securityTags, "ensemble-value-trap") {
 			c.log.Debug().
 				Str("symbol", position.Symbol).
-				Msg("Skipping value trap")
+				Msg("Skipping value trap (ensemble detection)")
 			continue
 		}
 

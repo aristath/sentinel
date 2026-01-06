@@ -144,19 +144,20 @@ func (c *HybridOpportunityBuysCalculator) Calculate(
 		// Quality gate: Exclude value traps, bubble risks, and low-return securities
 		securityTags, err := c.securityRepo.GetTagsForSecurity(symbol)
 		if err == nil {
-			// Skip value traps
-			if contains(securityTags, "value-trap") {
+			// Skip value traps (classical or ensemble)
+			if contains(securityTags, "value-trap") || contains(securityTags, "ensemble-value-trap") {
 				c.log.Debug().
 					Str("symbol", symbol).
-					Msg("Skipping value trap")
+					Msg("Skipping value trap (ensemble detection)")
 				continue
 			}
 
-			// Skip bubble risks (unless it's quality-high-cagr)
-			if contains(securityTags, "bubble-risk") && !contains(securityTags, "quality-high-cagr") {
+			// Skip bubble risks (classical or ensemble, unless it's quality-high-cagr)
+			if (contains(securityTags, "bubble-risk") || contains(securityTags, "ensemble-bubble-risk")) &&
+				!contains(securityTags, "quality-high-cagr") {
 				c.log.Debug().
 					Str("symbol", symbol).
-					Msg("Skipping bubble risk")
+					Msg("Skipping bubble risk (ensemble detection)")
 				continue
 			}
 
@@ -266,6 +267,14 @@ func (c *HybridOpportunityBuysCalculator) calculatePriority(
 	tags []string,
 ) float64 {
 	priority := score
+
+	// Apply soft filters for quantum warnings (reduce priority, don't exclude)
+	if contains(tags, "quantum-bubble-warning") {
+		priority *= 0.7 // Reduce by 30%
+	}
+	if contains(tags, "quantum-value-warning") {
+		priority *= 0.7 // Reduce by 30%
+	}
 
 	// High-quality value opportunities get significant boost (enhanced tag)
 	if contains(tags, "quality-value") {

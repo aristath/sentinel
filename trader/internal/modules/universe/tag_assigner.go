@@ -3,6 +3,7 @@ package universe
 import (
 	"math"
 
+	"github.com/aristath/arduino-trader/internal/modules/quantum"
 	"github.com/rs/zerolog"
 )
 
@@ -26,14 +27,16 @@ type RegimeScoreProvider interface {
 // TagAssigner assigns tags to securities based on analysis
 type TagAssigner struct {
 	log                 zerolog.Logger
-	adaptiveService     AdaptiveQualityGatesProvider // Optional: adaptive market service
-	regimeScoreProvider RegimeScoreProvider          // Optional: regime score provider
+	adaptiveService     AdaptiveQualityGatesProvider          // Optional: adaptive market service
+	regimeScoreProvider RegimeScoreProvider                   // Optional: regime score provider
+	quantumCalculator   *quantum.QuantumProbabilityCalculator // Quantum probability calculator
 }
 
 // NewTagAssigner creates a new tag assigner
 func NewTagAssigner(log zerolog.Logger) *TagAssigner {
 	return &TagAssigner{
-		log: log.With().Str("service", "tag_assigner").Logger(),
+		log:               log.With().Str("service", "tag_assigner").Logger(),
+		quantumCalculator: quantum.NewQuantumProbabilityCalculator(),
 	}
 }
 
@@ -433,8 +436,8 @@ func (ta *TagAssigner) AssignTagsForSecurity(input AssignTagsInput) ([]string, e
 
 	// Bubble risk: High CAGR with poor risk metrics
 	// Only use raw values for accurate risk assessment - no fallback approximations
+	isBubble := false
 	if cagrRaw > 0.165 { // 16.5% for 11% target (1.5x target)
-		isBubble := false
 		// Check risk metrics - require raw Sortino for accurate assessment
 		// If sortino_raw is not available (0), we can't accurately assess bubble risk
 		hasPoorRisk := sharpeRatio < 0.5 || volatility > 0.40 || fundamentalsScore < 0.6
@@ -474,17 +477,81 @@ func (ta *TagAssigner) AssignTagsForSecurity(input AssignTagsInput) ([]string, e
 		tags = append(tags, "poor-risk-adjusted")
 	}
 
+	// === QUANTUM BUBBLE DETECTION (Ensemble with Classical) ===
+
+	// Get regime score for adaptive weighting
+	regimeScore := 0.0
+	if ta.regimeScoreProvider != nil {
+		currentScore, err := ta.regimeScoreProvider.GetCurrentRegimeScore()
+		if err == nil {
+			regimeScore = currentScore
+		}
+	}
+
+	// Calculate quantum bubble probability
+	quantumBubbleProb := ta.quantumCalculator.CalculateBubbleProbability(
+		cagrRaw,
+		sharpeRatio,
+		sortinoRatioRaw,
+		volatility,
+		fundamentalsScore,
+		regimeScore,
+		nil, // kurtosis not available in tag assigner
+	)
+
+	// Ensemble decision logic
+	classicalBubble := isBubble
+	if classicalBubble {
+		// Classical detected bubble - add ensemble tag
+		tags = append(tags, "ensemble-bubble-risk")
+	} else if quantumBubbleProb > 0.7 {
+		// Quantum detected high probability bubble
+		tags = append(tags, "quantum-bubble-risk")
+		tags = append(tags, "ensemble-bubble-risk")
+	} else if quantumBubbleProb > 0.5 {
+		// Quantum early warning
+		tags = append(tags, "quantum-bubble-warning")
+	}
+
 	// === NEW: VALUE TRAP TAGS ===
 
 	// Value trap: Cheap but declining
+	isValueTrap := false
 	if peVsMarket < -0.20 {
-		isValueTrap := false
 		if fundamentalsScore < 0.6 || longTermScore < 0.5 || momentumScore < -0.05 || volatility > 0.35 {
 			isValueTrap = true
 		}
 
 		if isValueTrap {
 			tags = append(tags, "value-trap")
+		}
+	}
+
+	// === QUANTUM VALUE TRAP DETECTION (Ensemble with Classical) ===
+
+	// Calculate quantum value trap probability (only if cheap)
+	if peVsMarket < -0.20 {
+		quantumTrapProb := ta.quantumCalculator.CalculateValueTrapProbability(
+			peVsMarket,
+			fundamentalsScore,
+			longTermScore,
+			momentumScore,
+			volatility,
+			regimeScore,
+		)
+
+		// Ensemble decision logic
+		classicalTrap := isValueTrap
+		if classicalTrap {
+			// Classical detected trap - add ensemble tag
+			tags = append(tags, "ensemble-value-trap")
+		} else if quantumTrapProb > 0.7 {
+			// Quantum detected high probability trap
+			tags = append(tags, "quantum-value-trap")
+			tags = append(tags, "ensemble-value-trap")
+		} else if quantumTrapProb > 0.5 {
+			// Quantum early warning
+			tags = append(tags, "quantum-value-warning")
 		}
 	}
 

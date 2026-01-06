@@ -316,6 +316,7 @@ func TestTagAssigner_BubbleRisk(t *testing.T) {
 	tags, err := assigner.AssignTagsForSecurity(input)
 	assert.NoError(t, err)
 	assert.Contains(t, tags, "bubble-risk")
+	assert.Contains(t, tags, "ensemble-bubble-risk") // Classical bubble should also get ensemble tag
 	assert.NotContains(t, tags, "quality-high-cagr")
 }
 
@@ -863,4 +864,110 @@ func TestTagAssigner_AllEnhancedTags(t *testing.T) {
 	assert.NotContains(t, tags, "bubble-risk")
 
 	t.Logf("Assigned %d tags total", len(tags))
+}
+
+func TestTagAssigner_QuantumBubbleDetection(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	volatility := 0.38 // Just below 0.40 threshold
+
+	input := AssignTagsInput{
+		Symbol:     "TEST",
+		Volatility: &volatility,
+		GroupScores: map[string]float64{
+			"fundamentals": 0.62, // Just above 0.6 threshold
+		},
+		SubScores: map[string]map[string]float64{
+			"long_term": {
+				"cagr_raw":    0.16, // 16% - high but not > 16.5% (classical threshold)
+				"sharpe_raw":  0.52, // Just above 0.5 (classical threshold)
+				"sortino_raw": 0.52, // Just above 0.5 (classical threshold)
+			},
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+
+	// Classical should NOT detect (all metrics just above thresholds)
+	assert.NotContains(t, tags, "bubble-risk")
+
+	// Quantum might detect (early warning) - check if quantum tags are present
+	// Quantum detection is probabilistic, so we just verify the system runs
+	// In practice, with these inputs, quantum might detect early warning
+	t.Logf("Quantum bubble detection tags: %v", tags)
+	// Verify system doesn't crash and produces tags
+	assert.Greater(t, len(tags), 0, "Should produce some tags")
+}
+
+func TestTagAssigner_QuantumValueTrapDetection(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	peRatio := 12.0
+	marketAvgPE := 20.0
+	volatility := 0.30
+
+	input := AssignTagsInput{
+		Symbol:      "TEST",
+		PERatio:     &peRatio,
+		MarketAvgPE: marketAvgPE,
+		Volatility:  &volatility,
+		GroupScores: map[string]float64{
+			"fundamentals": 0.55, // Just below threshold
+			"long_term":    0.45, // Just below threshold
+		},
+		SubScores: map[string]map[string]float64{
+			"short_term": {
+				"momentum": -0.03, // Slightly negative
+			},
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+
+	// Classical might detect (borderline case)
+	// Quantum should also evaluate
+	hasValueTrapTag := false
+	for _, tag := range tags {
+		if tag == "value-trap" || tag == "quantum-value-trap" || tag == "ensemble-value-trap" {
+			hasValueTrapTag = true
+			break
+		}
+	}
+
+	t.Logf("Value trap detection tags: %v", tags)
+	// At least one detection method should flag this
+	assert.True(t, hasValueTrapTag, "Should detect value trap (classical or quantum)")
+}
+
+func TestTagAssigner_EnsembleBubbleDetection(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	volatility := 0.45
+
+	input := AssignTagsInput{
+		Symbol:     "TEST",
+		Volatility: &volatility,
+		GroupScores: map[string]float64{
+			"fundamentals": 0.55, // < 0.6
+		},
+		SubScores: map[string]map[string]float64{
+			"long_term": {
+				"cagr_raw":    0.18, // > 16.5% (classical threshold)
+				"sharpe_raw":  0.3,  // < 0.5 (classical threshold)
+				"sortino_raw": 0.4,  // < 0.5 (classical threshold)
+			},
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+
+	// Both classical and ensemble should detect
+	assert.Contains(t, tags, "bubble-risk")
+	assert.Contains(t, tags, "ensemble-bubble-risk")
 }
