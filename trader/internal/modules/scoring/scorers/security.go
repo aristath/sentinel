@@ -9,17 +9,24 @@ import (
 	"github.com/aristath/arduino-trader/pkg/formulas"
 )
 
+// AdaptiveWeightsProvider interface for getting adaptive weights
+type AdaptiveWeightsProvider interface {
+	CalculateAdaptiveWeights(regimeScore float64) map[string]float64
+}
+
 // SecurityScorer orchestrates all scoring groups for a security
 // Faithful translation from Python: app/modules/scoring/domain/security_scorer.py
 type SecurityScorer struct {
-	technicals      *TechnicalsScorer
-	longTerm        *LongTermScorer
-	opportunity     *OpportunityScorer
-	dividend        *DividendScorer
-	fundamentals    *FundamentalsScorer
-	shortTerm       *ShortTermScorer
-	opinion         *OpinionScorer
-	diversification *DiversificationScorer
+	technicals          *TechnicalsScorer
+	longTerm            *LongTermScorer
+	opportunity         *OpportunityScorer
+	dividend            *DividendScorer
+	fundamentals        *FundamentalsScorer
+	shortTerm           *ShortTermScorer
+	opinion             *OpinionScorer
+	diversification     *DiversificationScorer
+	adaptiveService     AdaptiveWeightsProvider // Optional: adaptive market service
+	regimeScoreProvider RegimeScoreProvider     // Optional: regime score provider
 }
 
 // ScoreWeights defines the weight for each scoring group
@@ -56,6 +63,16 @@ func NewSecurityScorer() *SecurityScorer {
 		opinion:         NewOpinionScorer(),
 		diversification: NewDiversificationScorer(),
 	}
+}
+
+// SetAdaptiveService sets the adaptive market service for dynamic weights
+func (ss *SecurityScorer) SetAdaptiveService(service AdaptiveWeightsProvider) {
+	ss.adaptiveService = service
+}
+
+// SetRegimeScoreProvider sets the regime score provider for getting current regime
+func (ss *SecurityScorer) SetRegimeScoreProvider(provider RegimeScoreProvider) {
+	ss.regimeScoreProvider = provider
 }
 
 // ScoreSecurityInput contains all data needed to score a security
@@ -244,13 +261,28 @@ func normalizeWeights(weights map[string]float64) map[string]float64 {
 	return normalized
 }
 
-// getScoreWeights returns score weights based on product type
+// RegimeScoreProvider interface for getting current regime score
+type RegimeScoreProvider interface {
+	GetCurrentRegimeScore() (float64, error)
+}
+
+// getScoreWeights returns score weights based on product type and market regime
 // Implements product-type-aware scoring weights as per PRODUCT_TYPE_DIFFERENTIATION.md
+// If adaptive service is available, uses adaptive weights based on regime score
 func (ss *SecurityScorer) getScoreWeights(productType string) map[string]float64 {
+	// Get current regime score if provider is available
+	regimeScore := 0.0
+	if ss.regimeScoreProvider != nil {
+		currentScore, err := ss.regimeScoreProvider.GetCurrentRegimeScore()
+		if err == nil {
+			regimeScore = currentScore
+		}
+	}
+
 	// Treat ETFs and Mutual Funds identically (both are diversified products)
 	if productType == "ETF" || productType == "MUTUALFUND" {
 		// Diversified product weights (ETFs & Mutual Funds)
-		return map[string]float64{
+		baseWeights := map[string]float64{
 			"long_term":       0.35, // ↑ from 25% (tracking quality matters)
 			"fundamentals":    0.10, // ↓ from 20% (less relevant)
 			"dividends":       0.18, // Same
@@ -260,10 +292,54 @@ func (ss *SecurityScorer) getScoreWeights(productType string) map[string]float64
 			"opinion":         0.05, // Same
 			"diversification": 0.05, // Same
 		}
+
+		// Apply adaptive weights if available
+		if ss.adaptiveService != nil {
+			return ss.GetScoreWeightsWithRegime(productType, regimeScore)
+		}
+
+		return baseWeights
 	}
 
 	// Default weights for stocks (EQUITY) and other types
+	// Apply adaptive weights if available
+	if ss.adaptiveService != nil {
+		return ss.GetScoreWeightsWithRegime(productType, regimeScore)
+	}
+
 	return ScoreWeights
+}
+
+// GetScoreWeightsWithRegime returns score weights with explicit regime score
+// This allows callers to provide regime score when available
+func (ss *SecurityScorer) GetScoreWeightsWithRegime(productType string, regimeScore float64) map[string]float64 {
+	// Get base weights first
+	baseWeights := ss.getScoreWeights(productType)
+
+	// Apply adaptive weights if service is available
+	if ss.adaptiveService != nil {
+		adaptiveWeights := ss.adaptiveService.CalculateAdaptiveWeights(regimeScore)
+		if adaptiveWeights != nil && len(adaptiveWeights) > 0 {
+			// Merge: use adaptive weights for common keys, keep base weights for others
+			result := make(map[string]float64)
+			for key, baseWeight := range baseWeights {
+				if adaptiveWeight, ok := adaptiveWeights[key]; ok {
+					result[key] = adaptiveWeight
+				} else {
+					result[key] = baseWeight
+				}
+			}
+			// Add any adaptive weights not in base
+			for key, adaptiveWeight := range adaptiveWeights {
+				if _, ok := result[key]; !ok {
+					result[key] = adaptiveWeight
+				}
+			}
+			return result
+		}
+	}
+
+	return baseWeights
 }
 
 // round4 rounds to 4 decimal places

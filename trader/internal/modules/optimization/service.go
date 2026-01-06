@@ -20,14 +20,26 @@ const (
 	DefaultTransactionCostPct   = 0.002 // 0.2%
 )
 
+// AdaptiveBlendProvider interface for getting adaptive blend
+type AdaptiveBlendProvider interface {
+	CalculateAdaptiveBlend(regimeScore float64) float64
+}
+
+// RegimeScoreProvider provides access to current regime score
+type RegimeScoreProvider interface {
+	GetCurrentRegimeScore() (float64, error)
+}
+
 // OptimizerService orchestrates the complete portfolio optimization process.
 type OptimizerService struct {
-	mvOptimizer    *MVOptimizer
-	hrpOptimizer   *HRPOptimizer
-	constraintsMgr *ConstraintsManager
-	returnsCalc    *ReturnsCalculator
-	riskBuilder    *RiskModelBuilder
-	log            zerolog.Logger
+	mvOptimizer         *MVOptimizer
+	hrpOptimizer        *HRPOptimizer
+	constraintsMgr      *ConstraintsManager
+	returnsCalc         *ReturnsCalculator
+	riskBuilder         *RiskModelBuilder
+	adaptiveService     AdaptiveBlendProvider // Optional: adaptive market service
+	regimeScoreProvider RegimeScoreProvider   // Optional: regime score provider
+	log                 zerolog.Logger
 }
 
 // NewOptimizerService creates a new optimizer service.
@@ -45,6 +57,16 @@ func NewOptimizerService(
 		riskBuilder:    riskBuilder,
 		log:            log.With().Str("component", "optimizer_service").Logger(),
 	}
+}
+
+// SetAdaptiveService sets the adaptive market service for dynamic blend
+func (os *OptimizerService) SetAdaptiveService(service AdaptiveBlendProvider) {
+	os.adaptiveService = service
+}
+
+// SetRegimeScoreProvider sets the regime score provider for getting current regime
+func (os *OptimizerService) SetRegimeScoreProvider(provider RegimeScoreProvider) {
+	os.regimeScoreProvider = provider
 }
 
 // Optimize runs the complete portfolio optimization process.
@@ -72,10 +94,26 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 	}
 
 	// 1. Calculate expected returns
-	os.log.Info().Msg("Calculating expected returns")
+	// Get current regime for returns calculation
+	regime := "sideways" // Default
+	if os.regimeScoreProvider != nil {
+		regimeScore, err := os.regimeScoreProvider.GetCurrentRegimeScore()
+		if err == nil {
+			// Convert continuous score to discrete regime
+			if regimeScore <= -0.33 {
+				regime = "bear"
+			} else if regimeScore >= 0.33 {
+				regime = "bull"
+			} else {
+				regime = "sideways"
+			}
+		}
+	}
+
+	os.log.Info().Str("regime", regime).Msg("Calculating expected returns")
 	expectedReturns, err := os.returnsCalc.CalculateExpectedReturns(
 		activeSecurities,
-		"sideways", // Default regime - could be parameterized
+		regime,
 		state.DividendBonuses,
 		settings.TargetReturn,
 		settings.TargetReturnThresholdPct,
@@ -163,9 +201,27 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 	}
 
 	// 7. Blend weights
+	// Use adaptive blend if available, otherwise use settings.Blend
+	blend := settings.Blend
+	if os.adaptiveService != nil {
+		// Get current regime score if provider is available, otherwise use neutral (0.0)
+		regimeScore := 0.0
+		if os.regimeScoreProvider != nil {
+			currentScore, err := os.regimeScoreProvider.GetCurrentRegimeScore()
+			if err == nil {
+				regimeScore = currentScore
+			}
+		}
+		blend = os.adaptiveService.CalculateAdaptiveBlend(regimeScore)
+		os.log.Info().
+			Float64("adaptive_blend", blend).
+			Float64("regime_score", regimeScore).
+			Msg("Using adaptive blend for optimization")
+	}
+
 	var targetWeights map[string]float64
 	if mvWeights != nil && hrpWeights != nil {
-		targetWeights = os.blendWeights(mvWeights, hrpWeights, settings.Blend)
+		targetWeights = os.blendWeights(mvWeights, hrpWeights, blend)
 		// Clamp blended weights to bounds
 		targetWeights = os.clampWeightsToBounds(targetWeights, constraints)
 		os.log.Info().Msg("Using blended MV + HRP weights")
@@ -222,7 +278,7 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 		Timestamp:              timestamp,
 		TargetReturn:           settings.TargetReturn,
 		AchievedExpectedReturn: &achievedReturn,
-		BlendUsed:              settings.Blend,
+		BlendUsed:              blend,
 		FallbackUsed:           fallbackUsed,
 		TargetWeights:          targetWeights,
 		WeightChanges:          weightChanges,

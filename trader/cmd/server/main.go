@@ -298,6 +298,26 @@ type JobInstances struct {
 	MonthlyMaintenance scheduler.Job
 }
 
+// qualityGatesAdapter adapts adaptation.AdaptiveMarketService to universe.AdaptiveQualityGatesProvider
+type qualityGatesAdapter struct {
+	service *adaptation.AdaptiveMarketService
+}
+
+func (a *qualityGatesAdapter) CalculateAdaptiveQualityGates(regimeScore float64) universe.QualityGateThresholdsProvider {
+	thresholds := a.service.CalculateAdaptiveQualityGates(regimeScore)
+	return thresholds // *adaptation.QualityGateThresholds implements the interface via GetFundamentals/GetLongTerm
+}
+
+// regimeScoreProviderAdapter adapts portfolio.RegimePersistence to RegimeScoreProvider interface
+type regimeScoreProviderAdapter struct {
+	persistence *portfolio.RegimePersistence
+}
+
+func (a *regimeScoreProviderAdapter) GetCurrentRegimeScore() (float64, error) {
+	score, err := a.persistence.GetCurrentRegimeScore()
+	return float64(score), err
+}
+
 func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, portfolioDB, agentsDB, historyDB, cacheDB *database.DB, cfg *config.Config, log zerolog.Logger, displayManager *display.StateManager) (*JobInstances, error) {
 	// Initialize required repositories and services for jobs
 
@@ -554,7 +574,7 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 		riskBuilder,
 		log,
 	)
-	
+
 	// Note: Adaptive service will be wired to optimizerService after it's created
 
 	sequencesService := sequences.NewService(log, riskBuilder)
@@ -656,7 +676,7 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 	// ==========================================
 	// ADAPTIVE MARKET HYPOTHESIS (AMH) SYSTEM
 	// ==========================================
-	
+
 	// Initialize market index service for market-wide regime detection
 	marketIndexService := portfolio.NewMarketIndexService(
 		universeDB.Conn(),
@@ -664,15 +684,15 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 		tradernetClient,
 		log,
 	)
-	
+
 	// Initialize regime persistence for smoothing and history
 	regimePersistence := portfolio.NewRegimePersistence(configDB.Conn(), log)
-	
+
 	// Initialize market regime detector
 	regimeDetector := portfolio.NewMarketRegimeDetector(log)
 	regimeDetector.SetMarketIndexService(marketIndexService)
 	regimeDetector.SetRegimePersistence(regimePersistence)
-	
+
 	// Initialize adaptive market service
 	// Note: Using nil for optional components (performanceTracker, weightsCalculator, repository)
 	// These can be added later if needed for more advanced adaptation
@@ -683,31 +703,38 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 		nil, // repository - optional
 		log,
 	)
-	
+
+	// Create regime score provider adapter
+	regimeScoreProvider := &regimeScoreProviderAdapter{persistence: regimePersistence}
+
 	// Wire up adaptive services to integration points
 	// OptimizerService: adaptive blend (available in registerJobs)
 	optimizerService.SetAdaptiveService(adaptiveMarketService)
+	optimizerService.SetRegimeScoreProvider(regimeScoreProvider)
 	log.Info().Msg("Adaptive service wired to OptimizerService")
-	
+
 	// TagAssigner: adaptive quality gates (available in registerJobs)
-	tagAssigner.SetAdaptiveService(adaptiveMarketService)
+	// Create an adapter to bridge the type mismatch between adaptation and universe packages
+	tagAssignerAdapter := &qualityGatesAdapter{service: adaptiveMarketService}
+	tagAssigner.SetAdaptiveService(tagAssignerAdapter)
+	tagAssigner.SetRegimeScoreProvider(regimeScoreProvider)
 	log.Info().Msg("Adaptive service wired to TagAssigner")
-	
+
 	// Note: SecurityScorer is created in multiple handlers (server.go, settings_routes.go)
-	// To wire it up, we would need to:
-	// 1. Add adaptive service to Server struct/config
-	// 2. Pass it to handlers when creating SecurityScorer
-	// 3. Call securityScorer.SetAdaptiveService(adaptiveMarketService) in each handler
-	// For now, this is documented as a future enhancement
-	// The adaptive weights will work when GetScoreWeightsWithRegime() is called with regime score
-	
+	// The adaptive service and regime score provider need to be passed to those handlers
+	// This will be done when handlers are created - they can access these via dependency injection
+	// For now, the infrastructure is ready - handlers just need to call:
+	// securityScorer.SetAdaptiveService(adaptiveMarketService)
+	// securityScorer.SetRegimeScoreProvider(regimeScoreProvider)
+
 	// Register Adaptive Market Check Job (daily at 6:00 AM, after market data sync)
 	adaptiveMarketJob := scheduler.NewAdaptiveMarketJob(scheduler.AdaptiveMarketJobConfig{
-		Log:                log,
-		RegimeDetector:     regimeDetector,
-		RegimePersistence:  regimePersistence,
-		AdaptiveService:    adaptiveMarketService,
-		AdaptationThreshold: 0.1, // 10% change threshold
+		Log:                 log,
+		RegimeDetector:      regimeDetector,
+		RegimePersistence:   regimePersistence,
+		AdaptiveService:     adaptiveMarketService,
+		AdaptationThreshold: 0.1,             // 10% change threshold
+		ConfigDB:            configDB.Conn(), // Database for storing adaptive parameters
 	})
 	if err := sched.AddJob("0 0 6 * * *", adaptiveMarketJob); err != nil {
 		return nil, fmt.Errorf("failed to register adaptive_market_check job: %w", err)

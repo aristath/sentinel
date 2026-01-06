@@ -291,15 +291,18 @@ export function PlannerManagementModal() {
                         <Text size="xs" c="dimmed">MV</Text>
                         <Slider
                           value={getConfigValue('optimizer_blend', 0.5)}
-                          onChange={(val) => updateConfig('optimizer_blend', val)}
+                          onChange={() => {}} // Read-only: algorithm-controlled
                           min={0}
                           max={1}
                           step={0.05}
                           style={{ flex: 1 }}
+                          disabled
                         />
                         <Text size="xs" c="dimmed">HRP</Text>
                       </Group>
-                      <Text size="xs" c="dimmed">0% = Goal-directed (Mean-Variance), 100% = Robust (HRP)</Text>
+                      <Text size="xs" c="dimmed">
+                        Algorithm-controlled based on market regime. 0% = Goal-directed (Mean-Variance), 100% = Robust (HRP)
+                      </Text>
                     </div>
                   </Stack>
                 </Paper>

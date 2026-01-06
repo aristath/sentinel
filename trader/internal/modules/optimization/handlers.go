@@ -83,9 +83,15 @@ func (h *Handler) HandleGetStatus(w http.ResponseWriter, r *http.Request) {
 	// Calculate min trade amount from transaction costs
 	minTradeAmount := h.calculateMinTradeAmount(DefaultTransactionCostFixed, DefaultTransactionCostPct)
 
+	// Use actual blend from last result if available (adaptive blend), otherwise use settings
+	actualBlend := settings.Blend
+	if h.cache.lastResult != nil {
+		actualBlend = h.cache.lastResult.BlendUsed
+	}
+
 	response := map[string]interface{}{
 		"settings": map[string]interface{}{
-			"optimizer_blend":         settings.Blend,
+			"optimizer_blend":         actualBlend, // Return actual blend used (adaptive), not user setting
 			"optimizer_target_return": settings.TargetReturn,
 			"min_cash_reserve":        settings.MinCashReserve,
 			"min_trade_amount":        math.Round(minTradeAmount*100) / 100,

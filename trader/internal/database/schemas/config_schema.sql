@@ -98,3 +98,42 @@ CREATE TABLE IF NOT EXISTS planner_settings (
 -- Insert default row (single row table - use INSERT OR REPLACE)
 INSERT OR REPLACE INTO planner_settings (id, name, description, updated_at)
 VALUES ('main', 'default', 'Default planner configuration', datetime('now'));
+
+-- Market regime history: tracks continuous regime scores over time
+CREATE TABLE IF NOT EXISTS market_regime_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    recorded_at TEXT NOT NULL,           -- ISO 8601 timestamp
+    raw_score REAL NOT NULL,             -- Raw regime score before smoothing (-1.0 to +1.0)
+    smoothed_score REAL NOT NULL,         -- Exponentially smoothed score (-1.0 to +1.0)
+    discrete_regime TEXT NOT NULL,       -- Discrete regime for reference ('bull', 'bear', 'sideways')
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS idx_regime_history_recorded ON market_regime_history(recorded_at DESC);
+CREATE INDEX IF NOT EXISTS idx_regime_history_smoothed ON market_regime_history(smoothed_score);
+
+-- Adaptive performance history: tracks component performance over time
+CREATE TABLE IF NOT EXISTS adaptive_performance_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    recorded_at TEXT NOT NULL,           -- ISO 8601 timestamp
+    regime_score REAL NOT NULL,          -- Regime score when recorded (-1.0 to +1.0)
+    portfolio_return REAL NOT NULL,      -- Portfolio return for this period
+    component_performance TEXT NOT NULL, -- JSON: {"long_term": 0.12, "fundamentals": 0.08, ...}
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS idx_adaptive_perf_recorded ON adaptive_performance_history(recorded_at DESC);
+CREATE INDEX IF NOT EXISTS idx_adaptive_perf_regime ON adaptive_performance_history(regime_score);
+
+-- Adaptive parameters: current active adaptive values
+CREATE TABLE IF NOT EXISTS adaptive_parameters (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    parameter_type TEXT NOT NULL UNIQUE, -- 'scoring_weights', 'optimizer_blend', 'quality_gates'
+    parameter_value TEXT NOT NULL,       -- JSON
+    regime_score REAL NOT NULL,          -- Regime score when adapted (-1.0 to +1.0)
+    adapted_at TEXT NOT NULL,            -- ISO 8601 timestamp
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS idx_adaptive_params_type ON adaptive_parameters(parameter_type);
+CREATE INDEX IF NOT EXISTS idx_adaptive_params_adapted ON adaptive_parameters(adapted_at DESC);

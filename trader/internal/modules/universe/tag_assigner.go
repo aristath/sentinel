@@ -6,21 +6,28 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// AdaptiveQualityGatesProvider interface for getting adaptive quality gate thresholds
-type AdaptiveQualityGatesProvider interface {
-	CalculateAdaptiveQualityGates(regimeScore float64) *QualityGateThresholds
+// QualityGateThresholdsProvider provides access to quality gate thresholds
+type QualityGateThresholdsProvider interface {
+	GetFundamentals() float64
+	GetLongTerm() float64
 }
 
-// QualityGateThresholds represents adaptive quality gate thresholds
-type QualityGateThresholds struct {
-	Fundamentals float64 // Fundamentals score threshold
-	LongTerm     float64 // Long-term score threshold
+// AdaptiveQualityGatesProvider interface for getting adaptive quality gate thresholds
+// The returned value must implement QualityGateThresholdsProvider interface
+type AdaptiveQualityGatesProvider interface {
+	CalculateAdaptiveQualityGates(regimeScore float64) QualityGateThresholdsProvider
+}
+
+// RegimeScoreProvider provides access to current regime score
+type RegimeScoreProvider interface {
+	GetCurrentRegimeScore() (float64, error)
 }
 
 // TagAssigner assigns tags to securities based on analysis
 type TagAssigner struct {
-	log             zerolog.Logger
-	adaptiveService AdaptiveQualityGatesProvider // Optional: adaptive market service
+	log                 zerolog.Logger
+	adaptiveService     AdaptiveQualityGatesProvider // Optional: adaptive market service
+	regimeScoreProvider RegimeScoreProvider          // Optional: regime score provider
 }
 
 // NewTagAssigner creates a new tag assigner
@@ -33,6 +40,11 @@ func NewTagAssigner(log zerolog.Logger) *TagAssigner {
 // SetAdaptiveService sets the adaptive market service for dynamic quality gates
 func (ta *TagAssigner) SetAdaptiveService(service AdaptiveQualityGatesProvider) {
 	ta.adaptiveService = service
+}
+
+// SetRegimeScoreProvider sets the regime score provider for getting current regime
+func (ta *TagAssigner) SetRegimeScoreProvider(provider RegimeScoreProvider) {
+	ta.regimeScoreProvider = provider
 }
 
 // AssignTagsInput contains all data needed to assign tags to a security
@@ -107,11 +119,6 @@ func (ta *TagAssigner) AssignTagsForSecurity(input AssignTagsInput) ([]string, e
 		dividendYield = *input.DividendYield
 	}
 
-	rsi := 0.0
-	if input.RSI != nil {
-		rsi = *input.RSI
-	}
-
 	ema200 := 0.0
 	if input.EMA200 != nil && input.CurrentPrice != nil {
 		ema200 = *input.EMA200
@@ -120,11 +127,6 @@ func (ta *TagAssigner) AssignTagsForSecurity(input AssignTagsInput) ([]string, e
 	distanceFromEMA := 0.0
 	if input.CurrentPrice != nil && ema200 > 0 {
 		distanceFromEMA = (*input.CurrentPrice - ema200) / ema200
-	}
-
-	bollingerPosition := 0.0
-	if input.BollingerPosition != nil {
-		bollingerPosition = *input.BollingerPosition
 	}
 
 	maxDrawdown := 0.0
@@ -384,15 +386,21 @@ func (ta *TagAssigner) AssignTagsForSecurity(input AssignTagsInput) ([]string, e
 	longTermThreshold := 0.5
 
 	if ta.adaptiveService != nil {
-		// Try to get regime score and calculate adaptive thresholds
-		// For now, use default thresholds
-		// TODO: Integrate regime score provider
-		// If regime score is available, use it:
-		// thresholds := ta.adaptiveService.CalculateAdaptiveQualityGates(regimeScore)
-		// if thresholds != nil {
-		//     fundamentalsThreshold = thresholds.Fundamentals
-		//     longTermThreshold = thresholds.LongTerm
-		// }
+		// Get current regime score if provider is available, otherwise use neutral (0.0)
+		regimeScore := 0.0
+		if ta.regimeScoreProvider != nil {
+			currentScore, err := ta.regimeScoreProvider.GetCurrentRegimeScore()
+			if err == nil {
+				regimeScore = currentScore
+			}
+		}
+
+		// Calculate adaptive thresholds based on current regime score
+		thresholds := ta.adaptiveService.CalculateAdaptiveQualityGates(regimeScore)
+		if thresholds != nil {
+			fundamentalsThreshold = thresholds.GetFundamentals()
+			longTermThreshold = thresholds.GetLongTerm()
+		}
 	}
 
 	// Quality gate pass/fail
