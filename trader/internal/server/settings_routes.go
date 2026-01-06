@@ -8,6 +8,7 @@ import (
 	"github.com/aristath/arduino-trader/internal/events"
 	"github.com/aristath/arduino-trader/internal/modules/allocation"
 	"github.com/aristath/arduino-trader/internal/modules/cash_flows"
+	"github.com/aristath/arduino-trader/internal/modules/market_hours"
 	"github.com/aristath/arduino-trader/internal/modules/portfolio"
 	"github.com/aristath/arduino-trader/internal/modules/scoring/scorers"
 	"github.com/aristath/arduino-trader/internal/modules/settings"
@@ -110,11 +111,15 @@ func (s *Server) setupSettingsRoutes(r chi.Router) {
 	tradingRepo := trading.NewTradeRepository(s.ledgerDB.Conn(), s.log)
 	settingsServiceForTrading := settings.NewService(settingsRepo, s.log)
 
+	// Create market hours service for trade safety
+	marketHoursService := market_hours.NewMarketHoursService()
+
 	tradeSafetyService := trading.NewTradeSafetyService(
 		tradingRepo,
 		positionRepo,
 		securityRepo,
 		settingsServiceForTrading,
+		marketHoursService,
 		s.log,
 	)
 

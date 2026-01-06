@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -13,7 +14,7 @@ import (
 
 // Config holds application configuration
 type Config struct {
-	DataDir             string // Base directory for all databases (defaults to "../data" or "./data")
+	DataDir             string // Base directory for all databases (defaults to "/home/arduino/data", always absolute)
 	EvaluatorServiceURL string
 	TradernetAPIKey     string
 	TradernetAPISecret  string
@@ -82,21 +83,29 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	// Determine data directory with fallback logic
-	dataDir := getEnv("DATA_DIR", "")
+	// 1. Check TRADER_DATA_DIR environment variable
+	// 2. If not set, default to /home/arduino/data
+	// 3. Always resolve to absolute path
+	// 4. Ensure directory exists
+	dataDir := getEnv("TRADER_DATA_DIR", "")
 	if dataDir == "" {
-		// Try to find data directory - check ../data first (when running from trader/), then ./data
-		if _, err := os.Stat("../data"); err == nil {
-			dataDir = "../data"
-		} else if _, err := os.Stat("./data"); err == nil {
-			dataDir = "./data"
-		} else {
-			// Default fallback
-			dataDir = "../data"
-		}
+		// Default fallback to absolute path
+		dataDir = "/home/arduino/data"
+	}
+
+	// Always resolve to absolute path
+	absDataDir, err := filepath.Abs(dataDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve data directory path: %w", err)
+	}
+
+	// Ensure directory exists
+	if err := os.MkdirAll(absDataDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create data directory: %w", err)
 	}
 
 	cfg := &Config{
-		DataDir:             dataDir,
+		DataDir:             absDataDir,
 		Port:                getEnvAsInt("GO_PORT", 8001), // Default 8001 (Python uses 8000)
 		DevMode:             getEnvAsBool("DEV_MODE", false),
 		EvaluatorServiceURL: getEnv("EVALUATOR_SERVICE_URL", "http://localhost:9000"), // Evaluator-go microservice on 9000

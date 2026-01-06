@@ -131,6 +131,36 @@ func (r *SecurityRepository) GetAllActive() ([]Security, error) {
 	return securities, nil
 }
 
+// GetDistinctExchanges returns a list of distinct exchange names from active securities
+func (r *SecurityRepository) GetDistinctExchanges() ([]string, error) {
+	query := `SELECT DISTINCT fullExchangeName FROM securities
+		WHERE fullExchangeName IS NOT NULL AND fullExchangeName != '' AND active = 1
+		ORDER BY fullExchangeName`
+
+	rows, err := r.universeDB.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query distinct exchanges: %w", err)
+	}
+	defer rows.Close()
+
+	var exchanges []string
+	for rows.Next() {
+		var exchange sql.NullString
+		if err := rows.Scan(&exchange); err != nil {
+			return nil, fmt.Errorf("failed to scan exchange: %w", err)
+		}
+		if exchange.Valid && exchange.String != "" {
+			exchanges = append(exchanges, exchange.String)
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating exchanges: %w", err)
+	}
+
+	return exchanges, nil
+}
+
 // GetAllActiveTradable returns all active securities excluding cash
 // Used for scoring and trading operations
 func (r *SecurityRepository) GetAllActiveTradable() ([]Security, error) {
@@ -185,8 +215,7 @@ func (r *SecurityRepository) GetAll() ([]Security, error) {
 	return securities, nil
 }
 
-// Create creates a new security
-// Faithful translation of Python: async def create(self, security: Security) -> None
+// GetDistinctExchanges returns a list of distinct exchange names from active securities
 func (r *SecurityRepository) Create(security Security) error {
 	now := time.Now().Format(time.RFC3339)
 

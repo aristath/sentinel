@@ -790,7 +790,9 @@ POST /api/settings/{key}
 
 ```bash
 # Data directory (contains all 7 databases)
-DATA_DIR=../data
+# Defaults to /home/arduino/data if not set
+# Always resolved to absolute path
+TRADER_DATA_DIR=/path/to/data
 
 
 # Tradernet API (DEPRECATED - use Settings UI instead)

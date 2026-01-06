@@ -19,6 +19,7 @@ import (
 	"github.com/aristath/arduino-trader/internal/modules/cleanup"
 	"github.com/aristath/arduino-trader/internal/modules/display"
 	"github.com/aristath/arduino-trader/internal/modules/dividends"
+	"github.com/aristath/arduino-trader/internal/modules/market_hours"
 	"github.com/aristath/arduino-trader/internal/modules/opportunities"
 	"github.com/aristath/arduino-trader/internal/modules/optimization"
 	"github.com/aristath/arduino-trader/internal/modules/planning"
@@ -65,7 +66,7 @@ func main() {
 
 	// Initialize databases - NEW 7-database architecture
 	// Architecture: universe, config, ledger, portfolio, agents, history, cache
-	// All databases use cfg.DataDir which automatically detects ../data or ./data
+	// All databases use cfg.DataDir which defaults to /home/arduino/data (always absolute)
 
 	// 1. universe.db - Investment universe (securities, groups)
 	universeDB, err := database.New(database.Config{
@@ -321,11 +322,19 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 
 	// Trading and portfolio services
 	// Trade safety service with all validation layers
+	// Create settings service for trade safety
+	settingsRepoForTrading := settings.NewRepository(configDB.Conn(), log)
+	settingsServiceForTrading := settings.NewService(settingsRepoForTrading, log)
+
+	// Create market hours service
+	marketHoursService := market_hours.NewMarketHoursService()
+
 	tradeSafetyService := trading.NewTradeSafetyService(
 		tradeRepo,
 		positionRepo,
 		securityRepo,
-		nil, // settingsService - will use defaults
+		settingsServiceForTrading,
+		marketHoursService,
 		log,
 	)
 

@@ -27,6 +27,7 @@ import (
 	"github.com/aristath/arduino-trader/internal/modules/display"
 	"github.com/aristath/arduino-trader/internal/modules/dividends"
 	"github.com/aristath/arduino-trader/internal/modules/evaluation"
+	"github.com/aristath/arduino-trader/internal/modules/market_hours"
 	"github.com/aristath/arduino-trader/internal/modules/opportunities"
 	"github.com/aristath/arduino-trader/internal/modules/optimization"
 	"github.com/aristath/arduino-trader/internal/modules/planning"
@@ -104,6 +105,9 @@ func New(cfg Config) *Server {
 	cashRepoForSystem := cash_flows.NewCashRepository(cfg.PortfolioDB.Conn(), cfg.Log)
 	cashManagerForSystem := cash_flows.NewCashManagerWithDualWrite(cashRepoForSystem, positionRepoForSystem, cfg.Log)
 
+	// Create market hours service
+	marketHoursService := market_hours.NewMarketHoursService()
+
 	systemHandlers := NewSystemHandlers(
 		cfg.Log,
 		dataDir,
@@ -116,6 +120,7 @@ func New(cfg Config) *Server {
 		tradernetClient,
 		currencyExchangeService,
 		cashManagerForSystem,
+		marketHoursService,
 	)
 
 	s := &Server{
@@ -663,12 +668,16 @@ func (s *Server) setupTradingRoutes(r chi.Router) {
 	settingsRepo := settings.NewRepository(s.configDB.Conn(), s.log)
 	settingsService := settings.NewService(settingsRepo, s.log)
 
+	// Create market hours service for trade safety
+	marketHoursServiceForTrading := market_hours.NewMarketHoursService()
+
 	// Trade safety service (validates all manual trades)
 	safetyService := trading.NewTradeSafetyService(
 		tradeRepo,
 		positionRepo,
 		securityRepo,
 		settingsService,
+		marketHoursServiceForTrading,
 		s.log,
 	)
 

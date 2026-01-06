@@ -12,8 +12,10 @@ import (
 	"github.com/aristath/arduino-trader/internal/clients/tradernet"
 	"github.com/aristath/arduino-trader/internal/database"
 	"github.com/aristath/arduino-trader/internal/modules/display"
+	"github.com/aristath/arduino-trader/internal/modules/market_hours"
 	"github.com/aristath/arduino-trader/internal/modules/portfolio"
 	"github.com/aristath/arduino-trader/internal/modules/settings"
+	"github.com/aristath/arduino-trader/internal/modules/universe"
 	"github.com/aristath/arduino-trader/internal/scheduler"
 	"github.com/aristath/arduino-trader/internal/services"
 	"github.com/rs/zerolog"
@@ -33,6 +35,7 @@ type SystemHandlers struct {
 	tradernetClient         *tradernet.Client
 	currencyExchangeService *services.CurrencyExchangeService
 	cashManager             portfolio.CashManager
+	marketHoursService      *market_hours.MarketHoursService
 	// Jobs (will be set after job registration in main.go)
 	healthCheckJob       scheduler.Job
 	syncCycleJob         scheduler.Job
@@ -51,6 +54,7 @@ func NewSystemHandlers(
 	tradernetClient *tradernet.Client,
 	currencyExchangeService *services.CurrencyExchangeService,
 	cashManager portfolio.CashManager,
+	marketHoursService *market_hours.MarketHoursService,
 ) *SystemHandlers {
 	// Create portfolio performance service
 	portfolioPerf := display.NewPortfolioPerformanceService(
@@ -78,6 +82,7 @@ func NewSystemHandlers(
 		scheduler:               sched,
 		portfolioDisplayCalc:    portfolioDisplayCalc,
 		displayManager:          displayManager,
+		marketHoursService:      marketHoursService,
 		tradernetClient:         tradernetClient,
 		currencyExchangeService: currencyExchangeService,
 		cashManager:             cashManager,
@@ -579,14 +584,93 @@ func (h *SystemHandlers) HandleJobsStatus(w http.ResponseWriter, r *http.Request
 // calculateNextOpenCloseTimes removed - market hours functionality removed
 
 // HandleMarketsStatus returns market open/close status grouped by geography
-// Market hours functionality removed - returns empty response
 func (h *SystemHandlers) HandleMarketsStatus(w http.ResponseWriter, r *http.Request) {
 	h.log.Debug().Msg("Getting markets status")
 
-	// Market hours functionality removed - return empty markets
+	if h.marketHoursService == nil {
+		h.log.Warn().Msg("Market hours service not available")
+		markets := make(map[string]MarketRegionInfo)
+		response := MarketsStatusResponse{
+			Markets:     markets,
+			OpenCount:   0,
+			ClosedCount: 0,
+			LastUpdated: time.Now().Format(time.RFC3339),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Get distinct exchanges from universe database
+	securityRepo := universe.NewSecurityRepository(h.universeDB.Conn(), h.log)
+	exchanges, err := securityRepo.GetDistinctExchanges()
+	if err != nil {
+		h.log.Warn().Err(err).Msg("Failed to get exchanges from database")
+		exchanges = []string{}
+	}
+
+	// If no exchanges found, return empty response
+	if len(exchanges) == 0 {
+		markets := make(map[string]MarketRegionInfo)
+		response := MarketsStatusResponse{
+			Markets:     markets,
+			OpenCount:   0,
+			ClosedCount: 0,
+			LastUpdated: time.Now().Format(time.RFC3339),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Group exchanges by region and get status
+	now := time.Now()
 	markets := make(map[string]MarketRegionInfo)
 	openCount := 0
 	closedCount := 0
+
+	// Group exchanges by region
+	regionMap := make(map[string][]string)
+	for _, exchangeName := range exchanges {
+		region := h.getExchangeRegion(exchangeName)
+		regionMap[region] = append(regionMap[region], exchangeName)
+	}
+
+	// Get status for each region
+	for region, exchangeNames := range regionMap {
+		regionOpen := false
+		var closesAt, opensAt, opensDate string
+
+		// Check if any exchange in region is open
+		for _, exchangeName := range exchangeNames {
+			status, err := h.marketHoursService.GetMarketStatus(exchangeName, now)
+			if err != nil {
+				h.log.Debug().Err(err).Str("exchange", exchangeName).Msg("Failed to get market status")
+				continue
+			}
+
+			if status.Open {
+				regionOpen = true
+				if closesAt == "" {
+					closesAt = status.ClosesAt
+				}
+				openCount++
+			} else {
+				closedCount++
+				if opensAt == "" {
+					opensAt = status.OpensAt
+					opensDate = status.OpensDate
+				}
+			}
+		}
+
+		markets[region] = MarketRegionInfo{
+			Open:      regionOpen,
+			ClosesAt:  closesAt,
+			OpensAt:   opensAt,
+			OpensDate: opensDate,
+		}
+	}
 
 	response := MarketsStatusResponse{
 		Markets:     markets,
@@ -597,6 +681,32 @@ func (h *SystemHandlers) HandleMarketsStatus(w http.ResponseWriter, r *http.Requ
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+// getExchangeRegion returns the geographic region for an exchange
+func (h *SystemHandlers) getExchangeRegion(exchangeName string) string {
+	exchangeCode := market_hours.GetExchangeCode(exchangeName)
+
+	// US exchanges
+	if exchangeCode == "XNYS" || exchangeCode == "XNAS" {
+		return "US"
+	}
+
+	// European exchanges
+	if exchangeCode == "XETR" || exchangeCode == "XLON" || exchangeCode == "XPAR" ||
+		exchangeCode == "XMIL" || exchangeCode == "XAMS" || exchangeCode == "XCSE" ||
+		exchangeCode == "ASEX" {
+		return "EU"
+	}
+
+	// Asian exchanges
+	if exchangeCode == "XHKG" || exchangeCode == "XSHG" || exchangeCode == "XTSE" ||
+		exchangeCode == "XASX" {
+		return "ASIA"
+	}
+
+	// Default to US
+	return "US"
 }
 
 // HandleDatabaseStats returns database statistics

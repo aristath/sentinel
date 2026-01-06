@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aristath/arduino-trader/internal/modules/market_hours"
 	"github.com/aristath/arduino-trader/internal/modules/portfolio"
 	"github.com/aristath/arduino-trader/internal/modules/settings"
 	"github.com/aristath/arduino-trader/internal/modules/universe"
@@ -14,11 +15,12 @@ import (
 // TradeSafetyService validates trades before execution
 // Faithful translation from Python: app/modules/trading/services/trade_safety_service.py
 type TradeSafetyService struct {
-	tradeRepo       *TradeRepository
-	positionRepo    *portfolio.PositionRepository
-	securityRepo    *universe.SecurityRepository
-	settingsService *settings.Service
-	log             zerolog.Logger
+	tradeRepo          *TradeRepository
+	positionRepo       *portfolio.PositionRepository
+	securityRepo       *universe.SecurityRepository
+	settingsService    *settings.Service
+	marketHoursService *market_hours.MarketHoursService
+	log                zerolog.Logger
 }
 
 // NewTradeSafetyService creates a new trade safety service
@@ -27,14 +29,16 @@ func NewTradeSafetyService(
 	positionRepo *portfolio.PositionRepository,
 	securityRepo *universe.SecurityRepository,
 	settingsService *settings.Service,
+	marketHoursService *market_hours.MarketHoursService,
 	log zerolog.Logger,
 ) *TradeSafetyService {
 	return &TradeSafetyService{
-		tradeRepo:       tradeRepo,
-		positionRepo:    positionRepo,
-		securityRepo:    securityRepo,
-		settingsService: settingsService,
-		log:             log.With().Str("service", "trade_safety").Logger(),
+		tradeRepo:          tradeRepo,
+		positionRepo:       positionRepo,
+		securityRepo:       securityRepo,
+		settingsService:    settingsService,
+		marketHoursService: marketHoursService,
+		log:                log.With().Str("service", "trade_safety").Logger(),
 	}
 }
 
@@ -53,6 +57,11 @@ func (s *TradeSafetyService) ValidateTrade(
 
 	// Layer 7: Security lookup (validate security exists)
 	if err := s.validateSecurity(symbol); err != nil {
+		return err
+	}
+
+	// Layer 1: Market hours check (if required for this trade)
+	if err := s.checkMarketHours(symbol, side); err != nil {
 		return err
 	}
 
@@ -95,7 +104,48 @@ func (s *TradeSafetyService) validateSecurity(symbol string) error {
 	return nil
 }
 
-// checkMarketHours removed - market hours functionality removed
+// checkMarketHours validates that the stock's market is currently open (if required for this trade)
+// Layer 1: Market Hours Check
+func (s *TradeSafetyService) checkMarketHours(symbol string, side string) error {
+	if s.marketHoursService == nil {
+		// Market hours service not available, allow trade (fail open)
+		return nil
+	}
+
+	security, err := s.securityRepo.GetBySymbol(symbol)
+	if err != nil {
+		s.log.Warn().Err(err).Str("symbol", symbol).Msg("Failed to lookup security for market hours check, allowing trade")
+		return nil // Fail open
+	}
+
+	if security == nil {
+		s.log.Warn().Str("symbol", symbol).Msg("Security not found for market hours check, allowing trade")
+		return nil // Fail open
+	}
+
+	exchange := security.FullExchangeName
+	if exchange == "" {
+		s.log.Warn().Str("symbol", symbol).Msg("Security has no exchange set, allowing trade")
+		return nil // Fail open
+	}
+
+	// Check if market hours validation is required for this trade
+	if !s.marketHoursService.ShouldCheckMarketHours(exchange, side) {
+		// Market hours check not required (e.g., BUY order on flexible hours market)
+		return nil
+	}
+
+	// Market hours check IS required (SELL orders or BUY on strict markets)
+	if !s.marketHoursService.IsMarketOpen(exchange, time.Now()) {
+		s.log.Info().
+			Str("symbol", symbol).
+			Str("exchange", exchange).
+			Msg("Market closed, blocking trade")
+		return fmt.Errorf("market closed for %s", exchange)
+	}
+
+	return nil
+}
 
 // checkBuyCooldown validates buy cooldown period
 // Layer 2: Buy Cooldown Check
