@@ -221,14 +221,13 @@ func main() {
 	})
 
 	// Wire up jobs for manual triggering via API
-	// Note: tagUpdateJob is registered after this point, so we'll need to set it separately
 	srv.SetJobs(
 		jobs.HealthCheck,
 		jobs.SyncCycle,
 		jobs.DividendReinvest,
 		jobs.PlannerBatch,
 		jobs.EventBasedTrading,
-		nil, // tagUpdateJob will be set after registration
+		jobs.TagUpdate,
 	)
 
 	// Start server in goroutine
@@ -285,6 +284,7 @@ type JobInstances struct {
 	DividendReinvest  scheduler.Job
 	PlannerBatch      scheduler.Job
 	EventBasedTrading scheduler.Job
+	TagUpdate         scheduler.Job
 
 	// Reliability jobs (Phase 11-15)
 	HistoryCleanup     scheduler.Job
@@ -683,9 +683,6 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 		return nil, fmt.Errorf("failed to register tag_update (weekly) job: %w", err)
 	}
 
-	// Set tag update job for manual triggering (after registration)
-	srv.SetTagUpdateJob(tagUpdateJob)
-
 	// Register Job 13: Weekly Backup (Sunday at 1:00 AM)
 	weeklyBackup := reliability.NewWeeklyBackupJob(backupService)
 	if err := sched.AddJob("0 0 1 * * 0", weeklyBackup); err != nil {
@@ -720,6 +717,7 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 		DividendReinvest:  dividendReinvest,
 		PlannerBatch:      plannerBatch,
 		EventBasedTrading: eventBasedTrading,
+		TagUpdate:         tagUpdateJob,
 
 		// Reliability jobs
 		HistoryCleanup:     historyCleanup,
