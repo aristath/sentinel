@@ -352,8 +352,9 @@ func TestNativeClient_SymbolResolution(t *testing.T) {
 		price2, err2 := client.GetCurrentPrice("MSFT", nil, 1)
 
 		// Both should succeed and return same price (using MSFT)
+		// Use InDelta to handle minor price fluctuations from live data
 		if err1 == nil && err2 == nil {
-			assert.Equal(t, *price1, *price2)
+			assert.InDelta(t, *price1, *price2, 0.1, "Prices should match (using MSFT for both)")
 		}
 	})
 

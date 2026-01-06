@@ -52,7 +52,7 @@ jobs:
 
       - name: Run tests
         working-directory: trader
-        run: go test ./... -v
+        run: go test ./... -v -tags=!integration
 
       - name: Build ARM64 binary for Arduino Uno Q
         working-directory: trader
