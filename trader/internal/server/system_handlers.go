@@ -19,6 +19,8 @@ import (
 	"github.com/aristath/arduino-trader/internal/scheduler"
 	"github.com/aristath/arduino-trader/internal/services"
 	"github.com/rs/zerolog"
+	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v3/mem"
 )
 
 // SystemHandlers handles system-wide monitoring and operations endpoints - NEW 8-database architecture
@@ -470,10 +472,12 @@ func (h *SystemHandlers) HandleLEDDisplay(w http.ResponseWriter, r *http.Request
 			Msg("Returning ticker display state")
 
 	default: // STATS mode
+		// Calculate actual CPU and RAM percentages
+		cpuPercent, ramPercent := h.getSystemStats()
 		response.SystemStats = map[string]interface{}{
 			"uptime_hours": 0, // TODO: Calculate actual uptime
-			"cpu_percent":  0,
-			"ram_percent":  0,
+			"cpu_percent":  cpuPercent,
+			"ram_percent":  ramPercent,
 		}
 	}
 
@@ -803,6 +807,31 @@ func (h *SystemHandlers) getDirSize(dirPath string) float64 {
 	}
 
 	return float64(totalSize) / 1024 / 1024
+}
+
+// getSystemStats calculates CPU and RAM usage percentages
+func (h *SystemHandlers) getSystemStats() (float64, float64) {
+	// Get CPU percentage (average across all CPUs, over 1 second)
+	cpuPercent, err := cpu.Percent(time.Second, false)
+	if err != nil {
+		h.log.Warn().Err(err).Msg("Failed to get CPU percentage")
+		cpuPercent = []float64{0}
+	}
+
+	// Get memory statistics
+	memStat, err := mem.VirtualMemory()
+	if err != nil {
+		h.log.Warn().Err(err).Msg("Failed to get memory statistics")
+		return 0, 0
+	}
+
+	// Return average CPU percentage and RAM usage percentage
+	cpuAvg := 0.0
+	if len(cpuPercent) > 0 {
+		cpuAvg = cpuPercent[0]
+	}
+
+	return cpuAvg, memStat.UsedPercent
 }
 
 // ============================================================================

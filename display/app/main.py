@@ -8,7 +8,7 @@ import json
 
 logger = Logger("trader-display")
 
-API_URL = "http://localhost:8080"
+API_URL = "http://localhost:8001"
 
 # Persistent HTTP session for connection pooling (reuses TCP connections)
 _http_session = requests.Session()
