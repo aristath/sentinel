@@ -479,6 +479,7 @@ func (s *Server) setupPortfolioRoutes(r chi.Router) {
 		tradernetClient,
 		currencyExchangeService,
 		cashManager,
+		s.configDB.Conn(),
 		s.log,
 	)
 

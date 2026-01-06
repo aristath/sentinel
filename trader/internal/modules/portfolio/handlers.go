@@ -1,7 +1,9 @@
 package portfolio
 
 import (
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
 
@@ -17,6 +19,7 @@ type Handler struct {
 	tradernetClient         *tradernet.Client
 	currencyExchangeService CurrencyExchangeServiceInterface
 	cashManager             CashManager
+	configDB                *sql.DB
 	log                     zerolog.Logger
 }
 
@@ -27,6 +30,7 @@ func NewHandler(
 	tradernetClient *tradernet.Client,
 	currencyExchangeService CurrencyExchangeServiceInterface,
 	cashManager CashManager,
+	configDB *sql.DB,
 	log zerolog.Logger,
 ) *Handler {
 	return &Handler{
@@ -35,6 +39,7 @@ func NewHandler(
 		tradernetClient:         tradernetClient,
 		currencyExchangeService: currencyExchangeService,
 		cashManager:             cashManager,
+		configDB:                configDB,
 		log:                     log.With().Str("handler", "portfolio").Logger(),
 	}
 }
@@ -128,6 +133,11 @@ func (h *Handler) HandleGetCashBreakdown(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "Failed to get cash breakdown")
 		return
+	}
+
+	// Add virtual test cash if in research mode
+	if err := h.addVirtualTestCash(cashBalancesMap); err != nil {
+		h.log.Warn().Err(err).Msg("Failed to add virtual test cash to cash breakdown, continuing without it")
 	}
 
 	// Convert map to slice format for response (matching Tradernet API format)
@@ -234,4 +244,68 @@ func (h *Handler) writeJSON(w http.ResponseWriter, status int, data interface{})
 
 func (h *Handler) writeError(w http.ResponseWriter, status int, message string) {
 	h.writeJSON(w, status, map[string]string{"error": message})
+}
+
+// addVirtualTestCash adds virtual test cash to cash balances if in research mode
+// TEST currency is added to cashBalances map, and also added to EUR for AvailableCashEUR calculation
+// This matches the implementation in scheduler/planner_batch.go and rebalancing/service.go
+func (h *Handler) addVirtualTestCash(cashBalances map[string]float64) error {
+	if h.configDB == nil {
+		return nil // No config DB available, skip
+	}
+
+	// Check trading mode - only add test cash in research mode
+	var tradingMode string
+	err := h.configDB.QueryRow("SELECT value FROM settings WHERE key = 'trading_mode'").Scan(&tradingMode)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// Default to research mode if not set
+			tradingMode = "research"
+		} else {
+			return fmt.Errorf("failed to get trading mode: %w", err)
+		}
+	}
+
+	// Only add test cash in research mode
+	if tradingMode != "research" {
+		return nil
+	}
+
+	// Get virtual_test_cash setting
+	var virtualTestCashStr string
+	err = h.configDB.QueryRow("SELECT value FROM settings WHERE key = 'virtual_test_cash'").Scan(&virtualTestCashStr)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// No virtual test cash set, that's fine
+			return nil
+		}
+		return fmt.Errorf("failed to get virtual_test_cash: %w", err)
+	}
+
+	// Parse virtual test cash amount
+	var virtualTestCash float64
+	_, err = fmt.Sscanf(virtualTestCashStr, "%f", &virtualTestCash)
+	if err != nil {
+		return fmt.Errorf("failed to parse virtual_test_cash: %w", err)
+	}
+
+	// Only add if > 0
+	if virtualTestCash > 0 {
+		// Add TEST currency to cashBalances
+		cashBalances["TEST"] = virtualTestCash
+
+		// Also add to EUR for AvailableCashEUR calculation (TEST is treated as EUR-equivalent)
+		// Get current EUR balance (default to 0 if not present)
+		currentEUR := cashBalances["EUR"]
+		cashBalances["EUR"] = currentEUR + virtualTestCash
+
+		h.log.Info().
+			Float64("virtual_test_cash", virtualTestCash).
+			Float64("eur_before", currentEUR).
+			Float64("eur_after", cashBalances["EUR"]).
+			Str("trading_mode", tradingMode).
+			Msg("Added virtual test cash to cash breakdown")
+	}
+
+	return nil
 }
