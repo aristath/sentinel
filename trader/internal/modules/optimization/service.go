@@ -22,7 +22,8 @@ const (
 
 // OptimizerService orchestrates the complete portfolio optimization process.
 type OptimizerService struct {
-	pypfoptClient  *PyPFOptClient
+	mvOptimizer    *MVOptimizer
+	hrpOptimizer   *HRPOptimizer
 	constraintsMgr *ConstraintsManager
 	returnsCalc    *ReturnsCalculator
 	riskBuilder    *RiskModelBuilder
@@ -31,14 +32,14 @@ type OptimizerService struct {
 
 // NewOptimizerService creates a new optimizer service.
 func NewOptimizerService(
-	pypfoptClient *PyPFOptClient,
 	constraintsMgr *ConstraintsManager,
 	returnsCalc *ReturnsCalculator,
 	riskBuilder *RiskModelBuilder,
 	log zerolog.Logger,
 ) *OptimizerService {
 	return &OptimizerService{
-		pypfoptClient:  pypfoptClient,
+		mvOptimizer:    NewMVOptimizer(),
+		hrpOptimizer:   NewHRPOptimizer(),
 		constraintsMgr: constraintsMgr,
 		returnsCalc:    returnsCalc,
 		riskBuilder:    riskBuilder,
@@ -232,52 +233,74 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 	}, nil
 }
 
-// runMeanVariance runs Mean-Variance optimization via PyPFOpt microservice.
+// runMeanVariance runs Mean-Variance optimization using native Go implementation.
 func (os *OptimizerService) runMeanVariance(
 	expectedReturns map[string]float64,
 	covMatrix [][]float64,
 	constraints Constraints,
 	targetReturn float64,
 ) (map[string]float64, *string, error) {
-	// Build request for PyPFOpt microservice
-	req := OptimizeRequest{
-		ExpectedReturns:   expectedReturns,
-		CovarianceMatrix:  covMatrix,
-		Symbols:           constraints.Symbols,
-		WeightBounds:      constraints.WeightBounds,
-		SectorConstraints: constraints.SectorConstraints,
-		Strategy:          "efficient_return",
-		TargetReturn:      &targetReturn,
+	// Try strategies in order: efficient_return → min_volatility → max_sharpe → efficient_risk
+	strategies := []string{"efficient_return", "min_volatility", "max_sharpe", "efficient_risk"}
+	var lastErr error
+
+	for _, strategy := range strategies {
+		var targetRet *float64
+		var targetVol *float64
+
+		if strategy == "efficient_return" {
+			targetRet = &targetReturn
+		} else if strategy == "efficient_risk" {
+			// Use a reasonable default volatility target (15%)
+			defaultVol := 0.15
+			targetVol = &defaultVol
+		}
+
+		weights, achievedReturn, err := os.mvOptimizer.Optimize(
+			expectedReturns,
+			covMatrix,
+			constraints.Symbols,
+			constraints.WeightBounds,
+			constraints.SectorConstraints,
+			strategy,
+			targetRet,
+			targetVol,
+		)
+
+		if err == nil {
+			os.log.Info().
+				Str("strategy_used", strategy).
+				Msg("MV optimization succeeded")
+
+			var fallback *string
+			if strategy != "efficient_return" {
+				fallback = &strategy
+			}
+
+			// Return weights and achieved return
+			// Note: achievedReturn is ignored in return signature but logged
+			_ = achievedReturn
+
+			return weights, fallback, nil
+		}
+
+		lastErr = err
+		os.log.Debug().
+			Str("strategy", strategy).
+			Err(err).
+			Msg("Strategy failed, trying next")
 	}
 
-	// Call progressive optimization endpoint (handles fallbacks automatically)
-	result, err := os.pypfoptClient.OptimizeProgressive(req)
-	if err != nil {
-		return nil, nil, fmt.Errorf("MV optimization failed: %w", err)
-	}
-
-	os.log.Info().
-		Str("strategy_used", result.StrategyUsed).
-		Msg("MV optimization succeeded")
-
-	// Extract fallback info
-	var fallback *string
-	if result.StrategyUsed != "efficient_return" {
-		fallback = &result.StrategyUsed
-	}
-
-	return result.Weights, fallback, nil
+	return nil, nil, fmt.Errorf("all MV optimization strategies failed: %w", lastErr)
 }
 
-// runHRP runs Hierarchical Risk Parity optimization via PyPFOpt microservice.
+// runHRP runs Hierarchical Risk Parity optimization using native Go implementation.
 func (os *OptimizerService) runHRP(
 	returns map[string][]float64,
 	symbols []string,
 ) (map[string]float64, error) {
 	// Filter returns to requested symbols
 	filteredReturns := make(map[string][]float64)
-	dates := []string{} // We don't have dates in the Go returns structure
-
 	for _, symbol := range symbols {
 		if ret, ok := returns[symbol]; ok {
 			filteredReturns[symbol] = ret
@@ -288,28 +311,8 @@ func (os *OptimizerService) runHRP(
 		return nil, fmt.Errorf("HRP needs at least 2 symbols, got %d", len(filteredReturns))
 	}
 
-	// Generate date strings (we don't have actual dates, so use sequential dates)
-	// Assume all symbols have same length returns
-	var returnLength int
-	for _, ret := range filteredReturns {
-		returnLength = len(ret)
-		break
-	}
-
-	for i := 0; i < returnLength; i++ {
-		dates = append(dates, fmt.Sprintf("2025-01-%02d", i+1))
-	}
-
-	// Build request
-	req := HRPRequest{
-		Returns: TimeSeriesData{
-			Dates: dates,
-			Data:  filteredReturns,
-		},
-	}
-
-	// Call HRP endpoint
-	weights, err := os.pypfoptClient.OptimizeHRP(req)
+	// Call native HRP optimizer
+	weights, err := os.hrpOptimizer.Optimize(filteredReturns, symbols)
 	if err != nil {
 		return nil, fmt.Errorf("HRP optimization failed: %w", err)
 	}

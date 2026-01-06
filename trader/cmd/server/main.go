@@ -532,14 +532,12 @@ func registerJobs(sched *scheduler.Scheduler, universeDB, configDB, ledgerDB, po
 	opportunitiesService := opportunities.NewService(log)
 
 	// Optimization services for correlation filtering and optimizer target weights
-	pypfoptClient := optimization.NewPyPFOptClient(cfg.UnifiedServiceURL, log)
-	riskBuilder := optimization.NewRiskModelBuilder(historyDB.Conn(), pypfoptClient, log)
+	riskBuilder := optimization.NewRiskModelBuilder(historyDB.Conn(), log)
 
 	// Initialize optimizer service for target weights
 	constraintsMgr := optimization.NewConstraintsManager(log)
 	returnsCalc := optimization.NewReturnsCalculator(configDB.Conn(), yahooClient, log)
 	optimizerService := optimization.NewOptimizerService(
-		pypfoptClient,
 		constraintsMgr,
 		returnsCalc,
 		riskBuilder,

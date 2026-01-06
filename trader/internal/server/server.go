@@ -748,9 +748,6 @@ func (s *Server) setupOptimizationRoutes(r chi.Router) {
 	cashRepoForOptimization := cash_flows.NewCashRepository(s.portfolioDB.Conn(), s.log)
 	cashManagerForOptimization := cash_flows.NewCashManagerWithDualWrite(cashRepoForOptimization, positionRepoForOptimization, s.log)
 
-	// Initialize PyPFOpt client
-	pypfoptClient := optimization.NewPyPFOptClient(s.cfg.UnifiedServiceURL, s.log)
-
 	// Initialize constraints manager
 	constraintsMgr := optimization.NewConstraintsManager(s.log)
 
@@ -758,11 +755,10 @@ func (s *Server) setupOptimizationRoutes(r chi.Router) {
 	returnsCalc := optimization.NewReturnsCalculator(s.configDB.Conn(), yahooClient, s.log)
 
 	// Initialize risk model builder
-	riskBuilder := optimization.NewRiskModelBuilder(s.configDB.Conn(), pypfoptClient, s.log)
+	riskBuilder := optimization.NewRiskModelBuilder(s.configDB.Conn(), s.log)
 
 	// Initialize optimization service
 	optimizerService := optimization.NewOptimizerService(
-		pypfoptClient,
 		constraintsMgr,
 		returnsCalc,
 		riskBuilder,
@@ -915,8 +911,7 @@ func (s *Server) setupRebalancingRoutes(r chi.Router) {
 	planningOpportunitiesService := opportunities.NewService(s.log)
 
 	// Initialize risk builder for sequences service
-	pypfoptClient := optimization.NewPyPFOptClient(s.cfg.UnifiedServiceURL, s.log)
-	riskBuilder := optimization.NewRiskModelBuilder(s.historyDB.Conn(), pypfoptClient, s.log)
+	riskBuilder := optimization.NewRiskModelBuilder(s.historyDB.Conn(), s.log)
 
 	planningSequencesService := sequences.NewService(s.log, riskBuilder)
 	planningEvaluationService := planningevaluation.NewService(4, s.log) // 4 workers

@@ -95,7 +95,20 @@ type Settings struct {
 	MaxConcentration         float64
 }
 
+// TimeSeriesData represents time series price data.
+type TimeSeriesData struct {
+	Dates []string             // Date strings in YYYY-MM-DD format
+	Data  map[string][]float64 // Symbol -> prices array
+}
+
 // Constraints
+
+// SectorConstraint represents sector allocation constraints.
+type SectorConstraint struct {
+	SectorMapper map[string]string  // Maps symbol to sector name
+	SectorLower  map[string]float64 // Lower bounds per sector
+	SectorUpper  map[string]float64 // Upper bounds per sector
+}
 
 // Constraints contains all constraints for optimization.
 type Constraints struct {
