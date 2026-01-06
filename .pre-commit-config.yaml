@@ -87,7 +87,7 @@ repos:
       # Ensure go.sum is up to date when go.mod or Go files change
       - id: ensure-go-sum
         name: Ensure go.sum is up to date
-        entry: bash -c 'cd trader && go mod tidy && if [ -n "$CI" ]; then git diff --exit-code go.sum go.mod || (echo "go.sum or go.mod changed" && exit 1); else git add go.sum go.mod 2>/dev/null || true; fi'
+        entry: bash -c 'cd trader && mkdir -p pkg/embedded/frontend pkg/embedded/display && cp -r frontend/dist pkg/embedded/frontend/ 2>/dev/null || true && cp -r ../display/app pkg/embedded/display/ 2>/dev/null || true && cp -r ../display/sketch pkg/embedded/display/ 2>/dev/null || true && go mod tidy && if [ -n "$CI" ]; then git diff --exit-code go.sum go.mod || (echo "go.sum or go.mod changed" && exit 1); else git add go.sum go.mod 2>/dev/null || true; fi'
         language: system
         files: ^trader/(go\.mod|.*\.go)$
         pass_filenames: false
