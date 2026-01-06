@@ -246,8 +246,14 @@ func (g *GitHubArtifactDeployer) getWorkflowID(githubToken string) (string, erro
 	}
 
 	// Find workflow by name (match either name or path)
+	// Also check if workflowName matches the filename part of the path
 	for _, workflow := range workflowsResponse.Workflows {
 		if workflow.Name == g.workflowName || workflow.Path == g.workflowName {
+			return fmt.Sprintf("%d", workflow.ID), nil
+		}
+		// Check if workflowName matches the filename part of the path
+		// e.g., "build-go.yml" should match ".github/workflows/build-go.yml"
+		if strings.HasSuffix(workflow.Path, "/"+g.workflowName) || strings.HasSuffix(workflow.Path, g.workflowName) {
 			return fmt.Sprintf("%d", workflow.ID), nil
 		}
 	}
