@@ -9,14 +9,6 @@ import (
 	"github.com/rs/zerolog"
 )
 
-import (
-	"encoding/json"
-	"net/http"
-	"time"
-
-	"github.com/rs/zerolog"
-)
-
 // Handler handles evaluation HTTP requests
 type Handler struct {
 	service *evaluation.Service
