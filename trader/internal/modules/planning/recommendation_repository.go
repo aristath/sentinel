@@ -335,6 +335,34 @@ func (r *RecommendationRepository) DismissAllByPortfolioHash(portfolioHash strin
 	return int(rowsAffected), nil
 }
 
+// DismissAllPending dismisses all pending recommendations regardless of portfolio hash
+func (r *RecommendationRepository) DismissAllPending() (int, error) {
+	now := time.Now().Unix()
+	result, err := r.db.Exec(`
+		UPDATE recommendations
+		SET status = 'dismissed',
+			updated_at = ?
+		WHERE status = 'pending'
+	`,
+		now,
+	)
+
+	if err != nil {
+		return 0, fmt.Errorf("failed to dismiss all pending recommendations: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	r.log.Info().
+		Int64("dismissed_count", rowsAffected).
+		Msg("Dismissed all pending recommendations")
+
+	return int(rowsAffected), nil
+}
+
 // GetPendingRecommendations retrieves all pending recommendations ordered by priority
 func (r *RecommendationRepository) GetPendingRecommendations(limit int) ([]Recommendation, error) {
 	query := `

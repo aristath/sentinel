@@ -415,9 +415,20 @@ func (a *RecommendationRepositoryAdapter) StorePlan(plan interface{}, portfolioH
 	if !ok {
 		return fmt.Errorf("invalid plan type")
 	}
+
 	if holisticPlan == nil || len(holisticPlan.Steps) == 0 {
+		// If plan has no steps, dismiss all old pending recommendations
+		// This ensures old invalid recommendations are cleared when no new plan is generated
+		_, _ = a.repo.DismissAllByPortfolioHash(portfolioHash)
 		return nil
 	}
+
+	// Dismiss all old pending recommendations before storing new ones
+	// This ensures old invalid recommendations (e.g., from before constraint enforcer was added)
+	// don't persist when new recommendations are created.
+	// We dismiss ALL pending recommendations because old ones may have different portfolio hashes
+	// from before portfolio changes, and we want a clean slate for the new plan.
+	_, _ = a.repo.DismissAllPending()
 
 	for stepIdx, step := range holisticPlan.Steps {
 		rec := planning.Recommendation{

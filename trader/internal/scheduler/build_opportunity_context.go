@@ -607,12 +607,13 @@ func (j *BuildOpportunityContextJob) addVirtualTestCash(cashBalances map[string]
 		return nil // Not an error, just skip
 	}
 
-	// Only add if > 0 (GetVirtualTestCash returns 0 if not in research mode)
-	if virtualTestCash > 0 {
-		// Add TEST currency to cashBalances
-		cashBalances["TEST"] = virtualTestCash
+	// Always add TEST currency to cashBalances, even if 0 (for consistency with UI)
+	// GetVirtualTestCash returns 0 if not in research mode, so this will only add TEST in research mode
+	cashBalances["TEST"] = virtualTestCash
 
-		// Also add to EUR for AvailableCashEUR calculation (TEST is treated as EUR-equivalent)
+	// Also add to EUR for AvailableCashEUR calculation (TEST is treated as EUR-equivalent)
+	// Only add to EUR if > 0 to avoid reducing EUR balance when TEST is 0
+	if virtualTestCash > 0 {
 		// Get current EUR balance (default to 0 if not present)
 		currentEUR := cashBalances["EUR"]
 		cashBalances["EUR"] = currentEUR + virtualTestCash
@@ -622,6 +623,10 @@ func (j *BuildOpportunityContextJob) addVirtualTestCash(cashBalances map[string]
 			Float64("eur_before", currentEUR).
 			Float64("eur_after", cashBalances["EUR"]).
 			Msg("Added virtual test cash to opportunity context")
+	} else {
+		j.log.Debug().
+			Float64("virtual_test_cash", virtualTestCash).
+			Msg("Added virtual test cash (0) to opportunity context for consistency")
 	}
 
 	return nil
