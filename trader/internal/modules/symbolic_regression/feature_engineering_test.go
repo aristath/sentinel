@@ -237,6 +237,118 @@ func TestNormalizeValue(t *testing.T) {
 	}
 }
 
+func TestUpdateMinMax(t *testing.T) {
+	tests := []struct {
+		name     string
+		minMax   *[2]float64
+		value    float64
+		expected [2]float64
+	}{
+		{
+			name:     "update initial min/max",
+			minMax:   &[2]float64{math.MaxFloat64, -math.MaxFloat64},
+			value:    5.0,
+			expected: [2]float64{5.0, 5.0},
+		},
+		{
+			name:     "update minimum",
+			minMax:   &[2]float64{5.0, 10.0},
+			value:    3.0,
+			expected: [2]float64{3.0, 10.0},
+		},
+		{
+			name:     "update maximum",
+			minMax:   &[2]float64{5.0, 10.0},
+			value:    15.0,
+			expected: [2]float64{5.0, 15.0},
+		},
+		{
+			name:     "value within range",
+			minMax:   &[2]float64{5.0, 10.0},
+			value:    7.5,
+			expected: [2]float64{5.0, 10.0},
+		},
+		{
+			name:     "ignore NaN",
+			minMax:   &[2]float64{5.0, 10.0},
+			value:    math.NaN(),
+			expected: [2]float64{5.0, 10.0},
+		},
+		{
+			name:     "ignore positive infinity",
+			minMax:   &[2]float64{5.0, 10.0},
+			value:    math.Inf(1),
+			expected: [2]float64{5.0, 10.0},
+		},
+		{
+			name:     "ignore negative infinity",
+			minMax:   &[2]float64{5.0, 10.0},
+			value:    math.Inf(-1),
+			expected: [2]float64{5.0, 10.0},
+		},
+		{
+			name:     "negative value",
+			minMax:   &[2]float64{0.0, 10.0},
+			value:    -5.0,
+			expected: [2]float64{-5.0, 10.0},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Make a copy to avoid modifying the original
+			minMaxCopy := *tt.minMax
+			updateMinMax(&minMaxCopy, tt.value)
+			assert.Equal(t, tt.expected[0], minMaxCopy[0])
+			assert.Equal(t, tt.expected[1], minMaxCopy[1])
+		})
+	}
+}
+
+func TestSetDefaultIfNeeded(t *testing.T) {
+	tests := []struct {
+		name     string
+		minMax   *[2]float64
+		expected [2]float64
+	}{
+		{
+			name:     "uninitialized (MaxFloat64) gets default",
+			minMax:   &[2]float64{math.MaxFloat64, -math.MaxFloat64},
+			expected: [2]float64{0.0, 1.0},
+		},
+		{
+			name:     "initialized range unchanged",
+			minMax:   &[2]float64{5.0, 10.0},
+			expected: [2]float64{5.0, 10.0},
+		},
+		{
+			name:     "min equals max gets small range added",
+			minMax:   &[2]float64{5.0, 5.0},
+			expected: [2]float64{5.0, 5.001},
+		},
+		{
+			name:     "zero range gets small range added",
+			minMax:   &[2]float64{0.0, 0.0},
+			expected: [2]float64{0.0, 0.001},
+		},
+		{
+			name:     "negative range gets small range added",
+			minMax:   &[2]float64{-10.0, -10.0},
+			expected: [2]float64{-10.0, -9.999},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Make a copy to avoid modifying the original
+			minMaxCopy := *tt.minMax
+			setDefaultIfNeeded(&minMaxCopy)
+			assert.InDelta(t, tt.expected[0], minMaxCopy[0], 0.0001)
+			assert.InDelta(t, tt.expected[1], minMaxCopy[1], 0.0001)
+		})
+	}
+}
+
 func floatPtr(f float64) *float64 {
 	return &f
 }
