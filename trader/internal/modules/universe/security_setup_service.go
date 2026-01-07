@@ -285,11 +285,11 @@ func (s *SecuritySetupService) AddSecurityByIdentifier(
 
 		lookupResult, err := s.getTradernetSymbolFromISIN(isinVal)
 		if err != nil {
-			// Check if error is about Tradernet not being connected - return it directly
-			// instead of wrapping it, so handler can detect it properly
-			// This can happen if Tradernet disconnects between the check above and the call
-			if strings.Contains(err.Error(), "not connected") || strings.Contains(err.Error(), "client not available") {
-				return nil, fmt.Errorf("Tradernet client is not connected. Cannot lookup Tradernet symbol for ISIN: %s. Please connect to Tradernet first", isinVal)
+			// Check if error is about SDK client not initialized or network error
+			// This can happen if FindSymbol fails for reasons other than connection
+			if strings.Contains(err.Error(), "SDK client not initialized") ||
+				strings.Contains(err.Error(), "client not available") {
+				return nil, fmt.Errorf("Tradernet client is not available. Cannot lookup Tradernet symbol for ISIN: %s", isinVal)
 			}
 			return nil, fmt.Errorf("failed to lookup Tradernet symbol for ISIN: %w", err)
 		}
@@ -519,17 +519,16 @@ type TradernetLookupResult struct {
 
 // getTradernetSymbolFromISIN gets Tradernet symbol, name, and currency from ISIN
 // Faithful translation from Python: SecuritySetupService._get_tradernet_symbol_from_isin()
-// Note: Connection check should be done by caller to avoid redundant checks
+// Note: Connection check should be done by caller to avoid redundant expensive checks.
+// IsConnected() makes a network call (UserInfo), so calling it twice can cause false negatives.
 func (s *SecuritySetupService) getTradernetSymbolFromISIN(isin string) (*TradernetLookupResult, error) {
-	// Double-check connection status (can change between caller's check and this call)
-	// But use consistent error message format so caller can detect it
 	if s.tradernetClient == nil {
 		return nil, fmt.Errorf("tradernet client not available")
 	}
 
-	if !s.tradernetClient.IsConnected() {
-		return nil, fmt.Errorf("tradernet not connected")
-	}
+	// Trust caller's connection check - IsConnected() makes expensive network calls
+	// and can fail intermittently even when Tradernet is functionally connected.
+	// Instead, just try the operation and handle errors properly.
 
 	securities, err := s.tradernetClient.FindSymbol(isin, nil)
 	if err != nil {
