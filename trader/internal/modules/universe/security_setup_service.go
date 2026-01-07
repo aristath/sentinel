@@ -277,6 +277,8 @@ func (s *SecuritySetupService) AddSecurityByIdentifier(
 		isin = &isinVal
 
 		// Check if Tradernet is connected before trying to lookup
+		// Note: We check here instead of inside getTradernetSymbolFromISIN to avoid
+		// redundant checks and ensure consistent error messages
 		if s.tradernetClient == nil || !s.tradernetClient.IsConnected() {
 			return nil, fmt.Errorf("Tradernet client is not connected. Cannot lookup Tradernet symbol for ISIN: %s. Please connect to Tradernet first", isinVal)
 		}
@@ -285,13 +287,14 @@ func (s *SecuritySetupService) AddSecurityByIdentifier(
 		if err != nil {
 			// Check if error is about Tradernet not being connected - return it directly
 			// instead of wrapping it, so handler can detect it properly
-			if strings.Contains(err.Error(), "not connected") {
+			// This can happen if Tradernet disconnects between the check above and the call
+			if strings.Contains(err.Error(), "not connected") || strings.Contains(err.Error(), "client not available") {
 				return nil, fmt.Errorf("Tradernet client is not connected. Cannot lookup Tradernet symbol for ISIN: %s. Please connect to Tradernet first", isinVal)
 			}
 			return nil, fmt.Errorf("failed to lookup Tradernet symbol for ISIN: %w", err)
 		}
 		if lookupResult == nil {
-			return nil, fmt.Errorf("could not find Tradernet symbol for ISIN: %s", isinVal)
+			return nil, fmt.Errorf("could not find Tradernet symbol for ISIN: %s. The ISIN may not exist in Tradernet's database, or the security may not have a Tradernet symbol", isinVal)
 		}
 		tradernetSymbol = lookupResult.Symbol
 		tradernetName = lookupResult.Name
@@ -516,7 +519,10 @@ type TradernetLookupResult struct {
 
 // getTradernetSymbolFromISIN gets Tradernet symbol, name, and currency from ISIN
 // Faithful translation from Python: SecuritySetupService._get_tradernet_symbol_from_isin()
+// Note: Connection check should be done by caller to avoid redundant checks
 func (s *SecuritySetupService) getTradernetSymbolFromISIN(isin string) (*TradernetLookupResult, error) {
+	// Double-check connection status (can change between caller's check and this call)
+	// But use consistent error message format so caller can detect it
 	if s.tradernetClient == nil {
 		return nil, fmt.Errorf("tradernet client not available")
 	}
