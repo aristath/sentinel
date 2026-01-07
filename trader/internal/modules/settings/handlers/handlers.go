@@ -2,15 +2,12 @@
 package handlers
 
 import (
-	"github.com/aristath/sentinel/internal/modules/settings"
-)
-
-import (
 	"encoding/json"
 	"net/http"
 	"os/exec"
 
 	"github.com/aristath/sentinel/internal/events"
+	"github.com/aristath/sentinel/internal/modules/settings"
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog"
 )

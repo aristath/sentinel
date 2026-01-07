@@ -2,14 +2,11 @@
 package handlers
 
 import (
-	"github.com/aristath/sentinel/internal/modules/charts"
-)
-
-import (
 	"encoding/json"
 	"net/http"
 	"strings"
 
+	"github.com/aristath/sentinel/internal/modules/charts"
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog"
 )
