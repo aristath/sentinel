@@ -138,7 +138,7 @@ func TestTagBasedFilter_GetOpportunityCandidates_WithCash(t *testing.T) {
 	)
 
 	// Execute
-	candidates, err := filter.GetOpportunityCandidates(ctx)
+	candidates, err := filter.GetOpportunityCandidates(ctx, nil)
 
 	// Assert
 	assert.NoError(t, err)
@@ -198,7 +198,7 @@ func TestTagBasedFilter_GetOpportunityCandidates_NoCash(t *testing.T) {
 	)
 
 	// Execute
-	candidates, err := filter.GetOpportunityCandidates(ctx)
+	candidates, err := filter.GetOpportunityCandidates(ctx, nil)
 
 	// Assert
 	assert.NoError(t, err)
@@ -263,7 +263,7 @@ func TestTagBasedFilter_GetSellCandidates(t *testing.T) {
 	)
 
 	// Execute
-	candidates, err := filter.GetSellCandidates(ctx)
+	candidates, err := filter.GetSellCandidates(ctx, nil)
 
 	// Assert
 	assert.NoError(t, err)
@@ -294,7 +294,7 @@ func TestTagBasedFilter_GetSellCandidates_NoPositions(t *testing.T) {
 	)
 
 	// Execute
-	candidates, err := filter.GetSellCandidates(ctx)
+	candidates, err := filter.GetSellCandidates(ctx, nil)
 
 	// Assert
 	assert.NoError(t, err)

@@ -82,7 +82,8 @@ func (r *ConfigRepository) getSettings() (*domain.PlannerConfiguration, error) {
 			enable_correlation_aware_filter,
 			enable_diversity_filter,
 			enable_eligibility_filter,
-			enable_recently_traded_filter
+			enable_recently_traded_filter,
+			enable_tag_filtering
 		FROM planner_settings
 		WHERE id = 'main'
 	`).Scan(
@@ -120,6 +121,7 @@ func (r *ConfigRepository) getSettings() (*domain.PlannerConfiguration, error) {
 		&cfg.EnableDiversityFilter,
 		&cfg.EnableEligibilityFilter,
 		&cfg.EnableRecentlyTradedFilter,
+		&cfg.EnableTagFiltering,
 	)
 
 	if err == sql.ErrNoRows {
@@ -181,6 +183,7 @@ func (r *ConfigRepository) updateSettings(cfg *domain.PlannerConfiguration) erro
 			enable_diversity_filter = ?,
 			enable_eligibility_filter = ?,
 			enable_recently_traded_filter = ?,
+			enable_tag_filtering = ?,
 			updated_at = ?
 		WHERE id = 'main'
 	`,
@@ -218,6 +221,7 @@ func (r *ConfigRepository) updateSettings(cfg *domain.PlannerConfiguration) erro
 		cfg.EnableDiversityFilter,
 		cfg.EnableEligibilityFilter,
 		cfg.EnableRecentlyTradedFilter,
+		cfg.EnableTagFiltering,
 		now,
 	)
 

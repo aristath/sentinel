@@ -67,7 +67,16 @@ func (c *HybridAveragingDownCalculator) Calculate(
 
 	// Step 1: Fast tag-based pre-filtering for averaging-down opportunities
 	// We want: recovery-candidate, value-opportunity, quality-gate-pass, quality-value
-	candidateSymbols, err := c.tagFilter.GetOpportunityCandidates(ctx)
+	// Get config from params if available, otherwise create default
+	var config *domain.PlannerConfiguration
+	if cfg, ok := params["config"].(*domain.PlannerConfiguration); ok && cfg != nil {
+		config = cfg
+	} else {
+		// Fallback: create default config (tag filtering enabled by default)
+		config = domain.NewDefaultConfiguration()
+	}
+
+	candidateSymbols, err := c.tagFilter.GetOpportunityCandidates(ctx, config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get tag-based candidates: %w", err)
 	}

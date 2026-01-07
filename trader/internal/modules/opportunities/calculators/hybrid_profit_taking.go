@@ -63,7 +63,16 @@ func (c *HybridProfitTakingCalculator) Calculate(
 	}
 
 	// Step 1: Fast tag-based pre-filtering (10-50ms)
-	candidateSymbols, err := c.tagFilter.GetSellCandidates(ctx)
+	// Get config from params if available, otherwise create default
+	var config *domain.PlannerConfiguration
+	if cfg, ok := params["config"].(*domain.PlannerConfiguration); ok && cfg != nil {
+		config = cfg
+	} else {
+		// Fallback: create default config (tag filtering enabled by default)
+		config = domain.NewDefaultConfiguration()
+	}
+
+	candidateSymbols, err := c.tagFilter.GetSellCandidates(ctx, config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get tag-based sell candidates: %w", err)
 	}

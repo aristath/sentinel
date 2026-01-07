@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS planner_settings (
     enable_diversity_filter INTEGER DEFAULT 1,
     enable_eligibility_filter INTEGER DEFAULT 1,
     enable_recently_traded_filter INTEGER DEFAULT 1,
+    enable_tag_filtering INTEGER DEFAULT 1  -- Enable/disable tag-based pre-filtering,
 
     -- Optimizer settings
     optimizer_blend REAL DEFAULT 0.5,  -- Blend between Mean-Variance (0.0) and HRP (1.0)

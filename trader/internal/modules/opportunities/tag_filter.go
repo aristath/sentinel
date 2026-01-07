@@ -24,9 +24,32 @@ func NewTagBasedFilter(securityRepo *universe.SecurityRepository, log zerolog.Lo
 
 // GetOpportunityCandidates uses tags to quickly identify buying opportunity candidates.
 // Returns a list of security symbols that match the selected opportunity tags.
-func (f *TagBasedFilter) GetOpportunityCandidates(ctx *domain.OpportunityContext) ([]string, error) {
+// If config is provided and EnableTagFiltering is false, returns all active securities.
+func (f *TagBasedFilter) GetOpportunityCandidates(ctx *domain.OpportunityContext, config *domain.PlannerConfiguration) ([]string, error) {
 	if ctx == nil {
 		return nil, nil
+	}
+
+	// If tag filtering is disabled, return all active securities
+	if config != nil && !config.EnableTagFiltering {
+		f.log.Debug().Msg("Tag filtering disabled, returning all active securities")
+		allSecurities, err := f.securityRepo.GetAllActive()
+		if err != nil {
+			return nil, err
+		}
+
+		symbols := make([]string, 0, len(allSecurities))
+		for _, sec := range allSecurities {
+			if sec.Symbol != "" {
+				symbols = append(symbols, sec.Symbol)
+			}
+		}
+
+		f.log.Debug().
+			Int("candidates", len(symbols)).
+			Msg("Returned all active securities (tag filtering disabled)")
+
+		return symbols, nil
 	}
 
 	tags := f.selectOpportunityTags(ctx)
@@ -60,7 +83,8 @@ func (f *TagBasedFilter) GetOpportunityCandidates(ctx *domain.OpportunityContext
 
 // GetSellCandidates uses tags to quickly identify selling opportunity candidates.
 // Returns a list of security symbols from positions that match sell-related tags.
-func (f *TagBasedFilter) GetSellCandidates(ctx *domain.OpportunityContext) ([]string, error) {
+// If config is provided and EnableTagFiltering is false, returns all position symbols.
+func (f *TagBasedFilter) GetSellCandidates(ctx *domain.OpportunityContext, config *domain.PlannerConfiguration) ([]string, error) {
 	if ctx == nil || len(ctx.Positions) == 0 {
 		return []string{}, nil
 	}
@@ -75,6 +99,14 @@ func (f *TagBasedFilter) GetSellCandidates(ctx *domain.OpportunityContext) ([]st
 
 	if len(positionSymbols) == 0 {
 		return []string{}, nil
+	}
+
+	// If tag filtering is disabled, return all position symbols
+	if config != nil && !config.EnableTagFiltering {
+		f.log.Debug().
+			Int("candidates", len(positionSymbols)).
+			Msg("Returned all position symbols (tag filtering disabled)")
+		return positionSymbols, nil
 	}
 
 	tags := f.selectSellTags(ctx)

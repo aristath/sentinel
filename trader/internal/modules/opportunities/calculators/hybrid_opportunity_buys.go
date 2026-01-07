@@ -12,8 +12,8 @@ import (
 
 // TagFilter is an interface for tag-based filtering to avoid import cycles.
 type TagFilter interface {
-	GetOpportunityCandidates(ctx *domain.OpportunityContext) ([]string, error)
-	GetSellCandidates(ctx *domain.OpportunityContext) ([]string, error)
+	GetOpportunityCandidates(ctx *domain.OpportunityContext, config *domain.PlannerConfiguration) ([]string, error)
+	GetSellCandidates(ctx *domain.OpportunityContext, config *domain.PlannerConfiguration) ([]string, error)
 }
 
 // HybridOpportunityBuysCalculator identifies buying opportunities using tag-based pre-filtering
@@ -77,7 +77,16 @@ func (c *HybridOpportunityBuysCalculator) Calculate(
 	}
 
 	// Step 1: Fast tag-based pre-filtering (10-50ms)
-	candidateSymbols, err := c.tagFilter.GetOpportunityCandidates(ctx)
+	// Get config from params if available, otherwise create default
+	var config *domain.PlannerConfiguration
+	if cfg, ok := params["config"].(*domain.PlannerConfiguration); ok && cfg != nil {
+		config = cfg
+	} else {
+		// Fallback: create default config (tag filtering enabled by default)
+		config = domain.NewDefaultConfiguration()
+	}
+
+	candidateSymbols, err := c.tagFilter.GetOpportunityCandidates(ctx, config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get tag-based candidates: %w", err)
 	}

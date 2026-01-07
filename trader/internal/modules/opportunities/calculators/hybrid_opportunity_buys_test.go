@@ -22,11 +22,11 @@ type mockTagFilter struct {
 	sellCandidates        []string
 }
 
-func (m *mockTagFilter) GetOpportunityCandidates(ctx *planningdomain.OpportunityContext) ([]string, error) {
+func (m *mockTagFilter) GetOpportunityCandidates(ctx *planningdomain.OpportunityContext, config *planningdomain.PlannerConfiguration) ([]string, error) {
 	return m.opportunityCandidates, nil
 }
 
-func (m *mockTagFilter) GetSellCandidates(ctx *planningdomain.OpportunityContext) ([]string, error) {
+func (m *mockTagFilter) GetSellCandidates(ctx *planningdomain.OpportunityContext, config *planningdomain.PlannerConfiguration) ([]string, error) {
 	return m.sellCandidates, nil
 }
 

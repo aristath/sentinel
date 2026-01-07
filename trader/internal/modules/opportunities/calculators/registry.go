@@ -98,6 +98,8 @@ func (r *CalculatorRegistry) IdentifyOpportunities(
 		name := calculator.Name()
 		category := calculator.Category()
 		params := config.GetCalculatorParams(name)
+		// Add full config to params so calculators can access EnableTagFiltering
+		params["config"] = config
 
 		r.log.Debug().
 			Str("calculator", name).

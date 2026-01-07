@@ -66,6 +66,9 @@ type PlannerConfiguration struct {
 	EnableDiversityFilter        bool `json:"enable_diversity_filter"`
 	EnableEligibilityFilter      bool `json:"enable_eligibility_filter"`
 	EnableRecentlyTradedFilter   bool `json:"enable_recently_traded_filter"`
+
+	// Tag filtering
+	EnableTagFiltering bool `json:"enable_tag_filtering"` // Enable/disable tag-based pre-filtering
 }
 
 // NewDefaultConfiguration creates a PlannerConfiguration with default settings.
@@ -114,6 +117,7 @@ func NewDefaultConfiguration() *PlannerConfiguration {
 		EnableDiversityFilter:                true,
 		EnableEligibilityFilter:              true,
 		EnableRecentlyTradedFilter:           true,
+		EnableTagFiltering:                   true, // Tag filtering enabled by default
 	}
 }
 

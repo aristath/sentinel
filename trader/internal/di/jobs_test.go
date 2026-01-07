@@ -23,6 +23,19 @@ func TestRegisterJobs(t *testing.T) {
 	container, err := InitializeDatabases(cfg, log)
 	require.NoError(t, err)
 
+	// Ensure databases are closed before temp directory cleanup
+	t.Cleanup(func() {
+		if container != nil {
+			container.UniverseDB.Close()
+			container.ConfigDB.Close()
+			container.LedgerDB.Close()
+			container.PortfolioDB.Close()
+			container.AgentsDB.Close()
+			container.HistoryDB.Close()
+			container.CacheDB.Close()
+		}
+	})
+
 	err = InitializeRepositories(container, log)
 	require.NoError(t, err)
 
@@ -53,13 +66,4 @@ func TestRegisterJobs(t *testing.T) {
 	assert.NotNil(t, jobInstances.MonthlyMaintenance)
 	assert.NotNil(t, jobInstances.FormulaDiscovery)
 	assert.NotNil(t, jobInstances.AdaptiveMarketJob)
-
-	// Cleanup
-	container.UniverseDB.Close()
-	container.ConfigDB.Close()
-	container.LedgerDB.Close()
-	container.PortfolioDB.Close()
-	container.AgentsDB.Close()
-	container.HistoryDB.Close()
-	container.CacheDB.Close()
 }
