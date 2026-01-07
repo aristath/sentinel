@@ -157,3 +157,25 @@ func TestStringify_MatchesPythonOutput(t *testing.T) {
 	assert.Contains(t, result, `"b":2`)
 	assert.NotContains(t, result, " ")
 }
+
+func TestAbsInt(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    int
+		expected int
+	}{
+		{"positive number", 5, 5},
+		{"negative number", -5, 5},
+		{"zero", 0, 0},
+		{"large positive", 1000, 1000},
+		{"large negative", -1000, 1000},
+		{"minimum int32", -2147483648, 2147483648},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := absInt(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
