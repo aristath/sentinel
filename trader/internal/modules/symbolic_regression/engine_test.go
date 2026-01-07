@@ -466,3 +466,252 @@ func TestGetVariableMap_NilPointers(t *testing.T) {
 	assert.Equal(t, 0.0, variables["rsi"])
 	assert.Equal(t, 0.0, variables["max_drawdown"])
 }
+
+func TestRank(t *testing.T) {
+	tests := []struct {
+		name     string
+		values   []float64
+		expected []float64
+	}{
+		{
+			name:     "ascending order",
+			values:   []float64{1.0, 2.0, 3.0, 4.0},
+			expected: []float64{1.0, 2.0, 3.0, 4.0},
+		},
+		{
+			name:     "descending order",
+			values:   []float64{4.0, 3.0, 2.0, 1.0},
+			expected: []float64{4.0, 3.0, 2.0, 1.0},
+		},
+		{
+			name:     "mixed order",
+			values:   []float64{3.0, 1.0, 4.0, 2.0},
+			expected: []float64{3.0, 1.0, 4.0, 2.0},
+		},
+		{
+			name:     "with ties",
+			values:   []float64{1.0, 2.0, 2.0, 3.0},
+			expected: []float64{1.0, 2.5, 2.5, 4.0}, // Average of ranks 2 and 3
+		},
+		{
+			name:     "all same values",
+			values:   []float64{5.0, 5.0, 5.0},
+			expected: []float64{2.0, 2.0, 2.0}, // Average of ranks 1, 2, 3 = 2.0
+		},
+		{
+			name:     "single value",
+			values:   []float64{10.0},
+			expected: []float64{1.0},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := rank(tt.values)
+			assert.Equal(t, len(tt.expected), len(result))
+			for i := range result {
+				assert.InDelta(t, tt.expected[i], result[i], 0.01)
+			}
+		})
+	}
+}
+
+func TestPearsonCorrelation(t *testing.T) {
+	tests := []struct {
+		name     string
+		x        []float64
+		y        []float64
+		expected float64
+		tol      float64
+	}{
+		{
+			name:     "perfect positive correlation",
+			x:        []float64{1.0, 2.0, 3.0, 4.0},
+			y:        []float64{2.0, 4.0, 6.0, 8.0},
+			expected: 1.0,
+			tol:      0.01,
+		},
+		{
+			name:     "perfect negative correlation",
+			x:        []float64{1.0, 2.0, 3.0, 4.0},
+			y:        []float64{8.0, 6.0, 4.0, 2.0},
+			expected: -1.0,
+			tol:      0.01,
+		},
+		{
+			name:     "no correlation",
+			x:        []float64{1.0, 2.0, 3.0, 4.0},
+			y:        []float64{1.0, 1.0, 1.0, 1.0},
+			expected: 0.0,
+			tol:      0.01,
+		},
+		{
+			name:     "different lengths",
+			x:        []float64{1.0, 2.0},
+			y:        []float64{1.0},
+			expected: 0.0,
+			tol:      0.01,
+		},
+		{
+			name:     "less than 2 values",
+			x:        []float64{1.0},
+			y:        []float64{2.0},
+			expected: 0.0,
+			tol:      0.01,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := pearsonCorrelation(tt.x, tt.y)
+			assert.InDelta(t, tt.expected, result, tt.tol)
+		})
+	}
+}
+
+func TestSpearmanCorrelation(t *testing.T) {
+	tests := []struct {
+		name     string
+		x        []float64
+		y        []float64
+		expected float64
+		tol      float64
+	}{
+		{
+			name:     "perfect positive correlation",
+			x:        []float64{1.0, 2.0, 3.0, 4.0},
+			y:        []float64{2.0, 4.0, 6.0, 8.0},
+			expected: 1.0,
+			tol:      0.01,
+		},
+		{
+			name:     "perfect negative correlation",
+			x:        []float64{1.0, 2.0, 3.0, 4.0},
+			y:        []float64{4.0, 3.0, 2.0, 1.0},
+			expected: -1.0,
+			tol:      0.01,
+		},
+		{
+			name:     "with ties",
+			x:        []float64{1.0, 2.0, 2.0, 4.0},
+			y:        []float64{1.0, 2.0, 3.0, 4.0},
+			expected: 0.945, // Approximate with ties
+			tol:      0.1,
+		},
+		{
+			name:     "different lengths",
+			x:        []float64{1.0, 2.0},
+			y:        []float64{1.0},
+			expected: 0.0,
+			tol:      0.01,
+		},
+		{
+			name:     "less than 2 values",
+			x:        []float64{1.0},
+			y:        []float64{2.0},
+			expected: 0.0,
+			tol:      0.01,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := spearmanCorrelation(tt.x, tt.y)
+			assert.InDelta(t, tt.expected, result, tt.tol)
+		})
+	}
+}
+
+func TestCalculateMAE(t *testing.T) {
+	// Simple formula: returns constant 5.0
+	formula := &Node{
+		Type:  NodeTypeConstant,
+		Value: 5.0,
+	}
+
+	examples := []TrainingExample{
+		{
+			Inputs:      TrainingInputs{TotalScore: 0.5},
+			TargetReturn: 5.0,
+		},
+		{
+			Inputs:      TrainingInputs{TotalScore: 0.6},
+			TargetReturn: 6.0,
+		},
+		{
+			Inputs:      TrainingInputs{TotalScore: 0.7},
+			TargetReturn: 4.0,
+		},
+	}
+
+	result := calculateMAE(formula, examples)
+	// MAE = (|5-5| + |5-6| + |5-4|) / 3 = (0 + 1 + 1) / 3 = 2/3 ≈ 0.667
+	expected := (0.0 + 1.0 + 1.0) / 3.0
+	assert.InDelta(t, expected, result, 0.01)
+}
+
+func TestCalculateRMSE(t *testing.T) {
+	// Simple formula: returns constant 5.0
+	formula := &Node{
+		Type:  NodeTypeConstant,
+		Value: 5.0,
+	}
+
+	examples := []TrainingExample{
+		{
+			Inputs:      TrainingInputs{TotalScore: 0.5},
+			TargetReturn: 5.0,
+		},
+		{
+			Inputs:      TrainingInputs{TotalScore: 0.6},
+			TargetReturn: 6.0,
+		},
+		{
+			Inputs:      TrainingInputs{TotalScore: 0.7},
+			TargetReturn: 4.0,
+		},
+	}
+
+	result := calculateRMSE(formula, examples)
+	// RMSE = sqrt((0² + 1² + 1²) / 3) = sqrt(2/3) ≈ 0.816
+	expected := math.Sqrt((0.0 + 1.0 + 1.0) / 3.0)
+	assert.InDelta(t, expected, result, 0.01)
+}
+
+func TestCalculateSpearman(t *testing.T) {
+	// Formula: returns total_score (simple identity)
+	formula := &Node{
+		Type:     NodeTypeVariable,
+		Variable: "total_score",
+	}
+
+	examples := []TrainingExample{
+		{
+			Inputs:      TrainingInputs{TotalScore: 0.9},
+			TargetReturn: 0.15, // High score -> high return
+		},
+		{
+			Inputs:      TrainingInputs{TotalScore: 0.7},
+			TargetReturn: 0.10,
+		},
+		{
+			Inputs:      TrainingInputs{TotalScore: 0.5},
+			TargetReturn: 0.05, // Low score -> low return
+		},
+	}
+
+	result := calculateSpearman(formula, examples)
+	// Spearman returns 1.0 - correlation, so for positive correlation it should be < 1.0
+	assert.Less(t, result, 1.0)
+	assert.GreaterOrEqual(t, result, 0.0)
+
+	// Test with less than 2 examples (should return 1.0)
+	shortExamples := []TrainingExample{
+		{
+			Inputs:      TrainingInputs{TotalScore: 0.5},
+			TargetReturn: 0.05,
+		},
+	}
+	result2 := calculateSpearman(formula, shortExamples)
+	assert.Equal(t, 1.0, result2)
+}
