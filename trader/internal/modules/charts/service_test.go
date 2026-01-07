@@ -158,3 +158,91 @@ func TestIsValidISIN(t *testing.T) {
 		})
 	}
 }
+
+func TestIsLetter(t *testing.T) {
+	tests := []struct {
+		name     string
+		char     byte
+		expected bool
+	}{
+		{"uppercase A", 'A', true},
+		{"uppercase Z", 'Z', true},
+		{"uppercase M", 'M', true},
+		{"lowercase a", 'a', true},
+		{"lowercase z", 'z', true},
+		{"lowercase m", 'm', true},
+		{"digit 0", '0', false},
+		{"digit 9", '9', false},
+		{"digit 5", '5', false},
+		{"special @", '@', false},
+		{"special #", '#', false},
+		{"space", ' ', false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isLetter(tt.char)
+			if result != tt.expected {
+				t.Errorf("isLetter(%q) = %v, want %v", tt.char, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestIsDigit(t *testing.T) {
+	tests := []struct {
+		name     string
+		char     byte
+		expected bool
+	}{
+		{"digit 0", '0', true},
+		{"digit 9", '9', true},
+		{"digit 5", '5', true},
+		{"uppercase A", 'A', false},
+		{"uppercase Z", 'Z', false},
+		{"lowercase a", 'a', false},
+		{"lowercase z", 'z', false},
+		{"special @", '@', false},
+		{"special #", '#', false},
+		{"space", ' ', false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isDigit(tt.char)
+			if result != tt.expected {
+				t.Errorf("isDigit(%q) = %v, want %v", tt.char, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestIsAlphanumeric(t *testing.T) {
+	tests := []struct {
+		name     string
+		char     byte
+		expected bool
+	}{
+		{"uppercase A", 'A', true},
+		{"uppercase Z", 'Z', true},
+		{"lowercase a", 'a', true},
+		{"lowercase z", 'z', true},
+		{"digit 0", '0', true},
+		{"digit 9", '9', true},
+		{"digit 5", '5', true},
+		{"special @", '@', false},
+		{"special #", '#', false},
+		{"space", ' ', false},
+		{"underscore", '_', false},
+		{"hyphen", '-', false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isAlphanumeric(tt.char)
+			if result != tt.expected {
+				t.Errorf("isAlphanumeric(%q) = %v, want %v", tt.char, result, tt.expected)
+			}
+		})
+	}
+}
