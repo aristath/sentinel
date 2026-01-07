@@ -284,6 +284,49 @@ func (db *DB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
 	return db.conn.BeginTx(ctx, opts)
 }
 
+// WithTransaction executes a function within a database transaction.
+// It handles begin, commit, rollback, panic recovery, and error wrapping automatically.
+// If the function returns an error or panics, the transaction is rolled back.
+// If the function succeeds, the transaction is committed.
+func WithTransaction(db *sql.DB, fn func(*sql.Tx) error) (err error) {
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
+
+	// Start transaction
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	// Defer rollback with panic recovery
+	// Use named return variable to capture panic value
+	defer func() {
+		if p := recover(); p != nil {
+			// Panic occurred - rollback and convert panic to error
+			_ = tx.Rollback()
+			err = fmt.Errorf("panic in transaction: %v", p)
+		} else if err != nil {
+			// Function returned error - rollback
+			rollbackErr := tx.Rollback()
+			if rollbackErr != nil {
+				err = fmt.Errorf("transaction failed: %w (rollback also failed: %v)", err, rollbackErr)
+			} else {
+				err = fmt.Errorf("transaction failed: %w", err)
+			}
+		} else {
+			// Function succeeded - commit
+			if commitErr := tx.Commit(); commitErr != nil {
+				err = fmt.Errorf("failed to commit transaction: %w", commitErr)
+			}
+		}
+	}()
+
+	// Execute function within transaction
+	err = fn(tx)
+	return err
+}
+
 // Exec executes a query without returning rows
 func (db *DB) Exec(query string, args ...interface{}) (sql.Result, error) {
 	return db.conn.Exec(query, args...)
