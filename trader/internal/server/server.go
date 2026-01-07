@@ -31,7 +31,7 @@ import (
 	displayhandlers "github.com/aristath/sentinel/internal/modules/display/handlers"
 	dividendhandlers "github.com/aristath/sentinel/internal/modules/dividends/handlers"
 	"github.com/aristath/sentinel/internal/modules/evaluation"
-	evaluationhandlers "github.com/aristath/sentinel/internal/evaluation/handlers"
+	evaluationhandlers "github.com/aristath/sentinel/internal/modules/evaluation/handlers"
 	optimizationhandlers "github.com/aristath/sentinel/internal/modules/optimization/handlers"
 	planningconfig "github.com/aristath/sentinel/internal/modules/planning/config"
 	planninghandlers "github.com/aristath/sentinel/internal/modules/planning/handlers"
