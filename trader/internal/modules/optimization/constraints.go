@@ -22,6 +22,7 @@ type ConstraintsManager struct {
 	maxConcentration float64
 	geoTolerance     float64
 	indTolerance     float64
+	kellySizer       *KellyPositionSizer // Optional: Kelly sizing for upper bounds
 	log              zerolog.Logger
 }
 
@@ -35,6 +36,11 @@ func NewConstraintsManager(log zerolog.Logger) *ConstraintsManager {
 	}
 }
 
+// SetKellySizer sets the Kelly position sizer for optimal sizing.
+func (cm *ConstraintsManager) SetKellySizer(kellySizer *KellyPositionSizer) {
+	cm.kellySizer = kellySizer
+}
+
 // BuildConstraints builds all constraints for optimization.
 func (cm *ConstraintsManager) BuildConstraints(
 	securities []Security,
@@ -43,9 +49,22 @@ func (cm *ConstraintsManager) BuildConstraints(
 	industryTargets map[string]float64,
 	portfolioValue float64,
 	currentPrices map[string]float64,
+	expectedReturns map[string]float64,
+	covMatrix [][]float64,
+	symbols []string,
+	regimeScore float64,
 ) (Constraints, error) {
 	// Calculate weight bounds for each security
-	weightBounds, symbols := cm.calculateWeightBounds(securities, positions, portfolioValue, currentPrices)
+	weightBounds, symbols := cm.calculateWeightBounds(
+		securities,
+		positions,
+		portfolioValue,
+		currentPrices,
+		expectedReturns,
+		covMatrix,
+		symbols,
+		regimeScore,
+	)
 
 	// Build sector constraints
 	countryCons, industryCons := cm.buildSectorConstraints(securities, countryTargets, industryTargets)
@@ -68,9 +87,13 @@ func (cm *ConstraintsManager) calculateWeightBounds(
 	positions map[string]Position,
 	portfolioValue float64,
 	currentPrices map[string]float64,
+	expectedReturns map[string]float64,
+	covMatrix [][]float64,
+	symbols []string,
+	regimeScore float64,
 ) ([][2]float64, []string) {
 	bounds := make([][2]float64, 0, len(securities))
-	symbols := make([]string, 0, len(securities))
+	constraintSymbols := make([]string, 0, len(securities))
 
 	cm.log.Debug().
 		Int("num_securities", len(securities)).
@@ -91,6 +114,33 @@ func (cm *ConstraintsManager) calculateWeightBounds(
 		// Default bounds - use product-type-aware concentration limit
 		lower := 0.0
 		upper := cm.getMaxConcentration(security.ProductType)
+
+		// If Kelly sizing is enabled, use Kelly-optimal size as upper bound (but still respect max concentration)
+		if cm.kellySizer != nil && expectedReturns != nil && covMatrix != nil && len(symbols) > 0 {
+			// Use default confidence of 0.5 (moderate confidence)
+			// In future enhancements, this could be derived from security scores
+			confidence := 0.5
+
+			// Calculate Kelly-optimal size
+			kellySize, err := cm.kellySizer.CalculateOptimalSizeForSymbol(
+				symbol,
+				expectedReturns,
+				covMatrix,
+				symbols,
+				confidence,
+				regimeScore,
+			)
+			if err == nil && kellySize > 0 {
+				// Use Kelly size as upper bound, but cap at max concentration
+				upper = math.Min(kellySize, upper)
+				cm.log.Debug().
+					Str("symbol", symbol).
+					Float64("kelly_size", kellySize).
+					Float64("max_concentration", cm.getMaxConcentration(security.ProductType)).
+					Float64("final_upper", upper).
+					Msg("Using Kelly-optimal size as upper bound")
+			}
+		}
 
 		// Apply user-defined portfolio targets (convert percentage to fraction)
 		if security.MinPortfolioTarget > 0 {
@@ -154,11 +204,11 @@ func (cm *ConstraintsManager) calculateWeightBounds(
 			upper = currentWeight
 		}
 
-		symbols = append(symbols, symbol)
+		constraintSymbols = append(constraintSymbols, symbol)
 		bounds = append(bounds, [2]float64{lower, upper})
 	}
 
-	return bounds, symbols
+	return bounds, constraintSymbols
 }
 
 // buildSectorConstraints builds country and industry sector constraints.

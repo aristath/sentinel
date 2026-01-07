@@ -9,6 +9,7 @@ import (
 	"github.com/aristath/portfolioManager/internal/events"
 	"github.com/aristath/portfolioManager/internal/modules/adaptation"
 	"github.com/aristath/portfolioManager/internal/modules/allocation"
+	"github.com/aristath/portfolioManager/internal/modules/analytics"
 	"github.com/aristath/portfolioManager/internal/modules/cash_flows"
 	"github.com/aristath/portfolioManager/internal/modules/dividends"
 	"github.com/aristath/portfolioManager/internal/modules/market_hours"
@@ -88,6 +89,10 @@ type Container struct {
 	RiskBuilder               *optimization.RiskModelBuilder
 	ConstraintsMgr            *optimization.ConstraintsManager
 	ReturnsCalc               *optimization.ReturnsCalculator
+	KellySizer                *optimization.KellyPositionSizer
+	CVaRCalculator            *optimization.CVaRCalculator
+	BlackLittermanOptimizer   *optimization.BlackLittermanOptimizer
+	ViewGenerator             *optimization.ViewGenerator
 	OptimizerService          *optimization.OptimizerService
 	SequencesService          *sequences.Service
 	EvaluationService         *planningevaluation.Service
@@ -110,6 +115,7 @@ type Container struct {
 	ConcentrationAlertService *allocation.ConcentrationAlertService
 	BackupService             *reliability.BackupService
 	HealthServices            map[string]*reliability.DatabaseHealthService
+	FactorExposureTracker     *analytics.FactorExposureTracker
 
 	// Handlers (will be populated in handlers.go)
 	// Note: Handlers are created per-route, so we don't store them in container

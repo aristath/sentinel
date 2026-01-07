@@ -22,6 +22,10 @@ The system implements a comprehensive suite of financial theories:
 - **Symbolic Regression**: Formula discovery for optimal scoring combinations across different market conditions (with walk-forward validation and complexity limits to prevent overfitting)
 - **Risk-Adjusted Metrics**: Sharpe ratio, Sortino ratio, and volatility-adjusted returns
 - **Total Return Focus**: Combined growth (CAGR) and dividend yield for comprehensive return measurement
+- **Kelly Criterion (Constrained)**: Optimal position sizing based on expected edge and confidence, with hard guardrails to prevent excessive concentration
+- **Conditional Value at Risk (CVaR)**: Tail risk measurement at 95% confidence level, complementing volatility-based metrics for extreme loss awareness
+- **Black-Litterman Model**: Bayesian portfolio optimization that integrates scoring system views with market equilibrium, reducing extreme allocations and handling estimation uncertainty
+- **Factor Exposure Tracking**: Monitor portfolio factor tilts (value, quality, momentum, size) for diagnostics and portfolio understanding
 
 ### Investment Philosophy
 
@@ -33,6 +37,10 @@ The system implements a comprehensive suite of financial theories:
 - **Gradual rebalancing**: Avoids large portfolio shifts, preferring incremental adjustments (even during regime changes - uses monthly deposits and selective buying rather than selling to rebalance)
 - **Dynamic adaptation**: Scoring weights and optimization strategies evolve with market conditions over months/years
 - **Regime awareness**: Different strategies for bull, bear, and sideways markets
+- **Optimal position sizing**: Kelly-optimal sizing based on expected returns and confidence, with adaptive fractional Kelly that adjusts by market regime
+- **Tail risk awareness**: CVaR constraints ensure portfolio can withstand extreme market events, with regime-aware limits that tighten in bear markets
+- **Bayesian optimization**: Black-Litterman model integrates scoring system confidence with market equilibrium for smoother, more stable allocations
+- **Factor diversification**: Explicit tracking of value, quality, momentum, and size factors ensures balanced portfolio characteristics
 
 **What the System Avoids:**
 - **Value traps**: Cheap securities with declining fundamentals or negative momentum
@@ -42,6 +50,10 @@ The system implements a comprehensive suite of financial theories:
 - **Large rebalancing moves**: Gradual adjustment prevents sudden portfolio shifts (>30% imbalance threshold)
 - **Static strategies**: Continuously adapts to changing market conditions rather than fixed allocations
 - **Speculative trading**: Focuses on 2-3 trades per week, not high-frequency strategies
+- **Suboptimal position sizing**: No longer uses simple constraint-based sizing; all positions sized using Kelly-optimal calculations
+- **Tail risk blindness**: Explicitly measures and constrains extreme losses (CVaR) beyond volatility metrics
+- **Estimation uncertainty**: Black-Litterman model accounts for uncertainty in expected returns, preventing overconfidence in predictions
+- **Factor concentration**: Monitors factor exposures to avoid unintended factor tilts that could expose portfolio to systematic risks
 
 The optimizer blends Mean-Variance (return-focused) and HRP (risk-focused) strategies using an adaptive blend that responds to market regime:
 - **Bull markets**: 70% MV / 30% HRP (return-focused)
@@ -49,6 +61,12 @@ The optimizer blends Mean-Variance (return-focused) and HRP (risk-focused) strat
 - **Bear markets**: 30% MV / 70% HRP (risk-focused)
 
 The blend adapts smoothly via linear interpolation based on the continuous regime score (-1.0 to +1.0). The planner identifies opportunities through value, quality, dividend, and technical analysis. All decisions are evaluated through a multi-factor scoring system that balances expected returns, risk, quality, and transaction costs.
+
+The optimizer integrates advanced position sizing and risk management:
+- **Kelly-optimal position sizing**: All positions sized using Kelly Criterion with adaptive fractional Kelly (0.25-0.75 multiplier based on regime and confidence)
+- **CVaR constraints**: Portfolio tail risk constrained at 95% confidence level, with regime-aware adjustments that tighten limits in bear markets
+- **Black-Litterman adjusted returns**: When enabled, expected returns are adjusted using Bayesian views derived from security scores, reducing extreme allocations
+- **Factor exposure tracking**: Portfolio factor loadings (value, quality, momentum, size) are calculated and monitored for diagnostics
 
 ## Table of Contents
 

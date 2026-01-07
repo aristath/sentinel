@@ -15,6 +15,7 @@ type Result struct {
 	WeightChanges          []WeightChange
 	HighCorrelations       []CorrelationPair
 	ConstraintsSummary     ConstraintsSummary
+	PortfolioCVaR          *float64 // CVaR at 95% confidence (if calculated)
 	Success                bool
 	Error                  *string
 }
@@ -93,6 +94,22 @@ type Settings struct {
 	MinTradeAmount           float64
 	TransactionCostPct       float64
 	MaxConcentration         float64
+	// Kelly Criterion settings
+	KellyEnabled         bool    // Enable Kelly sizing
+	FractionalKellyMode  string  // "fixed" or "adaptive"
+	FixedFractionalKelly float64 // If fixed mode (default 0.5)
+	MinKellyPositionSize float64 // Minimum 0.5%
+	RiskFreeRate         float64 // Default 0.02 (2%)
+	// CVaR settings
+	CVaREnabled          bool    // Enable CVaR constraints
+	MaxCVaR              float64 // Maximum allowed CVaR (e.g., 0.15 = 15%)
+	CVaRConfidence       float64 // 0.95 (95% confidence)
+	CVaRRegimeAdjustment bool    // Tighter limits in bear markets
+	// Black-Litterman settings
+	BlackLittermanEnabled bool    // Enable BL model
+	BLTau                 float64 // Scaling factor (default 0.05)
+	BLViewConfidence      float64 // Base confidence for views (default 0.5)
+	BLUseMarketCap        bool    // Use market cap for equilibrium (if available)
 }
 
 // TimeSeriesData represents time series price data.

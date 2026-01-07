@@ -249,6 +249,9 @@ func (s *Server) setupRoutes() {
 
 		// Symbolic Regression module (MIGRATED TO GO!)
 		s.setupSymbolicRegressionRoutes(r)
+
+		// Analytics module (Factor Exposure, etc.)
+		s.setupAnalyticsRoutes(r)
 	})
 
 	// Evaluation module routes (MIGRATED TO GO!)

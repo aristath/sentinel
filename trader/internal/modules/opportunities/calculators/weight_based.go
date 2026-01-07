@@ -217,6 +217,25 @@ func (c *WeightBasedCalculator) Calculate(
 
 			// Calculate target value
 			targetValue := diff * ctx.TotalPortfolioValueEUR
+
+			// Use Kelly-optimal size if available (as upper bound)
+			if ctx.KellySizes != nil {
+				if kellySize, hasKellySize := ctx.KellySizes[symbol]; hasKellySize && kellySize > 0 {
+					// Kelly size is a fraction (e.g., 0.05 = 5% of portfolio)
+					kellyValue := kellySize * ctx.TotalPortfolioValueEUR
+					// Cap target value at Kelly-optimal size (more conservative)
+					if kellyValue < targetValue {
+						targetValue = kellyValue
+						c.log.Debug().
+							Str("symbol", symbol).
+							Float64("kelly_size", kellySize).
+							Float64("kelly_value", kellyValue).
+							Float64("target_value", targetValue).
+							Msg("Capping weight-based buy at Kelly-optimal size")
+					}
+				}
+			}
+
 			if targetValue > maxValuePerTrade {
 				targetValue = maxValuePerTrade
 			}

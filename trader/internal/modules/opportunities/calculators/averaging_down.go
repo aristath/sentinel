@@ -137,8 +137,26 @@ func (c *AveragingDownCalculator) Calculate(
 		valueEUR := float64(quantity) * currentPrice
 
 		// Limit to max value per position
-		if valueEUR > maxValuePerPosition {
-			quantity = int(maxValuePerPosition / currentPrice)
+		// Use Kelly-optimal size if available (as upper bound)
+		maxAllowedValue := maxValuePerPosition
+		if ctx.KellySizes != nil {
+			if kellySize, hasKellySize := ctx.KellySizes[position.Symbol]; hasKellySize && kellySize > 0 {
+				// Kelly size is a fraction (e.g., 0.05 = 5% of portfolio)
+				kellyValue := kellySize * ctx.TotalPortfolioValueEUR
+				// Use Kelly size if it's smaller than maxValuePerPosition (more conservative)
+				if kellyValue < maxValuePerPosition {
+					maxAllowedValue = kellyValue
+					c.log.Debug().
+						Str("symbol", position.Symbol).
+						Float64("kelly_size", kellySize).
+						Float64("kelly_value", kellyValue).
+						Msg("Using Kelly-optimal size for averaging down")
+				}
+			}
+		}
+
+		if valueEUR > maxAllowedValue {
+			quantity = int(maxAllowedValue / currentPrice)
 			if quantity == 0 {
 				quantity = 1
 			}

@@ -37,8 +37,11 @@ type OptimizerService struct {
 	constraintsMgr      *ConstraintsManager
 	returnsCalc         *ReturnsCalculator
 	riskBuilder         *RiskModelBuilder
-	adaptiveService     AdaptiveBlendProvider // Optional: adaptive market service
-	regimeScoreProvider RegimeScoreProvider   // Optional: regime score provider
+	kellySizer          *KellyPositionSizer      // Optional: Kelly position sizing
+	cvarCalculator      *CVaRCalculator          // Optional: CVaR calculator
+	blackLitterman      *BlackLittermanOptimizer // Optional: Black-Litterman optimizer
+	adaptiveService     AdaptiveBlendProvider    // Optional: adaptive market service
+	regimeScoreProvider RegimeScoreProvider      // Optional: regime score provider
 	log                 zerolog.Logger
 }
 
@@ -67,6 +70,25 @@ func (os *OptimizerService) SetAdaptiveService(service AdaptiveBlendProvider) {
 // SetRegimeScoreProvider sets the regime score provider for getting current regime
 func (os *OptimizerService) SetRegimeScoreProvider(provider RegimeScoreProvider) {
 	os.regimeScoreProvider = provider
+}
+
+// SetKellySizer sets the Kelly position sizer for optimal sizing
+func (os *OptimizerService) SetKellySizer(kellySizer *KellyPositionSizer) {
+	os.kellySizer = kellySizer
+	// Also wire into constraints manager
+	if os.constraintsMgr != nil {
+		os.constraintsMgr.SetKellySizer(kellySizer)
+	}
+}
+
+// SetCVaRCalculator sets the CVaR calculator for tail risk measurement
+func (os *OptimizerService) SetCVaRCalculator(cvarCalculator *CVaRCalculator) {
+	os.cvarCalculator = cvarCalculator
+}
+
+// SetBlackLittermanOptimizer sets the Black-Litterman optimizer for Bayesian returns
+func (os *OptimizerService) SetBlackLittermanOptimizer(blOptimizer *BlackLittermanOptimizer) {
+	os.blackLitterman = blOptimizer
 }
 
 // Optimize runs the complete portfolio optimization process.
@@ -120,6 +142,8 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 		return os.errorResult(timestamp, settings.Blend, "No expected returns data"), nil
 	}
 
+	// Note: Black-Litterman adjustment will be applied after covariance matrix is built
+
 	os.log.Info().
 		Int("securities_with_returns", len(expectedReturns)).
 		Msg("Calculated expected returns")
@@ -144,7 +168,81 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 		Int("high_correlations", len(correlations)).
 		Msg("Built covariance matrix")
 
-	// 4. Build constraints
+	// 3.5. Apply Black-Litterman adjustment if enabled
+	if settings.BlackLittermanEnabled && os.blackLitterman != nil {
+		os.log.Info().Msg("Applying Black-Litterman adjustment to expected returns")
+
+		// Calculate market equilibrium weights (use equal weights as proxy for market cap)
+		marketWeights := make(map[string]float64)
+		equalWeight := 1.0 / float64(len(symbols))
+		for _, symbol := range symbols {
+			marketWeights[symbol] = equalWeight
+		}
+
+		// Risk aversion parameter (lambda) - typically 2-4, use 3 as default
+		riskAversion := 3.0
+
+		// Generate views from expected returns (high return = positive view)
+		// In a full implementation, views would come from security scores
+		views := make([]View, 0)
+		avgReturn := 0.0
+		for _, ret := range expectedReturns {
+			avgReturn += ret
+		}
+		if len(expectedReturns) > 0 {
+			avgReturn /= float64(len(expectedReturns))
+		}
+
+		// Create views for securities with significantly different returns
+		for symbol, ret := range expectedReturns {
+			if ret > avgReturn*1.1 {
+				// Outperform view
+				views = append(views, View{
+					Type:       "absolute",
+					Symbol:     symbol,
+					Return:     ret,
+					Confidence: 0.6, // Moderate confidence
+				})
+			} else if ret < avgReturn*0.9 {
+				// Underperform view
+				views = append(views, View{
+					Type:       "absolute",
+					Symbol:     symbol,
+					Return:     ret,
+					Confidence: 0.6,
+				})
+			}
+		}
+
+		// Apply Black-Litterman
+		tau := settings.BLTau
+		if tau <= 0 {
+			tau = 0.05 // Default tau
+		}
+
+		blReturns, err := os.blackLitterman.CalculateBLReturns(
+			marketWeights,
+			views,
+			covMatrix,
+			symbols,
+			tau,
+			riskAversion,
+		)
+		if err == nil && len(blReturns) > 0 {
+			// Replace expected returns with BL-adjusted returns
+			expectedReturns = blReturns
+			os.log.Info().
+				Int("views", len(views)).
+				Float64("tau", tau).
+				Msg("Applied Black-Litterman adjustment")
+		} else {
+			os.log.Warn().
+				Err(err).
+				Msg("Black-Litterman adjustment failed, using original returns")
+		}
+	}
+
+	// 4. Build constraints (with Kelly sizing if available)
 	os.log.Info().Msg("Building constraints")
 	constraints, err := os.constraintsMgr.BuildConstraints(
 		activeSecurities,
@@ -153,6 +251,10 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 		state.IndustryTargets,
 		state.PortfolioValue,
 		state.CurrentPrices,
+		expectedReturns,
+		covMatrix,
+		symbols,
+		regimeScore,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build constraints: %w", err)
@@ -305,6 +407,45 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 		}
 	}
 
+	// 13. Calculate CVaR if enabled
+	var portfolioCVaR *float64
+	if settings.CVaREnabled && os.cvarCalculator != nil {
+		confidence := settings.CVaRConfidence
+		if confidence <= 0 {
+			confidence = 0.95 // Default 95%
+		}
+
+		// Calculate CVaR from covariance matrix using Monte Carlo
+		cvar := os.cvarCalculator.CalculateFromCovariance(
+			covMatrix,
+			expectedReturns,
+			targetWeights,
+			symbols,
+			10000, // Number of simulations
+			confidence,
+		)
+
+		// Apply regime adjustment if enabled
+		if settings.CVaRRegimeAdjustment {
+			cvar = os.cvarCalculator.ApplyRegimeAdjustment(cvar, regimeScore)
+		}
+
+		// Check CVaR constraint
+		if settings.MaxCVaR > 0 && math.Abs(cvar) > settings.MaxCVaR {
+			os.log.Warn().
+				Float64("cvar", cvar).
+				Float64("max_cvar", settings.MaxCVaR).
+				Msg("Portfolio CVaR exceeds maximum allowed - consider tightening constraints or reducing risk")
+		}
+
+		portfolioCVaR = &cvar
+		os.log.Info().
+			Float64("cvar", cvar).
+			Float64("confidence", confidence).
+			Float64("max_cvar", settings.MaxCVaR).
+			Msg("Calculated portfolio CVaR")
+	}
+
 	os.log.Info().
 		Int("num_target_weights", len(targetWeights)).
 		Float64("achieved_return", achievedReturn).
@@ -321,6 +462,7 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 		WeightChanges:          weightChanges,
 		HighCorrelations:       hrpCorrelations[:min(5, len(hrpCorrelations))], // Top 5 from HRP risk model
 		ConstraintsSummary:     constraintsSummary,
+		PortfolioCVaR:          portfolioCVaR,
 		Success:                true,
 		Error:                  nil,
 	}, nil

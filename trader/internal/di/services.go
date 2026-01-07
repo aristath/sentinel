@@ -12,6 +12,7 @@ import (
 	"github.com/aristath/portfolioManager/internal/events"
 	"github.com/aristath/portfolioManager/internal/modules/adaptation"
 	"github.com/aristath/portfolioManager/internal/modules/allocation"
+	"github.com/aristath/portfolioManager/internal/modules/analytics"
 	"github.com/aristath/portfolioManager/internal/modules/cash_flows"
 	"github.com/aristath/portfolioManager/internal/modules/display"
 	"github.com/aristath/portfolioManager/internal/modules/market_hours"
@@ -275,6 +276,34 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 		log,
 	)
 
+	// Kelly Position Sizer
+	container.KellySizer = optimization.NewKellyPositionSizer(
+		0.02,  // riskFreeRate: 2%
+		0.5,   // fixedFractional: 0.5 (half-Kelly)
+		0.005, // minPositionSize: 0.5%
+		0.20,  // maxPositionSize: 20%
+		container.ReturnsCalc,
+		container.RiskBuilder,
+		container.RegimeDetector,
+	)
+
+	// CVaR Calculator
+	container.CVaRCalculator = optimization.NewCVaRCalculator(
+		container.RiskBuilder,
+		container.RegimeDetector,
+		log,
+	)
+
+	// View Generator (for Black-Litterman)
+	container.ViewGenerator = optimization.NewViewGenerator(log)
+
+	// Black-Litterman Optimizer
+	container.BlackLittermanOptimizer = optimization.NewBlackLittermanOptimizer(
+		container.ViewGenerator,
+		container.RiskBuilder,
+		log,
+	)
+
 	// Optimizer service
 	container.OptimizerService = optimization.NewOptimizerService(
 		container.ConstraintsMgr,
@@ -282,6 +311,18 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 		container.RiskBuilder,
 		log,
 	)
+
+	// Wire Kelly Sizer into OptimizerService
+	container.OptimizerService.SetKellySizer(container.KellySizer)
+
+	// Wire CVaR Calculator into OptimizerService
+	container.OptimizerService.SetCVaRCalculator(container.CVaRCalculator)
+
+	// Wire Black-Litterman Optimizer into OptimizerService
+	container.OptimizerService.SetBlackLittermanOptimizer(container.BlackLittermanOptimizer)
+
+	// Factor Exposure Tracker
+	container.FactorExposureTracker = analytics.NewFactorExposureTracker(log)
 
 	// ==========================================
 	// STEP 10: Initialize Rebalancing Services

@@ -44,6 +44,9 @@ type OpportunityContext struct {
 	TransactionCostPercent float64 `json:"transaction_cost_percent"`
 	AllowSell              bool    `json:"allow_sell"`
 	AllowBuy               bool    `json:"allow_buy"`
+
+	// Kelly-optimal position sizes (optional - if available from optimizer)
+	KellySizes map[string]float64 `json:"kelly_sizes,omitempty"` // Kelly-optimal position sizes by symbol (as fraction of portfolio)
 }
 
 // NewOpportunityContext creates a new OpportunityContext with defaults.
