@@ -71,6 +71,85 @@ func TestParseFormula_InvalidExpression(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestIsWhitespace(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    byte
+		expected bool
+	}{
+		{"space", ' ', true},
+		{"tab", '\t', true},
+		{"newline", '\n', true},
+		{"carriage return", '\r', true},
+		{"letter", 'a', false},
+		{"digit", '5', false},
+		{"symbol", '+', false},
+		{"zero byte", 0, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isWhitespace(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestIsDigit(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    byte
+		expected bool
+	}{
+		{"zero", '0', true},
+		{"five", '5', true},
+		{"nine", '9', true},
+		{"letter lowercase", 'a', false},
+		{"letter uppercase", 'A', false},
+		{"symbol", '+', false},
+		{"space", ' ', false},
+		{"below zero", '0' - 1, false},
+		{"above nine", '9' + 1, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isDigit(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestIsLetter(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    byte
+		expected bool
+	}{
+		{"lowercase a", 'a', true},
+		{"lowercase z", 'z', true},
+		{"uppercase A", 'A', true},
+		{"uppercase Z", 'Z', true},
+		{"lowercase m", 'm', true},
+		{"uppercase M", 'M', true},
+		{"digit", '5', false},
+		{"symbol", '+', false},
+		{"space", ' ', false},
+		{"below a", 'a' - 1, false},
+		{"above z", 'z' + 1, false},
+		{"below A", 'A' - 1, false},
+		{"above Z", 'Z' + 1, false},
+		{"underscore", '_', false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isLetter(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestFormulaToFunction_ExpectedReturn(t *testing.T) {
 	// Create a simple formula node
 	formula := &Node{
