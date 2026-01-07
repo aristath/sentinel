@@ -139,6 +139,36 @@ func (ds *DiscoveryService) DiscoverExpectedReturnFormula(
 			// Calculate validation metrics
 			metrics := ds.calculateValidationMetrics(best.Formula, regimeExamples)
 
+			// Validate against static formula
+			validationResult, validationErr := ds.validateAgainstStaticFormula(
+				best.Formula,
+				regimeExamples,
+				FormulaTypeExpectedReturn,
+				FitnessTypeMAE,
+			)
+
+			// Determine if formula should be active based on validation
+			isActive := false
+			if validationErr == nil && validationResult != nil && validationResult.IsBetter {
+				isActive = true
+				ds.log.Info().
+					Str("regime", regimeRange.Name).
+					Float64("improvement_pct", validationResult.ImprovementPct).
+					Msg("Discovered formula outperforms static formula, activating")
+			} else {
+				if validationErr != nil {
+					ds.log.Warn().
+						Str("regime", regimeRange.Name).
+						Err(validationErr).
+						Msg("Validation failed, saving formula as inactive")
+				} else if validationResult != nil && !validationResult.IsBetter {
+					ds.log.Warn().
+						Str("regime", regimeRange.Name).
+						Float64("improvement_pct", validationResult.ImprovementPct).
+						Msg("Discovered formula does not outperform static formula, saving as inactive")
+				}
+			}
+
 			// Create discovered formula with regime range
 			// Ensure fitness and complexity are in metrics (used by SaveFormula)
 			metrics["fitness"] = best.Fitness
@@ -153,8 +183,8 @@ func (ds *DiscoveryService) DiscoverExpectedReturnFormula(
 				DiscoveredAt:      time.Now(),
 			}
 
-			// Save to database
-			_, err = ds.storage.SaveFormula(discovered)
+			// Save to database with appropriate is_active status
+			_, err = ds.storage.SaveFormula(discovered, isActive)
 			if err != nil {
 				ds.log.Warn().Err(err).Str("regime", regimeRange.Name).Msg("Failed to save discovered formula")
 				continue
@@ -197,6 +227,33 @@ func (ds *DiscoveryService) DiscoverExpectedReturnFormula(
 		// Calculate validation metrics
 		metrics := ds.calculateValidationMetrics(best.Formula, validated)
 
+		// Validate against static formula
+		validationResult, validationErr := ds.validateAgainstStaticFormula(
+			best.Formula,
+			validated,
+			FormulaTypeExpectedReturn,
+			FitnessTypeMAE,
+		)
+
+		// Determine if formula should be active based on validation
+		isActive := false
+		if validationErr == nil && validationResult != nil && validationResult.IsBetter {
+			isActive = true
+			ds.log.Info().
+				Float64("improvement_pct", validationResult.ImprovementPct).
+				Msg("Discovered formula outperforms static formula, activating")
+		} else {
+			if validationErr != nil {
+				ds.log.Warn().
+					Err(validationErr).
+					Msg("Validation failed, saving formula as inactive")
+			} else if validationResult != nil && !validationResult.IsBetter {
+				ds.log.Warn().
+					Float64("improvement_pct", validationResult.ImprovementPct).
+					Msg("Discovered formula does not outperform static formula, saving as inactive")
+			}
+		}
+
 		// Create discovered formula (no regime range)
 		// Ensure fitness and complexity are in metrics (used by SaveFormula)
 		metrics["fitness"] = best.Fitness
@@ -209,8 +266,8 @@ func (ds *DiscoveryService) DiscoverExpectedReturnFormula(
 			DiscoveredAt:      time.Now(),
 		}
 
-		// Save to database
-		_, err = ds.storage.SaveFormula(discovered)
+		// Save to database with appropriate is_active status
+		_, err = ds.storage.SaveFormula(discovered, isActive)
 		if err != nil {
 			ds.log.Warn().Err(err).Msg("Failed to save discovered formula")
 		}
@@ -333,6 +390,36 @@ func (ds *DiscoveryService) DiscoverScoringFormula(
 			// Calculate validation metrics
 			metrics := ds.calculateValidationMetrics(best.Formula, regimeExamples)
 
+			// Validate against static formula
+			validationResult, validationErr := ds.validateAgainstStaticFormula(
+				best.Formula,
+				regimeExamples,
+				FormulaTypeScoring,
+				FitnessTypeSpearman,
+			)
+
+			// Determine if formula should be active based on validation
+			isActive := false
+			if validationErr == nil && validationResult != nil && validationResult.IsBetter {
+				isActive = true
+				ds.log.Info().
+					Str("regime", regimeRange.Name).
+					Float64("improvement_pct", validationResult.ImprovementPct).
+					Msg("Discovered scoring formula outperforms static formula, activating")
+			} else {
+				if validationErr != nil {
+					ds.log.Warn().
+						Str("regime", regimeRange.Name).
+						Err(validationErr).
+						Msg("Validation failed, saving scoring formula as inactive")
+				} else if validationResult != nil && !validationResult.IsBetter {
+					ds.log.Warn().
+						Str("regime", regimeRange.Name).
+						Float64("improvement_pct", validationResult.ImprovementPct).
+						Msg("Discovered scoring formula does not outperform static formula, saving as inactive")
+				}
+			}
+
 			// Create discovered formula with regime range
 			// Ensure fitness and complexity are in metrics (used by SaveFormula)
 			metrics["fitness"] = best.Fitness
@@ -347,8 +434,8 @@ func (ds *DiscoveryService) DiscoverScoringFormula(
 				DiscoveredAt:      time.Now(),
 			}
 
-			// Save to database
-			_, err = ds.storage.SaveFormula(discovered)
+			// Save to database with appropriate is_active status
+			_, err = ds.storage.SaveFormula(discovered, isActive)
 			if err != nil {
 				ds.log.Warn().Err(err).Str("regime", regimeRange.Name).Msg("Failed to save discovered formula")
 				continue
@@ -387,6 +474,33 @@ func (ds *DiscoveryService) DiscoverScoringFormula(
 		// Calculate validation metrics
 		metrics := ds.calculateValidationMetrics(best.Formula, validated)
 
+		// Validate against static formula
+		validationResult, validationErr := ds.validateAgainstStaticFormula(
+			best.Formula,
+			validated,
+			FormulaTypeScoring,
+			FitnessTypeSpearman,
+		)
+
+		// Determine if formula should be active based on validation
+		isActive := false
+		if validationErr == nil && validationResult != nil && validationResult.IsBetter {
+			isActive = true
+			ds.log.Info().
+				Float64("improvement_pct", validationResult.ImprovementPct).
+				Msg("Discovered scoring formula outperforms static formula, activating")
+		} else {
+			if validationErr != nil {
+				ds.log.Warn().
+					Err(validationErr).
+					Msg("Validation failed, saving scoring formula as inactive")
+			} else if validationResult != nil && !validationResult.IsBetter {
+				ds.log.Warn().
+					Float64("improvement_pct", validationResult.ImprovementPct).
+					Msg("Discovered scoring formula does not outperform static formula, saving as inactive")
+			}
+		}
+
 		// Create discovered formula (no regime range)
 		// Ensure fitness and complexity are in metrics (used by SaveFormula)
 		metrics["fitness"] = best.Fitness
@@ -399,8 +513,8 @@ func (ds *DiscoveryService) DiscoverScoringFormula(
 			DiscoveredAt:      time.Now(),
 		}
 
-		// Save to database
-		_, err = ds.storage.SaveFormula(discovered)
+		// Save to database with appropriate is_active status
+		_, err = ds.storage.SaveFormula(discovered, isActive)
 		if err != nil {
 			ds.log.Warn().Err(err).Msg("Failed to save discovered formula")
 		}
@@ -443,4 +557,56 @@ func (ds *DiscoveryService) calculateValidationMetrics(
 	metrics["fitness"] = mae // Use MAE as primary fitness
 
 	return metrics
+}
+
+// validateAgainstStaticFormula validates a discovered formula against the static formula
+// Returns ValidationResult and error. If test set has < 10 examples, returns error.
+func (ds *DiscoveryService) validateAgainstStaticFormula(
+	discoveredFormula *Node,
+	examples []TrainingExample,
+	formulaType FormulaType,
+	fitnessType FitnessType,
+) (*ValidationResult, error) {
+	// Split examples into train/test (80/20 split)
+	// Need at least 50 examples to guarantee 10 test examples (50 * 0.2 = 10)
+	if len(examples) < 50 {
+		return nil, fmt.Errorf("insufficient examples for validation: need at least 50 for train/test split (80/20), got %d", len(examples))
+	}
+
+	splitIdx := int(float64(len(examples)) * 0.8)
+	if splitIdx < 1 {
+		splitIdx = 1
+	}
+
+	trainExamples := examples[:splitIdx]
+	testExamples := examples[splitIdx:]
+
+	// Double-check test set has sufficient examples (should always pass with >= 50 examples)
+	if len(testExamples) < 10 {
+		return nil, fmt.Errorf("insufficient test examples for validation: need at least 10, got %d (this should not happen with >= 50 examples)", len(testExamples))
+	}
+
+	// Build appropriate static formula based on formula type
+	var staticFormula *Node
+	if formulaType == FormulaTypeExpectedReturn {
+		staticFormula = BuildStaticExpectedReturnFormula()
+	} else if formulaType == FormulaTypeScoring {
+		staticFormula = BuildStaticScoringFormula()
+	} else {
+		return nil, fmt.Errorf("unknown formula type: %s", formulaType)
+	}
+
+	// Validate discovered formula against static formula
+	result, err := ValidateDiscoveredFormula(
+		discoveredFormula,
+		staticFormula,
+		trainExamples,
+		testExamples,
+		fitnessType,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("validation failed: %w", err)
+	}
+
+	return result, nil
 }

@@ -22,6 +22,8 @@ func TestScoreCalculation_SavesAllRawValues(t *testing.T) {
 	defer db.Close()
 
 	// Create scores table with all columns (ISIN as PRIMARY KEY, matching migration 030)
+	// Drop table first to ensure clean state
+	_, _ = db.Conn().Exec(`DROP TABLE IF EXISTS scores`)
 	_, err = db.Conn().Exec(`
 		CREATE TABLE scores (
 			isin TEXT PRIMARY KEY,

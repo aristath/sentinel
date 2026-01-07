@@ -63,7 +63,7 @@ func TestFormulaStorage_SaveFormula(t *testing.T) {
 		DiscoveredAt: time.Now(),
 	}
 
-	id, err := storage.SaveFormula(formula)
+	id, err := storage.SaveFormula(formula, true) // Use explicit true for backward compatibility in test
 	require.NoError(t, err)
 	assert.Greater(t, id, int64(0))
 }
@@ -84,7 +84,7 @@ func TestFormulaStorage_GetActiveFormula(t *testing.T) {
 		DiscoveredAt:      time.Now(),
 	}
 
-	id, err := storage.SaveFormula(formula)
+	id, err := storage.SaveFormula(formula, true) // Use explicit true to make it active
 	require.NoError(t, err)
 
 	// Retrieve it
@@ -114,7 +114,7 @@ func TestFormulaStorage_DeactivateFormula(t *testing.T) {
 		DiscoveredAt:      time.Now(),
 	}
 
-	id, err := storage.SaveFormula(formula)
+	id, err := storage.SaveFormula(formula, true) // Use explicit true to make it active
 	require.NoError(t, err)
 
 	// Deactivate it
@@ -125,4 +125,56 @@ func TestFormulaStorage_DeactivateFormula(t *testing.T) {
 	retrieved, err := storage.GetActiveFormula(FormulaTypeExpectedReturn, SecurityTypeStock, nil)
 	require.NoError(t, err)
 	assert.Nil(t, retrieved)
+}
+
+func TestFormulaStorage_SaveFormulaWithIsActive(t *testing.T) {
+	db, cleanup := setupStorageTestDB(t)
+	defer cleanup()
+
+	log := zerolog.Nop()
+	storage := NewFormulaStorage(db, log)
+
+	formula := &DiscoveredFormula{
+		FormulaType:       FormulaTypeExpectedReturn,
+		SecurityType:      SecurityTypeStock,
+		FormulaExpression: "0.65*cagr + 0.28*score",
+		ValidationMetrics: map[string]float64{"mae": 0.05},
+		DiscoveredAt:      time.Now(),
+	}
+
+	t.Run("Save with isActive=true", func(t *testing.T) {
+		id, err := storage.SaveFormula(formula, true)
+		require.NoError(t, err)
+		assert.Greater(t, id, int64(0))
+
+		// Verify is_active = 1 in database
+		var isActive int
+		err = db.QueryRow("SELECT is_active FROM discovered_formulas WHERE id = ?", id).Scan(&isActive)
+		require.NoError(t, err)
+		assert.Equal(t, 1, isActive)
+	})
+
+	t.Run("Save with isActive=false", func(t *testing.T) {
+		id, err := storage.SaveFormula(formula, false)
+		require.NoError(t, err)
+		assert.Greater(t, id, int64(0))
+
+		// Verify is_active = 0 in database
+		var isActive int
+		err = db.QueryRow("SELECT is_active FROM discovered_formulas WHERE id = ?", id).Scan(&isActive)
+		require.NoError(t, err)
+		assert.Equal(t, 0, isActive)
+	})
+
+	t.Run("Save without isActive parameter (default to false)", func(t *testing.T) {
+		id, err := storage.SaveFormula(formula)
+		require.NoError(t, err)
+		assert.Greater(t, id, int64(0))
+
+		// Verify is_active = 0 in database (default)
+		var isActive int
+		err = db.QueryRow("SELECT is_active FROM discovered_formulas WHERE id = ?", id).Scan(&isActive)
+		require.NoError(t, err)
+		assert.Equal(t, 0, isActive)
+	})
 }

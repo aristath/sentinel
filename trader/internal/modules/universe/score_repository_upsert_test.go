@@ -22,6 +22,7 @@ func TestUpsert_InsertsAllColumns(t *testing.T) {
 	defer db.Close()
 
 	// Create scores table with all columns (ISIN as PRIMARY KEY, matching migration 030)
+	_, _ = db.Conn().Exec(`DROP TABLE IF EXISTS scores`)
 	_, err = db.Conn().Exec(`
 		CREATE TABLE scores (
 			isin TEXT PRIMARY KEY,
@@ -122,6 +123,7 @@ func TestUpsert_HandlesZeroValues(t *testing.T) {
 	defer db.Close()
 
 	// Create scores table (ISIN as PRIMARY KEY, matching migration 030)
+	_, _ = db.Conn().Exec(`DROP TABLE IF EXISTS scores`)
 	_, err = db.Conn().Exec(`
 		CREATE TABLE scores (
 			isin TEXT PRIMARY KEY,

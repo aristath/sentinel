@@ -142,7 +142,14 @@ func ValidateDiscoveredFormula(
 		discoveredTestFitness := discoveredMetrics["test_fitness"]
 		staticTestFitness := staticMetrics["test_fitness"]
 		result.IsBetter = discoveredTestFitness < staticTestFitness
-		result.ImprovementPct = (staticTestFitness - discoveredTestFitness) / staticTestFitness * 100.0
+		// Calculate improvement percentage, handling division by zero
+		if staticTestFitness > 0 {
+			result.ImprovementPct = (staticTestFitness - discoveredTestFitness) / staticTestFitness * 100.0
+		} else {
+			// If static fitness is 0 (perfect), any improvement is infinite
+			// Set to 0.0 to indicate improvement can't be calculated
+			result.ImprovementPct = 0.0
+		}
 	} else if fitnessType == FitnessTypeSpearman {
 		discoveredTestCorr := discoveredMetrics["test_spearman"]
 		staticTestCorr := staticMetrics["test_spearman"]

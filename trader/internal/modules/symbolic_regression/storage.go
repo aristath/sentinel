@@ -24,11 +24,18 @@ func NewFormulaStorage(db *sql.DB, log zerolog.Logger) *FormulaStorage {
 }
 
 // SaveFormula saves a discovered formula to the database
-func (fs *FormulaStorage) SaveFormula(formula *DiscoveredFormula) (int64, error) {
+// isActive is optional variadic parameter - if not provided, defaults to false
+func (fs *FormulaStorage) SaveFormula(formula *DiscoveredFormula, isActive ...bool) (int64, error) {
 	// Serialize validation metrics to JSON
 	metricsJSON, err := json.Marshal(formula.ValidationMetrics)
 	if err != nil {
 		return 0, fmt.Errorf("failed to marshal validation metrics: %w", err)
+	}
+
+	// Determine is_active value: default to false if not provided
+	isActiveValue := 0
+	if len(isActive) > 0 && isActive[0] {
+		isActiveValue = 1
 	}
 
 	query := `
@@ -36,7 +43,7 @@ func (fs *FormulaStorage) SaveFormula(formula *DiscoveredFormula) (int64, error)
 			formula_type, security_type, regime_range_min, regime_range_max,
 			formula_expression, validation_metrics, fitness_score, complexity,
 			training_examples_count, discovered_at, is_active
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	var regimeMin, regimeMax interface{}
@@ -69,6 +76,7 @@ func (fs *FormulaStorage) SaveFormula(formula *DiscoveredFormula) (int64, error)
 		complexity,
 		0, // training_examples_count (can be added later)
 		formula.DiscoveredAt.Unix(),
+		isActiveValue,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("failed to insert formula: %w", err)

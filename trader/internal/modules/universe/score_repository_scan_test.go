@@ -21,6 +21,7 @@ func TestScanScore_ScansAllColumns(t *testing.T) {
 	defer db.Close()
 
 	// Create scores table with all columns
+	_, _ = db.Conn().Exec(`DROP TABLE IF EXISTS scores`)
 	_, err = db.Conn().Exec(`
 		CREATE TABLE scores (
 			isin TEXT PRIMARY KEY,
@@ -100,6 +101,7 @@ func TestScanScore_HandlesNullValues(t *testing.T) {
 	defer db.Close()
 
 	// Create scores table
+	_, _ = db.Conn().Exec(`DROP TABLE IF EXISTS scores`)
 	_, err = db.Conn().Exec(`
 		CREATE TABLE scores (
 			isin TEXT PRIMARY KEY,
