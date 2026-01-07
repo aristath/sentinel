@@ -33,7 +33,7 @@ func (s *SecurityPerformanceService) CalculateTrailing12MoCAGR(isin string) (*fl
 	rows, err := s.historyDB.Query(`
 		SELECT date, close
 		FROM daily_prices
-		WHERE symbol = ? AND date >= ? AND date <= ?
+		WHERE isin = ? AND date >= ? AND date <= ?
 		ORDER BY date ASC
 	`, isin, startDate, endDate)
 	if err != nil {

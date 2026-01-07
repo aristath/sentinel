@@ -190,16 +190,16 @@ func (j *TagUpdateJob) updateTagsForSecurity(security universe.Security) error {
 		}
 
 		// Try to get raw CAGR from scores table for return-based tagging
-		if j.portfolioDB != nil {
+		// Use ISIN directly (PRIMARY KEY lookup - fastest)
+		if j.portfolioDB != nil && security.ISIN != "" {
 			var cagrScore sql.NullFloat64
 			err := j.portfolioDB.QueryRow(`
-				SELECT s.cagr_score
-				FROM scores s
-				INNER JOIN positions p ON s.isin = p.isin
-				WHERE p.symbol = ? AND s.cagr_score IS NOT NULL AND s.cagr_score > 0
-		ORDER BY s.last_updated DESC
-		LIMIT 1
-		`, security.Symbol).Scan(&cagrScore)
+				SELECT cagr_score
+				FROM scores
+				WHERE isin = ? AND cagr_score IS NOT NULL AND cagr_score > 0
+				ORDER BY last_updated DESC
+				LIMIT 1
+			`, security.ISIN).Scan(&cagrScore)
 			if err == nil && cagrScore.Valid && cagrScore.Float64 > 0 {
 				// Convert normalized cagr_score back to approximate CAGR percentage
 				// convertCAGRScoreToCAGR converts normalized cagr_score (0-1) back to approximate CAGR percentage.

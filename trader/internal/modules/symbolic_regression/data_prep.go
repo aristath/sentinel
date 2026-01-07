@@ -61,8 +61,8 @@ func (dp *DataPrep) ExtractTrainingExamples(
 	var examples []TrainingExample
 
 	for _, sec := range securities {
-		// Check if security has sufficient history (use symbol for daily_prices table)
-		hasData, err := dp.hasSufficientHistory(sec.Symbol, trainingDate, targetDate)
+		// Check if security has sufficient history (use ISIN for daily_prices table)
+		hasData, err := dp.hasSufficientHistory(sec.ISIN, trainingDate, targetDate)
 		if err != nil {
 			dp.log.Debug().
 				Str("isin", sec.ISIN).
@@ -91,8 +91,8 @@ func (dp *DataPrep) ExtractTrainingExamples(
 			continue
 		}
 
-		// Calculate target return (use symbol for daily_prices table)
-		targetReturn, err := dp.calculateTargetReturn(sec.Symbol, trainingDate.Format("2006-01-02"), targetDate.Format("2006-01-02"))
+		// Calculate target return (use ISIN for daily_prices table)
+		targetReturn, err := dp.calculateTargetReturn(sec.ISIN, trainingDate.Format("2006-01-02"), targetDate.Format("2006-01-02"))
 		if err != nil {
 			dp.log.Debug().
 				Str("isin", sec.ISIN).
@@ -166,16 +166,16 @@ func (dp *DataPrep) getAllSecurities() ([]SecurityInfo, error) {
 }
 
 // hasSufficientHistory checks if security has data at both training and target dates
-// Uses symbol since daily_prices table uses symbol as identifier
+// Parameter isin is the ISIN identifier (daily_prices table uses isin column)
 // Uses closest available date within ±5 days to handle weekends/holidays
-func (dp *DataPrep) hasSufficientHistory(symbol string, trainingDate, targetDate time.Time) (bool, error) {
+func (dp *DataPrep) hasSufficientHistory(isin string, trainingDate, targetDate time.Time) (bool, error) {
 	// Check if we have price data near training date (±5 days)
 	var count int
 	trainingDateStr := trainingDate.Format("2006-01-02")
 	err := dp.historyDB.QueryRow(
 		`SELECT COUNT(*) FROM daily_prices
-		 WHERE symbol = ? AND date BETWEEN date(?, '-5 days') AND date(?, '+5 days')`,
-		symbol, trainingDateStr, trainingDateStr,
+		 WHERE isin = ? AND date BETWEEN date(?, '-5 days') AND date(?, '+5 days')`,
+		isin, trainingDateStr, trainingDateStr,
 	).Scan(&count)
 	if err != nil {
 		return false, fmt.Errorf("failed to check training date price: %w", err)
@@ -188,8 +188,8 @@ func (dp *DataPrep) hasSufficientHistory(symbol string, trainingDate, targetDate
 	targetDateStr := targetDate.Format("2006-01-02")
 	err = dp.historyDB.QueryRow(
 		`SELECT COUNT(*) FROM daily_prices
-		 WHERE symbol = ? AND date BETWEEN date(?, '-5 days') AND date(?, '+5 days')`,
-		symbol, targetDateStr, targetDateStr,
+		 WHERE isin = ? AND date BETWEEN date(?, '-5 days') AND date(?, '+5 days')`,
+		isin, targetDateStr, targetDateStr,
 	).Scan(&count)
 	if err != nil {
 		return false, fmt.Errorf("failed to check target date price: %w", err)
@@ -342,23 +342,40 @@ func (dp *DataPrep) extractMetrics(symbol string, date time.Time) (map[string]fl
 		return make(map[string]float64), nil // Return empty map if no symbol
 	}
 
-	// Query metrics from scores table via positions table (symbol -> ISIN mapping)
+	// Lookup ISIN from symbol (if universeDB available)
+	var isin string
+	if dp.universeDB != nil {
+		err := dp.universeDB.QueryRow("SELECT isin FROM securities WHERE symbol = ?", symbol).Scan(&isin)
+		if err != nil {
+			// Symbol not found or no ISIN - return empty map gracefully
+			dp.log.Debug().Str("symbol", symbol).Err(err).Msg("Failed to lookup ISIN for symbol")
+			return make(map[string]float64), nil
+		}
+		if isin == "" {
+			return make(map[string]float64), nil
+		}
+	} else {
+		// No universeDB - cannot lookup ISIN, return empty map
+		dp.log.Debug().Str("symbol", symbol).Msg("UniverseDB not available, cannot lookup ISIN")
+		return make(map[string]float64), nil
+	}
+
+	// Query metrics from scores table directly by ISIN (PRIMARY KEY - fastest)
 	query := `
 		SELECT
-			s.cagr_score,
-			s.dividend_bonus,
-			s.volatility,
-			s.rsi,
-			s.drawdown_score,
-			s.sharpe_score
-		FROM scores s
-		INNER JOIN positions p ON s.isin = p.isin
-		WHERE p.symbol = ? AND s.last_updated <= ?
-		ORDER BY s.last_updated DESC
+			cagr_score,
+			dividend_bonus,
+			volatility,
+			rsi,
+			drawdown_score,
+			sharpe_score
+		FROM scores
+		WHERE isin = ? AND last_updated <= ?
+		ORDER BY last_updated DESC
 		LIMIT 1
 	`
 
-	rows, err := dp.portfolioDB.Query(query, symbol, date.Format("2006-01-02"))
+	rows, err := dp.portfolioDB.Query(query, isin, date.Format("2006-01-02"))
 	if err != nil {
 		// Table might not exist or no data - return empty map gracefully
 		dp.log.Debug().Str("symbol", symbol).Err(err).Msg("Failed to query metrics from scores table")
@@ -427,39 +444,39 @@ func convertCAGRScoreToCAGR(cagrScore float64) float64 {
 }
 
 // calculateTargetReturn calculates the actual return from startDate to endDate
-// Uses symbol since daily_prices table uses symbol as identifier
+// Parameter isin is the ISIN identifier (daily_prices table uses isin column)
 // Uses closest available date within ±5 days to handle weekends/holidays
-func (dp *DataPrep) calculateTargetReturn(symbol, startDate, endDate string) (float64, error) {
+func (dp *DataPrep) calculateTargetReturn(isin, startDate, endDate string) (float64, error) {
 	// Get price at start date (use closest available date within ±5 days)
 	var startPrice sql.NullFloat64
 	err := dp.historyDB.QueryRow(
 		`SELECT adjusted_close FROM daily_prices
-		 WHERE symbol = ? AND date BETWEEN date(?, '-5 days') AND date(?, '+5 days')
+		 WHERE isin = ? AND date BETWEEN date(?, '-5 days') AND date(?, '+5 days')
 		 ORDER BY ABS(julianday(date) - julianday(?)) ASC
 		 LIMIT 1`,
-		symbol, startDate, startDate, startDate,
+		isin, startDate, startDate, startDate,
 	).Scan(&startPrice)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get start price: %w", err)
 	}
 	if !startPrice.Valid || startPrice.Float64 <= 0 {
-		return 0, fmt.Errorf("invalid start price for %s at %s", symbol, startDate)
+		return 0, fmt.Errorf("invalid start price for %s at %s", isin, startDate)
 	}
 
 	// Get price at end date (use closest available date within ±5 days)
 	var endPrice sql.NullFloat64
 	err = dp.historyDB.QueryRow(
 		`SELECT adjusted_close FROM daily_prices
-		 WHERE symbol = ? AND date BETWEEN date(?, '-5 days') AND date(?, '+5 days')
+		 WHERE isin = ? AND date BETWEEN date(?, '-5 days') AND date(?, '+5 days')
 		 ORDER BY ABS(julianday(date) - julianday(?)) ASC
 		 LIMIT 1`,
-		symbol, endDate, endDate, endDate,
+		isin, endDate, endDate, endDate,
 	).Scan(&endPrice)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get end price: %w", err)
 	}
 	if !endPrice.Valid || endPrice.Float64 <= 0 {
-		return 0, fmt.Errorf("invalid end price for %s at %s", symbol, endDate)
+		return 0, fmt.Errorf("invalid end price for %s at %s", isin, endDate)
 	}
 
 	// Calculate return: (end - start) / start

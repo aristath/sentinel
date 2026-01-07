@@ -88,6 +88,8 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 		return os.errorResult(timestamp, settings.Blend, "No active securities"), nil
 	}
 
+	// Extract symbols for covariance matrix building
+	// Note: RiskModelBuilder.fetchPriceHistory will convert symbols to ISINs internally
 	symbols := make([]string, len(activeSecurities))
 	for i, sec := range activeSecurities {
 		symbols[i] = sec.Symbol

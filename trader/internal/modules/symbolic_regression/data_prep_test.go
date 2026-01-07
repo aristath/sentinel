@@ -18,11 +18,11 @@ func setupTestDB(t *testing.T) (*sql.DB, func()) {
 	// Create schema for testing
 	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS daily_prices (
-			symbol TEXT NOT NULL,
+			isin TEXT NOT NULL,
 			date TEXT NOT NULL,
 			close REAL NOT NULL,
 			adjusted_close REAL NOT NULL,
-			PRIMARY KEY (symbol, date)
+			PRIMARY KEY (isin, date)
 		);
 
 		CREATE TABLE IF NOT EXISTS scores (
@@ -101,13 +101,13 @@ func TestDataPrep_ExtractTrainingExamples_MinimumHistory(t *testing.T) {
 	isin := "US0378331005"
 	symbol := "AAPL"
 
-	// Insert daily prices: 18 months = ~540 days (use symbol, not isin)
+	// Insert daily prices: 18 months = ~540 days (use ISIN)
 	baseDate := time.Date(2023, 1, 15, 0, 0, 0, 0, time.UTC)
 	for i := 0; i < 540; i++ {
 		date := baseDate.AddDate(0, 0, i)
 		_, err := historyDB.Exec(
-			"INSERT INTO daily_prices (symbol, date, close, adjusted_close) VALUES (?, ?, ?, ?)",
-			symbol, date.Format("2006-01-02"), 100.0+float64(i)*0.1, 100.0+float64(i)*0.1,
+			"INSERT INTO daily_prices (isin, date, close, adjusted_close) VALUES (?, ?, ?, ?)",
+			isin, date.Format("2006-01-02"), 100.0+float64(i)*0.1, 100.0+float64(i)*0.1,
 		)
 		require.NoError(t, err)
 	}
@@ -184,12 +184,12 @@ func TestDataPrep_ExtractTrainingExamples_InsufficientHistory(t *testing.T) {
 	symbol := "NEWCO"
 
 	baseDate := time.Date(2023, 1, 15, 0, 0, 0, 0, time.UTC)
-	// Only 90 days (3 months) - insufficient for 6-month forward return (use symbol, not isin)
+	// Only 90 days (3 months) - insufficient for 6-month forward return (use ISIN)
 	for i := 0; i < 90; i++ {
 		date := baseDate.AddDate(0, 0, i)
 		_, err := historyDB.Exec(
-			"INSERT INTO daily_prices (symbol, date, close, adjusted_close) VALUES (?, ?, ?, ?)",
-			symbol, date.Format("2006-01-02"), 50.0, 50.0,
+			"INSERT INTO daily_prices (isin, date, close, adjusted_close) VALUES (?, ?, ?, ?)",
+			isin, date.Format("2006-01-02"), 50.0, 50.0,
 		)
 		require.NoError(t, err)
 	}
@@ -244,8 +244,8 @@ func TestDataPrep_ExtractTrainingExamples_TimeWindowed(t *testing.T) {
 	for i := 0; i < 3650; i++ {
 		date := aaplStart.AddDate(0, 0, i)
 		_, err := historyDB.Exec(
-			"INSERT INTO daily_prices (symbol, date, close, adjusted_close) VALUES (?, ?, ?, ?)",
-			aaplSymbol, date.Format("2006-01-02"), 100.0, 100.0,
+			"INSERT INTO daily_prices (isin, date, close, adjusted_close) VALUES (?, ?, ?, ?)",
+			aaplISIN, date.Format("2006-01-02"), 100.0, 100.0,
 		)
 		require.NoError(t, err)
 	}
@@ -284,8 +284,8 @@ func TestDataPrep_ExtractTrainingExamples_TimeWindowed(t *testing.T) {
 	for i := 0; i < 730; i++ {
 		date := newcoStart.AddDate(0, 0, i)
 		_, err := historyDB.Exec(
-			"INSERT INTO daily_prices (symbol, date, close, adjusted_close) VALUES (?, ?, ?, ?)",
-			newcoSymbol, date.Format("2006-01-02"), 50.0, 50.0,
+			"INSERT INTO daily_prices (isin, date, close, adjusted_close) VALUES (?, ?, ?, ?)",
+			newcoISIN, date.Format("2006-01-02"), 50.0, 50.0,
 		)
 		require.NoError(t, err)
 	}
@@ -352,23 +352,23 @@ func TestDataPrep_CalculateTargetReturn(t *testing.T) {
 	log := zerolog.Nop()
 	prep := NewDataPrep(historyDB, nil, nil, nil, log)
 
-	symbol := "AAPL"
+	isin := "US0378331005" // AAPL ISIN
 
 	// Insert price data: $100 on 2023-01-15, $110 on 2023-07-15 (10% return)
 	_, err := historyDB.Exec(
-		"INSERT INTO daily_prices (symbol, date, close, adjusted_close) VALUES (?, ?, ?, ?)",
-		symbol, "2023-01-15", 100.0, 100.0,
+		"INSERT INTO daily_prices (isin, date, close, adjusted_close) VALUES (?, ?, ?, ?)",
+		isin, "2023-01-15", 100.0, 100.0,
 	)
 	require.NoError(t, err)
 
 	_, err = historyDB.Exec(
-		"INSERT INTO daily_prices (symbol, date, close, adjusted_close) VALUES (?, ?, ?, ?)",
-		symbol, "2023-07-15", 110.0, 110.0,
+		"INSERT INTO daily_prices (isin, date, close, adjusted_close) VALUES (?, ?, ?, ?)",
+		isin, "2023-07-15", 110.0, 110.0,
 	)
 	require.NoError(t, err)
 
 	// Calculate 6-month return
-	returnVal, err := prep.calculateTargetReturn(symbol, "2023-01-15", "2023-07-15")
+	returnVal, err := prep.calculateTargetReturn(isin, "2023-01-15", "2023-07-15")
 	require.NoError(t, err)
 
 	// Should be 10% return

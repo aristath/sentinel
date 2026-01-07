@@ -35,17 +35,19 @@ const (
 
 // ReturnsCalculator calculates expected returns for portfolio optimization.
 type ReturnsCalculator struct {
-	db             *sql.DB
+	db             *sql.DB // portfolio.db
+	universeDB     *sql.DB // universe.db (for symbol -> ISIN lookup)
 	yahooClient    yahoo.FullClientInterface
 	formulaStorage *symbolic_regression.FormulaStorage
 	log            zerolog.Logger
 }
 
 // NewReturnsCalculator creates a new returns calculator.
-func NewReturnsCalculator(db *sql.DB, yahooClient yahoo.FullClientInterface, log zerolog.Logger) *ReturnsCalculator {
+func NewReturnsCalculator(db *sql.DB, universeDB *sql.DB, yahooClient yahoo.FullClientInterface, log zerolog.Logger) *ReturnsCalculator {
 	formulaStorage := symbolic_regression.NewFormulaStorage(db, log)
 	return &ReturnsCalculator{
 		db:             db,
+		universeDB:     universeDB,
 		yahooClient:    yahooClient,
 		formulaStorage: formulaStorage,
 		log:            log.With().Str("component", "returns").Logger(),
@@ -191,7 +193,8 @@ func (rc *ReturnsCalculator) calculateSingle(
 	isin := security.ISIN
 
 	// Get CAGR (prefer 5Y, fallback to 10Y)
-	cagr, dividendYield, err := rc.getCAGRAndDividend(symbol)
+	// Use ISIN directly (preferred) or lookup from symbol
+	cagr, dividendYield, err := rc.getCAGRAndDividend(isin, symbol)
 	if err != nil {
 		return nil, err
 	}
@@ -383,27 +386,45 @@ func (rc *ReturnsCalculator) calculateSingle(
 
 // getCAGRAndDividend fetches CAGR and dividend yield from database.
 // CAGR is stored in scores.cagr_score (normalized 0-1), dividend yield in scores.dividend_bonus.
-// Uses positions table to map symbol -> ISIN, then queries scores table.
-func (rc *ReturnsCalculator) getCAGRAndDividend(symbol string) (*float64, float64, error) {
-	// Query CAGR from scores table via positions table (symbol -> ISIN mapping)
-	// cagr_score is normalized 0-1, we need to convert it back to actual CAGR
-	// For now, we'll use cagr_score as-is (it's already a normalized score)
-	// TODO: If we need actual CAGR values, we may need to store them separately
+// Uses ISIN directly (preferred) or looks up ISIN from symbol if not available.
+func (rc *ReturnsCalculator) getCAGRAndDividend(isin string, symbol string) (*float64, float64, error) {
+	var queryISIN string
+
+	if isin != "" {
+		// Use ISIN directly (PRIMARY KEY lookup - fastest)
+		queryISIN = isin
+	} else if rc.universeDB != nil {
+		// Lookup ISIN from securities table (indexed query)
+		err := rc.universeDB.QueryRow("SELECT isin FROM securities WHERE symbol = ?", symbol).Scan(&queryISIN)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return nil, 0.0, nil // Security not found
+			}
+			return nil, 0.0, fmt.Errorf("failed to lookup ISIN for symbol %s: %w", symbol, err)
+		}
+		if queryISIN == "" {
+			return nil, 0.0, nil // No ISIN found
+		}
+	} else {
+		// No ISIN and no universeDB - cannot query
+		return nil, 0.0, fmt.Errorf("ISIN required but not available and universeDB not provided")
+	}
+
+	// Query scores directly by ISIN (PRIMARY KEY - fastest)
 	query := `
 		SELECT
-			s.cagr_score,
-			COALESCE(s.dividend_bonus, 0.0) as dividend_yield
-		FROM scores s
-		INNER JOIN positions p ON s.isin = p.isin
-		WHERE p.symbol = ?
-		ORDER BY s.last_updated DESC
+			cagr_score,
+			COALESCE(dividend_bonus, 0.0) as dividend_yield
+		FROM scores
+		WHERE isin = ?
+		ORDER BY last_updated DESC
 		LIMIT 1
 	`
 
 	var cagr sql.NullFloat64
 	var dividendYield float64
 
-	err := rc.db.QueryRow(query, symbol).Scan(&cagr, &dividendYield)
+	err := rc.db.QueryRow(query, queryISIN).Scan(&cagr, &dividendYield)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, 0.0, nil
@@ -467,31 +488,35 @@ func convertCAGRScoreToCAGR(cagrScore float64) float64 {
 }
 
 // getScore fetches security score from database.
-// Uses ISIN if available, falls back to symbol lookup via positions table.
+// Uses ISIN directly (preferred) or looks up ISIN from symbol if not available.
 func (rc *ReturnsCalculator) getScore(isin string, symbol string) (float64, error) {
-	var query string
-	var arg interface{}
+	var queryISIN string
 
 	if isin != "" {
-		// Use ISIN (primary key in scores table)
-		query = `SELECT total_score FROM scores WHERE isin = ? ORDER BY last_updated DESC LIMIT 1`
-		arg = isin
+		// Use ISIN directly (PRIMARY KEY lookup - fastest)
+		queryISIN = isin
+	} else if rc.universeDB != nil {
+		// Lookup ISIN from securities table (indexed query)
+		err := rc.universeDB.QueryRow("SELECT isin FROM securities WHERE symbol = ?", symbol).Scan(&queryISIN)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return 0.5, nil // Security not found, default to neutral
+			}
+			return 0.5, fmt.Errorf("failed to lookup ISIN for symbol %s: %w", symbol, err)
+		}
+		if queryISIN == "" {
+			return 0.5, nil // No ISIN found, default to neutral
+		}
 	} else {
-		// Fallback: Try to find ISIN via positions table, then query scores
-		// This is a workaround - ideally ISIN should always be available
-		query = `
-			SELECT s.total_score
-			FROM scores s
-			INNER JOIN positions p ON s.isin = p.isin
-			WHERE p.symbol = ?
-			ORDER BY s.last_updated DESC
-			LIMIT 1
-		`
-		arg = symbol
+		// No ISIN and no universeDB - cannot query
+		return 0.5, fmt.Errorf("ISIN required but not available and universeDB not provided")
 	}
 
+	// Query scores directly by ISIN (PRIMARY KEY - fastest)
+	query := `SELECT total_score FROM scores WHERE isin = ? ORDER BY last_updated DESC LIMIT 1`
+
 	var score sql.NullFloat64
-	err := rc.db.QueryRow(query, arg).Scan(&score)
+	err := rc.db.QueryRow(query, queryISIN).Scan(&score)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return 0.5, nil // Default to neutral
@@ -508,30 +533,42 @@ func (rc *ReturnsCalculator) getScore(isin string, symbol string) (float64, erro
 
 // getQualityScores fetches long-term and fundamentals scores for quality override calculation.
 // Uses cagr_score as proxy for long-term and fundamental_score for fundamentals.
-// Uses ISIN if available, falls back to symbol lookup via positions table.
+// Uses ISIN directly (preferred) or looks up ISIN from symbol if not available.
 func (rc *ReturnsCalculator) getQualityScores(isin string, symbol string) (*float64, *float64) {
-	var query string
-	var arg interface{}
+	var queryISIN string
 
 	if isin != "" {
-		// Use ISIN (primary key in scores table)
-		query = `SELECT cagr_score, fundamental_score FROM scores WHERE isin = ? ORDER BY last_updated DESC LIMIT 1`
-		arg = isin
+		// Use ISIN directly (PRIMARY KEY lookup - fastest)
+		queryISIN = isin
+	} else if rc.universeDB != nil {
+		// Lookup ISIN from securities table (indexed query)
+		err := rc.universeDB.QueryRow("SELECT isin FROM securities WHERE symbol = ?", symbol).Scan(&queryISIN)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				return nil, nil // Security not found
+			}
+			rc.log.Debug().
+				Err(err).
+				Str("symbol", symbol).
+				Msg("Failed to lookup ISIN for quality scores")
+			return nil, nil
+		}
+		if queryISIN == "" {
+			return nil, nil // No ISIN found
+		}
 	} else {
-		// Fallback: Try to find ISIN via positions table, then query scores
-		query = `
-			SELECT s.cagr_score, s.fundamental_score
-			FROM scores s
-			INNER JOIN positions p ON s.isin = p.isin
-			WHERE p.symbol = ?
-			ORDER BY s.last_updated DESC
-			LIMIT 1
-		`
-		arg = symbol
+		// No ISIN and no universeDB - cannot query
+		rc.log.Debug().
+			Str("symbol", symbol).
+			Msg("ISIN required but not available and universeDB not provided")
+		return nil, nil
 	}
 
+	// Query scores directly by ISIN (PRIMARY KEY - fastest)
+	query := `SELECT cagr_score, fundamental_score FROM scores WHERE isin = ? ORDER BY last_updated DESC LIMIT 1`
+
 	var cagrScore, fundamentalScore sql.NullFloat64
-	err := rc.db.QueryRow(query, arg).Scan(&cagrScore, &fundamentalScore)
+	err := rc.db.QueryRow(query, queryISIN).Scan(&cagrScore, &fundamentalScore)
 	if err != nil {
 		if err != sql.ErrNoRows {
 			rc.log.Debug().

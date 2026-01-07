@@ -31,29 +31,29 @@ func NewHistoryCleanupJob(historyDB, portfolioDB, universeDB *database.DB, log z
 func (j *HistoryCleanupJob) Run() error {
 	j.log.Info().Msg("Starting history cleanup job")
 
-	// Find and cleanup orphaned data (symbols in history/portfolio but not in universe)
+	// Find and cleanup orphaned data (ISINs in history/portfolio but not in universe)
 	orphaned, err := j.findOrphanedSymbols()
 	if err != nil {
-		return fmt.Errorf("failed to find orphaned symbols: %w", err)
+		return fmt.Errorf("failed to find orphaned ISINs: %w", err)
 	}
 
 	if len(orphaned) == 0 {
-		j.log.Info().Msg("No orphaned symbols to clean up")
+		j.log.Info().Msg("No orphaned ISINs to clean up")
 		return nil
 	}
 
-	j.log.Info().Int("count", len(orphaned)).Msg("Found orphaned symbols")
+	j.log.Info().Int("count", len(orphaned)).Msg("Found orphaned ISINs")
 
-	// Clean up each orphaned symbol immediately
+	// Clean up each orphaned ISIN immediately
 	cleaned := 0
 	errors := 0
 
-	for _, symbol := range orphaned {
-		if err := j.cleanupSymbol(symbol); err != nil {
+	for _, isin := range orphaned {
+		if err := j.cleanupSymbol(isin); err != nil {
 			j.log.Error().
 				Err(err).
-				Str("symbol", symbol).
-				Msg("Failed to cleanup orphaned symbol")
+				Str("isin", isin).
+				Msg("Failed to cleanup orphaned ISIN")
 			errors++
 		} else {
 			cleaned++
@@ -72,45 +72,45 @@ func (j *HistoryCleanupJob) Run() error {
 	return nil
 }
 
-// findOrphanedSymbols returns symbols present in history/portfolio but not in universe
+// findOrphanedSymbols returns ISINs present in history/portfolio but not in universe
 func (j *HistoryCleanupJob) findOrphanedSymbols() ([]string, error) {
-	// Get unique symbols from history.db
-	historySymbols := make(map[string]bool)
-	rows, err := j.historyDB.Conn().Query("SELECT DISTINCT symbol FROM daily_prices")
+	// Get unique ISINs from history.db
+	historyISINs := make(map[string]bool)
+	rows, err := j.historyDB.Conn().Query("SELECT DISTINCT isin FROM daily_prices")
 	if err != nil {
-		return nil, fmt.Errorf("failed to query history symbols: %w", err)
+		return nil, fmt.Errorf("failed to query history ISINs: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		var symbol string
-		if err := rows.Scan(&symbol); err != nil {
+		var isin string
+		if err := rows.Scan(&isin); err != nil {
 			return nil, err
 		}
-		historySymbols[symbol] = true
+		historyISINs[isin] = true
 	}
 
-	// Get active symbols from universe.db
-	activeSymbols := make(map[string]bool)
-	rows2, err := j.universeDB.Conn().Query("SELECT symbol FROM securities")
+	// Get active ISINs from universe.db
+	activeISINs := make(map[string]bool)
+	rows2, err := j.universeDB.Conn().Query("SELECT isin FROM securities WHERE active = 1")
 	if err != nil {
-		return nil, fmt.Errorf("failed to query universe symbols: %w", err)
+		return nil, fmt.Errorf("failed to query universe ISINs: %w", err)
 	}
 	defer rows2.Close()
 
 	for rows2.Next() {
-		var symbol string
-		if err := rows2.Scan(&symbol); err != nil {
+		var isin string
+		if err := rows2.Scan(&isin); err != nil {
 			return nil, err
 		}
-		activeSymbols[symbol] = true
+		activeISINs[isin] = true
 	}
 
 	// Find orphans (in history but not in universe)
 	var orphaned []string
-	for symbol := range historySymbols {
-		if !activeSymbols[symbol] {
-			orphaned = append(orphaned, symbol)
+	for isin := range historyISINs {
+		if !activeISINs[isin] {
+			orphaned = append(orphaned, isin)
 		}
 	}
 
@@ -122,12 +122,12 @@ func (j *HistoryCleanupJob) Name() string {
 	return "history_cleanup"
 }
 
-// cleanupSymbol removes all data for a symbol across databases
-func (j *HistoryCleanupJob) cleanupSymbol(symbol string) error {
-	j.log.Info().Str("symbol", symbol).Msg("Cleaning up orphaned symbol")
+// cleanupSymbol removes all data for an ISIN across databases
+func (j *HistoryCleanupJob) cleanupSymbol(isin string) error {
+	j.log.Info().Str("isin", isin).Msg("Cleaning up orphaned ISIN")
 
 	// Delete from history.db daily_prices
-	result, err := j.historyDB.Conn().Exec("DELETE FROM daily_prices WHERE symbol = ?", symbol)
+	result, err := j.historyDB.Conn().Exec("DELETE FROM daily_prices WHERE isin = ?", isin)
 	if err != nil {
 		return fmt.Errorf("failed to delete from daily_prices: %w", err)
 	}
@@ -135,15 +135,15 @@ func (j *HistoryCleanupJob) cleanupSymbol(symbol string) error {
 	deletedRows, _ := result.RowsAffected()
 
 	j.log.Info().
-		Str("symbol", symbol).
+		Str("isin", isin).
 		Int64("rows_deleted", deletedRows).
-		Msg("Symbol cleaned up successfully")
+		Msg("ISIN cleaned up successfully")
 
 	// Clean up from portfolio.db (positions, scores, calculated_metrics)
-	if err := j.cleanupPortfolioData(symbol); err != nil {
+	if err := j.cleanupPortfolioData(isin); err != nil {
 		j.log.Error().
 			Err(err).
-			Str("symbol", symbol).
+			Str("isin", isin).
 			Msg("Failed to cleanup portfolio data (non-fatal)")
 		// Don't return error - history cleanup succeeded
 	}
@@ -151,28 +151,29 @@ func (j *HistoryCleanupJob) cleanupSymbol(symbol string) error {
 	return nil
 }
 
-// cleanupPortfolioData removes portfolio data for a symbol
-func (j *HistoryCleanupJob) cleanupPortfolioData(symbol string) error {
-	// Delete from positions
-	_, err := j.portfolioDB.Conn().Exec("DELETE FROM positions WHERE symbol = ?", symbol)
+// cleanupPortfolioData removes portfolio data for an ISIN
+// Note: positions and scores tables use ISIN as PRIMARY KEY, not symbol
+func (j *HistoryCleanupJob) cleanupPortfolioData(isin string) error {
+	// Delete from positions (ISIN is PRIMARY KEY)
+	_, err := j.portfolioDB.Conn().Exec("DELETE FROM positions WHERE isin = ?", isin)
 	if err != nil {
 		return fmt.Errorf("failed to delete positions: %w", err)
 	}
 
-	// Delete from scores
-	_, err = j.portfolioDB.Conn().Exec("DELETE FROM scores WHERE symbol = ?", symbol)
+	// Delete from scores (ISIN is PRIMARY KEY)
+	_, err = j.portfolioDB.Conn().Exec("DELETE FROM scores WHERE isin = ?", isin)
 	if err != nil {
 		return fmt.Errorf("failed to delete scores: %w", err)
 	}
 
-	// Delete from calculated_metrics if table exists
-	_, err = j.portfolioDB.Conn().Exec("DELETE FROM calculated_metrics WHERE symbol = ?", symbol)
+	// Delete from calculated_metrics if table exists (legacy table, may not exist)
+	_, err = j.portfolioDB.Conn().Exec("DELETE FROM calculated_metrics WHERE symbol = ?", isin)
 	if err != nil && !isTableNotExistsError(err) {
 		return fmt.Errorf("failed to delete calculated_metrics: %w", err)
 	}
 
 	j.log.Debug().
-		Str("symbol", symbol).
+		Str("isin", isin).
 		Msg("Portfolio data cleaned up")
 
 	return nil

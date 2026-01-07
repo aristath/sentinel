@@ -19,7 +19,7 @@ func setupHistoryTestDB(t *testing.T) *sql.DB {
 	// Create daily_prices table (consolidated schema)
 	_, err = db.Exec(`
 		CREATE TABLE daily_prices (
-			symbol TEXT NOT NULL,
+			isin TEXT NOT NULL,
 			date TEXT NOT NULL,
 			open REAL NOT NULL,
 			high REAL NOT NULL,
@@ -27,7 +27,7 @@ func setupHistoryTestDB(t *testing.T) *sql.DB {
 			close REAL NOT NULL,
 			volume INTEGER,
 			adjusted_close REAL,
-			PRIMARY KEY (symbol, date)
+			PRIMARY KEY (isin, date)
 		) STRICT
 	`)
 	require.NoError(t, err)
@@ -35,22 +35,22 @@ func setupHistoryTestDB(t *testing.T) *sql.DB {
 	// Create monthly_prices table
 	_, err = db.Exec(`
 		CREATE TABLE monthly_prices (
-			symbol TEXT NOT NULL,
+			isin TEXT NOT NULL,
 			year_month TEXT NOT NULL,
 			avg_close REAL NOT NULL,
 			avg_adj_close REAL NOT NULL,
 			source TEXT,
 			created_at TEXT,
-			PRIMARY KEY (symbol, year_month)
+			PRIMARY KEY (isin, year_month)
 		) STRICT
 	`)
 	require.NoError(t, err)
 
 	// Create indexes
 	_, err = db.Exec(`
-		CREATE INDEX IF NOT EXISTS idx_prices_symbol ON daily_prices(symbol);
+		CREATE INDEX IF NOT EXISTS idx_prices_isin ON daily_prices(isin);
 		CREATE INDEX IF NOT EXISTS idx_prices_date ON daily_prices(date DESC);
-		CREATE INDEX IF NOT EXISTS idx_monthly_symbol ON monthly_prices(symbol);
+		CREATE INDEX IF NOT EXISTS idx_monthly_isin ON monthly_prices(isin);
 		CREATE INDEX IF NOT EXISTS idx_monthly_year_month ON monthly_prices(year_month DESC);
 	`)
 	require.NoError(t, err)
@@ -75,7 +75,7 @@ func TestGetDailyPrices_WithISIN(t *testing.T) {
 
 	// Insert test data with ISIN
 	_, err := db.Exec(`
-		INSERT INTO daily_prices (symbol, date, open, high, low, close, volume, adjusted_close)
+		INSERT INTO daily_prices (isin, date, open, high, low, close, volume, adjusted_close)
 		VALUES
 			('US0378331005', '2024-01-02', 185.0, 186.5, 184.0, 185.5, 50000000, 185.5),
 			('US0378331005', '2024-01-03', 185.5, 187.0, 185.0, 186.0, 45000000, 186.0),
@@ -123,7 +123,7 @@ func TestGetDailyPrices_Limit(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		date := time.Date(2024, 1, i+1, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
 		_, err := db.Exec(`
-			INSERT INTO daily_prices (symbol, date, open, high, low, close, volume, adjusted_close)
+			INSERT INTO daily_prices (isin, date, open, high, low, close, volume, adjusted_close)
 			VALUES (?, ?, 100.0, 105.0, 95.0, 102.0, 1000000, 102.0)
 		`, "US0378331005", date)
 		require.NoError(t, err)
@@ -145,7 +145,7 @@ func TestGetMonthlyPrices_WithISIN(t *testing.T) {
 
 	// Insert monthly data with ISIN
 	_, err := db.Exec(`
-		INSERT INTO monthly_prices (symbol, year_month, avg_close, avg_adj_close, source, created_at)
+		INSERT INTO monthly_prices (isin, year_month, avg_close, avg_adj_close, source, created_at)
 		VALUES
 			('US0378331005', '2024-01', 185.0, 185.0, 'calculated', datetime('now')),
 			('US0378331005', '2024-02', 186.5, 186.5, 'calculated', datetime('now')),
@@ -194,7 +194,7 @@ func TestHasMonthlyData_WithISIN(t *testing.T) {
 
 	// Insert monthly data
 	_, err = db.Exec(`
-		INSERT INTO monthly_prices (symbol, year_month, avg_close, avg_adj_close, source, created_at)
+		INSERT INTO monthly_prices (isin, year_month, avg_close, avg_adj_close, source, created_at)
 		VALUES ('US0378331005', '2024-01', 185.0, 185.0, 'calculated', datetime('now'))
 	`)
 	require.NoError(t, err)
@@ -231,18 +231,18 @@ func TestSyncHistoricalPrices_WithISIN(t *testing.T) {
 
 	// Verify daily prices were inserted
 	var count int
-	err = db.QueryRow("SELECT COUNT(*) FROM daily_prices WHERE symbol = ?", isin).Scan(&count)
+	err = db.QueryRow("SELECT COUNT(*) FROM daily_prices WHERE isin = ?", isin).Scan(&count)
 	assert.NoError(t, err)
 	assert.Equal(t, 3, count)
 
 	// Verify monthly prices were aggregated
-	err = db.QueryRow("SELECT COUNT(*) FROM monthly_prices WHERE symbol = ?", isin).Scan(&count)
+	err = db.QueryRow("SELECT COUNT(*) FROM monthly_prices WHERE isin = ?", isin).Scan(&count)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, count) // All 3 days are in January 2024
 
 	// Verify monthly price value
 	var avgClose float64
-	err = db.QueryRow("SELECT avg_close FROM monthly_prices WHERE symbol = ? AND year_month = '2024-01'", isin).Scan(&avgClose)
+	err = db.QueryRow("SELECT avg_close FROM monthly_prices WHERE isin = ? AND year_month = '2024-01'", isin).Scan(&avgClose)
 	assert.NoError(t, err)
 	expectedAvg := (185.5 + 186.0 + 187.5) / 3.0
 	assert.InDelta(t, expectedAvg, avgClose, 0.01)
@@ -273,9 +273,9 @@ func TestSyncHistoricalPrices_MultipleISINs(t *testing.T) {
 
 	// Verify ISIN isolation - each ISIN has its own data
 	var count1, count2 int
-	err = db.QueryRow("SELECT COUNT(*) FROM daily_prices WHERE symbol = ?", isin1).Scan(&count1)
+	err = db.QueryRow("SELECT COUNT(*) FROM daily_prices WHERE isin = ?", isin1).Scan(&count1)
 	assert.NoError(t, err)
-	err = db.QueryRow("SELECT COUNT(*) FROM daily_prices WHERE symbol = ?", isin2).Scan(&count2)
+	err = db.QueryRow("SELECT COUNT(*) FROM daily_prices WHERE isin = ?", isin2).Scan(&count2)
 	assert.NoError(t, err)
 
 	assert.Equal(t, 1, count1)
@@ -283,9 +283,9 @@ func TestSyncHistoricalPrices_MultipleISINs(t *testing.T) {
 
 	// Verify data is correct for each ISIN
 	var close1, close2 float64
-	err = db.QueryRow("SELECT close FROM daily_prices WHERE symbol = ?", isin1).Scan(&close1)
+	err = db.QueryRow("SELECT close FROM daily_prices WHERE isin = ?", isin1).Scan(&close1)
 	assert.NoError(t, err)
-	err = db.QueryRow("SELECT close FROM daily_prices WHERE symbol = ?", isin2).Scan(&close2)
+	err = db.QueryRow("SELECT close FROM daily_prices WHERE isin = ?", isin2).Scan(&close2)
 	assert.NoError(t, err)
 
 	assert.Equal(t, 185.5, close1)
@@ -317,13 +317,13 @@ func TestSyncHistoricalPrices_ReplaceExisting(t *testing.T) {
 
 	// Verify only one row exists (replaced, not duplicated)
 	var count int
-	err = db.QueryRow("SELECT COUNT(*) FROM daily_prices WHERE symbol = ?", isin).Scan(&count)
+	err = db.QueryRow("SELECT COUNT(*) FROM daily_prices WHERE isin = ?", isin).Scan(&count)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, count)
 
 	// Verify updated price
 	var close float64
-	err = db.QueryRow("SELECT close FROM daily_prices WHERE symbol = ? AND date = '2024-01-02'", isin).Scan(&close)
+	err = db.QueryRow("SELECT close FROM daily_prices WHERE isin = ? AND date = '2024-01-02'", isin).Scan(&close)
 	assert.NoError(t, err)
 	assert.Equal(t, 186.5, close) // Updated value, not original
 }
@@ -349,20 +349,20 @@ func TestSyncHistoricalPrices_MonthlyAggregation(t *testing.T) {
 
 	// Verify two monthly aggregates were created
 	var count int
-	err = db.QueryRow("SELECT COUNT(*) FROM monthly_prices WHERE symbol = ?", isin).Scan(&count)
+	err = db.QueryRow("SELECT COUNT(*) FROM monthly_prices WHERE isin = ?", isin).Scan(&count)
 	assert.NoError(t, err)
 	assert.Equal(t, 2, count)
 
 	// Verify January average
 	var janAvg float64
-	err = db.QueryRow("SELECT avg_close FROM monthly_prices WHERE symbol = ? AND year_month = '2024-01'", isin).Scan(&janAvg)
+	err = db.QueryRow("SELECT avg_close FROM monthly_prices WHERE isin = ? AND year_month = '2024-01'", isin).Scan(&janAvg)
 	assert.NoError(t, err)
 	expectedJanAvg := (185.5 + 186.0) / 2.0
 	assert.InDelta(t, expectedJanAvg, janAvg, 0.01)
 
 	// Verify February average
 	var febAvg float64
-	err = db.QueryRow("SELECT avg_close FROM monthly_prices WHERE symbol = ? AND year_month = '2024-02'", isin).Scan(&febAvg)
+	err = db.QueryRow("SELECT avg_close FROM monthly_prices WHERE isin = ? AND year_month = '2024-02'", isin).Scan(&febAvg)
 	assert.NoError(t, err)
 	expectedFebAvg := (186.5 + 187.5) / 2.0
 	assert.InDelta(t, expectedFebAvg, febAvg, 0.01)

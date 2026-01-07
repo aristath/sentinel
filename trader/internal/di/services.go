@@ -220,7 +220,7 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 	container.OpportunitiesService = opportunities.NewService(log)
 
 	// Risk builder (needed for sequences service)
-	container.RiskBuilder = optimization.NewRiskModelBuilder(container.HistoryDB.Conn(), log)
+	container.RiskBuilder = optimization.NewRiskModelBuilder(container.HistoryDB.Conn(), container.UniverseDB.Conn(), log)
 
 	// Sequences service
 	container.SequencesService = sequences.NewService(log, container.RiskBuilder)
@@ -254,6 +254,7 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 	// Returns calculator
 	container.ReturnsCalc = optimization.NewReturnsCalculator(
 		container.PortfolioDB.Conn(),
+		container.UniverseDB.Conn(),
 		container.YahooClient,
 		log,
 	)

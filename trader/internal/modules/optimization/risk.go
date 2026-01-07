@@ -21,8 +21,9 @@ const (
 
 // RiskModelBuilder builds covariance matrices and risk models for optimization.
 type RiskModelBuilder struct {
-	db  *sql.DB
-	log zerolog.Logger
+	db         *sql.DB // history.db
+	universeDB *sql.DB // universe.db (for symbol -> ISIN lookup)
+	log        zerolog.Logger
 }
 
 type marketIndexSpec struct {
@@ -37,10 +38,11 @@ type RegimeAwareRiskOptions struct {
 }
 
 // NewRiskModelBuilder creates a new risk model builder.
-func NewRiskModelBuilder(db *sql.DB, log zerolog.Logger) *RiskModelBuilder {
+func NewRiskModelBuilder(db *sql.DB, universeDB *sql.DB, log zerolog.Logger) *RiskModelBuilder {
 	return &RiskModelBuilder{
-		db:  db,
-		log: log.With().Str("component", "risk_model").Logger(),
+		db:         db,
+		universeDB: universeDB,
+		log:        log.With().Str("component", "risk_model").Logger(),
 	}
 }
 
@@ -153,6 +155,8 @@ func (rb *RiskModelBuilder) BuildRegimeAwareCovarianceMatrix(
 		{Symbol: "STOXX600.EU", Weight: 0.50},
 		{Symbol: "MSCIASIA.ASIA", Weight: 0.30},
 	}
+	// Market indices are stored with ISIN = "INDEX-SYMBOL" format
+	// Convert symbols to ISINs for querying
 	indexSymbols := make([]string, 0, len(indices))
 	for _, idx := range indices {
 		indexSymbols = append(indexSymbols, idx.Symbol)
@@ -237,6 +241,7 @@ func (rb *RiskModelBuilder) BuildRegimeAwareCovarianceMatrix(
 }
 
 // fetchPriceHistory fetches historical prices from the database.
+// This function converts symbols to ISINs before querying daily_prices.isin column.
 func (rb *RiskModelBuilder) fetchPriceHistory(symbols []string, days int) (TimeSeriesData, error) {
 	// Calculate start date
 	startDate := time.Now().AddDate(0, 0, -days).Format("2006-01-02")
@@ -246,22 +251,60 @@ func (rb *RiskModelBuilder) fetchPriceHistory(symbols []string, days int) (TimeS
 		Int("num_symbols", len(symbols)).
 		Msg("Fetching price history from database")
 
-	// Query to get price history for all symbols
+	// Convert symbols to ISINs (daily_prices.isin column stores ISINs)
+	symbolToISIN := make(map[string]string)
+	isins := make([]string, 0, len(symbols))
+
+	for _, symbol := range symbols {
+		// Check if symbol is already an ISIN (for market indices like "INDEX-SPX.US")
+		// Market indices use "INDEX-SYMBOL" format as ISIN
+		if len(symbol) > 6 && symbol[:6] == "INDEX-" {
+			// Already an ISIN
+			isin := symbol
+			symbolToISIN[symbol] = isin
+			isins = append(isins, isin)
+		} else {
+			// Lookup ISIN from securities table
+			var isin string
+			err := rb.universeDB.QueryRow("SELECT isin FROM securities WHERE symbol = ?", symbol).Scan(&isin)
+			if err != nil {
+				rb.log.Warn().
+					Err(err).
+					Str("symbol", symbol).
+					Msg("Failed to lookup ISIN for symbol, skipping")
+				continue
+			}
+			if isin == "" {
+				rb.log.Warn().
+					Str("symbol", symbol).
+					Msg("No ISIN found for symbol, skipping")
+				continue
+			}
+			symbolToISIN[symbol] = isin
+			isins = append(isins, isin)
+		}
+	}
+
+	if len(isins) == 0 {
+		return TimeSeriesData{}, fmt.Errorf("no valid ISINs found for symbols")
+	}
+
+	// Query to get price history for all ISINs
 	query := `
 		SELECT
-			symbol,
+			isin,
 			date,
 			close
 		FROM daily_prices
-		WHERE symbol IN (` + rb.buildPlaceholders(len(symbols)) + `)
+		WHERE isin IN (` + rb.buildPlaceholders(len(isins)) + `)
 			AND date >= ?
 		ORDER BY date ASC
 	`
 
-	// Build args: symbols + startDate
-	args := make([]interface{}, 0, len(symbols)+1)
-	for _, symbol := range symbols {
-		args = append(args, symbol)
+	// Build args: ISINs + startDate
+	args := make([]interface{}, 0, len(isins)+1)
+	for _, isin := range isins {
+		args = append(args, isin)
 	}
 	args = append(args, startDate)
 
@@ -272,21 +315,22 @@ func (rb *RiskModelBuilder) fetchPriceHistory(symbols []string, days int) (TimeS
 	defer rows.Close()
 
 	// Build time series data structure
-	pricesBySymbol := make(map[string]map[string]float64) // symbol -> date -> price
+	// Map ISIN -> date -> price (from database)
+	pricesByISIN := make(map[string]map[string]float64)
 	dateSet := make(map[string]bool)
 
 	for rows.Next() {
-		var symbol, date string
+		var isin, date string
 		var price float64
 
-		if err := rows.Scan(&symbol, &date, &price); err != nil {
+		if err := rows.Scan(&isin, &date, &price); err != nil {
 			return TimeSeriesData{}, fmt.Errorf("failed to scan row: %w", err)
 		}
 
-		if pricesBySymbol[symbol] == nil {
-			pricesBySymbol[symbol] = make(map[string]float64)
+		if pricesByISIN[isin] == nil {
+			pricesByISIN[isin] = make(map[string]float64)
 		}
-		pricesBySymbol[symbol][date] = price
+		pricesByISIN[isin][date] = price
 		dateSet[date] = true
 	}
 
@@ -310,12 +354,24 @@ func (rb *RiskModelBuilder) fetchPriceHistory(symbols []string, days int) (TimeS
 		}
 	}
 
-	// Build final data structure
+	// Build final data structure keyed by symbol (for compatibility)
+	// Map ISIN results back to symbols
 	data := make(map[string][]float64)
 	for _, symbol := range symbols {
+		isin, hasISIN := symbolToISIN[symbol]
+		if !hasISIN {
+			// No ISIN found, fill with NaN
+			prices := make([]float64, len(dates))
+			for i := range prices {
+				prices[i] = math.NaN()
+			}
+			data[symbol] = prices
+			continue
+		}
+
 		prices := make([]float64, len(dates))
 		for i, date := range dates {
-			if price, ok := pricesBySymbol[symbol][date]; ok {
+			if price, ok := pricesByISIN[isin][date]; ok {
 				prices[i] = price
 			} else {
 				// Mark missing data as NaN

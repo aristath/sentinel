@@ -83,7 +83,7 @@ func setupIntegrationTestDB(t *testing.T) (*sql.DB, *sql.DB, *sql.DB) {
 	// Create history schema (for market index prices)
 	_, err = historyDB.Exec(`
 		CREATE TABLE IF NOT EXISTS daily_prices (
-			symbol TEXT NOT NULL,
+			isin TEXT NOT NULL,
 			date TEXT NOT NULL,
 			open REAL NOT NULL,
 			high REAL NOT NULL,
@@ -91,9 +91,9 @@ func setupIntegrationTestDB(t *testing.T) (*sql.DB, *sql.DB, *sql.DB) {
 			close REAL NOT NULL,
 			volume INTEGER,
 			adjusted_close REAL,
-			PRIMARY KEY (symbol, date)
+			PRIMARY KEY (isin, date)
 		);
-		CREATE INDEX IF NOT EXISTS idx_prices_symbol_date ON daily_prices(symbol, date DESC);
+		CREATE INDEX IF NOT EXISTS idx_prices_isin_date ON daily_prices(isin, date DESC);
 	`)
 	require.NoError(t, err)
 

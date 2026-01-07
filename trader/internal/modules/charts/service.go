@@ -120,7 +120,7 @@ func (s *Service) getPricesFromDB(isin string, startDate string, endDate string)
 		query = `
 			SELECT date, close
 			FROM daily_prices
-			WHERE symbol = ? AND date >= ? AND date <= ?
+			WHERE isin = ? AND date >= ? AND date <= ?
 			ORDER BY date ASC
 		`
 		args = []interface{}{isin, startDate, endDate}
@@ -128,7 +128,7 @@ func (s *Service) getPricesFromDB(isin string, startDate string, endDate string)
 		query = `
 			SELECT date, close
 			FROM daily_prices
-			WHERE symbol = ? AND date >= ?
+			WHERE isin = ? AND date >= ?
 			ORDER BY date ASC
 		`
 		args = []interface{}{isin, startDate}
@@ -136,7 +136,7 @@ func (s *Service) getPricesFromDB(isin string, startDate string, endDate string)
 		query = `
 			SELECT date, close
 			FROM daily_prices
-			WHERE symbol = ?
+			WHERE isin = ?
 			ORDER BY date ASC
 		`
 		args = []interface{}{isin}

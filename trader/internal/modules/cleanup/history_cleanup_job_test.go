@@ -44,26 +44,26 @@ func TestHistoryCleanupJob_OrphanedData(t *testing.T) {
 		// Create tables
 		_, err = historyDB.Conn().Exec(`
 			CREATE TABLE daily_prices (
-				symbol TEXT,
+				isin TEXT,
 				date INTEGER,
 				close REAL,
-				PRIMARY KEY (symbol, date)
+				PRIMARY KEY (isin, date)
 			)
 		`)
 		require.NoError(t, err)
 
 		_, err = universeDB.Conn().Exec(`
-			CREATE TABLE securities (symbol TEXT PRIMARY KEY, name TEXT, active INTEGER)
+			CREATE TABLE securities (isin TEXT PRIMARY KEY, symbol TEXT, name TEXT, active INTEGER)
 		`)
 		require.NoError(t, err)
 
 		_, err = portfolioDB.Conn().Exec(`
-			CREATE TABLE positions (symbol TEXT PRIMARY KEY, quantity REAL)
+			CREATE TABLE positions (isin TEXT PRIMARY KEY, symbol TEXT, quantity REAL)
 		`)
 		require.NoError(t, err)
 
 		_, err = portfolioDB.Conn().Exec(`
-			CREATE TABLE scores (symbol TEXT PRIMARY KEY, quality REAL)
+			CREATE TABLE scores (isin TEXT PRIMARY KEY, quality REAL)
 		`)
 		require.NoError(t, err)
 
@@ -72,21 +72,21 @@ func TestHistoryCleanupJob_OrphanedData(t *testing.T) {
 		`)
 		require.NoError(t, err)
 
-		// Insert active symbol in universe
-		_, err = universeDB.Conn().Exec("INSERT INTO securities (symbol, name, active) VALUES ('AAPL', 'Apple Inc', 1)")
+		// Insert active symbol in universe (using ISIN as PRIMARY KEY)
+		_, err = universeDB.Conn().Exec("INSERT INTO securities (isin, symbol, name, active) VALUES ('US0378331005', 'AAPL', 'Apple Inc', 1)")
 		require.NoError(t, err)
 
-		// Insert price data for both active and orphaned symbols
+		// Insert price data for both active and orphaned symbols (using ISINs)
 		_, err = historyDB.Conn().Exec(`
-			INSERT INTO daily_prices (symbol, date, close)
-			VALUES ('AAPL', ?, 150.0), ('ORPHAN', ?, 100.0)
+			INSERT INTO daily_prices (isin, date, close)
+			VALUES ('US0378331005', ?, 150.0), ('ORPHAN-ISIN', ?, 100.0)
 		`, time.Now().Unix(), time.Now().Unix())
 		require.NoError(t, err)
 
-		// Insert portfolio data for orphaned symbol
-		_, err = portfolioDB.Conn().Exec("INSERT INTO positions (symbol, quantity) VALUES ('ORPHAN', 10)")
+		// Insert portfolio data for orphaned symbol (using ISIN as PRIMARY KEY)
+		_, err = portfolioDB.Conn().Exec("INSERT INTO positions (isin, symbol, quantity) VALUES ('ORPHAN-ISIN', 'ORPHAN', 10)")
 		require.NoError(t, err)
-		_, err = portfolioDB.Conn().Exec("INSERT INTO scores (symbol, quality) VALUES ('ORPHAN', 0.8)")
+		_, err = portfolioDB.Conn().Exec("INSERT INTO scores (isin, quality) VALUES ('ORPHAN-ISIN', 0.8)")
 		require.NoError(t, err)
 
 		// Create cleanup job
@@ -96,23 +96,23 @@ func TestHistoryCleanupJob_OrphanedData(t *testing.T) {
 		err = job.Run()
 		require.NoError(t, err)
 
-		// Verify active symbol still exists
+		// Verify active symbol still exists (using ISIN)
 		var count int
-		err = historyDB.Conn().QueryRow("SELECT COUNT(*) FROM daily_prices WHERE symbol = 'AAPL'").Scan(&count)
+		err = historyDB.Conn().QueryRow("SELECT COUNT(*) FROM daily_prices WHERE isin = 'US0378331005'").Scan(&count)
 		require.NoError(t, err)
 		assert.Equal(t, 1, count, "Active symbol should remain")
 
 		// Verify orphaned symbol was cleaned up from history
-		err = historyDB.Conn().QueryRow("SELECT COUNT(*) FROM daily_prices WHERE symbol = 'ORPHAN'").Scan(&count)
+		err = historyDB.Conn().QueryRow("SELECT COUNT(*) FROM daily_prices WHERE isin = 'ORPHAN-ISIN'").Scan(&count)
 		require.NoError(t, err)
 		assert.Equal(t, 0, count, "Orphaned symbol should be deleted from history")
 
-		// Verify orphaned symbol was cleaned up from portfolio
-		err = portfolioDB.Conn().QueryRow("SELECT COUNT(*) FROM positions WHERE symbol = 'ORPHAN'").Scan(&count)
+		// Verify orphaned symbol was cleaned up from portfolio (using ISIN as PRIMARY KEY)
+		err = portfolioDB.Conn().QueryRow("SELECT COUNT(*) FROM positions WHERE isin = 'ORPHAN-ISIN'").Scan(&count)
 		require.NoError(t, err)
 		assert.Equal(t, 0, count, "Orphaned symbol should be deleted from positions")
 
-		err = portfolioDB.Conn().QueryRow("SELECT COUNT(*) FROM scores WHERE symbol = 'ORPHAN'").Scan(&count)
+		err = portfolioDB.Conn().QueryRow("SELECT COUNT(*) FROM scores WHERE isin = 'ORPHAN-ISIN'").Scan(&count)
 		require.NoError(t, err)
 		assert.Equal(t, 0, count, "Orphaned symbol should be deleted from scores")
 	})
@@ -148,27 +148,27 @@ func TestHistoryCleanupJob_OrphanedData(t *testing.T) {
 		// Create tables
 		_, err = historyDB.Conn().Exec(`
 			CREATE TABLE daily_prices (
-				symbol TEXT,
+				isin TEXT,
 				date INTEGER,
 				close REAL,
-				PRIMARY KEY (symbol, date)
+				PRIMARY KEY (isin, date)
 			)
 		`)
 		require.NoError(t, err)
 
 		_, err = universeDB.Conn().Exec(`
-			CREATE TABLE securities (symbol TEXT PRIMARY KEY, name TEXT, active INTEGER)
+			CREATE TABLE securities (isin TEXT PRIMARY KEY, symbol TEXT, name TEXT, active INTEGER)
 		`)
 		require.NoError(t, err)
 
-		// Insert active symbols in universe
-		_, err = universeDB.Conn().Exec("INSERT INTO securities (symbol, name, active) VALUES ('AAPL', 'Apple Inc', 1), ('GOOGL', 'Google', 1)")
+		// Insert active symbols in universe (using ISIN as PRIMARY KEY)
+		_, err = universeDB.Conn().Exec("INSERT INTO securities (isin, symbol, name, active) VALUES ('US0378331005', 'AAPL', 'Apple Inc', 1), ('US02079K3059', 'GOOGL', 'Google', 1)")
 		require.NoError(t, err)
 
-		// Insert price data for all symbols
+		// Insert price data for all symbols (using ISINs)
 		_, err = historyDB.Conn().Exec(`
-			INSERT INTO daily_prices (symbol, date, close)
-			VALUES ('AAPL', ?, 150.0), ('GOOGL', ?, 2800.0)
+			INSERT INTO daily_prices (isin, date, close)
+			VALUES ('US0378331005', ?, 150.0), ('US02079K3059', ?, 2800.0)
 		`, time.Now().Unix(), time.Now().Unix())
 		require.NoError(t, err)
 

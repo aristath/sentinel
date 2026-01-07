@@ -39,13 +39,11 @@ type MonthlyPrice struct {
 }
 
 // GetDailyPrices fetches daily price data for an ISIN
-// Note: History database currently uses 'symbol' column but stores ISIN values
-// TODO: Migrate history database to use 'isin' column name for consistency
 func (h *HistoryDB) GetDailyPrices(isin string, limit int) ([]DailyPrice, error) {
 	query := `
 		SELECT date, close, high, low, open, volume
 		FROM daily_prices
-		WHERE symbol = ?
+		WHERE isin = ?
 		ORDER BY date DESC
 		LIMIT ?
 	`
@@ -81,13 +79,11 @@ func (h *HistoryDB) GetDailyPrices(isin string, limit int) ([]DailyPrice, error)
 }
 
 // GetMonthlyPrices fetches monthly price data for an ISIN
-// Note: History database currently uses 'symbol' column but stores ISIN values
-// TODO: Migrate history database to use 'isin' column name for consistency
 func (h *HistoryDB) GetMonthlyPrices(isin string, limit int) ([]MonthlyPrice, error) {
 	query := `
 		SELECT year_month, avg_adj_close
 		FROM monthly_prices
-		WHERE symbol = ?
+		WHERE isin = ?
 		ORDER BY year_month DESC
 		LIMIT ?
 	`
@@ -119,10 +115,9 @@ func (h *HistoryDB) GetMonthlyPrices(isin string, limit int) ([]MonthlyPrice, er
 
 // HasMonthlyData checks if the history database has monthly price data for an ISIN
 // Used to determine if initial 10-year seed has been done
-// Note: History database currently uses 'symbol' column but stores ISIN values
 func (h *HistoryDB) HasMonthlyData(isin string) (bool, error) {
 	var count int
-	err := h.db.QueryRow("SELECT COUNT(*) FROM monthly_prices WHERE symbol = ?", isin).Scan(&count)
+	err := h.db.QueryRow("SELECT COUNT(*) FROM monthly_prices WHERE isin = ?", isin).Scan(&count)
 	if err != nil {
 		return false, fmt.Errorf("failed to check monthly data: %w", err)
 	}
@@ -135,8 +130,6 @@ func (h *HistoryDB) HasMonthlyData(isin string) (bool, error) {
 //
 // Inserts/replaces daily prices and aggregates to monthly prices in a single transaction
 // The isin parameter is the ISIN (e.g., US0378331005), not the Tradernet symbol
-// Note: History database currently uses 'symbol' column but stores ISIN values
-// TODO: Migrate history database to use 'isin' column name for consistency
 func (h *HistoryDB) SyncHistoricalPrices(isin string, prices []DailyPrice) error {
 	// Begin transaction
 	tx, err := h.db.Begin()
@@ -145,10 +138,10 @@ func (h *HistoryDB) SyncHistoricalPrices(isin string, prices []DailyPrice) error
 	}
 	defer tx.Rollback() // Will be no-op if Commit succeeds
 
-	// Insert/replace daily prices with ISIN (stored in 'symbol' column for now)
+	// Insert/replace daily prices with ISIN
 	stmt, err := tx.Prepare(`
 		INSERT OR REPLACE INTO daily_prices
-		(symbol, date, open, high, low, close, volume, adjusted_close)
+		(isin, date, open, high, low, close, volume, adjusted_close)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
@@ -180,19 +173,19 @@ func (h *HistoryDB) SyncHistoricalPrices(isin string, prices []DailyPrice) error
 		}
 	}
 
-	// Aggregate to monthly prices with ISIN filter (stored in 'symbol' column for now)
+	// Aggregate to monthly prices with ISIN filter
 	_, err = tx.Exec(`
 		INSERT OR REPLACE INTO monthly_prices
-		(symbol, year_month, avg_close, avg_adj_close, source, created_at)
+		(isin, year_month, avg_close, avg_adj_close, source, created_at)
 		SELECT
-			? as symbol,
+			? as isin,
 			strftime('%Y-%m', date) as year_month,
 			AVG(close) as avg_close,
 			AVG(adjusted_close) as avg_adj_close,
 			'calculated',
 			datetime('now')
 		FROM daily_prices
-		WHERE symbol = ?
+		WHERE isin = ?
 		GROUP BY strftime('%Y-%m', date)
 	`, isin, isin)
 	if err != nil {

@@ -78,8 +78,10 @@ func TestReturnsCalculator_WithDiscoveredFormula(t *testing.T) {
 	formulaStorage := symbolic_regression.NewFormulaStorage(db, log)
 
 	// Create returns calculator with formula storage
+	// Note: universeDB is nil for this test since we're using ISIN directly
 	calc := &ReturnsCalculator{
 		db:             db,
+		universeDB:     nil, // Not needed for this test (ISIN provided directly)
 		formulaStorage: formulaStorage,
 		log:            log,
 	}

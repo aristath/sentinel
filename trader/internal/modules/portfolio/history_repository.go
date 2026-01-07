@@ -44,7 +44,7 @@ func (r *HistoryRepository) GetDailyRange(startDate, endDate string) ([]DailyPri
 	query := `
 		SELECT date, open, high, low, close, volume
 		FROM daily_prices
-		WHERE symbol = ? AND date >= ? AND date <= ?
+		WHERE isin = ? AND date >= ? AND date <= ?
 		ORDER BY date ASC
 	`
 
@@ -94,7 +94,7 @@ func (r *HistoryRepository) GetLatestPrice() (*DailyPrice, error) {
 	query := `
 		SELECT date, open, high, low, close, volume
 		FROM daily_prices
-		WHERE symbol = ?
+		WHERE isin = ?
 		ORDER BY date DESC
 		LIMIT 1
 	`

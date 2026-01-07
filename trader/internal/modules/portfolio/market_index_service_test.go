@@ -47,7 +47,7 @@ func setupMarketIndexTestDB(t *testing.T) (*sql.DB, *sql.DB) {
 	// Create history schema
 	_, err = historyDB.Exec(`
 		CREATE TABLE IF NOT EXISTS daily_prices (
-			symbol TEXT NOT NULL,
+			isin TEXT NOT NULL,
 			date TEXT NOT NULL,
 			open REAL NOT NULL,
 			high REAL NOT NULL,
@@ -55,9 +55,9 @@ func setupMarketIndexTestDB(t *testing.T) (*sql.DB, *sql.DB) {
 			close REAL NOT NULL,
 			volume INTEGER,
 			adjusted_close REAL,
-			PRIMARY KEY (symbol, date)
+			PRIMARY KEY (isin, date)
 		);
-		CREATE INDEX IF NOT EXISTS idx_prices_symbol_date ON daily_prices(symbol, date DESC);
+		CREATE INDEX IF NOT EXISTS idx_prices_isin_date ON daily_prices(isin, date DESC);
 	`)
 	require.NoError(t, err)
 
@@ -129,32 +129,34 @@ func TestGetCompositeReturns(t *testing.T) {
 	require.NoError(t, err)
 
 	// Insert test price data
+	// Note: daily_prices.isin column stores ISINs
+	// Indices use ISIN format: "INDEX-SYMBOL" (e.g., "INDEX-SPX.US")
 	now := time.Now()
 	for i := 0; i < 10; i++ {
 		date := now.AddDate(0, 0, -10+i).Format("2006-01-02")
 
-		// S&P 500: +1% per day
+		// S&P 500: +1% per day (using ISIN format)
 		spxPrice := 4000.0 * (1.0 + float64(i)*0.01)
 		_, err = historyDB.Exec(`
-			INSERT OR REPLACE INTO daily_prices (symbol, date, open, high, low, close, volume)
+			INSERT OR REPLACE INTO daily_prices (isin, date, open, high, low, close, volume)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
-		`, "SPX.US", date, spxPrice, spxPrice*1.01, spxPrice*0.99, spxPrice, 1000000)
+		`, "INDEX-SPX.US", date, spxPrice, spxPrice*1.01, spxPrice*0.99, spxPrice, 1000000)
 		require.NoError(t, err)
 
-		// MSCI Europe: +0.5% per day
+		// MSCI Europe: +0.5% per day (using ISIN format)
 		euPrice := 2000.0 * (1.0 + float64(i)*0.005)
 		_, err = historyDB.Exec(`
-			INSERT OR REPLACE INTO daily_prices (symbol, date, open, high, low, close, volume)
+			INSERT OR REPLACE INTO daily_prices (isin, date, open, high, low, close, volume)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
-		`, "STOXX600.EU", date, euPrice, euPrice*1.01, euPrice*0.99, euPrice, 1000000)
+		`, "INDEX-STOXX600.EU", date, euPrice, euPrice*1.01, euPrice*0.99, euPrice, 1000000)
 		require.NoError(t, err)
 
-		// MSCI Asia: +0.3% per day
+		// MSCI Asia: +0.3% per day (using ISIN format)
 		asiaPrice := 1500.0 * (1.0 + float64(i)*0.003)
 		_, err = historyDB.Exec(`
-			INSERT OR REPLACE INTO daily_prices (symbol, date, open, high, low, close, volume)
+			INSERT OR REPLACE INTO daily_prices (isin, date, open, high, low, close, volume)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
-		`, "MSCIASIA.ASIA", date, asiaPrice, asiaPrice*1.01, asiaPrice*0.99, asiaPrice, 1000000)
+		`, "INDEX-MSCIASIA.ASIA", date, asiaPrice, asiaPrice*1.01, asiaPrice*0.99, asiaPrice, 1000000)
 		require.NoError(t, err)
 	}
 
@@ -176,8 +178,8 @@ func TestGetCompositeReturns(t *testing.T) {
 	})
 
 	t.Run("Handles missing index data gracefully", func(t *testing.T) {
-		// Remove one index's data
-		_, err = historyDB.Exec(`DELETE FROM daily_prices WHERE symbol = 'MSCIASIA.ASIA'`)
+		// Remove one index's data (using ISIN format)
+		_, err = historyDB.Exec(`DELETE FROM daily_prices WHERE isin = 'INDEX-MSCIASIA.ASIA'`)
 		require.NoError(t, err)
 
 		// Should still work with available indices
@@ -200,16 +202,18 @@ func TestGetMarketReturns(t *testing.T) {
 	require.NoError(t, err)
 
 	// Insert price data
+	// Note: daily_prices.isin column stores ISINs
+	// Indices use ISIN format: "INDEX-SYMBOL" (e.g., "INDEX-SPX.US")
 	now := time.Now()
 	for i := 0; i < 30; i++ {
 		date := now.AddDate(0, 0, -30+i).Format("2006-01-02")
 		price := 1000.0 * (1.0 + float64(i)*0.001) // Small daily gains
 
-		for _, symbol := range []string{"SPX.US", "STOXX600.EU", "MSCIASIA.ASIA"} {
+		for _, isin := range []string{"INDEX-SPX.US", "INDEX-STOXX600.EU", "INDEX-MSCIASIA.ASIA"} {
 			_, err = historyDB.Exec(`
-				INSERT OR REPLACE INTO daily_prices (symbol, date, open, high, low, close, volume)
+				INSERT OR REPLACE INTO daily_prices (isin, date, open, high, low, close, volume)
 				VALUES (?, ?, ?, ?, ?, ?, ?)
-			`, symbol, date, price, price*1.01, price*0.99, price, 1000000)
+			`, isin, date, price, price*1.01, price*0.99, price, 1000000)
 			require.NoError(t, err)
 		}
 	}

@@ -517,16 +517,28 @@ func (j *PlannerBatchJob) populateCAGRs(securities []universe.Security) map[stri
 		return cagrs
 	}
 
-	// Query CAGR from scores table via positions table (symbol -> ISIN mapping)
-	// cagr_score is normalized 0-1, convert back to approximate CAGR percentage
+	// Build ISIN -> symbol map for securities
+	isinToSymbol := make(map[string]string)
+	isinList := make([]string, 0)
+	for _, sec := range securities {
+		if sec.ISIN != "" && sec.Symbol != "" {
+			isinToSymbol[sec.ISIN] = sec.Symbol
+			isinList = append(isinList, sec.ISIN)
+		}
+	}
+
+	if len(isinList) == 0 {
+		j.log.Debug().Msg("No ISINs available, skipping CAGR population")
+		return cagrs
+	}
+
+	// Query scores table directly by ISIN (PRIMARY KEY - fastest)
+	// Get all scores with valid CAGR, then filter to securities we care about
 	query := `
-		SELECT
-			p.symbol,
-			s.cagr_score
-		FROM scores s
-		INNER JOIN positions p ON s.isin = p.isin
-		WHERE s.cagr_score IS NOT NULL AND s.cagr_score > 0
-		ORDER BY s.last_updated DESC
+		SELECT isin, cagr_score
+		FROM scores
+		WHERE cagr_score IS NOT NULL AND cagr_score > 0
+		ORDER BY last_updated DESC
 	`
 
 	rows, err := j.portfolioDB.Query(query)
@@ -536,31 +548,27 @@ func (j *PlannerBatchJob) populateCAGRs(securities []universe.Security) map[stri
 	}
 	defer rows.Close()
 
-	// Build symbol -> ISIN map for securities
-	symbolToISIN := make(map[string]string)
-	for _, sec := range securities {
-		if sec.Symbol != "" && sec.ISIN != "" {
-			symbolToISIN[sec.Symbol] = sec.ISIN
-		}
-	}
-
 	for rows.Next() {
-		var symbol string
+		var isin string
 		var cagrScore sql.NullFloat64
-		if err := rows.Scan(&symbol, &cagrScore); err != nil {
-			j.log.Warn().Err(err).Str("symbol", symbol).Msg("Failed to scan CAGR")
+		if err := rows.Scan(&isin, &cagrScore); err != nil {
+			j.log.Warn().Err(err).Str("isin", isin).Msg("Failed to scan CAGR")
+			continue
+		}
+
+		// Only include CAGRs for securities we care about
+		if _, ok := isinToSymbol[isin]; !ok {
 			continue
 		}
 
 		if cagrScore.Valid && cagrScore.Float64 > 0 {
-			// Convert normalized cagr_score (0-1) back to approximate CAGR percentage
+			// Convert normalized cagr_score (0-1) to approximate CAGR percentage
 			cagrValue := convertCAGRScoreToCAGR(cagrScore.Float64)
 			if cagrValue > 0 {
-				// Store by symbol
-				cagrs[symbol] = cagrValue
-				// Also store by ISIN if available
-				if isin, ok := symbolToISIN[symbol]; ok {
-					cagrs[isin] = cagrValue
+				cagrs[isin] = cagrValue
+				// Also store by symbol if available
+				if symbol, ok := isinToSymbol[isin]; ok {
+					cagrs[symbol] = cagrValue
 				}
 			}
 		}

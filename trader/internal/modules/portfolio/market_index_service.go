@@ -185,16 +185,31 @@ func (s *MarketIndexService) GetMarketReturns(days int) ([]float64, error) {
 }
 
 // getIndexReturns gets daily returns for a specific index
+// Note: Market indices are stored with ISIN = "INDEX-SYMBOL" format in daily_prices.isin column
 func (s *MarketIndexService) getIndexReturns(symbol string, days int) ([]float64, error) {
+	// Lookup ISIN from securities table (indices have ISIN = "INDEX-SYMBOL")
+	var isin string
+	err := s.universeDB.QueryRow(`
+		SELECT isin FROM securities
+		WHERE symbol = ? AND product_type = 'INDEX'
+	`, symbol).Scan(&isin)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ISIN for index %s: %w", symbol, err)
+	}
+	if isin == "" {
+		return nil, fmt.Errorf("no ISIN found for index %s", symbol)
+	}
+
+	// Query daily_prices using ISIN
 	query := `
 		SELECT date, close
 		FROM daily_prices
-		WHERE symbol = ?
+		WHERE isin = ?
 		ORDER BY date DESC
 		LIMIT ?
 	`
 
-	rows, err := s.historyDB.Query(query, symbol, days+1) // +1 to calculate returns
+	rows, err := s.historyDB.Query(query, isin, days+1) // +1 to calculate returns
 	if err != nil {
 		return nil, fmt.Errorf("failed to query prices: %w", err)
 	}
