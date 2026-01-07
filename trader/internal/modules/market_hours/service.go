@@ -2,7 +2,6 @@ package market_hours
 
 import (
 	"fmt"
-	"strings"
 	"time"
 )
 
@@ -154,14 +153,11 @@ func (s *MarketHoursService) isEarlyClose(config *ExchangeConfig, t time.Time) b
 // - SELL orders: Always check market hours (all markets)
 // - BUY orders: Only check if exchange requires strict market hours
 func (s *MarketHoursService) ShouldCheckMarketHours(exchangeName, side string) bool {
-	// Normalize side to uppercase for comparison
-	sideUpper := strings.ToUpper(strings.TrimSpace(side))
-
-	if sideUpper == "SELL" {
+	if side == "SELL" {
 		return true
 	}
 
-	if sideUpper == "BUY" {
+	if side == "BUY" {
 		return s.RequiresStrictMarketHours(exchangeName)
 	}
 

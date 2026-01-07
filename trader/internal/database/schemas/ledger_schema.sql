@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS trades (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     symbol TEXT NOT NULL,
     isin TEXT,
-    side TEXT NOT NULL CHECK (side IN ('buy', 'sell')),
+    side TEXT NOT NULL CHECK (side IN ('BUY', 'SELL')),
     quantity REAL NOT NULL CHECK (quantity > 0),
     price REAL NOT NULL CHECK (price > 0),
     executed_at TEXT NOT NULL,       -- ISO 8601 timestamp

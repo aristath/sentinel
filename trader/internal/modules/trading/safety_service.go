@@ -152,7 +152,7 @@ func (s *TradeSafetyService) checkMarketHours(symbol string, side string) error 
 // Faithful translation from Python: async def check_cooldown()
 func (s *TradeSafetyService) checkBuyCooldown(symbol string, side string) error {
 	// Only applies to BUY orders
-	if strings.ToUpper(side) != "BUY" {
+	if side != "BUY" {
 		return nil
 	}
 
@@ -185,7 +185,7 @@ func (s *TradeSafetyService) checkBuyCooldown(symbol string, side string) error 
 // Faithful translation from Python: async def check_pending_orders()
 func (s *TradeSafetyService) checkPendingOrders(symbol string, side string) error {
 	// For SELL orders: Check database for recent orders (last 2 hours)
-	if strings.ToUpper(side) == "SELL" {
+	if side == "SELL" {
 		hasRecent, err := s.tradeRepo.HasRecentSellOrder(symbol, 2.0)
 		if err != nil {
 			s.log.Warn().Err(err).Msg("Failed to check recent sell orders - allowing trade")
@@ -209,7 +209,7 @@ func (s *TradeSafetyService) checkPendingOrders(symbol string, side string) erro
 // Faithful translation from Python: async def check_minimum_hold_time()
 func (s *TradeSafetyService) checkMinimumHoldTime(symbol string, side string) error {
 	// Only applies to SELL orders
-	if strings.ToUpper(side) != "SELL" {
+	if side != "SELL" {
 		return nil
 	}
 
@@ -260,7 +260,7 @@ func (s *TradeSafetyService) checkMinimumHoldTime(symbol string, side string) er
 // Faithful translation from Python: async def validate_sell_position()
 func (s *TradeSafetyService) validateSellPosition(symbol string, quantity float64, side string) error {
 	// Only applies to SELL orders
-	if strings.ToUpper(side) != "SELL" {
+	if side != "SELL" {
 		return nil
 	}
 

@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS recommendations (
     uuid TEXT PRIMARY KEY,
     symbol TEXT NOT NULL,
     name TEXT NOT NULL,
-    side TEXT NOT NULL CHECK (side IN ('buy', 'sell')),
+    side TEXT NOT NULL CHECK (side IN ('BUY', 'SELL')),
     quantity REAL NOT NULL CHECK (quantity > 0),
     estimated_price REAL NOT NULL CHECK (estimated_price > 0),
     estimated_value REAL NOT NULL,

@@ -4,7 +4,6 @@ package planning
 import (
 	"database/sql"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -441,14 +440,11 @@ func (r *RecommendationRepository) GetRecommendationsAsPlan() (map[string]interf
 			totalScoreImprovement = rec.ScoreChange
 		}
 
-		// Convert side to uppercase for frontend (BUY/SELL)
-		side := strings.ToUpper(rec.Side)
-
 		step := map[string]interface{}{
 			"step":                   stepNum,
 			"symbol":                 rec.Symbol,
 			"name":                   rec.Name,
-			"side":                   side,
+			"side":                   rec.Side,
 			"quantity":               rec.Quantity,
 			"estimated_price":        rec.EstimatedPrice,
 			"estimated_value":        rec.EstimatedValue,

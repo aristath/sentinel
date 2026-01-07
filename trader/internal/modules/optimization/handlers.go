@@ -564,9 +564,9 @@ func (h *Handler) optimizationResultToDict(result *Result, portfolioValue float6
 	for i := 0; i < maxChanges; i++ {
 		wc := result.WeightChanges[i]
 		changeEUR := wc.Change * portfolioValue
-		direction := "sell"
+		direction := "SELL"
 		if wc.Change > 0 {
-			direction = "buy"
+			direction = "BUY"
 		}
 
 		topChanges = append(topChanges, map[string]interface{}{
@@ -584,7 +584,7 @@ func (h *Handler) optimizationResultToDict(result *Result, portfolioValue float6
 	if len(topChanges) > 0 {
 		top := topChanges[0]
 		action := "Buy"
-		if top["direction"] == "sell" {
+		if top["direction"] == "SELL" {
 			action = "Sell"
 		}
 		changeEUR := top["change_eur"].(float64)

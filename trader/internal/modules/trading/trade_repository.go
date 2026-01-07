@@ -80,7 +80,7 @@ func (r *TradeRepository) Create(trade Trade) error {
 	_, err := r.ledgerDB.Exec(query,
 		strings.ToUpper(strings.TrimSpace(trade.Symbol)),
 		nullString(trade.ISIN),
-		strings.ToLower(string(trade.Side)),
+		string(trade.Side),
 		trade.Quantity,
 		trade.Price,
 		executedAt,
@@ -307,7 +307,7 @@ func (r *TradeRepository) GetRecentlyBoughtSymbols(days int) (map[string]bool, e
 
 	query := `
 		SELECT DISTINCT symbol FROM trades
-		WHERE UPPER(side) = 'BUY'
+		WHERE side = 'BUY'
 		  AND executed_at >= ?
 		  AND order_id IS NOT NULL
 		  AND order_id != ''
@@ -339,7 +339,7 @@ func (r *TradeRepository) GetRecentlySoldSymbols(days int) (map[string]bool, err
 
 	query := `
 		SELECT DISTINCT symbol FROM trades
-		WHERE UPPER(side) = 'SELL'
+		WHERE side = 'SELL'
 		  AND executed_at >= ?
 		  AND (order_id IS NULL OR order_id NOT LIKE 'RESEARCH_%')
 	`
@@ -370,7 +370,7 @@ func (r *TradeRepository) HasRecentSellOrder(symbol string, hours float64) (bool
 	query := `
 		SELECT 1 FROM trades
 		WHERE symbol = ?
-		  AND UPPER(side) = 'SELL'
+		  AND side = 'SELL'
 		  AND executed_at >= ?
 		  AND (order_id IS NULL OR order_id NOT LIKE 'RESEARCH_%')
 		LIMIT 1
@@ -393,7 +393,7 @@ func (r *TradeRepository) HasRecentSellOrder(symbol string, hours float64) (bool
 func (r *TradeRepository) GetFirstBuyDate(symbol string) (*string, error) {
 	query := `
 		SELECT MIN(executed_at) as first_buy FROM trades
-		WHERE symbol = ? AND UPPER(side) = 'BUY'
+		WHERE symbol = ? AND side = 'BUY'
 	`
 
 	var firstBuy sql.NullString
@@ -414,7 +414,7 @@ func (r *TradeRepository) GetFirstBuyDate(symbol string) (*string, error) {
 func (r *TradeRepository) GetLastBuyDate(symbol string) (*string, error) {
 	query := `
 		SELECT MAX(executed_at) as last_buy FROM trades
-		WHERE symbol = ? AND UPPER(side) = 'BUY'
+		WHERE symbol = ? AND side = 'BUY'
 	`
 
 	var lastBuy sql.NullString
@@ -435,7 +435,7 @@ func (r *TradeRepository) GetLastBuyDate(symbol string) (*string, error) {
 func (r *TradeRepository) GetLastSellDate(symbol string) (*string, error) {
 	query := `
 		SELECT MAX(executed_at) as last_sell FROM trades
-		WHERE symbol = ? AND UPPER(side) = 'SELL'
+		WHERE symbol = ? AND side = 'SELL'
 	`
 
 	var lastSell sql.NullString
@@ -478,8 +478,8 @@ func (r *TradeRepository) GetTradeDates() (map[string]map[string]*string, error)
 	query := `
 		SELECT
 			symbol,
-			MIN(CASE WHEN UPPER(side) = 'BUY' THEN executed_at END) as first_buy,
-			MAX(CASE WHEN UPPER(side) = 'SELL' THEN executed_at END) as last_sell
+			MIN(CASE WHEN side = 'BUY' THEN executed_at END) as first_buy,
+			MAX(CASE WHEN side = 'SELL' THEN executed_at END) as last_sell
 		FROM trades
 		GROUP BY symbol
 	`

@@ -21,7 +21,7 @@ type Position struct {
 // PendingOrder represents a pending order for hashing
 type PendingOrder struct {
 	Symbol   string
-	Side     string // "buy" or "sell"
+	Side     string // "BUY" or "SELL"
 	Quantity int
 	Price    float64
 	Currency string
@@ -66,7 +66,7 @@ func ApplyPendingOrdersToPortfolio(
 	// Process each pending order
 	for _, order := range pendingOrders {
 		symbol := strings.ToUpper(order.Symbol)
-		side := strings.ToLower(order.Side)
+		side := order.Side
 		quantity := order.Quantity
 		price := order.Price
 		currency := order.Currency
@@ -83,7 +83,7 @@ func ApplyPendingOrdersToPortfolio(
 			continue
 		}
 
-		if side == "buy" {
+		if side == "BUY" {
 			// Reduce cash by the order value
 			orderValue := float64(quantity) * price
 			currentCash := adjustedCash[currency]
@@ -107,7 +107,7 @@ func ApplyPendingOrdersToPortfolio(
 				Float64("order_value", orderValue).
 				Msg("Applied pending BUY")
 
-		} else if side == "sell" {
+		} else if side == "SELL" {
 			// Reduce position quantity
 			currentQuantity := positionMap[symbol]
 			newQuantity := int(math.Max(0.0, float64(currentQuantity-quantity)))

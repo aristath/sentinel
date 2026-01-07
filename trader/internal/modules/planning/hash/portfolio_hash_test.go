@@ -45,7 +45,7 @@ func TestGeneratePortfolioHash(t *testing.T) {
 			},
 			cashBalances: map[string]float64{"EUR": 1000.0},
 			pendingOrders: []PendingOrder{
-				{Symbol: "AAPL", Side: "buy", Quantity: 5, Price: 150.0, Currency: "EUR"},
+				{Symbol: "AAPL", Side: "BUY", Quantity: 5, Price: 150.0, Currency: "EUR"},
 			},
 			wantSameHash: true,
 		},
@@ -195,7 +195,7 @@ func TestApplyPendingOrdersToPortfolio(t *testing.T) {
 			},
 			cashBalances: map[string]float64{"EUR": 1000.0},
 			pendingOrders: []PendingOrder{
-				{Symbol: "AAPL", Side: "buy", Quantity: 5, Price: 100.0, Currency: "EUR"},
+				{Symbol: "AAPL", Side: "BUY", Quantity: 5, Price: 100.0, Currency: "EUR"},
 			},
 			allowNegativeCash: false,
 			wantPositions:     1,
@@ -208,7 +208,7 @@ func TestApplyPendingOrdersToPortfolio(t *testing.T) {
 			},
 			cashBalances: map[string]float64{"EUR": 1000.0},
 			pendingOrders: []PendingOrder{
-				{Symbol: "AAPL", Side: "sell", Quantity: 5, Price: 100.0, Currency: "EUR"},
+				{Symbol: "AAPL", Side: "SELL", Quantity: 5, Price: 100.0, Currency: "EUR"},
 			},
 			allowNegativeCash: false,
 			wantPositions:     1,
@@ -221,7 +221,7 @@ func TestApplyPendingOrdersToPortfolio(t *testing.T) {
 			},
 			cashBalances: map[string]float64{"EUR": 100.0},
 			pendingOrders: []PendingOrder{
-				{Symbol: "AAPL", Side: "buy", Quantity: 5, Price: 100.0, Currency: "EUR"},
+				{Symbol: "AAPL", Side: "BUY", Quantity: 5, Price: 100.0, Currency: "EUR"},
 			},
 			allowNegativeCash: false,
 			wantPositions:     1,
@@ -234,7 +234,7 @@ func TestApplyPendingOrdersToPortfolio(t *testing.T) {
 			},
 			cashBalances: map[string]float64{"EUR": 100.0},
 			pendingOrders: []PendingOrder{
-				{Symbol: "AAPL", Side: "buy", Quantity: 5, Price: 100.0, Currency: "EUR"},
+				{Symbol: "AAPL", Side: "BUY", Quantity: 5, Price: 100.0, Currency: "EUR"},
 			},
 			allowNegativeCash: true,
 			wantPositions:     1,

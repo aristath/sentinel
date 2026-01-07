@@ -177,8 +177,8 @@ func insertTestData(t *testing.T, db *sql.DB) {
 	// Insert trades
 	_, err = db.Exec(`
 		INSERT INTO trades (symbol, isin, side, quantity, price, executed_at, created_at) VALUES
-		('AAPL.US', 'US0378331005', 'buy', 10.0, 150.0, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
-		('MSFT.US', 'US5949181045', 'buy', 5.0, 300.0, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')
+		('AAPL.US', 'US0378331005', 'BUY', 10.0, 150.0, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
+		('MSFT.US', 'US5949181045', 'BUY', 5.0, 300.0, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')
 	`)
 	require.NoError(t, err)
 
@@ -192,7 +192,7 @@ func insertTestData(t *testing.T, db *sql.DB) {
 	// Insert recommendations
 	_, err = db.Exec(`
 		INSERT INTO recommendations (uuid, symbol, name, side, quantity, created_at) VALUES
-		('rec-1', 'AAPL.US', 'Apple Inc.', 'buy', 5.0, '2024-01-01T00:00:00Z')
+		('rec-1', 'AAPL.US', 'Apple Inc.', 'BUY', 5.0, '2024-01-01T00:00:00Z')
 	`)
 	require.NoError(t, err)
 

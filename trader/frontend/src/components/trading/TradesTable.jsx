@@ -66,10 +66,10 @@ export function TradesTable() {
                     <Table.Td>
                       <Badge
                         size="sm"
-                        color={trade.side.toLowerCase() === 'buy' ? 'green' : 'red'}
+                        color={trade.side === 'BUY' ? 'green' : 'red'}
                         variant="light"
                       >
-                        {trade.side.toUpperCase()}
+                        {trade.side}
                       </Badge>
                     </Table.Td>
                     <Table.Td ta="right">

@@ -343,7 +343,7 @@ For each database, I trace:
 - ✅ **008**: Attempts to create same table (will fail if exists, but schema matches)
 - ✅ **035**: **MIGRATES FROM OLD SCHEMA**:
   - Old schema (if exists): `id`, `symbol`, `action`, `priority`, `score`, `reason`, `created_at`, `expires_at`
-  - New schema: `uuid TEXT PRIMARY KEY`, `symbol TEXT NOT NULL`, `name TEXT NOT NULL`, `side TEXT NOT NULL CHECK (side IN ('buy', 'sell'))`, `quantity REAL NOT NULL CHECK (quantity > 0)`, `estimated_price REAL NOT NULL CHECK (estimated_price > 0)`, `estimated_value REAL NOT NULL`, `reason TEXT NOT NULL`, `currency TEXT NOT NULL`, `priority REAL NOT NULL`, `current_portfolio_score REAL NOT NULL`, `new_portfolio_score REAL NOT NULL`, `score_change REAL NOT NULL`, `status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'executed', 'rejected', 'expired'))`, `portfolio_hash TEXT NOT NULL`, `created_at TEXT NOT NULL`, `updated_at TEXT NOT NULL`, `executed_at TEXT`
+  - New schema: `uuid TEXT PRIMARY KEY`, `symbol TEXT NOT NULL`, `name TEXT NOT NULL`, `side TEXT NOT NULL CHECK (side IN ('BUY', 'SELL'))`, `quantity REAL NOT NULL CHECK (quantity > 0)`, `estimated_price REAL NOT NULL CHECK (estimated_price > 0)`, `estimated_value REAL NOT NULL`, `reason TEXT NOT NULL`, `currency TEXT NOT NULL`, `priority REAL NOT NULL`, `current_portfolio_score REAL NOT NULL`, `new_portfolio_score REAL NOT NULL`, `score_change REAL NOT NULL`, `status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'executed', 'rejected', 'expired'))`, `portfolio_hash TEXT NOT NULL`, `created_at TEXT NOT NULL`, `updated_at TEXT NOT NULL`, `executed_at TEXT`
 - ✅ **Final schema**: Matches 002/008/035 new schema exactly
 
 **VERIFIED**: Matches migrations exactly.
