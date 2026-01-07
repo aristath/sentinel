@@ -15,7 +15,7 @@ func TestRegisterRoutes(t *testing.T) {
 	// Create mock dependencies
 	// For analytics, we'll create a minimal handler with nil dependencies
 	// The actual handler creation is complex, so we'll test route registration differently
-	handler := NewHandler(nil, zerolog.Nop())
+	handler := NewHandler(nil, nil, nil, nil, nil, zerolog.Nop())
 
 	// Create router and register routes - this should not panic
 	router := chi.NewRouter()
@@ -30,9 +30,8 @@ func TestRegisterRoutes(t *testing.T) {
 		path   string
 		name   string
 	}{
-		{"GET", "/analytics/factor-exposure", "GetFactorExposure"},
-		{"GET", "/analytics/risk-metrics", "GetRiskMetrics"},
-		{"GET", "/analytics/correlation", "GetCorrelation"},
+		{"GET", "/analytics/factor-exposures", "GetFactorExposures"},
+		{"GET", "/analytics/factor-exposures/history", "GetFactorExposureHistory"},
 	}
 
 	for _, tc := range testCases {
@@ -68,13 +67,13 @@ func TestRegisterRoutes(t *testing.T) {
 
 func TestRegisterRoutes_RoutePrefix(t *testing.T) {
 	// Verify that routes are registered under /analytics prefix
-	handler := NewHandler(nil, zerolog.Nop())
+	handler := NewHandler(nil, nil, nil, nil, nil, zerolog.Nop())
 
 	router := chi.NewRouter()
 	handler.RegisterRoutes(router)
 
 	// Test that routes outside /analytics prefix return 404
-	req := httptest.NewRequest("GET", "/factor-exposure", nil)
+	req := httptest.NewRequest("GET", "/factor-exposures", nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusNotFound, rec.Code, "Route without /analytics prefix should return 404")
