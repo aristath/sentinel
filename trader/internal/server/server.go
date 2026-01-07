@@ -28,6 +28,7 @@ import (
 	"github.com/aristath/sentinel/internal/modules/optimization"
 	"github.com/aristath/sentinel/internal/modules/planning/repository"
 	"github.com/aristath/sentinel/internal/modules/portfolio"
+	portfoliohandlers "github.com/aristath/sentinel/internal/modules/portfolio/handlers"
 	"github.com/aristath/sentinel/internal/modules/rebalancing"
 	"github.com/aristath/sentinel/internal/modules/scoring/api"
 	"github.com/aristath/sentinel/internal/modules/trading"
@@ -274,7 +275,13 @@ func (s *Server) setupRoutes() {
 		allocationHandler.RegisterRoutes(r)
 
 		// Portfolio module (MIGRATED TO GO!)
-		s.setupPortfolioRoutes(r)
+		portfolioPositionRepo := s.container.PositionRepo
+		portfolioTradernetClient := s.container.TradernetClient
+		portfolioCurrencyExchangeService := s.container.CurrencyExchangeService
+		portfolioCashManager := s.container.CashManager
+		// portfolioService already declared above for allocation module
+		portfolioHandler := portfoliohandlers.NewHandler(portfolioPositionRepo, portfolioService, portfolioTradernetClient, portfolioCurrencyExchangeService, portfolioCashManager, s.configDB.Conn(), s.log)
+		portfolioHandler.RegisterRoutes(r)
 
 		// Universe module (MIGRATED TO GO!)
 		s.setupUniverseRoutes(r)
@@ -476,34 +483,6 @@ func (s *Server) setupSystemRoutes(r chi.Router) {
 			r.Post("/check-history-databases", systemHandlers.HandleTriggerCheckHistoryDatabases)
 			r.Post("/check-wal-checkpoints", systemHandlers.HandleTriggerCheckWALCheckpoints)
 		})
-	})
-}
-
-// setupPortfolioRoutes configures portfolio module routes
-func (s *Server) setupPortfolioRoutes(r chi.Router) {
-	// Use services from container (single source of truth)
-	positionRepo := s.container.PositionRepo
-	tradernetClient := s.container.TradernetClient
-	currencyExchangeService := s.container.CurrencyExchangeService
-	cashManager := s.container.CashManager
-	portfolioService := s.container.PortfolioService
-
-	handler := portfolio.NewHandler(
-		positionRepo,
-		portfolioService,
-		tradernetClient,
-		currencyExchangeService,
-		cashManager,
-		s.configDB.Conn(),
-		s.log,
-	)
-
-	// Portfolio routes (faithful translation of Python routes)
-	r.Route("/portfolio", func(r chi.Router) {
-		r.Get("/", handler.HandleGetPortfolio)                   // List positions (same as GET /portfolio)
-		r.Get("/summary", handler.HandleGetSummary)              // Portfolio summary
-		r.Get("/transactions", handler.HandleGetTransactions)    // Transaction history (via Tradernet microservice)
-		r.Get("/cash-breakdown", handler.HandleGetCashBreakdown) // Cash breakdown (via Tradernet microservice)
 	})
 }
 
