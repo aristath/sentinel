@@ -81,14 +81,20 @@ func (h *ConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Parse URL path to determine operation
 	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 
-	// Expected paths:
-	// /api/planning/configs - GET (list), POST (create)
-	// /api/planning/configs/:id - GET (retrieve), PUT (update), DELETE (delete)
-	// /api/planning/configs/:id/validate - POST (validate)
-	// /api/planning/configs/:id/history - GET (version history)
+	// Expected paths (routes are registered under /planning prefix):
+	// /planning/configs - GET (list), POST (create)
+	// /planning/configs/:id - GET (retrieve), PUT (update), DELETE (delete)
+	// /planning/configs/validate - POST (validate)
+	// /planning/configs/:id/history - GET (version history)
 
-	if len(pathParts) == 3 {
-		// /api/planning/configs
+	// Remove "planning" prefix if present (routes are registered under /planning)
+	// So pathParts will be: ["planning", "configs"] or ["planning", "configs", "id"]
+	if len(pathParts) > 0 && pathParts[0] == "planning" {
+		pathParts = pathParts[1:]
+	}
+
+	if len(pathParts) == 1 && pathParts[0] == "configs" {
+		// /planning/configs
 		switch r.Method {
 		case http.MethodGet:
 			h.handleList(w, r)
@@ -100,9 +106,23 @@ func (h *ConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(pathParts) == 4 {
-		// /api/planning/configs/:id
-		configID := pathParts[3]
+	if len(pathParts) == 2 && pathParts[0] == "configs" {
+		secondPart := pathParts[1]
+
+		if secondPart == "validate" {
+			// /planning/configs/validate (no ID - validates request body)
+			if r.Method == http.MethodPost {
+				// For validate without ID, we'll extract ID from request body if needed
+				// For now, pass empty string and let handler extract from body
+				h.handleValidate(w, r, "")
+			} else {
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			}
+			return
+		}
+
+		// /planning/configs/:id
+		configID := secondPart
 
 		switch r.Method {
 		case http.MethodGet:
@@ -117,27 +137,21 @@ func (h *ConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(pathParts) == 5 {
-		// /api/planning/configs/:id/validate or /api/planning/configs/:id/history
-		configID := pathParts[3]
-		action := pathParts[4]
+	if len(pathParts) == 3 && pathParts[0] == "configs" {
+		// /planning/configs/:id/history
+		configID := pathParts[1]
+		action := pathParts[2]
 
-		switch action {
-		case "validate":
-			if r.Method == http.MethodPost {
-				h.handleValidate(w, r, configID)
-			} else {
-				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			}
-		case "history":
+		if action == "history" {
 			if r.Method == http.MethodGet {
 				h.handleHistory(w, r, configID)
 			} else {
 				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			}
-		default:
-			http.Error(w, "Unknown action", http.StatusNotFound)
+			return
 		}
+
+		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
 
