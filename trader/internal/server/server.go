@@ -31,7 +31,7 @@ import (
 	"github.com/aristath/sentinel/internal/modules/portfolio"
 	portfoliohandlers "github.com/aristath/sentinel/internal/modules/portfolio/handlers"
 	"github.com/aristath/sentinel/internal/modules/rebalancing"
-	"github.com/aristath/sentinel/internal/modules/scoring/api"
+	scoringhandlers "github.com/aristath/sentinel/internal/modules/scoring/api/handlers"
 	tradinghandlers "github.com/aristath/sentinel/internal/modules/trading/handlers"
 	"github.com/aristath/sentinel/internal/modules/universe"
 	universehandlers "github.com/aristath/sentinel/internal/modules/universe/handlers"
@@ -355,7 +355,8 @@ func (s *Server) setupRoutes() {
 		displayHandler.RegisterRoutes(r)
 
 		// Scoring module (MIGRATED TO GO!)
-		s.setupScoringRoutes(r)
+		scoringHandler := scoringhandlers.NewHandlers(s.log)
+		scoringHandler.RegisterRoutes(r)
 
 		// Optimization module (MIGRATED TO GO!)
 		s.setupOptimizationRoutes(r)
@@ -559,17 +560,6 @@ func (a *securityFetcherAdapter) GetSecurityName(symbol string) (string, error) 
 		return symbol, nil // Return symbol if not found
 	}
 	return security.Name, nil
-}
-
-// setupScoringRoutes configures scoring module routes
-func (s *Server) setupScoringRoutes(r chi.Router) {
-	// Initialize scoring module components
-	handler := api.NewHandlers(s.log)
-
-	// Scoring routes
-	r.Route("/scoring", func(r chi.Router) {
-		r.Post("/score", handler.HandleScoreSecurity) // Calculate security score
-	})
 }
 
 // setupOptimizationRoutes configures optimization module routes
