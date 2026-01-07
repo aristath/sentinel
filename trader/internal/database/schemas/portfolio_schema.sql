@@ -50,21 +50,6 @@ CREATE TABLE IF NOT EXISTS scores (
 CREATE INDEX IF NOT EXISTS idx_scores_total ON scores(total_score DESC);
 CREATE INDEX IF NOT EXISTS idx_scores_updated ON scores(last_updated);
 
--- Calculated metrics table: LEGACY - NO LONGER USED
--- Data has been migrated to scores table
--- Kept for backwards compatibility only (cleanup job may reference it)
--- DO NOT USE - All metrics are now in scores table
--- CREATE TABLE IF NOT EXISTS calculated_metrics (
---     symbol TEXT NOT NULL,
---     metric_name TEXT NOT NULL,  -- e.g., 'rsi_14', 'ema_50', 'cagr_1y'
---     metric_value REAL NOT NULL,
---     calculated_at TEXT NOT NULL,
---     PRIMARY KEY (symbol, metric_name)
--- ) STRICT;
---
--- CREATE INDEX IF NOT EXISTS idx_metrics_symbol ON calculated_metrics(symbol);
--- CREATE INDEX IF NOT EXISTS idx_metrics_calculated ON calculated_metrics(calculated_at);
-
 -- Cash balances table: dedicated storage for cash balances
 -- This replaces the previous "cash-as-securities" approach where cash was stored
 -- as synthetic positions (CASH:EUR, CASH:USD, etc.) in the positions table.
