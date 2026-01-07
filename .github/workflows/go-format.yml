@@ -58,10 +58,6 @@ jobs:
         cp -r ../display/sketch pkg/embedded/display/
         echo "✓ Copied files for embedding"
 
-    - name: Download dependencies
-      working-directory: trader
-      run: go mod download
-
     - name: Format check
       working-directory: trader
       run: |
