@@ -20,7 +20,7 @@ import (
 	"github.com/aristath/sentinel/internal/config"
 	"github.com/aristath/sentinel/internal/database"
 	"github.com/aristath/sentinel/internal/di"
-	"github.com/aristath/sentinel/internal/modules/allocation"
+	allocationhandlers "github.com/aristath/sentinel/internal/modules/allocation/handlers"
 	"github.com/aristath/sentinel/internal/modules/cash_flows"
 	"github.com/aristath/sentinel/internal/modules/display"
 	"github.com/aristath/sentinel/internal/modules/dividends"
@@ -265,7 +265,13 @@ func (s *Server) setupRoutes() {
 		s.setupSystemRoutes(r)
 
 		// Allocation module (MIGRATED TO GO!)
-		s.setupAllocationRoutes(r)
+		allocRepo := s.container.AllocRepo
+		groupingRepo := s.container.GroupingRepo
+		alertService := s.container.ConcentrationAlertService
+		portfolioService := s.container.PortfolioService
+		portfolioSummaryAdapter := portfolio.NewPortfolioSummaryAdapter(portfolioService)
+		allocationHandler := allocationhandlers.NewHandler(allocRepo, groupingRepo, alertService, portfolioSummaryAdapter, s.container.EventManager, s.log)
+		allocationHandler.RegisterRoutes(r)
 
 		// Portfolio module (MIGRATED TO GO!)
 		s.setupPortfolioRoutes(r)
@@ -470,44 +476,6 @@ func (s *Server) setupSystemRoutes(r chi.Router) {
 			r.Post("/check-history-databases", systemHandlers.HandleTriggerCheckHistoryDatabases)
 			r.Post("/check-wal-checkpoints", systemHandlers.HandleTriggerCheckWALCheckpoints)
 		})
-	})
-}
-
-// setupAllocationRoutes configures allocation module routes
-func (s *Server) setupAllocationRoutes(r chi.Router) {
-	// Use services from container (single source of truth)
-	allocRepo := s.container.AllocRepo
-	groupingRepo := s.container.GroupingRepo
-	alertService := s.container.ConcentrationAlertService
-	portfolioService := s.container.PortfolioService
-
-	// Create adapter to break circular dependency: allocation → portfolio
-	portfolioSummaryAdapter := portfolio.NewPortfolioSummaryAdapter(portfolioService)
-
-	handler := allocation.NewHandler(allocRepo, groupingRepo, alertService, portfolioSummaryAdapter, s.container.EventManager, s.log)
-
-	// Allocation routes (faithful translation of Python routes)
-	r.Route("/allocation", func(r chi.Router) {
-		r.Get("/targets", handler.HandleGetTargets)
-		r.Get("/current", handler.HandleGetCurrentAllocation)
-		r.Get("/deviations", handler.HandleGetDeviations)
-
-		// Group management
-		r.Get("/groups/country", handler.HandleGetCountryGroups)
-		r.Get("/groups/industry", handler.HandleGetIndustryGroups)
-		r.Put("/groups/country", handler.HandleUpdateCountryGroup)
-		r.Put("/groups/industry", handler.HandleUpdateIndustryGroup)
-		r.Delete("/groups/country/{group_name}", handler.HandleDeleteCountryGroup)
-		r.Delete("/groups/industry/{group_name}", handler.HandleDeleteIndustryGroup)
-
-		// Available options
-		r.Get("/groups/available/countries", handler.HandleGetAvailableCountries)
-		r.Get("/groups/available/industries", handler.HandleGetAvailableIndustries)
-
-		// Group allocation and targets
-		r.Get("/groups/allocation", handler.HandleGetGroupAllocation)
-		r.Put("/groups/targets/country", handler.HandleUpdateCountryGroupTargets)
-		r.Put("/groups/targets/industry", handler.HandleUpdateIndustryGroupTargets)
 	})
 }
 
