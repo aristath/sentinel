@@ -277,34 +277,30 @@ func (j *BuildOpportunityContextJob) buildOpportunityContext(
 	// Populate value trap detection data
 	valueTrapData := j.populateValueTrapData(securities)
 
-	// Create opportunity context using NewOpportunityContext to ensure proper defaults
-	// (AllowSell=true, AllowBuy=true, TransactionCostFixed=2.0, TransactionCostPercent=0.002)
-	ctx := planningdomain.NewOpportunityContext(
-		portfolioCtx,
-		domainPositions,
-		domainSecurities,
-		availableCashEUR,
-		totalValue,
-		currentPrices,
-	)
-
-	// Override with additional data
-	ctx.TargetWeights = targetWeights // Optimizer target weights (security-level)
-	ctx.CountryWeights = countryWeights
-	ctx.CountryToGroup = countryToGroup
-	ctx.CAGRs = cagrs
-	ctx.LongTermScores = longTermScores
-	ctx.FundamentalsScores = fundamentalsScores
-	ctx.TargetReturn = targetReturn
-	ctx.TargetReturnThresholdPct = targetReturnThresholdPct
-	ctx.OpportunityScores = valueTrapData.OpportunityScores
-	ctx.PERatios = valueTrapData.PERatios
-	ctx.MarketAvgPE = valueTrapData.MarketAvgPE
-	ctx.MomentumScores = valueTrapData.MomentumScores
-	ctx.Volatility = valueTrapData.Volatility
-	ctx.RegimeScore = valueTrapData.RegimeScore
-
-	return ctx, nil
+	return &planningdomain.OpportunityContext{
+		PortfolioContext:         portfolioCtx,
+		Positions:                domainPositions,
+		Securities:               domainSecurities,
+		StocksByISIN:             stocksByISIN,
+		StocksBySymbol:           stocksBySymbol,
+		AvailableCashEUR:         availableCashEUR,
+		TotalPortfolioValueEUR:   totalValue,
+		CurrentPrices:            currentPrices,
+		TargetWeights:            targetWeights, // Optimizer target weights (security-level)
+		CountryWeights:           countryWeights,
+		CountryToGroup:           countryToGroup,
+		CAGRs:                    cagrs,
+		LongTermScores:           longTermScores,
+		FundamentalsScores:       fundamentalsScores,
+		TargetReturn:             targetReturn,
+		TargetReturnThresholdPct: targetReturnThresholdPct,
+		OpportunityScores:        valueTrapData.OpportunityScores,
+		PERatios:                 valueTrapData.PERatios,
+		MarketAvgPE:              valueTrapData.MarketAvgPE,
+		MomentumScores:           valueTrapData.MomentumScores,
+		Volatility:               valueTrapData.Volatility,
+		RegimeScore:              valueTrapData.RegimeScore,
+	}, nil
 }
 
 // fetchCurrentPrices fetches current prices for all securities
