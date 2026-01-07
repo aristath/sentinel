@@ -650,8 +650,9 @@ func (s *Server) setupRoutes() {
 	}
 }
 
-// setupSystemRoutes configures system monitoring and operations routes
-func (s *Server) setupSystemRoutes(r chi.Router) {
+// REMOVED: setupSystemRoutes - routes are now inlined in setupRoutes
+// This function is kept for reference but is no longer called
+func (s *Server) _setupSystemRoutes_OLD(r chi.Router) {
 	// Use server's system handlers instance
 	systemHandlers := s.systemHandlers
 
