@@ -378,3 +378,91 @@ func TestCalculateComplexity(t *testing.T) {
 
 	assert.Less(t, simpleComplexity, complexComplexity)
 }
+
+func TestGetFloatValue(t *testing.T) {
+	tests := []struct {
+		name     string
+		ptr      *float64
+		expected float64
+	}{
+		{"nil pointer", nil, 0.0},
+		{"valid pointer", floatPtr(3.14), 3.14},
+		{"zero value", floatPtr(0.0), 0.0},
+		{"negative value", floatPtr(-5.5), -5.5},
+		{"large value", floatPtr(1000.0), 1000.0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getFloatValue(tt.ptr)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestGetVariableMap(t *testing.T) {
+	sharpe := 1.5
+	sortino := 2.0
+	rsi := 65.0
+	maxDrawdown := -0.15
+
+	inputs := TrainingInputs{
+		LongTermScore:       0.8,
+		FundamentalsScore:   0.7,
+		DividendsScore:      0.6,
+		OpportunityScore:    0.9,
+		ShortTermScore:      0.5,
+		TechnicalsScore:     0.75,
+		OpinionScore:        0.65,
+		DiversificationScore: 0.85,
+		TotalScore:          0.75,
+		CAGR:                0.12,
+		DividendYield:       0.03,
+		Volatility:          0.18,
+		RegimeScore:         0.3,
+		SharpeRatio:         &sharpe,
+		SortinoRatio:        &sortino,
+		RSI:                 &rsi,
+		MaxDrawdown:         &maxDrawdown,
+	}
+
+	variables := getVariableMap(inputs)
+
+	assert.Equal(t, 0.8, variables["long_term"])
+	assert.Equal(t, 0.7, variables["fundamentals"])
+	assert.Equal(t, 0.6, variables["dividends"])
+	assert.Equal(t, 0.9, variables["opportunity"])
+	assert.Equal(t, 0.5, variables["short_term"])
+	assert.Equal(t, 0.75, variables["technicals"])
+	assert.Equal(t, 0.65, variables["opinion"])
+	assert.Equal(t, 0.85, variables["diversification"])
+	assert.Equal(t, 0.75, variables["total_score"])
+	assert.Equal(t, 0.12, variables["cagr"])
+	assert.Equal(t, 0.03, variables["dividend_yield"])
+	assert.Equal(t, 0.18, variables["volatility"])
+	assert.Equal(t, 0.3, variables["regime"])
+	assert.Equal(t, 1.5, variables["sharpe"])
+	assert.Equal(t, 2.0, variables["sortino"])
+	assert.Equal(t, 65.0, variables["rsi"])
+	assert.Equal(t, -0.15, variables["max_drawdown"])
+}
+
+func TestGetVariableMap_NilPointers(t *testing.T) {
+	inputs := TrainingInputs{
+		TotalScore: 0.75,
+		CAGR:       0.12,
+		// All pointer fields are nil
+	}
+
+	variables := getVariableMap(inputs)
+
+	// Non-pointer fields should be present
+	assert.Equal(t, 0.75, variables["total_score"])
+	assert.Equal(t, 0.12, variables["cagr"])
+
+	// Pointer fields should default to 0.0
+	assert.Equal(t, 0.0, variables["sharpe"])
+	assert.Equal(t, 0.0, variables["sortino"])
+	assert.Equal(t, 0.0, variables["rsi"])
+	assert.Equal(t, 0.0, variables["max_drawdown"])
+}
