@@ -294,3 +294,28 @@ func TestErrorHandling(t *testing.T) {
 		require.NotNil(t, weights)
 	})
 }
+
+func TestAbs(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    float64
+		expected float64
+	}{
+		{"positive number", 5.0, 5.0},
+		{"negative number", -5.0, 5.0},
+		{"zero", 0.0, 0.0},
+		{"positive decimal", 3.14, 3.14},
+		{"negative decimal", -3.14, 3.14},
+		{"small positive", 0.001, 0.001},
+		{"small negative", -0.001, 0.001},
+		{"large positive", 1000.0, 1000.0},
+		{"large negative", -1000.0, 1000.0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := abs(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
