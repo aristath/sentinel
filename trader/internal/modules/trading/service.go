@@ -11,8 +11,70 @@ import (
 
 // TradeRepositoryInterface defines the interface for trade persistence
 type TradeRepositoryInterface interface {
+	// Create inserts a new trade record
 	Create(trade Trade) error
+
+	// GetByOrderID retrieves a trade by order ID
+	GetByOrderID(orderID string) (*Trade, error)
+
+	// Exists checks if a trade with the given order ID exists
+	Exists(orderID string) (bool, error)
+
+	// GetHistory retrieves recent trades with optional limit
+	GetHistory(limit int) ([]Trade, error)
+
+	// GetAllInRange retrieves all trades within a date range
+	// startDate and endDate are in YYYY-MM-DD format
+	GetAllInRange(startDate, endDate string) ([]Trade, error)
+
+	// GetBySymbol retrieves trades for a symbol with optional limit
+	GetBySymbol(symbol string, limit int) ([]Trade, error)
+
+	// GetByISIN retrieves trades for an ISIN with optional limit
+	GetByISIN(isin string, limit int) ([]Trade, error)
+
+	// GetByIdentifier retrieves trades by symbol or ISIN with optional limit
+	GetByIdentifier(identifier string, limit int) ([]Trade, error)
+
+	// GetRecentlyBoughtSymbols returns map of symbols bought within specified days
+	GetRecentlyBoughtSymbols(days int) (map[string]bool, error)
+
+	// GetRecentlySoldSymbols returns map of symbols sold within specified days
+	GetRecentlySoldSymbols(days int) (map[string]bool, error)
+
+	// HasRecentSellOrder checks if there was a recent sell order for a symbol within specified hours
+	HasRecentSellOrder(symbol string, hours float64) (bool, error)
+
+	// GetFirstBuyDate retrieves the first buy date for a symbol
+	GetFirstBuyDate(symbol string) (*string, error)
+
+	// GetLastBuyDate retrieves the last buy date for a symbol
+	GetLastBuyDate(symbol string) (*string, error)
+
+	// GetLastSellDate retrieves the last sell date for a symbol
+	GetLastSellDate(symbol string) (*string, error)
+
+	// GetLastTransactionDate retrieves the last transaction date for a symbol
+	GetLastTransactionDate(symbol string) (*string, error)
+
+	// GetTradeDates retrieves first buy, last buy, and last sell dates for symbols
+	GetTradeDates() (map[string]map[string]*string, error)
+
+	// GetRecentTrades retrieves recent trades for a symbol within specified days
+	GetRecentTrades(symbol string, days int) ([]Trade, error)
+
+	// GetLastTradeTimestamp retrieves the timestamp of the most recent trade
+	GetLastTradeTimestamp() (*time.Time, error)
+
+	// GetTradeCountToday returns the number of trades executed today
+	GetTradeCountToday() (int, error)
+
+	// GetTradeCountThisWeek returns the number of trades executed this week
+	GetTradeCountThisWeek() (int, error)
 }
+
+// Compile-time check that TradeRepository implements TradeRepositoryInterface
+var _ TradeRepositoryInterface = (*TradeRepository)(nil)
 
 // Note: TradernetClientInterface has been moved to domain/interfaces.go
 // Use domain.TradernetClientInterface instead
