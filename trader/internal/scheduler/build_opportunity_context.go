@@ -245,6 +245,9 @@ func (j *BuildOpportunityContextJob) buildOpportunityContext(
 		}
 	}
 
+	// Populate SecurityScores from scores repository
+	securityScores := j.populateSecurityScores(securities)
+
 	// Build PortfolioContext (scoring domain)
 	portfolioCtx := &scoringdomain.PortfolioContext{
 		CountryWeights:     countryWeights,
@@ -252,7 +255,7 @@ func (j *BuildOpportunityContextJob) buildOpportunityContext(
 		Positions:          positionValues,
 		SecurityCountries:  securityCountries,
 		SecurityIndustries: securityIndustries,
-		SecurityScores:     make(map[string]float64), // Could fetch from score repo if needed
+		SecurityScores:     securityScores,
 		SecurityDividends:  make(map[string]float64), // Could fetch from dividend repo if needed
 		CountryToGroup:     countryToGroup,
 		IndustryToGroup:    industryToGroup,
@@ -286,7 +289,8 @@ func (j *BuildOpportunityContextJob) buildOpportunityContext(
 		AvailableCashEUR:         availableCashEUR,
 		TotalPortfolioValueEUR:   totalValue,
 		CurrentPrices:            currentPrices,
-		TargetWeights:            targetWeights, // Optimizer target weights (security-level)
+		SecurityScores:           securityScores, // Total scores keyed by symbol (for calculators)
+		TargetWeights:            targetWeights,  // Optimizer target weights (security-level)
 		CountryWeights:           countryWeights,
 		CountryToGroup:           countryToGroup,
 		CAGRs:                    cagrs,
@@ -399,6 +403,50 @@ func (j *BuildOpportunityContextJob) populateCAGRs(securities []universe.Securit
 
 	j.log.Debug().Int("cagr_count", len(cagrs)).Msg("Populated CAGRs for target return filtering")
 	return cagrs
+}
+
+// populateSecurityScores fetches total scores from scores repository
+func (j *BuildOpportunityContextJob) populateSecurityScores(securities []universe.Security) map[string]float64 {
+	securityScores := make(map[string]float64)
+
+	if j.scoresRepo == nil {
+		j.log.Debug().Msg("Scores repository not available, skipping security scores population")
+		return securityScores
+	}
+
+	// Build ISIN list for securities
+	isinList := make([]string, 0)
+	isinToSymbol := make(map[string]string)
+	for _, sec := range securities {
+		if sec.ISIN != "" && sec.Symbol != "" {
+			isinList = append(isinList, sec.ISIN)
+			isinToSymbol[sec.ISIN] = sec.Symbol
+		}
+	}
+
+	if len(isinList) == 0 {
+		j.log.Debug().Msg("No ISINs available, skipping security scores population")
+		return securityScores
+	}
+
+	// Get total scores from repository (keyed by ISIN)
+	totalScoresByISIN, err := j.scoresRepo.GetTotalScores(isinList)
+	if err != nil {
+		j.log.Warn().Err(err).Msg("Failed to get total scores from repository")
+		return securityScores
+	}
+
+	// Map scores by symbol (as calculators expect symbol keys)
+	for isin, score := range totalScoresByISIN {
+		if symbol, ok := isinToSymbol[isin]; ok {
+			securityScores[symbol] = score
+		}
+		// Also keep ISIN key for compatibility
+		securityScores[isin] = score
+	}
+
+	j.log.Debug().Int("score_count", len(securityScores)).Msg("Populated security scores")
+	return securityScores
 }
 
 // populateQualityScores fetches quality scores (long-term and fundamentals) from scores repository

@@ -128,6 +128,7 @@ type ScoresRepositoryInterface interface {
 	GetCAGRs(isinList []string) (map[string]float64, error)                                                 // Returns map keyed by ISIN and symbol
 	GetQualityScores(isinList []string) (map[string]float64, map[string]float64, error)                     // Returns longTermScores, fundamentalsScores
 	GetValueTrapData(isinList []string) (map[string]float64, map[string]float64, map[string]float64, error) // Returns opportunityScores, momentumScores, volatility
+	GetTotalScores(isinList []string) (map[string]float64, error)                                           // Returns total_score map keyed by ISIN
 }
 
 // SettingsRepositoryInterface defines the contract for settings database operations

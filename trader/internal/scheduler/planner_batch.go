@@ -16,6 +16,7 @@ type PlannerBatchJob struct {
 	lastPortfolioHash string
 	// Individual planning jobs
 	generatePortfolioHashJob   Job
+	getOptimizerWeightsJob     Job
 	buildOpportunityContextJob Job
 	createTradePlanJob         Job
 	storeRecommendationsJob    Job
@@ -26,6 +27,7 @@ type PlannerBatchConfig struct {
 	Log                        zerolog.Logger
 	EventManager               EventManagerInterface
 	GeneratePortfolioHashJob   Job
+	GetOptimizerWeightsJob     Job
 	BuildOpportunityContextJob Job
 	CreateTradePlanJob         Job
 	StoreRecommendationsJob    Job
@@ -37,6 +39,7 @@ func NewPlannerBatchJob(cfg PlannerBatchConfig) *PlannerBatchJob {
 		log:                        cfg.Log.With().Str("job", "planner_batch").Logger(),
 		eventManager:               cfg.EventManager,
 		generatePortfolioHashJob:   cfg.GeneratePortfolioHashJob,
+		getOptimizerWeightsJob:     cfg.GetOptimizerWeightsJob,
 		buildOpportunityContextJob: cfg.BuildOpportunityContextJob,
 		createTradePlanJob:         cfg.CreateTradePlanJob,
 		storeRecommendationsJob:    cfg.StoreRecommendationsJob,
@@ -81,25 +84,43 @@ func (j *PlannerBatchJob) Run() error {
 		Str("prev_hash", j.lastPortfolioHash).
 		Msg("Portfolio changed, generating new plan")
 
-	// Step 2: Build opportunity context
+	// Step 2: Get optimizer weights (optional - if available)
+	var optimizerWeights map[string]float64
+	if j.getOptimizerWeightsJob != nil {
+		if err := j.getOptimizerWeightsJob.Run(); err != nil {
+			j.log.Warn().Err(err).Msg("Failed to get optimizer weights, continuing without them")
+		} else {
+			weightsJob, ok := j.getOptimizerWeightsJob.(*GetOptimizerWeightsJob)
+			if ok {
+				optimizerWeights = weightsJob.GetTargetWeights()
+				j.log.Debug().Int("weight_count", len(optimizerWeights)).Msg("Retrieved optimizer target weights")
+			}
+		}
+	}
+
+	// Step 3: Build opportunity context
 	if j.buildOpportunityContextJob == nil {
 		return fmt.Errorf("build opportunity context job not available")
+	}
+	// Set optimizer weights on context job before running
+	contextJob, ok := j.buildOpportunityContextJob.(*BuildOpportunityContextJob)
+	if !ok {
+		return fmt.Errorf("build opportunity context job has wrong type")
+	}
+	if len(optimizerWeights) > 0 {
+		contextJob.SetOptimizerTargetWeights(optimizerWeights)
 	}
 	if err := j.buildOpportunityContextJob.Run(); err != nil {
 		return fmt.Errorf("failed to build opportunity context: %w", err)
 	}
 
-	// Get opportunity context from job
-	contextJob, ok := j.buildOpportunityContextJob.(*BuildOpportunityContextJob)
-	if !ok {
-		return fmt.Errorf("build opportunity context job has wrong type")
-	}
+	// Get opportunity context from job (already type-asserted above)
 	opportunityContext := contextJob.GetOpportunityContext()
 	if opportunityContext == nil {
 		return fmt.Errorf("opportunity context is nil")
 	}
 
-	// Step 3: Create trade plan
+	// Step 4: Create trade plan
 	if j.createTradePlanJob == nil {
 		return fmt.Errorf("create trade plan job not available")
 	}
@@ -118,7 +139,7 @@ func (j *PlannerBatchJob) Run() error {
 		return fmt.Errorf("plan is nil")
 	}
 
-	// Step 4: Store recommendations
+	// Step 5: Store recommendations
 	if j.storeRecommendationsJob == nil {
 		return fmt.Errorf("store recommendations job not available")
 	}

@@ -19,6 +19,7 @@ type GetOptimizerWeightsJob struct {
 	cashManager      CashManagerInterface
 	priceClient      PriceClientInterface
 	optimizerService OptimizerServiceInterface
+	targetWeights    map[string]float64 // Store computed weights
 }
 
 // NewGetOptimizerWeightsJob creates a new GetOptimizerWeightsJob
@@ -38,6 +39,7 @@ func NewGetOptimizerWeightsJob(
 		cashManager:      cashManager,
 		priceClient:      priceClient,
 		optimizerService: optimizerService,
+		targetWeights:    make(map[string]float64),
 	}
 }
 
@@ -203,11 +205,22 @@ func (j *GetOptimizerWeightsJob) Run() error {
 		return fmt.Errorf("optimizer returned unsuccessful result")
 	}
 
+	// Store target weights for retrieval
+	j.targetWeights = result.TargetWeights
+
 	j.log.Info().
 		Int("target_count", len(result.TargetWeights)).
 		Msg("Successfully retrieved optimizer target weights")
 
 	return nil
+}
+
+// GetTargetWeights returns the computed optimizer target weights
+func (j *GetOptimizerWeightsJob) GetTargetWeights() map[string]float64 {
+	if j.targetWeights == nil {
+		return make(map[string]float64)
+	}
+	return j.targetWeights
 }
 
 // fetchCurrentPrices fetches current prices for all securities

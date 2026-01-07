@@ -252,6 +252,45 @@ func (a *ScoresRepositoryAdapter) GetValueTrapData(isinList []string) (map[strin
 	return opportunityScores, momentumScores, volatility, nil
 }
 
+func (a *ScoresRepositoryAdapter) GetTotalScores(isinList []string) (map[string]float64, error) {
+	totalScores := make(map[string]float64)
+	if len(isinList) == 0 {
+		return totalScores, nil
+	}
+
+	placeholders := strings.Repeat("?,", len(isinList))
+	placeholders = placeholders[:len(placeholders)-1]
+	query := fmt.Sprintf(`
+		SELECT isin, total_score
+		FROM scores
+		WHERE isin IN (%s) AND total_score IS NOT NULL
+	`, placeholders)
+
+	args := make([]interface{}, len(isinList))
+	for i, isin := range isinList {
+		args[i] = isin
+	}
+
+	rows, err := a.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var isin string
+		var totalScore sql.NullFloat64
+		if err := rows.Scan(&isin, &totalScore); err != nil {
+			continue
+		}
+		if totalScore.Valid && totalScore.Float64 > 0 {
+			totalScores[isin] = totalScore.Float64
+		}
+	}
+
+	return totalScores, nil
+}
+
 // convertCAGRScoreToCAGRAdapter converts normalized cagr_score to CAGR percentage
 func convertCAGRScoreToCAGRAdapter(cagrScore float64) float64 {
 	if cagrScore <= 0 {

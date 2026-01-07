@@ -323,6 +323,7 @@ func RegisterJobs(container *Container, cfg *config.Config, displayManager *disp
 		Log:                        log,
 		EventManager:               container.EventManager,
 		GeneratePortfolioHashJob:   generatePortfolioHash,
+		GetOptimizerWeightsJob:     instances.GetOptimizerWeights,
 		BuildOpportunityContextJob: buildOpportunityContext,
 		CreateTradePlanJob:         createTradePlan,
 		StoreRecommendationsJob:    storeRecommendations,
