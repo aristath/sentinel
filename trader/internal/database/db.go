@@ -42,11 +42,17 @@ type Config struct {
 
 // New creates a new database connection with production-grade configuration
 func New(cfg Config) (*DB, error) {
-	// Ensure directory exists
-	dir := filepath.Dir(cfg.Path)
+	// Ensure directory exists - resolve to absolute path to avoid relative path issues
+	absPath, err := filepath.Abs(cfg.Path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve database path to absolute: %w", err)
+	}
+	dir := filepath.Dir(absPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create database directory: %w", err)
 	}
+	// Use absolute path for database operations
+	cfg.Path = absPath
 
 	// Default to standard profile if not specified
 	if cfg.Profile == "" {
