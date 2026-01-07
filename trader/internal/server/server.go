@@ -31,7 +31,7 @@ import (
 	portfoliohandlers "github.com/aristath/sentinel/internal/modules/portfolio/handlers"
 	"github.com/aristath/sentinel/internal/modules/rebalancing"
 	"github.com/aristath/sentinel/internal/modules/scoring/api"
-	"github.com/aristath/sentinel/internal/modules/trading"
+	tradinghandlers "github.com/aristath/sentinel/internal/modules/trading/handlers"
 	"github.com/aristath/sentinel/internal/modules/universe"
 	universehandlers "github.com/aristath/sentinel/internal/modules/universe/handlers"
 	"github.com/aristath/sentinel/internal/scheduler"
@@ -316,7 +316,31 @@ func (s *Server) setupRoutes() {
 		universeHandler.RegisterRoutes(r)
 
 		// Trading module (MIGRATED TO GO!)
-		s.setupTradingRoutes(r)
+		tradingTradeRepo := s.container.TradeRepo
+		tradingSecurityRepo := s.container.SecurityRepo
+		tradingSecurityFetcher := &securityFetcherAdapter{repo: tradingSecurityRepo}
+		tradingTradernetClient := s.container.TradernetClient
+		tradingPortfolioService := s.container.PortfolioService
+		tradingAlertService := s.container.ConcentrationAlertService
+		tradingSettingsService := s.container.SettingsService
+		tradingSafetyService := s.container.TradeSafetyService
+		tradingRecommendationRepo := s.container.RecommendationRepo
+		// Initialize planner repository for getting evaluated count
+		tradingPlannerRepo := repository.NewPlannerRepository(s.agentsDB, s.log)
+		tradingHandler := tradinghandlers.NewTradingHandlers(
+			tradingTradeRepo,
+			tradingSecurityFetcher,
+			tradingPortfolioService,
+			tradingAlertService, // ConcentrationAlertService implements ConcentrationAlertProvider
+			tradingTradernetClient,
+			tradingSafetyService,
+			tradingSettingsService,
+			tradingRecommendationRepo,
+			tradingPlannerRepo,
+			s.container.EventManager,
+			s.log,
+		)
+		tradingHandler.RegisterRoutes(r)
 
 		// Dividends module (MIGRATED TO GO!)
 		s.setupDividendRoutes(r)
@@ -529,45 +553,6 @@ func (a *securityFetcherAdapter) GetSecurityName(symbol string) (string, error) 
 		return symbol, nil // Return symbol if not found
 	}
 	return security.Name, nil
-}
-
-// setupTradingRoutes configures trading module routes
-func (s *Server) setupTradingRoutes(r chi.Router) {
-	// Use services from container (single source of truth)
-	tradeRepo := s.container.TradeRepo
-	securityRepo := s.container.SecurityRepo
-	securityFetcher := &securityFetcherAdapter{repo: securityRepo}
-	tradernetClient := s.container.TradernetClient
-	portfolioService := s.container.PortfolioService
-	alertService := s.container.ConcentrationAlertService
-	settingsService := s.container.SettingsService
-	safetyService := s.container.TradeSafetyService
-	recommendationRepo := s.container.RecommendationRepo
-
-	// Initialize planner repository for getting evaluated count
-	plannerRepo := repository.NewPlannerRepository(s.agentsDB, s.log)
-
-	handler := trading.NewTradingHandlers(
-		tradeRepo,
-		securityFetcher,
-		portfolioService,
-		alertService, // ConcentrationAlertService implements ConcentrationAlertProvider
-		tradernetClient,
-		safetyService,
-		settingsService,
-		recommendationRepo,
-		plannerRepo,
-		s.container.EventManager,
-		s.log,
-	)
-
-	// Trading routes (faithful translation of Python routes)
-	r.Route("/trades", func(r chi.Router) {
-		r.Get("/", handler.HandleGetTrades)                         // Trade history
-		r.Post("/execute", handler.HandleExecuteTrade)              // Execute trade (via Tradernet microservice)
-		r.Get("/allocation", handler.HandleGetAllocation)           // Portfolio allocation
-		r.Get("/recommendations", handler.HandleGetRecommendations) // Fetch existing recommendations
-	})
 }
 
 // setupDividendRoutes configures dividend module routes
