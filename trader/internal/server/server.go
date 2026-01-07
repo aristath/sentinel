@@ -23,6 +23,7 @@ import (
 	allocationhandlers "github.com/aristath/sentinel/internal/modules/allocation/handlers"
 	"github.com/aristath/sentinel/internal/modules/cash_flows"
 	"github.com/aristath/sentinel/internal/modules/display"
+	displayhandlers "github.com/aristath/sentinel/internal/modules/display/handlers"
 	dividendhandlers "github.com/aristath/sentinel/internal/modules/dividends/handlers"
 	"github.com/aristath/sentinel/internal/modules/evaluation"
 	"github.com/aristath/sentinel/internal/modules/optimization"
@@ -348,7 +349,10 @@ func (s *Server) setupRoutes() {
 		dividendHandler.RegisterRoutes(r)
 
 		// Display module (MIGRATED TO GO!)
-		s.setupDisplayRoutes(r)
+		// Display manager is passed in via server config, not container
+		// (it's initialized before container in main.go)
+		displayHandler := displayhandlers.NewHandlers(s.displayManager, s.log)
+		displayHandler.RegisterRoutes(r)
 
 		// Scoring module (MIGRATED TO GO!)
 		s.setupScoringRoutes(r)
@@ -555,21 +559,6 @@ func (a *securityFetcherAdapter) GetSecurityName(symbol string) (string, error) 
 		return symbol, nil // Return symbol if not found
 	}
 	return security.Name, nil
-}
-
-// setupDisplayRoutes configures display module routes
-func (s *Server) setupDisplayRoutes(r chi.Router) {
-	// Display manager is passed in via server config, not container
-	// (it's initialized before container in main.go)
-	handler := display.NewHandlers(s.displayManager, s.log)
-
-	// Display routes (faithful translation of Python display service)
-	r.Route("/display", func(r chi.Router) {
-		r.Get("/state", handler.HandleGetState) // Get current display state
-		r.Post("/text", handler.HandleSetText)  // Set display text
-		r.Post("/led3", handler.HandleSetLED3)  // Set LED3 color
-		r.Post("/led4", handler.HandleSetLED4)  // Set LED4 color
-	})
 }
 
 // setupScoringRoutes configures scoring module routes
