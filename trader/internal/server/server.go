@@ -33,6 +33,7 @@ import (
 	"github.com/aristath/sentinel/internal/modules/scoring/api"
 	"github.com/aristath/sentinel/internal/modules/trading"
 	"github.com/aristath/sentinel/internal/modules/universe"
+	universehandlers "github.com/aristath/sentinel/internal/modules/universe/handlers"
 	"github.com/aristath/sentinel/internal/scheduler"
 	"github.com/aristath/sentinel/pkg/embedded"
 )
@@ -284,7 +285,35 @@ func (s *Server) setupRoutes() {
 		portfolioHandler.RegisterRoutes(r)
 
 		// Universe module (MIGRATED TO GO!)
-		s.setupUniverseRoutes(r)
+		universeSecurityRepo := s.container.SecurityRepo
+		universeScoreRepo := s.container.ScoreRepo
+		universePositionRepo := s.container.PositionRepo
+		universeYahooClient := s.container.YahooClient
+		universeSecurityScorer := s.container.SecurityScorer
+		universeHistoryDB := s.container.HistoryDBClient
+		universeSetupService := s.container.SetupService
+		universeSyncService := s.container.SyncService
+		universeCurrencyExchangeService := s.container.CurrencyExchangeService
+		universeHandler := universehandlers.NewUniverseHandlers(
+			universeSecurityRepo,
+			universeScoreRepo,
+			s.portfolioDB.Conn(), // Pass portfolioDB for GetWithScores
+			universePositionRepo,
+			universeSecurityScorer,
+			universeYahooClient,
+			universeHistoryDB,
+			universeSetupService,
+			universeSyncService,
+			universeCurrencyExchangeService,
+			s.container.EventManager,
+			s.log,
+		)
+		// Wire the score calculator (handler implements the interface)
+		// Note: This wiring is already done in services.go, but we do it here too
+		// to ensure handlers created in other routes also have it wired
+		universeSetupService.SetScoreCalculator(universeHandler)
+		universeSyncService.SetScoreCalculator(universeHandler)
+		universeHandler.RegisterRoutes(r)
 
 		// Trading module (MIGRATED TO GO!)
 		s.setupTradingRoutes(r)
@@ -399,7 +428,7 @@ func (s *Server) setupSystemRoutes(r chi.Router) {
 	syncService1 := s.container.SyncService
 	currencyExchangeService1 := s.container.CurrencyExchangeService
 
-	universeHandlers := universe.NewUniverseHandlers(
+	universeHandlers := universehandlers.NewUniverseHandlers(
 		securityRepo,
 		scoreRepo,
 		s.portfolioDB.Conn(),
@@ -483,61 +512,6 @@ func (s *Server) setupSystemRoutes(r chi.Router) {
 			r.Post("/check-history-databases", systemHandlers.HandleTriggerCheckHistoryDatabases)
 			r.Post("/check-wal-checkpoints", systemHandlers.HandleTriggerCheckWALCheckpoints)
 		})
-	})
-}
-
-// setupUniverseRoutes configures universe/securities module routes
-func (s *Server) setupUniverseRoutes(r chi.Router) {
-	// Use services from container (single source of truth)
-	securityRepo := s.container.SecurityRepo
-	scoreRepo := s.container.ScoreRepo
-	positionRepo := s.container.PositionRepo
-	yahooClient := s.container.YahooClient
-	securityScorer := s.container.SecurityScorer
-	historyDB := s.container.HistoryDBClient
-	setupService := s.container.SetupService
-	syncService := s.container.SyncService
-	currencyExchangeService := s.container.CurrencyExchangeService
-
-	handler := universe.NewUniverseHandlers(
-		securityRepo,
-		scoreRepo,
-		s.portfolioDB.Conn(), // Pass portfolioDB for GetWithScores
-		positionRepo,
-		securityScorer,
-		yahooClient,
-		historyDB,
-		setupService,
-		syncService,
-		currencyExchangeService,
-		s.container.EventManager,
-		s.log,
-	)
-
-	// Wire the score calculator (handler implements the interface)
-	// Note: This wiring is already done in services.go, but we do it here too
-	// to ensure handlers created in other routes also have it wired
-	setupService.SetScoreCalculator(handler)
-	syncService.SetScoreCalculator(handler)
-
-	// Universe/Securities routes (faithful translation of Python routes)
-	r.Route("/securities", func(r chi.Router) {
-		// GET endpoints (implemented in Go)
-		r.Get("/", handler.HandleGetStocks)      // List all securities with scores
-		r.Get("/{isin}", handler.HandleGetStock) // Get security detail by ISIN
-
-		// POST endpoints (proxied to Python for complex operations)
-		r.Post("/", handler.HandleCreateStock)                           // Create security (requires Yahoo Finance)
-		r.Post("/add-by-identifier", handler.HandleAddStockByIdentifier) // Auto-setup by symbol/ISIN
-		r.Post("/refresh-all", handler.HandleRefreshAllScores)           // Recalculate all scores
-
-		// Security-specific POST endpoints
-		r.Post("/{isin}/refresh-data", handler.HandleRefreshSecurityData) // Full data refresh
-		r.Post("/{isin}/refresh", handler.HandleRefreshStockScore)        // Quick score refresh
-
-		// PUT/DELETE endpoints
-		r.Put("/{isin}", handler.HandleUpdateStock)    // Update security (requires score recalc)
-		r.Delete("/{isin}", handler.HandleDeleteStock) // Soft delete (implemented in Go)
 	})
 }
 
