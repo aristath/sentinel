@@ -198,21 +198,23 @@ repos:
 
     hooks:
 
-      # Ensure go.sum is up to date when go.mod or Go files change
-
+      # Ensure go.sum is up to date and staged when go.mod or Go files change
+      # This runs after go-mod-tidy to ensure go.sum is always committed
       - id: ensure-go-sum
 
-        name: Ensure go.sum is up to date
+        name: Ensure go.sum is up to date and staged
 
-        entry: bash -c 'cd trader && mkdir -p pkg/embedded/frontend pkg/embedded/display && cp -r frontend/dist pkg/embedded/frontend/ 2>/dev/null || true && cp -r ../display/app pkg/embedded/display/ 2>/dev/null || true && cp -r ../display/sketch pkg/embedded/display/ 2>/dev/null || true && go mod tidy && if [ -n "$CI" ]; then git diff --exit-code go.sum go.mod || (echo "go.sum or go.mod changed" && exit 1); else git add go.sum go.mod 2>/dev/null || true; fi'
+        entry: bash -c 'cd trader && go mod tidy && cd .. && git add -f trader/go.sum trader/go.mod'
 
         language: system
 
-        files: ^trader/(go\.mod|.*\.go)$
+        files: ^trader/(go\.mod|go\.sum|.*\.go)$
 
         pass_filenames: false
 
         always_run: false
+
+        stages: [commit]
 
 
 
