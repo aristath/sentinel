@@ -33,7 +33,7 @@ jobs:
       - name: Copy files for embedding
         working-directory: trader
         run: |
-          # Copy frontend/dist, display/app, and display/sketch into pkg/embedded/ for embedding
+          # Copy frontend/dist, display/app, display/app.yaml, and display/sketch into pkg/embedded/ for embedding
           # This allows embed directive to access all files without using .. paths
           # Must be done BEFORE go mod tidy so the embed directive can find the files
           mkdir -p pkg/embedded/frontend pkg/embedded/display
@@ -45,12 +45,17 @@ jobs:
             echo "ERROR: display/app not found"
             exit 1
           fi
+          if [ ! -f "../display/app.yaml" ]; then
+            echo "ERROR: display/app.yaml not found"
+            exit 1
+          fi
           if [ ! -d "../display/sketch" ]; then
             echo "ERROR: display/sketch not found"
             exit 1
           fi
           cp -r frontend/dist pkg/embedded/frontend/
           cp -r ../display/app pkg/embedded/display/
+          cp ../display/app.yaml pkg/embedded/display/
           cp -r ../display/sketch pkg/embedded/display/
           echo "✓ Copied files for embedding"
 
