@@ -30,7 +30,7 @@ import (
 	analyticshandlers "github.com/aristath/sentinel/internal/modules/analytics/handlers"
 	displayhandlers "github.com/aristath/sentinel/internal/modules/display/handlers"
 	dividendhandlers "github.com/aristath/sentinel/internal/modules/dividends/handlers"
-	"github.com/aristath/sentinel/internal/modules/evaluation"
+	evaluation "github.com/aristath/sentinel/internal/modules/evaluation"
 	evaluationhandlers "github.com/aristath/sentinel/internal/modules/evaluation/handlers"
 	optimizationhandlers "github.com/aristath/sentinel/internal/modules/optimization/handlers"
 	planningconfig "github.com/aristath/sentinel/internal/modules/planning/config"
@@ -472,11 +472,15 @@ func (s *Server) setupRoutes() {
 		analyticsHandler.RegisterRoutes(r)
 	})
 
-	// Evaluation module routes (MIGRATED TO GO!)
-	// Mounted directly under /api/v1 for Python client compatibility
-	evalService := s.container.EvalService
-	evalHandler := evaluationhandlers.NewHandler(evalService, s.log)
-	evalHandler.RegisterRoutes(s.router)
+		// Evaluation module routes (MIGRATED TO GO!)
+		// Mounted directly under /api/v1 for Python client compatibility
+		numWorkers := runtime.NumCPU()
+		if numWorkers < 2 {
+			numWorkers = 2
+		}
+		evalService := evaluation.NewService(numWorkers, s.log)
+		evalHandler := evaluationhandlers.NewHandler(evalService, s.log)
+		evalHandler.RegisterRoutes(r)
 
 	// Serve built frontend files from embedded filesystem
 	// Frontend files are embedded in the binary at frontend/dist
