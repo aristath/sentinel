@@ -933,11 +933,14 @@ func (j *PlannerBatchJob) storePlan(plan *planningdomain.HolisticPlan, portfolio
 	// Extract recommendations from plan steps
 	storedCount := 0
 	for stepIdx, step := range plan.Steps {
+		// Convert side to lowercase for database constraint (expects 'buy' or 'sell')
+		side := strings.ToLower(step.Side)
+
 		// Create recommendation from step
 		rec := planning.Recommendation{
 			Symbol:                step.Symbol,
 			Name:                  step.Name,
-			Side:                  step.Side,
+			Side:                  side,
 			Quantity:              float64(step.Quantity),
 			EstimatedPrice:        step.EstimatedPrice,
 			EstimatedValue:        step.EstimatedValue,
