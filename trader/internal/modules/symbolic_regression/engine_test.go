@@ -336,6 +336,62 @@ func TestCalculateFitness_Spearman(t *testing.T) {
 	assert.GreaterOrEqual(t, fitness, 0.0, "Fitness should be non-negative")
 }
 
+func TestFormatFloat(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    float64
+		expected string
+	}{
+		{
+			name:     "integer value",
+			input:    5.0,
+			expected: "5",
+		},
+		{
+			name:     "decimal value",
+			input:    3.141592,
+			expected: "3.141592",
+		},
+		{
+			name:     "small decimal",
+			input:    0.123456,
+			expected: "0.123456",
+		},
+		{
+			name:     "negative integer",
+			input:    -10.0,
+			expected: "-10",
+		},
+		{
+			name:     "negative decimal",
+			input:    -3.141592,
+			expected: "-3.141592",
+		},
+		{
+			name:     "zero",
+			input:    0.0,
+			expected: "0",
+		},
+		{
+			name:     "large integer",
+			input:    1000.0,
+			expected: "1000",
+		},
+		{
+			name:     "decimal with trailing zeros",
+			input:    5.500000,
+			expected: "5.500000",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatFloat(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestCalculateComplexity(t *testing.T) {
 	// Simple formula: constant
 	simple := &Node{

@@ -1,6 +1,7 @@
 package symbolic_regression
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -157,6 +158,83 @@ func TestGetFeatureValue(t *testing.T) {
 
 	// Test unknown feature
 	assert.Equal(t, 0.0, GetFeatureValue(inputs, "unknown_feature"))
+}
+
+func TestNormalizeValue(t *testing.T) {
+	tests := []struct {
+		name     string
+		value    float64
+		minMax   [2]float64
+		expected float64
+	}{
+		{
+			name:     "value at min",
+			value:    0.0,
+			minMax:   [2]float64{0.0, 10.0},
+			expected: 0.0,
+		},
+		{
+			name:     "value at max",
+			value:    10.0,
+			minMax:   [2]float64{0.0, 10.0},
+			expected: 1.0,
+		},
+		{
+			name:     "value in middle",
+			value:    5.0,
+			minMax:   [2]float64{0.0, 10.0},
+			expected: 0.5,
+		},
+		{
+			name:     "value below min (clamped)",
+			value:    -5.0,
+			minMax:   [2]float64{0.0, 10.0},
+			expected: 0.0,
+		},
+		{
+			name:     "value above max (clamped)",
+			value:    15.0,
+			minMax:   [2]float64{0.0, 10.0},
+			expected: 1.0,
+		},
+		{
+			name:     "no range (min == max)",
+			value:    5.0,
+			minMax:   [2]float64{5.0, 5.0},
+			expected: 0.5,
+		},
+		{
+			name:     "negative range",
+			value:    -5.0,
+			minMax:   [2]float64{-10.0, 0.0},
+			expected: 0.5,
+		},
+		{
+			name:     "NaN value",
+			value:    math.NaN(),
+			minMax:   [2]float64{0.0, 10.0},
+			expected: 0.0,
+		},
+		{
+			name:     "positive infinity",
+			value:    math.Inf(1),
+			minMax:   [2]float64{0.0, 10.0},
+			expected: 0.0,
+		},
+		{
+			name:     "negative infinity",
+			value:    math.Inf(-1),
+			minMax:   [2]float64{0.0, 10.0},
+			expected: 0.0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := normalizeValue(tt.value, tt.minMax)
+			assert.InDelta(t, tt.expected, result, 0.0001)
+		})
+	}
 }
 
 func floatPtr(f float64) *float64 {
