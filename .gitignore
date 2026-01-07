@@ -79,4 +79,6 @@ artifact.zip
 
 trader/test_results.txt
 
-trader/internal/modules/universe/:memory:
+# SQLite test database files created from :memory: connections
+**/:memory:
+**/:memory:-*
