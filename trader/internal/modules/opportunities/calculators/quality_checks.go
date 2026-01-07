@@ -108,12 +108,10 @@ func CheckQualityGates(
 			// if we have the other required data (P/E and market avg P/E are already checked above)
 			if ctx.RegimeScore >= -1.0 && ctx.RegimeScore <= 1.0 {
 				quantumCalc := quantum.NewQuantumProbabilityCalculator()
-				// Use 0.0 as defaults if momentum/volatility not available
+				// Use defaults if momentum/volatility not available
 				momentumForQuantum := momentumScore
 				volatilityForQuantum := volatility
-				if momentumForQuantum == 0.0 {
-					momentumForQuantum = 0.0 // Neutral momentum
-				}
+				// momentumForQuantum defaults to 0.0 (neutral) if not available, which is already the case
 				if volatilityForQuantum == 0.0 {
 					volatilityForQuantum = 0.20 // Default moderate volatility
 				}

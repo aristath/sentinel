@@ -83,8 +83,8 @@ func TestCalculatePortfolioCVaR(t *testing.T) {
 				"B": 0.4,
 			},
 			returns: map[string][]float64{
-				"A": {-0.10, -0.05, 0.0, 0.05, 0.10},
-				"B": {-0.15, -0.08, 0.0, 0.08, 0.15},
+				"A": []float64{-0.10, -0.05, 0.0, 0.05, 0.10},
+				"B": []float64{-0.15, -0.08, 0.0, 0.08, 0.15},
 			},
 			confidence:  0.95,
 			want:        -0.12, // Weighted average of worst returns
@@ -97,7 +97,7 @@ func TestCalculatePortfolioCVaR(t *testing.T) {
 				"A": 1.0,
 			},
 			returns: map[string][]float64{
-				"A": {-0.20, -0.10, 0.0, 0.10, 0.20},
+				"A": []float64{-0.20, -0.10, 0.0, 0.10, 0.20},
 			},
 			confidence:  0.95,
 			want:        -0.20,
