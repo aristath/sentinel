@@ -74,7 +74,7 @@ jobs:
 
     - name: Run tests
 
-      run: go test -v -coverprofile=coverage.out -covermode=atomic -tags=!integration ./...
+      run: go test -coverprofile=coverage.out -covermode=atomic -tags=!integration ./...
       continue-on-error: false
 
     - name: Upload coverage to Codecov
