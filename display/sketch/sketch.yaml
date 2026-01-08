@@ -8,5 +8,6 @@ profiles:
       - DebugLog (0.8.4)
       - ArxContainer (0.7.0)
       - ArxTypeTraits (0.3.1)
+      - ArduinoGraphics (1.1.4)
       # RouterBridge is included with arduino:zephyr platform, no need to install separately
 default_profile: default
