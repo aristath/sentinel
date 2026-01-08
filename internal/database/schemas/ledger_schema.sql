@@ -60,7 +60,8 @@ CREATE TABLE IF NOT EXISTS dividend_history (
     pending_bonus REAL DEFAULT 0,     -- Pending bonus amount (when reinvestment not possible)
     bonus_cleared INTEGER DEFAULT 0,  -- Boolean: was bonus cleared?
     cleared_at INTEGER,                -- Unix timestamp when bonus was cleared
-    created_at INTEGER NOT NULL       -- Unix timestamp (seconds since epoch)
+    created_at INTEGER NOT NULL,      -- Unix timestamp (seconds since epoch)
+    FOREIGN KEY (cash_flow_id) REFERENCES cash_flows(id) ON DELETE CASCADE
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_dividends_symbol ON dividend_history(symbol);

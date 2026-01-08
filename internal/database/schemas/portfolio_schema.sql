@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS kelly_sizes (
     fractional_multiplier REAL NOT NULL,
     regime_adjustment REAL NOT NULL,
     calculated_at INTEGER NOT NULL,    -- Unix timestamp (seconds since epoch)
-    FOREIGN KEY (isin) REFERENCES scores(isin)
+    FOREIGN KEY (isin) REFERENCES scores(isin) ON DELETE CASCADE
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_kelly_sizes_symbol ON kelly_sizes(symbol);
