@@ -12,7 +12,27 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// PortfolioService orchestrates portfolio operations
+// PortfolioService orchestrates portfolio operations and calculations.
+//
+// This is a module-specific service that encapsulates portfolio domain logic.
+// It coordinates between repositories, external clients, and shared services
+// to provide portfolio business functionality.
+//
+// Responsibilities:
+//   - Calculate portfolio summaries (allocation vs targets)
+//   - Aggregate position values by country/industry
+//   - Convert currencies for portfolio totals
+//   - Provide portfolio state queries
+//
+// Dependencies:
+//   - PositionRepositoryInterface: Position data access
+//   - domain.AllocationTargetProvider: Target allocation configuration
+//   - domain.CashManager: Cash balance queries
+//   - domain.CurrencyExchangeServiceInterface: Currency conversion (shared service)
+//   - domain.TradernetClientInterface: External API access
+//
+// See internal/services/README.md for service architecture documentation.
+//
 // Faithful translation from Python: app/modules/portfolio/services/portfolio_service.py
 type PortfolioService struct {
 	positionRepo            PositionRepositoryInterface

@@ -7,7 +7,22 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// UniverseService handles universe (securities) business logic and coordinates cleanup
+// UniverseService handles universe (securities) business logic and coordinates cleanup.
+//
+// This is a module-specific service that encapsulates universe domain logic.
+// It manages security lifecycle operations and price synchronization.
+//
+// Responsibilities:
+//   - Activate/deactivate securities
+//   - Synchronize prices from external sources
+//   - Coordinate cleanup operations
+//
+// Dependencies:
+//   - SecurityRepositoryInterface: Security data access
+//   - SyncServiceInterface: Price synchronization coordination
+//   - database.DB: Database access for cleanup operations
+//
+// See internal/services/README.md for service architecture documentation.
 type UniverseService struct {
 	securityRepo SecurityRepositoryInterface
 	historyDB    *database.DB

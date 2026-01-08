@@ -1,3 +1,9 @@
+// Package services provides core business services shared across multiple modules.
+//
+// This package contains TradeExecutionService which orchestrates trade execution
+// across multiple modules (portfolio, trading, cash flows).
+//
+// See services/README.md for architecture documentation and usage patterns.
 package services
 
 import (

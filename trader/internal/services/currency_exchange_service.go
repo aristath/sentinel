@@ -1,4 +1,9 @@
-// Package services provides core business services.
+// Package services provides core business services shared across multiple modules.
+//
+// Shared services handle cross-cutting business functionality that doesn't belong
+// to a specific domain but is essential for the system to function.
+//
+// See services/README.md for architecture documentation and usage patterns.
 package services
 
 import (

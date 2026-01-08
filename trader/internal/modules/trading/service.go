@@ -79,7 +79,23 @@ var _ TradeRepositoryInterface = (*TradeRepository)(nil)
 // Note: TradernetClientInterface has been moved to domain/interfaces.go
 // Use domain.TradernetClientInterface instead
 
-// TradingService handles trade-related business logic
+// TradingService handles trade-related business logic.
+//
+// This is a module-specific service that encapsulates trading domain logic.
+// It coordinates trade queries, safety validation, and event emission.
+//
+// Responsibilities:
+//   - Retrieve trade history with various filters
+//   - Coordinate trade safety validation
+//   - Emit trade-related events
+//
+// Dependencies:
+//   - TradeRepositoryInterface: Trade data access
+//   - domain.TradernetClientInterface: Order placement
+//   - TradeSafetyService: Safety rule validation
+//   - events.Manager: Event emission
+//
+// See internal/services/README.md for service architecture documentation.
 type TradingService struct {
 	log             zerolog.Logger
 	tradeRepo       TradeRepositoryInterface
