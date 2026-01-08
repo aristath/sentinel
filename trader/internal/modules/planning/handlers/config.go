@@ -199,7 +199,12 @@ func (h *ConfigHandler) handleGet(w http.ResponseWriter, r *http.Request, config
 
 	config, err := h.configRepo.GetConfig(id)
 	if err != nil {
-		h.log.Error().Err(err).Int64("config_id", id).Msg("Failed to retrieve configuration")
+		// Log the actual error for debugging
+		h.log.Error().
+			Err(err).
+			Int64("config_id", id).
+			Str("error_type", fmt.Sprintf("%T", err)).
+			Msg("Failed to retrieve configuration")
 		http.Error(w, "Configuration not found", http.StatusNotFound)
 		return
 	}

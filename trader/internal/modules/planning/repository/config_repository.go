@@ -126,12 +126,19 @@ func (r *ConfigRepository) getSettings() (*domain.PlannerConfiguration, error) {
 
 	if err == sql.ErrNoRows {
 		// No config exists, return defaults
+		r.log.Debug().Msg("No planner settings found in database, returning defaults")
 		return domain.NewDefaultConfiguration(), nil
 	}
 	if err != nil {
+		// Log detailed error information for debugging
+		r.log.Error().
+			Err(err).
+			Str("error_type", fmt.Sprintf("%T", err)).
+			Msg("Failed to query planner settings from database")
 		return nil, fmt.Errorf("failed to get planner settings: %w", err)
 	}
 
+	r.log.Debug().Str("name", cfg.Name).Msg("Successfully retrieved planner settings from database")
 	return &cfg, nil
 }
 
