@@ -12,6 +12,7 @@ import (
 	"github.com/aristath/sentinel/internal/modules/planning/config"
 	"github.com/aristath/sentinel/internal/modules/planning/domain"
 	"github.com/aristath/sentinel/internal/modules/planning/repository"
+	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog"
 )
 
@@ -77,24 +78,44 @@ type HistoryEntry struct {
 }
 
 // ServeHTTP routes config requests to appropriate handlers.
+// Routes are registered with chi router using path parameters like {id}.
+// The actual request path will be /api/planning/configs/{id} or /api/planning/configs.
 func (h *ConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Parse URL path to determine operation
+	// Path will be like: /api/planning/configs or /api/planning/configs/1 or /api/planning/configs/1/history
 	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 
-	// Expected paths (routes are registered under /planning prefix):
-	// /planning/configs - GET (list), POST (create)
-	// /planning/configs/:id - GET (retrieve), PUT (update), DELETE (delete)
-	// /planning/configs/validate - POST (validate)
-	// /planning/configs/:id/history - GET (version history)
-
-	// Remove "planning" prefix if present (routes are registered under /planning)
-	// So pathParts will be: ["planning", "configs"] or ["planning", "configs", "id"]
-	if len(pathParts) > 0 && pathParts[0] == "planning" {
-		pathParts = pathParts[1:]
+	// Remove "api" and "planning" prefixes if present
+	// After removal, pathParts should be: ["configs"] or ["configs", "id"] or ["configs", "id", "history"]
+	startIdx := 0
+	for i, part := range pathParts {
+		if part == "api" || part == "planning" {
+			startIdx = i + 1
+		} else {
+			break
+		}
+	}
+	if startIdx > 0 {
+		pathParts = pathParts[startIdx:]
 	}
 
-	if len(pathParts) == 1 && pathParts[0] == "configs" {
-		// /planning/configs
+	// Now pathParts should start with "configs"
+	if len(pathParts) == 0 || pathParts[0] != "configs" {
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
+
+	// Try to get ID from chi URL parameter first (more reliable)
+	configID := chi.URLParam(r, "id")
+
+	// If chi parameter not available, fall back to path parsing
+	if configID == "" && len(pathParts) > 1 {
+		configID = pathParts[1]
+	}
+
+	// Handle different route patterns
+	if len(pathParts) == 1 {
+		// /api/planning/configs
 		switch r.Method {
 		case http.MethodGet:
 			h.handleList(w, r)
@@ -106,14 +127,12 @@ func (h *ConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(pathParts) == 2 && pathParts[0] == "configs" {
+	if len(pathParts) == 2 {
 		secondPart := pathParts[1]
 
 		if secondPart == "validate" {
-			// /planning/configs/validate (no ID - validates request body)
+			// /api/planning/configs/validate
 			if r.Method == http.MethodPost {
-				// For validate without ID, we'll extract ID from request body if needed
-				// For now, pass empty string and let handler extract from body
 				h.handleValidate(w, r, "")
 			} else {
 				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -121,8 +140,10 @@ func (h *ConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// /planning/configs/:id
-		configID := secondPart
+		// /api/planning/configs/:id
+		if configID == "" {
+			configID = secondPart
+		}
 
 		switch r.Method {
 		case http.MethodGet:
@@ -137,9 +158,11 @@ func (h *ConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(pathParts) == 3 && pathParts[0] == "configs" {
-		// /planning/configs/:id/history
-		configID := pathParts[1]
+	if len(pathParts) == 3 {
+		// /api/planning/configs/:id/history
+		if configID == "" {
+			configID = pathParts[1]
+		}
 		action := pathParts[2]
 
 		if action == "history" {
