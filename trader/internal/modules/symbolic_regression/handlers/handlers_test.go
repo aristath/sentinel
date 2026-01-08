@@ -1,4 +1,4 @@
-package symbolic_regression
+package handlers
 
 import (
 	"database/sql"
@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aristath/sentinel/internal/modules/symbolic_regression"
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
@@ -40,9 +41,9 @@ func setupTestHandlers(t *testing.T) (*Handlers, *sql.DB, func()) {
 	require.NoError(t, err)
 
 	log := zerolog.Nop()
-	storage := NewFormulaStorage(db, log)
+	storage := symbolic_regression.NewFormulaStorage(db, log)
 
-	handlers := symbolicregressionhandlers.NewHandlers(storage, nil, nil, log)
+	handlers := NewHandlers(storage, nil, nil, log)
 
 	cleanup := func() {
 		db.Close()
