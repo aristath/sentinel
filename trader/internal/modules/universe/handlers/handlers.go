@@ -18,7 +18,6 @@ import (
 	"github.com/aristath/sentinel/internal/clients/yahoo"
 	"github.com/aristath/sentinel/internal/domain"
 	"github.com/aristath/sentinel/internal/events"
-	scoringdomain "github.com/aristath/sentinel/internal/modules/scoring/domain"
 	"github.com/aristath/sentinel/internal/modules/scoring/scorers"
 	"github.com/aristath/sentinel/pkg/formulas"
 	"github.com/go-chi/chi/v5"
