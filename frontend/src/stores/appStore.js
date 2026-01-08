@@ -21,6 +21,12 @@ export const useAppStore = create((set, get) => ({
   eventStreamReconnectAttempts: 0,
   eventStreamConnecting: false,
 
+  // Polling fallback
+  pollingIntervalId: null,
+  sseRetryIntervalId: null,
+  isPollingMode: false,
+  maxSseFailures: 5, // After 5 failures, switch to polling
+
   // UI State
   activeTab: 'next-actions',
   message: '',
@@ -194,9 +200,87 @@ export const useAppStore = create((set, get) => ({
     set({ plannerStatus: status });
   },
 
+  // Polling fallback mechanism
+  startPolling: () => {
+    const { pollingIntervalId, isPollingMode } = get();
+
+    // Prevent duplicate polling
+    if (pollingIntervalId || isPollingMode) {
+      return;
+    }
+
+    console.log('Starting polling mode (SSE unavailable)');
+    set({ isPollingMode: true });
+
+    // Poll critical data every 10 seconds
+    const intervalId = setInterval(async () => {
+      try {
+        // Fetch app store data
+        await get().fetchAll();
+
+        // Fetch other stores' data
+        const { usePortfolioStore } = await import('./portfolioStore');
+        const { useSecuritiesStore } = await import('./securitiesStore');
+        const { useTradesStore } = await import('./tradesStore');
+
+        await Promise.all([
+          usePortfolioStore.getState().fetchAllocation(),
+          usePortfolioStore.getState().fetchCashBreakdown(),
+          useSecuritiesStore.getState().fetchSecurities(),
+          useTradesStore.getState().fetchTrades(),
+        ]);
+      } catch (error) {
+        console.error('Polling error:', error);
+      }
+    }, 10000);
+
+    set({ pollingIntervalId: intervalId });
+
+    // Try to reconnect to SSE every 60 seconds
+    const retryIntervalId = setInterval(() => {
+      console.log('Attempting to reconnect to SSE...');
+      get().attemptSseReconnect();
+    }, 60000);
+
+    set({ sseRetryIntervalId: retryIntervalId });
+  },
+
+  stopPolling: () => {
+    const { pollingIntervalId, sseRetryIntervalId } = get();
+
+    if (pollingIntervalId) {
+      clearInterval(pollingIntervalId);
+      set({ pollingIntervalId: null });
+    }
+
+    if (sseRetryIntervalId) {
+      clearInterval(sseRetryIntervalId);
+      set({ sseRetryIntervalId: null });
+    }
+
+    set({ isPollingMode: false });
+    console.log('Stopped polling mode');
+  },
+
+  attemptSseReconnect: () => {
+    const { eventStreamSource } = get();
+
+    // Close existing failed connection if any
+    if (eventStreamSource) {
+      eventStreamSource.close();
+    }
+
+    // Reset reconnect attempts for fresh start
+    set({ eventStreamReconnectAttempts: 0 });
+
+    // Try to start SSE again
+    // Use the logFile from logsStore if needed
+    get().startEventStream();
+  },
+
   // Unified event stream
   startEventStream: (logFile = null) => {
-    const { eventStreamSource, eventStreamConnecting } = get();
+    const { eventStreamSource, eventStreamConnecting, isPollingMode } = get();
 
     // Prevent concurrent connection attempts
     if (eventStreamConnecting) {
@@ -236,8 +320,17 @@ export const useAppStore = create((set, get) => ({
 
       // Get current attempts for delay calculation
       const currentAttempts = get().eventStreamReconnectAttempts;
+      const maxFailures = get().maxSseFailures;
 
-      // Reconnect with exponential backoff (max 30 seconds)
+      // If we've failed too many times, switch to polling mode
+      if (currentAttempts >= maxFailures && !isPollingMode) {
+        console.warn(`SSE failed ${currentAttempts} times. Switching to polling mode.`);
+        set({ eventStreamReconnectAttempts: currentAttempts + 1 });
+        get().startPolling();
+        return;
+      }
+
+      // Otherwise, reconnect with exponential backoff (max 30 seconds)
       const delay = Math.min(1000 * Math.pow(2, currentAttempts), 30000);
       setTimeout(() => {
         // Read fresh state to avoid stale closure
@@ -249,7 +342,14 @@ export const useAppStore = create((set, get) => ({
 
     // Reset reconnect attempts on successful connection
     eventSource.addEventListener('open', () => {
+      console.log('SSE connection established');
       set({ eventStreamReconnectAttempts: 0 });
+
+      // If we were in polling mode, stop polling
+      if (isPollingMode) {
+        console.log('SSE reconnected successfully. Stopping polling mode.');
+        get().stopPolling();
+      }
     });
   },
 
@@ -259,6 +359,8 @@ export const useAppStore = create((set, get) => ({
       eventStreamSource.close();
       set({ eventStreamSource: null, eventStreamReconnectAttempts: 0 });
     }
+    // Stop polling if active
+    get().stopPolling();
     // Clear all pending debounced event handlers
     clearAllDebounces();
   },

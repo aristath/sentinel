@@ -36,8 +36,7 @@ export function SecurityTable() {
   // Load column visibility on mount
   useEffect(() => {
     fetchColumnVisibility();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fetchColumnVisibility]);
 
   const filteredSecurities = getFilteredSecurities();
   const countries = [...new Set(securities.map(s => s.country).filter(Boolean))].sort();

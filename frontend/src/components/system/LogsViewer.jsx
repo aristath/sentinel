@@ -34,13 +34,11 @@ export function LogsViewer() {
 
   useEffect(() => {
     fetchAvailableLogFiles();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fetchAvailableLogFiles]);
 
   useEffect(() => {
     fetchLogs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch]);
+  }, [fetchLogs, debouncedSearch, selectedLogFile, filterLevel, lineCount, showErrorsOnly]);
 
   useEffect(() => {
     if (autoRefresh) {
@@ -51,8 +49,7 @@ export function LogsViewer() {
     return () => {
       stopAutoRefresh();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoRefresh]);
+  }, [autoRefresh, startAutoRefresh, stopAutoRefresh]);
 
   useEffect(() => {
     if (autoScroll && scrollAreaRef.current) {

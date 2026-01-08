@@ -30,18 +30,8 @@ export function Layout() {
   const { fetchTrades } = useTradesStore();
   const { fetchAvailableLogFiles, selectedLogFile } = useLogsStore();
 
-  // Store function refs to prevent unnecessary effect re-runs
-  const startEventStreamRef = useRef(startEventStream);
-  const stopEventStreamRef = useRef(stopEventStream);
-
-  // Keep refs up to date
+  // Load initial data once on mount
   useEffect(() => {
-    startEventStreamRef.current = startEventStream;
-    stopEventStreamRef.current = stopEventStream;
-  });
-
-  useEffect(() => {
-    // Fetch all initial data
     const loadData = async () => {
       try {
         await Promise.all([
@@ -63,27 +53,16 @@ export function Layout() {
     };
 
     loadData();
+  }, [fetchAll, fetchAllocation, fetchCashBreakdown, fetchSecurities, fetchTargets, fetchSparklines, fetchSettings, fetchTrades, fetchAvailableLogFiles]);
 
-    // Start unified event stream with log_file param if logs view is active
+  // Manage event stream lifecycle - restart when selectedLogFile changes
+  useEffect(() => {
     startEventStream(selectedLogFile);
 
-    // Cleanup on unmount
     return () => {
       stopEventStream();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Restart event stream when log file changes
-  useEffect(() => {
-    if (selectedLogFile) {
-      stopEventStreamRef.current();
-      startEventStreamRef.current(selectedLogFile);
-    }
-    return () => {
-      stopEventStreamRef.current();
-    };
-  }, [selectedLogFile]);
+  }, [selectedLogFile, startEventStream, stopEventStream]);
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-dark-9)' }}>

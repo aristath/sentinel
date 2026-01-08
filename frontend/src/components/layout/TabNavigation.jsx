@@ -1,7 +1,7 @@
 import { Tabs, Badge, Group } from '@mantine/core';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppStore } from '../../stores/appStore';
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 
 export function TabNavigation() {
   const navigate = useNavigate();
@@ -20,7 +20,7 @@ export function TabNavigation() {
 
   const activeTab = getTabFromPath(location.pathname);
 
-  const handleTabChange = (value) => {
+  const handleTabChange = useCallback((value) => {
     setActiveTab(value);
     const routes = {
       'next-actions': '/',
@@ -30,7 +30,7 @@ export function TabNavigation() {
       'logs': '/logs',
     };
     navigate(routes[value] || '/');
-  };
+  }, [navigate, setActiveTab]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -54,8 +54,7 @@ export function TabNavigation() {
 
     document.addEventListener('keydown', handleKeydown);
     return () => document.removeEventListener('keydown', handleKeydown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [handleTabChange]);
 
   const pendingCount = recommendations?.steps?.length || 0;
 

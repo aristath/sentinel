@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
+import { useEffect, useRef, useState, useImperativeHandle, forwardRef, useCallback } from 'react';
 import { createChart, ColorType } from 'lightweight-charts';
 import { api } from '../../api/client';
 import { Select, Button, Group, Loader, Text } from '@mantine/core';
@@ -13,10 +13,46 @@ export const SecurityChart = forwardRef(({ isin, symbol, onClose }, ref) => {
   const [selectedRange, setSelectedRange] = useState('1Y');
   const [selectedSource, setSelectedSource] = useState('tradernet');
 
+  // Memoize chart data loading function
+  const loadChartData = useCallback(async () => {
+    if (!isin) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const data = await api.fetchSecurityChart(isin, selectedRange, selectedSource);
+
+      if (!data || data.length === 0) {
+        setError('No chart data available');
+        if (lineSeriesRef.current) {
+          lineSeriesRef.current.setData([]);
+        }
+        return;
+      }
+
+      // Transform data for Lightweight Charts
+      const chartData = data.map(item => ({
+        time: item.time,
+        value: item.value || item.close || item.price,
+      }));
+
+      if (lineSeriesRef.current) {
+        lineSeriesRef.current.setData(chartData);
+        chartRef.current.timeScale().fitContent();
+      }
+    } catch (err) {
+      console.error('Failed to load security chart:', err);
+      setError('Failed to load chart data');
+    } finally {
+      setLoading(false);
+    }
+  }, [isin, selectedRange, selectedSource]);
+
   // Expose refresh function via ref
   useImperativeHandle(ref, () => ({
     refresh: loadChartData,
-  }));
+  }), [loadChartData]);
 
   useEffect(() => {
     if (!chartContainerRef.current || !isin) return;
@@ -64,47 +100,12 @@ export const SecurityChart = forwardRef(({ isin, symbol, onClose }, ref) => {
     };
   }, [isin]);
 
-  const loadChartData = async () => {
-    if (!isin) return;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const data = await api.fetchSecurityChart(isin, selectedRange, selectedSource);
-
-      if (!data || data.length === 0) {
-        setError('No chart data available');
-        if (lineSeriesRef.current) {
-          lineSeriesRef.current.setData([]);
-        }
-        return;
-      }
-
-      // Transform data for Lightweight Charts
-      const chartData = data.map(item => ({
-        time: item.time,
-        value: item.value || item.close || item.price,
-      }));
-
-      if (lineSeriesRef.current) {
-        lineSeriesRef.current.setData(chartData);
-        chartRef.current.timeScale().fitContent();
-      }
-    } catch (err) {
-      console.error('Failed to load security chart:', err);
-      setError('Failed to load chart data');
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Load chart data when range, source, or isin changes
   useEffect(() => {
     if (isin && lineSeriesRef.current) {
       loadChartData();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedRange, selectedSource, isin]);
+  }, [isin, selectedRange, selectedSource, loadChartData]);
 
   // Register refresh function with event handler
   useEffect(() => {
@@ -119,8 +120,7 @@ export const SecurityChart = forwardRef(({ isin, symbol, onClose }, ref) => {
         setSecurityChartRefreshFn(null);
       };
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isin]);
+  }, [isin, loadChartData]);
 
   return (
     <div>

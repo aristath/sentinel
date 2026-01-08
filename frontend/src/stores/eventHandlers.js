@@ -65,13 +65,13 @@ export const eventHandlers = {
           securityChartRefreshFn();
         }
       }
-    }, 500);
+    }, 100);
   },
 
   SCORE_UPDATED: () => {
     debounce('securities', () => {
       useSecuritiesStore.getState().fetchSecurities();
-    }, 500);
+    }, 100);
   },
 
   SECURITY_SYNCED: (event) => {
@@ -104,7 +104,7 @@ export const eventHandlers = {
     debounce('portfolio', () => {
       usePortfolioStore.getState().fetchAllocation();
       usePortfolioStore.getState().fetchCashBreakdown();
-    }, 500);
+    }, 100);
   },
 
   TRADE_EXECUTED: () => {
@@ -178,6 +178,7 @@ export const eventHandlers = {
   // Settings events
   SETTINGS_CHANGED: () => {
     useSettingsStore.getState().fetchSettings();
+    useSecuritiesStore.getState().fetchColumnVisibility();
   },
 
   PLANNER_CONFIG_CHANGED: () => {
