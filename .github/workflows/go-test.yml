@@ -24,20 +24,30 @@ jobs:
       fail-fast: false
       matrix:
         group:
-          - name: "core"
-            packages: "./internal/clients/... ./internal/config ./internal/database/... ./internal/deployment ./internal/di ./internal/domain ./internal/events ./internal/evaluation/... ./internal/market_regime"
-          - name: "modules-1"
-            packages: "./internal/modules/adaptation ./internal/modules/allocation/... ./internal/modules/analytics/... ./internal/modules/cash_flows/... ./internal/modules/charts/... ./internal/modules/cleanup"
-          - name: "modules-2"
-            packages: "./internal/modules/display/... ./internal/modules/dividends/... ./internal/modules/evaluation/... ./internal/modules/market_hours ./internal/modules/opportunities/... ./internal/modules/optimization/..."
-          - name: "modules-3"
-            packages: "./internal/modules/planning/... ./internal/modules/portfolio/... ./internal/modules/quantum ./internal/modules/rebalancing/... ./internal/modules/scoring/..."
-          - name: "modules-4a"
-            packages: "./internal/modules/sequences/... ./internal/modules/settings/..."
-          - name: "modules-4b"
-            packages: "./internal/modules/symbolic_regression/... ./internal/modules/trading/... ./internal/modules/universe/..."
-          - name: "infrastructure"
-            packages: "./internal/queue ./internal/reliability ./internal/scheduler ./internal/services ./internal/ticker ./internal/utils ./pkg/..."
+          - { name: "core", packages: "./internal/clients/... ./internal/config ./internal/database/... ./internal/deployment ./internal/di ./internal/domain ./internal/events ./internal/evaluation/... ./internal/market_regime" }
+          - { name: "adaptation", packages: "./internal/modules/adaptation" }
+          - { name: "allocation", packages: "./internal/modules/allocation/..." }
+          - { name: "analytics", packages: "./internal/modules/analytics/..." }
+          - { name: "cash-flows", packages: "./internal/modules/cash_flows/..." }
+          - { name: "charts", packages: "./internal/modules/charts/..." }
+          - { name: "cleanup", packages: "./internal/modules/cleanup" }
+          - { name: "display", packages: "./internal/modules/display/..." }
+          - { name: "dividends", packages: "./internal/modules/dividends/..." }
+          - { name: "evaluation", packages: "./internal/modules/evaluation/..." }
+          - { name: "market-hours", packages: "./internal/modules/market_hours" }
+          - { name: "opportunities", packages: "./internal/modules/opportunities/..." }
+          - { name: "optimization", packages: "./internal/modules/optimization/..." }
+          - { name: "planning", packages: "./internal/modules/planning/..." }
+          - { name: "portfolio", packages: "./internal/modules/portfolio/..." }
+          - { name: "quantum", packages: "./internal/modules/quantum" }
+          - { name: "rebalancing", packages: "./internal/modules/rebalancing/..." }
+          - { name: "scoring", packages: "./internal/modules/scoring/..." }
+          - { name: "sequences", packages: "./internal/modules/sequences/..." }
+          - { name: "settings", packages: "./internal/modules/settings/..." }
+          - { name: "symbolic-regression", packages: "./internal/modules/symbolic_regression/..." }
+          - { name: "trading", packages: "./internal/modules/trading/..." }
+          - { name: "universe", packages: "./internal/modules/universe/..." }
+          - { name: "infrastructure", packages: "./internal/queue ./internal/reliability ./internal/scheduler ./internal/services ./internal/ticker ./internal/utils ./pkg/..." }
 
     steps:
     - uses: actions/checkout@v4
