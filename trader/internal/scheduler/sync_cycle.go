@@ -125,15 +125,15 @@ func (j *SyncCycleJob) Run() error {
 
 	// Emit PortfolioChanged event after successful sync
 	if j.eventManager != nil {
-		j.eventManager.Emit(events.PortfolioChanged, "sync_cycle", map[string]interface{}{
-			"sync_completed": true,
+		j.eventManager.EmitTyped(events.PortfolioChanged, "sync_cycle", &events.PortfolioChangedData{
+			SyncCompleted: true,
 		})
 	}
 
 	// Emit PriceUpdated event after price sync
 	if j.eventManager != nil {
-		j.eventManager.Emit(events.PriceUpdated, "sync_cycle", map[string]interface{}{
-			"prices_synced": true,
+		j.eventManager.EmitTyped(events.PriceUpdated, "sync_cycle", &events.PriceUpdatedData{
+			PricesSynced: true,
 		})
 	}
 

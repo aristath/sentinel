@@ -160,18 +160,18 @@ func (j *PlannerBatchJob) Run() error {
 	if j.eventManager != nil {
 		planInterface, ok := plan.(*planningdomain.HolisticPlan)
 		if ok {
-			j.eventManager.Emit(events.PlanGenerated, "planner", map[string]interface{}{
-				"portfolio_hash": portfolioHash,
-				"steps":          len(planInterface.Steps),
-				"end_score":      planInterface.EndStateScore,
-				"improvement":    planInterface.Improvement,
-				"feasible":       planInterface.Feasible,
+			j.eventManager.EmitTyped(events.PlanGenerated, "planner", &events.PlanGeneratedData{
+				PortfolioHash: portfolioHash,
+				Steps:         len(planInterface.Steps),
+				EndScore:      planInterface.EndStateScore,
+				Improvement:   planInterface.Improvement,
+				Feasible:      planInterface.Feasible,
 			})
 
 			if len(planInterface.Steps) > 0 {
-				j.eventManager.Emit(events.RecommendationsReady, "planner", map[string]interface{}{
-					"portfolio_hash": portfolioHash,
-					"count":          len(planInterface.Steps),
+				j.eventManager.EmitTyped(events.RecommendationsReady, "planner", &events.RecommendationsReadyData{
+					PortfolioHash: portfolioHash,
+					Count:         len(planInterface.Steps),
 				})
 			}
 		}

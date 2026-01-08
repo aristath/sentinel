@@ -88,9 +88,9 @@ func (d *SecurityAddedData) EventType() EventType {
 // This event has two variants - single security sync or batch sync
 type SecuritySyncedData struct {
 	// Single security sync fields
-	ISIN   string `json:"isin,omitempty"`
-	Symbol string `json:"symbol,omitempty"`
-	Reason string `json:"reason,omitempty"`
+	ISIN   string   `json:"isin,omitempty"`
+	Symbol string   `json:"symbol,omitempty"`
+	Reason string   `json:"reason,omitempty"`
 	Price  *float64 `json:"price,omitempty"`
 
 	// Batch sync fields
@@ -195,10 +195,10 @@ func (d *ErrorEventData) EventType() EventType {
 
 // EventWithData represents an event with typed data
 type EventWithData struct {
-	Type      EventType  `json:"type"`
-	Timestamp time.Time  `json:"timestamp"`
-	Module    string     `json:"module"`
-	Data      EventData  `json:"data"`
+	Type      EventType `json:"type"`
+	Timestamp time.Time `json:"timestamp"`
+	Module    string    `json:"module"`
+	Data      EventData `json:"data"`
 }
 
 // MarshalJSON customizes JSON serialization for EventWithData
@@ -294,7 +294,7 @@ func (e *EventWithData) UnmarshalJSON(data []byte) error {
 
 // GenericEventData is a fallback for events that don't have a specific type
 type GenericEventData struct {
-	Type EventType                `json:"-"`
+	Type EventType              `json:"-"`
 	Data map[string]interface{} `json:"-"`
 }
 
@@ -312,4 +312,3 @@ func (d *GenericEventData) MarshalJSON() ([]byte, error) {
 func (d *GenericEventData) UnmarshalJSON(data []byte) error {
 	return json.Unmarshal(data, &d.Data)
 }
-

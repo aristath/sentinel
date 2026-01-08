@@ -365,4 +365,3 @@ func TestEventDataInterface(t *testing.T) {
 		})
 	}
 }
-
