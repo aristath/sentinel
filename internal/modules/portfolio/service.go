@@ -39,15 +39,21 @@ type SettingsServiceInterface interface {
 // See internal/services/README.md for service architecture documentation.
 //
 // Faithful translation from Python: app/modules/portfolio/services/portfolio_service.py
+// ExchangeRateCacheServiceInterface defines the contract for exchange rate caching
+type ExchangeRateCacheServiceInterface interface {
+	GetRate(fromCurrency, toCurrency string) (float64, error)
+}
+
 type PortfolioService struct {
-	positionRepo            PositionRepositoryInterface
-	allocRepo               domain.AllocationTargetProvider
-	cashManager             domain.CashManager // Interface to break circular dependency
-	universeDB              *sql.DB            // For querying securities (universe.db)
-	tradernetClient         domain.TradernetClientInterface
-	currencyExchangeService domain.CurrencyExchangeServiceInterface
-	settingsService         SettingsServiceInterface // For staleness threshold configuration
-	log                     zerolog.Logger
+	positionRepo             PositionRepositoryInterface
+	allocRepo                domain.AllocationTargetProvider
+	cashManager              domain.CashManager // Interface to break circular dependency
+	universeDB               *sql.DB            // For querying securities (universe.db)
+	tradernetClient          domain.TradernetClientInterface
+	currencyExchangeService  domain.CurrencyExchangeServiceInterface
+	exchangeRateCacheService ExchangeRateCacheServiceInterface // For cached exchange rates
+	settingsService          SettingsServiceInterface          // For staleness threshold configuration
+	log                      zerolog.Logger
 }
 
 // NewPortfolioService creates a new portfolio service
@@ -58,18 +64,20 @@ func NewPortfolioService(
 	universeDB *sql.DB,
 	tradernetClient domain.TradernetClientInterface,
 	currencyExchangeService domain.CurrencyExchangeServiceInterface,
+	exchangeRateCacheService ExchangeRateCacheServiceInterface,
 	settingsService SettingsServiceInterface,
 	log zerolog.Logger,
 ) *PortfolioService {
 	return &PortfolioService{
-		positionRepo:            positionRepo,
-		allocRepo:               allocRepo,
-		cashManager:             cashManager,
-		universeDB:              universeDB,
-		tradernetClient:         tradernetClient,
-		currencyExchangeService: currencyExchangeService,
-		settingsService:         settingsService,
-		log:                     log.With().Str("service", "portfolio").Logger(),
+		positionRepo:             positionRepo,
+		allocRepo:                allocRepo,
+		cashManager:              cashManager,
+		universeDB:               universeDB,
+		tradernetClient:          tradernetClient,
+		currencyExchangeService:  currencyExchangeService,
+		exchangeRateCacheService: exchangeRateCacheService,
+		settingsService:          settingsService,
+		log:                      log.With().Str("service", "portfolio").Logger(),
 	}
 }
 
@@ -580,10 +588,10 @@ func (s *PortfolioService) SyncFromTradernet() error {
 		dbPos := Position{
 			ISIN:         isin, // Required for Upsert (PRIMARY KEY)
 			Symbol:       tradernetPos.Symbol,
-			Quantity:     tradernetPos.Quantity,     // From Tradernet
-			AvgPrice:     tradernetPos.AvgPrice,     // From Tradernet (historical)
-			Currency:     tradernetPos.Currency,     // From Tradernet
-			CurrencyRate: tradernetPos.CurrencyRate, // From Tradernet
+			Quantity:     tradernetPos.Quantity, // From Tradernet
+			AvgPrice:     tradernetPos.AvgPrice, // From Tradernet (historical)
+			Currency:     tradernetPos.Currency, // From Tradernet
+			CurrencyRate: 1.0,                   // Will be set below from cache
 			LastUpdated:  &now,
 		}
 
@@ -593,12 +601,59 @@ func (s *PortfolioService) SyncFromTradernet() error {
 			dbPos.MarketValueEUR = existingPos.MarketValueEUR // Keep Yahoo-calculated value
 		}
 
-		// If we have a current price, recalculate market value
+		// Fetch currency rate from cache service
+		if dbPos.Currency != "" && dbPos.Currency != "EUR" {
+			if s.exchangeRateCacheService != nil {
+				rate, err := s.exchangeRateCacheService.GetRate(dbPos.Currency, "EUR")
+				if err != nil {
+					s.log.Warn().
+						Err(err).
+						Str("currency", dbPos.Currency).
+						Str("symbol", dbPos.Symbol).
+						Msg("Failed to get cached exchange rate, using fallback")
+					// Use hardcoded fallback
+					switch dbPos.Currency {
+					case "USD":
+						dbPos.CurrencyRate = 1.0 / 0.9 // EUR/USD ~= 1.11
+					case "GBP":
+						dbPos.CurrencyRate = 1.0 / 1.2 // EUR/GBP ~= 0.83
+					case "HKD":
+						dbPos.CurrencyRate = 1.0 / 0.11 // EUR/HKD ~= 9.09
+					default:
+						dbPos.CurrencyRate = 1.0
+					}
+				} else {
+					// Convert {Currency}/EUR rate (from GetRate) to storage format
+					// GetRate returns "1 USD = X EUR", we need "1 USD / X" for storage
+					dbPos.CurrencyRate = 1.0 / rate
+				}
+			} else {
+				// Service not available, use hardcoded fallback rates
+				s.log.Warn().
+					Str("symbol", dbPos.Symbol).
+					Msg("ExchangeRateCacheService not available, using hardcoded fallback")
+				// Use hardcoded fallback rates
+				switch dbPos.Currency {
+				case "USD":
+					dbPos.CurrencyRate = 1.0 / 0.9 // EUR/USD ~= 1.11
+				case "GBP":
+					dbPos.CurrencyRate = 1.0 / 1.2 // EUR/GBP ~= 0.83
+				case "HKD":
+					dbPos.CurrencyRate = 1.0 / 0.11 // EUR/HKD ~= 9.09
+				default:
+					dbPos.CurrencyRate = 1.0
+				}
+			}
+		} else {
+			dbPos.CurrencyRate = 1.0 // EUR or no currency
+		}
+
+		// Recalculate market value with correct rate
 		if dbPos.CurrentPrice > 0 && dbPos.Quantity > 0 {
 			valueInCurrency := dbPos.Quantity * dbPos.CurrentPrice
-			if dbPos.CurrencyRate > 0 {
+			if dbPos.CurrencyRate > 0 && dbPos.CurrencyRate != 1.0 {
 				dbPos.MarketValueEUR = valueInCurrency / dbPos.CurrencyRate
-			} else if dbPos.Currency == "EUR" || dbPos.Currency == "" {
+			} else {
 				dbPos.MarketValueEUR = valueInCurrency
 			}
 		}
