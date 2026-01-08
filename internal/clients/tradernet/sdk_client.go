@@ -9,7 +9,7 @@ type SDKClient interface {
 	GetPlaced(active bool) (interface{}, error)
 	GetClientCpsHistory(dateFrom, dateTo string, cpsDocID, id, limit, offset, cpsStatus *int) (interface{}, error)
 	CorporateActions(reception int) (interface{}, error)
-	GetTradesHistory(start, end string, tradeID, limit *int, symbol, currency *string) (interface{}, error)
+	GetTradesHistory(start, end string, tradeID, limit, reception *int, symbol, currency *string) (interface{}, error)
 	FindSymbol(symbol string, exchange *string) (interface{}, error)
 	GetQuotes(symbols []string) (interface{}, error)
 	UserInfo() (interface{}, error)

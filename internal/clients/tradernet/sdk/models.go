@@ -14,15 +14,16 @@ type GetPositionJSONParams struct {
 
 // PutTradeOrderParams represents parameters for putTradeOrder command
 // CRITICAL: Field order MUST match Python's dict insertion order exactly!
-// Python order: 'instr_name', 'action_id', 'order_type_id', 'qty', 'limit_price', 'expiration_id', 'user_order_id'
+// Python order: 'instr_name', 'action_id', 'order_type_id', 'qty', 'limit_price', 'stop_price', 'expiration_id', 'user_order_id'
 type PutTradeOrderParams struct {
-	InstrName    string  `json:"instr_name"`              // Field 1
-	ActionID     int     `json:"action_id"`               // Field 2
-	OrderTypeID  int     `json:"order_type_id"`           // Field 3
-	Qty          int     `json:"qty"`                     // Field 4
-	LimitPrice   float64 `json:"limit_price"`             // Field 5
-	ExpirationID int     `json:"expiration_id"`           // Field 6
-	UserOrderID  *int    `json:"user_order_id,omitempty"` // Field 7
+	InstrName    string   `json:"instr_name"`              // Field 1
+	ActionID     int      `json:"action_id"`               // Field 2
+	OrderTypeID  int      `json:"order_type_id"`           // Field 3
+	Qty          int      `json:"qty"`                     // Field 4
+	LimitPrice   *float64 `json:"limit_price,omitempty"`   // Field 5 - Nullable for market orders
+	StopPrice    *float64 `json:"stop_price,omitempty"`    // Field 6 - Required for stop orders (types 3-6)
+	ExpirationID int      `json:"expiration_id"`           // Field 7
+	UserOrderID  *int     `json:"user_order_id,omitempty"` // Field 8
 }
 
 // GetNotifyOrderJSONParams represents parameters for getNotifyOrderJSON command
@@ -33,7 +34,7 @@ type GetNotifyOrderJSONParams struct {
 
 // GetTradesHistoryParams represents parameters for getTradesHistory command
 // CRITICAL: Field order MUST match Python's dict insertion order exactly!
-// Python order: 'beginDate', 'endDate', 'tradeId', 'max', 'nt_ticker', 'curr'
+// Python order: 'beginDate', 'endDate', 'tradeId', 'max', 'nt_ticker', 'curr', 'reception'
 type GetTradesHistoryParams struct {
 	BeginDate string  `json:"beginDate"`           // Field 1 - ISO format YYYY-MM-DD
 	EndDate   string  `json:"endDate"`             // Field 2 - ISO format YYYY-MM-DD
@@ -41,6 +42,7 @@ type GetTradesHistoryParams struct {
 	Max       *int    `json:"max,omitempty"`       // Field 4 - optional
 	NtTicker  *string `json:"nt_ticker,omitempty"` // Field 5 - optional
 	Curr      *string `json:"curr,omitempty"`      // Field 6 - optional
+	Reception *int    `json:"reception,omitempty"` // Field 7 - optional (office/reception filter)
 }
 
 // GetStockQuotesJSONParams represents parameters for getStockQuotesJSON command
@@ -194,8 +196,8 @@ type DeletePriceAlertParams struct {
 type PutStopLossParams struct {
 	InstrName               string   `json:"instr_name"`                          // Field 1 - always present
 	StopLoss                *float64 `json:"stop_loss,omitempty"`                 // Field 2 - for stop()
-	StopLossPercent         *int     `json:"stop_loss_percent,omitempty"`         // Field 3 - for trailing_stop()
-	StoplossTrailingPercent *int     `json:"stoploss_trailing_percent,omitempty"` // Field 4 - for trailing_stop()
+	StopLossPercent         *float64 `json:"stop_loss_percent,omitempty"`         // Field 3 - for trailing_stop() - supports decimals
+	StoplossTrailingPercent *float64 `json:"stoploss_trailing_percent,omitempty"` // Field 4 - for trailing_stop() - supports decimals
 	TakeProfit              *float64 `json:"take_profit,omitempty"`               // Field 5 - for take_profit()
 }
 

@@ -56,7 +56,7 @@ func (m *mockSDKClient) CorporateActions(reception int) (interface{}, error) {
 	return m.corporateActionsResult, m.corporateActionsError
 }
 
-func (m *mockSDKClient) GetTradesHistory(start, end string, tradeID, limit *int, symbol, currency *string) (interface{}, error) {
+func (m *mockSDKClient) GetTradesHistory(start, end string, tradeID, limit, reception *int, symbol, currency *string) (interface{}, error) {
 	return m.getTradesHistoryResult, m.getTradesHistoryError
 }
 

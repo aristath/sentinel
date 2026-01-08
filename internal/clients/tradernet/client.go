@@ -273,7 +273,7 @@ func (c *Client) GetExecutedTrades(limit int) ([]Trade, error) {
 	c.log.Debug().Int("limit", limit).Msg("GetExecutedTrades: calling SDK GetTradesHistory")
 
 	limitPtr := &limit
-	result, err := c.sdkClient.GetTradesHistory("", "", nil, limitPtr, nil, nil)
+	result, err := c.sdkClient.GetTradesHistory("", "", nil, limitPtr, nil, nil, nil)
 	if err != nil {
 		c.log.Error().Err(err).Msg("GetExecutedTrades: SDK GetTradesHistory failed")
 		return nil, fmt.Errorf("failed to get executed trades: %w", err)

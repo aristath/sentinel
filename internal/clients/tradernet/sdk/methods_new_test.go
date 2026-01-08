@@ -357,7 +357,7 @@ func TestTrailingStop(t *testing.T) {
 		log:        log,
 	}
 
-	result, err := client.TrailingStop("AAPL.US", 5)
+	result, err := client.TrailingStop("AAPL.US", 5.0)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)

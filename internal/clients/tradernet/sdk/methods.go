@@ -88,13 +88,20 @@ func (c *Client) AccountSummary() (interface{}, error) {
 	return c.authorizedRequest("getPositionJson", params)
 }
 
-// Trade places a trade order (internal method used by Buy/Sell)
-// This matches the Python SDK's trade() method exactly
-func (c *Client) Trade(symbol string, quantity int, price float64, duration string, useMargin bool, customOrderID *int) (interface{}, error) {
+// Trade places an order with support for all order types (1-6).
+// This matches the Python SDK's trade() method with extended functionality.
+//
+// Order Types: 1=Market, 2=Limit, 3=Stop, 4=StopLimit, 5=StopLoss, 6=TakeProfit
+// - Type 1 (Market): limitPrice=nil, stopPrice=nil
+// - Type 2 (Limit): limitPrice required, stopPrice=nil
+// - Type 3 (Stop): limitPrice=nil, stopPrice required
+// - Type 4 (StopLimit): limitPrice required, stopPrice required
+// - Type 5-6 (StopLoss/TakeProfit): stopPrice required
+func (c *Client) Trade(symbol string, quantity int, orderType int, limitPrice, stopPrice *float64, duration string, useMargin bool, customOrderID *int) (interface{}, error) {
 	// IOC emulation (special case)
 	if strings.ToLower(duration) == "ioc" {
 		// Place order with 'day' duration
-		order, err := c.Trade(symbol, quantity, price, "day", useMargin, customOrderID)
+		order, err := c.Trade(symbol, quantity, orderType, limitPrice, stopPrice, "day", useMargin, customOrderID)
 		if err != nil {
 			return nil, err
 		}
@@ -157,6 +164,31 @@ func (c *Client) Trade(symbol string, quantity int, price float64, duration stri
 		return nil, fmt.Errorf("unknown duration %s", duration)
 	}
 
+	// Validate order type
+	if orderType < 1 || orderType > 6 {
+		return nil, fmt.Errorf("invalid order type %d (must be 1-6)", orderType)
+	}
+
+	// Validate required parameters for each order type
+	switch orderType {
+	case 2: // Limit
+		if limitPrice == nil {
+			return nil, fmt.Errorf("limit_price required for limit orders (type 2)")
+		}
+	case 3: // Stop
+		if stopPrice == nil {
+			return nil, fmt.Errorf("stop_price required for stop orders (type 3)")
+		}
+	case 4: // StopLimit
+		if limitPrice == nil || stopPrice == nil {
+			return nil, fmt.Errorf("both limit_price and stop_price required for stop limit orders (type 4)")
+		}
+	case 5, 6: // StopLoss, TakeProfit
+		if stopPrice == nil {
+			return nil, fmt.Errorf("stop_price required for stop loss/take profit orders (type %d)", orderType)
+		}
+	}
+
 	// Action ID calculation
 	// Buy + no margin = 1, Buy + margin = 2
 	// Sell + no margin = 3, Sell + margin = 4
@@ -179,18 +211,13 @@ func (c *Client) Trade(symbol string, quantity int, price float64, duration stri
 		return nil, fmt.Errorf("zero quantity")
 	}
 
-	// Order type: 1 = market, 2 = limit
-	orderTypeID := 1
-	if price != 0 {
-		orderTypeID = 2
-	}
-
 	params := PutTradeOrderParams{
 		InstrName:    symbol,
 		ActionID:     actionID,
-		OrderTypeID:  orderTypeID,
+		OrderTypeID:  orderType,
 		Qty:          absInt(quantity),
-		LimitPrice:   price,
+		LimitPrice:   limitPrice,
+		StopPrice:    stopPrice,
 		ExpirationID: durationID,
 		UserOrderID:  customOrderID,
 	}
@@ -198,13 +225,24 @@ func (c *Client) Trade(symbol string, quantity int, price float64, duration stri
 	return c.authorizedRequest("putTradeOrder", params)
 }
 
-// Buy places a buy order
+// Buy places a buy order (market or limit based on price parameter)
 // This matches the Python SDK's buy() method exactly
 func (c *Client) Buy(symbol string, quantity int, price float64, duration string, useMargin bool, customOrderID *int) (interface{}, error) {
 	if quantity <= 0 {
 		return nil, fmt.Errorf("quantity must be positive")
 	}
-	return c.Trade(symbol, quantity, price, duration, useMargin, customOrderID)
+
+	// Auto-detect order type: market (price=0) or limit (price>0)
+	var orderType int
+	var limitPrice *float64
+	if price == 0 {
+		orderType = 1 // Market
+	} else {
+		orderType = 2 // Limit
+		limitPrice = &price
+	}
+
+	return c.Trade(symbol, quantity, orderType, limitPrice, nil, duration, useMargin, customOrderID)
 }
 
 // Sell places a sell order for the specified symbol.
@@ -243,8 +281,19 @@ func (c *Client) Sell(symbol string, quantity int, price float64, duration strin
 	if quantity <= 0 {
 		return nil, fmt.Errorf("quantity must be positive")
 	}
+
+	// Auto-detect order type: market (price=0) or limit (price>0)
+	var orderType int
+	var limitPrice *float64
+	if price == 0 {
+		orderType = 1 // Market
+	} else {
+		orderType = 2 // Limit
+		limitPrice = &price
+	}
+
 	// Negative quantity for sell
-	return c.Trade(symbol, -quantity, price, duration, useMargin, customOrderID)
+	return c.Trade(symbol, -quantity, orderType, limitPrice, nil, duration, useMargin, customOrderID)
 }
 
 // GetPlaced gets pending/active orders
@@ -263,7 +312,7 @@ func (c *Client) GetPlaced(active bool) (interface{}, error) {
 
 // GetTradesHistory gets executed trades history
 // This matches the Python SDK's get_trades_history() method exactly
-func (c *Client) GetTradesHistory(start, end string, tradeID, limit *int, symbol, currency *string) (interface{}, error) {
+func (c *Client) GetTradesHistory(start, end string, tradeID, limit, reception *int, symbol, currency *string) (interface{}, error) {
 	params := GetTradesHistoryParams{
 		BeginDate: start,
 		EndDate:   end,
@@ -271,6 +320,7 @@ func (c *Client) GetTradesHistory(start, end string, tradeID, limit *int, symbol
 		Max:       limit,
 		NtTicker:  symbol,
 		Curr:      currency,
+		Reception: reception,
 	}
 	return c.authorizedRequest("getTradesHistory", params)
 }
@@ -302,7 +352,7 @@ func (c *Client) GetCandles(symbol string, start, end time.Time, timeframeSecond
 		Timeframe:    timeframeMinutes,
 		DateFrom:     dateFrom,
 		DateTo:       dateTo,
-		IntervalMode: "OpenRay",
+		IntervalMode: "ClosedRay",
 	}
 	return c.authorizedRequest("getHloc", params)
 }
@@ -391,11 +441,17 @@ func (c *Client) GetClientCpsHistory(dateFrom, dateTo string, cpsDocID, id, limi
 //   - A map containing cancellation result with keys:
 //   - result: Cancellation status
 //   - order_id: Cancelled order ID
+//   - error_code: Error code (0 = success, non-zero = error)
+//   - error_message: Error description
 //   - Other cancellation-specific fields
 //
 // Errors:
 //   - Returns error if order ID is invalid or order cannot be cancelled
 //   - Returns error if API request fails or credentials are invalid
+//   - Returns specific error based on error_code:
+//     - 0: Method error (order not found, already cancelled, etc.)
+//     - 2: Common error
+//     - 12: No permission to cancel this order
 //
 // API Reference: https://freedom24.com/tradernet-api/orders-cancel
 //
@@ -409,7 +465,50 @@ func (c *Client) Cancel(orderID int) (interface{}, error) {
 	params := map[string]interface{}{
 		"order_id": orderID,
 	}
-	return c.authorizedRequest("delTradeOrder", params)
+
+	result, err := c.authorizedRequest("delTradeOrder", params)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check error_code in response
+	if resultMap, ok := result.(map[string]interface{}); ok {
+		if errorCode, exists := resultMap["error_code"]; exists {
+			// Convert error_code to int (API may return as float64 or int)
+			var code int
+			switch v := errorCode.(type) {
+			case float64:
+				code = int(v)
+			case int:
+				code = v
+			default:
+				// Unknown type, treat as error
+				return nil, fmt.Errorf("unexpected error_code type: %T", errorCode)
+			}
+
+			// Check if error occurred (non-zero error code)
+			if code != 0 {
+				errorMsg := "unknown error"
+				if msg, exists := resultMap["error_message"]; exists {
+					if msgStr, ok := msg.(string); ok {
+						errorMsg = msgStr
+					}
+				}
+
+				// Return specific error based on code
+				switch code {
+				case 2:
+					return nil, fmt.Errorf("common error: %s", errorMsg)
+				case 12:
+					return nil, fmt.Errorf("no permission to cancel order %d: %s", orderID, errorMsg)
+				default:
+					return nil, fmt.Errorf("method error (code %d): %s", code, errorMsg)
+				}
+			}
+		}
+	}
+
+	return result, nil
 }
 
 // NewUser creates a new user account.
@@ -1144,7 +1243,7 @@ func (c *Client) Stop(symbol string, price float64) (interface{}, error) {
 // Parameters:
 //   - symbol: Tradernet symbol for the position (e.g., "AAPL.US")
 //   - percent: Stop loss percentage. The stop price trails the current price by this
-//     percentage. Default: 1 (if 0 is provided)
+//     percentage. Supports decimal values (e.g., 2.5). Default: 1.0 (if 0 is provided)
 //
 // Returns:
 //   - A map containing order information with:
@@ -1160,13 +1259,16 @@ func (c *Client) Stop(symbol string, price float64) (interface{}, error) {
 // Example:
 //
 //	// 5% trailing stop
-//	result, err := client.TrailingStop("AAPL.US", 5)
+//	result, err := client.TrailingStop("AAPL.US", 5.0)
 //	if err != nil {
 //	    log.Fatal(err)
 //	}
-func (c *Client) TrailingStop(symbol string, percent int) (interface{}, error) {
+//
+//	// 2.5% trailing stop
+//	result, err := client.TrailingStop("AAPL.US", 2.5)
+func (c *Client) TrailingStop(symbol string, percent float64) (interface{}, error) {
 	if percent == 0 {
-		percent = 1 // Default
+		percent = 1.0 // Default
 	}
 	params := PutStopLossParams{
 		InstrName:               symbol,
