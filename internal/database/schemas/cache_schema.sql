@@ -19,11 +19,14 @@ CREATE TABLE IF NOT EXISTS recommendations (
     current_portfolio_score REAL NOT NULL,
     new_portfolio_score REAL NOT NULL,
     score_change REAL NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'executed', 'rejected', 'expired')),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'executed', 'rejected', 'expired', 'dismissed', 'failed')),
     portfolio_hash TEXT NOT NULL,
     created_at INTEGER NOT NULL,     -- Unix timestamp (seconds since epoch)
     updated_at INTEGER NOT NULL,     -- Unix timestamp (seconds since epoch)
-    executed_at INTEGER              -- Unix timestamp (seconds since epoch)
+    executed_at INTEGER,             -- Unix timestamp (seconds since epoch)
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    last_attempt_at INTEGER,         -- Unix timestamp (seconds since epoch)
+    failure_reason TEXT
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_recommendations_status_priority
