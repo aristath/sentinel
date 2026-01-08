@@ -179,9 +179,10 @@ func configureConnectionPool(conn *sql.DB, profile DatabaseProfile) {
 	conn.SetMaxOpenConns(25) // Max concurrent connections
 	conn.SetMaxIdleConns(5)  // Keep some connections warm
 
-	// Connection lifecycle management (prevent stale connections)
-	conn.SetConnMaxLifetime(1 * time.Hour)    // Recycle connections after 1 hour
-	conn.SetConnMaxIdleTime(10 * time.Minute) // Close idle connections after 10 minutes
+	// Connection lifecycle management (tuned for long-running embedded device)
+	// Extended lifetimes prevent unnecessary reconnection during long operations
+	conn.SetConnMaxLifetime(24 * time.Hour)   // Recycle connections after 24 hours
+	conn.SetConnMaxIdleTime(30 * time.Minute) // Close idle connections after 30 minutes
 
 	// Cache database can have fewer connections (less frequently accessed)
 	if profile == ProfileCache {
