@@ -33,6 +33,7 @@ func RegisterListeners(bus *events.Bus, manager *Manager, registry *Registry, lo
 	})
 
 	// RecommendationsReady -> event_based_trading (CRITICAL priority)
+	// Note: Job has in-memory 15-minute throttle and processes ONE trade at a time
 	bus.Subscribe(events.RecommendationsReady, func(event *events.Event) {
 		job := &Job{
 			ID:          fmt.Sprintf("%s-%d", JobTypeEventBasedTrading, event.Timestamp.UnixNano()),
