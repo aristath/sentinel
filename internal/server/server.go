@@ -150,8 +150,6 @@ func New(cfg Config) *Server {
 	s.statusMonitor = NewStatusMonitor(
 		cfg.Container.EventManager,
 		systemHandlers,
-		marketHoursService,
-		cfg.UniverseDB,
 		cfg.Log,
 	)
 

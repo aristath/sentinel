@@ -5,40 +5,31 @@ import (
 	"time"
 
 	"github.com/aristath/sentinel/internal/events"
-	"github.com/aristath/sentinel/internal/modules/market_hours"
 	"github.com/rs/zerolog"
 )
 
 // StatusMonitor periodically checks system statuses and emits events on changes
 type StatusMonitor struct {
-	eventManager       *events.Manager
-	systemHandlers     *SystemHandlers
-	marketHoursService *market_hours.MarketHoursService
-	universeDB         interface{}
-	log                zerolog.Logger
+	eventManager    *events.Manager
+	systemHandlers  *SystemHandlers
+	log             zerolog.Logger
 
 	// Track previous states
 	lastSystemStatus    map[string]interface{}
 	lastTradernetStatus bool
-	lastMarketsStatus   map[string]bool
 }
 
 // NewStatusMonitor creates a new status monitor
 func NewStatusMonitor(
 	eventManager *events.Manager,
 	systemHandlers *SystemHandlers,
-	marketHoursService *market_hours.MarketHoursService,
-	universeDB interface{},
 	log zerolog.Logger,
 ) *StatusMonitor {
 	return &StatusMonitor{
-		eventManager:       eventManager,
-		systemHandlers:     systemHandlers,
-		marketHoursService: marketHoursService,
-		universeDB:         universeDB,
-		log:                log.With().Str("component", "status_monitor").Logger(),
-		lastSystemStatus:   make(map[string]interface{}),
-		lastMarketsStatus:  make(map[string]bool),
+		eventManager:    eventManager,
+		systemHandlers:  systemHandlers,
+		log:             log.With().Str("component", "status_monitor").Logger(),
+		lastSystemStatus: make(map[string]interface{}),
 	}
 }
 
@@ -68,9 +59,6 @@ func (m *StatusMonitor) checkStatuses() {
 
 	// Check tradernet status
 	m.checkTradernetStatus()
-
-	// Check markets status
-	m.checkMarketsStatus()
 }
 
 // checkSystemStatus checks if system status has changed
@@ -102,28 +90,5 @@ func (m *StatusMonitor) checkTradernetStatus() {
 			})
 		}
 		m.lastTradernetStatus = connected
-	}
-}
-
-// checkMarketsStatus checks if market statuses have changed
-func (m *StatusMonitor) checkMarketsStatus() {
-	if m.marketHoursService == nil {
-		return
-	}
-
-	// This is a simplified check - in production we'd get exchanges from universe DB
-	// For now, we periodically emit a markets status check event
-	now := time.Now()
-
-	// Emit MARKETS_STATUS_CHANGED event periodically
-	// In a full implementation, we'd track individual market statuses and only emit on changes
-	if m.eventManager != nil {
-		// Get a simple count of open markets (simplified)
-		openMarkets := m.marketHoursService.GetOpenMarkets(now)
-
-		m.eventManager.Emit(events.MarketsStatusChanged, "status_monitor", map[string]interface{}{
-			"open_count": len(openMarkets),
-			"timestamp":  now.Format(time.RFC3339),
-		})
 	}
 }
