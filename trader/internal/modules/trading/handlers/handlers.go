@@ -324,9 +324,18 @@ func (h *TradingHandlers) HandleGetRecommendations(w http.ResponseWriter, r *htt
 	startingCashEUR := 0.0
 	if h.portfolioService != nil {
 		summary, err := h.portfolioService.GetPortfolioSummary()
-		if err == nil {
+		if err != nil {
+			h.log.Warn().
+				Err(err).
+				Msg("Failed to get portfolio summary for cash balance, using 0")
+		} else {
 			startingCashEUR = summary.CashBalance
+			h.log.Debug().
+				Float64("cash_balance", startingCashEUR).
+				Msg("Retrieved starting cash balance from portfolio")
 		}
+	} else {
+		h.log.Warn().Msg("Portfolio service not available, starting cash will be 0")
 	}
 
 	// Add virtual test cash if in research mode (matches how BuildOpportunityContext handles it)

@@ -11,18 +11,20 @@ import (
 	"github.com/aristath/sentinel/internal/modules/planning/hash"
 	"github.com/aristath/sentinel/internal/modules/sequences"
 	"github.com/aristath/sentinel/internal/modules/universe"
+	"github.com/aristath/sentinel/internal/services"
 	"github.com/rs/zerolog"
 )
 
 type Planner struct {
-	opportunitiesService *opportunities.Service
-	sequencesService     *sequences.Service
-	evaluationService    *evaluation.Service
-	constraintEnforcer   *planningconstraints.Enforcer
-	log                  zerolog.Logger
+	opportunitiesService    *opportunities.Service
+	sequencesService        *sequences.Service
+	evaluationService       *evaluation.Service
+	constraintEnforcer      *planningconstraints.Enforcer
+	currencyExchangeService *services.CurrencyExchangeService
+	log                     zerolog.Logger
 }
 
-func NewPlanner(opportunitiesService *opportunities.Service, sequencesService *sequences.Service, evaluationService *evaluation.Service, securityRepo *universe.SecurityRepository, log zerolog.Logger) *Planner {
+func NewPlanner(opportunitiesService *opportunities.Service, sequencesService *sequences.Service, evaluationService *evaluation.Service, securityRepo *universe.SecurityRepository, currencyExchangeService *services.CurrencyExchangeService, log zerolog.Logger) *Planner {
 	// Create security lookup function for constraint enforcer
 	securityLookup := func(symbol, isin string) (*universe.Security, bool) {
 		// Try ISIN first
@@ -45,11 +47,12 @@ func NewPlanner(opportunitiesService *opportunities.Service, sequencesService *s
 	constraintEnforcer := planningconstraints.NewEnforcer(log, securityLookup)
 
 	return &Planner{
-		opportunitiesService: opportunitiesService,
-		sequencesService:     sequencesService,
-		evaluationService:    evaluationService,
-		constraintEnforcer:   constraintEnforcer,
-		log:                  log.With().Str("component", "planner").Logger(),
+		opportunitiesService:    opportunitiesService,
+		sequencesService:        sequencesService,
+		evaluationService:       evaluationService,
+		constraintEnforcer:      constraintEnforcer,
+		currencyExchangeService: currencyExchangeService,
+		log:                     log.With().Str("component", "planner").Logger(),
 	}
 }
 
@@ -190,15 +193,38 @@ func (p *Planner) convertToPlan(sequence domain.ActionSequence, ctx *domain.Oppo
 
 	// Use validated actions (after constraint enforcement)
 	for i, action := range validatedActions {
+		// Convert price to EUR if not already in EUR
+		// This ensures all calculations use EUR prices
+		priceEUR := action.Price
+		if action.Currency != "EUR" && p.currencyExchangeService != nil {
+			rate, err := p.currencyExchangeService.GetRate(action.Currency, "EUR")
+			if err != nil {
+				p.log.Warn().
+					Err(err).
+					Str("currency", action.Currency).
+					Str("symbol", action.Symbol).
+					Msg("Failed to get exchange rate, using original price")
+			} else {
+				priceEUR = action.Price * rate
+				p.log.Debug().
+					Str("currency", action.Currency).
+					Str("symbol", action.Symbol).
+					Float64("original_price", action.Price).
+					Float64("price_eur", priceEUR).
+					Float64("rate", rate).
+					Msg("Converted price to EUR")
+			}
+		}
+
 		step := domain.HolisticStep{
 			StepNumber:     i + 1,
 			Side:           action.Side,
 			Symbol:         action.Symbol,
 			Name:           action.Name,
 			Quantity:       action.Quantity,
-			EstimatedPrice: action.Price,
+			EstimatedPrice: priceEUR, // Now in EUR
 			EstimatedValue: action.ValueEUR,
-			Currency:       action.Currency,
+			Currency:       "EUR", // Always EUR after conversion
 			Reason:         action.Reason,
 			Narrative:      fmt.Sprintf("Step %d: %s %d shares of %s", i+1, action.Side, action.Quantity, action.Symbol),
 		}

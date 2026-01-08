@@ -4,6 +4,7 @@ package planning
 import (
 	"database/sql"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -490,13 +491,16 @@ func (r *RecommendationRepository) GetRecommendationsAsPlan(getEvaluatedCount fu
 			currentCash = availableCashAfter
 		}
 
+		// Round price to 2 decimals for display
+		roundedPrice := math.Round(rec.EstimatedPrice*100) / 100
+
 		step := map[string]interface{}{
 			"step":                   stepNum,
 			"symbol":                 rec.Symbol,
 			"name":                   rec.Name,
 			"side":                   rec.Side,
 			"quantity":               rec.Quantity,
-			"estimated_price":        rec.EstimatedPrice,
+			"estimated_price":        roundedPrice,
 			"estimated_value":        rec.EstimatedValue,
 			"currency":               rec.Currency,
 			"reason":                 rec.Reason,
