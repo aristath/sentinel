@@ -226,7 +226,7 @@ The system includes automated deployment (`internal/deployment`) that:
 ### Development
 
 ```bash
-cd trader
+
 
 # Install dependencies
 go mod download
@@ -254,7 +254,7 @@ go build -o sentinel ./cmd/server
 
 ```bash
 # Build for Arduino Uno Q (ARM64)
-cd trader
+
 GOOS=linux GOARCH=arm64 go build -o sentinel-arm64 ./cmd/server
 ```
 
@@ -288,5 +288,5 @@ The codebase has documented violations in the README.md Architecture section. Be
 
 ### Frontend
 - Frontend is built with Vite and embedded in the Go binary via `pkg/embedded`
-- Built assets are in `trader/frontend/dist/`
+- Built assets are in `frontend/dist/`
 - Served as static files by the HTTP server

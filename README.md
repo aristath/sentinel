@@ -190,7 +190,7 @@ cd sentinel
 #### 2. Build Main Application
 
 ```bash
-cd trader
+# No need to cd - at root now
 
 # Install dependencies
 go mod download
@@ -232,7 +232,7 @@ The `.env` file is no longer required. If you need to set infrastructure setting
 #### 4. Run Main Application
 
 ```bash
-cd trader
+# No need to cd - at root now
 ./sentinel
 ```
 
@@ -681,7 +681,7 @@ sentinel/
 #### Main Application
 
 ```bash
-cd trader
+# No need to cd - at root now
 
 # Install dependencies
 go mod download
@@ -773,7 +773,7 @@ log.Error().
 
 **Main Application:**
 ```bash
-cd trader
+# No need to cd - at root now
 go test ./...
 ```
 
@@ -819,7 +819,7 @@ curl http://localhost:8001/api/system/deployment/status
 Builds are handled automatically by GitHub Actions. For local builds:
 
 ```bash
-cd trader
+# No need to cd - at root now
 
 # Cross-compile for ARM64
 GOOS=linux GOARCH=arm64 go build -o sentinel-arm64 ./cmd/server
@@ -1055,7 +1055,7 @@ POST /api/securities/add-by-identifier
 
 ```bash
 # Run main app with auto-reload
-cd trader && air
+# No need to cd - at root now && air
 
 # Run tests
 go test ./...

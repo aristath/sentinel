@@ -45,13 +45,3 @@ type GoServiceConfig struct {
 	BinaryName  string // Output binary name (e.g., "sentinel")
 	ServiceName string // Systemd service name (e.g., "sentinel")
 }
-
-// DefaultTraderConfig returns default configuration for Sentinel service
-func DefaultTraderConfig() GoServiceConfig {
-	return GoServiceConfig{
-		Name:        "sentinel",
-		BuildPath:   "cmd/server",
-		BinaryName:  "sentinel",
-		ServiceName: "sentinel",
-	}
-}
