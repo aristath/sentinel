@@ -4,15 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/aristath/sentinel/internal/events"
 	"github.com/aristath/sentinel/internal/modules/planning/config"
 	"github.com/aristath/sentinel/internal/modules/planning/domain"
 	"github.com/aristath/sentinel/internal/modules/planning/repository"
-	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog"
 )
 
@@ -64,29 +61,20 @@ type ValidationResponse struct {
 	Errors []string `json:"errors,omitempty"`
 }
 
-// HistoryResponse contains configuration version history.
-type HistoryResponse struct {
-	History []HistoryEntry `json:"history"`
-	Total   int            `json:"total"`
-}
-
-// HistoryEntry represents a single version in configuration history.
-type HistoryEntry struct {
-	Version   int    `json:"version"`
-	CreatedAt string `json:"created_at"`
-	Changes   string `json:"changes,omitempty"`
-}
-
 // ServeHTTP routes config requests to appropriate handlers.
-// Routes are registered with chi router using path parameters like {id}.
-// The actual request path will be /api/planning/configs/{id} or /api/planning/configs.
+// Routes are registered as /api/planning/config (singular - single config exists).
+// Supported endpoints:
+//   - GET /api/planning/config - retrieve the single config
+//   - PUT /api/planning/config - update the single config
+//   - DELETE /api/planning/config - reset config to defaults
+//   - POST /api/planning/config/validate - validate the config
 func (h *ConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Parse URL path to determine operation
-	// Path will be like: /api/planning/configs or /api/planning/configs/1 or /api/planning/configs/1/history
+	// Path will be like: /api/planning/config or /api/planning/config/validate
 	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 
 	// Remove "api" and "planning" prefixes if present
-	// After removal, pathParts should be: ["configs"] or ["configs", "id"] or ["configs", "id", "history"]
+	// After removal, pathParts should be: ["config"] or ["config", "validate"]
 	startIdx := 0
 	for i, part := range pathParts {
 		if part == "api" || part == "planning" {
@@ -99,192 +87,59 @@ func (h *ConfigHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		pathParts = pathParts[startIdx:]
 	}
 
-	// Now pathParts should start with "configs"
-	if len(pathParts) == 0 || pathParts[0] != "configs" {
+	// Now pathParts should start with "config"
+	if len(pathParts) == 0 || pathParts[0] != "config" {
 		http.Error(w, "Not found", http.StatusNotFound)
 		return
 	}
 
-	// Try to get ID from chi URL parameter first (more reliable)
-	configID := chi.URLParam(r, "id")
-
-	// If chi parameter not available, fall back to path parsing
-	if configID == "" && len(pathParts) > 1 {
-		configID = pathParts[1]
-	}
-
 	// Handle different route patterns
 	if len(pathParts) == 1 {
-		// /api/planning/configs
+		// /api/planning/config
 		switch r.Method {
 		case http.MethodGet:
-			h.handleList(w, r)
-		case http.MethodPost:
-			h.handleCreate(w, r)
-		default:
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		}
-		return
-	}
-
-	if len(pathParts) == 2 {
-		secondPart := pathParts[1]
-
-		if secondPart == "validate" {
-			// /api/planning/configs/validate
-			if r.Method == http.MethodPost {
-				h.handleValidate(w, r, "")
-			} else {
-				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			}
-			return
-		}
-
-		// /api/planning/configs/:id
-		if configID == "" {
-			configID = secondPart
-		}
-
-		switch r.Method {
-		case http.MethodGet:
-			h.handleGet(w, r, configID)
+			h.handleGet(w, r)
 		case http.MethodPut:
-			h.handleUpdate(w, r, configID)
+			h.handleUpdate(w, r)
 		case http.MethodDelete:
-			h.handleDelete(w, r, configID)
+			h.handleDelete(w, r)
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
 		return
 	}
 
-	if len(pathParts) == 3 {
-		// /api/planning/configs/:id/history
-		if configID == "" {
-			configID = pathParts[1]
+	if len(pathParts) == 2 && pathParts[1] == "validate" {
+		// /api/planning/config/validate
+		if r.Method == http.MethodPost {
+			h.handleValidate(w, r)
+		} else {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
-		action := pathParts[2]
-
-		if action == "history" {
-			if r.Method == http.MethodGet {
-				h.handleHistory(w, r, configID)
-			} else {
-				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			}
-			return
-		}
-
-		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
 
 	http.Error(w, "Not found", http.StatusNotFound)
 }
 
-func (h *ConfigHandler) handleList(w http.ResponseWriter, r *http.Request) {
-	h.log.Debug().Msg("Listing configurations")
+func (h *ConfigHandler) handleGet(w http.ResponseWriter, r *http.Request) {
+	h.log.Debug().Msg("Getting planner configuration")
 
-	configs, err := h.configRepo.ListConfigs()
-	if err != nil {
-		h.log.Error().Err(err).Msg("Failed to list configurations")
-		http.Error(w, "Failed to retrieve configurations", http.StatusInternalServerError)
-		return
-	}
-
-	// Build summaries
-	summaries := make([]ConfigSummary, len(configs))
-	for i, cfg := range configs {
-		summaries[i] = ConfigSummary{
-			ID:        cfg.ID,
-			Name:      cfg.Name,
-			CreatedAt: cfg.CreatedAt.Format(time.RFC3339),
-			UpdatedAt: cfg.UpdatedAt.Format(time.RFC3339),
-		}
-	}
-
-	response := ConfigListResponse{
-		Configs: summaries,
-		Total:   len(summaries),
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
-func (h *ConfigHandler) handleGet(w http.ResponseWriter, r *http.Request, configID string) {
-	h.log.Debug().Str("config_id", configID).Msg("Getting configuration")
-
-	id, err := strconv.ParseInt(configID, 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid config ID", http.StatusBadRequest)
-		return
-	}
-
-	config, err := h.configRepo.GetConfig(id)
+	// Get the single config (ID is ignored by repository)
+	config, err := h.configRepo.GetDefaultConfig()
 	if err != nil {
 		// Log the actual error for debugging
 		h.log.Error().
 			Err(err).
-			Int64("config_id", id).
 			Str("error_type", fmt.Sprintf("%T", err)).
 			Msg("Failed to retrieve configuration")
-		http.Error(w, "Configuration not found", http.StatusNotFound)
+		http.Error(w, "Failed to retrieve configuration", http.StatusInternalServerError)
 		return
 	}
 
 	response := ConfigResponse{Config: config}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
-// CreateConfigRequest represents a request to create a configuration.
-type CreateConfigRequest struct {
-	Config    domain.PlannerConfiguration `json:"config"`
-	IsDefault bool                        `json:"is_default,omitempty"`
-}
-
-func (h *ConfigHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
-	h.log.Debug().Msg("Creating configuration")
-
-	var req CreateConfigRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	// Validate configuration before creating
-	if h.validator != nil {
-		if err := h.validator.Validate(&req.Config); err != nil {
-			h.log.Warn().Err(err).Msg("Configuration validation failed")
-			http.Error(w, fmt.Sprintf("Invalid configuration: %v", err), http.StatusBadRequest)
-			return
-		}
-	}
-
-	// Create configuration in database
-	configID, err := h.configRepo.CreateConfig(&req.Config, req.IsDefault)
-	if err != nil {
-		h.log.Error().Err(err).Msg("Failed to create configuration")
-		http.Error(w, "Failed to create configuration", http.StatusInternalServerError)
-		return
-	}
-
-	h.log.Info().Int64("config_id", configID).Str("name", req.Config.Name).Msg("Configuration created")
-
-	// Emit PLANNER_CONFIG_CHANGED event
-	if h.eventManager != nil {
-		h.eventManager.Emit(events.PlannerConfigChanged, "planning", map[string]interface{}{
-			"config_id": configID,
-			"action":    "created",
-			"name":      req.Config.Name,
-		})
-	}
-
-	response := ConfigResponse{Config: &req.Config}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(response)
 }
 
@@ -295,14 +150,8 @@ type UpdateConfigRequest struct {
 	ChangeNote string                      `json:"change_note,omitempty"`
 }
 
-func (h *ConfigHandler) handleUpdate(w http.ResponseWriter, r *http.Request, configID string) {
-	h.log.Debug().Str("config_id", configID).Msg("Updating configuration")
-
-	id, err := strconv.ParseInt(configID, 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid config ID", http.StatusBadRequest)
-		return
-	}
+func (h *ConfigHandler) handleUpdate(w http.ResponseWriter, r *http.Request) {
+	h.log.Debug().Msg("Updating planner configuration")
 
 	var req UpdateConfigRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -313,7 +162,7 @@ func (h *ConfigHandler) handleUpdate(w http.ResponseWriter, r *http.Request, con
 	// Validate configuration before updating
 	if h.validator != nil {
 		if err := h.validator.Validate(&req.Config); err != nil {
-			h.log.Warn().Err(err).Int64("config_id", id).Msg("Configuration validation failed")
+			h.log.Warn().Err(err).Msg("Configuration validation failed")
 			http.Error(w, fmt.Sprintf("Invalid configuration: %v", err), http.StatusBadRequest)
 			return
 		}
@@ -325,20 +174,19 @@ func (h *ConfigHandler) handleUpdate(w http.ResponseWriter, r *http.Request, con
 		changedBy = "api"
 	}
 
-	// Update configuration in database
-	err = h.configRepo.UpdateConfig(id, &req.Config, changedBy, req.ChangeNote)
+	// Update configuration in database (ID is ignored, always updates the single config)
+	err := h.configRepo.UpdateConfig(1, &req.Config, changedBy, req.ChangeNote)
 	if err != nil {
-		h.log.Error().Err(err).Int64("config_id", id).Msg("Failed to update configuration")
+		h.log.Error().Err(err).Msg("Failed to update configuration")
 		http.Error(w, "Failed to update configuration", http.StatusInternalServerError)
 		return
 	}
 
-	h.log.Info().Int64("config_id", id).Str("name", req.Config.Name).Msg("Configuration updated")
+	h.log.Info().Str("name", req.Config.Name).Msg("Configuration updated")
 
 	// Emit PLANNER_CONFIG_CHANGED event
 	if h.eventManager != nil {
 		h.eventManager.Emit(events.PlannerConfigChanged, "planning", map[string]interface{}{
-			"config_id":  id,
 			"action":     "updated",
 			"name":       req.Config.Name,
 			"changed_by": changedBy,
@@ -351,55 +199,36 @@ func (h *ConfigHandler) handleUpdate(w http.ResponseWriter, r *http.Request, con
 	json.NewEncoder(w).Encode(response)
 }
 
-func (h *ConfigHandler) handleDelete(w http.ResponseWriter, r *http.Request, configID string) {
-	h.log.Debug().Str("config_id", configID).Msg("Deleting configuration")
+func (h *ConfigHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
+	h.log.Debug().Msg("Resetting planner configuration to defaults")
 
-	id, err := strconv.ParseInt(configID, 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid config ID", http.StatusBadRequest)
+	// Delete/reset configuration (resets to defaults, ID is ignored)
+	if err := h.configRepo.DeleteConfig(1); err != nil {
+		h.log.Error().Err(err).Msg("Failed to reset configuration")
+		http.Error(w, "Failed to reset configuration", http.StatusInternalServerError)
 		return
 	}
 
-	// Delete configuration from database
-	// Note: DeleteConfig checks if the config is the default and returns an error if so
-	if err := h.configRepo.DeleteConfig(id); err != nil {
-		h.log.Error().Err(err).Int64("config_id", id).Msg("Failed to delete configuration")
-		// Check if error is due to trying to delete default config
-		if err.Error() == "cannot delete default config" {
-			http.Error(w, "Cannot delete the default configuration", http.StatusForbidden)
-			return
-		}
-		http.Error(w, "Failed to delete configuration", http.StatusInternalServerError)
-		return
-	}
-
-	h.log.Info().Int64("config_id", id).Msg("Configuration deleted")
+	h.log.Info().Msg("Configuration reset to defaults")
 
 	// Emit PLANNER_CONFIG_CHANGED event
 	if h.eventManager != nil {
 		h.eventManager.Emit(events.PlannerConfigChanged, "planning", map[string]interface{}{
-			"config_id": id,
-			"action":    "deleted",
+			"action": "reset",
 		})
 	}
 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *ConfigHandler) handleValidate(w http.ResponseWriter, r *http.Request, configID string) {
-	h.log.Debug().Str("config_id", configID).Msg("Validating configuration")
-
-	id, err := strconv.ParseInt(configID, 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid config ID", http.StatusBadRequest)
-		return
-	}
+func (h *ConfigHandler) handleValidate(w http.ResponseWriter, r *http.Request) {
+	h.log.Debug().Msg("Validating planner configuration")
 
 	// Retrieve configuration from database
-	config, err := h.configRepo.GetConfig(id)
+	config, err := h.configRepo.GetDefaultConfig()
 	if err != nil {
-		h.log.Error().Err(err).Int64("config_id", id).Msg("Failed to retrieve configuration")
-		http.Error(w, "Configuration not found", http.StatusNotFound)
+		h.log.Error().Err(err).Msg("Failed to retrieve configuration")
+		http.Error(w, "Failed to retrieve configuration", http.StatusInternalServerError)
 		return
 	}
 
@@ -409,7 +238,7 @@ func (h *ConfigHandler) handleValidate(w http.ResponseWriter, r *http.Request, c
 		if err := h.validator.Validate(config); err != nil {
 			// Collect validation errors
 			validationErrors = append(validationErrors, err.Error())
-			h.log.Warn().Err(err).Int64("config_id", id).Msg("Configuration validation failed")
+			h.log.Warn().Err(err).Msg("Configuration validation failed")
 		}
 	}
 
@@ -419,51 +248,9 @@ func (h *ConfigHandler) handleValidate(w http.ResponseWriter, r *http.Request, c
 	}
 
 	h.log.Info().
-		Int64("config_id", id).
 		Bool("valid", response.Valid).
 		Int("error_count", len(validationErrors)).
 		Msg("Configuration validation complete")
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
-
-func (h *ConfigHandler) handleHistory(w http.ResponseWriter, r *http.Request, configID string) {
-	h.log.Debug().Str("config_id", configID).Msg("Getting configuration history")
-
-	id, err := strconv.ParseInt(configID, 10, 64)
-	if err != nil {
-		http.Error(w, "Invalid config ID", http.StatusBadRequest)
-		return
-	}
-
-	// Retrieve configuration history from database (limit 0 = no limit)
-	history, err := h.configRepo.GetConfigHistory(id, 0)
-	if err != nil {
-		h.log.Error().Err(err).Int64("config_id", id).Msg("Failed to retrieve configuration history")
-		http.Error(w, "Failed to retrieve configuration history", http.StatusInternalServerError)
-		return
-	}
-
-	// Build history entries
-	entries := make([]HistoryEntry, len(history))
-	for i, record := range history {
-		entries[i] = HistoryEntry{
-			Version:   i + 1, // Use index as version number (records are sorted by created_at DESC)
-			CreatedAt: record.CreatedAt.Format(time.RFC3339),
-			Changes:   record.ChangeNote,
-		}
-	}
-
-	response := HistoryResponse{
-		History: entries,
-		Total:   len(entries),
-	}
-
-	h.log.Info().
-		Int64("config_id", id).
-		Int("history_count", len(entries)).
-		Msg("Configuration history retrieved")
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)

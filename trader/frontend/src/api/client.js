@@ -158,19 +158,14 @@ export const api = {
   // Planner
   regenerateSequences: () => fetchJSON('/api/planner/regenerate-sequences', { method: 'POST' }),
 
-  // Planner Configuration
-  fetchPlannerConfigs: () => fetchJSON('/api/planning/configs'),
-  fetchPlannerConfig: (id) => fetchJSON(`/api/planning/configs/${id}`),
-  createPlannerConfig: (config, isDefault) => fetchJSON('/api/planning/configs', {
-    method: 'POST',
-    body: JSON.stringify({ config, is_default: isDefault }),
-  }),
-  updatePlannerConfig: (id, config, changedBy, changeNote) => fetchJSON(`/api/planning/configs/${id}`, {
+  // Planner Configuration (single config - no ID needed)
+  fetchPlannerConfig: () => fetchJSON('/api/planning/config'),
+  updatePlannerConfig: (config, changedBy, changeNote) => fetchJSON('/api/planning/config', {
     method: 'PUT',
     body: JSON.stringify({ config, changed_by: changedBy, change_note: changeNote }),
   }),
-  deletePlannerConfig: (id) => fetchJSON(`/api/planning/configs/${id}`, { method: 'DELETE' }),
-  validatePlannerConfig: (id) => fetchJSON(`/api/planning/configs/${id}/validate`, {
+  deletePlannerConfig: () => fetchJSON('/api/planning/config', { method: 'DELETE' }),
+  validatePlannerConfig: () => fetchJSON('/api/planning/config/validate', {
     method: 'POST',
   }),
 

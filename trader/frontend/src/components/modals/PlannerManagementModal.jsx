@@ -65,7 +65,6 @@ export function PlannerManagementModal() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [config, setConfig] = useState(DEFAULT_CONFIG);
-  const [configId, setConfigId] = useState(1);
 
   useEffect(() => {
     if (showPlannerManagementModal) {
@@ -77,19 +76,9 @@ export function PlannerManagementModal() {
     setLoading(true);
     setError(null);
     try {
-      // List configs to get the config ID (should be 1)
-      const listResponse = await api.fetchPlannerConfigs();
-      const configs = listResponse.configs || [];
-      if (configs.length > 0) {
-        const configId = configs[0].id;
-        setConfigId(configId);
-        // Fetch the actual config
-        const response = await api.fetchPlannerConfig(configId);
-        setConfig(response.config || DEFAULT_CONFIG);
-      } else {
-        // No config exists, use defaults
-        setConfig(DEFAULT_CONFIG);
-      }
+      // Fetch the single config directly
+      const response = await api.fetchPlannerConfig();
+      setConfig(response.config || DEFAULT_CONFIG);
     } catch (error) {
       setError(`Failed to load configuration: ${error.message}`);
       showNotification(`Failed to load configuration: ${error.message}`, 'error');
@@ -105,7 +94,7 @@ export function PlannerManagementModal() {
     setError(null);
 
     try {
-      await api.updatePlannerConfig(configId, config, 'ui', 'Updated via UI');
+      await api.updatePlannerConfig(config, 'ui', 'Updated via UI');
       showNotification('Planner configuration saved successfully', 'success');
     } catch (error) {
       const errorMsg = error.message || 'Failed to save configuration';

@@ -50,14 +50,11 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Get("/recommendations", h.recommendationsHandler.ServeHTTP)
 		r.Post("/recommendations", h.recommendationsHandler.ServeHTTP)
 
-		// Configuration management
-		r.Get("/configs", h.configHandler.ServeHTTP)
-		r.Post("/configs", h.configHandler.ServeHTTP)
-		r.Get("/configs/{id}", h.configHandler.ServeHTTP)
-		r.Put("/configs/{id}", h.configHandler.ServeHTTP)
-		r.Delete("/configs/{id}", h.configHandler.ServeHTTP)
-		r.Post("/configs/validate", h.configHandler.ServeHTTP)
-		r.Get("/configs/{id}/history", h.configHandler.ServeHTTP)
+		// Configuration management (single config - no ID needed)
+		r.Get("/config", h.configHandler.ServeHTTP)
+		r.Put("/config", h.configHandler.ServeHTTP)
+		r.Delete("/config", h.configHandler.ServeHTTP)
+		r.Post("/config/validate", h.configHandler.ServeHTTP)
 
 		// Batch generation
 		r.Post("/batch", h.batchHandler.ServeHTTP)

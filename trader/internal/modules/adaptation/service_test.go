@@ -1,6 +1,7 @@
 package adaptation
 
 import (
+	"math"
 	"testing"
 
 	"github.com/rs/zerolog"
@@ -314,7 +315,7 @@ func TestAbs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := abs(tt.input)
+			result := math.Abs(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
