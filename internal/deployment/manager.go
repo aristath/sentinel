@@ -249,6 +249,12 @@ func (m *Manager) Deploy() (*DeploymentResult, error) {
 		if err := m.MarkDeployed(); err != nil {
 			m.log.Warn().Err(err).Msg("Failed to mark deployment")
 		}
+		// Mark artifact as deployed in tracker to prevent redeployment loops
+		if artifactRunID != "" && m.artifactTracker != nil {
+			if err := m.artifactTracker.MarkDeployed(artifactRunID); err != nil {
+				m.log.Warn().Err(err).Str("run_id", artifactRunID).Msg("Failed to mark artifact as deployed in tracker")
+			}
+		}
 	}
 
 	// Determine overall success
