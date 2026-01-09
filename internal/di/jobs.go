@@ -329,6 +329,7 @@ func RegisterJobs(container *Container, cfg *config.Config, displayManager *disp
 	allocRepoAdapter := scheduler.NewAllocationRepositoryAdapter(container.AllocRepo)
 	priceClientAdapter := scheduler.NewPriceClientAdapter(container.YahooClient)
 	optimizerServiceAdapter := scheduler.NewOptimizerServiceAdapter(container.OptimizerService)
+	priceConversionServiceAdapter := scheduler.NewPriceConversionServiceAdapter(container.PriceConversionService)
 	getOptimizerWeights := scheduler.NewGetOptimizerWeightsJob(
 		positionRepoAdapter,
 		securityRepoAdapter,
@@ -336,6 +337,7 @@ func RegisterJobs(container *Container, cfg *config.Config, displayManager *disp
 		container.CashManager,
 		priceClientAdapter,
 		optimizerServiceAdapter,
+		priceConversionServiceAdapter,
 	)
 	getOptimizerWeights.SetLogger(log)
 	container.JobRegistry.Register(queue.JobTypeGetOptimizerWeights, queue.JobToHandler(getOptimizerWeights))
@@ -346,6 +348,7 @@ func RegisterJobs(container *Container, cfg *config.Config, displayManager *disp
 	settingsRepoAdapter := scheduler.NewSettingsRepositoryAdapter(container.ConfigDB.Conn(), log)
 	regimeRepoAdapter := scheduler.NewRegimeRepositoryAdapter(container.ConfigDB.Conn())
 	groupingRepoAdapter := scheduler.NewGroupingRepositoryAdapter(container.GroupingRepo)
+	priceConversionServiceAdapterForContext := scheduler.NewPriceConversionServiceAdapter(container.PriceConversionService)
 	buildOpportunityContext := scheduler.NewBuildOpportunityContextJob(
 		positionRepoAdapter,
 		securityRepoAdapter,
@@ -353,6 +356,7 @@ func RegisterJobs(container *Container, cfg *config.Config, displayManager *disp
 		groupingRepoAdapter,
 		container.CashManager,
 		priceClientAdapter,
+		priceConversionServiceAdapterForContext,
 		scoresRepoAdapter,
 		settingsRepoAdapter,
 		regimeRepoAdapter,

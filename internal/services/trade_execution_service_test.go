@@ -65,6 +65,82 @@ func (m *mockCurrencyExchangeService) GetRate(fromCurrency, toCurrency string) (
 	return 0, nil
 }
 
+func (m *mockCurrencyExchangeService) EnsureBalance(currency string, minAmount float64, sourceCurrency string) (bool, error) {
+	// Stub for tests that don't need currency conversion logic
+	return true, nil
+}
+
+// mockCurrencyExchangeServiceWithEnsureBalance is a more complete mock that tracks balance operations
+type mockCurrencyExchangeServiceWithEnsureBalance struct {
+	rates                 map[string]float64 // "FROM:TO" -> rate
+	cashManager           *mockCashManager
+	ensureBalanceCalled   bool
+	ensureBalanceCurrency string
+	ensureBalanceAmount   float64
+	ensureBalanceSource   string
+}
+
+func newMockCurrencyExchangeServiceWithEnsureBalance(rates map[string]float64, cashManager *mockCashManager) *mockCurrencyExchangeServiceWithEnsureBalance {
+	return &mockCurrencyExchangeServiceWithEnsureBalance{
+		rates:       rates,
+		cashManager: cashManager,
+	}
+}
+
+func (m *mockCurrencyExchangeServiceWithEnsureBalance) GetRate(fromCurrency, toCurrency string) (float64, error) {
+	if fromCurrency == toCurrency {
+		return 1.0, nil
+	}
+	key := fromCurrency + ":" + toCurrency
+	if rate, ok := m.rates[key]; ok {
+		return rate, nil
+	}
+	return 0, nil
+}
+
+func (m *mockCurrencyExchangeServiceWithEnsureBalance) EnsureBalance(currency string, minAmount float64, sourceCurrency string) (bool, error) {
+	m.ensureBalanceCalled = true
+	m.ensureBalanceCurrency = currency
+	m.ensureBalanceAmount = minAmount
+	m.ensureBalanceSource = sourceCurrency
+
+	// Check if we have enough in the target currency
+	currentBalance, _ := m.cashManager.GetCashBalance(currency)
+	if currentBalance >= minAmount {
+		return true, nil
+	}
+
+	// If insufficient and currency == sourceCurrency (e.g., both EUR), can't convert
+	if currency == sourceCurrency {
+		return false, fmt.Errorf("insufficient %s: need %.2f, have %.2f", currency, minAmount, currentBalance)
+	}
+
+	// Check if we have enough in source currency to convert
+	sourceBalance, _ := m.cashManager.GetCashBalance(sourceCurrency)
+
+	// Get conversion rate
+	rate, err := m.GetRate(sourceCurrency, currency)
+	if err != nil || rate <= 0 {
+		return false, fmt.Errorf("cannot get exchange rate from %s to %s", sourceCurrency, currency)
+	}
+
+	// Calculate how much source currency we need
+	sourceNeeded := minAmount / rate
+
+	// Add 2% buffer for conversion fees
+	sourceNeeded = sourceNeeded * 1.02
+
+	if sourceBalance < sourceNeeded {
+		return false, fmt.Errorf("insufficient %s for conversion: need %.2f, have %.2f", sourceCurrency, sourceNeeded, sourceBalance)
+	}
+
+	// Simulate the conversion by updating balances
+	m.cashManager.UpdateCashPosition(sourceCurrency, sourceBalance-sourceNeeded)
+	m.cashManager.UpdateCashPosition(currency, currentBalance+minAmount)
+
+	return true, nil
+}
+
 // Test calculateCommission
 
 func TestCalculateCommission_EUR(t *testing.T) {
@@ -119,203 +195,6 @@ func TestCalculateCommission_USD(t *testing.T) {
 	expected := 4.2
 	if commission != expected {
 		t.Errorf("Expected commission %.2f, got %.2f", expected, commission)
-	}
-}
-
-// Test validateBuyCashBalance
-
-func TestValidateBuyCashBalance_AlreadyNegative(t *testing.T) {
-	log := logger.New(logger.Config{Level: "error", Pretty: false})
-
-	// Balance is negative
-	cashManager := newMockCashManager(map[string]float64{
-		"EUR": -100.0,
-	})
-
-	exchangeService := newMockCurrencyExchangeService(map[string]float64{})
-
-	service := &TradeExecutionService{
-		cashManager:     cashManager,
-		exchangeService: exchangeService,
-		log:             log,
-	}
-
-	rec := TradeRecommendation{
-		Symbol:         "AAPL",
-		Side:           "BUY",
-		Quantity:       10,
-		EstimatedPrice: 150.0,
-		Currency:       "EUR",
-	}
-
-	result := service.validateBuyCashBalance(rec)
-
-	if result == nil {
-		t.Fatal("Expected validation to fail, but it passed")
-	}
-
-	if result.Status != "blocked" {
-		t.Errorf("Expected status 'blocked', got '%s'", result.Status)
-	}
-
-	if result.Error == nil {
-		t.Error("Expected error message, got nil")
-	} else if *result.Error != "Negative EUR balance (-100.00 EUR)" {
-		t.Errorf("Unexpected error message: %s", *result.Error)
-	}
-}
-
-func TestValidateBuyCashBalance_InsufficientFunds(t *testing.T) {
-	log := logger.New(logger.Config{Level: "error", Pretty: false})
-
-	// Balance is 1000 EUR, but trade needs more
-	cashManager := newMockCashManager(map[string]float64{
-		"EUR": 1000.0,
-	})
-
-	exchangeService := newMockCurrencyExchangeService(map[string]float64{})
-
-	service := &TradeExecutionService{
-		cashManager:     cashManager,
-		exchangeService: exchangeService,
-		log:             log,
-	}
-
-	// Trade value: 10 * 150 = 1500 EUR
-	// Commission: 2 + (1500 * 0.002) = 2 + 3 = 5 EUR
-	// Total needed: 1505 EUR
-	// Available: 1000 EUR
-	// Should be blocked
-	rec := TradeRecommendation{
-		Symbol:         "AAPL",
-		Side:           "BUY",
-		Quantity:       10,
-		EstimatedPrice: 150.0,
-		Currency:       "EUR",
-	}
-
-	result := service.validateBuyCashBalance(rec)
-
-	if result == nil {
-		t.Fatal("Expected validation to fail, but it passed")
-	}
-
-	if result.Status != "blocked" {
-		t.Errorf("Expected status 'blocked', got '%s'", result.Status)
-	}
-
-	if result.Error == nil {
-		t.Error("Expected error message, got nil")
-	} else if *result.Error != "Insufficient EUR balance (need 1505.00, have 1000.00)" {
-		t.Errorf("Unexpected error message: %s", *result.Error)
-	}
-}
-
-func TestValidateBuyCashBalance_SufficientFunds(t *testing.T) {
-	log := logger.New(logger.Config{Level: "error", Pretty: false})
-
-	// Balance is 2000 EUR, enough for the trade
-	cashManager := newMockCashManager(map[string]float64{
-		"EUR": 2000.0,
-	})
-
-	exchangeService := newMockCurrencyExchangeService(map[string]float64{})
-
-	service := &TradeExecutionService{
-		cashManager:     cashManager,
-		exchangeService: exchangeService,
-		log:             log,
-	}
-
-	// Trade value: 10 * 150 = 1500 EUR
-	// Commission: 2 + (1500 * 0.002) = 2 + 3 = 5 EUR
-	// Total needed: 1505 EUR
-	// Available: 2000 EUR
-	// Should pass
-	rec := TradeRecommendation{
-		Symbol:         "AAPL",
-		Side:           "BUY",
-		Quantity:       10,
-		EstimatedPrice: 150.0,
-		Currency:       "EUR",
-	}
-
-	result := service.validateBuyCashBalance(rec)
-
-	if result != nil {
-		t.Errorf("Expected validation to pass, but got error: %v", *result.Error)
-	}
-}
-
-func TestValidateBuyCashBalance_EdgeCase_ExactBalance(t *testing.T) {
-	log := logger.New(logger.Config{Level: "error", Pretty: false})
-
-	// Balance is exactly what's needed
-	cashManager := newMockCashManager(map[string]float64{
-		"EUR": 1505.0,
-	})
-
-	exchangeService := newMockCurrencyExchangeService(map[string]float64{})
-
-	service := &TradeExecutionService{
-		cashManager:     cashManager,
-		exchangeService: exchangeService,
-		log:             log,
-	}
-
-	// Trade value: 10 * 150 = 1500 EUR
-	// Commission: 2 + (1500 * 0.002) = 2 + 3 = 5 EUR
-	// Total needed: 1505 EUR
-	// Available: 1505 EUR (exact match)
-	// Should pass
-	rec := TradeRecommendation{
-		Symbol:         "AAPL",
-		Side:           "BUY",
-		Quantity:       10,
-		EstimatedPrice: 150.0,
-		Currency:       "EUR",
-	}
-
-	result := service.validateBuyCashBalance(rec)
-
-	if result != nil {
-		t.Errorf("Expected validation to pass with exact balance, but got error: %v", *result.Error)
-	}
-}
-
-func TestValidateBuyCashBalance_SmallTrade(t *testing.T) {
-	log := logger.New(logger.Config{Level: "error", Pretty: false})
-
-	// Small balance but trade is even smaller
-	cashManager := newMockCashManager(map[string]float64{
-		"EUR": 50.0,
-	})
-
-	exchangeService := newMockCurrencyExchangeService(map[string]float64{})
-
-	service := &TradeExecutionService{
-		cashManager:     cashManager,
-		exchangeService: exchangeService,
-		log:             log,
-	}
-
-	// Trade value: 1 * 10 = 10 EUR
-	// Commission: 2 + (10 * 0.002) = 2 + 0.02 = 2.02 EUR
-	// Total needed: 12.02 EUR
-	// Available: 50 EUR
-	// Should pass
-	rec := TradeRecommendation{
-		Symbol:         "AAPL",
-		Side:           "BUY",
-		Quantity:       1,
-		EstimatedPrice: 10.0,
-		Currency:       "EUR",
-	}
-
-	result := service.validateBuyCashBalance(rec)
-
-	if result != nil {
-		t.Errorf("Expected validation to pass, but got error: %v", *result.Error)
 	}
 }
 
@@ -709,7 +588,7 @@ func TestExecuteTrades_MultipleTrades_MixedResults(t *testing.T) {
 		"EUR": 2000.0,  // Enough for AAPL, not for MSFT
 		"USD": 10000.0, // Enough for GOOGL
 	})
-	exchangeService := newMockCurrencyExchangeService(map[string]float64{})
+	exchangeService := newMockCurrencyExchangeServiceWithEnsureBalance(map[string]float64{}, cashManager)
 
 	service := &TradeExecutionService{
 		brokerClient:    mockClient,
@@ -1353,4 +1232,313 @@ func (m *mockTradernetClientWithLimit) PlaceOrder(symbol, side string, quantity,
 		Quantity: quantity,
 		Price:    100.0,
 	}, nil
+}
+
+// ============================================================================
+// Trade Execution Currency Conversion Tests
+// ============================================================================
+
+// TestExecuteTrades_ForeignCurrency_AutoConversion tests foreign currency BUY with automatic EUR conversion
+func TestExecuteTrades_ForeignCurrency_AutoConversion(t *testing.T) {
+	log := logger.New(logger.Config{Level: "error", Pretty: false})
+
+	yahooPrice := 90.0
+	mockYahoo := &mockYahooClient{currentPrice: &yahooPrice}
+	mockClient := newMockTradernetClient(true)
+	mockTradeRepo := newMockTradeRepository()
+
+	// EUR balance only, no HKD
+	cashManager := newMockCashManager(map[string]float64{
+		"EUR": 10000.0,
+		"HKD": 0.0, // No HKD balance
+	})
+
+	// Mock exchange service that will convert EUR to HKD
+	exchangeService := newMockCurrencyExchangeServiceWithEnsureBalance(
+		map[string]float64{
+			"EUR:HKD": 9.0, // 1 EUR = 9 HKD
+		},
+		cashManager,
+	)
+
+	service := &TradeExecutionService{
+		brokerClient:    mockClient,
+		tradeRepo:       mockTradeRepo,
+		cashManager:     cashManager,
+		exchangeService: exchangeService,
+		yahooClient:     mockYahoo,
+		log:             log,
+	}
+
+	// BUY HKD security
+	recommendations := []TradeRecommendation{
+		{
+			Symbol:         "0700.HK",
+			Side:           "BUY",
+			Quantity:       100,
+			EstimatedPrice: 90.0, // HKD
+			Currency:       "HKD",
+		},
+	}
+
+	results := service.ExecuteTrades(recommendations)
+
+	// Verify:
+	// 1. Trade succeeded
+	assert.Equal(t, "success", results[0].Status, "Trade should succeed")
+
+	// 2. EUR was converted to HKD
+	assert.True(t, exchangeService.ensureBalanceCalled, "EnsureBalance should be called")
+	assert.Equal(t, "HKD", exchangeService.ensureBalanceCurrency, "Should ensure HKD")
+
+	// 3. Sufficient amount requested (trade + commission + margin)
+	// Trade: 100 × 90 = 9000 HKD
+	// Commission: 2 EUR * 9 (rate) + 0.2% of 9000 = 18 + 18 = 36 HKD
+	// Total: 9000 + 36 = 9036 HKD
+	// With 1% margin: 9036 * 1.01 = 9126.36 HKD
+	assert.Greater(t, exchangeService.ensureBalanceAmount, 9000.0, "Should ensure enough for trade")
+	assert.Less(t, exchangeService.ensureBalanceAmount, 10000.0, "Amount should be reasonable")
+}
+
+// TestExecuteTrades_EUR_NoConversionNeeded tests EUR trade does not trigger currency conversion
+func TestExecuteTrades_EUR_NoConversionNeeded(t *testing.T) {
+	log := logger.New(logger.Config{Level: "error", Pretty: false})
+
+	yahooPrice := 42.5
+	mockYahoo := &mockYahooClient{currentPrice: &yahooPrice}
+	mockClient := newMockTradernetClient(true)
+	mockTradeRepo := newMockTradeRepository()
+	cashManager := newMockCashManager(map[string]float64{"EUR": 10000.0})
+	exchangeService := newMockCurrencyExchangeServiceWithEnsureBalance(
+		map[string]float64{},
+		cashManager,
+	)
+
+	service := &TradeExecutionService{
+		brokerClient:    mockClient,
+		tradeRepo:       mockTradeRepo,
+		cashManager:     cashManager,
+		exchangeService: exchangeService,
+		yahooClient:     mockYahoo,
+		log:             log,
+	}
+
+	recommendations := []TradeRecommendation{
+		{
+			Symbol:         "VWS.AS",
+			Side:           "BUY",
+			Quantity:       100,
+			EstimatedPrice: 42.5,
+			Currency:       "EUR",
+		},
+	}
+
+	results := service.ExecuteTrades(recommendations)
+
+	assert.Equal(t, "success", results[0].Status)
+	// EnsureBalance is still called for EUR to validate we have enough
+	assert.True(t, exchangeService.ensureBalanceCalled, "EnsureBalance should be called to validate EUR balance")
+	assert.Equal(t, "EUR", exchangeService.ensureBalanceCurrency, "Should validate EUR balance")
+}
+
+// TestExecuteTrades_InsufficientEUR_Blocked tests insufficient EUR blocks foreign currency trade
+func TestExecuteTrades_InsufficientEUR_Blocked(t *testing.T) {
+	log := logger.New(logger.Config{Level: "error", Pretty: false})
+
+	yahooPrice := 90.0
+	mockYahoo := &mockYahooClient{currentPrice: &yahooPrice}
+	mockClient := newMockTradernetClient(true)
+
+	// Only 100 EUR, not enough to convert for HKD trade
+	cashManager := newMockCashManager(map[string]float64{
+		"EUR": 100.0,
+		"HKD": 0.0,
+	})
+
+	exchangeService := newMockCurrencyExchangeServiceWithEnsureBalance(
+		map[string]float64{
+			"EUR:HKD": 9.0,
+		},
+		cashManager,
+	)
+
+	service := &TradeExecutionService{
+		brokerClient:    mockClient,
+		cashManager:     cashManager,
+		exchangeService: exchangeService,
+		yahooClient:     mockYahoo,
+		log:             log,
+	}
+
+	// Large HKD trade requiring ~10,000 EUR worth
+	recommendations := []TradeRecommendation{
+		{
+			Symbol:         "0700.HK",
+			Side:           "BUY",
+			Quantity:       1000,
+			EstimatedPrice: 90.0, // 90,000 HKD needed (~10,000 EUR)
+			Currency:       "HKD",
+		},
+	}
+
+	results := service.ExecuteTrades(recommendations)
+
+	// Should be blocked
+	assert.Equal(t, "blocked", results[0].Status, "Trade should be blocked due to insufficient EUR")
+	assert.NotNil(t, results[0].Error)
+}
+
+// TestExecuteTrades_SELL_NoConversionNeeded tests SELL orders do not trigger currency conversion
+func TestExecuteTrades_SELL_NoConversionNeeded(t *testing.T) {
+	log := logger.New(logger.Config{Level: "error", Pretty: false})
+
+	yahooPrice := 90.0
+	mockYahoo := &mockYahooClient{currentPrice: &yahooPrice}
+	mockClient := newMockTradernetClient(true)
+	mockTradeRepo := newMockTradeRepository()
+	cashManager := newMockCashManager(map[string]float64{})
+	exchangeService := newMockCurrencyExchangeServiceWithEnsureBalance(
+		map[string]float64{},
+		cashManager,
+	)
+
+	service := &TradeExecutionService{
+		brokerClient:    mockClient,
+		tradeRepo:       mockTradeRepo,
+		exchangeService: exchangeService,
+		yahooClient:     mockYahoo,
+		log:             log,
+	}
+
+	recommendations := []TradeRecommendation{
+		{
+			Symbol:         "0700.HK",
+			Side:           "SELL",
+			Quantity:       100,
+			EstimatedPrice: 90.0,
+			Currency:       "HKD",
+		},
+	}
+
+	results := service.ExecuteTrades(recommendations)
+
+	assert.Equal(t, "success", results[0].Status)
+	// EnsureBalance should NOT be called for SELL orders
+	assert.False(t, exchangeService.ensureBalanceCalled, "EnsureBalance should NOT be called for SELL")
+}
+
+// ============================================================================
+// Configurable Trading Fees Tests
+// ============================================================================
+
+// TestCalculateCommission_ConfigurableFees tests commission calculation with custom fees from settings
+func TestCalculateCommission_ConfigurableFees(t *testing.T) {
+	log := logger.New(logger.Config{Level: "error", Pretty: false})
+
+	// Mock settings service with custom fees
+	mockSettings := newMockSettingsService()
+	mockSettings.Set("transaction_cost_fixed", 3.0)       // Custom: 3 EUR instead of 2
+	mockSettings.Set("transaction_cost_percent", 0.0025)  // Custom: 0.25% (as decimal) instead of 0.2%
+
+	exchangeService := newMockCurrencyExchangeService(map[string]float64{})
+
+	service := &TradeExecutionService{
+		exchangeService: exchangeService,
+		settingsService: mockSettings,
+		log:             log,
+	}
+
+	// Trade value: 1000 EUR
+	// Expected commission:
+	// - Fixed: 3.0 EUR
+	// - Variable: 1000 * 0.0025 = 2.5 EUR
+	// - Total: 5.5 EUR
+	commission, err := service.calculateCommission(1000.0, "EUR")
+
+	assert.NoError(t, err)
+	assert.Equal(t, 5.5, commission, "Commission should use configured fees")
+}
+
+// TestCalculateCommission_DefaultFallback tests commission calculation with default fees when settings unavailable
+func TestCalculateCommission_DefaultFallback(t *testing.T) {
+	log := logger.New(logger.Config{Level: "error", Pretty: false})
+
+	// No settings service
+	exchangeService := newMockCurrencyExchangeService(map[string]float64{})
+
+	service := &TradeExecutionService{
+		exchangeService: exchangeService,
+		settingsService: nil, // No settings
+		log:             log,
+	}
+
+	// Should use defaults: 2 EUR + 0.2%
+	// Trade value: 1000 EUR
+	// Expected commission:
+	// - Fixed: 2.0 EUR
+	// - Variable: 1000 * 0.002 = 2.0 EUR
+	// - Total: 4.0 EUR
+	commission, err := service.calculateCommission(1000.0, "EUR")
+
+	assert.NoError(t, err)
+	assert.Equal(t, 4.0, commission, "Should use default fees")
+}
+
+// TestCalculateCommission_ConfigurableFees_USD tests commission calculation with custom fees for foreign currency
+func TestCalculateCommission_ConfigurableFees_USD(t *testing.T) {
+	log := logger.New(logger.Config{Level: "error", Pretty: false})
+
+	// Mock settings service with custom fees
+	mockSettings := newMockSettingsService()
+	mockSettings.Set("transaction_cost_fixed", 5.0)      // Custom: 5 EUR
+	mockSettings.Set("transaction_cost_percent", 0.003)  // Custom: 0.3% (as decimal)
+
+	// EUR:USD rate = 1.1 (1 EUR = 1.1 USD)
+	exchangeService := newMockCurrencyExchangeService(map[string]float64{
+		"EUR:USD": 1.1,
+	})
+
+	service := &TradeExecutionService{
+		exchangeService: exchangeService,
+		settingsService: mockSettings,
+		log:             log,
+	}
+
+	// Trade value: 1000 USD
+	// Expected commission:
+	// - Fixed: 5.0 EUR * 1.1 = 5.5 USD
+	// - Variable: 1000 * 0.003 = 3.0 USD
+	// - Total: 8.5 USD
+	commission, err := service.calculateCommission(1000.0, "USD")
+
+	assert.NoError(t, err)
+	assert.Equal(t, 8.5, commission, "Commission should use configured fees with currency conversion")
+}
+
+// TestCalculateCommission_PartialSettings tests graceful fallback when only some settings are configured
+func TestCalculateCommission_PartialSettings(t *testing.T) {
+	log := logger.New(logger.Config{Level: "error", Pretty: false})
+
+	// Mock settings service with only fixed commission configured
+	mockSettings := newMockSettingsService()
+	mockSettings.Set("transaction_cost_fixed", 3.0) // Custom fixed
+	// Variable commission not set - should use default 0.2% (0.002)
+
+	exchangeService := newMockCurrencyExchangeService(map[string]float64{})
+
+	service := &TradeExecutionService{
+		exchangeService: exchangeService,
+		settingsService: mockSettings,
+		log:             log,
+	}
+
+	// Trade value: 1000 EUR
+	// Expected commission:
+	// - Fixed: 3.0 EUR (configured)
+	// - Variable: 1000 * 0.002 = 2.0 EUR (default)
+	// - Total: 5.0 EUR
+	commission, err := service.calculateCommission(1000.0, "EUR")
+
+	assert.NoError(t, err)
+	assert.Equal(t, 5.0, commission, "Should mix configured and default values")
 }

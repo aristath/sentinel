@@ -67,6 +67,7 @@ func TestService_GetTriggerChecker(t *testing.T) {
 		nil,            // cashManager
 		nil,            // tradernetClient
 		nil,            // yahooClient
+		nil,            // priceConversionService
 		nil,            // configRepo
 		nil,            // recommendationRepo
 		(*sql.DB)(nil), // portfolioDB
@@ -95,6 +96,7 @@ func TestService_GetNegativeBalanceRebalancer(t *testing.T) {
 		nil,            // cashManager
 		nil,            // tradernetClient
 		nil,            // yahooClient
+		nil,            // priceConversionService
 		nil,            // configRepo
 		nil,            // recommendationRepo
 		(*sql.DB)(nil), // portfolioDB
@@ -123,6 +125,7 @@ func TestService_CalculateRebalanceTrades_InsufficientCash(t *testing.T) {
 		nil,            // cashManager
 		nil,            // tradernetClient
 		nil,            // yahooClient
+		nil,            // priceConversionService
 		nil,            // configRepo
 		nil,            // recommendationRepo
 		(*sql.DB)(nil), // portfolioDB

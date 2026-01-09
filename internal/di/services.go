@@ -134,6 +134,12 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 		log,
 	)
 
+	// Price conversion service (converts native currency prices to EUR)
+	container.PriceConversionService = services.NewPriceConversionService(
+		container.CurrencyExchangeService,
+		log,
+	)
+
 	// ==========================================
 	// STEP 3: Initialize Cash Manager
 	// ==========================================
@@ -442,6 +448,7 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 		cashManager,
 		container.BrokerClient,
 		container.YahooClient,
+		container.PriceConversionService,
 		container.PlannerConfigRepo,
 		container.RecommendationRepo,
 		container.PortfolioDB.Conn(),

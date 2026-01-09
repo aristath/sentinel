@@ -12,14 +12,15 @@ import (
 
 // GetOptimizerWeightsJob fetches optimizer target weights for the current portfolio
 type GetOptimizerWeightsJob struct {
-	log              zerolog.Logger
-	positionRepo     PositionRepositoryInterface
-	securityRepo     SecurityRepositoryInterface
-	allocRepo        AllocationRepositoryInterface
-	cashManager      CashManagerInterface
-	priceClient      PriceClientInterface
-	optimizerService OptimizerServiceInterface
-	targetWeights    map[string]float64 // Store computed weights
+	log                    zerolog.Logger
+	positionRepo           PositionRepositoryInterface
+	securityRepo           SecurityRepositoryInterface
+	allocRepo              AllocationRepositoryInterface
+	cashManager            CashManagerInterface
+	priceClient            PriceClientInterface
+	optimizerService       OptimizerServiceInterface
+	priceConversionService PriceConversionServiceInterface
+	targetWeights          map[string]float64 // Store computed weights
 }
 
 // NewGetOptimizerWeightsJob creates a new GetOptimizerWeightsJob
@@ -30,16 +31,18 @@ func NewGetOptimizerWeightsJob(
 	cashManager CashManagerInterface,
 	priceClient PriceClientInterface,
 	optimizerService OptimizerServiceInterface,
+	priceConversionService PriceConversionServiceInterface,
 ) *GetOptimizerWeightsJob {
 	return &GetOptimizerWeightsJob{
-		log:              zerolog.Nop(),
-		positionRepo:     positionRepo,
-		securityRepo:     securityRepo,
-		allocRepo:        allocRepo,
-		cashManager:      cashManager,
-		priceClient:      priceClient,
-		optimizerService: optimizerService,
-		targetWeights:    make(map[string]float64),
+		log:                    zerolog.Nop(),
+		positionRepo:           positionRepo,
+		securityRepo:           securityRepo,
+		allocRepo:              allocRepo,
+		cashManager:            cashManager,
+		priceClient:            priceClient,
+		optimizerService:       optimizerService,
+		priceConversionService: priceConversionService,
+		targetWeights:          make(map[string]float64),
 	}
 }
 
@@ -223,7 +226,7 @@ func (j *GetOptimizerWeightsJob) GetTargetWeights() map[string]float64 {
 	return j.targetWeights
 }
 
-// fetchCurrentPrices fetches current prices for all securities
+// fetchCurrentPrices fetches current prices for all securities and converts them to EUR
 func (j *GetOptimizerWeightsJob) fetchCurrentPrices(securities []universe.Security) map[string]float64 {
 	prices := make(map[string]float64)
 
@@ -249,18 +252,28 @@ func (j *GetOptimizerWeightsJob) fetchCurrentPrices(securities []universe.Securi
 		symbolMap[security.Symbol] = yahooSymbolPtr
 	}
 
-	// Fetch batch quotes
+	// Fetch batch quotes (returns prices in native currencies)
 	quotes, err := j.priceClient.GetBatchQuotes(symbolMap)
 	if err != nil {
 		j.log.Warn().Err(err).Msg("Failed to fetch batch quotes, using empty prices")
 		return prices
 	}
 
-	// Convert quotes to price map
+	// Convert quotes to price map (native currencies)
+	nativePrices := make(map[string]float64)
 	for symbol, pricePtr := range quotes {
 		if pricePtr != nil {
-			prices[symbol] = *pricePtr
+			nativePrices[symbol] = *pricePtr
 		}
+	}
+
+	// Convert all prices to EUR using shared service
+	if j.priceConversionService != nil {
+		prices = j.priceConversionService.ConvertPricesToEUR(nativePrices, securities)
+	} else {
+		// Fallback: use native prices if service unavailable
+		j.log.Warn().Msg("Price conversion service not available, using native currency prices (may cause valuation errors)")
+		prices = nativePrices
 	}
 
 	return prices

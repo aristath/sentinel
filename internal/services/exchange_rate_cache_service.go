@@ -14,6 +14,7 @@ import (
 // SettingsServiceInterface defines the contract for settings operations
 type SettingsServiceInterface interface {
 	Get(key string) (interface{}, error)
+	Set(key string, value interface{}) (bool, error)
 }
 
 // ExchangeRateCacheService provides cached exchange rates with fallback

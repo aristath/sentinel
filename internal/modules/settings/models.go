@@ -71,6 +71,10 @@ var SettingDefaults = map[string]interface{}{
 	"min_hold_days":       90.0, // Minimum hold time before selling (days)
 	"max_price_age_hours": 48.0, // Maximum age of price data before considered stale (hours)
 
+	// Transaction costs (used by trade execution and planner)
+	"transaction_cost_fixed":   2.0,   // Fixed transaction cost per trade in EUR
+	"transaction_cost_percent": 0.002, // Variable transaction cost as decimal (0.002 = 0.2%)
+
 	// Security Discovery settings
 	"security_discovery_enabled":               1.0,          // 1.0 = enabled, 0.0 = disabled
 	"security_discovery_score_threshold":       0.75,         // Minimum score to add security

@@ -98,7 +98,7 @@ func (m *MockGroupingRepoForContext) GetIndustryGroups() (map[string][]string, e
 }
 
 func TestBuildOpportunityContextJob_Name(t *testing.T) {
-	job := NewBuildOpportunityContextJob(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	job := NewBuildOpportunityContextJob(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	assert.Equal(t, "build_opportunity_context", job.Name())
 }
 
@@ -215,6 +215,7 @@ func TestBuildOpportunityContextJob_Run_Success(t *testing.T) {
 		mockGroupingRepo,
 		mockCashManager,
 		mockPriceClient,
+		nil, // priceConversionService
 		mockScoresRepo,
 		mockSettingsRepo,
 		mockRegimeRepo,
@@ -249,6 +250,7 @@ func TestBuildOpportunityContextJob_Run_PositionRepoError(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 
 	err := job.Run()
@@ -275,6 +277,7 @@ func TestBuildOpportunityContextJob_Run_SecurityRepoError(t *testing.T) {
 		mockSecurityRepo,
 		nil,
 		mockGroupingRepo,
+		nil,
 		nil,
 		nil,
 		nil,
@@ -317,9 +320,271 @@ func TestBuildOpportunityContextJob_Run_AllocationRepoError(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 
 	err := job.Run()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to get allocations")
+}
+
+// ============================================================================
+// fetchCurrentPrices() EUR Conversion Tests
+// ============================================================================
+
+// MockPriceClientForConversion is a mock implementation for price fetching tests
+type MockPriceClientForConversion struct {
+	quotes map[string]*float64
+	err    error
+}
+
+func (m *MockPriceClientForConversion) GetBatchQuotes(symbolMap map[string]*string) (map[string]*float64, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.quotes, nil
+}
+
+// MockPriceConversionServiceForScheduler is a mock implementation of PriceConversionServiceInterface
+type MockPriceConversionServiceForScheduler struct {
+	convertFunc func(prices map[string]float64, securities []universe.Security) map[string]float64
+}
+
+func (m *MockPriceConversionServiceForScheduler) ConvertPricesToEUR(
+	prices map[string]float64,
+	securities []universe.Security,
+) map[string]float64 {
+	if m.convertFunc != nil {
+		return m.convertFunc(prices, securities)
+	}
+	return prices
+}
+
+// TestFetchCurrentPrices_HKD_Conversion verifies HKD prices are converted to EUR
+func TestFetchCurrentPrices_HKD_Conversion(t *testing.T) {
+	// Setup: HKD security with price 497.4 HKD
+	securities := []universe.Security{
+		{Symbol: "CAT.3750.AS", Currency: "HKD"},
+	}
+
+	// Mock Yahoo returns 497.4 HKD
+	hkdPrice := 497.4
+	priceClient := &MockPriceClientForConversion{
+		quotes: map[string]*float64{
+			"CAT.3750.AS": &hkdPrice,
+		},
+	}
+
+	// Mock price conversion service: converts HKD to EUR (1 HKD = 0.11 EUR)
+	priceConversionService := &MockPriceConversionServiceForScheduler{
+		convertFunc: func(prices map[string]float64, secs []universe.Security) map[string]float64 {
+			converted := make(map[string]float64)
+			for symbol, price := range prices {
+				if symbol == "CAT.3750.AS" {
+					converted[symbol] = price * 0.11 // Convert HKD to EUR
+				} else {
+					converted[symbol] = price
+				}
+			}
+			return converted
+		},
+	}
+
+	job := &BuildOpportunityContextJob{
+		priceClient:            priceClient,
+		priceConversionService: priceConversionService,
+	}
+
+	// Execute
+	prices := job.fetchCurrentPrices(securities)
+
+	// Verify: Price converted to EUR
+	eurPrice := prices["CAT.3750.AS"]
+	expected := 497.4 * 0.11 // = 54.714
+	assert.InDelta(t, expected, eurPrice, 0.01, "HKD price should be converted to EUR")
+}
+
+// TestFetchCurrentPrices_EUR_NoConversion verifies EUR prices are not converted
+func TestFetchCurrentPrices_EUR_NoConversion(t *testing.T) {
+	securities := []universe.Security{
+		{Symbol: "VWS.AS", Currency: "EUR"},
+	}
+
+	eurPrice := 42.5
+	priceClient := &MockPriceClientForConversion{
+		quotes: map[string]*float64{
+			"VWS.AS": &eurPrice,
+		},
+	}
+
+	// Mock conversion service that doesn't change EUR prices
+	priceConversionService := &MockPriceConversionServiceForScheduler{
+		convertFunc: func(prices map[string]float64, secs []universe.Security) map[string]float64 {
+			return prices // No conversion for EUR
+		},
+	}
+
+	job := &BuildOpportunityContextJob{
+		priceClient:            priceClient,
+		priceConversionService: priceConversionService,
+	}
+
+	prices := job.fetchCurrentPrices(securities)
+
+	// Verify: EUR price unchanged
+	assert.Equal(t, 42.5, prices["VWS.AS"], "EUR price should not be converted")
+}
+
+// TestFetchCurrentPrices_USD_Conversion verifies USD prices are converted to EUR
+func TestFetchCurrentPrices_USD_Conversion(t *testing.T) {
+	securities := []universe.Security{
+		{Symbol: "AAPL", Currency: "USD"},
+	}
+
+	usdPrice := 150.0
+	priceClient := &MockPriceClientForConversion{
+		quotes: map[string]*float64{
+			"AAPL": &usdPrice,
+		},
+	}
+
+	// Mock conversion: 1 USD = 0.93 EUR
+	priceConversionService := &MockPriceConversionServiceForScheduler{
+		convertFunc: func(prices map[string]float64, secs []universe.Security) map[string]float64 {
+			converted := make(map[string]float64)
+			for symbol, price := range prices {
+				if symbol == "AAPL" {
+					converted[symbol] = price * 0.93 // Convert USD to EUR
+				} else {
+					converted[symbol] = price
+				}
+			}
+			return converted
+		},
+	}
+
+	job := &BuildOpportunityContextJob{
+		priceClient:            priceClient,
+		priceConversionService: priceConversionService,
+	}
+
+	prices := job.fetchCurrentPrices(securities)
+
+	expected := 150.0 * 0.93 // = 139.5 EUR
+	assert.InDelta(t, expected, prices["AAPL"], 0.01, "USD price should be converted to EUR")
+}
+
+// TestFetchCurrentPrices_MissingRate_FallbackToNative verifies graceful fallback when rate unavailable
+func TestFetchCurrentPrices_MissingRate_FallbackToNative(t *testing.T) {
+	securities := []universe.Security{
+		{Symbol: "0700.HK", Currency: "HKD"},
+	}
+
+	hkdPrice := 90.0
+	priceClient := &MockPriceClientForConversion{
+		quotes: map[string]*float64{
+			"0700.HK": &hkdPrice,
+		},
+	}
+
+	// Mock conversion service that returns native price when conversion fails
+	priceConversionService := &MockPriceConversionServiceForScheduler{
+		convertFunc: func(prices map[string]float64, secs []universe.Security) map[string]float64 {
+			// Simulate missing rate - return native prices
+			return prices
+		},
+	}
+
+	job := &BuildOpportunityContextJob{
+		priceClient:            priceClient,
+		priceConversionService: priceConversionService,
+	}
+
+	prices := job.fetchCurrentPrices(securities)
+
+	// Should fallback to native price (logged warning in real implementation)
+	assert.Equal(t, 90.0, prices["0700.HK"], "Should use native price when rate unavailable")
+}
+
+// TestFetchCurrentPrices_NilPriceConversionService verifies graceful handling of nil service
+func TestFetchCurrentPrices_NilPriceConversionService(t *testing.T) {
+	securities := []universe.Security{
+		{Symbol: "CAT.3750.AS", Currency: "HKD"},
+	}
+
+	hkdPrice := 497.4
+	priceClient := &MockPriceClientForConversion{
+		quotes: map[string]*float64{
+			"CAT.3750.AS": &hkdPrice,
+		},
+	}
+
+	job := &BuildOpportunityContextJob{
+		priceClient:            priceClient,
+		priceConversionService: nil, // Not injected
+	}
+
+	prices := job.fetchCurrentPrices(securities)
+
+	// Should use native price when conversion service is nil (logged warning in real implementation)
+	assert.Equal(t, 497.4, prices["CAT.3750.AS"], "Should use native price when conversion service nil")
+}
+
+// TestFetchCurrentPrices_MultipleCurrencies verifies multiple currencies in single batch
+func TestFetchCurrentPrices_MultipleCurrencies(t *testing.T) {
+	securities := []universe.Security{
+		{Symbol: "VWS.AS", Currency: "EUR"},
+		{Symbol: "AAPL", Currency: "USD"},
+		{Symbol: "0700.HK", Currency: "HKD"},
+		{Symbol: "BARC.L", Currency: "GBP"},
+	}
+
+	eurPrice := 42.5
+	usdPrice := 150.0
+	hkdPrice := 90.0
+	gbpPrice := 25.0
+
+	priceClient := &MockPriceClientForConversion{
+		quotes: map[string]*float64{
+			"VWS.AS":  &eurPrice,
+			"AAPL":    &usdPrice,
+			"0700.HK": &hkdPrice,
+			"BARC.L":  &gbpPrice,
+		},
+	}
+
+	// Mock conversion with multiple rates
+	priceConversionService := &MockPriceConversionServiceForScheduler{
+		convertFunc: func(prices map[string]float64, secs []universe.Security) map[string]float64 {
+			converted := make(map[string]float64)
+			for symbol, price := range prices {
+				switch symbol {
+				case "VWS.AS":
+					converted[symbol] = price // EUR unchanged
+				case "AAPL":
+					converted[symbol] = price * 0.93 // USD to EUR
+				case "0700.HK":
+					converted[symbol] = price * 0.11 // HKD to EUR
+				case "BARC.L":
+					converted[symbol] = price * 1.17 // GBP to EUR
+				default:
+					converted[symbol] = price
+				}
+			}
+			return converted
+		},
+	}
+
+	job := &BuildOpportunityContextJob{
+		priceClient:            priceClient,
+		priceConversionService: priceConversionService,
+	}
+
+	prices := job.fetchCurrentPrices(securities)
+
+	// Verify all conversions
+	assert.Equal(t, 42.5, prices["VWS.AS"], "EUR unchanged")
+	assert.InDelta(t, 139.5, prices["AAPL"], 0.01, "USD converted")
+	assert.InDelta(t, 9.9, prices["0700.HK"], 0.01, "HKD converted")
+	assert.InDelta(t, 29.25, prices["BARC.L"], 0.01, "GBP converted")
 }

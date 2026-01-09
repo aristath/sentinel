@@ -3,6 +3,7 @@ package scheduler
 import (
 	"github.com/aristath/sentinel/internal/events"
 	planningdomain "github.com/aristath/sentinel/internal/modules/planning/domain"
+	"github.com/aristath/sentinel/internal/modules/universe"
 )
 
 // UniverseServiceInterface defines the contract for universe service operations
@@ -89,6 +90,12 @@ type TradernetClientInterfaceForJobs interface {
 // Used by scheduler to enable testing with mocks
 type OptimizerServiceInterface interface {
 	Optimize(state interface{}, settings interface{}) (interface{}, error) // Returns optimization result
+}
+
+// PriceConversionServiceInterface defines the contract for price conversion operations
+// Used by scheduler to enable testing with mocks
+type PriceConversionServiceInterface interface {
+	ConvertPricesToEUR(prices map[string]float64, securities []universe.Security) map[string]float64
 }
 
 // OpportunitiesServiceInterface defines the contract for opportunities service operations

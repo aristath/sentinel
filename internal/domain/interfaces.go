@@ -50,6 +50,11 @@ type BrokerClient interface {
 type CurrencyExchangeServiceInterface interface {
 	// GetRate returns the exchange rate from one currency to another
 	GetRate(fromCurrency, toCurrency string) (float64, error)
+
+	// EnsureBalance ensures there is sufficient balance in the target currency
+	// If insufficient, it will convert from source currency automatically
+	// Returns true if successful, false if unable to ensure balance
+	EnsureBalance(currency string, minAmount float64, sourceCurrency string) (bool, error)
 }
 
 // AllocationTargetProvider provides access to allocation targets

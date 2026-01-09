@@ -16,7 +16,6 @@ import (
 	"github.com/aristath/sentinel/internal/domain"
 	"github.com/aristath/sentinel/internal/events"
 	"github.com/aristath/sentinel/internal/modules/portfolio"
-	"github.com/aristath/sentinel/internal/modules/settings"
 	"github.com/aristath/sentinel/internal/modules/trading"
 	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/rs/zerolog"
@@ -57,7 +56,7 @@ type TradeRecommendation struct {
 // - Pending order detection
 // - Duplicate order prevention
 //
-// Cash balance validation: IMPLEMENTED (see validateBuyCashBalance)
+// Cash balance validation: IMPLEMENTED (see executeSingleTrade - uses CurrencyExchangeService.EnsureBalance)
 //
 // Faithful translation from Python: app/modules/trading/services/trade_execution_service.py
 type TradeExecutionService struct {
@@ -67,7 +66,7 @@ type TradeExecutionService struct {
 	cashManager     domain.CashManager
 	exchangeService domain.CurrencyExchangeServiceInterface
 	eventManager    *events.Manager
-	settingsService *settings.Service            // For max_price_age_hours configuration
+	settingsService SettingsServiceInterface     // For configuration (fees, price age, etc.)
 	yahooClient     yahoo.FullClientInterface    // For fetching fresh prices
 	historyDB       *sql.DB                      // For storing updated prices
 	securityRepo    *universe.SecurityRepository // For ISIN lookup
@@ -89,7 +88,7 @@ func NewTradeExecutionService(
 	cashManager domain.CashManager,
 	exchangeService domain.CurrencyExchangeServiceInterface,
 	eventManager *events.Manager,
-	settingsService *settings.Service,
+	settingsService SettingsServiceInterface,
 	yahooClient yahoo.FullClientInterface,
 	historyDB *sql.DB,
 	securityRepo *universe.SecurityRepository,
@@ -191,15 +190,59 @@ func (s *TradeExecutionService) executeSingleTrade(rec TradeRecommendation) Exec
 		}
 	}
 
-	// Pre-trade validation for BUY orders
+	// Pre-trade validation for BUY orders - ensure sufficient balance (with auto-conversion if needed)
 	if rec.Side == "BUY" {
-		if validationErr := s.validateBuyCashBalance(rec); validationErr != nil {
+		// Calculate total needed: trade value + commission + 1% safety margin
+		tradeValue := rec.Quantity * rec.EstimatedPrice
+
+		// Calculate commission
+		commission, err := s.calculateCommission(tradeValue, rec.Currency)
+		if err != nil {
 			s.log.Warn().
+				Err(err).
 				Str("symbol", rec.Symbol).
-				Str("error", *validationErr.Error).
-				Msg("Trade blocked by cash validation")
-			return *validationErr
+				Msg("Failed to calculate commission, using 2% buffer")
+			commission = tradeValue * 0.02 // Fallback: assume ~2% commission
 		}
+
+		// Add 1% safety margin to prevent rounding issues
+		totalNeeded := (tradeValue + commission) * 1.01
+
+		s.log.Info().
+			Str("symbol", rec.Symbol).
+			Str("currency", rec.Currency).
+			Float64("trade_value", tradeValue).
+			Float64("commission", commission).
+			Float64("total_needed", totalNeeded).
+			Msg("Ensuring sufficient balance before trade")
+
+		// EnsureBalance handles all currencies (EUR and foreign):
+		// 1. Check current balance in rec.Currency
+		// 2. If insufficient AND rec.Currency != EUR, convert from EUR automatically
+		// 3. If rec.Currency == EUR, just validates we have enough EUR
+		// 4. Returns false if insufficient funds in any scenario
+		success, err := s.exchangeService.EnsureBalance(rec.Currency, totalNeeded, "EUR")
+		if err != nil || !success {
+			s.log.Error().
+				Err(err).
+				Str("symbol", rec.Symbol).
+				Str("currency", rec.Currency).
+				Float64("needed", totalNeeded).
+				Msg("Failed to ensure sufficient currency balance - blocking trade for safety")
+			errMsg := fmt.Sprintf("Insufficient funds for trade (need %.2f %s): %v",
+				totalNeeded, rec.Currency, err)
+			return ExecuteResult{
+				Symbol: rec.Symbol,
+				Status: "blocked",
+				Error:  &errMsg,
+			}
+		}
+
+		s.log.Info().
+			Str("symbol", rec.Symbol).
+			Str("currency", rec.Currency).
+			Float64("ensured_amount", totalNeeded).
+			Msg("Successfully ensured currency balance")
 	}
 
 	// Place LIMIT order via Tradernet
@@ -317,8 +360,24 @@ func (s *TradeExecutionService) calculateCommission(
 	tradeValue float64,
 	tradeCurrency string,
 ) (float64, error) {
-	const fixedCommissionEUR = 2.0
-	const variableCommissionRate = 0.002 // 0.2%
+	// Get commission settings (with fallback to defaults)
+	fixedCommissionEUR := 2.0       // Default: 2 EUR
+	variableCommissionRate := 0.002 // Default: 0.2% as decimal
+
+	if s.settingsService != nil {
+		// Read fixed commission from settings
+		if val, err := s.settingsService.Get("transaction_cost_fixed"); err == nil {
+			if fval, ok := val.(float64); ok {
+				fixedCommissionEUR = fval
+			}
+		}
+		// Read variable commission rate from settings (already in decimal form)
+		if val, err := s.settingsService.Get("transaction_cost_percent"); err == nil {
+			if fval, ok := val.(float64); ok {
+				variableCommissionRate = fval
+			}
+		}
+	}
 
 	// Calculate variable commission (percentage of trade value)
 	variableCommission := tradeValue * variableCommissionRate
@@ -343,103 +402,6 @@ func (s *TradeExecutionService) calculateCommission(
 
 	totalCommission := fixedCommission + variableCommission
 	return totalCommission, nil
-}
-
-// validateBuyCashBalance validates cash balance before executing BUY order.
-//
-// Two-level validation:
-// 1. Block if balance is already negative (status: "blocked")
-// 2. Block if balance < (trade_value + commission) (status: "blocked")
-//
-// HARD FAIL-SAFE: Block trades if cash validation unavailable (prevents overdraft)
-//
-// Faithful translation from Python:
-// app/modules/trading/services/trade_execution_service.py:152-217
-func (s *TradeExecutionService) validateBuyCashBalance(rec TradeRecommendation) *ExecuteResult {
-	// Skip validation for SELL orders (defensive check)
-	if rec.Side == "SELL" {
-		return nil
-	}
-
-	// Get current balance for the trade currency
-	// Use CashSecurityManager directly
-	if s.cashManager == nil {
-		// HARD fail-safe - block BUY if cash validation unavailable
-		s.log.Error().Msg("CashSecurityManager not available - blocking BUY for safety (prevents overdraft)")
-		errMsg := "Cash balance validation unavailable - blocking BUY for safety"
-		return &ExecuteResult{
-			Symbol: rec.Symbol,
-			Status: "blocked",
-			Error:  &errMsg,
-		}
-	}
-
-	balance, err := s.cashManager.GetCashBalance(rec.Currency)
-	if err != nil {
-		s.log.Error().
-			Err(err).
-			Str("currency", rec.Currency).
-			Msg("Failed to get cash balance")
-		errMsg := fmt.Sprintf("Failed to get cash balance: %v", err)
-		return &ExecuteResult{
-			Symbol: rec.Symbol,
-			Status: "error",
-			Error:  &errMsg,
-		}
-	}
-
-	// Check 1: Block if balance is already negative
-	if balance < 0 {
-		s.log.Warn().
-			Str("symbol", rec.Symbol).
-			Str("currency", rec.Currency).
-			Float64("balance", balance).
-			Msg("Blocking BUY: negative balance")
-		errMsg := fmt.Sprintf("Negative %s balance (%.2f %s)", rec.Currency, balance, rec.Currency)
-		return &ExecuteResult{
-			Symbol: rec.Symbol,
-			Status: "blocked",
-			Error:  &errMsg,
-		}
-	}
-
-	// Calculate trade value
-	tradeValue := rec.Quantity * rec.EstimatedPrice
-
-	// Calculate commission
-	commission, err := s.calculateCommission(tradeValue, rec.Currency)
-	if err != nil {
-		s.log.Warn().
-			Err(err).
-			Str("symbol", rec.Symbol).
-			Msg("Failed to calculate commission, proceeding without commission check")
-		commission = 0
-	}
-
-	// Calculate total required (trade value + commission)
-	required := tradeValue + commission
-
-	// Check 2: Block if insufficient balance
-	if balance < required {
-		s.log.Warn().
-			Str("symbol", rec.Symbol).
-			Str("currency", rec.Currency).
-			Float64("need", required).
-			Float64("have", balance).
-			Float64("trade_value", tradeValue).
-			Float64("commission", commission).
-			Msgf("Skipping %s: insufficient %s balance (need %.2f %s: %.2f trade + %.2f commission, have %.2f)",
-				rec.Symbol, rec.Currency, required, rec.Currency, tradeValue, commission, balance)
-		errMsg := fmt.Sprintf("Insufficient %s balance (need %.2f, have %.2f)", rec.Currency, required, balance)
-		return &ExecuteResult{
-			Symbol: rec.Symbol,
-			Status: "blocked",
-			Error:  &errMsg,
-		}
-	}
-
-	// All checks passed
-	return nil
 }
 
 // validatePriceFreshness validates that price data is fresh, attempts auto-refresh if stale.

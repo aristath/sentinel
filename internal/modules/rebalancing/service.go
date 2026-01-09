@@ -16,6 +16,7 @@ import (
 	"github.com/aristath/sentinel/internal/modules/portfolio"
 	"github.com/aristath/sentinel/internal/modules/settings"
 	"github.com/aristath/sentinel/internal/modules/universe"
+	"github.com/aristath/sentinel/internal/services"
 	"github.com/rs/zerolog"
 )
 
@@ -59,17 +60,18 @@ type Service struct {
 	negativeRebalancer *NegativeBalanceRebalancer
 
 	// Planning integration
-	planningService    *planning.Service
-	positionRepo       *portfolio.PositionRepository
-	securityRepo       *universe.SecurityRepository
-	allocRepo          *allocation.Repository
-	cashManager        domain.CashManager
-	brokerClient       domain.BrokerClient
-	yahooClient        yahoo.FullClientInterface
-	configRepo         *planningrepo.ConfigRepository
-	recommendationRepo planning.RecommendationRepositoryInterface // Interface - can be DB or in-memory
-	portfolioDB        *sql.DB                                    // For querying scores and calculations
-	configDB           *sql.DB                                    // For querying settings
+	planningService        *planning.Service
+	positionRepo           *portfolio.PositionRepository
+	securityRepo           *universe.SecurityRepository
+	allocRepo              *allocation.Repository
+	cashManager            domain.CashManager
+	brokerClient           domain.BrokerClient
+	yahooClient            yahoo.FullClientInterface
+	priceConversionService *services.PriceConversionService
+	configRepo             *planningrepo.ConfigRepository
+	recommendationRepo     planning.RecommendationRepositoryInterface // Interface - can be DB or in-memory
+	portfolioDB            *sql.DB                                    // For querying scores and calculations
+	configDB               *sql.DB                                    // For querying settings
 
 	log zerolog.Logger
 }
@@ -85,6 +87,7 @@ func NewService(
 	cashManager domain.CashManager,
 	brokerClient domain.BrokerClient,
 	yahooClient yahoo.FullClientInterface,
+	priceConversionService *services.PriceConversionService,
 	configRepo *planningrepo.ConfigRepository,
 	recommendationRepo planning.RecommendationRepositoryInterface, // Interface - can be DB or in-memory
 	portfolioDB *sql.DB, // For querying scores and calculations
@@ -92,20 +95,21 @@ func NewService(
 	log zerolog.Logger,
 ) *Service {
 	return &Service{
-		triggerChecker:     triggerChecker,
-		negativeRebalancer: negativeRebalancer,
-		planningService:    planningService,
-		positionRepo:       positionRepo,
-		securityRepo:       securityRepo,
-		allocRepo:          allocRepo,
-		cashManager:        cashManager,
-		brokerClient:       brokerClient,
-		yahooClient:        yahooClient,
-		configRepo:         configRepo,
-		recommendationRepo: recommendationRepo,
-		portfolioDB:        portfolioDB,
-		configDB:           configDB,
-		log:                log.With().Str("service", "rebalancing").Logger(),
+		triggerChecker:         triggerChecker,
+		negativeRebalancer:     negativeRebalancer,
+		planningService:        planningService,
+		positionRepo:           positionRepo,
+		securityRepo:           securityRepo,
+		allocRepo:              allocRepo,
+		cashManager:            cashManager,
+		brokerClient:           brokerClient,
+		yahooClient:            yahooClient,
+		priceConversionService: priceConversionService,
+		configRepo:             configRepo,
+		recommendationRepo:     recommendationRepo,
+		portfolioDB:            portfolioDB,
+		configDB:               configDB,
+		log:                    log.With().Str("service", "rebalancing").Logger(),
 	}
 }
 
@@ -317,8 +321,8 @@ func (s *Service) buildOpportunityContext(availableCash float64) (*planningdomai
 	return ctx, nil
 }
 
-// fetchCurrentPrices fetches current prices for all securities from Yahoo Finance
-// After migration: Returns map keyed by ISIN (internal identifier)
+// fetchCurrentPrices fetches current prices for all securities from Yahoo Finance and converts to EUR
+// After migration: Returns map keyed by ISIN (internal identifier) with EUR-converted prices
 func (s *Service) fetchCurrentPrices(securities []universe.Security) map[string]float64 {
 	prices := make(map[string]float64)
 
@@ -349,28 +353,43 @@ func (s *Service) fetchCurrentPrices(securities []universe.Security) map[string]
 		}
 	}
 
-	// Fetch batch quotes from Yahoo (returns map keyed by Tradernet symbol)
+	// Fetch batch quotes from Yahoo (returns map keyed by Tradernet symbol, prices in native currencies)
 	quotes, err := s.yahooClient.GetBatchQuotes(symbolMap)
 	if err != nil {
 		s.log.Warn().Err(err).Msg("Failed to fetch batch quotes from Yahoo, using empty prices")
 		return prices
 	}
 
-	// Convert quotes map to prices map keyed by ISIN (convert *float64 to float64)
-	successCount := 0
+	// Convert quotes map to native currency prices keyed by symbol
+	nativePrices := make(map[string]float64)
 	for symbol, price := range quotes {
-		if price == nil {
-			continue
+		if price != nil {
+			nativePrices[symbol] = *price
 		}
+	}
+
+	// Convert all prices to EUR using shared service
+	var eurPrices map[string]float64
+	if s.priceConversionService != nil {
+		eurPrices = s.priceConversionService.ConvertPricesToEUR(nativePrices, securities)
+	} else {
+		// Fallback: use native prices if service unavailable
+		s.log.Warn().Msg("Price conversion service not available, using native currency prices (may cause valuation errors)")
+		eurPrices = nativePrices
+	}
+
+	// Convert symbol-keyed EUR prices to ISIN-keyed prices
+	successCount := 0
+	for symbol, eurPrice := range eurPrices {
 		// Convert symbol to ISIN for internal map key
 		isin, hasISIN := symbolToISIN[symbol]
 		if hasISIN && isin != "" {
-			prices[isin] = *price
+			prices[isin] = eurPrice
 			successCount++
 		} else {
 			// Fallback: use symbol as key if ISIN not found (shouldn't happen after migration)
 			s.log.Warn().Str("symbol", symbol).Msg("No ISIN found for symbol in price map, using symbol as key")
-			prices[symbol] = *price
+			prices[symbol] = eurPrice
 			successCount++
 		}
 	}
@@ -378,7 +397,7 @@ func (s *Service) fetchCurrentPrices(securities []universe.Security) map[string]
 	s.log.Debug().
 		Int("total", len(securities)).
 		Int("fetched", successCount).
-		Msg("Fetched current prices from Yahoo")
+		Msg("Fetched and converted current prices to EUR")
 
 	return prices
 }

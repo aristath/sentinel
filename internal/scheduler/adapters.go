@@ -127,6 +127,19 @@ func (a *OptimizerServiceAdapter) Optimize(state interface{}, settings interface
 	return a.service.Optimize(portfolioState, optimizerSettings)
 }
 
+// PriceConversionServiceAdapter adapts PriceConversionService to PriceConversionServiceInterface
+type PriceConversionServiceAdapter struct {
+	service *services.PriceConversionService
+}
+
+func NewPriceConversionServiceAdapter(service *services.PriceConversionService) *PriceConversionServiceAdapter {
+	return &PriceConversionServiceAdapter{service: service}
+}
+
+func (a *PriceConversionServiceAdapter) ConvertPricesToEUR(prices map[string]float64, securities []universe.Security) map[string]float64 {
+	return a.service.ConvertPricesToEUR(prices, securities)
+}
+
 // ScoresRepositoryAdapter adapts database connection to ScoresRepositoryInterface
 type ScoresRepositoryAdapter struct {
 	db  *sql.DB

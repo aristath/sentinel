@@ -23,6 +23,7 @@ type BuildOpportunityContextJob struct {
 	groupingRepo           GroupingRepositoryInterface
 	cashManager            CashManagerInterface
 	priceClient            PriceClientInterface
+	priceConversionService PriceConversionServiceInterface
 	scoresRepo             ScoresRepositoryInterface
 	settingsRepo           SettingsRepositoryInterface
 	regimeRepo             RegimeRepositoryInterface
@@ -38,21 +39,23 @@ func NewBuildOpportunityContextJob(
 	groupingRepo GroupingRepositoryInterface,
 	cashManager CashManagerInterface,
 	priceClient PriceClientInterface,
+	priceConversionService PriceConversionServiceInterface,
 	scoresRepo ScoresRepositoryInterface,
 	settingsRepo SettingsRepositoryInterface,
 	regimeRepo RegimeRepositoryInterface,
 ) *BuildOpportunityContextJob {
 	return &BuildOpportunityContextJob{
-		log:          zerolog.Nop(),
-		positionRepo: positionRepo,
-		securityRepo: securityRepo,
-		allocRepo:    allocRepo,
-		groupingRepo: groupingRepo,
-		cashManager:  cashManager,
-		priceClient:  priceClient,
-		scoresRepo:   scoresRepo,
-		settingsRepo: settingsRepo,
-		regimeRepo:   regimeRepo,
+		log:                    zerolog.Nop(),
+		positionRepo:           positionRepo,
+		securityRepo:           securityRepo,
+		allocRepo:              allocRepo,
+		groupingRepo:           groupingRepo,
+		cashManager:            cashManager,
+		priceClient:            priceClient,
+		priceConversionService: priceConversionService,
+		scoresRepo:             scoresRepo,
+		settingsRepo:           settingsRepo,
+		regimeRepo:             regimeRepo,
 	}
 }
 
@@ -181,6 +184,7 @@ func (j *BuildOpportunityContextJob) buildOpportunityContext(
 			ISIN:      sec.ISIN,
 			Active:    sec.Active,
 			Country:   sec.Country,
+			Currency:  domain.Currency(sec.Currency),
 			Name:      sec.Name,
 			AllowSell: sec.AllowSell,
 			AllowBuy:  sec.AllowBuy,
@@ -458,24 +462,33 @@ func (j *BuildOpportunityContextJob) fetchCurrentPrices(securities []universe.Se
 		symbolMap[security.Symbol] = yahooSymbolPtr
 	}
 
-	// Fetch batch quotes
+	// Fetch batch quotes (in native currencies)
 	quotes, err := j.priceClient.GetBatchQuotes(symbolMap)
 	if err != nil {
 		j.log.Warn().Err(err).Msg("Failed to fetch batch quotes, using empty prices")
 		return prices
 	}
 
-	// Convert quotes to price map
+	// Convert quotes to price map (still in native currencies)
+	nativePrices := make(map[string]float64)
 	for symbol, pricePtr := range quotes {
 		if pricePtr != nil {
-			prices[symbol] = *pricePtr
+			nativePrices[symbol] = *pricePtr
 		}
 	}
 
-	j.log.Info().
-		Int("total", len(securities)).
-		Int("fetched", len(prices)).
-		Msg("Fetched current prices")
+	// Convert all prices to EUR using shared service
+	if j.priceConversionService != nil {
+		prices = j.priceConversionService.ConvertPricesToEUR(nativePrices, securities)
+		j.log.Info().
+			Int("total", len(securities)).
+			Int("fetched", len(prices)).
+			Msg("Fetched current prices and converted to EUR")
+	} else {
+		// Fallback: use native prices if service unavailable
+		j.log.Warn().Msg("Price conversion service not available, using native currency prices (may cause valuation errors)")
+		prices = nativePrices
+	}
 
 	return prices
 }

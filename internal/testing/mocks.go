@@ -1519,6 +1519,17 @@ func (m *MockCurrencyExchangeService) GetRate(fromCurrency, toCurrency string) (
 	return 0, errors.New("exchange rate not found")
 }
 
+// EnsureBalance ensures there is sufficient balance in the target currency (stub for testing)
+func (m *MockCurrencyExchangeService) EnsureBalance(currency string, minAmount float64, sourceCurrency string) (bool, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.err != nil {
+		return false, m.err
+	}
+	// Mock implementation - always succeeds
+	return true, nil
+}
+
 // Verify interface implementation
 var _ domain.CurrencyExchangeServiceInterface = (*MockCurrencyExchangeService)(nil)
 

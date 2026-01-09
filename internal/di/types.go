@@ -73,6 +73,7 @@ type Container struct {
 	// Services
 	CurrencyExchangeService   *services.CurrencyExchangeService
 	ExchangeRateCacheService  *services.ExchangeRateCacheService
+	PriceConversionService    *services.PriceConversionService
 	CashManager               domain.CashManager // Interface
 	TradeSafetyService        *trading.TradeSafetyService
 	TradingService            *trading.TradingService

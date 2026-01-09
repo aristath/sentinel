@@ -109,6 +109,10 @@ func (m *mockCurrencyExchangeService) GetRate(fromCurrency, toCurrency string) (
 	return 1.0, nil
 }
 
+func (m *mockCurrencyExchangeService) EnsureBalance(currency string, minAmount float64, sourceCurrency string) (bool, error) {
+	return true, nil
+}
+
 type mockAllocationTargetProvider struct{}
 
 func (m *mockAllocationTargetProvider) GetAll() (map[string]float64, error) {
