@@ -221,14 +221,23 @@ func (s *MarketIndexService) getIndexReturns(symbol string, days int) ([]float64
 	}
 
 	for rows.Next() {
-		var p struct {
-			Date  string
-			Close float64
-		}
-		if err := rows.Scan(&p.Date, &p.Close); err != nil {
+		var dateUnix int64
+		var close float64
+
+		if err := rows.Scan(&dateUnix, &close); err != nil {
 			return nil, fmt.Errorf("failed to scan price: %w", err)
 		}
-		prices = append(prices, p)
+
+		// Convert Unix timestamp to YYYY-MM-DD string format
+		date := time.Unix(dateUnix, 0).UTC().Format("2006-01-02")
+
+		prices = append(prices, struct {
+			Date  string
+			Close float64
+		}{
+			Date:  date,
+			Close: close,
+		})
 	}
 
 	if err := rows.Err(); err != nil {

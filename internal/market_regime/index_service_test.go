@@ -133,14 +133,15 @@ func TestGetCompositeReturns(t *testing.T) {
 	// Indices use ISIN format: "INDEX-SYMBOL" (e.g., "INDEX-SPX.US")
 	now := time.Now()
 	for i := 0; i < 10; i++ {
-		date := now.AddDate(0, 0, -10+i).Format("2006-01-02")
+		dateTime := now.AddDate(0, 0, -10+i)
+		dateUnix := time.Date(dateTime.Year(), dateTime.Month(), dateTime.Day(), 0, 0, 0, 0, time.UTC).Unix()
 
 		// S&P 500: +1% per day (using ISIN format)
 		spxPrice := 4000.0 * (1.0 + float64(i)*0.01)
 		_, err = historyDB.Exec(`
 			INSERT OR REPLACE INTO daily_prices (isin, date, open, high, low, close, volume)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
-		`, "INDEX-SPX.US", date, spxPrice, spxPrice*1.01, spxPrice*0.99, spxPrice, 1000000)
+		`, "INDEX-SPX.US", dateUnix, spxPrice, spxPrice*1.01, spxPrice*0.99, spxPrice, 1000000)
 		require.NoError(t, err)
 
 		// MSCI Europe: +0.5% per day (using ISIN format)
@@ -148,7 +149,7 @@ func TestGetCompositeReturns(t *testing.T) {
 		_, err = historyDB.Exec(`
 			INSERT OR REPLACE INTO daily_prices (isin, date, open, high, low, close, volume)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
-		`, "INDEX-STOXX600.EU", date, euPrice, euPrice*1.01, euPrice*0.99, euPrice, 1000000)
+		`, "INDEX-STOXX600.EU", dateUnix, euPrice, euPrice*1.01, euPrice*0.99, euPrice, 1000000)
 		require.NoError(t, err)
 
 		// MSCI Asia: +0.3% per day (using ISIN format)
@@ -156,7 +157,7 @@ func TestGetCompositeReturns(t *testing.T) {
 		_, err = historyDB.Exec(`
 			INSERT OR REPLACE INTO daily_prices (isin, date, open, high, low, close, volume)
 			VALUES (?, ?, ?, ?, ?, ?, ?)
-		`, "INDEX-MSCIASIA.ASIA", date, asiaPrice, asiaPrice*1.01, asiaPrice*0.99, asiaPrice, 1000000)
+		`, "INDEX-MSCIASIA.ASIA", dateUnix, asiaPrice, asiaPrice*1.01, asiaPrice*0.99, asiaPrice, 1000000)
 		require.NoError(t, err)
 	}
 
@@ -206,14 +207,15 @@ func TestGetMarketReturns(t *testing.T) {
 	// Indices use ISIN format: "INDEX-SYMBOL" (e.g., "INDEX-SPX.US")
 	now := time.Now()
 	for i := 0; i < 30; i++ {
-		date := now.AddDate(0, 0, -30+i).Format("2006-01-02")
+		dateTime := now.AddDate(0, 0, -30+i)
+		dateUnix := time.Date(dateTime.Year(), dateTime.Month(), dateTime.Day(), 0, 0, 0, 0, time.UTC).Unix()
 		price := 1000.0 * (1.0 + float64(i)*0.001) // Small daily gains
 
 		for _, isin := range []string{"INDEX-SPX.US", "INDEX-STOXX600.EU", "INDEX-MSCIASIA.ASIA"} {
 			_, err = historyDB.Exec(`
 				INSERT OR REPLACE INTO daily_prices (isin, date, open, high, low, close, volume)
 				VALUES (?, ?, ?, ?, ?, ?, ?)
-			`, isin, date, price, price*1.01, price*0.99, price, 1000000)
+			`, isin, dateUnix, price, price*1.01, price*0.99, price, 1000000)
 			require.NoError(t, err)
 		}
 	}

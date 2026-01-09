@@ -321,12 +321,16 @@ func (rb *RiskModelBuilder) fetchPriceHistory(symbols []string, days int) (TimeS
 	dateSet := make(map[string]bool)
 
 	for rows.Next() {
-		var isin, date string
+		var isin string
+		var dateUnix int64
 		var price float64
 
-		if err := rows.Scan(&isin, &date, &price); err != nil {
+		if err := rows.Scan(&isin, &dateUnix, &price); err != nil {
 			return TimeSeriesData{}, fmt.Errorf("failed to scan row: %w", err)
 		}
+
+		// Convert Unix timestamp to YYYY-MM-DD string format
+		date := time.Unix(dateUnix, 0).UTC().Format("2006-01-02")
 
 		if pricesByISIN[isin] == nil {
 			pricesByISIN[isin] = make(map[string]float64)
