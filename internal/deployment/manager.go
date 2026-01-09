@@ -485,6 +485,60 @@ func (m *Manager) deployGoService(config GoServiceConfig, serviceName string, ru
 		Str("binary", tempBinary).
 		Msg("Downloaded and verified linux/arm64 artifact from GitHub Actions")
 
+	// SELF-DEPLOYMENT: Special handling when Sentinel updates itself
+	// We can't use systemctl/dbus from within a NoNewPrivileges service
+	// Instead: replace binary, mark deployed, exit gracefully → systemd restarts us (Restart=always)
+	isSelfDeployment := serviceName == "sentinel"
+
+	if isSelfDeployment {
+		m.log.Info().
+			Str("service", serviceName).
+			Msg("Self-deployment detected - using systemd-native restart mechanism")
+
+		// Deploy binary (atomic swap) while service is still running
+		if err := m.binaryDeployer.DeployBinary(tempBinary, m.config.DeployDir, config.BinaryName, true); err != nil {
+			deployment.Error = fmt.Sprintf("deployment failed: %v", err)
+			m.log.Error().
+				Err(err).
+				Str("service", serviceName).
+				Msg("Failed to deploy binary for self-update")
+			return deployment
+		}
+
+		m.log.Info().
+			Str("service", serviceName).
+			Str("binary_path", filepath.Join(m.config.DeployDir, config.BinaryName)).
+			Msg("Binary replaced successfully - will now exit for systemd restart")
+
+		// Mark artifact as deployed before exiting
+		if runID != "" && m.githubArtifactDeployer != nil && m.githubArtifactDeployer.tracker != nil {
+			if err := m.githubArtifactDeployer.tracker.MarkDeployed(runID); err != nil {
+				m.log.Warn().Err(err).Str("run_id", runID).Msg("Failed to mark artifact as deployed before restart")
+			} else {
+				m.log.Info().Str("run_id", runID).Msg("Marked artifact as deployed - ready for restart")
+			}
+		}
+
+		// Exit gracefully to trigger systemd restart with new binary
+		// systemd's Restart=always will start the new binary
+		m.log.Info().
+			Str("service", serviceName).
+			Msg("Exiting process to allow systemd restart with new binary (Restart=always)")
+
+		// Give logs time to flush
+		time.Sleep(100 * time.Millisecond)
+
+		// Exit with success code - systemd will restart us
+		os.Exit(0)
+
+		// This code is unreachable, but needed for compilation
+		deployment.Success = true
+		return deployment
+	}
+
+	// EXTERNAL SERVICE DEPLOYMENT: Normal flow for other services
+	// These don't have NoNewPrivileges restrictions from our perspective
+
 	// Stop service before binary replacement
 	if err := m.serviceManager.StopService(config.ServiceName); err != nil {
 		deployment.Error = fmt.Sprintf("service stop failed: %v", err)
