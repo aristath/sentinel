@@ -114,6 +114,10 @@ func (s *MarketIndexService) EnsureIndicesExist() error {
 // InitializeMarketIndices ensures market indices are fully set up with historical data
 // This is called once on application startup to bootstrap the market regime system
 func (s *MarketIndexService) InitializeMarketIndices(historicalSync HistoricalSyncService) error {
+	if historicalSync == nil {
+		return fmt.Errorf("historicalSync service is nil")
+	}
+
 	// Step 1: Ensure indices exist in securities table
 	if err := s.EnsureIndicesExist(); err != nil {
 		return fmt.Errorf("failed to create market indices: %w", err)
@@ -170,7 +174,7 @@ func (s *MarketIndexService) ensureYahooMappings() error {
 
 	for isin, yahooSymbol := range indexMappings {
 		// Update the yahoo_symbol column in the securities table
-		_, err := s.universeDB.Exec(`
+		result, err := s.universeDB.Exec(`
 			UPDATE securities
 			SET yahoo_symbol = ?, updated_at = ?
 			WHERE isin = ?
@@ -178,6 +182,15 @@ func (s *MarketIndexService) ensureYahooMappings() error {
 
 		if err != nil {
 			return fmt.Errorf("failed to create mapping for %s: %w", isin, err)
+		}
+
+		// Verify that the update affected a row (index must exist)
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("failed to check rows affected for %s: %w", isin, err)
+		}
+		if rowsAffected == 0 {
+			return fmt.Errorf("index %s does not exist in securities table", isin)
 		}
 
 		s.log.Debug().
