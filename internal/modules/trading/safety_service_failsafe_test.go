@@ -54,6 +54,21 @@ func createTestDB(t *testing.T, name string) (*database.DB, func()) {
 	return db, cleanup
 }
 
+// setupLiveTradingMode sets up dummy credentials and enables live trading mode for testing
+func setupLiveTradingMode(t *testing.T, settingsService *settings.Service) {
+	t.Helper()
+
+	// Set dummy API credentials (required for live mode)
+	_, err := settingsService.Set("tradernet_api_key", "test_key")
+	assert.NoError(t, err)
+	_, err = settingsService.Set("tradernet_api_secret", "test_secret")
+	assert.NoError(t, err)
+
+	// Now we can set trading mode to live
+	_, err = settingsService.Set("trading_mode", "live")
+	assert.NoError(t, err)
+}
+
 // Test HARD Fail-Safe: Security validation blocks when repository unavailable
 func TestValidateTrade_HardFailSafe_BlocksWhenSecurityRepoUnavailable(t *testing.T) {
 	log := zerolog.New(nil).Level(zerolog.Disabled)
@@ -64,8 +79,7 @@ func TestValidateTrade_HardFailSafe_BlocksWhenSecurityRepoUnavailable(t *testing
 
 	// Create settings service and set trading mode to "live" so we can test security repo fail-safe
 	settingsService := settings.NewService(settings.NewRepository(configDB.Conn(), log), log)
-	err := settingsService.Set("trading_mode", "live")
-	assert.NoError(t, err)
+	setupLiveTradingMode(t, settingsService)
 
 	// Create service with nil securityRepo
 	service := &TradeSafetyService{
@@ -78,7 +92,7 @@ func TestValidateTrade_HardFailSafe_BlocksWhenSecurityRepoUnavailable(t *testing
 	}
 
 	// HARD fail-safe should block the trade
-	err = service.ValidateTrade("AAPL", "BUY", 10.0)
+	err := service.ValidateTrade("AAPL", "BUY", 10.0)
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "security repository not available")
@@ -108,8 +122,7 @@ func TestValidateTrade_SoftFailSafe_AllowsWhenMarketHoursUnavailable(t *testing.
 	settingsService := settings.NewService(settings.NewRepository(configDB.Conn(), log), log)
 
 	// Set trading mode to "live" so we can test market hours fail-safe
-	err := settingsService.Set("trading_mode", "live")
-	assert.NoError(t, err)
+	setupLiveTradingMode(t, settingsService)
 
 	// Insert test security
 	security := universe.Security{
@@ -174,8 +187,7 @@ func TestValidateTrade_HardFailSafe_BlocksWhenTradeRepoUnavailable(t *testing.T)
 	settingsService := settings.NewService(settings.NewRepository(configDB.Conn(), log), log)
 
 	// Set trading mode to "live" so we can test trade repo fail-safe
-	err := settingsService.Set("trading_mode", "live")
-	assert.NoError(t, err)
+	setupLiveTradingMode(t, settingsService)
 
 	// Insert test security
 	security := universe.Security{
@@ -312,8 +324,7 @@ func TestValidateTrade_BlocksInsufficientQuantity(t *testing.T) {
 	settingsService := settings.NewService(settings.NewRepository(configDB.Conn(), log), log)
 
 	// Set trading mode to "live" so we can test position validation
-	err := settingsService.Set("trading_mode", "live")
-	assert.NoError(t, err)
+	setupLiveTradingMode(t, settingsService)
 
 	// Insert test security
 	security := universe.Security{
@@ -381,8 +392,7 @@ func TestValidateTrade_AllowsValidQuantity(t *testing.T) {
 	settingsService := settings.NewService(settings.NewRepository(configDB.Conn(), log), log)
 
 	// Set trading mode to "live" so we can test position validation
-	err := settingsService.Set("trading_mode", "live")
-	assert.NoError(t, err)
+	setupLiveTradingMode(t, settingsService)
 
 	// Insert test security
 	security := universe.Security{
@@ -441,8 +451,7 @@ func TestValidateTrade_BlocksUnknownSecurity(t *testing.T) {
 	settingsService := settings.NewService(settings.NewRepository(configDB.Conn(), log), log)
 
 	// Set trading mode to "live" so we can test security validation
-	err := settingsService.Set("trading_mode", "live")
-	assert.NoError(t, err)
+	setupLiveTradingMode(t, settingsService)
 
 	// Create service
 	service := &TradeSafetyService{
@@ -455,7 +464,7 @@ func TestValidateTrade_BlocksUnknownSecurity(t *testing.T) {
 	}
 
 	// Try to trade unknown security
-	err = service.ValidateTrade("UNKNOWN", "BUY", 10.0)
+	err := service.ValidateTrade("UNKNOWN", "BUY", 10.0)
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "security not found")
