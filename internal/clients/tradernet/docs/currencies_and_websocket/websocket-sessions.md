@@ -99,4 +99,3 @@ ws.onopen = function() { // Waiting for the connection to open
   ws.send(JSON.stringify(['session']));
 };
 ```
-

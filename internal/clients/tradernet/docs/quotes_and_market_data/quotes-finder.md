@@ -182,4 +182,3 @@ $publicApiClient = new PublicApiClient($apiKey, $apiSecretKey, Nt\PublicApiClien
 
 $responseExample = $publicApiClient->sendRequest('tickerFinder', ['text'=> 'AAPL.US'], 'array');
 ```
-

@@ -35,4 +35,3 @@ ws.onopen = function() { // Waiting for the connection to open
     ws.send("quotes", JSON.stringify(['quotes', tickersToWatchChanges]));
 }
 ```
-

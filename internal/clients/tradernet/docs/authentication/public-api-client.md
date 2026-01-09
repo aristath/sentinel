@@ -57,4 +57,3 @@ from tradernet import TraderNetAPI
 api = TraderNetAPI('public_key', 'private_key', 'login', 'passwd')
 api.user_info()
 ```
-

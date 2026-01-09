@@ -147,4 +147,3 @@ ws.onmessage  = function ({ data }) {
 $publicApiClient = new PublicApiClient($apiKey, $apiSecretKey, Nt\PublicApiClient::V2);
 $responseExample = $publicApiClient->sendRequest('getNotifyOrderJson');
 ```
-

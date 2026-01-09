@@ -112,4 +112,3 @@ print(res.sendRequest('getPositionJson'))
 ```
 
 ### Pages with examples (section Python):
-

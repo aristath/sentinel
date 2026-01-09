@@ -55,4 +55,3 @@ getNews(null, null, 2001200, function(json){
     console.log(json);
 });
 ```
-

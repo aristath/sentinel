@@ -78,4 +78,3 @@ $responseExample = $publicApiClient->sendRequest('getStockQuotesJson', ['tickers
 ### REST
 
 You can get quotes in JSON format by direct query to the server, separating tickers and necessary parameters with the + sign, for example
-
