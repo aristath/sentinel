@@ -2,7 +2,7 @@ import { Paper, Group, Text, NumberInput } from '@mantine/core';
 import { useState } from 'react';
 import { useAppStore } from '../../stores/appStore';
 import { usePortfolioStore } from '../../stores/portfolioStore';
-import { formatCurrency, formatNumber } from '../../utils/formatters';
+import { formatCurrency, formatNumber, formatTimestamp } from '../../utils/formatters';
 
 export function StatusBar() {
   const { status, showMessage } = useAppStore();
@@ -36,7 +36,7 @@ export function StatusBar() {
           </Group>
           <Text size="xs" c="dimmed" ff="var(--mantine-font-family)">|</Text>
           <Text size="xs" c="dimmed" ff="var(--mantine-font-family)">
-            Last sync: <span>{status.last_sync || 'Never'}</span>
+            Last sync: <span>{status.last_sync ? formatTimestamp(status.last_sync) : 'Never'}</span>
           </Text>
         </Group>
       </Group>

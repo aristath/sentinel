@@ -33,3 +33,10 @@ export function formatDateTime(date) {
   const d = new Date(date);
   return d.toLocaleString();
 }
+
+export function formatTimestamp(timestamp) {
+  if (!timestamp) return '-';
+  // Unix timestamps are in seconds, JavaScript Date expects milliseconds
+  const d = new Date(timestamp * 1000);
+  return d.toLocaleString();
+}

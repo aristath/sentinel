@@ -112,13 +112,14 @@ export function SettingsModal() {
   };
 
   return (
-    <Modal
-      opened={showSettingsModal}
-      onClose={closeSettingsModal}
-      title="Settings"
-      size="xl"
-      styles={{ body: { padding: 0 } }}
-    >
+    <>
+      <Modal
+        opened={showSettingsModal}
+        onClose={closeSettingsModal}
+        title="Settings"
+        size="xl"
+        styles={{ body: { padding: 0 } }}
+      >
       <Tabs value={activeTab} onChange={setActiveTab}>
         <Tabs.List grow>
           <Tabs.Tab value="trading">Trading</Tabs.Tab>
@@ -759,10 +760,11 @@ export function SettingsModal() {
           </Stack>
         </Tabs.Panel>
       </Tabs>
-    </Modal>
-    <R2BackupModal
-      opened={showR2BackupModal}
-      onClose={() => setShowR2BackupModal(false)}
-    />
+      </Modal>
+      <R2BackupModal
+        opened={showR2BackupModal}
+        onClose={() => setShowR2BackupModal(false)}
+      />
+    </>
   );
 }
