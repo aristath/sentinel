@@ -452,8 +452,8 @@ func TestEnforcer_EnforceConstraints_MaxSellPercentage(t *testing.T) {
 		Positions:         []domain.Position{position},
 		Securities:        []domain.Security{{Symbol: "PPA.GR", ISIN: "GR1234567890"}},
 		StocksByISIN:      map[string]domain.Security{"GR1234567890": {Symbol: "PPA.GR", ISIN: "GR1234567890"}},
-		IneligibleSymbols: map[string]bool{},
-		RecentlySold:      map[string]bool{},
+		IneligibleISINs: map[string]bool{},
+		RecentlySoldISINs:      map[string]bool{},
 		AllowSell:         true,
 	}
 
@@ -546,8 +546,8 @@ func TestEnforcer_EnforceConstraints_MaxSellPercentage_BuyNotAffected(t *testing
 		Positions:         []domain.Position{},
 		Securities:        []domain.Security{{Symbol: "TEST.US", ISIN: "US1234567890"}},
 		StocksByISIN:      map[string]domain.Security{"US1234567890": {Symbol: "TEST.US", ISIN: "US1234567890"}},
-		IneligibleSymbols: map[string]bool{},
-		RecentlySold:      map[string]bool{},
+		IneligibleISINs: map[string]bool{},
+		RecentlySoldISINs:      map[string]bool{},
 		AllowBuy:          true,
 	}
 
@@ -595,8 +595,8 @@ func TestEnforcer_EnforceConstraints_MaxSellPercentage_NoPosition(t *testing.T) 
 		Positions:         []domain.Position{},
 		Securities:        []domain.Security{{Symbol: "TEST.US", ISIN: "US1234567890"}},
 		StocksByISIN:      map[string]domain.Security{"US1234567890": {Symbol: "TEST.US", ISIN: "US1234567890"}},
-		IneligibleSymbols: map[string]bool{},
-		RecentlySold:      map[string]bool{},
+		IneligibleISINs: map[string]bool{},
+		RecentlySoldISINs:      map[string]bool{},
 		AllowSell:         true,
 	}
 
