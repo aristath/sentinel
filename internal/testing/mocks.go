@@ -376,33 +376,37 @@ func (m *MockTradeRepository) GetByIdentifier(identifier string, limit int) ([]t
 	return result, nil
 }
 
-// GetRecentlyBoughtSymbols returns symbols that were bought recently (within days)
-func (m *MockTradeRepository) GetRecentlyBoughtSymbols(days int) (map[string]bool, error) {
+// GetRecentlyBoughtISINs returns ISINs that were bought recently (within days)
+func (m *MockTradeRepository) GetRecentlyBoughtISINs(days int) (map[string]bool, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if m.err != nil {
 		return nil, m.err
 	}
+
+	cutoff := time.Now().AddDate(0, 0, -days)
 	result := make(map[string]bool)
 	for _, trade := range m.trades {
-		if trade.Side == trading.TradeSideBuy {
-			result[trade.Symbol] = true
+		if trade.Side == trading.TradeSideBuy && trade.ExecutedAt.After(cutoff) && trade.ISIN != "" {
+			result[trade.ISIN] = true
 		}
 	}
 	return result, nil
 }
 
-// GetRecentlySoldSymbols returns symbols that were sold recently (within days)
-func (m *MockTradeRepository) GetRecentlySoldSymbols(days int) (map[string]bool, error) {
+// GetRecentlySoldISINs returns ISINs that were sold recently (within days)
+func (m *MockTradeRepository) GetRecentlySoldISINs(days int) (map[string]bool, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if m.err != nil {
 		return nil, m.err
 	}
+
+	cutoff := time.Now().AddDate(0, 0, -days)
 	result := make(map[string]bool)
 	for _, trade := range m.trades {
-		if trade.Side == trading.TradeSideSell {
-			result[trade.Symbol] = true
+		if trade.Side == trading.TradeSideSell && trade.ExecutedAt.After(cutoff) && trade.ISIN != "" {
+			result[trade.ISIN] = true
 		}
 	}
 	return result, nil

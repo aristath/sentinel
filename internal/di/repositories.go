@@ -54,9 +54,10 @@ func InitializeRepositories(container *Container, log zerolog.Logger) error {
 		log,
 	)
 
-	// Trade repository (needs ledgerDB)
+	// Trade repository (needs ledgerDB and universeDB for ISIN lookup)
 	container.TradeRepo = trading.NewTradeRepository(
 		container.LedgerDB.Conn(),
+		container.UniverseDB.Conn(),
 		log,
 	)
 

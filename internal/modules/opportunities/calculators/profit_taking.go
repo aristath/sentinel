@@ -109,25 +109,32 @@ func (c *ProfitTakingCalculator) Calculate(
 			continue
 		}
 
-		// Use ISIN if available, otherwise fallback to symbol
+		// Get ISIN for internal operations
 		isin := position.ISIN
 		if isin == "" {
-			isin = position.Symbol // Fallback for CASH positions
-		}
-
-		// Skip if ineligible
-		if ctx.IneligibleSymbols[position.Symbol] {
+			c.log.Warn().
+				Str("symbol", position.Symbol).
+				Msg("Position missing ISIN, skipping")
 			continue
 		}
 
-		// Skip if recently sold
-		if ctx.RecentlySold[position.Symbol] {
+		// Skip if ineligible (ISIN lookup)
+		if ctx.IneligibleISINs[isin] { // ISIN key ✅
 			continue
 		}
 
-		// Get security info (try ISIN first, fallback to symbol)
-		security, ok := ctx.GetSecurityByISINOrSymbol(isin, position.Symbol)
+		// Skip if recently sold (ISIN lookup)
+		if ctx.RecentlySoldISINs[isin] { // ISIN key ✅
+			continue
+		}
+
+		// Get security info (direct ISIN lookup)
+		security, ok := ctx.StocksByISIN[isin] // ISIN key ✅
 		if !ok {
+			c.log.Debug().
+				Str("isin", isin).
+				Str("symbol", position.Symbol).
+				Msg("Security not found in StocksByISIN, skipping")
 			continue
 		}
 
@@ -135,12 +142,13 @@ func (c *ProfitTakingCalculator) Calculate(
 		if !security.AllowSell {
 			c.log.Debug().
 				Str("symbol", position.Symbol).
+				Str("isin", isin).
 				Msg("Skipping security: allow_sell=false")
 			continue
 		}
 
-		// Get current price (try ISIN first, fallback to symbol)
-		currentPrice, ok := ctx.GetPriceByISINOrSymbol(isin, position.Symbol)
+		// Get current price (direct ISIN lookup)
+		currentPrice, ok := ctx.CurrentPrices[isin] // ISIN key ✅
 		if !ok || currentPrice <= 0 {
 			c.log.Debug().
 				Str("symbol", position.Symbol).
@@ -209,6 +217,11 @@ func (c *ProfitTakingCalculator) Calculate(
 		// Calculate priority with tag-based boosting
 		priority := c.calculatePriority(gainPercent, isWindfall, securityTags, config)
 
+		// Apply tag-based priority boosts (with regime-aware logic, sell calculator - no quantum penalty)
+		if config.EnableTagFiltering && len(securityTags) > 0 {
+			priority = ApplyTagBasedPriorityBoosts(priority, securityTags, "profit_taking", c.securityRepo)
+		}
+
 		// Build reason
 		reason := fmt.Sprintf("%.1f%% gain (cost basis: %.2f, current: %.2f)",
 			gainPercent*100, costBasis, currentPrice)
@@ -242,7 +255,8 @@ func (c *ProfitTakingCalculator) Calculate(
 
 		candidate := domain.ActionCandidate{
 			Side:     "SELL",
-			Symbol:   position.Symbol,
+			ISIN:     isin,            // PRIMARY identifier ✅
+			Symbol:   position.Symbol, // BOUNDARY identifier
 			Name:     security.Name,
 			Quantity: int(quantity),
 			Price:    currentPrice,

@@ -78,10 +78,10 @@ func TestWeightBasedCalculator_MaxSellPercentage(t *testing.T) {
 				Securities:             []domain.Security{security},
 				CurrentPrices:          map[string]float64{"TEST.US": currentPrice}, // WeightBased uses Symbol as key
 				StocksByISIN:           map[string]domain.Security{"US1234567890": security},
-				TotalPortfolioValueEUR: tt.positionQuantity * currentPrice, // All in one position
+				TotalPortfolioValueEUR: tt.positionQuantity * currentPrice,  // All in one position
 				TargetWeights:          map[string]float64{"TEST.US": 0.40}, // Target 40%
-				IneligibleISINs:      map[string]bool{},
-				RecentlySoldISINs:           map[string]bool{},
+				IneligibleISINs:        map[string]bool{},
+				RecentlySoldISINs:      map[string]bool{},
 				AllowSell:              true,
 			}
 
@@ -127,8 +127,8 @@ func TestWeightBasedCalculator_MaxSellPercentage_MultiplePositions(t *testing.T)
 		StocksByISIN:           map[string]domain.Security{"US1111111111": securities[0], "US2222222222": securities[1]},
 		TotalPortfolioValueEUR: 15000,
 		TargetWeights:          map[string]float64{"STOCK_A.US": 0.40, "STOCK_B.US": 0.20},
-		IneligibleISINs:      map[string]bool{},
-		RecentlySoldISINs:           map[string]bool{},
+		IneligibleISINs:        map[string]bool{},
+		RecentlySoldISINs:      map[string]bool{},
 		AllowSell:              true,
 	}
 
@@ -181,8 +181,8 @@ func TestWeightBasedCalculator_NoMaxSellPercentage(t *testing.T) {
 		StocksByISIN:           map[string]domain.Security{"US1234567890": security},
 		TotalPortfolioValueEUR: 10000,
 		TargetWeights:          map[string]float64{"TEST.US": 0.20}, // Severely overweight
-		IneligibleISINs:      map[string]bool{},
-		RecentlySoldISINs:           map[string]bool{},
+		IneligibleISINs:        map[string]bool{},
+		RecentlySoldISINs:      map[string]bool{},
 		AllowSell:              true,
 	}
 

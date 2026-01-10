@@ -18,10 +18,9 @@ type OpportunityContext struct {
 	AvailableCashEUR       float64                         `json:"available_cash_eur"`
 	TotalPortfolioValueEUR float64                         `json:"total_portfolio_value_eur"`
 
-	// Market data (ALL PRICES IN EUR)
-	CurrentPrices  map[string]float64         `json:"current_prices"`   // Key: ISIN, Value: Price in EUR (converted at input boundary)
-	StocksByISIN   map[string]domain.Security `json:"stocks_by_isin"`   // Key: ISIN (primary identifier)
-	StocksBySymbol map[string]domain.Security `json:"stocks_by_symbol"` // Key: Symbol (for backward compatibility, deprecated)
+	// Market data (ALL PRICES IN EUR, ALL KEYS ARE ISIN)
+	CurrentPrices map[string]float64         `json:"current_prices"` // Key: ISIN (e.g., "US0378331005"), Value: Price in EUR
+	StocksByISIN  map[string]domain.Security `json:"stocks_by_isin"` // Key: ISIN (primary lookup)
 
 	// Optional enrichment data
 	SecurityScores     map[string]float64 `json:"security_scores,omitempty"`     // Final scores by ISIN (internal identifier)
@@ -45,10 +44,10 @@ type OpportunityContext struct {
 	Volatility        map[string]float64 `json:"volatility,omitempty"`         // Volatility by ISIN (optional)
 	RegimeScore       float64            `json:"regime_score,omitempty"`       // Current market regime score (single value, -1 to +1)
 
-	// Constraints
-	IneligibleSymbols map[string]bool `json:"ineligible_symbols"` // Can't sell these
-	RecentlySold      map[string]bool `json:"recently_sold"`      // Recently sold (cooldown)
-	RecentlyBought    map[string]bool `json:"recently_bought"`    // Recently bought
+	// Constraints (ALL KEYS ARE ISIN)
+	IneligibleISINs     map[string]bool `json:"ineligible_isins"`      // Key: ISIN - Can't sell these
+	RecentlySoldISINs   map[string]bool `json:"recently_sold_isins"`   // Key: ISIN - Recently sold (cooldown)
+	RecentlyBoughtISINs map[string]bool `json:"recently_bought_isins"` // Key: ISIN - Recently bought
 
 	// Configuration
 	TransactionCostFixed   float64 `json:"transaction_cost_fixed"`
@@ -57,7 +56,7 @@ type OpportunityContext struct {
 	AllowBuy               bool    `json:"allow_buy"`
 
 	// Kelly-optimal position sizes (optional - if available from optimizer)
-	KellySizes map[string]float64 `json:"kelly_sizes,omitempty"` // Kelly-optimal position sizes by symbol (as fraction of portfolio)
+	KellySizes map[string]float64 `json:"kelly_sizes,omitempty"` // Kelly-optimal position sizes by ISIN (as fraction of portfolio)
 }
 
 // NewOpportunityContext creates a new OpportunityContext with defaults.
@@ -69,16 +68,11 @@ func NewOpportunityContext(
 	totalPortfolioValueEUR float64,
 	currentPrices map[string]float64,
 ) *OpportunityContext {
-	// Build stocks by ISIN map (primary) and by symbol map (for backward compatibility)
+	// Build stocks by ISIN map (ONLY - no Symbol map)
 	stocksByISIN := make(map[string]domain.Security, len(securities))
-	stocksBySymbol := make(map[string]domain.Security, len(securities))
 	for _, sec := range securities {
 		if sec.ISIN != "" {
 			stocksByISIN[sec.ISIN] = sec
-		}
-		// Also index by symbol for backward compatibility
-		if sec.Symbol != "" {
-			stocksBySymbol[sec.Symbol] = sec
 		}
 	}
 
@@ -90,10 +84,9 @@ func NewOpportunityContext(
 		TotalPortfolioValueEUR: totalPortfolioValueEUR,
 		CurrentPrices:          currentPrices,
 		StocksByISIN:           stocksByISIN,
-		StocksBySymbol:         stocksBySymbol,
-		IneligibleSymbols:      make(map[string]bool),
-		RecentlySold:           make(map[string]bool),
-		RecentlyBought:         make(map[string]bool),
+		IneligibleISINs:        make(map[string]bool),
+		RecentlySoldISINs:      make(map[string]bool),
+		RecentlyBoughtISINs:    make(map[string]bool),
 		TransactionCostFixed:   2.0,
 		TransactionCostPercent: 0.002,
 		AllowSell:              true,
@@ -110,61 +103,6 @@ func (ctx *OpportunityContext) ApplyConfig(config *PlannerConfiguration) {
 	ctx.TransactionCostPercent = config.TransactionCostPercent
 	ctx.AllowSell = config.AllowSell
 	ctx.AllowBuy = config.AllowBuy
-}
-
-// GetSecurityByISINOrSymbol looks up a security by ISIN (preferred) or symbol (fallback).
-// This helper ensures calculators can work with both ISIN and symbol identifiers.
-func (ctx *OpportunityContext) GetSecurityByISINOrSymbol(isin, symbol string) (domain.Security, bool) {
-	// Try ISIN first (primary identifier)
-	if isin != "" {
-		if sec, ok := ctx.StocksByISIN[isin]; ok {
-			return sec, true
-		}
-	}
-	// Fallback to symbol (backward compatibility)
-	if symbol != "" {
-		if sec, ok := ctx.StocksBySymbol[symbol]; ok {
-			return sec, true
-		}
-	}
-	return domain.Security{}, false
-}
-
-// GetPriceByISINOrSymbol looks up a price by ISIN (preferred) or symbol (fallback).
-func (ctx *OpportunityContext) GetPriceByISINOrSymbol(isin, symbol string) (float64, bool) {
-	// Try ISIN first (primary identifier)
-	if isin != "" {
-		if price, ok := ctx.CurrentPrices[isin]; ok {
-			return price, true
-		}
-	}
-	// Fallback to symbol (backward compatibility)
-	if symbol != "" {
-		if price, ok := ctx.CurrentPrices[symbol]; ok {
-			return price, true
-		}
-	}
-	return 0, false
-}
-
-// GetScoreByISINOrSymbol looks up a security score by ISIN (preferred) or symbol (fallback).
-func (ctx *OpportunityContext) GetScoreByISINOrSymbol(isin, symbol string) (float64, bool) {
-	if ctx.SecurityScores == nil {
-		return 0, false
-	}
-	// Try ISIN first (primary identifier)
-	if isin != "" {
-		if score, ok := ctx.SecurityScores[isin]; ok {
-			return score, true
-		}
-	}
-	// Fallback to symbol (backward compatibility)
-	if symbol != "" {
-		if score, ok := ctx.SecurityScores[symbol]; ok {
-			return score, true
-		}
-	}
-	return 0, false
 }
 
 // CalculateMinTradeAmount calculates the minimum trade amount where transaction costs are acceptable.
@@ -204,16 +142,15 @@ type EvaluationContext struct {
 	AvailableCashEUR       float64                         `json:"available_cash_eur"`
 	TotalPortfolioValueEUR float64                         `json:"total_portfolio_value_eur"`
 
-	// Market data
-	CurrentPrices  map[string]float64         `json:"current_prices"`   // Key: ISIN (internal identifier)
-	StocksByISIN   map[string]domain.Security `json:"stocks_by_isin"`   // Key: ISIN (primary identifier)
-	StocksBySymbol map[string]domain.Security `json:"stocks_by_symbol"` // Key: Symbol (for backward compatibility, deprecated)
+	// Market data (ALL KEYS ARE ISIN)
+	CurrentPrices map[string]float64         `json:"current_prices"` // Key: ISIN (e.g., "US0378331005")
+	StocksByISIN  map[string]domain.Security `json:"stocks_by_isin"` // Key: ISIN (primary identifier)
 
 	// Configuration
 	TransactionCostFixed   float64 `json:"transaction_cost_fixed"`
 	TransactionCostPercent float64 `json:"transaction_cost_percent"`
 
-	// Optional: Price adjustment scenarios for stochastic evaluation
+	// Optional: Price adjustment scenarios for stochastic evaluation (Keys: ISIN)
 	PriceAdjustments map[string]float64 `json:"price_adjustments,omitempty"`
 }
 
@@ -226,16 +163,11 @@ func NewEvaluationContext(
 	totalPortfolioValueEUR float64,
 	currentPrices map[string]float64,
 ) *EvaluationContext {
-	// Build stocks by ISIN map (primary) and by symbol map (for backward compatibility)
+	// Build stocks by ISIN map (ONLY - no Symbol map)
 	stocksByISIN := make(map[string]domain.Security, len(securities))
-	stocksBySymbol := make(map[string]domain.Security, len(securities))
 	for _, sec := range securities {
 		if sec.ISIN != "" {
 			stocksByISIN[sec.ISIN] = sec
-		}
-		// Also index by symbol for backward compatibility
-		if sec.Symbol != "" {
-			stocksBySymbol[sec.Symbol] = sec
 		}
 	}
 
@@ -247,7 +179,6 @@ func NewEvaluationContext(
 		TotalPortfolioValueEUR: totalPortfolioValueEUR,
 		CurrentPrices:          currentPrices,
 		StocksByISIN:           stocksByISIN,
-		StocksBySymbol:         stocksBySymbol,
 		TransactionCostFixed:   2.0,
 		TransactionCostPercent: 0.002,
 	}
@@ -260,41 +191,6 @@ func (ctx *EvaluationContext) ApplyConfig(config *PlannerConfiguration) {
 	}
 	ctx.TransactionCostFixed = config.TransactionCostFixed
 	ctx.TransactionCostPercent = config.TransactionCostPercent
-}
-
-// GetSecurityByISINOrSymbol looks up a security by ISIN (preferred) or symbol (fallback).
-// This helper ensures calculators can work with both ISIN and symbol identifiers.
-func (ctx *EvaluationContext) GetSecurityByISINOrSymbol(isin, symbol string) (domain.Security, bool) {
-	// Try ISIN first (primary identifier)
-	if isin != "" {
-		if sec, ok := ctx.StocksByISIN[isin]; ok {
-			return sec, true
-		}
-	}
-	// Fallback to symbol (backward compatibility)
-	if symbol != "" {
-		if sec, ok := ctx.StocksBySymbol[symbol]; ok {
-			return sec, true
-		}
-	}
-	return domain.Security{}, false
-}
-
-// GetPriceByISINOrSymbol looks up a price by ISIN (preferred) or symbol (fallback).
-func (ctx *EvaluationContext) GetPriceByISINOrSymbol(isin, symbol string) (float64, bool) {
-	// Try ISIN first (primary identifier)
-	if isin != "" {
-		if price, ok := ctx.CurrentPrices[isin]; ok {
-			return price, true
-		}
-	}
-	// Fallback to symbol (backward compatibility)
-	if symbol != "" {
-		if price, ok := ctx.CurrentPrices[symbol]; ok {
-			return price, true
-		}
-	}
-	return 0, false
 }
 
 // PlanningContext combines opportunity and evaluation contexts with planner-specific settings.

@@ -259,12 +259,12 @@ func CheckQualityGates(
 	}
 
 	// Bubble Risk Detection
-	// Logic from tag_assigner.go: High CAGR (>16.5%) with poor risk metrics
+	// Logic from tag_assigner.go: High CAGR (>15%) with poor risk metrics
 	// Note: We don't have direct access to Sharpe/Sortino in context, so we use a simplified check
 	// High CAGR with low quality = potential bubble
 	if cagr > 0.15 { // 15% for 11% target (1.36x target, aligned with tag_assigner)
-		if fundamentalsScore > 0 && fundamentalsScore < 0.6 {
-			// High CAGR but poor fundamentals = bubble risk
+		if fundamentalsScore > 0 && fundamentalsScore < 0.55 {
+			// High CAGR but poor fundamentals = bubble risk (aligned with tag_assigner.go line 464)
 			result.IsBubbleRisk = true
 		}
 	}

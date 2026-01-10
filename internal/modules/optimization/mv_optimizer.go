@@ -24,6 +24,7 @@ func NewMVOptimizer(cvarCalculator *CVaRCalculator, settingsService *settings.Se
 }
 
 // Optimize solves the mean-variance optimization problem.
+// ALL PARAMETERS USE ISIN KEYS (not Symbol keys).
 //
 // Mathematical formulation:
 //   - Objective depends on strategy:
@@ -34,25 +35,26 @@ func NewMVOptimizer(cvarCalculator *CVaRCalculator, settingsService *settings.Se
 //
 // Constraints:
 //   - Σw = 1 (weights sum to 1)
-//   - lower_i ≤ w_i ≤ upper_i (bounds)
+//   - lower_i ≤ w_i ≤ upper_i (bounds from minWeights/maxWeights maps)
 //   - Σ(w in sector) ≥ sector_lower, ≤ sector_upper (sector constraints)
 func (mvo *MVOptimizer) Optimize(
-	expectedReturns map[string]float64,
+	expectedReturns map[string]float64,  // ISIN-keyed ✅
 	covMatrix [][]float64,
-	symbols []string,
-	bounds [][2]float64,
+	isins []string,                      // ISIN array ✅ (renamed from symbols)
+	minWeights map[string]float64,      // ISIN-keyed ✅ (replaces bounds array)
+	maxWeights map[string]float64,      // ISIN-keyed ✅ (replaces bounds array)
 	sectorConstraints []SectorConstraint,
 	strategy string,
 	targetReturn *float64,
 	targetVolatility *float64,
 ) (map[string]float64, *float64, error) {
-	n := len(symbols)
+	n := len(isins)
 	if n == 0 {
-		return nil, nil, fmt.Errorf("no symbols provided")
+		return nil, nil, fmt.Errorf("no ISINs provided")
 	}
 
 	if len(covMatrix) != n {
-		return nil, nil, fmt.Errorf("covariance matrix size %d doesn't match symbols count %d", len(covMatrix), n)
+		return nil, nil, fmt.Errorf("covariance matrix size %d doesn't match ISINs count %d", len(covMatrix), n)
 	}
 
 	for i := range covMatrix {
@@ -61,12 +63,12 @@ func (mvo *MVOptimizer) Optimize(
 		}
 	}
 
-	// Convert expected returns to vector
+	// Convert expected returns to vector (ordered by isins array)
 	mu := make([]float64, n)
-	for i, symbol := range symbols {
-		ret, ok := expectedReturns[symbol]
+	for i, isin := range isins {
+		ret, ok := expectedReturns[isin] // ISIN lookup ✅
 		if !ok {
-			return nil, nil, fmt.Errorf("missing expected return for symbol %s", symbol)
+			return nil, nil, fmt.Errorf("missing expected return for ISIN %s", isin)
 		}
 		mu[i] = ret
 	}
@@ -85,16 +87,16 @@ func (mvo *MVOptimizer) Optimize(
 		if targetReturn == nil {
 			return nil, nil, fmt.Errorf("target_return required for efficient_return strategy")
 		}
-		return mvo.optimizeEfficientReturn(mu, sigma, symbols, bounds, sectorConstraints, *targetReturn)
+		return mvo.optimizeEfficientReturn(mu, sigma, isins, minWeights, maxWeights, sectorConstraints, *targetReturn)
 	case "min_volatility":
-		return mvo.optimizeMinVolatility(mu, sigma, symbols, bounds, sectorConstraints)
+		return mvo.optimizeMinVolatility(mu, sigma, isins, minWeights, maxWeights, sectorConstraints)
 	case "max_sharpe":
-		return mvo.optimizeMaxSharpe(mu, sigma, symbols, bounds, sectorConstraints)
+		return mvo.optimizeMaxSharpe(mu, sigma, isins, minWeights, maxWeights, sectorConstraints)
 	case "efficient_risk":
 		if targetVolatility == nil {
 			return nil, nil, fmt.Errorf("target_volatility required for efficient_risk strategy")
 		}
-		return mvo.optimizeEfficientRisk(mu, sigma, symbols, bounds, sectorConstraints, *targetVolatility)
+		return mvo.optimizeEfficientRisk(mu, sigma, isins, minWeights, maxWeights, sectorConstraints, *targetVolatility)
 	default:
 		return nil, nil, fmt.Errorf("unknown strategy: %s", strategy)
 	}
@@ -104,8 +106,9 @@ func (mvo *MVOptimizer) Optimize(
 func (mvo *MVOptimizer) optimizeEfficientReturn(
 	mu []float64,
 	sigma *mat.Dense,
-	symbols []string,
-	bounds [][2]float64,
+	isins []string,              // ISIN array ✅
+	minWeights map[string]float64, // ISIN-keyed ✅
+	maxWeights map[string]float64, // ISIN-keyed ✅
 	sectorConstraints []SectorConstraint,
 	targetReturn float64,
 ) (map[string]float64, *float64, error) {
@@ -118,7 +121,7 @@ func (mvo *MVOptimizer) optimizeEfficientReturn(
 	problem := optimize.Problem{
 		Func: func(x []float64) float64 {
 			// Project to bounds first
-			xProj := mvo.projectToBounds(x, bounds)
+			xProj := mvo.projectToBoundsMap(x, isins, minWeights, maxWeights) // Use ISIN-keyed maps ✅
 
 			// Calculate portfolio return: μ'w
 			var portfolioReturn float64
@@ -148,12 +151,12 @@ func (mvo *MVOptimizer) optimizeEfficientReturn(
 			obj += penaltyWeight * (portfolioReturn - targetReturn) * (portfolioReturn - targetReturn)
 
 			// Penalty for sector constraints
-			obj += mvo.sectorConstraintPenalty(xProj, symbols, sectorConstraints, penaltyWeight)
+			obj += mvo.sectorConstraintPenalty(xProj, isins, sectorConstraints, penaltyWeight) // Use ISINs ✅
 
 			return obj
 		},
 		Grad: func(grad, x []float64) {
-			xProj := mvo.projectToBounds(x, bounds)
+			xProj := mvo.projectToBoundsMap(x, isins, minWeights, maxWeights) // Use ISIN maps ✅
 
 			// Gradient of objective
 			for i := 0; i < n; i++ {
@@ -182,7 +185,7 @@ func (mvo *MVOptimizer) optimizeEfficientReturn(
 			}
 
 			// Gradient of sector constraint penalty
-			mvo.addSectorConstraintPenaltyGradient(grad, xProj, symbols, sectorConstraints, penaltyWeight)
+			mvo.addSectorConstraintPenaltyGradient(grad, xProj, isins, sectorConstraints, penaltyWeight) // Use ISINs ✅
 		},
 	}
 
@@ -215,16 +218,16 @@ func (mvo *MVOptimizer) optimizeEfficientReturn(
 
 	// Project final solution to bounds and normalize
 	weights := make(map[string]float64)
-	xFinal := mvo.projectToBounds(result.X, bounds)
+	xFinal := mvo.projectToBoundsMap(result.X, isins, minWeights, maxWeights) // Use ISIN maps ✅
 	sum := 0.0
 	for i := range xFinal {
 		sum += xFinal[i]
 	}
 	var portfolioReturn float64
-	for i, symbol := range symbols {
+	for i, isin := range isins { // Use ISIN ✅
 		w := xFinal[i] / math.Max(sum, 1e-10)
-		weights[symbol] = math.Max(0.0, w)
-		portfolioReturn += mu[i] * weights[symbol]
+		weights[isin] = math.Max(0.0, w) // ISIN key ✅
+		portfolioReturn += mu[i] * weights[isin]
 	}
 
 	// Final normalization
@@ -233,14 +236,14 @@ func (mvo *MVOptimizer) optimizeEfficientReturn(
 		sum += w
 	}
 	if sum > 0 {
-		for symbol := range weights {
-			weights[symbol] /= sum
+		for isin := range weights { // Use ISIN ✅
+			weights[isin] /= sum
 		}
 		portfolioReturn /= sum
 	}
 
 	// Validate CVaR constraint
-	if err := mvo.validateCVaR(weights, mu, sigma, symbols); err != nil {
+	if err := mvo.validateCVaR(weights, mu, sigma, isins); err != nil { // Use ISINs ✅
 		return nil, nil, err
 	}
 
@@ -251,8 +254,9 @@ func (mvo *MVOptimizer) optimizeEfficientReturn(
 func (mvo *MVOptimizer) optimizeMinVolatility(
 	mu []float64,
 	sigma *mat.Dense,
-	symbols []string,
-	bounds [][2]float64,
+	isins []string,                // ISIN array ✅
+	minWeights map[string]float64, // ISIN-keyed ✅
+	maxWeights map[string]float64, // ISIN-keyed ✅
 	sectorConstraints []SectorConstraint,
 ) (map[string]float64, *float64, error) {
 	n := len(mu)
@@ -260,7 +264,7 @@ func (mvo *MVOptimizer) optimizeMinVolatility(
 
 	problem := optimize.Problem{
 		Func: func(x []float64) float64 {
-			xProj := mvo.projectToBounds(x, bounds)
+			xProj := mvo.projectToBoundsMap(x, isins, minWeights, maxWeights) // Use ISIN maps ✅
 
 			var variance float64
 			for i := 0; i < n; i++ {
@@ -276,12 +280,12 @@ func (mvo *MVOptimizer) optimizeMinVolatility(
 
 			obj := variance
 			obj += penaltyWeight * (sum - 1.0) * (sum - 1.0)
-			obj += mvo.sectorConstraintPenalty(xProj, symbols, sectorConstraints, penaltyWeight)
+			obj += mvo.sectorConstraintPenalty(xProj, isins, sectorConstraints, penaltyWeight) // Use ISINs ✅
 
 			return obj
 		},
 		Grad: func(grad, x []float64) {
-			xProj := mvo.projectToBounds(x, bounds)
+			xProj := mvo.projectToBoundsMap(x, isins, minWeights, maxWeights) // Use ISIN maps ✅
 
 			for i := 0; i < n; i++ {
 				grad[i] = 0
@@ -298,7 +302,7 @@ func (mvo *MVOptimizer) optimizeMinVolatility(
 				grad[i] += 2 * penaltyWeight * (sum - 1.0)
 			}
 
-			mvo.addSectorConstraintPenaltyGradient(grad, xProj, symbols, sectorConstraints, penaltyWeight)
+			mvo.addSectorConstraintPenaltyGradient(grad, xProj, isins, sectorConstraints, penaltyWeight) // Use ISINs ✅
 		},
 	}
 
@@ -320,16 +324,16 @@ func (mvo *MVOptimizer) optimizeMinVolatility(
 	}
 
 	weights := make(map[string]float64)
-	xFinal := mvo.projectToBounds(result.X, bounds)
+	xFinal := mvo.projectToBoundsMap(result.X, isins, minWeights, maxWeights) // Use ISIN maps ✅
 	sum := 0.0
 	for i := range xFinal {
 		sum += xFinal[i]
 	}
 	var portfolioReturn float64
-	for i, symbol := range symbols {
+	for i, isin := range isins { // Use ISIN ✅
 		w := xFinal[i] / math.Max(sum, 1e-10)
-		weights[symbol] = math.Max(0.0, w)
-		portfolioReturn += mu[i] * weights[symbol]
+		weights[isin] = math.Max(0.0, w) // ISIN key ✅
+		portfolioReturn += mu[i] * weights[isin]
 	}
 
 	sum = 0.0
@@ -337,14 +341,14 @@ func (mvo *MVOptimizer) optimizeMinVolatility(
 		sum += w
 	}
 	if sum > 0 {
-		for symbol := range weights {
-			weights[symbol] /= sum
+		for isin := range weights { // Use ISIN ✅
+			weights[isin] /= sum
 		}
 		portfolioReturn /= sum
 	}
 
 	// Validate CVaR constraint
-	if err := mvo.validateCVaR(weights, mu, sigma, symbols); err != nil {
+	if err := mvo.validateCVaR(weights, mu, sigma, isins); err != nil { // Use ISINs ✅
 		return nil, nil, err
 	}
 
@@ -355,8 +359,9 @@ func (mvo *MVOptimizer) optimizeMinVolatility(
 func (mvo *MVOptimizer) optimizeMaxSharpe(
 	mu []float64,
 	sigma *mat.Dense,
-	symbols []string,
-	bounds [][2]float64,
+	isins []string,                // ISIN array ✅
+	minWeights map[string]float64, // ISIN-keyed ✅
+	maxWeights map[string]float64, // ISIN-keyed ✅
 	sectorConstraints []SectorConstraint,
 ) (map[string]float64, *float64, error) {
 	n := len(mu)
@@ -364,7 +369,7 @@ func (mvo *MVOptimizer) optimizeMaxSharpe(
 
 	problem := optimize.Problem{
 		Func: func(x []float64) float64 {
-			xProj := mvo.projectToBounds(x, bounds)
+			xProj := mvo.projectToBoundsMap(x, isins, minWeights, maxWeights) // Use ISIN maps ✅
 
 			var returnVal, variance float64
 			for i := 0; i < n; i++ {
@@ -382,12 +387,12 @@ func (mvo *MVOptimizer) optimizeMaxSharpe(
 
 			obj := -returnVal / stdDev
 			obj += penaltyWeight * (sum - 1.0) * (sum - 1.0)
-			obj += mvo.sectorConstraintPenalty(xProj, symbols, sectorConstraints, penaltyWeight)
+			obj += mvo.sectorConstraintPenalty(xProj, isins, sectorConstraints, penaltyWeight) // Use ISINs ✅
 
 			return obj
 		},
 		Grad: func(grad, x []float64) {
-			xProj := mvo.projectToBounds(x, bounds)
+			xProj := mvo.projectToBoundsMap(x, isins, minWeights, maxWeights) // Use ISIN maps ✅
 
 			var returnVal, variance float64
 			for i := 0; i < n; i++ {
@@ -414,7 +419,7 @@ func (mvo *MVOptimizer) optimizeMaxSharpe(
 				grad[i] += 2 * penaltyWeight * (sum - 1.0)
 			}
 
-			mvo.addSectorConstraintPenaltyGradient(grad, xProj, symbols, sectorConstraints, penaltyWeight)
+			mvo.addSectorConstraintPenaltyGradient(grad, xProj, isins, sectorConstraints, penaltyWeight) // Use ISINs ✅
 		},
 	}
 
@@ -436,16 +441,16 @@ func (mvo *MVOptimizer) optimizeMaxSharpe(
 	}
 
 	weights := make(map[string]float64)
-	xFinal := mvo.projectToBounds(result.X, bounds)
+	xFinal := mvo.projectToBoundsMap(result.X, isins, minWeights, maxWeights) // Use ISIN maps ✅
 	sum := 0.0
 	for i := range xFinal {
 		sum += xFinal[i]
 	}
 	var portfolioReturn float64
-	for i, symbol := range symbols {
+	for i, isin := range isins { // Use ISIN ✅
 		w := xFinal[i] / math.Max(sum, 1e-10)
-		weights[symbol] = math.Max(0.0, w)
-		portfolioReturn += mu[i] * weights[symbol]
+		weights[isin] = math.Max(0.0, w) // ISIN key ✅
+		portfolioReturn += mu[i] * weights[isin]
 	}
 
 	sum = 0.0
@@ -453,14 +458,14 @@ func (mvo *MVOptimizer) optimizeMaxSharpe(
 		sum += w
 	}
 	if sum > 0 {
-		for symbol := range weights {
-			weights[symbol] /= sum
+		for isin := range weights { // Use ISIN ✅
+			weights[isin] /= sum
 		}
 		portfolioReturn /= sum
 	}
 
 	// Validate CVaR constraint
-	if err := mvo.validateCVaR(weights, mu, sigma, symbols); err != nil {
+	if err := mvo.validateCVaR(weights, mu, sigma, isins); err != nil { // Use ISINs ✅
 		return nil, nil, err
 	}
 
@@ -471,8 +476,9 @@ func (mvo *MVOptimizer) optimizeMaxSharpe(
 func (mvo *MVOptimizer) optimizeEfficientRisk(
 	mu []float64,
 	sigma *mat.Dense,
-	symbols []string,
-	bounds [][2]float64,
+	isins []string,                // ISIN array ✅
+	minWeights map[string]float64, // ISIN-keyed ✅
+	maxWeights map[string]float64, // ISIN-keyed ✅
 	sectorConstraints []SectorConstraint,
 	targetVolatility float64,
 ) (map[string]float64, *float64, error) {
@@ -481,7 +487,7 @@ func (mvo *MVOptimizer) optimizeEfficientRisk(
 
 	problem := optimize.Problem{
 		Func: func(x []float64) float64 {
-			xProj := mvo.projectToBounds(x, bounds)
+			xProj := mvo.projectToBoundsMap(x, isins, minWeights, maxWeights) // Use ISIN maps ✅
 
 			var returnVal, variance float64
 			for i := 0; i < n; i++ {
@@ -499,12 +505,12 @@ func (mvo *MVOptimizer) optimizeEfficientRisk(
 			obj := -returnVal
 			obj += penaltyWeight * (sum - 1.0) * (sum - 1.0)
 			obj += penaltyWeight * (variance - targetVolatility*targetVolatility) * (variance - targetVolatility*targetVolatility)
-			obj += mvo.sectorConstraintPenalty(xProj, symbols, sectorConstraints, penaltyWeight)
+			obj += mvo.sectorConstraintPenalty(xProj, isins, sectorConstraints, penaltyWeight) // Use ISINs ✅
 
 			return obj
 		},
 		Grad: func(grad, x []float64) {
-			xProj := mvo.projectToBounds(x, bounds)
+			xProj := mvo.projectToBoundsMap(x, isins, minWeights, maxWeights) // Use ISIN maps ✅
 
 			var returnVal, variance float64
 			for i := 0; i < n; i++ {
@@ -529,7 +535,7 @@ func (mvo *MVOptimizer) optimizeEfficientRisk(
 				grad[i] += 2 * penaltyWeight * (sum - 1.0)
 			}
 
-			mvo.addSectorConstraintPenaltyGradient(grad, xProj, symbols, sectorConstraints, penaltyWeight)
+			mvo.addSectorConstraintPenaltyGradient(grad, xProj, isins, sectorConstraints, penaltyWeight) // Use ISINs ✅
 		},
 	}
 
@@ -551,16 +557,16 @@ func (mvo *MVOptimizer) optimizeEfficientRisk(
 	}
 
 	weights := make(map[string]float64)
-	xFinal := mvo.projectToBounds(result.X, bounds)
+	xFinal := mvo.projectToBoundsMap(result.X, isins, minWeights, maxWeights) // Use ISIN maps ✅
 	sum := 0.0
 	for i := range xFinal {
 		sum += xFinal[i]
 	}
 	var portfolioReturn float64
-	for i, symbol := range symbols {
+	for i, isin := range isins { // Use ISIN ✅
 		w := xFinal[i] / math.Max(sum, 1e-10)
-		weights[symbol] = math.Max(0.0, w)
-		portfolioReturn += mu[i] * weights[symbol]
+		weights[isin] = math.Max(0.0, w) // ISIN key ✅
+		portfolioReturn += mu[i] * weights[isin]
 	}
 
 	sum = 0.0
@@ -568,14 +574,14 @@ func (mvo *MVOptimizer) optimizeEfficientRisk(
 		sum += w
 	}
 	if sum > 0 {
-		for symbol := range weights {
-			weights[symbol] /= sum
+		for isin := range weights { // Use ISIN ✅
+			weights[isin] /= sum
 		}
 		portfolioReturn /= sum
 	}
 
 	// Validate CVaR constraint
-	if err := mvo.validateCVaR(weights, mu, sigma, symbols); err != nil {
+	if err := mvo.validateCVaR(weights, mu, sigma, isins); err != nil { // Use ISINs ✅
 		return nil, nil, err
 	}
 
@@ -596,10 +602,27 @@ func (mvo *MVOptimizer) projectToBounds(x []float64, bounds [][2]float64) []floa
 	return proj
 }
 
+// projectToBoundsMap projects weights to their bounds using ISIN-keyed maps.
+func (mvo *MVOptimizer) projectToBoundsMap(
+	x []float64,
+	isins []string,
+	minWeights map[string]float64,
+	maxWeights map[string]float64,
+) []float64 {
+	proj := make([]float64, len(x))
+	for i, isin := range isins {
+		minW := minWeights[isin]
+		maxW := maxWeights[isin]
+		proj[i] = math.Max(minW, math.Min(maxW, x[i]))
+	}
+	return proj
+}
+
 // sectorConstraintPenalty calculates penalty for sector constraint violations.
+// Uses ISIN-keyed maps.
 func (mvo *MVOptimizer) sectorConstraintPenalty(
 	x []float64,
-	symbols []string,
+	isins []string, // ISIN array ✅ (renamed from symbols)
 	constraints []SectorConstraint,
 	penaltyWeight float64,
 ) float64 {
@@ -609,10 +632,10 @@ func (mvo *MVOptimizer) sectorConstraintPenalty(
 
 	var penalty float64
 	for _, constraint := range constraints {
-		// Group symbols by sector
+		// Group ISINs by sector
 		sectorWeights := make(map[string]float64)
-		for i, symbol := range symbols {
-			sector := constraint.SectorMapper[symbol]
+		for i, isin := range isins { // Use ISIN ✅
+			sector := constraint.SectorMapper[isin] // ISIN lookup ✅
 			if sector != "" {
 				sectorWeights[sector] += x[i]
 			}
@@ -639,10 +662,11 @@ func (mvo *MVOptimizer) sectorConstraintPenalty(
 }
 
 // addSectorConstraintPenaltyGradient adds gradient of sector constraint penalty.
+// Uses ISIN-keyed maps.
 func (mvo *MVOptimizer) addSectorConstraintPenaltyGradient(
 	grad []float64,
 	x []float64,
-	symbols []string,
+	isins []string, // ISIN array ✅ (renamed from symbols)
 	constraints []SectorConstraint,
 	penaltyWeight float64,
 ) {
@@ -651,10 +675,10 @@ func (mvo *MVOptimizer) addSectorConstraintPenaltyGradient(
 	}
 
 	for _, constraint := range constraints {
-		// Group symbols by sector
+		// Group ISINs by sector
 		sectorWeights := make(map[string]float64)
-		for i, symbol := range symbols {
-			sector := constraint.SectorMapper[symbol]
+		for i, isin := range isins { // Use ISIN ✅
+			sector := constraint.SectorMapper[isin] // ISIN lookup ✅
 			if sector != "" {
 				sectorWeights[sector] += x[i]
 			}
@@ -665,8 +689,8 @@ func (mvo *MVOptimizer) addSectorConstraintPenaltyGradient(
 			weight := sectorWeights[sector]
 			if weight < lower {
 				penalty := 2 * penaltyWeight * (lower - weight)
-				for i, symbol := range symbols {
-					if constraint.SectorMapper[symbol] == sector {
+				for i, isin := range isins { // Use ISIN ✅
+					if constraint.SectorMapper[isin] == sector { // ISIN lookup ✅
 						grad[i] -= penalty
 					}
 				}
@@ -678,8 +702,8 @@ func (mvo *MVOptimizer) addSectorConstraintPenaltyGradient(
 			weight := sectorWeights[sector]
 			if weight > upper {
 				penalty := 2 * penaltyWeight * (weight - upper)
-				for i, symbol := range symbols {
-					if constraint.SectorMapper[symbol] == sector {
+				for i, isin := range isins { // Use ISIN ✅
+					if constraint.SectorMapper[isin] == sector { // ISIN lookup ✅
 						grad[i] += penalty
 					}
 				}
@@ -691,10 +715,10 @@ func (mvo *MVOptimizer) addSectorConstraintPenaltyGradient(
 // validateCVaR validates that portfolio CVaR doesn't exceed maximum threshold.
 // Returns error if CVaR validation fails or threshold is exceeded.
 func (mvo *MVOptimizer) validateCVaR(
-	weights map[string]float64,
+	weights map[string]float64,  // ISIN-keyed ✅
 	mu []float64,
 	sigma *mat.Dense,
-	symbols []string,
+	isins []string, // ISIN array ✅ (renamed from symbols)
 ) error {
 	// Skip validation if CVaR calculator or settings service unavailable
 	if mvo.cvarCalculator == nil || mvo.settingsService == nil {
@@ -719,10 +743,10 @@ func (mvo *MVOptimizer) validateCVaR(
 		}
 	}
 
-	// Convert mu to map
+	// Convert mu to ISIN-keyed map
 	expectedReturnsMap := make(map[string]float64)
-	for i, symbol := range symbols {
-		expectedReturnsMap[symbol] = mu[i]
+	for i, isin := range isins { // Use ISIN ✅
+		expectedReturnsMap[isin] = mu[i]
 	}
 
 	// Calculate portfolio CVaR using Monte Carlo simulation
@@ -730,7 +754,7 @@ func (mvo *MVOptimizer) validateCVaR(
 		covMatrixSlice,
 		expectedReturnsMap,
 		weights,
-		symbols,
+		isins, // Use ISINs ✅
 		10000, // numSimulations
 		0.95,  // confidence (95%)
 	)

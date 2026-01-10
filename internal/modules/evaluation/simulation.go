@@ -24,17 +24,24 @@ func SimulateSequence(
 	securities []Security,
 	priceAdjustments map[string]float64,
 ) (PortfolioContext, float64) {
-	// Build securities lookup map
-	securitiesBySymbol := make(map[string]Security)
+	// Build securities lookup map (ISIN-keyed)
+	securitiesByISIN := make(map[string]Security)
 	for _, s := range securities {
-		securitiesBySymbol[s.Symbol] = s
+		if s.ISIN != "" {
+			securitiesByISIN[s.ISIN] = s
+		}
 	}
 
 	currentContext := portfolioContext
 	currentCash := availableCash
 
 	for _, action := range sequence {
-		security, exists := securitiesBySymbol[action.Symbol]
+		isin := action.ISIN
+		if isin == "" {
+			continue // Skip actions without ISIN
+		}
+
+		security, exists := securitiesByISIN[isin] // ISIN key ✅
 		var country, industry *string
 		if exists {
 			country = security.Country
@@ -44,7 +51,7 @@ func SimulateSequence(
 		// Apply price adjustment if provided (for stochastic scenarios)
 		adjustedValueEUR := action.ValueEUR
 		if priceAdjustments != nil {
-			if multiplier, hasPriceAdj := priceAdjustments[action.Symbol]; hasPriceAdj {
+			if multiplier, hasPriceAdj := priceAdjustments[isin]; hasPriceAdj { // ISIN key ✅
 				adjustedPrice := action.Price * multiplier
 				// Recalculate value with adjusted price (maintain same quantity)
 				adjustedValueEUR = float64(action.Quantity) * adjustedPrice
@@ -68,17 +75,17 @@ func SimulateSequence(
 			// Use adjusted value if price adjustments provided
 			sellValue := action.ValueEUR
 			if priceAdjustments != nil {
-				if _, hasPriceAdj := priceAdjustments[action.Symbol]; hasPriceAdj {
+				if _, hasPriceAdj := priceAdjustments[isin]; hasPriceAdj { // ISIN key ✅
 					sellValue = adjustedValueEUR
 				}
 			}
 
-			currentValue := newPositions[action.Symbol]
+			currentValue := newPositions[isin] // ISIN key ✅
 			newValue := maxFloat64(0, currentValue-sellValue)
 			if newValue <= 0 {
-				delete(newPositions, action.Symbol)
+				delete(newPositions, isin) // ISIN key ✅
 			} else {
-				newPositions[action.Symbol] = newValue
+				newPositions[isin] = newValue // ISIN key ✅
 			}
 			currentCash += sellValue
 			// Total portfolio value stays the same - we just converted security to cash
@@ -86,7 +93,7 @@ func SimulateSequence(
 			// Use adjusted value if price adjustments provided
 			buyValue := action.ValueEUR
 			if priceAdjustments != nil {
-				if _, hasPriceAdj := priceAdjustments[action.Symbol]; hasPriceAdj {
+				if _, hasPriceAdj := priceAdjustments[isin]; hasPriceAdj { // ISIN key ✅
 					buyValue = adjustedValueEUR
 				}
 			}
@@ -95,7 +102,7 @@ func SimulateSequence(
 				continue // Skip if can't afford
 			}
 
-			newPositions[action.Symbol] += buyValue
+			newPositions[isin] += buyValue // ISIN key ✅
 
 			// Copy-on-write: Create copies only for maps we're about to modify.
 			// This avoids unnecessary copies when only one type of metadata exists.
@@ -108,7 +115,7 @@ func SimulateSequence(
 					}
 					geographiesCopied = true
 				}
-				newGeographies[action.Symbol] = *country
+				newGeographies[isin] = *country // ISIN key ✅
 			}
 			if industry != nil {
 				if !industriesCopied {
@@ -119,7 +126,7 @@ func SimulateSequence(
 					}
 					industriesCopied = true
 				}
-				newIndustries[action.Symbol] = *industry
+				newIndustries[isin] = *industry // ISIN key ✅
 			}
 
 			currentCash -= buyValue

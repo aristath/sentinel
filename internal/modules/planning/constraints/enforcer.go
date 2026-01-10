@@ -70,10 +70,10 @@ func (e *Enforcer) validateAndAdjustAction(
 	ctx *planningdomain.OpportunityContext,
 	config *planningdomain.PlannerConfiguration,
 ) (bool, planningdomain.ActionCandidate, string) {
-	// Get ISIN from context if available
-	var isin string
-	if domainSec, ok := ctx.StocksBySymbol[action.Symbol]; ok {
-		isin = domainSec.ISIN
+	// Get ISIN from action (now always present)
+	isin := action.ISIN
+	if isin == "" {
+		return false, action, fmt.Sprintf("action missing ISIN for symbol: %s", action.Symbol)
 	}
 
 	// Look up security using ISIN (preferred) or symbol (fallback)

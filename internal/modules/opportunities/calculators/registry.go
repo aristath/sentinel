@@ -153,8 +153,8 @@ func NewPopulatedRegistry(
 	registry.Register(NewAveragingDownCalculator(tagFilter, securityRepo, log))
 	registry.Register(NewOpportunityBuysCalculator(tagFilter, securityRepo, log))
 	registry.Register(NewProfitTakingCalculator(tagFilter, securityRepo, log))
-	registry.Register(NewRebalanceBuysCalculator(log))
-	registry.Register(NewRebalanceSellsCalculator(log))
+	registry.Register(NewRebalanceBuysCalculator(tagFilter, securityRepo, log))
+	registry.Register(NewRebalanceSellsCalculator(tagFilter, securityRepo, log))
 	registry.Register(NewWeightBasedCalculator(securityRepo, log))
 
 	log.Info().

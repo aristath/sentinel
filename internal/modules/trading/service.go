@@ -36,11 +36,11 @@ type TradeRepositoryInterface interface {
 	// GetByIdentifier retrieves trades by symbol or ISIN with optional limit
 	GetByIdentifier(identifier string, limit int) ([]Trade, error)
 
-	// GetRecentlyBoughtSymbols returns map of symbols bought within specified days
-	GetRecentlyBoughtSymbols(days int) (map[string]bool, error)
+	// GetRecentlyBoughtISINs returns map of ISINs bought within specified days (excludes RESEARCH trades)
+	GetRecentlyBoughtISINs(days int) (map[string]bool, error)
 
-	// GetRecentlySoldSymbols returns map of symbols sold within specified days
-	GetRecentlySoldSymbols(days int) (map[string]bool, error)
+	// GetRecentlySoldISINs returns map of ISINs sold within specified days (excludes RESEARCH trades)
+	GetRecentlySoldISINs(days int) (map[string]bool, error)
 
 	// HasRecentSellOrder checks if there was a recent sell order for a symbol within specified hours
 	HasRecentSellOrder(symbol string, hours float64) (bool, error)

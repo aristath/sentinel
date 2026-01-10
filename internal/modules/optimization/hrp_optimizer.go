@@ -44,32 +44,33 @@ type hrpClusterNode struct {
 // 3) Hierarchical clustering (configurable linkage, deterministic tie-break)
 // 4) Quasi-diagonalization (leaf order from dendrogram)
 // 5) Recursive bisection allocation (cluster variance via IVP)
+// All parameters and returns use ISIN keys (not Symbol keys).
 func (hrp *HRPOptimizer) Optimize(
 	covMatrix [][]float64,
-	symbols []string,
+	isins []string, // ISIN array ✅ (renamed from symbols)
 ) (map[string]float64, error) {
-	return hrp.OptimizeWithOptions(covMatrix, symbols, defaultHRPOptions())
+	return hrp.OptimizeWithOptions(covMatrix, isins, defaultHRPOptions())
 }
 
 func (hrp *HRPOptimizer) OptimizeWithOptions(
 	covMatrix [][]float64,
-	symbols []string,
+	isins []string, // ISIN array ✅ (renamed from symbols)
 	opts HRPOptions,
 ) (map[string]float64, error) {
-	if len(symbols) == 0 {
-		return nil, fmt.Errorf("no symbols provided")
+	if len(isins) == 0 {
+		return nil, fmt.Errorf("no ISINs provided")
 	}
 
-	if len(symbols) == 1 {
+	if len(isins) == 1 {
 		// Single asset: all weight to that asset
-		return map[string]float64{symbols[0]: 1.0}, nil
+		return map[string]float64{isins[0]: 1.0}, nil // ISIN key ✅
 	}
 
-	if len(covMatrix) != len(symbols) {
-		return nil, fmt.Errorf("covariance matrix size %d does not match symbols %d", len(covMatrix), len(symbols))
+	if len(covMatrix) != len(isins) {
+		return nil, fmt.Errorf("covariance matrix size %d does not match ISINs %d", len(covMatrix), len(isins))
 	}
 	for i := 0; i < len(covMatrix); i++ {
-		if len(covMatrix[i]) != len(symbols) {
+		if len(covMatrix[i]) != len(isins) {
 			return nil, fmt.Errorf("covariance matrix is not square")
 		}
 	}
@@ -88,17 +89,17 @@ func (hrp *HRPOptimizer) OptimizeWithOptions(
 
 	root := hrp.buildDendrogram(distMatrix, linkage)
 	order := hrp.quasiDiagonalOrder(root)
-	if len(order) != len(symbols) {
+	if len(order) != len(isins) {
 		return nil, fmt.Errorf("invalid HRP order length %d", len(order))
 	}
 
-	weights := make([]float64, len(symbols))
+	weights := make([]float64, len(isins))
 	for i := range weights {
 		weights[i] = 1.0
 	}
 	hrp.recursiveBisectionAllocate(weights, covMatrix, order)
 
-	// Normalize and map back to symbols
+	// Normalize and map back to ISINs
 	sum := 0.0
 	for _, w := range weights {
 		sum += w
@@ -108,8 +109,8 @@ func (hrp *HRPOptimizer) OptimizeWithOptions(
 	}
 
 	result := make(map[string]float64)
-	for i, symbol := range symbols {
-		result[symbol] = weights[i] / sum
+	for i, isin := range isins { // Use ISIN ✅
+		result[isin] = weights[i] / sum // ISIN key ✅
 	}
 
 	return result, nil

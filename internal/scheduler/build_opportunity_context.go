@@ -414,7 +414,6 @@ func (j *BuildOpportunityContextJob) buildOpportunityContext(
 		Positions:                domainPositions,
 		Securities:               domainSecurities,
 		StocksByISIN:             stocksByISIN,
-		StocksBySymbol:           stocksBySymbol,
 		AvailableCashEUR:         availableCashEUR,
 		TotalPortfolioValueEUR:   totalValue,
 		CurrentPrices:            currentPrices,
@@ -488,17 +487,38 @@ func (j *BuildOpportunityContextJob) fetchCurrentPrices(securities []universe.Se
 	//   - Input layer (HERE): Normalizes everything to EUR
 	//   - Planning layer: Works purely in EUR
 	//   - Execution layer: Broker handles native currency conversion when placing orders
+	var eurPricesSymbol map[string]float64
 	if j.priceConversionService != nil {
-		prices = j.priceConversionService.ConvertPricesToEUR(nativePrices, securities)
-		j.log.Info().
-			Int("total", len(securities)).
-			Int("fetched", len(prices)).
-			Msg("Fetched current prices and converted to EUR")
+		eurPricesSymbol = j.priceConversionService.ConvertPricesToEUR(nativePrices, securities)
 	} else {
 		// Fallback: use native prices if service unavailable
 		j.log.Warn().Msg("Price conversion service not available, using native currency prices (may cause valuation errors)")
-		prices = nativePrices
+		eurPricesSymbol = nativePrices
 	}
+
+	// Transform Symbol keys → ISIN keys (internal boundary)
+	symbolToISIN := make(map[string]string)
+	for _, sec := range securities {
+		if sec.ISIN != "" && sec.Symbol != "" {
+			symbolToISIN[sec.Symbol] = sec.ISIN
+		}
+	}
+
+	for symbol, price := range eurPricesSymbol {
+		if isin, ok := symbolToISIN[symbol]; ok {
+			prices[isin] = price // ISIN key ✅
+		} else {
+			j.log.Warn().
+				Str("symbol", symbol).
+				Msg("No ISIN mapping found for symbol, skipping price")
+		}
+	}
+
+	j.log.Info().
+		Int("total", len(securities)).
+		Int("fetched", len(eurPricesSymbol)).
+		Int("mapped_to_isin", len(prices)).
+		Msg("Fetched current prices, converted to EUR, and mapped to ISIN keys")
 
 	return prices
 }
@@ -541,12 +561,9 @@ func (j *BuildOpportunityContextJob) populateCAGRs(securities []universe.Securit
 	}
 
 	// Copy CAGRs and add symbol keys
+	// Direct assignment - ISIN keys only (no duplication)
 	for isin, cagr := range cagrsMap {
-		cagrs[isin] = cagr
-		// Also store by symbol if available
-		if symbol, ok := isinToSymbol[isin]; ok {
-			cagrs[symbol] = cagr
-		}
+		cagrs[isin] = cagr // ISIN key only ✅
 	}
 
 	j.log.Debug().Int("cagr_count", len(cagrs)).Msg("Populated CAGRs for target return filtering")
@@ -564,11 +581,9 @@ func (j *BuildOpportunityContextJob) populateSecurityScores(securities []univers
 
 	// Build ISIN list for securities
 	isinList := make([]string, 0)
-	isinToSymbol := make(map[string]string)
 	for _, sec := range securities {
-		if sec.ISIN != "" && sec.Symbol != "" {
+		if sec.ISIN != "" {
 			isinList = append(isinList, sec.ISIN)
-			isinToSymbol[sec.ISIN] = sec.Symbol
 		}
 	}
 
@@ -584,13 +599,9 @@ func (j *BuildOpportunityContextJob) populateSecurityScores(securities []univers
 		return securityScores
 	}
 
-	// Map scores by symbol (as calculators expect symbol keys)
+	// Direct assignment - ISIN keys only (no duplication)
 	for isin, score := range totalScoresByISIN {
-		if symbol, ok := isinToSymbol[isin]; ok {
-			securityScores[symbol] = score
-		}
-		// Also keep ISIN key for compatibility
-		securityScores[isin] = score
+		securityScores[isin] = score // ISIN key only ✅
 	}
 
 	j.log.Debug().Int("score_count", len(securityScores)).Msg("Populated security scores")
@@ -627,28 +638,13 @@ func (j *BuildOpportunityContextJob) populateQualityScores(securities []universe
 		return longTermScores, fundamentalsScores
 	}
 
-	// Build ISIN -> symbol map for adding symbol keys
-	isinToSymbol := make(map[string]string)
-	for _, sec := range securities {
-		if sec.ISIN != "" && sec.Symbol != "" {
-			isinToSymbol[sec.ISIN] = sec.Symbol
-		}
-	}
-
-	// Copy long-term scores and add symbol keys
+	// Direct assignment - ISIN keys only (no duplication)
 	for isin, score := range longTerm {
-		longTermScores[isin] = score
-		if symbol, ok := isinToSymbol[isin]; ok {
-			longTermScores[symbol] = score
-		}
+		longTermScores[isin] = score // ISIN key only ✅
 	}
 
-	// Copy fundamentals scores and add symbol keys
 	for isin, score := range fundamentals {
-		fundamentalsScores[isin] = score
-		if symbol, ok := isinToSymbol[isin]; ok {
-			fundamentalsScores[symbol] = score
-		}
+		fundamentalsScores[isin] = score // ISIN key only ✅
 	}
 
 	j.log.Debug().
@@ -738,36 +734,17 @@ func (j *BuildOpportunityContextJob) populateValueTrapData(securities []universe
 		return data
 	}
 
-	// Build ISIN -> symbol map for adding symbol keys
-	isinToSymbol := make(map[string]string)
-	for _, sec := range securities {
-		if sec.ISIN != "" && sec.Symbol != "" {
-			isinToSymbol[sec.ISIN] = sec.Symbol
-		}
-	}
-
-	// Copy opportunity scores and add symbol keys
+	// Direct assignment - ISIN keys only (no duplication)
 	for isin, score := range opportunityScores {
-		data.OpportunityScores[isin] = score
-		if symbol, ok := isinToSymbol[isin]; ok {
-			data.OpportunityScores[symbol] = score
-		}
+		data.OpportunityScores[isin] = score // ISIN key only ✅
 	}
 
-	// Copy momentum scores and add symbol keys
 	for isin, score := range momentumScores {
-		data.MomentumScores[isin] = score
-		if symbol, ok := isinToSymbol[isin]; ok {
-			data.MomentumScores[symbol] = score
-		}
+		data.MomentumScores[isin] = score // ISIN key only ✅
 	}
 
-	// Copy volatility and add symbol keys
 	for isin, vol := range volatility {
-		data.Volatility[isin] = vol
-		if symbol, ok := isinToSymbol[isin]; ok {
-			data.Volatility[symbol] = vol
-		}
+		data.Volatility[isin] = vol // ISIN key only ✅
 	}
 
 	// Get regime score from regime repository

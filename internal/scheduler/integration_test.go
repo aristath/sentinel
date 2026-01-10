@@ -232,18 +232,18 @@ func TestBuildOpportunityContext_Integration_EURConversion(t *testing.T) {
 	t.Run("EUR prices converted correctly", func(t *testing.T) {
 		prices := ctx.CurrentPrices
 
-		// EUR security - unchanged
-		assert.InDelta(t, 42.50, prices["VWS.AS"], 0.01, "EUR price should be unchanged")
+		// EUR security - unchanged (ISIN key)
+		assert.InDelta(t, 42.50, prices["NL0000852564"], 0.01, "EUR price should be unchanged")
 
-		// USD security - converted (150 USD × 0.93 = 139.5 EUR)
-		assert.InDelta(t, 139.50, prices["AAPL"], 0.01, "USD price should be converted to EUR")
+		// USD security - converted (150 USD × 0.93 = 139.5 EUR) (ISIN key)
+		assert.InDelta(t, 139.50, prices["US0378331005"], 0.01, "USD price should be converted to EUR")
 
-		// HKD security - converted (497.40 HKD × 0.11 = 54.71 EUR)
+		// HKD security - converted (497.40 HKD × 0.11 = 54.71 EUR) (ISIN key)
 		// This is the critical bug fix - before it was 497.40 EUR (9x error)
-		assert.InDelta(t, 54.71, prices["0700.HK"], 0.01, "HKD price should be converted to EUR (not treated as EUR)")
+		assert.InDelta(t, 54.71, prices["KYG875721634"], 0.01, "HKD price should be converted to EUR (not treated as EUR)")
 
-		// GBP security - converted (25 GBP × 1.17 = 29.25 EUR)
-		assert.InDelta(t, 29.25, prices["BARC.L"], 0.01, "GBP price should be converted to EUR")
+		// GBP security - converted (25 GBP × 1.17 = 29.25 EUR) (ISIN key)
+		assert.InDelta(t, 29.25, prices["GB0031348658"], 0.01, "GBP price should be converted to EUR")
 	})
 
 	// Verify securities have correct data
@@ -291,7 +291,8 @@ func TestBuildOpportunityContext_Integration_MissingExchangeRate(t *testing.T) {
 	securities := []universe.Security{
 		{
 			Symbol:   "TSM",
-			Currency: "TWD", // Taiwan Dollar - no rate available
+			ISIN:     "US8740391003", // Taiwan Semiconductor ISIN
+			Currency: "TWD",          // Taiwan Dollar - no rate available
 			Active:   true,
 			Country:  "TW",
 			Name:     "Taiwan Semiconductor",
@@ -391,8 +392,8 @@ func TestBuildOpportunityContext_Integration_MissingExchangeRate(t *testing.T) {
 	ctx := job.GetOpportunityContext()
 	require.NotNil(t, ctx)
 
-	// Should use native price (graceful degradation)
-	assert.Equal(t, 600.0, ctx.CurrentPrices["TSM"], "Should fallback to native price when exchange rate unavailable")
+	// Should use native price (graceful degradation) - ISIN key
+	assert.Equal(t, 600.0, ctx.CurrentPrices["US8740391003"], "Should fallback to native price when exchange rate unavailable")
 }
 
 // TestBuildOpportunityContext_Integration_NoPriceConversionService tests graceful degradation when service is nil
@@ -400,6 +401,7 @@ func TestBuildOpportunityContext_Integration_NoPriceConversionService(t *testing
 	securities := []universe.Security{
 		{
 			Symbol:   "AAPL",
+			ISIN:     "US0378331005", // Apple Inc. ISIN
 			Currency: "USD",
 			Active:   true,
 			Name:     "Apple Inc.",
@@ -488,6 +490,6 @@ func TestBuildOpportunityContext_Integration_NoPriceConversionService(t *testing
 	ctx := job.GetOpportunityContext()
 	require.NotNil(t, ctx)
 
-	// Should use native price (logged warning about potential valuation errors)
-	assert.Equal(t, 150.0, ctx.CurrentPrices["AAPL"], "Should use native price when conversion service unavailable")
+	// Should use native price (logged warning about potential valuation errors) - ISIN key
+	assert.Equal(t, 150.0, ctx.CurrentPrices["US0378331005"], "Should use native price when conversion service unavailable")
 }

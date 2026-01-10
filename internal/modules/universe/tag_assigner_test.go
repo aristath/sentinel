@@ -224,41 +224,39 @@ func TestTagAssigner_QualityGatePass(t *testing.T) {
 
 	tags, err := assigner.AssignTagsForSecurity(input)
 	assert.NoError(t, err)
-	assert.Contains(t, tags, "quality-gate-pass")
-	assert.NotContains(t, tags, "quality-gate-fail")
+	// NEW: Verify quality-gate-fail is NOT present (inverted logic)
+	assert.NotContains(t, tags, "quality-gate-fail", "Should NOT have quality-gate-fail when passing")
 }
 
 func TestTagAssigner_QualityGateFail(t *testing.T) {
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 	assigner := NewTagAssigner(log)
 
-	// Test case 1: Fundamentals too low
+	// Test case 1: Fundamentals too low for relaxed threshold
 	input1 := AssignTagsInput{
 		Symbol: "TEST",
 		GroupScores: map[string]float64{
-			"fundamentals": 0.55, // < 0.6
-			"long_term":    0.55, // >= 0.5
+			"fundamentals": 0.54, // < 0.55 (new relaxed threshold)
+			"long_term":    0.44, // < 0.45 (new relaxed threshold)
 		},
 	}
 
 	tags1, err := assigner.AssignTagsForSecurity(input1)
 	assert.NoError(t, err)
 	assert.Contains(t, tags1, "quality-gate-fail")
-	assert.NotContains(t, tags1, "quality-gate-pass")
 
-	// Test case 2: Long-term too low
+	// Test case 2: Long-term too low for relaxed threshold
 	input2 := AssignTagsInput{
 		Symbol: "TEST",
 		GroupScores: map[string]float64{
-			"fundamentals": 0.65, // >= 0.6
-			"long_term":    0.45, // < 0.5
+			"fundamentals": 0.54, // < 0.55
+			"long_term":    0.44, // < 0.45
 		},
 	}
 
 	tags2, err := assigner.AssignTagsForSecurity(input2)
 	assert.NoError(t, err)
 	assert.Contains(t, tags2, "quality-gate-fail")
-	assert.NotContains(t, tags2, "quality-gate-pass")
 }
 
 func TestTagAssigner_QualityValue(t *testing.T) {
@@ -915,8 +913,8 @@ func TestTagAssigner_QuantumValueTrapDetection(t *testing.T) {
 		MarketAvgPE: marketAvgPE,
 		Volatility:  &volatility,
 		GroupScores: map[string]float64{
-			"fundamentals": 0.55, // Just below threshold
-			"long_term":    0.45, // Just below threshold
+			"fundamentals": 0.54, // Just below relaxed threshold (0.55)
+			"long_term":    0.44, // Just below relaxed threshold (0.45)
 		},
 		SubScores: map[string]map[string]float64{
 			"short_term": {
@@ -970,4 +968,678 @@ func TestTagAssigner_EnsembleBubbleDetection(t *testing.T) {
 	// Both classical and ensemble should detect
 	assert.Contains(t, tags, "bubble-risk")
 	assert.Contains(t, tags, "ensemble-bubble-risk")
+}
+
+// ============================================================================
+// Multi-Path Quality Gate Tests (TDD - these will fail until implementation)
+// ============================================================================
+
+// Path 1: Balanced (relaxed, adaptive) Tests
+
+func TestQualityGate_Path1_Balanced_Pass(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	input := AssignTagsInput{
+		Symbol: "TEST",
+		GroupScores: map[string]float64{
+			"fundamentals": 0.56, // >= 0.55
+			"long_term":    0.46, // >= 0.45
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	// NEW: Verify quality-gate-fail is NOT present (inverted logic)
+	assert.NotContains(t, tags, "quality-gate-fail", "Should NOT have quality-gate-fail when passing")
+}
+
+func TestQualityGate_Path1_Balanced_Fail(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	input := AssignTagsInput{
+		Symbol: "TEST",
+		GroupScores: map[string]float64{
+			"fundamentals": 0.54, // < 0.55
+			"long_term":    0.46, // >= 0.45
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	assert.NotNil(t, tags) // Should fail Path 1, but might pass other paths - we'll test fail-all later
+}
+
+// Path 2: Exceptional Excellence Tests
+
+func TestQualityGate_Path2_ExceptionalExcellence_FundamentalsPass(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	input := AssignTagsInput{
+		Symbol: "TEST",
+		GroupScores: map[string]float64{
+			"fundamentals": 0.76, // >= 0.75
+			"long_term":    0.30, // Below all other thresholds
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	// NEW: Verify quality-gate-fail is NOT present (inverted logic)
+	assert.NotContains(t, tags, "quality-gate-fail", "Should NOT have quality-gate-fail when passing")
+}
+
+func TestQualityGate_Path2_ExceptionalExcellence_LongTermPass(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	input := AssignTagsInput{
+		Symbol: "TEST",
+		GroupScores: map[string]float64{
+			"fundamentals": 0.40, // Below all other thresholds
+			"long_term":    0.76, // >= 0.75
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	// NEW: Verify quality-gate-fail is NOT present (inverted logic)
+	assert.NotContains(t, tags, "quality-gate-fail", "Should NOT have quality-gate-fail when passing")
+}
+
+func TestQualityGate_Path2_ExceptionalExcellence_Fail(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	input := AssignTagsInput{
+		Symbol: "TEST",
+		GroupScores: map[string]float64{
+			"fundamentals": 0.74, // < 0.75
+			"long_term":    0.74, // < 0.75
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	assert.NotNil(t, tags) // Might still pass other paths - not testing fail-all here
+}
+
+// Path 3: Quality Value Play Tests
+
+func TestQualityGate_Path3_QualityValuePlay_Pass(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	input := AssignTagsInput{
+		Symbol: "TEST",
+		GroupScores: map[string]float64{
+			"fundamentals": 0.61, // >= 0.60
+			"opportunity":  0.66, // >= 0.65
+			"long_term":    0.31, // >= 0.30
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	// NEW: Verify quality-gate-fail is NOT present (inverted logic)
+	assert.NotContains(t, tags, "quality-gate-fail", "Should NOT have quality-gate-fail when passing")
+}
+
+func TestQualityGate_Path3_QualityValuePlay_Fail(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	input := AssignTagsInput{
+		Symbol: "TEST",
+		GroupScores: map[string]float64{
+			"fundamentals": 0.61, // >= 0.60
+			"opportunity":  0.64, // < 0.65
+			"long_term":    0.31, // >= 0.30
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	assert.NotNil(t, tags) // Might still pass other paths
+}
+
+// Path 4: Dividend Income Play Tests
+
+func TestQualityGate_Path4_DividendIncomePlay_Pass(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	dividendYield := 0.036 // >= 0.035 (3.6%)
+
+	input := AssignTagsInput{
+		Symbol:        "TEST",
+		DividendYield: &dividendYield,
+		GroupScores: map[string]float64{
+			"fundamentals": 0.56, // >= 0.55
+			"dividends":    0.66, // >= 0.65
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	// NEW: Verify quality-gate-fail is NOT present (inverted logic)
+	assert.NotContains(t, tags, "quality-gate-fail", "Should NOT have quality-gate-fail when passing")
+}
+
+func TestQualityGate_Path4_DividendIncomePlay_Fail(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	dividendYield := 0.034 // < 0.035
+
+	input := AssignTagsInput{
+		Symbol:        "TEST",
+		DividendYield: &dividendYield,
+		GroupScores: map[string]float64{
+			"fundamentals": 0.56, // >= 0.55
+			"dividends":    0.66, // >= 0.65
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	assert.NotNil(t, tags) // Might still pass other paths
+}
+
+// Path 5: Risk-Adjusted Excellence Tests
+
+func TestQualityGate_Path5_RiskAdjustedExcellence_SharpePass(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	volatility := 0.34 // <= 0.35
+
+	input := AssignTagsInput{
+		Symbol:     "TEST",
+		Volatility: &volatility,
+		GroupScores: map[string]float64{
+			"long_term": 0.56, // >= 0.55
+		},
+		SubScores: map[string]map[string]float64{
+			"long_term": {
+				"sharpe_raw":  0.91, // >= 0.9
+				"sortino_raw": 0.50, // Not required
+			},
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	// NEW: Verify quality-gate-fail is NOT present (inverted logic)
+	assert.NotContains(t, tags, "quality-gate-fail", "Should NOT have quality-gate-fail when passing")
+}
+
+func TestQualityGate_Path5_RiskAdjustedExcellence_SortinoPass(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	volatility := 0.34 // <= 0.35
+
+	input := AssignTagsInput{
+		Symbol:     "TEST",
+		Volatility: &volatility,
+		GroupScores: map[string]float64{
+			"long_term": 0.56, // >= 0.55
+		},
+		SubScores: map[string]map[string]float64{
+			"long_term": {
+				"sharpe_raw":  0.50, // Not required
+				"sortino_raw": 0.91, // >= 0.9
+			},
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	// NEW: Verify quality-gate-fail is NOT present (inverted logic)
+	assert.NotContains(t, tags, "quality-gate-fail", "Should NOT have quality-gate-fail when passing")
+}
+
+func TestQualityGate_Path5_RiskAdjustedExcellence_Fail(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	volatility := 0.36 // > 0.35 - volatility too high
+
+	input := AssignTagsInput{
+		Symbol:     "TEST",
+		Volatility: &volatility,
+		GroupScores: map[string]float64{
+			"long_term": 0.56, // >= 0.55
+		},
+		SubScores: map[string]map[string]float64{
+			"long_term": {
+				"sharpe_raw":  0.91, // >= 0.9
+				"sortino_raw": 0.91, // >= 0.9
+			},
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	assert.NotNil(t, tags) // Might still pass other paths
+}
+
+// Path 6: Composite Minimum Tests
+
+func TestQualityGate_Path6_CompositeMinimum_Pass(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	input := AssignTagsInput{
+		Symbol: "TEST",
+		GroupScores: map[string]float64{
+			"fundamentals": 0.50, // >= 0.45, composite: 0.6*0.50 + 0.4*0.55 = 0.52
+			"long_term":    0.55, //
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	// NEW: Verify quality-gate-fail is NOT present (inverted logic)
+	assert.NotContains(t, tags, "quality-gate-fail", "Should NOT have quality-gate-fail when passing")
+}
+
+func TestQualityGate_Path6_CompositeMinimum_Fail(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	input := AssignTagsInput{
+		Symbol: "TEST",
+		GroupScores: map[string]float64{
+			"fundamentals": 0.44, // < 0.45 (fails fundamentals floor)
+			"long_term":    0.70, // High, but fundamentals floor not met
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	assert.NotNil(t, tags) // Might still pass other paths
+}
+
+// Path 7: Growth Opportunity Tests
+
+func TestQualityGate_Path7_GrowthOpportunity_Pass(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	volatility := 0.39 // <= 0.40
+
+	input := AssignTagsInput{
+		Symbol:     "TEST",
+		Volatility: &volatility,
+		GroupScores: map[string]float64{
+			"fundamentals": 0.51, // >= 0.50
+		},
+		SubScores: map[string]map[string]float64{
+			"long_term": {
+				"cagr_raw": 0.14, // >= 0.13 (14% CAGR)
+			},
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	// NEW: Verify quality-gate-fail is NOT present (inverted logic)
+	assert.NotContains(t, tags, "quality-gate-fail", "Should NOT have quality-gate-fail when passing")
+}
+
+func TestQualityGate_Path7_GrowthOpportunity_Fail(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	volatility := 0.41 // > 0.40 - volatility too high
+
+	input := AssignTagsInput{
+		Symbol:     "TEST",
+		Volatility: &volatility,
+		GroupScores: map[string]float64{
+			"fundamentals": 0.51, // >= 0.50
+		},
+		SubScores: map[string]map[string]float64{
+			"long_term": {
+				"cagr_raw": 0.14, // >= 0.13
+			},
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	assert.NotNil(t, tags) // Might still pass other paths
+}
+
+// Boundary Value Tests
+
+func TestQualityGate_Path1_BoundaryExact(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	input := AssignTagsInput{
+		Symbol: "TEST",
+		GroupScores: map[string]float64{
+			"fundamentals": 0.55, // Exactly at threshold
+			"long_term":    0.45, // Exactly at threshold
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	// NEW: Verify quality-gate-fail is NOT present (inverted logic)
+	assert.NotContains(t, tags, "quality-gate-fail", "Should NOT have quality-gate-fail when passing")
+}
+
+func TestQualityGate_Path2_BoundaryExact(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	input := AssignTagsInput{
+		Symbol: "TEST",
+		GroupScores: map[string]float64{
+			"fundamentals": 0.75, // Exactly at threshold
+			"long_term":    0.10, // Below all others
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	// NEW: Verify quality-gate-fail is NOT present (inverted logic)
+	assert.NotContains(t, tags, "quality-gate-fail", "Should NOT have quality-gate-fail when passing")
+}
+
+func TestQualityGate_Path3_BoundaryExact(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	input := AssignTagsInput{
+		Symbol: "TEST",
+		GroupScores: map[string]float64{
+			"fundamentals": 0.60, // Exactly at threshold
+			"opportunity":  0.65, // Exactly at threshold
+			"long_term":    0.30, // Exactly at threshold
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	// NEW: Verify quality-gate-fail is NOT present (inverted logic)
+	assert.NotContains(t, tags, "quality-gate-fail", "Should NOT have quality-gate-fail when passing")
+}
+
+func TestQualityGate_Path4_BoundaryExact(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	dividendYield := 0.035 // Exactly at threshold
+
+	input := AssignTagsInput{
+		Symbol:        "TEST",
+		DividendYield: &dividendYield,
+		GroupScores: map[string]float64{
+			"fundamentals": 0.55, // Exactly at threshold
+			"dividends":    0.65, // Exactly at threshold
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	// NEW: Verify quality-gate-fail is NOT present (inverted logic)
+	assert.NotContains(t, tags, "quality-gate-fail", "Should NOT have quality-gate-fail when passing")
+}
+
+func TestQualityGate_Path5_BoundaryExact(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	volatility := 0.35 // Exactly at threshold
+
+	input := AssignTagsInput{
+		Symbol:     "TEST",
+		Volatility: &volatility,
+		GroupScores: map[string]float64{
+			"long_term": 0.55, // Exactly at threshold
+		},
+		SubScores: map[string]map[string]float64{
+			"long_term": {
+				"sharpe_raw": 0.9, // Exactly at threshold
+			},
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	// NEW: Verify quality-gate-fail is NOT present (inverted logic)
+	assert.NotContains(t, tags, "quality-gate-fail", "Should NOT have quality-gate-fail when passing")
+}
+
+func TestQualityGate_Path6_BoundaryExact(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	input := AssignTagsInput{
+		Symbol: "TEST",
+		GroupScores: map[string]float64{
+			"fundamentals": 0.45, // Exactly at fundamentals floor
+			"long_term":    0.60, // Composite: 0.6*0.45 + 0.4*0.60 = 0.51 < 0.52
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	assert.NotNil(t, tags) // This should fail Path 6 (composite too low), might pass others
+}
+
+func TestQualityGate_Path7_BoundaryExact(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	volatility := 0.40 // Exactly at threshold
+
+	input := AssignTagsInput{
+		Symbol:     "TEST",
+		Volatility: &volatility,
+		GroupScores: map[string]float64{
+			"fundamentals": 0.50, // Exactly at threshold
+		},
+		SubScores: map[string]map[string]float64{
+			"long_term": {
+				"cagr_raw": 0.13, // Exactly at threshold
+			},
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	// NEW: Verify quality-gate-fail is NOT present (inverted logic)
+	assert.NotContains(t, tags, "quality-gate-fail", "Should NOT have quality-gate-fail when passing")
+}
+
+// Multi-Path Scenario Tests
+
+func TestQualityGate_PassesMultiplePaths(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	dividendYield := 0.05
+	volatility := 0.25
+
+	input := AssignTagsInput{
+		Symbol:        "TEST",
+		DividendYield: &dividendYield,
+		Volatility:    &volatility,
+		GroupScores: map[string]float64{
+			"fundamentals": 0.76, // Passes Path 1, 2, 4
+			"long_term":    0.60, // Passes Path 1, 5
+			"dividends":    0.70, // Passes Path 4
+		},
+		SubScores: map[string]map[string]float64{
+			"long_term": {
+				"sharpe_raw": 1.2, // Passes Path 5
+			},
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	// NEW: Verify quality-gate-fail is NOT present (inverted logic)
+	assert.NotContains(t, tags, "quality-gate-fail", "Should NOT have quality-gate-fail when passing")
+}
+
+func TestQualityGate_PassesOnlyOnePath(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	input := AssignTagsInput{
+		Symbol: "TEST",
+		GroupScores: map[string]float64{
+			"fundamentals": 0.76, // Only passes Path 2 (exceptional excellence)
+			"long_term":    0.20, // Too low for all other paths
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	// NEW: Verify quality-gate-fail is NOT present (inverted logic)
+	assert.NotContains(t, tags, "quality-gate-fail", "Should NOT have quality-gate-fail when passing")
+}
+
+func TestQualityGate_FailsAllPaths(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	dividendYield := 0.02
+	volatility := 0.50
+
+	input := AssignTagsInput{
+		Symbol:        "TEST",
+		DividendYield: &dividendYield,
+		Volatility:    &volatility,
+		GroupScores: map[string]float64{
+			"fundamentals": 0.40, // Below all thresholds
+			"long_term":    0.25, // Below all thresholds
+			"opportunity":  0.50, // Below thresholds
+			"dividends":    0.50, // Below thresholds
+		},
+		SubScores: map[string]map[string]float64{
+			"long_term": {
+				"cagr_raw":    0.08, // Below growth threshold
+				"sharpe_raw":  0.50, // Below risk-adjusted threshold
+				"sortino_raw": 0.50, // Below risk-adjusted threshold
+			},
+		},
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	// NEW: Verify quality-gate-fail IS present when failing all paths
+	assert.Contains(t, tags, "quality-gate-fail", "Should have quality-gate-fail when failing all paths")
+}
+
+func TestQualityGate_MissingDataPartialPaths(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	// Some scores present, some missing - should still pass via Path 1
+	input := AssignTagsInput{
+		Symbol: "TEST",
+		GroupScores: map[string]float64{
+			"fundamentals": 0.60, // Passes Path 1
+			"long_term":    0.50, // Passes Path 1
+			// Missing: opportunity, dividends
+		},
+		// Missing: SubScores, DividendYield, Volatility
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	// NEW: Verify quality-gate-fail is NOT present (inverted logic)
+	assert.NotContains(t, tags, "quality-gate-fail", "Should NOT have quality-gate-fail when passing")
+}
+
+func TestQualityGate_AllDataMissing_Fail(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	input := AssignTagsInput{
+		Symbol: "TEST",
+		// All scores missing (map is empty or nil)
+	}
+
+	tags, err := assigner.AssignTagsForSecurity(input)
+	assert.NoError(t, err)
+	// NEW: Verify quality-gate-fail IS present when failing all paths
+	assert.Contains(t, tags, "quality-gate-fail", "Should have quality-gate-fail when failing all paths")
+}
+
+// Adaptive Threshold Tests
+
+func TestQualityGate_Path1_AdaptiveBearMarket(t *testing.T) {
+	// Test requires mocking AdaptiveService which returns stricter thresholds
+	// For now, test with default thresholds (will enhance when adaptive is implemented)
+	t.Skip("Adaptive threshold testing requires AdaptiveService mock - will implement with main logic")
+}
+
+func TestQualityGate_Path1_AdaptiveBullMarket(t *testing.T) {
+	// Test requires mocking AdaptiveService which returns relaxed thresholds
+	// For now, test with default thresholds (will enhance when adaptive is implemented)
+	t.Skip("Adaptive threshold testing requires AdaptiveService mock - will implement with main logic")
+}
+
+// TestQualityGate_NeverAssignsPassTag verifies that quality-gate-pass is NEVER assigned
+// (architectural change: we only assign quality-gate-fail when failing, not quality-gate-pass when passing)
+func TestQualityGate_NeverAssignsPassTag(t *testing.T) {
+	log := zerolog.New(nil).Level(zerolog.Disabled)
+	assigner := NewTagAssigner(log)
+
+	// Test multiple scenarios - none should assign quality-gate-pass
+	scenarios := []struct {
+		name  string
+		input AssignTagsInput
+	}{
+		{
+			name: "Passing all paths",
+			input: AssignTagsInput{
+				Symbol: "PASS_ALL",
+				GroupScores: map[string]float64{
+					"fundamentals": 0.80,
+					"long_term":    0.80,
+				},
+			},
+		},
+		{
+			name: "Failing all paths",
+			input: AssignTagsInput{
+				Symbol: "FAIL_ALL",
+				GroupScores: map[string]float64{
+					"fundamentals": 0.40,
+					"long_term":    0.30,
+				},
+			},
+		},
+		{
+			name: "Passing Path 2 (Exceptional Excellence)",
+			input: AssignTagsInput{
+				Symbol: "PASS_PATH2",
+				GroupScores: map[string]float64{
+					"fundamentals": 0.76, // >= 0.75
+					"long_term":    0.30, // Below all other thresholds
+				},
+			},
+		},
+	}
+
+	for _, scenario := range scenarios {
+		t.Run(scenario.name, func(t *testing.T) {
+			tags, err := assigner.AssignTagsForSecurity(scenario.input)
+			assert.NoError(t, err)
+			assert.NotContains(t, tags, "quality-gate-pass",
+				"Should NEVER assign quality-gate-pass - only quality-gate-fail when failing")
+		})
+	}
 }

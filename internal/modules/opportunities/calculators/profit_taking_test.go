@@ -39,6 +39,10 @@ func (m *mockSecurityRepo) GetTagsForSecurity(symbol string) ([]string, error) {
 	return []string{}, nil
 }
 
+func (m *mockSecurityRepo) GetByTags(tags []string) ([]domain.Security, error) {
+	return []domain.Security{}, nil
+}
+
 func TestProfitTakingCalculator_MaxSellPercentage(t *testing.T) {
 	log := zerolog.Nop()
 	tagFilter := &mockTagFilter{sellCandidates: []string{}}
@@ -115,8 +119,8 @@ func TestProfitTakingCalculator_MaxSellPercentage(t *testing.T) {
 				Securities:        []domain.Security{security},
 				CurrentPrices:     map[string]float64{"US1234567890": currentPrice},
 				StocksByISIN:      map[string]domain.Security{"US1234567890": security},
-				IneligibleISINs: map[string]bool{},
-				RecentlySoldISINs:      map[string]bool{},
+				IneligibleISINs:   map[string]bool{},
+				RecentlySoldISINs: map[string]bool{},
 				AllowSell:         true,
 			}
 
@@ -171,8 +175,8 @@ func TestProfitTakingCalculator_MaxSellPercentage_WithSellPercentageParam(t *tes
 		Securities:        []domain.Security{security},
 		CurrentPrices:     map[string]float64{"US1234567890": 15.0},
 		StocksByISIN:      map[string]domain.Security{"US1234567890": security},
-		IneligibleISINs: map[string]bool{},
-		RecentlySoldISINs:      map[string]bool{},
+		IneligibleISINs:   map[string]bool{},
+		RecentlySoldISINs: map[string]bool{},
 		AllowSell:         true,
 	}
 
@@ -256,8 +260,8 @@ func TestProfitTakingCalculator_NoMaxSellPercentage(t *testing.T) {
 		Securities:        []domain.Security{security},
 		CurrentPrices:     map[string]float64{"US1234567890": 15.0},
 		StocksByISIN:      map[string]domain.Security{"US1234567890": security},
-		IneligibleISINs: map[string]bool{},
-		RecentlySoldISINs:      map[string]bool{},
+		IneligibleISINs:   map[string]bool{},
+		RecentlySoldISINs: map[string]bool{},
 		AllowSell:         true,
 	}
 

@@ -171,21 +171,21 @@ func (m *mockTradeRepository) GetByIdentifier(identifier string, limit int) ([]T
 	return m.GetBySymbol(identifier, limit)
 }
 
-func (m *mockTradeRepository) GetRecentlyBoughtSymbols(days int) (map[string]bool, error) {
+func (m *mockTradeRepository) GetRecentlyBoughtISINs(days int) (map[string]bool, error) {
 	result := make(map[string]bool)
 	for _, trade := range m.trades {
-		if trade.Side == TradeSideBuy {
-			result[trade.Symbol] = true
+		if trade.Side == TradeSideBuy && trade.ISIN != "" {
+			result[trade.ISIN] = true
 		}
 	}
 	return result, nil
 }
 
-func (m *mockTradeRepository) GetRecentlySoldSymbols(days int) (map[string]bool, error) {
+func (m *mockTradeRepository) GetRecentlySoldISINs(days int) (map[string]bool, error) {
 	result := make(map[string]bool)
 	for _, trade := range m.trades {
-		if trade.Side == TradeSideSell {
-			result[trade.Symbol] = true
+		if trade.Side == TradeSideSell && trade.ISIN != "" {
+			result[trade.ISIN] = true
 		}
 	}
 	return result, nil

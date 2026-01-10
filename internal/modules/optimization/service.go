@@ -128,11 +128,10 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 		return os.errorResult(timestamp, settings.Blend, "No active securities"), nil
 	}
 
-	// Extract symbols for covariance matrix building
-	// Note: RiskModelBuilder.fetchPriceHistory will convert symbols to ISINs internally
-	symbols := make([]string, len(activeSecurities))
+	// Extract ISINs for covariance matrix building and optimization
+	isins := make([]string, len(activeSecurities))
 	for i, sec := range activeSecurities {
-		symbols[i] = sec.Symbol
+		isins[i] = sec.ISIN // Use ISIN ✅
 	}
 
 	// 1. Calculate expected returns
@@ -176,7 +175,7 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 
 	// 3. Build covariance matrix
 	os.log.Info().Msg("Building covariance matrix")
-	covMatrix, _, correlations, err := os.riskBuilder.BuildCovarianceMatrix(symbols, DefaultLookbackDays)
+	covMatrix, _, correlations, err := os.riskBuilder.BuildCovarianceMatrix(isins, DefaultLookbackDays) // Use ISINs ✅
 	if err != nil {
 		return nil, fmt.Errorf("failed to build covariance matrix: %w", err)
 	}
@@ -192,9 +191,9 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 
 		// Calculate market equilibrium weights (use equal weights as proxy for market cap)
 		marketWeights := make(map[string]float64)
-		equalWeight := 1.0 / float64(len(symbols))
-		for _, symbol := range symbols {
-			marketWeights[symbol] = equalWeight
+		equalWeight := 1.0 / float64(len(isins))
+		for _, isin := range isins { // Use ISIN ✅
+			marketWeights[isin] = equalWeight // ISIN key ✅
 		}
 
 		// Risk aversion parameter (lambda) - typically 2-4, use 3 as default
@@ -212,12 +211,12 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 		}
 
 		// Create views for securities with significantly different returns
-		for symbol, ret := range expectedReturns {
+		for isin, ret := range expectedReturns { // Use ISIN ✅
 			if ret > avgReturn*1.1 {
 				// Outperform view
 				views = append(views, View{
 					Type:       "absolute",
-					Symbol:     symbol,
+					Symbol:     isin, // ISIN field (Symbol field name kept for compatibility) ✅
 					Return:     ret,
 					Confidence: 0.6, // Moderate confidence
 				})
@@ -225,7 +224,7 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 				// Underperform view
 				views = append(views, View{
 					Type:       "absolute",
-					Symbol:     symbol,
+					Symbol:     isin, // ISIN field (Symbol field name kept for compatibility) ✅
 					Return:     ret,
 					Confidence: 0.6,
 				})
@@ -242,7 +241,7 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 			marketWeights,
 			views,
 			covMatrix,
-			symbols,
+			isins, // Use ISINs ✅
 			tau,
 			riskAversion,
 		)
@@ -271,7 +270,7 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 		state.CurrentPrices,
 		expectedReturns,
 		covMatrix,
-		symbols,
+		isins, // Use ISINs ✅
 		regimeScore,
 	)
 	if err != nil {
@@ -311,7 +310,7 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 	// Long horizon: DefaultLookbackDays (~1y)
 	// Short horizon: 30d
 	regimeLongCov, _, _, errLong := os.riskBuilder.BuildRegimeAwareCovarianceMatrix(
-		symbols,
+		isins, // Use ISINs ✅
 		DefaultLookbackDays,
 		regimeScore,
 		RegimeAwareRiskOptions{},
@@ -323,7 +322,7 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 
 		// Try building short-horizon regime-aware covariance and combine if available.
 		regimeShortCov, _, _, errShort := os.riskBuilder.BuildRegimeAwareCovarianceMatrix(
-			symbols,
+			isins, // Use ISINs ✅
 			30,
 			regimeScore,
 			RegimeAwareRiskOptions{},
@@ -344,10 +343,10 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 			}
 		}
 
-		hrpCorrelations = os.riskBuilder.getCorrelations(hrpCov, symbols, HighCorrelationThreshold)
+		hrpCorrelations = os.riskBuilder.getCorrelations(hrpCov, isins, HighCorrelationThreshold) // Use ISINs ✅
 	}
 
-	hrpWeights, hrpErr := os.runHRP(hrpCov, symbols, regimeScore)
+	hrpWeights, hrpErr := os.runHRP(hrpCov, isins, regimeScore) // Use ISINs ✅
 	if hrpErr != nil {
 		os.log.Warn().Err(hrpErr).Msg("HRP optimization failed")
 	}
@@ -438,7 +437,7 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 			covMatrix,
 			expectedReturns,
 			targetWeights,
-			symbols,
+			isins, // Use ISINs ✅
 			10000, // Number of simulations
 			confidence,
 		)
@@ -488,7 +487,7 @@ func (os *OptimizerService) Optimize(state PortfolioState, settings Settings) (*
 
 // runMeanVariance runs Mean-Variance optimization using native Go implementation.
 func (os *OptimizerService) runMeanVariance(
-	expectedReturns map[string]float64,
+	expectedReturns map[string]float64, // ISIN-keyed ✅
 	covMatrix [][]float64,
 	constraints Constraints,
 	targetReturn float64,
@@ -510,10 +509,11 @@ func (os *OptimizerService) runMeanVariance(
 		}
 
 		weights, achievedReturn, err := os.mvOptimizer.Optimize(
-			expectedReturns,
+			expectedReturns,                // ISIN-keyed ✅
 			covMatrix,
-			constraints.Symbols,
-			constraints.WeightBounds,
+			constraints.ISINs,              // ISIN array ✅ (renamed from Symbols)
+			constraints.MinWeights,         // ISIN-keyed ✅ (replaces WeightBounds)
+			constraints.MaxWeights,         // ISIN-keyed ✅ (replaces WeightBounds)
 			constraints.SectorConstraints,
 			strategy,
 			targetRet,
@@ -548,20 +548,20 @@ func (os *OptimizerService) runMeanVariance(
 }
 
 // runHRP runs Hierarchical Risk Parity optimization using native Go implementation.
-func (os *OptimizerService) runHRP(covMatrix [][]float64, symbols []string, regimeScore float64) (map[string]float64, error) {
-	if len(symbols) < 2 {
-		return nil, fmt.Errorf("HRP needs at least 2 symbols, got %d", len(symbols))
+func (os *OptimizerService) runHRP(covMatrix [][]float64, isins []string, regimeScore float64) (map[string]float64, error) {
+	if len(isins) < 2 {
+		return nil, fmt.Errorf("HRP needs at least 2 ISINs, got %d", len(isins)) // Use ISINs ✅
 	}
 
 	// Call native HRP optimizer
 	opts := HRPOptions{Linkage: hrpLinkageForRegime(regimeScore)}
-	weights, err := os.hrpOptimizer.OptimizeWithOptions(covMatrix, symbols, opts)
+	weights, err := os.hrpOptimizer.OptimizeWithOptions(covMatrix, isins, opts) // Use ISINs ✅
 	if err != nil {
 		return nil, fmt.Errorf("HRP optimization failed: %w", err)
 	}
 
 	os.log.Info().
-		Int("num_symbols", len(weights)).
+		Int("num_isins", len(weights)).
 		Str("hrp_linkage", string(opts.Linkage)).
 		Msg("HRP optimization succeeded")
 
@@ -593,7 +593,7 @@ func (os *OptimizerService) blendWeights(
 	}
 
 	os.log.Debug().
-		Int("num_symbols", len(blended)).
+		Int("num_isins", len(blended)).
 		Float64("blend", blend).
 		Msg("Blended MV and HRP weights")
 
@@ -602,25 +602,21 @@ func (os *OptimizerService) blendWeights(
 
 // clampWeightsToBounds clamps weights to their constraint bounds.
 func (os *OptimizerService) clampWeightsToBounds(
-	weights map[string]float64,
+	weights map[string]float64,  // ISIN-keyed ✅
 	constraints Constraints,
 ) map[string]float64 {
 	clamped := make(map[string]float64)
 
-	// Build symbol -> index map
-	symbolIndex := make(map[string]int)
-	for i, symbol := range constraints.Symbols {
-		symbolIndex[symbol] = i
-	}
+	for isin, weight := range weights { // Use ISIN ✅
+		// Look up bounds directly from ISIN-keyed maps
+		lower, hasLower := constraints.MinWeights[isin]
+		upper, hasUpper := constraints.MaxWeights[isin]
 
-	for symbol, weight := range weights {
-		if idx, ok := symbolIndex[symbol]; ok {
-			bounds := constraints.WeightBounds[idx]
-			lower := bounds[0]
-			upper := bounds[1]
-			clamped[symbol] = math.Max(lower, math.Min(upper, weight))
+		if hasLower && hasUpper {
+			clamped[isin] = math.Max(lower, math.Min(upper, weight)) // ISIN key ✅
 		} else {
-			clamped[symbol] = weight
+			// If bounds not specified, use weight as-is
+			clamped[isin] = weight // ISIN key ✅
 		}
 	}
 

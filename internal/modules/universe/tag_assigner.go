@@ -87,8 +87,6 @@ func (ta *TagAssigner) AssignTagsForSecurity(input AssignTagsInput) ([]string, e
 	opportunityScore := getScore(input.GroupScores, "opportunity")
 	fundamentalsScore := getScore(input.GroupScores, "fundamentals")
 	longTermScore := getScore(input.GroupScores, "long_term")
-	technicalScore := getScore(input.GroupScores, "technicals")
-	shortTermScore := getScore(input.GroupScores, "short_term")
 	dividendScore := getScore(input.GroupScores, "dividends")
 	totalScore := 0.0
 	if input.Score != nil {
@@ -170,11 +168,12 @@ func (ta *TagAssigner) AssignTagsForSecurity(input AssignTagsInput) ([]string, e
 	// === OPPORTUNITY TAGS ===
 
 	// Value Opportunities
-	if opportunityScore > 0.7 && (below52wHighPct > 20.0 || peVsMarket < -0.20) {
+	if opportunityScore > 0.65 && (below52wHighPct > 15.0 || peVsMarket < -0.20) {
 		tags = append(tags, "value-opportunity")
 	}
 
-	if below52wHighPct > 30.0 && peVsMarket < -0.20 {
+	// Deep value: 25%+ discount AND cheap PE, OR 30%+ discount alone
+	if (below52wHighPct > 25.0 && peVsMarket < -0.20) || below52wHighPct > 30.0 {
 		tags = append(tags, "deep-value")
 	}
 
@@ -187,21 +186,21 @@ func (ta *TagAssigner) AssignTagsForSecurity(input AssignTagsInput) ([]string, e
 	}
 
 	// Quality Opportunities
-	if fundamentalsScore > 0.8 && longTermScore > 0.75 {
+	if fundamentalsScore > 0.7 && longTermScore > 0.7 {
 		tags = append(tags, "high-quality")
 	}
 
-	if fundamentalsScore > 0.75 && volatility < 0.20 && consistencyScore > 0.8 {
+	if fundamentalsScore > 0.75 && volatility < 0.25 && consistencyScore > 0.75 {
 		tags = append(tags, "stable")
 	}
 
 	// Consistent grower: requires both consistency and meaningful growth
-	// 10% CAGR threshold ensures meaningful growth for a retirement fund targeting 11%
-	if consistencyScore > 0.8 && cagrRaw > 0.10 {
+	// 9% CAGR threshold ensures meaningful growth for a retirement fund targeting 11%
+	if consistencyScore > 0.75 && cagrRaw > 0.09 {
 		tags = append(tags, "consistent-grower")
 	}
 
-	if fundamentalsScore > 0.8 {
+	if fundamentalsScore > 0.75 {
 		tags = append(tags, "strong-fundamentals")
 	}
 
@@ -212,47 +211,36 @@ func (ta *TagAssigner) AssignTagsForSecurity(input AssignTagsInput) ([]string, e
 		tags = append(tags, "oversold")
 	}
 
-	if distanceFromEMA < -0.05 {
-		tags = append(tags, "below-ema")
-	}
-
-	// Only tag as bollinger-oversold if Bollinger position is actually available
-	if input.BollingerPosition != nil && *input.BollingerPosition < 0.2 {
-		tags = append(tags, "bollinger-oversold")
-	}
+	// Removed: below-ema and bollinger-oversold tags (unused)
 
 	// Dividend Opportunities
-	if dividendYield > 0.06 {
+	if dividendYield > 0.04 {
 		tags = append(tags, "high-dividend")
 	}
 
-	if dividendScore > 0.7 && dividendYield > 0.03 {
+	if dividendScore > 0.55 && dividendYield > 0.025 {
 		tags = append(tags, "dividend-opportunity")
 	}
 
-	if dividendConsistencyScore > 0.8 && input.FiveYearAvgDivYield != nil && dividendYield > 0 {
+	if dividendConsistencyScore > 0.7 && input.FiveYearAvgDivYield != nil && dividendYield > 0 {
 		if *input.FiveYearAvgDivYield > dividendYield {
 			tags = append(tags, "dividend-grower")
 		}
 	}
 
 	// Momentum Opportunities
-	if shortTermScore > 0.7 && momentumScore > 0.05 && momentumScore < 0.15 {
-		tags = append(tags, "positive-momentum")
-	}
+	// Removed: positive-momentum tag (unused)
 
-	if momentumScore < 0 && fundamentalsScore > 0.7 && below52wHighPct > 15.0 {
+	if momentumScore < 0 && fundamentalsScore > 0.65 && below52wHighPct > 12.0 {
 		tags = append(tags, "recovery-candidate")
 	}
 
 	// Score-Based Opportunities
-	if totalScore > 0.75 {
+	if totalScore > 0.7 {
 		tags = append(tags, "high-score")
 	}
 
-	if totalScore > 0.7 && opportunityScore > 0.7 {
-		tags = append(tags, "good-opportunity")
-	}
+	// Removed: good-opportunity tag (unused)
 
 	// === DANGER TAGS ===
 
@@ -274,15 +262,7 @@ func (ta *TagAssigner) AssignTagsForSecurity(input AssignTagsInput) ([]string, e
 		tags = append(tags, "overvalued")
 	}
 
-	if below52wHighPct < 5.0 && input.Price52wHigh != nil && input.CurrentPrice != nil {
-		if *input.CurrentPrice > *input.Price52wHigh*0.95 {
-			tags = append(tags, "near-52w-high")
-		}
-	}
-
-	if distanceFromEMA > 0.10 {
-		tags = append(tags, "above-ema")
-	}
+	// Removed: near-52w-high and above-ema tags (unused)
 
 	// Only tag as overbought if RSI is actually available (not nil) and above 70
 	// Defaulting to 0.0 when RSI is missing would incorrectly tag securities
@@ -328,21 +308,9 @@ func (ta *TagAssigner) AssignTagsForSecurity(input AssignTagsInput) ([]string, e
 	if targetWeight > 0 {
 		deviation := positionWeight - targetWeight
 
-		if math.Abs(deviation) <= 0.01 {
-			tags = append(tags, "target-aligned")
-		} else if deviation > 0.03 {
+		// Only tag significant deviations (keep needs-rebalance, removed unused weight tags)
+		if deviation > 0.03 || deviation < -0.03 {
 			tags = append(tags, "needs-rebalance")
-			if deviation > 0.02 {
-				// Keep existing overweight tag logic (already added above)
-				_ = deviation // Explicitly acknowledge we're checking but not modifying
-			}
-		} else if deviation < -0.03 {
-			tags = append(tags, "needs-rebalance")
-			tags = append(tags, "underweight")
-		} else if deviation > 0.01 {
-			tags = append(tags, "slightly-overweight")
-		} else if deviation < -0.01 {
-			tags = append(tags, "slightly-underweight")
 		}
 	}
 
@@ -353,7 +321,7 @@ func (ta *TagAssigner) AssignTagsForSecurity(input AssignTagsInput) ([]string, e
 		tags = append(tags, "low-risk")
 	}
 
-	if volatility >= 0.15 && volatility <= 0.30 && fundamentalsScore > 0.6 {
+	if volatility >= 0.15 && volatility <= 0.30 && fundamentalsScore > 0.55 {
 		tags = append(tags, "medium-risk")
 	}
 
@@ -370,24 +338,15 @@ func (ta *TagAssigner) AssignTagsForSecurity(input AssignTagsInput) ([]string, e
 		tags = append(tags, "value")
 	}
 
-	if dividendYield > 0.04 && dividendScore > 0.7 {
+	if dividendYield > 0.04 && dividendScore > 0.65 {
 		tags = append(tags, "dividend-focused")
 	}
 
-	// Time Horizon
-	if longTermScore > 0.75 && consistencyScore > 0.8 {
-		tags = append(tags, "long-term")
-	}
+	// === MULTI-PATH QUALITY GATE TAGS ===
 
-	if technicalScore > 0.7 && opportunityScore > 0.7 && momentumScore > 0 {
-		tags = append(tags, "short-term-opportunity")
-	}
-
-	// === NEW: QUALITY GATE TAGS ===
-
-	// Get adaptive quality gate thresholds if available, otherwise use defaults
-	fundamentalsThreshold := 0.6
-	longTermThreshold := 0.5
+	// Get adaptive quality gate thresholds (for Path 1 only)
+	fundamentalsThreshold := 0.55 // Relaxed from 0.6
+	longTermThreshold := 0.45     // Relaxed from 0.5
 
 	if ta.adaptiveService != nil {
 		// Get current regime score if provider is available, otherwise use neutral (0.0)
@@ -407,11 +366,72 @@ func (ta *TagAssigner) AssignTagsForSecurity(input AssignTagsInput) ([]string, e
 		}
 	}
 
-	// Quality gate pass/fail
-	if fundamentalsScore >= fundamentalsThreshold && longTermScore >= longTermThreshold {
-		tags = append(tags, "quality-gate-pass")
-	} else {
+	// Extract additional scores for multi-path evaluation
+	sharpeRaw := getSubScore(input.SubScores, "long_term", "sharpe_raw")
+	sortinoRatioRaw := getSubScore(input.SubScores, "long_term", "sortino_raw")
+
+	// Evaluate all 7 paths - ANY path passes
+	passes := false
+	passedPath := ""
+
+	// Path 1: Balanced (adaptive)
+	if evaluatePath1Balanced(fundamentalsScore, longTermScore, fundamentalsThreshold, longTermThreshold) {
+		passes = true
+		passedPath = "balanced"
+	}
+
+	// Path 2: Exceptional Excellence
+	if !passes && evaluatePath2ExceptionalExcellence(fundamentalsScore, longTermScore) {
+		passes = true
+		passedPath = "exceptional_excellence"
+	}
+
+	// Path 3: Quality Value Play
+	if !passes && evaluatePath3QualityValuePlay(fundamentalsScore, opportunityScore, longTermScore) {
+		passes = true
+		passedPath = "quality_value"
+	}
+
+	// Path 4: Dividend Income Play
+	if !passes && evaluatePath4DividendIncomePlay(fundamentalsScore, dividendScore, dividendYield) {
+		passes = true
+		passedPath = "dividend_income"
+	}
+
+	// Path 5: Risk-Adjusted Excellence
+	if !passes && evaluatePath5RiskAdjustedExcellence(longTermScore, sharpeRaw, sortinoRatioRaw, volatility) {
+		passes = true
+		passedPath = "risk_adjusted"
+	}
+
+	// Path 6: Composite Minimum
+	if !passes && evaluatePath6CompositeMinimum(fundamentalsScore, longTermScore) {
+		passes = true
+		passedPath = "composite"
+	}
+
+	// Path 7: Growth Opportunity
+	if !passes && evaluatePath7GrowthOpportunity(cagrRaw, fundamentalsScore, volatility) {
+		passes = true
+		passedPath = "growth"
+	}
+
+	// Assign quality gate tag (only when failing - cleaner approach)
+	// Architectural change: Tag what's wrong, not what's right
+	if !passes {
 		tags = append(tags, "quality-gate-fail")
+		ta.log.Debug().
+			Str("symbol", input.Symbol).
+			Float64("fundamentals", fundamentalsScore).
+			Float64("long_term", longTermScore).
+			Msg("Quality gate failed - no paths satisfied")
+	} else {
+		ta.log.Debug().
+			Str("symbol", input.Symbol).
+			Str("path", passedPath).
+			Float64("fundamentals", fundamentalsScore).
+			Float64("long_term", longTermScore).
+			Msg("Quality gate passed")
 	}
 
 	// Quality value (high quality + value opportunity)
@@ -433,15 +453,15 @@ func (ta *TagAssigner) AssignTagsForSecurity(input AssignTagsInput) ([]string, e
 	// === NEW: BUBBLE DETECTION TAGS ===
 
 	sharpeRatio := getSubScore(input.SubScores, "long_term", "sharpe_raw")
-	sortinoRatioRaw := getSubScore(input.SubScores, "long_term", "sortino_raw") // Raw Sortino ratio
+	// sortinoRatioRaw already extracted above for multi-path quality gates
 
 	// Bubble risk: High CAGR with poor risk metrics
 	// Only use raw values for accurate risk assessment - no fallback approximations
 	isBubble := false
-	if cagrRaw > 0.165 { // 16.5% for 11% target (1.5x target)
+	if cagrRaw > 0.15 { // 15% for 11% target (1.36x target, relaxed from 1.5x)
 		// Check risk metrics - require raw Sortino for accurate assessment
 		// If sortino_raw is not available (0), we can't accurately assess bubble risk
-		hasPoorRisk := sharpeRatio < 0.5 || volatility > 0.40 || fundamentalsScore < 0.6
+		hasPoorRisk := sharpeRatio < 0.5 || volatility > 0.40 || fundamentalsScore < 0.55
 		if sortinoRatioRaw > 0 {
 			hasPoorRisk = hasPoorRisk || sortinoRatioRaw < 0.5
 		}
@@ -453,29 +473,12 @@ func (ta *TagAssigner) AssignTagsForSecurity(input AssignTagsInput) ([]string, e
 		if isBubble {
 			tags = append(tags, "bubble-risk")
 		} else {
-			// Only tag as quality-high-cagr if CAGR > 15% (not just > 16.5%)
-			if cagrRaw > 0.15 {
+			// High CAGR (15%+) with good risk metrics = quality-high-cagr
+			// Require both Sharpe and Sortino for quality-high-cagr tag
+			if sharpeRatio >= 0.5 && sortinoRatioRaw >= 0.5 && volatility <= 0.40 && fundamentalsScore >= 0.55 {
 				tags = append(tags, "quality-high-cagr")
 			}
 		}
-	} else if cagrRaw > 0.15 {
-		// High CAGR (15-16.5%) with good risk metrics
-		// Require both Sharpe and Sortino for quality-high-cagr tag
-		if sharpeRatio >= 0.5 && sortinoRatioRaw >= 0.5 && volatility <= 0.40 && fundamentalsScore >= 0.6 {
-			tags = append(tags, "quality-high-cagr")
-		}
-	}
-
-	// Risk-adjusted tags
-	if sharpeRatio >= 1.5 {
-		tags = append(tags, "high-sharpe")
-	}
-	if sortinoRatioRaw >= 1.5 {
-		tags = append(tags, "high-sortino")
-	}
-	// Poor risk-adjusted: only tag if we have raw risk metrics available
-	if isPoorRiskAdjusted(sharpeRatio, sortinoRatioRaw) {
-		tags = append(tags, "poor-risk-adjusted")
 	}
 
 	// === QUANTUM BUBBLE DETECTION (Ensemble with Classical) ===
@@ -519,7 +522,7 @@ func (ta *TagAssigner) AssignTagsForSecurity(input AssignTagsInput) ([]string, e
 	// Value trap: Cheap but declining
 	isValueTrap := false
 	if peVsMarket < -0.20 {
-		if fundamentalsScore < 0.6 || longTermScore < 0.5 || momentumScore < -0.05 || volatility > 0.35 {
+		if fundamentalsScore < 0.55 || longTermScore < 0.45 || momentumScore < -0.05 || volatility > 0.35 {
 			isValueTrap = true
 		}
 
@@ -577,7 +580,7 @@ func (ta *TagAssigner) AssignTagsForSecurity(input AssignTagsInput) ([]string, e
 	// === NEW: REGIME-SPECIFIC TAGS ===
 
 	// Bear market safe
-	if volatility < 0.20 && fundamentalsScore > 0.75 && maxDrawdown < 20.0 {
+	if volatility < 0.20 && fundamentalsScore > 0.70 && maxDrawdown < 20.0 {
 		tags = append(tags, "regime-bear-safe")
 	}
 
@@ -614,11 +617,10 @@ func (ta *TagAssigner) AssignTagsForSecurity(input AssignTagsInput) ([]string, e
 	}
 	thresholdPct := input.TargetReturnThresholdPct
 	if thresholdPct == 0 {
-		thresholdPct = 0.80 // Default 80%
+		thresholdPct = 0.70 // Default 70% (relaxed from 80% for 15-20 year horizon)
 	}
 
-	// Calculate thresholds
-	minCAGRThreshold := targetReturn * thresholdPct
+	// Calculate absolute minimum CAGR threshold
 	absoluteMinCAGR := math.Max(0.06, targetReturn*0.50)
 
 	// Get raw CAGR value (from sub-scores "cagr_raw", in decimal: e.g., 0.15 = 15%)
@@ -634,10 +636,7 @@ func (ta *TagAssigner) AssignTagsForSecurity(input AssignTagsInput) ([]string, e
 			tags = append(tags, "below-minimum-return")
 		}
 
-		// Tag securities below threshold (soft filter - can be overcome with quality)
-		if cagrRaw < minCAGRThreshold {
-			tags = append(tags, "below-target-return")
-		}
+		// Removed: below-target-return tag (unused - below-minimum-return is the hard filter)
 
 		// Tag securities meeting or exceeding target
 		if cagrRaw >= targetReturn {
@@ -715,4 +714,65 @@ func removeDuplicates(tags []string) []string {
 		}
 	}
 	return result
+}
+
+// ============================================================================
+// Multi-Path Quality Gate Evaluation Functions
+// ============================================================================
+
+// evaluatePath1Balanced checks balanced path with adaptive thresholds.
+// Path 1: Balanced (relaxed, adaptive)
+// Default: fundamentals >= 0.55 AND longTerm >= 0.45
+// Thresholds can be adjusted by AdaptiveService based on market regime.
+func evaluatePath1Balanced(fundamentals, longTerm, fundamentalsThreshold, longTermThreshold float64) bool {
+	return fundamentals >= fundamentalsThreshold && longTerm >= longTermThreshold
+}
+
+// evaluatePath2ExceptionalExcellence checks for exceptional performance in either dimension.
+// Path 2: Exceptional Excellence
+// Condition: fundamentals >= 0.75 OR longTerm >= 0.75
+// Allows one-dimensional excellence to compensate for weakness in other dimension.
+func evaluatePath2ExceptionalExcellence(fundamentals, longTerm float64) bool {
+	return fundamentals >= 0.75 || longTerm >= 0.75
+}
+
+// evaluatePath3QualityValuePlay checks quality value play path.
+// Path 3: Quality Value Play
+// Condition: fundamentals >= 0.60 AND opportunity >= 0.65 AND longTerm >= 0.30
+// Identifies high-quality undervalued securities with temporary weakness.
+func evaluatePath3QualityValuePlay(fundamentals, opportunity, longTerm float64) bool {
+	return fundamentals >= 0.60 && opportunity >= 0.65 && longTerm >= 0.30
+}
+
+// evaluatePath4DividendIncomePlay checks dividend income play path.
+// Path 4: Dividend Income Play
+// Condition: fundamentals >= 0.55 AND dividendScore >= 0.65 AND dividendYield >= 0.035
+// Identifies solid dividend payers for retirement income strategy.
+func evaluatePath4DividendIncomePlay(fundamentals, dividendScore, dividendYield float64) bool {
+	return fundamentals >= 0.55 && dividendScore >= 0.65 && dividendYield >= 0.035
+}
+
+// evaluatePath5RiskAdjustedExcellence checks risk-adjusted excellence path.
+// Path 5: Risk-Adjusted Excellence
+// Condition: longTerm >= 0.55 AND (sharpe >= 0.9 OR sortino >= 0.9) AND volatility <= 0.35
+// Identifies securities with excellent risk-adjusted returns.
+func evaluatePath5RiskAdjustedExcellence(longTerm, sharpe, sortino, volatility float64) bool {
+	return longTerm >= 0.55 && (sharpe >= 0.9 || sortino >= 0.9) && volatility <= 0.35
+}
+
+// evaluatePath6CompositeMinimum checks composite minimum path.
+// Path 6: Composite Minimum
+// Condition: (0.6 * fundamentals + 0.4 * longTerm) >= 0.52 AND fundamentals >= 0.45
+// Allows trade-offs between dimensions with minimum fundamentals floor.
+func evaluatePath6CompositeMinimum(fundamentals, longTerm float64) bool {
+	compositeScore := 0.6*fundamentals + 0.4*longTerm
+	return compositeScore >= 0.52 && fundamentals >= 0.45
+}
+
+// evaluatePath7GrowthOpportunity checks growth opportunity path.
+// Path 7: Growth Opportunity
+// Condition: cagrRaw >= 0.13 AND fundamentals >= 0.50 AND volatility <= 0.40
+// Identifies growth securities meeting 15-20 year retirement fund targets.
+func evaluatePath7GrowthOpportunity(cagrRaw, fundamentals, volatility float64) bool {
+	return cagrRaw >= 0.13 && fundamentals >= 0.50 && volatility <= 0.40
 }

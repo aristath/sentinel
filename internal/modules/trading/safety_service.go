@@ -2,7 +2,6 @@ package trading
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/aristath/sentinel/internal/modules/market_hours"
@@ -211,14 +210,25 @@ func (s *TradeSafetyService) checkBuyCooldown(symbol string, side string) error 
 		}
 	}
 
-	// Check if symbol was bought recently
-	recentlyBought, err := s.tradeRepo.GetRecentlyBoughtSymbols(int(cooldownDays))
+	// Look up security to get ISIN (Symbol is at boundary, use ISIN internally)
+	security, err := s.securityRepo.GetBySymbol(symbol)
+	if err != nil {
+		return fmt.Errorf("failed to lookup security: %w", err) // Fail safe
+	}
+	if security.ISIN == "" {
+		// No ISIN available, can't check cooldown
+		s.log.Warn().Str("symbol", symbol).Msg("Security missing ISIN, skipping cooldown check")
+		return nil
+	}
+
+	// Check if ISIN was bought recently (using ISIN internally)
+	recentlyBought, err := s.tradeRepo.GetRecentlyBoughtISINs(int(cooldownDays))
 	if err != nil {
 		return fmt.Errorf("failed to check cooldown: %w", err) // Fail safe
 	}
 
-	// Check if symbol is in the recently bought map
-	if recentlyBought[strings.ToUpper(symbol)] {
+	// Check if ISIN is in the recently bought map
+	if recentlyBought[security.ISIN] {
 		return fmt.Errorf("cannot buy %s: cooldown period active (bought within %d days)", symbol, int(cooldownDays))
 	}
 

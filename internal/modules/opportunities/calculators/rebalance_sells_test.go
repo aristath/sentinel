@@ -88,8 +88,8 @@ func TestRebalanceSellsCalculator_MaxSellPercentage(t *testing.T) {
 				StocksByISIN:           map[string]domain.Security{"US1234567890": security},
 				CountryAllocations:     countryAllocations,
 				CountryWeights:         countryWeights,
-				IneligibleISINs:      map[string]bool{},
-				RecentlySoldISINs:           map[string]bool{},
+				IneligibleISINs:        map[string]bool{},
+				RecentlySoldISINs:      map[string]bool{},
 				TotalPortfolioValueEUR: 10000,
 				AllowSell:              true,
 			}
@@ -158,8 +158,8 @@ func TestRebalanceSellsCalculator_MaxSellPercentage_MultiplePositions(t *testing
 		StocksByISIN:           map[string]domain.Security{"US1111111111": securities[0], "US2222222222": securities[1]},
 		CountryAllocations:     countryAllocations,
 		CountryWeights:         countryWeights,
-		IneligibleISINs:      map[string]bool{},
-		RecentlySoldISINs:           map[string]bool{},
+		IneligibleISINs:        map[string]bool{},
+		RecentlySoldISINs:      map[string]bool{},
 		TotalPortfolioValueEUR: 10000,
 		AllowSell:              true,
 	}
@@ -220,8 +220,8 @@ func TestRebalanceSellsCalculator_NoMaxSellPercentage_DefaultsToHardcodedCap(t *
 		StocksByISIN:           map[string]domain.Security{"US1234567890": security},
 		CountryAllocations:     countryAllocations,
 		CountryWeights:         countryWeights,
-		IneligibleISINs:      map[string]bool{},
-		RecentlySoldISINs:           map[string]bool{},
+		IneligibleISINs:        map[string]bool{},
+		RecentlySoldISINs:      map[string]bool{},
 		TotalPortfolioValueEUR: 10000,
 		AllowSell:              true,
 	}

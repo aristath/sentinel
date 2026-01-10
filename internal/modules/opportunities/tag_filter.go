@@ -141,29 +141,68 @@ func (f *TagBasedFilter) GetSellCandidates(ctx *domain.OpportunityContext, confi
 }
 
 // selectOpportunityTags intelligently selects tags based on opportunity context.
-// Adapts tag selection based on available cash, market conditions, and strategy.
+// Adapts tag selection based on available cash, market conditions, strategy, and market regime.
 func (f *TagBasedFilter) selectOpportunityTags(ctx *domain.OpportunityContext, config *domain.PlannerConfiguration) []string {
 	tags := []string{}
 
-	// Always include quality gates (enhanced tags)
-	tags = append(tags, "quality-gate-pass", "high-quality")
+	// Always include high-quality securities
+	// Note: We don't pre-filter by quality-gate-pass anymore (removed)
+	// Instead, calculators will exclude quality-gate-fail
+	tags = append(tags, "high-quality")
 
-	// Add value opportunities if we have sufficient cash
-	if ctx.AvailableCashEUR > 1000 {
-		tags = append(tags, "value-opportunity", "deep-value", "quality-value")
+	// Detect current market regime for regime-specific tag selection
+	regime := "neutral"
+	if f.securityRepo != nil {
+		// Use same DetectCurrentRegime logic from calculators
+		bearSafe, _ := f.securityRepo.GetByTags([]string{"regime-bear-safe"})
+		bullGrowth, _ := f.securityRepo.GetByTags([]string{"regime-bull-growth"})
+		sidewaysValue, _ := f.securityRepo.GetByTags([]string{"regime-sideways-value"})
+		volatile, _ := f.securityRepo.GetByTags([]string{"regime-volatile"})
+
+		if len(volatile) > 10 {
+			regime = "volatile"
+		} else if len(bullGrowth) > len(bearSafe) && len(bullGrowth) > len(sidewaysValue) {
+			regime = "bull"
+		} else if len(bearSafe) > len(bullGrowth) && len(bearSafe) > len(sidewaysValue) {
+			regime = "bear"
+		} else if len(sidewaysValue) > len(bullGrowth) && len(sidewaysValue) > len(bearSafe) {
+			regime = "sideways"
+		}
 	}
 
-	// Add technical opportunities if market is volatile
-	// Note: If tags are disabled, this function won't be called, so config should be non-nil
-	if f.IsMarketVolatile(ctx, config) {
-		tags = append(tags, "oversold", "below-ema", "recovery-candidate")
+	// Regime-specific tag selection
+	switch regime {
+	case "bear":
+		// Bear market: Focus on defensive, value, and dividend securities
+		tags = append(tags, "regime-bear-safe", "value-opportunity", "deep-value", "quality-value")
+		tags = append(tags, "dividend-opportunity", "high-dividend", "dividend-grower")
+	case "bull":
+		// Bull market: Focus on growth and momentum
+		tags = append(tags, "regime-bull-growth", "recovery-candidate", "oversold")
+		tags = append(tags, "high-total-return", "excellent-total-return")
+	case "sideways":
+		// Sideways market: Focus on dividends and value
+		tags = append(tags, "regime-sideways-value", "dividend-opportunity", "high-dividend")
+		tags = append(tags, "value-opportunity", "deep-value")
+	case "volatile":
+		// Volatile market: Focus on defensive and oversold opportunities
+		tags = append(tags, "regime-bear-safe", "low-risk", "stable")
+		tags = append(tags, "oversold", "recovery-candidate")
+	default:
+		// Neutral market: Use balanced approach
+		// Add value opportunities if we have sufficient cash
+		if ctx.AvailableCashEUR > 1000 {
+			tags = append(tags, "value-opportunity", "deep-value", "quality-value")
+		}
+		// Add technical opportunities if market is volatile (legacy check)
+		if f.IsMarketVolatile(ctx, config) {
+			tags = append(tags, "oversold", "recovery-candidate") // Note: below-ema tag was deleted
+		}
+		// Add dividend opportunities (always relevant for long-term strategy)
+		tags = append(tags, "dividend-opportunity", "high-dividend", "dividend-grower")
+		// Add total return opportunities (enhanced tags)
+		tags = append(tags, "high-total-return", "excellent-total-return")
 	}
-
-	// Add dividend opportunities (always relevant for long-term strategy)
-	tags = append(tags, "dividend-opportunity", "high-dividend", "dividend-grower")
-
-	// Add total return opportunities (enhanced tags)
-	tags = append(tags, "high-total-return", "excellent-total-return")
 
 	// Exclude value traps and bubble risks (use negative filtering in calculators)
 	// We don't add these to tags list, but calculators should check for them

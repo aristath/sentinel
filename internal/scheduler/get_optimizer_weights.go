@@ -109,13 +109,19 @@ func (j *GetOptimizerWeightsJob) Run() error {
 		}
 	}
 
-	// Step 4: Fetch current prices
+	// Step 4: Fetch current prices (returns ISIN-keyed map)
 	currentPrices := j.fetchCurrentPrices(securities)
 
-	// Step 5: Calculate portfolio value
+	// Step 5: Calculate portfolio value using ISIN lookup
 	portfolioValue := cashBalances["EUR"]
 	for _, pos := range positions {
-		if price, ok := currentPrices[pos.Symbol]; ok {
+		if pos.ISIN == "" {
+			j.log.Warn().
+				Str("symbol", pos.Symbol).
+				Msg("Position missing ISIN, skipping in portfolio value")
+			continue
+		}
+		if price, ok := currentPrices[pos.ISIN]; ok { // ISIN lookup ✅
 			portfolioValue += price * float64(pos.Quantity)
 		}
 	}
@@ -140,14 +146,22 @@ func (j *GetOptimizerWeightsJob) Run() error {
 		}
 	}
 
-	// Step 8: Convert positions to optimizer format
+	// Step 8: Convert positions to optimizer format (ISIN-keyed map)
 	optimizerPositions := make(map[string]optimization.Position)
 	for _, pos := range positions {
+		isin := pos.ISIN
+		if isin == "" {
+			j.log.Warn().
+				Str("symbol", pos.Symbol).
+				Msg("Position missing ISIN, skipping")
+			continue
+		}
+
 		valueEUR := 0.0
-		if price, ok := currentPrices[pos.Symbol]; ok {
+		if price, ok := currentPrices[isin]; ok { // ISIN lookup ✅
 			valueEUR = price * float64(pos.Quantity)
 		}
-		optimizerPositions[pos.Symbol] = optimization.Position{
+		optimizerPositions[isin] = optimization.Position{ // ISIN key ✅
 			Symbol:   pos.Symbol,
 			Quantity: float64(pos.Quantity),
 			ValueEUR: valueEUR,
@@ -157,8 +171,15 @@ func (j *GetOptimizerWeightsJob) Run() error {
 	// Step 9: Convert securities to optimizer format
 	optimizerSecurities := make([]optimization.Security, 0, len(securities))
 	for _, sec := range securities {
+		if sec.ISIN == "" {
+			j.log.Warn().
+				Str("symbol", sec.Symbol).
+				Msg("Security missing ISIN, skipping")
+			continue
+		}
 		optimizerSecurities = append(optimizerSecurities, optimization.Security{
-			Symbol:             sec.Symbol,
+			ISIN:               sec.ISIN,   // PRIMARY identifier ✅
+			Symbol:             sec.Symbol, // BOUNDARY identifier
 			Country:            sec.Country,
 			Industry:           sec.Industry,
 			MinPortfolioTarget: 0.0, // Could be from security settings
@@ -239,6 +260,7 @@ func (j *GetOptimizerWeightsJob) GetTargetWeights() map[string]float64 {
 }
 
 // fetchCurrentPrices fetches current prices for all securities and converts them to EUR
+// Returns ISIN-keyed map (not Symbol-keyed)
 func (j *GetOptimizerWeightsJob) fetchCurrentPrices(securities []universe.Security) map[string]float64 {
 	prices := make(map[string]float64)
 
@@ -252,7 +274,7 @@ func (j *GetOptimizerWeightsJob) fetchCurrentPrices(securities []universe.Securi
 		return prices
 	}
 
-	// Build symbol map (tradernet_symbol -> yahoo_symbol override)
+	// Build symbol map (tradernet_symbol -> yahoo_symbol override) for price API
 	symbolMap := make(map[string]*string)
 	for _, security := range securities {
 		var yahooSymbolPtr *string
@@ -264,14 +286,14 @@ func (j *GetOptimizerWeightsJob) fetchCurrentPrices(securities []universe.Securi
 		symbolMap[security.Symbol] = yahooSymbolPtr
 	}
 
-	// Fetch batch quotes (returns prices in native currencies)
+	// Fetch batch quotes (returns prices in native currencies) - external API uses Symbol
 	quotes, err := j.priceClient.GetBatchQuotes(symbolMap)
 	if err != nil {
 		j.log.Warn().Err(err).Msg("Failed to fetch batch quotes, using empty prices")
 		return prices
 	}
 
-	// Convert quotes to price map (native currencies)
+	// Convert quotes to price map (native currencies) - Symbol-keyed from API
 	nativePrices := make(map[string]float64)
 	for symbol, pricePtr := range quotes {
 		if pricePtr != nil {
@@ -279,14 +301,38 @@ func (j *GetOptimizerWeightsJob) fetchCurrentPrices(securities []universe.Securi
 		}
 	}
 
-	// Convert all prices to EUR using shared service
+	// Convert all prices to EUR using shared service (still Symbol-keyed)
+	eurPricesSymbol := make(map[string]float64)
 	if j.priceConversionService != nil {
-		prices = j.priceConversionService.ConvertPricesToEUR(nativePrices, securities)
+		eurPricesSymbol = j.priceConversionService.ConvertPricesToEUR(nativePrices, securities)
 	} else {
 		// Fallback: use native prices if service unavailable
 		j.log.Warn().Msg("Price conversion service not available, using native currency prices (may cause valuation errors)")
-		prices = nativePrices
+		eurPricesSymbol = nativePrices
 	}
+
+	// Transform Symbol keys → ISIN keys (internal boundary)
+	symbolToISIN := make(map[string]string)
+	for _, sec := range securities {
+		if sec.ISIN != "" && sec.Symbol != "" {
+			symbolToISIN[sec.Symbol] = sec.ISIN
+		}
+	}
+
+	for symbol, price := range eurPricesSymbol {
+		if isin, ok := symbolToISIN[symbol]; ok {
+			prices[isin] = price // ISIN key ✅
+		} else {
+			j.log.Warn().
+				Str("symbol", symbol).
+				Msg("No ISIN mapping found for symbol, skipping price")
+		}
+	}
+
+	j.log.Info().
+		Int("fetched", len(eurPricesSymbol)).
+		Int("mapped_to_isin", len(prices)).
+		Msg("Fetched and converted prices to ISIN keys")
 
 	return prices
 }

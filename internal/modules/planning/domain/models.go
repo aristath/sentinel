@@ -4,7 +4,8 @@ package domain
 // for priority-based selection and sequencing.
 type ActionCandidate struct {
 	Side     string   `json:"side"`      // Trade direction ("BUY" or "SELL")
-	Symbol   string   `json:"symbol"`    // Security symbol
+	ISIN     string   `json:"isin"`      // ISIN (PRIMARY identifier for internal operations)
+	Symbol   string   `json:"symbol"`    // Security symbol (for broker API and UI display)
 	Name     string   `json:"name"`      // Security name for display
 	Quantity int      `json:"quantity"`  // Number of units to trade
 	Price    float64  `json:"price"`     // Price per unit

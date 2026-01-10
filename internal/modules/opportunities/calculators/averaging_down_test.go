@@ -41,6 +41,10 @@ func (m *mockSecurityRepoAveragingDown) GetTagsForSecurity(symbol string) ([]str
 	return []string{}, nil
 }
 
+func (m *mockSecurityRepoAveragingDown) GetByTags(tags []string) ([]domain.Security, error) {
+	return []domain.Security{}, nil
+}
+
 func TestAveragingDownCalculator_WithTagFiltering_PreFiltersPositions(t *testing.T) {
 	log := zerolog.Nop()
 	tagFilter := &mockTagFilterAveragingDown{
@@ -88,14 +92,14 @@ func TestAveragingDownCalculator_WithTagFiltering_PreFiltersPositions(t *testing
 	}
 
 	ctx := &planningdomain.OpportunityContext{
-		Positions:         []domain.Position{position1, position2},
-		Securities:        []domain.Security{security1, security2},
-		CurrentPrices:     map[string]float64{"US1234567890": 15.0, "US0987654321": 15.0}, // 25% loss
-		StocksByISIN:      map[string]domain.Security{"US1234567890": security1, "US0987654321": security2},
-		AvailableCashEUR:  1000.0,
-		IneligibleISINs: map[string]bool{},
-		RecentlyBoughtISINs:    map[string]bool{},
-		AllowBuy:          true,
+		Positions:           []domain.Position{position1, position2},
+		Securities:          []domain.Security{security1, security2},
+		CurrentPrices:       map[string]float64{"US1234567890": 15.0, "US0987654321": 15.0}, // 25% loss
+		StocksByISIN:        map[string]domain.Security{"US1234567890": security1, "US0987654321": security2},
+		AvailableCashEUR:    1000.0,
+		IneligibleISINs:     map[string]bool{},
+		RecentlyBoughtISINs: map[string]bool{},
+		AllowBuy:            true,
 	}
 
 	config := planningdomain.NewDefaultConfiguration()
@@ -156,15 +160,15 @@ func TestAveragingDownCalculator_WithoutTagFiltering_ProcessesAllPositions(t *te
 	}
 
 	ctx := &planningdomain.OpportunityContext{
-		Positions:          []domain.Position{position1, position2},
-		Securities:         []domain.Security{security1, security2},
-		CurrentPrices:      map[string]float64{"US1234567890": 15.0, "US0987654321": 15.0},
-		StocksByISIN:       map[string]domain.Security{"US1234567890": security1, "US0987654321": security2},
-		AvailableCashEUR:   1000.0,
-		IneligibleISINs:  map[string]bool{},
-		RecentlyBoughtISINs:     map[string]bool{},
-		AllowBuy:           true,
-		FundamentalsScores: map[string]float64{"TEST.US": 0.7, "OTHER.US": 0.7},
+		Positions:           []domain.Position{position1, position2},
+		Securities:          []domain.Security{security1, security2},
+		CurrentPrices:       map[string]float64{"US1234567890": 15.0, "US0987654321": 15.0},
+		StocksByISIN:        map[string]domain.Security{"US1234567890": security1, "US0987654321": security2},
+		AvailableCashEUR:    1000.0,
+		IneligibleISINs:     map[string]bool{},
+		RecentlyBoughtISINs: map[string]bool{},
+		AllowBuy:            true,
+		FundamentalsScores:  map[string]float64{"TEST.US": 0.7, "OTHER.US": 0.7},
 	}
 
 	config := planningdomain.NewDefaultConfiguration()
@@ -207,14 +211,14 @@ func TestAveragingDownCalculator_EnforcesAllowBuy(t *testing.T) {
 	}
 
 	ctx := &planningdomain.OpportunityContext{
-		Positions:         []domain.Position{position},
-		Securities:        []domain.Security{security},
-		CurrentPrices:     map[string]float64{"US1234567890": 15.0},
-		StocksByISIN:      map[string]domain.Security{"US1234567890": security},
-		AvailableCashEUR:  1000.0,
-		IneligibleISINs: map[string]bool{},
-		RecentlyBoughtISINs:    map[string]bool{},
-		AllowBuy:          true,
+		Positions:           []domain.Position{position},
+		Securities:          []domain.Security{security},
+		CurrentPrices:       map[string]float64{"US1234567890": 15.0},
+		StocksByISIN:        map[string]domain.Security{"US1234567890": security},
+		AvailableCashEUR:    1000.0,
+		IneligibleISINs:     map[string]bool{},
+		RecentlyBoughtISINs: map[string]bool{},
+		AllowBuy:            true,
 	}
 
 	config := planningdomain.NewDefaultConfiguration()
@@ -261,8 +265,8 @@ func TestAveragingDownCalculator_RoundsToLotSize(t *testing.T) {
 		StocksByISIN:           map[string]domain.Security{"US1234567890": security},
 		AvailableCashEUR:       10000.0,
 		TotalPortfolioValueEUR: 10000.0,
-		IneligibleISINs:      map[string]bool{},
-		RecentlyBoughtISINs:         map[string]bool{},
+		IneligibleISINs:        map[string]bool{},
+		RecentlyBoughtISINs:    map[string]bool{},
 		AllowBuy:               true,
 		KellySizes:             nil, // Explicitly nil - use percentage-based fallback
 	}
@@ -316,8 +320,8 @@ func TestAveragingDownCalculator_KellyBasedQuantity_WhenAvailable(t *testing.T) 
 		StocksByISIN:           map[string]domain.Security{"US1234567890": security},
 		AvailableCashEUR:       10000.0,
 		TotalPortfolioValueEUR: 10000.0,
-		IneligibleISINs:      map[string]bool{},
-		RecentlyBoughtISINs:         map[string]bool{},
+		IneligibleISINs:        map[string]bool{},
+		RecentlyBoughtISINs:    map[string]bool{},
 		AllowBuy:               true,
 		KellySizes:             map[string]float64{"TEST.US": 0.20}, // Kelly says 20% of portfolio
 	}
@@ -374,8 +378,8 @@ func TestAveragingDownCalculator_PercentageBasedQuantity_Fallback(t *testing.T) 
 		StocksByISIN:           map[string]domain.Security{"US1234567890": security},
 		AvailableCashEUR:       10000.0,
 		TotalPortfolioValueEUR: 10000.0,
-		IneligibleISINs:      map[string]bool{},
-		RecentlyBoughtISINs:         map[string]bool{},
+		IneligibleISINs:        map[string]bool{},
+		RecentlyBoughtISINs:    map[string]bool{},
 		AllowBuy:               true,
 		// No KellySizes - should fall back to percentage
 	}
@@ -422,14 +426,14 @@ func TestAveragingDownCalculator_UsesConfigurablePercent_NotHardcoded(t *testing
 	}
 
 	ctx := &planningdomain.OpportunityContext{
-		Positions:         []domain.Position{position},
-		Securities:        []domain.Security{security},
-		CurrentPrices:     map[string]float64{"US1234567890": 15.0},
-		StocksByISIN:      map[string]domain.Security{"US1234567890": security},
-		AvailableCashEUR:  10000.0,
-		IneligibleISINs: map[string]bool{},
-		RecentlyBoughtISINs:    map[string]bool{},
-		AllowBuy:          true,
+		Positions:           []domain.Position{position},
+		Securities:          []domain.Security{security},
+		CurrentPrices:       map[string]float64{"US1234567890": 15.0},
+		StocksByISIN:        map[string]domain.Security{"US1234567890": security},
+		AvailableCashEUR:    10000.0,
+		IneligibleISINs:     map[string]bool{},
+		RecentlyBoughtISINs: map[string]bool{},
+		AllowBuy:            true,
 	}
 
 	config := planningdomain.NewDefaultConfiguration()
@@ -495,8 +499,8 @@ func TestAveragingDownCalculator_SkipsAveragingDown_WhenAtKellyOptimal(t *testin
 		StocksByISIN:           map[string]domain.Security{"US1234567890": security},
 		AvailableCashEUR:       10000.0,
 		TotalPortfolioValueEUR: 10000.0,
-		IneligibleISINs:      map[string]bool{},
-		RecentlyBoughtISINs:         map[string]bool{},
+		IneligibleISINs:        map[string]bool{},
+		RecentlyBoughtISINs:    map[string]bool{},
 		AllowBuy:               true,
 		KellySizes:             map[string]float64{"TEST.US": 0.20}, // Kelly says 20% = ~133 shares at $15
 	}
@@ -545,14 +549,14 @@ func TestAveragingDownCalculator_TagBasedQualityGates_ValueTrap(t *testing.T) {
 	}
 
 	ctx := &planningdomain.OpportunityContext{
-		Positions:         []domain.Position{position},
-		Securities:        []domain.Security{security},
-		CurrentPrices:     map[string]float64{"US1234567890": 15.0},
-		StocksByISIN:      map[string]domain.Security{"US1234567890": security},
-		AvailableCashEUR:  1000.0,
-		IneligibleISINs: map[string]bool{},
-		RecentlyBoughtISINs:    map[string]bool{},
-		AllowBuy:          true,
+		Positions:           []domain.Position{position},
+		Securities:          []domain.Security{security},
+		CurrentPrices:       map[string]float64{"US1234567890": 15.0},
+		StocksByISIN:        map[string]domain.Security{"US1234567890": security},
+		AvailableCashEUR:    1000.0,
+		IneligibleISINs:     map[string]bool{},
+		RecentlyBoughtISINs: map[string]bool{},
+		AllowBuy:            true,
 	}
 
 	config := planningdomain.NewDefaultConfiguration()
@@ -615,14 +619,14 @@ func TestAveragingDownCalculator_TagBasedPriorityBoosting_QualityValue(t *testin
 	}
 
 	ctx := &planningdomain.OpportunityContext{
-		Positions:         []domain.Position{position1, position2},
-		Securities:        []domain.Security{security1, security2},
-		CurrentPrices:     map[string]float64{"US1111111111": 15.0, "US2222222222": 15.0}, // Same loss
-		StocksByISIN:      map[string]domain.Security{"US1111111111": security1, "US2222222222": security2},
-		AvailableCashEUR:  10000.0,
-		IneligibleISINs: map[string]bool{},
-		RecentlyBoughtISINs:    map[string]bool{},
-		AllowBuy:          true,
+		Positions:           []domain.Position{position1, position2},
+		Securities:          []domain.Security{security1, security2},
+		CurrentPrices:       map[string]float64{"US1111111111": 15.0, "US2222222222": 15.0}, // Same loss
+		StocksByISIN:        map[string]domain.Security{"US1111111111": security1, "US2222222222": security2},
+		AvailableCashEUR:    10000.0,
+		IneligibleISINs:     map[string]bool{},
+		RecentlyBoughtISINs: map[string]bool{},
+		AllowBuy:            true,
 	}
 
 	config := planningdomain.NewDefaultConfiguration()
@@ -689,14 +693,14 @@ func TestAveragingDownCalculator_SortsByPriorityDescending(t *testing.T) {
 	}
 
 	ctx := &planningdomain.OpportunityContext{
-		Positions:         []domain.Position{position1, position2},
-		Securities:        []domain.Security{security1, security2},
-		CurrentPrices:     map[string]float64{"US1111111111": 12.0, "US2222222222": 18.0}, // 40% vs 10% loss
-		StocksByISIN:      map[string]domain.Security{"US1111111111": security1, "US2222222222": security2},
-		AvailableCashEUR:  10000.0,
-		IneligibleISINs: map[string]bool{},
-		RecentlyBoughtISINs:    map[string]bool{},
-		AllowBuy:          true,
+		Positions:           []domain.Position{position1, position2},
+		Securities:          []domain.Security{security1, security2},
+		CurrentPrices:       map[string]float64{"US1111111111": 12.0, "US2222222222": 18.0}, // 40% vs 10% loss
+		StocksByISIN:        map[string]domain.Security{"US1111111111": security1, "US2222222222": security2},
+		AvailableCashEUR:    10000.0,
+		IneligibleISINs:     map[string]bool{},
+		RecentlyBoughtISINs: map[string]bool{},
+		AllowBuy:            true,
 	}
 
 	config := planningdomain.NewDefaultConfiguration()
@@ -764,14 +768,14 @@ func TestAveragingDownCalculator_RespectsMaxPositionsLimit(t *testing.T) {
 	}
 
 	ctx := &planningdomain.OpportunityContext{
-		Positions:         positions,
-		Securities:        securities,
-		CurrentPrices:     prices,
-		StocksByISIN:      stocksByISIN,
-		AvailableCashEUR:  10000.0,
-		IneligibleISINs: map[string]bool{},
-		RecentlyBoughtISINs:    map[string]bool{},
-		AllowBuy:          true,
+		Positions:           positions,
+		Securities:          securities,
+		CurrentPrices:       prices,
+		StocksByISIN:        stocksByISIN,
+		AvailableCashEUR:    10000.0,
+		IneligibleISINs:     map[string]bool{},
+		RecentlyBoughtISINs: map[string]bool{},
+		AllowBuy:            true,
 	}
 
 	config := planningdomain.NewDefaultConfiguration()

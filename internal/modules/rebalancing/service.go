@@ -251,7 +251,6 @@ func (s *Service) buildOpportunityContext(availableCash float64) (*planningdomai
 
 	// Convert securities to domain format
 	domainSecurities := make([]domain.Security, 0, len(securities))
-	stocksBySymbol := make(map[string]domain.Security)
 	stocksByISIN := make(map[string]domain.Security)
 	for _, sec := range securities {
 		domainSec := domain.Security{
@@ -262,9 +261,8 @@ func (s *Service) buildOpportunityContext(availableCash float64) (*planningdomai
 			Name:    sec.Name,
 		}
 		domainSecurities = append(domainSecurities, domainSec)
-		stocksBySymbol[sec.Symbol] = domainSec
 		if sec.ISIN != "" {
-			stocksByISIN[sec.ISIN] = domainSec
+			stocksByISIN[sec.ISIN] = domainSec // ISIN key only ✅
 		}
 	}
 
@@ -273,12 +271,12 @@ func (s *Service) buildOpportunityContext(availableCash float64) (*planningdomai
 
 	// Calculate total portfolio value
 	totalValue := availableCash
-	for symbol, price := range currentPrices {
-		for _, pos := range domainPositions {
-			if pos.Symbol == symbol {
-				totalValue += price * pos.Quantity
-				break
-			}
+	for _, pos := range domainPositions {
+		if pos.ISIN == "" {
+			continue
+		}
+		if price, ok := currentPrices[pos.ISIN]; ok { // ISIN lookup ✅
+			totalValue += price * pos.Quantity
 		}
 	}
 
@@ -291,22 +289,21 @@ func (s *Service) buildOpportunityContext(availableCash float64) (*planningdomai
 	ctx := &planningdomain.OpportunityContext{
 		Positions:                domainPositions,
 		Securities:               domainSecurities,
-		StocksByISIN:             stocksByISIN,
-		StocksBySymbol:           stocksBySymbol,
+		StocksByISIN:             stocksByISIN, // ISIN-keyed only ✅
 		AvailableCashEUR:         availableCash,
 		TotalPortfolioValueEUR:   totalValue,
-		CurrentPrices:            currentPrices,
-		TargetWeights:            allocations,
-		IneligibleSymbols:        make(map[string]bool),
-		RecentlySold:             make(map[string]bool),
-		RecentlyBought:           make(map[string]bool),
+		CurrentPrices:            currentPrices, // ISIN-keyed ✅
+		TargetWeights:            allocations,   // ISIN-keyed ✅
+		IneligibleISINs:          make(map[string]bool),
+		RecentlySoldISINs:        make(map[string]bool),
+		RecentlyBoughtISINs:      make(map[string]bool),
 		TransactionCostFixed:     2.0,
 		TransactionCostPercent:   0.002,
 		AllowSell:                false, // Rebalancing only buys
 		AllowBuy:                 true,
-		CAGRs:                    cagrs,
-		LongTermScores:           longTermScores,
-		FundamentalsScores:       fundamentalsScores,
+		CAGRs:                    cagrs,                // ISIN-keyed ✅
+		LongTermScores:           longTermScores,       // ISIN-keyed ✅
+		FundamentalsScores:       fundamentalsScores,   // ISIN-keyed ✅
 		TargetReturn:             targetReturn,
 		TargetReturnThresholdPct: targetReturnThresholdPct,
 	}
@@ -406,7 +403,7 @@ func (s *Service) fetchCurrentPrices(securities []universe.Security) map[string]
 }
 
 // populateCAGRs fetches CAGR values from calculations table for all securities
-// Returns map keyed by both ISIN and symbol for flexible lookup
+// Returns map keyed by ISIN only (internal identifier)
 func (s *Service) populateCAGRs(securities []universe.Security) map[string]float64 {
 	cagrs := make(map[string]float64)
 
@@ -415,17 +412,15 @@ func (s *Service) populateCAGRs(securities []universe.Security) map[string]float
 		return cagrs
 	}
 
-	// Build ISIN -> symbol map for securities
-	isinToSymbol := make(map[string]string)
-	isinList := make([]string, 0)
+	// Build ISIN set for securities we care about
+	isinSet := make(map[string]bool)
 	for _, sec := range securities {
-		if sec.ISIN != "" && sec.Symbol != "" {
-			isinToSymbol[sec.ISIN] = sec.Symbol
-			isinList = append(isinList, sec.ISIN)
+		if sec.ISIN != "" {
+			isinSet[sec.ISIN] = true
 		}
 	}
 
-	if len(isinList) == 0 {
+	if len(isinSet) == 0 {
 		s.log.Debug().Msg("No ISINs available, skipping CAGR population")
 		return cagrs
 	}
@@ -455,7 +450,7 @@ func (s *Service) populateCAGRs(securities []universe.Security) map[string]float
 		}
 
 		// Only include CAGRs for securities we care about
-		if _, ok := isinToSymbol[isin]; !ok {
+		if !isinSet[isin] {
 			continue
 		}
 
@@ -463,11 +458,7 @@ func (s *Service) populateCAGRs(securities []universe.Security) map[string]float
 			// Convert normalized cagr_score (0-1) to approximate CAGR percentage
 			cagrValue := convertCAGRScoreToCAGR(cagrScore.Float64)
 			if cagrValue > 0 {
-				cagrs[isin] = cagrValue
-				// Also store by symbol if available
-				if symbol, ok := isinToSymbol[isin]; ok {
-					cagrs[symbol] = cagrValue
-				}
+				cagrs[isin] = cagrValue // ISIN key only ✅
 			}
 		}
 	}
@@ -504,7 +495,7 @@ func convertCAGRScoreToCAGR(cagrScore float64) float64 {
 }
 
 // populateQualityScores fetches quality scores (long-term and fundamentals) from scores table
-// Returns maps keyed by both ISIN and symbol for flexible lookup
+// Returns maps keyed by ISIN only (internal identifier)
 func (s *Service) populateQualityScores(securities []universe.Security) (map[string]float64, map[string]float64) {
 	longTermScores := make(map[string]float64)
 	fundamentalsScores := make(map[string]float64)
@@ -514,17 +505,15 @@ func (s *Service) populateQualityScores(securities []universe.Security) (map[str
 		return longTermScores, fundamentalsScores
 	}
 
-	// Build ISIN -> symbol map for securities
-	isinToSymbol := make(map[string]string)
-	isinList := make([]string, 0)
+	// Build ISIN set for securities we care about
+	isinSet := make(map[string]bool)
 	for _, sec := range securities {
-		if sec.ISIN != "" && sec.Symbol != "" {
-			isinToSymbol[sec.ISIN] = sec.Symbol
-			isinList = append(isinList, sec.ISIN)
+		if sec.ISIN != "" {
+			isinSet[sec.ISIN] = true
 		}
 	}
 
-	if len(isinList) == 0 {
+	if len(isinSet) == 0 {
 		s.log.Debug().Msg("No ISINs available, skipping quality scores population")
 		return longTermScores, fundamentalsScores
 	}
@@ -552,28 +541,20 @@ func (s *Service) populateQualityScores(securities []universe.Security) (map[str
 		}
 
 		// Only include scores for securities we care about
-		if _, ok := isinToSymbol[isin]; !ok {
+		if !isinSet[isin] {
 			continue
 		}
 
 		// Use cagr_score as proxy for long-term (normalize to 0-1 range)
 		if cagrScore.Valid {
 			normalized := math.Max(0.0, math.Min(1.0, cagrScore.Float64))
-			longTermScores[isin] = normalized
-			// Also store by symbol if available
-			if symbol, ok := isinToSymbol[isin]; ok {
-				longTermScores[symbol] = normalized
-			}
+			longTermScores[isin] = normalized // ISIN key only ✅
 		}
 
 		// Store fundamental_score
 		if fundamentalScore.Valid {
 			normalized := math.Max(0.0, math.Min(1.0, fundamentalScore.Float64))
-			fundamentalsScores[isin] = normalized
-			// Also store by symbol if available
-			if symbol, ok := isinToSymbol[isin]; ok {
-				fundamentalsScores[symbol] = normalized
-			}
+			fundamentalsScores[isin] = normalized // ISIN key only ✅
 		}
 	}
 

@@ -42,58 +42,62 @@ func (cm *ConstraintsManager) SetKellySizer(kellySizer *KellyPositionSizer) {
 }
 
 // BuildConstraints builds all constraints for optimization.
+// ALL PARAMETERS USE ISIN KEYS (not Symbol keys).
 func (cm *ConstraintsManager) BuildConstraints(
 	securities []Security,
-	positions map[string]Position,
+	positions map[string]Position,      // ISIN-keyed ✅
 	countryTargets map[string]float64,
 	industryTargets map[string]float64,
 	portfolioValue float64,
-	currentPrices map[string]float64,
-	expectedReturns map[string]float64,
+	currentPrices map[string]float64,   // ISIN-keyed ✅
+	expectedReturns map[string]float64, // ISIN-keyed ✅
 	covMatrix [][]float64,
-	symbols []string,
+	isins []string, // ISIN array ✅ (renamed from symbols)
 	regimeScore float64,
 ) (Constraints, error) {
-	// Calculate weight bounds for each security
-	weightBounds, symbols := cm.calculateWeightBounds(
+	// Calculate weight bounds for each security (returns ISIN-keyed maps)
+	minWeights, maxWeights, isins := cm.calculateWeightBounds(
 		securities,
-		positions,
+		positions,      // ISIN-keyed ✅
 		portfolioValue,
-		currentPrices,
-		expectedReturns,
+		currentPrices,  // ISIN-keyed ✅
+		expectedReturns, // ISIN-keyed ✅
 		covMatrix,
-		symbols,
+		isins, // ISIN array ✅
 		regimeScore,
 	)
 
-	// Build sector constraints
+	// Build sector constraints (uses ISIN keys)
 	countryCons, industryCons := cm.buildSectorConstraints(securities, countryTargets, industryTargets)
 
 	// Scale constraints if needed
 	countryCons, industryCons = cm.scaleConstraints(countryCons, industryCons)
 
 	constraints := Constraints{
-		WeightBounds:      weightBounds,
+		ISINs:             isins,      // ISIN array ✅
+		MinWeights:        minWeights, // ISIN-keyed ✅
+		MaxWeights:        maxWeights, // ISIN-keyed ✅
 		SectorConstraints: append(countryCons, industryCons...),
-		Symbols:           symbols,
 	}
 
 	return constraints, nil
 }
 
 // calculateWeightBounds calculates weight bounds for each security.
+// Returns ISIN-keyed maps for min/max weights, and ISIN array.
 func (cm *ConstraintsManager) calculateWeightBounds(
 	securities []Security,
-	positions map[string]Position,
+	positions map[string]Position,      // ISIN-keyed ✅
 	portfolioValue float64,
-	currentPrices map[string]float64,
-	expectedReturns map[string]float64,
+	currentPrices map[string]float64,   // ISIN-keyed ✅
+	expectedReturns map[string]float64, // ISIN-keyed ✅
 	covMatrix [][]float64,
-	symbols []string,
+	isins []string, // ISIN array ✅
 	regimeScore float64,
-) ([][2]float64, []string) {
-	bounds := make([][2]float64, 0, len(securities))
-	constraintSymbols := make([]string, 0, len(securities))
+) (map[string]float64, map[string]float64, []string) {
+	minWeights := make(map[string]float64)
+	maxWeights := make(map[string]float64)
+	constraintISINs := make([]string, 0, len(securities))
 
 	cm.log.Debug().
 		Int("num_securities", len(securities)).
@@ -101,9 +105,10 @@ func (cm *ConstraintsManager) calculateWeightBounds(
 		Msg("Calculating weight bounds")
 
 	for _, security := range securities {
-		symbol := security.Symbol
-		position, hasPosition := positions[symbol]
-		currentPrice := currentPrices[symbol]
+		isin := security.ISIN                     // Use ISIN ✅
+		symbol := security.Symbol                  // Keep Symbol for logging only
+		position, hasPosition := positions[isin]   // ISIN lookup ✅
+		currentPrice := currentPrices[isin]        // ISIN lookup ✅
 
 		// Calculate current weight
 		var currentWeight float64
@@ -116,17 +121,19 @@ func (cm *ConstraintsManager) calculateWeightBounds(
 		upper := cm.getMaxConcentration(security.ProductType)
 
 		// If Kelly sizing is enabled, use Kelly-optimal size as upper bound (but still respect max concentration)
-		if cm.kellySizer != nil && expectedReturns != nil && covMatrix != nil && len(symbols) > 0 {
+		// TODO: Update KellyPositionSizer to use ISIN instead of Symbol
+		if cm.kellySizer != nil && expectedReturns != nil && covMatrix != nil && len(isins) > 0 {
 			// Use default confidence of 0.5 (moderate confidence)
 			// In future enhancements, this could be derived from security scores
 			confidence := 0.5
 
-			// Calculate Kelly-optimal size
+			// TEMPORARY: Kelly sizer still uses Symbol-based API
+			// This will be updated when we migrate KellyPositionSizer
 			kellySize, err := cm.kellySizer.CalculateOptimalSizeForSymbol(
-				symbol,
-				expectedReturns,
+				symbol,          // TEMPORARY: Still using Symbol
+				expectedReturns, // ISIN-keyed (sizer will need update)
 				covMatrix,
-				symbols,
+				isins, // ISIN array (sizer will need update)
 				confidence,
 				regimeScore,
 			)
@@ -134,7 +141,8 @@ func (cm *ConstraintsManager) calculateWeightBounds(
 				// Use Kelly size as upper bound, but cap at max concentration
 				upper = math.Min(kellySize, upper)
 				cm.log.Debug().
-					Str("symbol", symbol).
+					Str("isin", isin).       // Log ISIN ✅
+					Str("symbol", symbol).    // Also log Symbol for readability
 					Float64("kelly_size", kellySize).
 					Float64("max_concentration", cm.getMaxConcentration(security.ProductType)).
 					Float64("final_upper", upper).
@@ -195,7 +203,8 @@ func (cm *ConstraintsManager) calculateWeightBounds(
 		if lower > upper {
 			// Constraint conflict - keep current weight
 			cm.log.Warn().
-				Str("symbol", symbol).
+				Str("isin", isin).       // Log ISIN ✅
+				Str("symbol", symbol).    // Also log Symbol for readability
 				Float64("lower", lower).
 				Float64("upper", upper).
 				Float64("current_weight", currentWeight).
@@ -204,41 +213,44 @@ func (cm *ConstraintsManager) calculateWeightBounds(
 			upper = currentWeight
 		}
 
-		constraintSymbols = append(constraintSymbols, symbol)
-		bounds = append(bounds, [2]float64{lower, upper})
+		// Store in ISIN-keyed maps ✅
+		constraintISINs = append(constraintISINs, isin)
+		minWeights[isin] = lower // ISIN key ✅
+		maxWeights[isin] = upper // ISIN key ✅
 	}
 
-	return bounds, constraintSymbols
+	return minWeights, maxWeights, constraintISINs
 }
 
 // buildSectorConstraints builds country and industry sector constraints.
+// Uses ISIN keys in SectorMapper.
 func (cm *ConstraintsManager) buildSectorConstraints(
 	securities []Security,
 	countryTargets map[string]float64,
 	industryTargets map[string]float64,
 ) ([]SectorConstraint, []SectorConstraint) {
-	// Group securities by country
+	// Group securities by country (use ISINs)
 	countryGroups := make(map[string][]string)
 	for _, security := range securities {
 		country := security.Country
 		if country == "" {
 			country = "OTHER"
 		}
-		countryGroups[country] = append(countryGroups[country], security.Symbol)
+		countryGroups[country] = append(countryGroups[country], security.ISIN) // Use ISIN ✅
 	}
 
 	cm.log.Info().
 		Int("num_country_groups", len(countryGroups)).
 		Msg("Grouped securities by country")
 
-	// Group securities by industry
+	// Group securities by industry (use ISINs)
 	industryGroups := make(map[string][]string)
 	for _, security := range securities {
 		industry := security.Industry
 		if industry == "" {
 			industry = "OTHER"
 		}
-		industryGroups[industry] = append(industryGroups[industry], security.Symbol)
+		industryGroups[industry] = append(industryGroups[industry], security.ISIN) // Use ISIN ✅
 	}
 
 	cm.log.Info().
@@ -247,7 +259,7 @@ func (cm *ConstraintsManager) buildSectorConstraints(
 
 	// Build country constraints
 	countryConstraints := make([]SectorConstraint, 0)
-	for country, symbols := range countryGroups {
+	for country, isins := range countryGroups { // Renamed from symbols
 		target := countryTargets[country]
 		if target > 0 {
 			// Calculate tolerance-based bounds
@@ -256,8 +268,8 @@ func (cm *ConstraintsManager) buildSectorConstraints(
 			hardUpper := math.Min(toleranceUpper, MaxCountryConcentration)
 
 			mapper := make(map[string]string)
-			for _, symbol := range symbols {
-				mapper[symbol] = country
+			for _, isin := range isins { // Use ISIN ✅
+				mapper[isin] = country // ISIN → country ✅
 			}
 
 			countryConstraints = append(countryConstraints, SectorConstraint{
@@ -317,7 +329,7 @@ func (cm *ConstraintsManager) buildSectorConstraints(
 	}
 
 	industryConstraints := make([]SectorConstraint, 0)
-	for industry, symbols := range industryGroups {
+	for industry, isins := range industryGroups { // Renamed from symbols
 		target := industryTargets[industry]
 		if target > 0 {
 			// Calculate tolerance-based bounds
@@ -326,8 +338,8 @@ func (cm *ConstraintsManager) buildSectorConstraints(
 			hardUpper := math.Min(toleranceUpper, effectiveMaxConcentration)
 
 			mapper := make(map[string]string)
-			for _, symbol := range symbols {
-				mapper[symbol] = industry
+			for _, isin := range isins { // Use ISIN ✅
+				mapper[isin] = industry // ISIN → industry ✅
 			}
 
 			industryConstraints = append(industryConstraints, SectorConstraint{
@@ -432,17 +444,20 @@ func (cm *ConstraintsManager) scaleConstraints(
 func (cm *ConstraintsManager) GetConstraintSummary(
 	constraints Constraints,
 ) ConstraintsSummary {
-	totalSecurities := len(constraints.WeightBounds)
+	totalSecurities := len(constraints.ISINs) // Use ISINs ✅
 	securitiesWithBounds := 0
 	totalMinWeight := 0.0
 	totalMaxWeight := 0.0
 
-	for _, bounds := range constraints.WeightBounds {
-		if bounds[0] > 0 || bounds[1] < cm.maxConcentration {
+	// Iterate over ISIN-keyed maps ✅
+	for _, isin := range constraints.ISINs {
+		minWeight := constraints.MinWeights[isin]
+		maxWeight := constraints.MaxWeights[isin]
+		if minWeight > 0 || maxWeight < cm.maxConcentration {
 			securitiesWithBounds++
 		}
-		totalMinWeight += bounds[0]
-		totalMaxWeight += bounds[1]
+		totalMinWeight += minWeight
+		totalMaxWeight += maxWeight
 	}
 
 	// Count sector constraints
@@ -470,8 +485,8 @@ func (cm *ConstraintsManager) GetConstraintSummary(
 func (cm *ConstraintsManager) ValidateConstraints(constraints Constraints) error {
 	// Check if total minimums exceed 100%
 	totalMin := 0.0
-	for _, bounds := range constraints.WeightBounds {
-		totalMin += bounds[0]
+	for _, isin := range constraints.ISINs { // Use ISINs ✅
+		totalMin += constraints.MinWeights[isin]
 	}
 
 	if totalMin > 1.0 {
@@ -479,10 +494,12 @@ func (cm *ConstraintsManager) ValidateConstraints(constraints Constraints) error
 	}
 
 	// Check if each bound is valid (lower <= upper)
-	for i, bounds := range constraints.WeightBounds {
-		if bounds[0] > bounds[1] {
+	for _, isin := range constraints.ISINs { // Use ISINs ✅
+		minWeight := constraints.MinWeights[isin]
+		maxWeight := constraints.MaxWeights[isin]
+		if minWeight > maxWeight {
 			return fmt.Errorf("security %s has invalid bounds: lower=%.4f > upper=%.4f",
-				constraints.Symbols[i], bounds[0], bounds[1])
+				isin, minWeight, maxWeight)
 		}
 	}
 

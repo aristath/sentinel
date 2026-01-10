@@ -122,14 +122,17 @@ type TimeSeriesData struct {
 
 // SectorConstraint represents sector allocation constraints.
 type SectorConstraint struct {
-	SectorMapper map[string]string  // Maps symbol to sector name
+	SectorMapper map[string]string  // Maps ISIN to sector name ✅
 	SectorLower  map[string]float64 // Lower bounds per sector
 	SectorUpper  map[string]float64 // Upper bounds per sector
 }
 
 // Constraints contains all constraints for optimization.
+// All keys are ISINs (not Symbols).
 type Constraints struct {
-	WeightBounds      [][2]float64       // Per-security bounds [min, max]
+	ISINs             []string           // Ordered ISIN list ✅ (renamed from Symbols)
+	MinWeights        map[string]float64 // Minimum weight per ISIN ✅
+	MaxWeights        map[string]float64 // Maximum weight per ISIN ✅
 	SectorConstraints []SectorConstraint // Country/industry constraints
-	Symbols           []string           // Ordered symbol list
+	// DELETED: WeightBounds [][2]float64 - replaced by MinWeights/MaxWeights maps
 }

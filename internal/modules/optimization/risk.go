@@ -47,8 +47,9 @@ func NewRiskModelBuilder(db *sql.DB, universeDB *sql.DB, log zerolog.Logger) *Ri
 }
 
 // BuildCovarianceMatrix builds a covariance matrix from historical prices.
+// All parameters and returns use ISIN keys (not Symbol keys).
 func (rb *RiskModelBuilder) BuildCovarianceMatrix(
-	symbols []string,
+	isins []string, // ISIN array ✅ (renamed from symbols)
 	lookbackDays int,
 ) ([][]float64, map[string][]float64, []CorrelationPair, error) {
 	if lookbackDays <= 0 {
@@ -56,12 +57,12 @@ func (rb *RiskModelBuilder) BuildCovarianceMatrix(
 	}
 
 	rb.log.Info().
-		Int("num_symbols", len(symbols)).
+		Int("num_isins", len(isins)).
 		Int("lookback_days", lookbackDays).
 		Msg("Building covariance matrix")
 
 	// 1. Fetch price history from database
-	priceData, err := rb.fetchPriceHistory(symbols, lookbackDays)
+	priceData, err := rb.fetchPriceHistory(isins, lookbackDays) // Use ISINs ✅
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to fetch price history: %w", err)
 	}
@@ -72,7 +73,7 @@ func (rb *RiskModelBuilder) BuildCovarianceMatrix(
 
 	rb.log.Debug().
 		Int("num_dates", len(priceData.Dates)).
-		Int("num_symbols", len(priceData.Data)).
+		Int("num_isins", len(priceData.Data)).
 		Msg("Fetched price history")
 
 	// 2. Handle missing data (forward-fill and back-fill)
@@ -82,7 +83,7 @@ func (rb *RiskModelBuilder) BuildCovarianceMatrix(
 	returns := rb.calculateReturns(filledData)
 
 	// 4. Calculate covariance matrix with Ledoit-Wolf shrinkage using native Go implementation
-	covMatrix, err := calculateCovarianceLedoitWolf(returns, symbols)
+	covMatrix, err := calculateCovarianceLedoitWolf(returns, isins) // Use ISINs ✅
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to calculate covariance: %w", err)
 	}
@@ -92,7 +93,7 @@ func (rb *RiskModelBuilder) BuildCovarianceMatrix(
 		Msg("Calculated covariance matrix with Ledoit-Wolf shrinkage")
 
 	// 5. Extract high correlations from covariance matrix
-	correlations := rb.getCorrelations(covMatrix, symbols, HighCorrelationThreshold)
+	correlations := rb.getCorrelations(covMatrix, isins, HighCorrelationThreshold) // Use ISINs ✅
 
 	rb.log.Info().
 		Int("high_correlations", len(correlations)).
@@ -105,8 +106,9 @@ func (rb *RiskModelBuilder) BuildCovarianceMatrix(
 // regime-weighted observations (kernel on regime score + time decay).
 //
 // The regime score series is derived from a fixed set of market indices in history DB.
+// All parameters and returns use ISIN keys (not Symbol keys).
 func (rb *RiskModelBuilder) BuildRegimeAwareCovarianceMatrix(
-	symbols []string,
+	isins []string, // ISIN array ✅ (renamed from symbols)
 	lookbackDays int,
 	currentRegimeScore float64,
 	opts RegimeAwareRiskOptions,
@@ -129,7 +131,7 @@ func (rb *RiskModelBuilder) BuildRegimeAwareCovarianceMatrix(
 	}
 
 	rb.log.Info().
-		Int("num_symbols", len(symbols)).
+		Int("num_isins", len(isins)).
 		Int("lookback_days", lookbackDays).
 		Float64("current_regime_score", currentRegimeScore).
 		Int("regime_window_days", regimeWindowDays).
@@ -138,7 +140,7 @@ func (rb *RiskModelBuilder) BuildRegimeAwareCovarianceMatrix(
 		Msg("Building regime-aware covariance matrix")
 
 	// 1. Fetch price history for assets.
-	assetPriceData, err := rb.fetchPriceHistory(symbols, lookbackDays)
+	assetPriceData, err := rb.fetchPriceHistory(isins, lookbackDays) // Use ISINs ✅
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to fetch price history: %w", err)
 	}
@@ -218,7 +220,7 @@ func (rb *RiskModelBuilder) BuildRegimeAwareCovarianceMatrix(
 		return nil, nil, nil, fmt.Errorf("failed to build observation weights: %w", err)
 	}
 
-	weightedCov, err := weightedCovariance(assetReturns, symbols, obsWeights)
+	weightedCov, err := weightedCovariance(assetReturns, isins, obsWeights) // Use ISINs ✅
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to calculate weighted covariance: %w", err)
 	}
@@ -230,7 +232,7 @@ func (rb *RiskModelBuilder) BuildRegimeAwareCovarianceMatrix(
 	}
 
 	// 5. Correlation diagnostics.
-	correlations := rb.getCorrelations(covMatrix, symbols, HighCorrelationThreshold)
+	correlations := rb.getCorrelations(covMatrix, isins, HighCorrelationThreshold) // Use ISINs ✅
 
 	rb.log.Info().
 		Float64("effective_sample_size", effectiveSampleSize(obsWeights)).
@@ -510,12 +512,13 @@ func (rb *RiskModelBuilder) calculateReturns(data TimeSeriesData) map[string][]f
 }
 
 // getCorrelations extracts high correlation pairs from covariance matrix.
+// All parameters use ISIN keys (not Symbol keys).
 func (rb *RiskModelBuilder) getCorrelations(
 	covMatrix [][]float64,
-	symbols []string,
+	isins []string, // ISIN array ✅ (renamed from symbols)
 	threshold float64,
 ) []CorrelationPair {
-	if len(covMatrix) == 0 || len(symbols) == 0 {
+	if len(covMatrix) == 0 || len(isins) == 0 {
 		return []CorrelationPair{}
 	}
 
@@ -539,14 +542,14 @@ func (rb *RiskModelBuilder) getCorrelations(
 				// Check if correlation exceeds threshold (absolute value)
 				if math.Abs(correlation) >= threshold {
 					correlations = append(correlations, CorrelationPair{
-						Symbol1:     symbols[i],
-						Symbol2:     symbols[j],
+						Symbol1:     isins[i], // ISIN ✅
+						Symbol2:     isins[j], // ISIN ✅
 						Correlation: correlation,
 					})
 
 					rb.log.Debug().
-						Str("symbol1", symbols[i]).
-						Str("symbol2", symbols[j]).
+						Str("isin1", isins[i]).
+						Str("isin2", isins[j]).
 						Float64("correlation", correlation).
 						Msg("High correlation detected")
 				}
@@ -589,24 +592,25 @@ func (rb *RiskModelBuilder) buildPlaceholders(n int) string {
 }
 
 // calculateSampleCovariance calculates the sample covariance matrix from returns.
-// Returns a symmetric matrix where element (i,j) is the covariance between symbols[i] and symbols[j].
-func calculateSampleCovariance(returns map[string][]float64, symbols []string) ([][]float64, error) {
-	if len(symbols) == 0 {
-		return nil, fmt.Errorf("no symbols provided")
+// Returns a symmetric matrix where element (i,j) is the covariance between isins[i] and isins[j].
+// All parameters use ISIN keys (not Symbol keys).
+func calculateSampleCovariance(returns map[string][]float64, isins []string) ([][]float64, error) {
+	if len(isins) == 0 {
+		return nil, fmt.Errorf("no ISINs provided")
 	}
 
-	// Find the length of returns (should be same for all symbols)
+	// Find the length of returns (should be same for all ISINs)
 	var returnLength int
-	for _, symbol := range symbols {
-		ret, ok := returns[symbol]
+	for _, isin := range isins {
+		ret, ok := returns[isin]
 		if !ok {
-			return nil, fmt.Errorf("missing returns for symbol %s", symbol)
+			return nil, fmt.Errorf("missing returns for ISIN %s", isin)
 		}
 		if returnLength == 0 {
 			returnLength = len(ret)
 		}
 		if len(ret) != returnLength {
-			return nil, fmt.Errorf("inconsistent return lengths: expected %d, got %d for symbol %s", returnLength, len(ret), symbol)
+			return nil, fmt.Errorf("inconsistent return lengths: expected %d, got %d for ISIN %s", returnLength, len(ret), isin)
 		}
 	}
 
@@ -614,18 +618,18 @@ func calculateSampleCovariance(returns map[string][]float64, symbols []string) (
 		return nil, fmt.Errorf("insufficient data: need at least 2 observations, got %d", returnLength)
 	}
 
-	n := len(symbols)
+	n := len(isins)
 	covMatrix := make([][]float64, n)
 	for i := range covMatrix {
 		covMatrix[i] = make([]float64, n)
 	}
 
-	// Build data matrix: each column is a symbol's returns
+	// Build data matrix: each column is an ISIN's returns
 	data := make([][]float64, returnLength)
 	for i := 0; i < returnLength; i++ {
 		data[i] = make([]float64, n)
-		for j, symbol := range symbols {
-			data[i][j] = returns[symbol][i]
+		for j, isin := range isins {
+			data[i][j] = returns[isin][i]
 		}
 	}
 
@@ -766,9 +770,10 @@ func applyLedoitWolfShrinkage(sampleCov [][]float64) ([][]float64, error) {
 
 // calculateCovarianceLedoitWolf calculates the covariance matrix with Ledoit-Wolf shrinkage.
 // First calculates sample covariance, then applies shrinkage.
-func calculateCovarianceLedoitWolf(returns map[string][]float64, symbols []string) ([][]float64, error) {
+// All parameters use ISIN keys (not Symbol keys).
+func calculateCovarianceLedoitWolf(returns map[string][]float64, isins []string) ([][]float64, error) {
 	// Calculate sample covariance
-	sampleCov, err := calculateSampleCovariance(returns, symbols)
+	sampleCov, err := calculateSampleCovariance(returns, isins)
 	if err != nil {
 		return nil, fmt.Errorf("failed to calculate sample covariance: %w", err)
 	}
@@ -838,16 +843,17 @@ func regimeTimeDecayWeights(
 	return weights, nil
 }
 
-// weightedCovariance computes a weighted covariance matrix (symbols order, oldest->newest observations).
+// weightedCovariance computes a weighted covariance matrix (ISINs order, oldest->newest observations).
 // Uses the effective-sample correction: denom = 1 - sum(w^2).
+// All parameters use ISIN keys (not Symbol keys).
 func weightedCovariance(
 	returns map[string][]float64,
-	symbols []string,
+	isins []string, // ISIN array ✅ (renamed from symbols)
 	weights []float64,
 ) ([][]float64, error) {
-	n := len(symbols)
+	n := len(isins)
 	if n == 0 {
-		return nil, fmt.Errorf("no symbols provided")
+		return nil, fmt.Errorf("no ISINs provided")
 	}
 	if len(weights) == 0 {
 		return nil, fmt.Errorf("no weights provided")
@@ -856,10 +862,10 @@ func weightedCovariance(
 	// Validate lengths and compute means.
 	t := len(weights)
 	mu := make([]float64, n)
-	for i, sym := range symbols {
-		ri, ok := returns[sym]
+	for i, isin := range isins {
+		ri, ok := returns[isin]
 		if !ok {
-			return nil, fmt.Errorf("missing returns for symbol %s", sym)
+			return nil, fmt.Errorf("missing returns for ISIN %s", isin)
 		}
 		if len(ri) != t {
 			return nil, fmt.Errorf("inconsistent return lengths")
@@ -886,9 +892,9 @@ func weightedCovariance(
 	}
 
 	for i := 0; i < n; i++ {
-		ri := returns[symbols[i]]
+		ri := returns[isins[i]]
 		for j := i; j < n; j++ {
-			rj := returns[symbols[j]]
+			rj := returns[isins[j]]
 			s := 0.0
 			for k := 0; k < t; k++ {
 				s += weights[k] * (ri[k] - mu[i]) * (rj[k] - mu[j])

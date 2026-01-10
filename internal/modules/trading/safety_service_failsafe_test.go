@@ -116,7 +116,7 @@ func TestValidateTrade_SoftFailSafe_AllowsWhenMarketHoursUnavailable(t *testing.
 	defer cleanupConfig()
 
 	// Create repositories
-	tradeRepo := NewTradeRepository(ledgerDB.Conn(), log)
+	tradeRepo := NewTradeRepository(ledgerDB.Conn(), universeDB.Conn(), log)
 	securityRepo := universe.NewSecurityRepository(universeDB.Conn(), log)
 	positionRepo := portfolio.NewPositionRepository(portfolioDB.Conn(), universeDB.Conn(), log)
 	settingsService := settings.NewService(settings.NewRepository(configDB.Conn(), log), log)
@@ -249,7 +249,7 @@ func TestValidateTrade_WithMarketHoursService(t *testing.T) {
 	defer cleanupConfig()
 
 	// Create repositories
-	tradeRepo := NewTradeRepository(ledgerDB.Conn(), log)
+	tradeRepo := NewTradeRepository(ledgerDB.Conn(), universeDB.Conn(), log)
 	securityRepo := universe.NewSecurityRepository(universeDB.Conn(), log)
 	positionRepo := portfolio.NewPositionRepository(portfolioDB.Conn(), universeDB.Conn(), log)
 	settingsService := settings.NewService(settings.NewRepository(configDB.Conn(), log), log)
@@ -318,7 +318,7 @@ func TestValidateTrade_BlocksInsufficientQuantity(t *testing.T) {
 	defer cleanupConfig()
 
 	// Create repositories
-	tradeRepo := NewTradeRepository(ledgerDB.Conn(), log)
+	tradeRepo := NewTradeRepository(ledgerDB.Conn(), universeDB.Conn(), log)
 	securityRepo := universe.NewSecurityRepository(universeDB.Conn(), log)
 	positionRepo := portfolio.NewPositionRepository(portfolioDB.Conn(), universeDB.Conn(), log)
 	settingsService := settings.NewService(settings.NewRepository(configDB.Conn(), log), log)
@@ -386,7 +386,7 @@ func TestValidateTrade_AllowsValidQuantity(t *testing.T) {
 	defer cleanupConfig()
 
 	// Create repositories
-	tradeRepo := NewTradeRepository(ledgerDB.Conn(), log)
+	tradeRepo := NewTradeRepository(ledgerDB.Conn(), universeDB.Conn(), log)
 	securityRepo := universe.NewSecurityRepository(universeDB.Conn(), log)
 	positionRepo := portfolio.NewPositionRepository(portfolioDB.Conn(), universeDB.Conn(), log)
 	settingsService := settings.NewService(settings.NewRepository(configDB.Conn(), log), log)

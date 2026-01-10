@@ -8,14 +8,23 @@ import (
 )
 
 // RebalanceSellsCalculator identifies overweight positions to sell for rebalancing.
+// Supports optional tag-based filtering for performance when EnableTagFiltering=true.
 type RebalanceSellsCalculator struct {
 	*BaseCalculator
+	tagFilter    TagFilter
+	securityRepo SecurityRepository
 }
 
 // NewRebalanceSellsCalculator creates a new rebalance sells calculator.
-func NewRebalanceSellsCalculator(log zerolog.Logger) *RebalanceSellsCalculator {
+func NewRebalanceSellsCalculator(
+	tagFilter TagFilter,
+	securityRepo SecurityRepository,
+	log zerolog.Logger,
+) *RebalanceSellsCalculator {
 	return &RebalanceSellsCalculator{
 		BaseCalculator: NewBaseCalculator(log, "rebalance_sells"),
+		tagFilter:      tagFilter,
+		securityRepo:   securityRepo,
 	}
 }
 
@@ -38,6 +47,15 @@ func (c *RebalanceSellsCalculator) Calculate(
 	minOverweightThreshold := GetFloatParam(params, "min_overweight_threshold", 0.05) // 5% overweight
 	maxSellPercentage := GetFloatParam(params, "max_sell_percentage", 0.50)           // Risk management cap (default 50%)
 	maxPositions := GetIntParam(params, "max_positions", 0)                           // 0 = unlimited
+
+	// Extract config for tag filtering (will be used in Phase 4 for priority boosting)
+	var config *domain.PlannerConfiguration
+	if cfg, ok := params["config"].(*domain.PlannerConfiguration); ok && cfg != nil {
+		config = cfg
+	} else {
+		config = domain.NewDefaultConfiguration()
+	}
+	_ = config // Reserved for future use in priority boosting (Phase 4)
 
 	if !ctx.AllowSell {
 		c.log.Debug().Msg("Selling not allowed, skipping rebalance sells")
@@ -87,25 +105,32 @@ func (c *RebalanceSellsCalculator) Calculate(
 	var candidates []domain.ActionCandidate
 
 	for _, position := range ctx.Positions {
-		// Use ISIN if available, otherwise fallback to symbol
+		// Get ISIN for internal operations
 		isin := position.ISIN
 		if isin == "" {
-			isin = position.Symbol // Fallback for CASH positions
-		}
-
-		// Skip if ineligible
-		if ctx.IneligibleSymbols[position.Symbol] {
+			c.log.Warn().
+				Str("symbol", position.Symbol).
+				Msg("Position missing ISIN, skipping")
 			continue
 		}
 
-		// Skip if recently sold
-		if ctx.RecentlySold[position.Symbol] {
+		// Skip if ineligible (ISIN lookup)
+		if ctx.IneligibleISINs[isin] { // ISIN key ✅
 			continue
 		}
 
-		// Get security info (try ISIN first, fallback to symbol)
-		security, ok := ctx.GetSecurityByISINOrSymbol(isin, position.Symbol)
+		// Skip if recently sold (ISIN lookup)
+		if ctx.RecentlySoldISINs[isin] { // ISIN key ✅
+			continue
+		}
+
+		// Get security info (direct ISIN lookup)
+		security, ok := ctx.StocksByISIN[isin] // ISIN key ✅
 		if !ok {
+			c.log.Debug().
+				Str("isin", isin).
+				Str("symbol", position.Symbol).
+				Msg("Security not found in StocksByISIN, skipping")
 			continue
 		}
 
@@ -113,6 +138,7 @@ func (c *RebalanceSellsCalculator) Calculate(
 		if !security.AllowSell {
 			c.log.Debug().
 				Str("symbol", position.Symbol).
+				Str("isin", isin).
 				Msg("Skipping security: allow_sell=false")
 			continue
 		}
@@ -139,8 +165,8 @@ func (c *RebalanceSellsCalculator) Calculate(
 			continue
 		}
 
-		// Get current price (try ISIN first, fallback to symbol)
-		currentPrice, ok := ctx.GetPriceByISINOrSymbol(isin, position.Symbol)
+		// Get current price (direct ISIN lookup)
+		currentPrice, ok := ctx.CurrentPrices[isin] // ISIN key ✅
 		if !ok || currentPrice <= 0 {
 			c.log.Warn().
 				Str("symbol", position.Symbol).
@@ -183,6 +209,14 @@ func (c *RebalanceSellsCalculator) Calculate(
 		// Priority based on how overweight the country is
 		priority := overweight * 0.5 // Lower priority than profit-taking
 
+		// Apply tag-based priority boosts (with regime-aware logic, sell calculator - no quantum penalty)
+		if config.EnableTagFiltering && c.securityRepo != nil {
+			securityTags, err := c.securityRepo.GetTagsForSecurity(position.Symbol)
+			if err == nil && len(securityTags) > 0 {
+				priority = ApplyTagBasedPriorityBoosts(priority, securityTags, "rebalance_sells", c.securityRepo)
+			}
+		}
+
 		// Build reason
 		reason := fmt.Sprintf("Rebalance: %s overweight by %.1f%%",
 			group, overweight*100)
@@ -192,7 +226,8 @@ func (c *RebalanceSellsCalculator) Calculate(
 
 		candidate := domain.ActionCandidate{
 			Side:     "SELL",
-			Symbol:   position.Symbol,
+			ISIN:     isin,            // PRIMARY identifier ✅
+			Symbol:   position.Symbol, // BOUNDARY identifier
 			Name:     security.Name,
 			Quantity: quantity,
 			Price:    currentPrice,
