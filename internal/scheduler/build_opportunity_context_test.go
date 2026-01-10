@@ -105,7 +105,7 @@ func TestBuildOpportunityContextJob_Name(t *testing.T) {
 func TestBuildOpportunityContextJob_Run_Success(t *testing.T) {
 	// Mock position repo
 	positions := []portfolio.Position{
-		{Symbol: "AAPL", Quantity: 10, Currency: "USD", AvgPrice: 150.0},
+		{Symbol: "AAPL", ISIN: "US0378331005", Quantity: 10, Currency: "USD", AvgPrice: 150.0},
 	}
 	positionsInterface := make([]interface{}, len(positions))
 	for i := range positions {
@@ -363,8 +363,9 @@ func (m *MockPriceConversionServiceForScheduler) ConvertPricesToEUR(
 // TestFetchCurrentPrices_HKD_Conversion verifies HKD prices are converted to EUR
 func TestFetchCurrentPrices_HKD_Conversion(t *testing.T) {
 	// Setup: HKD security with price 497.4 HKD
+	isin := "KYG2108Y1052" // CAT ISIN
 	securities := []universe.Security{
-		{Symbol: "CAT.3750.AS", Currency: "HKD"},
+		{Symbol: "CAT.3750.AS", ISIN: isin, Currency: "HKD"},
 	}
 
 	// Mock Yahoo returns 497.4 HKD
@@ -398,16 +399,17 @@ func TestFetchCurrentPrices_HKD_Conversion(t *testing.T) {
 	// Execute
 	prices := job.fetchCurrentPrices(securities)
 
-	// Verify: Price converted to EUR
-	eurPrice := prices["CAT.3750.AS"]
+	// Verify: Price converted to EUR (prices map uses ISIN keys)
+	eurPrice := prices[isin]
 	expected := 497.4 * 0.11 // = 54.714
 	assert.InDelta(t, expected, eurPrice, 0.01, "HKD price should be converted to EUR")
 }
 
 // TestFetchCurrentPrices_EUR_NoConversion verifies EUR prices are not converted
 func TestFetchCurrentPrices_EUR_NoConversion(t *testing.T) {
+	isin := "NL0000009082" // VWS ISIN
 	securities := []universe.Security{
-		{Symbol: "VWS.AS", Currency: "EUR"},
+		{Symbol: "VWS.AS", ISIN: isin, Currency: "EUR"},
 	}
 
 	eurPrice := 42.5
@@ -431,14 +433,15 @@ func TestFetchCurrentPrices_EUR_NoConversion(t *testing.T) {
 
 	prices := job.fetchCurrentPrices(securities)
 
-	// Verify: EUR price unchanged
-	assert.Equal(t, 42.5, prices["VWS.AS"], "EUR price should not be converted")
+	// Verify: EUR price unchanged (prices map uses ISIN keys)
+	assert.Equal(t, 42.5, prices[isin], "EUR price should not be converted")
 }
 
 // TestFetchCurrentPrices_USD_Conversion verifies USD prices are converted to EUR
 func TestFetchCurrentPrices_USD_Conversion(t *testing.T) {
+	isin := "US0378331005" // AAPL ISIN
 	securities := []universe.Security{
-		{Symbol: "AAPL", Currency: "USD"},
+		{Symbol: "AAPL", ISIN: isin, Currency: "USD"},
 	}
 
 	usdPrice := 150.0
@@ -471,7 +474,7 @@ func TestFetchCurrentPrices_USD_Conversion(t *testing.T) {
 	prices := job.fetchCurrentPrices(securities)
 
 	expected := 150.0 * 0.93 // = 139.5 EUR
-	assert.InDelta(t, expected, prices["AAPL"], 0.01, "USD price should be converted to EUR")
+	assert.InDelta(t, expected, prices[isin], 0.01, "USD price should be converted to EUR")
 }
 
 // TestFetchCurrentPrices_MissingRate_FallbackToNative verifies graceful fallback when rate unavailable

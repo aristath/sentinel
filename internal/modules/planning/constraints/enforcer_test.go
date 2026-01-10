@@ -656,6 +656,7 @@ func TestEnforcer_EnforceConstraints_InvalidSide(t *testing.T) {
 
 	action := planningdomain.ActionCandidate{
 		Side:     "INVALID",
+		ISIN:     "US1234567890",
 		Symbol:   "TEST.US",
 		Name:     "Test Security",
 		Quantity: 10,
