@@ -16,6 +16,7 @@ import (
 	"github.com/aristath/sentinel/internal/domain"
 	"github.com/aristath/sentinel/internal/events"
 	"github.com/aristath/sentinel/internal/modules/portfolio"
+	planningrepo "github.com/aristath/sentinel/internal/modules/planning/repository"
 	"github.com/aristath/sentinel/internal/modules/trading"
 	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/rs/zerolog"
@@ -70,18 +71,19 @@ type TradeRecommendation struct {
 //
 // Faithful translation from Python: app/modules/trading/services/trade_execution_service.py
 type TradeExecutionService struct {
-	brokerClient     domain.BrokerClient
-	tradeRepo        TradeRepositoryInterface
-	positionRepo     *portfolio.PositionRepository
-	cashManager      domain.CashManager
-	exchangeService  domain.CurrencyExchangeServiceInterface
-	eventManager     *events.Manager
-	settingsService  SettingsServiceInterface     // For configuration (fees, price age, etc.)
-	orderBookService OrderBookServiceInterface    // For order book analysis (liquidity validation, optimal limit pricing)
-	yahooClient      yahoo.FullClientInterface    // For fetching fresh prices
-	historyDB        *sql.DB                      // For storing updated prices
-	securityRepo     *universe.SecurityRepository // For ISIN lookup
-	log              zerolog.Logger
+	brokerClient      domain.BrokerClient
+	tradeRepo         TradeRepositoryInterface
+	positionRepo      *portfolio.PositionRepository
+	cashManager       domain.CashManager
+	exchangeService   domain.CurrencyExchangeServiceInterface
+	eventManager      *events.Manager
+	settingsService   SettingsServiceInterface     // For configuration (fees, price age, etc.)
+	plannerConfigRepo *planningrepo.ConfigRepository // For transaction costs from planner config
+	orderBookService  OrderBookServiceInterface    // For order book analysis (liquidity validation, optimal limit pricing)
+	yahooClient       yahoo.FullClientInterface    // For fetching fresh prices
+	historyDB         *sql.DB                      // For storing updated prices
+	securityRepo      *universe.SecurityRepository // For ISIN lookup
+	log               zerolog.Logger
 }
 
 // ExecuteResult represents the result of executing a trade
@@ -100,6 +102,7 @@ func NewTradeExecutionService(
 	exchangeService domain.CurrencyExchangeServiceInterface,
 	eventManager *events.Manager,
 	settingsService SettingsServiceInterface,
+	plannerConfigRepo *planningrepo.ConfigRepository,
 	orderBookService OrderBookServiceInterface,
 	yahooClient yahoo.FullClientInterface,
 	historyDB *sql.DB,
@@ -107,18 +110,19 @@ func NewTradeExecutionService(
 	log zerolog.Logger,
 ) *TradeExecutionService {
 	return &TradeExecutionService{
-		brokerClient:     brokerClient,
-		tradeRepo:        tradeRepo,
-		positionRepo:     positionRepo,
-		cashManager:      cashManager,
-		exchangeService:  exchangeService,
-		eventManager:     eventManager,
-		settingsService:  settingsService,
-		orderBookService: orderBookService,
-		yahooClient:      yahooClient,
-		historyDB:        historyDB,
-		securityRepo:     securityRepo,
-		log:              log.With().Str("service", "trade_execution").Logger(),
+		brokerClient:      brokerClient,
+		tradeRepo:         tradeRepo,
+		positionRepo:      positionRepo,
+		cashManager:       cashManager,
+		exchangeService:   exchangeService,
+		eventManager:      eventManager,
+		settingsService:   settingsService,
+		plannerConfigRepo: plannerConfigRepo,
+		orderBookService:  orderBookService,
+		yahooClient:       yahooClient,
+		historyDB:         historyDB,
+		securityRepo:      securityRepo,
+		log:               log.With().Str("service", "trade_execution").Logger(),
 	}
 }
 
@@ -373,22 +377,18 @@ func (s *TradeExecutionService) calculateCommission(
 	tradeValue float64,
 	tradeCurrency string,
 ) (float64, error) {
-	// Get commission settings (with fallback to defaults)
+	// Get commission settings from planner configuration (with fallback to defaults)
 	fixedCommissionEUR := 2.0       // Default: 2 EUR
 	variableCommissionRate := 0.002 // Default: 0.2% as decimal
 
-	if s.settingsService != nil {
-		// Read fixed commission from settings
-		if val, err := s.settingsService.Get("transaction_cost_fixed"); err == nil {
-			if fval, ok := val.(float64); ok {
-				fixedCommissionEUR = fval
-			}
-		}
-		// Read variable commission rate from settings (already in decimal form)
-		if val, err := s.settingsService.Get("transaction_cost_percent"); err == nil {
-			if fval, ok := val.(float64); ok {
-				variableCommissionRate = fval
-			}
+	if s.plannerConfigRepo != nil {
+		// Read transaction costs from planner config
+		config, err := s.plannerConfigRepo.GetDefaultConfig()
+		if err == nil {
+			fixedCommissionEUR = config.TransactionCostFixed
+			variableCommissionRate = config.TransactionCostPercent
+		} else {
+			s.log.Warn().Err(err).Msg("Failed to get planner config for transaction costs, using defaults")
 		}
 	}
 

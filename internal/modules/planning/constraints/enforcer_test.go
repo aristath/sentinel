@@ -41,7 +41,7 @@ func TestEnforcer_EnforceConstraints_AllowSellFalse(t *testing.T) {
 		Reason:   "Overweight",
 	}
 
-	validated, filtered := enforcer.EnforceConstraints([]planningdomain.ActionCandidate{action}, ctx)
+	validated, filtered := enforcer.EnforceConstraints([]planningdomain.ActionCandidate{action}, ctx, nil)
 
 	// Should be filtered out
 	assert.Len(t, validated, 0)
@@ -78,7 +78,7 @@ func TestEnforcer_EnforceConstraints_AllowBuyFalse(t *testing.T) {
 		Reason:   "Underweight",
 	}
 
-	validated, filtered := enforcer.EnforceConstraints([]planningdomain.ActionCandidate{action}, ctx)
+	validated, filtered := enforcer.EnforceConstraints([]planningdomain.ActionCandidate{action}, ctx, nil)
 
 	assert.Len(t, validated, 0)
 	assert.Len(t, filtered, 1)
@@ -114,7 +114,7 @@ func TestEnforcer_EnforceConstraints_LotSizeRoundingDown(t *testing.T) {
 		Reason:   "Overweight",
 	}
 
-	validated, filtered := enforcer.EnforceConstraints([]planningdomain.ActionCandidate{action}, ctx)
+	validated, filtered := enforcer.EnforceConstraints([]planningdomain.ActionCandidate{action}, ctx, nil)
 
 	assert.Len(t, validated, 1)
 	assert.Len(t, filtered, 0)
@@ -151,7 +151,7 @@ func TestEnforcer_EnforceConstraints_LotSizeRoundingUp(t *testing.T) {
 		Reason:   "Overweight",
 	}
 
-	validated, filtered := enforcer.EnforceConstraints([]planningdomain.ActionCandidate{action}, ctx)
+	validated, filtered := enforcer.EnforceConstraints([]planningdomain.ActionCandidate{action}, ctx, nil)
 
 	assert.Len(t, validated, 1)
 	assert.Len(t, filtered, 0)
@@ -188,7 +188,7 @@ func TestEnforcer_EnforceConstraints_LotSizeExactMatch(t *testing.T) {
 		Reason:   "Overweight",
 	}
 
-	validated, filtered := enforcer.EnforceConstraints([]planningdomain.ActionCandidate{action}, ctx)
+	validated, filtered := enforcer.EnforceConstraints([]planningdomain.ActionCandidate{action}, ctx, nil)
 
 	assert.Len(t, validated, 1)
 	assert.Len(t, filtered, 0)
@@ -225,7 +225,7 @@ func TestEnforcer_EnforceConstraints_LotSizeMultiple(t *testing.T) {
 		Reason:   "Overweight",
 	}
 
-	validated, filtered := enforcer.EnforceConstraints([]planningdomain.ActionCandidate{action}, ctx)
+	validated, filtered := enforcer.EnforceConstraints([]planningdomain.ActionCandidate{action}, ctx, nil)
 
 	assert.Len(t, validated, 1)
 	assert.Len(t, filtered, 0)
@@ -262,7 +262,7 @@ func TestEnforcer_EnforceConstraints_ValueRecalculation(t *testing.T) {
 		Reason:   "Overweight",
 	}
 
-	validated, _ := enforcer.EnforceConstraints([]planningdomain.ActionCandidate{action}, ctx)
+	validated, _ := enforcer.EnforceConstraints([]planningdomain.ActionCandidate{action}, ctx, nil)
 
 	require.Len(t, validated, 1)
 	assert.Equal(t, 500, validated[0].Quantity)
@@ -320,7 +320,7 @@ func TestEnforcer_EnforceConstraints_MultipleActions(t *testing.T) {
 	securityLookup := createSecurityLookup(securities)
 	enforcer := NewEnforcer(log, securityLookup)
 
-	validated, filtered := enforcer.EnforceConstraints(actions, ctx)
+	validated, filtered := enforcer.EnforceConstraints(actions, ctx, nil)
 
 	assert.Len(t, validated, 1)
 	assert.Len(t, filtered, 1)
@@ -352,7 +352,7 @@ func TestEnforcer_EnforceConstraints_MissingSecurity(t *testing.T) {
 		StocksByISIN:   make(map[string]domain.Security),
 	}
 
-	validated, filtered := enforcer.EnforceConstraints([]planningdomain.ActionCandidate{action}, ctx)
+	validated, filtered := enforcer.EnforceConstraints([]planningdomain.ActionCandidate{action}, ctx, nil)
 
 	assert.Len(t, validated, 0)
 	assert.Len(t, filtered, 1)
@@ -388,7 +388,7 @@ func TestEnforcer_EnforceConstraints_ZeroLotSize(t *testing.T) {
 		Reason:   "Overweight",
 	}
 
-	validated, filtered := enforcer.EnforceConstraints([]planningdomain.ActionCandidate{action}, ctx)
+	validated, filtered := enforcer.EnforceConstraints([]planningdomain.ActionCandidate{action}, ctx, nil)
 
 	assert.Len(t, validated, 1)
 	assert.Len(t, filtered, 0)
@@ -426,6 +426,208 @@ func TestEnforcer_roundToLotSize(t *testing.T) {
 	}
 }
 
+func TestEnforcer_EnforceConstraints_MaxSellPercentage(t *testing.T) {
+	log := zerolog.Nop()
+
+	security := universe.Security{
+		Symbol:    "PPA.GR",
+		Name:      "PPA Security",
+		ISIN:      "GR1234567890",
+		AllowSell: true,
+		AllowBuy:  true,
+		MinLot:    1,
+	}
+
+	// Position: 888.8 shares
+	position := domain.Position{
+		Symbol:   "PPA.GR",
+		ISIN:     "GR1234567890",
+		Quantity: 888.8,
+	}
+
+	config := &planningdomain.PlannerConfiguration{
+		MaxSellPercentage: 0.28, // 28% max sell
+	}
+
+	ctx := &planningdomain.OpportunityContext{
+		Positions:         []domain.Position{position},
+		Securities:        []domain.Security{{Symbol: "PPA.GR", ISIN: "GR1234567890"}},
+		StocksBySymbol:    map[string]domain.Security{"PPA.GR": {Symbol: "PPA.GR", ISIN: "GR1234567890"}},
+		StocksByISIN:      map[string]domain.Security{"GR1234567890": {Symbol: "PPA.GR", ISIN: "GR1234567890"}},
+		IneligibleSymbols: map[string]bool{},
+		RecentlySold:      map[string]bool{},
+		AllowSell:         true,
+	}
+
+	securityLookup := createSecurityLookup([]universe.Security{security})
+	enforcer := NewEnforcer(log, securityLookup)
+
+	tests := []struct {
+		name                 string
+		sellQuantity         int
+		expectedValid        bool
+		expectedMaxQuantity  int
+		description          string
+	}{
+		{
+			name:                "441 shares exceeds 28% of 888.8 (max 248)",
+			sellQuantity:        441,
+			expectedValid:       true, // Should be adjusted, not filtered
+			expectedMaxQuantity: 248,  // int(888.8 * 0.28) = 248
+			description:         "Should adjust 441 down to 248 (28% of 888.8)",
+		},
+		{
+			name:                "248 shares = exactly 28% of 888.8",
+			sellQuantity:        248,
+			expectedValid:       true,
+			expectedMaxQuantity: 248,
+			description:         "Should allow exactly 28%",
+		},
+		{
+			name:                "100 shares < 28% of 888.8",
+			sellQuantity:        100,
+			expectedValid:       true,
+			expectedMaxQuantity: 100,
+			description:         "Should allow amounts below the limit",
+		},
+		{
+			name:                "500 shares > 28% of 888.8",
+			sellQuantity:        500,
+			expectedValid:       true,
+			expectedMaxQuantity: 248,
+			description:         "Should adjust 500 down to 248 (28% of 888.8)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			action := planningdomain.ActionCandidate{
+				Side:     "SELL",
+				Symbol:   "PPA.GR",
+				Name:     "PPA Security",
+				Quantity: tt.sellQuantity,
+				Price:    10.0,
+				ValueEUR: float64(tt.sellQuantity) * 10.0,
+				Currency: "EUR",
+				Priority: 0.5,
+				Reason:   "Test",
+			}
+
+			validated, filtered := enforcer.EnforceConstraints([]planningdomain.ActionCandidate{action}, ctx, config)
+
+			if tt.expectedValid {
+				assert.Len(t, validated, 1, "Should validate the action (possibly adjusted)")
+				assert.Len(t, filtered, 0, "Should not filter the action")
+				assert.Equal(t, tt.expectedMaxQuantity, validated[0].Quantity,
+					"Quantity should be %d, got %d", tt.expectedMaxQuantity, validated[0].Quantity)
+			} else {
+				assert.Len(t, validated, 0, "Should not validate the action")
+				assert.Len(t, filtered, 1, "Should filter the action")
+			}
+		})
+	}
+}
+
+func TestEnforcer_EnforceConstraints_MaxSellPercentage_BuyNotAffected(t *testing.T) {
+	log := zerolog.Nop()
+
+	security := universe.Security{
+		Symbol:    "TEST.US",
+		Name:      "Test Security",
+		ISIN:      "US1234567890",
+		AllowSell: true,
+		AllowBuy:  true,
+		MinLot:    1,
+	}
+
+	config := &planningdomain.PlannerConfiguration{
+		MaxSellPercentage: 0.28,
+	}
+
+	ctx := &planningdomain.OpportunityContext{
+		Positions:         []domain.Position{},
+		Securities:        []domain.Security{{Symbol: "TEST.US", ISIN: "US1234567890"}},
+		StocksBySymbol:    map[string]domain.Security{"TEST.US": {Symbol: "TEST.US", ISIN: "US1234567890"}},
+		StocksByISIN:      map[string]domain.Security{"US1234567890": {Symbol: "TEST.US", ISIN: "US1234567890"}},
+		IneligibleSymbols: map[string]bool{},
+		RecentlySold:      map[string]bool{},
+		AllowBuy:          true,
+	}
+
+	securityLookup := createSecurityLookup([]universe.Security{security})
+	enforcer := NewEnforcer(log, securityLookup)
+
+	// MaxSellPercentage should NOT affect BUY actions
+	action := planningdomain.ActionCandidate{
+		Side:     "BUY",
+		Symbol:   "TEST.US",
+		Name:     "Test Security",
+		Quantity: 1000, // Large buy amount
+		Price:    10.0,
+		ValueEUR: 10000.0,
+		Currency: "EUR",
+		Priority: 0.5,
+		Reason:   "Test",
+	}
+
+	validated, filtered := enforcer.EnforceConstraints([]planningdomain.ActionCandidate{action}, ctx, config)
+
+	assert.Len(t, validated, 1, "BUY action should be validated")
+	assert.Len(t, filtered, 0, "BUY action should not be filtered")
+	assert.Equal(t, 1000, validated[0].Quantity, "BUY quantity should not be affected by MaxSellPercentage")
+}
+
+func TestEnforcer_EnforceConstraints_MaxSellPercentage_NoPosition(t *testing.T) {
+	log := zerolog.Nop()
+
+	security := universe.Security{
+		Symbol:    "TEST.US",
+		Name:      "Test Security",
+		ISIN:      "US1234567890",
+		AllowSell: true,
+		AllowBuy:  true,
+		MinLot:    1,
+	}
+
+	config := &planningdomain.PlannerConfiguration{
+		MaxSellPercentage: 0.28,
+	}
+
+	// No positions in context
+	ctx := &planningdomain.OpportunityContext{
+		Positions:         []domain.Position{},
+		Securities:        []domain.Security{{Symbol: "TEST.US", ISIN: "US1234567890"}},
+		StocksBySymbol:    map[string]domain.Security{"TEST.US": {Symbol: "TEST.US", ISIN: "US1234567890"}},
+		StocksByISIN:      map[string]domain.Security{"US1234567890": {Symbol: "TEST.US", ISIN: "US1234567890"}},
+		IneligibleSymbols: map[string]bool{},
+		RecentlySold:      map[string]bool{},
+		AllowSell:         true,
+	}
+
+	securityLookup := createSecurityLookup([]universe.Security{security})
+	enforcer := NewEnforcer(log, securityLookup)
+
+	// Trying to sell a security we don't own
+	action := planningdomain.ActionCandidate{
+		Side:     "SELL",
+		Symbol:   "TEST.US",
+		Name:     "Test Security",
+		Quantity: 100,
+		Price:    10.0,
+		ValueEUR: 1000.0,
+		Currency: "EUR",
+		Priority: 0.5,
+		Reason:   "Test",
+	}
+
+	validated, filtered := enforcer.EnforceConstraints([]planningdomain.ActionCandidate{action}, ctx, config)
+
+	// Should be filtered because we don't have a position
+	assert.Len(t, validated, 0, "Should not validate sell of non-existent position")
+	assert.Len(t, filtered, 1, "Should filter sell of non-existent position")
+	assert.Contains(t, filtered[0].Reason, "no position found", "Should indicate no position")
+}
+
 func TestEnforcer_EnforceConstraints_InvalidSide(t *testing.T) {
 	log := zerolog.Nop()
 
@@ -454,7 +656,7 @@ func TestEnforcer_EnforceConstraints_InvalidSide(t *testing.T) {
 		Reason:   "Test",
 	}
 
-	validated, filtered := enforcer.EnforceConstraints([]planningdomain.ActionCandidate{action}, ctx)
+	validated, filtered := enforcer.EnforceConstraints([]planningdomain.ActionCandidate{action}, ctx, nil)
 
 	assert.Len(t, validated, 0)
 	assert.Len(t, filtered, 1)
@@ -489,7 +691,7 @@ func TestEnforcer_EnforceConstraints_InvalidPrice(t *testing.T) {
 		Reason:   "Overweight",
 	}
 
-	validated, filtered := enforcer.EnforceConstraints([]planningdomain.ActionCandidate{action}, ctx)
+	validated, filtered := enforcer.EnforceConstraints([]planningdomain.ActionCandidate{action}, ctx, nil)
 
 	assert.Len(t, validated, 0)
 	assert.Len(t, filtered, 1)

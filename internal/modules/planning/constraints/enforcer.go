@@ -4,6 +4,7 @@ package constraints
 import (
 	"fmt"
 
+	"github.com/aristath/sentinel/internal/domain"
 	planningdomain "github.com/aristath/sentinel/internal/modules/planning/domain"
 	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/rs/zerolog"
@@ -37,12 +38,13 @@ func NewEnforcer(log zerolog.Logger, securityLookup SecurityLookupFunc) *Enforce
 func (e *Enforcer) EnforceConstraints(
 	actions []planningdomain.ActionCandidate,
 	ctx *planningdomain.OpportunityContext,
+	config *planningdomain.PlannerConfiguration,
 ) ([]planningdomain.ActionCandidate, []FilteredAction) {
 	var validated []planningdomain.ActionCandidate
 	var filtered []FilteredAction
 
 	for _, action := range actions {
-		valid, adjusted, reason := e.validateAndAdjustAction(action, ctx)
+		valid, adjusted, reason := e.validateAndAdjustAction(action, ctx, config)
 		if valid {
 			validated = append(validated, adjusted)
 		} else {
@@ -66,6 +68,7 @@ func (e *Enforcer) EnforceConstraints(
 func (e *Enforcer) validateAndAdjustAction(
 	action planningdomain.ActionCandidate,
 	ctx *planningdomain.OpportunityContext,
+	config *planningdomain.PlannerConfiguration,
 ) (bool, planningdomain.ActionCandidate, string) {
 	// Get ISIN from context if available
 	var isin string
@@ -84,6 +87,42 @@ func (e *Enforcer) validateAndAdjustAction(
 	if action.Side == "SELL" {
 		if !security.AllowSell {
 			return false, action, "allow_sell=false"
+		}
+
+		// Validate MaxSellPercentage for SELL actions (safety net)
+		if config != nil && config.MaxSellPercentage > 0 && config.MaxSellPercentage < 1.0 {
+			// Find the position for this symbol/ISIN
+			var position *domain.Position
+			for i := range ctx.Positions {
+				pos := &ctx.Positions[i]
+				if pos.Symbol == action.Symbol || (isin != "" && pos.ISIN == isin) {
+					position = pos
+					break
+				}
+			}
+
+			if position == nil {
+				return false, action, "no position found for sell action"
+			}
+
+			// Calculate maximum allowed sell quantity
+			maxAllowedQuantity := int(position.Quantity * config.MaxSellPercentage)
+			if action.Quantity > maxAllowedQuantity {
+				// Adjust quantity down to max allowed
+				e.log.Debug().
+					Str("symbol", action.Symbol).
+					Int("requested_quantity", action.Quantity).
+					Int("max_allowed_quantity", maxAllowedQuantity).
+					Float64("max_sell_percentage", config.MaxSellPercentage).
+					Float64("position_quantity", position.Quantity).
+					Msg("Adjusting sell quantity to respect max_sell_percentage")
+
+				action.Quantity = maxAllowedQuantity
+				// Recalculate value
+				if action.Price > 0 {
+					action.ValueEUR = float64(action.Quantity) * action.Price
+				}
+			}
 		}
 	} else if action.Side == "BUY" {
 		if !security.AllowBuy {

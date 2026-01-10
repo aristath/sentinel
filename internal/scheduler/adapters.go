@@ -449,6 +449,19 @@ func (a *ConfigRepositoryAdapter) GetDefaultConfig() (interface{}, error) {
 	return a.repo.GetDefaultConfig()
 }
 
+// PlannerConfigRepositoryAdapter adapts *repository.ConfigRepository to PlannerConfigRepositoryInterface
+type PlannerConfigRepositoryAdapter struct {
+	repo *repository.ConfigRepository
+}
+
+func NewPlannerConfigRepositoryAdapter(repo *repository.ConfigRepository) *PlannerConfigRepositoryAdapter {
+	return &PlannerConfigRepositoryAdapter{repo: repo}
+}
+
+func (a *PlannerConfigRepositoryAdapter) GetDefaultConfig() (*planningdomain.PlannerConfiguration, error) {
+	return a.repo.GetDefaultConfig()
+}
+
 // PlannerServiceAdapter adapts *planningplanner.Planner to PlannerServiceInterface
 type PlannerServiceAdapter struct {
 	service *planningplanner.Planner

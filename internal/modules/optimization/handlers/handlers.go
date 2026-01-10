@@ -17,6 +17,7 @@ import (
 	"github.com/aristath/sentinel/internal/clients/yahoo"
 	"github.com/aristath/sentinel/internal/domain"
 	"github.com/aristath/sentinel/internal/modules/dividends"
+	planningrepo "github.com/aristath/sentinel/internal/modules/planning/repository"
 	"github.com/aristath/sentinel/internal/services"
 	"github.com/rs/zerolog"
 )
@@ -37,6 +38,7 @@ type Handler struct {
 	currencyExchangeService domain.CurrencyExchangeServiceInterface
 	dividendRepo            *dividends.DividendRepository
 	cashManager             domain.CashManager
+	plannerConfigRepo       *planningrepo.ConfigRepository
 	cache                   *OptimizationCache
 	log                     zerolog.Logger
 }
@@ -45,6 +47,7 @@ type Handler struct {
 //
 // currencyExchangeService is used to convert non-EUR cash balances to EUR.
 // cashManager is used to get cash balances.
+// plannerConfigRepo is used to read optimizer settings from planner configuration.
 func NewHandler(
 	service *optimization.OptimizerService,
 	db *sql.DB,
@@ -53,6 +56,7 @@ func NewHandler(
 	currencyExchangeService *services.CurrencyExchangeService,
 	dividendRepo *dividends.DividendRepository,
 	cashManager domain.CashManager,
+	plannerConfigRepo *planningrepo.ConfigRepository,
 	log zerolog.Logger,
 ) *Handler {
 	return &Handler{
@@ -63,6 +67,7 @@ func NewHandler(
 		currencyExchangeService: currencyExchangeService,
 		dividendRepo:            dividendRepo,
 		cashManager:             cashManager,
+		plannerConfigRepo:       plannerConfigRepo,
 		cache: &OptimizationCache{
 			lastResult:  nil,
 			lastUpdated: time.Time{},
@@ -227,39 +232,34 @@ func (h *Handler) HandleRun(w http.ResponseWriter, r *http.Request) {
 // Helper methods for data fetching
 
 func (h *Handler) getSettings() (optimization.Settings, error) {
-	// Query optimizer_blend from planner_settings (moved from global settings)
-	// Other settings still come from settings table
-	query := `
-		SELECT
-			COALESCE((SELECT optimizer_blend FROM planner_settings WHERE id = 'main'), 0.5) as blend,
-			COALESCE((SELECT value FROM settings WHERE key = 'optimizer_target_return'), '0.11') as target_return,
-			COALESCE((SELECT value FROM settings WHERE key = 'target_return_threshold_pct'), '0.80') as target_return_threshold_pct,
-			COALESCE((SELECT value FROM settings WHERE key = 'min_cash_reserve'), '500.0') as min_cash_reserve
-	`
-
-	var blend float64
-	var targetReturnStr, targetReturnThresholdPctStr, minCashReserveStr string
-	err := h.db.QueryRow(query).Scan(&blend, &targetReturnStr, &targetReturnThresholdPctStr, &minCashReserveStr)
-	if err != nil {
-		return optimization.Settings{}, fmt.Errorf("failed to query settings: %w", err)
+	// All optimizer settings now come from planner configuration
+	if h.plannerConfigRepo == nil {
+		return optimization.Settings{}, fmt.Errorf("planner config repository not available")
 	}
 
-	targetReturn := optimization.OptimizerTargetReturn
-	fmt.Sscanf(targetReturnStr, "%f", &targetReturn)
+	config, err := h.plannerConfigRepo.GetDefaultConfig()
+	if err != nil {
+		return optimization.Settings{}, fmt.Errorf("failed to get planner config: %w", err)
+	}
+
+	// Get target_return_threshold_pct from global settings (not moved to planner config)
+	var targetReturnThresholdPctStr string
+	query := `SELECT COALESCE((SELECT value FROM settings WHERE key = 'target_return_threshold_pct'), '0.80') as target_return_threshold_pct`
+	err = h.db.QueryRow(query).Scan(&targetReturnThresholdPctStr)
+	if err != nil {
+		return optimization.Settings{}, fmt.Errorf("failed to query global settings: %w", err)
+	}
 
 	targetReturnThresholdPct := 0.80 // Default: 80% of target
 	fmt.Sscanf(targetReturnThresholdPctStr, "%f", &targetReturnThresholdPct)
 
-	minCashReserve := optimization.DefaultMinCashReserve
-	fmt.Sscanf(minCashReserveStr, "%f", &minCashReserve)
-
 	return optimization.Settings{
-		Blend:                    blend,
-		TargetReturn:             targetReturn,
+		Blend:                    config.OptimizerBlend,
+		TargetReturn:             config.OptimizerTargetReturn,
 		TargetReturnThresholdPct: targetReturnThresholdPct,
-		MinCashReserve:           minCashReserve,
+		MinCashReserve:           config.MinCashReserve,
 		MinTradeAmount:           0.0, // Calculated separately
-		TransactionCostPct:       optimization.DefaultTransactionCostPct,
+		TransactionCostPct:       config.TransactionCostPercent,
 		MaxConcentration:         optimization.MaxConcentration,
 	}, nil
 }

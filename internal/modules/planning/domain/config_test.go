@@ -137,17 +137,43 @@ func TestGetEnabledFilters(t *testing.T) {
 }
 
 func TestGetCalculatorParams(t *testing.T) {
-	config := &PlannerConfiguration{}
+	config := &PlannerConfiguration{
+		MaxSellPercentage: 0.28,
+		MinHoldDays:       90,
+	}
 
-	// Simplified: Returns empty map (parameters removed)
-	params := config.GetCalculatorParams("profit_taking")
-	assert.NotNil(t, params)
-	assert.Len(t, params, 0)
+	// Sell calculators should receive max_sell_percentage and min_hold_days
+	t.Run("profit_taking calculator", func(t *testing.T) {
+		params := config.GetCalculatorParams("profit_taking")
+		assert.NotNil(t, params)
+		assert.Contains(t, params, "max_sell_percentage")
+		assert.Equal(t, 0.28, params["max_sell_percentage"])
+		assert.Contains(t, params, "min_hold_days")
+		assert.Equal(t, float64(90), params["min_hold_days"])
+	})
+
+	t.Run("rebalance_sells calculator", func(t *testing.T) {
+		params := config.GetCalculatorParams("rebalance_sells")
+		assert.NotNil(t, params)
+		assert.Contains(t, params, "max_sell_percentage")
+		assert.Equal(t, 0.28, params["max_sell_percentage"])
+		assert.Contains(t, params, "min_hold_days")
+		assert.Equal(t, float64(90), params["min_hold_days"])
+	})
+
+	// Buy calculators should return empty map
+	t.Run("non-sell calculator", func(t *testing.T) {
+		params := config.GetCalculatorParams("opportunity_buys")
+		assert.NotNil(t, params)
+		assert.Len(t, params, 0)
+	})
 
 	// Non-existent calculator should return empty map
-	params = config.GetCalculatorParams("non_existent")
-	assert.NotNil(t, params)
-	assert.Len(t, params, 0)
+	t.Run("non-existent calculator", func(t *testing.T) {
+		params := config.GetCalculatorParams("non_existent")
+		assert.NotNil(t, params)
+		assert.Len(t, params, 0)
+	})
 }
 
 func TestGetPatternParams(t *testing.T) {

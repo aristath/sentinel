@@ -198,7 +198,8 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 		container.CurrencyExchangeService,
 		container.EventManager,
 		container.SettingsService,
-		container.OrderBookService, // NEW: Order book analysis for optimal limit pricing
+		container.PlannerConfigRepo, // NEW: Planner config for transaction costs
+		container.OrderBookService,  // NEW: Order book analysis for optimal limit pricing
 		container.YahooClient,
 		container.HistoryDB.Conn(), // Get underlying *sql.DB
 		container.SecurityRepo,

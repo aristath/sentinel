@@ -83,7 +83,7 @@ func (m *MockOptimizerService) Optimize(state interface{}, settings interface{})
 }
 
 func TestGetOptimizerWeightsJob_Name(t *testing.T) {
-	job := NewGetOptimizerWeightsJob(nil, nil, nil, nil, nil, nil, nil)
+	job := NewGetOptimizerWeightsJob(nil, nil, nil, nil, nil, nil, nil, nil)
 	assert.Equal(t, "get_optimizer_weights", job.Name())
 }
 
@@ -164,6 +164,7 @@ func TestGetOptimizerWeightsJob_Run_Success(t *testing.T) {
 		mockPriceClient,
 		mockOptimizerService,
 		nil, // priceConversionService
+		nil, // plannerConfigRepo
 	)
 
 	err := job.Run()
@@ -172,7 +173,7 @@ func TestGetOptimizerWeightsJob_Run_Success(t *testing.T) {
 }
 
 func TestGetOptimizerWeightsJob_Run_NoOptimizerService(t *testing.T) {
-	job := NewGetOptimizerWeightsJob(nil, nil, nil, nil, nil, nil, nil)
+	job := NewGetOptimizerWeightsJob(nil, nil, nil, nil, nil, nil, nil, nil)
 	err := job.Run()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "optimizer service not available")
@@ -195,6 +196,7 @@ func TestGetOptimizerWeightsJob_Run_PositionRepoError(t *testing.T) {
 		nil,
 		mockOptimizerService,
 		nil, // priceConversionService
+		nil, // plannerConfigRepo
 	)
 
 	err := job.Run()
@@ -225,6 +227,7 @@ func TestGetOptimizerWeightsJob_Run_SecurityRepoError(t *testing.T) {
 		nil,
 		mockOptimizerService,
 		nil, // priceConversionService
+		nil, // plannerConfigRepo
 	)
 
 	err := job.Run()
@@ -261,6 +264,7 @@ func TestGetOptimizerWeightsJob_Run_AllocationRepoError(t *testing.T) {
 		nil,
 		mockOptimizerService,
 		nil, // priceConversionService
+		nil, // plannerConfigRepo
 	)
 
 	err := job.Run()
@@ -313,6 +317,7 @@ func TestGetOptimizerWeightsJob_Run_OptimizerError(t *testing.T) {
 		mockPriceClient,
 		mockOptimizerService,
 		nil, // priceConversionService
+		nil, // plannerConfigRepo
 	)
 
 	err := job.Run()

@@ -330,6 +330,7 @@ func RegisterJobs(container *Container, cfg *config.Config, displayManager *disp
 	priceClientAdapter := scheduler.NewPriceClientAdapter(container.YahooClient)
 	optimizerServiceAdapter := scheduler.NewOptimizerServiceAdapter(container.OptimizerService)
 	priceConversionServiceAdapter := scheduler.NewPriceConversionServiceAdapter(container.PriceConversionService)
+	plannerConfigRepoAdapter := scheduler.NewPlannerConfigRepositoryAdapter(container.PlannerConfigRepo)
 	getOptimizerWeights := scheduler.NewGetOptimizerWeightsJob(
 		positionRepoAdapter,
 		securityRepoAdapter,
@@ -338,6 +339,7 @@ func RegisterJobs(container *Container, cfg *config.Config, displayManager *disp
 		priceClientAdapter,
 		optimizerServiceAdapter,
 		priceConversionServiceAdapter,
+		plannerConfigRepoAdapter,
 	)
 	getOptimizerWeights.SetLogger(log)
 	container.JobRegistry.Register(queue.JobTypeGetOptimizerWeights, queue.JobToHandler(getOptimizerWeights))

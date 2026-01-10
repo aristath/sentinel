@@ -32,7 +32,9 @@ type PlannerConfiguration struct {
 	MaxSellPercentage float64 `json:"max_sell_percentage"` // Maximum percentage of position allowed to sell per transaction
 
 	// Portfolio optimizer settings
-	OptimizerBlend float64 `json:"optimizer_blend"` // 0.0 = pure Mean-Variance, 1.0 = pure HRP
+	OptimizerBlend        float64 `json:"optimizer_blend"`        // 0.0 = pure Mean-Variance, 1.0 = pure HRP
+	OptimizerTargetReturn float64 `json:"optimizer_target_return"` // Target annual return for MV component
+	MinCashReserve        float64 `json:"min_cash_reserve"`        // Minimum cash to keep (never fully deploy)
 
 	// Opportunity Calculator enabled flags
 	EnableProfitTakingCalc    bool `json:"enable_profit_taking_calc"`
@@ -91,7 +93,9 @@ func NewDefaultConfiguration() *PlannerConfiguration {
 		SellCooldownDays:            180,
 		MaxLossThreshold:            -0.20,
 		MaxSellPercentage:           0.20,
-		OptimizerBlend:              0.5, // 50% MV, 50% HRP
+		OptimizerBlend:              0.5,   // 50% MV, 50% HRP
+		OptimizerTargetReturn:       0.11,  // 11% target annual return
+		MinCashReserve:              500.0, // €500 minimum cash
 		// All modules enabled by default
 		EnableProfitTakingCalc:               true,
 		EnableAveragingDownCalc:              true,
@@ -226,10 +230,16 @@ func (c *PlannerConfiguration) GetEnabledFilters() []string {
 }
 
 // GetCalculatorParams returns parameters for a specific calculator.
-// Simplified: Returns empty map since we no longer store module-specific parameters.
 func (c *PlannerConfiguration) GetCalculatorParams(name string) map[string]interface{} {
-	// Parameters removed in simplified version - return empty map
-	return make(map[string]interface{})
+	params := make(map[string]interface{})
+
+	// Pass risk management settings to sell calculators
+	if name == "profit_taking" || name == "rebalance_sells" {
+		params["max_sell_percentage"] = c.MaxSellPercentage
+		params["min_hold_days"] = float64(c.MinHoldDays)
+	}
+
+	return params
 }
 
 // GetPatternParams returns parameters for a specific pattern.

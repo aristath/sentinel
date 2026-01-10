@@ -36,6 +36,7 @@ func (c *RebalanceSellsCalculator) Calculate(
 ) ([]domain.ActionCandidate, error) {
 	// Parameters with defaults
 	minOverweightThreshold := GetFloatParam(params, "min_overweight_threshold", 0.05) // 5% overweight
+	maxSellPercentage := GetFloatParam(params, "max_sell_percentage", 0.50)           // Risk management cap (default 50%)
 	maxPositions := GetIntParam(params, "max_positions", 0)                           // 0 = unlimited
 
 	if !ctx.AllowSell {
@@ -149,10 +150,12 @@ func (c *RebalanceSellsCalculator) Calculate(
 		}
 
 		// Calculate how much to sell (proportional to overweight)
-		// For now, sell a fraction of the position
+		// Start with proportional amount based on how overweight we are
 		sellPercentage := overweight / (overweight + minOverweightThreshold)
-		if sellPercentage > 0.5 {
-			sellPercentage = 0.5 // Cap at 50%
+
+		// Cap at maxSellPercentage (risk management limit)
+		if sellPercentage > maxSellPercentage {
+			sellPercentage = maxSellPercentage
 		}
 
 		quantity := int(float64(position.Quantity) * sellPercentage)

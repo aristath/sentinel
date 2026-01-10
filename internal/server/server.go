@@ -498,6 +498,7 @@ func (s *Server) setupRoutes() {
 		optimizationCurrencyExchangeService := s.container.CurrencyExchangeService
 		optimizationCashManager := s.container.CashManager
 		optimizationService := s.container.OptimizerService
+		optimizationPlannerConfigRepo := s.container.PlannerConfigRepo
 		optimizationHandler := optimizationhandlers.NewHandler(
 			optimizationService,
 			s.configDB.Conn(),
@@ -506,6 +507,7 @@ func (s *Server) setupRoutes() {
 			optimizationCurrencyExchangeService,
 			optimizationDividendRepo,
 			optimizationCashManager,
+			optimizationPlannerConfigRepo,
 			s.log,
 		)
 		optimizationHandler.RegisterRoutes(r)

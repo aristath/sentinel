@@ -21,6 +21,9 @@ const DEFAULT_CONFIG = {
   sell_cooldown_days: 180,
   max_loss_threshold: -0.20,
   max_sell_percentage: 0.20,
+  // Portfolio optimizer
+  optimizer_target_return: 0.11,
+  min_cash_reserve: 500.0,
   // Opportunity Calculators
   enable_profit_taking_calc: true,
   enable_averaging_down_calc: true,
@@ -271,6 +274,24 @@ export function PlannerManagementModal() {
                 <Paper p="md" withBorder>
                   <Text size="sm" fw={500} mb="xs" tt="uppercase">Portfolio Optimizer</Text>
                   <Stack gap="md">
+                    <Group justify="space-between">
+                      <div>
+                        <Text size="sm">Target Return</Text>
+                        <Text size="xs" c="dimmed">Annual return goal for optimizer</Text>
+                      </div>
+                      <Group gap="xs">
+                        <NumberInput
+                          value={(getConfigValue('optimizer_target_return', 0.11) * 100).toFixed(0)}
+                          onChange={(val) => updateConfig('optimizer_target_return', (val || 0) / 100)}
+                          min={0}
+                          step={1}
+                          w={80}
+                          size="sm"
+                        />
+                        <Text size="sm" c="dimmed">%</Text>
+                      </Group>
+                    </Group>
+
                     <div>
                       <Group justify="space-between" mb="xs">
                         <Text size="sm">Strategy Blend</Text>
@@ -295,6 +316,24 @@ export function PlannerManagementModal() {
                         Algorithm-controlled based on market regime. 0% = Goal-directed (Mean-Variance), 100% = Robust (HRP)
                       </Text>
                     </div>
+
+                    <Group justify="space-between">
+                      <div>
+                        <Text size="sm">Min Cash Reserve</Text>
+                        <Text size="xs" c="dimmed">Never deploy below this amount</Text>
+                      </div>
+                      <Group gap="xs">
+                        <Text size="sm" c="dimmed">EUR</Text>
+                        <NumberInput
+                          value={getConfigValue('min_cash_reserve', 500)}
+                          onChange={(val) => updateConfig('min_cash_reserve', val)}
+                          min={0}
+                          step={50}
+                          w={100}
+                          size="sm"
+                        />
+                      </Group>
+                    </Group>
                   </Stack>
                 </Paper>
 

@@ -39,6 +39,7 @@ func (c *ProfitTakingCalculator) Calculate(
 	windfallThreshold := GetFloatParam(params, "windfall_threshold", 0.30) // 30% for windfall
 	minHoldDays := GetIntParam(params, "min_hold_days", 90)                // Minimum holding period
 	sellPercentage := GetFloatParam(params, "sell_percentage", 1.0)        // Sell 100% by default
+	maxSellPercentage := GetFloatParam(params, "max_sell_percentage", 1.0) // Risk management cap (from config)
 	maxPositions := GetIntParam(params, "max_positions", 0)                // 0 = unlimited
 
 	if !ctx.AllowSell {
@@ -112,12 +113,16 @@ func (c *ProfitTakingCalculator) Calculate(
 		isWindfall := gainPercent >= windfallThreshold
 
 		// Calculate quantity to sell
-		quantity := position.Quantity
-		if sellPercentage < 1.0 {
-			quantity = position.Quantity * sellPercentage
-			if quantity == 0 {
-				quantity = 1
-			}
+		// Apply both sellPercentage (strategy) and maxSellPercentage (risk management cap)
+		// The effective percentage is the minimum of the two
+		effectiveSellPct := sellPercentage
+		if maxSellPercentage < effectiveSellPct {
+			effectiveSellPct = maxSellPercentage
+		}
+
+		quantity := position.Quantity * effectiveSellPct
+		if quantity == 0 {
+			quantity = 1
 		}
 
 		// Round quantity to lot size and validate

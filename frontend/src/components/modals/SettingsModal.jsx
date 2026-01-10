@@ -73,12 +73,6 @@ export function SettingsModal() {
     return settings[key] ?? defaultValue;
   };
 
-  const minTradeWorthwhile = () => {
-    const fixed = getSetting('transaction_cost_fixed', 2.0);
-    const percent = getSetting('transaction_cost_percent', 0.002);
-    return fixed / (0.01 - percent);
-  };
-
   const handleTestR2Connection = async () => {
     setTestingR2Connection(true);
     try {
@@ -123,7 +117,6 @@ export function SettingsModal() {
       <Tabs value={activeTab} onChange={setActiveTab}>
         <Tabs.List grow>
           <Tabs.Tab value="trading">Trading</Tabs.Tab>
-          <Tabs.Tab value="portfolio">Portfolio</Tabs.Tab>
           <Tabs.Tab value="display">Display</Tabs.Tab>
           <Tabs.Tab value="system">System</Tabs.Tab>
           <Tabs.Tab value="backup">Backup</Tabs.Tab>
@@ -188,73 +181,6 @@ export function SettingsModal() {
                     w={80}
                     size="sm"
                   />
-                </Group>
-              </Stack>
-            </Paper>
-
-            {/* Transaction Costs */}
-            <Paper p="md" withBorder>
-              <Text size="sm" fw={500} mb="xs" tt="uppercase">Transaction Costs</Text>
-              <Text size="xs" c="dimmed" mb="md">
-                Freedom24 fee structure. Used to calculate minimum worthwhile trade size.
-              </Text>
-              <Stack gap="sm">
-                <Group justify="space-between">
-                  <div>
-                    <Text size="sm">Fixed Cost</Text>
-                    <Text size="xs" c="dimmed">Per trade</Text>
-                  </div>
-                  <Group gap="xs">
-                    <Text size="sm" c="dimmed">EUR</Text>
-                    <NumberInput
-                      value={getSetting('transaction_cost_fixed', 2.0)}
-                      onChange={(val) => handleUpdateSetting('transaction_cost_fixed', val)}
-                      min={0}
-                      step={0.5}
-                      w={80}
-                      size="sm"
-                    />
-                  </Group>
-                </Group>
-                <Group justify="space-between">
-                  <div>
-                    <Text size="sm">Variable Cost</Text>
-                    <Text size="xs" c="dimmed">Percentage of trade</Text>
-                  </div>
-                  <Group gap="xs">
-                    <NumberInput
-                      value={(getSetting('transaction_cost_percent', 0.002) * 100).toFixed(2)}
-                      onChange={(val) => handleUpdateSetting('transaction_cost_percent', (val || 0) / 100)}
-                      min={0}
-                      step={0.01}
-                      precision={2}
-                      w={80}
-                      size="sm"
-                    />
-                    <Text size="sm" c="dimmed">%</Text>
-                  </Group>
-                </Group>
-                <Group justify="space-between">
-                  <div>
-                    <Text size="sm">Min Cash Reserve</Text>
-                    <Text size="xs" c="dimmed">Never deploy below this</Text>
-                  </div>
-                  <Group gap="xs">
-                    <Text size="sm" c="dimmed">EUR</Text>
-                    <NumberInput
-                      value={getSetting('min_cash_reserve', 500)}
-                      onChange={(val) => handleUpdateSetting('min_cash_reserve', val)}
-                      min={0}
-                      step={50}
-                      w={100}
-                      size="sm"
-                    />
-                  </Group>
-                </Group>
-                <Divider />
-                <Group justify="space-between">
-                  <Text size="xs" c="dimmed">Min worthwhile trade (1% cost):</Text>
-                  <Text size="sm" fw={500}>EUR {minTradeWorthwhile().toFixed(0)}</Text>
                 </Group>
               </Stack>
             </Paper>
@@ -325,37 +251,6 @@ export function SettingsModal() {
                     w={80}
                     size="sm"
                   />
-                </Group>
-              </Stack>
-            </Paper>
-          </Stack>
-        </Tabs.Panel>
-
-        <Tabs.Panel value="portfolio" p="md">
-          <Stack gap="md">
-            {/* Portfolio Optimizer */}
-            <Paper p="md" withBorder>
-              <Text size="sm" fw={500} mb="xs" tt="uppercase">Portfolio Optimizer</Text>
-              <Text size="xs" c="dimmed" mb="md">
-                Note: Strategy Blend has been moved to Planner Configuration.
-              </Text>
-              <Stack gap="md">
-                <Group justify="space-between">
-                  <div>
-                    <Text size="sm">Target Return</Text>
-                    <Text size="xs" c="dimmed">Annual return goal</Text>
-                  </div>
-                  <Group gap="xs">
-                    <NumberInput
-                      value={(getSetting('optimizer_target_return', 0.11) * 100).toFixed(0)}
-                      onChange={(val) => handleUpdateSetting('optimizer_target_return', (val || 0) / 100)}
-                      min={0}
-                      step={1}
-                      w={80}
-                      size="sm"
-                    />
-                    <Text size="sm" c="dimmed">%</Text>
-                  </Group>
                 </Group>
               </Stack>
             </Paper>
@@ -436,7 +331,7 @@ export function SettingsModal() {
                   </Group>
                 </Group>
                 <Text size="xs" c="dimmed" mt="xs">
-                  Reserves are calculated as percentage of total portfolio value, with a minimum floor of €500.
+                  Reserves are calculated as percentage of total portfolio value, with a minimum floor set in Planner Configuration.
                 </Text>
               </Stack>
             </Paper>

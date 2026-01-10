@@ -4,11 +4,6 @@ import { api } from '../api/client';
 export const useSettingsStore = create((set, get) => ({
   // Settings
   settings: {
-    optimizer_blend: 0.5,
-    optimizer_target_return: 0.11,
-    transaction_cost_fixed: 2.0,
-    transaction_cost_percent: 0.002,
-    min_cash_reserve: 500.0,
     limit_order_buffer_percent: 0.05,
   },
   tradingMode: 'research',

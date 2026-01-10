@@ -90,7 +90,9 @@ CREATE TABLE IF NOT EXISTS planner_settings (
     enable_tag_filtering INTEGER DEFAULT 1,  -- Enable/disable tag-based pre-filtering
 
     -- Optimizer settings
-    optimizer_blend REAL DEFAULT 0.5,  -- Blend between Mean-Variance (0.0) and HRP (1.0)
+    optimizer_blend REAL DEFAULT 0.5,         -- Blend between Mean-Variance (0.0) and HRP (1.0)
+    optimizer_target_return REAL DEFAULT 0.11, -- Target annual return for MV component (11%)
+    min_cash_reserve REAL DEFAULT 500.0,      -- Minimum cash to keep (never fully deploy)
 
     -- Timestamps
     updated_at INTEGER NOT NULL      -- Unix timestamp (seconds since epoch)

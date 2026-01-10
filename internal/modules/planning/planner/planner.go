@@ -98,7 +98,7 @@ func (p *Planner) CreatePlan(ctx *domain.OpportunityContext, config *domain.Plan
 		// Fallback: use priority-based selection if evaluation fails
 		// Try up to MaxSequenceAttempts sequences until one passes constraints
 		bestSequence := p.selectByPriority(sequences)
-		plan := p.convertToPlan(bestSequence, ctx, 0.0, 0.0)
+		plan := p.convertToPlan(bestSequence, ctx, config, 0.0, 0.0)
 		if len(plan.Steps) == 0 {
 			// If the best sequence by priority was filtered out, return empty plan
 			return &domain.HolisticPlan{
@@ -123,7 +123,7 @@ func (p *Planner) CreatePlan(ctx *domain.OpportunityContext, config *domain.Plan
 	var bestSequenceIdx int
 
 	for idx, seqResult := range bestSequences {
-		plan := p.convertToPlan(seqResult.Sequence, ctx, 0.0, seqResult.Result.EndScore)
+		plan := p.convertToPlan(seqResult.Sequence, ctx, config, 0.0, seqResult.Result.EndScore)
 
 		// If this plan has at least one step after constraint enforcement, use it
 		if len(plan.Steps) > 0 {
@@ -169,9 +169,9 @@ func (p *Planner) CreatePlan(ctx *domain.OpportunityContext, config *domain.Plan
 	return bestPlan, nil
 }
 
-func (p *Planner) convertToPlan(sequence domain.ActionSequence, ctx *domain.OpportunityContext, currentScore float64, endScore float64) *domain.HolisticPlan {
+func (p *Planner) convertToPlan(sequence domain.ActionSequence, ctx *domain.OpportunityContext, config *domain.PlannerConfiguration, currentScore float64, endScore float64) *domain.HolisticPlan {
 	// Enforce constraints on actions before creating steps
-	validatedActions, filteredActions := p.constraintEnforcer.EnforceConstraints(sequence.Actions, ctx)
+	validatedActions, filteredActions := p.constraintEnforcer.EnforceConstraints(sequence.Actions, ctx, config)
 
 	// Log filtered actions for debugging
 	if len(filteredActions) > 0 {

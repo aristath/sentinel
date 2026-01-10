@@ -140,6 +140,12 @@ type ConfigRepositoryInterface interface {
 	GetDefaultConfig() (interface{}, error) // Returns *planningdomain.PlannerConfiguration
 }
 
+// PlannerConfigRepositoryInterface defines the contract for planner configuration repository operations
+// Used by scheduler jobs to fetch optimizer settings from planner config
+type PlannerConfigRepositoryInterface interface {
+	GetDefaultConfig() (*planningdomain.PlannerConfiguration, error)
+}
+
 // ScoresRepositoryInterface defines the contract for scores database operations
 // Used by scheduler to enable testing with mocks
 type ScoresRepositoryInterface interface {

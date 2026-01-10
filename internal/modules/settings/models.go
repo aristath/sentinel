@@ -25,14 +25,11 @@ var SettingDefaults = map[string]interface{}{
 	"r2_backup_schedule":       "daily", // Backup schedule: "daily", "weekly", or "monthly"
 	"r2_backup_retention_days": 90.0,    // Days to keep backups (0 = keep forever)
 
-	// Portfolio Optimizer settings
-	"optimizer_blend":             0.5,   // 0.0 = pure Mean-Variance, 1.0 = pure HRP
-	"optimizer_target_return":     0.11,  // Target annual return for MV component
+	// Portfolio Optimizer settings (NOTE: optimizer_blend and optimizer_target_return moved to planner_settings)
 	"target_return_threshold_pct": 0.80,  // Threshold percentage for target return filtering (0.80 = 80% of target, default for retirement funds)
 	"optimizer_max_cvar_95":       -0.15, // Maximum CVaR at 95% confidence (max -15% loss in tail risk)
 
-	// Cash management
-	"min_cash_reserve": 500.0, // Minimum cash to keep (never fully deploy)
+	// Cash management (NOTE: min_cash_reserve moved to planner_settings)
 
 	// LED Matrix settings
 	"ticker_speed":        50.0,  // Ticker scroll speed in ms per frame (lower = faster)
@@ -71,9 +68,7 @@ var SettingDefaults = map[string]interface{}{
 	"min_hold_days":       90.0, // Minimum hold time before selling (days)
 	"max_price_age_hours": 48.0, // Maximum age of price data before considered stale (hours)
 
-	// Transaction costs (used by trade execution and planner)
-	"transaction_cost_fixed":   2.0,   // Fixed transaction cost per trade in EUR
-	"transaction_cost_percent": 0.002, // Variable transaction cost as decimal (0.002 = 0.2%)
+	// Transaction costs (NOTE: transaction_cost_fixed and transaction_cost_percent moved to planner_settings)
 
 	// Security Discovery settings
 	"security_discovery_enabled":               1.0,          // 1.0 = enabled, 0.0 = disabled

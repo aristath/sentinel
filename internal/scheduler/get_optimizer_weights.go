@@ -21,6 +21,7 @@ type GetOptimizerWeightsJob struct {
 	priceClient            PriceClientInterface
 	optimizerService       OptimizerServiceInterface
 	priceConversionService PriceConversionServiceInterface
+	plannerConfigRepo      PlannerConfigRepositoryInterface
 	targetWeights          map[string]float64 // Store computed weights
 }
 
@@ -33,6 +34,7 @@ func NewGetOptimizerWeightsJob(
 	priceClient PriceClientInterface,
 	optimizerService OptimizerServiceInterface,
 	priceConversionService PriceConversionServiceInterface,
+	plannerConfigRepo PlannerConfigRepositoryInterface,
 ) *GetOptimizerWeightsJob {
 	return &GetOptimizerWeightsJob{
 		log:                    zerolog.Nop(),
@@ -43,6 +45,7 @@ func NewGetOptimizerWeightsJob(
 		priceClient:            priceClient,
 		optimizerService:       optimizerService,
 		priceConversionService: priceConversionService,
+		plannerConfigRepo:      plannerConfigRepo,
 		targetWeights:          make(map[string]float64),
 	}
 }
@@ -180,15 +183,23 @@ func (j *GetOptimizerWeightsJob) Run() error {
 		DividendBonuses: make(map[string]float64), // Could fetch from dividend repo if needed
 	}
 
-	// Step 11: Get optimizer settings
-	settings := optimization.Settings{
-		Blend:              0.5,  // Default blend
-		TargetReturn:       0.11, // 11% target
-		MinCashReserve:     500.0,
-		MinTradeAmount:     0.0,
-		TransactionCostPct: 0.002,
-		MaxConcentration:   0.25,
+	// Step 11: Get optimizer settings from planner config
+	plannerConfig, err := j.getPlannerConfig()
+	if err != nil {
+		j.log.Error().Err(err).Msg("Failed to get planner config, using defaults")
+		// Fallback to defaults
+		plannerConfig = &optimization.Settings{
+			Blend:                    0.5,
+			TargetReturn:             0.11,
+			MinCashReserve:           500.0,
+			MinTradeAmount:           0.0,
+			TransactionCostPct:       0.002,
+			MaxConcentration:         0.25,
+			TargetReturnThresholdPct: 0.80,
+		}
 	}
+
+	settings := *plannerConfig
 
 	// Step 12: Run optimization
 	resultInterface, err := j.optimizerService.Optimize(state, settings)
@@ -278,4 +289,29 @@ func (j *GetOptimizerWeightsJob) fetchCurrentPrices(securities []universe.Securi
 	}
 
 	return prices
+}
+
+// getPlannerConfig fetches optimizer settings from planner configuration
+func (j *GetOptimizerWeightsJob) getPlannerConfig() (*optimization.Settings, error) {
+	if j.plannerConfigRepo == nil {
+		return nil, fmt.Errorf("planner config repository not available")
+	}
+
+	config, err := j.plannerConfigRepo.GetDefaultConfig()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get planner config: %w", err)
+	}
+
+	// Convert planner config to optimizer settings
+	settings := &optimization.Settings{
+		Blend:                    config.OptimizerBlend,
+		TargetReturn:             config.OptimizerTargetReturn,
+		MinCashReserve:           config.MinCashReserve,
+		MinTradeAmount:           0.0, // Not in planner config yet
+		TransactionCostPct:       config.TransactionCostPercent,
+		MaxConcentration:         0.25, // Not in planner config yet
+		TargetReturnThresholdPct: 0.80, // Not in planner config yet
+	}
+
+	return settings, nil
 }

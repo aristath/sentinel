@@ -37,6 +37,7 @@ func TestRegisterRoutes(t *testing.T) {
 		currencyExchangeService,
 		dividendRepo,
 		cashManager,
+		nil, // plannerConfigRepo - not needed for route registration test
 		zerolog.Nop(),
 	)
 
@@ -106,6 +107,7 @@ func TestRegisterRoutes_RoutePrefix(t *testing.T) {
 		currencyExchangeService,
 		dividendRepo,
 		cashManager,
+		nil, // plannerConfigRepo
 		zerolog.Nop(),
 	)
 
