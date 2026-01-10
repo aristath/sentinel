@@ -48,8 +48,6 @@ type OrderBookServiceInterface interface {
 // PlannerConfigRepoInterface defines the interface for planner configuration
 type PlannerConfigRepoInterface interface {
 	GetDefaultConfig() (*planningdomain.PlannerConfiguration, error)
-	SaveConfig(config *planningdomain.PlannerConfiguration) error
-	GetConfig(id int64) (*planningdomain.PlannerConfiguration, error)
 }
 
 // TradeRecommendation represents a simplified trade recommendation for execution

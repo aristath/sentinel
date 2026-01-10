@@ -335,14 +335,6 @@ func (m *mockPlannerConfigRepo) GetDefaultConfig() (*planningdomain.PlannerConfi
 	return m.config, nil
 }
 
-func (m *mockPlannerConfigRepo) SaveConfig(config *planningdomain.PlannerConfiguration) error {
-	return nil
-}
-
-func (m *mockPlannerConfigRepo) GetConfig(id int64) (*planningdomain.PlannerConfiguration, error) {
-	return m.config, m.err
-}
-
 // Test ExecuteTrades orchestration
 
 func TestExecuteTrades_TradernetNotConnected(t *testing.T) {
