@@ -2,7 +2,6 @@ package services
 
 import (
 	"fmt"
-	"sync"
 	"testing"
 
 	"github.com/aristath/sentinel/internal/clients/yahoo"
