@@ -17,12 +17,23 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 
 		r.Route("/evaluate", func(r chi.Router) {
 			r.Post("/batch", h.HandleEvaluateBatch)
+			r.Post("/single", h.HandleEvaluateSingle)
+			r.Post("/compare", h.HandleEvaluateCompare)
 			r.Post("/monte-carlo", h.HandleMonteCarlo)
 			r.Post("/stochastic", h.HandleStochastic)
 		})
 
+		r.Route("/evaluation", func(r chi.Router) {
+			r.Get("/criteria", h.HandleGetEvaluationCriteria)
+		})
+
 		r.Route("/simulate", func(r chi.Router) {
 			r.Post("/batch", h.HandleSimulateBatch)
+			r.Post("/custom-prices", h.HandleSimulateCustomPrices)
+		})
+
+		r.Route("/monte-carlo", func(r chi.Router) {
+			r.Post("/advanced", h.HandleMonteCarloAdvanced)
 		})
 	})
 }

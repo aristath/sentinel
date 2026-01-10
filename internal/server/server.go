@@ -21,8 +21,19 @@ import (
 	"github.com/aristath/sentinel/internal/config"
 	"github.com/aristath/sentinel/internal/database"
 	"github.com/aristath/sentinel/internal/di"
+	adaptationhandlers "github.com/aristath/sentinel/internal/modules/adaptation/handlers"
 	allocationhandlers "github.com/aristath/sentinel/internal/modules/allocation/handlers"
 	analyticshandlers "github.com/aristath/sentinel/internal/modules/analytics/handlers"
+	historicalhandlers "github.com/aristath/sentinel/internal/modules/historical/handlers"
+	ledgerhandlers "github.com/aristath/sentinel/internal/modules/ledger/handlers"
+	markethourshandlers "github.com/aristath/sentinel/internal/modules/market_hours/handlers"
+	opportunitieshandlers "github.com/aristath/sentinel/internal/modules/opportunities/handlers"
+	riskhandlers "github.com/aristath/sentinel/internal/modules/risk/handlers"
+	snapshotshandlers "github.com/aristath/sentinel/internal/modules/snapshots/handlers"
+	sequenceshandlers "github.com/aristath/sentinel/internal/modules/sequences/handlers"
+	rebalancinghandlers "github.com/aristath/sentinel/internal/modules/rebalancing/handlers"
+	currencyhandlers "github.com/aristath/sentinel/internal/modules/currency/handlers"
+	quantumhandlers "github.com/aristath/sentinel/internal/modules/quantum/handlers"
 	"github.com/aristath/sentinel/internal/modules/cash_flows"
 	cashflowshandlers "github.com/aristath/sentinel/internal/modules/cash_flows/handlers"
 	"github.com/aristath/sentinel/internal/modules/charts"
@@ -608,6 +619,50 @@ func (s *Server) setupRoutes() {
 			s.log,
 		)
 		analyticsHandler.RegisterRoutes(r)
+
+		// Market Hours module (API extension)
+		marketHoursHandler := s.createMarketHoursHandler()
+		marketHoursHandler.RegisterRoutes(r)
+
+		// Historical Data module (API extension)
+		historicalHandler := s.createHistoricalHandler()
+		historicalHandler.RegisterRoutes(r)
+
+		// Risk Metrics module (API extension)
+		riskHandler := s.createRiskHandler()
+		riskHandler.RegisterRoutes(r)
+
+		// Adaptation (Market Regime) module (API extension)
+		adaptationHandler := s.createAdaptationHandler()
+		adaptationHandler.RegisterRoutes(r)
+
+		// Opportunities module (API extension)
+		opportunitiesHandler := s.createOpportunitiesHandler()
+		opportunitiesHandler.RegisterRoutes(r)
+
+		// Ledger module (API extension)
+		ledgerHandler := s.createLedgerHandler()
+		ledgerHandler.RegisterRoutes(r)
+
+		// Snapshots module (API extension)
+		snapshotsHandler := s.createSnapshotsHandler()
+		snapshotsHandler.RegisterRoutes(r)
+
+		// Sequences module (API extension)
+		sequencesHandler := s.createSequencesHandler()
+		sequencesHandler.RegisterRoutes(r)
+
+		// Rebalancing module (API extension)
+		rebalancingHandler := s.createRebalancingHandler()
+		rebalancingHandler.RegisterRoutes(r)
+
+		// Currency module (API extension)
+		currencyHandler := s.createCurrencyHandler()
+		currencyHandler.RegisterRoutes(r)
+
+		// Quantum module (API extension)
+		quantumHandler := s.createQuantumHandler()
+		quantumHandler.RegisterRoutes(r)
 	})
 
 	// Evaluation module routes (MIGRATED TO GO!)
@@ -906,4 +961,102 @@ func (s *Server) loggingMiddleware(next http.Handler) http.Handler {
 			Str("request_id", middleware.GetReqID(r.Context())).
 			Msg("HTTP request")
 	})
+}
+
+// createMarketHoursHandler creates a handler for market hours endpoints
+func (s *Server) createMarketHoursHandler() *markethourshandlers.Handler {
+	return markethourshandlers.NewHandler(
+		s.container.MarketHoursService,
+		s.log,
+	)
+}
+
+// createHistoricalHandler creates a handler for historical data endpoints
+func (s *Server) createHistoricalHandler() *historicalhandlers.Handler {
+	return historicalhandlers.NewHandler(
+		s.container.HistoryDBClient,
+		s.log,
+	)
+}
+
+// createRiskHandler creates a handler for risk metrics endpoints
+func (s *Server) createRiskHandler() *riskhandlers.Handler {
+	return riskhandlers.NewHandler(
+		s.container.HistoryDBClient,
+		s.container.PositionRepo,
+		s.log,
+	)
+}
+
+// createAdaptationHandler creates a handler for adaptation/regime endpoints
+func (s *Server) createAdaptationHandler() *adaptationhandlers.Handler {
+	return adaptationhandlers.NewHandler(
+		s.configDB.Conn(),
+		s.container.AdaptiveMarketService,
+		s.log,
+	)
+}
+
+// createOpportunitiesHandler creates a handler for opportunities endpoints
+func (s *Server) createOpportunitiesHandler() *opportunitieshandlers.Handler {
+	return opportunitieshandlers.NewHandler(
+		s.container.OpportunitiesService,
+		s.log,
+	)
+}
+
+// createLedgerHandler creates a handler for ledger endpoints
+func (s *Server) createLedgerHandler() *ledgerhandlers.Handler {
+	return ledgerhandlers.NewHandler(
+		s.ledgerDB.Conn(),
+		s.log,
+	)
+}
+
+// createSnapshotsHandler creates a handler for snapshot endpoints
+func (s *Server) createSnapshotsHandler() *snapshotshandlers.Handler {
+	return snapshotshandlers.NewHandler(
+		s.container.PositionRepo,
+		s.container.HistoryDBClient,
+		s.ledgerDB.Conn(),
+		s.configDB.Conn(),
+		s.container.CashManager,
+		s.container.AdaptiveMarketService,
+		s.container.MarketHoursService,
+		s.log,
+	)
+}
+
+// createSequencesHandler creates a handler for sequences endpoints
+func (s *Server) createSequencesHandler() *sequenceshandlers.Handler {
+	return sequenceshandlers.NewHandler(
+		s.container.SequencesService,
+		s.log,
+	)
+}
+
+// createRebalancingHandler creates a handler for rebalancing endpoints
+func (s *Server) createRebalancingHandler() *rebalancinghandlers.Handler {
+	return rebalancinghandlers.NewHandler(
+		s.container.RebalancingService,
+		s.log,
+	)
+}
+
+// createCurrencyHandler creates a handler for currency endpoints
+func (s *Server) createCurrencyHandler() *currencyhandlers.Handler {
+	return currencyhandlers.NewHandler(
+		s.container.CurrencyExchangeService,
+		s.container.ExchangeRateCacheService,
+		s.container.CashManager,
+		s.log,
+	)
+}
+
+// createQuantumHandler creates a handler for quantum endpoints
+func (s *Server) createQuantumHandler() *quantumhandlers.Handler {
+	return quantumhandlers.NewHandler(
+		s.container.QuantumCalculator,
+		s.log,
+	)
 }

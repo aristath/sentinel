@@ -249,6 +249,392 @@ func (h *Handler) HandleGetCashBreakdown(w http.ResponseWriter, r *http.Request)
 	h.writeJSON(w, http.StatusOK, response)
 }
 
+// HandleGetPerformanceHistory handles GET /api/portfolio/performance/history
+func (h *Handler) HandleGetPerformanceHistory(w http.ResponseWriter, r *http.Request) {
+	period := r.URL.Query().Get("period")
+	if period == "" {
+		period = "1M" // Default to 1 month
+	}
+
+	// Get current positions to calculate returns
+	positions, err := h.positionRepo.GetWithSecurityInfo()
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Calculate unrealized P&L for current positions
+	var totalGainLoss float64
+	var totalCost float64
+	for _, pos := range positions {
+		costBasis := pos.AvgPrice * pos.Quantity * pos.CurrencyRate
+		marketValue := pos.MarketValueEUR
+		totalCost += costBasis
+		totalGainLoss += (marketValue - costBasis)
+	}
+
+	returnPct := 0.0
+	if totalCost > 0 {
+		returnPct = (totalGainLoss / totalCost) * 100
+	}
+
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"period":             period,
+			"total_return_pct":   returnPct,
+			"total_gain_loss":    totalGainLoss,
+			"total_cost_basis":   totalCost,
+			"current_value":      totalCost + totalGainLoss,
+			"note":               "Historical performance tracking requires time-series data",
+		},
+		"metadata": map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+		},
+	}
+
+	h.writeJSON(w, http.StatusOK, response)
+}
+
+// HandleGetPerformanceVsBenchmark handles GET /api/portfolio/performance/vs-benchmark
+func (h *Handler) HandleGetPerformanceVsBenchmark(w http.ResponseWriter, r *http.Request) {
+	benchmark := r.URL.Query().Get("benchmark")
+	if benchmark == "" {
+		benchmark = "^STOXX50E" // Default to Euro Stoxx 50
+	}
+
+	// Get current positions
+	positions, err := h.positionRepo.GetWithSecurityInfo()
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Calculate portfolio return
+	var totalGainLoss float64
+	var totalCost float64
+	for _, pos := range positions {
+		costBasis := pos.AvgPrice * pos.Quantity * pos.CurrencyRate
+		marketValue := pos.MarketValueEUR
+		totalCost += costBasis
+		totalGainLoss += (marketValue - costBasis)
+	}
+
+	portfolioReturn := 0.0
+	if totalCost > 0 {
+		portfolioReturn = (totalGainLoss / totalCost) * 100
+	}
+
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"benchmark":         benchmark,
+			"portfolio_return":  portfolioReturn,
+			"benchmark_return":  0.0, // Placeholder - requires market data
+			"alpha":             portfolioReturn,
+			"note":              "Benchmark comparison requires historical market data integration",
+		},
+		"metadata": map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+		},
+	}
+
+	h.writeJSON(w, http.StatusOK, response)
+}
+
+// HandleGetPerformanceAttribution handles GET /api/portfolio/performance/attribution
+func (h *Handler) HandleGetPerformanceAttribution(w http.ResponseWriter, r *http.Request) {
+	// Get current positions
+	positions, err := h.positionRepo.GetWithSecurityInfo()
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Attribution by security
+	securityAttribution := make([]map[string]interface{}, 0, len(positions))
+	var totalPortfolioReturn float64
+	var totalValue float64
+
+	for _, pos := range positions {
+		costBasis := pos.AvgPrice * pos.Quantity * pos.CurrencyRate
+		marketValue := pos.MarketValueEUR
+		gainLoss := marketValue - costBasis
+		returnPct := 0.0
+		if costBasis > 0 {
+			returnPct = (gainLoss / costBasis) * 100
+		}
+
+		contribution := gainLoss
+		totalPortfolioReturn += contribution
+		totalValue += marketValue
+
+		securityAttribution = append(securityAttribution, map[string]interface{}{
+			"symbol":             pos.Symbol,
+			"name":               pos.StockName,
+			"return_pct":         returnPct,
+			"contribution":       contribution,
+			"weight":             marketValue,
+		})
+	}
+
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"total_return":       totalPortfolioReturn,
+			"total_value":        totalValue,
+			"security_attribution": securityAttribution,
+			"note":               "Full attribution requires factor model integration",
+		},
+		"metadata": map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+		},
+	}
+
+	h.writeJSON(w, http.StatusOK, response)
+}
+
+// HandleGetConcentration handles GET /api/portfolio/concentration
+func (h *Handler) HandleGetConcentration(w http.ResponseWriter, r *http.Request) {
+	// Get current positions
+	positions, err := h.positionRepo.GetWithSecurityInfo()
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Calculate total portfolio value
+	var totalValue float64
+	weights := make([]float64, 0, len(positions))
+	for _, pos := range positions {
+		totalValue += pos.MarketValueEUR
+	}
+
+	// Calculate concentration metrics
+	var herfindahlIndex float64
+	var top5Weight float64
+	var top10Weight float64
+
+	// Calculate weights
+	for _, pos := range positions {
+		weight := pos.MarketValueEUR / totalValue
+		weights = append(weights, weight)
+		herfindahlIndex += weight * weight
+	}
+
+	// Sort weights descending
+	sort.Float64s(weights)
+	for i, j := 0, len(weights)-1; i < j; i, j = i+1, j-1 {
+		weights[i], weights[j] = weights[j], weights[i]
+	}
+
+	// Calculate top N concentrations
+	for i, weight := range weights {
+		if i < 5 {
+			top5Weight += weight
+		}
+		if i < 10 {
+			top10Weight += weight
+		}
+	}
+
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"herfindahl_index": herfindahlIndex,
+			"top_5_weight":     top5Weight * 100,
+			"top_10_weight":    top10Weight * 100,
+			"num_positions":    len(positions),
+			"interpretation": map[string]string{
+				"herfindahl": "Lower is more diversified (1/N is perfectly equal)",
+				"top_n":      "Percentage of portfolio in top N positions",
+			},
+		},
+		"metadata": map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+		},
+	}
+
+	h.writeJSON(w, http.StatusOK, response)
+}
+
+// HandleGetDiversification handles GET /api/portfolio/diversification
+func (h *Handler) HandleGetDiversification(w http.ResponseWriter, r *http.Request) {
+	// Get current positions
+	positions, err := h.positionRepo.GetWithSecurityInfo()
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Calculate diversification by country and industry
+	countryWeights := make(map[string]float64)
+	industryWeights := make(map[string]float64)
+	var totalValue float64
+
+	for _, pos := range positions {
+		totalValue += pos.MarketValueEUR
+	}
+
+	for _, pos := range positions {
+		weight := pos.MarketValueEUR / totalValue
+
+		if pos.Country != "" {
+			countryWeights[pos.Country] += weight
+		}
+		if pos.Industry != "" {
+			industryWeights[pos.Industry] += weight
+		}
+	}
+
+	// Calculate Herfindahl-Hirschman Index for each dimension
+	var countryHHI float64
+	for _, weight := range countryWeights {
+		countryHHI += weight * weight
+	}
+
+	var industryHHI float64
+	for _, weight := range industryWeights {
+		industryHHI += weight * weight
+	}
+
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"geographic": map[string]interface{}{
+				"num_countries": len(countryWeights),
+				"hhi":           countryHHI,
+				"weights":       countryWeights,
+			},
+			"industry": map[string]interface{}{
+				"num_industries": len(industryWeights),
+				"hhi":            industryHHI,
+				"weights":        industryWeights,
+			},
+			"interpretation": "Lower HHI indicates better diversification",
+		},
+		"metadata": map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+		},
+	}
+
+	h.writeJSON(w, http.StatusOK, response)
+}
+
+// HandleGetUnrealizedPnLBreakdown handles GET /api/portfolio/unrealized-pnl/breakdown
+func (h *Handler) HandleGetUnrealizedPnLBreakdown(w http.ResponseWriter, r *http.Request) {
+	// Get current positions
+	positions, err := h.positionRepo.GetWithSecurityInfo()
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Calculate P&L by security
+	securityPnL := make([]map[string]interface{}, 0, len(positions))
+	countryPnL := make(map[string]float64)
+	industryPnL := make(map[string]float64)
+	var totalPnL float64
+
+	for _, pos := range positions {
+		costBasis := pos.AvgPrice * pos.Quantity * pos.CurrencyRate
+		marketValue := pos.MarketValueEUR
+		pnl := marketValue - costBasis
+		pnlPct := 0.0
+		if costBasis > 0 {
+			pnlPct = (pnl / costBasis) * 100
+		}
+
+		totalPnL += pnl
+
+		securityPnL = append(securityPnL, map[string]interface{}{
+			"symbol":   pos.Symbol,
+			"name":     pos.StockName,
+			"pnl":      pnl,
+			"pnl_pct":  pnlPct,
+			"country":  pos.Country,
+			"industry": pos.Industry,
+		})
+
+		if pos.Country != "" {
+			countryPnL[pos.Country] += pnl
+		}
+		if pos.Industry != "" {
+			industryPnL[pos.Industry] += pnl
+		}
+	}
+
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"total_pnl":    totalPnL,
+			"by_security":  securityPnL,
+			"by_country":   countryPnL,
+			"by_industry":  industryPnL,
+		},
+		"metadata": map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+		},
+	}
+
+	h.writeJSON(w, http.StatusOK, response)
+}
+
+// HandleGetCostBasis handles GET /api/portfolio/cost-basis
+func (h *Handler) HandleGetCostBasis(w http.ResponseWriter, r *http.Request) {
+	// Get current positions
+	positions, err := h.positionRepo.GetWithSecurityInfo()
+	if err != nil {
+		h.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Calculate cost basis analysis by security
+	costBasisAnalysis := make([]map[string]interface{}, 0, len(positions))
+	var totalCost float64
+	var totalValue float64
+
+	for _, pos := range positions {
+		costBasis := pos.AvgPrice * pos.Quantity * pos.CurrencyRate
+		marketValue := pos.MarketValueEUR
+		unrealizedGain := marketValue - costBasis
+		unrealizedGainPct := 0.0
+		if costBasis > 0 {
+			unrealizedGainPct = (unrealizedGain / costBasis) * 100
+		}
+
+		totalCost += costBasis
+		totalValue += marketValue
+
+		costBasisAnalysis = append(costBasisAnalysis, map[string]interface{}{
+			"symbol":             pos.Symbol,
+			"name":               pos.StockName,
+			"quantity":           pos.Quantity,
+			"avg_price":          pos.AvgPrice,
+			"currency":           pos.Currency,
+			"cost_basis_eur":     costBasis,
+			"market_value_eur":   marketValue,
+			"unrealized_gain":    unrealizedGain,
+			"unrealized_gain_pct": unrealizedGainPct,
+		})
+	}
+
+	totalGain := totalValue - totalCost
+	totalGainPct := 0.0
+	if totalCost > 0 {
+		totalGainPct = (totalGain / totalCost) * 100
+	}
+
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"total_cost_basis":   totalCost,
+			"total_market_value": totalValue,
+			"total_unrealized_gain": totalGain,
+			"total_unrealized_gain_pct": totalGainPct,
+			"by_security":        costBasisAnalysis,
+		},
+		"metadata": map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+		},
+	}
+
+	h.writeJSON(w, http.StatusOK, response)
+}
+
 // Helper methods
 
 func (h *Handler) writeJSON(w http.ResponseWriter, status int, data interface{}) {

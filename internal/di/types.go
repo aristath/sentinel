@@ -19,6 +19,7 @@ import (
 	"github.com/aristath/sentinel/internal/modules/optimization"
 	"github.com/aristath/sentinel/internal/modules/order_book"
 	"github.com/aristath/sentinel/internal/modules/planning"
+	"github.com/aristath/sentinel/internal/modules/quantum"
 	planningevaluation "github.com/aristath/sentinel/internal/modules/planning/evaluation"
 	planninghash "github.com/aristath/sentinel/internal/modules/planning/hash"
 	planningplanner "github.com/aristath/sentinel/internal/modules/planning/planner"
@@ -135,6 +136,7 @@ type Container struct {
 	R2Client                  *reliability.R2Client
 	R2BackupService           *reliability.R2BackupService
 	RestoreService            *reliability.RestoreService
+	QuantumCalculator         *quantum.QuantumProbabilityCalculator
 
 	// Handlers (will be populated in handlers.go)
 	// Note: Handlers are created per-route, so we don't store them in container

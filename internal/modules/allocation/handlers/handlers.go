@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/aristath/sentinel/internal/events"
 	"github.com/aristath/sentinel/internal/modules/allocation"
@@ -570,6 +571,247 @@ func buildAlertsArray(alerts []allocation.ConcentrationAlert) []map[string]inter
 		}
 	}
 	return result
+}
+
+// HandleGetAllocationHistory handles GET /api/allocation/history
+func (h *Handler) HandleGetAllocationHistory(w http.ResponseWriter, r *http.Request) {
+	// Return 501 Not Implemented - requires time-series storage
+	h.writeJSON(w, http.StatusNotImplemented, map[string]interface{}{
+		"error": map[string]interface{}{
+			"message": "Allocation history not yet implemented",
+			"code":    "NOT_IMPLEMENTED",
+			"details": map[string]string{
+				"reason": "Requires time-series database integration for historical allocation snapshots",
+			},
+		},
+	})
+}
+
+// HandleGetAllocationVsTargets handles GET /api/allocation/vs-targets
+func (h *Handler) HandleGetAllocationVsTargets(w http.ResponseWriter, r *http.Request) {
+	// Get portfolio summary
+	summary, err := h.portfolioSummaryProvider.GetPortfolioSummary()
+	if err != nil {
+		h.log.Error().Err(err).Msg("Failed to get portfolio summary")
+		h.writeError(w, http.StatusInternalServerError, "Failed to get portfolio summary")
+		return
+	}
+
+	// Combine country and industry allocations
+	allocations := append(summary.CountryAllocations, summary.IndustryAllocations...)
+
+	// Build detailed comparison - country allocations
+	comparison := make([]map[string]interface{}, 0)
+	var totalDeviation float64
+	var overweightCount int
+	var underweightCount int
+
+	for _, alloc := range allocations {
+		deviation := alloc.CurrentPct - alloc.TargetPct
+		totalDeviation += abs(deviation)
+
+		status := "on_target"
+		if deviation > 1.0 {
+			status = "overweight"
+			overweightCount++
+		} else if deviation < -1.0 {
+			status = "underweight"
+			underweightCount++
+		}
+
+		// Determine type based on which list this came from
+		allocType := "country"
+		if len(summary.CountryAllocations) > 0 && len(comparison) >= len(summary.CountryAllocations) {
+			allocType = "industry"
+		}
+
+		comparison = append(comparison, map[string]interface{}{
+			"group":        alloc.Name,
+			"type":         allocType,
+			"target_pct":   alloc.TargetPct,
+			"current_pct":  alloc.CurrentPct,
+			"deviation":    deviation,
+			"status":       status,
+			"current_value": alloc.CurrentValue,
+		})
+	}
+
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"comparison":       comparison,
+			"total_deviation":  totalDeviation,
+			"overweight_count": overweightCount,
+			"underweight_count": underweightCount,
+			"on_target_count":  len(allocations) - overweightCount - underweightCount,
+		},
+		"metadata": map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+		},
+	}
+
+	h.writeJSON(w, http.StatusOK, response)
+}
+
+// HandleGetRebalanceNeeds handles GET /api/allocation/rebalance-needs
+func (h *Handler) HandleGetRebalanceNeeds(w http.ResponseWriter, r *http.Request) {
+	// Get portfolio summary
+	summary, err := h.portfolioSummaryProvider.GetPortfolioSummary()
+	if err != nil {
+		h.log.Error().Err(err).Msg("Failed to get portfolio summary")
+		h.writeError(w, http.StatusInternalServerError, "Failed to get portfolio summary")
+		return
+	}
+
+	// Combine country and industry allocations
+	allocations := append(summary.CountryAllocations, summary.IndustryAllocations...)
+
+	// Calculate rebalancing needs
+	rebalanceNeeds := make([]map[string]interface{}, 0)
+	var totalRebalanceValue float64
+	processed := 0
+
+	for _, alloc := range allocations {
+		deviation := alloc.CurrentPct - alloc.TargetPct
+
+		// Only include groups that need rebalancing (>1% deviation)
+		if abs(deviation) > 1.0 {
+			// Calculate value needed to rebalance
+			// Assumes total portfolio value from current_value and current_pct
+			totalValue := 0.0
+			if alloc.CurrentPct > 0 {
+				totalValue = alloc.CurrentValue / (alloc.CurrentPct / 100.0)
+			}
+			targetValue := totalValue * (alloc.TargetPct / 100.0)
+			valueChange := targetValue - alloc.CurrentValue
+
+			totalRebalanceValue += abs(valueChange)
+
+			// Determine type based on position in combined list
+			allocType := "country"
+			if len(summary.CountryAllocations) > 0 && processed >= len(summary.CountryAllocations) {
+				allocType = "industry"
+			}
+
+			rebalanceNeeds = append(rebalanceNeeds, map[string]interface{}{
+				"group":          alloc.Name,
+				"type":           allocType,
+				"current_value":  alloc.CurrentValue,
+				"target_value":   targetValue,
+				"value_change":   valueChange,
+				"action":         getRebalanceAction(valueChange),
+				"priority":       getPriority(abs(deviation)),
+			})
+		}
+		processed++
+	}
+
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"rebalance_needs": rebalanceNeeds,
+			"total_groups_needing_rebalance": len(rebalanceNeeds),
+			"total_rebalance_value":          totalRebalanceValue,
+			"note":                           "Rebalancing requires trading module integration",
+		},
+		"metadata": map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+		},
+	}
+
+	h.writeJSON(w, http.StatusOK, response)
+}
+
+// HandleGetGroupContribution handles GET /api/allocation/groups/contribution
+func (h *Handler) HandleGetGroupContribution(w http.ResponseWriter, r *http.Request) {
+	// Get portfolio summary
+	summary, err := h.portfolioSummaryProvider.GetPortfolioSummary()
+	if err != nil {
+		h.log.Error().Err(err).Msg("Failed to get portfolio summary")
+		h.writeError(w, http.StatusInternalServerError, "Failed to get portfolio summary")
+		return
+	}
+
+	// Calculate diversification metrics by type
+	geographicContribution := make(map[string]float64)
+	industryContribution := make(map[string]float64)
+
+	for _, alloc := range summary.CountryAllocations {
+		geographicContribution[alloc.Name] = alloc.CurrentPct
+	}
+	for _, alloc := range summary.IndustryAllocations {
+		industryContribution[alloc.Name] = alloc.CurrentPct
+	}
+
+	// Calculate Herfindahl-Hirschman Index for each type
+	geographicHHI := calculateHHI(geographicContribution)
+	industryHHI := calculateHHI(industryContribution)
+
+	// Calculate effective number of groups (1/HHI)
+	effectiveGeographicGroups := 1.0 / geographicHHI
+	effectiveIndustryGroups := 1.0 / industryHHI
+
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"geographic": map[string]interface{}{
+				"contributions":     geographicContribution,
+				"hhi":               geographicHHI,
+				"effective_groups":  effectiveGeographicGroups,
+				"diversification_score": (1.0 - geographicHHI) * 100,
+			},
+			"industry": map[string]interface{}{
+				"contributions":     industryContribution,
+				"hhi":               industryHHI,
+				"effective_groups":  effectiveIndustryGroups,
+				"diversification_score": (1.0 - industryHHI) * 100,
+			},
+			"interpretation": map[string]string{
+				"hhi":                 "Lower is more diversified (range: 0-1)",
+				"effective_groups":    "Number of equally-weighted groups equivalent to current allocation",
+				"diversification_score": "Higher is better (range: 0-100)",
+			},
+		},
+		"metadata": map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+		},
+	}
+
+	h.writeJSON(w, http.StatusOK, response)
+}
+
+// Helper functions
+
+func abs(x float64) float64 {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+func getRebalanceAction(valueChange float64) string {
+	if valueChange > 0 {
+		return "BUY"
+	} else if valueChange < 0 {
+		return "SELL"
+	}
+	return "HOLD"
+}
+
+func getPriority(deviation float64) string {
+	if deviation >= 5.0 {
+		return "high"
+	} else if deviation >= 2.0 {
+		return "medium"
+	}
+	return "low"
+}
+
+func calculateHHI(weights map[string]float64) float64 {
+	var hhi float64
+	for _, weight := range weights {
+		// Convert percentage to decimal
+		decimal := weight / 100.0
+		hhi += decimal * decimal
+	}
+	return hhi
 }
 
 func (h *Handler) writeJSON(w http.ResponseWriter, status int, data interface{}) {

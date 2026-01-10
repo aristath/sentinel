@@ -28,6 +28,7 @@ import (
 	planningstatemonitor "github.com/aristath/sentinel/internal/modules/planning/state_monitor"
 	planninguniverse "github.com/aristath/sentinel/internal/modules/planning/universe_monitor"
 	"github.com/aristath/sentinel/internal/modules/portfolio"
+	"github.com/aristath/sentinel/internal/modules/quantum"
 	"github.com/aristath/sentinel/internal/modules/rebalancing"
 	"github.com/aristath/sentinel/internal/modules/scoring/scorers"
 	"github.com/aristath/sentinel/internal/modules/sequences"
@@ -597,6 +598,12 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 		container.PortfolioDB.Conn(),
 		log,
 	)
+
+	// ==========================================
+	// STEP 14.5: Initialize Quantum Calculator
+	// ==========================================
+
+	container.QuantumCalculator = quantum.NewQuantumProbabilityCalculator()
 
 	// ==========================================
 	// STEP 15: Initialize Callbacks (for jobs)

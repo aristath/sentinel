@@ -451,3 +451,303 @@ func getCurrencyConversionName(symbol string) string {
 	}
 	return symbol
 }
+
+// Trade Validation Endpoints (API Extension)
+
+// HandleValidateTrade handles POST /api/trade-validation/validate-trade
+// Full trade validation without execution
+func (h *TradingHandlers) HandleValidateTrade(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Symbol   string  `json:"symbol"`
+		Side     string  `json:"side"`
+		Quantity float64 `json:"quantity"`
+		Price    float64 `json:"price,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Run full validation using safety service
+	validationErrors := []string{}
+	warnings := []string{}
+	passed := true
+
+	if h.safetyService == nil {
+		h.writeError(w, http.StatusServiceUnavailable, "Safety service not available")
+		return
+	}
+
+	if err := h.safetyService.ValidateTrade(req.Symbol, req.Side, req.Quantity); err != nil {
+		validationErrors = append(validationErrors, err.Error())
+		passed = false
+	}
+
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"data": map[string]interface{}{
+			"passed": passed,
+			"symbol": req.Symbol,
+			"side":   req.Side,
+			"quantity": req.Quantity,
+			"errors": validationErrors,
+			"warnings": warnings,
+		},
+		"metadata": map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+		},
+	})
+}
+
+// HandleCheckMarketHours handles POST /api/trade-validation/check-market-hours
+// Market hours validation
+func (h *TradingHandlers) HandleCheckMarketHours(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Symbol string `json:"symbol"`
+		Side   string `json:"side"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// This endpoint delegates to the full ValidateTrade which includes market hours check
+	// Return 501 to indicate client should use /validate-trade instead
+	h.writeJSON(w, http.StatusNotImplemented, map[string]interface{}{
+		"error": map[string]interface{}{
+			"message": "Market hours check not yet implemented as standalone endpoint",
+			"code":    "NOT_IMPLEMENTED",
+			"details": map[string]string{
+				"reason":      "Use /trade-validation/validate-trade for full validation including market hours",
+				"alternative": "/api/trade-validation/validate-trade",
+			},
+		},
+	})
+}
+
+// HandleCheckPriceFreshness handles POST /api/trade-validation/check-price-freshness
+// Price staleness check
+func (h *TradingHandlers) HandleCheckPriceFreshness(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Symbol string `json:"symbol"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Return 501 Not Implemented - requires price database access
+	h.writeJSON(w, http.StatusNotImplemented, map[string]interface{}{
+		"error": map[string]interface{}{
+			"message": "Price freshness check not yet implemented as standalone endpoint",
+			"code":    "NOT_IMPLEMENTED",
+			"details": map[string]string{
+				"reason":      "Requires integration with price database",
+				"alternative": "/api/trade-validation/validate-trade",
+			},
+		},
+	})
+}
+
+// HandleCalculateCommission handles POST /api/trade-validation/calculate-commission
+// Commission calculation
+func (h *TradingHandlers) HandleCalculateCommission(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Symbol   string  `json:"symbol"`
+		Side     string  `json:"side"`
+		Quantity float64 `json:"quantity"`
+		Price    float64 `json:"price"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Get commission settings (defaults: 2 EUR fixed + 0.2%)
+	fixedCommissionEUR := 2.0
+	variableCommissionRate := 0.002
+
+	if h.settingsService != nil {
+		if val, err := h.settingsService.Get("transaction_cost_fixed"); err == nil {
+			if fixed, ok := val.(float64); ok {
+				fixedCommissionEUR = fixed
+			}
+		}
+		if val, err := h.settingsService.Get("transaction_cost_percent"); err == nil {
+			if variable, ok := val.(float64); ok {
+				variableCommissionRate = variable
+			}
+		}
+	}
+
+	tradeValue := req.Quantity * req.Price
+	variableCommission := tradeValue * variableCommissionRate
+	totalCommission := fixedCommissionEUR + variableCommission
+
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"data": map[string]interface{}{
+			"symbol":               req.Symbol,
+			"trade_value":          tradeValue,
+			"fixed_commission":     fixedCommissionEUR,
+			"variable_commission":  variableCommission,
+			"total_commission":     totalCommission,
+			"commission_currency":  "EUR",
+		},
+		"metadata": map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+		},
+	})
+}
+
+// HandleCalculateLimitPrice handles POST /api/trade-validation/calculate-limit-price
+// Limit price calculation
+func (h *TradingHandlers) HandleCalculateLimitPrice(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Symbol        string  `json:"symbol"`
+		Side          string  `json:"side"`
+		CurrentPrice  float64 `json:"current_price"`
+		SlippagePct   float64 `json:"slippage_pct,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Default slippage: 0.5% for buys, -0.5% for sells
+	slippage := req.SlippagePct
+	if slippage == 0 {
+		if strings.ToUpper(req.Side) == "BUY" {
+			slippage = 0.005 // 0.5% above current price
+		} else {
+			slippage = -0.005 // 0.5% below current price
+		}
+	}
+
+	limitPrice := req.CurrentPrice * (1 + slippage)
+
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"data": map[string]interface{}{
+			"symbol":        req.Symbol,
+			"side":          req.Side,
+			"current_price": req.CurrentPrice,
+			"slippage_pct":  slippage * 100,
+			"limit_price":   limitPrice,
+			"note":          "Limit price calculated with slippage buffer",
+		},
+		"metadata": map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+		},
+	})
+}
+
+// HandleCheckEligibility handles POST /api/trade-validation/check-eligibility
+// Security trading eligibility
+func (h *TradingHandlers) HandleCheckEligibility(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Symbol string `json:"symbol"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Check if security exists and is tradeable via safety service
+	eligible := true
+	reasons := []string{}
+
+	if h.safetyService == nil {
+		h.writeError(w, http.StatusServiceUnavailable, "Safety service not available")
+		return
+	}
+
+	// Try to validate the security (this will check if it exists)
+	// Use a dummy buy with 1 share to check eligibility
+	if err := h.safetyService.ValidateTrade(req.Symbol, "BUY", 1.0); err != nil {
+		eligible = false
+		reasons = append(reasons, err.Error())
+	}
+
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"data": map[string]interface{}{
+			"symbol":         req.Symbol,
+			"eligible":       eligible,
+			"reasons":        reasons,
+			"can_buy":        eligible,
+			"can_sell":       eligible,
+		},
+		"metadata": map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+		},
+	})
+}
+
+// HandleCheckCashSufficiency handles POST /api/trade-validation/check-cash-sufficiency
+// Cash requirement validation
+func (h *TradingHandlers) HandleCheckCashSufficiency(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Symbol   string  `json:"symbol"`
+		Side     string  `json:"side"`
+		Quantity float64 `json:"quantity"`
+		Price    float64 `json:"price"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// For SELL orders, no cash check needed
+	if strings.ToUpper(req.Side) == "SELL" {
+		h.writeJSON(w, http.StatusOK, map[string]interface{}{
+			"data": map[string]interface{}{
+				"sufficient": true,
+				"side":       req.Side,
+				"note":       "Sell orders do not require cash",
+			},
+			"metadata": map[string]interface{}{
+				"timestamp": time.Now().Format(time.RFC3339),
+			},
+		})
+		return
+	}
+
+	// Get current cash balance
+	cashBalance := 0.0
+	if h.portfolioService != nil {
+		summary, err := h.portfolioService.GetPortfolioSummary()
+		if err == nil {
+			cashBalance = summary.CashBalance
+		}
+	}
+
+	// Calculate required cash (trade value + commission)
+	tradeValue := req.Quantity * req.Price
+	commission := 2.0 + (tradeValue * 0.002) // Default commission
+	requiredCash := tradeValue + commission
+
+	sufficient := cashBalance >= requiredCash
+	shortfall := 0.0
+	if !sufficient {
+		shortfall = requiredCash - cashBalance
+	}
+
+	h.writeJSON(w, http.StatusOK, map[string]interface{}{
+		"data": map[string]interface{}{
+			"sufficient":      sufficient,
+			"cash_balance":    cashBalance,
+			"required_cash":   requiredCash,
+			"trade_value":     tradeValue,
+			"commission":      commission,
+			"shortfall":       shortfall,
+			"currency":        "EUR",
+		},
+		"metadata": map[string]interface{}{
+			"timestamp": time.Now().Format(time.RFC3339),
+		},
+	})
+}

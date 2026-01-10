@@ -31,9 +31,14 @@ func TestRegisterRoutes(t *testing.T) {
 		name   string
 	}{
 		{"POST", "/api/v1/evaluate/batch", "EvaluateBatch"},
+		{"POST", "/api/v1/evaluate/single", "EvaluateSingle"},
+		{"POST", "/api/v1/evaluate/compare", "EvaluateCompare"},
 		{"POST", "/api/v1/evaluate/monte-carlo", "EvaluateMonteCarlo"},
 		{"POST", "/api/v1/evaluate/stochastic", "EvaluateStochastic"},
+		{"GET", "/api/v1/evaluation/criteria", "GetEvaluationCriteria"},
 		{"POST", "/api/v1/simulate/batch", "SimulateBatch"},
+		{"POST", "/api/v1/simulate/custom-prices", "SimulateCustomPrices"},
+		{"POST", "/api/v1/monte-carlo/advanced", "MonteCarloAdvanced"},
 	}
 
 	for _, tc := range testCases {

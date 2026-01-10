@@ -52,6 +52,13 @@ func TestRegisterRoutes(t *testing.T) {
 		{"GET", "/portfolio/summary", "GetSummary"},
 		{"GET", "/portfolio/transactions", "GetTransactions"},
 		{"GET", "/portfolio/cash-breakdown", "GetCashBreakdown"},
+		{"GET", "/portfolio/performance/history", "GetPerformanceHistory"},
+		{"GET", "/portfolio/performance/vs-benchmark", "GetPerformanceVsBenchmark"},
+		{"GET", "/portfolio/performance/attribution", "GetPerformanceAttribution"},
+		{"GET", "/portfolio/concentration", "GetConcentration"},
+		{"GET", "/portfolio/diversification", "GetDiversification"},
+		{"GET", "/portfolio/unrealized-pnl/breakdown", "GetUnrealizedPnLBreakdown"},
+		{"GET", "/portfolio/cost-basis", "GetCostBasis"},
 	}
 
 	for _, tc := range testCases {

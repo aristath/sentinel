@@ -270,3 +270,138 @@ func (fs *FormulaStorage) GetAllFormulas(
 
 	return formulas, nil
 }
+
+// GetFormulasByRegimeRange retrieves formulas filtered by regime range
+func (fs *FormulaStorage) GetFormulasByRegimeRange(regimeMin, regimeMax float64) ([]*DiscoveredFormula, error) {
+	query := `
+		SELECT id, formula_type, security_type, regime_range_min, regime_range_max,
+		       formula_expression, validation_metrics, fitness_score, complexity,
+		       training_examples_count, discovered_at
+		FROM discovered_formulas
+		WHERE (regime_range_min IS NULL OR regime_range_min >= ?)
+		  AND (regime_range_max IS NULL OR regime_range_max <= ?)
+		  AND is_active = 1
+		ORDER BY discovered_at DESC
+	`
+
+	rows, err := fs.db.Query(query, regimeMin, regimeMax)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query formulas by regime: %w", err)
+	}
+	defer rows.Close()
+
+	var formulas []*DiscoveredFormula
+	for rows.Next() {
+		var formula DiscoveredFormula
+		var regimeRangeMin, regimeRangeMax sql.NullFloat64
+		var metricsJSON string
+		var discoveredAtUnix sql.NullInt64
+		var fitnessScore float64
+		var complexity int
+		var trainingExamplesCount sql.NullInt64
+
+		err := rows.Scan(
+			&formula.ID,
+			&formula.FormulaType,
+			&formula.SecurityType,
+			&regimeRangeMin,
+			&regimeRangeMax,
+			&formula.FormulaExpression,
+			&metricsJSON,
+			&fitnessScore,
+			&complexity,
+			&trainingExamplesCount,
+			&discoveredAtUnix,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan formula: %w", err)
+		}
+
+		// Parse regime ranges
+		if regimeRangeMin.Valid {
+			formula.RegimeRangeMin = &regimeRangeMin.Float64
+		}
+		if regimeRangeMax.Valid {
+			formula.RegimeRangeMax = &regimeRangeMax.Float64
+		}
+
+		// Parse validation metrics
+		formula.ValidationMetrics = make(map[string]float64)
+		if metricsJSON != "" {
+			if err := json.Unmarshal([]byte(metricsJSON), &formula.ValidationMetrics); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal validation metrics: %w", err)
+			}
+		}
+
+		// Convert Unix timestamp to time.Time
+		if discoveredAtUnix.Valid {
+			formula.DiscoveredAt = time.Unix(discoveredAtUnix.Int64, 0).UTC()
+		}
+
+		formulas = append(formulas, &formula)
+	}
+
+	return formulas, nil
+}
+
+// GetFormula retrieves a single formula by ID with all details
+func (fs *FormulaStorage) GetFormula(id int64) (*DiscoveredFormula, error) {
+	query := `
+		SELECT id, formula_type, security_type, regime_range_min, regime_range_max,
+		       formula_expression, validation_metrics, fitness_score, complexity,
+		       training_examples_count, discovered_at
+		FROM discovered_formulas
+		WHERE id = ?
+	`
+
+	var formula DiscoveredFormula
+	var regimeMin, regimeMax sql.NullFloat64
+	var metricsJSON string
+	var discoveredAtUnix sql.NullInt64
+	var fitnessScore float64
+	var complexity int
+	var trainingExamplesCount sql.NullInt64
+
+	err := fs.db.QueryRow(query, id).Scan(
+		&formula.ID,
+		&formula.FormulaType,
+		&formula.SecurityType,
+		&regimeMin,
+		&regimeMax,
+		&formula.FormulaExpression,
+		&metricsJSON,
+		&fitnessScore,
+		&complexity,
+		&trainingExamplesCount,
+		&discoveredAtUnix,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil // Formula not found
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to query formula: %w", err)
+	}
+
+	// Parse regime ranges
+	if regimeMin.Valid {
+		formula.RegimeRangeMin = &regimeMin.Float64
+	}
+	if regimeMax.Valid {
+		formula.RegimeRangeMax = &regimeMax.Float64
+	}
+
+	// Parse validation metrics
+	formula.ValidationMetrics = make(map[string]float64)
+	if metricsJSON != "" {
+		if err := json.Unmarshal([]byte(metricsJSON), &formula.ValidationMetrics); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal validation metrics: %w", err)
+		}
+	}
+
+	// Convert Unix timestamp to time.Time
+	if discoveredAtUnix.Valid {
+		formula.DiscoveredAt = time.Unix(discoveredAtUnix.Int64, 0).UTC()
+	}
+
+	return &formula, nil
+}
