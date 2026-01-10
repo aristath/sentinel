@@ -112,20 +112,27 @@ func (c *AveragingDownCalculator) Calculate(
 			continue
 		}
 
-		// Use ISIN if available, otherwise fallback to symbol
+		// Get ISIN for internal operations
 		isin := position.ISIN
 		if isin == "" {
-			isin = position.Symbol
-		}
-
-		// Skip if recently bought
-		if ctx.RecentlyBought[position.Symbol] {
+			c.log.Warn().
+				Str("symbol", position.Symbol).
+				Msg("Position missing ISIN, skipping")
 			continue
 		}
 
-		// Get security info (try ISIN first, fallback to symbol)
-		security, ok := ctx.GetSecurityByISINOrSymbol(isin, position.Symbol)
+		// Skip if recently bought (ISIN lookup)
+		if ctx.RecentlyBoughtISINs[isin] { // ISIN key ✅
+			continue
+		}
+
+		// Get security info (direct ISIN lookup)
+		security, ok := ctx.StocksByISIN[isin] // ISIN key ✅
 		if !ok {
+			c.log.Debug().
+				Str("isin", isin).
+				Str("symbol", position.Symbol).
+				Msg("Security not found in StocksByISIN, skipping")
 			continue
 		}
 
@@ -133,12 +140,13 @@ func (c *AveragingDownCalculator) Calculate(
 		if !security.AllowBuy {
 			c.log.Debug().
 				Str("symbol", position.Symbol).
+				Str("isin", isin).
 				Msg("Skipping security: allow_buy=false")
 			continue
 		}
 
-		// Get current price (try ISIN first, fallback to symbol)
-		currentPrice, ok := ctx.GetPriceByISINOrSymbol(isin, position.Symbol)
+		// Get current price (direct ISIN lookup)
+		currentPrice, ok := ctx.CurrentPrices[isin] // ISIN key ✅
 		if !ok || currentPrice <= 0 {
 			c.log.Debug().
 				Str("symbol", position.Symbol).
@@ -191,8 +199,8 @@ func (c *AveragingDownCalculator) Calculate(
 				continue
 			}
 
-			// CRITICAL: Require quality gate pass
-			if !contains(securityTags, "quality-gate-pass") {
+			// CRITICAL: Skip if quality gate failed (inverted logic - cleaner)
+			if contains(securityTags, "quality-gate-fail") {
 				c.log.Debug().
 					Str("symbol", position.Symbol).
 					Msg("Skipping - quality gate failed (tag-based check)")
@@ -200,7 +208,7 @@ func (c *AveragingDownCalculator) Calculate(
 			}
 		} else {
 			// Score-based fallback
-			qualityCheck := CheckQualityGates(ctx, position.Symbol, false, config)
+			qualityCheck := CheckQualityGates(ctx, position.ISIN, false, config)
 
 			if qualityCheck.IsEnsembleValueTrap {
 				c.log.Debug().
@@ -222,7 +230,7 @@ func (c *AveragingDownCalculator) Calculate(
 			// For averaging down, we're less strict on quality (already in position)
 			// Only skip if quality is very poor
 			if qualityCheck.QualityGateReason == "quality_gate_fail" {
-				fundamentalsScore := GetScoreFromContext(ctx, position.Symbol, ctx.FundamentalsScores)
+				fundamentalsScore := GetScoreFromContext(ctx, position.ISIN, ctx.FundamentalsScores)
 				if fundamentalsScore > 0 && fundamentalsScore < 0.4 {
 					c.log.Debug().
 						Str("symbol", position.Symbol).
@@ -238,7 +246,7 @@ func (c *AveragingDownCalculator) Calculate(
 
 		// Primary strategy: Kelly-based (when available)
 		if ctx.KellySizes != nil {
-			if kellySize, hasKellySize := ctx.KellySizes[position.Symbol]; hasKellySize && kellySize > 0 {
+			if kellySize, hasKellySize := ctx.KellySizes[isin]; hasKellySize && kellySize > 0 { // ISIN key ✅
 				kellyTargetValue := kellySize * ctx.TotalPortfolioValueEUR
 				kellyTargetShares := kellyTargetValue / currentPrice
 				currentShares := position.Quantity
@@ -248,6 +256,7 @@ func (c *AveragingDownCalculator) Calculate(
 					quantity = int(additionalShares)
 					c.log.Debug().
 						Str("symbol", position.Symbol).
+						Str("isin", isin).
 						Float64("kelly_target_shares", kellyTargetShares).
 						Float64("current_shares", currentShares).
 						Int("additional_shares", quantity).
@@ -256,6 +265,7 @@ func (c *AveragingDownCalculator) Calculate(
 					// Already at or above Kelly optimal - skip averaging down
 					c.log.Debug().
 						Str("symbol", position.Symbol).
+						Str("isin", isin).
 						Float64("kelly_target_shares", kellyTargetShares).
 						Float64("current_shares", currentShares).
 						Msg("Skipping - already at or above Kelly optimal")
@@ -326,6 +336,16 @@ func (c *AveragingDownCalculator) Calculate(
 		// Calculate priority with tag-based boosting
 		priority := c.calculatePriority(lossPercent, securityTags, config)
 
+		// Apply quantum warning penalty (10% for averaging down - already in position)
+		if config.EnableTagFiltering && len(securityTags) > 0 {
+			priority = ApplyQuantumWarningPenalty(priority, securityTags, "averaging_down")
+		}
+
+		// Apply tag-based priority boosts (with regime-aware logic)
+		if config.EnableTagFiltering && len(securityTags) > 0 {
+			priority = ApplyTagBasedPriorityBoosts(priority, securityTags, "averaging_down", c.securityRepo)
+		}
+
 		// Build reason
 		reason := fmt.Sprintf("Averaging down: %.1f%% loss (cost basis: %.2f, current: %.2f)",
 			lossPercent*100, costBasis, currentPrice)
@@ -348,7 +368,8 @@ func (c *AveragingDownCalculator) Calculate(
 
 		candidate := domain.ActionCandidate{
 			Side:     "BUY",
-			Symbol:   position.Symbol,
+			ISIN:     isin,            // PRIMARY identifier ✅
+			Symbol:   position.Symbol, // BOUNDARY identifier
 			Name:     security.Name,
 			Quantity: quantity,
 			Price:    currentPrice,
@@ -405,11 +426,6 @@ func (c *AveragingDownCalculator) calculatePriority(
 	// Recovery candidate gets boost
 	if contains(securityTags, "recovery-candidate") {
 		priority *= 1.3
-	}
-
-	// Quality gate pass gets moderate boost
-	if contains(securityTags, "quality-gate-pass") {
-		priority *= 1.2
 	}
 
 	// High quality gets boost

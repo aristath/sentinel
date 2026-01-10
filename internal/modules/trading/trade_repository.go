@@ -25,10 +25,11 @@ type TradeRepository struct {
 const tradesColumns = `id, symbol, isin, side, quantity, price, executed_at, order_id, currency, value_eur, source, mode, created_at`
 
 // NewTradeRepository creates a new trade repository
-func NewTradeRepository(ledgerDB *sql.DB, log zerolog.Logger) *TradeRepository {
+func NewTradeRepository(ledgerDB *sql.DB, universeDB *sql.DB, log zerolog.Logger) *TradeRepository {
 	return &TradeRepository{
-		ledgerDB: ledgerDB,
-		log:      log.With().Str("repo", "trade").Logger(),
+		ledgerDB:   ledgerDB,
+		universeDB: universeDB,
+		log:        log.With().Str("repo", "trade").Logger(),
 	}
 }
 
@@ -315,12 +316,18 @@ func (r *TradeRepository) GetByIdentifier(identifier string, limit int) ([]Trade
 	return r.GetBySymbol(identifier, limit)
 }
 
-// GetRecentlyBoughtSymbols returns symbols bought in the last N days (excluding RESEARCH trades)
-// Faithful translation of Python: async def get_recently_bought_symbols(self, days: int = 30) -> Set[str]
-func (r *TradeRepository) GetRecentlyBoughtSymbols(days int) (map[string]bool, error) {
+// GetRecentlyBoughtISINs returns ISINs of securities bought in the last N days
+// Excludes RESEARCH trades (order_id starting with 'RESEARCH_')
+// Returns map[isin]true for efficient lookup
+func (r *TradeRepository) GetRecentlyBoughtISINs(days int) (map[string]bool, error) {
+	if r.universeDB == nil {
+		return nil, fmt.Errorf("universe database not available for ISIN lookup")
+	}
+
 	cutoff := time.Now().AddDate(0, 0, -days).Unix()
 
-	query := `
+	// Step 1: Get distinct symbols from trades (single query)
+	symbolQuery := `
 		SELECT DISTINCT symbol FROM trades
 		WHERE side = 'BUY'
 		  AND executed_at >= ?
@@ -329,52 +336,146 @@ func (r *TradeRepository) GetRecentlyBoughtSymbols(days int) (map[string]bool, e
 		  AND order_id NOT LIKE 'RESEARCH_%'
 	`
 
-	rows, err := r.ledgerDB.Query(query, cutoff)
+	rows, err := r.ledgerDB.Query(symbolQuery, cutoff)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get recently bought symbols: %w", err)
 	}
 	defer rows.Close()
 
-	symbols := make(map[string]bool)
+	var symbols []string
 	for rows.Next() {
 		var symbol string
 		if err := rows.Scan(&symbol); err != nil {
 			return nil, fmt.Errorf("failed to scan symbol: %w", err)
 		}
-		symbols[symbol] = true
+		symbols = append(symbols, symbol)
 	}
 
-	return symbols, nil
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	if len(symbols) == 0 {
+		return make(map[string]bool), nil
+	}
+
+	// Step 2: Look up ISINs using WHERE IN clause (single query for all symbols)
+	// Build placeholders for IN clause: ?, ?, ?, ...
+	placeholders := make([]string, len(symbols))
+	args := make([]interface{}, len(symbols))
+	for i, symbol := range symbols {
+		placeholders[i] = "?"
+		args[i] = symbol
+	}
+
+	isinQuery := fmt.Sprintf(`
+		SELECT DISTINCT isin
+		FROM securities
+		WHERE symbol IN (%s)
+		  AND isin IS NOT NULL
+		  AND isin != ''
+	`, strings.Join(placeholders, ", "))
+
+	isinRows, err := r.universeDB.Query(isinQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to lookup ISINs: %w", err)
+	}
+	defer isinRows.Close()
+
+	isins := make(map[string]bool)
+	for isinRows.Next() {
+		var isin string
+		if err := isinRows.Scan(&isin); err != nil {
+			return nil, fmt.Errorf("failed to scan ISIN: %w", err)
+		}
+		isins[isin] = true
+	}
+
+	if err := isinRows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating ISIN rows: %w", err)
+	}
+
+	return isins, nil
 }
 
-// GetRecentlySoldSymbols returns symbols sold in the last N days (excluding RESEARCH trades)
-// Faithful translation of Python: async def get_recently_sold_symbols(self, days: int = 30) -> Set[str]
-func (r *TradeRepository) GetRecentlySoldSymbols(days int) (map[string]bool, error) {
+// GetRecentlySoldISINs returns ISINs of securities sold in the last N days
+// Excludes RESEARCH trades (order_id starting with 'RESEARCH_')
+// Returns map[isin]true for efficient lookup
+func (r *TradeRepository) GetRecentlySoldISINs(days int) (map[string]bool, error) {
+	if r.universeDB == nil {
+		return nil, fmt.Errorf("universe database not available for ISIN lookup")
+	}
+
 	cutoff := time.Now().AddDate(0, 0, -days).Unix()
 
-	query := `
+	// Step 1: Get distinct symbols from trades (single query)
+	symbolQuery := `
 		SELECT DISTINCT symbol FROM trades
 		WHERE side = 'SELL'
 		  AND executed_at >= ?
 		  AND (order_id IS NULL OR order_id NOT LIKE 'RESEARCH_%')
 	`
 
-	rows, err := r.ledgerDB.Query(query, cutoff)
+	rows, err := r.ledgerDB.Query(symbolQuery, cutoff)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get recently sold symbols: %w", err)
 	}
 	defer rows.Close()
 
-	symbols := make(map[string]bool)
+	var symbols []string
 	for rows.Next() {
 		var symbol string
 		if err := rows.Scan(&symbol); err != nil {
 			return nil, fmt.Errorf("failed to scan symbol: %w", err)
 		}
-		symbols[symbol] = true
+		symbols = append(symbols, symbol)
 	}
 
-	return symbols, nil
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	if len(symbols) == 0 {
+		return make(map[string]bool), nil
+	}
+
+	// Step 2: Look up ISINs using WHERE IN clause (single query for all symbols)
+	// Build placeholders for IN clause: ?, ?, ?, ...
+	placeholders := make([]string, len(symbols))
+	args := make([]interface{}, len(symbols))
+	for i, symbol := range symbols {
+		placeholders[i] = "?"
+		args[i] = symbol
+	}
+
+	isinQuery := fmt.Sprintf(`
+		SELECT DISTINCT isin
+		FROM securities
+		WHERE symbol IN (%s)
+		  AND isin IS NOT NULL
+		  AND isin != ''
+	`, strings.Join(placeholders, ", "))
+
+	isinRows, err := r.universeDB.Query(isinQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to lookup ISINs: %w", err)
+	}
+	defer isinRows.Close()
+
+	isins := make(map[string]bool)
+	for isinRows.Next() {
+		var isin string
+		if err := isinRows.Scan(&isin); err != nil {
+			return nil, fmt.Errorf("failed to scan ISIN: %w", err)
+		}
+		isins[isin] = true
+	}
+
+	if err := isinRows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating ISIN rows: %w", err)
+	}
+
+	return isins, nil
 }
 
 // HasRecentSellOrder checks if there's a recent SELL order for the symbol

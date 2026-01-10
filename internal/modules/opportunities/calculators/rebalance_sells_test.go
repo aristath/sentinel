@@ -12,7 +12,7 @@ import (
 
 func TestRebalanceSellsCalculator_MaxSellPercentage(t *testing.T) {
 	log := zerolog.Nop()
-	calc := NewRebalanceSellsCalculator(log)
+	calc := NewRebalanceSellsCalculator(nil, nil, log)
 
 	tests := []struct {
 		name                string
@@ -86,11 +86,10 @@ func TestRebalanceSellsCalculator_MaxSellPercentage(t *testing.T) {
 				Securities:             []domain.Security{security},
 				CurrentPrices:          map[string]float64{"US1234567890": currentPrice},
 				StocksByISIN:           map[string]domain.Security{"US1234567890": security},
-				StocksBySymbol:         map[string]domain.Security{"TEST.US": security},
 				CountryAllocations:     countryAllocations,
 				CountryWeights:         countryWeights,
-				IneligibleSymbols:      map[string]bool{},
-				RecentlySold:           map[string]bool{},
+				IneligibleISINs:      map[string]bool{},
+				RecentlySoldISINs:           map[string]bool{},
 				TotalPortfolioValueEUR: 10000,
 				AllowSell:              true,
 			}
@@ -115,7 +114,7 @@ func TestRebalanceSellsCalculator_MaxSellPercentage(t *testing.T) {
 
 func TestRebalanceSellsCalculator_MaxSellPercentage_MultiplePositions(t *testing.T) {
 	log := zerolog.Nop()
-	calc := NewRebalanceSellsCalculator(log)
+	calc := NewRebalanceSellsCalculator(nil, nil, log)
 
 	// Test that max_sell_percentage applies per-position
 	positions := []domain.Position{
@@ -157,11 +156,10 @@ func TestRebalanceSellsCalculator_MaxSellPercentage_MultiplePositions(t *testing
 		Securities:             securities,
 		CurrentPrices:          map[string]float64{"US1111111111": 10.0, "US2222222222": 20.0},
 		StocksByISIN:           map[string]domain.Security{"US1111111111": securities[0], "US2222222222": securities[1]},
-		StocksBySymbol:         map[string]domain.Security{"STOCK_A.US": securities[0], "STOCK_B.US": securities[1]},
 		CountryAllocations:     countryAllocations,
 		CountryWeights:         countryWeights,
-		IneligibleSymbols:      map[string]bool{},
-		RecentlySold:           map[string]bool{},
+		IneligibleISINs:      map[string]bool{},
+		RecentlySoldISINs:           map[string]bool{},
 		TotalPortfolioValueEUR: 10000,
 		AllowSell:              true,
 	}
@@ -188,7 +186,7 @@ func TestRebalanceSellsCalculator_MaxSellPercentage_MultiplePositions(t *testing
 
 func TestRebalanceSellsCalculator_NoMaxSellPercentage_DefaultsToHardcodedCap(t *testing.T) {
 	log := zerolog.Nop()
-	calc := NewRebalanceSellsCalculator(log)
+	calc := NewRebalanceSellsCalculator(nil, nil, log)
 
 	// When max_sell_percentage is not provided, the old hardcoded 50% cap should apply
 	position := domain.Position{
@@ -220,11 +218,10 @@ func TestRebalanceSellsCalculator_NoMaxSellPercentage_DefaultsToHardcodedCap(t *
 		Securities:             []domain.Security{security},
 		CurrentPrices:          map[string]float64{"US1234567890": 10.0},
 		StocksByISIN:           map[string]domain.Security{"US1234567890": security},
-		StocksBySymbol:         map[string]domain.Security{"TEST.US": security},
 		CountryAllocations:     countryAllocations,
 		CountryWeights:         countryWeights,
-		IneligibleSymbols:      map[string]bool{},
-		RecentlySold:           map[string]bool{},
+		IneligibleISINs:      map[string]bool{},
+		RecentlySoldISINs:           map[string]bool{},
 		TotalPortfolioValueEUR: 10000,
 		AllowSell:              true,
 	}

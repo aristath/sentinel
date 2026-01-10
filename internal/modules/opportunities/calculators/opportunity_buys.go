@@ -5,7 +5,8 @@ import (
 	"math"
 	"sort"
 
-	"github.com/aristath/sentinel/internal/modules/planning/domain"
+	"github.com/aristath/sentinel/internal/domain"
+	planningdomain "github.com/aristath/sentinel/internal/modules/planning/domain"
 	"github.com/rs/zerolog"
 )
 
@@ -36,17 +37,17 @@ func (c *OpportunityBuysCalculator) Name() string {
 }
 
 // Category returns the opportunity category.
-func (c *OpportunityBuysCalculator) Category() domain.OpportunityCategory {
-	return domain.OpportunityCategoryOpportunityBuys
+func (c *OpportunityBuysCalculator) Category() planningdomain.OpportunityCategory {
+	return planningdomain.OpportunityCategoryOpportunityBuys
 }
 
 // Calculate identifies opportunity buy candidates.
 func (c *OpportunityBuysCalculator) Calculate(
-	ctx *domain.OpportunityContext,
+	ctx *planningdomain.OpportunityContext,
 	params map[string]interface{},
-) ([]domain.ActionCandidate, error) {
+) ([]planningdomain.ActionCandidate, error) {
 	// Parameters with defaults
-	minScore := GetFloatParam(params, "min_score", 0.7) // Minimum score threshold
+	minScore := GetFloatParam(params, "min_score", 0.65) // Aligned with relaxed Path 3 (0.65 opportunity score)
 	maxValuePerPosition := GetFloatParam(params, "max_value_per_position", 500.0)
 	maxPositions := GetIntParam(params, "max_positions", 5)            // Default to top 5
 	excludeExisting := GetBoolParam(params, "exclude_existing", false) // Exclude positions we already have
@@ -69,20 +70,22 @@ func (c *OpportunityBuysCalculator) Calculate(
 	}
 
 	// Extract config for tag filtering
-	var config *domain.PlannerConfiguration
-	if cfg, ok := params["config"].(*domain.PlannerConfiguration); ok && cfg != nil {
+	var config *planningdomain.PlannerConfiguration
+	if cfg, ok := params["config"].(*planningdomain.PlannerConfiguration); ok && cfg != nil {
 		config = cfg
 	} else {
-		config = domain.NewDefaultConfiguration()
+		config = planningdomain.NewDefaultConfiguration()
 	}
 
-	// Check which positions we already have
+	// Check which positions we already have (use ISIN for internal tracking)
 	existingPositions := make(map[string]bool)
 	for _, position := range ctx.Positions {
-		existingPositions[position.Symbol] = true
+		if position.ISIN != "" {
+			existingPositions[position.ISIN] = true // ISIN key ✅
+		}
 	}
 
-	// Tag-based pre-filtering (when enabled)
+	// Tag-based pre-filtering (when enabled) - still uses Symbols for tag API
 	var candidateMap map[string]bool
 	var candidateSymbols []string
 
@@ -107,14 +110,20 @@ func (c *OpportunityBuysCalculator) Calculate(
 			Int("tag_candidates", len(candidateSymbols)).
 			Msg("Tag-based pre-filtering complete")
 	} else {
-		// No tag filtering - process all securities with scores
+		// No tag filtering - process all securities with scores (ISINs from SecurityScores)
 		if len(ctx.SecurityScores) == 0 {
 			c.log.Debug().Msg("No security scores available")
 			return nil, nil
 		}
 
-		for symbol := range ctx.SecurityScores {
-			candidateSymbols = append(candidateSymbols, symbol)
+		// SecurityScores is ISIN-keyed, but we need to match with tag filter logic
+		// Build candidateSymbols from Securities that have scores
+		for _, security := range ctx.Securities {
+			if security.ISIN != "" {
+				if _, hasScore := ctx.SecurityScores[security.ISIN]; hasScore {
+					candidateSymbols = append(candidateSymbols, security.Symbol)
+				}
+			}
 		}
 	}
 
@@ -126,29 +135,50 @@ func (c *OpportunityBuysCalculator) Calculate(
 
 	// Build list of scored securities
 	type scoredSecurity struct {
+		isin   string
 		symbol string
 		score  float64
 	}
 	var scoredSecurities []scoredSecurity
 
 	for _, symbol := range candidateSymbols {
-		// Get score
-		score, ok := ctx.SecurityScores[symbol]
+		// Look up security to get ISIN
+		var security domain.Security
+		var found bool
+		for _, sec := range ctx.Securities {
+			if sec.Symbol == symbol {
+				security = sec
+				found = true
+				break
+			}
+		}
+		if !found || security.ISIN == "" {
+			c.log.Debug().
+				Str("symbol", symbol).
+				Msg("Security not found or missing ISIN, skipping")
+			continue
+		}
+
+		isin := security.ISIN
+
+		// Get score by ISIN
+		score, ok := ctx.SecurityScores[isin] // ISIN key ✅
 		if !ok || score < minScore {
 			continue
 		}
 
 		// Skip if we already have this position and exclude_existing is true
-		if excludeExisting && existingPositions[symbol] {
+		if excludeExisting && existingPositions[isin] { // ISIN key ✅
 			continue
 		}
 
-		// Skip if recently bought
-		if ctx.RecentlyBought[symbol] {
+		// Skip if recently bought (ISIN lookup)
+		if ctx.RecentlyBoughtISINs[isin] { // ISIN key ✅
 			continue
 		}
 
 		scoredSecurities = append(scoredSecurities, scoredSecurity{
+			isin:   isin,
 			symbol: symbol,
 			score:  score,
 		})
@@ -165,32 +195,29 @@ func (c *OpportunityBuysCalculator) Calculate(
 	}
 
 	// Create candidates
-	var candidates []domain.ActionCandidate
+	var candidates []planningdomain.ActionCandidate
 	for _, scored := range scoredSecurities {
+		isin := scored.isin
 		symbol := scored.symbol
 		score := scored.score
 
-		// Get security info
-		security, ok := ctx.StocksBySymbol[symbol]
+		// Get security info (direct ISIN lookup)
+		security, ok := ctx.StocksByISIN[isin] // ISIN key ✅
 		if !ok {
 			c.log.Warn().
+				Str("isin", isin).
 				Str("symbol", symbol).
-				Msg("Security not found in stocks map")
+				Msg("Security not found in StocksByISIN")
 			continue
 		}
 
 		// Check per-security constraint: AllowBuy must be true
 		if !security.AllowBuy {
 			c.log.Debug().
+				Str("isin", isin).
 				Str("symbol", symbol).
 				Msg("Skipping security: allow_buy=false")
 			continue
-		}
-
-		// Use ISIN if available, otherwise fallback to symbol
-		isin := security.ISIN
-		if isin == "" {
-			isin = symbol // Fallback for CASH positions or securities without ISIN
 		}
 
 		// Apply target return filtering with flexible penalty system (if data available)
@@ -201,19 +228,17 @@ func (c *OpportunityBuysCalculator) Calculate(
 		}
 		thresholdPct := ctx.TargetReturnThresholdPct
 		if thresholdPct == 0 {
-			thresholdPct = 0.80 // Default 80%
+			thresholdPct = 0.70 // Default 70% (aligned with tag_assigner for 15-20 year horizon)
 		}
 		minCAGRThreshold := targetReturn * thresholdPct
 
 		// Absolute minimum guardrail: Never allow below 6% CAGR or 50% of target (whichever is higher)
 		absoluteMinCAGR := math.Max(0.06, targetReturn*0.50)
 
-		// Get CAGR if available (try ISIN first, fallback to symbol)
+		// Get CAGR if available (ISIN lookup only)
 		var cagr *float64
 		if ctx.CAGRs != nil {
-			if cagrVal, ok := ctx.CAGRs[isin]; ok {
-				cagr = &cagrVal
-			} else if cagrVal, ok := ctx.CAGRs[symbol]; ok {
+			if cagrVal, ok := ctx.CAGRs[isin]; ok { // ISIN key ✅
 				cagr = &cagrVal
 			}
 		}
@@ -241,16 +266,12 @@ func (c *OpportunityBuysCalculator) Calculate(
 			// Quality override: Get quality scores for penalty reduction
 			var longTermScore, fundamentalsScore *float64
 			if ctx.LongTermScores != nil {
-				if lt, ok := ctx.LongTermScores[isin]; ok {
-					longTermScore = &lt
-				} else if lt, ok := ctx.LongTermScores[symbol]; ok {
+				if lt, ok := ctx.LongTermScores[isin]; ok { // ISIN key ✅
 					longTermScore = &lt
 				}
 			}
 			if ctx.FundamentalsScores != nil {
-				if fund, ok := ctx.FundamentalsScores[isin]; ok {
-					fundamentalsScore = &fund
-				} else if fund, ok := ctx.FundamentalsScores[symbol]; ok {
+				if fund, ok := ctx.FundamentalsScores[isin]; ok { // ISIN key ✅
 					fundamentalsScore = &fund
 				}
 			}
@@ -326,8 +347,8 @@ func (c *OpportunityBuysCalculator) Calculate(
 				continue
 			}
 
-			// Require quality gate pass for new positions
-			if !existingPositions[symbol] && !contains(securityTags, "quality-gate-pass") {
+			// Skip new positions if quality gate failed (inverted logic - cleaner)
+			if !existingPositions[isin] && contains(securityTags, "quality-gate-fail") { // ISIN key ✅
 				c.log.Debug().
 					Str("symbol", symbol).
 					Msg("Skipping - quality gate failed (tag-based)")
@@ -335,7 +356,7 @@ func (c *OpportunityBuysCalculator) Calculate(
 			}
 		} else {
 			// Score-based quality gate fallback
-			qualityCheck := CheckQualityGates(ctx, symbol, !existingPositions[symbol], config)
+			qualityCheck := CheckQualityGates(ctx, isin, !existingPositions[isin], config) // ISIN parameter ✅
 
 			if qualityCheck.IsEnsembleValueTrap {
 				c.log.Debug().
@@ -367,8 +388,8 @@ func (c *OpportunityBuysCalculator) Calculate(
 			}
 		}
 
-		// Get current price
-		currentPrice, ok := ctx.GetPriceByISINOrSymbol(isin, symbol)
+		// Get current price (direct ISIN lookup)
+		currentPrice, ok := ctx.CurrentPrices[isin] // ISIN key ✅
 		if !ok || currentPrice <= 0 {
 			c.log.Warn().
 				Str("symbol", symbol).
@@ -382,7 +403,7 @@ func (c *OpportunityBuysCalculator) Calculate(
 
 		// Use Kelly-optimal size if available (as fraction of portfolio value)
 		if ctx.KellySizes != nil {
-			if kellySize, hasKellySize := ctx.KellySizes[symbol]; hasKellySize && kellySize > 0 {
+			if kellySize, hasKellySize := ctx.KellySizes[isin]; hasKellySize && kellySize > 0 { // ISIN key ✅
 				// Kelly size is a fraction (e.g., 0.05 = 5% of portfolio)
 				kellyValue := kellySize * ctx.TotalPortfolioValueEUR
 				// Use Kelly size if it's smaller than maxValuePerPosition (more conservative)
@@ -390,6 +411,7 @@ func (c *OpportunityBuysCalculator) Calculate(
 					targetValue = kellyValue
 					c.log.Debug().
 						Str("symbol", symbol).
+						Str("isin", isin).
 						Float64("kelly_size", kellySize).
 						Float64("kelly_value", kellyValue).
 						Float64("max_value", maxValuePerPosition).
@@ -442,6 +464,16 @@ func (c *OpportunityBuysCalculator) Calculate(
 		// Calculate priority with tag-based boosting
 		priority := c.calculatePriority(score, securityTags, config)
 
+		// Apply quantum warning penalty (30% for new positions)
+		if config.EnableTagFiltering && len(securityTags) > 0 {
+			priority = ApplyQuantumWarningPenalty(priority, securityTags, "opportunity_buys")
+		}
+
+		// Apply tag-based priority boosts (with regime-aware logic)
+		if config.EnableTagFiltering && len(securityTags) > 0 {
+			priority = ApplyTagBasedPriorityBoosts(priority, securityTags, "opportunity_buys", c.securityRepo)
+		}
+
 		// Build reason
 		reason := fmt.Sprintf("High score: %.2f - opportunity buy", score)
 
@@ -457,7 +489,7 @@ func (c *OpportunityBuysCalculator) Calculate(
 
 		// Build tags
 		tags := []string{"opportunity_buy", "high_score"}
-		if !existingPositions[symbol] {
+		if !existingPositions[isin] { // ISIN key ✅
 			tags = append(tags, "new_position")
 		}
 		if contains(securityTags, "quality-value") {
@@ -467,9 +499,10 @@ func (c *OpportunityBuysCalculator) Calculate(
 			tags = append(tags, "high_quality")
 		}
 
-		candidate := domain.ActionCandidate{
+		candidate := planningdomain.ActionCandidate{
 			Side:     "BUY",
-			Symbol:   symbol,
+			ISIN:     isin,   // PRIMARY identifier ✅
+			Symbol:   symbol, // BOUNDARY identifier
 			Name:     security.Name,
 			Quantity: quantity,
 			Price:    currentPrice,
@@ -501,7 +534,7 @@ func (c *OpportunityBuysCalculator) Calculate(
 func (c *OpportunityBuysCalculator) calculatePriority(
 	baseScore float64,
 	securityTags []string,
-	config *domain.PlannerConfiguration,
+	config *planningdomain.PlannerConfiguration,
 ) float64 {
 	priority := baseScore
 

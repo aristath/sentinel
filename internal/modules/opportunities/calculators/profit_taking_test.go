@@ -115,9 +115,8 @@ func TestProfitTakingCalculator_MaxSellPercentage(t *testing.T) {
 				Securities:        []domain.Security{security},
 				CurrentPrices:     map[string]float64{"US1234567890": currentPrice},
 				StocksByISIN:      map[string]domain.Security{"US1234567890": security},
-				StocksBySymbol:    map[string]domain.Security{"TEST.US": security},
-				IneligibleSymbols: map[string]bool{},
-				RecentlySold:      map[string]bool{},
+				IneligibleISINs: map[string]bool{},
+				RecentlySoldISINs:      map[string]bool{},
 				AllowSell:         true,
 			}
 
@@ -172,9 +171,8 @@ func TestProfitTakingCalculator_MaxSellPercentage_WithSellPercentageParam(t *tes
 		Securities:        []domain.Security{security},
 		CurrentPrices:     map[string]float64{"US1234567890": 15.0},
 		StocksByISIN:      map[string]domain.Security{"US1234567890": security},
-		StocksBySymbol:    map[string]domain.Security{"TEST.US": security},
-		IneligibleSymbols: map[string]bool{},
-		RecentlySold:      map[string]bool{},
+		IneligibleISINs: map[string]bool{},
+		RecentlySoldISINs:      map[string]bool{},
 		AllowSell:         true,
 	}
 
@@ -258,9 +256,8 @@ func TestProfitTakingCalculator_NoMaxSellPercentage(t *testing.T) {
 		Securities:        []domain.Security{security},
 		CurrentPrices:     map[string]float64{"US1234567890": 15.0},
 		StocksByISIN:      map[string]domain.Security{"US1234567890": security},
-		StocksBySymbol:    map[string]domain.Security{"TEST.US": security},
-		IneligibleSymbols: map[string]bool{},
-		RecentlySold:      map[string]bool{},
+		IneligibleISINs: map[string]bool{},
+		RecentlySoldISINs:      map[string]bool{},
 		AllowSell:         true,
 	}
 

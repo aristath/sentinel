@@ -9,14 +9,23 @@ import (
 )
 
 // RebalanceBuysCalculator identifies underweight positions to buy for rebalancing.
+// Supports optional tag-based pre-filtering for performance when EnableTagFiltering=true.
 type RebalanceBuysCalculator struct {
 	*BaseCalculator
+	tagFilter    TagFilter
+	securityRepo SecurityRepository
 }
 
 // NewRebalanceBuysCalculator creates a new rebalance buys calculator.
-func NewRebalanceBuysCalculator(log zerolog.Logger) *RebalanceBuysCalculator {
+func NewRebalanceBuysCalculator(
+	tagFilter TagFilter,
+	securityRepo SecurityRepository,
+	log zerolog.Logger,
+) *RebalanceBuysCalculator {
 	return &RebalanceBuysCalculator{
 		BaseCalculator: NewBaseCalculator(log, "rebalance_buys"),
+		tagFilter:      tagFilter,
+		securityRepo:   securityRepo,
 	}
 }
 
@@ -38,12 +47,44 @@ func (c *RebalanceBuysCalculator) Calculate(
 	// Parameters with defaults
 	minUnderweightThreshold := GetFloatParam(params, "min_underweight_threshold", 0.05) // 5% underweight
 	maxValuePerPosition := GetFloatParam(params, "max_value_per_position", 500.0)
-	minScore := GetFloatParam(params, "min_score", 0.6)     // Minimum security score
+	minScore := GetFloatParam(params, "min_score", 0.65)    // Aligned with relaxed Path 3 (0.65 opportunity score)
 	maxPositions := GetIntParam(params, "max_positions", 0) // 0 = unlimited
 
 	// Calculate minimum trade amount based on transaction costs (default: 1% max cost ratio)
 	maxCostRatio := GetFloatParam(params, "max_cost_ratio", 0.01) // Default 1% max cost
 	minTradeAmount := ctx.CalculateMinTradeAmount(maxCostRatio)
+
+	// Extract config for tag filtering
+	var config *domain.PlannerConfiguration
+	if cfg, ok := params["config"].(*domain.PlannerConfiguration); ok && cfg != nil {
+		config = cfg
+	} else {
+		config = domain.NewDefaultConfiguration()
+	}
+
+	// Tag-based pre-filtering (when enabled)
+	var candidateMap map[string]bool
+	if config.EnableTagFiltering && c.tagFilter != nil {
+		candidateSymbols, err := c.tagFilter.GetOpportunityCandidates(ctx, config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get tag-based candidates: %w", err)
+		}
+
+		if len(candidateSymbols) == 0 {
+			c.log.Debug().Msg("No tag-based candidates found")
+			return nil, nil
+		}
+
+		// Build lookup map
+		candidateMap = make(map[string]bool)
+		for _, symbol := range candidateSymbols {
+			candidateMap[symbol] = true
+		}
+
+		c.log.Debug().
+			Int("tag_candidates", len(candidateSymbols)).
+			Msg("Tag-based pre-filtering complete")
+	}
 
 	if !ctx.AllowBuy {
 		c.log.Debug().Msg("Buying not allowed, skipping rebalance buys")
@@ -91,6 +132,7 @@ func (c *RebalanceBuysCalculator) Calculate(
 
 	// Build candidates for securities in underweight countries
 	type scoredCandidate struct {
+		isin        string
 		symbol      string
 		group       string
 		underweight float64
@@ -98,14 +140,22 @@ func (c *RebalanceBuysCalculator) Calculate(
 	}
 	var scoredCandidates []scoredCandidate
 
-	for symbol := range ctx.StocksBySymbol {
-		// Skip if recently bought
-		if ctx.RecentlyBought[symbol] {
+	for isin, security := range ctx.StocksByISIN {
+		// Skip if recently bought (ISIN lookup)
+		if ctx.RecentlyBoughtISINs[isin] { // ISIN key ✅
 			continue
 		}
 
+		symbol := security.Symbol
+
+		// Skip if tag-based pre-filtering is enabled and symbol not in candidate set
+		if config.EnableTagFiltering && candidateMap != nil {
+			if !candidateMap[symbol] {
+				continue
+			}
+		}
+
 		// Get security and extract country
-		security := ctx.StocksBySymbol[symbol]
 		country := security.Country
 		if country == "" {
 			continue // Skip securities without country
@@ -135,10 +185,10 @@ func (c *RebalanceBuysCalculator) Calculate(
 			continue
 		}
 
-		// Get security score
+		// Get security score (ISIN lookup)
 		score := 0.5 // Default neutral score
 		if ctx.SecurityScores != nil {
-			if s, ok := ctx.SecurityScores[symbol]; ok {
+			if s, ok := ctx.SecurityScores[isin]; ok { // ISIN key ✅
 				score = s
 			}
 		}
@@ -148,7 +198,69 @@ func (c *RebalanceBuysCalculator) Calculate(
 			continue
 		}
 
+		// Quality gate checks - CRITICAL protection against bad trades
+		if config.EnableTagFiltering && c.securityRepo != nil {
+			// Tag-based quality checks (when enabled)
+			securityTags, err := c.securityRepo.GetTagsForSecurity(symbol)
+			if err == nil {
+				// Check for exclusion tags (inverted logic - skip if present)
+				if contains(securityTags, "value-trap") || contains(securityTags, "ensemble-value-trap") {
+					c.log.Debug().
+						Str("symbol", symbol).
+						Msg("Skipping - value trap detected (tag-based check)")
+					continue
+				}
+				if contains(securityTags, "bubble-risk") || contains(securityTags, "ensemble-bubble-risk") {
+					c.log.Debug().
+						Str("symbol", symbol).
+						Msg("Skipping - bubble risk detected (tag-based check)")
+					continue
+				}
+				if contains(securityTags, "below-minimum-return") {
+					c.log.Debug().
+						Str("symbol", symbol).
+						Msg("Skipping - below minimum return (tag-based check)")
+					continue
+				}
+				// Skip if quality gate failed (inverted logic - cleaner)
+				if contains(securityTags, "quality-gate-fail") {
+					c.log.Debug().
+						Str("symbol", symbol).
+						Msg("Skipping - quality gate failed (tag-based check)")
+					continue
+				}
+			}
+		} else {
+			// Score-based fallback when tag filtering is disabled
+			qualityCheck := CheckQualityGates(ctx, isin, true, config) // ISIN parameter ✅
+			if qualityCheck.IsEnsembleValueTrap {
+				c.log.Debug().
+					Str("symbol", symbol).
+					Msg("Skipping - value trap detected (score-based check)")
+				continue
+			}
+			if qualityCheck.IsBubbleRisk {
+				c.log.Debug().
+					Str("symbol", symbol).
+					Msg("Skipping - bubble risk detected (score-based check)")
+				continue
+			}
+			if qualityCheck.BelowMinimumReturn {
+				c.log.Debug().
+					Str("symbol", symbol).
+					Msg("Skipping - below minimum return (score-based check)")
+				continue
+			}
+			if !qualityCheck.PassesQualityGate {
+				c.log.Debug().
+					Str("symbol", symbol).
+					Msg("Skipping - quality gate failed (score-based check)")
+				continue
+			}
+		}
+
 		scoredCandidates = append(scoredCandidates, scoredCandidate{
+			isin:        isin,
 			symbol:      symbol,
 			group:       group,
 			underweight: underweight,
@@ -171,20 +283,17 @@ func (c *RebalanceBuysCalculator) Calculate(
 	// Create action candidates
 	var candidates []domain.ActionCandidate
 	for _, scored := range scoredCandidates {
+		isin := scored.isin
 		symbol := scored.symbol
-		security, ok := ctx.StocksBySymbol[symbol]
+
+		// Get security info (direct ISIN lookup)
+		security, ok := ctx.StocksByISIN[isin] // ISIN key ✅
 		if !ok {
 			continue
 		}
 
-		// Use ISIN if available, otherwise fallback to symbol
-		isin := security.ISIN
-		if isin == "" {
-			isin = symbol // Fallback for CASH positions or securities without ISIN
-		}
-
-		// Get current price (try ISIN first, fallback to symbol)
-		currentPrice, ok := ctx.GetPriceByISINOrSymbol(isin, symbol)
+		// Get current price (direct ISIN lookup)
+		currentPrice, ok := ctx.CurrentPrices[isin] // ISIN key ✅
 		if !ok || currentPrice <= 0 {
 			c.log.Warn().
 				Str("symbol", symbol).
@@ -248,6 +357,15 @@ func (c *RebalanceBuysCalculator) Calculate(
 		// Priority based on underweight and score
 		priority := scored.underweight * scored.score * 0.6
 
+		// Apply quantum warning penalty and priority boosts (30% for rebalance buys - new positions)
+		if config.EnableTagFiltering && c.securityRepo != nil {
+			securityTags, err := c.securityRepo.GetTagsForSecurity(symbol)
+			if err == nil && len(securityTags) > 0 {
+				priority = ApplyQuantumWarningPenalty(priority, securityTags, "rebalance_buys")
+				priority = ApplyTagBasedPriorityBoosts(priority, securityTags, "rebalance_buys", c.securityRepo)
+			}
+		}
+
 		// Build reason
 		reason := fmt.Sprintf("Rebalance: %s underweight by %.1f%% (score: %.2f)",
 			scored.group, scored.underweight*100, scored.score)
@@ -257,7 +375,8 @@ func (c *RebalanceBuysCalculator) Calculate(
 
 		candidate := domain.ActionCandidate{
 			Side:     "BUY",
-			Symbol:   symbol,
+			ISIN:     isin,   // PRIMARY identifier ✅
+			Symbol:   symbol, // BOUNDARY identifier
 			Name:     security.Name,
 			Quantity: quantity,
 			Price:    currentPrice,

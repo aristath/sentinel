@@ -1,6 +1,7 @@
 package calculators
 
 import (
+	appdomain "github.com/aristath/sentinel/internal/domain"
 	"github.com/aristath/sentinel/internal/modules/planning/domain"
 )
 
@@ -20,14 +21,5 @@ type TagFilter interface {
 // SecurityRepository defines the interface for security repository operations needed by calculators.
 type SecurityRepository interface {
 	GetTagsForSecurity(symbol string) ([]string, error)
-}
-
-// contains checks if a string slice contains a specific string.
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
+	GetByTags(tags []string) ([]appdomain.Security, error)
 }

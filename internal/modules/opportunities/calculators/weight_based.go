@@ -66,20 +66,27 @@ func (c *WeightBasedCalculator) Calculate(
 		Float64("min_weight_diff", minWeightDiff).
 		Msg("Calculating weight-based opportunities")
 
-	// Calculate current weights
+	// Calculate current weights (use ISIN for internal tracking)
 	currentWeights := make(map[string]float64)
 	for _, position := range ctx.Positions {
-		currentPrice, ok := ctx.CurrentPrices[position.Symbol]
+		isin := position.ISIN
+		if isin == "" {
+			c.log.Warn().
+				Str("symbol", position.Symbol).
+				Msg("Position missing ISIN, skipping in weight calculation")
+			continue
+		}
+		currentPrice, ok := ctx.CurrentPrices[isin] // ISIN key ✅
 		if !ok || currentPrice <= 0 {
 			continue
 		}
 		positionValue := float64(position.Quantity) * currentPrice
-		currentWeights[position.Symbol] = positionValue / ctx.TotalPortfolioValueEUR
+		currentWeights[isin] = positionValue / ctx.TotalPortfolioValueEUR // ISIN key ✅
 	}
 
 	// Identify weight differences
 	type weightDiff struct {
-		symbol    string
+		isin      string
 		current   float64
 		target    float64
 		diff      float64
@@ -87,14 +94,14 @@ func (c *WeightBasedCalculator) Calculate(
 	}
 	var diffs []weightDiff
 
-	// Check all target weights
-	for symbol, targetWeight := range ctx.TargetWeights {
-		currentWeight := currentWeights[symbol]
+	// Check all target weights (now ISIN-keyed)
+	for isin, targetWeight := range ctx.TargetWeights { // ISIN key ✅
+		currentWeight := currentWeights[isin] // ISIN key ✅
 		diff := targetWeight - currentWeight
 
 		if diff > minWeightDiff || diff < -minWeightDiff {
 			diffs = append(diffs, weightDiff{
-				symbol:    symbol,
+				isin:      isin,
 				current:   currentWeight,
 				target:    targetWeight,
 				diff:      diff,
@@ -120,26 +127,22 @@ func (c *WeightBasedCalculator) Calculate(
 	sellCount := 0
 
 	for _, d := range diffs {
-		symbol := d.symbol
+		isin := d.isin
 		diff := d.diff
 
-		// Get security info (SecurityScores uses symbol as key, so we look up by symbol first)
-		security, ok := ctx.StocksBySymbol[symbol]
+		// Get security info (direct ISIN lookup)
+		security, ok := ctx.StocksByISIN[isin] // ISIN key ✅
 		if !ok {
 			c.log.Warn().
-				Str("symbol", symbol).
-				Msg("Security not found")
+				Str("isin", isin).
+				Msg("Security not found in StocksByISIN")
 			continue
 		}
 
-		// Use ISIN if available, otherwise fallback to symbol
-		isin := security.ISIN
-		if isin == "" {
-			isin = symbol // Fallback for CASH positions or securities without ISIN
-		}
+		symbol := security.Symbol // Get Symbol for logging/tags
 
-		// Get current price (try ISIN first, fallback to symbol)
-		currentPrice, ok := ctx.GetPriceByISINOrSymbol(isin, symbol)
+		// Get current price (direct ISIN lookup)
+		currentPrice, ok := ctx.CurrentPrices[isin] // ISIN key ✅
 		if !ok || currentPrice <= 0 {
 			c.log.Warn().
 				Str("symbol", symbol).
@@ -153,7 +156,7 @@ func (c *WeightBasedCalculator) Calculate(
 			if !ctx.AllowBuy || buyCount >= maxBuyPositions {
 				continue
 			}
-			if ctx.RecentlyBought[symbol] {
+			if ctx.RecentlyBoughtISINs[isin] { // ISIN key ✅
 				continue
 			}
 			if ctx.AvailableCashEUR <= 0 {
@@ -210,15 +213,16 @@ func (c *WeightBasedCalculator) Calculate(
 					// Check if this is a new position (not in current positions)
 					isNewPosition := true
 					for _, pos := range ctx.Positions {
-						if pos.Symbol == symbol {
+						if pos.ISIN == isin { // ISIN comparison ✅
 							isNewPosition = false
 							break
 						}
 					}
 
-					if isNewPosition && !contains(securityTags, "quality-gate-pass") {
+					if isNewPosition && contains(securityTags, "quality-gate-fail") {
 						c.log.Debug().
 							Str("symbol", symbol).
+							Str("isin", isin).
 							Msg("Skipping - quality gate failed (new position)")
 						continue
 					}
@@ -227,13 +231,13 @@ func (c *WeightBasedCalculator) Calculate(
 					// Check if this is a new position
 					isNewPosition := true
 					for _, pos := range ctx.Positions {
-						if pos.Symbol == symbol {
+						if pos.ISIN == isin { // ISIN comparison ✅
 							isNewPosition = false
 							break
 						}
 					}
 
-					qualityCheck := CheckQualityGates(ctx, symbol, isNewPosition, config)
+					qualityCheck := CheckQualityGates(ctx, isin, isNewPosition, config) // ISIN parameter ✅
 
 					if qualityCheck.IsEnsembleValueTrap {
 						c.log.Debug().
@@ -274,7 +278,7 @@ func (c *WeightBasedCalculator) Calculate(
 
 			// Use Kelly-optimal size if available (as upper bound)
 			if ctx.KellySizes != nil {
-				if kellySize, hasKellySize := ctx.KellySizes[symbol]; hasKellySize && kellySize > 0 {
+				if kellySize, hasKellySize := ctx.KellySizes[isin]; hasKellySize && kellySize > 0 { // ISIN key ✅
 					// Kelly size is a fraction (e.g., 0.05 = 5% of portfolio)
 					kellyValue := kellySize * ctx.TotalPortfolioValueEUR
 					// Cap target value at Kelly-optimal size (more conservative)
@@ -282,6 +286,7 @@ func (c *WeightBasedCalculator) Calculate(
 						targetValue = kellyValue
 						c.log.Debug().
 							Str("symbol", symbol).
+							Str("isin", isin).
 							Float64("kelly_size", kellySize).
 							Float64("kelly_value", kellyValue).
 							Float64("target_value", targetValue).
@@ -348,12 +353,12 @@ func (c *WeightBasedCalculator) Calculate(
 			if c.securityRepo != nil {
 				securityTags, err := c.securityRepo.GetTagsForSecurity(symbol)
 				if err == nil {
-					// Soft filter: reduce priority for quantum warnings
-					if contains(securityTags, "quantum-bubble-warning") {
-						priority *= 0.7 // Reduce by 30%
-					}
+					// Apply quantum warning penalty (30% for weight-based - new positions)
+					priority = ApplyQuantumWarningPenalty(priority, securityTags, "weight_based")
+
+					// Also handle quantum-value-warning (specific to value traps)
 					if contains(securityTags, "quantum-value-warning") {
-						priority *= 0.7 // Reduce by 30%
+						priority *= 0.7 // Additional 30% reduction for value trap warning
 					}
 
 					// Boost if also a value opportunity or quality value
@@ -377,7 +382,8 @@ func (c *WeightBasedCalculator) Calculate(
 
 			candidate := planningdomain.ActionCandidate{
 				Side:     "BUY",
-				Symbol:   symbol,
+				ISIN:     isin,   // PRIMARY identifier ✅
+				Symbol:   symbol, // BOUNDARY identifier
 				Name:     security.Name,
 				Quantity: quantity,
 				Price:    currentPrice,
@@ -396,7 +402,7 @@ func (c *WeightBasedCalculator) Calculate(
 			if !ctx.AllowSell || sellCount >= maxSellPositions {
 				continue
 			}
-			if ctx.IneligibleSymbols[symbol] || ctx.RecentlySold[symbol] {
+			if ctx.IneligibleISINs[isin] || ctx.RecentlySoldISINs[isin] { // ISIN keys ✅
 				continue
 			}
 
@@ -404,14 +410,15 @@ func (c *WeightBasedCalculator) Calculate(
 			if !security.AllowSell {
 				c.log.Debug().
 					Str("symbol", symbol).
+					Str("isin", isin).
 					Msg("Skipping security: allow_sell=false")
 				continue
 			}
 
-			// Find position
+			// Find position by ISIN
 			var foundPosition *domain.Position
 			for i := range ctx.Positions {
-				if ctx.Positions[i].Symbol == symbol {
+				if ctx.Positions[i].ISIN == isin { // ISIN comparison ✅
 					pos := ctx.Positions[i]
 					foundPosition = &pos
 					break
@@ -481,7 +488,8 @@ func (c *WeightBasedCalculator) Calculate(
 
 			candidate := planningdomain.ActionCandidate{
 				Side:     "SELL",
-				Symbol:   symbol,
+				ISIN:     isin,   // PRIMARY identifier ✅
+				Symbol:   symbol, // BOUNDARY identifier
 				Name:     security.Name,
 				Quantity: quantity,
 				Price:    currentPrice,
