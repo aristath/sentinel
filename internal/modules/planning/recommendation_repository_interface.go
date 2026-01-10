@@ -37,6 +37,10 @@ type RecommendationRepositoryInterface interface {
 	// Used by StoreRecommendationsJob to convert plans to actionable recommendations
 	StorePlan(plan *planningdomain.HolisticPlan, portfolioHash string) error
 
+	// StoreRejectedOpportunities stores rejected opportunities for a portfolio hash
+	// Used to track why opportunities were not selected in the final plan
+	StoreRejectedOpportunities(rejected []planningdomain.RejectedOpportunity, portfolioHash string) error
+
 	// DeleteOlderThan deletes recommendations older than the specified duration
 	// Used by RecommendationGCJob for garbage collection (24h TTL)
 	DeleteOlderThan(maxAge time.Duration) (int, error)

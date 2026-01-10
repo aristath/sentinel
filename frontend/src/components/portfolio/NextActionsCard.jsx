@@ -258,6 +258,63 @@ export function NextActionsCard() {
           )}
         </Stack>
       )}
+
+      {/* Rejected Opportunities */}
+      {recommendations?.rejected_opportunities && recommendations.rejected_opportunities.length > 0 && (
+        <details style={{ marginTop: '1rem', borderTop: '1px solid var(--mantine-color-dark-6)', paddingTop: '1rem' }}>
+          <summary
+            style={{
+              cursor: 'pointer',
+              padding: '0.5rem',
+              fontSize: '0.875rem',
+              color: 'var(--mantine-color-dimmed)',
+              fontFamily: 'var(--mantine-font-family)',
+              fontWeight: 500,
+              listStyle: 'none',
+            }}
+          >
+            <Text size="sm" c="dimmed" fw={500} style={{ fontFamily: 'var(--mantine-font-family)' }}>
+              Rejected Opportunities ({recommendations.rejected_opportunities.length})
+            </Text>
+          </summary>
+          <Stack gap="xs" mt="sm" style={{ paddingLeft: '1rem' }}>
+            {recommendations.rejected_opportunities.map((rejected, index) => (
+              <Paper
+                key={`rejected-${rejected.symbol}-${rejected.side}-${index}`}
+                p="sm"
+                style={{
+                  border: '1px solid var(--mantine-color-dark-6)',
+                  backgroundColor: 'var(--mantine-color-dark-8)',
+                }}
+              >
+                <Group gap="xs" mb="xs" wrap="wrap">
+                  <Badge
+                    size="sm"
+                    color={rejected.side === 'SELL' ? 'red' : 'green'}
+                    variant="light"
+                    style={{ fontFamily: 'var(--mantine-font-family)' }}
+                  >
+                    {rejected.side}
+                  </Badge>
+                  <Text size="sm" fw={600} style={{ fontFamily: 'var(--mantine-font-family)' }} c="dimmed">
+                    {rejected.symbol}
+                  </Text>
+                  {rejected.name && (
+                    <Text size="sm" c="dimmed" style={{ fontFamily: 'var(--mantine-font-family)' }}>
+                      - {rejected.name}
+                    </Text>
+                  )}
+                </Group>
+                {rejected.reasons && rejected.reasons.length > 0 && (
+                  <Text size="xs" c="dimmed" style={{ fontFamily: 'var(--mantine-font-family)', lineHeight: 1.5 }}>
+                    {rejected.reasons.join('; ')}
+                  </Text>
+                )}
+              </Paper>
+            ))}
+          </Stack>
+        </details>
+      )}
     </Card>
   );
 }

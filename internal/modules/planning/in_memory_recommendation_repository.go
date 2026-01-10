@@ -13,15 +13,17 @@ import (
 )
 
 type InMemoryRecommendationRepository struct {
-	recommendations map[string]*Recommendation
-	mu              sync.RWMutex
-	log             zerolog.Logger
+	recommendations      map[string]*Recommendation
+	rejectedOpportunities map[string][]planningdomain.RejectedOpportunity // key: portfolioHash
+	mu                   sync.RWMutex
+	log                  zerolog.Logger
 }
 
 func NewInMemoryRecommendationRepository(log zerolog.Logger) *InMemoryRecommendationRepository {
 	return &InMemoryRecommendationRepository{
-		recommendations: make(map[string]*Recommendation),
-		log:             log.With().Str("repository", "recommendation_inmemory").Logger(),
+		recommendations:       make(map[string]*Recommendation),
+		rejectedOpportunities: make(map[string][]planningdomain.RejectedOpportunity),
+		log:                   log.With().Str("repository", "recommendation_inmemory").Logger(),
 	}
 }
 
@@ -263,6 +265,14 @@ func (r *InMemoryRecommendationRepository) GetRecommendationsAsPlan(getEvaluated
 		}
 	}
 
+	// Get rejected opportunities for this portfolio hash
+	var rejectedOpportunities interface{} = nil
+	r.mu.RLock()
+	if rejected, exists := r.rejectedOpportunities[portfolioHash]; exists && len(rejected) > 0 {
+		rejectedOpportunities = rejected
+	}
+	r.mu.RUnlock()
+
 	response := map[string]interface{}{
 		"steps":                   steps,
 		"current_score":           currentScore,
@@ -270,6 +280,10 @@ func (r *InMemoryRecommendationRepository) GetRecommendationsAsPlan(getEvaluated
 		"total_score_improvement": totalScoreImprovement,
 		"final_available_cash":    finalCash,
 		"evaluated_count":         evaluatedCount,
+	}
+
+	if rejectedOpportunities != nil {
+		response["rejected_opportunities"] = rejectedOpportunities
 	}
 
 	return response, nil
@@ -312,6 +326,11 @@ func (r *InMemoryRecommendationRepository) StorePlan(plan *planningdomain.Holist
 	if plan == nil || plan.Steps == nil {
 		return fmt.Errorf("plan and plan.Steps cannot be nil")
 	}
+
+	// Clear old rejected opportunities for this portfolio hash (they'll be replaced with new ones)
+	r.mu.Lock()
+	delete(r.rejectedOpportunities, portfolioHash)
+	r.mu.Unlock()
 
 	if len(plan.Steps) == 0 {
 		if _, err := r.DismissAllPending(); err != nil {
@@ -369,4 +388,18 @@ func (r *InMemoryRecommendationRepository) DeleteOlderThan(maxAge time.Duration)
 	}
 
 	return count, nil
+}
+
+func (r *InMemoryRecommendationRepository) StoreRejectedOpportunities(rejected []planningdomain.RejectedOpportunity, portfolioHash string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.rejectedOpportunities[portfolioHash] = rejected
+
+	r.log.Info().
+		Str("portfolio_hash", portfolioHash).
+		Int("rejected_count", len(rejected)).
+		Msg("Stored rejected opportunities")
+
+	return nil
 }

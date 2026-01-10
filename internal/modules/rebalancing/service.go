@@ -414,15 +414,34 @@ func (s *Service) CalculateRebalanceTrades(availableCash float64) ([]RebalanceRe
 		return nil, fmt.Errorf("failed to load planner config: %w", err)
 	}
 
-	// Step 4: Call planning service
-	plan, err := s.planningService.CreatePlan(opportunityCtx, config)
+	// Step 4: Call planning service with rejection tracking
+	planResult, err := s.planningService.CreatePlanWithRejections(opportunityCtx, config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create plan: %w", err)
 	}
 
+	plan := planResult.Plan
 	if !plan.Feasible {
 		s.log.Warn().Msg("Plan is not feasible")
 		return []RebalanceRecommendation{}, nil
+	}
+
+	// Store rejected opportunities if available (will be stored again when recommendations are stored,
+	// but we store here to ensure they're available even if recommendation storage fails)
+	if s.recommendationRepo != nil && len(planResult.RejectedOpportunities) > 0 {
+		portfolioHash := s.generatePortfolioHash()
+		if portfolioHash != "" {
+			// Store rejected opportunities
+			if err := s.recommendationRepo.StoreRejectedOpportunities(planResult.RejectedOpportunities, portfolioHash); err != nil {
+				s.log.Warn().Err(err).Msg("Failed to store rejected opportunities")
+				// Don't fail the whole operation if rejected opportunities can't be stored
+			} else {
+				s.log.Info().
+					Int("rejected_count", len(planResult.RejectedOpportunities)).
+					Str("portfolio_hash", portfolioHash).
+					Msg("Stored rejected opportunities")
+			}
+		}
 	}
 
 	// Step 5: Filter for BUY steps within budget
@@ -986,10 +1005,9 @@ func (s *Service) ExecuteRebalancing(
 	return nil
 }
 
-// storeRecommendations stores recommendations in the database
-// Following pattern from scheduler/planner_batch.go:353-406
-func (s *Service) storeRecommendations(recommendations []RebalanceRecommendation) error {
-	// Generate portfolio hash for grouping
+// generatePortfolioHash generates a portfolio hash from current portfolio state
+// This ensures consistent hash generation across all operations
+func (s *Service) generatePortfolioHash() string {
 	positions, _ := s.positionRepo.GetAll()
 	securities, _ := s.securityRepo.GetAllActive()
 	cashBalances := make(map[string]float64)
@@ -1020,7 +1038,19 @@ func (s *Service) storeRecommendations(recommendations []RebalanceRecommendation
 	}
 
 	pendingOrders := []hash.PendingOrder{} // Empty for now
-	portfolioHash := hash.GeneratePortfolioHash(hashPositions, hashSecurities, cashBalances, pendingOrders)
+	return hash.GeneratePortfolioHash(hashPositions, hashSecurities, cashBalances, pendingOrders)
+}
+
+// storeRecommendations stores recommendations in the database
+// Following pattern from scheduler/planner_batch.go:353-406
+// This also clears old rejected opportunities for the portfolio hash to ensure consistency
+func (s *Service) storeRecommendations(recommendations []RebalanceRecommendation) error {
+	portfolioHash := s.generatePortfolioHash()
+
+	// Note: Rejected opportunities are already stored in CalculateRebalanceTrades with the same hash
+	// They will be cleared automatically when StorePlan is called (which clears for the portfolio hash)
+	// For this path (storeRecommendations via CreateOrUpdate), we rely on the fact that
+	// rejected opportunities were stored with the same hash in CalculateRebalanceTrades
 
 	// Store each recommendation
 	for _, rec := range recommendations {

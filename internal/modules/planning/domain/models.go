@@ -88,3 +88,12 @@ const (
 
 // OpportunitiesByCategory organizes action candidates by their category.
 type OpportunitiesByCategory map[OpportunityCategory][]ActionCandidate
+
+// RejectedOpportunity represents an individual opportunity that was identified but not selected in the final plan.
+type RejectedOpportunity struct {
+	Side           string   `json:"side"`             // "BUY" or "SELL"
+	Symbol         string   `json:"symbol"`           // Security symbol (e.g., "IBM")
+	Name           string   `json:"name"`             // Security name
+	Reasons        []string `json:"reasons"`          // Array of rejection reasons (deduplicated)
+	OriginalReason string   `json:"original_reason,omitempty"` // Original opportunity reason if available (from calculator)
+}

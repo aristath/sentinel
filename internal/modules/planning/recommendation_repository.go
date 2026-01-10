@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"math"
+	"sync"
 	"time"
 
 	planningdomain "github.com/aristath/sentinel/internal/modules/planning/domain"
@@ -20,8 +21,10 @@ import (
 // Faithful translation from Python: app/repositories/recommendation.py
 // Database: cache.db (recommendations table)
 type RecommendationRepository struct {
-	db  *sql.DB // cache.db
-	log zerolog.Logger
+	db                    *sql.DB // cache.db
+	rejectedOpportunities map[string][]planningdomain.RejectedOpportunity // key: portfolioHash (in-memory)
+	rejectedMu            sync.RWMutex
+	log                   zerolog.Logger
 }
 
 // Recommendation represents a stored recommendation
@@ -52,8 +55,9 @@ type Recommendation struct {
 // NewRecommendationRepository creates a new recommendation repository
 func NewRecommendationRepository(db *sql.DB, log zerolog.Logger) *RecommendationRepository {
 	return &RecommendationRepository{
-		db:  db,
-		log: log.With().Str("repository", "recommendation").Logger(),
+		db:                    db,
+		rejectedOpportunities: make(map[string][]planningdomain.RejectedOpportunity),
+		log:                   log.With().Str("repository", "recommendation").Logger(),
 	}
 }
 
@@ -532,6 +536,14 @@ func (r *RecommendationRepository) GetRecommendationsAsPlan(getEvaluatedCount fu
 		}
 	}
 
+	// Get rejected opportunities for this portfolio hash
+	var rejectedOpportunities interface{} = nil
+	r.rejectedMu.RLock()
+	if rejected, exists := r.rejectedOpportunities[portfolioHash]; exists && len(rejected) > 0 {
+		rejectedOpportunities = rejected
+	}
+	r.rejectedMu.RUnlock()
+
 	// Build response matching frontend expectations
 	response := map[string]interface{}{
 		"steps":                   steps,
@@ -540,6 +552,10 @@ func (r *RecommendationRepository) GetRecommendationsAsPlan(getEvaluatedCount fu
 		"total_score_improvement": totalScoreImprovement,
 		"final_available_cash":    finalCash,
 		"evaluated_count":         evaluatedCount,
+	}
+
+	if rejectedOpportunities != nil {
+		response["rejected_opportunities"] = rejectedOpportunities
 	}
 
 	return response, nil
@@ -604,6 +620,11 @@ func (r *RecommendationRepository) StorePlan(plan *planningdomain.HolisticPlan, 
 	if plan == nil {
 		return fmt.Errorf("plan cannot be nil")
 	}
+
+	// Clear old rejected opportunities for this portfolio hash (they'll be replaced with new ones)
+	r.rejectedMu.Lock()
+	delete(r.rejectedOpportunities, portfolioHash)
+	r.rejectedMu.Unlock()
 
 	// If plan has no steps, dismiss all pending recommendations
 	if len(plan.Steps) == 0 {
@@ -675,4 +696,20 @@ func (r *RecommendationRepository) DeleteOlderThan(maxAge time.Duration) (int, e
 	}
 
 	return count, nil
+}
+
+// StoreRejectedOpportunities stores rejected opportunities for a portfolio hash (in-memory)
+// NOTE: Rejected opportunities stay in-memory per the design
+func (r *RecommendationRepository) StoreRejectedOpportunities(rejected []planningdomain.RejectedOpportunity, portfolioHash string) error {
+	r.rejectedMu.Lock()
+	defer r.rejectedMu.Unlock()
+
+	r.rejectedOpportunities[portfolioHash] = rejected
+
+	r.log.Info().
+		Str("portfolio_hash", portfolioHash).
+		Int("rejected_count", len(rejected)).
+		Msg("Stored rejected opportunities")
+
+	return nil
 }

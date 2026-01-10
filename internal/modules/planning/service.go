@@ -26,3 +26,7 @@ func NewService(opportunitiesService *opportunities.Service, sequencesService *s
 func (s *Service) CreatePlan(ctx *domain.OpportunityContext, config *domain.PlannerConfiguration) (*domain.HolisticPlan, error) {
 	return s.planner.CreatePlan(ctx, config)
 }
+
+func (s *Service) CreatePlanWithRejections(ctx *domain.OpportunityContext, config *domain.PlannerConfiguration) (*planner.PlanResult, error) {
+	return s.planner.CreatePlanWithRejections(ctx, config)
+}
