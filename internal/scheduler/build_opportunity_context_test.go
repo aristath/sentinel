@@ -537,10 +537,10 @@ func TestFetchCurrentPrices_NilPriceConversionService(t *testing.T) {
 
 // TestFetchCurrentPrices_MultipleCurrencies verifies multiple currencies in single batch
 func TestFetchCurrentPrices_MultipleCurrencies(t *testing.T) {
-	vwsISIN := "NL0000009082"    // VWS ISIN
-	aaplISIN := "US0378331005"   // AAPL ISIN
+	vwsISIN := "NL0000009082"     // VWS ISIN
+	aaplISIN := "US0378331005"    // AAPL ISIN
 	tencentISIN := "HK0000093390" // Tencent ISIN
-	barcISIN := "GB0031348658"   // Barclays ISIN
+	barcISIN := "GB0031348658"    // Barclays ISIN
 
 	securities := []universe.Security{
 		{Symbol: "VWS.AS", ISIN: vwsISIN, Currency: "EUR"},

@@ -830,36 +830,6 @@ func (m *mockYahooClient) LookupTickerFromISIN(isin string) (string, error) {
 	return "", nil
 }
 
-// Mock Settings Service for testing
-type mockSettingsService struct {
-	settings map[string]interface{}
-	mu       sync.RWMutex
-}
-
-func newMockSettingsService() *mockSettingsService {
-	return &mockSettingsService{
-		settings: make(map[string]interface{}),
-	}
-}
-
-func (m *mockSettingsService) Get(key string) (interface{}, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	if val, exists := m.settings[key]; exists {
-		return val, nil
-	}
-	return nil, fmt.Errorf("setting not found: %s", key)
-}
-
-func (m *mockSettingsService) Set(key string, value interface{}) (bool, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.settings[key] = value
-	return true, nil
-}
-
 // Test Suite: Price Validation and Limit Calculation for BUY Orders
 func TestValidatePriceAndCalculateLimit_BuyOrders(t *testing.T) {
 	log := logger.New(logger.Config{Level: "error", Pretty: false})
