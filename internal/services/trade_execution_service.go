@@ -15,7 +15,7 @@ import (
 	"github.com/aristath/sentinel/internal/clients/yahoo"
 	"github.com/aristath/sentinel/internal/domain"
 	"github.com/aristath/sentinel/internal/events"
-	planningrepo "github.com/aristath/sentinel/internal/modules/planning/repository"
+	planningdomain "github.com/aristath/sentinel/internal/modules/planning/domain"
 	"github.com/aristath/sentinel/internal/modules/portfolio"
 	"github.com/aristath/sentinel/internal/modules/trading"
 	"github.com/aristath/sentinel/internal/modules/universe"
@@ -43,6 +43,13 @@ type OrderBookServiceInterface interface {
 	CalculateOptimalLimit(symbol, side string, buffer float64) (float64, error)
 	// ValidateLiquidity checks if sufficient liquidity exists for the trade
 	ValidateLiquidity(symbol, side string, quantity float64) error
+}
+
+// PlannerConfigRepoInterface defines the interface for planner configuration
+type PlannerConfigRepoInterface interface {
+	GetDefaultConfig() (*planningdomain.PlannerConfiguration, error)
+	SaveConfig(config *planningdomain.PlannerConfiguration) error
+	GetConfig(name string) (*planningdomain.PlannerConfiguration, error)
 }
 
 // TradeRecommendation represents a simplified trade recommendation for execution
@@ -77,12 +84,12 @@ type TradeExecutionService struct {
 	cashManager       domain.CashManager
 	exchangeService   domain.CurrencyExchangeServiceInterface
 	eventManager      *events.Manager
-	settingsService   SettingsServiceInterface       // For configuration (fees, price age, etc.)
-	plannerConfigRepo *planningrepo.ConfigRepository // For transaction costs from planner config
-	orderBookService  OrderBookServiceInterface      // For order book analysis (liquidity validation, optimal limit pricing)
-	yahooClient       yahoo.FullClientInterface      // For fetching fresh prices
-	historyDB         *sql.DB                        // For storing updated prices
-	securityRepo      *universe.SecurityRepository   // For ISIN lookup
+	settingsService   SettingsServiceInterface      // For configuration (fees, price age, etc.)
+	plannerConfigRepo PlannerConfigRepoInterface    // For transaction costs from planner config
+	orderBookService  OrderBookServiceInterface     // For order book analysis (liquidity validation, optimal limit pricing)
+	yahooClient       yahoo.FullClientInterface     // For fetching fresh prices
+	historyDB         *sql.DB                       // For storing updated prices
+	securityRepo      *universe.SecurityRepository  // For ISIN lookup
 	log               zerolog.Logger
 }
 
@@ -102,7 +109,7 @@ func NewTradeExecutionService(
 	exchangeService domain.CurrencyExchangeServiceInterface,
 	eventManager *events.Manager,
 	settingsService SettingsServiceInterface,
-	plannerConfigRepo *planningrepo.ConfigRepository,
+	plannerConfigRepo PlannerConfigRepoInterface,
 	orderBookService OrderBookServiceInterface,
 	yahooClient yahoo.FullClientInterface,
 	historyDB *sql.DB,
