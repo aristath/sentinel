@@ -49,7 +49,7 @@ type OrderBookServiceInterface interface {
 type PlannerConfigRepoInterface interface {
 	GetDefaultConfig() (*planningdomain.PlannerConfiguration, error)
 	SaveConfig(config *planningdomain.PlannerConfiguration) error
-	GetConfig(name string) (*planningdomain.PlannerConfiguration, error)
+	GetConfig(id int64) (*planningdomain.PlannerConfiguration, error)
 }
 
 // TradeRecommendation represents a simplified trade recommendation for execution

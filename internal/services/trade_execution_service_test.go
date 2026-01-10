@@ -339,7 +339,7 @@ func (m *mockPlannerConfigRepo) SaveConfig(config *planningdomain.PlannerConfigu
 	return nil
 }
 
-func (m *mockPlannerConfigRepo) GetConfig(name string) (*planningdomain.PlannerConfiguration, error) {
+func (m *mockPlannerConfigRepo) GetConfig(id int64) (*planningdomain.PlannerConfiguration, error) {
 	return m.config, m.err
 }
 
