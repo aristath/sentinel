@@ -26,10 +26,11 @@ type PlannerConfiguration struct {
 	AllowBuy  bool `json:"allow_buy"`
 
 	// Risk management settings
-	MinHoldDays       int     `json:"min_hold_days"`       // Minimum days a position must be held before selling
-	SellCooldownDays  int     `json:"sell_cooldown_days"`  // Days to wait after selling before buying again
-	MaxLossThreshold  float64 `json:"max_loss_threshold"`  // Maximum loss threshold before forced selling consideration
-	MaxSellPercentage float64 `json:"max_sell_percentage"` // Maximum percentage of position allowed to sell per transaction
+	MinHoldDays         int     `json:"min_hold_days"`         // Minimum days a position must be held before selling
+	SellCooldownDays    int     `json:"sell_cooldown_days"`    // Days to wait after selling before buying again
+	MaxLossThreshold    float64 `json:"max_loss_threshold"`    // Maximum loss threshold before forced selling consideration
+	MaxSellPercentage   float64 `json:"max_sell_percentage"`   // Maximum percentage of position allowed to sell per transaction
+	AveragingDownPercent float64 `json:"averaging_down_percent"` // Maximum percentage of position to add when averaging down
 
 	// Portfolio optimizer settings
 	OptimizerBlend        float64 `json:"optimizer_blend"`        // 0.0 = pure Mean-Variance, 1.0 = pure HRP
@@ -93,7 +94,8 @@ func NewDefaultConfiguration() *PlannerConfiguration {
 		SellCooldownDays:            180,
 		MaxLossThreshold:            -0.20,
 		MaxSellPercentage:           0.20,
-		OptimizerBlend:              0.5,   // 50% MV, 50% HRP
+		AveragingDownPercent:        0.10, // 10% of position
+		OptimizerBlend:              0.5,  // 50% MV, 50% HRP
 		OptimizerTargetReturn:       0.11,  // 11% target annual return
 		MinCashReserve:              500.0, // €500 minimum cash
 		// All modules enabled by default

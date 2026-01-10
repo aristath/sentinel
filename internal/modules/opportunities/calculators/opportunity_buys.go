@@ -10,14 +10,23 @@ import (
 )
 
 // OpportunityBuysCalculator identifies new buying opportunities based on security scores.
+// Supports optional tag-based pre-filtering for performance when EnableTagFiltering=true.
 type OpportunityBuysCalculator struct {
 	*BaseCalculator
+	tagFilter    TagFilter
+	securityRepo SecurityRepository
 }
 
 // NewOpportunityBuysCalculator creates a new opportunity buys calculator.
-func NewOpportunityBuysCalculator(log zerolog.Logger) *OpportunityBuysCalculator {
+func NewOpportunityBuysCalculator(
+	tagFilter TagFilter,
+	securityRepo SecurityRepository,
+	log zerolog.Logger,
+) *OpportunityBuysCalculator {
 	return &OpportunityBuysCalculator{
 		BaseCalculator: NewBaseCalculator(log, "opportunity_buys"),
+		tagFilter:      tagFilter,
+		securityRepo:   securityRepo,
 	}
 }
 
@@ -59,14 +68,60 @@ func (c *OpportunityBuysCalculator) Calculate(
 		return nil, nil
 	}
 
-	if len(ctx.SecurityScores) == 0 {
-		c.log.Debug().Msg("No security scores available")
-		return nil, nil
+	// Extract config for tag filtering
+	var config *domain.PlannerConfiguration
+	if cfg, ok := params["config"].(*domain.PlannerConfiguration); ok && cfg != nil {
+		config = cfg
+	} else {
+		config = domain.NewDefaultConfiguration()
+	}
+
+	// Check which positions we already have
+	existingPositions := make(map[string]bool)
+	for _, position := range ctx.Positions {
+		existingPositions[position.Symbol] = true
+	}
+
+	// Tag-based pre-filtering (when enabled)
+	var candidateMap map[string]bool
+	var candidateSymbols []string
+
+	if config.EnableTagFiltering && c.tagFilter != nil {
+		symbols, err := c.tagFilter.GetOpportunityCandidates(ctx, config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get tag-based candidates: %w", err)
+		}
+
+		if len(symbols) == 0 {
+			c.log.Debug().Msg("No tag-based candidates found")
+			return nil, nil
+		}
+
+		candidateSymbols = symbols
+		candidateMap = make(map[string]bool)
+		for _, symbol := range symbols {
+			candidateMap[symbol] = true
+		}
+
+		c.log.Debug().
+			Int("tag_candidates", len(candidateSymbols)).
+			Msg("Tag-based pre-filtering complete")
+	} else {
+		// No tag filtering - process all securities with scores
+		if len(ctx.SecurityScores) == 0 {
+			c.log.Debug().Msg("No security scores available")
+			return nil, nil
+		}
+
+		for symbol := range ctx.SecurityScores {
+			candidateSymbols = append(candidateSymbols, symbol)
+		}
 	}
 
 	c.log.Debug().
 		Float64("min_score", minScore).
 		Int("max_positions", maxPositions).
+		Bool("tag_filtering_enabled", config.EnableTagFiltering).
 		Msg("Calculating opportunity buys")
 
 	// Build list of scored securities
@@ -76,15 +131,10 @@ func (c *OpportunityBuysCalculator) Calculate(
 	}
 	var scoredSecurities []scoredSecurity
 
-	// Check which positions we already have
-	existingPositions := make(map[string]bool)
-	for _, position := range ctx.Positions {
-		existingPositions[position.Symbol] = true
-	}
-
-	for symbol, score := range ctx.SecurityScores {
-		// Skip if below threshold
-		if score < minScore {
+	for _, symbol := range candidateSymbols {
+		// Get score
+		score, ok := ctx.SecurityScores[symbol]
+		if !ok || score < minScore {
 			continue
 		}
 
@@ -120,8 +170,7 @@ func (c *OpportunityBuysCalculator) Calculate(
 		symbol := scored.symbol
 		score := scored.score
 
-		// Get security info (try ISIN first, fallback to symbol)
-		// SecurityScores uses symbol as key, so we look up by symbol first
+		// Get security info
 		security, ok := ctx.StocksBySymbol[symbol]
 		if !ok {
 			c.log.Warn().
@@ -239,7 +288,86 @@ func (c *OpportunityBuysCalculator) Calculate(
 				Msg("Applied flexible penalty (quality-aware)")
 		}
 
-		// Get current price (try ISIN first, fallback to symbol)
+		// Quality gate checks (tag-based or score-based)
+		var securityTags []string
+		useTagChecks := false
+		if config.EnableTagFiltering && c.securityRepo != nil {
+			tags, err := c.securityRepo.GetTagsForSecurity(symbol)
+			if err == nil && len(tags) > 0 {
+				securityTags = tags
+				useTagChecks = true
+			}
+		}
+
+		if useTagChecks {
+			// Tag-based quality gates
+			// Skip value traps (classical or ensemble)
+			if contains(securityTags, "value-trap") || contains(securityTags, "ensemble-value-trap") {
+				c.log.Debug().
+					Str("symbol", symbol).
+					Msg("Skipping value trap (tag-based detection)")
+				continue
+			}
+
+			// Skip bubble risks (classical or ensemble, unless it's quality-high-cagr)
+			if (contains(securityTags, "bubble-risk") || contains(securityTags, "ensemble-bubble-risk")) &&
+				!contains(securityTags, "quality-high-cagr") {
+				c.log.Debug().
+					Str("symbol", symbol).
+					Msg("Skipping bubble risk (tag-based detection)")
+				continue
+			}
+
+			// Skip securities below absolute minimum return (hard filter from tags)
+			if contains(securityTags, "below-minimum-return") {
+				c.log.Debug().
+					Str("symbol", symbol).
+					Msg("Skipping - below absolute minimum return (tag-based filter)")
+				continue
+			}
+
+			// Require quality gate pass for new positions
+			if !existingPositions[symbol] && !contains(securityTags, "quality-gate-pass") {
+				c.log.Debug().
+					Str("symbol", symbol).
+					Msg("Skipping - quality gate failed (tag-based)")
+				continue
+			}
+		} else {
+			// Score-based quality gate fallback
+			qualityCheck := CheckQualityGates(ctx, symbol, !existingPositions[symbol], config)
+
+			if qualityCheck.IsEnsembleValueTrap {
+				c.log.Debug().
+					Str("symbol", symbol).
+					Msg("Skipping value trap (score-based detection)")
+				continue
+			}
+
+			if qualityCheck.IsBubbleRisk {
+				c.log.Debug().
+					Str("symbol", symbol).
+					Msg("Skipping bubble risk (score-based detection)")
+				continue
+			}
+
+			if qualityCheck.BelowMinimumReturn {
+				c.log.Debug().
+					Str("symbol", symbol).
+					Msg("Skipping - below absolute minimum return (score-based filter)")
+				continue
+			}
+
+			if !qualityCheck.PassesQualityGate {
+				c.log.Debug().
+					Str("symbol", symbol).
+					Str("reason", qualityCheck.QualityGateReason).
+					Msg("Skipping - quality gate failed (score-based)")
+				continue
+			}
+		}
+
+		// Get current price
 		currentPrice, ok := ctx.GetPriceByISINOrSymbol(isin, symbol)
 		if !ok || currentPrice <= 0 {
 			c.log.Warn().
@@ -306,31 +434,37 @@ func (c *OpportunityBuysCalculator) Calculate(
 		transactionCost := ctx.TransactionCostFixed + (valueEUR * ctx.TransactionCostPercent)
 		totalCostEUR := valueEUR + transactionCost
 
-		// Check if trade meets minimum trade amount (transaction cost efficiency)
-		if valueEUR < minTradeAmount {
-			c.log.Debug().
-				Str("symbol", symbol).
-				Float64("trade_value", valueEUR).
-				Float64("min_trade_amount", minTradeAmount).
-				Msg("Skipping trade below minimum trade amount")
-			continue
-		}
-
 		// Check if we have enough cash
 		if totalCostEUR > ctx.AvailableCashEUR {
 			continue
 		}
 
-		// Priority is based on score
-		priority := score
+		// Calculate priority with tag-based boosting
+		priority := c.calculatePriority(score, securityTags, config)
 
 		// Build reason
 		reason := fmt.Sprintf("High score: %.2f - opportunity buy", score)
+
+		// Add tag-based reason enhancements
+		if contains(securityTags, "quality-value") {
+			reason += " [Quality Value]"
+		} else if contains(securityTags, "high-quality") && contains(securityTags, "value-opportunity") {
+			reason += " [High Quality Value]"
+		}
+		if contains(securityTags, "excellent-total-return") {
+			reason += " [Excellent Returns]"
+		}
 
 		// Build tags
 		tags := []string{"opportunity_buy", "high_score"}
 		if !existingPositions[symbol] {
 			tags = append(tags, "new_position")
+		}
+		if contains(securityTags, "quality-value") {
+			tags = append(tags, "quality_value")
+		}
+		if contains(securityTags, "high-quality") {
+			tags = append(tags, "high_quality")
 		}
 
 		candidate := domain.ActionCandidate{
@@ -349,9 +483,82 @@ func (c *OpportunityBuysCalculator) Calculate(
 		candidates = append(candidates, candidate)
 	}
 
-	c.log.Info().
-		Int("candidates", len(candidates)).
-		Msg("Opportunity buy candidates identified")
+	// Sort by priority descending
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].Priority > candidates[j].Priority
+	})
+
+	logMsg := c.log.Info().Int("candidates", len(candidates))
+	if candidateMap != nil {
+		logMsg = logMsg.Int("filtered_from", len(candidateMap))
+	}
+	logMsg.Msg("Opportunity buy candidates identified")
 
 	return candidates, nil
+}
+
+// calculatePriority calculates priority with optional tag-based boosting.
+func (c *OpportunityBuysCalculator) calculatePriority(
+	baseScore float64,
+	securityTags []string,
+	config *domain.PlannerConfiguration,
+) float64 {
+	priority := baseScore
+
+	// Apply tag-based boosts only when tag filtering is enabled and tags are available
+	if config == nil || !config.EnableTagFiltering || len(securityTags) == 0 {
+		return priority
+	}
+
+	// Quantum warnings reduce priority
+	if contains(securityTags, "quantum-bubble-warning") {
+		priority *= 0.7
+	}
+	if contains(securityTags, "quantum-value-warning") {
+		priority *= 0.7
+	}
+
+	// Quality value gets strong boost
+	if contains(securityTags, "quality-value") {
+		priority *= 1.4
+	} else if contains(securityTags, "high-quality") && contains(securityTags, "value-opportunity") {
+		priority *= 1.3
+	}
+
+	// Deep value gets boost
+	if contains(securityTags, "deep-value") {
+		priority *= 1.2
+	}
+
+	// Oversold high-quality securities get boost
+	if contains(securityTags, "oversold") && contains(securityTags, "high-quality") {
+		priority *= 1.15
+	}
+
+	// Excellent returns get strong boost
+	if contains(securityTags, "excellent-total-return") {
+		priority *= 1.25
+	} else if contains(securityTags, "high-total-return") {
+		priority *= 1.15
+	}
+
+	// Quality high-CAGR gets boost
+	if contains(securityTags, "quality-high-cagr") {
+		priority *= 1.2
+	}
+
+	// Recovery candidates get moderate boost
+	if contains(securityTags, "recovery-candidate") {
+		priority *= 1.1
+	}
+
+	// Dividend growers get boost
+	if contains(securityTags, "dividend-grower") {
+		priority *= 1.15
+	} else if contains(securityTags, "high-dividend") {
+		priority *= 1.1
+	}
+
+	// Cap at 1.0 (max priority)
+	return math.Min(1.0, priority)
 }

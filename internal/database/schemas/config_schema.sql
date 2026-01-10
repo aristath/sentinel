@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS planner_settings (
     sell_cooldown_days INTEGER DEFAULT 180,
     max_loss_threshold REAL DEFAULT -0.20,
     max_sell_percentage REAL DEFAULT 0.20,
+    averaging_down_percent REAL DEFAULT 0.10,  -- Maximum percentage of position to add when averaging down
 
     -- Opportunity Calculator enabled flags
     enable_profit_taking_calc INTEGER DEFAULT 1,

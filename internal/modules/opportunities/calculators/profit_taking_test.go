@@ -10,16 +10,47 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Mock implementations for testing (duplicated here for backward compatibility with existing tests)
+type mockTagFilter struct {
+	sellCandidates []string
+	err            error
+}
+
+func (m *mockTagFilter) GetOpportunityCandidates(ctx *planningdomain.OpportunityContext, config *planningdomain.PlannerConfiguration) ([]string, error) {
+	return nil, nil
+}
+
+func (m *mockTagFilter) GetSellCandidates(ctx *planningdomain.OpportunityContext, config *planningdomain.PlannerConfiguration) ([]string, error) {
+	return m.sellCandidates, m.err
+}
+
+func (m *mockTagFilter) IsMarketVolatile(ctx *planningdomain.OpportunityContext, config *planningdomain.PlannerConfiguration) bool {
+	return false
+}
+
+type mockSecurityRepo struct {
+	tags map[string][]string
+}
+
+func (m *mockSecurityRepo) GetTagsForSecurity(symbol string) ([]string, error) {
+	if tags, ok := m.tags[symbol]; ok {
+		return tags, nil
+	}
+	return []string{}, nil
+}
+
 func TestProfitTakingCalculator_MaxSellPercentage(t *testing.T) {
 	log := zerolog.Nop()
-	calc := NewProfitTakingCalculator(log)
+	tagFilter := &mockTagFilter{sellCandidates: []string{}}
+	securityRepo := &mockSecurityRepo{tags: map[string][]string{}}
+	calc := NewProfitTakingCalculator(tagFilter, securityRepo, log)
 
 	tests := []struct {
-		name                  string
-		positionQuantity      float64
-		maxSellPercentage     float64
-		expectedMaxQuantity   int
-		description           string
+		name                string
+		positionQuantity    float64
+		maxSellPercentage   float64
+		expectedMaxQuantity int
+		description         string
 	}{
 		{
 			name:                "28% of 1000 shares = 280 shares",
@@ -90,9 +121,13 @@ func TestProfitTakingCalculator_MaxSellPercentage(t *testing.T) {
 				AllowSell:         true,
 			}
 
+			config := planningdomain.NewDefaultConfiguration()
+			config.EnableTagFiltering = false
+
 			params := map[string]interface{}{
-				"min_gain_threshold":  0.15,                  // 15% minimum
-				"max_sell_percentage": tt.maxSellPercentage,  // From config
+				"min_gain_threshold":  0.15,                 // 15% minimum
+				"max_sell_percentage": tt.maxSellPercentage, // From config
+				"config":              config,
 			}
 
 			candidates, err := calc.Calculate(ctx, params)
@@ -110,7 +145,9 @@ func TestProfitTakingCalculator_MaxSellPercentage(t *testing.T) {
 
 func TestProfitTakingCalculator_MaxSellPercentage_WithSellPercentageParam(t *testing.T) {
 	log := zerolog.Nop()
-	calc := NewProfitTakingCalculator(log)
+	tagFilter := &mockTagFilter{sellCandidates: []string{}}
+	securityRepo := &mockSecurityRepo{tags: map[string][]string{}}
+	calc := NewProfitTakingCalculator(tagFilter, securityRepo, log)
 
 	// Test interaction between sell_percentage (old param) and max_sell_percentage (new constraint)
 	// max_sell_percentage should always take precedence as the hard limit
@@ -142,11 +179,11 @@ func TestProfitTakingCalculator_MaxSellPercentage_WithSellPercentageParam(t *tes
 	}
 
 	tests := []struct {
-		name                 string
-		sellPercentage       float64
-		maxSellPercentage    float64
-		expectedMaxQuantity  int
-		description          string
+		name                string
+		sellPercentage      float64
+		maxSellPercentage   float64
+		expectedMaxQuantity int
+		description         string
 	}{
 		{
 			name:                "sell_percentage 100%, max_sell 28% = 280 shares",
@@ -173,10 +210,14 @@ func TestProfitTakingCalculator_MaxSellPercentage_WithSellPercentageParam(t *tes
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			config := planningdomain.NewDefaultConfiguration()
+			config.EnableTagFiltering = false
+
 			params := map[string]interface{}{
 				"min_gain_threshold":  0.15,
 				"sell_percentage":     tt.sellPercentage,
 				"max_sell_percentage": tt.maxSellPercentage,
+				"config":              config,
 			}
 
 			candidates, err := calc.Calculate(ctx, params)
@@ -191,7 +232,9 @@ func TestProfitTakingCalculator_MaxSellPercentage_WithSellPercentageParam(t *tes
 
 func TestProfitTakingCalculator_NoMaxSellPercentage(t *testing.T) {
 	log := zerolog.Nop()
-	calc := NewProfitTakingCalculator(log)
+	tagFilter := &mockTagFilter{sellCandidates: []string{}}
+	securityRepo := &mockSecurityRepo{tags: map[string][]string{}}
+	calc := NewProfitTakingCalculator(tagFilter, securityRepo, log)
 
 	// When max_sell_percentage is not provided, should use sell_percentage (default 100%)
 	position := domain.Position{
@@ -221,8 +264,12 @@ func TestProfitTakingCalculator_NoMaxSellPercentage(t *testing.T) {
 		AllowSell:         true,
 	}
 
+	config := planningdomain.NewDefaultConfiguration()
+	config.EnableTagFiltering = false
+
 	params := map[string]interface{}{
 		"min_gain_threshold": 0.15,
+		"config":             config,
 		// No max_sell_percentage provided
 	}
 

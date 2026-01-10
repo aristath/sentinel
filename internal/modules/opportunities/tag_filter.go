@@ -2,20 +2,21 @@ package opportunities
 
 import (
 	"github.com/aristath/sentinel/internal/modules/planning/domain"
-	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/rs/zerolog"
 )
 
 // TagBasedFilter provides intelligent tag-based pre-filtering for opportunity identification.
 // It uses tags to quickly reduce the candidate set from 100+ securities to 10-20,
 // enabling focused calculations on a smaller, higher-quality set.
+// Follows Dependency Inversion Principle - depends on SecurityRepository interface.
 type TagBasedFilter struct {
-	securityRepo *universe.SecurityRepository
+	securityRepo SecurityRepository
 	log          zerolog.Logger
 }
 
 // NewTagBasedFilter creates a new tag-based filter.
-func NewTagBasedFilter(securityRepo *universe.SecurityRepository, log zerolog.Logger) *TagBasedFilter {
+// Accepts SecurityRepository interface, not concrete implementation.
+func NewTagBasedFilter(securityRepo SecurityRepository, log zerolog.Logger) *TagBasedFilter {
 	return &TagBasedFilter{
 		securityRepo: securityRepo,
 		log:          log.With().Str("component", "tag_filter").Logger(),
@@ -154,7 +155,7 @@ func (f *TagBasedFilter) selectOpportunityTags(ctx *domain.OpportunityContext, c
 
 	// Add technical opportunities if market is volatile
 	// Note: If tags are disabled, this function won't be called, so config should be non-nil
-	if f.isMarketVolatile(ctx, config) {
+	if f.IsMarketVolatile(ctx, config) {
 		tags = append(tags, "oversold", "below-ema", "recovery-candidate")
 	}
 
@@ -192,7 +193,7 @@ func (f *TagBasedFilter) selectSellTags(ctx *domain.OpportunityContext) []string
 // isMarketVolatile determines if market conditions are volatile.
 // Checks if many securities have volatility-spike tag as a proxy for market volatility.
 // Falls back to checking all securities if tags are disabled.
-func (f *TagBasedFilter) isMarketVolatile(ctx *domain.OpportunityContext, config *domain.PlannerConfiguration) bool {
+func (f *TagBasedFilter) IsMarketVolatile(ctx *domain.OpportunityContext, config *domain.PlannerConfiguration) bool {
 	// If tag filtering is disabled, we can't use tags to check volatility
 	// Return false (conservative: assume market is not volatile)
 	if config != nil && !config.EnableTagFiltering {

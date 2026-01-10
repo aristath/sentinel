@@ -21,6 +21,7 @@ const DEFAULT_CONFIG = {
   sell_cooldown_days: 180,
   max_loss_threshold: -0.20,
   max_sell_percentage: 0.20,
+  averaging_down_percent: 0.10,
   // Portfolio optimizer
   optimizer_target_return: 0.11,
   min_cash_reserve: 500.0,
@@ -406,6 +407,24 @@ export function PlannerManagementModal() {
                         mb="xs"
                       />
                       <Text size="xs" c="dimmed">Maximum percentage of position allowed to sell per transaction (1% to 100%)</Text>
+                    </div>
+
+                    <div>
+                      <Group justify="space-between" mb="xs">
+                        <Text size="sm">Averaging Down Percent</Text>
+                        <Text size="sm" fw={500}>
+                          {(getConfigValue('averaging_down_percent', 0.10) * 100).toFixed(0)}%
+                        </Text>
+                      </Group>
+                      <Slider
+                        value={getConfigValue('averaging_down_percent', 0.10)}
+                        onChange={(val) => updateConfig('averaging_down_percent', val)}
+                        min={0.01}
+                        max={0.50}
+                        step={0.01}
+                        mb="xs"
+                      />
+                      <Text size="xs" c="dimmed">Maximum percentage of existing position to add when averaging down (1% to 50%, default 10%). Kelly sizing will be used as upper bound when available.</Text>
                     </div>
                   </Stack>
                 </Paper>

@@ -1,22 +1,31 @@
-// Package calculators provides trading opportunity calculation functionality.
 package calculators
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/aristath/sentinel/internal/modules/planning/domain"
 	"github.com/rs/zerolog"
 )
 
-// AveragingDownCalculator identifies opportunities to average down on underperforming positions.
+// AveragingDownCalculator identifies opportunities to average down on losing positions.
+// Supports optional tag-based pre-filtering for performance when EnableTagFiltering=true.
 type AveragingDownCalculator struct {
 	*BaseCalculator
+	tagFilter    TagFilter
+	securityRepo SecurityRepository
 }
 
 // NewAveragingDownCalculator creates a new averaging down calculator.
-func NewAveragingDownCalculator(log zerolog.Logger) *AveragingDownCalculator {
+func NewAveragingDownCalculator(
+	tagFilter TagFilter,
+	securityRepo SecurityRepository,
+	log zerolog.Logger,
+) *AveragingDownCalculator {
 	return &AveragingDownCalculator{
 		BaseCalculator: NewBaseCalculator(log, "averaging_down"),
+		tagFilter:      tagFilter,
+		securityRepo:   securityRepo,
 	}
 }
 
@@ -36,14 +45,14 @@ func (c *AveragingDownCalculator) Calculate(
 	params map[string]interface{},
 ) ([]domain.ActionCandidate, error) {
 	// Parameters with defaults
-	minLossThreshold := GetFloatParam(params, "min_loss_threshold", -0.10) // -10% minimum loss
-	maxLossThreshold := GetFloatParam(params, "max_loss_threshold", -0.30) // -30% maximum loss (safety)
-	minScore := GetFloatParam(params, "min_score", 0.6)                    // Minimum security score
+	maxLossThreshold := GetFloatParam(params, "max_loss_percent", -0.20) // -20% maximum loss
+	minLossThreshold := GetFloatParam(params, "min_loss_percent", -0.05) // -5% minimum loss
 	maxValuePerPosition := GetFloatParam(params, "max_value_per_position", 500.0)
-	maxPositions := GetIntParam(params, "max_positions", 0) // 0 = unlimited
+	avgDownPercent := GetFloatParam(params, "averaging_down_percent", 0.10) // 10% of position (configurable)
+	maxPositions := GetIntParam(params, "max_positions", 3)
 
 	// Calculate minimum trade amount based on transaction costs (default: 1% max cost ratio)
-	maxCostRatio := GetFloatParam(params, "max_cost_ratio", 0.01) // Default 1% max cost
+	maxCostRatio := GetFloatParam(params, "max_cost_ratio", 0.01)
 	minTradeAmount := ctx.CalculateMinTradeAmount(maxCostRatio)
 
 	if !ctx.AllowBuy {
@@ -51,27 +60,62 @@ func (c *AveragingDownCalculator) Calculate(
 		return nil, nil
 	}
 
-	if ctx.AvailableCashEUR <= minTradeAmount {
-		c.log.Debug().
-			Float64("available_cash", ctx.AvailableCashEUR).
-			Float64("min_trade_amount", minTradeAmount).
-			Msg("No available cash (below minimum trade amount), skipping averaging down")
+	if len(ctx.Positions) == 0 {
+		c.log.Debug().Msg("No positions available for averaging down")
 		return nil, nil
+	}
+
+	// Extract config for tag filtering
+	var config *domain.PlannerConfiguration
+	if cfg, ok := params["config"].(*domain.PlannerConfiguration); ok && cfg != nil {
+		config = cfg
+	} else {
+		config = domain.NewDefaultConfiguration()
+	}
+
+	// Tag-based pre-filtering (when enabled)
+	var candidateMap map[string]bool
+	if config.EnableTagFiltering && c.tagFilter != nil {
+		candidateSymbols, err := c.tagFilter.GetOpportunityCandidates(ctx, config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get tag-based candidates: %w", err)
+		}
+
+		if len(candidateSymbols) == 0 {
+			c.log.Debug().Msg("No tag-based candidates found")
+			return nil, nil
+		}
+
+		// Build lookup map
+		candidateMap = make(map[string]bool)
+		for _, symbol := range candidateSymbols {
+			candidateMap[symbol] = true
+		}
+
+		c.log.Debug().
+			Int("tag_candidates", len(candidateSymbols)).
+			Msg("Tag-based pre-filtering complete")
 	}
 
 	var candidates []domain.ActionCandidate
 
 	c.log.Debug().
-		Float64("min_loss_threshold", minLossThreshold).
 		Float64("max_loss_threshold", maxLossThreshold).
-		Float64("min_score", minScore).
+		Float64("min_loss_threshold", minLossThreshold).
+		Float64("averaging_down_percent", avgDownPercent).
+		Bool("tag_filtering_enabled", config.EnableTagFiltering).
 		Msg("Calculating averaging-down opportunities")
 
 	for _, position := range ctx.Positions {
+		// Skip if not in tag-filtered candidates (when tag filtering enabled)
+		if candidateMap != nil && !candidateMap[position.Symbol] {
+			continue
+		}
+
 		// Use ISIN if available, otherwise fallback to symbol
 		isin := position.ISIN
 		if isin == "" {
-			isin = position.Symbol // Fallback for CASH positions
+			isin = position.Symbol
 		}
 
 		// Skip if recently bought
@@ -96,10 +140,10 @@ func (c *AveragingDownCalculator) Calculate(
 		// Get current price (try ISIN first, fallback to symbol)
 		currentPrice, ok := ctx.GetPriceByISINOrSymbol(isin, position.Symbol)
 		if !ok || currentPrice <= 0 {
-			c.log.Warn().
+			c.log.Debug().
 				Str("symbol", position.Symbol).
 				Str("isin", isin).
-				Msg("No current price available")
+				Msg("No current price available, skipping")
 			continue
 		}
 
@@ -111,75 +155,154 @@ func (c *AveragingDownCalculator) Calculate(
 
 		lossPercent := (currentPrice - costBasis) / costBasis
 
-		// Check if loss is in the averaging-down range
-		if lossPercent >= minLossThreshold || lossPercent <= maxLossThreshold {
-			continue // Either not enough loss, or too much loss (safety)
+		// CRITICAL: Only average down on positions with losses
+		// Must be between minLossThreshold and maxLossThreshold
+		if lossPercent >= 0 || lossPercent < maxLossThreshold || lossPercent > minLossThreshold {
+			continue
 		}
 
-		// Check security score if available
-		if ctx.SecurityScores != nil {
-			if score, ok := ctx.SecurityScores[position.Symbol]; ok {
-				if score < minScore {
+		// Get security tags for quality gates and priority boosting
+		var securityTags []string
+		if config.EnableTagFiltering && c.securityRepo != nil {
+			tags, err := c.securityRepo.GetTagsForSecurity(position.Symbol)
+			if err == nil && len(tags) > 0 {
+				securityTags = tags
+			}
+		}
+
+		// Quality gates: tag-based when available, score-based fallback
+		useTagChecks := len(securityTags) > 0 && config.EnableTagFiltering
+
+		if useTagChecks {
+			// Tag-based checks
+			// CRITICAL: Exclude value traps (classical or ensemble)
+			if contains(securityTags, "value-trap") || contains(securityTags, "ensemble-value-trap") {
+				c.log.Debug().
+					Str("symbol", position.Symbol).
+					Msg("Skipping value trap (tag-based detection)")
+				continue
+			}
+
+			// CRITICAL: Skip securities below absolute minimum return
+			if contains(securityTags, "below-minimum-return") {
+				c.log.Debug().
+					Str("symbol", position.Symbol).
+					Msg("Skipping - below absolute minimum return (tag-based filter)")
+				continue
+			}
+
+			// CRITICAL: Require quality gate pass
+			if !contains(securityTags, "quality-gate-pass") {
+				c.log.Debug().
+					Str("symbol", position.Symbol).
+					Msg("Skipping - quality gate failed (tag-based check)")
+				continue
+			}
+		} else {
+			// Score-based fallback
+			qualityCheck := CheckQualityGates(ctx, position.Symbol, false, config)
+
+			if qualityCheck.IsEnsembleValueTrap {
+				c.log.Debug().
+					Str("symbol", position.Symbol).
+					Bool("classical", qualityCheck.IsValueTrap).
+					Bool("quantum", qualityCheck.IsQuantumValueTrap).
+					Float64("quantum_prob", qualityCheck.QuantumValueTrapProb).
+					Msg("Skipping value trap (ensemble detection)")
+				continue
+			}
+
+			if qualityCheck.BelowMinimumReturn {
+				c.log.Debug().
+					Str("symbol", position.Symbol).
+					Msg("Skipping - below absolute minimum return (score-based filter)")
+				continue
+			}
+
+			// For averaging down, we're less strict on quality (already in position)
+			// Only skip if quality is very poor
+			if qualityCheck.QualityGateReason == "quality_gate_fail" {
+				fundamentalsScore := GetScoreFromContext(ctx, position.Symbol, ctx.FundamentalsScores)
+				if fundamentalsScore > 0 && fundamentalsScore < 0.4 {
 					c.log.Debug().
 						Str("symbol", position.Symbol).
-						Float64("score", score).
-						Float64("min_score", minScore).
-						Msg("Security score too low for averaging down")
+						Float64("fundamentals_score", fundamentalsScore).
+						Msg("Skipping - extremely poor quality (score-based check)")
 					continue
 				}
 			}
 		}
 
-		// Calculate quantity to buy (aim for ~10% increase in position size)
-		targetIncrease := float64(position.Quantity) * 0.10
-		if targetIncrease < 1 {
-			targetIncrease = 1
+		// Calculate quantity based on Kelly-optimal sizing (primary) or percentage (fallback)
+		var quantity int
+
+		// Primary strategy: Kelly-based (when available)
+		if ctx.KellySizes != nil {
+			if kellySize, hasKellySize := ctx.KellySizes[position.Symbol]; hasKellySize && kellySize > 0 {
+				kellyTargetValue := kellySize * ctx.TotalPortfolioValueEUR
+				kellyTargetShares := kellyTargetValue / currentPrice
+				currentShares := position.Quantity
+				additionalShares := kellyTargetShares - currentShares
+
+				if additionalShares > 0 {
+					quantity = int(additionalShares)
+					c.log.Debug().
+						Str("symbol", position.Symbol).
+						Float64("kelly_target_shares", kellyTargetShares).
+						Float64("current_shares", currentShares).
+						Int("additional_shares", quantity).
+						Msg("Using Kelly-based quantity calculation")
+				} else {
+					// Already at or above Kelly optimal - skip averaging down
+					c.log.Debug().
+						Str("symbol", position.Symbol).
+						Float64("kelly_target_shares", kellyTargetShares).
+						Float64("current_shares", currentShares).
+						Msg("Skipping - already at or above Kelly optimal")
+					continue
+				}
+			}
 		}
 
-		quantity := int(targetIncrease)
+		// Fallback strategy: Percentage-based (when Kelly unavailable)
 		if quantity == 0 {
-			quantity = 1
+			targetIncrease := position.Quantity * avgDownPercent
+			if targetIncrease < 1 {
+				targetIncrease = 1
+			}
+			quantity = int(targetIncrease)
+			c.log.Debug().
+				Str("symbol", position.Symbol).
+				Float64("position_quantity", position.Quantity).
+				Float64("averaging_down_percent", avgDownPercent).
+				Int("quantity", quantity).
+				Msg("Using percentage-based quantity calculation (Kelly unavailable)")
+		}
+
+		// Cap at maxValuePerPosition
+		valueEUR := float64(quantity) * currentPrice
+		if valueEUR > maxValuePerPosition {
+			quantity = int(maxValuePerPosition / currentPrice)
+			if quantity == 0 {
+				quantity = 1
+			}
+			valueEUR = float64(quantity) * currentPrice
 		}
 
 		// Round quantity to lot size and validate
-		quantity = RoundToLotSize(quantity, security.MinLot)
-		if quantity <= 0 {
+		quantityInt := quantity
+		quantityInt = RoundToLotSize(quantityInt, security.MinLot)
+		if quantityInt <= 0 {
 			c.log.Debug().
 				Str("symbol", position.Symbol).
 				Int("min_lot", security.MinLot).
 				Msg("Skipping security: quantity below minimum lot size after rounding")
 			continue
 		}
+		quantity = quantityInt
 
-		// Calculate value
-		valueEUR := float64(quantity) * currentPrice
-
-		// Limit to max value per position
-		// Use Kelly-optimal size if available (as upper bound)
-		maxAllowedValue := maxValuePerPosition
-		if ctx.KellySizes != nil {
-			if kellySize, hasKellySize := ctx.KellySizes[position.Symbol]; hasKellySize && kellySize > 0 {
-				// Kelly size is a fraction (e.g., 0.05 = 5% of portfolio)
-				kellyValue := kellySize * ctx.TotalPortfolioValueEUR
-				// Use Kelly size if it's smaller than maxValuePerPosition (more conservative)
-				if kellyValue < maxValuePerPosition {
-					maxAllowedValue = kellyValue
-					c.log.Debug().
-						Str("symbol", position.Symbol).
-						Float64("kelly_size", kellySize).
-						Float64("kelly_value", kellyValue).
-						Msg("Using Kelly-optimal size for averaging down")
-				}
-			}
-		}
-
-		if valueEUR > maxAllowedValue {
-			quantity = int(maxAllowedValue / currentPrice)
-			if quantity == 0 {
-				quantity = 1
-			}
-			valueEUR = float64(quantity) * currentPrice
-		}
+		// Recalculate value after lot size rounding
+		valueEUR = float64(quantity) * currentPrice
 
 		// Apply transaction costs
 		transactionCost := ctx.TransactionCostFixed + (valueEUR * ctx.TransactionCostPercent)
@@ -200,17 +323,28 @@ func (c *AveragingDownCalculator) Calculate(
 			continue
 		}
 
-		// Calculate priority (greater loss = higher priority, but capped)
-		// Normalize loss to 0-1 range
-		normalizedLoss := (lossPercent - maxLossThreshold) / (minLossThreshold - maxLossThreshold)
-		priority := normalizedLoss * 0.7 // Scale down relative to other opportunities
+		// Calculate priority with tag-based boosting
+		priority := c.calculatePriority(lossPercent, securityTags, config)
 
 		// Build reason
-		reason := fmt.Sprintf("%.1f%% loss (cost basis: %.2f, current: %.2f) - averaging down",
+		reason := fmt.Sprintf("Averaging down: %.1f%% loss (cost basis: %.2f, current: %.2f)",
 			lossPercent*100, costBasis, currentPrice)
+
+		// Add tag-based reason enhancements
+		if contains(securityTags, "quality-value") {
+			reason += " [Quality Value]"
+		} else if contains(securityTags, "recovery-candidate") {
+			reason += " [Recovery Candidate]"
+		}
 
 		// Build tags
 		tags := []string{"averaging_down", "value_opportunity"}
+		if contains(securityTags, "quality-value") {
+			tags = append(tags, "quality_value")
+		}
+		if contains(securityTags, "recovery-candidate") {
+			tags = append(tags, "recovery_candidate")
+		}
 
 		candidate := domain.ActionCandidate{
 			Side:     "BUY",
@@ -228,14 +362,65 @@ func (c *AveragingDownCalculator) Calculate(
 		candidates = append(candidates, candidate)
 	}
 
+	// Sort by priority descending
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].Priority > candidates[j].Priority
+	})
+
 	// Limit to max positions if specified
 	if maxPositions > 0 && len(candidates) > maxPositions {
 		candidates = candidates[:maxPositions]
 	}
 
-	c.log.Info().
-		Int("candidates", len(candidates)).
-		Msg("Averaging-down opportunities identified")
+	logMsg := c.log.Info().Int("candidates", len(candidates))
+	if candidateMap != nil {
+		logMsg = logMsg.Int("filtered_from", len(candidateMap))
+	}
+	logMsg.Msg("Averaging-down opportunities identified")
 
 	return candidates, nil
+}
+
+// calculatePriority calculates priority with optional tag-based boosting.
+// More negative loss (deeper discount) and quality tags increase priority.
+func (c *AveragingDownCalculator) calculatePriority(
+	lossPercent float64,
+	securityTags []string,
+	config *domain.PlannerConfiguration,
+) float64 {
+	// Base priority is inverse of loss (more negative = higher priority)
+	// Convert loss to positive scale: -0.20 loss = 0.20 priority, -0.05 loss = 0.05 priority
+	priority := -lossPercent
+
+	// Apply tag-based boosts only when tag filtering is enabled and tags are available
+	if config == nil || !config.EnableTagFiltering || len(securityTags) == 0 {
+		return priority
+	}
+
+	// Quality value gets significant boost
+	if contains(securityTags, "quality-value") {
+		priority *= 1.5
+	}
+
+	// Recovery candidate gets boost
+	if contains(securityTags, "recovery-candidate") {
+		priority *= 1.3
+	}
+
+	// Quality gate pass gets moderate boost
+	if contains(securityTags, "quality-gate-pass") {
+		priority *= 1.2
+	}
+
+	// High quality gets boost
+	if contains(securityTags, "high-quality") {
+		priority *= 1.15
+	}
+
+	// Value opportunity gets small boost
+	if contains(securityTags, "value-opportunity") {
+		priority *= 1.1
+	}
+
+	return priority
 }

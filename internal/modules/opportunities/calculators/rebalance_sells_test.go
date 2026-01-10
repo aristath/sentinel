@@ -153,17 +153,17 @@ func TestRebalanceSellsCalculator_MaxSellPercentage_MultiplePositions(t *testing
 	}
 
 	ctx := &planningdomain.OpportunityContext{
-		Positions:          positions,
-		Securities:         securities,
-		CurrentPrices:      map[string]float64{"US1111111111": 10.0, "US2222222222": 20.0},
-		StocksByISIN:       map[string]domain.Security{"US1111111111": securities[0], "US2222222222": securities[1]},
-		StocksBySymbol:     map[string]domain.Security{"STOCK_A.US": securities[0], "STOCK_B.US": securities[1]},
-		CountryAllocations: countryAllocations,
-		CountryWeights:     countryWeights,
-		IneligibleSymbols:  map[string]bool{},
-		RecentlySold:       map[string]bool{},
+		Positions:              positions,
+		Securities:             securities,
+		CurrentPrices:          map[string]float64{"US1111111111": 10.0, "US2222222222": 20.0},
+		StocksByISIN:           map[string]domain.Security{"US1111111111": securities[0], "US2222222222": securities[1]},
+		StocksBySymbol:         map[string]domain.Security{"STOCK_A.US": securities[0], "STOCK_B.US": securities[1]},
+		CountryAllocations:     countryAllocations,
+		CountryWeights:         countryWeights,
+		IneligibleSymbols:      map[string]bool{},
+		RecentlySold:           map[string]bool{},
 		TotalPortfolioValueEUR: 10000,
-		AllowSell:          true,
+		AllowSell:              true,
 	}
 
 	params := map[string]interface{}{

@@ -324,8 +324,11 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 	// STEP 8: Initialize Planning Services
 	// ==========================================
 
-	// Opportunities service
-	container.OpportunitiesService = opportunities.NewService(log)
+	// Opportunities service (with unified calculators - tag-based optimization controlled by config)
+	// Create adapter to bridge between universe.SecurityRepository and opportunities.SecurityRepository interface
+	securityRepoAdapter := opportunities.NewSecurityRepositoryAdapter(container.SecurityRepo)
+	tagFilter := opportunities.NewTagBasedFilter(securityRepoAdapter, log)
+	container.OpportunitiesService = opportunities.NewService(tagFilter, securityRepoAdapter, log)
 
 	// Risk builder (needed for sequences service)
 	container.RiskBuilder = optimization.NewRiskModelBuilder(container.HistoryDB.Conn(), container.UniverseDB.Conn(), log)

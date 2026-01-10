@@ -89,7 +89,8 @@ func TestTagBasedFilter_GetOpportunityCandidates_WithCash(t *testing.T) {
 	defer db.Close()
 
 	log := zerolog.New(nil).Level(zerolog.Disabled)
-	securityRepo := universe.NewSecurityRepository(db, log)
+	universeRepo := universe.NewSecurityRepository(db, log)
+	securityRepo := NewSecurityRepositoryAdapter(universeRepo)
 	filter := NewTagBasedFilter(securityRepo, log)
 
 	now := time.Now().Unix()
@@ -154,7 +155,8 @@ func TestTagBasedFilter_GetOpportunityCandidates_NoCash(t *testing.T) {
 	defer db.Close()
 
 	log := zerolog.New(nil).Level(zerolog.Disabled)
-	securityRepo := universe.NewSecurityRepository(db, log)
+	universeRepo := universe.NewSecurityRepository(db, log)
+	securityRepo := NewSecurityRepositoryAdapter(universeRepo)
 	filter := NewTagBasedFilter(securityRepo, log)
 
 	now := time.Now().Unix()
@@ -213,7 +215,8 @@ func TestTagBasedFilter_GetSellCandidates(t *testing.T) {
 	defer db.Close()
 
 	log := zerolog.New(nil).Level(zerolog.Disabled)
-	securityRepo := universe.NewSecurityRepository(db, log)
+	universeRepo := universe.NewSecurityRepository(db, log)
+	securityRepo := NewSecurityRepositoryAdapter(universeRepo)
 	filter := NewTagBasedFilter(securityRepo, log)
 
 	now := time.Now().Unix()
@@ -280,7 +283,8 @@ func TestTagBasedFilter_GetSellCandidates_NoPositions(t *testing.T) {
 	defer db.Close()
 
 	log := zerolog.New(nil).Level(zerolog.Disabled)
-	securityRepo := universe.NewSecurityRepository(db, log)
+	universeRepo := universe.NewSecurityRepository(db, log)
+	securityRepo := NewSecurityRepositoryAdapter(universeRepo)
 	filter := NewTagBasedFilter(securityRepo, log)
 
 	// Create opportunity context with no positions
@@ -307,7 +311,8 @@ func TestTagBasedFilter_isMarketVolatile(t *testing.T) {
 	defer db.Close()
 
 	log := zerolog.New(nil).Level(zerolog.Disabled)
-	securityRepo := universe.NewSecurityRepository(db, log)
+	universeRepo := universe.NewSecurityRepository(db, log)
+	securityRepo := NewSecurityRepositoryAdapter(universeRepo)
 	filter := NewTagBasedFilter(securityRepo, log)
 
 	now := time.Now().Unix()
@@ -368,7 +373,7 @@ func TestTagBasedFilter_isMarketVolatile(t *testing.T) {
 
 	// Execute
 	config := planningdomain.NewDefaultConfiguration()
-	isVolatile := filter.isMarketVolatile(ctx, config)
+	isVolatile := filter.IsMarketVolatile(ctx, config)
 
 	// Assert
 	assert.True(t, isVolatile, "Market should be volatile with 6 securities having volatility-spike tag")
@@ -380,7 +385,8 @@ func TestTagBasedFilter_isMarketVolatile_NotVolatile(t *testing.T) {
 	defer db.Close()
 
 	log := zerolog.New(nil).Level(zerolog.Disabled)
-	securityRepo := universe.NewSecurityRepository(db, log)
+	universeRepo := universe.NewSecurityRepository(db, log)
+	securityRepo := NewSecurityRepositoryAdapter(universeRepo)
 	filter := NewTagBasedFilter(securityRepo, log)
 
 	now := time.Now().Unix()
@@ -422,7 +428,7 @@ func TestTagBasedFilter_isMarketVolatile_NotVolatile(t *testing.T) {
 
 	// Execute
 	config := planningdomain.NewDefaultConfiguration()
-	isVolatile := filter.isMarketVolatile(ctx, config)
+	isVolatile := filter.IsMarketVolatile(ctx, config)
 
 	// Assert
 	assert.False(t, isVolatile, "Market should not be volatile with only 2 securities having volatility-spike tag")

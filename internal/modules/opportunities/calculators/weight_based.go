@@ -6,7 +6,6 @@ import (
 
 	"github.com/aristath/sentinel/internal/domain"
 	planningdomain "github.com/aristath/sentinel/internal/modules/planning/domain"
-	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/rs/zerolog"
 )
 
@@ -14,19 +13,12 @@ import (
 // Enhanced with quality gates to prevent buying low-quality securities even if optimizer says so.
 type WeightBasedCalculator struct {
 	*BaseCalculator
-	securityRepo *universe.SecurityRepository // Added for quality gate filtering
+	securityRepo SecurityRepository // Added for quality gate filtering
 }
 
 // NewWeightBasedCalculator creates a new weight-based calculator.
-func NewWeightBasedCalculator(log zerolog.Logger) *WeightBasedCalculator {
-	return &WeightBasedCalculator{
-		BaseCalculator: NewBaseCalculator(log, "weight_based"),
-		securityRepo:   nil, // Optional - quality gates only work if provided
-	}
-}
-
-// NewWeightBasedCalculatorWithQualityGates creates a new weight-based calculator with quality gate support.
-func NewWeightBasedCalculatorWithQualityGates(securityRepo *universe.SecurityRepository, log zerolog.Logger) *WeightBasedCalculator {
+// securityRepo is required for quality gate checks (conditional on EnableTagFiltering).
+func NewWeightBasedCalculator(securityRepo SecurityRepository, log zerolog.Logger) *WeightBasedCalculator {
 	return &WeightBasedCalculator{
 		BaseCalculator: NewBaseCalculator(log, "weight_based"),
 		securityRepo:   securityRepo,
