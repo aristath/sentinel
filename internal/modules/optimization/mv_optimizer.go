@@ -590,18 +590,6 @@ func (mvo *MVOptimizer) optimizeEfficientRisk(
 
 // Helper functions
 
-// projectToBounds projects weights to their bounds.
-func (mvo *MVOptimizer) projectToBounds(x []float64, bounds [][2]float64) []float64 {
-	if len(bounds) == 0 {
-		return x
-	}
-	proj := make([]float64, len(x))
-	for i := range x {
-		proj[i] = math.Max(bounds[i][0], math.Min(bounds[i][1], x[i]))
-	}
-	return proj
-}
-
 // projectToBoundsMap projects weights to their bounds using ISIN-keyed maps.
 func (mvo *MVOptimizer) projectToBoundsMap(
 	x []float64,

@@ -55,7 +55,6 @@ func TestPortfolioState_ISINKeyedMaps(t *testing.T) {
 // TestResult_ISINKeyedMaps verifies Result uses ISIN keys
 func TestResult_ISINKeyedMaps(t *testing.T) {
 	result := Result{
-		Success: true,
 		TargetWeights: map[string]float64{
 			"US0378331005": 0.40, // ISIN key ✅
 			"US5949181045": 0.60, // ISIN key ✅
@@ -115,12 +114,6 @@ func TestSectorConstraint_ISINMapper(t *testing.T) {
 			"US0378331005": "Technology", // ISIN → sector ✅
 			"US5949181045": "Technology", // ISIN → sector ✅
 		},
-		SectorLower: map[string]float64{
-			"Technology": 0.0,
-		},
-		SectorUpper: map[string]float64{
-			"Technology": 0.80,
-		},
 	}
 
 	// Verify SectorMapper uses ISIN keys
@@ -135,14 +128,7 @@ func TestSectorConstraint_ISINMapper(t *testing.T) {
 
 // TestNoDualKeyDuplication verifies maps don't have both ISIN and Symbol keys
 func TestNoDualKeyDuplication(t *testing.T) {
-	// Setup state with 2 securities
-	securities := []Security{
-		{Symbol: "AAPL.US", ISIN: "US0378331005"},
-		{Symbol: "MSFT.US", ISIN: "US5949181045"},
-	}
-
 	state := PortfolioState{
-		Securities: securities,
 		Positions: map[string]Position{
 			"US0378331005": {Symbol: "AAPL.US", Quantity: 10, ValueEUR: 1500},
 		},
