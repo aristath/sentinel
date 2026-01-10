@@ -1,10 +1,9 @@
-import { Card, Group, Text, Button, Badge, Progress, Stack, Paper, ActionIcon } from '@mantine/core';
+import { Card, Group, Text, Badge, Progress, Stack, Paper, ActionIcon } from '@mantine/core';
 import { IconRefresh, IconRotateClockwise } from '@tabler/icons-react';
 import { useAppStore } from '../../stores/appStore';
 import { usePortfolioStore } from '../../stores/portfolioStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { formatCurrency } from '../../utils/formatters';
-import { useEffect } from 'react';
 
 export function NextActionsCard() {
   const {
@@ -12,7 +11,6 @@ export function NextActionsCard() {
     plannerStatus,
     loading,
     fetchRecommendations,
-    executeRecommendation,
     regenerateSequences,
   } = useAppStore();
   const { allocation } = usePortfolioStore();
@@ -163,7 +161,7 @@ export function NextActionsCard() {
           </Group>
 
           <Stack gap="md">
-            {steps.map((step, index) => (
+            {steps.map((step) => (
               <Paper
                 key={`step-${step.step}`}
                 p="md"

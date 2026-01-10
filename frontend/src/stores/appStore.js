@@ -260,6 +260,7 @@ export const useAppStore = create((set, get) => ({
       // Clear completed job after 4 seconds (linger with checkmark)
       setTimeout(() => {
         set((state) => {
+          // eslint-disable-next-line no-unused-vars
           const { [jobId]: _, ...remaining } = state.completedJobs;
           return { completedJobs: remaining };
         });

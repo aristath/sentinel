@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { Group, Text, Button, Slider, Badge, Stack, Divider } from '@mantine/core';
 import { usePortfolioStore } from '../../stores/portfolioStore';
-import { useNotifications } from '../../hooks/useNotifications';
 import { formatPercent } from '../../utils/formatters';
 
 // Generate consistent color for country name
@@ -87,17 +86,6 @@ export function GeoChart() {
     saveCountryTargets,
     loading,
   } = usePortfolioStore();
-  const { showNotification } = useNotifications();
-
-  const handleSave = async () => {
-    try {
-      await saveCountryTargets();
-      showNotification('Country targets saved successfully', 'success');
-    } catch (error) {
-      showNotification(`Failed to save country targets: ${error.message}`, 'error');
-    }
-  };
-
   const countryAllocations = allocation.country || [];
 
   const targets = useMemo(() => {

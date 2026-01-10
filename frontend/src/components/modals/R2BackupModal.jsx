@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Modal, Table, Button, Group, Text, Alert, ActionIcon, Tooltip, Stack, Badge, Divider } from '@mantine/core';
 import { IconDownload, IconTrash, IconRefresh, IconRestore } from '@tabler/icons-react';
 import { api } from '../../api/client';
@@ -11,13 +11,7 @@ export function R2BackupModal({ opened, onClose }) {
   const [actionLoading, setActionLoading] = useState(null); // Track which action is loading
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(null); // Backup to restore
 
-  useEffect(() => {
-    if (opened) {
-      fetchBackups();
-    }
-  }, [opened]);
-
-  const fetchBackups = async () => {
+  const fetchBackups = useCallback(async () => {
     setLoading(true);
     try {
       const result = await api.listR2Backups();
@@ -28,7 +22,13 @@ export function R2BackupModal({ opened, onClose }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [showNotification]);
+
+  useEffect(() => {
+    if (opened) {
+      fetchBackups();
+    }
+  }, [opened, fetchBackups]);
 
   const handleDownload = async (filename) => {
     setActionLoading(`download-${filename}`);
@@ -134,7 +134,7 @@ export function R2BackupModal({ opened, onClose }) {
 
               {backups.length === 0 && !loading && (
                 <Alert color="blue">
-                  <Text size="sm">No backups found. Create your first backup using the "Backup Now" button in Settings.</Text>
+                  <Text size="sm">No backups found. Create your first backup using the &quot;Backup Now&quot; button in Settings.</Text>
                 </Alert>
               )}
 

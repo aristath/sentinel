@@ -10,7 +10,7 @@ import { EditSecurityModal } from '../modals/EditSecurityModal';
 import { SecurityChartModal } from '../modals/SecurityChartModal';
 import { SettingsModal } from '../modals/SettingsModal';
 import { PlannerManagementModal } from '../modals/PlannerManagementModal';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppStore } from '../../stores/appStore';
 import { usePortfolioStore } from '../../stores/portfolioStore';
 import { useSecuritiesStore } from '../../stores/securitiesStore';

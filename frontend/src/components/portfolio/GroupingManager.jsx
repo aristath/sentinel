@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Modal, Text, Button, TextInput, Group, Stack, Paper, Badge, Loader, ActionIcon } from '@mantine/core';
 import { IconTrash } from '@tabler/icons-react';
 import { api } from '../../api/client';
@@ -66,11 +66,7 @@ export function GroupingManager() {
   const [modalItem, setModalItem] = useState(null);
   const [newGroupName, setNewGroupName] = useState('');
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const assignColorsToGroups = (countryGroups, industryGroups) => {
+  const assignColorsToGroups = useCallback((countryGroups, industryGroups) => {
     const allGroups = new Set();
     Object.keys(countryGroups).forEach(g => allGroups.add(g));
     Object.keys(industryGroups).forEach(g => allGroups.add(g));
@@ -84,9 +80,9 @@ export function GroupingManager() {
       }
     });
     setGroupColorMap(colorMap);
-  };
+  }, []);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [countriesRes, industriesRes, countryGroupsRes, industryGroupsRes] = await Promise.all([
@@ -102,13 +98,11 @@ export function GroupingManager() {
       // Ensure groups is an object, not an array
       let cGroups = countryGroupsRes.groups || {};
       if (Array.isArray(cGroups)) {
-        console.warn('countryGroups is an array, converting to object');
         cGroups = {};
       }
 
       let iGroups = industryGroupsRes.groups || {};
       if (Array.isArray(iGroups)) {
-        console.warn('industryGroups is an array, converting to object');
         iGroups = {};
       }
 
@@ -118,12 +112,15 @@ export function GroupingManager() {
       setIndustryGroups(iGroups);
       assignColorsToGroups(cGroups, iGroups);
     } catch (error) {
-      console.error('Failed to load grouping data:', error);
-      showNotification('Failed to load grouping data', 'error');
+      showNotification(`Failed to load grouping data: ${error.message}`, 'error');
     } finally {
       setLoading(false);
     }
-  };
+  }, [showNotification, assignColorsToGroups]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const getCountryGroup = (country) => {
     for (const [groupName, countries] of Object.entries(countryGroups)) {

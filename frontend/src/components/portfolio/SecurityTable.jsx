@@ -11,7 +11,6 @@ import { useEffect, useState } from 'react';
 export function SecurityTable() {
   const {
     securities,
-    sparklines,
     sparklineTimeframe,
     securityFilter,
     industryFilter,

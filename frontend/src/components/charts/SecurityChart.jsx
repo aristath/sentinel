@@ -4,7 +4,7 @@ import { api } from '../../api/client';
 import { Select, Button, Group, Loader, Text } from '@mantine/core';
 import { setSecurityChartRefreshFn } from '../../stores/eventHandlers';
 
-export const SecurityChart = forwardRef(({ isin, symbol, onClose }, ref) => {
+const SecurityChartComponent = forwardRef(({ isin, symbol, onClose }, ref) => {
   const chartContainerRef = useRef(null);
   const chartRef = useRef(null);
   const lineSeriesRef = useRef(null);
@@ -181,3 +181,7 @@ export const SecurityChart = forwardRef(({ isin, symbol, onClose }, ref) => {
     </div>
   );
 });
+
+SecurityChartComponent.displayName = 'SecurityChart';
+
+export const SecurityChart = SecurityChartComponent;

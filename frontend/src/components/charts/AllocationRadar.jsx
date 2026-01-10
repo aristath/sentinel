@@ -22,7 +22,7 @@ function getTargetPcts(weights, activeItems) {
 }
 
 export function AllocationRadar({ type = 'both' }) {
-  const { allocation, activeCountries, activeIndustries, countryTargets, industryTargets } = usePortfolioStore();
+  const { allocation, activeCountries, activeIndustries } = usePortfolioStore();
 
   // Calculate country data
   const geoData = useMemo(() => {
@@ -50,7 +50,7 @@ export function AllocationRadar({ type = 'both' }) {
     const maxValue = allValues.length > 0 ? Math.max(...allValues) : 100;
 
     return { labels, targetData, currentData, maxValue };
-  }, [type, allocation.country, activeCountries, countryTargets]);
+  }, [type, allocation.country, activeCountries]);
 
   // Calculate industry data
   const industryData = useMemo(() => {
@@ -78,7 +78,7 @@ export function AllocationRadar({ type = 'both' }) {
     const maxValue = allValues.length > 0 ? Math.max(...allValues) : 100;
 
     return { labels, targetData, currentData, maxValue };
-  }, [type, allocation.industry, activeIndustries, industryTargets]);
+  }, [type, allocation.industry, activeIndustries]);
 
   return (
     <div>

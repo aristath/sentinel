@@ -92,7 +92,7 @@ export function SettingsModal() {
   const handleBackupToR2 = async () => {
     setBackingUpToR2(true);
     try {
-      const result = await api.createR2Backup();
+      await api.createR2Backup();
       showNotification('Backup job started successfully', 'success');
     } catch (error) {
       showNotification(`Failed to create backup: ${error.message}`, 'error');
@@ -249,7 +249,7 @@ export function SettingsModal() {
                 <Alert color="blue" variant="light" styles={{message: {fontSize: '12px'}}}>
                   <Text size="xs">
                     <strong>Example:</strong> If Yahoo shows €30 and buffer is 5%, buy limit is €31.50.
-                    If Tradernet real price is €600 (error), order won't fill. Money safe!
+                    If Tradernet real price is €600 (error), order won&apos;t fill. Money safe!
                   </Text>
                 </Alert>
               </Stack>

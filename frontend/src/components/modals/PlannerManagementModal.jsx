@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Modal, Tabs, Text, Button, TextInput, Textarea, Switch, NumberInput, Slider, Group, Stack, Paper, Alert, Loader, Divider, Tooltip, ActionIcon } from '@mantine/core';
 import { IconInfoCircle } from '@tabler/icons-react';
 import { useAppStore } from '../../stores/appStore';
@@ -70,13 +70,7 @@ export function PlannerManagementModal() {
   const [error, setError] = useState(null);
   const [config, setConfig] = useState(DEFAULT_CONFIG);
 
-  useEffect(() => {
-    if (showPlannerManagementModal) {
-      loadConfig();
-    }
-  }, [showPlannerManagementModal]);
-
-  const loadConfig = async () => {
+  const loadConfig = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -91,7 +85,13 @@ export function PlannerManagementModal() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [showNotification]);
+
+  useEffect(() => {
+    if (showPlannerManagementModal) {
+      loadConfig();
+    }
+  }, [showPlannerManagementModal, loadConfig]);
 
   const handleSave = async () => {
     setSaving(true);
