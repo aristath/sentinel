@@ -43,7 +43,7 @@ add_package_comment() {
     echo "Added package comment to $first_file"
 }
 
-# Add comments to packages (paths relative to trader/)
+# Add comments to packages (paths relative to project root)
 add_package_comment "internal/modules/charts" "Package charts provides charting and visualization functionality."
 add_package_comment "internal/modules/cleanup" "Package cleanup provides data cleanup and maintenance functionality."
 add_package_comment "internal/modules/display" "Package display provides display and monitoring functionality."

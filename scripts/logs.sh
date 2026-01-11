@@ -26,7 +26,7 @@ show_logs() {
 }
 
 case "$SERVICE" in
-    sentinel|trader)
+    sentinel)
         show_logs "$SERVICE_TRADER_GO" "$LINES" "$FOLLOW"
         ;;
     display-bridge|bridge)

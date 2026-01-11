@@ -67,7 +67,7 @@ func (c *DeploymentConfig) ToDeploymentConfig(githubToken string) *deployment.De
 		GitBranch:              c.GitBranch,
 		TraderConfig: deployment.GoServiceConfig{
 			Name:        "sentinel",
-			BuildPath:   "trader/cmd/server",
+			BuildPath:   "cmd/server",
 			BinaryName:  c.TraderBinaryName,
 			ServiceName: c.TraderServiceName,
 		},

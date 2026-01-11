@@ -42,7 +42,7 @@ case "$SERVICE" in
         restart_service "$SERVICE_BRIDGE_GO"
         log_success "All services restarted!"
         ;;
-    sentinel|trader)
+    sentinel)
         restart_service "$SERVICE_TRADER_GO"
         ;;
     display-bridge|bridge)

@@ -126,10 +126,7 @@ func findSchemasDir() (string, error) {
 
 	// Try common paths relative to CWD
 	candidates := []string{
-		filepath.Join(cwd, "trader/internal/database/schemas"),
 		filepath.Join(cwd, "internal/database/schemas"),
-		filepath.Join(cwd, "../trader/internal/database/schemas"),
-		filepath.Join(cwd, "../../trader/internal/database/schemas"),
 		filepath.Join(cwd, "../internal/database/schemas"),
 		filepath.Join(cwd, "../../internal/database/schemas"),
 	}
@@ -140,8 +137,6 @@ func findSchemasDir() (string, error) {
 		candidates = append(candidates,
 			filepath.Join(execDir, "internal/database/schemas"),
 			filepath.Join(filepath.Dir(execDir), "internal/database/schemas"),
-			filepath.Join(execDir, "../trader/internal/database/schemas"),
-			filepath.Join(filepath.Dir(execDir), "trader/internal/database/schemas"),
 		)
 	}
 

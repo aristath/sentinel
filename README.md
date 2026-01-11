@@ -576,44 +576,43 @@ Composite jobs (`sync_cycle`, `planner_batch`, `dividend_reinvestment`, `health_
 
 ```
 sentinel/
-├── trader/                      # Main Go application
-│   ├── cmd/server/             # Application entry point
-│   ├── internal/               # Private application code
-│   │   ├── config/            # Configuration management
-│   │   ├── database/          # SQLite access layer
-│   │   ├── domain/            # Domain models
-│   │   ├── modules/           # Business modules
-│   │   │   ├── allocation/   # Allocation management
-│   │   │   ├── cash_flows/   # Cash flow processing
-│   │   │   ├── cash_utils/   # Cash utility functions
-│   │   │   ├── charts/       # Chart data & visualization
-│   │   │   ├── cleanup/      # Data cleanup jobs
-│   │   │   ├── display/      # LED display management
-│   │   │   ├── dividends/    # Dividend processing
-│   │   │   ├── evaluation/   # Sequence evaluation (built-in)
-│   │   │   │   ├── adaptation/   # Adaptive Market Hypothesis
-│   │   │   ├── market_hours/  # Market hours & holidays
-│   │   │   ├── opportunities/# Opportunity identification
-│   │   │   ├── optimization/ # Portfolio optimization
-│   │   │   ├── planning/     # Planning & recommendations
-│   │   │   ├── portfolio/    # Portfolio management
-│   │   │   ├── quantum/     # Quantum probability models
-│   │   │   ├── rebalancing/  # Rebalancing logic
-│   │   │   ├── scoring/      # Security scoring
-│   │   │   ├── sequences/    # Trade sequence generation
-│   │   │   ├── settings/     # Settings management
-│   │   │   ├── symbolic_regression/ # Formula discovery
-│   │   │   ├── trading/      # Trade execution
-│   │   │   └── universe/     # Security universe
-│   │   ├── services/         # External service clients
-│   │   ├── scheduler/        # Background job scheduler
-│   │   ├── middleware/       # HTTP middleware
-│   │   └── server/           # HTTP server & routes
-│   ├── pkg/                  # Public reusable packages
-│   │   ├── cache/           # In-memory cache
-│   │   ├── events/          # Event system
-│   │   └── logger/          # Structured logging
-│   └── static/              # Static web assets
+├── cmd/server/                 # Application entry point
+├── internal/                   # Private application code
+│   ├── config/                 # Configuration management
+│   ├── database/               # SQLite access layer
+│   ├── domain/                 # Domain models
+│   ├── modules/                # Business modules
+│   │   ├── allocation/         # Allocation management
+│   │   ├── cash_flows/         # Cash flow processing
+│   │   ├── cash_utils/         # Cash utility functions
+│   │   ├── charts/              # Chart data & visualization
+│   │   ├── cleanup/            # Data cleanup jobs
+│   │   ├── display/            # LED display management
+│   │   ├── dividends/          # Dividend processing
+│   │   ├── evaluation/         # Sequence evaluation (built-in)
+│   │   │   ├── adaptation/     # Adaptive Market Hypothesis
+│   │   ├── market_hours/       # Market hours & holidays
+│   │   ├── opportunities/      # Opportunity identification
+│   │   ├── optimization/       # Portfolio optimization
+│   │   ├── planning/           # Planning & recommendations
+│   │   ├── portfolio/         # Portfolio management
+│   │   ├── quantum/           # Quantum probability models
+│   │   ├── rebalancing/       # Rebalancing logic
+│   │   ├── scoring/           # Security scoring
+│   │   ├── sequences/         # Trade sequence generation
+│   │   ├── settings/          # Settings management
+│   │   ├── symbolic_regression/ # Formula discovery
+│   │   ├── trading/           # Trade execution
+│   │   └── universe/           # Security universe
+│   ├── services/              # External service clients
+│   ├── scheduler/             # Background job scheduler
+│   ├── middleware/             # HTTP middleware
+│   └── server/                # HTTP server & routes
+├── pkg/                        # Public reusable packages
+│   ├── cache/                 # In-memory cache
+│   ├── events/                # Event system
+│   └── logger/                # Structured logging
+└── static/                     # Static web assets
 ├── display/                  # Display system (LED matrix)
 │   ├── sketch/              # Arduino C++ sketch
 │   └── app/                 # Python display app (Arduino App Framework - separate from main Go app)
@@ -787,9 +786,9 @@ After=network.target
 [Service]
 Type=simple
 User=aristath
-WorkingDirectory=/home/aristath/sentinel/trader
+WorkingDirectory=/home/aristath/sentinel
 Environment="PATH=/usr/local/bin:/usr/bin:/bin"
-ExecStart=/home/aristath/sentinel/trader/sentinel
+ExecStart=/home/aristath/sentinel/sentinel
 Restart=always
 RestartSec=10
 
@@ -1022,7 +1021,7 @@ go build -o sentinel ./cmd/server
 GOOS=linux GOARCH=arm64 go build -o sentinel-arm64 ./cmd/server
 
 # Start service
-sudo systemctl start trader
+sudo systemctl start sentinel
 
 # Stop service
 sudo systemctl stop sentinel
@@ -1043,7 +1042,7 @@ The following utility scripts are available for manual operations:
 - `scripts/restart.sh [SERVICE]` - Restart services manually
 - `scripts/config.sh` - Configuration file (used by other scripts)
 - `scripts/pre-commit-build-frontend.sh` - Git pre-commit hook for frontend builds
-- `trader/scripts/build.sh [arch]` - Build script (used by Makefile)
+- `scripts/build.sh [arch]` - Build script (used by Makefile)
 
 **Note:** Deployment is fully automated. These scripts are for monitoring and troubleshooting only.
 

@@ -38,81 +38,80 @@ This is an autonomous portfolio management system that manages my retirement fun
 
 ```
 sentinel/
-├── trader/                      # Main Go application
-│   ├── cmd/server/             # Application entry point (main.go)
-│   ├── internal/               # Private application code
-│   │   ├── clients/            # External API clients
-│   │   │   ├── tradernet/     # Tradernet API client (Go SDK)
-│   │   │   └── yahoo/         # Yahoo Finance client
-│   │   ├── config/             # Configuration management
-│   │   ├── database/           # SQLite access layer (7-database architecture)
-│   │   ├── deployment/         # Automated deployment system
-│   │   ├── di/                 # Dependency injection container
-│   │   │   ├── databases.go # Database initialization
-│   │   │   ├── repositories.go # Repository creation
-│   │   │   ├── services.go    # Service creation (single source of truth)
-│   │   │   ├── jobs.go        # Job registration
-│   │   │   ├── types.go       # Container type definitions
-│   │   │   └── wire.go        # Main orchestration
-│   │   ├── domain/             # Domain models and interfaces
-│   │   ├── events/             # Event bus system
-│   │   ├── evaluation/         # Sequence evaluation (built-in worker pool)
-│   │   ├── market_regime/      # Market regime detection
-│   │   ├── modules/            # Business modules
-│   │   │   ├── adaptation/    # Adaptive Market Hypothesis
-│   │   │   ├── allocation/    # Allocation management
-│   │   │   ├── analytics/     # Analytics and metrics
-│   │   │   ├── cash_flows/    # Cash flow processing
-│   │   │   ├── charts/        # Chart data & visualization
-│   │   │   ├── cleanup/       # Data cleanup jobs
-│   │   │   ├── display/       # LED display management
-│   │   │   ├── dividends/     # Dividend processing
-│   │   │   ├── evaluation/    # Sequence evaluation
-│   │   │   ├── market_hours/  # Market hours & holidays
-│   │   │   ├── opportunities/ # Opportunity identification
-│   │   │   ├── optimization/  # Portfolio optimization
-│   │   │   ├── planning/      # Planning & recommendations
-│   │   │   ├── portfolio/    # Portfolio management
-│   │   │   ├── quantum/       # Quantum probability models
-│   │   │   ├── rebalancing/   # Rebalancing logic
-│   │   │   ├── scoring/       # Security scoring
-│   │   │   ├── sequences/     # Trade sequence generation
-│   │   │   ├── settings/      # Settings management
-│   │   │   ├── symbolic_regression/ # Formula discovery
-│   │   │   ├── trading/       # Trade execution
-│   │   │   └── universe/      # Security universe
-│   │   ├── queue/              # Background job queue system
-│   │   │   ├── manager.go     # Queue manager
-│   │   │   ├── scheduler.go   # Time-based scheduler
-│   │   │   ├── worker.go      # Worker pool
-│   │   │   ├── registry.go    # Job registry
-│   │   │   └── history.go     # Job execution history
-│   │   ├── reliability/       # Backup and health check services
-│   │   ├── scheduler/         # Individual job implementations
-│   │   ├── server/            # HTTP server & routes
-│   │   ├── services/          # Core services (trade execution, currency exchange)
-│   │   ├── testing/           # Test utilities
-│   │   ├── ticker/            # LED ticker content generation
-│   │   └── utils/             # Utility functions
-│   ├── frontend/              # React frontend (Vite)
-│   │   ├── src/
-│   │   │   ├── components/    # React components
-│   │   │   ├── views/         # Page views
-│   │   │   ├── stores/        # State management
-│   │   │   ├── api/           # API client
-│   │   │   └── hooks/         # React hooks
-│   │   └── dist/              # Built frontend assets
-│   ├── display/               # LED display system
-│   │   ├── sketch/            # Arduino C++ sketch
-│   │   └── app/               # Python display app (Arduino App Framework)
-│   ├── pkg/                   # Public reusable packages
-│   │   ├── embedded/          # Embedded frontend assets
-│   │   ├── formulas/          # Financial formulas (HRP, Sharpe, CVaR, etc.)
-│   │   └── logger/            # Structured logging
-│   └── go.mod                 # Go module definition
-├── scripts/                    # Utility scripts
-├── migrations/                 # Database migrations
-└── README.md                   # Main documentation
+├── cmd/server/                 # Application entry point (main.go)
+├── internal/                   # Private application code
+│   ├── clients/               # External API clients
+│   │   ├── tradernet/         # Tradernet API client (Go SDK)
+│   │   └── yahoo/              # Yahoo Finance client
+│   ├── config/                 # Configuration management
+│   ├── database/               # SQLite access layer (7-database architecture)
+│   ├── deployment/             # Automated deployment system
+│   ├── di/                     # Dependency injection container
+│   │   ├── databases.go        # Database initialization
+│   │   ├── repositories.go     # Repository creation
+│   │   ├── services.go         # Service creation (single source of truth)
+│   │   ├── jobs.go             # Job registration
+│   │   ├── types.go            # Container type definitions
+│   │   └── wire.go             # Main orchestration
+│   ├── domain/                 # Domain models and interfaces
+│   ├── events/                 # Event bus system
+│   ├── evaluation/             # Sequence evaluation (built-in worker pool)
+│   ├── market_regime/          # Market regime detection
+│   ├── modules/                # Business modules
+│   │   ├── adaptation/         # Adaptive Market Hypothesis
+│   │   ├── allocation/         # Allocation management
+│   │   ├── analytics/          # Analytics and metrics
+│   │   ├── cash_flows/         # Cash flow processing
+│   │   ├── charts/             # Chart data & visualization
+│   │   ├── cleanup/            # Data cleanup jobs
+│   │   ├── display/            # LED display management
+│   │   ├── dividends/          # Dividend processing
+│   │   ├── evaluation/         # Sequence evaluation
+│   │   ├── market_hours/        # Market hours & holidays
+│   │   ├── opportunities/      # Opportunity identification
+│   │   ├── optimization/       # Portfolio optimization
+│   │   ├── planning/           # Planning & recommendations
+│   │   ├── portfolio/          # Portfolio management
+│   │   ├── quantum/            # Quantum probability models
+│   │   ├── rebalancing/        # Rebalancing logic
+│   │   ├── scoring/            # Security scoring
+│   │   ├── sequences/         # Trade sequence generation
+│   │   ├── settings/           # Settings management
+│   │   ├── symbolic_regression/ # Formula discovery
+│   │   ├── trading/            # Trade execution
+│   │   └── universe/           # Security universe
+│   ├── queue/                  # Background job queue system
+│   │   ├── manager.go          # Queue manager
+│   │   ├── scheduler.go        # Time-based scheduler
+│   │   ├── worker.go           # Worker pool
+│   │   ├── registry.go         # Job registry
+│   │   └── history.go          # Job execution history
+│   ├── reliability/            # Backup and health check services
+│   ├── scheduler/              # Individual job implementations
+│   ├── server/                 # HTTP server & routes
+│   ├── services/               # Core services (trade execution, currency exchange)
+│   ├── testing/                # Test utilities
+│   ├── ticker/                 # LED ticker content generation
+│   └── utils/                  # Utility functions
+├── frontend/                    # React frontend (Vite)
+│   ├── src/
+│   │   ├── components/         # React components
+│   │   ├── views/              # Page views
+│   │   ├── stores/             # State management
+│   │   ├── api/                # API client
+│   │   └── hooks/              # React hooks
+│   └── dist/                   # Built frontend assets
+├── display/                     # LED display system
+│   ├── sketch/                 # Arduino C++ sketch
+│   └── app/                    # Python display app (Arduino App Framework)
+├── pkg/                         # Public reusable packages
+│   ├── embedded/               # Embedded frontend assets
+│   ├── formulas/               # Financial formulas (HRP, Sharpe, CVaR, etc.)
+│   └── logger/                 # Structured logging
+├── scripts/                     # Utility scripts
+├── migrations/                  # Database migrations
+├── go.mod                       # Go module definition
+└── README.md                    # Main documentation
 ```
 
 ### Database Architecture
