@@ -120,7 +120,7 @@ export function GroupingManager() {
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+  }, []);
 
   const getCountryGroup = (country) => {
     for (const [groupName, countries] of Object.entries(countryGroups)) {
