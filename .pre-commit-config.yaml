@@ -1,216 +1,112 @@
 repos:
-
   - repo: https://github.com/pre-commit/pre-commit-hooks
-
     rev: v5.0.0
-
     hooks:
-
       - id: trailing-whitespace
-
         exclude: ^frontend/dist/
-
       - id: end-of-file-fixer
-
         exclude: ^frontend/dist/
-
       - id: check-yaml
-
       - id: check-added-large-files
-
         args: ['--maxkb=1000']
-
         exclude: ^frontend/dist/
-
       - id: check-json
-
       - id: check-toml
-
       - id: check-merge-conflict
-
       - id: debug-statements
 
-
-
   - repo: https://github.com/psf/black
-
     rev: 24.10.0
-
     hooks:
-
       - id: black
-
         files: ^(legacy/app|legacy/tests|microservices)/
-
-
 
   - repo: https://github.com/pycqa/isort
-
     rev: 5.13.2
-
     hooks:
-
       - id: isort
-
         args: ["--profile", "black"]
-
         files: ^(legacy/app|legacy/tests|microservices)/
-
-
 
   - repo: https://github.com/pycqa/flake8
-
     rev: 7.1.1
-
     hooks:
-
       - id: flake8
-
         files: ^(legacy/app|legacy/tests|microservices)/
-
         args: ['--max-line-length=88', '--extend-ignore=E203,W503']
 
-
-
   - repo: https://github.com/pre-commit/mirrors-mypy
-
     rev: v1.13.0
-
     hooks:
-
       - id: mypy
-
         args: ['--ignore-missing-imports', '--no-error-summary', '--explicit-package-bases', '--namespace-packages']
-
         files: ^(legacy/app|legacy/tests|microservices)/
-
         additional_dependencies:
-
           - types-python-dateutil
-
           - types-requests
-
           - pydantic
-
           - pytest
 
-
-
   - repo: https://github.com/PyCQA/bandit
-
     rev: 1.8.3
-
     hooks:
-
       - id: bandit
-
         # B101: assert, B108: /tmp in tests, B324: MD5 for cache, B601: shell, B608: dynamic SQL (false positive)
-
         args: ['-ll', '--skip', 'B101,B108,B324,B601,B608']
-
         files: ^(legacy/app|legacy/tests|microservices)/
-
         exclude: ^(venv|\.venv|node_modules|build|dist)/
 
-
-
   # golangci-lint - comprehensive linter
-
   - repo: local
-
     hooks:
-
       # Copy embedded files before any Go operations
-
       # This must run before go-build-mod and go-test-mod
-
       - id: copy-embedded-files
-
         name: Copy files for embedding
-
         entry: bash -c 'mkdir -p pkg/embedded/frontend pkg/embedded/display && cp -r frontend/dist pkg/embedded/frontend/ 2>/dev/null || true && cp -r display/app pkg/embedded/display/ 2>/dev/null || true && cp display/app.yaml pkg/embedded/display/ 2>/dev/null || true && cp -r display/sketch pkg/embedded/display/ 2>/dev/null || true && echo "✓ Copied files for embedding"'
-
         language: system
-
         files: ^.*\.go$
-
         pass_filenames: false
-
         always_run: false
 
-
-
   # Go hooks - using TekWizely's pre-commit-golang which is actively maintained
-
   - repo: https://github.com/TekWizely/pre-commit-golang
-
     rev: v1.0.0-rc.1
-
     hooks:
-
       # Format Go code
-
       - id: go-fmt
-
         args: [-w]
-
         files: ^.*\.go$
-
       # Fix imports - disabled: goimports not in PATH for pre-commit environment
-
       # - id: go-imports
-
       #   args: [-w]
-
       # Run go vet
-
       - id: go-vet-mod
-
         files: ^.*\.go$
-
       # Build project
-
       - id: go-build-mod
-
         files: ^.*\.go$
-
       # Run tests - DISABLED: Tests are slow and we have dedicated test workflows
       # Pre-commit is meant for quick checks, full tests run in Go Tests workflow
       # - id: go-test-mod
       #   args: [-timeout=10m, -short]
       #   files: ^.*\.go$
-
       # Check go.mod is tidy
-
       - id: go-mod-tidy
-
         files: ^(go\.mod|go\.sum|.*\.go)$
 
-
-
   # golangci-lint - comprehensive linter
-
   - repo: local
-
     hooks:
-
       # Ensure go.sum is up to date and staged when go.mod or Go files change
       # This runs after go-mod-tidy to ensure go.sum is always committed
       - id: ensure-go-sum
-
         name: Ensure go.sum is up to date and staged
-
         entry: bash -c 'go mod tidy && git add -f go.sum go.mod'
-
         language: system
-
         files: ^(go\.mod|go\.sum|.*\.go)$
-
         pass_filenames: false
-
         always_run: false
-
-
 
       # Generate version.go with commit timestamp
       - id: generate-version
@@ -219,33 +115,17 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
-
       - id: golangci-lint
-
         name: golangci-lint
-
         entry: bash -c 'export PATH="$(go env GOPATH)/bin:$PATH" && golangci-lint run --timeout=5m --config .golangci.yml ./...'
-
         language: system
-
         files: ^.*\.go$
-
         pass_filenames: false
-
-
-
       # Build frontend and stage dist/ when frontend files change
-
       - id: build-frontend
-
         name: Build frontend and stage dist/
-
         entry: bash scripts/pre-commit-build-frontend.sh
-
         language: system
-
         files: ^frontend/
-
         pass_filenames: false
-
         always_run: false
