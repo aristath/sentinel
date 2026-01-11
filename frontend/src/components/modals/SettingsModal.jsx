@@ -16,12 +16,17 @@ export function SettingsModal() {
   const [testingR2Connection, setTestingR2Connection] = useState(false);
   const [backingUpToR2, setBackingUpToR2] = useState(false);
   const [showR2BackupModal, setShowR2BackupModal] = useState(false);
+  const [riskToleranceValue, setRiskToleranceValue] = useState(0.5);
 
   useEffect(() => {
     if (showSettingsModal) {
       fetchSettings();
     }
   }, [showSettingsModal, fetchSettings]);
+
+  useEffect(() => {
+    setRiskToleranceValue(settings?.risk_tolerance ?? 0.5);
+  }, [settings]);
 
   const handleUpdateSetting = async (key, value) => {
     try {
@@ -135,8 +140,9 @@ export function SettingsModal() {
               </Text>
               <Stack gap="sm">
                 <Slider
-                  value={getSetting('risk_tolerance', 0.5)}
-                  onChange={(val) => handleUpdateSetting('risk_tolerance', val)}
+                  value={riskToleranceValue}
+                  onChange={setRiskToleranceValue}
+                  onChangeEnd={(val) => handleUpdateSetting('risk_tolerance', val)}
                   min={0}
                   max={1}
                   step={0.01}
@@ -147,7 +153,7 @@ export function SettingsModal() {
                   ]}
                 />
                 <Group justify="space-between" mt="xs">
-                  <Text size="xs" c="dimmed">Current: {(getSetting('risk_tolerance', 0.5) * 100).toFixed(0)}%</Text>
+                  <Text size="xs" c="dimmed">Current: {(riskToleranceValue * 100).toFixed(0)}%</Text>
                   <Text size="xs" c="dimmed">Range: 0.0 - 1.0</Text>
                 </Group>
                 <Alert color="blue" variant="light" size="sm">
