@@ -186,6 +186,16 @@ func (j *PlannerBatchJob) Run() error {
 	}
 	storeJob.SetPlan(plan)
 	storeJob.SetPortfolioHash(portfolioHash)
+
+	// Pass rejected opportunities from plan job to store job
+	rejectedOpportunities := planJob.GetRejectedOpportunities()
+	storeJob.SetRejectedOpportunities(rejectedOpportunities)
+	if len(rejectedOpportunities) > 0 {
+		j.log.Info().
+			Int("rejected_count", len(rejectedOpportunities)).
+			Msg("Passing rejected opportunities to store job")
+	}
+
 	if err := j.storeRecommendationsJob.Run(); err != nil {
 		return fmt.Errorf("failed to store recommendations: %w", err)
 	}

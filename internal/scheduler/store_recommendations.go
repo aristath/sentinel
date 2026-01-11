@@ -11,11 +11,12 @@ import (
 // StoreRecommendationsJob stores a generated plan as recommendations
 type StoreRecommendationsJob struct {
 	JobBase
-	log                zerolog.Logger
-	eventManager       EventManagerInterface
-	recommendationRepo RecommendationRepositoryInterface
-	portfolioHash      string
-	plan               *planningdomain.HolisticPlan
+	log                   zerolog.Logger
+	eventManager          EventManagerInterface
+	recommendationRepo    RecommendationRepositoryInterface
+	portfolioHash         string
+	plan                  *planningdomain.HolisticPlan
+	rejectedOpportunities []planningdomain.RejectedOpportunity
 }
 
 // NewStoreRecommendationsJob creates a new StoreRecommendationsJob
@@ -52,6 +53,11 @@ func (j *StoreRecommendationsJob) SetPortfolioHash(hash string) {
 	j.portfolioHash = hash
 }
 
+// SetRejectedOpportunities sets the rejected opportunities to store
+func (j *StoreRecommendationsJob) SetRejectedOpportunities(rejected []planningdomain.RejectedOpportunity) {
+	j.rejectedOpportunities = rejected
+}
+
 // Name returns the job name
 func (j *StoreRecommendationsJob) Name() string {
 	return "store_recommendations"
@@ -65,6 +71,19 @@ func (j *StoreRecommendationsJob) Run() error {
 
 	if j.plan == nil {
 		return fmt.Errorf("plan not set")
+	}
+
+	// Store rejected opportunities first (if available)
+	if len(j.rejectedOpportunities) > 0 && j.portfolioHash != "" {
+		if err := j.recommendationRepo.StoreRejectedOpportunities(j.rejectedOpportunities, j.portfolioHash); err != nil {
+			j.log.Warn().Err(err).Msg("Failed to store rejected opportunities")
+			// Don't fail - continue to store plan
+		} else {
+			j.log.Info().
+				Int("rejected_count", len(j.rejectedOpportunities)).
+				Str("portfolio_hash", j.portfolioHash).
+				Msg("Stored rejected opportunities")
+		}
 	}
 
 	err := j.recommendationRepo.StorePlan(j.plan, j.portfolioHash)

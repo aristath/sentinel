@@ -349,13 +349,25 @@ func transformCashFlows(sdkResult interface{}) ([]CashFlowTransaction, error) {
 func transformTrades(sdkResult interface{}) ([]Trade, error) {
 	resultMap, ok := sdkResult.(map[string]interface{})
 	if !ok {
-		return nil, fmt.Errorf("invalid SDK result format: expected map[string]interface{}")
+		return nil, fmt.Errorf("invalid SDK result format: expected map[string]interface{}, got %T", sdkResult)
 	}
 
 	// DEBUG: Log the raw response structure for diagnostics
 	responseKeys := make([]string, 0)
 	for key := range resultMap {
 		responseKeys = append(responseKeys, key)
+	}
+
+	// Log all available keys in response
+	rawJSON, _ := json.Marshal(resultMap)
+	_ = fmt.Sprintf("DEBUG transformTrades response keys: %v, full response: %s", responseKeys, string(rawJSON))
+
+	// Check if API returned an error
+	if errMsg, ok := resultMap["errMsg"].(string); ok && errMsg != "" {
+		return nil, fmt.Errorf("API error: %s", errMsg)
+	}
+	if errMsg, ok := resultMap["error"].(string); ok && errMsg != "" {
+		return nil, fmt.Errorf("API error: %s", errMsg)
 	}
 
 	// Handle API response structure: {"trades": {"trade": [...], "max_trade_id": [...]}}
@@ -394,12 +406,15 @@ func transformTrades(sdkResult interface{}) ([]Trade, error) {
 			continue // Skip trades without ID
 		}
 
+		price := getFloat64(itemMap, "p")
+		symbol := getSymbol(itemMap)
+
 		trade := Trade{
 			OrderID:    orderID,
-			Symbol:     getSymbol(itemMap),   // Use helper with fallback
+			Symbol:     symbol,
 			Side:       convertSide(itemMap), // Convert type field
 			Quantity:   getFloat64(itemMap, "q"),
-			Price:      getFloat64(itemMap, "p"),
+			Price:      price,
 			ExecutedAt: getExecutedAt(itemMap), // Use helper with fallback
 		}
 
@@ -664,6 +679,12 @@ func getFloat64FromValue(val interface{}) float64 {
 		return float64(v)
 	case int32:
 		return float64(v)
+	case string:
+		// Tradernet API returns some numeric fields as strings (e.g., "p": "141.4")
+		if floatVal, err := strconv.ParseFloat(v, 64); err == nil {
+			return floatVal
+		}
+		return 0.0
 	default:
 		return 0.0
 	}

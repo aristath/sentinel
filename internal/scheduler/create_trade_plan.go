@@ -4,17 +4,19 @@ import (
 	"fmt"
 
 	planningdomain "github.com/aristath/sentinel/internal/modules/planning/domain"
+	"github.com/aristath/sentinel/internal/modules/planning/planner"
 	"github.com/rs/zerolog"
 )
 
 // CreateTradePlanJob creates a holistic trade plan from opportunity context
 type CreateTradePlanJob struct {
 	JobBase
-	log                zerolog.Logger
-	plannerService     PlannerServiceInterface
-	configRepo         ConfigRepositoryInterface
-	opportunityContext *planningdomain.OpportunityContext
-	plan               *planningdomain.HolisticPlan
+	log                   zerolog.Logger
+	plannerService        PlannerServiceInterface
+	configRepo            ConfigRepositoryInterface
+	opportunityContext    *planningdomain.OpportunityContext
+	plan                  *planningdomain.HolisticPlan
+	rejectedOpportunities []planningdomain.RejectedOpportunity
 }
 
 // NewCreateTradePlanJob creates a new CreateTradePlanJob
@@ -44,6 +46,11 @@ func (j *CreateTradePlanJob) GetPlan() *planningdomain.HolisticPlan {
 	return j.plan
 }
 
+// GetRejectedOpportunities returns the rejected opportunities from plan creation
+func (j *CreateTradePlanJob) GetRejectedOpportunities() []planningdomain.RejectedOpportunity {
+	return j.rejectedOpportunities
+}
+
 // Name returns the job name
 func (j *CreateTradePlanJob) Name() string {
 	return "create_trade_plan"
@@ -66,22 +73,24 @@ func (j *CreateTradePlanJob) Run() error {
 		config = planningdomain.NewDefaultConfiguration()
 	}
 
-	// Create plan (planner service returns interface{}, we type assert to HolisticPlan)
-	planInterface, err := j.plannerService.CreatePlan(j.opportunityContext, config)
+	// Create plan with rejection tracking (planner service returns interface{}, we type assert to PlanResult)
+	planResultInterface, err := j.plannerService.CreatePlanWithRejections(j.opportunityContext, config)
 	if err != nil {
 		j.log.Error().Err(err).Msg("Failed to create plan")
 		return fmt.Errorf("failed to create plan: %w", err)
 	}
 
-	// Type assert to HolisticPlan
-	plan, ok := planInterface.(*planningdomain.HolisticPlan)
+	// Type assert to PlanResult
+	planResult, ok := planResultInterface.(*planner.PlanResult)
 	if !ok {
-		return fmt.Errorf("plan has invalid type: expected *planningdomain.HolisticPlan")
+		return fmt.Errorf("plan result has invalid type: expected *planner.PlanResult")
 	}
 
-	j.plan = plan
+	j.plan = planResult.Plan
+	j.rejectedOpportunities = planResult.RejectedOpportunities
 
 	j.log.Info().
+		Int("rejected_count", len(j.rejectedOpportunities)).
 		Msg("Successfully created trade plan")
 
 	return nil

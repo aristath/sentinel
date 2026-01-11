@@ -361,6 +361,43 @@ func TestTransformTrades(t *testing.T) {
 	assert.Equal(t, "2024-01-15T10:00:00Z", trade.ExecutedAt)
 }
 
+// TestTransformTrades_StringPrice tests that prices returned as strings (actual API format) are correctly converted
+func TestTransformTrades_StringPrice(t *testing.T) {
+	// This test verifies the fix for prices returned as strings by Tradernet API (e.g., "p": "141.4")
+	sdkResult := map[string]interface{}{
+		"trades": map[string]interface{}{
+			"trade": []interface{}{
+				map[string]interface{}{
+					"order_id": "299998887727",
+					"instr_nm": "AAPL.US",
+					"q":        "20",
+					"p":        "141.4", // String price - actual API format
+					"date":     "2019-08-15T10:10:22",
+					"type":     "1", // 1 = Buy, 2 = Sell
+				},
+			},
+			"max_trade_id": []interface{}{
+				map[string]interface{}{
+					"@text": "40975888",
+				},
+			},
+		},
+	}
+
+	trades, err := transformTrades(sdkResult)
+
+	assert.NoError(t, err)
+	assert.Len(t, trades, 1)
+
+	trade := trades[0]
+	assert.Equal(t, "299998887727", trade.OrderID)
+	assert.Equal(t, "AAPL.US", trade.Symbol)
+	assert.Equal(t, "BUY", trade.Side)
+	assert.Equal(t, float64(20), trade.Quantity)
+	assert.Equal(t, float64(141.4), trade.Price) // Should parse string to float
+	assert.Equal(t, "2019-08-15T10:10:22", trade.ExecutedAt)
+}
+
 // TestTransformSecurityInfo tests transformation of SDK FindSymbol to []SecurityInfo
 func TestTransformSecurityInfo(t *testing.T) {
 	sdkResult := map[string]interface{}{
