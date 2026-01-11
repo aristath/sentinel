@@ -2,31 +2,25 @@
 package server
 
 import (
-	"bufio"
 	"encoding/json"
-	"io"
+	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
-	"sort"
+	"os/exec"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/rs/zerolog"
 )
 
-// LogHandlers handles log file access and filtering
+// LogHandlers handles log access via journalctl
 type LogHandlers struct {
-	log     zerolog.Logger
-	dataDir string
+	log zerolog.Logger
 }
 
 // NewLogHandlers creates a new log handlers instance
-func NewLogHandlers(log zerolog.Logger, dataDir string) *LogHandlers {
+func NewLogHandlers(log zerolog.Logger) *LogHandlers {
 	return &LogHandlers{
-		log:     log.With().Str("component", "log_handlers").Logger(),
-		dataDir: dataDir,
+		log: log.With().Str("component", "log_handlers").Logger(),
 	}
 }
 
@@ -46,88 +40,38 @@ type LogListResponse struct {
 	Total    int           `json:"total"`
 }
 
-// LogContentResponse represents log file content
+// LogContentResponse represents log content
 type LogContentResponse struct {
-	FileName string   `json:"file_name"`
-	Lines    []string `json:"lines"`
-	Total    int      `json:"total"`
-	Filtered int      `json:"filtered"`
+	Lines  []string `json:"lines"`
+	Total  int      `json:"total"`
+	Status string   `json:"status"`
 }
 
-// HandleListLogs lists available log files
+// HandleListLogs returns available log sources
 func (h *LogHandlers) HandleListLogs(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	h.log.Debug().Msg("Listing log files")
+	h.log.Debug().Msg("Listing log sources")
 
-	logsDir := filepath.Join(h.dataDir, "logs")
-
-	// Check if logs directory exists
-	if _, err := os.Stat(logsDir); os.IsNotExist(err) {
-		// No logs directory, return empty list
-		response := LogListResponse{
-			LogFiles: []LogFileInfo{},
-			Total:    0,
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
-		return
-	}
-
-	// Read log files
-	entries, err := os.ReadDir(logsDir)
-	if err != nil {
-		h.log.Error().Err(err).Msg("Failed to read logs directory")
-		http.Error(w, "Failed to read logs directory", http.StatusInternalServerError)
-		return
-	}
-
-	logFiles := make([]LogFileInfo, 0)
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		// Only include .log files
-		if !strings.HasSuffix(entry.Name(), ".log") {
-			continue
-		}
-
-		info, err := entry.Info()
-		if err != nil {
-			h.log.Warn().Err(err).Str("file", entry.Name()).Msg("Failed to get file info")
-			continue
-		}
-
-		logFile := LogFileInfo{
-			Name:         entry.Name(),
-			Path:         filepath.Join(logsDir, entry.Name()),
-			SizeMB:       float64(info.Size()) / 1024 / 1024,
-			ModifiedAt:   info.ModTime(),
-			LastModified: info.ModTime().Format("2006-01-02 15:04:05"),
-		}
-
-		logFiles = append(logFiles, logFile)
-	}
-
-	// Sort by modification time (newest first)
-	sort.Slice(logFiles, func(i, j int) bool {
-		return logFiles[i].ModifiedAt.After(logFiles[j].ModifiedAt)
-	})
-
+	// Return single log source from journalctl
 	response := LogListResponse{
-		LogFiles: logFiles,
-		Total:    len(logFiles),
+		LogFiles: []LogFileInfo{
+			{
+				Name:         "sentinel",
+				LastModified: "systemd journal",
+			},
+		},
+		Total: 1,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
 
-// HandleGetLogs retrieves log content with filtering
+// HandleGetLogs retrieves log content from journalctl with filtering
 func (h *LogHandlers) HandleGetLogs(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -135,15 +79,9 @@ func (h *LogHandlers) HandleGetLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Query parameters
-	logFile := r.URL.Query().Get("file")
 	linesParam := r.URL.Query().Get("lines")
 	level := strings.ToUpper(r.URL.Query().Get("level"))
 	search := r.URL.Query().Get("search")
-
-	if logFile == "" {
-		http.Error(w, "Missing 'file' parameter", http.StatusBadRequest)
-		return
-	}
 
 	// Default to last 100 lines
 	lines := 100
@@ -157,38 +95,28 @@ func (h *LogHandlers) HandleGetLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.log.Debug().
-		Str("file", logFile).
 		Int("lines", lines).
 		Str("level", level).
 		Str("search", search).
-		Msg("Getting log content")
+		Msg("Getting log content from journalctl")
 
-	// Validate log file path (prevent directory traversal)
-	if strings.Contains(logFile, "..") || strings.Contains(logFile, "/") {
-		http.Error(w, "Invalid file name", http.StatusBadRequest)
-		return
-	}
+	// Build journalctl command
+	cmd := exec.Command("journalctl", "-u", "sentinel",
+		fmt.Sprintf("--lines=%d", lines),
+		"--output=short",
+		"--no-pager")
 
-	logsDir := filepath.Join(h.dataDir, "logs")
-	logPath := filepath.Join(logsDir, logFile)
-
-	// Verify file exists and is within logs directory
-	if !strings.HasPrefix(logPath, logsDir) {
-		http.Error(w, "Invalid file path", http.StatusBadRequest)
-		return
-	}
-
-	if _, err := os.Stat(logPath); os.IsNotExist(err) {
-		http.Error(w, "Log file not found", http.StatusNotFound)
-		return
-	}
-
-	// Read log file (last N lines)
-	logLines, err := h.readLastLines(logPath, lines)
+	output, err := cmd.Output()
 	if err != nil {
-		h.log.Error().Err(err).Str("file", logFile).Msg("Failed to read log file")
-		http.Error(w, "Failed to read log file", http.StatusInternalServerError)
+		h.log.Error().Err(err).Msg("Failed to read journalctl logs")
+		http.Error(w, "Failed to read logs", http.StatusInternalServerError)
 		return
+	}
+
+	// Parse output into lines
+	logLines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	if len(logLines) == 1 && logLines[0] == "" {
+		logLines = []string{}
 	}
 
 	totalLines := len(logLines)
@@ -197,30 +125,23 @@ func (h *LogHandlers) HandleGetLogs(w http.ResponseWriter, r *http.Request) {
 	filteredLines := h.filterLogs(logLines, level, search)
 
 	response := LogContentResponse{
-		FileName: logFile,
-		Lines:    filteredLines,
-		Total:    totalLines,
-		Filtered: len(filteredLines),
+		Lines:  filteredLines,
+		Total:  totalLines,
+		Status: "ok",
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
 
-// HandleGetErrors retrieves only error logs
+// HandleGetErrors retrieves only error logs from journalctl
 func (h *LogHandlers) HandleGetErrors(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	logFile := r.URL.Query().Get("file")
 	linesParam := r.URL.Query().Get("lines")
-
-	if logFile == "" {
-		http.Error(w, "Missing 'file' parameter", http.StatusBadRequest)
-		return
-	}
 
 	// Default to last 500 lines for error search
 	lines := 500
@@ -233,33 +154,25 @@ func (h *LogHandlers) HandleGetErrors(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.log.Debug().Str("file", logFile).Int("lines", lines).Msg("Getting error logs")
+	h.log.Debug().Int("lines", lines).Msg("Getting error logs from journalctl")
 
-	// Validate log file path
-	if strings.Contains(logFile, "..") || strings.Contains(logFile, "/") {
-		http.Error(w, "Invalid file name", http.StatusBadRequest)
-		return
-	}
+	// Build journalctl command
+	cmd := exec.Command("journalctl", "-u", "sentinel",
+		fmt.Sprintf("--lines=%d", lines),
+		"--output=short",
+		"--no-pager")
 
-	logsDir := filepath.Join(h.dataDir, "logs")
-	logPath := filepath.Join(logsDir, logFile)
-
-	if !strings.HasPrefix(logPath, logsDir) {
-		http.Error(w, "Invalid file path", http.StatusBadRequest)
-		return
-	}
-
-	if _, err := os.Stat(logPath); os.IsNotExist(err) {
-		http.Error(w, "Log file not found", http.StatusNotFound)
-		return
-	}
-
-	// Read log file
-	logLines, err := h.readLastLines(logPath, lines)
+	output, err := cmd.Output()
 	if err != nil {
-		h.log.Error().Err(err).Str("file", logFile).Msg("Failed to read log file")
-		http.Error(w, "Failed to read log file", http.StatusInternalServerError)
+		h.log.Error().Err(err).Msg("Failed to read journalctl logs")
+		http.Error(w, "Failed to read logs", http.StatusInternalServerError)
 		return
+	}
+
+	// Parse output into lines
+	logLines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	if len(logLines) == 1 && logLines[0] == "" {
+		logLines = []string{}
 	}
 
 	totalLines := len(logLines)
@@ -268,98 +181,13 @@ func (h *LogHandlers) HandleGetErrors(w http.ResponseWriter, r *http.Request) {
 	errorLines := h.filterLogs(logLines, "ERROR", "")
 
 	response := LogContentResponse{
-		FileName: logFile,
-		Lines:    errorLines,
-		Total:    totalLines,
-		Filtered: len(errorLines),
+		Lines:  errorLines,
+		Total:  totalLines,
+		Status: "ok",
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
-}
-
-// readLastLines efficiently reads the last N lines from a file
-func (h *LogHandlers) readLastLines(filePath string, n int) ([]string, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	// Get file size
-	stat, err := file.Stat()
-	if err != nil {
-		return nil, err
-	}
-
-	fileSize := stat.Size()
-
-	// For small files, read entire file
-	if fileSize < 1024*1024 { // < 1MB
-		return h.readAllLines(file)
-	}
-
-	// For large files, read from end
-	return h.readLastLinesReverse(file, fileSize, n)
-}
-
-// readAllLines reads all lines from a file
-func (h *LogHandlers) readAllLines(file *os.File) ([]string, error) {
-	var lines []string
-	scanner := bufio.NewScanner(file)
-
-	// Increase buffer size for long log lines
-	buf := make([]byte, 0, 64*1024)
-	scanner.Buffer(buf, 1024*1024) // 1MB max line length
-
-	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-
-	return lines, nil
-}
-
-// readLastLinesReverse reads last N lines by seeking from end of file
-func (h *LogHandlers) readLastLinesReverse(file *os.File, fileSize int64, n int) ([]string, error) {
-	// Start from end of file, read backwards in chunks
-	const chunkSize = 8192
-
-	// Calculate starting position (read last ~100KB for last N lines)
-	startPos := fileSize - (chunkSize * 12)
-	if startPos < 0 {
-		startPos = 0
-	}
-
-	// Seek to starting position
-	_, err := file.Seek(startPos, io.SeekStart)
-	if err != nil {
-		return nil, err
-	}
-
-	// Read from starting position to end
-	scanner := bufio.NewScanner(file)
-	buf := make([]byte, 0, 64*1024)
-	scanner.Buffer(buf, 1024*1024)
-
-	allLines := make([]string, 0)
-	for scanner.Scan() {
-		allLines = append(allLines, scanner.Text())
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-
-	// Return last N lines
-	if len(allLines) <= n {
-		return allLines, nil
-	}
-
-	return allLines[len(allLines)-n:], nil
 }
 
 // filterLogs filters log lines by level and search term

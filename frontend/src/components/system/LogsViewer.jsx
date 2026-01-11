@@ -7,8 +7,6 @@ import { useDebouncedValue } from '@mantine/hooks';
 export function LogsViewer() {
   const {
     entries,
-    selectedLogFile,
-    availableLogFiles,
     filterLevel,
     searchQuery,
     lineCount,
@@ -16,10 +14,7 @@ export function LogsViewer() {
     autoRefresh,
     loading,
     totalLines,
-    returnedLines,
-    fetchAvailableLogFiles,
     fetchLogs,
-    setSelectedLogFile,
     setFilterLevel,
     setLineCount,
     setShowErrorsOnly,
@@ -33,12 +28,8 @@ export function LogsViewer() {
   const scrollAreaRef = useRef(null);
 
   useEffect(() => {
-    fetchAvailableLogFiles();
-  }, [fetchAvailableLogFiles]);
-
-  useEffect(() => {
     fetchLogs();
-  }, [fetchLogs, debouncedSearch, selectedLogFile, filterLevel, lineCount, showErrorsOnly]);
+  }, [fetchLogs, debouncedSearch, filterLevel, lineCount, showErrorsOnly]);
 
   useEffect(() => {
     if (autoRefresh) {
@@ -78,14 +69,6 @@ export function LogsViewer() {
         {/* Controls */}
         <Card p="md" style={{ backgroundColor: 'var(--mantine-color-dark-8)', border: '1px solid var(--mantine-color-dark-6)' }}>
           <Group gap="md" wrap="wrap">
-            <Select
-              label="Log File"
-              data={availableLogFiles.map(f => ({ value: f.name, label: f.name }))}
-              value={selectedLogFile}
-              onChange={setSelectedLogFile}
-              style={{ flex: 1, minWidth: '150px' }}
-              size="xs"
-            />
             <Select
               label="Level"
               data={[
@@ -146,7 +129,7 @@ export function LogsViewer() {
               Refresh
             </Button>
             <Text size="xs" c="dimmed">
-              {returnedLines} / {totalLines} lines
+              {entries.length} lines
             </Text>
           </Group>
         </Card>

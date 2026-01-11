@@ -3,8 +3,6 @@ import { api } from '../api/client';
 
 export const useLogsStore = create((set, get) => ({
   entries: [],
-  selectedLogFile: 'sentinel.log',
-  availableLogFiles: [],
   filterLevel: null,
   searchQuery: '',
   lineCount: 100,
@@ -14,33 +12,22 @@ export const useLogsStore = create((set, get) => ({
   loading: false,
   refreshTimer: null,
   totalLines: 0,
-  returnedLines: 0,
-
-  fetchAvailableLogFiles: async () => {
-    try {
-      const data = await api.fetchAvailableLogFiles();
-      set({ availableLogFiles: data.files || [] });
-    } catch (e) {
-      console.error('Failed to fetch available log files:', e);
-    }
-  },
 
   fetchLogs: async () => {
-    const { selectedLogFile, filterLevel, searchQuery, lineCount, showErrorsOnly } = get();
+    const { filterLevel, searchQuery, lineCount, showErrorsOnly } = get();
     set({ loading: true });
 
     try {
       let data;
       if (showErrorsOnly) {
-        data = await api.fetchErrorLogs(selectedLogFile, lineCount);
+        data = await api.fetchErrorLogs(lineCount);
       } else {
-        data = await api.fetchLogs(selectedLogFile, lineCount, filterLevel, searchQuery || null);
+        data = await api.fetchLogs(lineCount, filterLevel, searchQuery || null);
       }
 
       set({
-        entries: data.entries || [],
-        totalLines: data.total_lines || 0,
-        returnedLines: data.returned_lines || 0,
+        entries: data.lines || [],
+        totalLines: data.total || 0,
         loading: false,
       });
     } catch (e) {
@@ -68,11 +55,6 @@ export const useLogsStore = create((set, get) => ({
       clearInterval(refreshTimer);
       set({ refreshTimer: null });
     }
-  },
-
-  setSelectedLogFile: (file) => {
-    set({ selectedLogFile: file });
-    get().fetchLogs();
   },
 
   setFilterLevel: (level) => {

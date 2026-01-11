@@ -311,8 +311,7 @@ func (s *Server) setupRoutes() {
 		systemHandlers := s.systemHandlers
 
 		// Initialize log handlers
-		dataDir := s.cfg.DataDir
-		logHandlers := NewLogHandlers(s.log, dataDir)
+		logHandlers := NewLogHandlers(s.log)
 
 		// Use services from container (single source of truth)
 		securityRepo := s.container.SecurityRepo
@@ -731,8 +730,7 @@ func (s *Server) _setupSystemRoutes_OLD(r chi.Router) {
 	systemHandlers := s.systemHandlers
 
 	// Initialize log handlers
-	dataDir := s.cfg.DataDir
-	logHandlers := NewLogHandlers(s.log, dataDir)
+	logHandlers := NewLogHandlers(s.log)
 
 	// Use services from container (single source of truth)
 	securityRepo := s.container.SecurityRepo

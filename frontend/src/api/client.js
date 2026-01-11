@@ -78,14 +78,14 @@ export const api = {
   syncHistorical: () => fetchJSON('/api/system/sync/historical', { method: 'POST' }),
 
   // Logs
-  fetchLogs: (logFile = 'sentinel.log', lines = 100, level = null, search = null) => {
-    const params = new URLSearchParams({ log_file: logFile, lines: lines.toString() });
+  fetchLogs: (lines = 100, level = null, search = null) => {
+    const params = new URLSearchParams({ lines: lines.toString() });
     if (level) params.append('level', level);
     if (search) params.append('search', search);
     return fetchJSON(`/api/system/logs?${params}`);
   },
-  fetchErrorLogs: (logFile = 'sentinel.log', lines = 50) => {
-    const params = new URLSearchParams({ log_file: logFile, lines: lines.toString() });
+  fetchErrorLogs: (lines = 50) => {
+    const params = new URLSearchParams({ lines: lines.toString() });
     return fetchJSON(`/api/system/logs/errors?${params}`);
   },
   fetchAvailableLogFiles: () => fetchJSON('/api/system/logs/list'),

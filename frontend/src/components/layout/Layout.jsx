@@ -16,7 +16,6 @@ import { usePortfolioStore } from '../../stores/portfolioStore';
 import { useSecuritiesStore } from '../../stores/securitiesStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useTradesStore } from '../../stores/tradesStore';
-import { useLogsStore } from '../../stores/logsStore';
 import { useNotifications } from '../../hooks/useNotifications';
 
 export function Layout() {
@@ -27,7 +26,6 @@ export function Layout() {
   const { fetchSecurities } = useSecuritiesStore();
   const { fetchSettings } = useSettingsStore();
   const { fetchTrades } = useTradesStore();
-  const { fetchAvailableLogFiles } = useLogsStore();
   const [version, setVersion] = useState('loading...');
 
   // Fetch version on mount
@@ -50,7 +48,6 @@ export function Layout() {
           fetchTargets(),
           fetchSettings(),
           fetchTrades(),
-          fetchAvailableLogFiles(),
         ]);
       } catch (error) {
         console.error('Failed to load initial data:', error);
@@ -60,7 +57,7 @@ export function Layout() {
     };
 
     loadData();
-  }, [fetchAll, fetchAllocation, fetchCashBreakdown, fetchSecurities, fetchTargets, fetchSettings, fetchTrades, fetchAvailableLogFiles]);
+  }, [fetchAll, fetchAllocation, fetchCashBreakdown, fetchSecurities, fetchTargets, fetchSettings, fetchTrades]);
 
   // Manage event stream lifecycle
   useEffect(() => {
