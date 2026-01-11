@@ -9,8 +9,8 @@ export const useLogsStore = create((set, get) => ({
   searchQuery: '',
   lineCount: 100,
   showErrorsOnly: false,
-  autoRefresh: false, // Disabled - now using SSE events
-  refreshInterval: 5000,
+  autoRefresh: true, // Auto-refresh enabled (HTTP polling)
+  refreshInterval: 10000, // Refresh every 10 seconds
   loading: false,
   refreshTimer: null,
   totalLines: 0,

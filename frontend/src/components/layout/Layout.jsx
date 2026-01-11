@@ -27,7 +27,7 @@ export function Layout() {
   const { fetchSecurities } = useSecuritiesStore();
   const { fetchSettings } = useSettingsStore();
   const { fetchTrades } = useTradesStore();
-  const { fetchAvailableLogFiles, selectedLogFile } = useLogsStore();
+  const { fetchAvailableLogFiles } = useLogsStore();
   const [version, setVersion] = useState('loading...');
 
   // Fetch version on mount
@@ -62,14 +62,14 @@ export function Layout() {
     loadData();
   }, [fetchAll, fetchAllocation, fetchCashBreakdown, fetchSecurities, fetchTargets, fetchSettings, fetchTrades, fetchAvailableLogFiles]);
 
-  // Manage event stream lifecycle - restart when selectedLogFile changes
+  // Manage event stream lifecycle
   useEffect(() => {
-    startEventStream(selectedLogFile);
+    startEventStream();
 
     return () => {
       stopEventStream();
     };
-  }, [selectedLogFile, startEventStream, stopEventStream]);
+  }, [startEventStream, stopEventStream]);
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--mantine-color-dark-9)' }}>

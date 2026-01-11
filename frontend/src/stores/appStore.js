@@ -355,7 +355,7 @@ export const useAppStore = create((set, get) => ({
   },
 
   // Unified event stream
-  startEventStream: (logFile = null) => {
+  startEventStream: () => {
     const { eventStreamSource, eventStreamConnecting, isPollingMode } = get();
 
     // Prevent concurrent connection attempts
@@ -369,12 +369,8 @@ export const useAppStore = create((set, get) => ({
       eventStreamSource.close();
     }
 
-    // Build URL with optional log_file query param
-    let url = '/api/events/stream';
-    if (logFile) {
-      url += `?log_file=${encodeURIComponent(logFile)}`;
-    }
-
+    // Event stream without log file watching (logs use HTTP polling instead)
+    const url = '/api/events/stream';
     const eventSource = new EventSource(url);
     set({ eventStreamSource: eventSource, eventStreamConnecting: false });
 
@@ -412,7 +408,7 @@ export const useAppStore = create((set, get) => ({
         // Read fresh state to avoid stale closure
         const freshAttempts = get().eventStreamReconnectAttempts;
         set({ eventStreamReconnectAttempts: freshAttempts + 1 });
-        get().startEventStream(logFile);
+        get().startEventStream();
       }, delay);
     };
 

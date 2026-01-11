@@ -220,17 +220,7 @@ export const eventHandlers = {
     useAppStore.setState({ markets: event.data.markets || {} });
   },
 
-  // Logs events
-  LOG_FILE_CHANGED: (event) => {
-    if (!event || !event.data) {
-      console.warn('LOG_FILE_CHANGED event missing data');
-      return;
-    }
-    const { selectedLogFile } = useLogsStore.getState();
-    if (event.data.log_file === selectedLogFile) {
-      useLogsStore.getState().fetchLogs();
-    }
-  },
+  // Logs events - removed (logs now use HTTP polling instead of SSE)
 
   // Settings events
   SETTINGS_CHANGED: () => {
