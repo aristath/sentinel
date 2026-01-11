@@ -296,7 +296,7 @@ func TestClient_GetAllCashFlows(t *testing.T) {
 
 	mockSDK := &mockSDKClient{
 		getClientCpsHistoryResult: map[string]interface{}{
-			"result": []interface{}{
+			"cps": []interface{}{
 				map[string]interface{}{
 					"id":               "tx1",
 					"transaction_id":   "tx1",
@@ -305,12 +305,13 @@ func TestClient_GetAllCashFlows(t *testing.T) {
 					"transaction_type": "dividend",
 					"dt":               "2024-01-15T10:00:00Z",
 					"date":             "2024-01-15",
-					"sm":               float64(50.0),
-					"amount":           float64(50.0),
+					"sm":               "50.0", // Tradernet returns amounts as strings
+					"amount":           "50.0",
 					"curr":             "USD",
 					"currency":         "USD",
 				},
 			},
+			"total": "50.0",
 		},
 	}
 
@@ -332,14 +333,21 @@ func TestClient_GetExecutedTrades(t *testing.T) {
 
 	mockSDK := &mockSDKClient{
 		getTradesHistoryResult: map[string]interface{}{
-			"result": []interface{}{
-				map[string]interface{}{
-					"order_id":    float64(111),
-					"i":           "AAPL.US",
-					"q":           float64(10),
-					"p":           float64(150.5),
-					"executed_at": "2024-01-15T10:00:00Z",
-					"side":        "BUY",
+			"trades": map[string]interface{}{
+				"trade": []interface{}{
+					map[string]interface{}{
+						"order_id": "111",
+						"instr_nm": "AAPL.US",
+						"q":        float64(10),
+						"p":        "150.5", // Tradernet returns price as string
+						"date":     "2024-01-15T10:00:00Z",
+						"type":     "1", // 1 = BUY, 2 = SELL
+					},
+				},
+				"max_trade_id": []interface{}{
+					map[string]interface{}{
+						"@text": "111",
+					},
 				},
 			},
 		},
@@ -356,6 +364,7 @@ func TestClient_GetExecutedTrades(t *testing.T) {
 	assert.Len(t, trades, 1)
 	assert.Equal(t, "111", trades[0].OrderID)
 	assert.Equal(t, "AAPL.US", trades[0].Symbol)
+	assert.Equal(t, 150.5, trades[0].Price)
 }
 
 // TestClient_FindSymbol tests FindSymbol() using SDK

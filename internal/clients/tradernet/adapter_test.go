@@ -210,14 +210,21 @@ func TestTradernetBrokerAdapter_GetExecutedTrades(t *testing.T) {
 
 	mockSDK := &mockSDKClient{
 		getTradesHistoryResult: map[string]interface{}{
-			"result": []interface{}{
-				map[string]interface{}{
-					"id":          "trade-1",
-					"i":           "TSLA",
-					"side":        "BUY",
-					"q":           2.0,
-					"p":           250.0,
-					"executed_at": "2025-01-08T10:00:00Z",
+			"trades": map[string]interface{}{
+				"trade": []interface{}{
+					map[string]interface{}{
+						"order_id": "trade-1",
+						"instr_nm": "TSLA",
+						"type":     "1", // 1 = BUY, 2 = SELL
+						"q":        2.0,
+						"p":        "250.0", // Tradernet returns price as string
+						"date":     "2025-01-08T10:00:00Z",
+					},
+				},
+				"max_trade_id": []interface{}{
+					map[string]interface{}{
+						"@text": "12345",
+					},
 				},
 			},
 		},
@@ -232,6 +239,7 @@ func TestTradernetBrokerAdapter_GetExecutedTrades(t *testing.T) {
 	assert.Equal(t, "trade-1", trades[0].OrderID)
 	assert.Equal(t, "TSLA", trades[0].Symbol)
 	assert.Equal(t, "BUY", trades[0].Side)
+	assert.Equal(t, 250.0, trades[0].Price)
 }
 
 // TestTradernetBrokerAdapter_IsConnected tests IsConnected
@@ -271,17 +279,18 @@ func TestTradernetBrokerAdapter_GetAllCashFlows(t *testing.T) {
 
 	mockSDK := &mockSDKClient{
 		getClientCpsHistoryResult: map[string]interface{}{
-			"result": []interface{}{
+			"cps": []interface{}{
 				map[string]interface{}{
 					"id":          "cf-1",
-					"transaction": "tx-1",
+					"transaction_id": "tx-1",
 					"type":        "deposit",
-					"sm":          1000.0,
-					"c":           "EUR",
+					"sm":          "1000.0", // Tradernet returns amounts as strings
+					"curr":        "EUR",
 					"dt":          "2025-01-08",
 					"description": "Monthly deposit",
 				},
 			},
+			"total": "1000.0",
 		},
 	}
 
@@ -293,6 +302,8 @@ func TestTradernetBrokerAdapter_GetAllCashFlows(t *testing.T) {
 	assert.Len(t, flows, 1)
 	assert.Equal(t, "cf-1", flows[0].ID)
 	assert.Equal(t, "deposit", flows[0].Type)
+	assert.Equal(t, 1000.0, flows[0].Amount)
+	assert.Equal(t, "EUR", flows[0].Currency)
 }
 
 // TestTradernetBrokerAdapter_FindSymbol tests FindSymbol transformation
