@@ -8,11 +8,11 @@ repos:
 
       - id: trailing-whitespace
 
-        exclude: ^trader/frontend/dist/
+        exclude: ^frontend/dist/
 
       - id: end-of-file-fixer
 
-        exclude: ^trader/frontend/dist/
+        exclude: ^frontend/dist/
 
       - id: check-yaml
 
@@ -20,7 +20,7 @@ repos:
 
         args: ['--maxkb=1000']
 
-        exclude: ^trader/frontend/dist/
+        exclude: ^frontend/dist/
 
       - id: check-json
 
@@ -128,17 +128,15 @@ repos:
 
         name: Copy files for embedding
 
-        entry: bash -c 'cd trader && mkdir -p pkg/embedded/frontend pkg/embedded/display && cp -r frontend/dist pkg/embedded/frontend/ 2>/dev/null || true && cp -r ../display/app pkg/embedded/display/ 2>/dev/null || true && cp -r ../display/sketch pkg/embedded/display/ 2>/dev/null || true && echo "✓ Copied files for embedding"'
+        entry: bash -c 'mkdir -p pkg/embedded/frontend pkg/embedded/display && cp -r frontend/dist pkg/embedded/frontend/ 2>/dev/null || true && cp -r display/app pkg/embedded/display/ 2>/dev/null || true && cp display/app.yaml pkg/embedded/display/ 2>/dev/null || true && cp -r display/sketch pkg/embedded/display/ 2>/dev/null || true && echo "✓ Copied files for embedding"'
 
         language: system
 
-        files: ^trader/.*\.go$
+        files: ^.*\.go$
 
         pass_filenames: false
 
         always_run: false
-
-        stages: [commit]
 
 
 
@@ -156,7 +154,7 @@ repos:
 
         args: [-w]
 
-        files: ^trader/.*\.go$
+        files: ^.*\.go$
 
       # Fix imports - disabled: goimports not in PATH for pre-commit environment
 
@@ -168,25 +166,25 @@ repos:
 
       - id: go-vet-mod
 
-        files: ^trader/.*\.go$
+        files: ^.*\.go$
 
       # Build project
 
       - id: go-build-mod
 
-        files: ^trader/.*\.go$
+        files: ^.*\.go$
 
       # Run tests - DISABLED: Tests are slow and we have dedicated test workflows
       # Pre-commit is meant for quick checks, full tests run in Go Tests workflow
       # - id: go-test-mod
       #   args: [-timeout=10m, -short]
-      #   files: ^trader/.*\.go$
+      #   files: ^.*\.go$
 
       # Check go.mod is tidy
 
       - id: go-mod-tidy
 
-        files: ^trader/(go\.mod|go\.sum|.*\.go)$
+        files: ^(go\.mod|go\.sum|.*\.go)$
 
 
 
@@ -202,17 +200,15 @@ repos:
 
         name: Ensure go.sum is up to date and staged
 
-        entry: bash -c 'cd trader && go mod tidy && cd .. && git add -f trader/go.sum trader/go.mod'
+        entry: bash -c 'go mod tidy && git add -f go.sum go.mod'
 
         language: system
 
-        files: ^trader/(go\.mod|go\.sum|.*\.go)$
+        files: ^(go\.mod|go\.sum|.*\.go)$
 
         pass_filenames: false
 
         always_run: false
-
-        stages: [commit]
 
 
 
@@ -223,17 +219,16 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
-        stages: [commit]
 
       - id: golangci-lint
 
         name: golangci-lint
 
-        entry: bash -c 'export PATH="$(go env GOPATH)/bin:$PATH" && cd trader && golangci-lint run --timeout=5m --config .golangci.yml ./...'
+        entry: bash -c 'export PATH="$(go env GOPATH)/bin:$PATH" && golangci-lint run --timeout=5m --config .golangci.yml ./...'
 
         language: system
 
-        files: ^trader/.*\.go$
+        files: ^.*\.go$
 
         pass_filenames: false
 
@@ -249,7 +244,7 @@ repos:
 
         language: system
 
-        files: ^trader/frontend/
+        files: ^frontend/
 
         pass_filenames: false
 

@@ -4,7 +4,7 @@
 
 set -e
 
-FRONTEND_DIR="trader/frontend"
+FRONTEND_DIR="frontend"
 DIST_DIR="${FRONTEND_DIR}/dist"
 
 # Check if any frontend source files are staged (excluding dist/ and node_modules/)
