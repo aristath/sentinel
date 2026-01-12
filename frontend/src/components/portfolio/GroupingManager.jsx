@@ -122,35 +122,39 @@ export function GroupingManager() {
     loadData();
   }, []);
 
-  const getCountryGroup = (country) => {
+  // Returns array of all groups containing the country
+  const getCountryGroups = (country) => {
+    const groups = [];
     for (const [groupName, countries] of Object.entries(countryGroups)) {
       if (countries.includes(country)) {
-        return groupName;
+        groups.push(groupName);
       }
     }
-    return null;
+    return groups;
   };
 
-  const getIndustryGroup = (industry) => {
+  // Returns array of all groups containing the industry
+  const getIndustryGroups = (industry) => {
+    const groups = [];
     for (const [groupName, industries] of Object.entries(industryGroups)) {
       if (industries.includes(industry)) {
-        return groupName;
+        groups.push(groupName);
       }
     }
-    return null;
+    return groups;
   };
 
   const getCountryPillClass = (country) => {
-    const group = getCountryGroup(country);
-    if (group) {
+    const groups = getCountryGroups(country);
+    if (groups.length > 0) {
       return { variant: 'light' };
     }
     return { variant: 'outline', color: 'yellow' };
   };
 
   const getIndustryPillClass = (industry) => {
-    const group = getIndustryGroup(industry);
-    if (group) {
+    const groups = getIndustryGroups(industry);
+    if (groups.length > 0) {
       return { variant: 'light' };
     }
     return { variant: 'outline', color: 'yellow' };
@@ -170,11 +174,12 @@ export function GroupingManager() {
     setNewGroupName('');
   };
 
-  const getCurrentGroup = () => {
+  // Returns array of all groups the current modal item belongs to
+  const getCurrentGroups = () => {
     if (modalType === 'country') {
-      return getCountryGroup(modalItem);
+      return getCountryGroups(modalItem);
     } else {
-      return getIndustryGroup(modalItem);
+      return getIndustryGroups(modalItem);
     }
   };
 
@@ -190,33 +195,39 @@ export function GroupingManager() {
     }
   };
 
-  const removeAssignment = async () => {
-    const currentGroup = getCurrentGroup();
-    if (!currentGroup) return;
+  // Remove item from a specific group
+  const removeFromGroup = async (groupName) => {
+    if (!groupName) return;
 
     try {
       if (modalType === 'country') {
-        const countries = countryGroups[currentGroup].filter(c => c !== modalItem);
+        const countries = countryGroups[groupName].filter(c => c !== modalItem);
         await api.updateCountryGroup({
-          group_name: currentGroup,
+          group_name: groupName,
           country_names: countries,
         });
       } else {
-        const industries = industryGroups[currentGroup].filter(i => i !== modalItem);
+        const industries = industryGroups[groupName].filter(i => i !== modalItem);
         await api.updateIndustryGroup({
-          group_name: currentGroup,
+          group_name: groupName,
           industry_names: industries,
         });
       }
-      showNotification('Assignment removed', 'success');
+      showNotification(`Removed from ${groupName}`, 'success');
       await loadData();
-      closeModal();
     } catch (error) {
       showNotification(`Failed to remove assignment: ${error.message}`, 'error');
     }
   };
 
   const assignToGroup = async (groupName) => {
+    // Check if already assigned to this group
+    const currentGroups = getCurrentGroups();
+    if (currentGroups.includes(groupName)) {
+      showNotification(`Already assigned to ${groupName}`, 'info');
+      return;
+    }
+
     try {
       if (modalType === 'country') {
         const countries = [...(countryGroups[groupName] || []), modalItem];
@@ -231,9 +242,9 @@ export function GroupingManager() {
           industry_names: industries,
         });
       }
-      showNotification('Assigned to group', 'success');
+      showNotification(`Added to ${groupName}`, 'success');
       await loadData();
-      closeModal();
+      // Don't close modal - allow adding to multiple groups
     } catch (error) {
       showNotification(`Failed to assign to group: ${error.message}`, 'error');
     }
@@ -254,9 +265,10 @@ export function GroupingManager() {
           industry_names: [modalItem],
         });
       }
-      showNotification('Group created and assigned', 'success');
+      showNotification(`Created group "${newGroupName.trim()}" and assigned`, 'success');
+      setNewGroupName('');
       await loadData();
-      closeModal();
+      // Don't close modal - allow adding to more groups
     } catch (error) {
       showNotification(`Failed to create group: ${error.message}`, 'error');
     }
@@ -277,13 +289,6 @@ export function GroupingManager() {
         await api.deleteIndustryGroup(groupName);
       }
       showNotification(`Group "${groupName}" deleted successfully`, 'success');
-
-      // If the deleted group was the current group, close the modal
-      const currentGroup = getCurrentGroup();
-      if (currentGroup === groupName) {
-        closeModal();
-      }
-
       await loadData();
     } catch (error) {
       showNotification(`Failed to delete group: ${error.message}`, 'error');
@@ -307,7 +312,7 @@ export function GroupingManager() {
           <Text size="sm" fw={500} mb="md">Countries</Text>
           <Group gap="xs" wrap="wrap">
             {availableCountries.map((country) => {
-              const group = getCountryGroup(country);
+              const groups = getCountryGroups(country);
               const pillClass = getCountryPillClass(country);
 
               return (
@@ -319,19 +324,20 @@ export function GroupingManager() {
                   style={{ position: 'relative' }}
                 >
                   {country}
-                  {group && (
+                  {groups.length > 0 && groups.map((group) => (
                     <Badge
+                      key={group}
                       size="xs"
                       style={{
-                        marginLeft: '8px',
+                        marginLeft: '4px',
                         backgroundColor: groupColorMap[group],
                         color: getContrastColor(groupColorMap[group]),
                       }}
                     >
-                      | {group}
+                      {group}
                     </Badge>
-                  )}
-                  {!group && (
+                  ))}
+                  {groups.length === 0 && (
                     <Text size="xs" c="yellow" style={{ marginLeft: '4px' }}>
                       ⚠️
                     </Text>
@@ -347,7 +353,7 @@ export function GroupingManager() {
           <Text size="sm" fw={500} mb="md">Industries</Text>
           <Group gap="xs" wrap="wrap">
             {availableIndustries.map((industry) => {
-              const group = getIndustryGroup(industry);
+              const groups = getIndustryGroups(industry);
               const pillClass = getIndustryPillClass(industry);
 
               return (
@@ -359,19 +365,20 @@ export function GroupingManager() {
                   style={{ position: 'relative' }}
                 >
                   {industry}
-                  {group && (
+                  {groups.length > 0 && groups.map((group) => (
                     <Badge
+                      key={group}
                       size="xs"
                       style={{
-                        marginLeft: '8px',
+                        marginLeft: '4px',
                         backgroundColor: groupColorMap[group],
                         color: getContrastColor(groupColorMap[group]),
                       }}
                     >
-                      | {group}
+                      {group}
                     </Badge>
-                  )}
-                  {!group && (
+                  ))}
+                  {groups.length === 0 && (
                     <Text size="xs" c="yellow" style={{ marginLeft: '4px' }}>
                       ⚠️
                     </Text>
@@ -391,72 +398,96 @@ export function GroupingManager() {
         size="md"
       >
         <Stack gap="md">
-          {/* Current Assignment */}
-          {getCurrentGroup() && (
+          {/* Current Groups */}
+          {getCurrentGroups().length > 0 && (
             <Paper p="md" withBorder>
-              <Text size="sm" fw={500} mb="xs">Current group:</Text>
-              <Group>
-                <Badge
-                  style={{
-                    backgroundColor: groupColorMap[getCurrentGroup()],
-                    color: getContrastColor(groupColorMap[getCurrentGroup()]),
-                  }}
-                >
-                  {getCurrentGroup()}
-                </Badge>
-                <Button
-                  size="xs"
-                  color="red"
-                  variant="light"
-                  onClick={removeAssignment}
-                >
-                  Remove
-                </Button>
+              <Text size="sm" fw={500} mb="xs">
+                Current groups ({getCurrentGroups().length}):
+              </Text>
+              <Group gap="xs" wrap="wrap">
+                {getCurrentGroups().map((group) => (
+                  <Badge
+                    key={group}
+                    size="lg"
+                    rightSection={
+                      <ActionIcon
+                        size="xs"
+                        color="red"
+                        variant="transparent"
+                        onClick={() => removeFromGroup(group)}
+                        style={{ marginLeft: '4px' }}
+                      >
+                        ×
+                      </ActionIcon>
+                    }
+                    style={{
+                      backgroundColor: groupColorMap[group],
+                      color: getContrastColor(groupColorMap[group]),
+                      paddingRight: '4px',
+                    }}
+                  >
+                    {group}
+                  </Badge>
+                ))}
               </Group>
+              {getCurrentGroups().length > 1 && (
+                <Text size="xs" c="dimmed" mt="xs">
+                  Value will be split equally across {getCurrentGroups().length} groups
+                </Text>
+              )}
             </Paper>
           )}
 
           {/* Assign to Existing Group */}
           <div>
-            <Text size="sm" fw={500} mb="xs">Assign to existing group:</Text>
+            <Text size="sm" fw={500} mb="xs">Add to group:</Text>
             <Stack gap="xs" style={{ maxHeight: '200px', overflowY: 'auto' }}>
               {getExistingGroups().length === 0 ? (
                 <Text size="xs" c="dimmed" p="sm">
                   No groups exist yet. Create one below.
                 </Text>
               ) : (
-                getExistingGroups().map((groupName) => (
-                  <Group key={groupName} justify="space-between" gap="xs">
-                    <Button
-                      onClick={() => assignToGroup(groupName)}
-                      variant={getCurrentGroup() === groupName ? 'filled' : 'light'}
-                      justify="flex-start"
-                      style={{ flex: 1 }}
-                    >
-                      <div
-                        style={{
-                          width: '16px',
-                          height: '16px',
-                          borderRadius: '4px',
-                          backgroundColor: groupColorMap[groupName],
-                          marginRight: '8px',
+                getExistingGroups().map((groupName) => {
+                  const isAssigned = getCurrentGroups().includes(groupName);
+                  return (
+                    <Group key={groupName} justify="space-between" gap="xs">
+                      <Button
+                        onClick={() => assignToGroup(groupName)}
+                        variant={isAssigned ? 'filled' : 'light'}
+                        justify="flex-start"
+                        style={{ flex: 1 }}
+                        disabled={isAssigned}
+                      >
+                        <div
+                          style={{
+                            width: '16px',
+                            height: '16px',
+                            borderRadius: '4px',
+                            backgroundColor: groupColorMap[groupName],
+                            marginRight: '8px',
+                          }}
+                        />
+                        {groupName}
+                        {isAssigned && (
+                          <Text size="xs" c="dimmed" ml="xs">
+                            (assigned)
+                          </Text>
+                        )}
+                      </Button>
+                      <ActionIcon
+                        color="red"
+                        variant="light"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteGroup(groupName);
                         }}
-                      />
-                      {groupName}
-                    </Button>
-                    <ActionIcon
-                      color="red"
-                      variant="light"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteGroup(groupName);
-                      }}
-                      title={`Delete group "${groupName}"`}
-                    >
-                      <IconTrash size={16} />
-                    </ActionIcon>
-                  </Group>
-                ))
+                        title={`Delete group "${groupName}"`}
+                      >
+                        <IconTrash size={16} />
+                      </ActionIcon>
+                    </Group>
+                  );
+                })
               )}
             </Stack>
           </div>
@@ -480,10 +511,15 @@ export function GroupingManager() {
                 onClick={createAndAssignGroup}
                 disabled={!newGroupName.trim()}
               >
-                Create & Assign
+                Create & Add
               </Button>
             </Group>
           </Paper>
+
+          {/* Done button */}
+          <Button variant="default" onClick={closeModal}>
+            Done
+          </Button>
         </Stack>
       </Modal>
     </>

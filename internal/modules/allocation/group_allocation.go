@@ -15,7 +15,7 @@ type GroupAllocation struct {
 }
 
 // CalculateGroupAllocation aggregates allocations by user-defined groups
-// Faithful translation of Python logic from app/modules/allocation/api/allocation.py
+// Supports items belonging to multiple groups with proportional value splitting
 func CalculateGroupAllocation(
 	summary PortfolioSummary,
 	countryGroups map[string][]string,
@@ -24,13 +24,13 @@ func CalculateGroupAllocation(
 	industryGroupTargets map[string]float64,
 ) ([]GroupAllocation, []GroupAllocation) {
 
-	// Build reverse mappings (item -> group)
-	countryToGroup := buildReverseMapping(countryGroups)
-	industryToGroup := buildReverseMapping(industryGroups)
+	// Build multi-group mappings (item -> []groups)
+	countryToGroups := buildMultiGroupMapping(countryGroups)
+	industryToGroups := buildMultiGroupMapping(industryGroups)
 
-	// Aggregate values by group
-	countryGroupValues := aggregateByGroup(summary.CountryAllocations, countryToGroup)
-	industryGroupValues := aggregateByGroup(summary.IndustryAllocations, industryToGroup)
+	// Aggregate values by group (split proportionally if item is in multiple groups)
+	countryGroupValues := aggregateByGroupMulti(summary.CountryAllocations, countryToGroups)
+	industryGroupValues := aggregateByGroupMulti(summary.IndustryAllocations, industryToGroups)
 
 	// Build results
 	countryGroupAllocs := buildGroupAllocations(
@@ -47,31 +47,42 @@ func CalculateGroupAllocation(
 	return countryGroupAllocs, industryGroupAllocs
 }
 
-// buildReverseMapping creates a map from item to group name
-// e.g., {"North America": ["United States", "Canada"]} -> {"United States": "North America", "Canada": "North America"}
-func buildReverseMapping(groups map[string][]string) map[string]string {
-	result := make(map[string]string)
+// buildMultiGroupMapping creates a map from item to list of group names
+// Supports items belonging to multiple groups
+// e.g., {"Tech": ["Technology"], "Growth": ["Technology", "Healthcare"]}
+//
+//	-> {"Technology": ["Tech", "Growth"], "Healthcare": ["Growth"]}
+func buildMultiGroupMapping(groups map[string][]string) map[string][]string {
+	result := make(map[string][]string)
 	for groupName, items := range groups {
 		for _, item := range items {
-			result[item] = groupName
+			result[item] = append(result[item], groupName)
 		}
 	}
 	return result
 }
 
-// aggregateByGroup sums allocation values by group
-func aggregateByGroup(
+// aggregateByGroupMulti sums allocation values by group
+// When an item belongs to multiple groups, its value is split equally among them
+func aggregateByGroupMulti(
 	allocations []PortfolioAllocation,
-	itemToGroup map[string]string,
+	itemToGroups map[string][]string,
 ) map[string]float64 {
 	groupValues := make(map[string]float64)
 
 	for _, alloc := range allocations {
-		group := itemToGroup[alloc.Name]
-		if group == "" {
-			group = "OTHER"
+		groups := itemToGroups[alloc.Name]
+		if len(groups) == 0 {
+			// Item not assigned to any group - count as "OTHER"
+			groupValues["OTHER"] += alloc.CurrentValue
+			continue
 		}
-		groupValues[group] += alloc.CurrentValue
+
+		// Split value proportionally among all groups
+		splitValue := alloc.CurrentValue / float64(len(groups))
+		for _, group := range groups {
+			groupValues[group] += splitValue
+		}
 	}
 
 	return groupValues
