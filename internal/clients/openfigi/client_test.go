@@ -12,11 +12,11 @@ import (
 )
 
 func TestNewClient(t *testing.T) {
-	client := NewClient("", zerolog.Nop())
+	client := NewClient("", nil, zerolog.Nop())
 	assert.NotNil(t, client)
 	assert.Empty(t, client.apiKey)
 
-	clientWithKey := NewClient("test-api-key", zerolog.Nop())
+	clientWithKey := NewClient("test-api-key", nil, zerolog.Nop())
 	assert.Equal(t, "test-api-key", clientWithKey.apiKey)
 }
 
@@ -55,7 +55,7 @@ func TestLookupISIN_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient("", zerolog.Nop())
+	client := NewClient("", nil, zerolog.Nop())
 	client.baseURL = server.URL
 
 	results, err := client.LookupISIN("US0378331005")
@@ -84,7 +84,7 @@ func TestLookupISIN_MultipleResults(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient("", zerolog.Nop())
+	client := NewClient("", nil, zerolog.Nop())
 	client.baseURL = server.URL
 
 	results, err := client.LookupISIN("US0378331005")
@@ -108,7 +108,7 @@ func TestLookupISIN_NoResults(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient("", zerolog.Nop())
+	client := NewClient("", nil, zerolog.Nop())
 	client.baseURL = server.URL
 
 	results, err := client.LookupISIN("INVALID123456")
@@ -118,16 +118,11 @@ func TestLookupISIN_NoResults(t *testing.T) {
 
 func TestLookupISINForExchange(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req []MappingRequest
-		json.NewDecoder(r.Body).Decode(&req)
-
-		// Filter by exchange code
-		exchCode := req[0].ExchCode
-
 		resp := []MappingResponse{
 			{
 				Data: []MappingResult{
-					{FIGI: "BBG000B9XRY4", Ticker: "AAPL", ExchCode: exchCode},
+					{FIGI: "BBG000B9XRY4", Ticker: "AAPL", ExchCode: "US"},
+					{FIGI: "BBG0020P10C5", Ticker: "AAPL", ExchCode: "LN"},
 				},
 			},
 		}
@@ -136,7 +131,7 @@ func TestLookupISINForExchange(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient("", zerolog.Nop())
+	client := NewClient("", nil, zerolog.Nop())
 	client.baseURL = server.URL
 
 	result, err := client.LookupISINForExchange("US0378331005", "US")
@@ -155,7 +150,7 @@ func TestLookupISINForExchange_NotFound(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient("", zerolog.Nop())
+	client := NewClient("", nil, zerolog.Nop())
 	client.baseURL = server.URL
 
 	result, err := client.LookupISINForExchange("US0378331005", "XX")
@@ -183,7 +178,7 @@ func TestBatchLookup(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient("", zerolog.Nop())
+	client := NewClient("", nil, zerolog.Nop())
 	client.baseURL = server.URL
 
 	isins := []string{"US0378331005", "US5949181045", "US88160R1014"}
@@ -208,7 +203,7 @@ func TestClient_WithAPIKey(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient("my-api-key", zerolog.Nop())
+	client := NewClient("my-api-key", nil, zerolog.Nop())
 	client.baseURL = server.URL
 
 	_, err := client.LookupISIN("US0378331005")
@@ -222,7 +217,7 @@ func TestClient_HTTPError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient("", zerolog.Nop())
+	client := NewClient("", nil, zerolog.Nop())
 	client.baseURL = server.URL
 
 	_, err := client.LookupISIN("US0378331005")
@@ -236,14 +231,15 @@ func TestClient_InvalidJSON(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient("", zerolog.Nop())
+	client := NewClient("", nil, zerolog.Nop())
 	client.baseURL = server.URL
 
 	_, err := client.LookupISIN("US0378331005")
 	assert.Error(t, err)
 }
 
-func TestCaching(t *testing.T) {
+func TestNoCaching_WithNilRepo(t *testing.T) {
+	// Without a cache repo, each call should hit the API
 	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
@@ -253,7 +249,7 @@ func TestCaching(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient("", zerolog.Nop())
+	client := NewClient("", nil, zerolog.Nop())
 	client.baseURL = server.URL
 
 	// First call
@@ -261,13 +257,7 @@ func TestCaching(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, callCount)
 
-	// Second call - should use cache
-	_, err = client.LookupISIN("US0378331005")
-	require.NoError(t, err)
-	assert.Equal(t, 1, callCount) // Still 1, not 2
-
-	// Clear cache and call again
-	client.ClearCache()
+	// Second call - should also hit API since no cache repo
 	_, err = client.LookupISIN("US0378331005")
 	require.NoError(t, err)
 	assert.Equal(t, 2, callCount)

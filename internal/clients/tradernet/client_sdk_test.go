@@ -94,6 +94,10 @@ func (m *mockSDKClient) UserInfo() (interface{}, error) {
 	return m.userInfoResult, m.userInfoError
 }
 
+func (m *mockSDKClient) Close() {
+	// No-op for mock
+}
+
 // TestClient_GetPortfolio tests GetPortfolio() using SDK
 func TestClient_GetPortfolio(t *testing.T) {
 	log := zerolog.New(nil).Level(zerolog.Disabled)

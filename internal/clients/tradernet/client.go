@@ -638,3 +638,10 @@ func (c *Client) GetPendingOrders() ([]PendingOrder, error) {
 
 	return orders, nil
 }
+
+// Close gracefully shuts down the client and its SDK client
+func (c *Client) Close() {
+	if c.sdkClient != nil {
+		c.sdkClient.Close()
+	}
+}

@@ -162,3 +162,10 @@ func (a *TradernetBrokerAdapter) HealthCheck() (*domain.BrokerHealthResult, erro
 func (a *TradernetBrokerAdapter) SetCredentials(apiKey, apiSecret string) {
 	a.client.SetCredentials(apiKey, apiSecret)
 }
+
+// Close gracefully shuts down the adapter and its underlying client
+func (a *TradernetBrokerAdapter) Close() {
+	if a.client != nil {
+		a.client.Close()
+	}
+}

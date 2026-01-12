@@ -24,6 +24,7 @@ const (
 	JobTypeAdaptiveMarket     JobType = "adaptive_market_check"
 	JobTypeHistoryCleanup     JobType = "history_cleanup"
 	JobTypeRecommendationGC   JobType = "recommendation_gc"
+	JobTypeClientDataCleanup  JobType = "client_data_cleanup"
 	JobTypeDeployment         JobType = "deployment"
 	JobTypeR2Backup           JobType = "r2_backup"
 	JobTypeR2BackupRotation   JobType = "r2_backup_rotation"
@@ -140,6 +141,7 @@ func GetJobDescription(jobType JobType) string {
 		JobTypeAdaptiveMarket:     "Checking market regime",
 		JobTypeHistoryCleanup:     "Cleaning up historical data",
 		JobTypeRecommendationGC:   "Cleaning up old recommendations",
+		JobTypeClientDataCleanup:  "Cleaning up expired API cache",
 		JobTypeDeployment:         "Checking for system updates",
 		JobTypeR2Backup:           "Uploading backup to cloud",
 		JobTypeR2BackupRotation:   "Rotating cloud backups",

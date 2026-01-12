@@ -9,7 +9,7 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// InitializeDatabases initializes all 6 databases and applies schemas
+// InitializeDatabases initializes all 7 databases and applies schemas
 // Returns a Container with databases populated (agents.db removed - data now in-memory)
 func InitializeDatabases(cfg *config.Config, log zerolog.Logger) (*Container, error) {
 	container := &Container{}
@@ -102,9 +102,26 @@ func InitializeDatabases(cfg *config.Config, log zerolog.Logger) (*Container, er
 	}
 	container.CacheDB = cacheDB
 
+	// 8. client_data.db - External API response cache (Alpha Vantage, Yahoo, OpenFIGI, ExchangeRate)
+	clientDataDB, err := database.New(database.Config{
+		Path:    cfg.DataDir + "/client_data.db",
+		Profile: database.ProfileCache, // Maximum speed for cache data
+		Name:    "client_data",
+	})
+	if err != nil {
+		universeDB.Close()
+		configDB.Close()
+		ledgerDB.Close()
+		portfolioDB.Close()
+		historyDB.Close()
+		cacheDB.Close()
+		return nil, fmt.Errorf("failed to initialize client_data database: %w", err)
+	}
+	container.ClientDataDB = clientDataDB
+
 	// Apply schemas to all databases (single source of truth)
 	// Note: agentsDB removed - sequences/evaluations now in-memory
-	for _, db := range []*database.DB{universeDB, configDB, ledgerDB, portfolioDB, historyDB, cacheDB} {
+	for _, db := range []*database.DB{universeDB, configDB, ledgerDB, portfolioDB, historyDB, cacheDB, clientDataDB} {
 		if err := db.Migrate(); err != nil {
 			// Cleanup on error
 			universeDB.Close()
@@ -113,6 +130,7 @@ func InitializeDatabases(cfg *config.Config, log zerolog.Logger) (*Container, er
 			portfolioDB.Close()
 			historyDB.Close()
 			cacheDB.Close()
+			clientDataDB.Close()
 			return nil, fmt.Errorf("failed to apply schema to %s: %w", db.Name(), err)
 		}
 	}

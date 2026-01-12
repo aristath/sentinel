@@ -165,6 +165,11 @@ func (s *Scheduler) Start() {
 					s.enqueueTimeBasedJob(JobTypeHistoryCleanup, PriorityMedium, 24*time.Hour)
 				}
 
+				// Client data cleanup: Daily at 00:30 AM (after history cleanup)
+				if hour == 0 && minute == 30 {
+					s.enqueueTimeBasedJob(JobTypeClientDataCleanup, PriorityMedium, 24*time.Hour)
+				}
+
 				// Dividend reinvestment: Daily at 10:00 AM
 				if hour == 10 && minute == 0 {
 					s.enqueueTimeBasedJob(JobTypeDividendReinvest, PriorityHigh, 24*time.Hour)

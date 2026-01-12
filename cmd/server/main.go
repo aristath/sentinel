@@ -91,6 +91,7 @@ func main() {
 	// AgentsDB removed - sequences/evaluations now in-memory
 	defer container.HistoryDB.Close()
 	defer container.CacheDB.Close()
+	defer container.ClientDataDB.Close()
 
 	// Update config from settings DB (credentials, etc.) - BEFORE creating deployment manager
 	// This ensures GitHub token and other credentials are loaded from settings

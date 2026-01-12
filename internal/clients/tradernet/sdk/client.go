@@ -138,41 +138,56 @@ func (c *Client) worker() {
 	var lastRequestTime time.Time
 	firstRequest := true
 
+	processJob := func(job requestJob) {
+		// Wait for rate limit delay (except before first request)
+		if !firstRequest {
+			elapsed := time.Since(lastRequestTime)
+			if elapsed < rateLimitDelay {
+				time.Sleep(rateLimitDelay - elapsed)
+			}
+		}
+		firstRequest = false
+
+		// Process the request
+		var result requestResult
+		if job.isAuth {
+			result.data, result.err = c.authorizedRequestInternal(job.cmd, job.params)
+		} else {
+			if params, ok := job.params.(map[string]interface{}); ok {
+				result.data, result.err = c.plainRequestInternal(job.cmd, params)
+			} else {
+				result.err = fmt.Errorf("invalid params type for plain request")
+			}
+		}
+
+		lastRequestTime = time.Now()
+
+		// Send result back
+		job.resultCh <- result
+	}
+
 	for {
 		select {
 		case <-c.stopChan:
-			return
+			// Drain remaining jobs from queue before exiting
+			for {
+				select {
+				case job, ok := <-c.requestQueue:
+					if !ok {
+						return
+					}
+					processJob(job)
+				default:
+					// Queue is empty
+					return
+				}
+			}
 		case job, ok := <-c.requestQueue:
 			if !ok {
 				// Queue closed
 				return
 			}
-
-			// Wait for rate limit delay (except before first request)
-			if !firstRequest {
-				elapsed := time.Since(lastRequestTime)
-				if elapsed < rateLimitDelay {
-					time.Sleep(rateLimitDelay - elapsed)
-				}
-			}
-			firstRequest = false
-
-			// Process the request
-			var result requestResult
-			if job.isAuth {
-				result.data, result.err = c.authorizedRequestInternal(job.cmd, job.params)
-			} else {
-				if params, ok := job.params.(map[string]interface{}); ok {
-					result.data, result.err = c.plainRequestInternal(job.cmd, params)
-				} else {
-					result.err = fmt.Errorf("invalid params type for plain request")
-				}
-			}
-
-			lastRequestTime = time.Now()
-
-			// Send result back
-			job.resultCh <- result
+			processJob(job)
 		}
 	}
 }

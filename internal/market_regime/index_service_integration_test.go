@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aristath/sentinel/internal/clients/tradernet"
 	"github.com/aristath/sentinel/internal/config"
 	"github.com/aristath/sentinel/internal/di"
 	"github.com/rs/zerolog"
@@ -11,14 +12,57 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// cleanupContainer properly shuts down all container resources
+func cleanupContainer(container *di.Container) {
+	// Stop background services first
+	if container.TimeScheduler != nil {
+		container.TimeScheduler.Stop()
+	}
+	if container.WorkerPool != nil {
+		container.WorkerPool.Stop()
+	}
+	if container.MarketStatusWS != nil {
+		container.MarketStatusWS.Stop()
+	}
+	// Close broker client (which closes SDK client's rate limiter worker)
+	if adapter, ok := container.BrokerClient.(*tradernet.TradernetBrokerAdapter); ok {
+		adapter.Close()
+	}
+
+	// Close all databases
+	if container.UniverseDB != nil {
+		container.UniverseDB.Close()
+	}
+	if container.ConfigDB != nil {
+		container.ConfigDB.Close()
+	}
+	if container.LedgerDB != nil {
+		container.LedgerDB.Close()
+	}
+	if container.PortfolioDB != nil {
+		container.PortfolioDB.Close()
+	}
+	if container.AgentsDB != nil {
+		container.AgentsDB.Close()
+	}
+	if container.HistoryDB != nil {
+		container.HistoryDB.Close()
+	}
+	if container.CacheDB != nil {
+		container.CacheDB.Close()
+	}
+	if container.ClientDataDB != nil {
+		container.ClientDataDB.Close()
+	}
+}
+
 func TestInitializeMarketIndices_EndToEnd(t *testing.T) {
 	// Setup: Create container with test databases
 	cfg := &config.Config{DataDir: t.TempDir()}
 	log := zerolog.Nop()
 	container, _, err := di.Wire(cfg, log, nil, nil)
 	require.NoError(t, err)
-	defer container.UniverseDB.Close()
-	defer container.HistoryDB.Close()
+	defer cleanupContainer(container)
 
 	// Execute: Initialize market indices
 	err = container.MarketIndexService.InitializeMarketIndices(container.HistoricalSyncService)
@@ -72,8 +116,7 @@ func TestGetMarketReturns_WithRealData(t *testing.T) {
 	log := zerolog.Nop()
 	container, _, err := di.Wire(cfg, log, nil, nil)
 	require.NoError(t, err)
-	defer container.UniverseDB.Close()
-	defer container.HistoryDB.Close()
+	defer cleanupContainer(container)
 
 	err = container.MarketIndexService.InitializeMarketIndices(container.HistoricalSyncService)
 	require.NoError(t, err)
@@ -98,8 +141,7 @@ func TestInitializeMarketIndices_SkipsWhenDataExists(t *testing.T) {
 	log := zerolog.Nop()
 	container, _, err := di.Wire(cfg, log, nil, nil)
 	require.NoError(t, err)
-	defer container.UniverseDB.Close()
-	defer container.HistoryDB.Close()
+	defer cleanupContainer(container)
 
 	// First initialization
 	err = container.MarketIndexService.InitializeMarketIndices(container.HistoricalSyncService)

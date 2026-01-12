@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sync"
 	"time"
 
+	"github.com/aristath/sentinel/internal/clientdata"
 	"github.com/rs/zerolog"
 )
 
@@ -53,57 +53,37 @@ type MappingResponse struct {
 	Warning string          `json:"warning,omitempty"`
 }
 
-// cacheEntry stores cached results with expiration.
-type cacheEntry struct {
-	results   []MappingResult
-	expiresAt time.Time
-}
-
 // Client is the OpenFIGI API client.
 type Client struct {
 	baseURL    string
 	apiKey     string // Optional - increases rate limits
 	httpClient *http.Client
 	log        zerolog.Logger
-
-	// Cache for ISIN lookups
-	cacheMu  sync.RWMutex
-	cache    map[string]cacheEntry
-	cacheTTL time.Duration
+	cacheRepo  *clientdata.Repository
 }
 
 // NewClient creates a new OpenFIGI client.
 // apiKey is optional but recommended for higher rate limits.
-func NewClient(apiKey string, log zerolog.Logger) *Client {
+// cacheRepo is optional - if nil, caching is disabled.
+func NewClient(apiKey string, cacheRepo *clientdata.Repository, log zerolog.Logger) *Client {
 	return &Client{
 		baseURL: defaultBaseURL,
 		apiKey:  apiKey,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		log:      log.With().Str("component", "openfigi").Logger(),
-		cache:    make(map[string]cacheEntry),
-		cacheTTL: 24 * time.Hour, // Cache ISIN mappings for 24 hours
+		log:       log.With().Str("component", "openfigi").Logger(),
+		cacheRepo: cacheRepo,
 	}
-}
-
-// SetCacheTTL configures the cache expiration duration.
-func (c *Client) SetCacheTTL(ttl time.Duration) {
-	c.cacheTTL = ttl
-}
-
-// ClearCache removes all cached entries.
-func (c *Client) ClearCache() {
-	c.cacheMu.Lock()
-	defer c.cacheMu.Unlock()
-	c.cache = make(map[string]cacheEntry)
 }
 
 // LookupISIN maps an ISIN to ticker symbol(s).
 // Returns multiple results if the security trades on multiple exchanges.
+// If the API fails, returns stale cached data if available (stale data > no data).
 func (c *Client) LookupISIN(isin string) ([]MappingResult, error) {
-	// Check cache
+	// Check persistent cache for fresh data
 	if results, ok := c.getFromCache(isin); ok {
+		c.log.Debug().Str("isin", isin).Msg("OpenFIGI cache hit")
 		return results, nil
 	}
 
@@ -117,6 +97,14 @@ func (c *Client) LookupISIN(isin string) ([]MappingResult, error) {
 
 	responses, err := c.doRequest(requests)
 	if err != nil {
+		// API failed - try to get stale cached data as fallback
+		if staleResults, ok := c.getStaleFromCache(isin); ok {
+			c.log.Warn().
+				Err(err).
+				Str("isin", isin).
+				Msg("API failed, using stale cached data")
+			return staleResults, nil
+		}
 		return nil, err
 	}
 
@@ -126,7 +114,7 @@ func (c *Client) LookupISIN(isin string) ([]MappingResult, error) {
 
 	results := responses[0].Data
 
-	// Cache results
+	// Cache results persistently
 	c.setCache(isin, results)
 
 	return results, nil
@@ -134,42 +122,26 @@ func (c *Client) LookupISIN(isin string) ([]MappingResult, error) {
 
 // LookupISINForExchange maps an ISIN to ticker for a specific exchange.
 func (c *Client) LookupISINForExchange(isin string, exchCode string) (*MappingResult, error) {
-	// Check cache with exchange-specific key
-	cacheKey := isin + ":" + exchCode
-	if results, ok := c.getFromCache(cacheKey); ok {
-		if len(results) > 0 {
-			return &results[0], nil
-		}
-		return nil, nil
-	}
-
-	// Make request
-	requests := []MappingRequest{
-		{
-			IDType:   "ID_ISIN",
-			IDValue:  isin,
-			ExchCode: exchCode,
-		},
-	}
-
-	responses, err := c.doRequest(requests)
+	// For exchange-specific lookups, we first check the full ISIN lookup
+	// to avoid duplicate API calls. Then filter by exchange.
+	results, err := c.LookupISIN(isin)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(responses) == 0 || len(responses[0].Data) == 0 {
-		c.setCache(cacheKey, nil)
-		return nil, nil
+	// Filter results by exchange code
+	for i := range results {
+		if results[i].ExchCode == exchCode {
+			return &results[i], nil
+		}
 	}
 
-	result := responses[0].Data[0]
-	c.setCache(cacheKey, responses[0].Data)
-
-	return &result, nil
+	return nil, nil
 }
 
 // BatchLookup looks up multiple ISINs in a single request.
 // Returns a map of ISIN -> []MappingResult.
+// If the API fails, returns stale cached data for any ISINs that have it.
 func (c *Client) BatchLookup(isins []string) (map[string][]MappingResult, error) {
 	results := make(map[string][]MappingResult)
 
@@ -185,8 +157,15 @@ func (c *Client) BatchLookup(isins []string) (map[string][]MappingResult, error)
 
 	// If all were cached, return early
 	if len(uncachedISINs) == 0 {
+		c.log.Debug().Int("count", len(isins)).Msg("All ISINs found in cache")
 		return results, nil
 	}
+
+	c.log.Debug().
+		Int("total", len(isins)).
+		Int("cached", len(isins)-len(uncachedISINs)).
+		Int("to_fetch", len(uncachedISINs)).
+		Msg("BatchLookup cache stats")
 
 	// Build requests for uncached ISINs
 	requests := make([]MappingRequest, len(uncachedISINs))
@@ -199,10 +178,29 @@ func (c *Client) BatchLookup(isins []string) (map[string][]MappingResult, error)
 
 	responses, err := c.doRequest(requests)
 	if err != nil {
+		// API failed - try to get stale cached data as fallback for uncached ISINs
+		staleCount := 0
+		for _, isin := range uncachedISINs {
+			if stale, ok := c.getStaleFromCache(isin); ok {
+				results[isin] = stale
+				staleCount++
+			}
+		}
+		if staleCount > 0 {
+			c.log.Warn().
+				Err(err).
+				Int("stale_count", staleCount).
+				Int("missing", len(uncachedISINs)-staleCount).
+				Msg("API failed, using stale cached data for some ISINs")
+		}
+		// If we have some results (fresh + stale), return them even though API failed
+		if len(results) > 0 {
+			return results, nil
+		}
 		return nil, err
 	}
 
-	// Map responses back to ISINs
+	// Map responses back to ISINs and cache them
 	for i, resp := range responses {
 		if i < len(uncachedISINs) {
 			isin := uncachedISINs[i]
@@ -253,28 +251,62 @@ func (c *Client) doRequest(requests []MappingRequest) ([]MappingResponse, error)
 }
 
 // getFromCache retrieves cached results if they exist and haven't expired.
-func (c *Client) getFromCache(key string) ([]MappingResult, bool) {
-	c.cacheMu.RLock()
-	defer c.cacheMu.RUnlock()
+func (c *Client) getFromCache(isin string) ([]MappingResult, bool) {
+	if c.cacheRepo == nil {
+		return nil, false
+	}
 
-	entry, exists := c.cache[key]
-	if !exists {
+	data, err := c.cacheRepo.GetIfFresh("openfigi", isin)
+	if err != nil {
+		c.log.Warn().Err(err).Str("isin", isin).Msg("Failed to get from cache")
 		return nil, false
 	}
-	if time.Now().After(entry.expiresAt) {
+	if data == nil {
 		return nil, false
 	}
-	return entry.results, true
+
+	var results []MappingResult
+	if err := json.Unmarshal(data, &results); err != nil {
+		c.log.Warn().Err(err).Str("isin", isin).Msg("Failed to unmarshal cached data")
+		return nil, false
+	}
+
+	return results, true
 }
 
-// setCache stores results in the cache.
-func (c *Client) setCache(key string, results []MappingResult) {
-	c.cacheMu.Lock()
-	defer c.cacheMu.Unlock()
+// getStaleFromCache retrieves cached results even if expired.
+// Use this as a fallback when API calls fail - stale data is better than no data.
+func (c *Client) getStaleFromCache(isin string) ([]MappingResult, bool) {
+	if c.cacheRepo == nil {
+		return nil, false
+	}
 
-	c.cache[key] = cacheEntry{
-		results:   results,
-		expiresAt: time.Now().Add(c.cacheTTL),
+	data, err := c.cacheRepo.Get("openfigi", isin)
+	if err != nil {
+		c.log.Warn().Err(err).Str("isin", isin).Msg("Failed to get stale data from cache")
+		return nil, false
+	}
+	if data == nil {
+		return nil, false
+	}
+
+	var results []MappingResult
+	if err := json.Unmarshal(data, &results); err != nil {
+		c.log.Warn().Err(err).Str("isin", isin).Msg("Failed to unmarshal stale cached data")
+		return nil, false
+	}
+
+	return results, true
+}
+
+// setCache stores results in the persistent cache.
+func (c *Client) setCache(isin string, results []MappingResult) {
+	if c.cacheRepo == nil {
+		return
+	}
+
+	if err := c.cacheRepo.Store("openfigi", isin, results, clientdata.TTLOpenFIGI); err != nil {
+		c.log.Warn().Err(err).Str("isin", isin).Msg("Failed to cache OpenFIGI results")
 	}
 }
 
@@ -327,18 +359,8 @@ type TickerLookupResult struct {
 // LookupByTicker attempts to find security information by ticker symbol.
 // exchCode is optional (e.g., "US", "LN", "GA").
 // Note: OpenFIGI doesn't directly return ISIN, but we can get it from the compositeFIGI.
+// Note: Ticker lookups are NOT cached as they don't have a stable key (ISIN).
 func (c *Client) LookupByTicker(ticker string, exchCode string) (*TickerLookupResult, error) {
-	// Check cache
-	cacheKey := "ticker:" + ticker + ":" + exchCode
-	if results, ok := c.getFromCache(cacheKey); ok && len(results) > 0 {
-		return &TickerLookupResult{
-			Ticker:   results[0].Ticker,
-			ExchCode: results[0].ExchCode,
-			Name:     results[0].Name,
-			ISIN:     "", // OpenFIGI doesn't return ISIN directly
-		}, nil
-	}
-
 	// Make request using TICKER id type
 	req := MappingRequest{
 		IDType:  "TICKER",
@@ -354,12 +376,10 @@ func (c *Client) LookupByTicker(ticker string, exchCode string) (*TickerLookupRe
 	}
 
 	if len(responses) == 0 || len(responses[0].Data) == 0 {
-		c.setCache(cacheKey, nil)
 		return nil, nil
 	}
 
 	result := responses[0].Data[0]
-	c.setCache(cacheKey, responses[0].Data)
 
 	// Note: OpenFIGI returns FIGI identifiers, not ISINs directly
 	// The compositeFIGI can potentially be used to look up the ISIN

@@ -4,6 +4,7 @@ package di
 import (
 	"fmt"
 
+	"github.com/aristath/sentinel/internal/clientdata"
 	"github.com/aristath/sentinel/internal/modules/allocation"
 	"github.com/aristath/sentinel/internal/modules/cash_flows"
 	"github.com/aristath/sentinel/internal/modules/dividends"
@@ -101,6 +102,11 @@ func InitializeRepositories(container *Container, log zerolog.Logger) error {
 	container.HistoryDBClient = universe.NewHistoryDB(
 		container.HistoryDB.Conn(),
 		log,
+	)
+
+	// Client data repository (needs clientDataDB)
+	container.ClientDataRepo = clientdata.NewRepository(
+		container.ClientDataDB.Conn(),
 	)
 
 	log.Info().Msg("All repositories initialized")

@@ -20,4 +20,6 @@ type SDKClient interface {
 	GetCandles(symbol string, start, end time.Time, timeframeSeconds int) (interface{}, error)
 	GetCrossRatesForDate(baseCurrency string, currencies []string, date *string) (interface{}, error)
 	UserInfo() (interface{}, error)
+	// Close gracefully shuts down the SDK client
+	Close()
 }

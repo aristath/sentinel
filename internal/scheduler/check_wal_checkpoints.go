@@ -8,14 +8,15 @@ import (
 // CheckWALCheckpointsJob monitors WAL checkpoint status
 type CheckWALCheckpointsJob struct {
 	JobBase
-	log         zerolog.Logger
-	universeDB  *database.DB
-	configDB    *database.DB
-	ledgerDB    *database.DB
-	portfolioDB *database.DB
-	agentsDB    *database.DB
-	historyDB   *database.DB
-	cacheDB     *database.DB
+	log          zerolog.Logger
+	universeDB   *database.DB
+	configDB     *database.DB
+	ledgerDB     *database.DB
+	portfolioDB  *database.DB
+	agentsDB     *database.DB
+	historyDB    *database.DB
+	cacheDB      *database.DB
+	clientDataDB *database.DB
 }
 
 // NewCheckWALCheckpointsJob creates a new CheckWALCheckpointsJob
@@ -27,16 +28,18 @@ func NewCheckWALCheckpointsJob(
 	agentsDB *database.DB,
 	historyDB *database.DB,
 	cacheDB *database.DB,
+	clientDataDB *database.DB,
 ) *CheckWALCheckpointsJob {
 	return &CheckWALCheckpointsJob{
-		log:         zerolog.Nop(),
-		universeDB:  universeDB,
-		configDB:    configDB,
-		ledgerDB:    ledgerDB,
-		portfolioDB: portfolioDB,
-		agentsDB:    agentsDB,
-		historyDB:   historyDB,
-		cacheDB:     cacheDB,
+		log:          zerolog.Nop(),
+		universeDB:   universeDB,
+		configDB:     configDB,
+		ledgerDB:     ledgerDB,
+		portfolioDB:  portfolioDB,
+		agentsDB:     agentsDB,
+		historyDB:    historyDB,
+		cacheDB:      cacheDB,
+		clientDataDB: clientDataDB,
 	}
 }
 
@@ -53,13 +56,14 @@ func (j *CheckWALCheckpointsJob) Name() string {
 // Run executes the check WAL checkpoints job
 func (j *CheckWALCheckpointsJob) Run() error {
 	databases := map[string]*database.DB{
-		"universe":  j.universeDB,
-		"config":    j.configDB,
-		"ledger":    j.ledgerDB,
-		"portfolio": j.portfolioDB,
-		"agents":    j.agentsDB,
-		"history":   j.historyDB,
-		"cache":     j.cacheDB,
+		"universe":    j.universeDB,
+		"config":      j.configDB,
+		"ledger":      j.ledgerDB,
+		"portfolio":   j.portfolioDB,
+		"agents":      j.agentsDB,
+		"history":     j.historyDB,
+		"cache":       j.cacheDB,
+		"client_data": j.clientDataDB,
 	}
 
 	checkedCount := 0

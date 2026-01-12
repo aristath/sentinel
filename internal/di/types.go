@@ -2,6 +2,7 @@
 package di
 
 import (
+	"github.com/aristath/sentinel/internal/clientdata"
 	"github.com/aristath/sentinel/internal/clients/alphavantage"
 	"github.com/aristath/sentinel/internal/clients/exchangerate"
 	"github.com/aristath/sentinel/internal/clients/openfigi"
@@ -45,14 +46,15 @@ import (
 // Container holds all dependencies for the application
 // This is the single source of truth for all service instances
 type Container struct {
-	// Databases (7-database architecture)
-	UniverseDB  *database.DB
-	ConfigDB    *database.DB
-	LedgerDB    *database.DB
-	PortfolioDB *database.DB
-	AgentsDB    *database.DB
-	HistoryDB   *database.DB
-	CacheDB     *database.DB
+	// Databases (8-database architecture)
+	UniverseDB   *database.DB
+	ConfigDB     *database.DB
+	LedgerDB     *database.DB
+	PortfolioDB  *database.DB
+	AgentsDB     *database.DB
+	HistoryDB    *database.DB
+	CacheDB      *database.DB
+	ClientDataDB *database.DB
 
 	// Clients
 	BrokerClient          domain.BrokerClient
@@ -77,6 +79,7 @@ type Container struct {
 	PlannerRepo        planningrepo.PlannerRepositoryInterface // Interface - can be DB or in-memory
 	GroupingRepo       *allocation.GroupingRepository
 	HistoryDBClient    *universe.HistoryDB
+	ClientDataRepo     *clientdata.Repository
 
 	// Services
 	DataSourceRouter          *services.DataSourceRouter
@@ -197,6 +200,7 @@ type JobInstances struct {
 	// Reliability jobs
 	HistoryCleanup     scheduler.Job
 	RecommendationGC   scheduler.Job
+	ClientDataCleanup  scheduler.Job
 	HourlyBackup       scheduler.Job
 	DailyBackup        scheduler.Job
 	DailyMaintenance   scheduler.Job

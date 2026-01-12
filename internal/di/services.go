@@ -81,8 +81,8 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 	log.Info().Msg("Using native Go Yahoo Finance client")
 
 	// ExchangeRate API client (exchangerate-api.com)
-	container.ExchangeRateAPIClient = exchangerate.NewClient(log)
-	log.Info().Msg("ExchangeRateAPI client initialized")
+	container.ExchangeRateAPIClient = exchangerate.NewClient(container.ClientDataRepo, log)
+	log.Info().Msg("ExchangeRateAPI client initialized with persistent cache")
 
 	// Alpha Vantage client (fundamentals, technical indicators, etc.)
 	// Get API key from settings or config
@@ -107,11 +107,11 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 			openFIGIKey = *key
 		}
 	}
-	container.OpenFIGIClient = openfigi.NewClient(openFIGIKey, log)
+	container.OpenFIGIClient = openfigi.NewClient(openFIGIKey, container.ClientDataRepo, log)
 	if openFIGIKey != "" {
-		log.Info().Msg("OpenFIGI client initialized with API key (25k requests/min)")
+		log.Info().Msg("OpenFIGI client initialized with API key and persistent cache (25k requests/min)")
 	} else {
-		log.Info().Msg("OpenFIGI client initialized (25 requests/min without key)")
+		log.Info().Msg("OpenFIGI client initialized with persistent cache (25 requests/min without key)")
 	}
 
 	// Symbol mapper for converting symbols between providers

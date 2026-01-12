@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/aristath/sentinel/internal/clientdata"
 	"github.com/aristath/sentinel/internal/config"
 	"github.com/aristath/sentinel/internal/database"
 	"github.com/aristath/sentinel/internal/deployment"
@@ -103,6 +104,11 @@ func RegisterJobs(container *Container, cfg *config.Config, displayManager *disp
 	container.JobRegistry.Register(queue.JobTypeRecommendationGC, queue.JobToHandler(recommendationGC))
 	instances.RecommendationGC = recommendationGC
 
+	// Job 8b: Client Data Cleanup (removes expired API cache entries)
+	clientDataCleanup := clientdata.NewCleanupJob(container.ClientDataRepo, log)
+	container.JobRegistry.Register(queue.JobTypeClientDataCleanup, queue.JobToHandler(clientDataCleanup))
+	instances.ClientDataCleanup = clientDataCleanup
+
 	// Job 9: Hourly Backup
 	hourlyBackup := reliability.NewHourlyBackupJob(container.BackupService)
 	container.JobRegistry.Register(queue.JobTypeHourlyBackup, queue.JobToHandler(hourlyBackup))
@@ -122,8 +128,9 @@ func RegisterJobs(container *Container, cfg *config.Config, displayManager *disp
 		"ledger":    container.LedgerDB,
 		"portfolio": container.PortfolioDB,
 		// "agents": removed - sequences/evaluations now in-memory
-		"history": container.HistoryDB,
-		"cache":   container.CacheDB,
+		"history":     container.HistoryDB,
+		"cache":       container.CacheDB,
+		"client_data": container.ClientDataDB,
 	}
 	dailyMaintenance := reliability.NewDailyMaintenanceJob(databases, container.HealthServices, backupDir, log)
 	container.JobRegistry.Register(queue.JobTypeDailyMaintenance, queue.JobToHandler(dailyMaintenance))
@@ -479,6 +486,7 @@ func RegisterJobs(container *Container, cfg *config.Config, displayManager *disp
 		nil, // AgentsDB removed - sequences/evaluations now in-memory
 		container.HistoryDB,
 		container.CacheDB,
+		container.ClientDataDB,
 	)
 	checkWALCheckpoints.SetLogger(log)
 	container.JobRegistry.Register(queue.JobTypeCheckWALCheckpoints, queue.JobToHandler(checkWALCheckpoints))
