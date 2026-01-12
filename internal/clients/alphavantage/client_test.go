@@ -1,9 +1,6 @@
 package alphavantage
 
 import (
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -714,4 +711,3 @@ func BenchmarkCacheOperations(b *testing.B) {
 func TestInterfaceImplementation(t *testing.T) {
 	var _ ClientInterface = (*Client)(nil)
 }
-
