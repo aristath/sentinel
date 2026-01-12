@@ -326,8 +326,6 @@ func TestSyncFromTradernet_Success(t *testing.T) {
 	// Mock expectations
 	mockTradernetClient.On("GetPortfolio").Return(tradernetPositions, nil)
 	mockPositionRepo.On("GetAll").Return(currentPositions, nil)
-	mockPositionRepo.On("GetBySymbol", "AAPL").Return(nil, nil).Once()
-	mockPositionRepo.On("GetBySymbol", "MSFT").Return(nil, nil).Once()
 	mockPositionRepo.On("Upsert", mock.AnythingOfType("Position")).Return(nil).Times(2)
 	mockTradernetClient.On("GetCashBalances").Return(cashBalances, nil)
 	mockCashManager.On("UpdateCashPosition", "EUR", 1000.0).Return(nil).Once()
@@ -405,7 +403,6 @@ func TestSyncFromTradernet_DeleteStale(t *testing.T) {
 	// Mock expectations
 	mockTradernetClient.On("GetPortfolio").Return(tradernetPositions, nil)
 	mockPositionRepo.On("GetAll").Return(currentPositions, nil)
-	mockPositionRepo.On("GetBySymbol", "AAPL").Return(nil, nil).Once()
 	mockPositionRepo.On("Upsert", mock.AnythingOfType("Position")).Return(nil).Once()
 	mockPositionRepo.On("Delete", "US5949181045").Return(nil).Once() // Delete by ISIN
 	mockTradernetClient.On("GetCashBalances").Return(cashBalances, nil)
@@ -481,7 +478,6 @@ func TestSyncFromTradernet_SkipZeroQuantity(t *testing.T) {
 	// Mock expectations - Upsert should only be called once (for AAPL)
 	mockTradernetClient.On("GetPortfolio").Return(tradernetPositions, nil)
 	mockPositionRepo.On("GetAll").Return(currentPositions, nil)
-	mockPositionRepo.On("GetBySymbol", "AAPL").Return(nil, nil).Once()
 	mockPositionRepo.On("Upsert", mock.AnythingOfType("Position")).Return(nil).Once()
 	mockTradernetClient.On("GetCashBalances").Return(cashBalances, nil)
 	mockCashManager.On("UpdateCashPosition", mock.Anything, mock.Anything).Return(nil)
@@ -618,8 +614,6 @@ func TestSyncFromTradernet_UpsertError(t *testing.T) {
 	// Mock expectations - Upsert fails for first position but succeeds for second
 	mockTradernetClient.On("GetPortfolio").Return(tradernetPositions, nil)
 	mockPositionRepo.On("GetAll").Return(currentPositions, nil)
-	mockPositionRepo.On("GetBySymbol", "AAPL").Return(nil, nil).Once()
-	mockPositionRepo.On("GetBySymbol", "MSFT").Return(nil, nil).Once()
 	mockPositionRepo.On("Upsert", mock.MatchedBy(func(p Position) bool {
 		return p.Symbol == "AAPL"
 	})).Return(errors.New("database error")).Once()
@@ -687,7 +681,6 @@ func TestSyncFromTradernet_CashBalancesError(t *testing.T) {
 	// Mock expectations - GetCashBalances fails
 	mockTradernetClient.On("GetPortfolio").Return(tradernetPositions, nil)
 	mockPositionRepo.On("GetAll").Return(currentPositions, nil)
-	mockPositionRepo.On("GetBySymbol", "AAPL").Return(nil, nil).Once()
 	mockPositionRepo.On("Upsert", mock.AnythingOfType("Position")).Return(nil).Once()
 	mockTradernetClient.On("GetCashBalances").Return(nil, errors.New("cash balances error"))
 
