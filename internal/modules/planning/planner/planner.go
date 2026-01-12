@@ -462,7 +462,7 @@ func (p *Planner) selectBestSequences(sequences []domain.ActionSequence, results
 	return validSequences
 }
 
-// buildRejectedOpportunities builds a list of rejected opportunities with all rejection reasons
+// buildRejectedOpportunities builds a list of rejected opportunities with clear, actionable rejection reasons
 func (p *Planner) buildRejectedOpportunities(
 	allIdentified []domain.ActionCandidate,
 	opportunitiesInSequences map[string]bool,
@@ -511,40 +511,31 @@ func (p *Planner) buildRejectedOpportunities(
 
 		rejected := rejectionReasons[key]
 
-		// Add reasons based on opportunity lifecycle
+		// Add reasons based on opportunity lifecycle with clear explanations
 		if !opportunitiesInSequences[key] {
 			// Opportunity was not included in any sequence
-			rejected.Reasons = append(rejected.Reasons, "not included in any sequence")
+			// This happens when patterns don't pick up this opportunity
+			rejected.Reasons = append(rejected.Reasons, "not selected by any pattern (may need different pattern or lower priority)")
 		} else if opportunitiesInSelectedSequences != nil && opportunitiesInSelectedSequences[key] {
-			// Opportunity was in selected sequences, check if it was filtered by constraints
+			// Opportunity was in one of the top evaluated sequences
 			if constraintReasons, hasConstraints := filteredByConstraints[key]; hasConstraints {
 				// Was filtered by constraints
-				rejected.Reasons = append(rejected.Reasons, constraintReasons...)
+				for _, reason := range constraintReasons {
+					rejected.Reasons = append(rejected.Reasons, fmt.Sprintf("constraint: %s", reason))
+				}
 			} else {
-				// If it's in selected sequences and not filtered by constraints, it should be in final plan
-				// Since it's not in final plan, add a generic reason
-				rejected.Reasons = append(rejected.Reasons, "not included in final plan")
+				// Opportunity was in a candidate sequence that wasn't the winning one
+				// This is the key fix: be specific about WHY it wasn't included
+				rejected.Reasons = append(rejected.Reasons, "in alternative sequence (a different sequence had higher score)")
 			}
 		} else {
-			// Opportunity was in sequences but not in selected sequences
-			rejected.Reasons = append(rejected.Reasons, "not in best sequence")
+			// Opportunity was in sequences but not in top evaluated sequences
+			rejected.Reasons = append(rejected.Reasons, "sequence not in top candidates (lower combined priority)")
 		}
 
-		// Add original opportunity reason if available
+		// Add original opportunity reason if available (for context)
 		if candidate.Reason != "" {
 			rejected.OriginalReason = candidate.Reason
-			// Include original reason in Reasons array for context (e.g., "near 52-week high")
-			// Check if it's not already in Reasons to avoid duplicates
-			foundInReasons := false
-			for _, existingReason := range rejected.Reasons {
-				if existingReason == candidate.Reason {
-					foundInReasons = true
-					break
-				}
-			}
-			if !foundInReasons {
-				rejected.Reasons = append(rejected.Reasons, candidate.Reason)
-			}
 		}
 	}
 

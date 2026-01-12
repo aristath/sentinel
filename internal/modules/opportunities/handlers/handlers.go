@@ -71,6 +71,9 @@ func (h *Handler) HandleGetAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Apply configuration to context (sets AllowBuy, AllowSell, transaction costs)
+	ctx.ApplyConfig(config)
+
 	// Identify opportunities
 	opportunities, err := h.service.IdentifyOpportunities(ctx, config)
 	if err != nil {
@@ -130,6 +133,9 @@ func (h *Handler) handleCategoryOpportunities(w http.ResponseWriter, r *http.Req
 		http.Error(w, "Failed to load planner config", http.StatusInternalServerError)
 		return
 	}
+
+	// Apply configuration to context (sets AllowBuy, AllowSell, transaction costs)
+	ctx.ApplyConfig(config)
 
 	// Identify opportunities
 	allOpportunities, err := h.service.IdentifyOpportunities(ctx, config)
@@ -349,13 +355,36 @@ func (h *Handler) buildOpportunityContext() (*planningdomain.OpportunityContext,
 		}
 	}
 
-	// Build opportunity context
+	// Get available cash in EUR
+	availableCashEUR := cashBalances["EUR"]
+
+	// Build current prices map from positions (keyed by ISIN)
+	currentPrices := make(map[string]float64)
+	for _, pos := range positions {
+		if pos.ISIN != "" && pos.CurrentPrice > 0 {
+			currentPrices[pos.ISIN] = pos.CurrentPrice
+		}
+	}
+
+	// Build opportunity context with all required fields
 	ctx := &planningdomain.OpportunityContext{
 		EnrichedPositions:      enrichedPositions,
 		Securities:             domainSecurities,
 		TotalPortfolioValueEUR: totalValue,
 		StocksByISIN:           stocksByISIN,
+		CurrentPrices:          currentPrices,
+		AvailableCashEUR:       availableCashEUR,
 		CountryAllocations:     allocations, // These are allocation targets
+		// Initialize constraint maps to avoid nil pointer issues
+		IneligibleISINs:     make(map[string]bool),
+		RecentlySoldISINs:   make(map[string]bool),
+		RecentlyBoughtISINs: make(map[string]bool),
+		// Default transaction costs (will be overridden by ApplyConfig)
+		TransactionCostFixed:   2.0,
+		TransactionCostPercent: 0.002,
+		// Default to true (will be overridden by ApplyConfig)
+		AllowBuy:  true,
+		AllowSell: true,
 	}
 
 	return ctx, nil
