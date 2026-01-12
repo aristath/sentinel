@@ -257,25 +257,13 @@ export function NextActionsCard() {
         </Stack>
       )}
 
-      {/* Rejected Opportunities */}
+      {/* Rejected Opportunities - Always visible */}
       {recommendations?.rejected_opportunities && recommendations.rejected_opportunities.length > 0 && (
-        <details style={{ marginTop: '1rem', borderTop: '1px solid var(--mantine-color-dark-6)', paddingTop: '1rem' }}>
-          <summary
-            style={{
-              cursor: 'pointer',
-              padding: '0.5rem',
-              fontSize: '0.875rem',
-              color: 'var(--mantine-color-dimmed)',
-              fontFamily: 'var(--mantine-font-family)',
-              fontWeight: 500,
-              listStyle: 'none',
-            }}
-          >
-            <Text size="sm" c="dimmed" fw={500} style={{ fontFamily: 'var(--mantine-font-family)' }}>
-              Rejected Opportunities ({recommendations.rejected_opportunities.length})
-            </Text>
-          </summary>
-          <Stack gap="xs" mt="sm" style={{ paddingLeft: '1rem' }}>
+        <div style={{ marginTop: '1rem', borderTop: '1px solid var(--mantine-color-dark-6)', paddingTop: '1rem' }}>
+          <Text size="sm" c="dimmed" fw={500} mb="sm" style={{ fontFamily: 'var(--mantine-font-family)' }}>
+            Rejected Opportunities ({recommendations.rejected_opportunities.length})
+          </Text>
+          <Stack gap="xs">
             {recommendations.rejected_opportunities.map((rejected, index) => (
               <Paper
                 key={`rejected-${rejected.symbol}-${rejected.side}-${index}`}
@@ -311,7 +299,7 @@ export function NextActionsCard() {
               </Paper>
             ))}
           </Stack>
-        </details>
+        </div>
       )}
     </Card>
   );
