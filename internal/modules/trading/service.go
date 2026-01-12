@@ -126,8 +126,8 @@ func NewTradingService(
 func (s *TradingService) SyncFromTradernet() error {
 	s.log.Info().Msg("Syncing trades from Tradernet")
 
-	// Get recent trades from Tradernet (last 100 trades)
-	trades, err := s.brokerClient.GetExecutedTrades(100)
+	// Get ALL trades from Tradernet (limit=0 returns all trades per API docs)
+	trades, err := s.brokerClient.GetExecutedTrades(0)
 	if err != nil {
 		return fmt.Errorf("failed to get trades from Tradernet: %w", err)
 	}

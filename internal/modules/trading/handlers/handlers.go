@@ -84,8 +84,8 @@ func NewTradingHandlers(
 // Faithful translation from Python: @router.get("")
 // GET /api/trades
 func (h *TradingHandlers) HandleGetTrades(w http.ResponseWriter, r *http.Request) {
-	// Parse limit parameter
-	limit := 50
+	// Parse limit parameter (default 500 to show full history)
+	limit := 500
 	if limitParam := r.URL.Query().Get("limit"); limitParam != "" {
 		if parsed, err := strconv.Atoi(limitParam); err == nil {
 			limit = parsed
