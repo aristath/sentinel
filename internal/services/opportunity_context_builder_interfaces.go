@@ -81,3 +81,8 @@ type BrokerClient interface {
 	IsConnected() bool
 	GetPendingOrders() ([]domain.BrokerPendingOrder, error)
 }
+
+// DismissedFilterRepository provides access to user-dismissed pre-filter reasons.
+type DismissedFilterRepository interface {
+	GetAll() (map[string]map[string][]string, error) // map[ISIN][calculator][]reasons
+}

@@ -141,3 +141,15 @@ CREATE TABLE IF NOT EXISTS adaptive_parameters (
 
 CREATE INDEX IF NOT EXISTS idx_adaptive_params_type ON adaptive_parameters(parameter_type);
 CREATE INDEX IF NOT EXISTS idx_adaptive_params_adapted ON adaptive_parameters(adapted_at DESC);
+
+-- Dismissed filters: user-dismissed pre-filter reasons for securities
+-- Row exists = dismissed, delete row = re-enabled
+-- Cleared automatically when a trade (BUY/SELL) is executed on the security
+CREATE TABLE IF NOT EXISTS dismissed_filters (
+    isin TEXT NOT NULL,
+    calculator TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    PRIMARY KEY (isin, calculator, reason)
+) STRICT;
+
+CREATE INDEX IF NOT EXISTS idx_dismissed_filters_isin ON dismissed_filters(isin);

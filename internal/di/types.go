@@ -13,7 +13,6 @@ import (
 	"github.com/aristath/sentinel/internal/domain"
 	"github.com/aristath/sentinel/internal/events"
 	"github.com/aristath/sentinel/internal/market_regime"
-	"github.com/aristath/sentinel/internal/mcu"
 	"github.com/aristath/sentinel/internal/modules/adaptation"
 	"github.com/aristath/sentinel/internal/modules/allocation"
 	"github.com/aristath/sentinel/internal/modules/analytics"
@@ -64,24 +63,24 @@ type Container struct {
 	OpenFIGIClient        *openfigi.Client
 	ExchangeRateAPIClient *exchangerate.Client
 	MarketStatusWS        *tradernet.MarketStatusWebSocket
-	MCUClient             *mcu.Client // Arduino MCU client (nil if not on Arduino hardware)
 
 	// Repositories
-	PositionRepo       *portfolio.PositionRepository
-	SecurityRepo       *universe.SecurityRepository
-	ScoreRepo          *universe.ScoreRepository
-	DividendRepo       *dividends.DividendRepository
-	CashRepo           *cash_flows.CashRepository
-	TradeRepo          *trading.TradeRepository
-	AllocRepo          *allocation.Repository
-	SettingsRepo       *settings.Repository
-	CashFlowsRepo      *cash_flows.Repository
-	RecommendationRepo planning.RecommendationRepositoryInterface // Interface - can be DB or in-memory
-	PlannerConfigRepo  *planningrepo.ConfigRepository
-	PlannerRepo        planningrepo.PlannerRepositoryInterface // Interface - can be DB or in-memory
-	GroupingRepo       *allocation.GroupingRepository
-	HistoryDBClient    *universe.HistoryDB
-	ClientDataRepo     *clientdata.Repository
+	PositionRepo        *portfolio.PositionRepository
+	SecurityRepo        *universe.SecurityRepository
+	ScoreRepo           *universe.ScoreRepository
+	DividendRepo        *dividends.DividendRepository
+	CashRepo            *cash_flows.CashRepository
+	TradeRepo           *trading.TradeRepository
+	AllocRepo           *allocation.Repository
+	SettingsRepo        *settings.Repository
+	CashFlowsRepo       *cash_flows.Repository
+	RecommendationRepo  planning.RecommendationRepositoryInterface // Interface - can be DB or in-memory
+	PlannerConfigRepo   *planningrepo.ConfigRepository
+	PlannerRepo         planningrepo.PlannerRepositoryInterface // Interface - can be DB or in-memory
+	GroupingRepo        *allocation.GroupingRepository
+	HistoryDBClient     *universe.HistoryDB
+	ClientDataRepo      *clientdata.Repository
+	DismissedFilterRepo *planningrepo.DismissedFilterRepository
 
 	// Services
 	DataSourceRouter          *services.DataSourceRouter

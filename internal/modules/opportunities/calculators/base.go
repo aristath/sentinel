@@ -34,40 +34,73 @@ func NewBaseCalculator(log zerolog.Logger, name string) *BaseCalculator {
 
 // ExclusionCollector helps calculators track pre-filtered securities with reasons.
 // Use this to collect exclusion reasons during calculation.
+// Dismissed filters are still tracked but marked as dismissed in the output.
 type ExclusionCollector struct {
-	calculator string
-	exclusions map[string]*domain.PreFilteredSecurity // keyed by ISIN
+	calculator       string
+	exclusions       map[string]*domain.PreFilteredSecurity // keyed by ISIN
+	dismissedFilters map[string]map[string][]string         // map[ISIN][calculator][]reasons
 }
 
 // NewExclusionCollector creates a new exclusion collector for a calculator.
-func NewExclusionCollector(calculatorName string) *ExclusionCollector {
+// The dismissedFilters parameter is optional - pass nil if no dismissals are tracked.
+func NewExclusionCollector(calculatorName string, dismissedFilters map[string]map[string][]string) *ExclusionCollector {
 	return &ExclusionCollector{
-		calculator: calculatorName,
-		exclusions: make(map[string]*domain.PreFilteredSecurity),
+		calculator:       calculatorName,
+		exclusions:       make(map[string]*domain.PreFilteredSecurity),
+		dismissedFilters: dismissedFilters,
 	}
+}
+
+// isDismissed checks if a specific reason for this ISIN is dismissed by the user.
+func (c *ExclusionCollector) isDismissed(isin, reason string) bool {
+	if c.dismissedFilters == nil {
+		return false
+	}
+	calcDismissals, ok := c.dismissedFilters[isin]
+	if !ok {
+		return false
+	}
+	reasons, ok := calcDismissals[c.calculator]
+	if !ok {
+		return false
+	}
+	for _, r := range reasons {
+		if r == reason {
+			return true
+		}
+	}
+	return false
 }
 
 // Add records an exclusion reason for a security.
 // Multiple calls for the same ISIN will accumulate reasons.
+// The reason will be marked as dismissed if it exists in the dismissed filters.
 func (c *ExclusionCollector) Add(isin, symbol, name, reason string) {
 	if isin == "" {
 		return
 	}
+
+	dismissed := c.isDismissed(isin, reason)
+	newReason := domain.PreFilteredReason{
+		Reason:    reason,
+		Dismissed: dismissed,
+	}
+
 	if existing, ok := c.exclusions[isin]; ok {
-		// Add reason if not already present
+		// Check if reason already present
 		for _, r := range existing.Reasons {
-			if r == reason {
+			if r.Reason == reason {
 				return
 			}
 		}
-		existing.Reasons = append(existing.Reasons, reason)
+		existing.Reasons = append(existing.Reasons, newReason)
 	} else {
 		c.exclusions[isin] = &domain.PreFilteredSecurity{
 			ISIN:       isin,
 			Symbol:     symbol,
 			Name:       name,
 			Calculator: c.calculator,
-			Reasons:    []string{reason},
+			Reasons:    []domain.PreFilteredReason{newReason},
 		}
 	}
 }

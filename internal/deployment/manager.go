@@ -4,9 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -202,7 +200,7 @@ func (m *Manager) Deploy() (*DeploymentResult, error) {
 	}
 
 	// Deploy Go binary (only artifact needed - frontend and sketch are embedded)
-	// Note: Python display app has been removed - MCU communication is now direct via Go
+	// Note: Display app uses App Lab (Python + sketch) - deployed via AppLabDeployer
 	deploymentErrors := m.deployServices(result, artifactRunID)
 
 	// Extract and deploy embedded sketch files to ArduinoApps directory
@@ -219,11 +217,12 @@ func (m *Manager) Deploy() (*DeploymentResult, error) {
 		}
 	}
 
-	// Compile and upload sketch to MCU if sketch files were deployed
+	// Restart App Lab app if sketch files were deployed
+	// App Lab framework handles compilation and upload automatically
 	if sketchDeployed {
-		m.log.Info().Msg("Compiling and uploading sketch to MCU")
-		if err := m.uploadSketch(); err != nil {
-			m.log.Warn().Err(err).Msg("Failed to upload sketch (sketch files deployed, manual upload may be needed)")
+		m.log.Info().Msg("Restarting App Lab app (will auto-compile and upload sketch)")
+		if err := m.sketchDeployer.RestartApp(); err != nil {
+			m.log.Warn().Err(err).Msg("Failed to restart App Lab app (sketch files deployed, manual restart may be needed)")
 		}
 	}
 
@@ -344,11 +343,12 @@ func (m *Manager) HardUpdate() (*DeploymentResult, error) {
 		}
 	}
 
-	// Compile and upload sketch to MCU if sketch files were deployed
+	// Restart App Lab app if sketch files were deployed
+	// App Lab framework handles compilation and upload automatically
 	if sketchDeployed {
-		m.log.Info().Msg("Compiling and uploading sketch to MCU")
-		if err := m.uploadSketch(); err != nil {
-			m.log.Warn().Err(err).Msg("Failed to upload sketch (sketch files deployed, manual upload may be needed)")
+		m.log.Info().Msg("Restarting App Lab app (will auto-compile and upload sketch)")
+		if err := m.sketchDeployer.RestartApp(); err != nil {
+			m.log.Warn().Err(err).Msg("Failed to restart App Lab app (sketch files deployed, manual restart may be needed)")
 		}
 	}
 
@@ -744,49 +744,6 @@ func (e *logEventAdapter) Err(err error) LogEvent {
 
 func (e *logEventAdapter) Msg(msg string) {
 	e.event.Msg(msg)
-}
-
-// uploadSketch compiles and uploads the Arduino sketch using arduino-cli
-// This is called after sketch files are deployed to trigger the MCU update
-func (m *Manager) uploadSketch() error {
-	sketchDir := "/home/arduino/ArduinoApps/sentinel-display/sketch"
-
-	m.log.Info().Str("sketch_dir", sketchDir).Msg("Compiling and uploading Arduino sketch")
-
-	// Compile the sketch
-	m.log.Debug().Msg("Compiling sketch with arduino-cli")
-	compileCmd := exec.Command("arduino-cli", "compile",
-		"--fqbn", "arduino:zephyr:unoq",
-		sketchDir,
-	)
-	var compileStdout, compileStderr strings.Builder
-	compileCmd.Stdout = &compileStdout
-	compileCmd.Stderr = &compileStderr
-
-	if err := compileCmd.Run(); err != nil {
-		output := compileStdout.String() + compileStderr.String()
-		return fmt.Errorf("failed to compile sketch: %w\nOutput: %s", err, output)
-	}
-	m.log.Debug().Msg("Sketch compiled successfully")
-
-	// Upload the sketch (using network port - the Arduino Uno Q uses OTA upload)
-	m.log.Debug().Msg("Uploading sketch to MCU via arduino-cli")
-	uploadCmd := exec.Command("arduino-cli", "upload",
-		"--fqbn", "arduino:zephyr:unoq",
-		"--port", "192.168.1.11", // Arduino Uno Q network port
-		sketchDir,
-	)
-	var uploadStdout, uploadStderr strings.Builder
-	uploadCmd.Stdout = &uploadStdout
-	uploadCmd.Stderr = &uploadStderr
-
-	if err := uploadCmd.Run(); err != nil {
-		output := uploadStdout.String() + uploadStderr.String()
-		return fmt.Errorf("failed to upload sketch: %w\nOutput: %s", err, output)
-	}
-
-	m.log.Info().Msg("Sketch compiled and uploaded successfully")
-	return nil
 }
 
 func (e *logEventAdapter) Dur(key string, value time.Duration) LogEvent {

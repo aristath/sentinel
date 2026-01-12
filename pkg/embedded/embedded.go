@@ -7,12 +7,13 @@ import (
 
 // Files contains all files embedded in the Go binary:
 // - Frontend files (frontend/dist) - served directly via HTTP
-// - Sketch files (display/sketch) - extracted to disk, compiled and uploaded
+// - Display App Lab files (display/) - Arduino App Lab application
+//   - app.yaml - App Lab configuration
+//   - python/main.py - Python app with Web UI Brick REST API
+//   - sketch/ - Arduino sketch files
 //
 // Note: Files are copied into pkg/embedded/ during GitHub Actions build
-// Note: Python display app has been removed - MCU communication is now handled
+// The display app uses Arduino App Lab's Web UI Brick for HTTP API communication
 //
-//	directly by the Go service via Unix socket to arduino-router
-//
-//go:embed frontend/dist display/sketch
+//go:embed frontend/dist display
 var Files embed.FS

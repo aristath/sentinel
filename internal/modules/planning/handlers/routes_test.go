@@ -29,6 +29,7 @@ func TestRegisterRoutes(t *testing.T) {
 		planningService,
 		configRepo,
 		plannerRepo,
+		nil, // dismissedFilterRepo
 		validator,
 		eventBroadcaster,
 		nil, // eventManager
@@ -56,6 +57,9 @@ func TestRegisterRoutes(t *testing.T) {
 		{"DELETE", "/planning/config", "DeleteConfig"},
 		{"POST", "/planning/config/validate", "ValidateConfig"},
 		{"POST", "/planning/execute", "PostExecute"},
+		{"POST", "/planning/dismiss-filter", "PostDismissFilter"},
+		{"DELETE", "/planning/dismiss-filter", "DeleteDismissFilter"},
+		{"GET", "/planning/dismissed-filters", "GetDismissedFilters"},
 		// Skip stream test - SSE connections stay open and cause timeout
 	}
 
@@ -105,6 +109,7 @@ func TestRegisterRoutes_RoutePrefix(t *testing.T) {
 		planningService,
 		configRepo,
 		plannerRepo,
+		nil, // dismissedFilterRepo
 		validator,
 		eventBroadcaster,
 		nil, // eventManager

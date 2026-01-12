@@ -6,6 +6,28 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestPreFilteredReason(t *testing.T) {
+	t.Run("creates with reason and dismissed flag", func(t *testing.T) {
+		reason := PreFilteredReason{
+			Reason:    "score below minimum",
+			Dismissed: false,
+		}
+
+		assert.Equal(t, "score below minimum", reason.Reason)
+		assert.False(t, reason.Dismissed)
+	})
+
+	t.Run("dismissed flag can be true", func(t *testing.T) {
+		reason := PreFilteredReason{
+			Reason:    "value trap detected",
+			Dismissed: true,
+		}
+
+		assert.Equal(t, "value trap detected", reason.Reason)
+		assert.True(t, reason.Dismissed)
+	})
+}
+
 func TestPreFilteredSecurity(t *testing.T) {
 	t.Run("creates with all fields", func(t *testing.T) {
 		pf := PreFilteredSecurity{
@@ -13,7 +35,10 @@ func TestPreFilteredSecurity(t *testing.T) {
 			Symbol:     "AAPL",
 			Name:       "Apple Inc.",
 			Calculator: "opportunity_buys",
-			Reasons:    []string{"score 0.45 below minimum 0.65", "quality gate failed"},
+			Reasons: []PreFilteredReason{
+				{Reason: "score 0.45 below minimum 0.65", Dismissed: false},
+				{Reason: "quality gate failed", Dismissed: true},
+			},
 		}
 
 		assert.Equal(t, "US0378331005", pf.ISIN)
@@ -21,7 +46,9 @@ func TestPreFilteredSecurity(t *testing.T) {
 		assert.Equal(t, "Apple Inc.", pf.Name)
 		assert.Equal(t, "opportunity_buys", pf.Calculator)
 		assert.Len(t, pf.Reasons, 2)
-		assert.Contains(t, pf.Reasons, "score 0.45 below minimum 0.65")
+		assert.Equal(t, "score 0.45 below minimum 0.65", pf.Reasons[0].Reason)
+		assert.False(t, pf.Reasons[0].Dismissed)
+		assert.True(t, pf.Reasons[1].Dismissed)
 	})
 
 	t.Run("can have empty reasons", func(t *testing.T) {
@@ -29,7 +56,7 @@ func TestPreFilteredSecurity(t *testing.T) {
 			ISIN:       "US0378331005",
 			Symbol:     "AAPL",
 			Calculator: "averaging_down",
-			Reasons:    []string{},
+			Reasons:    []PreFilteredReason{},
 		}
 
 		assert.Equal(t, "US0378331005", pf.ISIN)
@@ -46,8 +73,8 @@ func TestCalculatorResult(t *testing.T) {
 				{Symbol: "AAPL", Side: "BUY", Priority: 0.8},
 			},
 			PreFiltered: []PreFilteredSecurity{
-				{Symbol: "MSFT", Calculator: "opportunity_buys", Reasons: []string{"value trap"}},
-				{Symbol: "GOOG", Calculator: "opportunity_buys", Reasons: []string{"low score"}},
+				{Symbol: "MSFT", Calculator: "opportunity_buys", Reasons: []PreFilteredReason{{Reason: "value trap", Dismissed: false}}},
+				{Symbol: "GOOG", Calculator: "opportunity_buys", Reasons: []PreFilteredReason{{Reason: "low score", Dismissed: true}}},
 			},
 		}
 
@@ -55,6 +82,8 @@ func TestCalculatorResult(t *testing.T) {
 		assert.Len(t, result.PreFiltered, 2)
 		assert.Equal(t, "AAPL", result.Candidates[0].Symbol)
 		assert.Equal(t, "MSFT", result.PreFiltered[0].Symbol)
+		assert.False(t, result.PreFiltered[0].Reasons[0].Dismissed)
+		assert.True(t, result.PreFiltered[1].Reasons[0].Dismissed)
 	})
 
 	t.Run("handles empty results", func(t *testing.T) {
@@ -83,7 +112,7 @@ func TestOpportunitiesResultByCategory(t *testing.T) {
 					{Symbol: "AAPL", Side: "BUY"},
 				},
 				PreFiltered: []PreFilteredSecurity{
-					{Symbol: "MSFT", Reasons: []string{"value trap"}},
+					{Symbol: "MSFT", Reasons: []PreFilteredReason{{Reason: "value trap", Dismissed: false}}},
 				},
 			},
 			OpportunityCategoryAveragingDown: CalculatorResult{

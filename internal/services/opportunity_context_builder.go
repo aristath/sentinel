@@ -31,6 +31,7 @@ type OpportunityContextBuilder struct {
 	priceClient            PriceClient
 	priceConversionService PriceConversionServiceInterface
 	brokerClient           BrokerClient
+	dismissedFilterRepo    DismissedFilterRepository
 	log                    zerolog.Logger
 }
 
@@ -48,6 +49,7 @@ func NewOpportunityContextBuilder(
 	priceClient PriceClient,
 	priceConversionService PriceConversionServiceInterface,
 	brokerClient BrokerClient,
+	dismissedFilterRepo DismissedFilterRepository,
 	log zerolog.Logger,
 ) *OpportunityContextBuilder {
 	return &OpportunityContextBuilder{
@@ -63,6 +65,7 @@ func NewOpportunityContextBuilder(
 		priceClient:            priceClient,
 		priceConversionService: priceConversionService,
 		brokerClient:           brokerClient,
+		dismissedFilterRepo:    dismissedFilterRepo,
 		log:                    log.With().Str("service", "opportunity_context_builder").Logger(),
 	}
 }
@@ -192,6 +195,9 @@ func (b *OpportunityContextBuilder) buildContext(
 	// Get available cash in EUR
 	availableCashEUR := cashBalances["EUR"]
 
+	// Get dismissed filters
+	dismissedFilters := b.populateDismissedFilters()
+
 	// Build PortfolioContext for scoring
 	portfolioCtx := b.buildPortfolioContext(enrichedPositions, countryWeights, countryToGroup, currentPrices, totalValue)
 
@@ -222,6 +228,7 @@ func (b *OpportunityContextBuilder) buildContext(
 		RecentlySoldISINs:        recentlySoldISINs,
 		RecentlyBoughtISINs:      recentlyBoughtISINs,
 		IneligibleISINs:          make(map[string]bool),
+		DismissedFilters:         dismissedFilters,
 		TransactionCostFixed:     2.0,
 		TransactionCostPercent:   0.002,
 		AllowSell:                true,
@@ -657,6 +664,25 @@ func (b *OpportunityContextBuilder) buildPortfolioContext(
 		CurrentPrices:     currentPrices,
 		TotalValue:        totalValue,
 	}
+}
+
+// populateDismissedFilters gets user-dismissed pre-filter reasons.
+func (b *OpportunityContextBuilder) populateDismissedFilters() map[string]map[string][]string {
+	if b.dismissedFilterRepo == nil {
+		return make(map[string]map[string][]string)
+	}
+
+	filters, err := b.dismissedFilterRepo.GetAll()
+	if err != nil {
+		b.log.Warn().Err(err).Msg("Failed to get dismissed filters")
+		return make(map[string]map[string][]string)
+	}
+
+	if len(filters) > 0 {
+		b.log.Debug().Int("isin_count", len(filters)).Msg("Loaded dismissed filters")
+	}
+
+	return filters
 }
 
 // normalizeWeights normalizes a map of weights to sum to 1.0.

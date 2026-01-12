@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"math"
+	"os"
 	"strings"
 	"time"
 
@@ -19,7 +20,6 @@ import (
 	"github.com/aristath/sentinel/internal/domain"
 	"github.com/aristath/sentinel/internal/events"
 	"github.com/aristath/sentinel/internal/market_regime"
-	"github.com/aristath/sentinel/internal/mcu"
 	"github.com/aristath/sentinel/internal/modules/adaptation"
 	"github.com/aristath/sentinel/internal/modules/allocation"
 	"github.com/aristath/sentinel/internal/modules/analytics"
@@ -119,23 +119,42 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 	container.SymbolMapper = symbols.NewMapper()
 	log.Info().Msg("Symbol mapper initialized")
 
-	// MCU client for Arduino display (optional - only if socket exists)
-	mcuClient, err := mcu.NewClient(mcu.DefaultSocketPath, log)
-	if err != nil {
-		if err == mcu.ErrSocketNotFound {
-			log.Info().Msg("MCU client not initialized - not running on Arduino hardware")
-		} else {
-			log.Warn().Err(err).Msg("MCU client initialization failed")
+	// Configure display service (App Lab HTTP API on localhost:7000)
+	// displayManager can be nil in tests - skip display configuration if nil
+	if displayManager != nil {
+		// Get display URL from settings or use default
+		displayURL := display.DefaultDisplayURL
+		if container.SettingsRepo != nil {
+			if url, err := container.SettingsRepo.Get("display_url"); err == nil && url != nil && *url != "" {
+				displayURL = *url
+			}
 		}
-		// MCU client is optional - continue without it
-	} else {
-		container.MCUClient = mcuClient
-		log.Info().Msg("MCU client initialized")
+		displayManager.SetDisplayURL(displayURL)
 
-		// Wire MCU client to display manager for direct hardware control
-		if displayManager != nil {
-			displayManager.SetMCUClient(mcuClient)
+		// Check if display should be enabled (default: true on Arduino hardware)
+		// Display is enabled if running on Arduino Uno Q (check for arduino-router socket)
+		displayEnabled := false
+		if _, err := os.Stat("/var/run/arduino-router.sock"); err == nil {
+			// Arduino router socket exists - we're on Arduino hardware
+			displayEnabled = true
+			log.Info().Str("url", displayURL).Msg("Arduino hardware detected, enabling display service")
+		} else {
+			// Allow manual override via settings
+			if container.SettingsRepo != nil {
+				if enabled, err := container.SettingsRepo.Get("display_enabled"); err == nil && enabled != nil && *enabled == "true" {
+					displayEnabled = true
+					log.Info().Str("url", displayURL).Msg("Display service manually enabled via settings")
+				}
+			}
 		}
+
+		if displayEnabled {
+			displayManager.Enable()
+		} else {
+			log.Info().Msg("Display service disabled (not on Arduino hardware)")
+		}
+	} else {
+		log.Debug().Msg("Display manager not provided - skipping display configuration")
 	}
 
 	// Data source router for configurable provider priorities
@@ -304,7 +323,8 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 		container.YahooClient,
 		container.HistoryDB.Conn(),
 		container.SecurityRepo,
-		container.MarketHoursService, // Market hours validation
+		container.MarketHoursService,  // Market hours validation
+		container.DismissedFilterRepo, // Clear dismissed filters after trades
 		log,
 	)
 
@@ -525,6 +545,7 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 		&ocbPriceClientAdapter{client: container.YahooClient},
 		container.PriceConversionService,
 		&ocbBrokerClientAdapter{client: container.BrokerClient},
+		&ocbDismissedFilterRepoAdapter{repo: container.DismissedFilterRepo},
 		log,
 	)
 	log.Info().Msg("Opportunity context builder initialized")
@@ -1523,4 +1544,16 @@ func (a *ocbBrokerClientAdapter) GetPendingOrders() ([]domain.BrokerPendingOrder
 		return nil, fmt.Errorf("broker client not available")
 	}
 	return a.client.GetPendingOrders()
+}
+
+// ocbDismissedFilterRepoAdapter adapts DismissedFilterRepository to services.DismissedFilterRepository
+type ocbDismissedFilterRepoAdapter struct {
+	repo *planningrepo.DismissedFilterRepository
+}
+
+func (a *ocbDismissedFilterRepoAdapter) GetAll() (map[string]map[string][]string, error) {
+	if a.repo == nil {
+		return make(map[string]map[string][]string), nil
+	}
+	return a.repo.GetAll()
 }

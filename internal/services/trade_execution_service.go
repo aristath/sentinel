@@ -67,6 +67,11 @@ type MarketHoursChecker interface {
 	IsMarketOpen(exchangeName string, t time.Time) bool
 }
 
+// DismissedFilterRepoInterface defines the interface for clearing dismissed filters after trades
+type DismissedFilterRepoInterface interface {
+	ClearForSecurity(isin string) (int, error)
+}
+
 // TradeExecutionService executes trade recommendations with comprehensive safety validation:
 // - Market hours checking (pre-trade)
 // - Price freshness validation
@@ -74,21 +79,22 @@ type MarketHoursChecker interface {
 // - Duplicate order detection
 // - Trade frequency limits
 type TradeExecutionService struct {
-	brokerClient      domain.BrokerClient
-	tradeRepo         TradeRepositoryInterface
-	positionRepo      *portfolio.PositionRepository
-	cashManager       domain.CashManager
-	exchangeService   domain.CurrencyExchangeServiceInterface
-	eventManager      *events.Manager
-	settingsService   SettingsServiceInterface     // For configuration (fees, price age, etc.)
-	plannerConfigRepo PlannerConfigRepoInterface   // For transaction costs from planner config
-	orderBookService  OrderBookServiceInterface    // For order book analysis (liquidity validation, optimal limit pricing)
-	yahooClient       yahoo.FullClientInterface    // For fetching fresh prices
-	historyDB         *sql.DB                      // For storing updated prices
-	securityRepo      *universe.SecurityRepository // For ISIN lookup
-	marketHours       MarketHoursChecker           // For market hours validation
-	lastTradeTime     map[string]time.Time         // Track last trade time per symbol for cooldown
-	log               zerolog.Logger
+	brokerClient        domain.BrokerClient
+	tradeRepo           TradeRepositoryInterface
+	positionRepo        *portfolio.PositionRepository
+	cashManager         domain.CashManager
+	exchangeService     domain.CurrencyExchangeServiceInterface
+	eventManager        *events.Manager
+	settingsService     SettingsServiceInterface     // For configuration (fees, price age, etc.)
+	plannerConfigRepo   PlannerConfigRepoInterface   // For transaction costs from planner config
+	orderBookService    OrderBookServiceInterface    // For order book analysis (liquidity validation, optimal limit pricing)
+	yahooClient         yahoo.FullClientInterface    // For fetching fresh prices
+	historyDB           *sql.DB                      // For storing updated prices
+	securityRepo        *universe.SecurityRepository // For ISIN lookup
+	marketHours         MarketHoursChecker           // For market hours validation
+	dismissedFilterRepo DismissedFilterRepoInterface // For clearing dismissed filters after trades
+	lastTradeTime       map[string]time.Time         // Track last trade time per symbol for cooldown
+	log                 zerolog.Logger
 }
 
 // ExecuteResult represents the result of executing a trade
@@ -113,24 +119,26 @@ func NewTradeExecutionService(
 	historyDB *sql.DB,
 	securityRepo *universe.SecurityRepository,
 	marketHours MarketHoursChecker,
+	dismissedFilterRepo DismissedFilterRepoInterface,
 	log zerolog.Logger,
 ) *TradeExecutionService {
 	return &TradeExecutionService{
-		brokerClient:      brokerClient,
-		tradeRepo:         tradeRepo,
-		positionRepo:      positionRepo,
-		cashManager:       cashManager,
-		exchangeService:   exchangeService,
-		eventManager:      eventManager,
-		settingsService:   settingsService,
-		plannerConfigRepo: plannerConfigRepo,
-		orderBookService:  orderBookService,
-		yahooClient:       yahooClient,
-		historyDB:         historyDB,
-		securityRepo:      securityRepo,
-		marketHours:       marketHours,
-		lastTradeTime:     make(map[string]time.Time),
-		log:               log.With().Str("service", "trade_execution").Logger(),
+		brokerClient:        brokerClient,
+		tradeRepo:           tradeRepo,
+		positionRepo:        positionRepo,
+		cashManager:         cashManager,
+		exchangeService:     exchangeService,
+		eventManager:        eventManager,
+		settingsService:     settingsService,
+		plannerConfigRepo:   plannerConfigRepo,
+		orderBookService:    orderBookService,
+		yahooClient:         yahooClient,
+		historyDB:           historyDB,
+		securityRepo:        securityRepo,
+		marketHours:         marketHours,
+		dismissedFilterRepo: dismissedFilterRepo,
+		lastTradeTime:       make(map[string]time.Time),
+		log:                 log.With().Str("service", "trade_execution").Logger(),
 	}
 }
 
@@ -393,6 +401,22 @@ func (s *TradeExecutionService) executeSingleTrade(rec TradeRecommendation) Exec
 
 	// Record trade time for frequency limiting
 	s.recordTradeTime(rec.Symbol)
+
+	// Clear dismissed filters for this security (by ISIN)
+	// Dismissals should be reset when a trade is executed
+	if rec.ISIN != "" && s.dismissedFilterRepo != nil {
+		if cleared, err := s.dismissedFilterRepo.ClearForSecurity(rec.ISIN); err != nil {
+			s.log.Warn().
+				Err(err).
+				Str("isin", rec.ISIN).
+				Msg("Failed to clear dismissed filters after trade")
+		} else if cleared > 0 {
+			s.log.Info().
+				Str("isin", rec.ISIN).
+				Int("cleared", cleared).
+				Msg("Cleared dismissed filters after trade")
+		}
+	}
 
 	return ExecuteResult{
 		Symbol: rec.Symbol,

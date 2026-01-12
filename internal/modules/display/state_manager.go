@@ -1,11 +1,18 @@
 package display
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"net/http"
 	"sync"
+	"time"
 
-	"github.com/aristath/sentinel/internal/mcu"
 	"github.com/rs/zerolog"
 )
+
+// Default display URL (App Lab Web UI Brick - default port 7000)
+const DefaultDisplayURL = "http://localhost:7000"
 
 // LEDColor represents RGB color values (0-255)
 type LEDColor struct {
@@ -50,7 +57,7 @@ type LED4State struct {
 }
 
 // StateManager handles thread-safe display state management
-// Faithful translation from Python: app/modules/display/services/display_service.py
+// Communicates with Arduino App Lab via HTTP REST API
 type StateManager struct {
 	log         zerolog.Logger
 	currentText string
@@ -59,7 +66,11 @@ type StateManager struct {
 	led3Blink   LED3BlinkState
 	led4State   LED4State
 	mu          sync.RWMutex
-	mcuClient   *mcu.Client // Optional MCU client for direct hardware control
+
+	// HTTP client for App Lab REST API
+	httpClient *http.Client
+	displayURL string
+	enabled    bool // Whether display communication is enabled
 }
 
 // NewStateManager creates a new display state manager
@@ -71,22 +82,79 @@ func NewStateManager(log zerolog.Logger) *StateManager {
 		led3Blink:   LED3BlinkState{IsBlinking: false},
 		led4State:   LED4State{Mode: LEDModeSolid},
 		log:         log.With().Str("component", "display_state_manager").Logger(),
+		httpClient: &http.Client{
+			Timeout: 5 * time.Second,
+		},
+		displayURL: DefaultDisplayURL,
+		enabled:    false, // Disabled by default until explicitly enabled
 	}
 }
 
-// SetMCUClient sets the MCU client for direct hardware control.
-// This is called after the client is created in the DI container.
-func (sm *StateManager) SetMCUClient(client *mcu.Client) {
+// SetDisplayURL sets the URL for the App Lab display service
+func (sm *StateManager) SetDisplayURL(url string) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
-	sm.mcuClient = client
-	if client != nil {
-		sm.log.Info().Msg("MCU client attached to display state manager")
+	sm.displayURL = url
+	sm.log.Info().Str("url", url).Msg("Display URL configured")
+}
+
+// Enable enables display communication
+func (sm *StateManager) Enable() {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sm.enabled = true
+	sm.log.Info().Msg("Display communication enabled")
+}
+
+// Disable disables display communication
+func (sm *StateManager) Disable() {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sm.enabled = false
+	sm.log.Info().Msg("Display communication disabled")
+}
+
+// IsEnabled returns whether display communication is enabled
+func (sm *StateManager) IsEnabled() bool {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	return sm.enabled
+}
+
+// postJSON sends a JSON POST request to the display service
+func (sm *StateManager) postJSON(endpoint string, data interface{}) error {
+	if !sm.enabled {
+		return nil // Silently skip if disabled
 	}
+
+	url := fmt.Sprintf("%s%s", sm.displayURL, endpoint)
+
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal JSON: %w", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := sm.httpClient.Do(req)
+	if err != nil {
+		sm.log.Debug().Err(err).Str("url", url).Msg("Display request failed (display may be offline)")
+		return fmt.Errorf("display request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("display returned error status: %d", resp.StatusCode)
+	}
+
+	return nil
 }
 
 // SetText sets display text (latest message wins)
-// Faithful translation of Python: def set_text(self, text: str) -> None
 func (sm *StateManager) SetText(text string) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -100,17 +168,19 @@ func (sm *StateManager) SetText(text string) {
 			Str("new_text", text).
 			Msg("Display text updated")
 
-		// Push to MCU if available
-		if sm.mcuClient != nil {
-			if err := sm.mcuClient.ScrollText(text, 50); err != nil {
-				sm.log.Warn().Err(err).Msg("Failed to push text to MCU")
+		// Push to display via HTTP
+		go func() {
+			if err := sm.postJSON("/text", map[string]interface{}{
+				"text":  text,
+				"speed": 50, // Default scroll speed
+			}); err != nil {
+				sm.log.Debug().Err(err).Msg("Failed to push text to display")
 			}
-		}
+		}()
 	}
 }
 
 // GetCurrentText gets current display text
-// Faithful translation of Python: def get_current_text(self) -> str
 func (sm *StateManager) GetCurrentText() string {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
@@ -118,7 +188,6 @@ func (sm *StateManager) GetCurrentText() string {
 }
 
 // SetLED3 sets RGB LED 3 color (sync indicator) - stops blinking
-// Faithful translation of Python: def set_led3(self, r: int, g: int, b: int) -> None
 func (sm *StateManager) SetLED3(r, g, b int) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -136,12 +205,17 @@ func (sm *StateManager) SetLED3(r, g, b int) {
 		Int("b", sm.led3.B).
 		Msg("LED3 color updated (solid)")
 
-	// Push to MCU if available
-	if sm.mcuClient != nil {
-		if err := sm.mcuClient.SetRGB3(sm.led3.R, sm.led3.G, sm.led3.B); err != nil {
-			sm.log.Warn().Err(err).Msg("Failed to push LED3 to MCU")
+	// Push to display via HTTP
+	led3 := sm.led3
+	go func() {
+		if err := sm.postJSON("/led3", map[string]int{
+			"r": led3.R,
+			"g": led3.G,
+			"b": led3.B,
+		}); err != nil {
+			sm.log.Debug().Err(err).Msg("Failed to push LED3 to display")
 		}
-	}
+	}()
 }
 
 // SetLED3Color is an alias for SetLED3
@@ -150,6 +224,7 @@ func (sm *StateManager) SetLED3Color(r, g, b int) {
 }
 
 // SetLED3Blink enables blink mode for LED3
+// Note: Blink is handled client-side since App Lab doesn't support hardware blink
 func (sm *StateManager) SetLED3Blink(r, g, b int, intervalMs int) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -174,12 +249,16 @@ func (sm *StateManager) SetLED3Blink(r, g, b int, intervalMs int) {
 		Int("interval_ms", intervalMs).
 		Msg("LED3 blink mode enabled")
 
-	// Push to MCU if available
-	if sm.mcuClient != nil {
-		if err := sm.mcuClient.SetBlink3(color.R, color.G, color.B, intervalMs); err != nil {
-			sm.log.Warn().Err(err).Msg("Failed to push LED3 blink to MCU")
+	// For simplicity, just set the color (blink would need client-side timing)
+	go func() {
+		if err := sm.postJSON("/led3", map[string]int{
+			"r": color.R,
+			"g": color.G,
+			"b": color.B,
+		}); err != nil {
+			sm.log.Debug().Err(err).Msg("Failed to push LED3 blink to display")
 		}
-	}
+	}()
 }
 
 // UpdateLED3BlinkState updates LED3 blink state (called periodically to track ON/OFF)
@@ -204,7 +283,6 @@ func (sm *StateManager) GetLED3BlinkState() bool {
 }
 
 // GetLED3 gets RGB LED 3 color
-// Faithful translation of Python: def get_led3(self) -> list[int]
 func (sm *StateManager) GetLED3() LEDColor {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
@@ -212,7 +290,6 @@ func (sm *StateManager) GetLED3() LEDColor {
 }
 
 // SetLED4 sets RGB LED 4 color (processing indicator) - stops blinking
-// Faithful translation of Python: def set_led4(self, r: int, g: int, b: int) -> None
 func (sm *StateManager) SetLED4(r, g, b int) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -230,12 +307,17 @@ func (sm *StateManager) SetLED4(r, g, b int) {
 		Int("b", sm.led4.B).
 		Msg("LED4 color updated (solid)")
 
-	// Push to MCU if available
-	if sm.mcuClient != nil {
-		if err := sm.mcuClient.SetRGB4(sm.led4.R, sm.led4.G, sm.led4.B); err != nil {
-			sm.log.Warn().Err(err).Msg("Failed to push LED4 to MCU")
+	// Push to display via HTTP
+	led4 := sm.led4
+	go func() {
+		if err := sm.postJSON("/led4", map[string]int{
+			"r": led4.R,
+			"g": led4.G,
+			"b": led4.B,
+		}); err != nil {
+			sm.log.Debug().Err(err).Msg("Failed to push LED4 to display")
 		}
-	}
+	}()
 }
 
 // SetLED4Color is an alias for SetLED4
@@ -244,6 +326,7 @@ func (sm *StateManager) SetLED4Color(r, g, b int) {
 }
 
 // SetLED4Blink enables simple blink mode for LED4
+// Note: Blink is handled client-side since App Lab doesn't support hardware blink
 func (sm *StateManager) SetLED4Blink(r, g, b int, intervalMs int) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
@@ -266,12 +349,17 @@ func (sm *StateManager) SetLED4Blink(r, g, b int, intervalMs int) {
 		Int("interval_ms", intervalMs).
 		Msg("LED4 blink mode enabled")
 
-	// Push to MCU if available
-	if sm.mcuClient != nil {
-		if err := sm.mcuClient.SetBlink4(sm.led4.R, sm.led4.G, sm.led4.B, intervalMs); err != nil {
-			sm.log.Warn().Err(err).Msg("Failed to push LED4 blink to MCU")
+	// For simplicity, just set the color
+	led4 := sm.led4
+	go func() {
+		if err := sm.postJSON("/led4", map[string]int{
+			"r": led4.R,
+			"g": led4.G,
+			"b": led4.B,
+		}); err != nil {
+			sm.log.Debug().Err(err).Msg("Failed to push LED4 blink to display")
 		}
-	}
+	}()
 }
 
 // SetLED4Alternating enables alternating color mode for LED4
@@ -295,12 +383,16 @@ func (sm *StateManager) SetLED4Alternating(r1, g1, b1, r2, g2, b2 int, intervalM
 		Int("interval_ms", intervalMs).
 		Msg("LED4 alternating mode enabled")
 
-	// Push to MCU if available
-	if sm.mcuClient != nil {
-		if err := sm.mcuClient.SetBlink4Alternating(color1.R, color1.G, color1.B, color2.R, color2.G, color2.B, intervalMs); err != nil {
-			sm.log.Warn().Err(err).Msg("Failed to push LED4 alternating to MCU")
+	// Set first color
+	go func() {
+		if err := sm.postJSON("/led4", map[string]int{
+			"r": color1.R,
+			"g": color1.G,
+			"b": color1.B,
+		}); err != nil {
+			sm.log.Debug().Err(err).Msg("Failed to push LED4 alternating to display")
 		}
-	}
+	}()
 }
 
 // SetLED4Coordinated enables coordinated mode for LED4 (alternates with LED3)
@@ -328,16 +420,24 @@ func (sm *StateManager) SetLED4Coordinated(r, g, b int, intervalMs int, led3Phas
 		Bool("led3_phase", led3Phase).
 		Msg("LED4 coordinated mode enabled")
 
-	// Push to MCU if available
-	if sm.mcuClient != nil {
-		if err := sm.mcuClient.SetBlink4Coordinated(sm.led4.R, sm.led4.G, sm.led4.B, intervalMs, led3Phase); err != nil {
-			sm.log.Warn().Err(err).Msg("Failed to push LED4 coordinated to MCU")
+	// Set color based on current phase
+	led4 := sm.led4
+	go func() {
+		color := map[string]int{"r": 0, "g": 0, "b": 0}
+		if !led3Phase { // LED4 ON when LED3 OFF
+			color = map[string]int{
+				"r": led4.R,
+				"g": led4.G,
+				"b": led4.B,
+			}
 		}
-	}
+		if err := sm.postJSON("/led4", color); err != nil {
+			sm.log.Debug().Err(err).Msg("Failed to push LED4 coordinated to display")
+		}
+	}()
 }
 
 // GetLED4 gets RGB LED 4 color
-// Faithful translation of Python: def get_led4(self) -> list[int]
 func (sm *StateManager) GetLED4() LEDColor {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
@@ -370,6 +470,42 @@ func (sm *StateManager) GetLED4StateInfo() (mode LEDMode, color LEDColor, altCol
 	defer sm.mu.RUnlock()
 
 	return sm.led4State.Mode, sm.led4State.Color, sm.led4State.AltColor1, sm.led4State.AltColor2, sm.led4State.IntervalMs, sm.led4State.CoordinatedWith
+}
+
+// ClearMatrix clears the LED matrix
+func (sm *StateManager) ClearMatrix() {
+	go func() {
+		if err := sm.postJSON("/clear", map[string]string{}); err != nil {
+			sm.log.Debug().Err(err).Msg("Failed to clear matrix on display")
+		}
+	}()
+}
+
+// SetPixelCount sets the number of lit pixels (for system stats mode)
+func (sm *StateManager) SetPixelCount(count int) {
+	go func() {
+		if err := sm.postJSON("/pixels", map[string]int{
+			"count": clamp(count, 0, 104),
+		}); err != nil {
+			sm.log.Debug().Err(err).Msg("Failed to set pixel count on display")
+		}
+	}()
+}
+
+// CheckHealth checks if the display service is healthy
+func (sm *StateManager) CheckHealth() bool {
+	if !sm.enabled {
+		return false
+	}
+
+	url := fmt.Sprintf("%s/health", sm.displayURL)
+	resp, err := sm.httpClient.Get(url)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+
+	return resp.StatusCode == http.StatusOK
 }
 
 // clamp restricts a value to be within a given range

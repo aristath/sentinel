@@ -15,6 +15,7 @@ type Handler struct {
 	configHandler          *ConfigHandler
 	executeHandler         *ExecuteHandler
 	streamHandler          *StreamHandler
+	dismissedFilterHandler *DismissedFilterHandler
 }
 
 // NewHandler creates a new planning handler with all sub-handlers
@@ -22,6 +23,7 @@ func NewHandler(
 	planningService *planning.Service,
 	configRepo *repository.ConfigRepository,
 	plannerRepo *repository.PlannerRepository,
+	dismissedFilterRepo *repository.DismissedFilterRepository,
 	validator *config.Validator,
 	eventBroadcaster *EventBroadcaster,
 	eventManager *events.Manager,
@@ -33,6 +35,7 @@ func NewHandler(
 		configHandler:          NewConfigHandler(configRepo, validator, eventManager, log),
 		executeHandler:         NewExecuteHandler(plannerRepo, tradeExecutor, log),
 		streamHandler:          NewStreamHandler(eventBroadcaster, log),
+		dismissedFilterHandler: NewDismissedFilterHandler(dismissedFilterRepo, log),
 	}
 }
 
@@ -54,5 +57,10 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 
 		// SSE streaming
 		r.Get("/stream", h.streamHandler.ServeHTTP)
+
+		// Dismissed filters management
+		r.Post("/dismiss-filter", h.dismissedFilterHandler.Dismiss)
+		r.Delete("/dismiss-filter", h.dismissedFilterHandler.Undismiss)
+		r.Get("/dismissed-filters", h.dismissedFilterHandler.GetAll)
 	})
 }

@@ -214,6 +214,21 @@ func (m *ocbMockBrokerClient) GetPendingOrders() ([]domain.BrokerPendingOrder, e
 	return m.pendingOrders, m.pendingErr
 }
 
+type ocbMockDismissedFilterRepository struct {
+	filters map[string]map[string][]string
+	err     error
+}
+
+func (m *ocbMockDismissedFilterRepository) GetAll() (map[string]map[string][]string, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	if m.filters != nil {
+		return m.filters, nil
+	}
+	return make(map[string]map[string][]string), nil
+}
+
 // Test: Build returns a complete context with all fields populated
 func TestOpportunityContextBuilder_Build_ReturnsCompleteContext(t *testing.T) {
 	isin := "US0378331005"
@@ -259,6 +274,7 @@ func TestOpportunityContextBuilder_Build_ReturnsCompleteContext(t *testing.T) {
 		&ocbMockPriceClient{quotes: map[string]*float64{symbol: &price}},
 		&ocbMockPriceConversionService{convertedPrices: map[string]float64{isin: 139.5}}, // USD to EUR
 		&ocbMockBrokerClient{connected: true, pendingOrders: []domain.BrokerPendingOrder{}},
+		nil, // dismissed filter repo
 		log,
 	)
 
@@ -308,6 +324,7 @@ func TestOpportunityContextBuilder_Build_PopulatesCooloffFromTrades(t *testing.T
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{connected: false},
+		nil, // dismissed filter repo
 		log,
 	)
 
@@ -365,6 +382,7 @@ func TestOpportunityContextBuilder_Build_PopulatesCooloffFromPendingOrders(t *te
 				{Symbol: pendingBuySymbol, Side: "BUY", Quantity: 10, Price: 300.0},
 			},
 		},
+		nil, // dismissed filter repo
 		log,
 	)
 
@@ -416,6 +434,7 @@ func TestOpportunityContextBuilder_Build_MergesCooloffSources(t *testing.T) {
 				{Symbol: pendingSoldSymbol, Side: "SELL", Quantity: 5, Price: 300.0},
 			},
 		},
+		nil, // dismissed filter repo
 		log,
 	)
 
@@ -457,6 +476,7 @@ func TestOpportunityContextBuilder_Build_PopulatesCountryWeights(t *testing.T) {
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{connected: false},
+		nil, // dismissed filter repo
 		log,
 	)
 
@@ -494,6 +514,7 @@ func TestOpportunityContextBuilder_Build_PopulatesSecurityScores(t *testing.T) {
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{connected: false},
+		nil, // dismissed filter repo
 		log,
 	)
 
@@ -530,6 +551,7 @@ func TestOpportunityContextBuilder_Build_PopulatesRiskMetrics(t *testing.T) {
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{connected: false},
+		nil, // dismissed filter repo
 		log,
 	)
 
@@ -567,6 +589,7 @@ func TestOpportunityContextBuilder_Build_PopulatesCAGRs(t *testing.T) {
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{connected: false},
+		nil, // dismissed filter repo
 		log,
 	)
 
@@ -615,6 +638,7 @@ func TestOpportunityContextBuilder_Build_ConvertsAllPricesToEUR(t *testing.T) {
 		// PriceConversionService returns prices keyed by symbol, then implementation converts to ISIN
 		&ocbMockPriceConversionService{convertedPrices: map[string]float64{symbol: priceEUR}},
 		&ocbMockBrokerClient{connected: false},
+		nil, // dismissed filter repo
 		log,
 	)
 
@@ -652,6 +676,7 @@ func TestOpportunityContextBuilder_Build_UsesConfiguredCooloffDays(t *testing.T)
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{connected: false},
+		nil, // dismissed filter repo
 		log,
 	)
 
@@ -681,6 +706,7 @@ func TestOpportunityContextBuilder_Build_HandlesEmptyPositions(t *testing.T) {
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{connected: false},
+		nil, // dismissed filter repo
 		log,
 	)
 
@@ -722,6 +748,7 @@ func TestOpportunityContextBuilder_Build_HandlesMissingPrices(t *testing.T) {
 		&ocbMockPriceClient{quotes: map[string]*float64{}}, // No prices
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{connected: false},
+		nil, // dismissed filter repo
 		log,
 	)
 
@@ -752,6 +779,7 @@ func TestOpportunityContextBuilder_Build_HandlesBrokerDisconnected(t *testing.T)
 			connected:     false, // Disconnected
 			pendingOrders: []domain.BrokerPendingOrder{},
 		},
+		nil, // dismissed filter repo
 		log,
 	)
 
@@ -791,6 +819,7 @@ func TestOpportunityContextBuilder_Build_PopulatesValueTrapData(t *testing.T) {
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{connected: false},
+		nil, // dismissed filter repo
 		log,
 	)
 
@@ -825,6 +854,7 @@ func TestOpportunityContextBuilder_Build_HandlesPositionRepoError(t *testing.T) 
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{connected: false},
+		nil, // dismissed filter repo
 		log,
 	)
 
@@ -852,6 +882,7 @@ func TestOpportunityContextBuilder_Build_HandlesSecurityRepoError(t *testing.T) 
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{connected: false},
+		nil, // dismissed filter repo
 		log,
 	)
 
@@ -860,4 +891,78 @@ func TestOpportunityContextBuilder_Build_HandlesSecurityRepoError(t *testing.T) 
 	require.Error(t, err)
 	assert.Nil(t, ctx)
 	assert.Contains(t, err.Error(), "securit")
+}
+
+// Test: Dismissed filters are populated
+func TestOpportunityContextBuilder_Build_PopulatesDismissedFilters(t *testing.T) {
+	log := logger.New(logger.Config{Level: "error", Pretty: false})
+
+	dismissedFilters := map[string]map[string][]string{
+		"US0378331005": {
+			"opportunity_buys": {"score below minimum", "value trap detected"},
+			"averaging_down":   {"recently bought"},
+		},
+		"US5949181045": {
+			"profit_taking": {"insufficient gains"},
+		},
+	}
+
+	builder := NewOpportunityContextBuilder(
+		&ocbMockPositionRepository{positions: []portfolio.Position{}},
+		&ocbMockSecurityRepository{securities: []universe.Security{}},
+		&ocbMockAllocationRepository{allocations: map[string]float64{}},
+		&ocbMockGroupingRepository{groupWeights: map[string]map[string]float64{"country": {}}},
+		&ocbMockTradeRepository{recentlySold: map[string]bool{}, recentlyBought: map[string]bool{}},
+		&ocbMockScoresRepository{},
+		&ocbMockSettingsRepository{},
+		&ocbMockRegimeRepository{},
+		&ocbMockCashManager{balances: map[string]float64{"EUR": 1000.0}},
+		&ocbMockPriceClient{},
+		&ocbMockPriceConversionService{},
+		&ocbMockBrokerClient{connected: false},
+		&ocbMockDismissedFilterRepository{filters: dismissedFilters},
+		log,
+	)
+
+	ctx, err := builder.Build()
+
+	require.NoError(t, err)
+	require.NotNil(t, ctx)
+
+	// Verify dismissed filters are populated
+	assert.NotNil(t, ctx.DismissedFilters, "DismissedFilters should not be nil")
+	assert.Len(t, ctx.DismissedFilters, 2, "Should have 2 ISINs with dismissed filters")
+	assert.Len(t, ctx.DismissedFilters["US0378331005"]["opportunity_buys"], 2)
+	assert.Contains(t, ctx.DismissedFilters["US0378331005"]["opportunity_buys"], "score below minimum")
+}
+
+// Test: Nil dismissed filter repo is handled gracefully
+func TestOpportunityContextBuilder_Build_HandlesNilDismissedFilterRepo(t *testing.T) {
+	log := logger.New(logger.Config{Level: "error", Pretty: false})
+
+	builder := NewOpportunityContextBuilder(
+		&ocbMockPositionRepository{positions: []portfolio.Position{}},
+		&ocbMockSecurityRepository{securities: []universe.Security{}},
+		&ocbMockAllocationRepository{allocations: map[string]float64{}},
+		&ocbMockGroupingRepository{groupWeights: map[string]map[string]float64{"country": {}}},
+		&ocbMockTradeRepository{recentlySold: map[string]bool{}, recentlyBought: map[string]bool{}},
+		&ocbMockScoresRepository{},
+		&ocbMockSettingsRepository{},
+		&ocbMockRegimeRepository{},
+		&ocbMockCashManager{balances: map[string]float64{"EUR": 1000.0}},
+		&ocbMockPriceClient{},
+		&ocbMockPriceConversionService{},
+		&ocbMockBrokerClient{connected: false},
+		nil, // nil dismissed filter repo
+		log,
+	)
+
+	ctx, err := builder.Build()
+
+	require.NoError(t, err)
+	require.NotNil(t, ctx)
+
+	// Dismissed filters should be empty map (not nil)
+	assert.NotNil(t, ctx.DismissedFilters)
+	assert.Empty(t, ctx.DismissedFilters)
 }

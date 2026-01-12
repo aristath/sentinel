@@ -550,12 +550,14 @@ func (s *Server) setupRoutes() {
 		planningService := s.container.PlanningService
 		planningConfigRepo := s.container.PlannerConfigRepo
 		planningPlannerRepo := repository.NewPlannerRepository(s.agentsDB, s.log)
+		planningDismissedFilterRepo := s.container.DismissedFilterRepo
 		planningValidator := planningconfig.NewValidator()
 		planningEventBroadcaster := planninghandlers.NewEventBroadcaster(s.log)
 		planningHandler := planninghandlers.NewHandler(
 			planningService,
 			planningConfigRepo,
 			planningPlannerRepo,
+			planningDismissedFilterRepo,
 			planningValidator,
 			planningEventBroadcaster,
 			s.container.EventManager,

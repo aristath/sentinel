@@ -239,7 +239,7 @@ func TestNewBaseCalculator(t *testing.T) {
 
 func TestExclusionCollector(t *testing.T) {
 	t.Run("collects exclusions", func(t *testing.T) {
-		collector := NewExclusionCollector("opportunity_buys")
+		collector := NewExclusionCollector("opportunity_buys", nil)
 
 		collector.Add("US0378331005", "AAPL", "Apple Inc.", "score below minimum")
 		collector.Add("US5949181045", "MSFT", "Microsoft Corp.", "value trap detected")
@@ -249,7 +249,7 @@ func TestExclusionCollector(t *testing.T) {
 	})
 
 	t.Run("accumulates reasons for same ISIN", func(t *testing.T) {
-		collector := NewExclusionCollector("opportunity_buys")
+		collector := NewExclusionCollector("opportunity_buys", nil)
 
 		collector.Add("US0378331005", "AAPL", "Apple Inc.", "score below minimum")
 		collector.Add("US0378331005", "AAPL", "Apple Inc.", "quality gate failed")
@@ -257,12 +257,18 @@ func TestExclusionCollector(t *testing.T) {
 		result := collector.Result()
 		assert.Len(t, result, 1)
 		assert.Len(t, result[0].Reasons, 2)
-		assert.Contains(t, result[0].Reasons, "score below minimum")
-		assert.Contains(t, result[0].Reasons, "quality gate failed")
+
+		// Check reasons are present (now PreFilteredReason type)
+		reasons := make([]string, len(result[0].Reasons))
+		for i, r := range result[0].Reasons {
+			reasons[i] = r.Reason
+		}
+		assert.Contains(t, reasons, "score below minimum")
+		assert.Contains(t, reasons, "quality gate failed")
 	})
 
 	t.Run("deduplicates same reason", func(t *testing.T) {
-		collector := NewExclusionCollector("opportunity_buys")
+		collector := NewExclusionCollector("opportunity_buys", nil)
 
 		collector.Add("US0378331005", "AAPL", "Apple Inc.", "score below minimum")
 		collector.Add("US0378331005", "AAPL", "Apple Inc.", "score below minimum")
@@ -273,7 +279,7 @@ func TestExclusionCollector(t *testing.T) {
 	})
 
 	t.Run("ignores empty ISIN", func(t *testing.T) {
-		collector := NewExclusionCollector("opportunity_buys")
+		collector := NewExclusionCollector("opportunity_buys", nil)
 
 		collector.Add("", "AAPL", "Apple Inc.", "no ISIN")
 
@@ -282,10 +288,61 @@ func TestExclusionCollector(t *testing.T) {
 	})
 
 	t.Run("sets calculator name", func(t *testing.T) {
-		collector := NewExclusionCollector("averaging_down")
+		collector := NewExclusionCollector("averaging_down", nil)
 		collector.Add("US0378331005", "AAPL", "Apple Inc.", "reason")
 
 		result := collector.Result()
 		assert.Equal(t, "averaging_down", result[0].Calculator)
+	})
+
+	t.Run("marks dismissed reasons", func(t *testing.T) {
+		dismissedFilters := map[string]map[string][]string{
+			"US0378331005": {
+				"opportunity_buys": {"score below minimum"},
+			},
+		}
+		collector := NewExclusionCollector("opportunity_buys", dismissedFilters)
+
+		collector.Add("US0378331005", "AAPL", "Apple Inc.", "score below minimum")
+		collector.Add("US0378331005", "AAPL", "Apple Inc.", "quality gate failed")
+
+		result := collector.Result()
+		assert.Len(t, result, 1)
+		assert.Len(t, result[0].Reasons, 2)
+
+		// Find and check each reason
+		for _, r := range result[0].Reasons {
+			if r.Reason == "score below minimum" {
+				assert.True(t, r.Dismissed, "score below minimum should be dismissed")
+			} else if r.Reason == "quality gate failed" {
+				assert.False(t, r.Dismissed, "quality gate failed should NOT be dismissed")
+			}
+		}
+	})
+
+	t.Run("dismissal is calculator-specific", func(t *testing.T) {
+		// Only "averaging_down" has this reason dismissed
+		dismissedFilters := map[string]map[string][]string{
+			"US0378331005": {
+				"averaging_down": {"score below minimum"},
+			},
+		}
+
+		// Use different calculator - should not be dismissed
+		collector := NewExclusionCollector("opportunity_buys", dismissedFilters)
+		collector.Add("US0378331005", "AAPL", "Apple Inc.", "score below minimum")
+
+		result := collector.Result()
+		assert.Len(t, result, 1)
+		assert.False(t, result[0].Reasons[0].Dismissed, "should not be dismissed for different calculator")
+	})
+
+	t.Run("reasons without dismissal are not dismissed", func(t *testing.T) {
+		collector := NewExclusionCollector("opportunity_buys", nil)
+		collector.Add("US0378331005", "AAPL", "Apple Inc.", "score below minimum")
+
+		result := collector.Result()
+		assert.Len(t, result, 1)
+		assert.False(t, result[0].Reasons[0].Dismissed, "should default to not dismissed")
 	})
 }

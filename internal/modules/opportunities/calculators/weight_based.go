@@ -51,7 +51,7 @@ func (c *WeightBasedCalculator) Calculate(
 	minTradeAmount := ctx.CalculateMinTradeAmount(maxCostRatio)
 
 	// Initialize exclusion collector
-	exclusions := NewExclusionCollector(c.Name())
+	exclusions := NewExclusionCollector(c.Name(), ctx.DismissedFilters)
 
 	// Check if we have target weights
 	if len(ctx.TargetWeights) == 0 {

@@ -1,9 +1,10 @@
 import { Card, Group, Text, Badge, Progress, Stack, Paper, ActionIcon, Loader } from '@mantine/core';
-import { IconRefresh, IconRotateClockwise } from '@tabler/icons-react';
+import { IconRefresh, IconRotateClockwise, IconX, IconPlus } from '@tabler/icons-react';
 import { useAppStore } from '../../stores/appStore';
 import { usePortfolioStore } from '../../stores/portfolioStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { formatCurrency } from '../../utils/formatters';
+import { api } from '../../api/client';
 
 export function NextActionsCard() {
   const {
@@ -356,16 +357,47 @@ export function NextActionsCard() {
                   </Group>
                   <Stack gap={4}>
                     {security.reasons.map((entry, entryIndex) => (
-                      entry.reasons.map((reason, reasonIndex) => (
-                        <Text
-                          key={`${entryIndex}-${reasonIndex}`}
-                          size="xs"
-                          c="dimmed"
-                          style={{ fontFamily: 'var(--mantine-font-family)', lineHeight: 1.4 }}
-                        >
-                          • <Text span size="xs" c="gray.5" style={{ fontFamily: 'var(--mantine-font-family)' }}>{entry.calculator}</Text> {reason}
-                        </Text>
-                      ))
+                      entry.reasons.map((reasonObj, reasonIndex) => {
+                        // Handle both old format (string) and new format (object with reason & dismissed)
+                        const reasonText = typeof reasonObj === 'string' ? reasonObj : reasonObj.reason;
+                        const isDismissed = typeof reasonObj === 'object' && reasonObj.dismissed;
+
+                        const handleToggleDismiss = async () => {
+                          try {
+                            if (isDismissed) {
+                              await api.undismissFilter(security.isin, entry.calculator, reasonText);
+                            } else {
+                              await api.dismissFilter(security.isin, entry.calculator, reasonText);
+                            }
+                            // Refresh recommendations to update the UI
+                            fetchRecommendations();
+                          } catch (error) {
+                            console.error('Failed to toggle dismiss:', error);
+                          }
+                        };
+
+                        return (
+                          <Group key={`${entryIndex}-${reasonIndex}`} gap="xs" wrap="nowrap">
+                            <Text
+                              size="xs"
+                              c="dimmed"
+                              td={isDismissed ? 'line-through' : undefined}
+                              style={{ fontFamily: 'var(--mantine-font-family)', lineHeight: 1.4, flex: 1 }}
+                            >
+                              • <Text span size="xs" c="gray.5" style={{ fontFamily: 'var(--mantine-font-family)' }}>{entry.calculator}</Text> {reasonText}
+                            </Text>
+                            <ActionIcon
+                              size="xs"
+                              variant="subtle"
+                              color={isDismissed ? 'green' : 'red'}
+                              onClick={handleToggleDismiss}
+                              title={isDismissed ? 'Re-enable this filter' : 'Dismiss this filter'}
+                            >
+                              {isDismissed ? <IconPlus size={12} /> : <IconX size={12} />}
+                            </ActionIcon>
+                          </Group>
+                        );
+                      })
                     ))}
                   </Stack>
                 </Paper>

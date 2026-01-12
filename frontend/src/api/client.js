@@ -248,6 +248,16 @@ export const api = {
   // Planner
   triggerPlannerBatch: () => fetchJSON('/api/jobs/planner-batch', { method: 'POST' }),
 
+  // Dismiss filters for pre-filtered securities
+  dismissFilter: (isin, calculator, reason) => fetchJSON('/api/planning/dismiss-filter', {
+    method: 'POST',
+    body: JSON.stringify({ isin, calculator, reason }),
+  }),
+  undismissFilter: (isin, calculator, reason) => fetchJSON('/api/planning/dismiss-filter', {
+    method: 'DELETE',
+    body: JSON.stringify({ isin, calculator, reason }),
+  }),
+
   // Planner Configuration (single config - no ID needed)
   fetchPlannerConfig: () => fetchJSON('/api/planning/config'),
   updatePlannerConfig: (config, changedBy, changeNote) => fetchJSON('/api/planning/config', {

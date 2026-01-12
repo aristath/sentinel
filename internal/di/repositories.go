@@ -109,6 +109,12 @@ func InitializeRepositories(container *Container, log zerolog.Logger) error {
 		container.ClientDataDB.Conn(),
 	)
 
+	// Dismissed filter repository (needs configDB - stores user-dismissed pre-filter reasons)
+	container.DismissedFilterRepo = planningrepo.NewDismissedFilterRepository(
+		container.ConfigDB,
+		log,
+	)
+
 	log.Info().Msg("All repositories initialized")
 
 	return nil

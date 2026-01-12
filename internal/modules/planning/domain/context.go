@@ -53,6 +53,10 @@ type OpportunityContext struct {
 	RecentlySoldISINs   map[string]bool `json:"recently_sold_isins"`   // Key: ISIN - Recently sold (cooldown)
 	RecentlyBoughtISINs map[string]bool `json:"recently_bought_isins"` // Key: ISIN - Recently bought
 
+	// User-dismissed pre-filter reasons: map[ISIN][calculator][]reasons
+	// Securities with dismissed reasons are still tracked but marked as dismissed in output
+	DismissedFilters map[string]map[string][]string `json:"dismissed_filters,omitempty"`
+
 	// Configuration
 	TransactionCostFixed   float64 `json:"transaction_cost_fixed"`
 	TransactionCostPercent float64 `json:"transaction_cost_percent"`

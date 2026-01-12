@@ -1,0 +1,14 @@
+# Arduino App Lab Configuration
+# Sentinel LED Display Controller
+# Following Arduino Uno Q documentation: https://docs.arduino.cc/tutorials/uno-q/user-manual/
+
+# User-visible name of the application
+name: sentinel-display
+
+# Brief description of the application's functionality
+description: LED display controller for Sentinel portfolio manager
+icon: "📊"
+
+# Bricks
+bricks:
+  - arduino:web_ui
