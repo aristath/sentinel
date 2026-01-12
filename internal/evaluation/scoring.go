@@ -333,19 +333,19 @@ func calculateTotalReturnScore(ctx models.PortfolioContext) float64 {
 	weightedCAGR := 0.0
 	weightedDividend := 0.0
 
-	for symbol, value := range ctx.Positions {
+	for isin, value := range ctx.Positions {
 		weight := value / totalValue
 
 		// CAGR contribution
-		if cagr, hasCagr := ctx.SecurityCAGRs[symbol]; hasCagr {
+		if cagr, hasCagr := ctx.SecurityCAGRs[isin]; hasCagr {
 			weightedCAGR += cagr * weight
-		} else if score, hasScore := ctx.SecurityScores[symbol]; hasScore {
+		} else if score, hasScore := ctx.SecurityScores[isin]; hasScore {
 			// Estimate CAGR from quality score
 			weightedCAGR += score * 0.15 * weight // Quality -> estimated CAGR
 		}
 
 		// Dividend contribution
-		if dividend, hasDiv := ctx.SecurityDividends[symbol]; hasDiv {
+		if dividend, hasDiv := ctx.SecurityDividends[isin]; hasDiv {
 			weightedDividend += dividend * weight
 		}
 	}
@@ -385,9 +385,9 @@ func calculateLongTermPromiseScore(ctx models.PortfolioContext) float64 {
 	weightedQuality := 0.0
 	hasQuality := false
 
-	for symbol, value := range ctx.Positions {
+	for isin, value := range ctx.Positions {
 		weight := value / totalValue
-		if quality, hasQ := ctx.SecurityScores[symbol]; hasQ {
+		if quality, hasQ := ctx.SecurityScores[isin]; hasQ {
 			weightedQuality += quality * weight
 			hasQuality = true
 		}
@@ -413,15 +413,15 @@ func calculateStabilityScore(ctx models.PortfolioContext) float64 {
 	hasVol := false
 	hasDD := false
 
-	for symbol, value := range ctx.Positions {
+	for isin, value := range ctx.Positions {
 		weight := value / totalValue
 
-		if vol, hasV := ctx.SecurityVolatility[symbol]; hasV && vol > 0 {
+		if vol, hasV := ctx.SecurityVolatility[isin]; hasV && vol > 0 {
 			weightedVol += vol * weight
 			hasVol = true
 		}
 
-		if dd, hasD := ctx.SecurityMaxDrawdown[symbol]; hasD {
+		if dd, hasD := ctx.SecurityMaxDrawdown[isin]; hasD {
 			weightedDD += math.Abs(dd) * weight
 			hasDD = true
 		}
@@ -494,8 +494,8 @@ func calculateGeoDiversification(ctx models.PortfolioContext, totalValue float64
 	}
 
 	groupValues := make(map[string]float64)
-	for symbol, value := range ctx.Positions {
-		country, hasCountry := ctx.SecurityCountries[symbol]
+	for isin, value := range ctx.Positions {
+		country, hasCountry := ctx.SecurityCountries[isin]
 		if !hasCountry {
 			country = "OTHER"
 		}
@@ -536,8 +536,8 @@ func calculateIndustryDiversification(ctx models.PortfolioContext, totalValue fl
 	}
 
 	groupValues := make(map[string]float64)
-	for symbol, value := range ctx.Positions {
-		industry, hasIndustry := ctx.SecurityIndustries[symbol]
+	for isin, value := range ctx.Positions {
+		industry, hasIndustry := ctx.SecurityIndustries[isin]
 		if !hasIndustry {
 			industry = "OTHER"
 		}
@@ -573,8 +573,8 @@ func calculateOptimizerAlignment(ctx models.PortfolioContext, totalValue float64
 	}
 
 	var deviations []float64
-	for symbol, targetWeight := range ctx.OptimizerTargetWeights {
-		currentValue, hasPosition := ctx.Positions[symbol]
+	for isin, targetWeight := range ctx.OptimizerTargetWeights {
+		currentValue, hasPosition := ctx.Positions[isin]
 		currentWeight := 0.0
 		if hasPosition {
 			currentWeight = currentValue / totalValue
@@ -624,9 +624,9 @@ func calculateWeightedSharpeScore(ctx models.PortfolioContext, totalValue float6
 	weightedSharpe := 0.0
 	hasSharpe := false
 
-	for symbol, value := range ctx.Positions {
+	for isin, value := range ctx.Positions {
 		weight := value / totalValue
-		if sharpe, hasS := ctx.SecuritySharpe[symbol]; hasS {
+		if sharpe, hasS := ctx.SecuritySharpe[isin]; hasS {
 			weightedSharpe += sharpe * weight
 			hasSharpe = true
 		}
@@ -654,9 +654,9 @@ func calculateWeightedVolatilityScore(ctx models.PortfolioContext, totalValue fl
 	weightedVol := 0.0
 	hasVol := false
 
-	for symbol, value := range ctx.Positions {
+	for isin, value := range ctx.Positions {
 		weight := value / totalValue
-		if vol, hasV := ctx.SecurityVolatility[symbol]; hasV && vol > 0 {
+		if vol, hasV := ctx.SecurityVolatility[isin]; hasV && vol > 0 {
 			weightedVol += vol * weight
 			hasVol = true
 		}
@@ -682,9 +682,9 @@ func calculateWeightedDrawdownScore(ctx models.PortfolioContext, totalValue floa
 	weightedDD := 0.0
 	hasDD := false
 
-	for symbol, value := range ctx.Positions {
+	for isin, value := range ctx.Positions {
 		weight := value / totalValue
-		if dd, hasD := ctx.SecurityMaxDrawdown[symbol]; hasD {
+		if dd, hasD := ctx.SecurityMaxDrawdown[isin]; hasD {
 			weightedDD += math.Abs(dd) * weight
 			hasDD = true
 		}

@@ -48,53 +48,60 @@ type Security struct {
 
 // Position represents a current position in a security
 type Position struct {
-	Symbol         string  `json:"symbol"`           // Security symbol
+	ISIN           string  `json:"isin"`             // ISIN (primary internal identifier)
+	Symbol         string  `json:"symbol"`           // Security symbol (for display/API boundary)
 	Quantity       float64 `json:"quantity"`         // Number of shares
-	AvgPrice       float64 `json:"avg_price"`        // Average purchase price
+	AvgPrice       float64 `json:"avg_price"`        // Average purchase price (EUR)
 	Currency       string  `json:"currency"`         // Position currency
 	CurrencyRate   float64 `json:"currency_rate"`    // Currency conversion rate to EUR
-	CurrentPrice   float64 `json:"current_price"`    // Current market price
+	CurrentPrice   float64 `json:"current_price"`    // Current market price (EUR)
 	MarketValueEUR float64 `json:"market_value_eur"` // Market value in EUR
 }
 
-// PortfolioContext contains portfolio state for allocation fit calculations
+// PortfolioContext contains portfolio state for allocation fit calculations.
+//
+// KEY CONVENTION: All maps keyed by security identifier use ISIN as the key.
+// ISIN is the internal identifier; Symbol is only used at boundaries (UI, APIs).
 type PortfolioContext struct {
 	// Core portfolio weights and positions
 	CountryWeights  map[string]float64 `json:"country_weights"`  // group_name -> weight (0 to 1)
 	IndustryWeights map[string]float64 `json:"industry_weights"` // group_name -> weight (0 to 1)
-	Positions       map[string]float64 `json:"positions"`        // symbol -> position_value in EUR
+	Positions       map[string]float64 `json:"positions"`        // ISIN -> position_value in EUR
 	TotalValue      float64            `json:"total_value"`      // Total portfolio value in EUR
 
-	// Additional data for portfolio scoring
-	SecurityCountries  map[string]string  `json:"security_countries,omitempty"`  // symbol -> country (individual)
-	SecurityIndustries map[string]string  `json:"security_industries,omitempty"` // symbol -> industry (individual)
-	SecurityScores     map[string]float64 `json:"security_scores,omitempty"`     // symbol -> quality_score (0-1)
-	SecurityDividends  map[string]float64 `json:"security_dividends,omitempty"`  // symbol -> dividend_yield
+	// Additional data for portfolio scoring (ALL KEYED BY ISIN)
+	SecurityCountries  map[string]string  `json:"security_countries,omitempty"`  // ISIN -> country (individual)
+	SecurityIndustries map[string]string  `json:"security_industries,omitempty"` // ISIN -> industry (individual)
+	SecurityScores     map[string]float64 `json:"security_scores,omitempty"`     // ISIN -> quality_score (0-1)
+	SecurityDividends  map[string]float64 `json:"security_dividends,omitempty"`  // ISIN -> dividend_yield
 
 	// Group mappings (for mapping individual countries/industries to groups)
 	CountryToGroup  map[string]string `json:"country_to_group,omitempty"`  // country -> group_name
 	IndustryToGroup map[string]string `json:"industry_to_group,omitempty"` // industry -> group_name
 
-	// Cost basis data for averaging down and windfall detection
-	PositionAvgPrices map[string]float64 `json:"position_avg_prices,omitempty"` // symbol -> avg_purchase_price
-	CurrentPrices     map[string]float64 `json:"current_prices,omitempty"`      // symbol -> current_market_price
+	// Cost basis data for averaging down and windfall detection (ALL KEYED BY ISIN)
+	PositionAvgPrices map[string]float64 `json:"position_avg_prices,omitempty"` // ISIN -> avg_purchase_price (EUR)
+	CurrentPrices     map[string]float64 `json:"current_prices,omitempty"`      // ISIN -> current_market_price (EUR)
 
 	// Optimizer target allocations (for alignment scoring)
-	OptimizerTargetWeights map[string]float64 `json:"optimizer_target_weights,omitempty"` // symbol -> target_weight (0 to 1)
+	OptimizerTargetWeights map[string]float64 `json:"optimizer_target_weights,omitempty"` // ISIN -> target_weight (0 to 1)
 
-	// Extended metrics for comprehensive evaluation
-	SecurityCAGRs       map[string]float64 `json:"security_cagrs,omitempty"`        // symbol -> historical CAGR
-	SecurityVolatility  map[string]float64 `json:"security_volatility,omitempty"`   // symbol -> annual volatility
-	SecuritySharpe      map[string]float64 `json:"security_sharpe,omitempty"`       // symbol -> Sharpe ratio
-	SecuritySortino     map[string]float64 `json:"security_sortino,omitempty"`      // symbol -> Sortino ratio
-	SecurityMaxDrawdown map[string]float64 `json:"security_max_drawdown,omitempty"` // symbol -> max drawdown (negative)
+	// Extended metrics for comprehensive evaluation (ALL KEYED BY ISIN)
+	SecurityCAGRs       map[string]float64 `json:"security_cagrs,omitempty"`        // ISIN -> historical CAGR
+	SecurityVolatility  map[string]float64 `json:"security_volatility,omitempty"`   // ISIN -> annual volatility
+	SecuritySharpe      map[string]float64 `json:"security_sharpe,omitempty"`       // ISIN -> Sharpe ratio
+	SecuritySortino     map[string]float64 `json:"security_sortino,omitempty"`      // ISIN -> Sortino ratio
+	SecurityMaxDrawdown map[string]float64 `json:"security_max_drawdown,omitempty"` // ISIN -> max drawdown (negative)
 
 	// Market regime and adaptive weights
 	MarketRegimeScore float64            `json:"market_regime_score,omitempty"` // -1 (bear) to +1 (bull)
 	AdaptiveWeights   map[string]float64 `json:"adaptive_weights,omitempty"`    // component -> adaptive weight
 }
 
-// EvaluationContext contains all data needed to simulate and score action sequences
+// EvaluationContext contains all data needed to simulate and score action sequences.
+//
+// KEY CONVENTION: All maps keyed by security identifier use ISIN as the key.
+// ISIN is the internal identifier; Symbol is only used at boundaries (UI, APIs).
 type EvaluationContext struct {
 	// Portfolio state
 	PortfolioContext       PortfolioContext `json:"portfolio_context"`
@@ -103,9 +110,12 @@ type EvaluationContext struct {
 	AvailableCashEUR       float64          `json:"available_cash_eur"`
 	TotalPortfolioValueEUR float64          `json:"total_portfolio_value_eur"`
 
-	// Market data
-	CurrentPrices  map[string]float64  `json:"current_prices"`   // symbol -> current price
-	StocksBySymbol map[string]Security `json:"stocks_by_symbol"` // symbol -> Security (computed)
+	// Market data (ALL KEYED BY ISIN)
+	CurrentPrices map[string]float64  `json:"current_prices"` // ISIN -> current price (EUR)
+	StocksByISIN  map[string]Security `json:"stocks_by_isin"` // ISIN -> Security (computed)
+
+	// Deprecated: kept for backward compatibility during transition
+	StocksBySymbol map[string]Security `json:"stocks_by_symbol,omitempty"` // symbol -> Security (use StocksByISIN)
 
 	// Configuration
 	TransactionCostFixed   float64 `json:"transaction_cost_fixed"`   // Fixed transaction cost (EUR)
@@ -113,7 +123,7 @@ type EvaluationContext struct {
 	CostPenaltyFactor      float64 `json:"cost_penalty_factor"`      // Penalty factor for transaction costs (0.0 = no penalty, 0.1 = default)
 
 	// Optional: Price adjustment scenarios for stochastic evaluation
-	PriceAdjustments map[string]float64 `json:"price_adjustments,omitempty"` // symbol -> multiplier (e.g., 1.05 for +5%)
+	PriceAdjustments map[string]float64 `json:"price_adjustments,omitempty"` // ISIN -> multiplier (e.g., 1.05 for +5%)
 }
 
 // SequenceEvaluationResult represents the result of evaluating a single sequence

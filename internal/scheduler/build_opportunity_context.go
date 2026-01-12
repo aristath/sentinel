@@ -168,11 +168,12 @@ func (j *BuildOpportunityContextJob) buildOpportunityContext(
 	positionValues := make(map[string]float64) // For PortfolioContext
 
 	// Convert securities to domain format
+	// KEY CONVENTION: All maps use ISIN as primary key (Symbol only at boundaries)
 	domainSecurities := make([]domain.Security, 0, len(securities))
-	stocksBySymbol := make(map[string]domain.Security)
-	stocksByISIN := make(map[string]domain.Security)
-	securityCountries := make(map[string]string)
-	securityIndustries := make(map[string]string)
+	stocksBySymbol := make(map[string]domain.Security) // For UI/API boundary lookups
+	stocksByISIN := make(map[string]domain.Security)   // For internal lookups
+	securityCountries := make(map[string]string)       // ISIN -> country
+	securityIndustries := make(map[string]string)      // ISIN -> industry
 	for _, sec := range securities {
 		domainSec := domain.Security{
 			Symbol:    sec.Symbol,
@@ -190,12 +191,13 @@ func (j *BuildOpportunityContextJob) buildOpportunityContext(
 		stocksBySymbol[sec.Symbol] = domainSec
 		if sec.ISIN != "" {
 			stocksByISIN[sec.ISIN] = domainSec
-		}
-		if sec.Country != "" {
-			securityCountries[sec.Symbol] = sec.Country
-		}
-		if sec.Industry != "" {
-			securityIndustries[sec.Symbol] = sec.Industry
+			// Use ISIN as key for all internal lookups
+			if sec.Country != "" {
+				securityCountries[sec.ISIN] = sec.Country
+			}
+			if sec.Industry != "" {
+				securityIndustries[sec.ISIN] = sec.Industry
+			}
 		}
 	}
 
@@ -301,7 +303,7 @@ func (j *BuildOpportunityContextJob) buildOpportunityContext(
 			valueEUR = currentPrice * float64(pos.Quantity)
 		}
 
-		positionValues[pos.Symbol] = valueEUR
+		positionValues[isin] = valueEUR // Key by ISIN, not Symbol
 		totalValue += valueEUR
 
 		// Convert Unix timestamps to time.Time pointers
@@ -361,12 +363,12 @@ func (j *BuildOpportunityContextJob) buildOpportunityContext(
 			}
 		}
 
-		// Store EUR average price for scoring (must match currency of CurrentPrices)
+		// Store EUR average price for scoring (key by ISIN, not Symbol)
 		if averageCostEUR > 0 {
-			positionAvgPrices[pos.Symbol] = averageCostEUR
+			positionAvgPrices[isin] = averageCostEUR
 		} else {
 			// Fallback to current price if no cost basis available
-			positionAvgPrices[pos.Symbol] = currentPrice
+			positionAvgPrices[isin] = currentPrice
 		}
 
 		// Build enriched position with ALL fields
@@ -485,21 +487,26 @@ func (j *BuildOpportunityContextJob) buildOpportunityContext(
 	industryValues := make(map[string]float64)
 
 	for _, pos := range positions {
-		valueEUR := positionValues[pos.Symbol]
+		// Skip positions without ISIN
+		if pos.ISIN == "" {
+			continue
+		}
+
+		valueEUR := positionValues[pos.ISIN] // Key by ISIN, not Symbol
 		if valueEUR <= 0 {
 			continue
 		}
 
-		// Get security to find country/industry
-		if sec, ok := stocksBySymbol[pos.Symbol]; ok {
+		// Get security to find country/industry (key by ISIN)
+		if sec, ok := stocksByISIN[pos.ISIN]; ok {
 			// Aggregate by country
 			if sec.Country != "" {
 				countryValues[sec.Country] += valueEUR
 			}
 		}
 
-		// Aggregate by industry (use securityIndustries map built earlier)
-		if industry, ok := securityIndustries[pos.Symbol]; ok && industry != "" {
+		// Aggregate by industry (securityIndustries is keyed by ISIN)
+		if industry, ok := securityIndustries[pos.ISIN]; ok && industry != "" {
 			// Parse industries if comma-separated
 			industries := parseIndustries(industry)
 			if len(industries) > 0 {

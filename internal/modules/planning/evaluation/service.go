@@ -114,14 +114,14 @@ func (s *Service) BatchEvaluate(ctx context.Context, sequences []domain.ActionSe
 	// Build complete EvaluationContext with all required data
 	var evalSecurities []models.Security
 	var evalPositions []models.Position
-	var stocksBySymbol map[string]models.Security
+	var stocksByISIN map[string]models.Security
 	var availableCashEUR float64
 	var totalPortfolioValueEUR float64
 
 	if opportunityCtx != nil {
-		// Convert securities
+		// Convert securities - build lookup by ISIN (internal key)
 		evalSecurities = make([]models.Security, 0, len(opportunityCtx.Securities))
-		stocksBySymbol = make(map[string]models.Security)
+		stocksByISIN = make(map[string]models.Security)
 		for _, sec := range opportunityCtx.Securities {
 			// Convert Country from string to *string
 			var countryPtr *string
@@ -131,6 +131,7 @@ func (s *Service) BatchEvaluate(ctx context.Context, sequences []domain.ActionSe
 			// Note: domain.Security doesn't have Industry field, so we can't include it
 			// This is acceptable as Industry is optional in evaluation models
 			evalSec := models.Security{
+				ISIN:     sec.ISIN,
 				Symbol:   sec.Symbol,
 				Name:     sec.Name,
 				Country:  countryPtr,
@@ -138,28 +139,31 @@ func (s *Service) BatchEvaluate(ctx context.Context, sequences []domain.ActionSe
 				Currency: string(sec.Currency),
 			}
 			evalSecurities = append(evalSecurities, evalSec)
-			stocksBySymbol[sec.Symbol] = evalSec
+			if sec.ISIN != "" {
+				stocksByISIN[sec.ISIN] = evalSec
+			}
 		}
 
-		// Convert positions
+		// Convert positions - use ISIN for lookups
 		evalPositions = make([]models.Position, 0, len(opportunityCtx.EnrichedPositions))
 		for _, pos := range opportunityCtx.EnrichedPositions {
-			// Get current price for position value calculation
-			currentPrice := 0.0
-			if opportunityCtx.CurrentPrices != nil {
-				if price, ok := opportunityCtx.CurrentPrices[pos.Symbol]; ok {
+			// Get current price by ISIN (internal key)
+			currentPrice := pos.CurrentPrice // Use enriched position's already-calculated price
+			if currentPrice <= 0 && opportunityCtx.CurrentPrices != nil {
+				if price, ok := opportunityCtx.CurrentPrices[pos.ISIN]; ok {
 					currentPrice = price
 				}
 			}
 
 			evalPositions = append(evalPositions, models.Position{
+				ISIN:           pos.ISIN,
 				Symbol:         pos.Symbol,
 				Quantity:       pos.Quantity,
-				AvgPrice:       currentPrice, // Could be enhanced with actual avg price
+				AvgPrice:       pos.AverageCost, // Use enriched position's average cost
 				Currency:       string(pos.Currency),
-				CurrencyRate:   1.0, // Default to 1.0 for EUR
+				CurrencyRate:   pos.CurrencyRate,
 				CurrentPrice:   currentPrice,
-				MarketValueEUR: currentPrice * pos.Quantity,
+				MarketValueEUR: pos.MarketValueEUR,
 			})
 		}
 
@@ -175,7 +179,7 @@ func (s *Service) BatchEvaluate(ctx context.Context, sequences []domain.ActionSe
 		AvailableCashEUR:       availableCashEUR,
 		TotalPortfolioValueEUR: totalPortfolioValueEUR,
 		CurrentPrices:          portfolioCtx.CurrentPrices,
-		StocksBySymbol:         stocksBySymbol,
+		StocksByISIN:           stocksByISIN,
 		TransactionCostFixed:   transactionCostFixed,
 		TransactionCostPercent: transactionCostPercent,
 		CostPenaltyFactor:      0.1, // Default cost penalty factor
@@ -284,8 +288,7 @@ func convertPortfolioContext(
 // convertPortfolioContextWithOpportunityData converts with additional data from OpportunityContext.
 // This ensures all available data flows through to evaluation.
 //
-// IMPORTANT: OpportunityContext stores metrics by ISIN (e.g., CAGRs, Volatility),
-// but scoring functions look up by Symbol. We must convert ISIN keys to Symbol keys.
+// KEY CONVENTION: All data is keyed by ISIN internally. No conversion needed.
 func convertPortfolioContextWithOpportunityData(
 	scoringCtx *scoringdomain.PortfolioContext,
 	opportunityCtx *domain.OpportunityContext,
@@ -299,78 +302,51 @@ func convertPortfolioContextWithOpportunityData(
 
 	// Enrich with OpportunityContext data if available
 	if opportunityCtx != nil {
-		// Build ISIN -> Symbol mapping for key conversion
-		// OpportunityContext stores data by ISIN, but scoring uses Symbol keys
-		isinToSymbol := make(map[string]string)
-		for _, sec := range opportunityCtx.Securities {
-			if sec.ISIN != "" && sec.Symbol != "" {
-				isinToSymbol[sec.ISIN] = sec.Symbol
-			}
-		}
-
-		// Optimizer targets (already keyed by Symbol in OpportunityContext)
+		// Optimizer targets (keyed by ISIN)
 		if len(opportunityCtx.TargetWeights) > 0 {
 			result.OptimizerTargetWeights = make(map[string]float64)
-			for k, v := range opportunityCtx.TargetWeights {
-				result.OptimizerTargetWeights[k] = v
+			for isin, v := range opportunityCtx.TargetWeights {
+				result.OptimizerTargetWeights[isin] = v
 			}
 		}
 
-		// CAGRs from OpportunityContext (keyed by ISIN, convert to Symbol)
+		// CAGRs from OpportunityContext (keyed by ISIN)
 		if len(opportunityCtx.CAGRs) > 0 {
 			result.SecurityCAGRs = make(map[string]float64)
 			for isin, v := range opportunityCtx.CAGRs {
-				if symbol, ok := isinToSymbol[isin]; ok {
-					result.SecurityCAGRs[symbol] = v
-				}
-				// Also keep ISIN key for action lookups that might use ISIN
 				result.SecurityCAGRs[isin] = v
 			}
 		}
 
-		// Volatility from OpportunityContext (keyed by ISIN, convert to Symbol)
+		// Volatility from OpportunityContext (keyed by ISIN)
 		if len(opportunityCtx.Volatility) > 0 {
 			result.SecurityVolatility = make(map[string]float64)
 			for isin, v := range opportunityCtx.Volatility {
-				if symbol, ok := isinToSymbol[isin]; ok {
-					result.SecurityVolatility[symbol] = v
-				}
-				// Also keep ISIN key for action lookups that might use ISIN
 				result.SecurityVolatility[isin] = v
 			}
 		}
 
-		// Sharpe ratios from OpportunityContext (keyed by ISIN, convert to Symbol)
+		// Sharpe ratios from OpportunityContext (keyed by ISIN)
 		if len(opportunityCtx.Sharpe) > 0 {
 			result.SecuritySharpe = make(map[string]float64)
 			for isin, v := range opportunityCtx.Sharpe {
-				if symbol, ok := isinToSymbol[isin]; ok {
-					result.SecuritySharpe[symbol] = v
-				}
-				// Also keep ISIN key for action lookups
 				result.SecuritySharpe[isin] = v
 			}
 		} else if len(opportunityCtx.MomentumScores) > 0 {
 			// Fallback: Use momentum as proxy for Sharpe if actual Sharpe unavailable
 			result.SecuritySharpe = make(map[string]float64)
 			for isin, v := range opportunityCtx.MomentumScores {
-				if symbol, ok := isinToSymbol[isin]; ok {
-					// Convert momentum score (0-1) to approximate Sharpe (-1 to 3)
-					// Momentum 0.5 = Sharpe 0, Momentum 1.0 = Sharpe 2
-					approxSharpe := (v - 0.5) * 4.0
-					result.SecuritySharpe[symbol] = approxSharpe
-				}
+				// Convert momentum score (0-1) to approximate Sharpe (-1 to 3)
+				// Momentum 0.5 = Sharpe 0, Momentum 1.0 = Sharpe 2
+				approxSharpe := (v - 0.5) * 4.0
+				result.SecuritySharpe[isin] = approxSharpe
 			}
 		}
 
-		// MaxDrawdown from OpportunityContext (keyed by ISIN, convert to Symbol)
+		// MaxDrawdown from OpportunityContext (keyed by ISIN)
 		if len(opportunityCtx.MaxDrawdown) > 0 {
 			result.SecurityMaxDrawdown = make(map[string]float64)
 			for isin, v := range opportunityCtx.MaxDrawdown {
-				if symbol, ok := isinToSymbol[isin]; ok {
-					result.SecurityMaxDrawdown[symbol] = v
-				}
-				// Also keep ISIN key for action lookups
 				result.SecurityMaxDrawdown[isin] = v
 			}
 		}
