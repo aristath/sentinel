@@ -160,6 +160,7 @@ export const api = {
 
   // Trades
   fetchTrades: () => fetchJSON('/api/trades'),
+  fetchPendingOrders: () => fetchJSON('/api/system/pending-orders'),
   fetchRecommendations: () => fetchJSON('/api/trades/recommendations'),
   executeRecommendation: () => fetchJSON('/api/trades/recommendations/execute', { method: 'POST' }),
 

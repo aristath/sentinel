@@ -1,17 +1,27 @@
-import { Card, Table, Text, Badge } from '@mantine/core';
+import { Card, Table, Text, Badge, Group } from '@mantine/core';
 import { useTradesStore } from '../../stores/tradesStore';
 import { formatCurrency, formatDateTime } from '../../utils/formatters';
 
 export function TradesTable() {
-  const { trades } = useTradesStore();
+  const { trades, pendingOrders } = useTradesStore();
+
+  const hasPending = pendingOrders.length > 0;
+  const hasData = trades.length > 0 || hasPending;
 
   return (
     <Card p="md" style={{ backgroundColor: 'var(--mantine-color-dark-7)', border: '1px solid var(--mantine-color-dark-6)' }}>
-      <Text size="xs" tt="uppercase" c="dimmed" fw={600} mb="md" style={{ fontFamily: 'var(--mantine-font-family)' }}>
-        Recent Trades
-      </Text>
+      <Group justify="space-between" mb="md">
+        <Text size="xs" tt="uppercase" c="dimmed" fw={600} style={{ fontFamily: 'var(--mantine-font-family)' }}>
+          Recent Trades
+        </Text>
+        {hasPending && (
+          <Badge size="sm" color="yellow" variant="light">
+            {pendingOrders.length} pending
+          </Badge>
+        )}
+      </Group>
 
-      {trades.length === 0 ? (
+      {!hasData ? (
         <Text c="dimmed" size="sm" ta="center" py="xl">
           No trades yet
         </Text>
@@ -30,6 +40,69 @@ export function TradesTable() {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
+              {/* Pending orders first */}
+              {pendingOrders.map((order) => {
+                const isCash = order.symbol.includes('/');
+                return (
+                  <Table.Tr
+                    key={`pending-${order.order_id}`}
+                    style={{
+                      backgroundColor: 'rgba(255, 193, 7, 0.1)',
+                    }}
+                  >
+                    <Table.Td>
+                      <Badge size="xs" color="yellow" variant="filled">
+                        PENDING
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text
+                        size="sm"
+                        style={{ fontFamily: 'var(--mantine-font-family)' }}
+                        c={isCash ? 'violet' : 'yellow'}
+                      >
+                        {order.symbol}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td visibleFrom="sm">
+                      <Text
+                        size="sm"
+                        c="dimmed"
+                        truncate
+                        style={{ maxWidth: '128px', fontFamily: 'var(--mantine-font-family)' }}
+                      >
+                        {order.symbol}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Badge
+                        size="sm"
+                        color={order.side === 'BUY' ? 'green' : 'red'}
+                        variant="light"
+                        style={{ fontFamily: 'var(--mantine-font-family)' }}
+                      >
+                        {order.side}
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td ta="right">
+                      <Text size="sm" style={{ fontFamily: 'var(--mantine-font-family)' }} c="dimmed">
+                        {formatCurrency(order.quantity)}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td ta="right" visibleFrom="sm">
+                      <Text size="sm" style={{ fontFamily: 'var(--mantine-font-family)' }} c="dimmed">
+                        {formatCurrency(order.price)}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td ta="right">
+                      <Text size="sm" style={{ fontFamily: 'var(--mantine-font-family)' }} fw={600}>
+                        {formatCurrency(order.quantity * order.price)}
+                      </Text>
+                    </Table.Td>
+                  </Table.Tr>
+                );
+              })}
+              {/* Executed trades */}
               {trades.map((trade) => {
                 const isCash = trade.symbol.includes('/');
                 return (

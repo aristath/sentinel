@@ -25,7 +25,7 @@ export function Layout() {
   const { fetchAllocation, fetchCashBreakdown, fetchTargets } = usePortfolioStore();
   const { fetchSecurities } = useSecuritiesStore();
   const { fetchSettings } = useSettingsStore();
-  const { fetchTrades } = useTradesStore();
+  const { fetchAll: fetchTradesAndPending } = useTradesStore();
   const [version, setVersion] = useState('loading...');
 
   // Fetch version on mount
@@ -47,7 +47,7 @@ export function Layout() {
           fetchSecurities(),
           fetchTargets(),
           fetchSettings(),
-          fetchTrades(),
+          fetchTradesAndPending(),
         ]);
       } catch (error) {
         console.error('Failed to load initial data:', error);
@@ -57,7 +57,7 @@ export function Layout() {
     };
 
     loadData();
-  }, [fetchAll, fetchAllocation, fetchCashBreakdown, fetchSecurities, fetchTargets, fetchSettings, fetchTrades]);
+  }, [fetchAll, fetchAllocation, fetchCashBreakdown, fetchSecurities, fetchTargets, fetchSettings, fetchTradesAndPending]);
 
   // Manage event stream lifecycle
   useEffect(() => {
