@@ -229,8 +229,7 @@ func EvaluateSequence(
 	for _, sec := range coreSecurities {
 		stocksBySymbol[sec.Symbol] = sec
 	}
-	//nolint:SA1019 // StocksBySymbol is deprecated but kept for backward compatibility during transition
-	coreContext.StocksBySymbol = stocksBySymbol
+	coreContext.StocksBySymbol = stocksBySymbol //nolint:SA1019 // StocksBySymbol is deprecated but kept for backward compatibility during transition
 
 	// Call core evaluation
 	coreResult := coreevaluation.EvaluateSequence(coreSequence, coreContext)
