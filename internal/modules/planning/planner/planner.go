@@ -97,7 +97,7 @@ func (p *Planner) CreatePlanWithRejections(ctx *domain.OpportunityContext, confi
 		return nil, fmt.Errorf("failed to identify opportunities: %w", err)
 	}
 
-	// Extract opportunities for backward compatibility with sequence generation
+	// Extract opportunities for sequence generation
 	opportunities := opportunitiesResult.ToOpportunitiesByCategory()
 
 	// Collect all pre-filtered securities across categories
@@ -129,7 +129,7 @@ func (p *Planner) CreatePlanWithRejections(ctx *domain.OpportunityContext, confi
 
 	if len(sequences) == 0 {
 		p.log.Info().Msg("No sequences generated")
-		rejected := p.buildRejectedOpportunities(identifiedOpportunitiesList, opportunitiesInSequences, nil, nil, nil)
+		rejected := p.buildRejectedOpportunities(identifiedOpportunitiesList, opportunitiesInSequences, nil, nil)
 		return &PlanResult{
 			Plan: &domain.HolisticPlan{
 				Steps:         []domain.HolisticStep{},
@@ -161,9 +161,9 @@ func (p *Planner) CreatePlanWithRejections(ctx *domain.OpportunityContext, confi
 			key := fmt.Sprintf("%s|%s", action.Symbol, action.Side)
 			opportunitiesInSelectedSequence[key] = true
 		}
-		plan, filteredActions := p.convertToPlanWithFiltered(bestSequence, ctx, config, 0.0, 0.0)
+		plan := p.convertToPlan(bestSequence, ctx, config, 0.0, 0.0)
 		if len(plan.Steps) == 0 {
-			rejected := p.buildRejectedOpportunities(identifiedOpportunitiesList, opportunitiesInSequences, opportunitiesInSelectedSequence, nil, filteredActions)
+			rejected := p.buildRejectedOpportunities(identifiedOpportunitiesList, opportunitiesInSequences, opportunitiesInSelectedSequence, nil)
 			return &PlanResult{
 				Plan: &domain.HolisticPlan{
 					Steps:         []domain.HolisticStep{},
@@ -175,7 +175,7 @@ func (p *Planner) CreatePlanWithRejections(ctx *domain.OpportunityContext, confi
 				PreFilteredSecurities: preFilteredSecurities,
 			}, nil
 		}
-		rejected := p.buildRejectedOpportunities(identifiedOpportunitiesList, opportunitiesInSequences, opportunitiesInSelectedSequence, plan, filteredActions)
+		rejected := p.buildRejectedOpportunities(identifiedOpportunitiesList, opportunitiesInSequences, opportunitiesInSelectedSequence, plan)
 		return &PlanResult{
 			Plan:                  plan,
 			RejectedOpportunities: rejected,
@@ -183,10 +183,10 @@ func (p *Planner) CreatePlanWithRejections(ctx *domain.OpportunityContext, confi
 		}, nil
 	}
 
-	// Step 4: Select best sequences based on evaluation scores (try top N until one passes constraints)
+	// Step 4: Select best sequences based on evaluation scores
 	bestSequences := p.selectBestSequences(sequences, results, config.MaxSequenceAttempts)
 	if len(bestSequences) == 0 {
-		rejected := p.buildRejectedOpportunities(identifiedOpportunitiesList, opportunitiesInSequences, nil, nil, nil)
+		rejected := p.buildRejectedOpportunities(identifiedOpportunitiesList, opportunitiesInSequences, nil, nil)
 		return &PlanResult{
 			Plan: &domain.HolisticPlan{
 				Steps:         []domain.HolisticStep{},
@@ -208,48 +208,16 @@ func (p *Planner) CreatePlanWithRejections(ctx *domain.OpportunityContext, confi
 		}
 	}
 
-	// Step 5: Try each sequence until we find one that passes constraints (has at least 1 step)
-	var bestPlan *domain.HolisticPlan
-	var bestFilteredActions []planningconstraints.FilteredAction
-	var bestScore float64
-	var bestSequenceIdx int
-
-	for idx, seqResult := range bestSequences {
-		plan, filteredActions := p.convertToPlanWithFiltered(seqResult.Sequence, ctx, config, 0.0, seqResult.Result.EndScore)
-
-		// If this plan has at least one step after constraint enforcement, use it
-		if len(plan.Steps) > 0 {
-			bestPlan = plan
-			bestFilteredActions = filteredActions
-			bestScore = seqResult.Result.EndScore
-			bestSequenceIdx = idx
-			p.log.Info().
-				Int("sequence_index", idx+1).
-				Int("total_attempted", len(bestSequences)).
-				Int("steps", len(plan.Steps)).
-				Float64("end_score", seqResult.Result.EndScore).
-				Msg("Found valid sequence that passes constraints")
-			break
-		} else {
-			p.log.Debug().
-				Int("sequence_index", idx+1).
-				Int("actions", len(seqResult.Sequence.Actions)).
-				Float64("score", seqResult.Result.EndScore).
-				Msg("Sequence filtered out by constraints, trying next")
-		}
-	}
-
-	// If no sequence passed constraints, return empty plan
-	if bestPlan == nil {
-		p.log.Info().
-			Int("attempted_sequences", len(bestSequences)).
-			Msg("No sequences passed constraints after enforcement")
-		rejected := p.buildRejectedOpportunities(identifiedOpportunitiesList, opportunitiesInSequences, opportunitiesInSelectedSequences, nil, nil)
+	// Step 5: Select the best sequence (highest score)
+	// All actions are already validated by the generator - no re-filtering needed
+	if len(bestSequences) == 0 {
+		p.log.Info().Msg("No sequences generated")
+		rejected := p.buildRejectedOpportunities(identifiedOpportunitiesList, opportunitiesInSequences, nil, nil)
 		return &PlanResult{
 			Plan: &domain.HolisticPlan{
 				Steps:         []domain.HolisticStep{},
 				CurrentScore:  0.0,
-				EndStateScore: bestSequences[0].Result.EndScore,
+				EndStateScore: 0.0,
 				Feasible:      true,
 			},
 			RejectedOpportunities: rejected,
@@ -257,15 +225,37 @@ func (p *Planner) CreatePlanWithRejections(ctx *domain.OpportunityContext, confi
 		}, nil
 	}
 
-	p.log.Info().
-		Int("sequence_index", bestSequenceIdx+1).
-		Int("total_attempted", len(bestSequences)).
-		Int("steps", len(bestPlan.Steps)).
-		Float64("end_score", bestScore).
-		Msg("Plan created")
+	// Take the best sequence (first in sorted list)
+	bestSequence := bestSequences[0]
+	bestPlan := p.convertToPlan(bestSequence.Sequence, ctx, config, 0.0, bestSequence.Result.EndScore)
 
-	// Build rejected opportunities with all tracking information
-	rejected := p.buildRejectedOpportunities(identifiedOpportunitiesList, opportunitiesInSequences, opportunitiesInSelectedSequences, bestPlan, bestFilteredActions)
+	p.log.Info().
+		Int("total_candidates", len(bestSequences)).
+		Int("steps", len(bestPlan.Steps)).
+		Float64("end_score", bestSequence.Result.EndScore).
+		Float64("improvement", bestSequence.Result.EndScore-bestPlan.CurrentScore).
+		Msg("Selected best sequence")
+
+	// Log top 5 candidates for debugging
+	for i := 0; i < min(5, len(bestSequences)); i++ {
+		seq := bestSequences[i]
+		p.log.Debug().
+			Int("rank", i+1).
+			Int("actions", len(seq.Sequence.Actions)).
+			Float64("score", seq.Result.EndScore).
+			Bool("selected", i == 0).
+			Msg("Candidate sequence")
+	}
+
+	// Track which opportunities are in the selected sequence
+	opportunitiesInSelectedSequence := make(map[string]bool)
+	for _, action := range bestSequence.Sequence.Actions {
+		key := fmt.Sprintf("%s|%s", action.Symbol, action.Side)
+		opportunitiesInSelectedSequence[key] = true
+	}
+
+	// Build rejected opportunities
+	rejected := p.buildRejectedOpportunities(identifiedOpportunitiesList, opportunitiesInSequences, opportunitiesInSelectedSequence, bestPlan)
 
 	return &PlanResult{
 		Plan:                  bestPlan,
@@ -274,30 +264,15 @@ func (p *Planner) CreatePlanWithRejections(ctx *domain.OpportunityContext, confi
 	}, nil
 }
 
-func (p *Planner) convertToPlanWithFiltered(sequence domain.ActionSequence, ctx *domain.OpportunityContext, config *domain.PlannerConfiguration, currentScore float64, endScore float64) (*domain.HolisticPlan, []planningconstraints.FilteredAction) {
-	// Enforce constraints on actions before creating steps
-	validatedActions, filteredActions := p.constraintEnforcer.EnforceConstraints(sequence.Actions, ctx, config)
-
-	// Log filtered actions for debugging
-	if len(filteredActions) > 0 {
-		p.log.Info().
-			Int("filtered_count", len(filteredActions)).
-			Int("validated_count", len(validatedActions)).
-			Msg("Applied constraint enforcement")
-		for _, filtered := range filteredActions {
-			p.log.Debug().
-				Str("symbol", filtered.Action.Symbol).
-				Str("side", filtered.Action.Side).
-				Str("reason", filtered.Reason).
-				Msg("Action filtered by constraints")
-		}
-	}
+func (p *Planner) convertToPlan(sequence domain.ActionSequence, ctx *domain.OpportunityContext, config *domain.PlannerConfiguration, currentScore float64, endScore float64) *domain.HolisticPlan {
+	// No constraint enforcement needed - generator already filtered infeasible actions
+	// All actions in the sequence are guaranteed to be executable
 	var steps []domain.HolisticStep
 	cashRequired := 0.0
 	cashGenerated := 0.0
 
-	// Use validated actions (after constraint enforcement)
-	for i, action := range validatedActions {
+	// Use sequence actions directly - generator already validated feasibility
+	for i, action := range sequence.Actions {
 		// Convert price to EUR if not already in EUR
 		// This ensures all calculations use EUR prices
 		priceEUR := action.Price
@@ -361,7 +336,7 @@ func (p *Planner) convertToPlanWithFiltered(sequence domain.ActionSequence, ctx 
 		CashRequired:     cashRequired,
 		CashGenerated:    cashGenerated,
 		Feasible:         true,
-	}, filteredActions
+	}
 }
 
 // generatePortfolioHash creates a hash representing the portfolio state.
@@ -532,7 +507,6 @@ func (p *Planner) buildRejectedOpportunities(
 	opportunitiesInSequences map[string]bool,
 	opportunitiesInSelectedSequences map[string]bool,
 	finalPlan *domain.HolisticPlan,
-	filteredActions []planningconstraints.FilteredAction,
 ) []domain.RejectedOpportunity {
 	// Build a map of opportunities in final plan (key: "symbol|side")
 	finalPlanOpportunities := make(map[string]bool)
@@ -541,13 +515,6 @@ func (p *Planner) buildRejectedOpportunities(
 			key := fmt.Sprintf("%s|%s", step.Symbol, step.Side)
 			finalPlanOpportunities[key] = true
 		}
-	}
-
-	// Build a map of filtered actions with reasons (key: "symbol|side" -> reasons)
-	filteredByConstraints := make(map[string][]string)
-	for _, filtered := range filteredActions {
-		key := fmt.Sprintf("%s|%s", filtered.Action.Symbol, filtered.Action.Side)
-		filteredByConstraints[key] = append(filteredByConstraints[key], filtered.Reason)
 	}
 
 	// Build rejection reasons map (key: "symbol|side" -> reasons array)
@@ -578,20 +545,11 @@ func (p *Planner) buildRejectedOpportunities(
 		// Add reasons based on opportunity lifecycle with clear explanations
 		if !opportunitiesInSequences[key] {
 			// Opportunity was not included in any sequence
-			// This happens when patterns don't pick up this opportunity
-			rejected.Reasons = append(rejected.Reasons, "not selected by any pattern (may need different pattern or lower priority)")
+			// This happens when the exhaustive generator didn't create a sequence with this opportunity
+			rejected.Reasons = append(rejected.Reasons, "not selected by sequence generator (may need different parameters or lower priority)")
 		} else if opportunitiesInSelectedSequences != nil && opportunitiesInSelectedSequences[key] {
-			// Opportunity was in one of the top evaluated sequences
-			if constraintReasons, hasConstraints := filteredByConstraints[key]; hasConstraints {
-				// Was filtered by constraints
-				for _, reason := range constraintReasons {
-					rejected.Reasons = append(rejected.Reasons, fmt.Sprintf("constraint: %s", reason))
-				}
-			} else {
-				// Opportunity was in a candidate sequence that wasn't the winning one
-				// This is the key fix: be specific about WHY it wasn't included
-				rejected.Reasons = append(rejected.Reasons, "in alternative sequence (a different sequence had higher score)")
-			}
+			// Opportunity was in one of the top evaluated sequences but not the winning one
+			rejected.Reasons = append(rejected.Reasons, "in alternative sequence (a different sequence had higher score)")
 		} else {
 			// Opportunity was in sequences but not in top evaluated sequences
 			rejected.Reasons = append(rejected.Reasons, "sequence not in top candidates (lower combined priority)")
@@ -642,4 +600,12 @@ func containsTag(tags []string, target string) bool {
 		}
 	}
 	return false
+}
+
+// min returns the minimum of two integers.
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

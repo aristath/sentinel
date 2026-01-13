@@ -136,6 +136,8 @@ func (g *ExhaustiveGenerator) Generate(
 }
 
 // collectAndFilter gathers all opportunities and applies constraint filtering.
+// This is the ONLY place where constraints are checked - the planner trusts
+// that all actions in generated sequences are executable.
 func (g *ExhaustiveGenerator) collectAndFilter(
 	opportunities domain.OpportunitiesByCategory,
 	ctx *domain.OpportunityContext,

@@ -2,9 +2,7 @@
 package domain
 
 // PlannerConfiguration represents the complete configuration for a planner instance.
-// Simplified structure with exhaustive sequence generation replacing patterns/generators.
 type PlannerConfiguration struct {
-	// Planner identification (legacy - kept for backwards compatibility with existing configs)
 	Name                  string `json:"name"`
 	Description           string `json:"description"`
 	EnableBatchGeneration bool   `json:"enable_batch_generation"`
@@ -14,7 +12,7 @@ type PlannerConfiguration struct {
 	MaxOpportunitiesPerCategory int     `json:"max_opportunities_per_category"`
 	EnableDiverseSelection      bool    `json:"enable_diverse_selection"`
 	DiversityWeight             float64 `json:"diversity_weight"`
-	MaxSequenceAttempts         int     `json:"max_sequence_attempts"` // Maximum number of sequences to try until one passes constraints
+	MaxSequenceAttempts         int     `json:"max_sequence_attempts"` // Maximum number of top-scoring sequences to consider
 
 	// Transaction costs
 	TransactionCostFixed   float64 `json:"transaction_cost_fixed"`
@@ -62,7 +60,7 @@ func NewDefaultConfiguration() *PlannerConfiguration {
 		EnableBatchGeneration:       true,
 		MaxDepth:                    10, // Maximum complexity for exhaustive generation
 		MaxOpportunitiesPerCategory: 10,
-		MaxSequenceAttempts:         20, // Try top 20 sequences until one passes constraints
+		MaxSequenceAttempts:         20, // Evaluate top 20 sequences to select the best one
 		EnableDiverseSelection:      true,
 		DiversityWeight:             0.3,
 		TransactionCostFixed:        5.0,
