@@ -136,10 +136,10 @@ Note: All functionality has been migrated to Go - Tradernet API is integrated di
 
 ### Main Application
 
-**Language:** Go 1.22+
+**Language:** Go 1.23+
 - **HTTP Router:** Chi (stdlib-based, lightweight)
 - **Database:** SQLite with modernc.org/sqlite (pure Go, no CGo)
-- **Scheduler:** robfig/cron for background jobs
+- **Scheduler:** Custom queue-based scheduler (`queue.Scheduler`) with market-aware intervals (5min/10min when markets open, paused when closed)
 - **Logging:** zerolog (structured, high-performance)
 - **Configuration:** godotenv
 
@@ -174,7 +174,7 @@ Note: All functionality has been migrated to Go - Tradernet API is integrated di
 
 ### Prerequisites
 
-- Go 1.22+ (for building Sentinel)
+- Go 1.23+ (for building Sentinel)
 - Existing SQLite databases (7-database architecture)
 - Tradernet API credentials
 
@@ -307,11 +307,26 @@ See [docs/api/README.md](docs/api/README.md) for the complete API documentation 
 
 ## Background Jobs
 
-The system runs scheduled background jobs for autonomous operation. All jobs are split into individual, single-responsibility units for maximum modularity and testability.
+The system runs scheduled background jobs for autonomous operation using a custom queue-based scheduler (`queue.Scheduler`) with market-aware intervals. All jobs are split into individual, single-responsibility units for maximum modularity and testability.
+
+### Job System Architecture
+
+The job system consists of three main components:
+1. **QueueManager** - Manages job queue and execution history
+2. **TimeScheduler** (`queue.Scheduler`) - Enqueues time-based jobs with market-aware intervals
+3. **WorkerPool** - Processes jobs asynchronously with retry logic and progress reporting
+
+Jobs can be:
+- **Time-based**: Scheduled via `TimeScheduler` with market-aware intervals (5min/10min when markets open, paused when closed)
+- **Event-based**: Triggered by events via event listeners
+- **Manual**: Triggered via API endpoints
 
 ### Composite Jobs
 
-**sync_cycle** (Every 30 minutes) - Composite job that runs all sync operations
+**sync_cycle** (Market-aware intervals) - Composite job that runs all sync operations
+- Every 5 minutes when dominant markets are open or pre-market
+- Every 10 minutes when only secondary markets are open
+- Paused when all markets are closed
 
 **planner_batch** (Event-driven) - Composite job that runs full planning pipeline
 
@@ -337,6 +352,14 @@ The system runs scheduled background jobs for autonomous operation. All jobs are
 - Fetches current market prices
 - Updates price cache for all securities
 
+**sync_exchange_rates** - Update currency exchange rates
+- Fetches current exchange rates
+- Updates exchange rate cache
+
+**retry_trades** - Retry pending trade executions (Hourly)
+- Processes trades that failed due to temporary errors
+- Retries with exponential backoff
+
 **check_negative_balances** - Check for negative cash balances
 - Monitors all currency balances
 - Triggers emergency rebalancing if negative balances detected
@@ -361,8 +384,23 @@ The system runs scheduled background jobs for autonomous operation. All jobs are
 - Creates complete context for opportunity identification
 - Includes CAGR, quality scores, value trap data, and regime information
 
+**identify_opportunities** - Identify trading opportunities
+- Analyzes portfolio state and optimizer weights
+- Identifies buy/sell opportunities based on configuration
+- Returns structured opportunity data
+
+**generate_sequences** - Generate trade sequences
+- Creates candidate trade sequences from opportunities
+- Generates multiple pattern-based sequences
+- Prepares sequences for evaluation
+
+**evaluate_sequences** - Evaluate trade sequences
+- Evaluates sequences using scoring system
+- Ranks sequences by expected utility
+- Filters infeasible sequences
+
 **create_trade_plan** - Create holistic trade plan
-- Takes opportunity context and planner configuration
+- Takes evaluated sequences and planner configuration
 - Generates optimal sequence of trading actions
 - Returns complete plan with scores and feasibility
 
@@ -406,7 +444,7 @@ The system runs scheduled background jobs for autonomous operation. All jobs are
 ### Individual Health Check Jobs
 
 **check_core_databases** - Verify integrity of core databases
-- Checks universe, config, ledger, portfolio, and agents databases
+- Checks universe, config, ledger, and portfolio databases
 - Runs SQLite PRAGMA integrity_check
 - Returns error if any database is corrupted
 
@@ -433,20 +471,36 @@ The system runs scheduled background jobs for autonomous operation. All jobs are
 - Update quality, opportunity, and risk tags
 - Support fast filtering and quality gates
 
-**adaptive_market** (Daily at 6:00 AM)
+**adaptive_market_check** (Daily at 6:00 AM)
 - Monitor market conditions and adapt portfolio strategy
 - Update scoring weights based on market regime
 - Adjust optimizer blend (MV/HRP) dynamically
 
+**recommendation_gc** (Hourly)
+- Garbage collection for old recommendations
+- Removes recommendations older than 24 hours
+- Maintains database size
+
+**client_data_cleanup** (Daily at 00:30 AM)
+- Cleans up expired API cache entries
+- Removes stale cached responses
+- Maintains cache database size
+
+**deployment** (Configurable interval - default: 5 minutes)
+- Checks for code changes in git repository
+- Downloads pre-built binaries from GitHub Actions
+- Deploys services, frontend, display app, and sketch
+- Restarts services automatically
+- Interval configurable via `job_auto_deploy_minutes` setting
+
 ### Backup & Reliability Jobs
 
-**r2_backup** (Scheduled: Daily/Weekly/Monthly at 3:00 AM)
+**r2_backup** (Daily at 3:00 AM)
 - Creates compressed archive of all 7 databases
 - Uploads backup to Cloudflare R2 cloud storage
 - Includes SHA256 checksums and metadata
 - Schedule configurable via Settings UI (daily/weekly/monthly)
 - Only runs if R2 backups enabled in settings
-- See [docs/R2_BACKUP.md](docs/R2_BACKUP.md) for full documentation
 
 **r2_backup_rotation** (Daily at 3:30 AM)
 - Deletes old backups based on retention policy
@@ -538,6 +592,11 @@ POST /api/system/jobs/check-history-databases
 POST /api/system/jobs/check-wal-checkpoints
 ```
 
+**Other Operational Jobs:**
+```bash
+POST /api/system/jobs/deployment
+```
+
 Note: Reliability jobs (backups, maintenance, cleanup) run automatically on schedule and are not exposed for manual triggering.
 
 ### Job Orchestration
@@ -545,7 +604,7 @@ Note: Reliability jobs (backups, maintenance, cleanup) run automatically on sche
 Individual jobs can be orchestrated together to create complete workflows:
 
 **Sync Workflow:**
-1. `sync_trades` → `sync_cash_flows` → `sync_portfolio` → `sync_prices` → `check_negative_balances` → `update_display_ticker`
+1. `sync_trades` → `sync_cash_flows` → `sync_portfolio` → `sync_prices` → `sync_exchange_rates` → `check_negative_balances` → `update_display_ticker`
 
 **Planning Workflow:**
 1. `generate_portfolio_hash` → `get_optimizer_weights` → `build_opportunity_context` → `create_trade_plan` → `store_recommendations`
@@ -564,7 +623,7 @@ Composite jobs (`sync_cycle`, `planner_batch`, `dividend_reinvestment`, `health_
 
 ### Prerequisites
 
-- Go 1.22+
+- Go 1.23+
 - golangci-lint (for linting)
 - air (for auto-reload during development)
 
@@ -727,7 +786,7 @@ go test -cover ./...
 ## Deployment
 
 **Deployment is fully automated** by the Sentinel service. The system automatically:
-- Checks for code changes every 5 minutes
+- Checks for code changes at configurable intervals (default: 5 minutes, configurable via `job_auto_deploy_minutes` setting)
 - Downloads pre-built binaries from GitHub Actions
 - Deploys Go services, frontend, display app, and sketch
 - Restarts services automatically

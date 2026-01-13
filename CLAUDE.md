@@ -143,9 +143,9 @@ The container (`di.Container`) holds all service instances and is passed to hand
 
 The system uses a queue-based job system (`internal/queue`) with three components:
 
-1. **QueueManager** - Manages job queue and history
-2. **WorkerPool** - Executes jobs asynchronously
-3. **TimeScheduler** - Schedules time-based jobs (cron-like)
+1. **QueueManager** - Manages job queue and execution history
+2. **TimeScheduler** (`queue.Scheduler`) - Enqueues time-based jobs with market-aware intervals
+3. **WorkerPool** - Processes jobs asynchronously with retry logic and progress reporting
 
 Jobs are registered via `di.RegisterJobs()` and can be:
 - **Time-based**: Scheduled via `TimeScheduler` (e.g., daily at 2 AM)
@@ -299,7 +299,7 @@ GOOS=linux GOARCH=arm64 go build -o sentinel-arm64 ./cmd/server
 - **Language**: Go 1.23+
 - **HTTP Router**: Chi (stdlib-based, lightweight)
 - **Database**: SQLite with modernc.org/sqlite (pure Go, no CGo)
-- **Scheduler**: robfig/cron for time-based scheduling + custom queue system
+- **Scheduler**: Custom queue-based scheduler (`queue.Scheduler`) with market-aware intervals (5min/10min when markets open, paused when closed)
 - **Logging**: zerolog (structured, high-performance)
 - **Frontend**: React + Vite
 - **Git Hooks**: Lefthook (fast, no stashing, single binary)

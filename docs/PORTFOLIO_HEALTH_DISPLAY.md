@@ -65,31 +65,31 @@ System statistics visualization (existing pixel count mode).
 
 ```bash
 # Switch to health mode
-curl -X POST http://localhost:8080/api/display/mode \
+curl -X POST http://localhost:8001/api/display/mode \
   -H "Content-Type: application/json" \
   -d '{"mode": "HEALTH"}'
 
 # Switch back to text mode
-curl -X POST http://localhost:8080/api/display/mode \
+curl -X POST http://localhost:8001/api/display/mode \
   -H "Content-Type: application/json" \
   -d '{"mode": "TEXT"}'
 
 # Get current mode
-curl http://localhost:8080/api/display/mode
+curl http://localhost:8001/api/display/mode
 ```
 
 ### Preview Health Scores
 
 ```bash
 # View current health scores for all holdings
-curl http://localhost:8080/api/display/portfolio-health/preview
+curl http://localhost:8001/api/display/portfolio-health/preview
 ```
 
 ### Manually Trigger Update
 
 ```bash
 # Force immediate health update (useful for testing)
-curl -X POST http://localhost:8080/api/display/portfolio-health/trigger
+curl -X POST http://localhost:8001/api/display/portfolio-health/trigger
 ```
 
 ## Configuration
@@ -274,7 +274,7 @@ The system prevents LED burn-in through multiple mechanisms:
 ### Health mode not starting
 - Check display is enabled: `curl http://localhost:7000/health`
 - Verify mode manager initialized: Check logs for "Display mode manager initialized"
-- Ensure portfolio has holdings: `curl http://localhost:8080/api/display/portfolio-health/preview`
+- Ensure portfolio has holdings: `curl http://localhost:8001/api/display/portfolio-health/preview`
 
 ### Animation looks jerky
 - Check MCU is receiving updates: Look for "setPortfolioHealth" in Arduino serial output
@@ -313,15 +313,15 @@ go build -o sentinel ./cmd/server
 ./sentinel
 
 # In another terminal, test health mode
-curl -X POST http://localhost:8080/api/display/mode \
+curl -X POST http://localhost:8001/api/display/mode \
   -H "Content-Type: application/json" \
   -d '{"mode": "HEALTH"}'
 
 # View health scores
-curl http://localhost:8080/api/display/portfolio-health/preview
+curl http://localhost:8001/api/display/portfolio-health/preview
 
 # Force update
-curl -X POST http://localhost:8080/api/display/portfolio-health/trigger
+curl -X POST http://localhost:8001/api/display/portfolio-health/trigger
 ```
 
 ## Credits
