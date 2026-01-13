@@ -1222,7 +1222,7 @@ func (h *SystemHandlers) HandleSyncPortfolio(w http.ResponseWriter, r *http.Requ
 
 // HandleSyncDailyPipeline triggers daily pipeline (securities data sync)
 // POST /api/system/sync/daily-pipeline
-	// This is an alias for /sync/securities-data
+// This is an alias for /sync/securities-data
 func (h *SystemHandlers) HandleSyncDailyPipeline(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

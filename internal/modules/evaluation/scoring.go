@@ -339,4 +339,5 @@ func calculateRiskAdjustedScore(ctx PortfolioContext) float64 {
 	}
 	return 0.0
 }
+
 // The new scoring is purely based on portfolio end state quality.

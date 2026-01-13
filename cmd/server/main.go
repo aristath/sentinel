@@ -130,7 +130,6 @@ func main() {
 			Msg("Deployment manager initialized and job registered")
 	}
 
-
 	// Create deployment handlers if deployment is enabled
 	var deploymentHandlers *server.DeploymentHandlers
 	if deploymentManager != nil {

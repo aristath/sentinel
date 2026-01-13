@@ -123,11 +123,11 @@ func RegisterJobs(container *Container, cfg *config.Config, displayManager *disp
 	dataDir := cfg.DataDir
 	backupDir := dataDir + "/backups"
 	databases := map[string]*database.DB{
-		"universe":  container.UniverseDB,
-		"config":    container.ConfigDB,
-		"ledger":    container.LedgerDB,
-		"portfolio": container.PortfolioDB,
-		"history":   container.HistoryDB,
+		"universe":    container.UniverseDB,
+		"config":      container.ConfigDB,
+		"ledger":      container.LedgerDB,
+		"portfolio":   container.PortfolioDB,
+		"history":     container.HistoryDB,
 		"cache":       container.CacheDB,
 		"client_data": container.ClientDataDB,
 	}
