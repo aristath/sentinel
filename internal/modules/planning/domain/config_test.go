@@ -12,8 +12,8 @@ func TestNewDefaultConfiguration(t *testing.T) {
 	assert.NotNil(t, config)
 	assert.Equal(t, "default", config.Name)
 	assert.True(t, config.EnableBatchGeneration)
-	assert.Equal(t, 10, config.MaxDepth)                    // Hardcoded for maximum complexity
-	assert.Equal(t, 10, config.MaxOpportunitiesPerCategory) // Hardcoded for maximum opportunities
+	assert.Equal(t, 10, config.MaxDepth)
+	assert.Equal(t, 10, config.MaxOpportunitiesPerCategory)
 	assert.True(t, config.EnableDiverseSelection)
 	assert.Equal(t, 0.3, config.DiversityWeight)
 	assert.Equal(t, 5.0, config.TransactionCostFixed)
@@ -25,19 +25,20 @@ func TestNewDefaultConfiguration(t *testing.T) {
 	assert.Equal(t, -0.20, config.MaxLossThreshold)
 	assert.Equal(t, 0.20, config.MaxSellPercentage)
 
-	// All modules should be enabled by default
+	// All calculators should be enabled by default
 	assert.True(t, config.EnableProfitTakingCalc)
 	assert.True(t, config.EnableAveragingDownCalc)
 	assert.True(t, config.EnableOpportunityBuysCalc)
 	assert.True(t, config.EnableRebalanceSellsCalc)
 	assert.True(t, config.EnableRebalanceBuysCalc)
 	assert.True(t, config.EnableWeightBasedCalc)
-	assert.True(t, config.EnableDirectBuyPattern)
-	assert.True(t, config.EnableProfitTakingPattern)
-	assert.True(t, config.EnableRebalancePattern)
-	assert.True(t, config.EnableAdaptivePattern)
-	assert.True(t, config.EnableCombinatorialGenerator)
+
+	// Post-generation filters should be enabled by default
 	assert.True(t, config.EnableCorrelationAwareFilter)
+	assert.True(t, config.EnableDiversityFilter)
+
+	// Tag filtering should be enabled by default
+	assert.True(t, config.EnableTagFiltering)
 }
 
 func TestGetEnabledCalculators(t *testing.T) {
@@ -92,48 +93,62 @@ func TestGetEnabledCalculators(t *testing.T) {
 	}
 }
 
-func TestGetEnabledPatterns(t *testing.T) {
-	config := NewDefaultConfiguration()
-	enabled := config.GetEnabledPatterns()
-
-	// Default config has all patterns enabled
-	assert.Len(t, enabled, 13)
-	assert.Contains(t, enabled, "direct_buy")
-	assert.Contains(t, enabled, "profit_taking")
-	assert.Contains(t, enabled, "rebalance")
-	assert.Contains(t, enabled, "averaging_down")
-	assert.Contains(t, enabled, "single_best")
-	assert.Contains(t, enabled, "multi_sell")
-	assert.Contains(t, enabled, "mixed_strategy")
-	assert.Contains(t, enabled, "opportunity_first")
-	assert.Contains(t, enabled, "deep_rebalance")
-	assert.Contains(t, enabled, "cash_generation")
-	assert.Contains(t, enabled, "cost_optimized")
-	assert.Contains(t, enabled, "adaptive")
-	assert.Contains(t, enabled, "market_regime")
-}
-
-func TestGetEnabledGenerators(t *testing.T) {
-	config := NewDefaultConfiguration()
-	enabled := config.GetEnabledGenerators()
-
-	// Default config has all generators enabled
-	assert.Len(t, enabled, 3)
-	assert.Contains(t, enabled, "combinatorial")
-	assert.Contains(t, enabled, "enhanced_combinatorial")
-	assert.Contains(t, enabled, "constraint_relaxation")
-}
-
 func TestGetEnabledFilters(t *testing.T) {
 	config := NewDefaultConfiguration()
 	enabled := config.GetEnabledFilters()
 
-	// Default config has all filters enabled
-	assert.Len(t, enabled, 4)
+	// Default config has post-generation filters enabled
+	assert.Len(t, enabled, 2)
 	assert.Contains(t, enabled, "correlation_aware")
 	assert.Contains(t, enabled, "diversity")
-	assert.Contains(t, enabled, "eligibility")
-	assert.Contains(t, enabled, "recently_traded")
+}
+
+func TestGetEnabledFilters_SelectiveEnable(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   *PlannerConfiguration
+		expected []string
+	}{
+		{
+			name: "all filters enabled",
+			config: &PlannerConfiguration{
+				EnableCorrelationAwareFilter: true,
+				EnableDiversityFilter:        true,
+			},
+			expected: []string{"correlation_aware", "diversity"},
+		},
+		{
+			name: "only correlation enabled",
+			config: &PlannerConfiguration{
+				EnableCorrelationAwareFilter: true,
+				EnableDiversityFilter:        false,
+			},
+			expected: []string{"correlation_aware"},
+		},
+		{
+			name: "only diversity enabled",
+			config: &PlannerConfiguration{
+				EnableCorrelationAwareFilter: false,
+				EnableDiversityFilter:        true,
+			},
+			expected: []string{"diversity"},
+		},
+		{
+			name: "none enabled",
+			config: &PlannerConfiguration{
+				EnableCorrelationAwareFilter: false,
+				EnableDiversityFilter:        false,
+			},
+			expected: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			enabled := tt.config.GetEnabledFilters()
+			assert.ElementsMatch(t, tt.expected, enabled)
+		})
+	}
 }
 
 func TestGetCalculatorParams(t *testing.T) {
@@ -185,35 +200,6 @@ func TestGetCalculatorParams(t *testing.T) {
 	})
 }
 
-func TestGetPatternParams(t *testing.T) {
-	config := &PlannerConfiguration{}
-
-	// Simplified: Returns empty map (parameters removed)
-	params := config.GetPatternParams("adaptive")
-	assert.NotNil(t, params)
-	assert.Len(t, params, 0)
-
-	// Non-existent pattern should return empty map
-	params = config.GetPatternParams("non_existent")
-	assert.NotNil(t, params)
-	assert.Len(t, params, 0)
-}
-
-func TestGetGeneratorParams(t *testing.T) {
-	config := &PlannerConfiguration{}
-
-	// GetGeneratorParams always returns max_depth parameter
-	params := config.GetGeneratorParams("combinatorial")
-	assert.NotNil(t, params)
-	assert.Contains(t, params, "max_depth")
-	assert.Equal(t, float64(0), params["max_depth"])
-
-	// Non-existent generator still returns max_depth
-	params = config.GetGeneratorParams("non_existent")
-	assert.NotNil(t, params)
-	assert.Contains(t, params, "max_depth")
-}
-
 func TestGetFilterParams(t *testing.T) {
 	config := &PlannerConfiguration{
 		EnableDiverseSelection: true,
@@ -251,16 +237,8 @@ func TestGetFilterParams(t *testing.T) {
 	assert.Contains(t, params, "min_diversity_score")
 	assert.Equal(t, 1.0, params["min_diversity_score"])
 
-	// Test other filters return empty map
+	// Test correlation_aware filter returns empty map
 	params = config.GetFilterParams("correlation_aware")
-	assert.NotNil(t, params)
-	assert.Len(t, params, 0)
-
-	params = config.GetFilterParams("eligibility")
-	assert.NotNil(t, params)
-	assert.Len(t, params, 0)
-
-	params = config.GetFilterParams("recently_traded")
 	assert.NotNil(t, params)
 	assert.Len(t, params, 0)
 }

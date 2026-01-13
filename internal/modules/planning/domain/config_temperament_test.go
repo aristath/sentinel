@@ -21,15 +21,11 @@ func TestPlannerConfigDefaultsMaximumComplexity(t *testing.T) {
 }
 
 // TestPlannerConfigNoLegacyNameDescription verifies Name and Description
-// are removed from the struct (legacy multi-agent refactor)
+// are kept for backwards compatibility but not required for operation
 func TestPlannerConfigNoLegacyNameDescription(t *testing.T) {
-	// The Name and Description fields should be removed from the struct
-	// This test will fail if those fields still exist (intentionally)
-	// We verify by checking NewDefaultConfiguration creates valid config without them
-
 	config := NewDefaultConfiguration()
 
-	// Config should be usable without Name/Description
+	// Config should be usable without relying on Name/Description
 	assert.True(t, config.EnableBatchGeneration,
 		"Config should work without legacy Name/Description fields")
 	assert.True(t, config.EnableTagFiltering,
@@ -99,73 +95,21 @@ func TestPlannerConfigAllCalculatorsEnabledByDefault(t *testing.T) {
 	}
 }
 
-// TestPlannerConfigAllPatternsEnabledByDefault verifies all patterns enabled
-func TestPlannerConfigAllPatternsEnabledByDefault(t *testing.T) {
-	config := NewDefaultConfiguration()
-
-	enabled := config.GetEnabledPatterns()
-
-	expectedPatterns := []string{
-		"direct_buy",
-		"profit_taking",
-		"rebalance",
-		"averaging_down",
-		"single_best",
-		"multi_sell",
-		"mixed_strategy",
-		"opportunity_first",
-		"deep_rebalance",
-		"cash_generation",
-		"cost_optimized",
-		"adaptive",
-		"market_regime",
-	}
-
-	assert.Equal(t, len(expectedPatterns), len(enabled),
-		"All 13 patterns should be enabled by default")
-
-	for _, pattern := range expectedPatterns {
-		assert.Contains(t, enabled, pattern,
-			"Pattern %s should be enabled by default", pattern)
-	}
-}
-
-// TestPlannerConfigAllGeneratorsEnabledByDefault verifies all generators enabled
-func TestPlannerConfigAllGeneratorsEnabledByDefault(t *testing.T) {
-	config := NewDefaultConfiguration()
-
-	enabled := config.GetEnabledGenerators()
-
-	expectedGenerators := []string{
-		"combinatorial",
-		"enhanced_combinatorial",
-		"constraint_relaxation",
-	}
-
-	assert.Equal(t, len(expectedGenerators), len(enabled),
-		"All 3 generators should be enabled by default")
-
-	for _, gen := range expectedGenerators {
-		assert.Contains(t, enabled, gen,
-			"Generator %s should be enabled by default", gen)
-	}
-}
-
-// TestPlannerConfigAllFiltersEnabledByDefault verifies all filters enabled
+// TestPlannerConfigAllFiltersEnabledByDefault verifies post-generation filters enabled
 func TestPlannerConfigAllFiltersEnabledByDefault(t *testing.T) {
 	config := NewDefaultConfiguration()
 
 	enabled := config.GetEnabledFilters()
 
+	// Only post-generation filters remain (eligibility and recently_traded
+	// are now handled during generation via constraints.Enforcer)
 	expectedFilters := []string{
 		"correlation_aware",
 		"diversity",
-		"eligibility",
-		"recently_traded",
 	}
 
 	assert.Equal(t, len(expectedFilters), len(enabled),
-		"All 4 filters should be enabled by default")
+		"Both post-generation filters should be enabled by default")
 
 	for _, filter := range expectedFilters {
 		assert.Contains(t, enabled, filter,
@@ -195,15 +139,6 @@ func TestGetCalculatorParamsPassesRiskManagement(t *testing.T) {
 	// Other calculators should get empty params
 	adParams := config.GetCalculatorParams("averaging_down")
 	assert.Empty(t, adParams["max_sell_percentage"])
-}
-
-// TestGetGeneratorParamsPassesMaxDepth verifies MaxDepth is passed to generators
-func TestGetGeneratorParamsPassesMaxDepth(t *testing.T) {
-	config := NewDefaultConfiguration()
-
-	params := config.GetGeneratorParams("combinatorial")
-	assert.Equal(t, 10.0, params["max_depth"],
-		"MaxDepth should be passed to generators as float64")
 }
 
 // TestGetFilterParamsPassesDiversityWeight verifies DiversityWeight is passed

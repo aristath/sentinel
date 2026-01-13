@@ -69,14 +69,16 @@ func (r *FilterRegistry) ApplyFilters(sequences []domain.ActionSequence, config 
 }
 
 // NewPopulatedFilterRegistry creates a new filter registry with all filters registered.
+// Note: Eligibility and RecentlyTraded filters are NOT included - those checks
+// are now performed during generation by the ExhaustiveGenerator via constraints.Enforcer.
 func NewPopulatedFilterRegistry(log zerolog.Logger, riskBuilder *optimization.RiskModelBuilder) *FilterRegistry {
 	registry := NewFilterRegistry(log)
 
-	// Register all filters
+	// Register post-generation filters
+	// DedupeFilter runs first to remove duplicate sequences before other processing
+	registry.Register(NewDedupeFilter(log))
 	registry.Register(NewCorrelationAwareFilter(log, riskBuilder))
 	registry.Register(NewDiversityFilter(log))
-	registry.Register(NewEligibilityFilter(log))
-	registry.Register(NewRecentlyTradedFilter(log))
 
 	log.Info().
 		Int("filters", len(registry.filters)).

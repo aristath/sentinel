@@ -15,12 +15,11 @@ import (
 // =============================================================================
 
 const (
-	// Main evaluation component weights
-	WeightOpportunityCapture       = coreevaluation.WeightOpportunityCapture
+	// Main evaluation component weights (pure end-state scoring)
 	WeightPortfolioQuality         = coreevaluation.WeightPortfolioQuality
 	WeightDiversificationAlignment = coreevaluation.WeightDiversificationAlignment
 	WeightRiskAdjustedMetrics      = coreevaluation.WeightRiskAdjustedMetrics
-	WeightRegimeRobustness         = coreevaluation.WeightRegimeRobustness
+	WeightEndStateImprovement      = coreevaluation.WeightEndStateImprovement
 
 	// Legacy constants for backwards compatibility
 	GeoWeight             = 0.40
@@ -150,17 +149,21 @@ func CalculateTransactionCostEnhanced(
 
 // EvaluateEndState evaluates the end state of a portfolio after executing a sequence.
 // Delegates to core evaluation package for unified scoring.
+// Now uses pure end-state scoring with start context for improvement calculation.
 func EvaluateEndState(
+	startContext PortfolioContext,
 	endContext PortfolioContext,
 	sequence []ActionCandidate,
 	transactionCostFixed float64,
 	transactionCostPercent float64,
 	costPenaltyFactor float64,
 ) float64 {
-	coreContext := convertToCorePortfolioContext(endContext)
+	coreStartContext := convertToCorePortfolioContext(startContext)
+	coreEndContext := convertToCorePortfolioContext(endContext)
 	coreSequence := convertToCoreSequence(sequence)
 	return coreevaluation.EvaluateEndState(
-		coreContext,
+		coreStartContext,
+		coreEndContext,
 		coreSequence,
 		transactionCostFixed,
 		transactionCostPercent,
@@ -293,7 +296,8 @@ func calculateOptimizerAlignment(ctx PortfolioContext, totalValue float64) float
 // calculatePortfolioQualityScore is exposed for testing
 func calculatePortfolioQualityScore(ctx PortfolioContext) float64 {
 	coreContext := convertToCorePortfolioContext(ctx)
-	return coreevaluation.EvaluateEndState(coreContext, nil, 0, 0, 0, nil)
+	// Use same context for start and end to get base quality score
+	return coreevaluation.EvaluateEndState(coreContext, coreContext, nil, 0, 0, 0, nil)
 }
 
 // calculateRiskAdjustedScore is exposed for testing - returns neutral if no data
@@ -337,26 +341,7 @@ func calculateRiskAdjustedScore(ctx PortfolioContext) float64 {
 	return 0.0
 }
 
-// calculateWindfallScore is exposed for testing
-func calculateWindfallScore(ctx PortfolioContext, sequence []ActionCandidate) float64 {
-	coreContext := convertToCorePortfolioContext(ctx)
-	coreSequence := convertToCoreSequence(sequence)
-	// Windfall is part of opportunity capture, but we can approximate
-	// by evaluating with only the sequence
-	return coreevaluation.EvaluateEndState(coreContext, coreSequence, 0, 0, 0, nil)
-}
-
-// calculateActionPriorityScore is exposed for testing
-func calculateActionPriorityScore(sequence []ActionCandidate) float64 {
-	if len(sequence) == 0 {
-		return 0.5
-	}
-
-	totalPriority := 0.0
-	for _, action := range sequence {
-		priority := math.Max(0, math.Min(1, action.Priority))
-		totalPriority += priority
-	}
-
-	return totalPriority / float64(len(sequence))
-}
+// NOTE: calculateWindfallScore and calculateActionPriorityScore have been removed
+// as part of the pure end-state scoring refactor. These functions scored based on
+// action characteristics, which is no longer part of the scoring philosophy.
+// The new scoring is purely based on portfolio end state quality.

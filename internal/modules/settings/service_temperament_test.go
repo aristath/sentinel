@@ -32,36 +32,33 @@ func getDefaultTemperamentValues() (riskTolerance, aggression, patience float64)
 // ============================================================================
 
 func TestEvaluationWeightsStruct(t *testing.T) {
+	// Pure end-state scoring with 4 components
 	weights := EvaluationWeights{
-		OpportunityCapture:       0.30,
-		PortfolioQuality:         0.25,
-		RiskAdjustedMetrics:      0.15,
-		DiversificationAlignment: 0.20,
-		RegimeRobustness:         0.10,
+		PortfolioQuality:         0.35,
+		DiversificationAlignment: 0.30,
+		RiskAdjustedMetrics:      0.25,
+		EndStateImprovement:      0.10,
 	}
 
 	// Weights should sum close to 1.0
-	sum := weights.OpportunityCapture + weights.PortfolioQuality +
-		weights.RiskAdjustedMetrics + weights.DiversificationAlignment +
-		weights.RegimeRobustness
+	sum := weights.PortfolioQuality + weights.DiversificationAlignment +
+		weights.RiskAdjustedMetrics + weights.EndStateImprovement
 	assert.InDelta(t, 1.0, sum, 0.001, "weights should sum to 1.0")
 }
 
 func TestEvaluationWeightsNormalization(t *testing.T) {
 	// Test that weights are normalized to sum to 1.0
 	weights := EvaluationWeights{
-		OpportunityCapture:       0.35,
-		PortfolioQuality:         0.28,
-		RiskAdjustedMetrics:      0.20,
-		DiversificationAlignment: 0.23,
-		RegimeRobustness:         0.12,
+		PortfolioQuality:         0.40,
+		DiversificationAlignment: 0.35,
+		RiskAdjustedMetrics:      0.30,
+		EndStateImprovement:      0.15,
 	}
 
 	normalized := weights.Normalize()
 
-	sum := normalized.OpportunityCapture + normalized.PortfolioQuality +
-		normalized.RiskAdjustedMetrics + normalized.DiversificationAlignment +
-		normalized.RegimeRobustness
+	sum := normalized.PortfolioQuality + normalized.DiversificationAlignment +
+		normalized.RiskAdjustedMetrics + normalized.EndStateImprovement
 	assert.InDelta(t, 1.0, sum, 0.001, "normalized weights should sum to 1.0")
 }
 
@@ -355,19 +352,18 @@ func TestRoundTrip(t *testing.T) {
 
 // Test normalize function
 func TestNormalizeWeights(t *testing.T) {
+	// Pure end-state scoring weights
 	weights := EvaluationWeights{
-		OpportunityCapture:       0.30,
-		PortfolioQuality:         0.25,
-		RiskAdjustedMetrics:      0.15,
-		DiversificationAlignment: 0.20,
-		RegimeRobustness:         0.10,
+		PortfolioQuality:         0.35,
+		DiversificationAlignment: 0.30,
+		RiskAdjustedMetrics:      0.25,
+		EndStateImprovement:      0.10,
 	}
 
 	normalized := weights.Normalize()
 
 	// Sum should be exactly 1.0
-	sum := normalized.OpportunityCapture + normalized.PortfolioQuality +
-		normalized.RiskAdjustedMetrics + normalized.DiversificationAlignment +
-		normalized.RegimeRobustness
+	sum := normalized.PortfolioQuality + normalized.DiversificationAlignment +
+		normalized.RiskAdjustedMetrics + normalized.EndStateImprovement
 	assert.True(t, math.Abs(sum-1.0) < 0.0001, "normalized sum should be 1.0, got %f", sum)
 }

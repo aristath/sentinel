@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/aristath/sentinel/internal/modules/optimization"
+	"github.com/aristath/sentinel/internal/modules/planning/domain"
 	"github.com/aristath/sentinel/internal/modules/sequences"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
@@ -17,34 +18,31 @@ import (
 func setupTestService() *sequences.Service {
 	logger := zerolog.New(nil).Level(zerolog.Disabled)
 	riskBuilder := &optimization.RiskModelBuilder{}
-	return sequences.NewService(logger, riskBuilder)
+	// Pass nil enforcer - tests don't need constraint enforcement
+	return sequences.NewService(logger, riskBuilder, nil)
 }
 
-func TestHandleGenerateFromPattern(t *testing.T) {
+func TestHandleGenerate(t *testing.T) {
 	logger := zerolog.New(nil).Level(zerolog.Disabled)
 	service := setupTestService()
 	handler := NewHandler(service, logger)
 
 	requestBody := map[string]interface{}{
-		"pattern_type": "opportunity_first",
 		"opportunities": map[string]interface{}{
 			"profit_taking":  []interface{}{},
 			"averaging_down": []interface{}{},
 		},
 		"config": map[string]interface{}{
-			"patterns": map[string]interface{}{
-				"opportunity_first": map[string]interface{}{
-					"enabled": true,
-				},
-			},
+			"max_depth":     5,
+			"max_sequences": 100,
 		},
 	}
 	bodyBytes, _ := json.Marshal(requestBody)
 
-	req := httptest.NewRequest("POST", "/api/sequences/generate/pattern", bytes.NewReader(bodyBytes))
+	req := httptest.NewRequest("POST", "/api/sequences/generate", bytes.NewReader(bodyBytes))
 	w := httptest.NewRecorder()
 
-	handler.HandleGenerateFromPattern(w, req)
+	handler.HandleGenerate(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
@@ -57,49 +55,46 @@ func TestHandleGenerateFromPattern(t *testing.T) {
 	assert.Contains(t, response, "metadata")
 }
 
-func TestHandleGenerateFromAllPatterns(t *testing.T) {
+func TestHandleGenerateWithOpportunities(t *testing.T) {
 	logger := zerolog.New(nil).Level(zerolog.Disabled)
 	service := setupTestService()
 	handler := NewHandler(service, logger)
 
-	requestBody := map[string]interface{}{
-		"opportunities": map[string]interface{}{
-			"profit_taking":  []interface{}{},
-			"averaging_down": []interface{}{},
-		},
-		"config": map[string]interface{}{
-			"patterns": map[string]interface{}{
-				"opportunity_first": map[string]interface{}{
-					"enabled": true,
+	requestBody := GenerateRequest{
+		Opportunities: domain.OpportunitiesByCategory{
+			domain.OpportunityCategoryProfitTaking: []domain.ActionCandidate{
+				{
+					Symbol:   "AAPL",
+					ISIN:     "US0378331005",
+					Side:     "SELL",
+					Quantity: 10,
+					Price:    150.0,
+					ValueEUR: 1500.0,
+					Priority: 0.8,
 				},
 			},
+			domain.OpportunityCategoryOpportunityBuys: []domain.ActionCandidate{
+				{
+					Symbol:   "GOOGL",
+					ISIN:     "US02079K1079",
+					Side:     "BUY",
+					Quantity: 5,
+					Price:    100.0,
+					ValueEUR: 500.0,
+					Priority: 0.7,
+				},
+			},
+		},
+		Config: &domain.PlannerConfiguration{
+			MaxDepth: 3,
 		},
 	}
 	bodyBytes, _ := json.Marshal(requestBody)
 
-	req := httptest.NewRequest("POST", "/api/sequences/generate/all-patterns", bytes.NewReader(bodyBytes))
+	req := httptest.NewRequest("POST", "/api/sequences/generate", bytes.NewReader(bodyBytes))
 	w := httptest.NewRecorder()
 
-	handler.HandleGenerateFromAllPatterns(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var response map[string]interface{}
-	err := json.NewDecoder(w.Body).Decode(&response)
-	require.NoError(t, err)
-
-	assert.Contains(t, response, "data")
-}
-
-func TestHandleListPatterns(t *testing.T) {
-	logger := zerolog.New(nil).Level(zerolog.Disabled)
-	service := setupTestService()
-	handler := NewHandler(service, logger)
-
-	req := httptest.NewRequest("GET", "/api/sequences/patterns", nil)
-	w := httptest.NewRecorder()
-
-	handler.HandleListPatterns(w, req)
+	handler.HandleGenerate(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
@@ -108,38 +103,20 @@ func TestHandleListPatterns(t *testing.T) {
 	require.NoError(t, err)
 
 	data := response["data"].(map[string]interface{})
-	patterns := data["patterns"].([]interface{})
-	assert.Greater(t, len(patterns), 0, "Should have at least one pattern")
+	count := int(data["count"].(float64))
+	// Should generate sequences: single SELL, single BUY, and SELL+BUY combo
+	assert.GreaterOrEqual(t, count, 1, "Should generate at least one sequence")
 }
 
-func TestHandleFilterEligibility(t *testing.T) {
+func TestHandleGetInfo(t *testing.T) {
 	logger := zerolog.New(nil).Level(zerolog.Disabled)
 	service := setupTestService()
 	handler := NewHandler(service, logger)
 
-	requestBody := map[string]interface{}{
-		"sequences": []interface{}{
-			map[string]interface{}{
-				"actions": []interface{}{
-					map[string]interface{}{
-						"symbol":   "AAPL",
-						"isin":     "US0378331005",
-						"side":     "BUY",
-						"quantity": 1,
-						"price":    150.0,
-					},
-				},
-				"pattern_type": "direct_buy",
-			},
-		},
-		"config": map[string]interface{}{},
-	}
-	bodyBytes, _ := json.Marshal(requestBody)
-
-	req := httptest.NewRequest("POST", "/api/sequences/filter/eligibility", bytes.NewReader(bodyBytes))
+	req := httptest.NewRequest("GET", "/api/sequences/info", nil)
 	w := httptest.NewRecorder()
 
-	handler.HandleFilterEligibility(w, req)
+	handler.HandleGetInfo(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
@@ -147,7 +124,10 @@ func TestHandleFilterEligibility(t *testing.T) {
 	err := json.NewDecoder(w.Body).Decode(&response)
 	require.NoError(t, err)
 
-	assert.Contains(t, response, "data")
+	data := response["data"].(map[string]interface{})
+	assert.Equal(t, "exhaustive", data["generator"])
+	assert.Contains(t, data, "features")
+	assert.Contains(t, data, "filters")
 }
 
 func TestHandleFilterCorrelation(t *testing.T) {
@@ -167,7 +147,7 @@ func TestHandleFilterCorrelation(t *testing.T) {
 						"price":    150.0,
 					},
 				},
-				"pattern_type": "direct_buy",
+				"pattern_type": "exhaustive",
 			},
 		},
 		"config": map[string]interface{}{},
@@ -188,170 +168,15 @@ func TestHandleFilterCorrelation(t *testing.T) {
 	assert.Contains(t, response, "data")
 }
 
-func TestHandleFilterRecentlyTraded(t *testing.T) {
-	logger := zerolog.New(nil).Level(zerolog.Disabled)
-	service := setupTestService()
-	handler := NewHandler(service, logger)
-
-	requestBody := map[string]interface{}{
-		"sequences": []interface{}{
-			map[string]interface{}{
-				"actions": []interface{}{
-					map[string]interface{}{
-						"symbol":   "AAPL",
-						"isin":     "US0378331005",
-						"side":     "BUY",
-						"quantity": 1,
-						"price":    150.0,
-					},
-				},
-				"pattern_type": "direct_buy",
-			},
-		},
-		"config": map[string]interface{}{},
-	}
-	bodyBytes, _ := json.Marshal(requestBody)
-
-	req := httptest.NewRequest("POST", "/api/sequences/filter/recently-traded", bytes.NewReader(bodyBytes))
-	w := httptest.NewRecorder()
-
-	handler.HandleFilterRecentlyTraded(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var response map[string]interface{}
-	err := json.NewDecoder(w.Body).Decode(&response)
-	require.NoError(t, err)
-
-	assert.Contains(t, response, "data")
-}
-
-func TestHandleFilterTags(t *testing.T) {
-	logger := zerolog.New(nil).Level(zerolog.Disabled)
-	service := setupTestService()
-	handler := NewHandler(service, logger)
-
-	requestBody := map[string]interface{}{
-		"sequences": []interface{}{
-			map[string]interface{}{
-				"actions": []interface{}{
-					map[string]interface{}{
-						"symbol":   "AAPL",
-						"isin":     "US0378331005",
-						"side":     "BUY",
-						"quantity": 1,
-						"price":    150.0,
-					},
-				},
-				"pattern_type": "direct_buy",
-			},
-		},
-		"config": map[string]interface{}{},
-	}
-	bodyBytes, _ := json.Marshal(requestBody)
-
-	req := httptest.NewRequest("POST", "/api/sequences/filter/tags", bytes.NewReader(bodyBytes))
-	w := httptest.NewRecorder()
-
-	handler.HandleFilterTags(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var response map[string]interface{}
-	err := json.NewDecoder(w.Body).Decode(&response)
-	require.NoError(t, err)
-
-	assert.Contains(t, response, "data")
-}
-
-func TestHandleGetContext(t *testing.T) {
-	logger := zerolog.New(nil).Level(zerolog.Disabled)
-	service := setupTestService()
-	handler := NewHandler(service, logger)
-
-	req := httptest.NewRequest("GET", "/api/sequences/context", nil)
-	w := httptest.NewRecorder()
-
-	handler.HandleGetContext(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var response map[string]interface{}
-	err := json.NewDecoder(w.Body).Decode(&response)
-	require.NoError(t, err)
-
-	assert.Contains(t, response, "data")
-	data := response["data"].(map[string]interface{})
-	assert.Contains(t, data, "patterns")
-	assert.Contains(t, data, "filters")
-}
-
-func TestHandleGenerateCombinatorial(t *testing.T) {
-	logger := zerolog.New(nil).Level(zerolog.Disabled)
-	service := setupTestService()
-	handler := NewHandler(service, logger)
-
-	requestBody := map[string]interface{}{
-		"pattern_types": []string{"opportunity_first", "direct_buy"},
-		"opportunities": map[string]interface{}{
-			"profit_taking":  []interface{}{},
-			"averaging_down": []interface{}{},
-		},
-		"config": map[string]interface{}{
-			"patterns": map[string]interface{}{
-				"opportunity_first": map[string]interface{}{
-					"enabled": true,
-				},
-				"direct_buy": map[string]interface{}{
-					"enabled": true,
-				},
-			},
-		},
-	}
-	bodyBytes, _ := json.Marshal(requestBody)
-
-	req := httptest.NewRequest("POST", "/api/sequences/generate/combinatorial", bytes.NewReader(bodyBytes))
-	w := httptest.NewRecorder()
-
-	handler.HandleGenerateCombinatorial(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-
-	var response map[string]interface{}
-	err := json.NewDecoder(w.Body).Decode(&response)
-	require.NoError(t, err)
-
-	assert.Contains(t, response, "data")
-}
-
 func TestInvalidJSONRequest(t *testing.T) {
 	logger := zerolog.New(nil).Level(zerolog.Disabled)
 	service := setupTestService()
 	handler := NewHandler(service, logger)
 
-	req := httptest.NewRequest("POST", "/api/sequences/generate/pattern", bytes.NewReader([]byte("invalid json")))
+	req := httptest.NewRequest("POST", "/api/sequences/generate", bytes.NewReader([]byte("invalid json")))
 	w := httptest.NewRecorder()
 
-	handler.HandleGenerateFromPattern(w, req)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-}
-
-func TestMissingPatternType(t *testing.T) {
-	logger := zerolog.New(nil).Level(zerolog.Disabled)
-	service := setupTestService()
-	handler := NewHandler(service, logger)
-
-	requestBody := map[string]interface{}{
-		"opportunities": map[string]interface{}{},
-		"config":        map[string]interface{}{},
-	}
-	bodyBytes, _ := json.Marshal(requestBody)
-
-	req := httptest.NewRequest("POST", "/api/sequences/generate/pattern", bytes.NewReader(bodyBytes))
-	w := httptest.NewRecorder()
-
-	handler.HandleGenerateFromPattern(w, req)
+	handler.HandleGenerate(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
 }

@@ -44,6 +44,8 @@ func (r *ConfigRepository) GetDefaultConfig() (*domain.PlannerConfiguration, err
 }
 
 // GetSettings retrieves the planner settings (single config exists).
+// NOTE: Pattern, generator, and eligibility/recently_traded filter columns removed in 2026-01.
+// These are now handled by ExhaustiveGenerator with constraints.Enforcer during generation.
 func (r *ConfigRepository) getSettings() (*domain.PlannerConfiguration, error) {
 	var cfg domain.PlannerConfiguration
 
@@ -63,26 +65,8 @@ func (r *ConfigRepository) getSettings() (*domain.PlannerConfiguration, error) {
 			enable_rebalance_sells_calc,
 			enable_rebalance_buys_calc,
 			enable_weight_based_calc,
-			enable_direct_buy_pattern,
-			enable_profit_taking_pattern,
-			enable_rebalance_pattern,
-			enable_averaging_down_pattern,
-			enable_single_best_pattern,
-			enable_multi_sell_pattern,
-			enable_mixed_strategy_pattern,
-			enable_opportunity_first_pattern,
-			enable_deep_rebalance_pattern,
-			enable_cash_generation_pattern,
-			enable_cost_optimized_pattern,
-			enable_adaptive_pattern,
-			enable_market_regime_pattern,
-			enable_combinatorial_generator,
-			enable_enhanced_combinatorial_generator,
-			enable_constraint_relaxation_generator,
 			enable_correlation_aware_filter,
 			enable_diversity_filter,
-			enable_eligibility_filter,
-			enable_recently_traded_filter,
 			enable_tag_filtering
 		FROM planner_settings
 		WHERE id = 'main'
@@ -101,26 +85,8 @@ func (r *ConfigRepository) getSettings() (*domain.PlannerConfiguration, error) {
 		&cfg.EnableRebalanceSellsCalc,
 		&cfg.EnableRebalanceBuysCalc,
 		&cfg.EnableWeightBasedCalc,
-		&cfg.EnableDirectBuyPattern,
-		&cfg.EnableProfitTakingPattern,
-		&cfg.EnableRebalancePattern,
-		&cfg.EnableAveragingDownPattern,
-		&cfg.EnableSingleBestPattern,
-		&cfg.EnableMultiSellPattern,
-		&cfg.EnableMixedStrategyPattern,
-		&cfg.EnableOpportunityFirstPattern,
-		&cfg.EnableDeepRebalancePattern,
-		&cfg.EnableCashGenerationPattern,
-		&cfg.EnableCostOptimizedPattern,
-		&cfg.EnableAdaptivePattern,
-		&cfg.EnableMarketRegimePattern,
-		&cfg.EnableCombinatorialGenerator,
-		&cfg.EnableEnhancedCombinatorialGenerator,
-		&cfg.EnableConstraintRelaxationGenerator,
 		&cfg.EnableCorrelationAwareFilter,
 		&cfg.EnableDiversityFilter,
-		&cfg.EnableEligibilityFilter,
-		&cfg.EnableRecentlyTradedFilter,
 		&cfg.EnableTagFiltering,
 	)
 
@@ -143,6 +109,7 @@ func (r *ConfigRepository) getSettings() (*domain.PlannerConfiguration, error) {
 }
 
 // UpdateSettings updates the planner settings (single config exists).
+// NOTE: Pattern, generator, and eligibility/recently_traded filter columns removed in 2026-01.
 func (r *ConfigRepository) updateSettings(cfg *domain.PlannerConfiguration) error {
 	now := time.Now().Unix()
 
@@ -173,26 +140,8 @@ func (r *ConfigRepository) updateSettings(cfg *domain.PlannerConfiguration) erro
 			enable_rebalance_sells_calc = ?,
 			enable_rebalance_buys_calc = ?,
 			enable_weight_based_calc = ?,
-			enable_direct_buy_pattern = ?,
-			enable_profit_taking_pattern = ?,
-			enable_rebalance_pattern = ?,
-			enable_averaging_down_pattern = ?,
-			enable_single_best_pattern = ?,
-			enable_multi_sell_pattern = ?,
-			enable_mixed_strategy_pattern = ?,
-			enable_opportunity_first_pattern = ?,
-			enable_deep_rebalance_pattern = ?,
-			enable_cash_generation_pattern = ?,
-			enable_cost_optimized_pattern = ?,
-			enable_adaptive_pattern = ?,
-			enable_market_regime_pattern = ?,
-			enable_combinatorial_generator = ?,
-			enable_enhanced_combinatorial_generator = ?,
-			enable_constraint_relaxation_generator = ?,
 			enable_correlation_aware_filter = ?,
 			enable_diversity_filter = ?,
-			enable_eligibility_filter = ?,
-			enable_recently_traded_filter = ?,
 			enable_tag_filtering = ?,
 			updated_at = ?
 		WHERE id = 'main'
@@ -211,26 +160,8 @@ func (r *ConfigRepository) updateSettings(cfg *domain.PlannerConfiguration) erro
 		cfg.EnableRebalanceSellsCalc,
 		cfg.EnableRebalanceBuysCalc,
 		cfg.EnableWeightBasedCalc,
-		cfg.EnableDirectBuyPattern,
-		cfg.EnableProfitTakingPattern,
-		cfg.EnableRebalancePattern,
-		cfg.EnableAveragingDownPattern,
-		cfg.EnableSingleBestPattern,
-		cfg.EnableMultiSellPattern,
-		cfg.EnableMixedStrategyPattern,
-		cfg.EnableOpportunityFirstPattern,
-		cfg.EnableDeepRebalancePattern,
-		cfg.EnableCashGenerationPattern,
-		cfg.EnableCostOptimizedPattern,
-		cfg.EnableAdaptivePattern,
-		cfg.EnableMarketRegimePattern,
-		cfg.EnableCombinatorialGenerator,
-		cfg.EnableEnhancedCombinatorialGenerator,
-		cfg.EnableConstraintRelaxationGenerator,
 		cfg.EnableCorrelationAwareFilter,
 		cfg.EnableDiversityFilter,
-		cfg.EnableEligibilityFilter,
-		cfg.EnableRecentlyTradedFilter,
 		cfg.EnableTagFiltering,
 		now,
 	)

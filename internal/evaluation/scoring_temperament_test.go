@@ -33,46 +33,39 @@ func TestScoringParamsStruct(t *testing.T) {
 
 // TestEvaluationWeightsFromSettings verifies weights can be retrieved from settings
 func TestEvaluationWeightsFromSettings(t *testing.T) {
+	// Pure end-state scoring with 4 components
 	weights := settings.EvaluationWeights{
-		OpportunityCapture:       0.30,
-		PortfolioQuality:         0.25,
-		RiskAdjustedMetrics:      0.15,
-		DiversificationAlignment: 0.20,
-		RegimeRobustness:         0.10,
+		PortfolioQuality:         0.35,
+		DiversificationAlignment: 0.30,
+		RiskAdjustedMetrics:      0.25,
+		EndStateImprovement:      0.10,
 	}
 
 	// Verify weights sum to 1.0
-	sum := weights.OpportunityCapture + weights.PortfolioQuality +
-		weights.RiskAdjustedMetrics + weights.DiversificationAlignment +
-		weights.RegimeRobustness
+	sum := weights.PortfolioQuality + weights.DiversificationAlignment +
+		weights.RiskAdjustedMetrics + weights.EndStateImprovement
 
 	assert.InDelta(t, 1.0, sum, 0.001, "weights should sum to 1.0")
 
 	// Verify normalization works
 	normalized := weights.Normalize()
-	normalizedSum := normalized.OpportunityCapture + normalized.PortfolioQuality +
-		normalized.RiskAdjustedMetrics + normalized.DiversificationAlignment +
-		normalized.RegimeRobustness
+	normalizedSum := normalized.PortfolioQuality + normalized.DiversificationAlignment +
+		normalized.RiskAdjustedMetrics + normalized.EndStateImprovement
 
 	assert.InDelta(t, 1.0, normalizedSum, 0.001, "normalized weights should sum to 1.0")
 }
 
-// TestDefaultWeightsMatchConstants verifies default temperament produces same weights as constants
+// TestDefaultWeightsMatchConstants verifies default weights match the new pure end-state constants
 func TestDefaultWeightsMatchConstants(t *testing.T) {
-	// At temperament 0.5 (balanced), weights should match the base values
-	// which should be the same as the current hardcoded constants
-
-	// Current constants
-	assert.Equal(t, 0.30, WeightOpportunityCapture)
-	assert.Equal(t, 0.25, WeightPortfolioQuality)
-	assert.Equal(t, 0.20, WeightDiversificationAlignment)
-	assert.Equal(t, 0.15, WeightRiskAdjustedMetrics)
-	assert.Equal(t, 0.10, WeightRegimeRobustness)
+	// Current constants for pure end-state scoring
+	assert.Equal(t, 0.35, WeightPortfolioQuality)
+	assert.Equal(t, 0.30, WeightDiversificationAlignment)
+	assert.Equal(t, 0.25, WeightRiskAdjustedMetrics)
+	assert.Equal(t, 0.10, WeightEndStateImprovement)
 
 	// Sum should be 1.0
-	sum := WeightOpportunityCapture + WeightPortfolioQuality +
-		WeightDiversificationAlignment + WeightRiskAdjustedMetrics +
-		WeightRegimeRobustness
+	sum := WeightPortfolioQuality + WeightDiversificationAlignment +
+		WeightRiskAdjustedMetrics + WeightEndStateImprovement
 	assert.InDelta(t, 1.0, sum, 0.001, "constant weights should sum to 1.0")
 }
 
@@ -80,27 +73,20 @@ func TestDefaultWeightsMatchConstants(t *testing.T) {
 func TestScoringThresholdsMatchDefaults(t *testing.T) {
 	// Current constants
 	assert.Equal(t, 0.3, DeviationScale)
-	assert.Equal(t, 0.50, WindfallExcessHigh)
-	assert.Equal(t, 0.25, WindfallExcessMedium)
 }
 
 // TestTemperamentScorerInterface verifies the scorer can be created with settings
 func TestTemperamentScorerInterface(t *testing.T) {
-	// This tests that a scorer can use temperament-adjusted parameters
-	// The actual implementation will inject settings service
-
+	// Pure end-state weights
 	weights := settings.EvaluationWeights{
-		OpportunityCapture:       0.30,
-		PortfolioQuality:         0.25,
-		RiskAdjustedMetrics:      0.15,
-		DiversificationAlignment: 0.20,
-		RegimeRobustness:         0.10,
+		PortfolioQuality:         0.35,
+		DiversificationAlignment: 0.30,
+		RiskAdjustedMetrics:      0.25,
+		EndStateImprovement:      0.10,
 	}
 
 	params := settings.ScoringParams{
-		WindfallExcessHigh:   0.50,
-		WindfallExcessMedium: 0.25,
-		DeviationScale:       0.30,
+		DeviationScale: 0.30,
 	}
 
 	// Create a scorer config
@@ -113,9 +99,8 @@ func TestTemperamentScorerInterface(t *testing.T) {
 
 	// Verify config is valid
 	assert.NotNil(t, config)
-	assert.InDelta(t, 1.0, config.Weights.OpportunityCapture+config.Weights.PortfolioQuality+
-		config.Weights.RiskAdjustedMetrics+config.Weights.DiversificationAlignment+
-		config.Weights.RegimeRobustness, 0.001)
+	assert.InDelta(t, 1.0, config.Weights.PortfolioQuality+config.Weights.DiversificationAlignment+
+		config.Weights.RiskAdjustedMetrics+config.Weights.EndStateImprovement, 0.001)
 }
 
 // TestGetRegimeAdaptiveWeights_BullMarket verifies bull market weight adjustments
@@ -123,12 +108,12 @@ func TestGetRegimeAdaptiveWeights_BullMarket(t *testing.T) {
 	// Strong bull market
 	weights := GetRegimeAdaptiveWeights(0.8)
 
-	// In bull market, opportunity should increase
-	assert.Greater(t, weights["opportunity"], 0.30,
-		"opportunity weight should increase in bull market")
+	// In bull market, quality should increase
+	assert.Greater(t, weights["quality"], WeightPortfolioQuality,
+		"quality weight should increase in bull market")
 
 	// Risk weight should decrease
-	assert.Less(t, weights["risk"], 0.15,
+	assert.Less(t, weights["risk"], WeightRiskAdjustedMetrics,
 		"risk weight should decrease in bull market")
 }
 
@@ -137,12 +122,12 @@ func TestGetRegimeAdaptiveWeights_BearMarket(t *testing.T) {
 	// Strong bear market
 	weights := GetRegimeAdaptiveWeights(-0.8)
 
-	// In bear market, opportunity should decrease
-	assert.Less(t, weights["opportunity"], 0.30,
-		"opportunity weight should decrease in bear market")
+	// In bear market, quality should decrease
+	assert.Less(t, weights["quality"], WeightPortfolioQuality,
+		"quality weight should decrease in bear market")
 
 	// Risk weight should increase
-	assert.Greater(t, weights["risk"], 0.15,
+	assert.Greater(t, weights["risk"], WeightRiskAdjustedMetrics,
 		"risk weight should increase in bear market")
 }
 
@@ -152,9 +137,8 @@ func TestGetRegimeAdaptiveWeights_NeutralMarket(t *testing.T) {
 	weights := GetRegimeAdaptiveWeights(0.0)
 
 	// Weights should be at base values
-	assert.Equal(t, WeightOpportunityCapture, weights["opportunity"])
 	assert.Equal(t, WeightPortfolioQuality, weights["quality"])
 	assert.Equal(t, WeightDiversificationAlignment, weights["diversification"])
 	assert.Equal(t, WeightRiskAdjustedMetrics, weights["risk"])
-	assert.Equal(t, WeightRegimeRobustness, weights["robustness"])
+	assert.Equal(t, WeightEndStateImprovement, weights["improvement"])
 }

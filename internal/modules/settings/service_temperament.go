@@ -55,14 +55,14 @@ func (s *Service) getAdjustedParam(paramName string) float64 {
 // EVALUATION WEIGHTS
 // ============================================================================
 
-// GetAdjustedEvaluationWeights returns normalized evaluation weights adjusted by temperament
+// GetAdjustedEvaluationWeights returns normalized evaluation weights adjusted by temperament.
+// Uses pure end-state scoring with 4 components.
 func (s *Service) GetAdjustedEvaluationWeights() EvaluationWeights {
 	weights := EvaluationWeights{
-		OpportunityCapture:       s.getAdjustedParam("evaluation_opportunity_weight"),
 		PortfolioQuality:         s.getAdjustedParam("evaluation_quality_weight"),
-		RiskAdjustedMetrics:      s.getAdjustedParam("evaluation_risk_adjusted_weight"),
 		DiversificationAlignment: s.getAdjustedParam("evaluation_diversification_weight"),
-		RegimeRobustness:         s.getAdjustedParam("evaluation_regime_weight"),
+		RiskAdjustedMetrics:      s.getAdjustedParam("evaluation_risk_adjusted_weight"),
+		EndStateImprovement:      s.getAdjustedParam("evaluation_improvement_weight"),
 	}
 
 	return weights.Normalize()
@@ -429,11 +429,10 @@ func (s *Service) GetAdjustedRegimeThresholds() RegimeThresholds {
 // EVALUATION SCORING
 // ============================================================================
 
-// GetAdjustedScoringParams returns evaluation scoring parameters adjusted by temperament
+// GetAdjustedScoringParams returns evaluation scoring parameters adjusted by temperament.
+// Uses pure end-state scoring (no windfall-related params).
 func (s *Service) GetAdjustedScoringParams() ScoringParams {
 	return ScoringParams{
-		WindfallExcessHigh:   s.getAdjustedParam("scoring_windfall_excess_high"),
-		WindfallExcessMedium: s.getAdjustedParam("scoring_windfall_excess_medium"),
 		DeviationScale:       s.getAdjustedParam("scoring_deviation_scale"),
 		RegimeBullThreshold:  s.getAdjustedParam("scoring_regime_bull_threshold"),
 		RegimeBearThreshold:  s.getAdjustedParam("scoring_regime_bear_threshold"),

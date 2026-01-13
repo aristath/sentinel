@@ -158,61 +158,9 @@ func TestValidator_Validate_NoCalculatorsEnabled(t *testing.T) {
 	assert.Contains(t, err.Error(), "at least one opportunity calculator must be enabled")
 }
 
-func TestValidator_Validate_NoPatternsEnabled(t *testing.T) {
-	validator := NewValidator()
-	config := domain.NewDefaultConfiguration()
-
-	// Disable all patterns
-	config.EnableDirectBuyPattern = false
-	config.EnableProfitTakingPattern = false
-	config.EnableRebalancePattern = false
-	config.EnableAveragingDownPattern = false
-	config.EnableSingleBestPattern = false
-	config.EnableMultiSellPattern = false
-	config.EnableMixedStrategyPattern = false
-	config.EnableOpportunityFirstPattern = false
-	config.EnableDeepRebalancePattern = false
-	config.EnableCashGenerationPattern = false
-	config.EnableCostOptimizedPattern = false
-	config.EnableAdaptivePattern = false
-	config.EnableMarketRegimePattern = false
-
-	err := validator.Validate(config)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "pattern_generators")
-	assert.Contains(t, err.Error(), "at least one pattern generator must be enabled")
-}
-
-func TestValidator_Validate_NoGeneratorsEnabled(t *testing.T) {
-	validator := NewValidator()
-	config := domain.NewDefaultConfiguration()
-
-	// Disable all generators
-	config.EnableCombinatorialGenerator = false
-	config.EnableEnhancedCombinatorialGenerator = false
-	config.EnableConstraintRelaxationGenerator = false
-
-	err := validator.Validate(config)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "sequence_generators")
-	assert.Contains(t, err.Error(), "at least one sequence generator must be enabled")
-}
-
-func TestValidator_Validate_NoFiltersEnabled(t *testing.T) {
-	validator := NewValidator()
-	config := domain.NewDefaultConfiguration()
-
-	// Disable all filters
-	config.EnableCorrelationAwareFilter = false
-	config.EnableDiversityFilter = false
-	config.EnableEligibilityFilter = false
-	config.EnableRecentlyTradedFilter = false
-
-	err := validator.Validate(config)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "filters")
-	assert.Contains(t, err.Error(), "at least one filter must be enabled")
-}
+// NOTE: TestValidator_Validate_NoPatternsEnabled, TestValidator_Validate_NoGeneratorsEnabled,
+// and TestValidator_Validate_NoFiltersEnabled removed - patterns/generators are no longer
+// validated as they've been replaced by ExhaustiveGenerator, and filters are optional.
 
 func TestValidator_Validate_NoBuyOrSellAllowed(t *testing.T) {
 	validator := NewValidator()
@@ -356,12 +304,6 @@ func TestValidator_ValidateParams(t *testing.T) {
 		assert.NoError(t, err) // Unknown modules accept any params
 	})
 
-	t.Run("module with no required params", func(t *testing.T) {
-		params := map[string]interface{}{}
-		err := validator.ValidateParams("direct_buy", params)
-		assert.NoError(t, err) // direct_buy has no required params
-	})
-
 	t.Run("averaging_down cross-constraint", func(t *testing.T) {
 		params := map[string]interface{}{
 			"loss_threshold":    0.25, // Invalid: > max_loss_allowed
@@ -412,66 +354,7 @@ func TestValidator_ValidateParams(t *testing.T) {
 		assert.Contains(t, errStr, ";")
 	})
 
-	t.Run("ValidateParams edge cases", func(t *testing.T) {
-		t.Run("invalid threshold value", func(t *testing.T) {
-			params := map[string]interface{}{
-				"gain_threshold": 1.5, // > 1.0
-				"windfall_score": 0.7,
-				"min_hold_days":  float64(90),
-				"sell_cooldown":  float64(180),
-			}
-			err := validator.ValidateParams("profit_taking", params)
-			assert.Error(t, err)
-		})
-
-		t.Run("invalid weight value", func(t *testing.T) {
-			params := map[string]interface{}{
-				"scoring_weight":    1.5, // > 1.0
-				"max_opportunities": float64(5),
-			}
-			err := validator.ValidateParams("opportunity_buys", params)
-			assert.Error(t, err)
-		})
-
-		t.Run("invalid count as float zero", func(t *testing.T) {
-			params := map[string]interface{}{
-				"gain_threshold": 0.15,
-				"windfall_score": 0.7,
-				"min_hold_days":  float64(0), // Zero
-				"sell_cooldown":  float64(180),
-			}
-			err := validator.ValidateParams("profit_taking", params)
-			assert.Error(t, err)
-		})
-
-		t.Run("invalid count as negative int", func(t *testing.T) {
-			params := map[string]interface{}{
-				"max_combinations": -10,
-			}
-			err := validator.ValidateParams("combinatorial", params)
-			assert.Error(t, err)
-		})
-
-		t.Run("invalid percentage", func(t *testing.T) {
-			// Test with a module that uses percentage (if any)
-			// For now, just test that validators work
-			params := map[string]interface{}{
-				"correlation_threshold": 0.85,
-			}
-			err := validator.ValidateParams("correlation_aware", params)
-			assert.NoError(t, err) // Should pass with valid threshold
-		})
-
-		t.Run("invalid factor", func(t *testing.T) {
-			params := map[string]interface{}{
-				"adaptation_rate": 0.0, // Zero factor
-			}
-			err := validator.ValidateParams("adaptive", params)
-			assert.Error(t, err)
-		})
-	})
-
-	t.Run("ValidateParams all module types", func(t *testing.T) {
+	t.Run("ValidateParams calculator modules", func(t *testing.T) {
 		modules := []struct {
 			name   string
 			params map[string]interface{}
@@ -480,11 +363,28 @@ func TestValidator_ValidateParams(t *testing.T) {
 			{"rebalance_sells", map[string]interface{}{"over_weight_threshold": 0.05}, true},
 			{"rebalance_buys", map[string]interface{}{"under_weight_threshold": 0.05}, true},
 			{"weight_based", map[string]interface{}{"target_weight_tolerance": 0.02}, true},
-			{"combinatorial", map[string]interface{}{"max_combinations": float64(100)}, true},
-			{"constraint_relaxation", map[string]interface{}{"relaxation_factor": 1.5}, true},
+		}
+
+		for _, tt := range modules {
+			t.Run(tt.name, func(t *testing.T) {
+				err := validator.ValidateParams(tt.name, tt.params)
+				if tt.valid {
+					assert.NoError(t, err, "Module %s should be valid", tt.name)
+				} else {
+					assert.Error(t, err, "Module %s should be invalid", tt.name)
+				}
+			})
+		}
+	})
+
+	t.Run("ValidateParams filter modules", func(t *testing.T) {
+		modules := []struct {
+			name   string
+			params map[string]interface{}
+			valid  bool
+		}{
+			{"correlation_aware", map[string]interface{}{"correlation_threshold": 0.85}, true},
 			{"diversity", map[string]interface{}{"diversity_threshold": 0.3}, true},
-			{"recently_traded", map[string]interface{}{"cooldown_days": float64(30)}, true},
-			{"market_regime", map[string]interface{}{"regime_threshold": 0.5}, true},
 		}
 
 		for _, tt := range modules {

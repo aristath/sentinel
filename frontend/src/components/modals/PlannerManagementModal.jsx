@@ -25,29 +25,9 @@ const DEFAULT_CONFIG = {
   enable_weight_based_calc: true,
   // Portfolio optimizer
   optimizer_blend: 0.5,
-  // Pattern Generators
-  enable_direct_buy_pattern: true,
-  enable_profit_taking_pattern: true,
-  enable_rebalance_pattern: true,
-  enable_averaging_down_pattern: true,
-  enable_single_best_pattern: true,
-  enable_multi_sell_pattern: true,
-  enable_mixed_strategy_pattern: true,
-  enable_opportunity_first_pattern: true,
-  enable_deep_rebalance_pattern: true,
-  enable_cash_generation_pattern: true,
-  enable_cost_optimized_pattern: true,
-  enable_adaptive_pattern: true,
-  enable_market_regime_pattern: true,
-  // Sequence Generators
-  enable_combinatorial_generator: true,
-  enable_enhanced_combinatorial_generator: true,
-  enable_constraint_relaxation_generator: true,
-  // Filters
+  // Post-generation Filters (eligibility & recently_traded are now handled during generation)
   enable_correlation_aware_filter: true,
   enable_diversity_filter: true,
-  enable_eligibility_filter: true,
-  enable_recently_traded_filter: true,
   // Tag filtering
   enable_tag_filtering: true,
 };
@@ -170,8 +150,6 @@ export function PlannerManagementModal() {
               <Tabs.Tab value="planner">Planner</Tabs.Tab>
               <Tabs.Tab value="transaction">Costs</Tabs.Tab>
               <Tabs.Tab value="calculators">Calculators</Tabs.Tab>
-              <Tabs.Tab value="patterns">Patterns</Tabs.Tab>
-              <Tabs.Tab value="generators">Generators</Tabs.Tab>
               <Tabs.Tab value="filters">Filters</Tabs.Tab>
             </Tabs.List>
 
@@ -518,142 +496,27 @@ export function PlannerManagementModal() {
               </Stack>
             </Tabs.Panel>
 
-            {/* Pattern Generators Tab */}
-            <Tabs.Panel value="patterns" p="md">
-              <Stack gap="md">
-                <Paper p="md" withBorder>
-                  <Text size="sm" fw={500} mb="xs" tt="uppercase">Pattern Generators</Text>
-                  <Text size="xs" c="dimmed" mb="md">
-                    Enable or disable pattern generators that create trade action patterns.
-                  </Text>
-                  <Stack gap="sm">
-                    <Switch
-                      label="Direct Buy Pattern"
-                      checked={getConfigValue('enable_direct_buy_pattern', true)}
-                      onChange={(e) => updateConfig('enable_direct_buy_pattern', e.currentTarget.checked)}
-                    />
-                    <Switch
-                      label="Profit Taking Pattern"
-                      checked={getConfigValue('enable_profit_taking_pattern', true)}
-                      onChange={(e) => updateConfig('enable_profit_taking_pattern', e.currentTarget.checked)}
-                    />
-                    <Switch
-                      label="Rebalance Pattern"
-                      checked={getConfigValue('enable_rebalance_pattern', true)}
-                      onChange={(e) => updateConfig('enable_rebalance_pattern', e.currentTarget.checked)}
-                    />
-                    <Switch
-                      label="Averaging Down Pattern"
-                      checked={getConfigValue('enable_averaging_down_pattern', true)}
-                      onChange={(e) => updateConfig('enable_averaging_down_pattern', e.currentTarget.checked)}
-                    />
-                    <Switch
-                      label="Single Best Pattern"
-                      checked={getConfigValue('enable_single_best_pattern', true)}
-                      onChange={(e) => updateConfig('enable_single_best_pattern', e.currentTarget.checked)}
-                    />
-                    <Switch
-                      label="Multi Sell Pattern"
-                      checked={getConfigValue('enable_multi_sell_pattern', true)}
-                      onChange={(e) => updateConfig('enable_multi_sell_pattern', e.currentTarget.checked)}
-                    />
-                    <Switch
-                      label="Mixed Strategy Pattern"
-                      checked={getConfigValue('enable_mixed_strategy_pattern', true)}
-                      onChange={(e) => updateConfig('enable_mixed_strategy_pattern', e.currentTarget.checked)}
-                    />
-                    <Switch
-                      label="Opportunity First Pattern"
-                      checked={getConfigValue('enable_opportunity_first_pattern', true)}
-                      onChange={(e) => updateConfig('enable_opportunity_first_pattern', e.currentTarget.checked)}
-                    />
-                    <Switch
-                      label="Deep Rebalance Pattern"
-                      checked={getConfigValue('enable_deep_rebalance_pattern', true)}
-                      onChange={(e) => updateConfig('enable_deep_rebalance_pattern', e.currentTarget.checked)}
-                    />
-                    <Switch
-                      label="Cash Generation Pattern"
-                      checked={getConfigValue('enable_cash_generation_pattern', true)}
-                      onChange={(e) => updateConfig('enable_cash_generation_pattern', e.currentTarget.checked)}
-                    />
-                    <Switch
-                      label="Cost Optimized Pattern"
-                      checked={getConfigValue('enable_cost_optimized_pattern', true)}
-                      onChange={(e) => updateConfig('enable_cost_optimized_pattern', e.currentTarget.checked)}
-                    />
-                    <Switch
-                      label="Adaptive Pattern"
-                      checked={getConfigValue('enable_adaptive_pattern', true)}
-                      onChange={(e) => updateConfig('enable_adaptive_pattern', e.currentTarget.checked)}
-                    />
-                    <Switch
-                      label="Market Regime Pattern"
-                      checked={getConfigValue('enable_market_regime_pattern', true)}
-                      onChange={(e) => updateConfig('enable_market_regime_pattern', e.currentTarget.checked)}
-                    />
-                  </Stack>
-                </Paper>
-              </Stack>
-            </Tabs.Panel>
-
-            {/* Sequence Generators Tab */}
-            <Tabs.Panel value="generators" p="md">
-              <Stack gap="md">
-                <Paper p="md" withBorder>
-                  <Text size="sm" fw={500} mb="xs" tt="uppercase">Sequence Generators</Text>
-                  <Text size="xs" c="dimmed" mb="md">
-                    Enable or disable sequence generators that create action sequences.
-                  </Text>
-                  <Stack gap="sm">
-                    <Switch
-                      label="Combinatorial Generator"
-                      checked={getConfigValue('enable_combinatorial_generator', true)}
-                      onChange={(e) => updateConfig('enable_combinatorial_generator', e.currentTarget.checked)}
-                    />
-                    <Switch
-                      label="Enhanced Combinatorial Generator"
-                      checked={getConfigValue('enable_enhanced_combinatorial_generator', true)}
-                      onChange={(e) => updateConfig('enable_enhanced_combinatorial_generator', e.currentTarget.checked)}
-                    />
-                    <Switch
-                      label="Constraint Relaxation Generator"
-                      checked={getConfigValue('enable_constraint_relaxation_generator', true)}
-                      onChange={(e) => updateConfig('enable_constraint_relaxation_generator', e.currentTarget.checked)}
-                    />
-                  </Stack>
-                </Paper>
-              </Stack>
-            </Tabs.Panel>
-
             {/* Filters Tab */}
             <Tabs.Panel value="filters" p="md">
               <Stack gap="md">
                 <Paper p="md" withBorder>
-                  <Text size="sm" fw={500} mb="xs" tt="uppercase">Filters</Text>
+                  <Text size="sm" fw={500} mb="xs" tt="uppercase">Post-Generation Filters</Text>
                   <Text size="xs" c="dimmed" mb="md">
-                    Enable or disable filters that refine generated sequences.
+                    Filters that refine generated sequences after generation.
+                    Eligibility and cooloff checks are now performed during generation for early pruning.
                   </Text>
                   <Stack gap="sm">
                     <Switch
                       label="Correlation Aware Filter"
                       checked={getConfigValue('enable_correlation_aware_filter', true)}
                       onChange={(e) => updateConfig('enable_correlation_aware_filter', e.currentTarget.checked)}
+                      description="Filters sequences with highly correlated actions"
                     />
                     <Switch
                       label="Diversity Filter"
                       checked={getConfigValue('enable_diversity_filter', true)}
                       onChange={(e) => updateConfig('enable_diversity_filter', e.currentTarget.checked)}
-                    />
-                    <Switch
-                      label="Eligibility Filter"
-                      checked={getConfigValue('enable_eligibility_filter', true)}
-                      onChange={(e) => updateConfig('enable_eligibility_filter', e.currentTarget.checked)}
-                    />
-                    <Switch
-                      label="Recently Traded Filter"
-                      checked={getConfigValue('enable_recently_traded_filter', true)}
-                      onChange={(e) => updateConfig('enable_recently_traded_filter', e.currentTarget.checked)}
+                      description="Ensures sequences include diverse actions"
                     />
                     <Divider my="sm" />
                     <Switch

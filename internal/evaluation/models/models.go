@@ -132,18 +132,21 @@ type EvaluationContext struct {
 
 // ScoringConfig holds temperament-adjusted scoring parameters.
 // This allows the scorer to use weights and thresholds from temperament settings.
+//
+// Uses pure end-state scoring with 4 components:
+// - Portfolio Quality (35%)
+// - Diversification & Alignment (30%)
+// - Risk-Adjusted Metrics (25%)
+// - End-State Improvement (10%)
 type ScoringConfig struct {
 	// Main evaluation component weights (should sum to ~1.0)
-	WeightOpportunityCapture       float64 `json:"weight_opportunity_capture"`
 	WeightPortfolioQuality         float64 `json:"weight_portfolio_quality"`
 	WeightDiversificationAlignment float64 `json:"weight_diversification_alignment"`
 	WeightRiskAdjustedMetrics      float64 `json:"weight_risk_adjusted_metrics"`
-	WeightRegimeRobustness         float64 `json:"weight_regime_robustness"`
+	WeightEndStateImprovement      float64 `json:"weight_end_state_improvement"`
 
 	// Scoring thresholds
-	WindfallExcessHigh   float64 `json:"windfall_excess_high"`
-	WindfallExcessMedium float64 `json:"windfall_excess_medium"`
-	DeviationScale       float64 `json:"deviation_scale"`
+	DeviationScale float64 `json:"deviation_scale"`
 
 	// Regime thresholds
 	RegimeBullThreshold float64 `json:"regime_bull_threshold"`

@@ -50,9 +50,10 @@ func EvaluateMonteCarlo(req MonteCarloRequest) MonteCarloResult {
 				priceAdj,
 			)
 
-			// Evaluate end state
+			// Evaluate end state with start context for improvement calculation
 			endScore := EvaluateEndState(
-				endContext,
+				req.EvaluationContext.PortfolioContext, // Start state
+				endContext,                             // End state
 				req.Sequence,
 				req.EvaluationContext.TransactionCostFixed,
 				req.EvaluationContext.TransactionCostPercent,
@@ -182,9 +183,10 @@ func EvaluateStochastic(req StochasticRequest) StochasticResult {
 				priceAdj,
 			)
 
-			// Evaluate end state
+			// Evaluate end state with start context for improvement calculation
 			endScore := EvaluateEndState(
-				endContext,
+				req.EvaluationContext.PortfolioContext, // Start state
+				endContext,                             // End state
 				req.Sequence,
 				req.EvaluationContext.TransactionCostFixed,
 				req.EvaluationContext.TransactionCostPercent,

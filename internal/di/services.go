@@ -30,6 +30,7 @@ import (
 	"github.com/aristath/sentinel/internal/modules/optimization"
 	"github.com/aristath/sentinel/internal/modules/order_book"
 	"github.com/aristath/sentinel/internal/modules/planning"
+	planningconstraints "github.com/aristath/sentinel/internal/modules/planning/constraints"
 	planningevaluation "github.com/aristath/sentinel/internal/modules/planning/evaluation"
 	planninghash "github.com/aristath/sentinel/internal/modules/planning/hash"
 	planningplanner "github.com/aristath/sentinel/internal/modules/planning/planner"
@@ -477,8 +478,27 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 	// Risk builder (needed for sequences service)
 	container.RiskBuilder = optimization.NewRiskModelBuilder(container.HistoryDB.Conn(), container.UniverseDB.Conn(), log)
 
+	// Constraint enforcer for sequences service
+	// Uses security lookup to check per-security allow_buy/allow_sell constraints
+	securityLookup := func(symbol, isin string) (*universe.Security, bool) {
+		if isin != "" {
+			sec, err := container.SecurityRepo.GetByISIN(isin)
+			if err == nil && sec != nil {
+				return sec, true
+			}
+		}
+		if symbol != "" {
+			sec, err := container.SecurityRepo.GetBySymbol(symbol)
+			if err == nil && sec != nil {
+				return sec, true
+			}
+		}
+		return nil, false
+	}
+	sequencesEnforcer := planningconstraints.NewEnforcer(log, securityLookup)
+
 	// Sequences service
-	container.SequencesService = sequences.NewService(log, container.RiskBuilder)
+	container.SequencesService = sequences.NewService(log, container.RiskBuilder, sequencesEnforcer)
 
 	// Evaluation service (4 workers)
 	container.EvaluationService = planningevaluation.NewService(4, log)

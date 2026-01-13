@@ -121,7 +121,7 @@ func (v *Validator) Validate(config *domain.PlannerConfiguration) error {
 		})
 	}
 
-	// Validate that at least one module is enabled in each category
+	// Validate that at least one opportunity calculator is enabled
 	enabledCalculators := config.GetEnabledCalculators()
 	if len(enabledCalculators) == 0 {
 		errors = append(errors, ValidationError{
@@ -130,29 +130,8 @@ func (v *Validator) Validate(config *domain.PlannerConfiguration) error {
 		})
 	}
 
-	enabledPatterns := config.GetEnabledPatterns()
-	if len(enabledPatterns) == 0 {
-		errors = append(errors, ValidationError{
-			Field:   "pattern_generators",
-			Message: "at least one pattern generator must be enabled",
-		})
-	}
-
-	enabledGenerators := config.GetEnabledGenerators()
-	if len(enabledGenerators) == 0 {
-		errors = append(errors, ValidationError{
-			Field:   "sequence_generators",
-			Message: "at least one sequence generator must be enabled",
-		})
-	}
-
-	enabledFilters := config.GetEnabledFilters()
-	if len(enabledFilters) == 0 {
-		errors = append(errors, ValidationError{
-			Field:   "filters",
-			Message: "at least one filter must be enabled",
-		})
-	}
+	// NOTE: Patterns and generators are no longer validated - ExhaustiveGenerator always runs
+	// NOTE: Filters validation is relaxed - filters are optional post-generation optimizations
 
 	// Validate buy/sell permissions
 	if !config.AllowBuy && !config.AllowSell {
@@ -313,6 +292,8 @@ func (v *Validator) ValidateParams(moduleName string, params map[string]interfac
 }
 
 // getRequiredParams returns required parameters for each module type.
+// NOTE: Pattern and generator entries kept for backwards compatibility with
+// any code that calls ValidateParams, but these modules no longer exist.
 func getRequiredParams(moduleName string) map[string]string {
 	// Define required parameters per module (paramName -> paramType)
 	paramMap := map[string]map[string]string{
@@ -342,24 +323,15 @@ func getRequiredParams(moduleName string) map[string]string {
 			"target_weight_tolerance": "threshold",
 		},
 
-		// Pattern Generators
-		"direct_buy":        {},
-		"rebalance":         {},
-		"single_best":       {},
-		"multi_sell":        {},
-		"mixed_strategy":    {},
-		"opportunity_first": {},
-		"deep_rebalance":    {},
-		"cash_generation":   {},
-		"cost_optimized":    {},
-		"adaptive": {
-			"adaptation_rate": "factor",
+		// Post-generation Filters
+		"correlation_aware": {
+			"correlation_threshold": "threshold",
 		},
-		"market_regime": {
-			"regime_threshold": "threshold",
+		"diversity": {
+			"diversity_threshold": "threshold",
 		},
 
-		// Sequence Generators
+		// Legacy entries for backwards compatibility (no longer used)
 		"combinatorial": {
 			"max_combinations": "count",
 		},
@@ -370,15 +342,9 @@ func getRequiredParams(moduleName string) map[string]string {
 		"constraint_relaxation": {
 			"relaxation_factor": "factor",
 		},
-
-		// Filters
-		"correlation_aware": {
-			"correlation_threshold": "threshold",
+		"market_regime": {
+			"regime_threshold": "threshold",
 		},
-		"diversity": {
-			"diversity_threshold": "threshold",
-		},
-		"eligibility": {},
 		"recently_traded": {
 			"cooldown_days": "count",
 		},

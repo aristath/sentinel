@@ -120,8 +120,10 @@ func TestEvaluateEndState_BasicScore(t *testing.T) {
 		{ValueEUR: 100.0},
 	}
 
+	// Pass same context for start and end (no change scenario)
 	score := EvaluateEndState(
-		portfolioContext,
+		portfolioContext, // Start
+		portfolioContext, // End
 		sequence,
 		2.0,   // Fixed cost
 		0.002, // Percent cost
@@ -148,8 +150,10 @@ func TestEvaluateEndState_WithCostPenalty(t *testing.T) {
 		{ValueEUR: 100.0},
 	}
 
+	// Pass same context for start and end
 	scoreWithoutPenalty := EvaluateEndState(
-		portfolioContext,
+		portfolioContext, // Start
+		portfolioContext, // End
 		sequence,
 		2.0,
 		0.002,
@@ -157,7 +161,8 @@ func TestEvaluateEndState_WithCostPenalty(t *testing.T) {
 	)
 
 	scoreWithPenalty := EvaluateEndState(
-		portfolioContext,
+		portfolioContext, // Start
+		portfolioContext, // End
 		sequence,
 		2.0,
 		0.002,
@@ -371,75 +376,32 @@ func TestCalculateOptimizerAlignment_NoTargets(t *testing.T) {
 func TestGetRegimeAdaptiveWeights_NeutralMarket(t *testing.T) {
 	weights := GetRegimeAdaptiveWeights(0.0)
 
-	assert.InDelta(t, 0.30, weights["opportunity"], 0.01, "Opportunity should be 30% in neutral")
-	assert.InDelta(t, 0.25, weights["quality"], 0.01, "Quality should be 25% in neutral")
-	assert.InDelta(t, 0.20, weights["diversification"], 0.01, "Diversification should be 20% in neutral")
+	// Pure end-state scoring weights
+	assert.InDelta(t, WeightPortfolioQuality, weights["quality"], 0.01, "Quality should be 35% in neutral")
+	assert.InDelta(t, WeightDiversificationAlignment, weights["diversification"], 0.01, "Diversification should be 30% in neutral")
+	assert.InDelta(t, WeightRiskAdjustedMetrics, weights["risk"], 0.01, "Risk should be 25% in neutral")
+	assert.InDelta(t, WeightEndStateImprovement, weights["improvement"], 0.01, "Improvement should be 10% in neutral")
 }
 
 func TestGetRegimeAdaptiveWeights_BullMarket(t *testing.T) {
 	weights := GetRegimeAdaptiveWeights(0.8)
 
-	// Bull market should increase opportunity, decrease risk
-	assert.Greater(t, weights["opportunity"], 0.30, "Opportunity should increase in bull")
-	assert.Less(t, weights["risk"], 0.15, "Risk should decrease in bull")
+	// Bull market should increase quality, decrease risk
+	assert.Greater(t, weights["quality"], WeightPortfolioQuality, "Quality should increase in bull")
+	assert.Less(t, weights["risk"], WeightRiskAdjustedMetrics, "Risk should decrease in bull")
 }
 
 func TestGetRegimeAdaptiveWeights_BearMarket(t *testing.T) {
 	weights := GetRegimeAdaptiveWeights(-0.8)
 
-	// Bear market should decrease opportunity, increase risk
-	assert.Less(t, weights["opportunity"], 0.30, "Opportunity should decrease in bear")
-	assert.Greater(t, weights["risk"], 0.15, "Risk should increase in bear")
+	// Bear market should decrease quality, increase risk
+	assert.Less(t, weights["quality"], WeightPortfolioQuality, "Quality should decrease in bear")
+	assert.Greater(t, weights["risk"], WeightRiskAdjustedMetrics, "Risk should increase in bear")
 }
 
-// ============================================================================
-// Windfall Detection Tests
-// ============================================================================
-
-func TestCalculateWindfallScore_HighWindfall(t *testing.T) {
-	portfolioContext := PortfolioContext{
-		Positions: map[string]float64{
-			"WINDFALL_STOCK": 1000.0,
-		},
-		TotalValue: 1000.0,
-		PositionAvgPrices: map[string]float64{
-			"WINDFALL_STOCK": 100.0,
-		},
-		CurrentPrices: map[string]float64{
-			"WINDFALL_STOCK": 200.0, // 100% gain (vs ~10% expected)
-		},
-		SecurityCAGRs: map[string]float64{
-			"WINDFALL_STOCK": 0.10, // 10% historical CAGR
-		},
-	}
-
-	sequence := []ActionCandidate{
-		{
-			Side:   TradeSideSell,
-			Symbol: "WINDFALL_STOCK",
-		},
-	}
-
-	score := calculateWindfallScore(portfolioContext, sequence)
-
-	// Note: calculateWindfallScore now returns the full unified evaluation score
-	// where windfall is just one component (30% * 40% = 12% of total)
-	// The score should be positive and reasonable
-	assert.Greater(t, score, 0.4, "Windfall scenario should have reasonable score")
-}
-
-func TestCalculateActionPriorityScore(t *testing.T) {
-	sequence := []ActionCandidate{
-		{Priority: 0.9},
-		{Priority: 0.8},
-		{Priority: 0.7},
-	}
-
-	score := calculateActionPriorityScore(sequence)
-
-	// Average: (0.9 + 0.8 + 0.7) / 3 = 0.8
-	assert.InDelta(t, 0.8, score, 0.01, "Should average priorities")
-}
+// NOTE: TestCalculateWindfallScore and TestCalculateActionPriorityScore have been removed
+// as part of the pure end-state scoring refactor. These functions scored based on
+// action characteristics, which is no longer part of the scoring philosophy.
 
 // TestSum tests the sum helper function
 func TestSum(t *testing.T) {

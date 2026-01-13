@@ -110,7 +110,7 @@ func (p *Planner) CreatePlanWithRejections(ctx *domain.OpportunityContext, confi
 	}
 
 	// Step 2: Generate sequences
-	sequences, err := p.sequencesService.GenerateSequences(opportunities, config)
+	sequences, err := p.sequencesService.GenerateSequences(opportunities, ctx, config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate sequences: %w", err)
 	}
@@ -318,18 +318,24 @@ func (p *Planner) convertToPlanWithFiltered(sequence domain.ActionSequence, ctx 
 			}
 		}
 
+		// Check tags for windfall and averaging down flags
+		isWindfall := containsTag(action.Tags, "windfall")
+		isAveragingDown := containsTag(action.Tags, "averaging_down")
+
 		step := domain.HolisticStep{
-			StepNumber:     i + 1,
-			Side:           action.Side,
-			ISIN:           action.ISIN,   // Primary identifier
-			Symbol:         action.Symbol, // For broker API and UI display
-			Name:           action.Name,
-			Quantity:       action.Quantity,
-			EstimatedPrice: priceEUR, // Now in EUR
-			EstimatedValue: action.ValueEUR,
-			Currency:       "EUR", // Always EUR after conversion
-			Reason:         action.Reason,
-			Narrative:      fmt.Sprintf("Step %d: %s %d shares of %s", i+1, action.Side, action.Quantity, action.Symbol),
+			StepNumber:      i + 1,
+			Side:            action.Side,
+			ISIN:            action.ISIN,   // Primary identifier
+			Symbol:          action.Symbol, // For broker API and UI display
+			Name:            action.Name,
+			Quantity:        action.Quantity,
+			EstimatedPrice:  priceEUR, // Now in EUR
+			EstimatedValue:  action.ValueEUR,
+			Currency:        "EUR", // Always EUR after conversion
+			Reason:          action.Reason,
+			Narrative:       fmt.Sprintf("Step %d: %s %d shares of %s", i+1, action.Side, action.Quantity, action.Symbol),
+			IsWindfall:      isWindfall,
+			IsAveragingDown: isAveragingDown,
 		}
 
 		if action.Side == "BUY" {
@@ -623,4 +629,14 @@ func (p *Planner) buildRejectedOpportunities(
 	})
 
 	return result
+}
+
+// containsTag checks if a tag is present in a slice of tags.
+func containsTag(tags []string, target string) bool {
+	for _, tag := range tags {
+		if tag == target {
+			return true
+		}
+	}
+	return false
 }

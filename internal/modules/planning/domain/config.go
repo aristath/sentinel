@@ -2,10 +2,9 @@
 package domain
 
 // PlannerConfiguration represents the complete configuration for a planner instance.
-// Simplified to match database schema - flattened structure with individual boolean fields
-// instead of nested ModuleConfig structures.
+// Simplified structure with exhaustive sequence generation replacing patterns/generators.
 type PlannerConfiguration struct {
-	// Planner identification
+	// Planner identification (legacy - kept for backwards compatibility with existing configs)
 	Name                  string `json:"name"`
 	Description           string `json:"description"`
 	EnableBatchGeneration bool   `json:"enable_batch_generation"`
@@ -45,31 +44,11 @@ type PlannerConfiguration struct {
 	EnableRebalanceBuysCalc   bool `json:"enable_rebalance_buys_calc"`
 	EnableWeightBasedCalc     bool `json:"enable_weight_based_calc"`
 
-	// Pattern Generator enabled flags
-	EnableDirectBuyPattern        bool `json:"enable_direct_buy_pattern"`
-	EnableProfitTakingPattern     bool `json:"enable_profit_taking_pattern"`
-	EnableRebalancePattern        bool `json:"enable_rebalance_pattern"`
-	EnableAveragingDownPattern    bool `json:"enable_averaging_down_pattern"`
-	EnableSingleBestPattern       bool `json:"enable_single_best_pattern"`
-	EnableMultiSellPattern        bool `json:"enable_multi_sell_pattern"`
-	EnableMixedStrategyPattern    bool `json:"enable_mixed_strategy_pattern"`
-	EnableOpportunityFirstPattern bool `json:"enable_opportunity_first_pattern"`
-	EnableDeepRebalancePattern    bool `json:"enable_deep_rebalance_pattern"`
-	EnableCashGenerationPattern   bool `json:"enable_cash_generation_pattern"`
-	EnableCostOptimizedPattern    bool `json:"enable_cost_optimized_pattern"`
-	EnableAdaptivePattern         bool `json:"enable_adaptive_pattern"`
-	EnableMarketRegimePattern     bool `json:"enable_market_regime_pattern"`
-
-	// Sequence Generator enabled flags
-	EnableCombinatorialGenerator         bool `json:"enable_combinatorial_generator"`
-	EnableEnhancedCombinatorialGenerator bool `json:"enable_enhanced_combinatorial_generator"`
-	EnableConstraintRelaxationGenerator  bool `json:"enable_constraint_relaxation_generator"`
-
-	// Filter enabled flags
+	// Filter enabled flags (post-generation filters only)
+	// Note: Eligibility and RecentlyTraded filters are now handled during generation
+	// via constraints.Enforcer, not as post-generation filters.
 	EnableCorrelationAwareFilter bool `json:"enable_correlation_aware_filter"`
 	EnableDiversityFilter        bool `json:"enable_diversity_filter"`
-	EnableEligibilityFilter      bool `json:"enable_eligibility_filter"`
-	EnableRecentlyTradedFilter   bool `json:"enable_recently_traded_filter"`
 
 	// Tag filtering
 	EnableTagFiltering bool `json:"enable_tag_filtering"` // Enable/disable tag-based pre-filtering
@@ -78,11 +57,11 @@ type PlannerConfiguration struct {
 // NewDefaultConfiguration creates a PlannerConfiguration with default settings.
 func NewDefaultConfiguration() *PlannerConfiguration {
 	return &PlannerConfiguration{
-		Name:                        "default", // Legacy field - will be removed
-		Description:                 "",        // Legacy field - will be removed
+		Name:                        "default",
+		Description:                 "",
 		EnableBatchGeneration:       true,
-		MaxDepth:                    10, // Hardcoded for maximum complexity
-		MaxOpportunitiesPerCategory: 10, // Hardcoded for maximum opportunities
+		MaxDepth:                    10, // Maximum complexity for exhaustive generation
+		MaxOpportunitiesPerCategory: 10,
 		MaxSequenceAttempts:         20, // Try top 20 sequences until one passes constraints
 		EnableDiverseSelection:      true,
 		DiversityWeight:             0.3,
@@ -98,34 +77,18 @@ func NewDefaultConfiguration() *PlannerConfiguration {
 		OptimizerBlend:              0.5,   // 50% MV, 50% HRP
 		OptimizerTargetReturn:       0.11,  // 11% target annual return
 		MinCashReserve:              500.0, // €500 minimum cash
-		// All modules enabled by default
-		EnableProfitTakingCalc:               true,
-		EnableAveragingDownCalc:              true,
-		EnableOpportunityBuysCalc:            true,
-		EnableRebalanceSellsCalc:             true,
-		EnableRebalanceBuysCalc:              true,
-		EnableWeightBasedCalc:                true,
-		EnableDirectBuyPattern:               true,
-		EnableProfitTakingPattern:            true,
-		EnableRebalancePattern:               true,
-		EnableAveragingDownPattern:           true,
-		EnableSingleBestPattern:              true,
-		EnableMultiSellPattern:               true,
-		EnableMixedStrategyPattern:           true,
-		EnableOpportunityFirstPattern:        true,
-		EnableDeepRebalancePattern:           true,
-		EnableCashGenerationPattern:          true,
-		EnableCostOptimizedPattern:           true,
-		EnableAdaptivePattern:                true,
-		EnableMarketRegimePattern:            true,
-		EnableCombinatorialGenerator:         true,
-		EnableEnhancedCombinatorialGenerator: true,
-		EnableConstraintRelaxationGenerator:  true,
-		EnableCorrelationAwareFilter:         true,
-		EnableDiversityFilter:                true,
-		EnableEligibilityFilter:              true,
-		EnableRecentlyTradedFilter:           true,
-		EnableTagFiltering:                   true, // Tag filtering enabled by default
+		// All calculators enabled by default
+		EnableProfitTakingCalc:    true,
+		EnableAveragingDownCalc:   true,
+		EnableOpportunityBuysCalc: true,
+		EnableRebalanceSellsCalc:  true,
+		EnableRebalanceBuysCalc:   true,
+		EnableWeightBasedCalc:     true,
+		// Post-generation filters enabled by default
+		EnableCorrelationAwareFilter: true,
+		EnableDiversityFilter:        true,
+		// Tag filtering enabled by default
+		EnableTagFiltering: true,
 	}
 }
 
@@ -153,67 +116,8 @@ func (c *PlannerConfiguration) GetEnabledCalculators() []string {
 	return enabled
 }
 
-// GetEnabledPatterns returns a list of enabled pattern generator names.
-func (c *PlannerConfiguration) GetEnabledPatterns() []string {
-	enabled := []string{}
-	if c.EnableDirectBuyPattern {
-		enabled = append(enabled, "direct_buy")
-	}
-	if c.EnableProfitTakingPattern {
-		enabled = append(enabled, "profit_taking")
-	}
-	if c.EnableRebalancePattern {
-		enabled = append(enabled, "rebalance")
-	}
-	if c.EnableAveragingDownPattern {
-		enabled = append(enabled, "averaging_down")
-	}
-	if c.EnableSingleBestPattern {
-		enabled = append(enabled, "single_best")
-	}
-	if c.EnableMultiSellPattern {
-		enabled = append(enabled, "multi_sell")
-	}
-	if c.EnableMixedStrategyPattern {
-		enabled = append(enabled, "mixed_strategy")
-	}
-	if c.EnableOpportunityFirstPattern {
-		enabled = append(enabled, "opportunity_first")
-	}
-	if c.EnableDeepRebalancePattern {
-		enabled = append(enabled, "deep_rebalance")
-	}
-	if c.EnableCashGenerationPattern {
-		enabled = append(enabled, "cash_generation")
-	}
-	if c.EnableCostOptimizedPattern {
-		enabled = append(enabled, "cost_optimized")
-	}
-	if c.EnableAdaptivePattern {
-		enabled = append(enabled, "adaptive")
-	}
-	if c.EnableMarketRegimePattern {
-		enabled = append(enabled, "market_regime")
-	}
-	return enabled
-}
-
-// GetEnabledGenerators returns a list of enabled sequence generator names.
-func (c *PlannerConfiguration) GetEnabledGenerators() []string {
-	enabled := []string{}
-	if c.EnableCombinatorialGenerator {
-		enabled = append(enabled, "combinatorial")
-	}
-	if c.EnableEnhancedCombinatorialGenerator {
-		enabled = append(enabled, "enhanced_combinatorial")
-	}
-	if c.EnableConstraintRelaxationGenerator {
-		enabled = append(enabled, "constraint_relaxation")
-	}
-	return enabled
-}
-
-// GetEnabledFilters returns a list of enabled filter names.
+// GetEnabledFilters returns a list of enabled post-generation filter names.
+// Note: Eligibility and RecentlyTraded filtering is now done during generation.
 func (c *PlannerConfiguration) GetEnabledFilters() []string {
 	enabled := []string{}
 	if c.EnableCorrelationAwareFilter {
@@ -221,12 +125,6 @@ func (c *PlannerConfiguration) GetEnabledFilters() []string {
 	}
 	if c.EnableDiversityFilter {
 		enabled = append(enabled, "diversity")
-	}
-	if c.EnableEligibilityFilter {
-		enabled = append(enabled, "eligibility")
-	}
-	if c.EnableRecentlyTradedFilter {
-		enabled = append(enabled, "recently_traded")
 	}
 	return enabled
 }
@@ -241,21 +139,6 @@ func (c *PlannerConfiguration) GetCalculatorParams(name string) map[string]inter
 		params["min_hold_days"] = float64(c.MinHoldDays)
 	}
 
-	return params
-}
-
-// GetPatternParams returns parameters for a specific pattern.
-// Simplified: Returns empty map since we no longer store module-specific parameters.
-func (c *PlannerConfiguration) GetPatternParams(name string) map[string]interface{} {
-	// Parameters removed in simplified version - return empty map
-	return make(map[string]interface{})
-}
-
-// GetGeneratorParams returns parameters for a specific generator.
-func (c *PlannerConfiguration) GetGeneratorParams(name string) map[string]interface{} {
-	params := make(map[string]interface{})
-	// MaxDepth applies to all generators
-	params["max_depth"] = float64(c.MaxDepth)
 	return params
 }
 

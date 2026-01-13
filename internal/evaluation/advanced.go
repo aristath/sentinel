@@ -52,8 +52,10 @@ func EvaluateMonteCarlo(req models.MonteCarloRequest) models.MonteCarloResult {
 			)
 
 			// Evaluate end state (using temperament config if available)
+			// Pass start context for improvement calculation
 			endScore := EvaluateEndState(
-				endContext,
+				req.EvaluationContext.PortfolioContext, // Start state
+				endContext,                             // End state
 				req.Sequence,
 				req.EvaluationContext.TransactionCostFixed,
 				req.EvaluationContext.TransactionCostPercent,
@@ -183,8 +185,10 @@ func EvaluateStochastic(req models.StochasticRequest) models.StochasticResult {
 			)
 
 			// Evaluate end state (using temperament config if available)
+			// Pass start context for improvement calculation
 			endScore := EvaluateEndState(
-				endContext,
+				req.EvaluationContext.PortfolioContext, // Start state
+				endContext,                             // End state
 				req.Sequence,
 				req.EvaluationContext.TransactionCostFixed,
 				req.EvaluationContext.TransactionCostPercent,

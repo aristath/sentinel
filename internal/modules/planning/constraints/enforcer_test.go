@@ -47,7 +47,7 @@ func TestEnforcer_EnforceConstraints_AllowSellFalse(t *testing.T) {
 	// Should be filtered out
 	assert.Len(t, validated, 0)
 	assert.Len(t, filtered, 1)
-	assert.Equal(t, "allow_sell=false", filtered[0].Reason)
+	assert.Equal(t, "security allow_sell=false", filtered[0].Reason)
 	assert.Equal(t, "BYD.285.AS", filtered[0].Action.Symbol)
 }
 
@@ -84,7 +84,7 @@ func TestEnforcer_EnforceConstraints_AllowBuyFalse(t *testing.T) {
 
 	assert.Len(t, validated, 0)
 	assert.Len(t, filtered, 1)
-	assert.Equal(t, "allow_buy=false", filtered[0].Reason)
+	assert.Equal(t, "security allow_buy=false", filtered[0].Reason)
 }
 
 func TestEnforcer_EnforceConstraints_LotSizeRoundingDown(t *testing.T) {
@@ -335,7 +335,7 @@ func TestEnforcer_EnforceConstraints_MultipleActions(t *testing.T) {
 	assert.Len(t, filtered, 1)
 	assert.Equal(t, "VALID.US", validated[0].Symbol)
 	assert.Equal(t, "BYD.285.AS", filtered[0].Action.Symbol)
-	assert.Equal(t, "allow_sell=false", filtered[0].Reason)
+	assert.Equal(t, "security allow_sell=false", filtered[0].Reason)
 }
 
 func TestEnforcer_EnforceConstraints_MissingSecurity(t *testing.T) {
@@ -356,9 +356,14 @@ func TestEnforcer_EnforceConstraints_MissingSecurity(t *testing.T) {
 		Reason:   "Overweight",
 	}
 
-	// Context without this security
+	// Context without this security but with global flags set
 	ctx := &planningdomain.OpportunityContext{
-		StocksByISIN: make(map[string]domain.Security),
+		StocksByISIN:        make(map[string]domain.Security),
+		AllowSell:           true,
+		AllowBuy:            true,
+		RecentlySoldISINs:   make(map[string]bool),
+		RecentlyBoughtISINs: make(map[string]bool),
+		IneligibleISINs:     make(map[string]bool),
 	}
 
 	validated, filtered := enforcer.EnforceConstraints([]planningdomain.ActionCandidate{action}, ctx, nil)
@@ -745,10 +750,13 @@ func createTestContextWithMultipleSecurities(securities []universe.Security) *pl
 	}
 
 	ctx := &planningdomain.OpportunityContext{
-		Securities:   domainSecurities,
-		StocksByISIN: stocksByISIN,
-		AllowSell:    true,
-		AllowBuy:     true,
+		Securities:          domainSecurities,
+		StocksByISIN:        stocksByISIN,
+		AllowSell:           true,
+		AllowBuy:            true,
+		RecentlySoldISINs:   make(map[string]bool),
+		RecentlyBoughtISINs: make(map[string]bool),
+		IneligibleISINs:     make(map[string]bool),
 	}
 
 	return ctx

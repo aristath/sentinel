@@ -6,6 +6,12 @@ import (
 
 // ScorerConfig holds the configuration for temperament-aware scoring.
 // This allows the scorer to use adjusted weights and thresholds from the settings service.
+//
+// With pure end-state scoring, we have 4 components:
+// - Portfolio Quality (35%)
+// - Diversification & Alignment (30%)
+// - Risk-Adjusted Metrics (25%)
+// - End-State Improvement (10%)
 type ScorerConfig struct {
 	// Weights holds the evaluation weights adjusted by temperament
 	Weights settings.EvaluationWeights
@@ -33,18 +39,16 @@ func NewScorerConfig(settingsService *settings.Service) ScorerConfig {
 func NewDefaultScorerConfig() ScorerConfig {
 	return ScorerConfig{
 		Weights: settings.EvaluationWeights{
-			OpportunityCapture:       WeightOpportunityCapture,
+			// Pure end-state scoring weights
 			PortfolioQuality:         WeightPortfolioQuality,
-			RiskAdjustedMetrics:      WeightRiskAdjustedMetrics,
 			DiversificationAlignment: WeightDiversificationAlignment,
-			RegimeRobustness:         WeightRegimeRobustness,
+			RiskAdjustedMetrics:      WeightRiskAdjustedMetrics,
+			EndStateImprovement:      WeightEndStateImprovement,
 		},
 		ScoringParams: settings.ScoringParams{
-			WindfallExcessHigh:   WindfallExcessHigh,
-			WindfallExcessMedium: WindfallExcessMedium,
 			DeviationScale:       DeviationScale,
-			RegimeBullThreshold:  0.30,  // Same as current hardcoded value
-			RegimeBearThreshold:  -0.30, // Same as current hardcoded value
+			RegimeBullThreshold:  0.30,
+			RegimeBearThreshold:  -0.30,
 			VolatilityExcellent:  0.15,
 			VolatilityGood:       0.25,
 			VolatilityAcceptable: 0.40,
@@ -59,38 +63,38 @@ func NewDefaultScorerConfig() ScorerConfig {
 }
 
 // GetWeightsMap converts EvaluationWeights to a map for use with existing code.
+// Uses the new 4-component pure end-state scoring structure.
 func (c ScorerConfig) GetWeightsMap() map[string]float64 {
 	return map[string]float64{
-		"opportunity":     c.Weights.OpportunityCapture,
 		"quality":         c.Weights.PortfolioQuality,
 		"diversification": c.Weights.DiversificationAlignment,
 		"risk":            c.Weights.RiskAdjustedMetrics,
-		"robustness":      c.Weights.RegimeRobustness,
+		"improvement":     c.Weights.EndStateImprovement,
 	}
 }
 
 // GetRegimeAdaptiveWeightsWithConfig returns evaluation weights adjusted for market regime
 // using the temperament-adjusted base weights from the config.
+// Uses pure end-state adjustments (no action-based components).
 func GetRegimeAdaptiveWeightsWithConfig(regimeScore float64, config ScorerConfig) map[string]float64 {
 	// Start with temperament-adjusted weights
 	weights := config.GetWeightsMap()
 
-	// Apply regime adjustments on top of temperament adjustments
+	// Apply regime adjustments - pure end-state focus
 	if regimeScore > config.ScoringParams.RegimeBullThreshold { // Bull market
 		bullFactor := (regimeScore - config.ScoringParams.RegimeBullThreshold) /
 			(1.0 - config.ScoringParams.RegimeBullThreshold)
-		weights["opportunity"] = weights["opportunity"] + 0.05*bullFactor
+		// In bull markets: emphasize quality and diversification
+		weights["quality"] = weights["quality"] + 0.03*bullFactor
 		weights["risk"] = weights["risk"] - 0.03*bullFactor
-		weights["diversification"] = weights["diversification"] - 0.02*bullFactor
-		weights["robustness"] = weights["robustness"] + 0.02*bullFactor
 	} else if regimeScore < config.ScoringParams.RegimeBearThreshold { // Bear market
 		bearFactor := (config.ScoringParams.RegimeBearThreshold - regimeScore) /
 			(config.ScoringParams.RegimeBearThreshold - (-1.0))
-		weights["opportunity"] = weights["opportunity"] - 0.10*bearFactor
-		weights["risk"] = weights["risk"] + 0.10*bearFactor
-		weights["diversification"] = weights["diversification"] + 0.05*bearFactor
-		weights["quality"] = weights["quality"] - 0.02*bearFactor
-		weights["robustness"] = weights["robustness"] - 0.03*bearFactor
+		// In bear markets: emphasize risk management and diversification
+		weights["risk"] = weights["risk"] + 0.08*bearFactor
+		weights["diversification"] = weights["diversification"] + 0.02*bearFactor
+		weights["quality"] = weights["quality"] - 0.05*bearFactor
+		weights["improvement"] = weights["improvement"] - 0.05*bearFactor
 	}
 
 	return weights
@@ -142,18 +146,8 @@ func SharpeScore(weightedSharpe float64, params settings.ScoringParams) float64 
 	return 0.0
 }
 
-// WindfallScore converts excess gain to a score using temperament thresholds.
-func WindfallScore(excessGain float64, params settings.ScoringParams) float64 {
-	if excessGain >= params.WindfallExcessHigh {
-		return 1.0
-	} else if excessGain >= params.WindfallExcessMedium {
-		return 0.5 + (excessGain-params.WindfallExcessMedium)/
-			(params.WindfallExcessHigh-params.WindfallExcessMedium)*0.5
-	} else if excessGain > 0 {
-		return excessGain / params.WindfallExcessMedium * 0.5
-	}
-	return 0.3 // Below expected, still valid to sell for rebalancing
-}
+// NOTE: WindfallScore has been removed as part of the pure end-state scoring refactor.
+// Windfall was an action-based metric that no longer applies to the new scoring philosophy.
 
 // DeviationScore converts average deviation to a score using temperament scale.
 func DeviationScore(avgDeviation float64, params settings.ScoringParams) float64 {

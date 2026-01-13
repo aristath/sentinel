@@ -6,37 +6,40 @@ package settings
 
 // EvaluationWeights holds the adjusted weights for portfolio evaluation scoring.
 // These weights sum to 1.0 after normalization and control how different aspects
-// of a trade sequence are weighted in the unified evaluation function.
+// of the end portfolio state are weighted in the evaluation function.
+//
+// Pure end-state scoring philosophy:
+// - Portfolio Quality (35%): Total return, long-term promise, stability
+// - Diversification & Alignment (30%): Geographic, industry, optimizer alignment
+// - Risk-Adjusted Metrics (25%): Sharpe, volatility, drawdown
+// - End-State Improvement (10%): How much the portfolio improved vs start
 type EvaluationWeights struct {
-	OpportunityCapture       float64 // Weight for windfall detection, action priority, technical opportunity
 	PortfolioQuality         float64 // Weight for total return, long-term promise, stability
-	RiskAdjustedMetrics      float64 // Weight for Sharpe, volatility, drawdown
 	DiversificationAlignment float64 // Weight for geographic, industry, optimizer alignment
-	RegimeRobustness         float64 // Weight for market regime alignment, sequence coherence
+	RiskAdjustedMetrics      float64 // Weight for Sharpe, volatility, drawdown
+	EndStateImprovement      float64 // Weight for improvement from start to end state
 }
 
 // Normalize adjusts weights to sum to 1.0
 func (w EvaluationWeights) Normalize() EvaluationWeights {
-	sum := w.OpportunityCapture + w.PortfolioQuality +
-		w.RiskAdjustedMetrics + w.DiversificationAlignment +
-		w.RegimeRobustness
+	sum := w.PortfolioQuality + w.DiversificationAlignment +
+		w.RiskAdjustedMetrics + w.EndStateImprovement
 
 	if sum == 0 {
+		// Default weights for pure end-state scoring
 		return EvaluationWeights{
-			OpportunityCapture:       0.30,
-			PortfolioQuality:         0.25,
-			RiskAdjustedMetrics:      0.15,
-			DiversificationAlignment: 0.20,
-			RegimeRobustness:         0.10,
+			PortfolioQuality:         0.35,
+			DiversificationAlignment: 0.30,
+			RiskAdjustedMetrics:      0.25,
+			EndStateImprovement:      0.10,
 		}
 	}
 
 	return EvaluationWeights{
-		OpportunityCapture:       w.OpportunityCapture / sum,
 		PortfolioQuality:         w.PortfolioQuality / sum,
-		RiskAdjustedMetrics:      w.RiskAdjustedMetrics / sum,
 		DiversificationAlignment: w.DiversificationAlignment / sum,
-		RegimeRobustness:         w.RegimeRobustness / sum,
+		RiskAdjustedMetrics:      w.RiskAdjustedMetrics / sum,
+		EndStateImprovement:      w.EndStateImprovement / sum,
 	}
 }
 
@@ -307,20 +310,19 @@ type RegimeThresholds struct {
 // EVALUATION SCORING
 // ============================================================================
 
-// ScoringParams holds evaluation scoring parameters
+// ScoringParams holds evaluation scoring parameters for pure end-state scoring.
+// These parameters control thresholds for various scoring components.
 type ScoringParams struct {
-	WindfallExcessHigh   float64 // High threshold for windfall excess
-	WindfallExcessMedium float64 // Medium threshold for windfall excess
-	DeviationScale       float64 // Scale for deviation penalties
-	RegimeBullThreshold  float64 // Threshold for bull regime
-	RegimeBearThreshold  float64 // Threshold for bear regime (negative)
-	VolatilityExcellent  float64 // Volatility threshold for excellent
-	VolatilityGood       float64 // Volatility threshold for good
-	VolatilityAcceptable float64 // Volatility threshold for acceptable
-	DrawdownExcellent    float64 // Drawdown threshold for excellent
-	DrawdownGood         float64 // Drawdown threshold for good
-	DrawdownAcceptable   float64 // Drawdown threshold for acceptable
-	SharpeExcellent      float64 // Sharpe ratio for excellent
-	SharpeGood           float64 // Sharpe ratio for good
-	SharpeAcceptable     float64 // Sharpe ratio for acceptable
+	DeviationScale       float64 // Scale for deviation penalties (diversification)
+	RegimeBullThreshold  float64 // Threshold for bull regime (for regime-adaptive weights)
+	RegimeBearThreshold  float64 // Threshold for bear regime (negative, for regime-adaptive weights)
+	VolatilityExcellent  float64 // Volatility threshold for excellent score
+	VolatilityGood       float64 // Volatility threshold for good score
+	VolatilityAcceptable float64 // Volatility threshold for acceptable score
+	DrawdownExcellent    float64 // Drawdown threshold for excellent score
+	DrawdownGood         float64 // Drawdown threshold for good score
+	DrawdownAcceptable   float64 // Drawdown threshold for acceptable score
+	SharpeExcellent      float64 // Sharpe ratio for excellent score
+	SharpeGood           float64 // Sharpe ratio for good score
+	SharpeAcceptable     float64 // Sharpe ratio for acceptable score
 }

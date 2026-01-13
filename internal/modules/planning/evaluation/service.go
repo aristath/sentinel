@@ -51,16 +51,13 @@ func (s *Service) buildScoringConfig() *models.ScoringConfig {
 	scoring := s.settingsService.GetAdjustedScoringParams()
 
 	return &models.ScoringConfig{
-		// Main weights
-		WeightOpportunityCapture:       weights.OpportunityCapture,
+		// Main weights (pure end-state scoring)
 		WeightPortfolioQuality:         weights.PortfolioQuality,
 		WeightDiversificationAlignment: weights.DiversificationAlignment,
 		WeightRiskAdjustedMetrics:      weights.RiskAdjustedMetrics,
-		WeightRegimeRobustness:         weights.RegimeRobustness,
+		WeightEndStateImprovement:      weights.EndStateImprovement,
 		// Scoring thresholds
-		WindfallExcessHigh:   scoring.WindfallExcessHigh,
-		WindfallExcessMedium: scoring.WindfallExcessMedium,
-		DeviationScale:       scoring.DeviationScale,
+		DeviationScale: scoring.DeviationScale,
 		// Regime thresholds
 		RegimeBullThreshold: scoring.RegimeBullThreshold,
 		RegimeBearThreshold: scoring.RegimeBearThreshold,

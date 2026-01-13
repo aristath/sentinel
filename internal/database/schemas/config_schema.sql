@@ -25,6 +25,8 @@ CREATE INDEX IF NOT EXISTS idx_allocation_type ON allocation_targets(type);
 
 -- Planner settings: Direct storage of planner configuration
 -- Single row table (only one config exists)
+-- NOTE: Pattern, generator, and eligibility/recently_traded filter fields removed in 2026-01
+-- These are now handled by the ExhaustiveGenerator with constraints.Enforcer during generation
 CREATE TABLE IF NOT EXISTS planner_settings (
     -- Primary key (constant value - only one row exists)
     id TEXT PRIMARY KEY DEFAULT 'main',
@@ -35,8 +37,8 @@ CREATE TABLE IF NOT EXISTS planner_settings (
 
     -- Global planner settings
     enable_batch_generation INTEGER DEFAULT 1,  -- Boolean
-    max_depth INTEGER DEFAULT 5,
-    max_opportunities_per_category INTEGER DEFAULT 5,
+    max_depth INTEGER DEFAULT 10,                -- Increased for exhaustive generation
+    max_opportunities_per_category INTEGER DEFAULT 10,
     enable_diverse_selection INTEGER DEFAULT 1,  -- Boolean
     diversity_weight REAL DEFAULT 0.3,
 
@@ -53,7 +55,7 @@ CREATE TABLE IF NOT EXISTS planner_settings (
     sell_cooldown_days INTEGER DEFAULT 180,
     max_loss_threshold REAL DEFAULT -0.20,
     max_sell_percentage REAL DEFAULT 0.20,
-    averaging_down_percent REAL DEFAULT 0.10,  -- Maximum percentage of position to add when averaging down
+    averaging_down_percent REAL DEFAULT 0.10,
 
     -- Opportunity Calculator enabled flags
     enable_profit_taking_calc INTEGER DEFAULT 1,
@@ -63,37 +65,16 @@ CREATE TABLE IF NOT EXISTS planner_settings (
     enable_rebalance_buys_calc INTEGER DEFAULT 1,
     enable_weight_based_calc INTEGER DEFAULT 1,
 
-    -- Pattern Generator enabled flags
-    enable_direct_buy_pattern INTEGER DEFAULT 1,
-    enable_profit_taking_pattern INTEGER DEFAULT 1,
-    enable_rebalance_pattern INTEGER DEFAULT 1,
-    enable_averaging_down_pattern INTEGER DEFAULT 1,
-    enable_single_best_pattern INTEGER DEFAULT 1,
-    enable_multi_sell_pattern INTEGER DEFAULT 1,
-    enable_mixed_strategy_pattern INTEGER DEFAULT 1,
-    enable_opportunity_first_pattern INTEGER DEFAULT 1,
-    enable_deep_rebalance_pattern INTEGER DEFAULT 1,
-    enable_cash_generation_pattern INTEGER DEFAULT 1,
-    enable_cost_optimized_pattern INTEGER DEFAULT 1,
-    enable_adaptive_pattern INTEGER DEFAULT 1,
-    enable_market_regime_pattern INTEGER DEFAULT 1,
-
-    -- Sequence Generator enabled flags
-    enable_combinatorial_generator INTEGER DEFAULT 1,
-    enable_enhanced_combinatorial_generator INTEGER DEFAULT 1,
-    enable_constraint_relaxation_generator INTEGER DEFAULT 1,
-
-    -- Filter enabled flags
+    -- Post-generation filter enabled flags
+    -- Note: Eligibility and RecentlyTraded filtering is now done during generation
     enable_correlation_aware_filter INTEGER DEFAULT 1,
     enable_diversity_filter INTEGER DEFAULT 1,
-    enable_eligibility_filter INTEGER DEFAULT 1,
-    enable_recently_traded_filter INTEGER DEFAULT 1,
-    enable_tag_filtering INTEGER DEFAULT 1,  -- Enable/disable tag-based pre-filtering
+    enable_tag_filtering INTEGER DEFAULT 1,
 
     -- Optimizer settings
-    optimizer_blend REAL DEFAULT 0.5,         -- Blend between Mean-Variance (0.0) and HRP (1.0)
-    optimizer_target_return REAL DEFAULT 0.11, -- Target annual return for MV component (11%)
-    min_cash_reserve REAL DEFAULT 500.0,      -- Minimum cash to keep (never fully deploy)
+    optimizer_blend REAL DEFAULT 0.5,
+    optimizer_target_return REAL DEFAULT 0.11,
+    min_cash_reserve REAL DEFAULT 500.0,
 
     -- Timestamps
     updated_at INTEGER NOT NULL      -- Unix timestamp (seconds since epoch)

@@ -9,56 +9,49 @@ import (
 // =============================================================================
 // UNIFIED EVALUATION WEIGHTS
 // =============================================================================
-// These weights implement solid investment principles with a retirement bias.
-// Designed to be action-oriented while remaining principled.
+// These weights implement pure end-state scoring for retirement investing.
+// Scoring is based ONLY on the quality of the final portfolio state,
+// NOT on action characteristics like priority or count.
 //
 // Philosophy:
-// - Opportunity Capture (30%): This is WHY the system exists - to act on opportunities
-// - Portfolio Quality (25%): Quality compounding over 15 years matters
-// - Diversification & Alignment (20%): Discipline without paralysis
-// - Risk-Adjusted Metrics (15%): Risk-AWARE not risk-AVERSE
-// - Regime & Robustness (10%): Adaptive + sanity check, not gatekeeper
+// - Portfolio Quality (35%): Quality compounding over 15 years matters
+// - Diversification & Alignment (30%): Geographic, industry, optimizer alignment
+// - Risk-Adjusted Metrics (25%): Risk-AWARE not risk-AVERSE
+// - End-State Improvement (10%): Reward progress toward better portfolio
 
 const (
 	// Main evaluation component weights (must sum to 1.0)
-	WeightOpportunityCapture       = 0.30 // Windfall, action priority, opportunity score
-	WeightPortfolioQuality         = 0.25 // End state quality (total return, promise, stability)
-	WeightDiversificationAlignment = 0.20 // Geographic, industry, optimizer alignment
-	WeightRiskAdjustedMetrics      = 0.15 // Sharpe, Sortino, volatility impact
-	WeightRegimeRobustness         = 0.10 // Market regime, robustness checks
+	// ALL components measure END STATE QUALITY, not action characteristics
+	WeightPortfolioQuality         = 0.35 // End state quality (total return, promise, stability)
+	WeightDiversificationAlignment = 0.30 // Geographic, industry, optimizer alignment
+	WeightRiskAdjustedMetrics      = 0.25 // Sharpe, volatility, drawdown
+	WeightEndStateImprovement      = 0.10 // Improvement from start to end state
 
-	// Sub-weights for Opportunity Capture (30%)
-	OpportunityWeightWindfall       = 0.40 // Windfall detection (excess gains)
-	OpportunityWeightActionPriority = 0.35 // Priority from opportunity identification
-	OpportunityWeightTechnical      = 0.25 // Technical opportunity score
-
-	// Sub-weights for Portfolio Quality (25%)
+	// Sub-weights for Portfolio Quality (35%)
 	QualityWeightTotalReturn     = 0.40 // CAGR + Dividends
 	QualityWeightLongTermPromise = 0.35 // Consistency, financial strength
 	QualityWeightStability       = 0.25 // Low volatility, minimal drawdown
 
-	// Sub-weights for Diversification & Alignment (20%)
+	// Sub-weights for Diversification & Alignment (30%)
 	DiversificationWeightGeographic = 0.35 // Geographic allocation fit
 	DiversificationWeightIndustry   = 0.30 // Industry/sector allocation fit
 	DiversificationWeightOptimizer  = 0.35 // Optimizer target weight alignment
 
-	// Sub-weights for Risk-Adjusted Metrics (15%)
+	// Sub-weights for Risk-Adjusted Metrics (25%)
 	RiskWeightSharpe     = 0.40 // Risk-adjusted return (Sharpe)
 	RiskWeightVolatility = 0.35 // Portfolio volatility
 	RiskWeightDrawdown   = 0.25 // Maximum drawdown impact
 
 	// Deviation scoring scale
 	DeviationScale = 0.3 // Maximum deviation for 0 score (30%)
-
-	// Windfall thresholds
-	WindfallExcessHigh   = 0.50 // 50%+ above expected = high windfall
-	WindfallExcessMedium = 0.25 // 25-50% above expected = medium windfall
 )
 
 // =============================================================================
 // REGIME-ADAPTIVE WEIGHTS
 // =============================================================================
 // Weights shift based on market conditions while maintaining overall philosophy.
+// With pure end-state scoring, regime adaptation is simpler and focuses on
+// risk vs quality trade-offs.
 
 // GetRegimeAdaptiveWeights returns evaluation weights adjusted for market regime.
 // Uses default hardcoded weights. For temperament-adjusted weights, use getWeightsWithConfig.
@@ -73,53 +66,47 @@ func getWeightsWithConfig(regimeScore float64, config *models.ScoringConfig) map
 	score := math.Max(-1.0, math.Min(1.0, regimeScore))
 
 	// Get base weights from config or use defaults
-	var baseOpportunity, baseQuality, baseDiversification, baseRisk, baseRobustness float64
+	var baseQuality, baseDiversification, baseRisk, baseImprovement float64
 	var bullThreshold, bearThreshold float64
 
 	if config != nil {
-		baseOpportunity = config.WeightOpportunityCapture
 		baseQuality = config.WeightPortfolioQuality
 		baseDiversification = config.WeightDiversificationAlignment
 		baseRisk = config.WeightRiskAdjustedMetrics
-		baseRobustness = config.WeightRegimeRobustness
+		baseImprovement = WeightEndStateImprovement // Use constant for improvement
 		bullThreshold = config.RegimeBullThreshold
 		bearThreshold = config.RegimeBearThreshold
 	} else {
-		// Default hardcoded values for backward compatibility
-		baseOpportunity = WeightOpportunityCapture
+		// Default hardcoded values
 		baseQuality = WeightPortfolioQuality
 		baseDiversification = WeightDiversificationAlignment
 		baseRisk = WeightRiskAdjustedMetrics
-		baseRobustness = WeightRegimeRobustness
+		baseImprovement = WeightEndStateImprovement
 		bullThreshold = 0.3
 		bearThreshold = -0.3
 	}
 
 	// Start with base weights
 	weights := map[string]float64{
-		"opportunity":     baseOpportunity,
 		"quality":         baseQuality,
 		"diversification": baseDiversification,
 		"risk":            baseRisk,
-		"robustness":      baseRobustness,
+		"improvement":     baseImprovement,
 	}
 
-	// Adjust based on regime
+	// Adjust based on regime - pure end-state adjustments
 	if score > bullThreshold { // Bull market
-		// More aggressive: increase opportunity capture, decrease risk focus
+		// In bull markets: emphasize quality and diversification
 		bullFactor := (score - bullThreshold) / (1.0 - bullThreshold) // 0 to 1
-		weights["opportunity"] = baseOpportunity + 0.05*bullFactor
+		weights["quality"] = baseQuality + 0.03*bullFactor
 		weights["risk"] = baseRisk - 0.03*bullFactor
-		weights["diversification"] = baseDiversification - 0.02*bullFactor
-		weights["robustness"] = baseRobustness + 0.02*bullFactor
 	} else if score < bearThreshold { // Bear market
-		// More defensive: decrease opportunity, increase risk focus
+		// In bear markets: emphasize risk management and diversification
 		bearFactor := (bearThreshold - score) / (bearThreshold - (-1.0)) // 0 to 1
-		weights["opportunity"] = baseOpportunity - 0.10*bearFactor
-		weights["risk"] = baseRisk + 0.10*bearFactor
-		weights["diversification"] = baseDiversification + 0.05*bearFactor
-		weights["quality"] = baseQuality - 0.02*bearFactor
-		weights["robustness"] = baseRobustness - 0.03*bearFactor
+		weights["risk"] = baseRisk + 0.08*bearFactor
+		weights["diversification"] = baseDiversification + 0.02*bearFactor
+		weights["quality"] = baseQuality - 0.05*bearFactor
+		weights["improvement"] = baseImprovement - 0.05*bearFactor
 	}
 
 	return weights
@@ -131,16 +118,19 @@ func getWeightsWithConfig(regimeScore float64, config *models.ScoringConfig) map
 
 // EvaluateEndState evaluates the end state of a portfolio after executing a sequence.
 //
-// This is the UNIFIED evaluation function that combines:
-// 1. Opportunity Capture (30%): Windfall, action priority, technical opportunity
-// 2. Portfolio Quality (25%): Total return, long-term promise, stability
-// 3. Diversification & Alignment (20%): Geographic, industry, optimizer alignment
-// 4. Risk-Adjusted Metrics (15%): Sharpe, volatility, drawdown
-// 5. Regime & Robustness (10%): Market regime alignment, robustness checks
+// This is the UNIFIED evaluation function using PURE END-STATE scoring:
+// 1. Portfolio Quality (35%): Total return, long-term promise, stability
+// 2. Diversification & Alignment (30%): Geographic, industry, optimizer alignment
+// 3. Risk-Adjusted Metrics (25%): Sharpe, volatility, drawdown
+// 4. End-State Improvement (10%): How much the portfolio improved from start
+//
+// IMPORTANT: This function scores based ONLY on end portfolio state.
+// It does NOT consider action characteristics like priority or count.
 //
 // Args:
-//   - endContext: Final portfolio state after sequence execution
-//   - sequence: The action sequence that was executed
+//   - startContext: Portfolio state BEFORE sequence execution
+//   - endContext: Portfolio state AFTER sequence execution
+//   - sequence: The action sequence (only used for transaction cost calculation)
 //   - transactionCostFixed: Fixed cost per trade (EUR)
 //   - transactionCostPercent: Variable cost as fraction
 //   - costPenaltyFactor: Penalty factor for transaction costs (0.0 = no penalty)
@@ -149,6 +139,7 @@ func getWeightsWithConfig(regimeScore float64, config *models.ScoringConfig) map
 // Returns:
 //   - Final score (0-1 scale)
 func EvaluateEndState(
+	startContext models.PortfolioContext,
 	endContext models.PortfolioContext,
 	sequence []models.ActionCandidate,
 	transactionCostFixed float64,
@@ -159,27 +150,23 @@ func EvaluateEndState(
 	// Get regime-adaptive weights (uses config if provided, defaults otherwise)
 	weights := getWeightsWithConfig(endContext.MarketRegimeScore, scoringConfig)
 
-	// 1. OPPORTUNITY CAPTURE (30% default)
-	opportunityScore := calculateOpportunityCaptureScore(endContext, sequence)
-
-	// 2. PORTFOLIO QUALITY (25% default)
+	// 1. PORTFOLIO QUALITY (35% default)
 	qualityScore := calculatePortfolioQualityScore(endContext)
 
-	// 3. DIVERSIFICATION & ALIGNMENT (20% default)
+	// 2. DIVERSIFICATION & ALIGNMENT (30% default)
 	diversificationScore := calculateDiversificationAlignmentScore(endContext)
 
-	// 4. RISK-ADJUSTED METRICS (15% default)
+	// 3. RISK-ADJUSTED METRICS (25% default)
 	riskScore := calculateRiskAdjustedScore(endContext)
 
-	// 5. REGIME & ROBUSTNESS (10% default)
-	robustnessScore := calculateRegimeRobustnessScore(endContext, sequence)
+	// 4. END-STATE IMPROVEMENT (10% default)
+	improvementScore := calculateEndStateImprovementScore(startContext, endContext)
 
 	// Combine scores with regime-adaptive weights
-	endScore := opportunityScore*weights["opportunity"] +
-		qualityScore*weights["quality"] +
+	endScore := qualityScore*weights["quality"] +
 		diversificationScore*weights["diversification"] +
 		riskScore*weights["risk"] +
-		robustnessScore*weights["robustness"]
+		improvementScore*weights["improvement"]
 
 	// Apply transaction cost penalty
 	totalCost := CalculateTransactionCost(sequence, transactionCostFixed, transactionCostPercent)
@@ -192,150 +179,45 @@ func EvaluateEndState(
 }
 
 // =============================================================================
-// COMPONENT 1: OPPORTUNITY CAPTURE (30%)
+// COMPONENT 1: END-STATE IMPROVEMENT (10%)
 // =============================================================================
-// This is WHY the system exists - to capture value opportunities.
+// Measures how much the portfolio improved from start to end state.
+// Rewards sequences that move the portfolio closer to targets.
 
-func calculateOpportunityCaptureScore(ctx models.PortfolioContext, sequence []models.ActionCandidate) float64 {
-	if len(sequence) == 0 {
-		return 0.5 // Neutral for empty sequence
+// calculateEndStateImprovementScore measures portfolio improvement from start to end.
+// Returns 0.5 for no change, higher for improvement, lower for degradation.
+func calculateEndStateImprovementScore(start, end models.PortfolioContext) float64 {
+	if start.TotalValue <= 0 || end.TotalValue <= 0 {
+		return 0.5 // Neutral if no valid data
 	}
 
-	// Calculate sub-scores
-	windfallScore := calculateWindfallScore(ctx, sequence)
-	priorityScore := calculateActionPriorityScore(sequence)
-	technicalScore := calculateTechnicalOpportunityScore(ctx, sequence)
+	// Calculate component scores for both states
+	startDiv := calculateDiversificationAlignmentScore(start)
+	endDiv := calculateDiversificationAlignmentScore(end)
 
-	// Combine with sub-weights
-	return windfallScore*OpportunityWeightWindfall +
-		priorityScore*OpportunityWeightActionPriority +
-		technicalScore*OpportunityWeightTechnical
-}
+	startRisk := calculateRiskAdjustedScore(start)
+	endRisk := calculateRiskAdjustedScore(end)
 
-// calculateWindfallScore detects excess gains above expected CAGR
-func calculateWindfallScore(ctx models.PortfolioContext, sequence []models.ActionCandidate) float64 {
-	if len(sequence) == 0 {
-		return 0.5
-	}
+	startQuality := calculatePortfolioQualityScore(start)
+	endQuality := calculatePortfolioQualityScore(end)
 
-	totalWindfallScore := 0.0
-	sellCount := 0
+	// Calculate improvements (positive = better)
+	divImprovement := endDiv - startDiv
+	riskImprovement := endRisk - startRisk
+	qualityImprovement := endQuality - startQuality
 
-	for _, action := range sequence {
-		if !action.Side.IsSell() {
-			continue
-		}
-		sellCount++
+	// Average improvement, scaled to 0-1 range
+	// Improvements range from -1 to +1, so map to 0-1
+	avgImprovement := (divImprovement + riskImprovement + qualityImprovement) / 3.0
+	score := 0.5 + (avgImprovement * 0.5) // Maps [-1,1] to [0,1]
 
-		// Calculate current gain
-		avgPrice, hasAvg := ctx.PositionAvgPrices[action.Symbol]
-		currentPrice, hasCurrent := ctx.CurrentPrices[action.Symbol]
-		if !hasAvg || !hasCurrent || avgPrice <= 0 {
-			totalWindfallScore += 0.5 // Neutral if no price data
-			continue
-		}
-
-		currentGain := (currentPrice - avgPrice) / avgPrice
-
-		// Get historical CAGR (default 10% if not available)
-		historicalCAGR := 0.10
-		if cagr, hasCagr := ctx.SecurityCAGRs[action.Symbol]; hasCagr && cagr > 0 {
-			historicalCAGR = cagr
-		}
-
-		// Calculate expected gain (assume 1 year holding if no data)
-		yearsHeld := 1.0
-		expectedGain := math.Pow(1+historicalCAGR, yearsHeld) - 1
-		excessGain := currentGain - expectedGain
-
-		// Score based on excess gain
-		var windfallScore float64
-		if excessGain >= WindfallExcessHigh { // 50%+ excess
-			windfallScore = 1.0
-		} else if excessGain >= WindfallExcessMedium { // 25-50% excess
-			windfallScore = 0.5 + (excessGain-WindfallExcessMedium)/(WindfallExcessHigh-WindfallExcessMedium)*0.5
-		} else if excessGain > 0 { // 0-25% excess
-			windfallScore = excessGain / WindfallExcessMedium * 0.5
-		} else {
-			windfallScore = 0.3 // Below expected, still valid to sell for rebalancing
-		}
-
-		totalWindfallScore += windfallScore
-	}
-
-	// For BUY sequences, check if we're buying at good prices
-	buyCount := 0
-	for _, action := range sequence {
-		if action.Side.IsBuy() {
-			buyCount++
-			// Buying opportunity score based on technical indicators
-			// (handled in technical score)
-			totalWindfallScore += 0.6 // Neutral-positive for buys
-		}
-	}
-
-	totalActions := sellCount + buyCount
-	if totalActions == 0 {
-		return 0.5
-	}
-
-	return totalWindfallScore / float64(totalActions)
-}
-
-// calculateActionPriorityScore uses the priority from opportunity identification
-func calculateActionPriorityScore(sequence []models.ActionCandidate) float64 {
-	if len(sequence) == 0 {
-		return 0.5
-	}
-
-	totalPriority := 0.0
-	for _, action := range sequence {
-		// Priority is already 0-1 from opportunity identification
-		// Clamp to ensure valid range
-		priority := math.Max(0, math.Min(1, action.Priority))
-		totalPriority += priority
-	}
-
-	return totalPriority / float64(len(sequence))
-}
-
-// calculateTechnicalOpportunityScore evaluates technical indicators
-func calculateTechnicalOpportunityScore(ctx models.PortfolioContext, sequence []models.ActionCandidate) float64 {
-	if len(sequence) == 0 {
-		return 0.5
-	}
-
-	// For now, use security scores as proxy for technical opportunity
-	// In full implementation, this would check RSI, Bollinger, 52W high, etc.
-	totalScore := 0.0
-	count := 0
-
-	for _, action := range sequence {
-		if score, hasScore := ctx.SecurityScores[action.Symbol]; hasScore {
-			// For buys: higher score = better opportunity
-			// For sells: score indicates we're selling quality (neutral)
-			if action.Side.IsBuy() {
-				totalScore += score
-			} else {
-				totalScore += 0.5 + score*0.3 // Selling quality is okay
-			}
-			count++
-		} else {
-			totalScore += 0.5 // Neutral if no score
-			count++
-		}
-	}
-
-	if count == 0 {
-		return 0.5
-	}
-
-	return totalScore / float64(count)
+	return math.Min(1.0, math.Max(0.0, score))
 }
 
 // =============================================================================
-// COMPONENT 2: PORTFOLIO QUALITY (25%)
+// COMPONENT 2: PORTFOLIO QUALITY (35%)
 // =============================================================================
+// Quality compounding over 15 years matters.
 // Quality compounding over 15 years matters.
 
 func calculatePortfolioQualityScore(ctx models.PortfolioContext) float64 {
@@ -493,9 +375,9 @@ func calculateStabilityScore(ctx models.PortfolioContext) float64 {
 }
 
 // =============================================================================
-// COMPONENT 3: DIVERSIFICATION & ALIGNMENT (20%)
+// COMPONENT 3: DIVERSIFICATION & ALIGNMENT (30%)
 // =============================================================================
-// Discipline without paralysis.
+// Geographic, industry, and optimizer alignment.
 
 func calculateDiversificationAlignmentScore(ctx models.PortfolioContext) float64 {
 	totalValue := ctx.TotalValue
@@ -626,7 +508,7 @@ func calculateOptimizerAlignment(ctx models.PortfolioContext, totalValue float64
 }
 
 // =============================================================================
-// COMPONENT 4: RISK-ADJUSTED METRICS (15%)
+// COMPONENT 4: RISK-ADJUSTED METRICS (25%)
 // =============================================================================
 // Risk-AWARE not risk-AVERSE.
 
@@ -740,101 +622,6 @@ func calculateWeightedDrawdownScore(ctx models.PortfolioContext, totalValue floa
 }
 
 // =============================================================================
-// COMPONENT 5: REGIME & ROBUSTNESS (10%)
-// =============================================================================
-// Adaptive + sanity check, not gatekeeper.
-
-func calculateRegimeRobustnessScore(ctx models.PortfolioContext, sequence []models.ActionCandidate) float64 {
-	// Market regime alignment
-	regimeScore := calculateRegimeAlignmentScore(ctx, sequence)
-
-	// Robustness (simplified - sequence coherence check)
-	robustnessScore := calculateSequenceCoherenceScore(sequence)
-
-	// Combine
-	return regimeScore*0.6 + robustnessScore*0.4
-}
-
-// calculateRegimeAlignmentScore checks if actions align with market regime
-func calculateRegimeAlignmentScore(ctx models.PortfolioContext, sequence []models.ActionCandidate) float64 {
-	regime := ctx.MarketRegimeScore // -1 (bear) to +1 (bull)
-
-	if len(sequence) == 0 {
-		return 0.5
-	}
-
-	// Count buy vs sell actions
-	buys := 0
-	sells := 0
-	for _, action := range sequence {
-		if action.Side.IsBuy() {
-			buys++
-		} else {
-			sells++
-		}
-	}
-
-	totalActions := buys + sells
-	if totalActions == 0 {
-		return 0.5
-	}
-
-	buyRatio := float64(buys) / float64(totalActions)
-
-	// In bull market: buying is aligned
-	// In bear market: selling is aligned
-	// In neutral: both are okay
-	var alignmentScore float64
-	if regime > 0.3 { // Bull
-		alignmentScore = 0.5 + buyRatio*0.5 // More buys = better
-	} else if regime < -0.3 { // Bear
-		alignmentScore = 0.5 + (1-buyRatio)*0.5 // More sells = better
-	} else { // Neutral
-		alignmentScore = 0.7 // Both are acceptable
-	}
-
-	return alignmentScore
-}
-
-// calculateSequenceCoherenceScore checks if sequence is coherent
-func calculateSequenceCoherenceScore(sequence []models.ActionCandidate) float64 {
-	if len(sequence) == 0 {
-		return 0.5
-	}
-
-	// Check for contradictory actions (buy and sell same symbol)
-	symbolActions := make(map[string]struct {
-		buys  int
-		sells int
-	})
-
-	for _, action := range sequence {
-		entry := symbolActions[action.Symbol]
-		if action.Side.IsBuy() {
-			entry.buys++
-		} else {
-			entry.sells++
-		}
-		symbolActions[action.Symbol] = entry
-	}
-
-	// Penalize contradictory actions
-	contradictions := 0
-	for _, entry := range symbolActions {
-		if entry.buys > 0 && entry.sells > 0 {
-			contradictions++
-		}
-	}
-
-	if len(symbolActions) == 0 {
-		return 0.5
-	}
-
-	coherenceRatio := 1.0 - float64(contradictions)/float64(len(symbolActions))
-	return coherenceRatio
-}
-
-// =============================================================================
 // TRANSACTION COST CALCULATION
 // =============================================================================
 
@@ -935,9 +722,11 @@ func EvaluateSequence(
 		context.TransactionCostPercent,
 	)
 
-	// Evaluate end state with unified scoring (using temperament config if available)
+	// Evaluate end state with pure end-state scoring
+	// Pass BOTH start and end context for improvement calculation
 	score := EvaluateEndState(
-		endPortfolio,
+		context.PortfolioContext, // Start state
+		endPortfolio,             // End state
 		sequence,
 		context.TransactionCostFixed,
 		context.TransactionCostPercent,

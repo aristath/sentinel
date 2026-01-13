@@ -12,7 +12,14 @@ import (
 // SecurityLookupFunc is a function that looks up full security information by symbol or ISIN
 type SecurityLookupFunc func(symbol, isin string) (*universe.Security, bool)
 
-// Enforcer validates and adjusts actions based on security constraints
+// Enforcer validates and adjusts actions based on security constraints.
+// Enforces:
+// - Per-security allow_buy/allow_sell flags
+// - Max sell percentage limits
+// - Lot size rounding
+// - Cooloff periods (recently sold/bought)
+// - Ineligible ISINs (pending orders, etc.)
+// - Global allow_buy/allow_sell settings
 type Enforcer struct {
 	log            zerolog.Logger
 	securityLookup SecurityLookupFunc
@@ -75,17 +82,55 @@ func (e *Enforcer) validateAndAdjustAction(
 		return false, action, fmt.Sprintf("action missing ISIN for symbol: %s", action.Symbol)
 	}
 
+	// ==========================================================================
+	// GLOBAL CONSTRAINTS (from context)
+	// ==========================================================================
+
+	// Check global allow_sell/allow_buy flags
+	if action.Side == "SELL" && !ctx.AllowSell {
+		return false, action, "global allow_sell=false"
+	}
+	if action.Side == "BUY" && !ctx.AllowBuy {
+		return false, action, "global allow_buy=false"
+	}
+
+	// ==========================================================================
+	// COOLOFF PERIODS (recently traded)
+	// ==========================================================================
+
+	// Check if ISIN was recently sold (can't sell again during cooloff)
+	if action.Side == "SELL" && ctx.RecentlySoldISINs[isin] {
+		return false, action, "cooloff: recently sold"
+	}
+
+	// Check if ISIN was recently bought (can't buy again during cooloff)
+	if action.Side == "BUY" && ctx.RecentlyBoughtISINs[isin] {
+		return false, action, "cooloff: recently bought"
+	}
+
+	// ==========================================================================
+	// INELIGIBLE ISINs (pending orders, etc.)
+	// ==========================================================================
+
+	// Check if ISIN is marked as ineligible (e.g., has pending order)
+	if ctx.IneligibleISINs[isin] {
+		return false, action, "ineligible: pending order or other constraint"
+	}
+
+	// ==========================================================================
+	// SECURITY-SPECIFIC CONSTRAINTS (from security lookup)
+	// ==========================================================================
+
 	// Look up security using ISIN (preferred) or symbol (fallback)
 	security, found := e.securityLookup(action.Symbol, isin)
-
 	if !found {
 		return false, action, fmt.Sprintf("security not found: %s", action.Symbol)
 	}
 
-	// Check allow_sell/allow_buy constraints
+	// Check per-security allow_sell/allow_buy constraints
 	if action.Side == "SELL" {
 		if !security.AllowSell {
-			return false, action, "allow_sell=false"
+			return false, action, "security allow_sell=false"
 		}
 
 		// Validate MaxSellPercentage for SELL actions (safety net)
@@ -125,12 +170,16 @@ func (e *Enforcer) validateAndAdjustAction(
 		}
 	} else if action.Side == "BUY" {
 		if !security.AllowBuy {
-			return false, action, "allow_buy=false"
+			return false, action, "security allow_buy=false"
 		}
 	} else {
 		// Invalid side value - reject the action
 		return false, action, fmt.Sprintf("invalid side: %s (must be BUY or SELL)", action.Side)
 	}
+
+	// ==========================================================================
+	// LOT SIZE ADJUSTMENT
+	// ==========================================================================
 
 	// Round quantity to lot size
 	adjustedQuantity := e.roundToLotSize(action.Quantity, security.MinLot)
@@ -196,4 +245,54 @@ func (e *Enforcer) roundToLotSize(quantity int, lotSize int) int {
 	}
 
 	return 0 // Cannot make valid
+}
+
+// IsActionFeasible performs a fast feasibility check without adjusting the action.
+// Used for pruning during sequence generation.
+// Returns (feasible, reason).
+func (e *Enforcer) IsActionFeasible(
+	action planningdomain.ActionCandidate,
+	ctx *planningdomain.OpportunityContext,
+) (bool, string) {
+	isin := action.ISIN
+	if isin == "" {
+		return false, "missing ISIN"
+	}
+
+	// Global constraints
+	if action.Side == "SELL" && !ctx.AllowSell {
+		return false, "global allow_sell=false"
+	}
+	if action.Side == "BUY" && !ctx.AllowBuy {
+		return false, "global allow_buy=false"
+	}
+
+	// Cooloff periods
+	if action.Side == "SELL" && ctx.RecentlySoldISINs[isin] {
+		return false, "cooloff: recently sold"
+	}
+	if action.Side == "BUY" && ctx.RecentlyBoughtISINs[isin] {
+		return false, "cooloff: recently bought"
+	}
+
+	// Ineligible ISINs
+	if ctx.IneligibleISINs[isin] {
+		return false, "ineligible"
+	}
+
+	// Security-specific constraints (if lookup available)
+	if e.securityLookup != nil {
+		security, found := e.securityLookup(action.Symbol, isin)
+		if !found {
+			return false, "security not found"
+		}
+		if action.Side == "SELL" && !security.AllowSell {
+			return false, "security allow_sell=false"
+		}
+		if action.Side == "BUY" && !security.AllowBuy {
+			return false, "security allow_buy=false"
+		}
+	}
+
+	return true, ""
 }
