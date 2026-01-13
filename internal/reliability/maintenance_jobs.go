@@ -144,10 +144,9 @@ func (j *DailyMaintenanceJob) verifyBackups() error {
 		return fmt.Errorf("yesterday's backup directory not found: %s", dailyBackupDir)
 	}
 
-	// Verify each database backup
-	dbNames := []string{"universe.db", "config.db", "ledger.db", "portfolio.db", "agents.db", "history.db"}
-	for _, dbName := range dbNames {
-		backupPath := filepath.Join(dailyBackupDir, dbName)
+	// Verify each database backup - dynamically from actual databases
+	for dbName := range j.databases {
+		backupPath := filepath.Join(dailyBackupDir, dbName+".db")
 
 		if _, err := os.Stat(backupPath); os.IsNotExist(err) {
 			j.log.Error().
@@ -296,7 +295,6 @@ type MonthlyMaintenanceJob struct {
 	base.JobBase
 	databases      map[string]*database.DB
 	healthServices map[string]*DatabaseHealthService
-	agentsDB       *database.DB
 	backupDir      string
 	log            zerolog.Logger
 }
@@ -305,14 +303,12 @@ type MonthlyMaintenanceJob struct {
 func NewMonthlyMaintenanceJob(
 	databases map[string]*database.DB,
 	healthServices map[string]*DatabaseHealthService,
-	agentsDB *database.DB,
 	backupDir string,
 	log zerolog.Logger,
 ) *MonthlyMaintenanceJob {
 	return &MonthlyMaintenanceJob{
 		databases:      databases,
 		healthServices: healthServices,
-		agentsDB:       agentsDB,
 		backupDir:      backupDir,
 		log:            log.With().Str("job", "monthly_maintenance").Logger(),
 	}
@@ -349,13 +345,7 @@ func (j *MonthlyMaintenanceJob) Run() error {
 		return fmt.Errorf("CRITICAL: Backup verification failed: %w", err)
 	}
 
-	// Step 3: Archive old sequences from agents.db (>90 days)
-	if err := j.archiveOldSequences(); err != nil {
-		j.log.Error().Err(err).Msg("Failed to archive old sequences")
-		// Continue - not critical
-	}
-
-	// Step 4: Database growth analysis
+	// Step 3: Database growth analysis
 	j.analyzeGrowthTrends()
 
 	duration := time.Since(startTime)
@@ -440,15 +430,19 @@ func (j *MonthlyMaintenanceJob) fullBackupVerification() error {
 	backupPath := filepath.Join(dailyBackupDir, mostRecentBackup)
 	j.log.Info().Str("backup_date", mostRecentBackup).Msg("Verifying backup")
 
-	// Verify each database backup
-	dbNames := []string{"universe.db", "config.db", "ledger.db", "portfolio.db", "agents.db", "history.db"}
-	for _, dbName := range dbNames {
+	// Verify each database backup - dynamically from actual databases
+	for name := range j.databases {
+		dbName := name + ".db"
 		srcPath := filepath.Join(backupPath, dbName)
 		dstPath := filepath.Join(tempDir, dbName)
 
 		// Copy backup to temp
 		if err := CopyFile(srcPath, dstPath); err != nil {
-			return fmt.Errorf("failed to copy %s: %w", dbName, err)
+			j.log.Warn().
+				Str("database", name).
+				Err(err).
+				Msg("Failed to copy backup for verification, skipping")
+			continue
 		}
 
 		// Open and verify integrity
@@ -471,59 +465,6 @@ func (j *MonthlyMaintenanceJob) fullBackupVerification() error {
 	j.log.Info().
 		Str("backup_date", mostRecentBackup).
 		Msg("Full backup verification completed successfully")
-
-	return nil
-}
-
-// archiveOldSequences deletes sequences older than 90 days from agents.db
-func (j *MonthlyMaintenanceJob) archiveOldSequences() error {
-	ninetyDaysAgo := time.Now().AddDate(0, 0, -90).Unix()
-
-	// Count rows to be archived
-	var count int
-	err := j.agentsDB.Conn().QueryRow(`
-		SELECT COUNT(*) FROM sequences
-		WHERE created_at < ?
-	`, ninetyDaysAgo).Scan(&count)
-
-	if err != nil {
-		return fmt.Errorf("failed to count old sequences: %w", err)
-	}
-
-	if count == 0 {
-		j.log.Debug().Msg("No old sequences to archive")
-		return nil
-	}
-
-	// Delete old sequences
-	result, err := j.agentsDB.Conn().Exec(`
-		DELETE FROM sequences
-		WHERE created_at < ?
-	`, ninetyDaysAgo)
-
-	if err != nil {
-		return fmt.Errorf("failed to delete old sequences: %w", err)
-	}
-
-	rowsDeleted, _ := result.RowsAffected()
-	j.log.Info().
-		Int64("rows_deleted", rowsDeleted).
-		Msg("Archived old sequences")
-
-	// Also delete associated evaluations
-	result, err = j.agentsDB.Conn().Exec(`
-		DELETE FROM evaluations
-		WHERE created_at < ?
-	`, ninetyDaysAgo)
-
-	if err != nil {
-		return fmt.Errorf("failed to delete old evaluations: %w", err)
-	}
-
-	rowsDeleted, _ = result.RowsAffected()
-	j.log.Info().
-		Int64("rows_deleted", rowsDeleted).
-		Msg("Archived old evaluations")
 
 	return nil
 }

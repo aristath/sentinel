@@ -16,7 +16,7 @@ func TestCheckWALCheckpointsJob_Name(t *testing.T) {
 
 func TestCheckWALCheckpointsJob_Run_NoDatabases(t *testing.T) {
 	log := zerolog.New(nil).Level(zerolog.Disabled)
-	job := NewCheckWALCheckpointsJob(nil, nil, nil, nil, nil, nil, nil, nil)
+	job := NewCheckWALCheckpointsJob(nil, nil, nil, nil, nil, nil, nil)
 	job.SetLogger(log)
 
 	err := job.Run()

@@ -17,9 +17,9 @@ func TestContainer_Initialization(t *testing.T) {
 	assert.Nil(t, container.ConfigDB)
 	assert.Nil(t, container.LedgerDB)
 	assert.Nil(t, container.PortfolioDB)
-	assert.Nil(t, container.AgentsDB)
 	assert.Nil(t, container.HistoryDB)
 	assert.Nil(t, container.CacheDB)
+	assert.Nil(t, container.ClientDataDB)
 }
 
 func TestContainer_CanSetDatabases(t *testing.T) {

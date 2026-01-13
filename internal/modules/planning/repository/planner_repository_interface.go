@@ -66,8 +66,5 @@ type PlannerRepositoryInterface interface {
 	DeleteAllBestResults() error
 }
 
-// Compile-time check that PlannerRepository implements PlannerRepositoryInterface
-var _ PlannerRepositoryInterface = (*PlannerRepository)(nil)
-
 // Compile-time check that InMemoryPlannerRepository implements PlannerRepositoryInterface
 var _ PlannerRepositoryInterface = (*InMemoryPlannerRepository)(nil)

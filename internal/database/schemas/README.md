@@ -10,9 +10,9 @@ Each database has one schema file that represents its complete, final state:
 - `config_schema.sql` - Application configuration (settings, allocation targets, planner settings)
 - `ledger_schema.sql` - Immutable financial audit trail (trades, cash flows, dividends, DRIP tracking)
 - `portfolio_schema.sql` - Current portfolio state (positions, scores, calculated metrics)
-- `agents_schema.sql` - Strategy management (sequences, evaluations, best results)
 - `history_schema.sql` - Historical time-series data (daily/monthly prices, exchange rates)
-- `cache_schema.sql` - Ephemeral operational data (recommendations, cache)
+- `cache_schema.sql` - Ephemeral operational data (job history)
+- `client_data_schema.sql` - External API response cache (Alpha Vantage, Yahoo, OpenFIGI)
 
 ## How It Works
 
@@ -30,7 +30,3 @@ To modify a database schema:
 1. Edit the appropriate schema file in this directory
 2. The changes will be applied automatically on the next application start
 3. For existing databases, SQLite will handle `CREATE TABLE IF NOT EXISTS` and similar statements gracefully
-
-## Old Migrations
-
-Previous migration files (001-036) have been archived to `../migrations_archive/` for reference. The migration history is preserved but no longer used.

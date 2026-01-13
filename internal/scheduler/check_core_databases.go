@@ -16,7 +16,6 @@ type CheckCoreDatabasesJob struct {
 	configDB    *database.DB
 	ledgerDB    *database.DB
 	portfolioDB *database.DB
-	agentsDB    *database.DB
 }
 
 // NewCheckCoreDatabasesJob creates a new CheckCoreDatabasesJob
@@ -25,7 +24,6 @@ func NewCheckCoreDatabasesJob(
 	configDB *database.DB,
 	ledgerDB *database.DB,
 	portfolioDB *database.DB,
-	agentsDB *database.DB,
 ) *CheckCoreDatabasesJob {
 	return &CheckCoreDatabasesJob{
 		log:         zerolog.Nop(),
@@ -33,7 +31,6 @@ func NewCheckCoreDatabasesJob(
 		configDB:    configDB,
 		ledgerDB:    ledgerDB,
 		portfolioDB: portfolioDB,
-		agentsDB:    agentsDB,
 	}
 }
 
@@ -54,7 +51,6 @@ func (j *CheckCoreDatabasesJob) Run() error {
 		"config":    j.configDB,
 		"ledger":    j.ledgerDB,
 		"portfolio": j.portfolioDB,
-		"agents":    j.agentsDB,
 	}
 
 	for name, db := range databases {

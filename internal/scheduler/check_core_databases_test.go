@@ -16,7 +16,7 @@ func TestCheckCoreDatabasesJob_Name(t *testing.T) {
 
 func TestCheckCoreDatabasesJob_Run_NoDatabases(t *testing.T) {
 	log := zerolog.New(nil).Level(zerolog.Disabled)
-	job := NewCheckCoreDatabasesJob(nil, nil, nil, nil, nil)
+	job := NewCheckCoreDatabasesJob(nil, nil, nil, nil)
 	job.SetLogger(log)
 
 	err := job.Run()

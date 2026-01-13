@@ -10,7 +10,6 @@ import (
 )
 
 // InitializeDatabases initializes all 7 databases and applies schemas
-// Returns a Container with databases populated (agents.db removed - data now in-memory)
 func InitializeDatabases(cfg *config.Config, log zerolog.Logger) (*Container, error) {
 	container := &Container{}
 
@@ -64,12 +63,7 @@ func InitializeDatabases(cfg *config.Config, log zerolog.Logger) (*Container, er
 	}
 	container.PortfolioDB = portfolioDB
 
-	// 5. agents.db - REMOVED: Sequences, evaluations, best_result now stored in-memory
-	// All ephemeral planning data is now handled by InMemoryPlannerRepository
-	// No database needed for this data - it's regenerated on each planning cycle
-	container.AgentsDB = nil // Set to nil for backward compatibility
-
-	// 6. history.db - Historical time-series data (prices, rates, cleanup tracking)
+	// 5. history.db - Historical time-series data (prices, rates, cleanup tracking)
 	historyDB, err := database.New(database.Config{
 		Path:    cfg.DataDir + "/history.db",
 		Profile: database.ProfileStandard,
@@ -80,12 +74,11 @@ func InitializeDatabases(cfg *config.Config, log zerolog.Logger) (*Container, er
 		configDB.Close()
 		ledgerDB.Close()
 		portfolioDB.Close()
-		// agentsDB removed
 		return nil, fmt.Errorf("failed to initialize history database: %w", err)
 	}
 	container.HistoryDB = historyDB
 
-	// 7. cache.db - Ephemeral operational data (recommendations, cache)
+	// 6. cache.db - Ephemeral operational data (job history)
 	cacheDB, err := database.New(database.Config{
 		Path:    cfg.DataDir + "/cache.db",
 		Profile: database.ProfileCache, // Maximum speed for ephemeral data
@@ -96,13 +89,12 @@ func InitializeDatabases(cfg *config.Config, log zerolog.Logger) (*Container, er
 		configDB.Close()
 		ledgerDB.Close()
 		portfolioDB.Close()
-		// agentsDB removed
 		historyDB.Close()
 		return nil, fmt.Errorf("failed to initialize cache database: %w", err)
 	}
 	container.CacheDB = cacheDB
 
-	// 8. client_data.db - External API response cache (Alpha Vantage, Yahoo, OpenFIGI, ExchangeRate)
+	// 7. client_data.db - External API response cache (Alpha Vantage, Yahoo, OpenFIGI, ExchangeRate)
 	clientDataDB, err := database.New(database.Config{
 		Path:    cfg.DataDir + "/client_data.db",
 		Profile: database.ProfileCache, // Maximum speed for cache data
@@ -120,7 +112,6 @@ func InitializeDatabases(cfg *config.Config, log zerolog.Logger) (*Container, er
 	container.ClientDataDB = clientDataDB
 
 	// Apply schemas to all databases (single source of truth)
-	// Note: agentsDB removed - sequences/evaluations now in-memory
 	for _, db := range []*database.DB{universeDB, configDB, ledgerDB, portfolioDB, historyDB, cacheDB, clientDataDB} {
 		if err := db.Migrate(); err != nil {
 			// Cleanup on error

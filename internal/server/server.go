@@ -41,7 +41,6 @@ import (
 	optimizationhandlers "github.com/aristath/sentinel/internal/modules/optimization/handlers"
 	planningconfig "github.com/aristath/sentinel/internal/modules/planning/config"
 	planninghandlers "github.com/aristath/sentinel/internal/modules/planning/handlers"
-	"github.com/aristath/sentinel/internal/modules/planning/repository"
 	"github.com/aristath/sentinel/internal/modules/portfolio"
 	portfoliohandlers "github.com/aristath/sentinel/internal/modules/portfolio/handlers"
 	quantumhandlers "github.com/aristath/sentinel/internal/modules/quantum/handlers"
@@ -72,7 +71,6 @@ type Config struct {
 	ConfigDB           *database.DB
 	LedgerDB           *database.DB
 	PortfolioDB        *database.DB
-	AgentsDB           *database.DB
 	HistoryDB          *database.DB
 	CacheDB            *database.DB
 	Config             *config.Config
@@ -83,7 +81,7 @@ type Config struct {
 	Container          *di.Container // DI container with all services
 }
 
-// Server represents the HTTP server - NEW 7-database architecture
+// Server represents the HTTP server - 7-database architecture
 type Server struct {
 	router             *chi.Mux
 	server             *http.Server
@@ -92,7 +90,6 @@ type Server struct {
 	configDB           *database.DB
 	ledgerDB           *database.DB
 	portfolioDB        *database.DB
-	agentsDB           *database.DB
 	historyDB          *database.DB
 	cacheDB            *database.DB
 	cfg                *config.Config
@@ -157,7 +154,6 @@ func New(cfg Config) *Server {
 		configDB:           cfg.ConfigDB,
 		ledgerDB:           cfg.LedgerDB,
 		portfolioDB:        cfg.PortfolioDB,
-		agentsDB:           cfg.AgentsDB,
 		historyDB:          cfg.HistoryDB,
 		cacheDB:            cfg.CacheDB,
 		cfg:                cfg.Config,
@@ -549,7 +545,7 @@ func (s *Server) setupRoutes() {
 		// Planning module (MIGRATED TO GO!)
 		planningService := s.container.PlanningService
 		planningConfigRepo := s.container.PlannerConfigRepo
-		planningPlannerRepo := repository.NewPlannerRepository(s.agentsDB, s.log)
+		planningPlannerRepo := s.container.PlannerRepo // Use in-memory planner repo from container
 		planningDismissedFilterRepo := s.container.DismissedFilterRepo
 		planningValidator := planningconfig.NewValidator()
 		planningEventBroadcaster := planninghandlers.NewEventBroadcaster(s.log)

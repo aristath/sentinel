@@ -46,12 +46,11 @@ import (
 // Container holds all dependencies for the application
 // This is the single source of truth for all service instances
 type Container struct {
-	// Databases (8-database architecture)
+	// Databases (7-database architecture)
 	UniverseDB   *database.DB
 	ConfigDB     *database.DB
 	LedgerDB     *database.DB
 	PortfolioDB  *database.DB
-	AgentsDB     *database.DB
 	HistoryDB    *database.DB
 	CacheDB      *database.DB
 	ClientDataDB *database.DB

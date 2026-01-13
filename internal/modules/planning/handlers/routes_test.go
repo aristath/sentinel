@@ -20,7 +20,7 @@ func TestRegisterRoutes(t *testing.T) {
 	// The actual handler creation is complex, so we'll test route registration differently
 	planningService := &planning.Service{}
 	configRepo := &repository.ConfigRepository{}
-	plannerRepo := repository.NewPlannerRepository(nil, zerolog.Nop())
+	plannerRepo := repository.NewInMemoryPlannerRepository(zerolog.Nop())
 	validator := config.NewValidator()
 	eventBroadcaster := NewEventBroadcaster(zerolog.Nop())
 
@@ -101,7 +101,7 @@ func TestRegisterRoutes_RoutePrefix(t *testing.T) {
 	// Verify that routes are registered under /planning prefix
 	planningService := &planning.Service{}
 	configRepo := &repository.ConfigRepository{}
-	plannerRepo := repository.NewPlannerRepository(nil, zerolog.Nop())
+	plannerRepo := repository.NewInMemoryPlannerRepository(zerolog.Nop())
 	validator := config.NewValidator()
 	eventBroadcaster := NewEventBroadcaster(zerolog.Nop())
 

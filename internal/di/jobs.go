@@ -152,7 +152,7 @@ func RegisterJobs(container *Container, cfg *config.Config, displayManager *disp
 	instances.MonthlyBackup = monthlyBackup
 
 	// Job 14: Monthly Maintenance
-	monthlyMaintenance := reliability.NewMonthlyMaintenanceJob(databases, container.HealthServices, nil, backupDir, log) // AgentsDB removed
+	monthlyMaintenance := reliability.NewMonthlyMaintenanceJob(databases, container.HealthServices, backupDir, log)
 	container.JobRegistry.Register(queue.JobTypeMonthlyMaintenance, queue.JobToHandler(monthlyMaintenance))
 	instances.MonthlyMaintenance = monthlyMaintenance
 
@@ -465,7 +465,6 @@ func RegisterJobs(container *Container, cfg *config.Config, displayManager *disp
 		container.ConfigDB,
 		container.LedgerDB,
 		container.PortfolioDB,
-		nil, // AgentsDB removed - sequences/evaluations now in-memory
 	)
 	checkCoreDatabases.SetLogger(log)
 	container.JobRegistry.Register(queue.JobTypeCheckCoreDatabases, queue.JobToHandler(checkCoreDatabases))
@@ -483,7 +482,6 @@ func RegisterJobs(container *Container, cfg *config.Config, displayManager *disp
 		container.ConfigDB,
 		container.LedgerDB,
 		container.PortfolioDB,
-		nil, // AgentsDB removed - sequences/evaluations now in-memory
 		container.HistoryDB,
 		container.CacheDB,
 		container.ClientDataDB,

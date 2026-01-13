@@ -13,7 +13,6 @@ type CheckWALCheckpointsJob struct {
 	configDB     *database.DB
 	ledgerDB     *database.DB
 	portfolioDB  *database.DB
-	agentsDB     *database.DB
 	historyDB    *database.DB
 	cacheDB      *database.DB
 	clientDataDB *database.DB
@@ -25,7 +24,6 @@ func NewCheckWALCheckpointsJob(
 	configDB *database.DB,
 	ledgerDB *database.DB,
 	portfolioDB *database.DB,
-	agentsDB *database.DB,
 	historyDB *database.DB,
 	cacheDB *database.DB,
 	clientDataDB *database.DB,
@@ -36,7 +34,6 @@ func NewCheckWALCheckpointsJob(
 		configDB:     configDB,
 		ledgerDB:     ledgerDB,
 		portfolioDB:  portfolioDB,
-		agentsDB:     agentsDB,
 		historyDB:    historyDB,
 		cacheDB:      cacheDB,
 		clientDataDB: clientDataDB,
@@ -60,7 +57,6 @@ func (j *CheckWALCheckpointsJob) Run() error {
 		"config":      j.configDB,
 		"ledger":      j.ledgerDB,
 		"portfolio":   j.portfolioDB,
-		"agents":      j.agentsDB,
 		"history":     j.historyDB,
 		"cache":       j.cacheDB,
 		"client_data": j.clientDataDB,

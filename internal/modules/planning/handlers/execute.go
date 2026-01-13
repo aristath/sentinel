@@ -18,14 +18,14 @@ type TradeExecutor interface {
 
 // ExecuteHandler handles executing the next step in a plan.
 type ExecuteHandler struct {
-	repository *repository.PlannerRepository
+	repository repository.PlannerRepositoryInterface
 	executor   TradeExecutor
 	log        zerolog.Logger
 }
 
 // NewExecuteHandler creates a new execute handler.
 func NewExecuteHandler(
-	repo *repository.PlannerRepository,
+	repo repository.PlannerRepositoryInterface,
 	executor TradeExecutor,
 	log zerolog.Logger,
 ) *ExecuteHandler {

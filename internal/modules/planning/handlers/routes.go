@@ -22,7 +22,7 @@ type Handler struct {
 func NewHandler(
 	planningService *planning.Service,
 	configRepo *repository.ConfigRepository,
-	plannerRepo *repository.PlannerRepository,
+	plannerRepo repository.PlannerRepositoryInterface,
 	dismissedFilterRepo *repository.DismissedFilterRepository,
 	validator *config.Validator,
 	eventBroadcaster *EventBroadcaster,

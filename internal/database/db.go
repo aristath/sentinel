@@ -234,7 +234,6 @@ func (db *DB) Migrate() error {
 		"config":      "config_schema.sql",
 		"ledger":      "ledger_schema.sql",
 		"portfolio":   "portfolio_schema.sql",
-		"agents":      "agents_schema.sql",
 		"history":     "history_schema.sql",
 		"cache":       "cache_schema.sql",
 		"client_data": "client_data_schema.sql",

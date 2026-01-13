@@ -256,9 +256,9 @@ The system uses a clean 7-database architecture:
 2. **config.db** - Application configuration (settings, allocation targets)
 3. **ledger.db** - Immutable financial audit trail (trades, cash flows, dividends)
 4. **portfolio.db** - Current portfolio state (positions, scores, metrics, snapshots)
-5. **agents.db** - Strategy management (sequences, evaluations)
-6. **history.db** - Historical time-series data (prices, rates, cleanup tracking)
-7. **cache.db** - Ephemeral operational data (recommendations, cache)
+5. **history.db** - Historical time-series data (prices, rates, cleanup tracking)
+6. **cache.db** - Ephemeral operational data (job history)
+7. **client_data.db** - External API response cache (Alpha Vantage, Yahoo, OpenFIGI)
 
 All databases use SQLite with WAL mode and profile-specific PRAGMAs for optimal performance and safety.
 

@@ -21,9 +21,9 @@ import (
 //   - "config" - applies config_schema.sql
 //   - "ledger" - applies ledger_schema.sql
 //   - "portfolio" - applies portfolio_schema.sql
-//   - "agents" - applies agents_schema.sql
 //   - "history" - applies history_schema.sql
 //   - "cache" - applies cache_schema.sql
+//   - "client_data" - applies client_data_schema.sql
 //   - Unknown names - creates empty database (no schema applied)
 func NewTestDB(t *testing.T, name string) (*database.DB, func()) {
 	t.Helper()

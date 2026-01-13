@@ -42,9 +42,6 @@ func cleanupContainer(container *di.Container) {
 	if container.PortfolioDB != nil {
 		container.PortfolioDB.Close()
 	}
-	if container.AgentsDB != nil {
-		container.AgentsDB.Close()
-	}
 	if container.HistoryDB != nil {
 		container.HistoryDB.Close()
 	}
