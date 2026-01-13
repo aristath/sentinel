@@ -27,7 +27,7 @@ type ServiceDeployment struct {
 // ChangeCategories categorizes what types of changes were detected
 type ChangeCategories struct {
 	MainApp    bool
-	DisplayApp bool // App Lab display app (display/python/)
+	DisplayApp bool // App Lab display app (display/app/)
 	Frontend   bool
 	Sketch     bool
 	Config     bool
