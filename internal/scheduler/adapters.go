@@ -13,6 +13,7 @@ import (
 	"github.com/aristath/sentinel/internal/modules/planning"
 	planningdomain "github.com/aristath/sentinel/internal/modules/planning/domain"
 	planningplanner "github.com/aristath/sentinel/internal/modules/planning/planner"
+	"github.com/aristath/sentinel/internal/modules/planning/progress"
 	"github.com/aristath/sentinel/internal/modules/planning/repository"
 	"github.com/aristath/sentinel/internal/modules/portfolio"
 	"github.com/aristath/sentinel/internal/modules/settings"
@@ -527,7 +528,7 @@ func (a *PlannerServiceAdapter) CreatePlan(ctx interface{}, config interface{}) 
 	return a.service.CreatePlan(opportunityContext, plannerConfig)
 }
 
-func (a *PlannerServiceAdapter) CreatePlanWithRejections(ctx interface{}, config interface{}) (interface{}, error) {
+func (a *PlannerServiceAdapter) CreatePlanWithRejections(ctx interface{}, config interface{}, progressCallback interface{}) (interface{}, error) {
 	opportunityContext, ok := ctx.(*planningdomain.OpportunityContext)
 	if !ok {
 		return nil, fmt.Errorf("invalid context type")
@@ -536,7 +537,16 @@ func (a *PlannerServiceAdapter) CreatePlanWithRejections(ctx interface{}, config
 	if !ok {
 		return nil, fmt.Errorf("invalid config type")
 	}
-	return a.service.CreatePlanWithRejections(opportunityContext, plannerConfig)
+	// Convert progress callback interface to typed callback
+	var cb progress.Callback
+	if progressCallback != nil {
+		if typedCb, ok := progressCallback.(progress.Callback); ok {
+			cb = typedCb
+		} else if funcCb, ok := progressCallback.(func(int, int, string)); ok {
+			cb = progress.Callback(funcCb)
+		}
+	}
+	return a.service.CreatePlanWithRejections(opportunityContext, plannerConfig, cb)
 }
 
 // RecommendationRepositoryAdapter adapts *planning.RecommendationRepository to RecommendationRepositoryInterface

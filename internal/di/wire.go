@@ -31,7 +31,6 @@ func Wire(cfg *config.Config, log zerolog.Logger, displayManager *display.StateM
 		container.ConfigDB.Close()
 		container.LedgerDB.Close()
 		container.PortfolioDB.Close()
-		// container.AgentsDB.Close() // AgentsDB removed - sequences/evaluations now in-memory
 		container.HistoryDB.Close()
 		container.CacheDB.Close()
 		container.ClientDataDB.Close()
@@ -45,7 +44,6 @@ func Wire(cfg *config.Config, log zerolog.Logger, displayManager *display.StateM
 		container.ConfigDB.Close()
 		container.LedgerDB.Close()
 		container.PortfolioDB.Close()
-		// container.AgentsDB.Close() // AgentsDB removed - sequences/evaluations now in-memory
 		container.HistoryDB.Close()
 		container.CacheDB.Close()
 		container.ClientDataDB.Close()
@@ -60,7 +58,6 @@ func Wire(cfg *config.Config, log zerolog.Logger, displayManager *display.StateM
 		container.ConfigDB.Close()
 		container.LedgerDB.Close()
 		container.PortfolioDB.Close()
-		// container.AgentsDB.Close() // AgentsDB removed - sequences/evaluations now in-memory
 		container.HistoryDB.Close()
 		container.CacheDB.Close()
 		container.ClientDataDB.Close()

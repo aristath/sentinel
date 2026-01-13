@@ -5,6 +5,8 @@ import (
 
 	planningdomain "github.com/aristath/sentinel/internal/modules/planning/domain"
 	"github.com/aristath/sentinel/internal/modules/planning/planner"
+	"github.com/aristath/sentinel/internal/modules/planning/progress"
+	"github.com/aristath/sentinel/internal/queue"
 	"github.com/rs/zerolog"
 )
 
@@ -79,8 +81,18 @@ func (j *CreateTradePlanJob) Run() error {
 		config = planningdomain.NewDefaultConfiguration()
 	}
 
+	// Create progress callback from the job's progress reporter
+	var progressCallback progress.Callback
+	if r := j.GetProgressReporter(); r != nil {
+		if reporter, ok := r.(*queue.ProgressReporter); ok && reporter != nil {
+			progressCallback = func(current, total int, message string) {
+				reporter.Report(current, total, message)
+			}
+		}
+	}
+
 	// Create plan with rejection tracking (planner service returns interface{}, we type assert to PlanResult)
-	planResultInterface, err := j.plannerService.CreatePlanWithRejections(j.opportunityContext, config)
+	planResultInterface, err := j.plannerService.CreatePlanWithRejections(j.opportunityContext, config, progressCallback)
 	if err != nil {
 		j.log.Error().Err(err).Msg("Failed to create plan")
 		return fmt.Errorf("failed to create plan: %w", err)

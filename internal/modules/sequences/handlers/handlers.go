@@ -68,7 +68,8 @@ func (h *Handler) HandleGenerate(w http.ResponseWriter, r *http.Request) {
 		req.Config = domain.NewDefaultConfiguration()
 	}
 
-	sequences, err := h.service.GenerateSequences(req.Opportunities, ctx, req.Config)
+	// Pass nil for progress callback in HTTP handlers (no streaming support)
+	sequences, err := h.service.GenerateSequences(req.Opportunities, ctx, req.Config, nil)
 	if err != nil {
 		h.log.Error().Err(err).Msg("Failed to generate sequences")
 		http.Error(w, "Failed to generate sequences", http.StatusInternalServerError)

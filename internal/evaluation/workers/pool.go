@@ -6,6 +6,7 @@ import (
 
 	"github.com/aristath/sentinel/internal/evaluation"
 	"github.com/aristath/sentinel/internal/evaluation/models"
+	"github.com/aristath/sentinel/internal/modules/planning/progress"
 )
 
 // WorkerPool manages a pool of worker goroutines for parallel sequence evaluation
@@ -31,12 +32,14 @@ func NewWorkerPool(numWorkers int) *WorkerPool {
 // Args:
 //   - sequences: List of sequences to evaluate
 //   - context: Evaluation context shared by all sequences
+//   - progressCallback: Optional callback to report evaluation progress
 //
 // Returns:
 //   - List of evaluation results (same order as input sequences)
 func (wp *WorkerPool) EvaluateBatch(
 	sequences [][]models.ActionCandidate,
 	context models.EvaluationContext,
+	progressCallback progress.Callback,
 ) []models.SequenceEvaluationResult {
 	numSequences := len(sequences)
 	if numSequences == 0 {
@@ -77,10 +80,13 @@ func (wp *WorkerPool) EvaluateBatch(
 		close(results)
 	}()
 
-	// Collect results
+	// Collect results and report progress
 	resultSlice := make([]models.SequenceEvaluationResult, numSequences)
+	completed := 0
 	for result := range results {
 		resultSlice[result.index] = result.evalResult
+		completed++
+		progress.Call(progressCallback, completed, numSequences, "Evaluating sequences")
 	}
 
 	return resultSlice

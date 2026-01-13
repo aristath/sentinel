@@ -12,6 +12,7 @@ import (
 	"github.com/aristath/sentinel/internal/modules/planning/domain"
 	"github.com/aristath/sentinel/internal/modules/planning/evaluation"
 	"github.com/aristath/sentinel/internal/modules/planning/hash"
+	"github.com/aristath/sentinel/internal/modules/planning/progress"
 	"github.com/aristath/sentinel/internal/modules/sequences"
 	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/aristath/sentinel/internal/services"
@@ -71,14 +72,16 @@ type PlanResult struct {
 }
 
 func (p *Planner) CreatePlan(ctx *domain.OpportunityContext, config *domain.PlannerConfiguration) (*domain.HolisticPlan, error) {
-	planResult, err := p.CreatePlanWithRejections(ctx, config)
+	planResult, err := p.CreatePlanWithRejections(ctx, config, nil)
 	if err != nil {
 		return nil, err
 	}
 	return planResult.Plan, nil
 }
 
-func (p *Planner) CreatePlanWithRejections(ctx *domain.OpportunityContext, config *domain.PlannerConfiguration) (*PlanResult, error) {
+// CreatePlanWithRejections creates a holistic trading plan with rejection tracking.
+// The progressCallback is called during sequence generation and evaluation to report progress.
+func (p *Planner) CreatePlanWithRejections(ctx *domain.OpportunityContext, config *domain.PlannerConfiguration, progressCallback progress.Callback) (*PlanResult, error) {
 	p.log.Info().Msg("Creating holistic plan")
 
 	// Apply configuration to context
@@ -110,7 +113,7 @@ func (p *Planner) CreatePlanWithRejections(ctx *domain.OpportunityContext, confi
 	}
 
 	// Step 2: Generate sequences
-	sequences, err := p.sequencesService.GenerateSequences(opportunities, ctx, config)
+	sequences, err := p.sequencesService.GenerateSequences(opportunities, ctx, config, progressCallback)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate sequences: %w", err)
 	}
@@ -147,7 +150,7 @@ func (p *Planner) CreatePlanWithRejections(ctx *domain.OpportunityContext, confi
 
 	// Call evaluation service (pass OpportunityContext for optimizer targets)
 	evalCtx := context.Background()
-	results, err := p.evaluationService.BatchEvaluate(evalCtx, sequences, portfolioHash, config, ctx)
+	results, err := p.evaluationService.BatchEvaluate(evalCtx, sequences, portfolioHash, config, ctx, progressCallback)
 	if err != nil {
 		p.log.Error().Err(err).Msg("Evaluation failed, falling back to priority-based selection")
 		// Fallback: use priority-based selection if evaluation fails

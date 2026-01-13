@@ -6,6 +6,7 @@ import (
 	"github.com/aristath/sentinel/internal/modules/planning/domain"
 	"github.com/aristath/sentinel/internal/modules/planning/evaluation"
 	"github.com/aristath/sentinel/internal/modules/planning/planner"
+	"github.com/aristath/sentinel/internal/modules/planning/progress"
 	"github.com/aristath/sentinel/internal/modules/sequences"
 	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/aristath/sentinel/internal/services"
@@ -28,6 +29,7 @@ func (s *Service) CreatePlan(ctx *domain.OpportunityContext, config *domain.Plan
 	return s.planner.CreatePlan(ctx, config)
 }
 
-func (s *Service) CreatePlanWithRejections(ctx *domain.OpportunityContext, config *domain.PlannerConfiguration) (*planner.PlanResult, error) {
-	return s.planner.CreatePlanWithRejections(ctx, config)
+// CreatePlanWithRejections creates a plan with rejection tracking and optional progress callback.
+func (s *Service) CreatePlanWithRejections(ctx *domain.OpportunityContext, config *domain.PlannerConfiguration, progressCallback progress.Callback) (*planner.PlanResult, error) {
+	return s.planner.CreatePlanWithRejections(ctx, config, progressCallback)
 }

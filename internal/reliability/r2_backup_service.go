@@ -82,8 +82,8 @@ func (s *R2BackupService) CreateAndUploadBackup(ctx context.Context) error {
 	}
 	defer os.RemoveAll(stagingDir) // Clean up on exit
 
-	// Backup all 7 databases to staging
-	dbNames := []string{"universe", "config", "ledger", "portfolio", "agents", "history", "cache"}
+	// Get database names dynamically from BackupService (includes cache, excludes client_data)
+	dbNames := s.backupService.GetDatabaseNames(true, false)
 	metadata := BackupMetadata{
 		Timestamp:       time.Now().UTC(),
 		Version:         "1.0.0",

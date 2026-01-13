@@ -88,8 +88,14 @@ type Job struct {
 	progressReporter *ProgressReporter
 }
 
-// GetProgressReporter returns the progress reporter for this job
-func (j *Job) GetProgressReporter() *ProgressReporter {
+// GetProgressReporter returns the progress reporter for this job.
+// Returns interface{} to satisfy the scheduler/base.JobBase interface requirement.
+// Callers should type-assert to *ProgressReporter.
+// Returns nil (not a nil-pointer interface) when no reporter is set.
+func (j *Job) GetProgressReporter() interface{} {
+	if j.progressReporter == nil {
+		return nil
+	}
 	return j.progressReporter
 }
 
@@ -112,8 +118,10 @@ func (b *BaseJob) SetJob(j interface{}) {
 	}
 }
 
-// GetProgressReporter returns the progress reporter for this job
-func (b *BaseJob) GetProgressReporter() *ProgressReporter {
+// GetProgressReporter returns the progress reporter for this job.
+// Returns interface{} to match the scheduler/base.JobBase interface.
+// Callers should type-assert to *ProgressReporter.
+func (b *BaseJob) GetProgressReporter() interface{} {
 	if b.queueJob == nil {
 		return nil
 	}

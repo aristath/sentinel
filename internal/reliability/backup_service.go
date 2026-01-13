@@ -37,6 +37,23 @@ func NewBackupService(
 	}
 }
 
+// GetDatabaseNames returns the names of all databases available for backup.
+// If includeCache is false, the "cache" database is excluded (for daily backups).
+// If includeClientData is false, the "client_data" database is excluded.
+func (s *BackupService) GetDatabaseNames(includeCache, includeClientData bool) []string {
+	names := make([]string, 0, len(s.databases))
+	for name := range s.databases {
+		if !includeCache && name == "cache" {
+			continue
+		}
+		if !includeClientData && name == "client_data" {
+			continue
+		}
+		names = append(names, name)
+	}
+	return names
+}
+
 // HourlyBackup performs hourly backup (ledger.db only)
 // Keeps last 24 hours, rotates older backups
 func (s *BackupService) HourlyBackup() error {
@@ -80,7 +97,7 @@ func (s *BackupService) HourlyBackup() error {
 	return nil
 }
 
-// DailyBackup performs daily backup (all databases except cache)
+// DailyBackup performs daily backup (all databases except cache and client_data)
 // Keeps last 30 days, rotates older backups
 func (s *BackupService) DailyBackup() error {
 	s.log.Info().Msg("Starting daily backup")
@@ -93,8 +110,8 @@ func (s *BackupService) DailyBackup() error {
 		return fmt.Errorf("failed to create daily backup directory: %w", err)
 	}
 
-	// Backup all databases except cache
-	dbNames := []string{"universe", "config", "ledger", "portfolio", "agents", "history"}
+	// Backup all databases except cache and client_data (derived from actual databases)
+	dbNames := s.GetDatabaseNames(false, false)
 	for _, dbName := range dbNames {
 		backupPath := filepath.Join(dailyDir, dbName+".db")
 
@@ -133,7 +150,7 @@ func (s *BackupService) DailyBackup() error {
 	return nil
 }
 
-// WeeklyBackup performs weekly backup (all databases including cache)
+// WeeklyBackup performs weekly backup (all databases including cache, excluding client_data)
 // Keeps last 12 weeks, rotates older backups
 func (s *BackupService) WeeklyBackup() error {
 	s.log.Info().Msg("Starting weekly backup")
@@ -146,8 +163,8 @@ func (s *BackupService) WeeklyBackup() error {
 		return fmt.Errorf("failed to create weekly backup directory: %w", err)
 	}
 
-	// Backup all databases (including cache)
-	dbNames := []string{"universe", "config", "ledger", "portfolio", "agents", "history", "cache"}
+	// Backup all databases including cache, excluding client_data (derived from actual databases)
+	dbNames := s.GetDatabaseNames(true, false)
 	for _, dbName := range dbNames {
 		backupPath := filepath.Join(weekDir, dbName+".db")
 
@@ -186,7 +203,7 @@ func (s *BackupService) WeeklyBackup() error {
 	return nil
 }
 
-// MonthlyBackup performs monthly backup (all databases including cache)
+// MonthlyBackup performs monthly backup (all databases including cache, excluding client_data)
 // Keeps last 120 months (10 years), rotates older backups
 func (s *BackupService) MonthlyBackup() error {
 	s.log.Info().Msg("Starting monthly backup")
@@ -199,8 +216,8 @@ func (s *BackupService) MonthlyBackup() error {
 		return fmt.Errorf("failed to create monthly backup directory: %w", err)
 	}
 
-	// Backup all databases (including cache)
-	dbNames := []string{"universe", "config", "ledger", "portfolio", "agents", "history", "cache"}
+	// Backup all databases including cache, excluding client_data (derived from actual databases)
+	dbNames := s.GetDatabaseNames(true, false)
 	for _, dbName := range dbNames {
 		backupPath := filepath.Join(monthDir, dbName+".db")
 

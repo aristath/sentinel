@@ -5,6 +5,7 @@ import (
 	"github.com/aristath/sentinel/internal/modules/optimization"
 	"github.com/aristath/sentinel/internal/modules/planning/constraints"
 	"github.com/aristath/sentinel/internal/modules/planning/domain"
+	"github.com/aristath/sentinel/internal/modules/planning/progress"
 	"github.com/aristath/sentinel/internal/modules/sequences/filters"
 	"github.com/rs/zerolog"
 )
@@ -37,10 +38,13 @@ func NewService(
 // 2. Constraint filtering: During generation (cooloff, ineligibility, etc.)
 // 3. Cash feasibility: Prune sequences that can't be executed
 // 4. Post-filters: Correlation, diversity (if enabled)
+//
+// The progressCallback is called during generation to report progress.
 func (s *Service) GenerateSequences(
 	opportunities domain.OpportunitiesByCategory,
 	ctx *domain.OpportunityContext,
 	config *domain.PlannerConfiguration,
+	progressCallback progress.Callback,
 ) ([]domain.ActionSequence, error) {
 	// Build generation config from planner config
 	genConfig := DefaultGenerationConfig()
@@ -54,6 +58,7 @@ func (s *Service) GenerateSequences(
 		genConfig.AvailableCash = ctx.AvailableCashEUR
 		genConfig.PruneInfeasible = true
 	}
+	genConfig.ProgressCallback = progressCallback
 
 	// Generate sequences
 	sequences := s.generator.Generate(opportunities, ctx, genConfig)

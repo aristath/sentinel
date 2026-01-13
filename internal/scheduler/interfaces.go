@@ -119,8 +119,8 @@ type EvaluationServiceInterface interface {
 // PlannerServiceInterface defines the contract for planner service operations
 // Used by scheduler to enable testing with mocks
 type PlannerServiceInterface interface {
-	CreatePlan(ctx interface{}, config interface{}) (interface{}, error)               // Returns HolisticPlan
-	CreatePlanWithRejections(ctx interface{}, config interface{}) (interface{}, error) // Returns PlanResult
+	CreatePlan(ctx interface{}, config interface{}) (interface{}, error)                                             // Returns HolisticPlan
+	CreatePlanWithRejections(ctx interface{}, config interface{}, progressCallback interface{}) (interface{}, error) // Returns PlanResult
 }
 
 // RecommendationRepositoryInterface defines the contract for recommendation repository operations

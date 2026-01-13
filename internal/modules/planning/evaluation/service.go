@@ -13,6 +13,7 @@ import (
 	"github.com/aristath/sentinel/internal/evaluation/models"
 	"github.com/aristath/sentinel/internal/evaluation/workers"
 	"github.com/aristath/sentinel/internal/modules/planning/domain"
+	"github.com/aristath/sentinel/internal/modules/planning/progress"
 	scoringdomain "github.com/aristath/sentinel/internal/modules/scoring/domain"
 	"github.com/aristath/sentinel/internal/modules/settings"
 	"github.com/rs/zerolog"
@@ -108,7 +109,8 @@ func hashSequence(actions []domain.ActionCandidate) string {
 
 // BatchEvaluate evaluates a batch of sequences directly (no HTTP overhead).
 // It accepts an optional OpportunityContext to extract optimizer targets and portfolio context.
-func (s *Service) BatchEvaluate(ctx context.Context, sequences []domain.ActionSequence, portfolioHash string, config *domain.PlannerConfiguration, opportunityCtx *domain.OpportunityContext) ([]domain.EvaluationResult, error) {
+// The progressCallback is called as each sequence evaluation completes.
+func (s *Service) BatchEvaluate(ctx context.Context, sequences []domain.ActionSequence, portfolioHash string, config *domain.PlannerConfiguration, opportunityCtx *domain.OpportunityContext, progressCallback progress.Callback) ([]domain.EvaluationResult, error) {
 	if len(sequences) == 0 {
 		return nil, fmt.Errorf("no sequences to evaluate")
 	}
@@ -231,7 +233,7 @@ func (s *Service) BatchEvaluate(ctx context.Context, sequences []domain.ActionSe
 
 	// Evaluate using worker pool
 	startTime := time.Now()
-	results := s.workerPool.EvaluateBatch(evalSequences, evalContext)
+	results := s.workerPool.EvaluateBatch(evalSequences, evalContext, progressCallback)
 	elapsed := time.Since(startTime)
 
 	s.log.Info().
@@ -405,8 +407,9 @@ func convertPortfolioContextWithOpportunityData(
 }
 
 // EvaluateSingleSequence evaluates a single sequence.
+// Progress callback is not used for single sequence evaluation.
 func (s *Service) EvaluateSingleSequence(ctx context.Context, sequence domain.ActionSequence, portfolioHash string, config *domain.PlannerConfiguration, opportunityCtx *domain.OpportunityContext) (*domain.EvaluationResult, error) {
-	results, err := s.BatchEvaluate(ctx, []domain.ActionSequence{sequence}, portfolioHash, config, opportunityCtx)
+	results, err := s.BatchEvaluate(ctx, []domain.ActionSequence{sequence}, portfolioHash, config, opportunityCtx, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -421,7 +424,7 @@ func (s *Service) EvaluateSingleSequence(ctx context.Context, sequence domain.Ac
 // BatchEvaluateWithOptions provides more control over evaluation parameters.
 // Currently supports deterministic evaluation only.
 // Monte Carlo and stochastic simulation are not implemented - the options are ignored.
-func (s *Service) BatchEvaluateWithOptions(ctx context.Context, sequences []domain.ActionSequence, portfolioHash string, opts EvaluationOptions, opportunityCtx *domain.OpportunityContext) ([]domain.EvaluationResult, error) {
+func (s *Service) BatchEvaluateWithOptions(ctx context.Context, sequences []domain.ActionSequence, portfolioHash string, opts EvaluationOptions, opportunityCtx *domain.OpportunityContext, progressCallback progress.Callback) ([]domain.EvaluationResult, error) {
 	// Monte Carlo and stochastic evaluation require price simulation infrastructure.
 	// These options are currently ignored and deterministic evaluation is used.
 	if opts.UseMonteCarlo || opts.UseStochastic {
@@ -432,7 +435,7 @@ func (s *Service) BatchEvaluateWithOptions(ctx context.Context, sequences []doma
 	}
 
 	// Use standard batch evaluation with deterministic pricing
-	return s.BatchEvaluate(ctx, sequences, portfolioHash, nil, opportunityCtx)
+	return s.BatchEvaluate(ctx, sequences, portfolioHash, nil, opportunityCtx, progressCallback)
 }
 
 // HealthCheck is no longer needed (no external service) but kept for interface compatibility.

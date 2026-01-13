@@ -215,3 +215,139 @@ func TestGeneratorGenerateWithOpportunities(t *testing.T) {
 		}
 	}
 }
+
+func TestGeneratorProgressCallback(t *testing.T) {
+	log := zerolog.Nop()
+	generator := NewExhaustiveGenerator(log, nil)
+
+	opportunities := domain.OpportunitiesByCategory{
+		domain.OpportunityCategoryProfitTaking: []domain.ActionCandidate{
+			{Side: "SELL", Symbol: "A", ISIN: "ISIN_A", Quantity: 10, ValueEUR: 1000, Priority: 0.8},
+			{Side: "SELL", Symbol: "B", ISIN: "ISIN_B", Quantity: 5, ValueEUR: 500, Priority: 0.7},
+		},
+		domain.OpportunityCategoryOpportunityBuys: []domain.ActionCandidate{
+			{Side: "BUY", Symbol: "C", ISIN: "ISIN_C", Quantity: 3, ValueEUR: 300, Priority: 0.6},
+		},
+	}
+
+	ctx := &domain.OpportunityContext{
+		AllowSell:           true,
+		AllowBuy:            true,
+		AvailableCashEUR:    1000,
+		RecentlySoldISINs:   make(map[string]bool),
+		RecentlyBoughtISINs: make(map[string]bool),
+		IneligibleISINs:     make(map[string]bool),
+	}
+
+	// Track progress calls
+	var progressCalls []struct {
+		current int
+		total   int
+		message string
+	}
+
+	callback := func(current, total int, message string) {
+		progressCalls = append(progressCalls, struct {
+			current int
+			total   int
+			message string
+		}{current, total, message})
+	}
+
+	config := GenerationConfig{
+		MaxDepth:         3,
+		AvailableCash:    1000,
+		PruneInfeasible:  true,
+		ProgressCallback: callback,
+	}
+
+	sequences := generator.Generate(opportunities, ctx, config)
+
+	// Should have generated sequences
+	assert.NotEmpty(t, sequences, "Should generate sequences")
+
+	// Progress callback should have been called for each depth
+	assert.Len(t, progressCalls, 3, "Progress should be called for each depth (1, 2, 3)")
+
+	// Verify progress values are correct
+	for i, call := range progressCalls {
+		expectedDepth := i + 1
+		assert.Equal(t, expectedDepth, call.current, "Current should match depth")
+		assert.Equal(t, 3, call.total, "Total should match maxDepth")
+		assert.Contains(t, call.message, "Generating depth", "Message should describe generation")
+	}
+}
+
+func TestGeneratorProgressCallbackNil(t *testing.T) {
+	log := zerolog.Nop()
+	generator := NewExhaustiveGenerator(log, nil)
+
+	opportunities := domain.OpportunitiesByCategory{
+		domain.OpportunityCategoryProfitTaking: []domain.ActionCandidate{
+			{Side: "SELL", Symbol: "A", ISIN: "ISIN_A", Quantity: 10, ValueEUR: 1000, Priority: 0.8},
+		},
+	}
+
+	ctx := &domain.OpportunityContext{
+		AllowSell:           true,
+		AllowBuy:            true,
+		AvailableCashEUR:    1000,
+		RecentlySoldISINs:   make(map[string]bool),
+		RecentlyBoughtISINs: make(map[string]bool),
+		IneligibleISINs:     make(map[string]bool),
+	}
+
+	config := GenerationConfig{
+		MaxDepth:         2,
+		AvailableCash:    1000,
+		PruneInfeasible:  true,
+		ProgressCallback: nil, // Explicitly nil
+	}
+
+	// Should not panic with nil callback
+	assert.NotPanics(t, func() {
+		generator.Generate(opportunities, ctx, config)
+	})
+}
+
+func TestGeneratorProgressCallbackEarlyTermination(t *testing.T) {
+	log := zerolog.Nop()
+	generator := NewExhaustiveGenerator(log, nil)
+
+	// Create more opportunities to generate more combinations
+	opportunities := domain.OpportunitiesByCategory{
+		domain.OpportunityCategoryProfitTaking: []domain.ActionCandidate{
+			{Side: "SELL", Symbol: "A", ISIN: "ISIN_A", Quantity: 10, ValueEUR: 100, Priority: 0.9},
+			{Side: "SELL", Symbol: "B", ISIN: "ISIN_B", Quantity: 10, ValueEUR: 100, Priority: 0.8},
+		},
+	}
+
+	ctx := &domain.OpportunityContext{
+		AllowSell:           true,
+		AllowBuy:            true,
+		AvailableCashEUR:    1000,
+		RecentlySoldISINs:   make(map[string]bool),
+		RecentlyBoughtISINs: make(map[string]bool),
+		IneligibleISINs:     make(map[string]bool),
+	}
+
+	var progressCalls int
+	callback := func(current, total int, message string) {
+		progressCalls++
+	}
+
+	config := GenerationConfig{
+		MaxDepth:         5, // High depth
+		MaxSequences:     1, // But limit to 1 sequence (early termination)
+		AvailableCash:    1000,
+		PruneInfeasible:  true,
+		ProgressCallback: callback,
+	}
+
+	sequences := generator.Generate(opportunities, ctx, config)
+
+	// Should have terminated early
+	assert.Len(t, sequences, 1, "Should have only 1 sequence due to MaxSequences limit")
+	// Progress callback should have been called at least once (depth 1)
+	assert.GreaterOrEqual(t, progressCalls, 1, "Progress should be called at least for depth 1")
+}

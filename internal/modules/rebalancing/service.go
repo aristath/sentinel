@@ -411,8 +411,8 @@ func (s *Service) CalculateRebalanceTrades(availableCash float64) ([]RebalanceRe
 		return nil, fmt.Errorf("failed to load planner config: %w", err)
 	}
 
-	// Step 4: Call planning service with rejection tracking
-	planResult, err := s.planningService.CreatePlanWithRejections(opportunityCtx, config)
+	// Step 4: Call planning service with rejection tracking (nil progress callback)
+	planResult, err := s.planningService.CreatePlanWithRejections(opportunityCtx, config, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create plan: %w", err)
 	}

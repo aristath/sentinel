@@ -5,10 +5,12 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"sort"
 
 	"github.com/aristath/sentinel/internal/modules/planning/constraints"
 	"github.com/aristath/sentinel/internal/modules/planning/domain"
+	"github.com/aristath/sentinel/internal/modules/planning/progress"
 	"github.com/rs/zerolog"
 )
 
@@ -34,10 +36,11 @@ func NewExhaustiveGenerator(log zerolog.Logger, enforcer *constraints.Enforcer) 
 
 // GenerationConfig contains parameters for sequence generation.
 type GenerationConfig struct {
-	MaxDepth        int     // Maximum number of actions per sequence (default: 8)
-	MaxSequences    int     // Maximum total sequences to generate (0 = unlimited)
-	AvailableCash   float64 // Available cash for feasibility checks
-	PruneInfeasible bool    // Whether to prune cash-infeasible sequences during generation
+	MaxDepth         int               // Maximum number of actions per sequence (default: 8)
+	MaxSequences     int               // Maximum total sequences to generate (0 = unlimited)
+	AvailableCash    float64           // Available cash for feasibility checks
+	PruneInfeasible  bool              // Whether to prune cash-infeasible sequences during generation
+	ProgressCallback progress.Callback // Optional callback to report generation progress
 }
 
 // DefaultGenerationConfig returns sensible defaults for generation.
@@ -80,6 +83,10 @@ func (g *ExhaustiveGenerator) Generate(
 
 	// Generate combinations from depth 1 to max_depth
 	for depth := 1; depth <= effectiveMaxDepth; depth++ {
+		// Report progress at each depth level
+		progress.Call(config.ProgressCallback, depth, effectiveMaxDepth,
+			fmt.Sprintf("Generating depth %d sequences", depth))
+
 		combos := g.generateCombinations(allCandidates, depth)
 		for _, combo := range combos {
 			// Normalize: Sort SELL before BUY for canonical order
