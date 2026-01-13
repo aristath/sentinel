@@ -64,7 +64,7 @@ jobs:
     - name: Copy files for embedding
 
       run: |
-        # Copy frontend/dist, display/app, display/app.yaml, and display/sketch into pkg/embedded/ for embedding
+        # Copy frontend/dist, display/python, display/app.yaml, and display/sketch into pkg/embedded/ for embedding
         # This allows embed directive to access all files without using .. paths
         # Must be done BEFORE go mod tidy so the embed directive can find the files
         mkdir -p pkg/embedded/frontend pkg/embedded/display
@@ -78,12 +78,12 @@ jobs:
           mkdir -p pkg/embedded/frontend
         fi
 
-        if [ -d "display/app" ]; then
-          cp -r display/app pkg/embedded/display/
-          echo "✓ Copied display/app"
+        if [ -d "display/python" ]; then
+          cp -r display/python pkg/embedded/display/
+          echo "✓ Copied display/python"
         else
-          echo "WARNING: display/app not found - creating empty directory"
-          mkdir -p pkg/embedded/display/app
+          echo "WARNING: display/python not found - creating empty directory"
+          mkdir -p pkg/embedded/display/python
         fi
 
         if [ -f "display/app.yaml" ]; then
