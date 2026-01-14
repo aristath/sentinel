@@ -3,7 +3,6 @@
 Endpoints in this category:
 
 - [`GET /api/analytics/factor-exposures`](GET-api-analytics-factor-exposures.md)
-- [`GET /api/analytics/factor-exposures/history`](GET-api-analytics-factor-exposures-history.md)
 - [`GET /api/portfolio/concentration`](GET-api-portfolio-concentration.md)
 - [`GET /api/portfolio/cost-basis`](GET-api-portfolio-cost-basis.md)
 - [`GET /api/portfolio/diversification`](GET-api-portfolio-diversification.md)

@@ -10,10 +10,10 @@ CREATE TABLE IF NOT EXISTS settings (
     updated_at INTEGER NOT NULL      -- Unix timestamp (seconds since epoch)
 ) STRICT;
 
--- Allocation targets table: group-based allocation rules
+-- Allocation targets table: direct allocation rules (no groups)
 CREATE TABLE IF NOT EXISTS allocation_targets (
     id INTEGER PRIMARY KEY,
-    type TEXT NOT NULL,      -- 'geography', 'industry', 'country_group', 'industry_group'
+    type TEXT NOT NULL,      -- 'geography' or 'industry' only
     name TEXT NOT NULL,
     target_pct REAL NOT NULL,
     created_at INTEGER NOT NULL,     -- Unix timestamp (seconds since epoch)
@@ -95,19 +95,6 @@ CREATE TABLE IF NOT EXISTS market_regime_history (
 
 CREATE INDEX IF NOT EXISTS idx_regime_history_recorded ON market_regime_history(recorded_at DESC);
 CREATE INDEX IF NOT EXISTS idx_regime_history_smoothed ON market_regime_history(smoothed_score);
-
--- Adaptive performance history: tracks component performance over time
-CREATE TABLE IF NOT EXISTS adaptive_performance_history (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    recorded_at INTEGER NOT NULL,        -- Unix timestamp (seconds since epoch)
-    regime_score REAL NOT NULL,          -- Regime score when recorded (-1.0 to +1.0)
-    portfolio_return REAL NOT NULL,      -- Portfolio return for this period
-    component_performance TEXT NOT NULL, -- JSON: {"long_term": 0.12, "stability": 0.08, ...}
-    created_at INTEGER DEFAULT (strftime('%s', 'now'))  -- Unix timestamp (seconds since epoch)
-) STRICT;
-
-CREATE INDEX IF NOT EXISTS idx_adaptive_perf_recorded ON adaptive_performance_history(recorded_at DESC);
-CREATE INDEX IF NOT EXISTS idx_adaptive_perf_regime ON adaptive_performance_history(regime_score);
 
 -- Adaptive parameters: current active adaptive values
 CREATE TABLE IF NOT EXISTS adaptive_parameters (

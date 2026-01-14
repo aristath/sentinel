@@ -93,56 +93,6 @@ func (h *Handler) HandleGetFactorExposures(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-// HandleGetFactorExposureHistory handles GET /api/analytics/factor-exposures/history
-func (h *Handler) HandleGetFactorExposureHistory(w http.ResponseWriter, r *http.Request) {
-	// Query factor_exposures table
-	rows, err := h.portfolioDB.Query(`
-		SELECT calculated_at, factor_name, exposure, contribution, portfolio_value
-		FROM factor_exposures
-		ORDER BY calculated_at DESC
-		LIMIT 100
-	`)
-	if err != nil {
-		h.log.Error().Err(err).Msg("Failed to query factor exposure history")
-		http.Error(w, "Failed to retrieve factor exposure history", http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
-	type FactorExposureRecord struct {
-		CalculatedAt   int64                  `json:"calculated_at"`
-		FactorName     string                 `json:"factor_name"`
-		Exposure       float64                `json:"exposure"`
-		Contribution   map[string]interface{} `json:"contribution"`
-		PortfolioValue float64                `json:"portfolio_value"`
-	}
-
-	history := make([]FactorExposureRecord, 0)
-	for rows.Next() {
-		var record FactorExposureRecord
-		var contributionJSON string
-		if err := rows.Scan(&record.CalculatedAt, &record.FactorName, &record.Exposure, &contributionJSON, &record.PortfolioValue); err != nil {
-			h.log.Warn().Err(err).Msg("Failed to scan factor exposure record")
-			continue
-		}
-
-		// Parse contribution JSON
-		if contributionJSON != "" {
-			if err := json.Unmarshal([]byte(contributionJSON), &record.Contribution); err != nil {
-				h.log.Warn().Err(err).Msg("Failed to parse contribution JSON")
-			}
-		}
-
-		history = append(history, record)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(history); err != nil {
-		h.log.Error().Err(err).Msg("Failed to encode factor exposure history response")
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-	}
-}
-
 // Helper functions
 
 type positionForFactorExposure struct {
