@@ -22,11 +22,17 @@ type CredentialRefresher interface {
 	RefreshCredentials() error
 }
 
+// DisplayModeSwitcher defines the interface for switching display modes
+type DisplayModeSwitcher interface {
+	SetModeString(mode string) error
+}
+
 // Handler provides HTTP handlers for settings endpoints
 type Handler struct {
 	service             *settings.Service
 	onboardingService   OnboardingServiceInterface
 	credentialRefresher CredentialRefresher
+	displayModeSwitcher DisplayModeSwitcher
 	eventManager        *events.Manager
 	log                 zerolog.Logger
 }
@@ -48,6 +54,11 @@ func (h *Handler) SetOnboardingService(onboardingService OnboardingServiceInterf
 // SetCredentialRefresher sets the credential refresher (for dependency injection)
 func (h *Handler) SetCredentialRefresher(refresher CredentialRefresher) {
 	h.credentialRefresher = refresher
+}
+
+// SetDisplayModeSwitcher sets the display mode switcher (for dependency injection)
+func (h *Handler) SetDisplayModeSwitcher(switcher DisplayModeSwitcher) {
+	h.displayModeSwitcher = switcher
 }
 
 // HandleGetAll handles GET /api/settings
@@ -100,6 +111,17 @@ func (h *Handler) HandleUpdate(w http.ResponseWriter, r *http.Request) {
 			h.log.Warn().Err(err).Msg("Failed to refresh tradernet client credentials after update")
 		} else {
 			h.log.Info().Msg("Tradernet client credentials refreshed after settings update")
+		}
+	}
+
+	// Switch display mode if this was a display_mode update
+	if key == "display_mode" && h.displayModeSwitcher != nil {
+		if modeStr, ok := update.Value.(string); ok {
+			if err := h.displayModeSwitcher.SetModeString(modeStr); err != nil {
+				h.log.Warn().Err(err).Str("mode", modeStr).Msg("Failed to switch display mode after update")
+			} else {
+				h.log.Info().Str("mode", modeStr).Msg("Display mode switched after settings update")
+			}
 		}
 	}
 

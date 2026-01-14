@@ -97,6 +97,11 @@ func (m *ModeManager) GetMode() DisplayMode {
 	return m.currentMode
 }
 
+// SetModeString switches the display to the specified mode (string version for interface compatibility)
+func (m *ModeManager) SetModeString(mode string) error {
+	return m.SetMode(DisplayMode(mode))
+}
+
 // stopCurrentMode stops the currently active mode
 func (m *ModeManager) stopCurrentMode() {
 	switch m.currentMode {

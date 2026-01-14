@@ -101,9 +101,9 @@ var SettingDefaults = map[string]interface{}{
 	"disable_cooloff_checks": 0.0, // 1.0 = disable cooloff checks (only effective in research mode)
 
 	// Portfolio Display Mode settings
-	"display_mode":               "STATS", // Display mode: "STATS" (CPU/RAM), "TICKER", or "PORTFOLIO"
-	"display_min_cluster_size":   5.0,     // Minimum pixels per top holding cluster
-	"display_top_holdings_count": 5.0,     // Number of top holdings to show as clusters
+	"display_mode":               "TEXT", // Display mode: "TEXT" (ticker), "HEALTH" (animated), or "STATS" (pixel count)
+	"display_min_cluster_size":   5.0,    // Minimum pixels per top holding cluster
+	"display_top_holdings_count": 5.0,    // Number of top holdings to show as clusters
 
 	// Performance calculation weights
 	"display_performance_trailing12mo_weight": 0.70, // Weight for trailing 12mo CAGR

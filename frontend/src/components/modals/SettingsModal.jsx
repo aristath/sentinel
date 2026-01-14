@@ -351,12 +351,12 @@ export function SettingsModal() {
               </Text>
               <Select
                 label="Display Mode"
-                value={getSetting('display_mode', 'STATS') || 'STATS'}
+                value={getSetting('display_mode', 'TEXT') || 'TEXT'}
                 onChange={(val) => handleUpdateSetting('display_mode', val)}
                 data={[
-                  { value: 'STATS', label: 'System Stats (CPU/RAM visualization)' },
-                  { value: 'TICKER', label: 'Ticker (Portfolio value, cash, actions)' },
-                  { value: 'PORTFOLIO', label: 'Portfolio (Visual holdings representation)' }
+                  { value: 'TEXT', label: 'Ticker (Portfolio value, cash, actions)' },
+                  { value: 'HEALTH', label: 'Health (Animated portfolio visualization)' },
+                  { value: 'STATS', label: 'Stats (Pixel count visualization)' }
                 ]}
                 description="Select which information to display on the LED matrix"
               />

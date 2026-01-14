@@ -233,12 +233,12 @@ type SystemStatusResponse struct {
 
 // LEDDisplayResponse represents the LED display state
 type LEDDisplayResponse struct {
-	Mode           string                 `json:"mode"`                      // "STATS", "TICKER", or "PORTFOLIO"
-	CurrentPanel   int                    `json:"current_panel"`             // For TICKER mode
+	Mode           string                 `json:"mode"`                      // "TEXT", "HEALTH", or "STATS"
+	CurrentPanel   int                    `json:"current_panel"`             // For TEXT mode
 	SystemStats    map[string]interface{} `json:"system_stats,omitempty"`    // For STATS mode
-	PortfolioState interface{}            `json:"portfolio_state,omitempty"` // For PORTFOLIO mode
-	DisplayText    string                 `json:"display_text,omitempty"`    // For TICKER mode
-	TickerSpeed    int                    `json:"ticker_speed,omitempty"`    // For TICKER mode
+	PortfolioState interface{}            `json:"portfolio_state,omitempty"` // For HEALTH mode
+	DisplayText    string                 `json:"display_text,omitempty"`    // For TEXT mode
+	TickerSpeed    int                    `json:"ticker_speed,omitempty"`    // For TEXT mode
 	LED3           [3]int                 `json:"led3"`                      // RGB values for LED3
 	LED4           [3]int                 `json:"led4"`                      // RGB values for LED4
 	LED3Mode       string                 `json:"led3_mode,omitempty"`       // "solid", "blink", etc.
@@ -501,9 +501,9 @@ func (h *SystemHandlers) HandleLEDDisplay(w http.ResponseWriter, r *http.Request
 	var displayMode string
 	err := h.configDB.Conn().QueryRow("SELECT value FROM settings WHERE key = 'display_mode'").Scan(&displayMode)
 	if err != nil {
-		// Default to STATS if setting not found
-		displayMode = "STATS"
-		h.log.Debug().Err(err).Msg("display_mode setting not found, defaulting to STATS")
+		// Default to TEXT if setting not found
+		displayMode = "TEXT"
+		h.log.Debug().Err(err).Msg("display_mode setting not found, defaulting to TEXT")
 	}
 
 	// Get LED states from display manager
@@ -576,13 +576,13 @@ func (h *SystemHandlers) HandleLEDDisplay(w http.ResponseWriter, r *http.Request
 
 	// Return appropriate data based on mode
 	switch displayMode {
-	case "PORTFOLIO":
-		// Calculate portfolio display state
+	case "HEALTH":
+		// Calculate portfolio display state (health visualization)
 		portfolioState, err := h.portfolioDisplayCalc.CalculateDisplayState()
 		if err != nil {
 			h.log.Error().Err(err).Msg("Failed to calculate portfolio display state")
-			// Fallback to STATS mode
-			response.Mode = "STATS"
+			// Fallback to TEXT mode
+			response.Mode = "TEXT"
 			response.SystemStats = map[string]interface{}{
 				"error": "Failed to calculate portfolio state",
 			}
@@ -590,7 +590,7 @@ func (h *SystemHandlers) HandleLEDDisplay(w http.ResponseWriter, r *http.Request
 			response.PortfolioState = portfolioState
 		}
 
-	case "TICKER":
+	case "TEXT":
 		// Get ticker speed from settings
 		var tickerSpeed float64
 		err := h.configDB.Conn().QueryRow("SELECT value FROM settings WHERE key = 'ticker_speed'").Scan(&tickerSpeed)
