@@ -34,7 +34,8 @@ const (
 type MarketStatusWebSocket struct {
 	// Connection
 	url        string
-	sid        string // Optional session ID
+	sid        string       // Optional session ID
+	httpClient *http.Client // Reusable HTTP client configured for HTTP/1.1
 	conn       *websocket.Conn
 	connCtx    context.Context    // Connection context (cancelled on disconnect)
 	cancelFunc context.CancelFunc // For cancelling the connection context
@@ -81,6 +82,7 @@ func NewMarketStatusWebSocket(url, sid string, eventBus *events.Bus, log zerolog
 	return &MarketStatusWebSocket{
 		url:         url,
 		sid:         sid,
+		httpClient:  createHTTP1Client(),
 		eventBus:    eventBus,
 		log:         log.With().Str("component", "market_status_websocket").Logger(),
 		marketCache: make(map[string]MarketStatusData),
@@ -146,12 +148,9 @@ func (ws *MarketStatusWebSocket) Connect() error {
 	dialCtx, dialCancel := context.WithTimeout(context.Background(), dialTimeout)
 	defer dialCancel()
 
-	// Create HTTP/1.1 client to work around Cloudflare ALPN issues
-	httpClient := createHTTP1Client()
-
-	// Dial WebSocket with nhooyr.io/websocket
+	// Dial WebSocket with nhooyr.io/websocket using the pre-configured HTTP/1.1 client
 	conn, _, err := websocket.Dial(dialCtx, wsURL, &websocket.DialOptions{
-		HTTPClient: httpClient,
+		HTTPClient: ws.httpClient,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to dial WebSocket: %w", err)
