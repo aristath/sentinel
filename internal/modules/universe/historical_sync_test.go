@@ -11,10 +11,12 @@ import (
 func TestHistoricalSyncServiceCreation(t *testing.T) {
 	log := zerolog.Nop()
 
+	priceValidator := NewPriceValidator(log)
 	service := NewHistoricalSyncService(
-		nil, // yahooClient
+		nil, // brokerClient
 		nil, // securityRepo
 		nil, // historyDB
+		priceValidator,
 		1*time.Second,
 		log,
 	)
@@ -26,10 +28,12 @@ func TestHistoricalSyncServiceCreation(t *testing.T) {
 func TestHistoricalSyncService_SyncWithoutClients(t *testing.T) {
 	log := zerolog.Nop()
 
+	priceValidator := NewPriceValidator(log)
 	service := NewHistoricalSyncService(
-		nil,
-		nil,
-		nil,
+		nil, // brokerClient
+		nil, // securityRepo
+		nil, // historyDB
+		priceValidator,
 		0, // no rate limit for tests
 		log,
 	)

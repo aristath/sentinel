@@ -349,11 +349,15 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 	// STEP 5: Initialize Universe Services
 	// ==========================================
 
+	// Historical price validator for validating and interpolating abnormal prices
+	historicalPriceValidator := universe.NewPriceValidator(log)
+
 	// Historical sync service (uses Tradernet as primary source for historical data)
 	container.HistoricalSyncService = universe.NewHistoricalSyncService(
 		container.BrokerClient, // Changed from YahooClient - Tradernet is now single source of truth
 		container.SecurityRepo,
 		container.HistoryDBClient,
+		historicalPriceValidator,
 		time.Second*2, // Rate limit delay
 		log,
 	)

@@ -86,6 +86,60 @@ func (h *HistoryDB) GetDailyPrices(isin string, limit int) ([]DailyPrice, error)
 	return prices, nil
 }
 
+// GetRecentPrices fetches recent daily price data for an ISIN
+// Returns prices from the last N days, ordered by date descending
+func (h *HistoryDB) GetRecentPrices(isin string, days int) ([]DailyPrice, error) {
+	if days <= 0 {
+		return []DailyPrice{}, nil
+	}
+
+	// Calculate cutoff date (days ago)
+	cutoffDate := time.Now().AddDate(0, 0, -days)
+	cutoffUnix := cutoffDate.Unix()
+
+	query := `
+		SELECT date, close, high, low, open, volume
+		FROM daily_prices
+		WHERE isin = ? AND date >= ?
+		ORDER BY date DESC
+	`
+
+	rows, err := h.db.Query(query, isin, cutoffUnix)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query recent prices: %w", err)
+	}
+	defer rows.Close()
+
+	var prices []DailyPrice
+	for rows.Next() {
+		var p DailyPrice
+		var volume sql.NullInt64
+		var dateUnix sql.NullInt64
+
+		err := rows.Scan(&dateUnix, &p.Close, &p.High, &p.Low, &p.Open, &volume)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan daily price: %w", err)
+		}
+
+		if dateUnix.Valid {
+			// Convert Unix timestamp to YYYY-MM-DD format
+			t := time.Unix(dateUnix.Int64, 0).UTC()
+			p.Date = t.Format("2006-01-02")
+		}
+		if volume.Valid {
+			p.Volume = &volume.Int64
+		}
+
+		prices = append(prices, p)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating recent prices: %w", err)
+	}
+
+	return prices, nil
+}
+
 // GetMonthlyPrices fetches monthly price data for an ISIN
 func (h *HistoryDB) GetMonthlyPrices(isin string, limit int) ([]MonthlyPrice, error) {
 	query := `

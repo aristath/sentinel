@@ -693,7 +693,131 @@ func transformCandles(sdkResult interface{}, symbol string) ([]OHLCV, error) {
 		candles = append(candles, candle)
 	}
 
-	return candles, nil
+	// Validate and interpolate abnormal prices
+	validatedCandles := validateAndInterpolateCandles(candles)
+
+	return validatedCandles, nil
+}
+
+// validateAndInterpolateCandles validates OHLCV candles and interpolates abnormal ones
+// Uses surrounding candles in the same response for interpolation context
+func validateAndInterpolateCandles(candles []OHLCV) []OHLCV {
+	if len(candles) == 0 {
+		return candles
+	}
+
+	validated := make([]OHLCV, 0, len(candles))
+
+	for i, candle := range candles {
+		// Basic OHLC consistency checks
+		if candle.High < candle.Low || candle.High < candle.Open || candle.High < candle.Close ||
+			candle.Low > candle.Open || candle.Low > candle.Close {
+			// OHLC inconsistent - interpolate using surrounding candles
+			interpolated := interpolateOHLCV(candle, i, candles)
+			validated = append(validated, interpolated)
+			continue
+		}
+
+		// Check absolute bounds (basic sanity check)
+		if candle.Close > 10000.0 || candle.Close < 0.01 {
+			// Absolute bound exceeded - interpolate
+			interpolated := interpolateOHLCV(candle, i, candles)
+			validated = append(validated, interpolated)
+			continue
+		}
+
+		// Check for spikes/crashes relative to surrounding candles
+		if i > 0 && i < len(candles)-1 {
+			prevClose := candles[i-1].Close
+			nextClose := candles[i+1].Close
+			if prevClose > 0 {
+				changePercent := ((candle.Close - prevClose) / prevClose) * 100.0
+				// If >1000% change or <-90% change, and next price is normal, interpolate
+				if (changePercent > 1000.0 || changePercent < -90.0) && nextClose > 0 {
+					nextChangePercent := ((nextClose - prevClose) / prevClose) * 100.0
+					// If next price is also abnormal, might be a real move - keep it
+					// Otherwise, interpolate
+					if nextChangePercent <= 1000.0 && nextChangePercent >= -90.0 {
+						interpolated := interpolateOHLCV(candle, i, candles)
+						validated = append(validated, interpolated)
+						continue
+					}
+				}
+			}
+		}
+
+		// Price is valid
+		validated = append(validated, candle)
+	}
+
+	return validated
+}
+
+// interpolateOHLCV interpolates an abnormal OHLCV using surrounding candles
+func interpolateOHLCV(candle OHLCV, index int, allCandles []OHLCV) OHLCV {
+	interpolated := candle // Preserve timestamp and volume
+
+	// Find before and after candles
+	var before, after *OHLCV
+
+	// Look for valid before candle
+	for i := index - 1; i >= 0; i-- {
+		prev := allCandles[i]
+		if prev.Close > 0.01 && prev.Close <= 10000.0 {
+			before = &prev
+			break
+		}
+	}
+
+	// Look for valid after candle
+	for i := index + 1; i < len(allCandles); i++ {
+		next := allCandles[i]
+		if next.Close > 0.01 && next.Close <= 10000.0 {
+			after = &next
+			break
+		}
+	}
+
+	// Linear interpolation if both available
+	if before != nil && after != nil {
+		// Simple interpolation: use average of before and after
+		interpolated.Close = (before.Close + after.Close) / 2.0
+		interpolated.Open = (before.Open + after.Open) / 2.0
+		interpolated.High = (before.High + after.High) / 2.0
+		interpolated.Low = (before.Low + after.Low) / 2.0
+	} else if before != nil {
+		// Forward fill
+		interpolated.Close = before.Close
+		interpolated.Open = before.Open
+		interpolated.High = before.High
+		interpolated.Low = before.Low
+	} else if after != nil {
+		// Backward fill
+		interpolated.Close = after.Close
+		interpolated.Open = after.Open
+		interpolated.High = after.High
+		interpolated.Low = after.Low
+	}
+	// If neither available, return original (shouldn't happen in practice)
+
+	// Ensure OHLC consistency
+	if interpolated.High < interpolated.Close {
+		interpolated.High = interpolated.Close
+	}
+	if interpolated.Low > interpolated.Close {
+		interpolated.Low = interpolated.Close
+	}
+	if interpolated.High < interpolated.Open {
+		interpolated.High = interpolated.Open
+	}
+	if interpolated.Low > interpolated.Open {
+		interpolated.Low = interpolated.Open
+	}
+	if interpolated.High < interpolated.Low {
+		interpolated.High = interpolated.Low
+	}
+
+	return interpolated
 }
 
 // Helper functions

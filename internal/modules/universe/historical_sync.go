@@ -34,7 +34,8 @@ type HistoricalSyncService struct {
 	dataFetcher    HistoricalDataFetcher // Optional - if set, uses multi-source fetching
 	securityRepo   SecurityLookupInterface
 	historyDB      HistoryDBInterface
-	rateLimitDelay time.Duration // API rate limit delay
+	priceValidator *PriceValidator // Validates and interpolates abnormal prices
+	rateLimitDelay time.Duration   // API rate limit delay
 	log            zerolog.Logger
 }
 
@@ -49,6 +50,7 @@ type SecurityLookupInterface interface {
 type HistoryDBInterface interface {
 	HasMonthlyData(isin string) (bool, error)
 	SyncHistoricalPrices(isin string, prices []DailyPrice) error
+	GetRecentPrices(isin string, days int) ([]DailyPrice, error)
 }
 
 // NewHistoricalSyncService creates a new historical sync service.
@@ -58,6 +60,7 @@ func NewHistoricalSyncService(
 	brokerClient domain.BrokerClient,
 	securityRepo SecurityLookupInterface,
 	historyDB HistoryDBInterface,
+	priceValidator *PriceValidator,
 	rateLimitDelay time.Duration,
 	log zerolog.Logger,
 ) *HistoricalSyncService {
@@ -65,6 +68,7 @@ func NewHistoricalSyncService(
 		brokerClient:   brokerClient,
 		securityRepo:   securityRepo,
 		historyDB:      historyDB,
+		priceValidator: priceValidator,
 		rateLimitDelay: rateLimitDelay,
 		log:            log.With().Str("service", "historical_sync").Logger(),
 	}
@@ -188,6 +192,50 @@ func (s *HistoricalSyncService) SyncHistoricalPrices(symbol string) error {
 		Str("source", source).
 		Int("count", len(dailyPrices)).
 		Msg("Fetched historical prices")
+
+	// Validate and interpolate abnormal prices before storing
+	if s.priceValidator != nil {
+		// Fetch recent prices from database for context
+		context, err := s.historyDB.GetRecentPrices(isin, 30)
+		if err != nil {
+			s.log.Warn().
+				Err(err).
+				Str("symbol", symbol).
+				Str("isin", isin).
+				Msg("Failed to fetch recent prices for context, proceeding without validation")
+			context = []DailyPrice{}
+		}
+
+		// Validate and interpolate
+		validatedPrices, interpolationLogs, err := s.priceValidator.ValidateAndInterpolate(dailyPrices, context)
+		if err != nil {
+			s.log.Error().
+				Err(err).
+				Str("symbol", symbol).
+				Msg("Price validation failed, using original prices")
+			validatedPrices = dailyPrices
+		} else {
+			// Log interpolation summary
+			if len(interpolationLogs) > 0 {
+				s.log.Warn().
+					Str("symbol", symbol).
+					Int("interpolated_count", len(interpolationLogs)).
+					Msg("Interpolated abnormal prices")
+				for _, log := range interpolationLogs {
+					s.log.Info().
+						Str("symbol", symbol).
+						Str("isin", isin).
+						Str("date", log.Date).
+						Float64("original_close", log.OriginalClose).
+						Float64("interpolated_close", log.InterpolatedClose).
+						Str("method", log.Method).
+						Str("reason", log.Reason).
+						Msg("Price interpolation")
+				}
+			}
+			dailyPrices = validatedPrices
+		}
+	}
 
 	// Write to history database (transaction, daily + monthly aggregation)
 	err = s.historyDB.SyncHistoricalPrices(isin, dailyPrices)
