@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/aristath/sentinel/internal/domain"
+	"github.com/aristath/sentinel/internal/utils"
 	"github.com/rs/zerolog"
 )
 
@@ -234,7 +235,7 @@ func (s *PortfolioService) aggregatePositionValues(positions []PositionWithSecur
 		totalValue += eurValue
 
 		// Aggregate by geography (split if multiple geographies)
-		geographies := parseGeographies(pos.Geography)
+		geographies := utils.ParseCSV(pos.Geography)
 		if len(geographies) > 0 {
 			splitValue := eurValue / float64(len(geographies))
 			for _, geo := range geographies {
@@ -243,7 +244,7 @@ func (s *PortfolioService) aggregatePositionValues(positions []PositionWithSecur
 		}
 
 		// Aggregate by industry (split if multiple industries)
-		industries := parseIndustries(pos.Industry)
+		industries := utils.ParseCSV(pos.Industry)
 		if len(industries) > 0 {
 			splitValue := eurValue / float64(len(industries))
 			for _, ind := range industries {
@@ -497,14 +498,14 @@ func (s *PortfolioService) getAllSecurityGeographiesAndIndustries() (map[string]
 		}
 
 		if geography.Valid && geography.String != "" {
-			geos := parseGeographies(geography.String)
+			geos := utils.ParseCSV(geography.String)
 			for _, geo := range geos {
 				geographies[geo] = true
 			}
 		}
 
 		if industry.Valid && industry.String != "" {
-			inds := parseIndustries(industry.String)
+			inds := utils.ParseCSV(industry.String)
 			for _, ind := range inds {
 				industries[ind] = true
 			}
@@ -516,38 +517,6 @@ func (s *PortfolioService) getAllSecurityGeographiesAndIndustries() (map[string]
 	}
 
 	return geographies, industries, nil
-}
-
-// parseGeographies parses comma-separated geography string into list
-func parseGeographies(geographyStr string) []string {
-	if geographyStr == "" {
-		return []string{}
-	}
-
-	var result []string
-	for _, geo := range strings.Split(geographyStr, ",") {
-		trimmed := strings.TrimSpace(geo)
-		if trimmed != "" {
-			result = append(result, trimmed)
-		}
-	}
-	return result
-}
-
-// parseIndustries parses comma-separated industry string into list
-func parseIndustries(industryStr string) []string {
-	if industryStr == "" {
-		return []string{}
-	}
-
-	var result []string
-	for _, ind := range strings.Split(industryStr, ",") {
-		trimmed := strings.TrimSpace(ind)
-		if trimmed != "" {
-			result = append(result, trimmed)
-		}
-	}
-	return result
 }
 
 // round rounds a float64 to n decimal places

@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/aristath/sentinel/internal/evaluation/models"
+	"github.com/aristath/sentinel/internal/utils"
 )
 
 // =============================================================================
@@ -403,13 +404,23 @@ func calculateGeoDiversification(ctx models.PortfolioContext, totalValue float64
 	}
 
 	// Aggregate position values by geography (direct, no groups)
+	// Parse comma-separated geographies and distribute value equally across them
 	geographyValues := make(map[string]float64)
 	for isin, value := range ctx.Positions {
-		geography, hasGeography := ctx.SecurityGeographies[isin]
+		geoStr, hasGeography := ctx.SecurityGeographies[isin]
 		if !hasGeography {
-			geography = "OTHER"
+			geoStr = "OTHER"
 		}
-		geographyValues[geography] += value
+
+		geographies := utils.ParseCSV(geoStr)
+		if len(geographies) == 0 {
+			geographies = []string{"OTHER"}
+		}
+
+		valuePerGeo := value / float64(len(geographies))
+		for _, geo := range geographies {
+			geographyValues[geo] += valuePerGeo
+		}
 	}
 
 	var deviations []float64
@@ -435,13 +446,23 @@ func calculateIndustryDiversification(ctx models.PortfolioContext, totalValue fl
 	}
 
 	// Aggregate position values by industry (direct, no groups)
+	// Parse comma-separated industries and distribute value equally across them
 	industryValues := make(map[string]float64)
 	for isin, value := range ctx.Positions {
-		industry, hasIndustry := ctx.SecurityIndustries[isin]
+		indStr, hasIndustry := ctx.SecurityIndustries[isin]
 		if !hasIndustry {
-			industry = "OTHER"
+			indStr = "OTHER"
 		}
-		industryValues[industry] += value
+
+		industries := utils.ParseCSV(indStr)
+		if len(industries) == 0 {
+			industries = []string{"OTHER"}
+		}
+
+		valuePerInd := value / float64(len(industries))
+		for _, industry := range industries {
+			industryValues[industry] += valuePerInd
+		}
 	}
 
 	var deviations []float64

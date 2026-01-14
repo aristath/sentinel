@@ -3,26 +3,11 @@ package calculators
 import (
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/aristath/sentinel/internal/modules/planning/domain"
+	"github.com/aristath/sentinel/internal/utils"
 	"github.com/rs/zerolog"
 )
-
-// parseGeographies splits a comma-separated geography string into a slice.
-func parseGeographies(geographyStr string) []string {
-	if geographyStr == "" {
-		return nil
-	}
-	var result []string
-	for _, g := range strings.Split(geographyStr, ",") {
-		trimmed := strings.TrimSpace(g)
-		if trimmed != "" {
-			result = append(result, trimmed)
-		}
-	}
-	return result
-}
 
 // RebalanceBuysCalculator identifies underweight positions to buy for rebalancing.
 // Supports optional tag-based pre-filtering for performance when EnableTagFiltering=true.
@@ -195,7 +180,7 @@ func (c *RebalanceBuysCalculator) Calculate(
 
 		// Check if any of the security's geographies are underweight
 		// Parse comma-separated geographies
-		geos := parseGeographies(geography)
+		geos := utils.ParseCSV(geography)
 		var underweight float64
 		var matchedGeo string
 		for _, geo := range geos {

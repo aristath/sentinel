@@ -6,6 +6,7 @@ import (
 	"math"
 
 	"github.com/aristath/sentinel/internal/modules/allocation"
+	"github.com/aristath/sentinel/internal/utils"
 	"github.com/rs/zerolog"
 )
 
@@ -234,13 +235,16 @@ func (cm *ConstraintsManager) buildSectorConstraints(
 	normalizedIndustryTargets := allocation.NormalizeWeights(industryTargets)
 
 	// Group securities by geography (use ISINs)
+	// Parse comma-separated geographies so securities can belong to multiple groups
 	geographyGroups := make(map[string][]string)
 	for _, security := range securities {
-		geography := security.Geography
-		if geography == "" {
-			geography = "OTHER"
+		geographies := utils.ParseCSV(security.Geography)
+		if len(geographies) == 0 {
+			geographies = []string{"OTHER"}
 		}
-		geographyGroups[geography] = append(geographyGroups[geography], security.ISIN) // Use ISIN ✅
+		for _, geography := range geographies {
+			geographyGroups[geography] = append(geographyGroups[geography], security.ISIN)
+		}
 	}
 
 	cm.log.Info().
@@ -248,13 +252,16 @@ func (cm *ConstraintsManager) buildSectorConstraints(
 		Msg("Grouped securities by geography")
 
 	// Group securities by industry (use ISINs)
+	// Parse comma-separated industries so securities can belong to multiple groups
 	industryGroups := make(map[string][]string)
 	for _, security := range securities {
-		industry := security.Industry
-		if industry == "" {
-			industry = "OTHER"
+		industries := utils.ParseCSV(security.Industry)
+		if len(industries) == 0 {
+			industries = []string{"OTHER"}
 		}
-		industryGroups[industry] = append(industryGroups[industry], security.ISIN) // Use ISIN ✅
+		for _, industry := range industries {
+			industryGroups[industry] = append(industryGroups[industry], security.ISIN)
+		}
 	}
 
 	cm.log.Info().

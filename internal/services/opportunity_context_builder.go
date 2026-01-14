@@ -2,13 +2,13 @@ package services
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/aristath/sentinel/internal/domain"
 	planningdomain "github.com/aristath/sentinel/internal/modules/planning/domain"
 	"github.com/aristath/sentinel/internal/modules/portfolio"
 	scoringdomain "github.com/aristath/sentinel/internal/modules/scoring/domain"
 	"github.com/aristath/sentinel/internal/modules/universe"
+	"github.com/aristath/sentinel/internal/utils"
 	"github.com/rs/zerolog"
 )
 
@@ -387,7 +387,7 @@ func (b *OpportunityContextBuilder) calculateGeographyAllocations(positions []pl
 	geographyValues := make(map[string]float64)
 	for _, pos := range positions {
 		// Parse comma-separated geographies
-		geographies := parseGeographies(pos.Geography)
+		geographies := utils.ParseCSV(pos.Geography)
 		if len(geographies) == 0 {
 			continue
 		}
@@ -405,21 +405,6 @@ func (b *OpportunityContextBuilder) calculateGeographyAllocations(positions []pl
 	}
 
 	return allocations
-}
-
-// parseGeographies splits a comma-separated geography string into a slice.
-func parseGeographies(geographyStr string) []string {
-	if geographyStr == "" {
-		return nil
-	}
-	var result []string
-	for _, g := range strings.Split(geographyStr, ",") {
-		trimmed := strings.TrimSpace(g)
-		if trimmed != "" {
-			result = append(result, trimmed)
-		}
-	}
-	return result
 }
 
 // getISINList extracts ISINs from securities.

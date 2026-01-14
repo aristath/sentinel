@@ -1012,55 +1012,6 @@ func TestBuildAllocations_ZeroTotalValue(t *testing.T) {
 	assert.Equal(t, -0.60, allocations[0].Deviation)
 }
 
-// TestParseIndustries tests industry string parsing
-func TestParseIndustries(t *testing.T) {
-	tests := []struct {
-		name          string
-		input         string
-		expectedCount int
-		expectedItems []string
-	}{
-		{
-			name:          "single industry",
-			input:         "Technology",
-			expectedCount: 1,
-			expectedItems: []string{"Technology"},
-		},
-		{
-			name:          "multiple industries",
-			input:         "Technology, Finance",
-			expectedCount: 2,
-			expectedItems: []string{"Technology", "Finance"},
-		},
-		{
-			name:          "multiple with extra spaces",
-			input:         "Technology,  Finance ,   Healthcare",
-			expectedCount: 3,
-			expectedItems: []string{"Technology", "Finance", "Healthcare"},
-		},
-		{
-			name:          "empty string",
-			input:         "",
-			expectedCount: 0,
-		},
-		{
-			name:          "only commas and spaces",
-			input:         " , , ",
-			expectedCount: 0,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := parseIndustries(tt.input)
-			assert.Equal(t, tt.expectedCount, len(result))
-			if tt.expectedCount > 0 {
-				assert.Equal(t, tt.expectedItems, result)
-			}
-		})
-	}
-}
-
 // TestRound tests the round helper function
 func TestRound(t *testing.T) {
 	tests := []struct {

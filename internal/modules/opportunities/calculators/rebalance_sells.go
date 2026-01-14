@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/aristath/sentinel/internal/modules/planning/domain"
+	"github.com/aristath/sentinel/internal/utils"
 	"github.com/rs/zerolog"
 )
 
@@ -141,7 +142,7 @@ func (c *RebalanceSellsCalculator) Calculate(
 		}
 
 		// Check if any of the position's geographies are overweight
-		geos := parseGeographies(geography)
+		geos := utils.ParseCSV(geography)
 		var overweight float64
 		var matchedGeo string
 		for _, geo := range geos {

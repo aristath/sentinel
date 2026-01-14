@@ -3,8 +3,10 @@ package allocation
 import (
 	"database/sql"
 	"fmt"
+	"sort"
 	"time"
 
+	"github.com/aristath/sentinel/internal/utils"
 	"github.com/rs/zerolog"
 )
 
@@ -185,54 +187,80 @@ func (r *Repository) Delete(targetType, name string) error {
 	return nil
 }
 
-// GetAvailableGeographies returns distinct geographies from active securities
+// GetAvailableGeographies returns distinct geographies from active securities.
+// Parses comma-separated geography values and returns unique, sorted individual geographies.
 func (r *Repository) GetAvailableGeographies() ([]string, error) {
 	if r.universeDB == nil {
 		return nil, fmt.Errorf("universe database not configured")
 	}
 
-	query := "SELECT DISTINCT geography FROM securities WHERE active = 1 AND geography IS NOT NULL AND geography != ''"
+	query := "SELECT geography FROM securities WHERE active = 1 AND geography IS NOT NULL AND geography != ''"
 	rows, err := r.universeDB.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query geographies: %w", err)
 	}
 	defer rows.Close()
 
+	seen := make(map[string]bool)
 	var result []string
 	for rows.Next() {
-		var geo string
-		if err := rows.Scan(&geo); err != nil {
+		var geoRaw string
+		if err := rows.Scan(&geoRaw); err != nil {
 			return nil, fmt.Errorf("failed to scan geography: %w", err)
 		}
-		result = append(result, geo)
+		// Parse comma-separated values and deduplicate
+		for _, geo := range utils.ParseCSV(geoRaw) {
+			if !seen[geo] {
+				seen[geo] = true
+				result = append(result, geo)
+			}
+		}
 	}
 
-	return result, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	sort.Strings(result)
+	return result, nil
 }
 
-// GetAvailableIndustries returns distinct industries from active securities
+// GetAvailableIndustries returns distinct industries from active securities.
+// Parses comma-separated industry values and returns unique, sorted individual industries.
 func (r *Repository) GetAvailableIndustries() ([]string, error) {
 	if r.universeDB == nil {
 		return nil, fmt.Errorf("universe database not configured")
 	}
 
-	query := "SELECT DISTINCT industry FROM securities WHERE active = 1 AND industry IS NOT NULL AND industry != ''"
+	query := "SELECT industry FROM securities WHERE active = 1 AND industry IS NOT NULL AND industry != ''"
 	rows, err := r.universeDB.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query industries: %w", err)
 	}
 	defer rows.Close()
 
+	seen := make(map[string]bool)
 	var result []string
 	for rows.Next() {
-		var industry string
-		if err := rows.Scan(&industry); err != nil {
+		var industryRaw string
+		if err := rows.Scan(&industryRaw); err != nil {
 			return nil, fmt.Errorf("failed to scan industry: %w", err)
 		}
-		result = append(result, industry)
+		// Parse comma-separated values and deduplicate
+		for _, industry := range utils.ParseCSV(industryRaw) {
+			if !seen[industry] {
+				seen[industry] = true
+				result = append(result, industry)
+			}
+		}
 	}
 
-	return result, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	sort.Strings(result)
+	return result, nil
 }
 
 // SetGeographyTargets sets multiple geography allocation targets at once

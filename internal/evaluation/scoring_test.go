@@ -488,3 +488,198 @@ func createTestPortfolioContext(totalValue float64) models.PortfolioContext {
 		},
 	}
 }
+
+// =============================================================================
+// MULTI-VALUE GEOGRAPHY/INDUSTRY TESTS
+// =============================================================================
+// These tests verify that comma-separated geography and industry values
+// are properly parsed and split across multiple categories.
+
+func TestCalculateGeoDiversification_MultiGeography(t *testing.T) {
+	// Security with multiple geographies should split its value across all of them
+	portfolioContext := models.PortfolioContext{
+		Positions: map[string]float64{
+			"VT":  600.0, // Global ETF with multiple geographies
+			"SPY": 400.0, // US-only ETF
+		},
+		TotalValue: 1000.0,
+		GeographyWeights: map[string]float64{
+			"US":     0.5,
+			"Europe": 0.3,
+			"Asia":   0.2,
+		},
+		SecurityGeographies: map[string]string{
+			"VT":  "US, Europe, Asia", // Comma-separated geographies
+			"SPY": "US",
+		},
+	}
+
+	score := CalculateDiversificationScore(portfolioContext)
+
+	// VT's €600 should be split: €200 each to US, Europe, Asia
+	// SPY's €400 goes entirely to US
+	// Expected allocations: US=€600/€1000=60%, Europe=€200/€1000=20%, Asia=€200/€1000=20%
+	// Target: US=50%, Europe=30%, Asia=20%
+	// This is reasonably well-balanced, so score should be decent
+	assert.Greater(t, score, 0.3, "Multi-geography security should contribute to diversification")
+}
+
+func TestCalculateGeoDiversification_SingleVsMultiGeography(t *testing.T) {
+	// Compare a well-diversified portfolio using multi-geo securities
+	// vs. one using single-geo securities
+
+	// Portfolio using multi-geo security
+	multiGeoContext := models.PortfolioContext{
+		Positions: map[string]float64{
+			"VT": 1000.0, // Global ETF covering all geographies
+		},
+		TotalValue: 1000.0,
+		GeographyWeights: map[string]float64{
+			"US":     0.4,
+			"Europe": 0.3,
+			"Asia":   0.3,
+		},
+		SecurityGeographies: map[string]string{
+			"VT": "US, Europe, Asia", // Equal split to all 3
+		},
+	}
+
+	// Portfolio using single-geo securities that match targets
+	singleGeoContext := models.PortfolioContext{
+		Positions: map[string]float64{
+			"SPY": 400.0, // US only
+			"VGK": 300.0, // Europe only
+			"VPL": 300.0, // Asia only
+		},
+		TotalValue: 1000.0,
+		GeographyWeights: map[string]float64{
+			"US":     0.4,
+			"Europe": 0.3,
+			"Asia":   0.3,
+		},
+		SecurityGeographies: map[string]string{
+			"SPY": "US",
+			"VGK": "Europe",
+			"VPL": "Asia",
+		},
+	}
+
+	multiScore := CalculateDiversificationScore(multiGeoContext)
+	singleScore := CalculateDiversificationScore(singleGeoContext)
+
+	// Both should have positive scores
+	assert.Greater(t, multiScore, 0.0, "Multi-geo portfolio should have positive score")
+	assert.Greater(t, singleScore, 0.0, "Single-geo portfolio should have positive score")
+}
+
+func TestCalculateIndustryDiversification_MultiIndustry(t *testing.T) {
+	// Security with multiple industries should split its value across all of them
+	portfolioContext := models.PortfolioContext{
+		Positions: map[string]float64{
+			"GE":  600.0, // Conglomerate with multiple industries
+			"XOM": 400.0, // Energy-only company
+		},
+		TotalValue: 1000.0,
+		IndustryWeights: map[string]float64{
+			"Industrial": 0.3,
+			"Technology": 0.3,
+			"Energy":     0.4,
+		},
+		SecurityIndustries: map[string]string{
+			"GE":  "Industrial, Technology, Energy", // Comma-separated industries
+			"XOM": "Energy",
+		},
+	}
+
+	score := CalculateDiversificationScore(portfolioContext)
+
+	// GE's €600 should be split: €200 each to Industrial, Technology, Energy
+	// XOM's €400 goes entirely to Energy
+	// Expected allocations: Industrial=€200/€1000=20%, Technology=€200/€1000=20%, Energy=€600/€1000=60%
+	// This should produce a reasonable score
+	assert.Greater(t, score, 0.0, "Multi-industry security should contribute to diversification")
+}
+
+func TestVerifyMultiGeoValueDistribution(t *testing.T) {
+	// Test that a security with "US, Europe" geography
+	// actually distributes value to both US and Europe, not to a single key "US, Europe"
+
+	ctx := models.PortfolioContext{
+		Positions: map[string]float64{
+			"VT": 1000.0, // Global ETF
+		},
+		TotalValue: 1000.0,
+		GeographyWeights: map[string]float64{
+			"US":     0.5,
+			"Europe": 0.5,
+		},
+		SecurityGeographies: map[string]string{
+			"VT": "US, Europe", // Comma-separated!
+		},
+	}
+
+	// If parsing works correctly:
+	// - VT's €1000 should split: €500 to US, €500 to Europe
+	// - US allocation: 500/1000 = 50% (matches target 50%)
+	// - Europe allocation: 500/1000 = 50% (matches target 50%)
+	// - Diversification component should score high
+
+	// If parsing DOESN'T work (bug):
+	// - VT's €1000 goes to key "US, Europe" (the raw string)
+	// - US allocation: 0/1000 = 0% (target 50%)
+	// - Europe allocation: 0/1000 = 0% (target 50%)
+	// - Score should be very low
+
+	score := CalculateDiversificationScore(ctx)
+
+	// This assertion will FAIL if multi-geo parsing is broken
+	// Score should be reasonable if multi-geo works (value distributed to both US and Europe)
+	assert.Greater(t, score, 0.6,
+		"Multi-geo security with perfect target match should have good score - if this fails, parsing is broken")
+}
+
+func TestCalculateGeoDiversification_EmptyGeographyTreatedAsOther(t *testing.T) {
+	portfolioContext := models.PortfolioContext{
+		Positions: map[string]float64{
+			"AAPL": 500.0,
+			"XYZ":  500.0, // Unknown company with no geography
+		},
+		TotalValue: 1000.0,
+		GeographyWeights: map[string]float64{
+			"US":    0.5,
+			"OTHER": 0.5,
+		},
+		SecurityGeographies: map[string]string{
+			"AAPL": "US",
+			"XYZ":  "", // Empty geography should be treated as OTHER
+		},
+	}
+
+	score := CalculateDiversificationScore(portfolioContext)
+
+	// Should handle empty geography gracefully
+	assert.GreaterOrEqual(t, score, 0.0, "Empty geography should be handled gracefully")
+}
+
+func TestCalculateIndustryDiversification_EmptyIndustryTreatedAsOther(t *testing.T) {
+	portfolioContext := models.PortfolioContext{
+		Positions: map[string]float64{
+			"AAPL": 500.0,
+			"XYZ":  500.0, // Unknown company with no industry
+		},
+		TotalValue: 1000.0,
+		IndustryWeights: map[string]float64{
+			"Technology": 0.5,
+			"OTHER":      0.5,
+		},
+		SecurityIndustries: map[string]string{
+			"AAPL": "Technology",
+			"XYZ":  "", // Empty industry should be treated as OTHER
+		},
+	}
+
+	score := CalculateDiversificationScore(portfolioContext)
+
+	// Should handle empty industry gracefully
+	assert.GreaterOrEqual(t, score, 0.0, "Empty industry should be handled gracefully")
+}

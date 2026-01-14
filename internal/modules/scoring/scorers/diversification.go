@@ -3,10 +3,10 @@ package scorers
 
 import (
 	"math"
-	"strings"
 
 	"github.com/aristath/sentinel/internal/modules/scoring"
 	"github.com/aristath/sentinel/internal/modules/scoring/domain"
+	"github.com/aristath/sentinel/internal/utils"
 )
 
 // DiversificationScorer calculates portfolio fit and balance score
@@ -71,20 +71,15 @@ func (ds *DiversificationScorer) Calculate(
 // Higher weight = underweight region = higher score (buy to rebalance)
 // For securities with multiple geographies, returns the highest score.
 func calculateGeoGapScore(geography string, portfolioContext *domain.PortfolioContext) float64 {
-	if geography == "" {
+	geos := utils.ParseCSV(geography)
+	if len(geos) == 0 {
 		return 0.5
 	}
 
-	// Split comma-separated geographies and find highest score
-	geos := strings.Split(geography, ",")
+	// Find highest score across all geographies
 	maxScore := 0.1
 
 	for _, geo := range geos {
-		geo = strings.TrimSpace(geo)
-		if geo == "" {
-			continue
-		}
-
 		// Look up weight for the geography directly (0 to 1, where higher = prioritize)
 		geoWeight := 0.0
 		if portfolioContext.GeographyWeights != nil {
@@ -108,23 +103,17 @@ func calculateGeoGapScore(geography string, portfolioContext *domain.PortfolioCo
 // Higher weight = underweight sector = higher score
 // For securities with multiple industries, returns the average score.
 func calculateIndustryGapScore(industry *string, portfolioContext *domain.PortfolioContext) float64 {
-	if industry == nil || *industry == "" {
+	if industry == nil {
 		return 0.5
 	}
 
-	// Split comma-separated industries
-	industries := strings.Split(*industry, ",")
+	industries := utils.ParseCSV(*industry)
 	if len(industries) == 0 {
 		return 0.5
 	}
 
 	indScores := make([]float64, 0, len(industries))
 	for _, ind := range industries {
-		ind = strings.TrimSpace(ind)
-		if ind == "" {
-			continue
-		}
-
 		// Look up weight for the industry directly (0 to 1, where higher = prioritize)
 		indWeight := 0.0
 		if portfolioContext.IndustryWeights != nil {
@@ -137,10 +126,6 @@ func calculateIndustryGapScore(industry *string, portfolioContext *domain.Portfo
 		// weight=0 (avoid) → score=0.1
 		indScore := 0.1 + (indWeight * 0.8)
 		indScores = append(indScores, math.Max(0.1, math.Min(0.9, indScore)))
-	}
-
-	if len(indScores) == 0 {
-		return 0.5
 	}
 
 	// Average across all industries
@@ -260,14 +245,13 @@ func calculateDiversificationScore(portfolioContext *domain.PortfolioContext, to
 				geography = "OTHER"
 			}
 
-			// Split comma-separated geographies and distribute value equally
-			geos := strings.Split(geography, ",")
+			// Parse comma-separated geographies and distribute value equally
+			geos := utils.ParseCSV(geography)
+			if len(geos) == 0 {
+				geos = []string{"OTHER"}
+			}
 			valuePerGeo := value / float64(len(geos))
 			for _, geo := range geos {
-				geo = strings.TrimSpace(geo)
-				if geo == "" {
-					geo = "OTHER"
-				}
 				geographyValues[geo] += valuePerGeo
 			}
 		}
