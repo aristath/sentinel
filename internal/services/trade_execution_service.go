@@ -34,16 +34,6 @@ type TradeRepositoryInterface interface {
 	IncrementRetryAttempt(id int64) error
 }
 
-// OrderBookServiceInterface defines the interface for order book analysis
-type OrderBookServiceInterface interface {
-	// IsEnabled checks if order book analysis is enabled
-	IsEnabled() bool
-	// CalculateOptimalLimit calculates optimal limit price using order book + price validation
-	CalculateOptimalLimit(symbol, side string, buffer float64) (float64, error)
-	// ValidateLiquidity checks if sufficient liquidity exists for the trade
-	ValidateLiquidity(symbol, side string, quantity float64) error
-}
-
 // PlannerConfigRepoInterface defines the interface for planner configuration
 type PlannerConfigRepoInterface interface {
 	GetDefaultConfig() (*planningdomain.PlannerConfiguration, error)
@@ -73,10 +63,11 @@ type DismissedFilterRepoInterface interface {
 
 // TradeExecutionService executes trade recommendations with comprehensive safety validation:
 // - Market hours checking (pre-trade)
-// - Price freshness validation
 // - Balance validation (with auto-conversion)
 // - Duplicate order detection
 // - Trade frequency limits
+//
+// Uses market orders for simplicity and reliability - no limit price calculation needed.
 type TradeExecutionService struct {
 	brokerClient        domain.BrokerClient
 	tradeRepo           TradeRepositoryInterface
@@ -84,9 +75,8 @@ type TradeExecutionService struct {
 	cashManager         domain.CashManager
 	exchangeService     domain.CurrencyExchangeServiceInterface
 	eventManager        *events.Manager
-	settingsService     SettingsServiceInterface     // For configuration (fees, price age, etc.)
+	settingsService     SettingsServiceInterface     // For configuration (fees, etc.)
 	plannerConfigRepo   PlannerConfigRepoInterface   // For transaction costs from planner config
-	orderBookService    OrderBookServiceInterface    // For order book analysis (liquidity validation, optimal limit pricing)
 	historyDB           *sql.DB                      // For storing updated prices
 	securityRepo        *universe.SecurityRepository // For ISIN lookup
 	marketHours         MarketHoursChecker           // For market hours validation
@@ -112,7 +102,6 @@ func NewTradeExecutionService(
 	eventManager *events.Manager,
 	settingsService SettingsServiceInterface,
 	plannerConfigRepo PlannerConfigRepoInterface,
-	orderBookService OrderBookServiceInterface,
 	historyDB *sql.DB,
 	securityRepo *universe.SecurityRepository,
 	marketHours MarketHoursChecker,
@@ -128,7 +117,6 @@ func NewTradeExecutionService(
 		eventManager:        eventManager,
 		settingsService:     settingsService,
 		plannerConfigRepo:   plannerConfigRepo,
-		orderBookService:    orderBookService,
 		historyDB:           historyDB,
 		securityRepo:        securityRepo,
 		marketHours:         marketHours,
@@ -251,30 +239,6 @@ func (s *TradeExecutionService) executeSingleTrade(rec TradeRecommendation) Exec
 		return *validationErr
 	}
 
-	// Price staleness validation (with auto-refresh if stale)
-	if validationErr := s.validatePriceFreshness(rec); validationErr != nil {
-		s.log.Warn().
-			Str("symbol", rec.Symbol).
-			Str("error", *validationErr.Error).
-			Msg("Trade blocked by price staleness check")
-		return *validationErr
-	}
-
-	// Price validation and limit calculation
-	limitPrice, err := s.validatePriceAndCalculateLimit(rec)
-	if err != nil {
-		s.log.Error().
-			Err(err).
-			Str("symbol", rec.Symbol).
-			Msg("Trade blocked by price validation failure")
-		errMsg := err.Error()
-		return ExecuteResult{
-			Symbol: rec.Symbol,
-			Status: "blocked",
-			Error:  &errMsg,
-		}
-	}
-
 	// Pre-trade validation for BUY orders - ensure sufficient balance (with auto-conversion if needed)
 	if rec.Side == "BUY" {
 		// Calculate total needed: trade value + commission + 1% safety margin
@@ -330,12 +294,12 @@ func (s *TradeExecutionService) executeSingleTrade(rec TradeRecommendation) Exec
 			Msg("Successfully ensured currency balance")
 	}
 
-	// Place LIMIT order via Tradernet
+	// Place MARKET order via Tradernet (price=0 means market order)
 	orderResult, err := s.brokerClient.PlaceOrder(
 		rec.Symbol,
 		rec.Side, // "BUY" or "SELL"
 		rec.Quantity,
-		limitPrice, // Pass calculated limit price
+		0, // Market order - broker executes at best available price
 	)
 
 	if err != nil {
@@ -502,212 +466,6 @@ func (s *TradeExecutionService) calculateCommission(
 
 	totalCommission := fixedCommission + variableCommission
 	return totalCommission, nil
-}
-
-// validatePriceFreshness validates that price data is fresh, attempts auto-refresh if stale.
-//
-// Three-stage process:
-// 1. Check if price is stale (older than max_price_age_hours from settings, default 48h)
-// 2. If stale: Attempt to fetch fresh price from Yahoo Finance
-// 3. If fetch succeeds: Store in history.db and proceed. If fetch fails: Block trade
-//
-// Returns *ExecuteResult if validation fails (stale and refresh failed), nil if OK to proceed
-func (s *TradeExecutionService) validatePriceFreshness(rec TradeRecommendation) *ExecuteResult {
-	// Get max price age from settings (default 48 hours)
-	maxAgeHours := 48.0
-	if s.settingsService != nil {
-		if val, err := s.settingsService.Get("max_price_age_hours"); err == nil {
-			if age, ok := val.(float64); ok {
-				maxAgeHours = age
-			}
-		}
-	}
-
-	// Skip staleness check if required dependencies unavailable (degrade gracefully)
-	if s.securityRepo == nil || s.historyDB == nil {
-		s.log.Warn().Msg("Price staleness check skipped: dependencies unavailable")
-		return nil
-	}
-
-	// Get ISIN for symbol
-	security, err := s.securityRepo.GetBySymbol(rec.Symbol)
-	if err != nil {
-		s.log.Warn().
-			Err(err).
-			Str("symbol", rec.Symbol).
-			Msg("Failed to lookup security for staleness check, allowing trade")
-		return nil
-	}
-
-	if security == nil || security.ISIN == "" {
-		s.log.Warn().
-			Str("symbol", rec.Symbol).
-			Msg("No ISIN found for symbol, skipping staleness check")
-		return nil
-	}
-
-	// Create history repository for this ISIN
-	historyRepo := portfolio.NewHistoryRepository(security.ISIN, s.historyDB, s.log)
-
-	// Check price staleness
-	_, err = historyRepo.GetLatestPriceWithStalenessCheck(maxAgeHours)
-	if err == nil {
-		// Price is fresh, proceed with trade
-		return nil
-	}
-
-	// Price is stale, attempt to refresh from Tradernet (primary source)
-	s.log.Warn().
-		Err(err).
-		Str("symbol", rec.Symbol).
-		Str("isin", security.ISIN).
-		Msg("Price data is stale, attempting to refresh from Tradernet")
-
-	// Fetch fresh price from Tradernet (primary source)
-	if s.brokerClient == nil {
-		s.log.Error().Msg("Broker client unavailable, cannot refresh stale price")
-		errMsg := "Price data is stale and refresh unavailable (broker client not configured)"
-		return &ExecuteResult{
-			Symbol: rec.Symbol,
-			Status: "blocked",
-			Error:  &errMsg,
-		}
-	}
-
-	// Get current price from Tradernet
-	quotes, err := s.brokerClient.GetQuotes([]string{rec.Symbol})
-	if err != nil || quotes[rec.Symbol] == nil || quotes[rec.Symbol].Price <= 0 {
-		s.log.Error().
-			Err(err).
-			Str("symbol", rec.Symbol).
-			Msg("Failed to fetch fresh price from Tradernet")
-		errMsg := fmt.Sprintf("Price data is stale (older than %.0f hours) and refresh failed", maxAgeHours)
-		return &ExecuteResult{
-			Symbol: rec.Symbol,
-			Status: "blocked",
-			Error:  &errMsg,
-		}
-	}
-
-	currentPrice := quotes[rec.Symbol].Price
-
-	// Store fresh price in history.db
-	now := time.Now()
-	todayStr := now.Format("2006-01-02")
-
-	// Insert or update today's price
-	insertQuery := `
-		INSERT OR REPLACE INTO daily_prices (isin, date, close, open, high, low, volume)
-		VALUES (?, ?, ?, ?, ?, ?, 0)
-	`
-
-	dateUnix := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).Unix()
-	_, err = s.historyDB.Exec(insertQuery, security.ISIN, dateUnix, currentPrice, currentPrice, currentPrice, currentPrice)
-	if err != nil {
-		s.log.Warn().
-			Err(err).
-			Str("symbol", rec.Symbol).
-			Float64("price", currentPrice).
-			Msg("Failed to store refreshed price in history.db, but proceeding with trade")
-		// Don't block trade if storage fails - we have the fresh price
-	} else {
-		s.log.Info().
-			Str("symbol", rec.Symbol).
-			Str("date", todayStr).
-			Float64("price", currentPrice).
-			Msg("Successfully refreshed stale price from Tradernet")
-	}
-
-	// Fresh price obtained, allow trade to proceed
-	return nil
-}
-
-// validatePriceAndCalculateLimit fetches price from Tradernet (primary) and calculates limit price.
-// Uses Yahoo as a non-blocking sanity check (if Tradernet price is >50% higher, uses Yahoo).
-//
-// For BUY orders: limit = price × (1 + buffer)  // Allow buying slightly above
-// For SELL orders: limit = price × (1 - buffer) // Allow selling slightly below
-//
-// Returns limit price and nil error if successful.
-// Returns 0 and error if Tradernet unavailable (blocks trade for safety).
-func (s *TradeExecutionService) validatePriceAndCalculateLimit(rec TradeRecommendation) (float64, error) {
-	// Get buffer from settings (existing logic)
-	buffer := s.getBuffer()
-
-	// Check if order book module available and enabled
-	if s.orderBookService != nil && s.orderBookService.IsEnabled() {
-		// Use order book module (handles everything internally):
-		// - Fetches order book (primary source)
-		// - Fetches Yahoo (validation source)
-		// - Cross-validates with asymmetric validation (blocks if discrepancy >= 50%)
-		// - Calculates limit with buffer
-		limitPrice, err := s.orderBookService.CalculateOptimalLimit(rec.Symbol, rec.Side, buffer)
-		if err != nil {
-			// Order book module failed (liquidity issue or API bug detected)
-			// BLOCK trade - return error
-			return 0, fmt.Errorf("order book analysis failed: %w", err)
-		}
-
-		return limitPrice, nil
-	}
-
-	// Fallback to Tradernet-only mode
-	s.log.Debug().
-		Str("symbol", rec.Symbol).
-		Msg("Order book analysis disabled or unavailable - using Tradernet only")
-	return s.calculateLimit(rec, buffer)
-}
-
-// getBuffer extracts buffer from settings (existing logic)
-func (s *TradeExecutionService) getBuffer() float64 {
-	buffer := 0.05 // default 5%
-	if s.settingsService != nil {
-		if val, err := s.settingsService.Get("limit_order_buffer_percent"); err == nil {
-			if bufferVal, ok := val.(float64); ok && bufferVal >= 0.001 && bufferVal <= 0.20 {
-				buffer = bufferVal
-			}
-		}
-	}
-	return buffer
-}
-
-// calculateLimit uses Tradernet as primary source with Yahoo as sanity check
-func (s *TradeExecutionService) calculateLimit(rec TradeRecommendation, buffer float64) (float64, error) {
-	// Check if broker client is available (primary source)
-	if s.brokerClient == nil {
-		return 0, fmt.Errorf("broker client unavailable and order book disabled")
-	}
-
-	// Fetch current price from Tradernet (primary source)
-	quotes, err := s.brokerClient.GetQuotes([]string{rec.Symbol})
-	if err != nil || quotes[rec.Symbol] == nil {
-		return 0, fmt.Errorf("failed to fetch Tradernet price for %s: %w", rec.Symbol, err)
-	}
-
-	tradernetPrice := quotes[rec.Symbol].Price
-
-	// Validate price is reasonable
-	if tradernetPrice <= 0 {
-		return 0, fmt.Errorf("invalid Tradernet price for %s: %.2f (must be positive)", rec.Symbol, tradernetPrice)
-	}
-
-	// Calculate limit price with buffer using Tradernet price
-	var limitPrice float64
-	if rec.Side == "BUY" {
-		limitPrice = tradernetPrice * (1 + buffer)
-	} else {
-		limitPrice = tradernetPrice * (1 - buffer)
-	}
-
-	s.log.Info().
-		Str("symbol", rec.Symbol).
-		Str("side", rec.Side).
-		Float64("tradernet_price", tradernetPrice).
-		Float64("limit_price", limitPrice).
-		Float64("buffer_pct", buffer*100).
-		Msg("Calculated limit price from Tradernet")
-
-	return limitPrice, nil
 }
 
 // isMarketHoursError checks if an error message indicates a market hours issue

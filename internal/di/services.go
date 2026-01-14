@@ -24,7 +24,6 @@ import (
 	"github.com/aristath/sentinel/internal/modules/market_hours"
 	"github.com/aristath/sentinel/internal/modules/opportunities"
 	"github.com/aristath/sentinel/internal/modules/optimization"
-	"github.com/aristath/sentinel/internal/modules/order_book"
 	"github.com/aristath/sentinel/internal/modules/planning"
 	planningconstraints "github.com/aristath/sentinel/internal/modules/planning/constraints"
 	planningevaluation "github.com/aristath/sentinel/internal/modules/planning/evaluation"
@@ -163,14 +162,6 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 	// Settings service (needed for trade safety and other services)
 	container.SettingsService = settings.NewService(container.SettingsRepo, log)
 
-	// Order Book service (validates liquidity and calculates optimal limit prices)
-	// Uses bid-ask midpoint pricing strategy for optimal execution
-	container.OrderBookService = order_book.NewService(
-		container.BrokerClient,
-		container.SettingsService,
-		log.With().Str("service", "order_book").Logger(),
-	)
-
 	// Exchange rate cache service (Tradernet + DB cache)
 	container.ExchangeRateCacheService = services.NewExchangeRateCacheService(
 		container.CurrencyExchangeService, // Tradernet (primary)
@@ -217,7 +208,7 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 		log,
 	)
 
-	// Trade execution service for emergency rebalancing
+	// Trade execution service - uses market orders for simplicity
 	container.TradeExecutionService = services.NewTradeExecutionService(
 		container.BrokerClient,
 		container.TradeRepo,
@@ -227,7 +218,6 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 		container.EventManager,
 		container.SettingsService,
 		container.PlannerConfigRepo,
-		container.OrderBookService,
 		container.HistoryDB.Conn(),
 		container.SecurityRepo,
 		container.MarketHoursService,  // Market hours validation
