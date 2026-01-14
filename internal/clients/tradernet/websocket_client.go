@@ -149,8 +149,12 @@ func (ws *MarketStatusWebSocket) Connect() error {
 	defer dialCancel()
 
 	// Dial WebSocket with nhooyr.io/websocket using the pre-configured HTTP/1.1 client
+	// Set User-Agent to avoid Cloudflare bot protection (same as REST SDK)
 	conn, _, err := websocket.Dial(dialCtx, wsURL, &websocket.DialOptions{
 		HTTPClient: ws.httpClient,
+		HTTPHeader: http.Header{
+			"User-Agent": []string{"Mozilla/5.0 (compatible; TradernetSDK/2.0)"},
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("failed to dial WebSocket: %w", err)
