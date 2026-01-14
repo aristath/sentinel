@@ -425,44 +425,18 @@ func (j *TagUpdateJob) updateTagsForSecurity(security universe.Security) error {
 		return fmt.Errorf("failed to assign tags: %w", err)
 	}
 
-	// Filter to only tags that need updating
-	tagsToUpdate := make([]string, 0)
-	for _, tagID := range allTagIDs {
-		if tagsNeedingUpdate[tagID] {
-			tagsToUpdate = append(tagsToUpdate, tagID)
-		}
-	}
-
-	// Also include any new tags that weren't in current tags
-	currentTagSet := make(map[string]bool)
-	for tagID := range currentTagsWithTimes {
-		currentTagSet[tagID] = true
-	}
-	for _, tagID := range allTagIDs {
-		if !currentTagSet[tagID] {
-			// New tag - add it
-			tagsToUpdate = append(tagsToUpdate, tagID)
-		}
-	}
-
-	if len(tagsToUpdate) == 0 {
-		// No tags need updating (shouldn't happen, but handle gracefully)
-		j.log.Debug().
-			Str("symbol", security.Symbol).
-			Msg("No tags need updating after filtering")
-		return nil
-	}
-
-	// Update only the tags that need updating (preserves other tags)
-	if err := j.securityRepo.UpdateSpecificTags(security.Symbol, tagsToUpdate); err != nil {
-		return fmt.Errorf("failed to update specific tags: %w", err)
+	// Replace all tags atomically - ensures stale tags are removed
+	// SetTagsForSecurity deletes existing tags and inserts the new set,
+	// which correctly removes tags that no longer apply (e.g., quality-gate-fail
+	// when a security now passes the quality gate)
+	if err := j.securityRepo.SetTagsForSecurity(security.Symbol, allTagIDs); err != nil {
+		return fmt.Errorf("failed to set tags: %w", err)
 	}
 
 	j.log.Debug().
 		Str("symbol", security.Symbol).
-		Int("tags_updated", len(tagsToUpdate)).
-		Strs("updated_tags", tagsToUpdate).
-		Msg("Tags updated for security (per-tag frequency)")
+		Int("tag_count", len(allTagIDs)).
+		Msg("Tags replaced for security")
 
 	return nil
 }
