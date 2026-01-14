@@ -101,7 +101,7 @@ func TestPriceValidator_ValidatePrice_OHLCConsistency(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			valid, reason := validator.ValidatePrice(tt.price, tt.context)
+			valid, reason := validator.ValidatePrice(tt.price, nil, tt.context)
 			assert.Equal(t, tt.want, valid, "validation result mismatch")
 			if !tt.want {
 				assert.Equal(t, tt.reason, reason, "reason mismatch")
@@ -124,11 +124,12 @@ func TestPriceValidator_ValidatePrice_PercentageChange(t *testing.T) {
 	}
 
 	tests := []struct {
-		name    string
-		price   DailyPrice
-		context []DailyPrice
-		want    bool
-		reason  string
+		name          string
+		price         DailyPrice
+		previousPrice *DailyPrice
+		context       []DailyPrice
+		want          bool
+		reason        string
 	}{
 		{
 			name: "normal price within range",
@@ -139,9 +140,10 @@ func TestPriceValidator_ValidatePrice_PercentageChange(t *testing.T) {
 				High:  52.0,
 				Low:   49.0,
 			},
-			context: context,
-			want:    true,
-			reason:  "",
+			previousPrice: &DailyPrice{Date: "2025-01-14", Close: 50.0},
+			context:       context,
+			want:          true,
+			reason:        "",
 		},
 		{
 			name: "price too high (10x average)",
@@ -170,7 +172,7 @@ func TestPriceValidator_ValidatePrice_PercentageChange(t *testing.T) {
 			reason:  "price_too_low",
 		},
 		{
-			name: "spike detected (>1000% change)",
+			name: "spike detected (>1000% change) - uses previousPrice, not context",
 			price: DailyPrice{
 				Date:  "2025-01-15",
 				Close: 600.0, // 1100% increase from previous day (50 -> 600)
@@ -178,12 +180,13 @@ func TestPriceValidator_ValidatePrice_PercentageChange(t *testing.T) {
 				High:  610.0,
 				Low:   590.0,
 			},
-			context: context,
-			want:    false,
-			reason:  "spike_detected",
+			previousPrice: &DailyPrice{Date: "2025-01-14", Close: 50.0},
+			context:       context,
+			want:          false,
+			reason:        "spike_detected",
 		},
 		{
-			name: "crash detected (<-90% change)",
+			name: "crash detected (<-90% change) - uses previousPrice, not context",
 			price: DailyPrice{
 				Date:  "2025-01-15",
 				Close: 4.0, // -92% decrease from previous day (50 -> 4)
@@ -191,12 +194,13 @@ func TestPriceValidator_ValidatePrice_PercentageChange(t *testing.T) {
 				High:  5.0,
 				Low:   3.0,
 			},
-			context: context,
-			want:    false,
-			reason:  "crash_detected",
+			previousPrice: &DailyPrice{Date: "2025-01-14", Close: 50.0},
+			context:       context,
+			want:          false,
+			reason:        "crash_detected",
 		},
 		{
-			name: "LDO.EU anomaly case (44,000 vs 50)",
+			name: "LDO.EU anomaly case (44,000 vs 50) - uses previousPrice",
 			price: DailyPrice{
 				Date:  "2025-08-11",
 				Close: 44458.62, // Abnormal: 44,458 vs normal ~50 (889x increase = spike)
@@ -204,21 +208,59 @@ func TestPriceValidator_ValidatePrice_PercentageChange(t *testing.T) {
 				High:  44497.59,
 				Low:   44050.53,
 			},
-			context: context,
-			want:    false,
-			reason:  "spike_detected", // Spike detection takes priority (>1000% change)
+			previousPrice: &DailyPrice{Date: "2025-08-10", Close: 47.0},
+			context:       context,
+			want:          false,
+			reason:        "spike_detected", // Spike detection takes priority (>1000% change)
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			valid, reason := validator.ValidatePrice(tt.price, tt.context)
+			valid, reason := validator.ValidatePrice(tt.price, tt.previousPrice, tt.context)
 			assert.Equal(t, tt.want, valid, "validation result mismatch")
 			if !tt.want {
 				assert.Equal(t, tt.reason, reason, "reason mismatch")
 			}
 		})
 	}
+}
+
+// Test that day-over-day detection uses previousPrice, not context[0]
+func TestPriceValidator_ValidatePrice_DayOverDayUsesPreviousPrice(t *testing.T) {
+	log := zerolog.Nop()
+	validator := NewPriceValidator(log)
+
+	// Context with future prices (simulating syncing old historical data when DB has newer data)
+	context := []DailyPrice{
+		{Date: "2025-12-31", Close: 100.0}, // Future price (most recent in DB)
+		{Date: "2025-12-30", Close: 99.0},
+	}
+
+	// Price from 2020 being validated
+	price := DailyPrice{
+		Date:  "2020-01-15",
+		Close: 50.0, // Normal price for 2020
+		Open:  49.0,
+		High:  51.0,
+		Low:   48.0,
+	}
+
+	// Previous price from the array being validated (2020-01-14)
+	previousPrice := &DailyPrice{
+		Date:  "2020-01-14",
+		Close: 49.0, // Normal day-over-day change
+	}
+
+	// Should be valid - uses previousPrice (49.0 -> 50.0 = 2% change), not context[0] (100.0)
+	valid, reason := validator.ValidatePrice(price, previousPrice, context)
+	assert.True(t, valid, "price should be valid when using previousPrice, not context[0]")
+	assert.Empty(t, reason, "should have no reason when valid")
+
+	// Without previousPrice, should still be valid (average-based check, not day-over-day)
+	valid2, reason2 := validator.ValidatePrice(price, nil, context)
+	assert.True(t, valid2, "price should be valid even without previousPrice (uses average)")
+	assert.Empty(t, reason2, "should have no reason when valid")
 }
 
 func TestPriceValidator_ValidatePrice_AbsoluteBounds(t *testing.T) {
@@ -275,7 +317,7 @@ func TestPriceValidator_ValidatePrice_AbsoluteBounds(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			valid, reason := validator.ValidatePrice(tt.price, tt.context)
+			valid, reason := validator.ValidatePrice(tt.price, nil, tt.context)
 			assert.Equal(t, tt.want, valid, "validation result mismatch")
 			if !tt.want {
 				assert.Equal(t, tt.reason, reason, "reason mismatch")
@@ -418,8 +460,16 @@ func TestPriceValidator_ValidateAndInterpolate(t *testing.T) {
 	// Prices to validate: one normal, one abnormal (in chronological order)
 	prices := []DailyPrice{
 		{
+			Date:   "2025-08-10",
+			Close:  47.0, // Normal - will be used as previousPrice for next price
+			Open:   46.0,
+			High:   48.0,
+			Low:    45.0,
+			Volume: intPtrForPriceValidator(1000000),
+		},
+		{
 			Date:   "2025-08-11",
-			Close:  44458.62, // Abnormal (LDO.EU case)
+			Close:  44458.62, // Abnormal (LDO.EU case) - spike from 47.0
 			Open:   44050.53,
 			High:   44497.59,
 			Low:    44050.53,
@@ -437,24 +487,27 @@ func TestPriceValidator_ValidateAndInterpolate(t *testing.T) {
 
 	result, logs, err := validator.ValidateAndInterpolate(prices, context)
 	require.NoError(t, err)
-	require.Len(t, result, 2, "should return same number of prices")
+	require.Len(t, result, 3, "should return same number of prices")
 	require.Len(t, logs, 1, "should log one interpolation")
 
-	// First price should be interpolated
-	// It will use linear interpolation between context[0] (47.0) and prices[1] (46.7)
+	// First price should be unchanged (normal)
+	assert.Equal(t, 47.0, result[0].Close, "first price should be unchanged")
+
+	// Second price should be interpolated
+	// It will use linear interpolation between prices[0] (47.0) and prices[2] (46.7)
 	// Date: 2025-08-11, before: 2025-08-10 (47.0), after: 2025-08-12 (46.7)
 	// Days between: 1, total: 2, so: 47.0 + (46.7-47.0)*(1/2) = 47.0 - 0.15 = 46.85
 	expectedClose := 47.0 + (46.7-47.0)*(1.0/2.0)
-	assert.InDelta(t, expectedClose, result[0].Close, 0.1, "first price should be interpolated")
+	assert.InDelta(t, expectedClose, result[1].Close, 0.1, "second price should be interpolated")
 	assert.Equal(t, "2025-08-11", logs[0].Date)
 	assert.Equal(t, 44458.62, logs[0].OriginalClose)
 	assert.InDelta(t, expectedClose, logs[0].InterpolatedClose, 0.1)
 	assert.Equal(t, "linear", logs[0].Method)         // Will use linear since both before and after are available
-	assert.Equal(t, "spike_detected", logs[0].Reason) // Spike detection takes priority
+	assert.Equal(t, "spike_detected", logs[0].Reason) // Spike detection takes priority (uses previousPrice from array)
 
-	// Second price should be unchanged
-	assert.Equal(t, 46.7, result[1].Close, "second price should be unchanged")
-	assert.Equal(t, int64(3190483), *result[1].Volume, "volume should be preserved")
+	// Third price should be unchanged
+	assert.Equal(t, 46.7, result[2].Close, "third price should be unchanged")
+	assert.Equal(t, int64(3190483), *result[2].Volume, "volume should be preserved")
 }
 
 func TestPriceValidator_ValidateAndInterpolate_MultipleAbnormal(t *testing.T) {
@@ -542,6 +595,45 @@ func TestPriceValidator_ValidateAndInterpolate_EmptyContext(t *testing.T) {
 	assert.Equal(t, "absolute_bound_exceeded", logs[0].Reason)
 	// Should use no_interpolation (no before, no after)
 	assert.Equal(t, "no_interpolation", logs[0].Method)
+}
+
+// Test that before/after price lookups work correctly with DESC-ordered context
+func TestPriceValidator_ValidateAndInterpolate_ContextLookups(t *testing.T) {
+	log := zerolog.Nop()
+	validator := NewPriceValidator(log)
+
+	// Context with prices in DESC order (most recent first, as from GetRecentPrices)
+	// Simulating syncing 2020 data when DB has 2024 data
+	context := []DailyPrice{
+		{Date: "2024-01-15", Close: 100.0, Open: 99.0, High: 101.0, Low: 98.0}, // Most recent (future relative to prices)
+		{Date: "2024-01-14", Close: 99.0, Open: 98.0, High: 100.0, Low: 97.0},
+		{Date: "2020-01-20", Close: 50.0, Open: 49.0, High: 51.0, Low: 48.0}, // Past price (after prices being validated)
+		{Date: "2020-01-10", Close: 48.0, Open: 47.0, High: 49.0, Low: 46.0}, // Past price (before prices being validated)
+		{Date: "2020-01-05", Close: 47.0, Open: 46.0, High: 48.0, Low: 45.0}, // Older past price (before prices being validated)
+	}
+
+	// Prices to validate (2020 dates, between context dates)
+	prices := []DailyPrice{
+		{
+			Date:  "2020-01-15",
+			Close: 44458.62, // Abnormal spike
+			Open:  44050.53,
+			High:  44497.59,
+			Low:   44050.53,
+		},
+	}
+
+	result, logs, err := validator.ValidateAndInterpolate(prices, context)
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	require.Len(t, logs, 1)
+
+	// Should find:
+	// - before: 2020-01-10 (48.0) - most recent price in context that's before 2020-01-15
+	// - after: 2020-01-20 (50.0) - earliest price in context that's after 2020-01-15
+	// Should use linear interpolation between 48.0 and 50.0
+	assert.Equal(t, "linear", logs[0].Method, "should use linear interpolation with both before and after from context")
+	assert.InDelta(t, 49.0, result[0].Close, 1.0, "should interpolate between 48.0 and 50.0")
 }
 
 func intPtrForPriceValidator(i int64) *int64 {

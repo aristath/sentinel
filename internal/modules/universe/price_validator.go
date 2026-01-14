@@ -41,8 +41,10 @@ func NewPriceValidator(log zerolog.Logger) *PriceValidator {
 }
 
 // ValidatePrice checks if a price is valid
+// previousPrice is the previous price from the prices array being validated (for day-over-day change detection)
+// context is the recent prices from the database (for average-based validation)
 // Returns (isValid, reason)
-func (v *PriceValidator) ValidatePrice(price DailyPrice, context []DailyPrice) (bool, string) {
+func (v *PriceValidator) ValidatePrice(price DailyPrice, previousPrice *DailyPrice, context []DailyPrice) (bool, string) {
 	// 1. OHLC consistency checks (always applied, no context needed)
 	if price.High < price.Low {
 		return false, "high_below_low"
@@ -60,10 +62,11 @@ func (v *PriceValidator) ValidatePrice(price DailyPrice, context []DailyPrice) (
 		return false, "low_above_close"
 	}
 
-	// 2. Percentage change checks (requires context)
-	if len(context) > 0 {
-		// Check day-over-day change FIRST (takes priority over average checks)
-		prevClose := context[0].Close
+	// 2. Percentage change checks
+	// Check day-over-day change FIRST (takes priority over average checks)
+	// Use previousPrice from the array being validated, not context[0] which may be a future price
+	if previousPrice != nil {
+		prevClose := previousPrice.Close
 		if prevClose > 0 {
 			changePercent := ((price.Close - prevClose) / prevClose) * 100.0
 			if changePercent > maxPriceChangePercent {
@@ -73,6 +76,10 @@ func (v *PriceValidator) ValidatePrice(price DailyPrice, context []DailyPrice) (
 				return false, "crash_detected"
 			}
 		}
+	}
+
+	// 3. Average-based validation (requires context)
+	if len(context) > 0 {
 
 		// Calculate average of recent prices (last 30 or all if <30)
 		contextSize := len(context)
@@ -96,7 +103,7 @@ func (v *PriceValidator) ValidatePrice(price DailyPrice, context []DailyPrice) (
 		}
 	}
 
-	// 3. Absolute bounds (fallback when no context)
+	// 4. Absolute bounds (fallback when no context and no previousPrice)
 	if len(context) == 0 {
 		if price.Close > absolutePriceMax {
 			return false, "absolute_bound_exceeded"
@@ -215,7 +222,32 @@ func (v *PriceValidator) ValidateAndInterpolate(prices []DailyPrice, context []D
 	logs := []InterpolationLog{}
 
 	for i, price := range prices {
-		valid, reason := v.ValidatePrice(price, context)
+		// Get previous price from result (already validated prices) for day-over-day detection
+		var previousPrice *DailyPrice
+		if len(result) > 0 {
+			// Find the most recent price in result that's before the current price
+			for j := len(result) - 1; j >= 0; j-- {
+				resultDate, err1 := time.Parse("2006-01-02", result[j].Date)
+				currentDate, err2 := time.Parse("2006-01-02", price.Date)
+				if err1 == nil && err2 == nil && resultDate.Before(currentDate) {
+					previousPrice = &result[j]
+					break
+				}
+			}
+		}
+		// If not found in result, check previous prices in the prices array
+		if previousPrice == nil && i > 0 {
+			for j := i - 1; j >= 0; j-- {
+				// Use nil for previousPrice when validating previous prices to avoid recursion
+				prevValid, _ := v.ValidatePrice(prices[j], nil, context)
+				if prevValid {
+					previousPrice = &prices[j]
+					break
+				}
+			}
+		}
+
+		valid, reason := v.ValidatePrice(price, previousPrice, context)
 		if valid {
 			// Price is valid, keep as-is
 			result = append(result, price)
@@ -241,7 +273,7 @@ func (v *PriceValidator) ValidateAndInterpolate(prices []DailyPrice, context []D
 		// If not found in result, check previous prices in the prices array
 		if len(before) == 0 {
 			for j := i - 1; j >= 0; j-- {
-				prevValid, _ := v.ValidatePrice(prices[j], context)
+				prevValid, _ := v.ValidatePrice(prices[j], nil, context)
 				if prevValid {
 					before = []DailyPrice{prices[j]}
 					break
@@ -249,15 +281,21 @@ func (v *PriceValidator) ValidateAndInterpolate(prices []DailyPrice, context []D
 			}
 		}
 		// If still not found, find the most recent context price that's before current price
+		// Context is ordered DESC (most recent first), so the first match is the most recent "before" price
 		if len(before) == 0 && len(context) > 0 {
 			priceDate, err := time.Parse("2006-01-02", price.Date)
 			if err == nil {
+				var mostRecentBefore *DailyPrice
 				for _, ctxPrice := range context {
 					ctxDate, err := time.Parse("2006-01-02", ctxPrice.Date)
 					if err == nil && ctxDate.Before(priceDate) {
-						before = []DailyPrice{ctxPrice}
+						// Since context is DESC, first match is the most recent "before" price
+						mostRecentBefore = &ctxPrice
 						break
 					}
+				}
+				if mostRecentBefore != nil {
+					before = []DailyPrice{*mostRecentBefore}
 				}
 			}
 		}
@@ -265,22 +303,35 @@ func (v *PriceValidator) ValidateAndInterpolate(prices []DailyPrice, context []D
 		// Look for after price (next valid price in prices array)
 		for j := i + 1; j < len(prices); j++ {
 			// Check if next price is valid
-			nextValid, _ := v.ValidatePrice(prices[j], context)
+			nextValid, _ := v.ValidatePrice(prices[j], nil, context)
 			if nextValid {
 				after = []DailyPrice{prices[j]}
 				break
 			}
 		}
-		// If not found in prices, try to find a future date in context
+		// If not found in prices, try to find the earliest (oldest) future date in context
+		// Context is ordered DESC (most recent first), so we need to find the last match (earliest date)
 		if len(after) == 0 && len(context) > 0 {
 			priceDate, err := time.Parse("2006-01-02", price.Date)
 			if err == nil {
+				var earliestAfter *DailyPrice
+				// Iterate through context to find the earliest (oldest) date that's after priceDate
 				for _, ctxPrice := range context {
 					ctxDate, err := time.Parse("2006-01-02", ctxPrice.Date)
 					if err == nil && ctxDate.After(priceDate) {
-						after = []DailyPrice{ctxPrice}
-						break
+						// Keep updating to find the earliest (oldest) one
+						if earliestAfter == nil {
+							earliestAfter = &ctxPrice
+						} else {
+							earliestDate, _ := time.Parse("2006-01-02", earliestAfter.Date)
+							if ctxDate.Before(earliestDate) {
+								earliestAfter = &ctxPrice
+							}
+						}
 					}
+				}
+				if earliestAfter != nil {
+					after = []DailyPrice{*earliestAfter}
 				}
 			}
 		}
