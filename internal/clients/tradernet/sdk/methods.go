@@ -384,7 +384,7 @@ func (c *Client) GetLevel1Quote(symbol string) (interface{}, error) {
 }
 
 // GetCandles gets historical OHLC data
-// This matches the Python SDK's get_candles() method exactly
+// Uses plainRequest since getHloc doesn't require authentication
 func (c *Client) GetCandles(symbol string, start, end time.Time, timeframeSeconds int) (interface{}, error) {
 	// Date format: "01.01.2020 00:00"
 	dateFrom := start.Format("02.01.2006 15:04")
@@ -393,15 +393,15 @@ func (c *Client) GetCandles(symbol string, start, end time.Time, timeframeSecond
 	// Timeframe: convert seconds to minutes
 	timeframeMinutes := timeframeSeconds / 60
 
-	params := GetHlocParams{
-		ID:           symbol,
-		Count:        -1,
-		Timeframe:    timeframeMinutes,
-		DateFrom:     dateFrom,
-		DateTo:       dateTo,
-		IntervalMode: "ClosedRay",
+	params := map[string]interface{}{
+		"id":           symbol,
+		"count":        -1,
+		"timeframe":    timeframeMinutes,
+		"date_from":    dateFrom,
+		"date_to":      dateTo,
+		"intervalMode": "ClosedRay",
 	}
-	return c.authorizedRequest("getHloc", params)
+	return c.plainRequest("getHloc", params)
 }
 
 // FindSymbol finds security by symbol or ISIN
