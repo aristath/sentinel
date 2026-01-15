@@ -117,6 +117,24 @@ func (a *TradernetBrokerAdapter) FindSymbol(symbol string, exchange *string) ([]
 	return transformSecurityInfoToDomain(tnSecurities), nil
 }
 
+// GetSecurityMetadata implements domain.BrokerClient
+// Uses getAllSecurities API which returns issuer_country_code and sector_code
+func (a *TradernetBrokerAdapter) GetSecurityMetadata(symbol string) (*domain.BrokerSecurityInfo, error) {
+	tnSecurity, err := a.client.GetSecurityMetadata(symbol)
+	if err != nil {
+		return nil, err
+	}
+	if tnSecurity == nil {
+		return nil, nil
+	}
+	// Transform single security to domain type
+	results := transformSecurityInfoToDomain([]SecurityInfo{*tnSecurity})
+	if len(results) == 0 {
+		return nil, nil
+	}
+	return &results[0], nil
+}
+
 // GetFXRates implements domain.BrokerClient
 func (a *TradernetBrokerAdapter) GetFXRates(baseCurrency string, currencies []string) (map[string]float64, error) {
 	rates, err := a.client.GetFXRates(baseCurrency, currencies)

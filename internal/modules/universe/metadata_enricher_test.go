@@ -59,6 +59,9 @@ func (m *MockBrokerClient) GetCashMovements() (*domain.BrokerCashMovement, error
 func (m *MockBrokerClient) IsConnected() bool                                     { return true }
 func (m *MockBrokerClient) HealthCheck() (*domain.BrokerHealthResult, error)      { return nil, nil }
 func (m *MockBrokerClient) SetCredentials(apiKey, apiSecret string)               {}
+func (m *MockBrokerClient) GetSecurityMetadata(symbol string) (*domain.BrokerSecurityInfo, error) {
+	return nil, nil
+}
 
 // ============================================================================
 // MetadataEnricher.Enrich Tests

@@ -43,6 +43,10 @@ type BrokerClient interface {
 	// timeframeSeconds: 86400 for daily, 3600 for hourly, etc.
 	GetHistoricalPrices(symbol string, start, end int64, timeframeSeconds int) ([]BrokerOHLCV, error)
 	FindSymbol(symbol string, exchange *string) ([]BrokerSecurityInfo, error)
+	// GetSecurityMetadata gets full security metadata including country and sector
+	// This uses getAllSecurities API which returns issuer_country_code and sector_code
+	// unlike FindSymbol (tickerFinder) which doesn't return these fields
+	GetSecurityMetadata(symbol string) (*BrokerSecurityInfo, error)
 	// GetFXRates retrieves currency exchange rates for today's date
 	// Returns a map of currency codes to exchange rates relative to baseCurrency
 	GetFXRates(baseCurrency string, currencies []string) (map[string]float64, error)

@@ -1252,6 +1252,16 @@ func (m *MockTradernetClient) GetHistoricalPrices(symbol string, start, end int6
 	return []domain.BrokerOHLCV{}, nil
 }
 
+// GetSecurityMetadata retrieves security metadata (mock implementation)
+func (m *MockTradernetClient) GetSecurityMetadata(symbol string) (*domain.BrokerSecurityInfo, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.err != nil {
+		return nil, m.err
+	}
+	return nil, nil
+}
+
 // Verify interface implementation
 
 // MockBrokerClient is a thread-safe mock implementation of domain.BrokerClient for testing
@@ -1512,6 +1522,20 @@ func (m *MockBrokerClient) FindSymbol(symbol string, exchange *string) ([]domain
 		return nil, m.err
 	}
 	return m.securities, nil
+}
+
+// GetSecurityMetadata implements domain.BrokerClient
+func (m *MockBrokerClient) GetSecurityMetadata(symbol string) (*domain.BrokerSecurityInfo, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.err != nil {
+		return nil, m.err
+	}
+	// Return first security if available (matches symbol lookup behavior)
+	if len(m.securities) > 0 {
+		return &m.securities[0], nil
+	}
+	return nil, nil
 }
 
 // GetFXRates implements domain.BrokerClient

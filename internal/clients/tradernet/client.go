@@ -260,6 +260,35 @@ func (c *Client) FindSymbol(symbol string, exchange *string) ([]SecurityInfo, er
 	return securities, nil
 }
 
+// GetSecurityMetadata gets full security metadata including country and sector
+// This uses getAllSecurities which returns issuer_country_code and sector_code
+// unlike FindSymbol (tickerFinder) which doesn't return these fields
+func (c *Client) GetSecurityMetadata(symbol string) (*SecurityInfo, error) {
+	if c.sdkClient == nil {
+		return nil, fmt.Errorf("SDK client not initialized")
+	}
+
+	c.log.Debug().Str("symbol", symbol).Msg("GetSecurityMetadata: calling SDK GetAllSecurities")
+
+	result, err := c.sdkClient.GetAllSecurities(symbol, 1, 0)
+	if err != nil {
+		c.log.Error().Err(err).Msg("GetSecurityMetadata: SDK GetAllSecurities failed")
+		return nil, fmt.Errorf("failed to get security metadata: %w", err)
+	}
+
+	securities, err := transformAllSecuritiesResponse(result)
+	if err != nil {
+		c.log.Error().Err(err).Msg("GetSecurityMetadata: transform failed")
+		return nil, fmt.Errorf("failed to transform security metadata: %w", err)
+	}
+
+	if len(securities) == 0 {
+		return nil, nil // No results
+	}
+
+	return &securities[0], nil
+}
+
 // Trade represents an executed trade
 type Trade struct {
 	OrderID    string  `json:"order_id"`

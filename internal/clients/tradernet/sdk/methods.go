@@ -418,6 +418,38 @@ func (c *Client) FindSymbol(symbol string, exchange *string) (interface{}, error
 	return c.plainRequest("tickerFinder", params)
 }
 
+// GetAllSecurities retrieves securities with full metadata including issuer_country_code and sector_code.
+// This is more comprehensive than FindSymbol (tickerFinder) which doesn't return country/sector.
+//
+// Parameters:
+//   - ticker: Exact ticker to filter by (e.g., "AAPL.US")
+//   - take: Number of results to return (default 10)
+//   - skip: Number of results to skip for pagination
+//
+// Returns:
+//   - Securities array with issuer_country_code, sector_code, codesub_nm (exchange name), etc.
+//
+// API Reference: getAllSecurities command
+func (c *Client) GetAllSecurities(ticker string, take, skip int) (interface{}, error) {
+	if take == 0 {
+		take = 10
+	}
+	params := map[string]interface{}{
+		"take": take,
+		"skip": skip,
+		"filter": map[string]interface{}{
+			"filters": []map[string]interface{}{
+				{
+					"field":    "ticker",
+					"operator": "eq",
+					"value":    ticker,
+				},
+			},
+		},
+	}
+	return c.authorizedRequest("getAllSecurities", params)
+}
+
 // SecurityInfo gets security information
 // This matches the Python SDK's security_info() method exactly
 // CRITICAL: Boolean stays boolean (NOT converted to int!)

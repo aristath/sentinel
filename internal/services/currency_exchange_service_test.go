@@ -234,6 +234,10 @@ func (m *mockBrokerClientCurrencyTest) HealthCheck() (*domain.BrokerHealthResult
 func (m *mockBrokerClientCurrencyTest) SetCredentials(apiKey, apiSecret string) {
 }
 
+func (m *mockBrokerClientCurrencyTest) GetSecurityMetadata(symbol string) (*domain.BrokerSecurityInfo, error) {
+	return nil, nil
+}
+
 // TestExecuteStep_MarketOrder tests that FX conversions use market orders
 func TestExecuteStep_MarketOrder(t *testing.T) {
 	log := logger.New(logger.Config{Level: "error", Pretty: false})
@@ -495,4 +499,8 @@ func (m *mockBrokerClientCurrencyTestNotConnected) HealthCheck() (*domain.Broker
 }
 
 func (m *mockBrokerClientCurrencyTestNotConnected) SetCredentials(apiKey, apiSecret string) {
+}
+
+func (m *mockBrokerClientCurrencyTestNotConnected) GetSecurityMetadata(symbol string) (*domain.BrokerSecurityInfo, error) {
+	return nil, nil
 }

@@ -81,6 +81,9 @@ func (m *syncTestBrokerClient) GetCashMovements() (*domain.BrokerCashMovement, e
 func (m *syncTestBrokerClient) IsConnected() bool                                { return true }
 func (m *syncTestBrokerClient) HealthCheck() (*domain.BrokerHealthResult, error) { return nil, nil }
 func (m *syncTestBrokerClient) SetCredentials(apiKey, apiSecret string)          {}
+func (m *syncTestBrokerClient) GetSecurityMetadata(symbol string) (*domain.BrokerSecurityInfo, error) {
+	return nil, nil
+}
 
 // MockDB is a mock database for testing
 type MockDB struct {

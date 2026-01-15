@@ -551,6 +551,105 @@ func transformSecurityInfo(sdkResult interface{}) ([]SecurityInfo, error) {
 	return securities, nil
 }
 
+// transformAllSecuritiesResponse transforms getAllSecurities API response to []SecurityInfo
+// This response format is different from tickerFinder - it uses "securities" array
+// and includes issuer_country_code and sector_code fields
+func transformAllSecuritiesResponse(sdkResult interface{}) ([]SecurityInfo, error) {
+	resultMap, ok := sdkResult.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("invalid SDK result format: expected map[string]interface{}")
+	}
+
+	// getAllSecurities returns {"securities": [...], "total": N}
+	securitiesRaw, ok := resultMap["securities"]
+	if !ok || securitiesRaw == nil {
+		return []SecurityInfo{}, nil
+	}
+
+	securitiesArray, ok := securitiesRaw.([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("invalid securities format: expected array, got %T", securitiesRaw)
+	}
+
+	securities := make([]SecurityInfo, 0, len(securitiesArray))
+	for _, item := range securitiesArray {
+		itemMap, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		// getAllSecurities uses "ticker" field for symbol
+		symbol := getString(itemMap, "ticker")
+		if symbol == "" {
+			continue
+		}
+
+		sec := SecurityInfo{
+			Symbol: symbol,
+		}
+
+		// Name
+		if nameVal, exists := itemMap["name"]; exists && nameVal != nil {
+			if nameStr, ok := nameVal.(string); ok && nameStr != "" {
+				sec.Name = &nameStr
+			}
+		}
+
+		// ISIN: "issue_nb" in getAllSecurities response
+		if isinVal, exists := itemMap["issue_nb"]; exists && isinVal != nil {
+			if isinStr, ok := isinVal.(string); ok && isinStr != "" {
+				sec.ISIN = &isinStr
+			}
+		}
+
+		// Currency: "face_curr_c" in getAllSecurities response
+		if currVal, exists := itemMap["face_curr_c"]; exists && currVal != nil {
+			if currStr, ok := currVal.(string); ok && currStr != "" {
+				sec.Currency = &currStr
+			}
+		}
+
+		// Market: "mkt_name" in getAllSecurities response
+		if mktVal, exists := itemMap["mkt_name"]; exists && mktVal != nil {
+			if mktStr, ok := mktVal.(string); ok && mktStr != "" {
+				sec.Market = &mktStr
+			}
+		}
+
+		// Exchange code: "code_nm" in getAllSecurities response
+		if exVal, exists := itemMap["code_nm"]; exists && exVal != nil {
+			if exStr, ok := exVal.(string); ok && exStr != "" {
+				sec.ExchangeCode = &exStr
+			}
+		}
+
+		// Country: "issuer_country_code" - the key field we need!
+		if countryVal, exists := itemMap["issuer_country_code"]; exists && countryVal != nil {
+			if countryStr, ok := countryVal.(string); ok && countryStr != "" {
+				sec.Country = &countryStr
+			}
+		}
+
+		// Sector: "sector_code" - the key field we need!
+		if sectorVal, exists := itemMap["sector_code"]; exists && sectorVal != nil {
+			if sectorStr, ok := sectorVal.(string); ok && sectorStr != "" {
+				sec.Sector = &sectorStr
+			}
+		}
+
+		// Exchange name: "codesub_nm" in getAllSecurities response
+		if exNameVal, exists := itemMap["codesub_nm"]; exists && exNameVal != nil {
+			if exNameStr, ok := exNameVal.(string); ok && exNameStr != "" {
+				sec.ExchangeName = &exNameStr
+			}
+		}
+
+		securities = append(securities, sec)
+	}
+
+	return securities, nil
+}
+
 // transformQuote transforms SDK GetQuotes to Quote
 // Handles both array and map response formats from getStockQuotesJson
 func transformQuote(sdkResult interface{}, symbol string) (*Quote, error) {

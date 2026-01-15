@@ -89,6 +89,10 @@ func (m *mockTradernetClient) GetHistoricalPrices(symbol string, start, end int6
 	return []domain.BrokerOHLCV{}, nil
 }
 
+func (m *mockTradernetClient) GetSecurityMetadata(symbol string) (*domain.BrokerSecurityInfo, error) {
+	return nil, nil
+}
+
 // Mock Trade Repository for testing
 
 type mockTradeRepository struct {

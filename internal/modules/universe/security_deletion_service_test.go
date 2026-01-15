@@ -225,6 +225,9 @@ func (m *mockBrokerClientForDeletion) HealthCheck() (*domain.BrokerHealthResult,
 	return nil, nil
 }
 func (m *mockBrokerClientForDeletion) SetCredentials(apiKey, apiSecret string) {}
+func (m *mockBrokerClientForDeletion) GetSecurityMetadata(symbol string) (*domain.BrokerSecurityInfo, error) {
+	return nil, nil
+}
 
 func TestSecurityDeletionService_HardDelete(t *testing.T) {
 	log := zerolog.Nop()

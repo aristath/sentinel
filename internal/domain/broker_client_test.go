@@ -156,6 +156,17 @@ func (m *mockBrokerClientForTest) SetCredentials(apiKey, apiSecret string) {
 	m.credentialsSet = true
 }
 
+// GetSecurityMetadata implements BrokerClient
+func (m *mockBrokerClientForTest) GetSecurityMetadata(symbol string) (*BrokerSecurityInfo, error) {
+	if m.returnError {
+		return nil, errors.New("mock error")
+	}
+	if len(m.securities) > 0 {
+		return &m.securities[0], nil
+	}
+	return nil, nil
+}
+
 // Compile-time check that mockBrokerClientForTest implements BrokerClient
 var _ BrokerClient = (*mockBrokerClientForTest)(nil)
 

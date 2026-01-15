@@ -13,6 +13,7 @@ type SDKClient interface {
 	CorporateActions(reception int) (interface{}, error)
 	GetTradesHistory(start, end string, tradeID, limit, reception *int, symbol, currency *string) (interface{}, error)
 	FindSymbol(symbol string, exchange *string) (interface{}, error)
+	GetAllSecurities(ticker string, take, skip int) (interface{}, error)
 	GetQuotes(symbols []string) (interface{}, error)
 	// GetLevel1Quote fetches Level 1 market data (best bid/ask only)
 	GetLevel1Quote(symbol string) (interface{}, error)

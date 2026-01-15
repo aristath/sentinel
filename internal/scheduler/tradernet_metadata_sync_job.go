@@ -105,21 +105,19 @@ func (j *TradernetMetadataSyncJob) Run() error {
 // Tradernet is the source of truth - always overwrites existing values
 // User customizations should be stored in security_overrides table
 func (j *TradernetMetadataSyncJob) fetchAndUpdateMetadata(security *universe.Security) (bool, error) {
-	// Use FindSymbol to get security info (domain.BrokerClient uses BrokerSecurityInfo)
-	results, err := j.brokerClient.FindSymbol(security.Symbol, nil)
+	// Use GetSecurityMetadata which calls getAllSecurities API
+	// This returns issuer_country_code and sector_code, unlike FindSymbol (tickerFinder)
+	info, err := j.brokerClient.GetSecurityMetadata(security.Symbol)
 	if err != nil {
-		return false, fmt.Errorf("failed to find symbol %s: %w", security.Symbol, err)
+		return false, fmt.Errorf("failed to get security metadata for %s: %w", security.Symbol, err)
 	}
 
-	if len(results) == 0 {
+	if info == nil {
 		j.log.Debug().
 			Str("symbol", security.Symbol).
-			Msg("No results from Tradernet FindSymbol")
+			Msg("No results from Tradernet GetSecurityMetadata")
 		return false, nil // Not an error, just no data
 	}
-
-	// Use first result (typically the primary exchange listing)
-	info := results[0]
 
 	// Build update map - always update from Tradernet (source of truth)
 	updates := make(map[string]any)

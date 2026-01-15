@@ -162,6 +162,14 @@ func (m *MockTradernetClient) GetHistoricalPrices(symbol string, start, end int6
 	return args.Get(0).([]domain.BrokerOHLCV), args.Error(1)
 }
 
+func (m *MockTradernetClient) GetSecurityMetadata(symbol string) (*domain.BrokerSecurityInfo, error) {
+	args := m.Called(symbol)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.BrokerSecurityInfo), args.Error(1)
+}
+
 // MockPositionRepository is a mock position repository for testing
 type MockPositionRepository struct {
 	mock.Mock

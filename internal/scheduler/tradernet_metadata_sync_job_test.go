@@ -37,8 +37,9 @@ func TestTradernetMetadataSyncJob_Run_NoBrokerClient(t *testing.T) {
 
 // mockBrokerClient implements domain.BrokerClient for testing
 type mockBrokerClient struct {
-	connected    bool
-	findSymbolFn func(symbol string, exchange *string) ([]domain.BrokerSecurityInfo, error)
+	connected             bool
+	findSymbolFn          func(symbol string, exchange *string) ([]domain.BrokerSecurityInfo, error)
+	getSecurityMetadataFn func(symbol string) (*domain.BrokerSecurityInfo, error)
 }
 
 func (m *mockBrokerClient) IsConnected() bool {
@@ -48,6 +49,13 @@ func (m *mockBrokerClient) IsConnected() bool {
 func (m *mockBrokerClient) FindSymbol(symbol string, exchange *string) ([]domain.BrokerSecurityInfo, error) {
 	if m.findSymbolFn != nil {
 		return m.findSymbolFn(symbol, exchange)
+	}
+	return nil, nil
+}
+
+func (m *mockBrokerClient) GetSecurityMetadata(symbol string) (*domain.BrokerSecurityInfo, error) {
+	if m.getSecurityMetadataFn != nil {
+		return m.getSecurityMetadataFn(symbol)
 	}
 	return nil, nil
 }

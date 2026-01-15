@@ -27,6 +27,8 @@ type mockSDKClient struct {
 	getTradesHistoryError      error
 	findSymbolResult           interface{}
 	findSymbolError            error
+	getAllSecuritiesResult     interface{}
+	getAllSecuritiesError      error
 	getQuotesResult            interface{}
 	getQuotesError             error
 	getLevel1QuoteResult       interface{}
@@ -72,6 +74,10 @@ func (m *mockSDKClient) GetTradesHistory(start, end string, tradeID, limit, rece
 
 func (m *mockSDKClient) FindSymbol(symbol string, exchange *string) (interface{}, error) {
 	return m.findSymbolResult, m.findSymbolError
+}
+
+func (m *mockSDKClient) GetAllSecurities(ticker string, take, skip int) (interface{}, error) {
+	return m.getAllSecuritiesResult, m.getAllSecuritiesError
 }
 
 func (m *mockSDKClient) GetQuotes(symbols []string) (interface{}, error) {

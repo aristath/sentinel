@@ -119,6 +119,10 @@ func (m *mockBrokerClient) GetHistoricalPrices(symbol string, start, end int64, 
 	return []BrokerOHLCV{}, nil
 }
 
+func (m *mockBrokerClient) GetSecurityMetadata(symbol string) (*BrokerSecurityInfo, error) {
+	return nil, nil
+}
+
 type mockCurrencyExchangeService struct{}
 
 func (m *mockCurrencyExchangeService) GetRate(fromCurrency, toCurrency string) (float64, error) {

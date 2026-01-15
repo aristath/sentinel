@@ -306,6 +306,10 @@ func (m *mockTradernetClient) PlaceOrder(symbol, side string, quantity, limitPri
 	}, nil
 }
 
+func (m *mockTradernetClient) GetSecurityMetadata(symbol string) (*domain.BrokerSecurityInfo, error) {
+	return nil, nil
+}
+
 // Mock Trade Repository for testing
 
 type mockTradeRepository struct {
