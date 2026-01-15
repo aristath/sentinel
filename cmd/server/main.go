@@ -203,6 +203,14 @@ func main() {
 		log.Info().Msg("Work processor started")
 	}
 
+	// Start worker pool for manual job execution via /api/jobs/* endpoints
+	// NOTE: Only manually-triggered jobs run through WorkerPool now
+	// (RegisterListeners disabled, TimeScheduler deleted)
+	if container.WorkerPool != nil {
+		container.WorkerPool.Start()
+		log.Info().Msg("Worker pool started (for manual job execution)")
+	}
+
 	// Start LED status monitors
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -241,8 +249,11 @@ func main() {
 		log.Info().Msg("Work processor stopped")
 	}
 
-	// NOTE: Old queue system (TimeScheduler, WorkerPool) is no longer started,
-	// so we don't need to stop it. The Work Processor handles all automatic work.
+	// Stop worker pool (for manual job execution)
+	if container.WorkerPool != nil {
+		container.WorkerPool.Stop()
+		log.Info().Msg("Worker pool stopped")
+	}
 
 	// Stop WebSocket client
 	if container.MarketStatusWS != nil {
