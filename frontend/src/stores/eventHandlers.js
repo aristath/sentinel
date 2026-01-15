@@ -192,15 +192,6 @@ export const eventHandlers = {
     useAppStore.getState().fetchRecommendations();
   },
 
-  PLANNING_STATUS_UPDATED: (event) => {
-    if (!event) {
-      console.warn('PLANNING_STATUS_UPDATED event is null or undefined');
-      return;
-    }
-    const status = event.data || {};
-    useAppStore.getState().updatePlannerStatus(status);
-  },
-
   // System status events
   SYSTEM_STATUS_CHANGED: () => {
     useAppStore.getState().fetchStatus();

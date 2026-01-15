@@ -18,6 +18,7 @@ type StoreRecommendationsJob struct {
 	plan                  *planningdomain.HolisticPlan
 	rejectedOpportunities []planningdomain.RejectedOpportunity
 	preFilteredSecurities []planningdomain.PreFilteredSecurity
+	rejectedSequences     []planningdomain.RejectedSequence
 }
 
 // NewStoreRecommendationsJob creates a new StoreRecommendationsJob
@@ -64,6 +65,11 @@ func (j *StoreRecommendationsJob) SetPreFilteredSecurities(preFiltered []plannin
 	j.preFilteredSecurities = preFiltered
 }
 
+// SetRejectedSequences sets the rejected sequences to store
+func (j *StoreRecommendationsJob) SetRejectedSequences(rejected []planningdomain.RejectedSequence) {
+	j.rejectedSequences = rejected
+}
+
 // Name returns the job name
 func (j *StoreRecommendationsJob) Name() string {
 	return "store_recommendations"
@@ -102,6 +108,19 @@ func (j *StoreRecommendationsJob) Run() error {
 				Int("pre_filtered_count", len(j.preFilteredSecurities)).
 				Str("portfolio_hash", j.portfolioHash).
 				Msg("Stored pre-filtered securities")
+		}
+	}
+
+	// Store rejected sequences (if available)
+	if len(j.rejectedSequences) > 0 && j.portfolioHash != "" {
+		if err := j.recommendationRepo.StoreRejectedSequences(j.rejectedSequences, j.portfolioHash); err != nil {
+			j.log.Warn().Err(err).Msg("Failed to store rejected sequences")
+			// Don't fail - continue to store plan
+		} else {
+			j.log.Info().
+				Int("rejected_sequences_count", len(j.rejectedSequences)).
+				Str("portfolio_hash", j.portfolioHash).
+				Msg("Stored rejected sequences")
 		}
 	}
 

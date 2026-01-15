@@ -153,3 +153,45 @@ func (r OpportunitiesResultByCategory) ToOpportunitiesByCategory() Opportunities
 	}
 	return opportunities
 }
+
+// RejectedSequence represents an evaluated sequence that was not selected for the final plan.
+// All evaluated sequences except the winning one are stored as rejected for debugging visibility.
+type RejectedSequence struct {
+	Rank     int               `json:"rank"`     // Position in sorted list (2 = second best, 3 = third, etc.)
+	Actions  []ActionCandidate `json:"actions"`  // The sequence of actions
+	Score    float64           `json:"score"`    // End-state score from evaluation
+	Feasible bool              `json:"feasible"` // Whether the sequence was feasible (had enough cash, etc.)
+	Reason   string            `json:"reason"`   // Why rejected: "lower_score", "infeasible", "insufficient_cash", etc.
+}
+
+// PlannerRunSummary contains aggregated metrics from a planner run for debugging.
+// This is persisted after each planner run to help identify performance issues and bottlenecks.
+type PlannerRunSummary struct {
+	Candidates          int     `json:"candidates"`             // Number of opportunity candidates identified
+	SequencesTotal      int     `json:"sequences_total"`        // Total sequences generated
+	SequencesFeasible   int     `json:"sequences_feasible"`     // Sequences that passed feasibility check
+	SequencesInfeasible int     `json:"sequences_infeasible"`   // Sequences that failed feasibility check
+	BestScore           float64 `json:"best_score"`             // Best score achieved
+	AvgScore            float64 `json:"avg_score"`              // Average score across all evaluated sequences
+	ThroughputSeqPerSec float64 `json:"throughput_seq_per_sec"` // Sequences evaluated per second
+	PeakMemoryMB        float64 `json:"peak_memory_mb"`         // Peak memory usage in MB
+	TotalDurationMS     int64   `json:"total_duration_ms"`      // Total planner run duration in milliseconds
+}
+
+// StageStatus represents the status of a planner stage.
+type StageStatus string
+
+const (
+	StageStatusPending   StageStatus = "pending"
+	StageStatusRunning   StageStatus = "running"
+	StageStatusCompleted StageStatus = "completed"
+)
+
+// StageInfo represents information about a single stage in the planner pipeline.
+// Used for progress tracking and debugging to show exactly what the planner is doing.
+type StageInfo struct {
+	Name       string                 `json:"name"`                  // Human-readable stage name
+	Status     StageStatus            `json:"status"`                // Current status
+	DurationMS int64                  `json:"duration_ms,omitempty"` // Duration in milliseconds (set when completed)
+	Details    map[string]interface{} `json:"details,omitempty"`     // Stage-specific metrics
+}

@@ -13,13 +13,15 @@ import (
 // CreateTradePlanJob creates a holistic trade plan from opportunity context
 type CreateTradePlanJob struct {
 	JobBase
-	log                   zerolog.Logger
-	plannerService        PlannerServiceInterface
-	configRepo            ConfigRepositoryInterface
-	opportunityContext    *planningdomain.OpportunityContext
-	plan                  *planningdomain.HolisticPlan
-	rejectedOpportunities []planningdomain.RejectedOpportunity
-	preFilteredSecurities []planningdomain.PreFilteredSecurity
+	log                      zerolog.Logger
+	plannerService           PlannerServiceInterface
+	configRepo               ConfigRepositoryInterface
+	opportunityContext       *planningdomain.OpportunityContext
+	plan                     *planningdomain.HolisticPlan
+	rejectedOpportunities    []planningdomain.RejectedOpportunity
+	preFilteredSecurities    []planningdomain.PreFilteredSecurity
+	rejectedSequences        []planningdomain.RejectedSequence
+	detailedProgressCallback progress.DetailedCallback
 }
 
 // NewCreateTradePlanJob creates a new CreateTradePlanJob
@@ -44,6 +46,11 @@ func (j *CreateTradePlanJob) SetOpportunityContext(ctx *planningdomain.Opportuni
 	j.opportunityContext = ctx
 }
 
+// SetDetailedProgressCallback sets the detailed progress callback for rich progress reporting
+func (j *CreateTradePlanJob) SetDetailedProgressCallback(callback progress.DetailedCallback) {
+	j.detailedProgressCallback = callback
+}
+
 // GetPlan returns the created plan
 func (j *CreateTradePlanJob) GetPlan() *planningdomain.HolisticPlan {
 	return j.plan
@@ -57,6 +64,11 @@ func (j *CreateTradePlanJob) GetRejectedOpportunities() []planningdomain.Rejecte
 // GetPreFilteredSecurities returns the pre-filtered securities from plan creation
 func (j *CreateTradePlanJob) GetPreFilteredSecurities() []planningdomain.PreFilteredSecurity {
 	return j.preFilteredSecurities
+}
+
+// GetRejectedSequences returns the rejected sequences from plan creation
+func (j *CreateTradePlanJob) GetRejectedSequences() []planningdomain.RejectedSequence {
+	return j.rejectedSequences
 }
 
 // Name returns the job name
@@ -81,18 +93,25 @@ func (j *CreateTradePlanJob) Run() error {
 		config = planningdomain.NewDefaultConfiguration()
 	}
 
-	// Create progress callback from the job's progress reporter
-	var progressCallback progress.Callback
-	if r := j.GetProgressReporter(); r != nil {
-		if reporter, ok := r.(*queue.ProgressReporter); ok && reporter != nil {
-			progressCallback = func(current, total int, message string) {
-				reporter.Report(current, total, message)
+	var planResultInterface interface{}
+
+	// Use detailed progress callback if available
+	if j.detailedProgressCallback != nil {
+		j.log.Debug().Msg("Using detailed progress callback for plan creation")
+		planResultInterface, err = j.plannerService.CreatePlanWithDetailedProgress(j.opportunityContext, config, j.detailedProgressCallback)
+	} else {
+		// Fallback to legacy progress callback from the job's progress reporter
+		var progressCallback progress.Callback
+		if r := j.GetProgressReporter(); r != nil {
+			if reporter, ok := r.(*queue.ProgressReporter); ok && reporter != nil {
+				progressCallback = func(current, total int, message string) {
+					reporter.Report(current, total, message)
+				}
 			}
 		}
+		planResultInterface, err = j.plannerService.CreatePlanWithRejections(j.opportunityContext, config, progressCallback)
 	}
 
-	// Create plan with rejection tracking (planner service returns interface{}, we type assert to PlanResult)
-	planResultInterface, err := j.plannerService.CreatePlanWithRejections(j.opportunityContext, config, progressCallback)
 	if err != nil {
 		j.log.Error().Err(err).Msg("Failed to create plan")
 		return fmt.Errorf("failed to create plan: %w", err)
@@ -107,10 +126,12 @@ func (j *CreateTradePlanJob) Run() error {
 	j.plan = planResult.Plan
 	j.rejectedOpportunities = planResult.RejectedOpportunities
 	j.preFilteredSecurities = planResult.PreFilteredSecurities
+	j.rejectedSequences = planResult.RejectedSequences
 
 	j.log.Info().
-		Int("rejected_count", len(j.rejectedOpportunities)).
+		Int("rejected_opportunities_count", len(j.rejectedOpportunities)).
 		Int("pre_filtered_count", len(j.preFilteredSecurities)).
+		Int("rejected_sequences_count", len(j.rejectedSequences)).
 		Msg("Successfully created trade plan")
 
 	return nil

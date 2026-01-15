@@ -8,6 +8,20 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// ProgressUpdate represents a progress update during opportunity identification.
+// Used for hierarchical progress reporting in the planner pipeline.
+type ProgressUpdate struct {
+	Phase    string         // Phase identifier (e.g., "opportunity_identification")
+	SubPhase string         // Sub-phase identifier (e.g., calculator name)
+	Current  int            // Current progress count
+	Total    int            // Total items to process
+	Message  string         // Human-readable progress message
+	Details  map[string]any // Arbitrary metrics for debugging
+}
+
+// ProgressCallback is a function type for receiving progress updates.
+type ProgressCallback func(update ProgressUpdate)
+
 // CalculatorRegistry manages all registered opportunity calculators.
 type CalculatorRegistry struct {
 	calculators map[string]OpportunityCalculator
@@ -159,6 +173,124 @@ func (r *CalculatorRegistry) IdentifyOpportunitiesWithExclusions(
 		Int("total_pre_filtered", totalPreFiltered).
 		Int("categories", len(results)).
 		Msg("Opportunity identification complete")
+
+	return results, nil
+}
+
+// IdentifyOpportunitiesWithProgress runs all enabled calculators with progress reporting.
+// Reports progress after each calculator completes, enabling real-time UI updates.
+func (r *CalculatorRegistry) IdentifyOpportunitiesWithProgress(
+	ctx *domain.OpportunityContext,
+	config *domain.PlannerConfiguration,
+	progressCallback ProgressCallback,
+) (domain.OpportunitiesResultByCategory, error) {
+	enabled := r.GetEnabled(config)
+	results := make(domain.OpportunitiesResultByCategory)
+
+	total := len(enabled)
+	if total == 0 {
+		return results, nil
+	}
+
+	r.log.Info().
+		Int("enabled_calculators", total).
+		Msg("Identifying opportunities with progress reporting")
+
+	// Track cumulative counts for progress details
+	candidatesSoFar := 0
+	filteredSoFar := 0
+
+	for i, calculator := range enabled {
+		name := calculator.Name()
+		category := calculator.Category()
+		params := config.GetCalculatorParams(name)
+		params["config"] = config
+
+		r.log.Debug().
+			Str("calculator", name).
+			Str("category", string(category)).
+			Int("index", i+1).
+			Int("total", total).
+			Msg("Running calculator")
+
+		// Report progress before running calculator
+		if progressCallback != nil {
+			progressCallback(ProgressUpdate{
+				Phase:    "opportunity_identification",
+				SubPhase: name,
+				Current:  i + 1,
+				Total:    total,
+				Message:  fmt.Sprintf("Running %s calculator", name),
+				Details: map[string]any{
+					"calculators_total":  total,
+					"calculators_done":   i,
+					"candidates_so_far":  candidatesSoFar,
+					"filtered_so_far":    filteredSoFar,
+					"current_calculator": name,
+				},
+			})
+		}
+
+		result, err := calculator.Calculate(ctx, params)
+		if err != nil {
+			r.log.Error().
+				Err(err).
+				Str("calculator", name).
+				Msg("Calculator failed")
+			continue
+		}
+
+		// Update cumulative counts
+		candidatesSoFar += len(result.Candidates)
+		filteredSoFar += len(result.PreFiltered)
+
+		r.log.Debug().
+			Str("calculator", name).
+			Int("candidates", len(result.Candidates)).
+			Int("pre_filtered", len(result.PreFiltered)).
+			Msg("Calculator completed")
+
+		// Merge into category results
+		existing := results[category]
+		existing.Candidates = append(existing.Candidates, result.Candidates...)
+		existing.PreFiltered = append(existing.PreFiltered, result.PreFiltered...)
+		results[category] = existing
+
+		// Report progress after calculator completes
+		if progressCallback != nil {
+			progressCallback(ProgressUpdate{
+				Phase:    "opportunity_identification",
+				SubPhase: name,
+				Current:  i + 1,
+				Total:    total,
+				Message:  fmt.Sprintf("Completed %s calculator", name),
+				Details: map[string]any{
+					"calculators_total":        total,
+					"calculators_done":         i + 1,
+					"candidates_so_far":        candidatesSoFar,
+					"filtered_so_far":          filteredSoFar,
+					"current_calculator":       name,
+					"current_candidates_found": len(result.Candidates),
+					"current_filtered_count":   len(result.PreFiltered),
+				},
+			})
+		}
+	}
+
+	// Log summary
+	for category, result := range results {
+		r.log.Info().
+			Str("category", string(category)).
+			Int("candidates", len(result.Candidates)).
+			Int("pre_filtered", len(result.PreFiltered)).
+			Msg("Opportunities by category")
+	}
+
+	r.log.Info().
+		Int("total_candidates", candidatesSoFar).
+		Int("total_pre_filtered", filteredSoFar).
+		Int("categories", len(results)).
+		Msg("Opportunity identification with progress complete")
 
 	return results, nil
 }

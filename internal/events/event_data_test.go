@@ -372,6 +372,143 @@ func TestJobProgressInfo(t *testing.T) {
 	assert.Equal(t, progress.Message, unmarshaled.Message)
 }
 
+// TestJobProgressInfo_WithHierarchicalProgress tests JobProgressInfo with Phase, SubPhase, Details
+func TestJobProgressInfo_WithHierarchicalProgress(t *testing.T) {
+	progress := JobProgressInfo{
+		Current:  847,
+		Total:    2500,
+		Message:  "Evaluating sequences",
+		Phase:    "sequence_evaluation",
+		SubPhase: "batch_1",
+		Details: map[string]interface{}{
+			"workers_active":       4,
+			"feasible_count":       823,
+			"infeasible_count":     24,
+			"best_score":           0.847,
+			"avg_score":            0.612,
+			"sequences_per_second": 520.5,
+			"elapsed_ms":           1632,
+			"memory_alloc_mb":      45.2,
+		},
+	}
+
+	// Test JSON marshaling
+	jsonData, err := json.Marshal(progress)
+	require.NoError(t, err)
+	assert.Contains(t, string(jsonData), `"phase":"sequence_evaluation"`)
+	assert.Contains(t, string(jsonData), `"sub_phase":"batch_1"`)
+	assert.Contains(t, string(jsonData), `"workers_active"`)
+	assert.Contains(t, string(jsonData), `"feasible_count"`)
+	assert.Contains(t, string(jsonData), `"best_score"`)
+
+	// Test JSON unmarshaling
+	var unmarshaled JobProgressInfo
+	err = json.Unmarshal(jsonData, &unmarshaled)
+	require.NoError(t, err)
+	assert.Equal(t, progress.Current, unmarshaled.Current)
+	assert.Equal(t, progress.Total, unmarshaled.Total)
+	assert.Equal(t, progress.Message, unmarshaled.Message)
+	assert.Equal(t, progress.Phase, unmarshaled.Phase)
+	assert.Equal(t, progress.SubPhase, unmarshaled.SubPhase)
+	assert.NotNil(t, unmarshaled.Details)
+
+	// Verify specific details - JSON numbers unmarshal as float64
+	assert.Equal(t, float64(4), unmarshaled.Details["workers_active"])
+	assert.Equal(t, float64(823), unmarshaled.Details["feasible_count"])
+	assert.Equal(t, float64(24), unmarshaled.Details["infeasible_count"])
+	assert.Equal(t, 0.847, unmarshaled.Details["best_score"])
+	assert.Equal(t, 520.5, unmarshaled.Details["sequences_per_second"])
+}
+
+// TestJobProgressInfo_WithPhaseOnly tests JobProgressInfo with just Phase (no SubPhase or Details)
+func TestJobProgressInfo_WithPhaseOnly(t *testing.T) {
+	progress := JobProgressInfo{
+		Current: 3,
+		Total:   6,
+		Message: "Running profit_taking calculator",
+		Phase:   "opportunity_identification",
+	}
+
+	// Test JSON marshaling
+	jsonData, err := json.Marshal(progress)
+	require.NoError(t, err)
+	assert.Contains(t, string(jsonData), `"phase":"opportunity_identification"`)
+	// SubPhase and Details should be omitted when empty
+	assert.NotContains(t, string(jsonData), `"sub_phase"`)
+	assert.NotContains(t, string(jsonData), `"details"`)
+
+	// Test JSON unmarshaling
+	var unmarshaled JobProgressInfo
+	err = json.Unmarshal(jsonData, &unmarshaled)
+	require.NoError(t, err)
+	assert.Equal(t, progress.Phase, unmarshaled.Phase)
+	assert.Equal(t, "", unmarshaled.SubPhase)
+	assert.Nil(t, unmarshaled.Details)
+}
+
+// TestJobProgressInfo_SequenceGeneration tests progress during sequence generation
+func TestJobProgressInfo_SequenceGeneration(t *testing.T) {
+	progress := JobProgressInfo{
+		Current:  3,
+		Total:    10,
+		Message:  "Generating depth 3/10 sequences",
+		Phase:    "sequence_generation",
+		SubPhase: "depth_3",
+		Details: map[string]interface{}{
+			"candidates_count":       15,
+			"current_depth":          3,
+			"combinations_at_depth":  455,
+			"combinations_processed": 230,
+			"sequences_generated":    1234,
+			"duplicates_removed":     89,
+			"infeasible_pruned":      456,
+		},
+	}
+
+	// Test JSON round-trip
+	jsonData, err := json.Marshal(progress)
+	require.NoError(t, err)
+
+	var unmarshaled JobProgressInfo
+	err = json.Unmarshal(jsonData, &unmarshaled)
+	require.NoError(t, err)
+
+	assert.Equal(t, "sequence_generation", unmarshaled.Phase)
+	assert.Equal(t, "depth_3", unmarshaled.SubPhase)
+	assert.Equal(t, float64(15), unmarshaled.Details["candidates_count"])
+	assert.Equal(t, float64(1234), unmarshaled.Details["sequences_generated"])
+}
+
+// TestJobProgressInfo_OpportunityIdentification tests progress during opportunity identification
+func TestJobProgressInfo_OpportunityIdentification(t *testing.T) {
+	progress := JobProgressInfo{
+		Current:  2,
+		Total:    6,
+		Message:  "Running averaging_down calculator",
+		Phase:    "opportunity_identification",
+		SubPhase: "averaging_down",
+		Details: map[string]interface{}{
+			"calculators_total":  6,
+			"calculators_done":   1,
+			"candidates_so_far":  3,
+			"filtered_so_far":    12,
+			"current_calculator": "averaging_down",
+		},
+	}
+
+	// Test JSON round-trip
+	jsonData, err := json.Marshal(progress)
+	require.NoError(t, err)
+
+	var unmarshaled JobProgressInfo
+	err = json.Unmarshal(jsonData, &unmarshaled)
+	require.NoError(t, err)
+
+	assert.Equal(t, "opportunity_identification", unmarshaled.Phase)
+	assert.Equal(t, "averaging_down", unmarshaled.SubPhase)
+	assert.Equal(t, "averaging_down", unmarshaled.Details["current_calculator"])
+}
+
 // TestJobStatusData tests JobStatusData struct
 func TestJobStatusData(t *testing.T) {
 	now := time.Now()

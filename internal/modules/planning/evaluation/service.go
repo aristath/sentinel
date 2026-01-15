@@ -402,6 +402,175 @@ func convertPortfolioContextWithOpportunityData(
 	return result
 }
 
+// BatchEvaluateDetailed evaluates a batch of sequences with detailed progress reporting.
+// This method provides rich progress metrics for debugging and UI display.
+// The progressCallback receives structured updates with phase, subphase, and details.
+func (s *Service) BatchEvaluateDetailed(ctx context.Context, sequences []domain.ActionSequence, portfolioHash string, config *domain.PlannerConfiguration, opportunityCtx *domain.OpportunityContext, progressCallback progress.DetailedCallback) ([]domain.EvaluationResult, error) {
+	if len(sequences) == 0 {
+		return nil, fmt.Errorf("no sequences to evaluate")
+	}
+
+	s.log.Debug().
+		Int("sequence_count", len(sequences)).
+		Str("portfolio_hash", portfolioHash).
+		Msg("Starting batch evaluation with detailed progress")
+
+	// Convert domain sequences to evaluation models
+	evalSequences := make([][]models.ActionCandidate, len(sequences))
+	for i, seq := range sequences {
+		evalActions := make([]models.ActionCandidate, len(seq.Actions))
+		for j, action := range seq.Actions {
+			evalActions[j] = models.ActionCandidate{
+				Side:     models.TradeSide(action.Side),
+				Symbol:   action.Symbol,
+				Name:     action.Name,
+				Quantity: action.Quantity,
+				Price:    action.Price,
+				ValueEUR: action.ValueEUR,
+				Currency: action.Currency,
+				Priority: action.Priority,
+				Reason:   action.Reason,
+				Tags:     action.Tags,
+			}
+		}
+		evalSequences[i] = evalActions
+	}
+
+	// Create evaluation context with config values
+	transactionCostFixed := 2.0
+	transactionCostPercent := 0.002
+	if config != nil {
+		transactionCostFixed = config.TransactionCostFixed
+		transactionCostPercent = config.TransactionCostPercent
+	}
+
+	// Build PortfolioContext from OpportunityContext if available
+	var portfolioCtx models.PortfolioContext
+	if opportunityCtx != nil && opportunityCtx.PortfolioContext != nil {
+		portfolioCtx = convertPortfolioContextWithOpportunityData(opportunityCtx.PortfolioContext, opportunityCtx)
+	}
+
+	// Build complete EvaluationContext with all required data
+	var evalSecurities []models.Security
+	var evalPositions []models.Position
+	var stocksByISIN map[string]models.Security
+	var availableCashEUR float64
+	var totalPortfolioValueEUR float64
+
+	if opportunityCtx != nil {
+		// Convert securities - build lookup by ISIN (internal key)
+		evalSecurities = make([]models.Security, 0, len(opportunityCtx.Securities))
+		stocksByISIN = make(map[string]models.Security)
+		for _, sec := range opportunityCtx.Securities {
+			var geographyPtr *string
+			if sec.Geography != "" {
+				geographyPtr = &sec.Geography
+			}
+			evalSec := models.Security{
+				ISIN:      sec.ISIN,
+				Symbol:    sec.Symbol,
+				Name:      sec.Name,
+				Geography: geographyPtr,
+				Industry:  nil,
+				Currency:  string(sec.Currency),
+			}
+			evalSecurities = append(evalSecurities, evalSec)
+			if sec.ISIN != "" {
+				stocksByISIN[sec.ISIN] = evalSec
+			}
+		}
+
+		// Convert positions - use ISIN for lookups
+		evalPositions = make([]models.Position, 0, len(opportunityCtx.EnrichedPositions))
+		for _, pos := range opportunityCtx.EnrichedPositions {
+			currentPrice := pos.CurrentPrice
+			if currentPrice <= 0 && opportunityCtx.CurrentPrices != nil {
+				if price, ok := opportunityCtx.CurrentPrices[pos.ISIN]; ok {
+					currentPrice = price
+				}
+			}
+
+			evalPositions = append(evalPositions, models.Position{
+				ISIN:           pos.ISIN,
+				Symbol:         pos.Symbol,
+				Quantity:       pos.Quantity,
+				AvgPrice:       pos.AverageCost,
+				Currency:       string(pos.Currency),
+				CurrencyRate:   pos.CurrencyRate,
+				CurrentPrice:   currentPrice,
+				MarketValueEUR: pos.MarketValueEUR,
+			})
+		}
+
+		availableCashEUR = opportunityCtx.AvailableCashEUR
+		totalPortfolioValueEUR = opportunityCtx.TotalPortfolioValueEUR
+	}
+
+	// Build evaluation context with all required data
+	evalContext := models.EvaluationContext{
+		PortfolioContext:       portfolioCtx,
+		Positions:              evalPositions,
+		Securities:             evalSecurities,
+		AvailableCashEUR:       availableCashEUR,
+		TotalPortfolioValueEUR: totalPortfolioValueEUR,
+		CurrentPrices:          portfolioCtx.CurrentPrices,
+		StocksByISIN:           stocksByISIN,
+		TransactionCostFixed:   transactionCostFixed,
+		TransactionCostPercent: transactionCostPercent,
+		CostPenaltyFactor:      0.1,
+		ScoringConfig:          s.buildScoringConfig(),
+	}
+
+	// Evaluate using worker pool with detailed progress
+	startTime := time.Now()
+	results := s.workerPool.EvaluateBatchDetailed(evalSequences, evalContext, progressCallback)
+	elapsed := time.Since(startTime)
+
+	s.log.Info().
+		Int("sequence_count", len(sequences)).
+		Int("result_count", len(results)).
+		Float64("elapsed_seconds", elapsed.Seconds()).
+		Float64("ms_per_sequence", float64(elapsed.Milliseconds())/float64(len(sequences))).
+		Msg("Batch evaluation with detailed progress complete")
+
+	// Convert results back to domain models
+	domainResults := make([]domain.EvaluationResult, len(results))
+	for i, result := range results {
+		sequenceHash := sequences[i].SequenceHash
+		if sequenceHash == "" {
+			sequenceHash = hashSequence(sequences[i].Actions)
+		}
+
+		divScore := evaluation.CalculateDiversificationScore(result.EndPortfolio)
+
+		breakdown := make(map[string]float64)
+		breakdown["diversification"] = divScore
+		breakdown["transaction_cost"] = result.TransactionCosts
+		breakdown["final_score"] = result.Score
+
+		endPositions := make(map[string]float64)
+		if result.EndPortfolio.Positions != nil {
+			for symbol, value := range result.EndPortfolio.Positions {
+				endPositions[symbol] = value
+			}
+		}
+
+		domainResults[i] = domain.EvaluationResult{
+			SequenceHash:         sequenceHash,
+			PortfolioHash:        portfolioHash,
+			EndScore:             result.Score,
+			ScoreBreakdown:       breakdown,
+			EndCash:              result.EndCashEUR,
+			EndContextPositions:  endPositions,
+			DiversificationScore: divScore,
+			TotalValue:           result.EndPortfolio.TotalValue,
+			Feasible:             result.Feasible,
+		}
+	}
+
+	return domainResults, nil
+}
+
 // EvaluateSingleSequence evaluates a single sequence.
 // Progress callback is not used for single sequence evaluation.
 func (s *Service) EvaluateSingleSequence(ctx context.Context, sequence domain.ActionSequence, portfolioHash string, config *domain.PlannerConfiguration, opportunityCtx *domain.OpportunityContext) (*domain.EvaluationResult, error) {

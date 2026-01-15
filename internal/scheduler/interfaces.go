@@ -112,8 +112,9 @@ type EvaluationServiceInterface interface {
 // PlannerServiceInterface defines the contract for planner service operations
 // Used by scheduler to enable testing with mocks
 type PlannerServiceInterface interface {
-	CreatePlan(ctx interface{}, config interface{}) (interface{}, error)                                             // Returns HolisticPlan
-	CreatePlanWithRejections(ctx interface{}, config interface{}, progressCallback interface{}) (interface{}, error) // Returns PlanResult
+	CreatePlan(ctx interface{}, config interface{}) (interface{}, error)                                                   // Returns HolisticPlan
+	CreatePlanWithRejections(ctx interface{}, config interface{}, progressCallback interface{}) (interface{}, error)       // Returns PlanResult
+	CreatePlanWithDetailedProgress(ctx interface{}, config interface{}, detailedCallback interface{}) (interface{}, error) // Returns PlanResult with detailed progress
 }
 
 // RecommendationRepositoryInterface defines the contract for recommendation repository operations
@@ -122,6 +123,7 @@ type RecommendationRepositoryInterface interface {
 	StorePlan(plan *planningdomain.HolisticPlan, portfolioHash string) error
 	StoreRejectedOpportunities(rejected []planningdomain.RejectedOpportunity, portfolioHash string) error
 	StorePreFilteredSecurities(preFiltered []planningdomain.PreFilteredSecurity, portfolioHash string) error
+	StoreRejectedSequences(rejected []planningdomain.RejectedSequence, portfolioHash string) error
 }
 
 // PriceClientInterface defines the contract for price fetching operations

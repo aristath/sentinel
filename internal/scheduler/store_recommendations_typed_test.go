@@ -13,6 +13,7 @@ type MockRecommendationRepoForStoreTyped struct {
 	StorePlanFunc                  func(plan *planningdomain.HolisticPlan, portfolioHash string) error
 	StoreRejectedOpportunitiesFunc func(rejected []planningdomain.RejectedOpportunity, portfolioHash string) error
 	StorePreFilteredSecuritiesFunc func(preFiltered []planningdomain.PreFilteredSecurity, portfolioHash string) error
+	StoreRejectedSequencesFunc     func(rejected []planningdomain.RejectedSequence, portfolioHash string) error
 }
 
 func (m *MockRecommendationRepoForStoreTyped) StorePlan(plan *planningdomain.HolisticPlan, portfolioHash string) error {
@@ -32,6 +33,13 @@ func (m *MockRecommendationRepoForStoreTyped) StoreRejectedOpportunities(rejecte
 func (m *MockRecommendationRepoForStoreTyped) StorePreFilteredSecurities(preFiltered []planningdomain.PreFilteredSecurity, portfolioHash string) error {
 	if m.StorePreFilteredSecuritiesFunc != nil {
 		return m.StorePreFilteredSecuritiesFunc(preFiltered, portfolioHash)
+	}
+	return nil
+}
+
+func (m *MockRecommendationRepoForStoreTyped) StoreRejectedSequences(rejected []planningdomain.RejectedSequence, portfolioHash string) error {
+	if m.StoreRejectedSequencesFunc != nil {
+		return m.StoreRejectedSequencesFunc(rejected, portfolioHash)
 	}
 	return nil
 }

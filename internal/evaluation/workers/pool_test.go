@@ -4,7 +4,9 @@ import (
 	"testing"
 
 	"github.com/aristath/sentinel/internal/evaluation/models"
+	"github.com/aristath/sentinel/internal/modules/planning/progress"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewWorkerPool(t *testing.T) {
@@ -137,4 +139,201 @@ func TestEvaluateBatch_PreservesOrder(t *testing.T) {
 		assert.Equal(t, sequences[i][0].Symbol, result.Sequence[0].Symbol,
 			"Result %d should correspond to sequence %d", i, i)
 	}
+}
+
+// Tests for EvaluateBatchDetailed with detailed progress reporting
+
+func TestEvaluateBatchDetailed_WithDetailedProgress(t *testing.T) {
+	pool := NewWorkerPool(2)
+
+	sequences := [][]models.ActionCandidate{
+		{{Symbol: "A", Side: "SELL", Quantity: 1, ValueEUR: 100}},
+		{{Symbol: "B", Side: "SELL", Quantity: 1, ValueEUR: 100}},
+		{{Symbol: "C", Side: "SELL", Quantity: 1, ValueEUR: 100}},
+	}
+
+	context := models.EvaluationContext{
+		AvailableCashEUR: 1000,
+		PortfolioContext: models.PortfolioContext{
+			TotalValue: 10000,
+			Positions: map[string]float64{
+				"A": 100, "B": 100, "C": 100,
+			},
+		},
+	}
+
+	var progressUpdates []progress.Update
+
+	callback := func(update progress.Update) {
+		progressUpdates = append(progressUpdates, update)
+	}
+
+	results := pool.EvaluateBatchDetailed(sequences, context, callback)
+
+	// Should have results for all sequences
+	assert.Len(t, results, 3)
+
+	// Should have received progress updates
+	assert.NotEmpty(t, progressUpdates)
+
+	// Verify progress update structure
+	for _, update := range progressUpdates {
+		assert.Equal(t, "sequence_evaluation", update.Phase)
+		assert.NotNil(t, update.Details)
+	}
+}
+
+func TestEvaluateBatchDetailed_DetailsContent(t *testing.T) {
+	pool := NewWorkerPool(2)
+
+	sequences := [][]models.ActionCandidate{
+		{{Symbol: "A", Side: "SELL", Quantity: 1, ValueEUR: 100}},
+		{{Symbol: "B", Side: "SELL", Quantity: 1, ValueEUR: 100}},
+	}
+
+	context := models.EvaluationContext{
+		AvailableCashEUR: 1000,
+		PortfolioContext: models.PortfolioContext{
+			TotalValue: 10000,
+			Positions:  map[string]float64{"A": 100, "B": 100},
+		},
+	}
+
+	var lastUpdate progress.Update
+
+	callback := func(update progress.Update) {
+		lastUpdate = update
+	}
+
+	pool.EvaluateBatchDetailed(sequences, context, callback)
+
+	// Final update should contain expected detail keys
+	require.NotNil(t, lastUpdate.Details)
+	assert.Contains(t, lastUpdate.Details, "workers_active")
+	assert.Contains(t, lastUpdate.Details, "feasible_count")
+	assert.Contains(t, lastUpdate.Details, "infeasible_count")
+	assert.Contains(t, lastUpdate.Details, "best_score")
+}
+
+func TestEvaluateBatchDetailed_NilCallback(t *testing.T) {
+	pool := NewWorkerPool(2)
+
+	sequences := [][]models.ActionCandidate{
+		{{Symbol: "A", Side: "SELL", Quantity: 1, ValueEUR: 100}},
+	}
+
+	context := models.EvaluationContext{
+		AvailableCashEUR: 1000,
+		PortfolioContext: models.PortfolioContext{
+			TotalValue: 10000,
+			Positions:  map[string]float64{"A": 100},
+		},
+	}
+
+	// Should not panic with nil callback
+	assert.NotPanics(t, func() {
+		pool.EvaluateBatchDetailed(sequences, context, nil)
+	})
+}
+
+func TestEvaluateBatchDetailed_TracksFeasibleCount(t *testing.T) {
+	pool := NewWorkerPool(2)
+
+	// Mix of feasible and potentially infeasible sequences
+	sequences := [][]models.ActionCandidate{
+		{{Symbol: "A", Side: "SELL", Quantity: 1, ValueEUR: 100}}, // Feasible
+		{{Symbol: "B", Side: "SELL", Quantity: 1, ValueEUR: 100}}, // Feasible
+	}
+
+	context := models.EvaluationContext{
+		AvailableCashEUR: 1000,
+		PortfolioContext: models.PortfolioContext{
+			TotalValue: 10000,
+			Positions:  map[string]float64{"A": 100, "B": 100},
+		},
+	}
+
+	var lastUpdate progress.Update
+
+	callback := func(update progress.Update) {
+		lastUpdate = update
+	}
+
+	pool.EvaluateBatchDetailed(sequences, context, callback)
+
+	// Final update should have feasible count
+	require.NotNil(t, lastUpdate.Details)
+	feasibleCount, ok := lastUpdate.Details["feasible_count"]
+	assert.True(t, ok, "Should have feasible_count in details")
+	assert.GreaterOrEqual(t, feasibleCount, 0)
+}
+
+func TestEvaluateBatchDetailed_TracksElapsedTime(t *testing.T) {
+	pool := NewWorkerPool(2)
+
+	sequences := [][]models.ActionCandidate{
+		{{Symbol: "A", Side: "SELL", Quantity: 1, ValueEUR: 100}},
+	}
+
+	context := models.EvaluationContext{
+		AvailableCashEUR: 1000,
+		PortfolioContext: models.PortfolioContext{
+			TotalValue: 10000,
+			Positions:  map[string]float64{"A": 100},
+		},
+	}
+
+	var lastUpdate progress.Update
+
+	callback := func(update progress.Update) {
+		lastUpdate = update
+	}
+
+	pool.EvaluateBatchDetailed(sequences, context, callback)
+
+	// Final update should have elapsed_ms
+	require.NotNil(t, lastUpdate.Details)
+	assert.Contains(t, lastUpdate.Details, "elapsed_ms")
+}
+
+func TestEvaluateBatchDetailed_TracksBestScore(t *testing.T) {
+	pool := NewWorkerPool(2)
+
+	sequences := [][]models.ActionCandidate{
+		{{Symbol: "A", Side: "SELL", Quantity: 1, ValueEUR: 100}},
+		{{Symbol: "B", Side: "SELL", Quantity: 1, ValueEUR: 100}},
+	}
+
+	context := models.EvaluationContext{
+		AvailableCashEUR: 1000,
+		PortfolioContext: models.PortfolioContext{
+			TotalValue: 10000,
+			Positions:  map[string]float64{"A": 100, "B": 100},
+		},
+	}
+
+	var lastUpdate progress.Update
+
+	callback := func(update progress.Update) {
+		lastUpdate = update
+	}
+
+	pool.EvaluateBatchDetailed(sequences, context, callback)
+
+	// Final update should have best_score
+	require.NotNil(t, lastUpdate.Details)
+	assert.Contains(t, lastUpdate.Details, "best_score")
+}
+
+func TestEvaluateBatchDetailed_Empty(t *testing.T) {
+	pool := NewWorkerPool(2)
+
+	var progressCalls int
+	callback := func(update progress.Update) {
+		progressCalls++
+	}
+
+	results := pool.EvaluateBatchDetailed(nil, models.EvaluationContext{}, callback)
+	assert.Empty(t, results)
+	assert.Equal(t, 0, progressCalls, "No progress should be reported for empty input")
 }

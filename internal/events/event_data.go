@@ -217,11 +217,27 @@ func (d *ErrorEventData) EventType() EventType {
 	return ErrorOccurred
 }
 
-// JobProgressInfo contains progress information for a job
+// JobProgressInfo contains progress information for a job.
+// Supports hierarchical progress with Phase, SubPhase, and Details for rich progress reporting.
 type JobProgressInfo struct {
 	Current int    `json:"current"`
 	Total   int    `json:"total"`
 	Message string `json:"message,omitempty"`
+
+	// Phase identifies the current high-level operation (e.g., "opportunity_identification",
+	// "sequence_generation", "sequence_evaluation")
+	Phase string `json:"phase,omitempty"`
+
+	// SubPhase identifies the specific sub-operation within a phase (e.g., "profit_taking",
+	// "depth_3", "batch_1")
+	SubPhase string `json:"sub_phase,omitempty"`
+
+	// Details contains arbitrary key-value metrics for the current phase.
+	// Common keys include:
+	// - For opportunity_identification: calculators_total, calculators_done, candidates_so_far, filtered_so_far
+	// - For sequence_generation: candidates_count, current_depth, combinations_at_depth, sequences_generated
+	// - For sequence_evaluation: workers_active, feasible_count, infeasible_count, best_score, sequences_per_second
+	Details map[string]interface{} `json:"details,omitempty"`
 }
 
 // JobStatusData contains data for job lifecycle events

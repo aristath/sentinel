@@ -12,8 +12,11 @@ export const useAppStore = create((set, get) => ({
   markets: {},
 
   // Job status tracking
-  runningJobs: {},     // Map: jobId -> { jobType, status, description, startedAt, progress }
+  runningJobs: {},     // Map: jobId -> { jobType, status, description, startedAt, progress, stages }
   completedJobs: {},   // Map: jobId -> { jobType, status, description, completedAt, duration }
+
+  // Last completed planner run (persists for debugging until next run starts)
+  lastPlannerRun: null,
 
   // Recommendations
   recommendations: null,
@@ -199,19 +202,27 @@ export const useAppStore = create((set, get) => ({
   // Job status management (called by event handlers)
   addRunningJob: (job) => {
     const { jobId, jobType, status, description, startedAt } = job;
-    set((state) => ({
-      runningJobs: {
-        ...state.runningJobs,
-        [jobId]: {
-          jobId,
-          jobType,
-          status,
-          description,
-          startedAt,
-          progress: null,
+    set((state) => {
+      const newState = {
+        runningJobs: {
+          ...state.runningJobs,
+          [jobId]: {
+            jobId,
+            jobType,
+            status,
+            description,
+            startedAt,
+            progress: null,
+            stages: null,
+          },
         },
-      },
-    }));
+      };
+      // Clear lastPlannerRun when a new planner_batch starts
+      if (jobType === 'planner_batch') {
+        newState.lastPlannerRun = null;
+      }
+      return newState;
+    });
   },
 
   updateJobProgress: (jobId, progress) => {
@@ -219,12 +230,23 @@ export const useAppStore = create((set, get) => ({
       const job = state.runningJobs[jobId];
       if (!job) return state;
 
+      // Extract stages from details if present (for planner_batch)
+      const stages = progress?.details?.stages || job.stages;
+
       return {
         runningJobs: {
           ...state.runningJobs,
           [jobId]: {
             ...job,
-            progress,
+            progress: {
+              current: progress.current,
+              total: progress.total,
+              message: progress.message,
+              phase: progress.phase || null,
+              subPhase: progress.sub_phase || null,
+              details: progress.details || null,
+            },
+            stages,
           },
         },
       };
@@ -258,13 +280,27 @@ export const useAppStore = create((set, get) => ({
         });
       }, 4000);
 
-      return {
+      const newState = {
         runningJobs: remainingRunning,
         completedJobs: {
           ...state.completedJobs,
           [jobId]: completedJobData,
         },
       };
+
+      // Save planner_batch runs to lastPlannerRun for debugging
+      if (job.jobType === 'planner_batch') {
+        newState.lastPlannerRun = {
+          completedAt: new Date().toISOString(),
+          totalDuration: duration,
+          stages: job.stages || null,
+          status,
+          error: error || null,
+          summary: job.progress?.details || null,
+        };
+      }
+
+      return newState;
     });
   },
 

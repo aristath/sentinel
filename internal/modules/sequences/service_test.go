@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/aristath/sentinel/internal/modules/planning/domain"
+	"github.com/aristath/sentinel/internal/modules/planning/progress"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -350,4 +351,127 @@ func TestGeneratorProgressCallbackEarlyTermination(t *testing.T) {
 	assert.Len(t, sequences, 1, "Should have only 1 sequence due to MaxSequences limit")
 	// Progress callback should have been called at least once (depth 1)
 	assert.GreaterOrEqual(t, progressCalls, 1, "Progress should be called at least for depth 1")
+}
+
+// Tests for Service.GenerateSequencesWithDetailedProgress
+
+func TestService_GenerateSequencesWithDetailedProgress(t *testing.T) {
+	log := zerolog.Nop()
+	service := NewService(log, nil, nil)
+
+	opportunities := domain.OpportunitiesByCategory{
+		domain.OpportunityCategoryProfitTaking: []domain.ActionCandidate{
+			{Side: "SELL", Symbol: "A", ISIN: "ISIN_A", Quantity: 10, ValueEUR: 100, Priority: 0.9},
+			{Side: "SELL", Symbol: "B", ISIN: "ISIN_B", Quantity: 10, ValueEUR: 100, Priority: 0.8},
+		},
+		domain.OpportunityCategoryOpportunityBuys: []domain.ActionCandidate{
+			{Side: "BUY", Symbol: "C", ISIN: "ISIN_C", Quantity: 3, ValueEUR: 300, Priority: 0.6},
+		},
+	}
+
+	ctx := &domain.OpportunityContext{
+		AllowSell:           true,
+		AllowBuy:            true,
+		AvailableCashEUR:    1000,
+		RecentlySoldISINs:   make(map[string]bool),
+		RecentlyBoughtISINs: make(map[string]bool),
+		IneligibleISINs:     make(map[string]bool),
+	}
+
+	config := &domain.PlannerConfiguration{
+		MaxDepth: 3,
+	}
+
+	var progressUpdates []progress.Update
+
+	callback := func(update progress.Update) {
+		progressUpdates = append(progressUpdates, update)
+	}
+
+	sequences, err := service.GenerateSequencesWithDetailedProgress(opportunities, ctx, config, callback)
+
+	require.NoError(t, err)
+	assert.NotEmpty(t, sequences)
+
+	// Should have received detailed progress updates
+	assert.NotEmpty(t, progressUpdates)
+
+	// Verify progress update structure
+	for _, update := range progressUpdates {
+		assert.Equal(t, "sequence_generation", update.Phase)
+		assert.NotEmpty(t, update.SubPhase)
+		assert.NotNil(t, update.Details)
+	}
+}
+
+func TestService_GenerateSequencesWithDetailedProgress_NilCallback(t *testing.T) {
+	log := zerolog.Nop()
+	service := NewService(log, nil, nil)
+
+	opportunities := domain.OpportunitiesByCategory{
+		domain.OpportunityCategoryProfitTaking: []domain.ActionCandidate{
+			{Side: "SELL", Symbol: "A", ISIN: "ISIN_A", Quantity: 10, ValueEUR: 100, Priority: 0.9},
+		},
+	}
+
+	ctx := &domain.OpportunityContext{
+		AllowSell:           true,
+		AllowBuy:            true,
+		AvailableCashEUR:    1000,
+		RecentlySoldISINs:   make(map[string]bool),
+		RecentlyBoughtISINs: make(map[string]bool),
+		IneligibleISINs:     make(map[string]bool),
+	}
+
+	config := &domain.PlannerConfiguration{
+		MaxDepth: 2,
+	}
+
+	// Should not panic with nil callback
+	assert.NotPanics(t, func() {
+		_, err := service.GenerateSequencesWithDetailedProgress(opportunities, ctx, config, nil)
+		assert.NoError(t, err)
+	})
+}
+
+func TestService_GenerateSequencesWithDetailedProgress_DetailsContent(t *testing.T) {
+	log := zerolog.Nop()
+	service := NewService(log, nil, nil)
+
+	opportunities := domain.OpportunitiesByCategory{
+		domain.OpportunityCategoryProfitTaking: []domain.ActionCandidate{
+			{Side: "SELL", Symbol: "A", ISIN: "ISIN_A", Quantity: 10, ValueEUR: 100, Priority: 0.9},
+			{Side: "SELL", Symbol: "B", ISIN: "ISIN_B", Quantity: 5, ValueEUR: 50, Priority: 0.8},
+		},
+	}
+
+	ctx := &domain.OpportunityContext{
+		AllowSell:           true,
+		AllowBuy:            true,
+		AvailableCashEUR:    1000,
+		RecentlySoldISINs:   make(map[string]bool),
+		RecentlyBoughtISINs: make(map[string]bool),
+		IneligibleISINs:     make(map[string]bool),
+	}
+
+	config := &domain.PlannerConfiguration{
+		MaxDepth: 2,
+	}
+
+	var lastUpdate progress.Update
+
+	callback := func(update progress.Update) {
+		lastUpdate = update
+	}
+
+	_, err := service.GenerateSequencesWithDetailedProgress(opportunities, ctx, config, callback)
+
+	require.NoError(t, err)
+
+	// Final update should contain expected detail keys
+	require.NotNil(t, lastUpdate.Details)
+	assert.Contains(t, lastUpdate.Details, "candidates_count")
+	assert.Contains(t, lastUpdate.Details, "current_depth")
+	assert.Contains(t, lastUpdate.Details, "combinations_at_depth")
+	assert.Contains(t, lastUpdate.Details, "sequences_generated")
 }

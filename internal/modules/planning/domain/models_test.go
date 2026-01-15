@@ -104,6 +104,149 @@ func TestCalculatorResult(t *testing.T) {
 	})
 }
 
+func TestRejectedSequence(t *testing.T) {
+	t.Run("creates with all fields", func(t *testing.T) {
+		rs := RejectedSequence{
+			Rank: 2,
+			Actions: []ActionCandidate{
+				{Side: "SELL", Symbol: "AAPL", Quantity: 5, ValueEUR: 875.50},
+				{Side: "BUY", Symbol: "GOOGL", Quantity: 3, ValueEUR: 450.25},
+			},
+			Score:    0.843,
+			Feasible: true,
+			Reason:   "lower_score",
+		}
+
+		assert.Equal(t, 2, rs.Rank)
+		assert.Len(t, rs.Actions, 2)
+		assert.Equal(t, "SELL", rs.Actions[0].Side)
+		assert.Equal(t, "AAPL", rs.Actions[0].Symbol)
+		assert.Equal(t, 0.843, rs.Score)
+		assert.True(t, rs.Feasible)
+		assert.Equal(t, "lower_score", rs.Reason)
+	})
+
+	t.Run("infeasible sequence", func(t *testing.T) {
+		rs := RejectedSequence{
+			Rank: 100,
+			Actions: []ActionCandidate{
+				{Side: "BUY", Symbol: "NVDA", Quantity: 100, ValueEUR: 50000.00},
+			},
+			Score:    0.412,
+			Feasible: false,
+			Reason:   "insufficient_cash",
+		}
+
+		assert.Equal(t, 100, rs.Rank)
+		assert.Len(t, rs.Actions, 1)
+		assert.Equal(t, "NVDA", rs.Actions[0].Symbol)
+		assert.Equal(t, 0.412, rs.Score)
+		assert.False(t, rs.Feasible)
+		assert.Equal(t, "insufficient_cash", rs.Reason)
+	})
+
+	t.Run("single action sequence", func(t *testing.T) {
+		rs := RejectedSequence{
+			Rank: 3,
+			Actions: []ActionCandidate{
+				{Side: "BUY", Symbol: "MSFT", Quantity: 10, ValueEUR: 3500.00},
+			},
+			Score:    0.841,
+			Feasible: true,
+			Reason:   "lower_score",
+		}
+
+		assert.Equal(t, 3, rs.Rank)
+		assert.Len(t, rs.Actions, 1)
+		assert.Equal(t, "BUY", rs.Actions[0].Side)
+		assert.Equal(t, 0.841, rs.Score)
+		assert.True(t, rs.Feasible)
+		assert.Equal(t, "lower_score", rs.Reason)
+	})
+}
+
+func TestPlannerRunSummary(t *testing.T) {
+	t.Run("creates with all metrics", func(t *testing.T) {
+		summary := PlannerRunSummary{
+			Candidates:          15,
+			SequencesTotal:      2500,
+			SequencesFeasible:   2100,
+			SequencesInfeasible: 400,
+			BestScore:           0.847,
+			AvgScore:            0.612,
+			ThroughputSeqPerSec: 520.5,
+			PeakMemoryMB:        45.2,
+			TotalDurationMS:     4812,
+		}
+
+		assert.Equal(t, 15, summary.Candidates)
+		assert.Equal(t, 2500, summary.SequencesTotal)
+		assert.Equal(t, 2100, summary.SequencesFeasible)
+		assert.Equal(t, 400, summary.SequencesInfeasible)
+		assert.Equal(t, 0.847, summary.BestScore)
+		assert.Equal(t, 0.612, summary.AvgScore)
+		assert.Equal(t, 520.5, summary.ThroughputSeqPerSec)
+		assert.Equal(t, 45.2, summary.PeakMemoryMB)
+		assert.Equal(t, int64(4812), summary.TotalDurationMS)
+	})
+}
+
+func TestStageInfo(t *testing.T) {
+	t.Run("pending stage", func(t *testing.T) {
+		stage := StageInfo{
+			Name:   "Store recommendations",
+			Status: StageStatusPending,
+		}
+
+		assert.Equal(t, "Store recommendations", stage.Name)
+		assert.Equal(t, StageStatusPending, stage.Status)
+		assert.Equal(t, int64(0), stage.DurationMS)
+	})
+
+	t.Run("running stage", func(t *testing.T) {
+		stage := StageInfo{
+			Name:   "Creating trade plan",
+			Status: StageStatusRunning,
+		}
+
+		assert.Equal(t, "Creating trade plan", stage.Name)
+		assert.Equal(t, StageStatusRunning, stage.Status)
+	})
+
+	t.Run("completed stage with duration", func(t *testing.T) {
+		stage := StageInfo{
+			Name:       "Portfolio hash",
+			Status:     StageStatusCompleted,
+			DurationMS: 23,
+		}
+
+		assert.Equal(t, "Portfolio hash", stage.Name)
+		assert.Equal(t, StageStatusCompleted, stage.Status)
+		assert.Equal(t, int64(23), stage.DurationMS)
+	})
+
+	t.Run("completed stage with details", func(t *testing.T) {
+		stage := StageInfo{
+			Name:       "Creating trade plan",
+			Status:     StageStatusCompleted,
+			DurationMS: 4521,
+			Details: map[string]any{
+				"candidates":         15,
+				"sequences_total":    2500,
+				"sequences_feasible": 2100,
+				"best_score":         0.847,
+			},
+		}
+
+		assert.Equal(t, "Creating trade plan", stage.Name)
+		assert.Equal(t, StageStatusCompleted, stage.Status)
+		assert.Equal(t, int64(4521), stage.DurationMS)
+		assert.NotNil(t, stage.Details)
+		assert.Equal(t, 15, stage.Details["candidates"])
+		assert.Equal(t, 0.847, stage.Details["best_score"])
+	})
+}
+
 func TestOpportunitiesResultByCategory(t *testing.T) {
 	t.Run("organizes by category with pre-filtered", func(t *testing.T) {
 		result := OpportunitiesResultByCategory{

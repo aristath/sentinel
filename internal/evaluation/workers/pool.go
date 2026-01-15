@@ -2,7 +2,10 @@
 package workers
 
 import (
+	"fmt"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/aristath/sentinel/internal/evaluation"
 	"github.com/aristath/sentinel/internal/evaluation/models"
@@ -87,6 +90,118 @@ func (wp *WorkerPool) EvaluateBatch(
 		resultSlice[result.index] = result.evalResult
 		completed++
 		progress.Call(progressCallback, completed, numSequences, "Evaluating sequences")
+	}
+
+	return resultSlice
+}
+
+// EvaluateBatchDetailed evaluates multiple sequences with detailed progress reporting.
+// This method provides rich progress metrics for debugging and UI display.
+//
+// Args:
+//   - sequences: List of sequences to evaluate
+//   - context: Evaluation context shared by all sequences
+//   - progressCallback: Optional callback for detailed progress with metrics
+//
+// Returns:
+//   - List of evaluation results (same order as input sequences)
+func (wp *WorkerPool) EvaluateBatchDetailed(
+	sequences [][]models.ActionCandidate,
+	context models.EvaluationContext,
+	progressCallback progress.DetailedCallback,
+) []models.SequenceEvaluationResult {
+	numSequences := len(sequences)
+	if numSequences == 0 {
+		return []models.SequenceEvaluationResult{}
+	}
+
+	startTime := time.Now()
+
+	// Create channels for work distribution and result collection
+	jobs := make(chan jobItem, numSequences)
+	results := make(chan resultItem, numSequences)
+
+	// Start workers
+	var wg sync.WaitGroup
+	numActualWorkers := wp.numWorkers
+	if numSequences < numActualWorkers {
+		numActualWorkers = numSequences
+	}
+
+	// Track active workers using atomic counter
+	var activeWorkers int64
+
+	for i := 0; i < numActualWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			atomic.AddInt64(&activeWorkers, 1)
+			defer atomic.AddInt64(&activeWorkers, -1)
+			worker(jobs, results, context)
+		}()
+	}
+
+	// Send jobs to workers
+	for idx, sequence := range sequences {
+		jobs <- jobItem{
+			index:    idx,
+			sequence: sequence,
+		}
+	}
+	close(jobs)
+
+	// Wait for all workers to finish
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Collect results and report detailed progress
+	resultSlice := make([]models.SequenceEvaluationResult, numSequences)
+	completed := 0
+	feasibleCount := 0
+	infeasibleCount := 0
+	var bestScore float64
+
+	for result := range results {
+		resultSlice[result.index] = result.evalResult
+		completed++
+
+		// Track feasibility
+		if result.evalResult.Feasible {
+			feasibleCount++
+			// Track best score among feasible sequences
+			if result.evalResult.Score > bestScore {
+				bestScore = result.evalResult.Score
+			}
+		} else {
+			infeasibleCount++
+		}
+
+		// Calculate throughput
+		elapsed := time.Since(startTime)
+		elapsedMs := elapsed.Milliseconds()
+		var throughput float64
+		if elapsedMs > 0 {
+			throughput = float64(completed) / elapsed.Seconds()
+		}
+
+		// Report detailed progress
+		progress.CallDetailed(progressCallback, progress.Update{
+			Phase:    "sequence_evaluation",
+			SubPhase: fmt.Sprintf("batch_%d", completed),
+			Current:  completed,
+			Total:    numSequences,
+			Message:  fmt.Sprintf("Evaluated %d/%d sequences", completed, numSequences),
+			Details: map[string]any{
+				"workers_active":       int(atomic.LoadInt64(&activeWorkers)),
+				"feasible_count":       feasibleCount,
+				"infeasible_count":     infeasibleCount,
+				"best_score":           bestScore,
+				"elapsed_ms":           elapsedMs,
+				"sequences_per_second": throughput,
+			},
+		})
 	}
 
 	return resultSlice

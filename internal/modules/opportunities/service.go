@@ -6,6 +6,7 @@ import (
 
 	"github.com/aristath/sentinel/internal/modules/opportunities/calculators"
 	"github.com/aristath/sentinel/internal/modules/planning/domain"
+	"github.com/aristath/sentinel/internal/modules/planning/progress"
 	"github.com/rs/zerolog"
 )
 
@@ -49,7 +50,17 @@ func (s *Service) IdentifyOpportunitiesWithExclusions(
 	ctx *domain.OpportunityContext,
 	config *domain.PlannerConfiguration,
 ) (domain.OpportunitiesResultByCategory, error) {
-	s.log.Info().Msg("Identifying opportunities with exclusions")
+	return s.IdentifyOpportunitiesWithProgress(ctx, config, nil)
+}
+
+// IdentifyOpportunitiesWithProgress identifies all trading opportunities with detailed
+// progress reporting. The callback receives updates for each calculator that runs.
+func (s *Service) IdentifyOpportunitiesWithProgress(
+	ctx *domain.OpportunityContext,
+	config *domain.PlannerConfiguration,
+	progressCallback progress.DetailedCallback,
+) (domain.OpportunitiesResultByCategory, error) {
+	s.log.Info().Msg("Identifying opportunities with progress")
 
 	if ctx == nil {
 		return nil, fmt.Errorf("opportunity context is nil")
@@ -59,8 +70,23 @@ func (s *Service) IdentifyOpportunitiesWithExclusions(
 		return nil, fmt.Errorf("planner configuration is nil")
 	}
 
-	// Use registry to run all enabled calculators
-	results, err := s.registry.IdentifyOpportunitiesWithExclusions(ctx, config)
+	// Convert progress.DetailedCallback to calculators.ProgressCallback
+	var registryCallback calculators.ProgressCallback
+	if progressCallback != nil {
+		registryCallback = func(update calculators.ProgressUpdate) {
+			progressCallback(progress.Update{
+				Phase:    update.Phase,
+				SubPhase: update.SubPhase,
+				Current:  update.Current,
+				Total:    update.Total,
+				Message:  update.Message,
+				Details:  update.Details,
+			})
+		}
+	}
+
+	// Use registry to run all enabled calculators with progress
+	results, err := s.registry.IdentifyOpportunitiesWithProgress(ctx, config, registryCallback)
 	if err != nil {
 		return nil, fmt.Errorf("failed to identify opportunities: %w", err)
 	}

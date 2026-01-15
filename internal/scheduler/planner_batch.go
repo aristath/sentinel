@@ -6,10 +6,18 @@ import (
 
 	"github.com/aristath/sentinel/internal/events"
 	"github.com/aristath/sentinel/internal/modules/planning"
+	"github.com/aristath/sentinel/internal/modules/planning/progress"
 	planningrepo "github.com/aristath/sentinel/internal/modules/planning/repository"
 	"github.com/aristath/sentinel/internal/queue"
 	"github.com/rs/zerolog"
 )
+
+// StageInfo represents a stage in the planner batch execution
+type StageInfo struct {
+	Name       string  `json:"name"`
+	Status     string  `json:"status"` // "pending", "running", "completed", "failed"
+	DurationMs float64 `json:"duration_ms,omitempty"`
+}
 
 // PlannerBatchJob orchestrates individual planning jobs to generate trading recommendations
 type PlannerBatchJob struct {
@@ -87,16 +95,52 @@ func (j *PlannerBatchJob) Run() error {
 	}
 	const totalSteps = 5
 
-	// Step 1: Generate portfolio hash (still needed for plan metadata)
-	if reporter != nil {
-		reporter.Report(1, totalSteps, "Generating portfolio hash")
+	// Initialize stage tracking
+	stages := []StageInfo{
+		{Name: "Portfolio hash", Status: "pending"},
+		{Name: "Optimizer weights", Status: "pending"},
+		{Name: "Opportunity context", Status: "pending"},
+		{Name: "Create trade plan", Status: "pending"},
+		{Name: "Store recommendations", Status: "pending"},
 	}
+
+	// Helper to report current stages state
+	reportStages := func(current int, message string) {
+		if reporter != nil {
+			stagesAsAny := make([]interface{}, len(stages))
+			for i, s := range stages {
+				stagesAsAny[i] = s
+			}
+			reporter.ReportWithDetails(current, totalSteps, message, "planner_batch", stages[current-1].Name, map[string]interface{}{
+				"stages": stagesAsAny,
+			})
+		}
+	}
+
+	// Helper to mark stage as running and report
+	startStage := func(idx int) {
+		stages[idx].Status = "running"
+		reportStages(idx+1, stages[idx].Name)
+	}
+
+	// Helper to update stage status and report progress
+	updateStage := func(idx int, status string, durationMs float64) {
+		stages[idx].Status = status
+		stages[idx].DurationMs = durationMs
+		reportStages(idx+1, stages[idx].Name)
+	}
+
+	// Step 1: Generate portfolio hash (still needed for plan metadata)
+	step1Start := time.Now()
+	startStage(0)
 	if j.generatePortfolioHashJob == nil {
 		return fmt.Errorf("generate portfolio hash job not available")
 	}
 	if err := j.generatePortfolioHashJob.Run(); err != nil {
+		updateStage(0, "failed", float64(time.Since(step1Start).Milliseconds()))
 		return fmt.Errorf("failed to generate portfolio hash: %w", err)
 	}
+	updateStage(0, "completed", float64(time.Since(step1Start).Milliseconds()))
 
 	// Get portfolio hash from job (for metadata/logging only, not for skip logic)
 	hashJob, ok := j.generatePortfolioHashJob.(*GeneratePortfolioHashJob)
@@ -110,9 +154,8 @@ func (j *PlannerBatchJob) Run() error {
 		Msg("Generating new plan")
 
 	// Step 2: Get optimizer weights (optional - if available)
-	if reporter != nil {
-		reporter.Report(2, totalSteps, "Getting optimizer weights")
-	}
+	step2Start := time.Now()
+	startStage(1)
 	var optimizerWeights map[string]float64
 	if j.getOptimizerWeightsJob != nil {
 		if err := j.getOptimizerWeightsJob.Run(); err != nil {
@@ -125,11 +168,11 @@ func (j *PlannerBatchJob) Run() error {
 			}
 		}
 	}
+	updateStage(1, "completed", float64(time.Since(step2Start).Milliseconds()))
 
 	// Step 3: Build opportunity context
-	if reporter != nil {
-		reporter.Report(3, totalSteps, "Building opportunity context")
-	}
+	step3Start := time.Now()
+	startStage(2)
 	if j.buildOpportunityContextJob == nil {
 		return fmt.Errorf("build opportunity context job not available")
 	}
@@ -142,8 +185,10 @@ func (j *PlannerBatchJob) Run() error {
 		contextJob.SetOptimizerTargetWeights(optimizerWeights)
 	}
 	if err := j.buildOpportunityContextJob.Run(); err != nil {
+		updateStage(2, "failed", float64(time.Since(step3Start).Milliseconds()))
 		return fmt.Errorf("failed to build opportunity context: %w", err)
 	}
+	updateStage(2, "completed", float64(time.Since(step3Start).Milliseconds()))
 
 	// Get opportunity context from job (already type-asserted above)
 	opportunityContext := contextJob.GetOpportunityContext()
@@ -151,10 +196,9 @@ func (j *PlannerBatchJob) Run() error {
 		return fmt.Errorf("opportunity context is nil")
 	}
 
-	// Step 4: Create trade plan
-	if reporter != nil {
-		reporter.Report(4, totalSteps, "Creating trade plan")
-	}
+	// Step 4: Create trade plan with detailed progress
+	step4Start := time.Now()
+	startStage(3)
 	if j.createTradePlanJob == nil {
 		return fmt.Errorf("create trade plan job not available")
 	}
@@ -163,9 +207,21 @@ func (j *PlannerBatchJob) Run() error {
 		return fmt.Errorf("create trade plan job has wrong type")
 	}
 	planJob.SetOpportunityContext(opportunityContext)
+
+	// Create detailed progress callback that wraps the reporter
+	if reporter != nil {
+		detailedCallback := func(update progress.Update) {
+			// Forward detailed progress to the reporter with phase/subphase info
+			reporter.ReportWithDetails(4, totalSteps, update.Message, update.Phase, update.SubPhase, update.Details)
+		}
+		planJob.SetDetailedProgressCallback(detailedCallback)
+	}
+
 	if err := j.createTradePlanJob.Run(); err != nil {
+		updateStage(3, "failed", float64(time.Since(step4Start).Milliseconds()))
 		return fmt.Errorf("failed to create trade plan: %w", err)
 	}
+	updateStage(3, "completed", float64(time.Since(step4Start).Milliseconds()))
 
 	// Get plan from job (now returns typed *planningdomain.HolisticPlan)
 	plan := planJob.GetPlan()
@@ -174,9 +230,8 @@ func (j *PlannerBatchJob) Run() error {
 	}
 
 	// Step 5: Store recommendations
-	if reporter != nil {
-		reporter.Report(5, totalSteps, "Storing recommendations")
-	}
+	step5Start := time.Now()
+	startStage(4)
 	if j.storeRecommendationsJob == nil {
 		return fmt.Errorf("store recommendations job not available")
 	}
@@ -205,11 +260,22 @@ func (j *PlannerBatchJob) Run() error {
 			Msg("Passing pre-filtered securities to store job")
 	}
 
-	if err := j.storeRecommendationsJob.Run(); err != nil {
-		return fmt.Errorf("failed to store recommendations: %w", err)
+	// Pass rejected sequences from plan job to store job
+	rejectedSequences := planJob.GetRejectedSequences()
+	storeJob.SetRejectedSequences(rejectedSequences)
+	if len(rejectedSequences) > 0 {
+		j.log.Info().
+			Int("rejected_sequences_count", len(rejectedSequences)).
+			Msg("Passing rejected sequences to store job")
 	}
 
-	// Emit events
+	if err := j.storeRecommendationsJob.Run(); err != nil {
+		updateStage(4, "failed", float64(time.Since(step5Start).Milliseconds()))
+		return fmt.Errorf("failed to store recommendations: %w", err)
+	}
+	updateStage(4, "completed", float64(time.Since(step5Start).Milliseconds()))
+
+	// Emit events with final stage information
 	if j.eventManager != nil {
 		// plan is guaranteed to be non-nil here (checked above)
 		j.eventManager.EmitTyped(events.PlanGenerated, "planner", &events.PlanGeneratedData{

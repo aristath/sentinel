@@ -64,11 +64,12 @@ func NewPlanner(opportunitiesService *opportunities.Service, sequencesService *s
 	}
 }
 
-// PlanResult wraps a HolisticPlan with rejected opportunities and pre-filtered securities
+// PlanResult wraps a HolisticPlan with rejected opportunities, pre-filtered securities, and rejected sequences
 type PlanResult struct {
 	Plan                  *domain.HolisticPlan
 	RejectedOpportunities []domain.RejectedOpportunity
 	PreFilteredSecurities []domain.PreFilteredSecurity
+	RejectedSequences     []domain.RejectedSequence
 }
 
 func (p *Planner) CreatePlan(ctx *domain.OpportunityContext, config *domain.PlannerConfiguration) (*domain.HolisticPlan, error) {
@@ -77,6 +78,235 @@ func (p *Planner) CreatePlan(ctx *domain.OpportunityContext, config *domain.Plan
 		return nil, err
 	}
 	return planResult.Plan, nil
+}
+
+// CreatePlanWithDetailedProgress creates a holistic trading plan with detailed progress reporting.
+// The detailedCallback receives structured progress updates with phase, subphase, and metrics.
+// This method provides rich progress information for debugging and UI display.
+func (p *Planner) CreatePlanWithDetailedProgress(ctx *domain.OpportunityContext, config *domain.PlannerConfiguration, detailedCallback progress.DetailedCallback) (*PlanResult, error) {
+	p.log.Info().Msg("Creating holistic plan with detailed progress")
+
+	// Apply configuration to context
+	ctx.ApplyConfig(config)
+
+	// Track all identified opportunities for rejection tracking
+	allIdentifiedOpportunities := make(map[string]domain.ActionCandidate) // key: "symbol|side"
+	var identifiedOpportunitiesList []domain.ActionCandidate
+
+	// Step 1: Identify opportunities with per-calculator progress reporting
+	opportunitiesResult, err := p.opportunitiesService.IdentifyOpportunitiesWithProgress(ctx, config, detailedCallback)
+	if err != nil {
+		return nil, fmt.Errorf("failed to identify opportunities: %w", err)
+	}
+
+	// Extract opportunities for sequence generation
+	opportunities := opportunitiesResult.ToOpportunitiesByCategory()
+
+	// Collect all pre-filtered securities across categories
+	preFilteredSecurities := opportunitiesResult.AllPreFiltered()
+
+	// Count total candidates
+	totalCandidates := 0
+	for _, candidates := range opportunities {
+		totalCandidates += len(candidates)
+	}
+
+	// Report completion of opportunity identification
+	progress.CallDetailed(detailedCallback, progress.Update{
+		Phase:    "opportunity_identification",
+		SubPhase: "complete",
+		Current:  1,
+		Total:    1,
+		Message:  fmt.Sprintf("Identified %d trading opportunities", totalCandidates),
+		Details: map[string]any{
+			"total_candidates":   totalCandidates,
+			"pre_filtered_count": len(preFilteredSecurities),
+			"categories":         len(opportunities),
+		},
+	})
+
+	// Collect all identified opportunities
+	for _, candidates := range opportunities {
+		for _, candidate := range candidates {
+			key := fmt.Sprintf("%s|%s", candidate.Symbol, candidate.Side)
+			allIdentifiedOpportunities[key] = candidate
+			identifiedOpportunitiesList = append(identifiedOpportunitiesList, candidate)
+		}
+	}
+
+	// Step 2: Generate sequences with detailed progress
+	sequences, err := p.sequencesService.GenerateSequencesWithDetailedProgress(opportunities, ctx, config, detailedCallback)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate sequences: %w", err)
+	}
+
+	// Track which opportunities are in which sequences
+	opportunitiesInSequences := make(map[string]bool) // key: "symbol|side"
+	for _, seq := range sequences {
+		for _, action := range seq.Actions {
+			key := fmt.Sprintf("%s|%s", action.Symbol, action.Side)
+			opportunitiesInSequences[key] = true
+		}
+	}
+
+	if len(sequences) == 0 {
+		p.log.Info().Msg("No sequences generated")
+		rejected := p.buildRejectedOpportunities(identifiedOpportunitiesList, opportunitiesInSequences, nil, nil)
+		return &PlanResult{
+			Plan: &domain.HolisticPlan{
+				Steps:         []domain.HolisticStep{},
+				CurrentScore:  0.0,
+				EndStateScore: 0.0,
+				Feasible:      true,
+			},
+			RejectedOpportunities: rejected,
+			PreFilteredSecurities: preFilteredSecurities,
+		}, nil
+	}
+
+	// Step 3: Evaluate sequences using evaluation service with detailed progress
+	p.log.Info().Int("sequence_count", len(sequences)).Msg("Evaluating sequences")
+
+	// Generate portfolio hash
+	portfolioHash := p.generatePortfolioHash(ctx)
+
+	// Call evaluation service with detailed progress
+	evalCtx := context.Background()
+	results, err := p.evaluationService.BatchEvaluateDetailed(evalCtx, sequences, portfolioHash, config, ctx, detailedCallback)
+	if err != nil {
+		p.log.Error().Err(err).Msg("Evaluation failed, falling back to priority-based selection")
+		// Fallback: use priority-based selection if evaluation fails
+		bestSequence := p.selectByPriority(sequences)
+		// Track opportunities in selected sequence (bestSequence)
+		opportunitiesInSelectedSequence := make(map[string]bool)
+		for _, action := range bestSequence.Actions {
+			key := fmt.Sprintf("%s|%s", action.Symbol, action.Side)
+			opportunitiesInSelectedSequence[key] = true
+		}
+		plan := p.convertToPlan(bestSequence, ctx, config, 0.0, 0.0)
+		if len(plan.Steps) == 0 {
+			rejected := p.buildRejectedOpportunities(identifiedOpportunitiesList, opportunitiesInSequences, opportunitiesInSelectedSequence, nil)
+			return &PlanResult{
+				Plan: &domain.HolisticPlan{
+					Steps:         []domain.HolisticStep{},
+					CurrentScore:  0.0,
+					EndStateScore: 0.0,
+					Feasible:      true,
+				},
+				RejectedOpportunities: rejected,
+				PreFilteredSecurities: preFilteredSecurities,
+			}, nil
+		}
+		rejected := p.buildRejectedOpportunities(identifiedOpportunitiesList, opportunitiesInSequences, opportunitiesInSelectedSequence, plan)
+		return &PlanResult{
+			Plan:                  plan,
+			RejectedOpportunities: rejected,
+			PreFilteredSecurities: preFilteredSecurities,
+		}, nil
+	}
+
+	// Step 4: Select best sequences based on evaluation scores
+	bestSequences := p.selectBestSequences(sequences, results, config.MaxSequenceAttempts)
+	if len(bestSequences) == 0 {
+		rejected := p.buildRejectedOpportunities(identifiedOpportunitiesList, opportunitiesInSequences, nil, nil)
+		return &PlanResult{
+			Plan: &domain.HolisticPlan{
+				Steps:         []domain.HolisticStep{},
+				CurrentScore:  0.0,
+				EndStateScore: 0.0,
+				Feasible:      true,
+			},
+			RejectedOpportunities: rejected,
+			PreFilteredSecurities: preFilteredSecurities,
+		}, fmt.Errorf("no valid sequence found")
+	}
+
+	// Track which opportunities are in selected sequences (bestSequences)
+	opportunitiesInSelectedSequences := make(map[string]bool)
+	for _, seqResult := range bestSequences {
+		for _, action := range seqResult.Sequence.Actions {
+			key := fmt.Sprintf("%s|%s", action.Symbol, action.Side)
+			opportunitiesInSelectedSequences[key] = true
+		}
+	}
+
+	// Count feasible and infeasible sequences
+	feasibleCount := 0
+	infeasibleCount := 0
+	var bestScore float64
+	for _, result := range results {
+		if result.Feasible {
+			feasibleCount++
+			if result.EndScore > bestScore {
+				bestScore = result.EndScore
+			}
+		} else {
+			infeasibleCount++
+		}
+	}
+
+	// Report selection phase completion
+	progress.CallDetailed(detailedCallback, progress.Update{
+		Phase:    "sequence_selection",
+		SubPhase: "complete",
+		Current:  1,
+		Total:    1,
+		Message:  fmt.Sprintf("Selected best sequence from %d candidates", len(bestSequences)),
+		Details: map[string]any{
+			"total_sequences":  len(sequences),
+			"feasible_count":   feasibleCount,
+			"infeasible_count": infeasibleCount,
+			"best_score":       bestScore,
+			"selected_count":   len(bestSequences),
+		},
+	})
+
+	// Step 5: Select the best sequence (highest score)
+	if len(bestSequences) == 0 {
+		p.log.Info().Msg("No sequences generated")
+		rejected := p.buildRejectedOpportunities(identifiedOpportunitiesList, opportunitiesInSequences, nil, nil)
+		return &PlanResult{
+			Plan: &domain.HolisticPlan{
+				Steps:         []domain.HolisticStep{},
+				CurrentScore:  0.0,
+				EndStateScore: 0.0,
+				Feasible:      true,
+			},
+			RejectedOpportunities: rejected,
+			PreFilteredSecurities: preFilteredSecurities,
+		}, nil
+	}
+
+	// Take the best sequence (first in sorted list)
+	bestSequence := bestSequences[0]
+	bestPlan := p.convertToPlan(bestSequence.Sequence, ctx, config, 0.0, bestSequence.Result.EndScore)
+
+	p.log.Info().
+		Int("total_candidates", len(bestSequences)).
+		Int("steps", len(bestPlan.Steps)).
+		Float64("end_score", bestSequence.Result.EndScore).
+		Float64("improvement", bestSequence.Result.EndScore-bestPlan.CurrentScore).
+		Msg("Selected best sequence with detailed progress")
+
+	// Track which opportunities are in the selected sequence
+	opportunitiesInSelectedSequence := make(map[string]bool)
+	for _, action := range bestSequence.Sequence.Actions {
+		key := fmt.Sprintf("%s|%s", action.Symbol, action.Side)
+		opportunitiesInSelectedSequence[key] = true
+	}
+
+	// Build rejected opportunities
+	rejected := p.buildRejectedOpportunities(identifiedOpportunitiesList, opportunitiesInSequences, opportunitiesInSelectedSequence, bestPlan)
+
+	// Build rejected sequences (all sequences except the winning one)
+	rejectedSequences := p.buildRejectedSequences(sequences, results, bestSequence.Sequence.SequenceHash)
+
+	return &PlanResult{
+		Plan:                  bestPlan,
+		RejectedOpportunities: rejected,
+		PreFilteredSecurities: preFilteredSecurities,
+		RejectedSequences:     rejectedSequences,
+	}, nil
 }
 
 // CreatePlanWithRejections creates a holistic trading plan with rejection tracking.
@@ -257,10 +487,14 @@ func (p *Planner) CreatePlanWithRejections(ctx *domain.OpportunityContext, confi
 	// Build rejected opportunities
 	rejected := p.buildRejectedOpportunities(identifiedOpportunitiesList, opportunitiesInSequences, opportunitiesInSelectedSequence, bestPlan)
 
+	// Build rejected sequences (all sequences except the winning one)
+	rejectedSequences := p.buildRejectedSequences(sequences, results, bestSequence.Sequence.SequenceHash)
+
 	return &PlanResult{
 		Plan:                  bestPlan,
 		RejectedOpportunities: rejected,
 		PreFilteredSecurities: preFilteredSecurities,
+		RejectedSequences:     rejectedSequences,
 	}, nil
 }
 
@@ -608,4 +842,88 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// buildRejectedSequences builds a list of rejected sequences from evaluation results.
+// All sequences except the winning one (rank 1) are marked as rejected with appropriate reasons.
+func (p *Planner) buildRejectedSequences(sequences []domain.ActionSequence, results []domain.EvaluationResult, winningHash string) []domain.RejectedSequence {
+	if len(sequences) == 0 || len(results) == 0 {
+		return nil
+	}
+
+	// Create a map from sequence hash to evaluation result
+	resultsByHash := make(map[string]*domain.EvaluationResult)
+	for i := range results {
+		resultsByHash[results[i].SequenceHash] = &results[i]
+	}
+
+	// Create a map from sequence hash to sequence
+	sequencesByHash := make(map[string]domain.ActionSequence)
+	for _, seq := range sequences {
+		sequencesByHash[seq.SequenceHash] = seq
+	}
+
+	// Build list of all sequences with results (including infeasible)
+	type sequenceWithScore struct {
+		hash     string
+		sequence domain.ActionSequence
+		result   *domain.EvaluationResult
+	}
+	var allSequences []sequenceWithScore
+
+	for _, seq := range sequences {
+		result, ok := resultsByHash[seq.SequenceHash]
+		if !ok {
+			continue
+		}
+		allSequences = append(allSequences, sequenceWithScore{
+			hash:     seq.SequenceHash,
+			sequence: seq,
+			result:   result,
+		})
+	}
+
+	// Sort by score descending (feasible first, then by score)
+	for i := 0; i < len(allSequences)-1; i++ {
+		for j := i + 1; j < len(allSequences); j++ {
+			// Feasible sequences come before infeasible
+			if allSequences[i].result.Feasible != allSequences[j].result.Feasible {
+				if allSequences[j].result.Feasible {
+					allSequences[i], allSequences[j] = allSequences[j], allSequences[i]
+				}
+			} else if allSequences[i].result.EndScore < allSequences[j].result.EndScore {
+				allSequences[i], allSequences[j] = allSequences[j], allSequences[i]
+			}
+		}
+	}
+
+	// Build rejected sequences list (all except rank 1 / winning hash)
+	var rejected []domain.RejectedSequence
+	rank := 1
+	for _, sws := range allSequences {
+		if sws.hash == winningHash {
+			rank++ // Skip the winning sequence but still increment rank
+			continue
+		}
+
+		reason := "lower_score"
+		if !sws.result.Feasible {
+			if sws.result.Error != "" {
+				reason = sws.result.Error
+			} else {
+				reason = "infeasible"
+			}
+		}
+
+		rejected = append(rejected, domain.RejectedSequence{
+			Rank:     rank,
+			Actions:  sws.sequence.Actions,
+			Score:    sws.result.EndScore,
+			Feasible: sws.result.Feasible,
+			Reason:   reason,
+		})
+		rank++
+	}
+
+	return rejected
 }

@@ -23,8 +23,10 @@ type RecommendationRepository struct {
 	db                    *sql.DB                                         // cache.db
 	rejectedOpportunities map[string][]planningdomain.RejectedOpportunity // key: portfolioHash (in-memory)
 	preFilteredSecurities map[string][]planningdomain.PreFilteredSecurity // key: portfolioHash (in-memory)
+	rejectedSequences     map[string][]planningdomain.RejectedSequence    // key: portfolioHash (in-memory)
 	rejectedMu            sync.RWMutex
 	preFilteredMu         sync.RWMutex
+	rejectedSeqMu         sync.RWMutex
 	log                   zerolog.Logger
 }
 
@@ -59,6 +61,7 @@ func NewRecommendationRepository(db *sql.DB, log zerolog.Logger) *Recommendation
 		db:                    db,
 		rejectedOpportunities: make(map[string][]planningdomain.RejectedOpportunity),
 		preFilteredSecurities: make(map[string][]planningdomain.PreFilteredSecurity),
+		rejectedSequences:     make(map[string][]planningdomain.RejectedSequence),
 		log:                   log.With().Str("repository", "recommendation").Logger(),
 	}
 }
@@ -554,6 +557,14 @@ func (r *RecommendationRepository) GetRecommendationsAsPlan(getEvaluatedCount fu
 	}
 	r.preFilteredMu.RUnlock()
 
+	// Get rejected sequences for this portfolio hash
+	var rejectedSequences interface{} = nil
+	r.rejectedSeqMu.RLock()
+	if rejected, exists := r.rejectedSequences[portfolioHash]; exists && len(rejected) > 0 {
+		rejectedSequences = rejected
+	}
+	r.rejectedSeqMu.RUnlock()
+
 	// Build response matching frontend expectations
 	response := map[string]interface{}{
 		"steps":                   steps,
@@ -570,6 +581,10 @@ func (r *RecommendationRepository) GetRecommendationsAsPlan(getEvaluatedCount fu
 
 	if preFilteredSecurities != nil {
 		response["pre_filtered_securities"] = preFilteredSecurities
+	}
+
+	if rejectedSequences != nil {
+		response["rejected_sequences"] = rejectedSequences
 	}
 
 	return response, nil
@@ -773,4 +788,31 @@ func isEmergencyReason(reason string) bool {
 		}
 	}
 	return false
+}
+
+// StoreRejectedSequences stores rejected sequences for a portfolio hash (in-memory).
+// Rejected sequences are evaluated action sequences that were not selected for the final plan.
+func (r *RecommendationRepository) StoreRejectedSequences(rejected []planningdomain.RejectedSequence, portfolioHash string) error {
+	r.rejectedSeqMu.Lock()
+	defer r.rejectedSeqMu.Unlock()
+
+	r.rejectedSequences[portfolioHash] = rejected
+
+	r.log.Info().
+		Str("portfolio_hash", portfolioHash).
+		Int("rejected_sequences_count", len(rejected)).
+		Msg("Stored rejected sequences")
+
+	return nil
+}
+
+// GetRejectedSequences retrieves rejected sequences for a portfolio hash.
+func (r *RecommendationRepository) GetRejectedSequences(portfolioHash string) []planningdomain.RejectedSequence {
+	r.rejectedSeqMu.RLock()
+	defer r.rejectedSeqMu.RUnlock()
+
+	if rejected, exists := r.rejectedSequences[portfolioHash]; exists {
+		return rejected
+	}
+	return nil
 }

@@ -11,8 +11,9 @@ import (
 
 // MockPlannerService is a mock implementation of PlannerServiceInterface
 type MockPlannerService struct {
-	CreatePlanFunc               func(ctx interface{}, config interface{}) (interface{}, error)
-	CreatePlanWithRejectionsFunc func(ctx interface{}, config interface{}, progressCallback interface{}) (interface{}, error)
+	CreatePlanFunc                     func(ctx interface{}, config interface{}) (interface{}, error)
+	CreatePlanWithRejectionsFunc       func(ctx interface{}, config interface{}, progressCallback interface{}) (interface{}, error)
+	CreatePlanWithDetailedProgressFunc func(ctx interface{}, config interface{}, detailedCallback interface{}) (interface{}, error)
 }
 
 func (m *MockPlannerService) CreatePlan(ctx interface{}, config interface{}) (interface{}, error) {
@@ -27,6 +28,14 @@ func (m *MockPlannerService) CreatePlanWithRejections(ctx interface{}, config in
 		return m.CreatePlanWithRejectionsFunc(ctx, config, progressCallback)
 	}
 	return nil, nil
+}
+
+func (m *MockPlannerService) CreatePlanWithDetailedProgress(ctx interface{}, config interface{}, detailedCallback interface{}) (interface{}, error) {
+	if m.CreatePlanWithDetailedProgressFunc != nil {
+		return m.CreatePlanWithDetailedProgressFunc(ctx, config, detailedCallback)
+	}
+	// Fallback to CreatePlanWithRejections if DetailedProgress is not set
+	return m.CreatePlanWithRejections(ctx, config, nil)
 }
 
 // MockConfigRepoForPlan is a mock implementation of ConfigRepositoryInterface

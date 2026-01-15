@@ -1,15 +1,17 @@
-import { Card, Group, Text, Badge, Progress, Stack, Paper, ActionIcon, Loader } from '@mantine/core';
+import { Card, Group, Text, Badge, Stack, Paper, ActionIcon } from '@mantine/core';
 import { IconRefresh, IconRotateClockwise, IconX, IconPlus } from '@tabler/icons-react';
 import { useAppStore } from '../../stores/appStore';
 import { usePortfolioStore } from '../../stores/portfolioStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { formatCurrency } from '../../utils/formatters';
 import { api } from '../../api/client';
+import { PlannerProgressPanel, RejectedSequencesList } from '../planning';
 
 export function NextActionsCard() {
   const {
     recommendations,
     runningJobs,
+    lastPlannerRun,
     loading,
     fetchRecommendations,
     triggerPlannerBatch,
@@ -85,32 +87,12 @@ export function NextActionsCard() {
         </Group>
       </Group>
 
-      {/* Planner Job Status */}
-      {isPlanning && (
-        <Paper className="next-actions__planner-status" p="md" mb="md" style={{ border: '1px solid var(--mantine-color-blue-0)', backgroundColor: 'var(--mantine-color-dark-7)' }}>
-          <Group className="next-actions__planner-header" gap="xs" mb="sm">
-            <Loader size={14} color="blue" />
-            <Text className="next-actions__planner-description" size="sm" fw={600} c="blue">
-              {plannerJob.description || 'Planning...'}
-            </Text>
-          </Group>
-
-          {plannerJob.progress && plannerJob.progress.total > 0 && (
-            <div className="next-actions__planner-progress">
-              <Progress
-                className="next-actions__progress-bar"
-                value={(plannerJob.progress.current / plannerJob.progress.total) * 100}
-                size="sm"
-                mb="xs"
-                color="blue"
-              />
-              <Text className="next-actions__progress-text" size="xs" c="dimmed" ta="center">
-                Step {plannerJob.progress.current} of {plannerJob.progress.total}
-                {plannerJob.progress.description && ` - ${plannerJob.progress.description}`}
-              </Text>
-            </div>
-          )}
-        </Paper>
+      {/* Planner Progress Panel - shows when running or has last run data */}
+      {(isPlanning || lastPlannerRun) && (
+        <PlannerProgressPanel
+          job={plannerJob}
+          lastRun={isPlanning ? null : lastPlannerRun}
+        />
       )}
 
       {/* Empty State */}
@@ -419,6 +401,14 @@ export function NextActionsCard() {
           </div>
         );
       })()}
+
+      {/* Rejected Sequences - All evaluated sequences that weren't selected */}
+      {recommendations?.rejected_sequences && recommendations.rejected_sequences.length > 0 && (
+        <RejectedSequencesList
+          sequences={recommendations.rejected_sequences}
+          selectedScore={recommendations.end_state_score}
+        />
+      )}
     </Card>
   );
 }

@@ -36,11 +36,12 @@ func NewExhaustiveGenerator(log zerolog.Logger, enforcer *constraints.Enforcer) 
 
 // GenerationConfig contains parameters for sequence generation.
 type GenerationConfig struct {
-	MaxDepth         int               // Maximum number of actions per sequence (default: 8)
-	MaxSequences     int               // Maximum total sequences to generate (0 = unlimited)
-	AvailableCash    float64           // Available cash for feasibility checks
-	PruneInfeasible  bool              // Whether to prune cash-infeasible sequences during generation
-	ProgressCallback progress.Callback // Optional callback to report generation progress
+	MaxDepth                 int                       // Maximum number of actions per sequence (default: 8)
+	MaxSequences             int                       // Maximum total sequences to generate (0 = unlimited)
+	AvailableCash            float64                   // Available cash for feasibility checks
+	PruneInfeasible          bool                      // Whether to prune cash-infeasible sequences during generation
+	ProgressCallback         progress.Callback         // Optional callback to report generation progress (legacy)
+	DetailedProgressCallback progress.DetailedCallback // Optional callback for detailed progress with phase/subphase/details
 }
 
 // DefaultGenerationConfig returns sensible defaults for generation.
@@ -81,13 +82,37 @@ func (g *ExhaustiveGenerator) Generate(
 		effectiveMaxDepth = len(allCandidates)
 	}
 
+	// Track metrics for progress reporting
+	totalDuplicates := 0
+	totalInfeasiblePruned := 0
+
 	// Generate combinations from depth 1 to max_depth
 	for depth := 1; depth <= effectiveMaxDepth; depth++ {
-		// Report progress at each depth level
+		// Report progress at each depth level (legacy callback)
 		progress.Call(config.ProgressCallback, depth, effectiveMaxDepth,
 			fmt.Sprintf("Generating depth %d sequences", depth))
 
 		combos := g.generateCombinations(allCandidates, depth)
+		depthDuplicates := 0
+		depthInfeasible := 0
+
+		// Report detailed progress at start of depth
+		progress.CallDetailed(config.DetailedProgressCallback, progress.Update{
+			Phase:    "sequence_generation",
+			SubPhase: fmt.Sprintf("depth_%d", depth),
+			Current:  depth,
+			Total:    effectiveMaxDepth,
+			Message:  fmt.Sprintf("Generating depth %d sequences", depth),
+			Details: map[string]any{
+				"candidates_count":      len(allCandidates),
+				"current_depth":         depth,
+				"combinations_at_depth": len(combos),
+				"sequences_generated":   len(sequences),
+				"duplicates_removed":    totalDuplicates,
+				"infeasible_pruned":     totalInfeasiblePruned,
+			},
+		})
+
 		for _, combo := range combos {
 			// Normalize: Sort SELL before BUY for canonical order
 			normalized := g.normalizeSequence(combo)
@@ -95,12 +120,14 @@ func (g *ExhaustiveGenerator) Generate(
 			// Check for duplicates using order-independent hash
 			hash := g.computeSequenceHash(normalized)
 			if seen[hash] {
+				depthDuplicates++
 				continue
 			}
 
 			// Feasibility check: Can we afford this sequence?
 			if config.PruneInfeasible && config.AvailableCash > 0 {
 				if !g.checkCashFeasibility(normalized, config.AvailableCash) {
+					depthInfeasible++
 					continue
 				}
 			}
@@ -125,6 +152,29 @@ func (g *ExhaustiveGenerator) Generate(
 				return sequences
 			}
 		}
+
+		// Update totals
+		totalDuplicates += depthDuplicates
+		totalInfeasiblePruned += depthInfeasible
+
+		// Report detailed progress at end of depth
+		progress.CallDetailed(config.DetailedProgressCallback, progress.Update{
+			Phase:    "sequence_generation",
+			SubPhase: fmt.Sprintf("depth_%d", depth),
+			Current:  depth,
+			Total:    effectiveMaxDepth,
+			Message:  fmt.Sprintf("Completed depth %d", depth),
+			Details: map[string]any{
+				"candidates_count":        len(allCandidates),
+				"current_depth":           depth,
+				"combinations_at_depth":   len(combos),
+				"sequences_generated":     len(sequences),
+				"duplicates_removed":      totalDuplicates,
+				"infeasible_pruned":       totalInfeasiblePruned,
+				"depth_duplicates":        depthDuplicates,
+				"depth_infeasible_pruned": depthInfeasible,
+			},
+		})
 	}
 
 	g.log.Info().

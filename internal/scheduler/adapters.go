@@ -556,6 +556,27 @@ func (a *PlannerServiceAdapter) CreatePlanWithRejections(ctx interface{}, config
 	return a.service.CreatePlanWithRejections(opportunityContext, plannerConfig, cb)
 }
 
+func (a *PlannerServiceAdapter) CreatePlanWithDetailedProgress(ctx interface{}, config interface{}, detailedCallback interface{}) (interface{}, error) {
+	opportunityContext, ok := ctx.(*planningdomain.OpportunityContext)
+	if !ok {
+		return nil, fmt.Errorf("invalid context type")
+	}
+	plannerConfig, ok := config.(*planningdomain.PlannerConfiguration)
+	if !ok {
+		return nil, fmt.Errorf("invalid config type")
+	}
+	// Convert detailed callback interface to typed callback
+	var cb progress.DetailedCallback
+	if detailedCallback != nil {
+		if typedCb, ok := detailedCallback.(progress.DetailedCallback); ok {
+			cb = typedCb
+		} else if funcCb, ok := detailedCallback.(func(progress.Update)); ok {
+			cb = progress.DetailedCallback(funcCb)
+		}
+	}
+	return a.service.CreatePlanWithDetailedProgress(opportunityContext, plannerConfig, cb)
+}
+
 // RecommendationRepositoryAdapter adapts *planning.RecommendationRepository to RecommendationRepositoryInterface
 type RecommendationRepositoryAdapter struct {
 	repo *planning.RecommendationRepository

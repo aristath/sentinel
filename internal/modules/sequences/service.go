@@ -81,3 +81,47 @@ func (s *Service) GenerateSequences(
 
 	return sequences, nil
 }
+
+// GenerateSequencesWithDetailedProgress creates sequences with detailed progress reporting.
+// This method provides rich progress metrics for debugging and UI display.
+// The detailedCallback receives structured updates with phase, subphase, and details.
+func (s *Service) GenerateSequencesWithDetailedProgress(
+	opportunities domain.OpportunitiesByCategory,
+	ctx *domain.OpportunityContext,
+	config *domain.PlannerConfiguration,
+	detailedCallback progress.DetailedCallback,
+) ([]domain.ActionSequence, error) {
+	// Build generation config from planner config
+	genConfig := DefaultGenerationConfig()
+	if config != nil {
+		if config.MaxDepth > 0 {
+			genConfig.MaxDepth = config.MaxDepth
+		}
+	}
+	if ctx != nil {
+		genConfig.AvailableCash = ctx.AvailableCashEUR
+		genConfig.PruneInfeasible = true
+	}
+	genConfig.DetailedProgressCallback = detailedCallback
+
+	// Generate sequences
+	sequences := s.generator.Generate(opportunities, ctx, genConfig)
+
+	s.log.Info().
+		Int("pre_filter_sequences", len(sequences)).
+		Msg("Sequences generated with detailed progress, applying filters")
+
+	// Apply post-generation filters (correlation, diversity)
+	var err error
+	sequences, err = s.filterRegistry.ApplyFilters(sequences, config)
+	if err != nil {
+		s.log.Error().Err(err).Msg("Filter application failed")
+		// Continue with unfiltered sequences rather than failing
+	}
+
+	s.log.Info().
+		Int("final_sequences", len(sequences)).
+		Msg("Sequence generation with detailed progress complete")
+
+	return sequences, nil
+}
