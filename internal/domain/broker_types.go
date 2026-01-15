@@ -63,15 +63,16 @@ type BrokerPendingOrder struct {
 
 // BrokerSecurityInfo represents security lookup result (broker-agnostic)
 type BrokerSecurityInfo struct {
-	Symbol       string  // Security symbol
-	Name         *string // Company name (nullable)
-	ISIN         *string // ISIN code (nullable)
-	Currency     *string // Trading currency (nullable)
-	Market       *string // Market name (nullable)
-	ExchangeCode *string // Exchange code (nullable)
-	Country      *string // Issuer country code (nullable)
-	Sector       *string // Sector/industry code (nullable)
-	ExchangeName *string // Full exchange name (nullable)
+	Symbol        string  // Security symbol
+	Name          *string // Company name (nullable)
+	ISIN          *string // ISIN code (nullable)
+	Currency      *string // Trading currency (nullable)
+	Market        *string // Market name (nullable)
+	ExchangeCode  *string // Exchange code (nullable)
+	Country       *string // Issuer country code (nullable)
+	CountryOfRisk *string // Country of risk from attributes (fallback for Country)
+	Sector        *string // Sector/industry code (nullable)
+	ExchangeName  *string // Full exchange name (nullable)
 }
 
 // BrokerCashMovement represents cash withdrawal history (broker-agnostic)

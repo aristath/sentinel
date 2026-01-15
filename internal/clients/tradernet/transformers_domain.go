@@ -179,15 +179,16 @@ func transformSecurityInfoToDomain(tnSecurities []SecurityInfo) []domain.BrokerS
 	result := make([]domain.BrokerSecurityInfo, len(tnSecurities))
 	for i, tn := range tnSecurities {
 		result[i] = domain.BrokerSecurityInfo{
-			Symbol:       tn.Symbol,
-			Name:         tn.Name,
-			ISIN:         tn.ISIN,
-			Currency:     tn.Currency,
-			Market:       tn.Market,
-			ExchangeCode: tn.ExchangeCode,
-			Country:      tn.Country,
-			Sector:       tn.Sector,
-			ExchangeName: tn.ExchangeName,
+			Symbol:        tn.Symbol,
+			Name:          tn.Name,
+			ISIN:          tn.ISIN,
+			Currency:      tn.Currency,
+			Market:        tn.Market,
+			ExchangeCode:  tn.ExchangeCode,
+			Country:       tn.Country,
+			CountryOfRisk: tn.CountryOfRisk,
+			Sector:        tn.Sector,
+			ExchangeName:  tn.ExchangeName,
 		}
 	}
 	return result

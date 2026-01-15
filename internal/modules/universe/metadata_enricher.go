@@ -58,20 +58,24 @@ func (e *MetadataEnricher) Enrich(security *Security) error {
 		return nil
 	}
 
-	// Search for security info from broker
-	results, err := e.brokerClient.FindSymbol(security.Symbol, nil)
-	if err != nil {
-		return fmt.Errorf("failed to find symbol: %w", err)
+	// Use GetSecurityMetadata for full metadata including CountryOfRisk
+	// This uses getAllSecurities API which has better country data than FindSymbol
+	brokerInfo, err := e.brokerClient.GetSecurityMetadata(security.Symbol)
+	if err != nil || brokerInfo == nil {
+		if err != nil {
+			e.log.Warn().Err(err).Str("symbol", security.Symbol).Msg("GetSecurityMetadata failed, trying FindSymbol fallback")
+		}
+		// Fallback to FindSymbol
+		results, findErr := e.brokerClient.FindSymbol(security.Symbol, nil)
+		if findErr != nil {
+			return fmt.Errorf("failed to find symbol: %w", findErr)
+		}
+		if len(results) == 0 {
+			e.log.Debug().Str("symbol", security.Symbol).Msg("No broker data found for symbol")
+			return nil
+		}
+		brokerInfo = &results[0]
 	}
-
-	// No results - nothing to enrich
-	if len(results) == 0 {
-		e.log.Debug().Str("symbol", security.Symbol).Msg("No broker data found for symbol")
-		return nil
-	}
-
-	// Use first matching result
-	brokerInfo := results[0]
 
 	// Enrich only missing fields (don't overwrite existing data)
 	enriched := false
@@ -91,10 +95,20 @@ func (e *MetadataEnricher) Enrich(security *Security) error {
 		enriched = true
 	}
 
-	if security.Geography == "" && brokerInfo.Country != nil && *brokerInfo.Country != "" {
-		// Map broker's Country to our Geography field
-		security.Geography = *brokerInfo.Country
-		enriched = true
+	// Geography: prefer CountryOfRisk, fallback to Country, reject "0"
+	// Always overwrite - Tradernet is source of truth, user customizations go to override table
+	{
+		country := ""
+		if brokerInfo.CountryOfRisk != nil && *brokerInfo.CountryOfRisk != "" {
+			country = *brokerInfo.CountryOfRisk
+		} else if brokerInfo.Country != nil && *brokerInfo.Country != "" && *brokerInfo.Country != "0" {
+			country = *brokerInfo.Country
+		}
+		// Always write - empty string clears bad data like "0"
+		if security.Geography != country {
+			security.Geography = country
+			enriched = true
+		}
 	}
 
 	if security.Industry == "" && brokerInfo.Sector != nil && *brokerInfo.Sector != "" {

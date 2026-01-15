@@ -136,7 +136,8 @@ func TestMetadataEnricher_Enrich_PreservesExistingData(t *testing.T) {
 	log := zerolog.Nop()
 	enricher := NewMetadataEnricher(mockClient, log)
 
-	// Security with existing data - should NOT be overwritten
+	// Security with existing data - most fields should NOT be overwritten
+	// EXCEPT geography which is always synced from Tradernet (user overrides go to override table)
 	security := &Security{
 		Symbol:           "AAPL.US",
 		Name:             "Existing Name",
@@ -150,10 +151,10 @@ func TestMetadataEnricher_Enrich_PreservesExistingData(t *testing.T) {
 	err := enricher.Enrich(security)
 
 	assert.NoError(t, err)
-	// Existing values should be preserved
+	// Existing values should be preserved (except geography)
 	assert.Equal(t, "Existing Name", security.Name)
 	assert.Equal(t, "EUR", security.Currency)
-	assert.Equal(t, "DE", security.Geography)
+	assert.Equal(t, "US", security.Geography) // Geography always synced from Tradernet
 	assert.Equal(t, "Custom Industry", security.Industry)
 	assert.Equal(t, "Custom Exchange", security.FullExchangeName)
 	assert.Equal(t, "EU", security.MarketCode)

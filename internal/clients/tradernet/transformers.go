@@ -644,6 +644,17 @@ func transformAllSecuritiesResponse(sdkResult interface{}) ([]SecurityInfo, erro
 			}
 		}
 
+		// CountryOfRisk: from nested "attributes.CntryOfRisk" - fallback when issuer_country_code is "0"
+		if attrsVal, exists := itemMap["attributes"]; exists && attrsVal != nil {
+			if attrsMap, ok := attrsVal.(map[string]interface{}); ok {
+				if countryRiskVal, exists := attrsMap["CntryOfRisk"]; exists && countryRiskVal != nil {
+					if countryRiskStr, ok := countryRiskVal.(string); ok && countryRiskStr != "" {
+						sec.CountryOfRisk = &countryRiskStr
+					}
+				}
+			}
+		}
+
 		securities = append(securities, sec)
 	}
 
