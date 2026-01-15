@@ -231,6 +231,7 @@ type SecurityInfo struct {
 	CountryOfRisk *string `json:"country_of_risk"` // Fallback country from attributes.CntryOfRisk
 	Sector        *string `json:"sector"`          // Sector code (sector_code)
 	ExchangeName  *string `json:"exchange_name"`   // Full exchange name (codesub_nm)
+	LotSize       *int    `json:"lot_size"`        // Minimum lot size (quotes.x_lot)
 }
 
 // FindSymbolResponse is the response for FindSymbol

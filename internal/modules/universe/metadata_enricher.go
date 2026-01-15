@@ -7,29 +7,6 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// SectorMapping maps Tradernet sector codes to industry names
-var SectorMapping = map[string]string{
-	"FIN": "Financial Services",
-	"TEC": "Technology",
-	"HLT": "Healthcare",
-	"CST": "Consumer Staples",
-	"CSD": "Consumer Discretionary",
-	"IND": "Industrials",
-	"MAT": "Materials",
-	"ENE": "Energy",
-	"UTL": "Utilities",
-	"COM": "Communication Services",
-	"REI": "Real Estate",
-	"OTH": "Other",
-}
-
-// MapSectorToIndustry converts a Tradernet sector code to an industry name
-func MapSectorToIndustry(sectorCode string) string {
-	if industry, ok := SectorMapping[sectorCode]; ok {
-		return industry
-	}
-	return ""
-}
 
 // MetadataEnricher enriches security metadata from broker API
 type MetadataEnricher struct {
@@ -111,10 +88,28 @@ func (e *MetadataEnricher) Enrich(security *Security) error {
 		}
 	}
 
-	if security.Industry == "" && brokerInfo.Sector != nil && *brokerInfo.Sector != "" {
-		industry := MapSectorToIndustry(*brokerInfo.Sector)
-		if industry != "" {
-			security.Industry = industry
+	// Industry: always overwrite with raw sector code from Tradernet
+	// User customizations go to override table
+	{
+		sector := ""
+		if brokerInfo.Sector != nil && *brokerInfo.Sector != "" {
+			sector = *brokerInfo.Sector
+		}
+		if security.Industry != sector {
+			security.Industry = sector
+			enriched = true
+		}
+	}
+
+	// MinLot: always overwrite from Tradernet (quotes.x_lot)
+	// User customizations go to override table
+	{
+		lot := 1 // Default to 1 if not provided
+		if brokerInfo.LotSize != nil && *brokerInfo.LotSize > 0 {
+			lot = *brokerInfo.LotSize
+		}
+		if security.MinLot != lot {
+			security.MinLot = lot
 			enriched = true
 		}
 	}
@@ -135,6 +130,7 @@ func (e *MetadataEnricher) Enrich(security *Security) error {
 			Str("name", security.Name).
 			Str("geography", security.Geography).
 			Str("industry", security.Industry).
+			Int("min_lot", security.MinLot).
 			Str("market_code", security.MarketCode).
 			Msg("Enriched security metadata from broker")
 	} else {

@@ -73,6 +73,7 @@ type BrokerSecurityInfo struct {
 	CountryOfRisk *string // Country of risk from attributes (fallback for Country)
 	Sector        *string // Sector/industry code (nullable)
 	ExchangeName  *string // Full exchange name (nullable)
+	LotSize       *int    // Minimum lot size (nullable)
 }
 
 // BrokerCashMovement represents cash withdrawal history (broker-agnostic)

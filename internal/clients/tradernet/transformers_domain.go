@@ -189,6 +189,7 @@ func transformSecurityInfoToDomain(tnSecurities []SecurityInfo) []domain.BrokerS
 			CountryOfRisk: tn.CountryOfRisk,
 			Sector:        tn.Sector,
 			ExchangeName:  tn.ExchangeName,
+			LotSize:       tn.LotSize,
 		}
 	}
 	return result

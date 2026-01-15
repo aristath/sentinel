@@ -75,6 +75,7 @@ func TestMetadataEnricher_Enrich_FillsMissingFields(t *testing.T) {
 	exchangeName := "NASDAQ"
 	isin := "US0378331005"
 	marketCode := "FIX"
+	lotSize := 10
 
 	mockClient := &MockBrokerClient{
 		findSymbolResults: []domain.BrokerSecurityInfo{
@@ -87,6 +88,7 @@ func TestMetadataEnricher_Enrich_FillsMissingFields(t *testing.T) {
 				Sector:       &sector,
 				ExchangeName: &exchangeName,
 				Market:       &marketCode,
+				LotSize:      &lotSize,
 			},
 		},
 	}
@@ -106,10 +108,11 @@ func TestMetadataEnricher_Enrich_FillsMissingFields(t *testing.T) {
 	assert.Equal(t, "Apple Inc.", security.Name)
 	assert.Equal(t, "USD", security.Currency)
 	assert.Equal(t, "US", security.Geography)
-	assert.Equal(t, "Technology", security.Industry) // Mapped from TEC
+	assert.Equal(t, "TEC", security.Industry) // Raw sector code from Tradernet
 	assert.Equal(t, "NASDAQ", security.FullExchangeName)
 	assert.Equal(t, "US0378331005", security.ISIN)
 	assert.Equal(t, "FIX", security.MarketCode)
+	assert.Equal(t, 10, security.MinLot) // From quotes.x_lot
 }
 
 func TestMetadataEnricher_Enrich_PreservesExistingData(t *testing.T) {
@@ -119,6 +122,7 @@ func TestMetadataEnricher_Enrich_PreservesExistingData(t *testing.T) {
 	sector := "TEC"
 	exchangeName := "NASDAQ"
 	marketCode := "FIX"
+	lotSize := 5
 
 	mockClient := &MockBrokerClient{
 		findSymbolResults: []domain.BrokerSecurityInfo{
@@ -130,6 +134,7 @@ func TestMetadataEnricher_Enrich_PreservesExistingData(t *testing.T) {
 				Sector:       &sector,
 				ExchangeName: &exchangeName,
 				Market:       &marketCode,
+				LotSize:      &lotSize,
 			},
 		},
 	}
@@ -137,7 +142,7 @@ func TestMetadataEnricher_Enrich_PreservesExistingData(t *testing.T) {
 	enricher := NewMetadataEnricher(mockClient, log)
 
 	// Security with existing data - most fields should NOT be overwritten
-	// EXCEPT geography which is always synced from Tradernet (user overrides go to override table)
+	// EXCEPT geography, industry, and min_lot which are always synced from Tradernet (user overrides go to override table)
 	security := &Security{
 		Symbol:           "AAPL.US",
 		Name:             "Existing Name",
@@ -146,16 +151,18 @@ func TestMetadataEnricher_Enrich_PreservesExistingData(t *testing.T) {
 		Industry:         "Custom Industry",
 		FullExchangeName: "Custom Exchange",
 		MarketCode:       "EU",
+		MinLot:           100, // Will be overwritten
 	}
 
 	err := enricher.Enrich(security)
 
 	assert.NoError(t, err)
-	// Existing values should be preserved (except geography)
+	// Existing values should be preserved (except geography, industry, min_lot)
 	assert.Equal(t, "Existing Name", security.Name)
 	assert.Equal(t, "EUR", security.Currency)
 	assert.Equal(t, "US", security.Geography) // Geography always synced from Tradernet
-	assert.Equal(t, "Custom Industry", security.Industry)
+	assert.Equal(t, "TEC", security.Industry) // Industry always synced from Tradernet
+	assert.Equal(t, 5, security.MinLot)       // MinLot always synced from Tradernet
 	assert.Equal(t, "Custom Exchange", security.FullExchangeName)
 	assert.Equal(t, "EU", security.MarketCode)
 }
@@ -234,47 +241,6 @@ func TestMetadataEnricher_Enrich_NilSecurity(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "security cannot be nil")
-}
-
-// ============================================================================
-// Sector Mapping Tests
-// ============================================================================
-
-func TestSectorMapping_AllSectors(t *testing.T) {
-	testCases := []struct {
-		code     string
-		expected string
-	}{
-		{"FIN", "Financial Services"},
-		{"TEC", "Technology"},
-		{"HLT", "Healthcare"},
-		{"CST", "Consumer Staples"},
-		{"CSD", "Consumer Discretionary"},
-		{"IND", "Industrials"},
-		{"MAT", "Materials"},
-		{"ENE", "Energy"},
-		{"UTL", "Utilities"},
-		{"COM", "Communication Services"},
-		{"REI", "Real Estate"},
-		{"OTH", "Other"},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.code, func(t *testing.T) {
-			result := MapSectorToIndustry(tc.code)
-			assert.Equal(t, tc.expected, result)
-		})
-	}
-}
-
-func TestSectorMapping_UnknownCode(t *testing.T) {
-	result := MapSectorToIndustry("UNKNOWN")
-	assert.Equal(t, "", result)
-}
-
-func TestSectorMapping_EmptyCode(t *testing.T) {
-	result := MapSectorToIndustry("")
-	assert.Equal(t, "", result)
 }
 
 // ============================================================================

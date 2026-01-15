@@ -655,6 +655,22 @@ func transformAllSecuritiesResponse(sdkResult interface{}) ([]SecurityInfo, erro
 			}
 		}
 
+		// LotSize: from nested "quotes.x_lot"
+		if quotesVal, exists := itemMap["quotes"]; exists && quotesVal != nil {
+			if quotesMap, ok := quotesVal.(map[string]interface{}); ok {
+				if lotVal, exists := quotesMap["x_lot"]; exists && lotVal != nil {
+					// x_lot can be int or float64 depending on JSON unmarshaling
+					switch v := lotVal.(type) {
+					case float64:
+						lot := int(v)
+						sec.LotSize = &lot
+					case int:
+						sec.LotSize = &v
+					}
+				}
+			}
+		}
+
 		securities = append(securities, sec)
 	}
 
