@@ -74,30 +74,30 @@ type Container struct {
 	ClientDataRepo     *clientdata.Repository
 
 	// Services
-	CurrencyExchangeService   *services.CurrencyExchangeService
-	ExchangeRateCacheService  *services.ExchangeRateCacheService
-	PriceConversionService    *services.PriceConversionService
-	DividendYieldCalculator   *dividends.DividendYieldCalculator
-	CashManager               domain.CashManager // Interface
-	TradeSafetyService        *trading.TradeSafetyService
-	TradingService            *trading.TradingService
-	PortfolioService          *portfolio.PortfolioService
-	CashFlowsService          *cash_flows.CashFlowsService
-	UniverseService           *universe.UniverseService
-	TagAssigner               *universe.TagAssigner
-	TradeExecutionService     *services.TradeExecutionService
-	SettingsService           *settings.Service
-	MarketHoursService        *market_hours.MarketHoursService
-	MarketStateDetector       *market_regime.MarketStateDetector
-	EventBus                  *events.Bus
-	EventManager              *events.Manager
-	TickerContentService      *ticker.TickerContentService
-	HealthCalculator          *display.HealthCalculator
-	HealthUpdater             *display.HealthUpdater
-	ModeManager               *display.ModeManager
-	QueueManager              *queue.Manager
-	WorkerPool                *queue.WorkerPool
-	TimeScheduler             *queue.Scheduler
+	CurrencyExchangeService  *services.CurrencyExchangeService
+	ExchangeRateCacheService *services.ExchangeRateCacheService
+	PriceConversionService   *services.PriceConversionService
+	DividendYieldCalculator  *dividends.DividendYieldCalculator
+	CashManager              domain.CashManager // Interface
+	TradeSafetyService       *trading.TradeSafetyService
+	TradingService           *trading.TradingService
+	PortfolioService         *portfolio.PortfolioService
+	CashFlowsService         *cash_flows.CashFlowsService
+	UniverseService          *universe.UniverseService
+	TagAssigner              *universe.TagAssigner
+	TradeExecutionService    *services.TradeExecutionService
+	SettingsService          *settings.Service
+	MarketHoursService       *market_hours.MarketHoursService
+	MarketStateDetector      *market_regime.MarketStateDetector
+	EventBus                 *events.Bus
+	EventManager             *events.Manager
+	TickerContentService     *ticker.TickerContentService
+	HealthCalculator         *display.HealthCalculator
+	HealthUpdater            *display.HealthUpdater
+	ModeManager              *display.ModeManager
+	QueueManager             *queue.Manager
+	WorkerPool               *queue.WorkerPool
+	// NOTE: TimeScheduler removed - Work Processor handles all automatic scheduling
 	JobHistory                *queue.History
 	JobRegistry               *queue.Registry
 	NegativeBalanceRebalancer *rebalancing.NegativeBalanceRebalancer

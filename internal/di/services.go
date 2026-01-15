@@ -156,10 +156,7 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 	container.JobRegistry = queue.NewRegistry()
 	container.WorkerPool = queue.NewWorkerPool(container.QueueManager, container.JobRegistry, 2)
 	container.WorkerPool.SetLogger(log)
-	container.TimeScheduler = queue.NewScheduler(container.QueueManager)
-	container.TimeScheduler.SetLogger(log)
-	// Set market state detector on scheduler for market-aware sync scheduling
-	container.TimeScheduler.SetMarketStateDetector(container.MarketStateDetector)
+	// NOTE: TimeScheduler removed - Work Processor handles all automatic scheduling
 
 	// Settings service (needed for trade safety and other services)
 	container.SettingsService = settings.NewService(container.SettingsRepo, log)

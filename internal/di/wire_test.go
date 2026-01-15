@@ -47,9 +47,7 @@ func TestWire(t *testing.T) {
 			if container.WorkerPool != nil {
 				container.WorkerPool.Stop()
 			}
-			if container.TimeScheduler != nil {
-				container.TimeScheduler.Stop()
-			}
+			// NOTE: TimeScheduler removed - Work Processor handles scheduling
 			// Give goroutines time to stop before closing databases
 			time.Sleep(50 * time.Millisecond)
 

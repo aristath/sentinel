@@ -31,9 +31,7 @@ func TestRegisterJobs(t *testing.T) {
 			if container.WorkerPool != nil {
 				container.WorkerPool.Stop()
 			}
-			if container.TimeScheduler != nil {
-				container.TimeScheduler.Stop()
-			}
+			// NOTE: TimeScheduler removed - Work Processor handles scheduling
 			// Give goroutines time to stop before closing databases
 			// This prevents "directory not empty" errors during temp cleanup
 			time.Sleep(50 * time.Millisecond)

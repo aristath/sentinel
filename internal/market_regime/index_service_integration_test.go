@@ -17,9 +17,7 @@ import (
 // cleanupContainer properly shuts down all container resources
 func cleanupContainer(container *di.Container) {
 	// Stop background services first
-	if container.TimeScheduler != nil {
-		container.TimeScheduler.Stop()
-	}
+	// NOTE: TimeScheduler removed - Work Processor handles scheduling
 	if container.WorkerPool != nil {
 		container.WorkerPool.Stop()
 	}

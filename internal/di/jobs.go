@@ -506,9 +506,7 @@ func RegisterJobs(container *Container, cfg *config.Config, displayManager *disp
 			deploymentJob := scheduler.NewDeploymentJob(mgr, deploymentInterval, true, log)
 			container.JobRegistry.Register(queue.JobTypeDeployment, queue.JobToHandler(deploymentJob))
 			instances.Deployment = deploymentJob
-
-			// Configure scheduler with deployment interval
-			container.TimeScheduler.SetDeploymentInterval(deploymentInterval)
+			// NOTE: TimeScheduler removed - deployment is now handled by Work Processor
 
 			log.Info().
 				Float64("interval_minutes", deploymentIntervalMinutes).
