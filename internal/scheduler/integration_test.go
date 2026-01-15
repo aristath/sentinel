@@ -111,12 +111,14 @@ func TestBuildOpportunityContextJob_Integration_ContextRetrieval(t *testing.T) {
 	})
 }
 
-// TestPlannerBatchJob_Integration demonstrates how BuildOpportunityContextJob integrates with PlannerBatchJob
-func TestPlannerBatchJob_Integration_ContextPassing(t *testing.T) {
+// TestBuildOpportunityContextJob_Integration_PlannerContextPassing demonstrates how
+// BuildOpportunityContextJob provides context for the planner workflow.
+// NOTE: The Work Processor now handles orchestration (formerly PlannerBatchJob).
+func TestBuildOpportunityContextJob_Integration_PlannerContextPassing(t *testing.T) {
 	// This test demonstrates the expected data flow:
 	// 1. BuildOpportunityContextJob.Run() builds context
 	// 2. GetOpportunityContext() retrieves it
-	// 3. PlannerBatchJob uses it for planning
+	// 3. Work Processor's planner work types use it for planning
 
 	t.Run("context_flows_to_planner", func(t *testing.T) {
 		// Setup build job
@@ -133,7 +135,7 @@ func TestPlannerBatchJob_Integration_ContextPassing(t *testing.T) {
 			RecentlyBoughtISINs:    map[string]bool{},
 		}
 
-		// Retrieve context (as PlannerBatchJob would)
+		// Retrieve context (as Work Processor's planner work types would)
 		ctx := buildJob.GetOpportunityContext()
 
 		// Verify context is available for planning

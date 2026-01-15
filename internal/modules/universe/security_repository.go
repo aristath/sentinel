@@ -400,7 +400,7 @@ func (r *SecurityRepository) Update(isin string, updates map[string]interface{})
 	}
 
 	// Whitelist of allowed update fields
-	// Note: allow_buy, allow_sell, min_lot, priority_multiplier are NOT allowed here
+	// Note: allow_buy, allow_sell, priority_multiplier are NOT allowed here
 	// They should be set via security_overrides table
 	allowedFields := map[string]bool{
 		"active": true,
@@ -412,6 +412,7 @@ func (r *SecurityRepository) Update(isin string, updates map[string]interface{})
 		"isin":        true,
 		"symbol":      true,
 		"last_synced": true, // Unix timestamp
+		"min_lot":     true, // Minimum lot size from broker
 	}
 
 	// Validate all keys are in whitelist

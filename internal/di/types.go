@@ -157,11 +157,10 @@ type Container struct {
 }
 
 // JobInstances holds references to all registered jobs for manual triggering
+// NOTE: Composite jobs (SyncCycle, PlannerBatch) removed - orchestration handled by Work Processor
 type JobInstances struct {
 	HealthCheck       scheduler.Job
-	SyncCycle         scheduler.Job
 	DividendReinvest  scheduler.Job
-	PlannerBatch      scheduler.Job
 	EventBasedTrading scheduler.Job
 	TagUpdate         scheduler.Job
 

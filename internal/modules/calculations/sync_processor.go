@@ -9,6 +9,13 @@ import (
 // SyncThresholdHours is how old last_synced must be to require processing (24 hours)
 const SyncThresholdHours = 24
 
+// SecurityInfo holds minimal security data for sync processing
+type SecurityInfo struct {
+	ISIN       string
+	Symbol     string
+	LastSynced *int64
+}
+
 // SecuritySyncer defines the interface for syncing a single security.
 // This is implemented by universe.SyncService.RefreshSingleSecurity.
 type SecuritySyncer interface {

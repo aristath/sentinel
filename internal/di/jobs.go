@@ -30,9 +30,11 @@ func RegisterJobs(container *Container, cfg *config.Config, displayManager *disp
 	instances := &JobInstances{}
 
 	// ==========================================
-	// Register Event Listeners
+	// NOTE: Event listeners are now registered by the Work Processor (see work.go)
+	// The old queue.RegisterListeners() is no longer called since:
+	// 1. Work Processor handles StateChanged, RecommendationsReady, DividendDetected events
+	// 2. Old WorkerPool is not started, so enqueued jobs would never be processed
 	// ==========================================
-	queue.RegisterListeners(container.EventBus, container.QueueManager, container.JobRegistry, log)
 
 	// ==========================================
 	// INDIVIDUAL HEALTH CHECK JOBS (created first, then used by composite job)
@@ -305,23 +307,8 @@ func RegisterJobs(container *Container, cfg *config.Config, displayManager *disp
 	container.JobRegistry.Register(queue.JobTypeRetryTrades, queue.JobToHandler(retryTrades))
 	instances.RetryTrades = retryTrades
 
-	// ==========================================
-	// COMPOSITE SYNC CYCLE JOB (orchestrates individual sync jobs)
-	// ==========================================
-	syncCycle := scheduler.NewSyncCycleJob(scheduler.SyncCycleConfig{
-		Log:                      log,
-		DisplayManager:           displayManager,
-		EventManager:             container.EventManager,
-		SyncTradesJob:            syncTrades,
-		SyncCashFlowsJob:         syncCashFlows,
-		SyncPortfolioJob:         syncPortfolio,
-		SyncPricesJob:            syncPrices,
-		SyncExchangeRatesJob:     syncExchangeRates,
-		CheckNegativeBalancesJob: checkNegativeBalances,
-		UpdateDisplayTickerJob:   updateDisplayTicker,
-	})
-	container.JobRegistry.Register(queue.JobTypeSyncCycle, queue.JobToHandler(syncCycle))
-	instances.SyncCycle = syncCycle
+	// NOTE: SyncCycle composite job removed - orchestration handled by Work Processor
+	// Individual sync jobs above are kept for manual triggering via UI
 
 	// ==========================================
 	// INDIVIDUAL PLANNING JOBS
@@ -387,22 +374,8 @@ func RegisterJobs(container *Container, cfg *config.Config, displayManager *disp
 	container.JobRegistry.Register(queue.JobTypeStoreRecommendations, queue.JobToHandler(storeRecommendations))
 	instances.StoreRecommendations = storeRecommendations
 
-	// ==========================================
-	// COMPOSITE PLANNER BATCH JOB (orchestrates individual planning jobs)
-	// ==========================================
-	plannerBatch := scheduler.NewPlannerBatchJob(scheduler.PlannerBatchConfig{
-		Log:                        log,
-		EventManager:               container.EventManager,
-		RecommendationRepo:         container.RecommendationRepo,
-		PlannerRepo:                container.PlannerRepo,
-		GeneratePortfolioHashJob:   generatePortfolioHash,
-		GetOptimizerWeightsJob:     instances.GetOptimizerWeights,
-		BuildOpportunityContextJob: buildOpportunityContext,
-		CreateTradePlanJob:         createTradePlan,
-		StoreRecommendationsJob:    storeRecommendations,
-	})
-	container.JobRegistry.Register(queue.JobTypePlannerBatch, queue.JobToHandler(plannerBatch))
-	instances.PlannerBatch = plannerBatch
+	// NOTE: PlannerBatch composite job removed - orchestration handled by Work Processor
+	// Individual planning jobs above are kept for manual triggering via UI
 
 	// ==========================================
 	// INDIVIDUAL DIVIDEND JOBS

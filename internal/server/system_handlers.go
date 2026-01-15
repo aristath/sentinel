@@ -44,11 +44,9 @@ type SystemHandlers struct {
 	marketHoursService      *market_hours.MarketHoursService
 	marketStatusWS          *tradernet.MarketStatusWebSocket
 	// Jobs (will be set after job registration in main.go)
-	// Original composite jobs
+	// NOTE: Composite jobs (syncCycleJob, plannerBatchJob) removed - use Work Processor endpoints instead
 	healthCheckJob       scheduler.Job
-	syncCycleJob         scheduler.Job
 	dividendReinvestJob  scheduler.Job
-	plannerBatchJob      scheduler.Job
 	eventBasedTradingJob scheduler.Job
 	tagUpdateJob         scheduler.Job
 
@@ -135,11 +133,10 @@ func NewSystemHandlers(
 
 // SetJobs registers job references for manual triggering
 // Called after jobs are registered in main.go
+// NOTE: Composite jobs (SyncCycle, PlannerBatch) removed - use Work Processor endpoints instead
 func (h *SystemHandlers) SetJobs(
 	healthCheck scheduler.Job,
-	syncCycle scheduler.Job,
 	dividendReinvest scheduler.Job,
-	plannerBatch scheduler.Job,
 	eventBasedTrading scheduler.Job,
 	tagUpdate scheduler.Job,
 	// Individual sync jobs
@@ -168,9 +165,7 @@ func (h *SystemHandlers) SetJobs(
 	checkWALCheckpoints scheduler.Job,
 ) {
 	h.healthCheckJob = healthCheck
-	h.syncCycleJob = syncCycle
 	h.dividendReinvestJob = dividendReinvest
-	h.plannerBatchJob = plannerBatch
 	h.eventBasedTradingJob = eventBasedTrading
 	h.tagUpdateJob = tagUpdate
 
@@ -1024,45 +1019,23 @@ func (h *SystemHandlers) getSystemStats() (float64, float64) {
 // Job Trigger Endpoints
 // ============================================================================
 
-// HandleTriggerSyncCycle triggers the sync cycle job immediately
+// HandleTriggerSyncCycle - DEPRECATED: Use Work Processor endpoints instead
 // POST /api/jobs/sync-cycle
+// The sync cycle composite job has been removed. Use individual sync work types:
+// - POST /api/work/sync:portfolio/execute
+// - POST /api/work/sync:trades/execute
+// - POST /api/work/sync:cashflows/execute
+// - POST /api/work/sync:prices/execute
+// - POST /api/work/sync:rates/execute
 func (h *SystemHandlers) HandleTriggerSyncCycle(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	if h.syncCycleJob == nil {
-		h.log.Warn().Msg("Sync cycle job not registered yet")
-		h.writeJSON(w, map[string]string{
-			"status":  "error",
-			"message": "Sync cycle job not registered",
-		})
-		return
-	}
-
-	h.log.Info().Msg("Manual sync cycle triggered")
-
-	// Enqueue sync cycle job
-	job := &queue.Job{
-		ID:          fmt.Sprintf("manual-sync-cycle-%d", time.Now().UnixNano()),
-		Type:        queue.JobTypeSyncCycle,
-		Priority:    queue.PriorityHigh,
-		Payload:     map[string]interface{}{"manual": true},
-		CreatedAt:   time.Now(),
-		AvailableAt: time.Now(),
-		Retries:     0,
-		MaxRetries:  3,
-	}
-	if err := h.queueManager.Enqueue(job); err != nil {
-		h.log.Error().Err(err).Msg("Failed to trigger sync cycle")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	h.writeJSON(w, map[string]string{
-		"status":  "success",
-		"message": "Sync cycle triggered successfully",
+		"status":  "deprecated",
+		"message": "SyncCycle composite job removed. Use Work Processor endpoints: POST /api/work/sync:portfolio/execute, etc.",
 	})
 }
 
@@ -1128,34 +1101,22 @@ func (h *SystemHandlers) HandleTriggerDividendReinvestment(w http.ResponseWriter
 	})
 }
 
-// HandleTriggerPlannerBatch triggers the planner batch job immediately
+// HandleTriggerPlannerBatch - DEPRECATED: Use Work Processor endpoints instead
 // POST /api/jobs/planner-batch
+// The planner batch composite job has been removed. Use individual planner work types:
+// - POST /api/work/planner:weights/execute
+// - POST /api/work/planner:context/execute
+// - POST /api/work/planner:plan/execute
+// - POST /api/work/planner:recommendations/execute
 func (h *SystemHandlers) HandleTriggerPlannerBatch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	if h.plannerBatchJob == nil {
-		h.log.Warn().Msg("Planner batch job not registered yet")
-		h.writeJSON(w, map[string]string{
-			"status":  "error",
-			"message": "Planner batch job not registered",
-		})
-		return
-	}
-
-	h.log.Info().Msg("Manual planner batch triggered")
-
-	if err := h.enqueueJob(queue.JobTypePlannerBatch, queue.PriorityHigh); err != nil {
-		h.log.Error().Err(err).Msg("Failed to trigger planner batch")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	h.writeJSON(w, map[string]string{
-		"status":  "success",
-		"message": "Planner batch triggered successfully",
+		"status":  "deprecated",
+		"message": "PlannerBatch composite job removed. Use Work Processor endpoints: POST /api/work/planner:weights/execute, etc.",
 	})
 }
 

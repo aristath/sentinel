@@ -37,10 +37,9 @@ func TestJobInstances_Initialization(t *testing.T) {
 	assert.NotNil(t, instances)
 
 	// All jobs should be nil initially
+	// NOTE: Composite jobs (SyncCycle, PlannerBatch) removed - Work Processor handles orchestration
 	assert.Nil(t, instances.HealthCheck)
-	assert.Nil(t, instances.SyncCycle)
 	assert.Nil(t, instances.DividendReinvest)
-	assert.Nil(t, instances.PlannerBatch)
 	assert.Nil(t, instances.EventBasedTrading)
 	assert.Nil(t, instances.TagUpdate)
 }

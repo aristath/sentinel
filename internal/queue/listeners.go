@@ -66,7 +66,7 @@ func RegisterListeners(bus *events.Bus, manager *Manager, registry *Registry, lo
 		}
 	})
 
-	// NOTE: Tag updates are now handled by the IdleProcessor during idle time.
+	// NOTE: Tag updates are now handled by the Work Processor.
 	// Per-security tag updates are staggered to avoid paralyzing the system.
 	// Batch TagUpdateJob is still available via API for manual force-refresh.
 	// Removed event listeners: PlanGenerated, PriceUpdated, ScoreUpdated -> tag_update
