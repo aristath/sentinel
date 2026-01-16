@@ -121,8 +121,18 @@ func NewTradingService(
 	}
 }
 
-// SyncFromTradernet synchronizes trade history from Tradernet microservice
-// Returns count of newly synced trades
+// SyncFromTradernet synchronizes trade history from Tradernet broker.
+// This method fetches all executed trades from the broker and syncs them to the local database.
+// The sync is idempotent - trades with existing order_ids are skipped (no duplicates).
+//
+// The method:
+// 1. Fetches all trades from Tradernet (limit=0 returns all trades)
+// 2. Parses trade side and executed_at timestamp (handles multiple formats)
+// 3. Validates trade data (skips trades with invalid prices)
+// 4. Creates trade records in the database (immutable audit trail)
+//
+// Returns:
+//   - error: Error if broker connection fails or critical database operations fail
 func (s *TradingService) SyncFromTradernet() error {
 	s.log.Info().Msg("Syncing trades from Tradernet")
 
@@ -233,8 +243,26 @@ type TradeResult struct {
 	Reason  string // Rejection reason if not successful
 }
 
-// ExecuteTrade executes a trade through the Tradernet microservice
-// Includes all safety validations before execution
+// ExecuteTrade executes a trade through the Tradernet broker.
+// This method performs comprehensive safety validations before execution and records
+// the trade in the database after successful execution.
+//
+// The method:
+// 1. Validates trade safety (cooloff periods, frequency limits, etc.)
+// 2. Places order via broker client (broker handles currency conversion)
+// 3. Records trade in database (immutable audit trail)
+// 4. Emits TRADE_EXECUTED event for downstream processing
+//
+// Currency handling: The broker API handles currency conversion automatically.
+// We pass symbol and quantity, and the broker determines the native trading currency
+// and converts EUR cash to native currency as needed.
+//
+// Parameters:
+//   - req: TradeRequest with symbol, side, quantity, and reason
+//
+// Returns:
+//   - *TradeResult: Result with success status, order ID, and reason
+//   - error: Error only for system failures (validation failures return nil error with TradeResult)
 func (s *TradingService) ExecuteTrade(req TradeRequest) (*TradeResult, error) {
 	s.log.Info().
 		Str("symbol", req.Symbol).

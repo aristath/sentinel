@@ -97,7 +97,22 @@ func NewPortfolioService(
 	}
 }
 
-// GetPortfolioSummary calculates current portfolio allocation vs targets
+// GetPortfolioSummary calculates current portfolio allocation vs targets.
+// This is the main method for portfolio analysis, aggregating positions by geography
+// and industry, converting all values to EUR, and comparing against target allocations.
+//
+// The method:
+// 1. Fetches allocation targets from the allocation repository
+// 2. Gets all positions with security metadata (geography, industry)
+// 3. Checks for stale price data (warns but doesn't block)
+// 4. Aggregates position values by geography and industry (handles comma-separated values)
+// 5. Converts cash balances from all currencies to EUR
+// 6. Builds allocation status lists showing current vs target percentages
+//
+// Returns:
+//   - PortfolioSummary: Complete portfolio summary with allocations and cash balance
+//   - error: Error if data fetching or calculation fails
+//
 // Faithful translation of Python: async def get_portfolio_summary(self) -> PortfolioSummary
 func (s *PortfolioService) GetPortfolioSummary() (PortfolioSummary, error) {
 	// Get allocation targets
@@ -540,7 +555,21 @@ func round(val float64, decimals int) float64 {
 	return math.Round(val*multiplier) / multiplier
 }
 
-// SyncFromTradernet synchronizes positions and cash balances from Tradernet brokerage
+// SyncFromTradernet synchronizes positions and cash balances from Tradernet brokerage.
+// This method performs a full sync of the portfolio state from the broker:
+// 1. Fetches current positions from Tradernet
+// 2. Upserts positions to database (auto-adds missing securities to universe)
+// 3. Deletes stale positions (in DB but not in Tradernet)
+// 4. Syncs cash balances to cash_balances table
+//
+// Currency conversion: All position values are converted to EUR before storage.
+// This ensures the database always contains EUR-normalized values for planning.
+//
+// Auto-adding securities: If a position references a security not in the universe,
+// it is automatically added via SecuritySetupService (full data pipeline).
+//
+// Returns:
+//   - error: Error if broker connection fails or critical database operations fail
 func (s *PortfolioService) SyncFromTradernet() error {
 	s.log.Info().Msg("Starting portfolio sync from Tradernet")
 
