@@ -4,7 +4,7 @@
 
 -- Securities table: investment universe (ISIN as PRIMARY KEY)
 -- geography and industry support comma-separated values for multiple assignments
--- User-configurable fields (allow_buy, allow_sell, min_lot, priority_multiplier) are stored in security_overrides
+-- User-configurable fields (allow_buy, allow_sell, priority_multiplier) are stored in security_overrides
 CREATE TABLE IF NOT EXISTS securities (
     isin TEXT PRIMARY KEY,
     symbol TEXT NOT NULL,
@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS securities (
     last_synced INTEGER,               -- Unix timestamp (seconds since epoch)
     min_portfolio_target REAL,
     max_portfolio_target REAL,
+    min_lot INTEGER DEFAULT 1,         -- Minimum lot size from broker (base data, user overrides in security_overrides)
     created_at INTEGER NOT NULL,       -- Unix timestamp (seconds since epoch)
     updated_at INTEGER NOT NULL        -- Unix timestamp (seconds since epoch)
 ) STRICT;
