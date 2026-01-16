@@ -13,8 +13,9 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// MinCurrencyReserve is the minimum cash reserve per currency (€5)
-const MinCurrencyReserve = 5.0
+// MinCurrencyReserve is the minimum cash reserve per currency (€0)
+// Set to 0 to only trigger emergency rebalancing for truly negative balances
+const MinCurrencyReserve = 0.0
 
 // NegativeBalanceRebalancer automatically fixes negative cash balances
 // Faithful translation from Python: app/modules/rebalancing/services/negative_balance_rebalancer.py
