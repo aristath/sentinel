@@ -2,6 +2,7 @@ package di
 
 import (
 	"testing"
+	"time"
 
 	"github.com/aristath/sentinel/internal/config"
 	"github.com/aristath/sentinel/internal/modules/display"
@@ -51,13 +52,23 @@ func TestInitializeServices(t *testing.T) {
 	assert.NotNil(t, container.TickerContentService)
 
 	// Cleanup
-	container.UniverseDB.Close()
-	container.ConfigDB.Close()
-	container.LedgerDB.Close()
-	container.PortfolioDB.Close()
-	container.HistoryDB.Close()
-	container.CacheDB.Close()
-	container.ClientDataDB.Close()
+	t.Cleanup(func() {
+		// Stop WebSocket client if running
+		if container.MarketStatusWS != nil {
+			_ = container.MarketStatusWS.Stop()
+		}
+
+		// Give goroutines time to stop before closing databases
+		time.Sleep(100 * time.Millisecond)
+
+		container.UniverseDB.Close()
+		container.ConfigDB.Close()
+		container.LedgerDB.Close()
+		container.PortfolioDB.Close()
+		container.HistoryDB.Close()
+		container.CacheDB.Close()
+		container.ClientDataDB.Close()
+	})
 }
 
 func TestInitializeServices_DependencyOrder(t *testing.T) {
@@ -89,11 +100,21 @@ func TestInitializeServices_DependencyOrder(t *testing.T) {
 	assert.NotNil(t, container.PortfolioService)
 
 	// Cleanup
-	container.UniverseDB.Close()
-	container.ConfigDB.Close()
-	container.LedgerDB.Close()
-	container.PortfolioDB.Close()
-	container.HistoryDB.Close()
-	container.CacheDB.Close()
-	container.ClientDataDB.Close()
+	t.Cleanup(func() {
+		// Stop WebSocket client if running
+		if container.MarketStatusWS != nil {
+			_ = container.MarketStatusWS.Stop()
+		}
+
+		// Give goroutines time to stop before closing databases
+		time.Sleep(100 * time.Millisecond)
+
+		container.UniverseDB.Close()
+		container.ConfigDB.Close()
+		container.LedgerDB.Close()
+		container.PortfolioDB.Close()
+		container.HistoryDB.Close()
+		container.CacheDB.Close()
+		container.ClientDataDB.Close()
+	})
 }
