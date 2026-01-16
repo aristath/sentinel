@@ -1,20 +1,20 @@
 /**
  * Edit Security Modal Component
- * 
+ *
  * Modal dialog for editing security properties in the investment universe.
  * Supports field overrides (custom values that override defaults) with reset functionality.
- * 
+ *
  * Features:
  * - Editable fields: symbol, name, geography, exchange, industry, product type, min lot, allow buy/sell
  * - Override indicators showing which fields have custom values
  * - Reset to default functionality for overridden fields
  * - Field validation and whitelist enforcement
  * - Success/error notifications
- * 
+ *
  * Used for customizing security metadata and trading permissions.
  */
-import { Modal, TextInput, NumberInput, Switch, Button, Group, Stack, Select, ActionIcon, Tooltip, Badge } from '@mantine/core';
-import { IconRefresh } from '@tabler/icons-react';
+import { Modal, TextInput, NumberInput, Switch, Button, Group, Stack, Select, ActionIcon, Tooltip, Badge, Collapse, Code } from '@mantine/core';
+import { IconRefresh, IconChevronDown, IconChevronRight } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useAppStore } from '../../stores/appStore';
 import { useSecuritiesStore } from '../../stores/securitiesStore';
@@ -23,9 +23,9 @@ import { api } from '../../api/client';
 
 /**
  * Edit Security modal component
- * 
+ *
  * Provides a form to edit security properties with override support.
- * 
+ *
  * @returns {JSX.Element|null} Edit Security modal dialog or null if no security selected
  */
 export function EditSecurityModal() {
@@ -35,6 +35,7 @@ export function EditSecurityModal() {
   const [overrides, setOverrides] = useState({});  // Fields that have custom overrides
   const [loading, setLoading] = useState(false);
   const [resettingField, setResettingField] = useState(null);  // Field currently being reset
+  const [showRawData, setShowRawData] = useState(false);  // Control collapse for raw JSON data
 
   // Load security data and overrides when editing security changes
   useEffect(() => {
@@ -52,7 +53,7 @@ export function EditSecurityModal() {
 
   /**
    * Resets a field to its default value by deleting the override
-   * 
+   *
    * @param {string} field - Field name to reset
    */
   const handleResetField = async (field) => {
@@ -86,9 +87,9 @@ export function EditSecurityModal() {
 
   /**
    * Override indicator component
-   * 
+   *
    * Shows a "Customized" badge and reset button for fields that have overrides.
-   * 
+   *
    * @param {Object} props - Component props
    * @param {string} props.field - Field name to check for override
    * @returns {JSX.Element|null} Override indicator or null if not overridden
@@ -117,7 +118,7 @@ export function EditSecurityModal() {
 
   /**
    * Handles saving security changes
-   * 
+   *
    * Only sends whitelisted editable fields to the backend.
    * Filters out undefined/null values but preserves empty strings and false booleans.
    */
@@ -265,6 +266,35 @@ export function EditSecurityModal() {
             onChange={(e) => setFormData({ ...formData, allow_sell: e.currentTarget.checked })}
           />
         </Group>
+
+        {/* Raw JSON Data Viewer - Collapsible debugging section */}
+        <Stack gap="xs" mt="md" pt="md" style={{ borderTop: '1px solid var(--mantine-color-dark-4)' }}>
+          <Group
+            gap="xs"
+            style={{ cursor: 'pointer' }}
+            onClick={() => setShowRawData(!showRawData)}
+          >
+            {showRawData ? <IconChevronDown size={16} /> : <IconChevronRight size={16} />}
+            <Badge size="sm" variant="outline" color="gray">Debug</Badge>
+            <span style={{ fontSize: '0.875rem', color: 'var(--mantine-color-dimmed)' }}>
+              Raw JSON Data
+            </span>
+          </Group>
+          <Collapse in={showRawData}>
+            <Code
+              block
+              style={{
+                maxHeight: '300px',
+                overflow: 'auto',
+                fontSize: '0.75rem',
+                backgroundColor: 'var(--mantine-color-dark-7)',
+              }}
+            >
+              {formData.data ? JSON.stringify(formData.data, null, 2) : 'No data available'}
+            </Code>
+          </Collapse>
+        </Stack>
+
         <Group className="edit-security-modal__actions" justify="flex-end">
           <Button className="edit-security-modal__cancel-btn" variant="subtle" onClick={closeEditSecurityModal}>
             Cancel
