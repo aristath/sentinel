@@ -1,4 +1,7 @@
 // Package repository provides planning data repository functionality.
+// This file implements the ConfigRepository, which handles planner configuration
+// stored in config.db. The planner configuration is a single-row table that stores
+// all planner settings (opportunity calculators, filters, transaction costs, etc.).
 package repository
 
 import (
@@ -12,14 +15,24 @@ import (
 )
 
 // ConfigRepository handles database operations for planner configurations.
+// The planner configuration is stored as a single row in planner_settings table (id = 'main').
+// This simplified design avoids the complexity of multiple configurations and history tracking.
+//
 // Database: config.db (planner_settings table - single row)
 type ConfigRepository struct {
-	db  *database.DB // config.db
+	db  *database.DB // config.db - planner_settings table
 	log zerolog.Logger
 }
 
 // NewConfigRepository creates a new config repository.
-// db parameter should be config.db connection
+// The repository manages the single planner configuration stored in planner_settings.
+//
+// Parameters:
+//   - db: Database connection to config.db
+//   - log: Structured logger
+//
+// Returns:
+//   - *ConfigRepository: Initialized repository instance
 func NewConfigRepository(db *database.DB, log zerolog.Logger) *ConfigRepository {
 	return &ConfigRepository{
 		db:  db,
@@ -38,6 +51,12 @@ type ConfigRecord struct {
 }
 
 // GetDefaultConfig retrieves the planner configuration (single config exists).
+// Since there's only one configuration, this always returns the same config.
+// Returns default configuration if no config exists in database.
+//
+// Returns:
+//   - *domain.PlannerConfiguration: Planner configuration (or defaults if not found)
+//   - error: Error if query fails
 func (r *ConfigRepository) GetDefaultConfig() (*domain.PlannerConfiguration, error) {
 	return r.getSettings()
 }
@@ -184,6 +203,17 @@ func (r *ConfigRepository) GetConfigByName(name string) (*domain.PlannerConfigur
 }
 
 // UpdateConfig updates the planner configuration (single config exists).
+// The id, changedBy, and changeNote parameters are ignored since there's only one config
+// and no history tracking in the simplified version.
+//
+// Parameters:
+//   - id: Configuration ID (ignored - single config exists)
+//   - cfg: PlannerConfiguration object to save
+//   - changedBy: User who made the change (ignored - no history)
+//   - changeNote: Change description (ignored - no history)
+//
+// Returns:
+//   - error: Error if database operation fails
 func (r *ConfigRepository) UpdateConfig(
 	id int64,
 	cfg *domain.PlannerConfiguration,

@@ -1,3 +1,6 @@
+// Package allocation provides repository implementations for managing allocation targets.
+// This file implements the Repository, which handles allocation targets stored in config.db.
+// Allocation targets define target percentages for geography and industry diversification.
 package allocation
 
 import (
@@ -10,31 +13,50 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// SecurityInfo represents security information needed for allocation
+// SecurityInfo represents security information needed for allocation calculations.
+// This is a simplified view of security data used when determining available
+// geographies and industries from the investment universe.
 type SecurityInfo struct {
-	ISIN      string
-	Symbol    string
-	Name      string
-	Geography string
-	Industry  string
+	ISIN      string // Primary identifier
+	Symbol    string // Trading symbol
+	Name      string // Company name
+	Geography string // Country/region (may be comma-separated)
+	Industry  string // Industry sector (may be comma-separated)
 }
 
-// SecurityProvider defines the contract for getting security information
+// SecurityProvider defines the contract for getting security information.
+// This interface is used to avoid circular dependencies with the universe module.
+// It provides access to active tradable securities for determining available
+// geographies and industries.
 type SecurityProvider interface {
-	GetAllActiveTradable() ([]SecurityInfo, error)
+	GetAllActiveTradable() ([]SecurityInfo, error) // Get all tradable securities
 }
 
-// Repository handles allocation target database operations
+// Repository handles allocation target database operations.
+// Allocation targets are stored in config.db and define target percentages for
+// geography and industry diversification. The repository can optionally use a
+// SecurityProvider to determine available geographies and industries from the
+// investment universe.
+//
 // Database: config.db (allocation_targets table), universe.db (securities table for lookups)
 type Repository struct {
-	db               *sql.DB          // config.db
+	db               *sql.DB          // config.db - allocation_targets table
 	universeDB       *sql.DB          // universe.db (optional, for GetAvailableGeographies/Industries)
-	securityProvider SecurityProvider // Optional: for override support
-	log              zerolog.Logger
+	securityProvider SecurityProvider // Optional provider for security lookups
+	log              zerolog.Logger   // Structured logger
 }
 
-// NewRepository creates a new allocation repository
-// db parameter should be config.db connection
+// NewRepository creates a new allocation repository.
+// The securityProvider is optional but recommended for full functionality
+// (determining available geographies and industries).
+//
+// Parameters:
+//   - db: Database connection to config.db
+//   - securityProvider: Provider for security lookups (can be nil, but limits functionality)
+//   - log: Structured logger
+//
+// Returns:
+//   - *Repository: Initialized repository instance
 func NewRepository(db *sql.DB, securityProvider SecurityProvider, log zerolog.Logger) *Repository {
 	return &Repository{
 		db:               db,
@@ -43,12 +65,24 @@ func NewRepository(db *sql.DB, securityProvider SecurityProvider, log zerolog.Lo
 	}
 }
 
-// SetUniverseDB sets the universe database connection for querying securities
+// SetUniverseDB sets the universe database connection for querying securities.
+// This is used by methods that need direct access to the securities table
+// (e.g., GetAvailableGeographies, GetAvailableIndustries).
+//
+// Parameters:
+//   - universeDB: Database connection to universe.db
 func (r *Repository) SetUniverseDB(universeDB *sql.DB) {
 	r.universeDB = universeDB
 }
 
-// GetAll returns all allocation targets as map with key 'type:name'
+// GetAll returns all allocation targets as a map with key 'type:name'.
+// The key format is "type:name" (e.g., "geography:US", "industry:Technology").
+// This is useful for quick lookups of target percentages.
+//
+// Returns:
+//   - map[string]float64: Map of "type:name" -> target percentage
+//   - error: Error if query fails
+//
 // Faithful translation of Python: async def get_all(self) -> Dict[str, float]
 func (r *Repository) GetAll() (map[string]float64, error) {
 	query := "SELECT type, name, target_pct FROM allocation_targets"
@@ -79,7 +113,16 @@ func (r *Repository) GetAll() (map[string]float64, error) {
 	return result, nil
 }
 
-// GetByType returns allocation targets filtered by type
+// GetByType returns allocation targets filtered by type.
+// Types include "geography" and "industry".
+//
+// Parameters:
+//   - targetType: Target type ("geography" or "industry")
+//
+// Returns:
+//   - []AllocationTarget: List of allocation targets of the specified type
+//   - error: Error if query fails
+//
 // Faithful translation of Python: async def get_by_type(self, target_type: str) -> List[AllocationTarget]
 func (r *Repository) GetByType(targetType string) ([]AllocationTarget, error) {
 	query := "SELECT id, type, name, target_pct, created_at, updated_at FROM allocation_targets WHERE type = ?"
@@ -126,6 +169,11 @@ func (r *Repository) GetByType(targetType string) ([]AllocationTarget, error) {
 
 // GetGeographyTargets returns geography allocation targets as raw weights.
 // The returned weights are NOT normalized - call NormalizeWeights() when needed for calculations.
+// This is a convenience method that filters GetByType("geography") and converts to a map.
+//
+// Returns:
+//   - map[string]float64: Map of geography name -> target percentage (raw, not normalized)
+//   - error: Error if query fails
 func (r *Repository) GetGeographyTargets() (map[string]float64, error) {
 	targets, err := r.GetByType("geography")
 	if err != nil {
@@ -142,6 +190,11 @@ func (r *Repository) GetGeographyTargets() (map[string]float64, error) {
 
 // GetIndustryTargets returns industry allocation targets as raw weights.
 // The returned weights are NOT normalized - call NormalizeWeights() when needed for calculations.
+// This is a convenience method that filters GetByType("industry") and converts to a map.
+//
+// Returns:
+//   - map[string]float64: Map of industry name -> target percentage (raw, not normalized)
+//   - error: Error if query fails
 func (r *Repository) GetIndustryTargets() (map[string]float64, error) {
 	targets, err := r.GetByType("industry")
 	if err != nil {
@@ -156,7 +209,16 @@ func (r *Repository) GetIndustryTargets() (map[string]float64, error) {
 	return result, nil
 }
 
-// Upsert inserts or updates an allocation target
+// Upsert inserts or updates an allocation target.
+// Uses INSERT OR REPLACE to handle both insert and update in a single operation.
+// The (type, name) combination is unique - updating an existing target replaces its target_pct.
+//
+// Parameters:
+//   - target: AllocationTarget object to upsert
+//
+// Returns:
+//   - error: Error if database operation fails
+//
 // Faithful translation of Python: async def upsert(self, target: AllocationTarget) -> None
 func (r *Repository) Upsert(target AllocationTarget) error {
 	now := time.Now().Unix()
@@ -183,7 +245,16 @@ func (r *Repository) Upsert(target AllocationTarget) error {
 	return nil
 }
 
-// Delete removes an allocation target
+// Delete removes an allocation target.
+// This operation is idempotent - it does not error if the target doesn't exist.
+//
+// Parameters:
+//   - targetType: Target type ("geography" or "industry")
+//   - name: Target name (e.g., "US", "Technology")
+//
+// Returns:
+//   - error: Error if database operation fails
+//
 // Faithful translation of Python: async def delete(self, target_type: str, name: str) -> None
 func (r *Repository) Delete(targetType, name string) error {
 	query := "DELETE FROM allocation_targets WHERE type = ? AND name = ?"
@@ -204,7 +275,15 @@ func (r *Repository) Delete(targetType, name string) error {
 }
 
 // GetAvailableGeographies returns distinct geographies from active tradable securities (excludes indices).
-// Parses comma-separated geography values and returns unique, sorted individual geographies.
+// This method queries the security universe to determine which geographies are available
+// for allocation targeting. It parses comma-separated geography values and returns unique,
+// sorted individual geographies.
+//
+// Requires securityProvider to be configured.
+//
+// Returns:
+//   - []string: Sorted list of available geography names
+//   - error: Error if securityProvider is missing or query fails
 func (r *Repository) GetAvailableGeographies() ([]string, error) {
 	// SecurityProvider is required - no fallback
 	if r.securityProvider == nil {
@@ -236,7 +315,15 @@ func (r *Repository) GetAvailableGeographies() ([]string, error) {
 }
 
 // GetAvailableIndustries returns distinct industries from active tradable securities (excludes indices).
-// Parses comma-separated industry values and returns unique, sorted individual industries.
+// This method queries the security universe to determine which industries are available
+// for allocation targeting. It parses comma-separated industry values and returns unique,
+// sorted individual industries.
+//
+// Requires securityProvider to be configured.
+//
+// Returns:
+//   - []string: Sorted list of available industry names
+//   - error: Error if securityProvider is missing or query fails
 func (r *Repository) GetAvailableIndustries() ([]string, error) {
 	// SecurityProvider is required - no fallback
 	if r.securityProvider == nil {
@@ -267,7 +354,14 @@ func (r *Repository) GetAvailableIndustries() ([]string, error) {
 	return result, nil
 }
 
-// SetGeographyTargets sets multiple geography allocation targets at once
+// SetGeographyTargets sets multiple geography allocation targets at once.
+// This is a convenience method for bulk updates. Each target is upserted individually.
+//
+// Parameters:
+//   - targets: Map of geography name -> target percentage
+//
+// Returns:
+//   - error: Error if any target upsert fails (partial update may have occurred)
 func (r *Repository) SetGeographyTargets(targets map[string]float64) error {
 	for name, weight := range targets {
 		target := AllocationTarget{
@@ -282,7 +376,14 @@ func (r *Repository) SetGeographyTargets(targets map[string]float64) error {
 	return nil
 }
 
-// SetIndustryTargets sets multiple industry allocation targets at once
+// SetIndustryTargets sets multiple industry allocation targets at once.
+// This is a convenience method for bulk updates. Each target is upserted individually.
+//
+// Parameters:
+//   - targets: Map of industry name -> target percentage
+//
+// Returns:
+//   - error: Error if any target upsert fails (partial update may have occurred)
 func (r *Repository) SetIndustryTargets(targets map[string]float64) error {
 	for name, weight := range targets {
 		target := AllocationTarget{

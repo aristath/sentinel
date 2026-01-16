@@ -27,11 +27,21 @@ var validTables = func() map[string]bool {
 }()
 
 // Repository provides cache operations for client data.
+// This repository manages persistent caching of external API responses (exchange rates,
+// current prices, symbol-to-ISIN mappings) with expiration timestamps for cache-first behavior.
+// All data is stored as JSON blobs in client_data.db.
 type Repository struct {
-	db *sql.DB
+	db *sql.DB // client_data.db - cache tables (exchangerate, current_prices, symbol_to_isin)
 }
 
 // NewRepository creates a new client data repository.
+// The repository manages cached API responses with expiration timestamps.
+//
+// Parameters:
+//   - db: Database connection to client_data.db
+//
+// Returns:
+//   - *Repository: Initialized repository instance
 func NewRepository(db *sql.DB) *Repository {
 	return &Repository{db: db}
 }
@@ -59,7 +69,17 @@ func getKeyColumn(table string) string {
 }
 
 // Store saves data with expiration = now + ttl.
-// Uses INSERT OR REPLACE to upsert data.
+// Uses INSERT OR REPLACE to upsert data. The data is serialized to JSON before storage.
+// This is used for caching API responses to reduce external API calls.
+//
+// Parameters:
+//   - table: Table name (must be in AllTables list for security)
+//   - key: Cache key (primary key for the table - varies by table: isin, pair, symbol)
+//   - data: Data to cache (will be serialized to JSON)
+//   - ttl: Time-to-live duration (expiration = now + ttl)
+//
+// Returns:
+//   - error: Error if table validation fails, JSON serialization fails, or database operation fails
 func (r *Repository) Store(table, key string, data interface{}, ttl time.Duration) error {
 	if err := validateTable(table); err != nil {
 		return err
@@ -92,8 +112,17 @@ func (r *Repository) Store(table, key string, data interface{}, ttl time.Duratio
 }
 
 // GetIfFresh returns data only if expires_at > now, nil otherwise.
+// This is the primary method for cache lookups - only returns fresh (non-expired) data.
 // Returns nil, nil if the key doesn't exist or data is expired.
 // Use Get() to retrieve stale data as a fallback when API calls fail.
+//
+// Parameters:
+//   - table: Table name (must be in AllTables list for security)
+//   - key: Cache key
+//
+// Returns:
+//   - json.RawMessage: Cached data if fresh, nil if expired or not found
+//   - error: Error if table validation fails or query fails
 func (r *Repository) GetIfFresh(table, key string) (json.RawMessage, error) {
 	if err := validateTable(table); err != nil {
 		return nil, err
@@ -121,7 +150,15 @@ func (r *Repository) GetIfFresh(table, key string) (json.RawMessage, error) {
 
 // Get returns data regardless of expiration status.
 // Use this as a fallback when API calls fail - stale data is better than no data.
-// Returns nil, nil if the key doesn't exist.
+// This is useful for graceful degradation when external APIs are unavailable.
+//
+// Parameters:
+//   - table: Table name (must be in AllTables list for security)
+//   - key: Cache key
+//
+// Returns:
+//   - json.RawMessage: Cached data (even if expired), nil if not found
+//   - error: Error if table validation fails or query fails
 func (r *Repository) Get(table, key string) (json.RawMessage, error) {
 	if err := validateTable(table); err != nil {
 		return nil, err
@@ -146,7 +183,15 @@ func (r *Repository) Get(table, key string) (json.RawMessage, error) {
 	return json.RawMessage(data), nil
 }
 
-// Delete removes a specific entry.
+// Delete removes a specific cache entry.
+// This operation is idempotent - it does not error if the entry doesn't exist.
+//
+// Parameters:
+//   - table: Table name (must be in AllTables list for security)
+//   - key: Cache key to delete
+//
+// Returns:
+//   - error: Error if table validation fails or database operation fails
 func (r *Repository) Delete(table, key string) error {
 	if err := validateTable(table); err != nil {
 		return err
@@ -165,7 +210,14 @@ func (r *Repository) Delete(table, key string) error {
 }
 
 // DeleteExpired removes all rows where expires_at < now.
-// Returns the number of rows deleted.
+// This is useful for cache cleanup operations to reclaim storage space.
+//
+// Parameters:
+//   - table: Table name (must be in AllTables list for security)
+//
+// Returns:
+//   - int64: Number of rows deleted
+//   - error: Error if table validation fails or database operation fails
 func (r *Repository) DeleteExpired(table string) (int64, error) {
 	if err := validateTable(table); err != nil {
 		return 0, err
@@ -189,7 +241,12 @@ func (r *Repository) DeleteExpired(table string) (int64, error) {
 }
 
 // DeleteAllExpired removes all expired entries from all tables.
-// Returns a map of table name to number of rows deleted.
+// This is useful for bulk cache cleanup operations across all cache tables.
+// Returns a map showing how many rows were deleted from each table.
+//
+// Returns:
+//   - map[string]int64: Map of table name -> number of rows deleted
+//   - error: Error if any table cleanup fails (partial cleanup may have occurred)
 func (r *Repository) DeleteAllExpired() (map[string]int64, error) {
 	results := make(map[string]int64)
 

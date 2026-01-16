@@ -1,3 +1,6 @@
+// Package cash_flows provides repository implementations for managing cash balances and cash flow transactions.
+// This file implements the Repository for cash flow transactions, which handles cash flow records stored in ledger.db.
+// Cash flows represent deposits, withdrawals, dividends, and other cash movements in the portfolio.
 package cash_flows
 
 import (
@@ -11,14 +14,28 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// Repository handles cash flow persistence
+// Repository handles cash flow persistence for the immutable audit trail.
+// Cash flows are stored in ledger.db and represent deposits, withdrawals, dividends,
+// and other cash movements. They form part of the immutable financial audit trail.
+//
+// The repository validates currency conversion accuracy and provides methods for
+// querying cash flows by date range, type, and calculating totals.
+//
 // Faithful translation from Python: app/modules/cash_flows/database/cash_flow_repository.py
 type Repository struct {
-	ledgerDB *sql.DB
-	log      zerolog.Logger
+	ledgerDB *sql.DB        // ledger.db - cash_flows table (immutable audit trail)
+	log      zerolog.Logger // Structured logger
 }
 
-// NewRepository creates a new cash flow repository
+// NewRepository creates a new cash flow repository.
+// The repository manages cash flow transactions stored in the cash_flows table.
+//
+// Parameters:
+//   - ledgerDB: Database connection to ledger.db
+//   - log: Structured logger
+//
+// Returns:
+//   - *Repository: Initialized repository instance
 func NewRepository(ledgerDB *sql.DB, log zerolog.Logger) *Repository {
 	return &Repository{
 		ledgerDB: ledgerDB,
@@ -26,13 +43,23 @@ func NewRepository(ledgerDB *sql.DB, log zerolog.Logger) *Repository {
 	}
 }
 
-// BalancePoint represents a point in cash balance history
+// BalancePoint represents a point in cash balance history.
+// Used for generating cash balance charts over time.
 type BalancePoint struct {
-	Date    string  `json:"date"`
-	Balance float64 `json:"balance"`
+	Date    string  `json:"date"`    // Date in YYYY-MM-DD format
+	Balance float64 `json:"balance"` // Cash balance in EUR at this date
 }
 
-// Create inserts a new cash flow
+// Create inserts a new cash flow into the immutable audit trail.
+// This method validates currency conversion accuracy before insertion.
+// Dates are converted from YYYY-MM-DD format to Unix timestamps at midnight UTC.
+//
+// Parameters:
+//   - cashFlow: CashFlow object to create
+//
+// Returns:
+//   - *CashFlow: Created cash flow with ID and CreatedAt populated
+//   - error: Error if validation fails or database operation fails
 func (r *Repository) Create(cashFlow *CashFlow) (*CashFlow, error) {
 	// Validate currency conversion accuracy
 	if err := r.validateCurrencyConversion(cashFlow); err != nil {
@@ -84,7 +111,15 @@ func (r *Repository) Create(cashFlow *CashFlow) (*CashFlow, error) {
 	return cashFlow, nil
 }
 
-// validateCurrencyConversion ensures currency conversion accuracy in cash flows
+// validateCurrencyConversion ensures currency conversion accuracy in cash flows.
+// For EUR currency, amounts must match exactly. For other currencies, it performs
+// sanity checks on the implied exchange rate (warns if suspicious but doesn't fail).
+//
+// Parameters:
+//   - cf: CashFlow object to validate
+//
+// Returns:
+//   - error: Error if EUR conversion mismatch detected
 func (r *Repository) validateCurrencyConversion(cf *CashFlow) error {
 	// For EUR currency, amounts should match exactly
 	if cf.Currency == "EUR" {
@@ -110,7 +145,15 @@ func (r *Repository) validateCurrencyConversion(cf *CashFlow) error {
 	return nil
 }
 
-// GetByTransactionID retrieves a cash flow by transaction ID
+// GetByTransactionID retrieves a cash flow by transaction ID.
+// Transaction IDs are unique identifiers from the broker API and are used to prevent duplicates.
+//
+// Parameters:
+//   - transactionID: Broker transaction ID
+//
+// Returns:
+//   - *CashFlow: Cash flow object if found, nil if not found
+//   - error: Error if query fails
 func (r *Repository) GetByTransactionID(transactionID string) (*CashFlow, error) {
 	query := `
 		SELECT id, transaction_id, type_doc_id, transaction_type, date, amount, currency,
@@ -155,7 +198,15 @@ func (r *Repository) GetByTransactionID(transactionID string) (*CashFlow, error)
 	return &cf, nil
 }
 
-// Exists checks if a transaction ID exists
+// Exists checks if a transaction ID exists in the database.
+// This is used to prevent duplicate cash flow recording during sync operations.
+//
+// Parameters:
+//   - transactionID: Broker transaction ID
+//
+// Returns:
+//   - bool: True if transaction exists, false otherwise
+//   - error: Error if query fails
 func (r *Repository) Exists(transactionID string) (bool, error) {
 	var count int
 	err := r.ledgerDB.QueryRow("SELECT COUNT(*) FROM cash_flows WHERE transaction_id = ?", transactionID).Scan(&count)
@@ -165,7 +216,15 @@ func (r *Repository) Exists(transactionID string) (bool, error) {
 	return count > 0, nil
 }
 
-// GetAll retrieves all cash flows with optional limit
+// GetAll retrieves all cash flows with optional limit.
+// Results are ordered by date descending (most recent first).
+//
+// Parameters:
+//   - limit: Optional limit on number of results (nil for no limit)
+//
+// Returns:
+//   - []CashFlow: List of cash flows (ordered by date DESC)
+//   - error: Error if query fails
 func (r *Repository) GetAll(limit *int) ([]CashFlow, error) {
 	query := "SELECT id, transaction_id, type_doc_id, transaction_type, date, amount, currency, amount_eur, status, status_c, description, params_json, created_at FROM cash_flows ORDER BY date DESC"
 
@@ -182,8 +241,17 @@ func (r *Repository) GetAll(limit *int) ([]CashFlow, error) {
 	return r.scanCashFlows(rows)
 }
 
-// GetByDateRange retrieves cash flows within a date range
-// startDate and endDate are in YYYY-MM-DD format, converted to Unix timestamps
+// GetByDateRange retrieves cash flows within a date range.
+// Dates are converted from YYYY-MM-DD format to Unix timestamps at midnight UTC.
+// Useful for generating reports or analyzing cash movements over a specific period.
+//
+// Parameters:
+//   - startDate: Start date in YYYY-MM-DD format (inclusive, midnight UTC)
+//   - endDate: End date in YYYY-MM-DD format (inclusive, end of day UTC)
+//
+// Returns:
+//   - []CashFlow: List of cash flows within the date range (ordered by date ASC)
+//   - error: Error if date parsing fails or query fails
 func (r *Repository) GetByDateRange(startDate, endDate string) ([]CashFlow, error) {
 	// Convert YYYY-MM-DD to Unix timestamps at midnight UTC
 	startUnix, err := utils.DateToUnix(startDate)
@@ -215,7 +283,15 @@ func (r *Repository) GetByDateRange(startDate, endDate string) ([]CashFlow, erro
 	return r.scanCashFlows(rows)
 }
 
-// GetByType retrieves cash flows by transaction type
+// GetByType retrieves cash flows by transaction type.
+// Transaction types include deposits, withdrawals, dividends, fees, etc.
+//
+// Parameters:
+//   - txType: Transaction type (e.g., "DEPOSIT", "WITHDRAWAL", "DIVIDEND")
+//
+// Returns:
+//   - []CashFlow: List of cash flows of the specified type (ordered by date DESC)
+//   - error: Error if query fails
 func (r *Repository) GetByType(txType string) ([]CashFlow, error) {
 	query := `
 		SELECT id, transaction_id, type_doc_id, transaction_type, date, amount, currency,
@@ -234,7 +310,17 @@ func (r *Repository) GetByType(txType string) ([]CashFlow, error) {
 	return r.scanCashFlows(rows)
 }
 
-// SyncFromAPI syncs transactions from API, returns count of newly inserted
+// SyncFromAPI syncs transactions from the broker API.
+// This method checks for existing transactions by transaction_id to prevent duplicates,
+// then creates new cash flow records for transactions that don't exist yet.
+// Returns the count of newly inserted transactions.
+//
+// Parameters:
+//   - transactions: List of API transactions from broker
+//
+// Returns:
+//   - int: Count of newly inserted transactions
+//   - error: Error if any transaction creation fails (partial sync may have occurred)
 func (r *Repository) SyncFromAPI(transactions []APITransaction) (int, error) {
 	syncedCount := 0
 
@@ -281,7 +367,12 @@ func (r *Repository) SyncFromAPI(transactions []APITransaction) (int, error) {
 	return syncedCount, nil
 }
 
-// GetTotalDeposits calculates total deposits
+// GetTotalDeposits calculates total deposits in EUR.
+// Includes transactions with "deposit" or "refill" in the transaction type (case-insensitive).
+//
+// Returns:
+//   - float64: Total deposits in EUR (0.0 if none)
+//   - error: Error if query fails
 func (r *Repository) GetTotalDeposits() (float64, error) {
 	query := `
 		SELECT COALESCE(SUM(amount_eur), 0)
@@ -298,7 +389,13 @@ func (r *Repository) GetTotalDeposits() (float64, error) {
 	return total, nil
 }
 
-// GetTotalWithdrawals calculates total withdrawals
+// GetTotalWithdrawals calculates total withdrawals in EUR.
+// Includes transactions with "withdrawal" in the transaction type (case-insensitive).
+// Uses ABS() to ensure positive values even if amounts are stored as negative.
+//
+// Returns:
+//   - float64: Total withdrawals in EUR (0.0 if none)
+//   - error: Error if query fails
 func (r *Repository) GetTotalWithdrawals() (float64, error) {
 	query := `
 		SELECT COALESCE(SUM(ABS(amount_eur)), 0)
@@ -314,8 +411,21 @@ func (r *Repository) GetTotalWithdrawals() (float64, error) {
 	return total, nil
 }
 
-// GetCashBalanceHistory calculates running cash balance
-// startDate and endDate are in YYYY-MM-DD format, converted to Unix timestamps
+// GetCashBalanceHistory calculates running cash balance over time.
+// This method aggregates daily cash flows and calculates a running balance starting
+// from initialCash. Useful for generating cash balance charts.
+//
+// Dates are converted from YYYY-MM-DD format to Unix timestamps at midnight UTC.
+// Daily flows are calculated by summing deposits/dividends (positive) and withdrawals (negative).
+//
+// Parameters:
+//   - startDate: Start date in YYYY-MM-DD format (inclusive, midnight UTC)
+//   - endDate: End date in YYYY-MM-DD format (inclusive, end of day UTC)
+//   - initialCash: Starting cash balance in EUR (before the date range)
+//
+// Returns:
+//   - []BalancePoint: List of balance points with dates and running balances
+//   - error: Error if date parsing fails or query fails
 func (r *Repository) GetCashBalanceHistory(startDate, endDate string, initialCash float64) ([]BalancePoint, error) {
 	// Convert YYYY-MM-DD to Unix timestamps at midnight UTC
 	startUnix, err := utils.DateToUnix(startDate)

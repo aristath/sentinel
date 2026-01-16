@@ -1,3 +1,6 @@
+// Package dividends provides repository implementations for managing dividend records.
+// This file implements the DividendRepository, which handles dividend records stored in ledger.db.
+// Dividends represent dividend payments received and their reinvestment status (DRIP).
 package dividends
 
 import (
@@ -10,18 +13,26 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// SecurityProvider defines the interface for getting security information
-// Used to avoid circular dependencies with universe module
+// SecurityProvider defines the interface for getting security information.
+// This interface is used to avoid circular dependencies with the universe module.
+// It provides symbol-to-ISIN lookups for dividend records.
 type SecurityProvider interface {
-	GetISINBySymbol(symbol string) (string, error)
+	GetISINBySymbol(symbol string) (string, error) // Resolve symbol to ISIN
 }
 
-// DividendRepository handles dividend database operations
+// DividendRepository handles dividend database operations for the immutable audit trail.
+// Dividends are stored in ledger.db and represent dividend payments received from securities.
+// The repository tracks reinvestment status (DRIP), pending bonuses, and bonus clearing.
+// After migration 030, ISIN is the primary identifier (replacing symbol).
+//
+// The repository can optionally use a SecurityProvider to resolve symbols to ISINs
+// for backward compatibility.
+//
 // Faithful translation from Python: app/modules/dividends/database/dividend_repository.py
 type DividendRepository struct {
-	ledgerDB         *sql.DB          // ledger.db - dividend_history table
-	securityProvider SecurityProvider // For symbol->ISIN lookup (optional for backwards compatibility)
-	log              zerolog.Logger
+	ledgerDB         *sql.DB          // ledger.db - dividend_history table (immutable audit trail)
+	securityProvider SecurityProvider // Optional provider for symbol -> ISIN lookup
+	log              zerolog.Logger   // Structured logger
 }
 
 // dividendHistoryColumns is the list of columns for the dividend_history table
@@ -39,8 +50,15 @@ func NewDividendRepository(ledgerDB *sql.DB, securityProvider SecurityProvider, 
 	}
 }
 
-// Create creates a new dividend record
-// After migration: ISIN should be populated
+// Create creates a new dividend record in the immutable audit trail.
+// This method automatically resolves ISIN from symbol if not provided (via securityProvider).
+// Payment date is required and stored as a Unix timestamp.
+//
+// Parameters:
+//   - dividend: DividendRecord object to create (ID and CreatedAt will be populated)
+//
+// Returns:
+//   - error: Error if payment_date is missing or database operation fails
 func (r *DividendRepository) Create(dividend *DividendRecord) error {
 	now := time.Now().Unix()
 
@@ -194,7 +212,17 @@ func (r *DividendRepository) GetBySymbol(symbol string) ([]DividendRecord, error
 	return dividends, nil
 }
 
-// GetByISIN retrieves all dividend records for an ISIN
+// GetByISIN retrieves all dividend records for an ISIN.
+// This is the preferred method after migration 030 (ISIN is the primary identifier).
+// Results are ordered by payment_date descending (most recent first).
+//
+// Parameters:
+//   - isin: Security ISIN
+//
+// Returns:
+//   - []DividendRecord: List of dividend records (ordered by payment_date DESC)
+//   - error: Error if query fails
+//
 // Faithful translation of Python: async def get_by_isin(self, isin: str) -> List[DividendRecord]
 func (r *DividendRepository) GetByISIN(isin string) ([]DividendRecord, error) {
 	query := `
@@ -270,7 +298,15 @@ func (r *DividendRepository) GetAll(limit int) ([]DividendRecord, error) {
 	return dividends, nil
 }
 
-// GetPendingBonuses retrieves all pending dividend bonuses by symbol
+// GetPendingBonuses retrieves all pending dividend bonuses by symbol.
+// Pending bonuses are dividends that couldn't be fully reinvested (e.g., insufficient amount
+// to buy a full share). These accumulate until the security is bought again, at which point
+// they are cleared via ClearBonus().
+//
+// Returns:
+//   - map[string]float64: Map of symbol -> total pending bonus amount
+//   - error: Error if query fails
+//
 // Faithful translation of Python: async def get_pending_bonuses(self) -> Dict[str, float]
 func (r *DividendRepository) GetPendingBonuses() (map[string]float64, error) {
 	query := `
@@ -317,7 +353,17 @@ func (r *DividendRepository) GetPendingBonus(symbol string) (float64, error) {
 	return total, nil
 }
 
-// MarkReinvested marks a dividend as reinvested (DRIP executed)
+// MarkReinvested marks a dividend as reinvested (DRIP executed).
+// This updates the dividend record to indicate it was used to purchase shares via DRIP.
+// The pending_bonus is cleared when a dividend is marked as reinvested.
+//
+// Parameters:
+//   - dividendID: Dividend record ID
+//   - quantity: Number of shares purchased with the dividend
+//
+// Returns:
+//   - error: Error if database operation fails
+//
 // Faithful translation of Python: async def mark_reinvested(self, dividend_id: int, quantity: int) -> None
 func (r *DividendRepository) MarkReinvested(dividendID int, quantity int) error {
 	now := time.Now().Unix()
@@ -361,7 +407,17 @@ func (r *DividendRepository) SetPendingBonus(dividendID int, bonus float64) erro
 	return nil
 }
 
-// ClearBonus clears pending bonuses for a symbol (after security is bought)
+// ClearBonus clears pending bonuses for a symbol (after security is bought).
+// When a security is purchased, any accumulated pending bonuses are cleared.
+// This prevents double-counting of bonuses that were already used in the purchase.
+//
+// Parameters:
+//   - symbol: Security symbol
+//
+// Returns:
+//   - int: Number of dividend records updated
+//   - error: Error if database operation fails
+//
 // Faithful translation of Python: async def clear_bonus(self, symbol: str) -> int
 func (r *DividendRepository) ClearBonus(symbol string) (int, error) {
 	now := time.Now().Unix()
