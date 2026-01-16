@@ -400,7 +400,8 @@ func (s *Service) CalculateRebalanceTrades(availableCash float64) ([]RebalanceRe
 	}
 
 	// Step 2: Build OpportunityContext using unified builder
-	opportunityCtx, err := s.contextBuilder.Build()
+	// Rebalancing doesn't use optimizer weights, pass nil to use allocation targets
+	opportunityCtx, err := s.contextBuilder.Build(nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build opportunity context: %w", err)
 	}

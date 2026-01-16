@@ -247,7 +247,6 @@ func TestPlannerContext_Execute(t *testing.T) {
 	cache.Set("optimizer_weights", map[string]float64{"AAPL": 0.5})
 
 	contextBuilder := &MockOpportunityContextBuilder{}
-	contextBuilder.On("SetWeights", mock.Anything).Return()
 	contextBuilder.On("Build").Return(map[string]interface{}{"test": true}, nil)
 
 	deps := &PlannerDeps{

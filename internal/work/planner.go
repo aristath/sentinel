@@ -22,7 +22,6 @@ type OptimizerServiceInterface interface {
 // OpportunityContextBuilderInterface defines the context builder interface
 type OpportunityContextBuilderInterface interface {
 	Build() (interface{}, error)
-	SetWeights(weights map[string]float64)
 }
 
 // PlannerServiceInterface defines the planner service interface
@@ -88,18 +87,7 @@ func RegisterPlannerWorkTypes(registry *Registry, deps *PlannerDeps) {
 			return []string{""}
 		},
 		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
-
-			// Get weights from cache
-			weightsInterface := deps.Cache.Get("optimizer_weights")
-			weights, ok := weightsInterface.(map[string]float64)
-			if !ok {
-				return fmt.Errorf("optimizer weights not found in cache")
-			}
-
-			// Set weights on context builder
-			deps.ContextBuilder.SetWeights(weights)
-
-			// Build context
+			// Build context (adapter gets weights from cache automatically)
 			opportunityContext, err := deps.ContextBuilder.Build()
 			if err != nil {
 				return fmt.Errorf("failed to build opportunity context: %w", err)

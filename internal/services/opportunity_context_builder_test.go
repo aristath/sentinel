@@ -257,7 +257,7 @@ func TestOpportunityContextBuilder_Build_ReturnsCompleteContext(t *testing.T) {
 		log,
 	)
 
-	ctx, err := builder.Build()
+	ctx, err := builder.Build(nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -305,7 +305,7 @@ func TestOpportunityContextBuilder_Build_PopulatesCooloffFromTrades(t *testing.T
 		log,
 	)
 
-	ctx, err := builder.Build()
+	ctx, err := builder.Build(nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -361,7 +361,7 @@ func TestOpportunityContextBuilder_Build_PopulatesCooloffFromPendingOrders(t *te
 		log,
 	)
 
-	ctx, err := builder.Build()
+	ctx, err := builder.Build(nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -411,7 +411,7 @@ func TestOpportunityContextBuilder_Build_MergesCooloffSources(t *testing.T) {
 		log,
 	)
 
-	ctx, err := builder.Build()
+	ctx, err := builder.Build(nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -446,7 +446,7 @@ func TestOpportunityContextBuilder_Build_PopulatesGeographyWeights(t *testing.T)
 		log,
 	)
 
-	ctx, err := builder.Build()
+	ctx, err := builder.Build(nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -482,7 +482,7 @@ func TestOpportunityContextBuilder_Build_PopulatesSecurityScores(t *testing.T) {
 		log,
 	)
 
-	ctx, err := builder.Build()
+	ctx, err := builder.Build(nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -517,7 +517,7 @@ func TestOpportunityContextBuilder_Build_PopulatesRiskMetrics(t *testing.T) {
 		log,
 	)
 
-	ctx, err := builder.Build()
+	ctx, err := builder.Build(nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -553,7 +553,7 @@ func TestOpportunityContextBuilder_Build_PopulatesCAGRs(t *testing.T) {
 		log,
 	)
 
-	ctx, err := builder.Build()
+	ctx, err := builder.Build(nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -600,7 +600,7 @@ func TestOpportunityContextBuilder_Build_ConvertsAllPricesToEUR(t *testing.T) {
 		log,
 	)
 
-	ctx, err := builder.Build()
+	ctx, err := builder.Build(nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -636,7 +636,7 @@ func TestOpportunityContextBuilder_Build_UsesConfiguredCooloffDays(t *testing.T)
 		log,
 	)
 
-	ctx, err := builder.Build()
+	ctx, err := builder.Build(nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -664,7 +664,7 @@ func TestOpportunityContextBuilder_Build_HandlesEmptyPositions(t *testing.T) {
 		log,
 	)
 
-	ctx, err := builder.Build()
+	ctx, err := builder.Build(nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -704,7 +704,7 @@ func TestOpportunityContextBuilder_Build_HandlesMissingPrices(t *testing.T) {
 		log,
 	)
 
-	ctx, err := builder.Build()
+	ctx, err := builder.Build(nil)
 
 	// Should not error, just handle gracefully
 	require.NoError(t, err)
@@ -733,7 +733,7 @@ func TestOpportunityContextBuilder_Build_HandlesBrokerDisconnected(t *testing.T)
 		log,
 	)
 
-	ctx, err := builder.Build()
+	ctx, err := builder.Build(nil)
 
 	// Should not error, just skip pending orders
 	require.NoError(t, err)
@@ -771,7 +771,7 @@ func TestOpportunityContextBuilder_Build_PopulatesValueTrapData(t *testing.T) {
 		log,
 	)
 
-	ctx, err := builder.Build()
+	ctx, err := builder.Build(nil)
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -804,7 +804,7 @@ func TestOpportunityContextBuilder_Build_HandlesPositionRepoError(t *testing.T) 
 		log,
 	)
 
-	ctx, err := builder.Build()
+	ctx, err := builder.Build(nil)
 
 	require.Error(t, err)
 	assert.Nil(t, ctx)
@@ -830,11 +830,154 @@ func TestOpportunityContextBuilder_Build_HandlesSecurityRepoError(t *testing.T) 
 		log,
 	)
 
-	ctx, err := builder.Build()
+	ctx, err := builder.Build(nil)
 
 	require.Error(t, err)
 	assert.Nil(t, ctx)
 	assert.Contains(t, err.Error(), "securit")
+}
+
+// Test: Build with optimizer weights uses them instead of allocations
+func TestOpportunityContextBuilder_Build_WithOptimizerWeights(t *testing.T) {
+	log := logger.New(logger.Config{Level: "error", Pretty: false})
+
+	isin1 := "NL0010273215"
+	isin2 := "US0378331005"
+
+	// Setup with allocation targets in database
+	allocations := map[string]float64{
+		"geography:US": 0.6,
+		"geography:EU": 0.4,
+	}
+
+	// Optimizer weights (ISIN-keyed)
+	optimizerWeights := map[string]float64{
+		isin1: 0.4,
+		isin2: 0.6,
+	}
+
+	price1 := 650.0
+	price2 := 150.0
+
+	builder := NewOpportunityContextBuilder(
+		&ocbMockPositionRepository{
+			positions: []portfolio.Position{
+				{ISIN: isin1, Symbol: "ASML", Quantity: 10, AvgPrice: 600.0, Currency: "EUR"},
+			},
+		},
+		&ocbMockSecurityRepository{
+			securities: []universe.Security{
+				{ISIN: isin1, Symbol: "ASML", Active: true, Geography: "EU", Currency: "EUR", Name: "ASML Holding"},
+				{ISIN: isin2, Symbol: "AAPL", Active: true, Geography: "US", Currency: "USD", Name: "Apple Inc"},
+			},
+		},
+		&ocbMockAllocationRepository{allocations: allocations},
+		&ocbMockTradeRepository{recentlySold: map[string]bool{}, recentlyBought: map[string]bool{}},
+		&ocbMockScoresRepository{},
+		&ocbMockSettingsRepository{},
+		&ocbMockRegimeRepository{},
+		&ocbMockCashManager{balances: map[string]float64{"EUR": 1000.0}},
+		&ocbMockPriceClient{quotes: map[string]*float64{
+			"ASML": &price1,
+			"AAPL": &price2,
+		}},
+		&ocbMockPriceConversionService{convertedPrices: map[string]float64{
+			"ASML": 650.0,
+			"AAPL": 150.0,
+		}},
+		&ocbMockBrokerClient{connected: false},
+		log,
+	)
+
+	ctx, err := builder.Build(optimizerWeights)
+
+	require.NoError(t, err)
+	require.NotNil(t, ctx)
+
+	// Verify TargetWeights uses optimizer weights, NOT allocations
+	assert.Equal(t, 0.4, ctx.TargetWeights[isin1], "Should have optimizer weight for ASML")
+	assert.Equal(t, 0.6, ctx.TargetWeights[isin2], "Should have optimizer weight for AAPL")
+
+	// Should NOT contain allocation keys
+	assert.NotContains(t, ctx.TargetWeights, "geography:US", "Should not contain allocation keys")
+	assert.NotContains(t, ctx.TargetWeights, "geography:EU", "Should not contain allocation keys")
+
+	// Verify only 2 entries (ISINs, not allocation keys)
+	assert.Len(t, ctx.TargetWeights, 2, "Should only have ISIN keys")
+}
+
+// Test: Build without optimizer weights falls back to allocations
+func TestOpportunityContextBuilder_Build_WithoutOptimizerWeights(t *testing.T) {
+	log := logger.New(logger.Config{Level: "error", Pretty: false})
+
+	// Allocation targets from database
+	allocations := map[string]float64{
+		"geography:US": 0.6,
+		"geography:EU": 0.4,
+	}
+
+	builder := NewOpportunityContextBuilder(
+		&ocbMockPositionRepository{positions: []portfolio.Position{}},
+		&ocbMockSecurityRepository{securities: []universe.Security{}},
+		&ocbMockAllocationRepository{allocations: allocations},
+		&ocbMockTradeRepository{recentlySold: map[string]bool{}, recentlyBought: map[string]bool{}},
+		&ocbMockScoresRepository{},
+		&ocbMockSettingsRepository{},
+		&ocbMockRegimeRepository{},
+		&ocbMockCashManager{balances: map[string]float64{"EUR": 1000.0}},
+		&ocbMockPriceClient{},
+		&ocbMockPriceConversionService{},
+		&ocbMockBrokerClient{connected: false},
+		log,
+	)
+
+	ctx, err := builder.Build(nil)
+
+	require.NoError(t, err)
+	require.NotNil(t, ctx)
+
+	// When no optimizer weights provided, should fall back to allocations
+	assert.Contains(t, ctx.TargetWeights, "geography:US", "Should contain allocation keys when no optimizer weights")
+	assert.Contains(t, ctx.TargetWeights, "geography:EU", "Should contain allocation keys when no optimizer weights")
+	assert.Equal(t, 0.6, ctx.TargetWeights["geography:US"])
+	assert.Equal(t, 0.4, ctx.TargetWeights["geography:EU"])
+}
+
+// Test: Build with empty optimizer weights falls back to allocations
+func TestOpportunityContextBuilder_Build_WithEmptyOptimizerWeights(t *testing.T) {
+	log := logger.New(logger.Config{Level: "error", Pretty: false})
+
+	allocations := map[string]float64{
+		"geography:US": 0.7,
+		"geography:EU": 0.3,
+	}
+
+	builder := NewOpportunityContextBuilder(
+		&ocbMockPositionRepository{positions: []portfolio.Position{}},
+		&ocbMockSecurityRepository{securities: []universe.Security{}},
+		&ocbMockAllocationRepository{allocations: allocations},
+		&ocbMockTradeRepository{recentlySold: map[string]bool{}, recentlyBought: map[string]bool{}},
+		&ocbMockScoresRepository{},
+		&ocbMockSettingsRepository{},
+		&ocbMockRegimeRepository{},
+		&ocbMockCashManager{balances: map[string]float64{"EUR": 1000.0}},
+		&ocbMockPriceClient{},
+		&ocbMockPriceConversionService{},
+		&ocbMockBrokerClient{connected: false},
+		log,
+	)
+
+	// Pass empty map (should fall back to allocations)
+	ctx, err := builder.Build(map[string]float64{})
+
+	require.NoError(t, err)
+	require.NotNil(t, ctx)
+
+	// Should fall back to allocations when optimizer weights are empty
+	assert.Contains(t, ctx.TargetWeights, "geography:US")
+	assert.Contains(t, ctx.TargetWeights, "geography:EU")
+	assert.Equal(t, 0.7, ctx.TargetWeights["geography:US"])
+	assert.Equal(t, 0.3, ctx.TargetWeights["geography:EU"])
 }
 
 // Removed TestOpportunityContextBuilder_Build_PopulatesDismissedFilters - dismissed filter functionality removed

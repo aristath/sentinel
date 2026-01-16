@@ -66,8 +66,13 @@ func NewOpportunityContextBuilder(
 }
 
 // Build creates a complete OpportunityContext with all fields populated.
+//
+// Parameters:
+//   - optimizerWeights: ISIN-keyed target weights from optimizer (e.g., {"NL0010273215": 0.05})
+//     Pass nil to use allocation targets from database instead
+//
 // Returns error if critical data cannot be loaded.
-func (b *OpportunityContextBuilder) Build() (*planningdomain.OpportunityContext, error) {
+func (b *OpportunityContextBuilder) Build(optimizerWeights map[string]float64) (*planningdomain.OpportunityContext, error) {
 	b.log.Debug().Msg("Building opportunity context")
 
 	// Step 1: Get positions
@@ -110,7 +115,7 @@ func (b *OpportunityContextBuilder) Build() (*planningdomain.OpportunityContext,
 	}
 
 	// Step 6: Build the context
-	return b.buildContext(positions, securities, allocations, cashBalances)
+	return b.buildContext(positions, securities, allocations, cashBalances, optimizerWeights)
 }
 
 // buildContext creates the OpportunityContext from the gathered data.
@@ -119,6 +124,7 @@ func (b *OpportunityContextBuilder) buildContext(
 	securities []universe.Security,
 	allocations map[string]float64,
 	cashBalances map[string]float64,
+	optimizerWeights map[string]float64,
 ) (*planningdomain.OpportunityContext, error) {
 	// Convert securities to domain format and build lookup maps
 	domainSecurities := make([]domain.Security, 0, len(securities))
@@ -191,6 +197,12 @@ func (b *OpportunityContextBuilder) buildContext(
 	// Build PortfolioContext for scoring
 	portfolioCtx := b.buildPortfolioContext(enrichedPositions, geographyWeights, currentPrices, totalValue)
 
+	// Use optimizer weights if provided, otherwise fall back to allocations
+	targetWeights := optimizerWeights
+	if targetWeights == nil || len(targetWeights) == 0 {
+		targetWeights = allocations
+	}
+
 	return &planningdomain.OpportunityContext{
 		PortfolioContext:         portfolioCtx,
 		EnrichedPositions:        enrichedPositions,
@@ -200,7 +212,7 @@ func (b *OpportunityContextBuilder) buildContext(
 		TotalPortfolioValueEUR:   totalValue,
 		CurrentPrices:            currentPrices,
 		SecurityScores:           securityScores,
-		TargetWeights:            allocations,
+		TargetWeights:            targetWeights,
 		GeographyAllocations:     geographyAllocations,
 		GeographyWeights:         geographyWeights,
 		CAGRs:                    cagrs,

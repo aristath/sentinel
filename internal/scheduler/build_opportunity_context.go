@@ -59,15 +59,15 @@ func (j *BuildOpportunityContextJob) Run() error {
 	}
 
 	// Build context using the unified builder
-	ctx, err := j.contextBuilder.Build()
+	// Pass optimizer weights directly to Build() instead of applying post-hoc
+	ctx, err := j.contextBuilder.Build(j.optimizerTargetWeights)
 	if err != nil {
 		j.log.Error().Err(err).Msg("Failed to build opportunity context")
 		return fmt.Errorf("failed to build opportunity context: %w", err)
 	}
 
-	// Apply optimizer target weights if available
+	// Log weights application if present
 	if len(j.optimizerTargetWeights) > 0 {
-		ctx.TargetWeights = j.optimizerTargetWeights
 		j.log.Debug().Int("count", len(j.optimizerTargetWeights)).Msg("Applied optimizer target weights")
 	}
 

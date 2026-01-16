@@ -47,7 +47,8 @@ func (h *Handler) HandleGetAll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build opportunity context using unified builder
-	ctx, err := h.contextBuilder.Build()
+	// Opportunities handler doesn't use optimizer weights, pass nil to use allocation targets
+	ctx, err := h.contextBuilder.Build(nil)
 	if err != nil {
 		h.log.Error().Err(err).Msg("Failed to build opportunity context")
 		http.Error(w, "Failed to build opportunity context", http.StatusInternalServerError)
@@ -117,7 +118,8 @@ func (h *Handler) handleCategoryOpportunities(w http.ResponseWriter, r *http.Req
 	}
 
 	// Build opportunity context using unified builder
-	ctx, err := h.contextBuilder.Build()
+	// Opportunities handler doesn't use optimizer weights, pass nil to use allocation targets
+	ctx, err := h.contextBuilder.Build(nil)
 	if err != nil {
 		h.log.Error().Err(err).Msg("Failed to build opportunity context")
 		http.Error(w, "Failed to build opportunity context", http.StatusInternalServerError)

@@ -249,14 +249,20 @@ func (a *plannerOptimizerAdapter) CalculateWeights() (map[string]float64, error)
 
 type plannerContextBuilderAdapter struct {
 	container *Container
+	cache     *workCache
 }
 
 func (a *plannerContextBuilderAdapter) Build() (interface{}, error) {
-	return a.container.OpportunityContextBuilder.Build()
-}
+	// Get optimizer weights from cache (set by planner:weights work type)
+	weightsInterface := a.cache.Get("optimizer_weights")
+	var weights map[string]float64
+	if weightsInterface != nil {
+		if w, ok := weightsInterface.(map[string]float64); ok {
+			weights = w
+		}
+	}
 
-func (a *plannerContextBuilderAdapter) SetWeights(weights map[string]float64) {
-	// Weights are set via the optimizer result
+	return a.container.OpportunityContextBuilder.Build(weights)
 }
 
 type plannerServiceAdapter struct {
@@ -377,7 +383,7 @@ func registerPlannerWork(registry *work.Registry, container *Container, cache *w
 	deps := &work.PlannerDeps{
 		Cache:              cache,
 		OptimizerService:   &plannerOptimizerAdapter{container: container, cache: cache, log: log},
-		ContextBuilder:     &plannerContextBuilderAdapter{container: container},
+		ContextBuilder:     &plannerContextBuilderAdapter{container: container, cache: cache},
 		PlannerService:     &plannerServiceAdapter{container: container, cache: cache},
 		RecommendationRepo: &plannerRecommendationRepoAdapter{container: container, log: log},
 		EventManager:       &plannerEventManagerAdapter{container: container},
