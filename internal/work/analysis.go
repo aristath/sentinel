@@ -31,7 +31,7 @@ func RegisterAnalysisWorkTypes(registry *Registry, deps *AnalysisDeps) {
 			}
 			return nil
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			err := deps.MarketRegimeService.AnalyzeMarketRegime()
 			if err != nil {

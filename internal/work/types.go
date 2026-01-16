@@ -100,7 +100,8 @@ type WorkType struct {
 
 	// Execute performs the work for a given subject.
 	// Subject is empty string for global work, ISIN for per-security work.
-	Execute func(ctx context.Context, subject string) error
+	// Progress can be used to report execution progress to the Activity UI.
+	Execute func(ctx context.Context, subject string, progress *ProgressReporter) error
 }
 
 // WorkItem represents a specific unit of work to be executed.

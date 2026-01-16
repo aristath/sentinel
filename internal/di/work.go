@@ -60,6 +60,26 @@ func (a *marketHoursAdapter) AreAllMarketsClosed() bool {
 	return len(openMarkets) == 0
 }
 
+// eventEmitterAdapter adapts events.Manager to work.EventEmitter interface
+type eventEmitterAdapter struct {
+	manager *events.Manager
+}
+
+func (a *eventEmitterAdapter) Emit(event string, data any) {
+	if a.manager == nil {
+		return
+	}
+	// Convert string event name to events.EventType
+	eventType := events.EventType(event)
+	// Convert data to map[string]interface{} for EventManager
+	details, ok := data.(map[string]interface{})
+	if !ok && data != nil {
+		// Wrap non-map data in a map
+		details = map[string]interface{}{"data": data}
+	}
+	a.manager.Emit(eventType, "", details)
+}
+
 // InitializeWork creates and wires up all work processor components
 func InitializeWork(container *Container, log zerolog.Logger) (*WorkComponents, error) {
 	// Create core components
@@ -67,6 +87,12 @@ func InitializeWork(container *Container, log zerolog.Logger) (*WorkComponents, 
 	completion := work.NewCompletionTracker()
 	market := work.NewMarketTimingChecker(&marketHoursAdapter{container: container})
 	processor := work.NewProcessor(registry, completion, market)
+
+	// Wire event emitter for progress reporting
+	if container.EventManager != nil {
+		processor.SetEventEmitter(&eventEmitterAdapter{manager: container.EventManager})
+	}
+
 	handlers := work.NewHandlers(processor, registry)
 
 	// Create work cache

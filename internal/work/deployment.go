@@ -29,7 +29,7 @@ func RegisterDeploymentWorkTypes(registry *Registry, deps *DeploymentDeps) {
 			// Always check for deployments on interval
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			err := deps.DeploymentService.CheckForDeployment()
 			if err != nil {

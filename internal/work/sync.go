@@ -70,7 +70,7 @@ func RegisterSyncWorkTypes(registry *Registry, deps *SyncDeps) {
 			// Always return work, interval check handles frequency
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			err := deps.PortfolioService.SyncPortfolio()
 			if err != nil {
@@ -93,7 +93,7 @@ func RegisterSyncWorkTypes(registry *Registry, deps *SyncDeps) {
 		FindSubjects: func() []string {
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			err := deps.TradesService.SyncTrades()
 			if err != nil {
@@ -113,7 +113,7 @@ func RegisterSyncWorkTypes(registry *Registry, deps *SyncDeps) {
 		FindSubjects: func() []string {
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			err := deps.CashFlowsService.SyncCashFlows()
 			if err != nil {
@@ -133,7 +133,7 @@ func RegisterSyncWorkTypes(registry *Registry, deps *SyncDeps) {
 		FindSubjects: func() []string {
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			err := deps.PricesService.SyncPrices()
 			if err != nil {
@@ -153,7 +153,7 @@ func RegisterSyncWorkTypes(registry *Registry, deps *SyncDeps) {
 		FindSubjects: func() []string {
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			err := deps.ExchangeRateService.SyncExchangeRates()
 			if err != nil {
@@ -173,7 +173,7 @@ func RegisterSyncWorkTypes(registry *Registry, deps *SyncDeps) {
 		FindSubjects: func() []string {
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			err := deps.DisplayService.UpdateDisplay()
 			if err != nil {
@@ -193,7 +193,7 @@ func RegisterSyncWorkTypes(registry *Registry, deps *SyncDeps) {
 		FindSubjects: func() []string {
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			err := deps.NegativeBalanceService.CheckNegativeBalances()
 			if err != nil {

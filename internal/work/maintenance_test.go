@@ -159,7 +159,7 @@ func TestMaintenanceBackup_Execute(t *testing.T) {
 	wt := registry.Get("maintenance:backup")
 	require.NotNil(t, wt)
 
-	err := wt.Execute(context.Background(), "")
+	err := wt.Execute(context.Background(), "", nil)
 	require.NoError(t, err)
 
 	backupService.AssertCalled(t, "RunDailyBackup")

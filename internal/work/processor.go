@@ -9,13 +9,18 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// PeriodicTriggerInterval is the fallback interval for checking time-based work eligibility.
+// This ensures interval-based work runs even when no events fire.
+const PeriodicTriggerInterval = 1 * time.Minute
+
 // Processor is the main work processor that executes work items.
 // It processes one work item at a time, respecting dependencies and market timing.
 type Processor struct {
-	registry   *Registry
-	completion *CompletionTracker
-	market     *MarketTimingChecker
-	timeout    time.Duration
+	registry     *Registry
+	completion   *CompletionTracker
+	market       *MarketTimingChecker
+	eventEmitter EventEmitter
+	timeout      time.Duration
 
 	trigger    chan struct{}
 	done       chan struct{}
@@ -48,9 +53,19 @@ func NewProcessorWithTimeout(registry *Registry, completion *CompletionTracker, 
 	}
 }
 
+// SetEventEmitter sets the event emitter for progress reporting.
+// This should be called before Run() to enable progress events.
+func (p *Processor) SetEventEmitter(emitter EventEmitter) {
+	p.eventEmitter = emitter
+}
+
 // Run starts the processor loop. This blocks until Stop() is called.
 func (p *Processor) Run() {
 	defer close(p.stopped)
+
+	// Create periodic ticker for time-based eligibility checks
+	ticker := time.NewTicker(PeriodicTriggerInterval)
+	defer ticker.Stop()
 
 	for {
 		select {
@@ -59,7 +74,9 @@ func (p *Processor) Run() {
 		case <-p.trigger:
 			p.processOne()
 		case <-p.done:
-			p.processOne()
+			p.processOne() // Previous work done, immediately check for next
+		case <-ticker.C:
+			p.processOne() // Periodic fallback for interval-based work
 		}
 	}
 }
@@ -119,6 +136,14 @@ func (p *Processor) processOne() {
 
 	// Execute asynchronously
 	go func() {
+		startTime := time.Now()
+
+		// Create progress reporter
+		progress := NewProgressReporter(p.eventEmitter, item.ID, item.TypeID, item.Subject)
+
+		// Emit started event
+		progress.emitStarted()
+
 		defer func() {
 			p.mu.Lock()
 			delete(p.inFlight, item.ID)
@@ -134,7 +159,9 @@ func (p *Processor) processOne() {
 		ctx, cancel := context.WithTimeout(context.Background(), p.timeout)
 		defer cancel()
 
-		err := p.executeWithContext(ctx, item, wt)
+		err := p.executeWithContext(ctx, item, wt, progress)
+		duration := time.Since(startTime)
+
 		if err != nil {
 			if ctx.Err() == context.DeadlineExceeded {
 				log.Error().Str("work", item.ID).Msg("work timed out")
@@ -143,6 +170,10 @@ func (p *Processor) processOne() {
 			}
 
 			item.Retries++
+
+			// Emit failed event
+			progress.emitFailed(err, duration, item.Retries)
+
 			if item.Retries < MaxRetries {
 				p.pushRetryQueue(item)
 			} else {
@@ -150,6 +181,9 @@ func (p *Processor) processOne() {
 			}
 		} else {
 			p.completion.MarkCompleted(item)
+
+			// Emit completed event
+			progress.emitCompleted(duration)
 		}
 	}()
 }
@@ -206,15 +240,32 @@ func (p *Processor) dependenciesMet(wt *WorkType, subject string) bool {
 
 // executeItem executes a work item synchronously.
 func (p *Processor) executeItem(item *WorkItem, wt *WorkType) error {
+	startTime := time.Now()
+
+	// Create progress reporter
+	progress := NewProgressReporter(p.eventEmitter, item.ID, item.TypeID, item.Subject)
+
+	// Emit started event
+	progress.emitStarted()
+
 	ctx, cancel := context.WithTimeout(context.Background(), p.timeout)
 	defer cancel()
 
-	return p.executeWithContext(ctx, item, wt)
+	err := p.executeWithContext(ctx, item, wt, progress)
+	duration := time.Since(startTime)
+
+	if err != nil {
+		progress.emitFailed(err, duration, item.Retries)
+	} else {
+		progress.emitCompleted(duration)
+	}
+
+	return err
 }
 
 // executeWithContext executes a work item with a context.
-func (p *Processor) executeWithContext(ctx context.Context, item *WorkItem, wt *WorkType) error {
-	return wt.Execute(ctx, item.Subject)
+func (p *Processor) executeWithContext(ctx context.Context, item *WorkItem, wt *WorkType, progress *ProgressReporter) error {
+	return wt.Execute(ctx, item.Subject, progress)
 }
 
 // pushRetryQueue adds an item to the retry queue.

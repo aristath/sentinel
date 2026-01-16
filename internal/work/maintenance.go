@@ -59,7 +59,7 @@ func RegisterMaintenanceWorkTypes(registry *Registry, deps *MaintenanceDeps) {
 			}
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			err := deps.BackupService.RunDailyBackup()
 			if err != nil {
@@ -80,7 +80,7 @@ func RegisterMaintenanceWorkTypes(registry *Registry, deps *MaintenanceDeps) {
 		FindSubjects: func() []string {
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			err := deps.R2BackupService.UploadBackup()
 			if err != nil {
@@ -101,7 +101,7 @@ func RegisterMaintenanceWorkTypes(registry *Registry, deps *MaintenanceDeps) {
 		FindSubjects: func() []string {
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			err := deps.R2BackupService.RotateBackups()
 			if err != nil {
@@ -122,7 +122,7 @@ func RegisterMaintenanceWorkTypes(registry *Registry, deps *MaintenanceDeps) {
 		FindSubjects: func() []string {
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			err := deps.VacuumService.VacuumDatabases()
 			if err != nil {
@@ -142,7 +142,7 @@ func RegisterMaintenanceWorkTypes(registry *Registry, deps *MaintenanceDeps) {
 		FindSubjects: func() []string {
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			err := deps.HealthCheckService.RunHealthChecks()
 			if err != nil {
@@ -162,7 +162,7 @@ func RegisterMaintenanceWorkTypes(registry *Registry, deps *MaintenanceDeps) {
 		FindSubjects: func() []string {
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			err := deps.CleanupService.CleanupHistory()
 			if err != nil {
@@ -182,7 +182,7 @@ func RegisterMaintenanceWorkTypes(registry *Registry, deps *MaintenanceDeps) {
 		FindSubjects: func() []string {
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			err := deps.CleanupService.CleanupCache()
 			if err != nil {
@@ -202,7 +202,7 @@ func RegisterMaintenanceWorkTypes(registry *Registry, deps *MaintenanceDeps) {
 		FindSubjects: func() []string {
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			err := deps.CleanupService.CleanupRecommendations()
 			if err != nil {
@@ -222,7 +222,7 @@ func RegisterMaintenanceWorkTypes(registry *Registry, deps *MaintenanceDeps) {
 		FindSubjects: func() []string {
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			err := deps.CleanupService.CleanupClientData()
 			if err != nil {

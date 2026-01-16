@@ -37,7 +37,7 @@ func RegisterTradingWorkTypes(registry *Registry, deps *TradingDeps) {
 			}
 			return nil
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			err := deps.ExecutionService.ExecutePendingTrades()
 			if err != nil {
@@ -60,7 +60,7 @@ func RegisterTradingWorkTypes(registry *Registry, deps *TradingDeps) {
 			}
 			return nil
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			err := deps.RetryService.RetryFailedTrades()
 			if err != nil {

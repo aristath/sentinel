@@ -191,7 +191,7 @@ func TestSyncPortfolio_Execute(t *testing.T) {
 	wt := registry.Get("sync:portfolio")
 	require.NotNil(t, wt)
 
-	err := wt.Execute(context.Background(), "")
+	err := wt.Execute(context.Background(), "", nil)
 	require.NoError(t, err)
 
 	portfolioService.AssertExpectations(t)
@@ -220,7 +220,7 @@ func TestSyncTrades_Execute(t *testing.T) {
 	wt := registry.Get("sync:trades")
 	require.NotNil(t, wt)
 
-	err := wt.Execute(context.Background(), "")
+	err := wt.Execute(context.Background(), "", nil)
 	require.NoError(t, err)
 
 	tradesService.AssertExpectations(t)
@@ -248,7 +248,7 @@ func TestSyncRates_Execute(t *testing.T) {
 	wt := registry.Get("sync:rates")
 	require.NotNil(t, wt)
 
-	err := wt.Execute(context.Background(), "")
+	err := wt.Execute(context.Background(), "", nil)
 	require.NoError(t, err)
 
 	ratesService.AssertExpectations(t)

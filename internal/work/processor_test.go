@@ -33,7 +33,7 @@ func TestProcessor_Trigger(t *testing.T) {
 		FindSubjects: func() []string {
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			executed.Store(true)
 			return nil
 		},
@@ -75,7 +75,7 @@ func TestProcessor_DependencyOrdering(t *testing.T) {
 			}
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			mu.Lock()
 			executionOrder = append(executionOrder, "planner:weights")
 			executed["planner:weights"] = true
@@ -96,7 +96,7 @@ func TestProcessor_DependencyOrdering(t *testing.T) {
 			}
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			mu.Lock()
 			executionOrder = append(executionOrder, "planner:context")
 			executed["planner:context"] = true
@@ -117,7 +117,7 @@ func TestProcessor_DependencyOrdering(t *testing.T) {
 			}
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			mu.Lock()
 			executionOrder = append(executionOrder, "planner:plan")
 			executed["planner:plan"] = true
@@ -167,7 +167,7 @@ func TestProcessor_PerSecurityDependencies(t *testing.T) {
 			}
 			return []string{"NL0010273215"}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			mu.Lock()
 			executionOrder = append(executionOrder, "security:sync:"+subject)
 			executed["security:sync:"+subject] = true
@@ -189,7 +189,7 @@ func TestProcessor_PerSecurityDependencies(t *testing.T) {
 			}
 			return []string{"NL0010273215"}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			mu.Lock()
 			executionOrder = append(executionOrder, "security:technical:"+subject)
 			executed["security:technical:"+subject] = true
@@ -236,7 +236,7 @@ func TestProcessor_MarketTimingRespected(t *testing.T) {
 		FindSubjects: func() []string {
 			return []string{"NL0010273215"}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			executed.Store(true)
 			return nil
 		},
@@ -270,7 +270,7 @@ func TestProcessor_RetryOnFailure(t *testing.T) {
 			}
 			return nil // No more work after success
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			count := attempts.Add(1)
 			if count < 2 {
 				return assert.AnError // Fail first time
@@ -311,7 +311,7 @@ func TestProcessor_MaxRetries(t *testing.T) {
 			}
 			return nil
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			attempts.Add(1)
 			return assert.AnError // Always fail
 		},
@@ -352,7 +352,7 @@ func TestProcessor_Timeout(t *testing.T) {
 			}
 			return nil
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			started.Store(true)
 			<-ctx.Done() // Wait for cancellation
 			cancelled.Store(true)
@@ -396,7 +396,7 @@ func TestProcessor_ExecuteNow(t *testing.T) {
 		FindSubjects: func() []string {
 			return nil // No automatic work
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			executed.Store(true)
 			mu.Lock()
 			executedSubject = subject
@@ -448,7 +448,7 @@ func TestProcessor_ExecuteNow_WithSubject(t *testing.T) {
 		FindSubjects: func() []string {
 			return nil
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			mu.Lock()
 			executedSubject = subject
 			mu.Unlock()
@@ -511,7 +511,7 @@ func TestProcessor_NoDuplicateExecution(t *testing.T) {
 			}
 			return nil
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			execCount.Add(1)
 			time.Sleep(50 * time.Millisecond)
 			return nil
@@ -547,7 +547,7 @@ func TestProcessor_SystemBusyCheck(t *testing.T) {
 		FindSubjects: func() []string {
 			return []string{"a", "b", "c"} // Multiple subjects
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			execCount.Add(1)
 			time.Sleep(50 * time.Millisecond)
 			return nil

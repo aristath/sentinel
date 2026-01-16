@@ -176,7 +176,7 @@ func TestSecuritySync_Execute(t *testing.T) {
 	require.NotNil(t, wt)
 
 	// Execute with ISIN as subject
-	err := wt.Execute(context.Background(), "NL0010273215")
+	err := wt.Execute(context.Background(), "NL0010273215", nil)
 	require.NoError(t, err)
 
 	historySyncService.AssertCalled(t, "SyncSecurityHistory", "NL0010273215")
@@ -230,7 +230,7 @@ func TestSecurityTechnical_Execute(t *testing.T) {
 	wt := registry.Get("security:technical")
 	require.NotNil(t, wt)
 
-	err := wt.Execute(context.Background(), "NL0010273215")
+	err := wt.Execute(context.Background(), "NL0010273215", nil)
 	require.NoError(t, err)
 
 	technicalService.AssertCalled(t, "CalculateTechnicals", "NL0010273215")
@@ -315,7 +315,7 @@ func TestSecurityMetadata_Execute(t *testing.T) {
 	require.NotNil(t, wt)
 
 	// Execute with ISIN as subject
-	err := wt.Execute(context.Background(), "NL0010273215")
+	err := wt.Execute(context.Background(), "NL0010273215", nil)
 	require.NoError(t, err)
 
 	metadataService.AssertCalled(t, "SyncMetadata", "NL0010273215")

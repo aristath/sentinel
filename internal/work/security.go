@@ -56,7 +56,7 @@ func RegisterSecurityWorkTypes(registry *Registry, deps *SecurityDeps) {
 		FindSubjects: func() []string {
 			return deps.HistorySyncService.GetStaleSecurities()
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			err := deps.HistorySyncService.SyncSecurityHistory(subject)
 			if err != nil {
@@ -77,7 +77,7 @@ func RegisterSecurityWorkTypes(registry *Registry, deps *SecurityDeps) {
 		FindSubjects: func() []string {
 			return deps.TechnicalService.GetSecuritiesNeedingTechnicals()
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			err := deps.TechnicalService.CalculateTechnicals(subject)
 			if err != nil {
@@ -98,7 +98,7 @@ func RegisterSecurityWorkTypes(registry *Registry, deps *SecurityDeps) {
 		FindSubjects: func() []string {
 			return deps.FormulaService.GetSecuritiesNeedingDiscovery()
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			err := deps.FormulaService.RunDiscovery(subject)
 			if err != nil {
@@ -119,7 +119,7 @@ func RegisterSecurityWorkTypes(registry *Registry, deps *SecurityDeps) {
 		FindSubjects: func() []string {
 			return deps.TagService.GetSecuritiesNeedingTagUpdate()
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			err := deps.TagService.UpdateTags(subject)
 			if err != nil {
@@ -140,7 +140,7 @@ func RegisterSecurityWorkTypes(registry *Registry, deps *SecurityDeps) {
 		FindSubjects: func() []string {
 			return deps.MetadataSyncService.GetAllActiveISINs()
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			err := deps.MetadataSyncService.SyncMetadata(subject)
 			if err != nil {

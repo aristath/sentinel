@@ -63,7 +63,7 @@ func RegisterPlannerWorkTypes(registry *Registry, deps *PlannerDeps) {
 			}
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			weights, err := deps.OptimizerService.CalculateWeights()
 			if err != nil {
@@ -87,7 +87,7 @@ func RegisterPlannerWorkTypes(registry *Registry, deps *PlannerDeps) {
 			}
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			// Get weights from cache
 			weightsInterface := deps.Cache.Get("optimizer_weights")
@@ -122,7 +122,7 @@ func RegisterPlannerWorkTypes(registry *Registry, deps *PlannerDeps) {
 			}
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			// Get context from cache
 			opportunityContext := deps.Cache.Get("opportunity_context")
@@ -154,7 +154,7 @@ func RegisterPlannerWorkTypes(registry *Registry, deps *PlannerDeps) {
 			}
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			// Get plan from cache
 			plan := deps.Cache.Get("trade_plan")

@@ -184,7 +184,7 @@ func TestPlannerWeights_Execute(t *testing.T) {
 	require.NotNil(t, wt)
 
 	// Execute
-	err := wt.Execute(context.Background(), "")
+	err := wt.Execute(context.Background(), "", nil)
 	require.NoError(t, err)
 
 	// Verify optimizer was called
@@ -264,7 +264,7 @@ func TestPlannerContext_Execute(t *testing.T) {
 	wt := registry.Get("planner:context")
 	require.NotNil(t, wt)
 
-	err := wt.Execute(context.Background(), "")
+	err := wt.Execute(context.Background(), "", nil)
 	require.NoError(t, err)
 
 	contextBuilder.AssertExpectations(t)
@@ -295,7 +295,7 @@ func TestPlannerPlan_Execute(t *testing.T) {
 	wt := registry.Get("planner:plan")
 	require.NotNil(t, wt)
 
-	err := wt.Execute(context.Background(), "")
+	err := wt.Execute(context.Background(), "", nil)
 	require.NoError(t, err)
 
 	plannerService.AssertExpectations(t)
@@ -328,7 +328,7 @@ func TestPlannerRecommendations_Execute(t *testing.T) {
 	wt := registry.Get("planner:recommendations")
 	require.NotNil(t, wt)
 
-	err := wt.Execute(context.Background(), "")
+	err := wt.Execute(context.Background(), "", nil)
 	require.NoError(t, err)
 
 	recommendationRepo.AssertExpectations(t)

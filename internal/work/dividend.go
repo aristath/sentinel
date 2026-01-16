@@ -56,7 +56,7 @@ func RegisterDividendWorkTypes(registry *Registry, deps *DividendDeps) {
 			}
 			return nil
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			dividends, err := deps.DetectionService.DetectUnreinvestedDividends()
 			if err != nil {
@@ -80,7 +80,7 @@ func RegisterDividendWorkTypes(registry *Registry, deps *DividendDeps) {
 			}
 			return nil
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			dividends := deps.Cache.Get("detected_dividends")
 			if dividends == nil {
@@ -109,7 +109,7 @@ func RegisterDividendWorkTypes(registry *Registry, deps *DividendDeps) {
 			}
 			return nil
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			analysis := deps.Cache.Get("dividend_analysis")
 			if analysis == nil {
@@ -138,7 +138,7 @@ func RegisterDividendWorkTypes(registry *Registry, deps *DividendDeps) {
 			}
 			return nil
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
 			recommendations := deps.Cache.Get("dividend_recommendations")
 			if recommendations == nil {

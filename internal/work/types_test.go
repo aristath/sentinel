@@ -162,7 +162,7 @@ func TestWorkTypeExecution(t *testing.T) {
 	wt := &WorkType{
 		ID:       "test:work",
 		Priority: PriorityMedium,
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			executed = true
 			executedSubject = subject
 			return nil
@@ -171,7 +171,7 @@ func TestWorkTypeExecution(t *testing.T) {
 
 	assert.Equal(t, "test:work", wt.ID)
 	assert.Equal(t, PriorityMedium, wt.Priority)
-	err := wt.Execute(context.Background(), "test-subject")
+	err := wt.Execute(context.Background(), "test-subject", nil)
 
 	require.NoError(t, err)
 	assert.True(t, executed)

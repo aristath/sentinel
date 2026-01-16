@@ -38,7 +38,7 @@ func TestIntegration_PlannerChainExecutesInOrder(t *testing.T) {
 			}
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			mu.Lock()
 			executionOrder = append(executionOrder, "planner:weights")
 			executed["planner:weights"] = true
@@ -59,7 +59,7 @@ func TestIntegration_PlannerChainExecutesInOrder(t *testing.T) {
 			}
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			mu.Lock()
 			executionOrder = append(executionOrder, "planner:context")
 			executed["planner:context"] = true
@@ -80,7 +80,7 @@ func TestIntegration_PlannerChainExecutesInOrder(t *testing.T) {
 			}
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			mu.Lock()
 			executionOrder = append(executionOrder, "planner:plan")
 			executed["planner:plan"] = true
@@ -101,7 +101,7 @@ func TestIntegration_PlannerChainExecutesInOrder(t *testing.T) {
 			}
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			mu.Lock()
 			executionOrder = append(executionOrder, "planner:recommendations")
 			executed["planner:recommendations"] = true
@@ -157,7 +157,7 @@ func TestIntegration_SyncCycleWithDependencies(t *testing.T) {
 			}
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			mu.Lock()
 			executionOrder = append(executionOrder, "sync:portfolio")
 			executed["sync:portfolio"] = true
@@ -180,7 +180,7 @@ func TestIntegration_SyncCycleWithDependencies(t *testing.T) {
 			}
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			mu.Lock()
 			executionOrder = append(executionOrder, "sync:trades")
 			executed["sync:trades"] = true
@@ -203,7 +203,7 @@ func TestIntegration_SyncCycleWithDependencies(t *testing.T) {
 			}
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			mu.Lock()
 			executionOrder = append(executionOrder, "sync:prices")
 			executed["sync:prices"] = true
@@ -226,7 +226,7 @@ func TestIntegration_SyncCycleWithDependencies(t *testing.T) {
 			}
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			mu.Lock()
 			executionOrder = append(executionOrder, "sync:display")
 			executed["sync:display"] = true
@@ -287,7 +287,7 @@ func TestIntegration_PerSecurityWorkRespectsMarketTiming(t *testing.T) {
 		FindSubjects: func() []string {
 			return []string{"NL0010273215"}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			executed.Store(true)
 			return nil
 		},
@@ -337,7 +337,7 @@ func TestIntegration_MaintenanceOnlyDuringAllMarketsClosed(t *testing.T) {
 		FindSubjects: func() []string {
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			executed.Store(true)
 			return nil
 		},
@@ -387,7 +387,7 @@ func TestIntegration_ManualTriggerBypassesTimingChecks(t *testing.T) {
 		FindSubjects: func() []string {
 			return nil // No automatic work
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			executed.Store(true)
 			return nil
 		},
@@ -439,7 +439,7 @@ func TestIntegration_DividendWorkflowChain(t *testing.T) {
 				}
 				return []string{""}
 			},
-			Execute: func(ctx context.Context, subject string) error {
+			Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 				mu.Lock()
 				executionOrder = append(executionOrder, stepID)
 				executed[stepID] = true
@@ -483,7 +483,7 @@ func TestIntegration_IntervalStalenessCheck(t *testing.T) {
 		FindSubjects: func() []string {
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			execCount.Add(1)
 			return nil
 		},
@@ -529,7 +529,7 @@ func TestIntegration_CompletionTrackerPersistsDuringSession(t *testing.T) {
 		FindSubjects: func() []string {
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			execCount.Add(1)
 			return nil
 		},
@@ -589,7 +589,7 @@ func TestIntegration_PriorityOrdering(t *testing.T) {
 				}
 				return []string{""}
 			},
-			Execute: func(ctx context.Context, subject string) error {
+			Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 				mu.Lock()
 				executionOrder = append(executionOrder, wtID)
 				executed[wtID] = true
@@ -653,7 +653,7 @@ func TestIntegration_PerSecurityDependencySameSubject(t *testing.T) {
 			}
 			return subjects
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			mu.Lock()
 			key := "security:sync:" + subject
 			executionOrder = append(executionOrder, key)
@@ -681,7 +681,7 @@ func TestIntegration_PerSecurityDependencySameSubject(t *testing.T) {
 			}
 			return subjects
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			mu.Lock()
 			key := "security:technical:" + subject
 			executionOrder = append(executionOrder, key)

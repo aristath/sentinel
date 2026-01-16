@@ -267,7 +267,7 @@ func TestRegistry_FullWorkflowExample(t *testing.T) {
 		FindSubjects: func() []string {
 			return []string{""} // Global work
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			return nil
 		},
 	})
@@ -279,7 +279,7 @@ func TestRegistry_FullWorkflowExample(t *testing.T) {
 		FindSubjects: func() []string {
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			return nil
 		},
 	})
@@ -291,7 +291,7 @@ func TestRegistry_FullWorkflowExample(t *testing.T) {
 		FindSubjects: func() []string {
 			return []string{""}
 		},
-		Execute: func(ctx context.Context, subject string) error {
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 			return nil
 		},
 	})
