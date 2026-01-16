@@ -692,11 +692,9 @@ func (r *SecurityRepository) HardDelete(isin string) error {
 // Faithful translation of Python: async def get_with_scores(self) -> List[dict]
 // Note: This method accesses multiple databases (universe.db and portfolio.db) - architecture violation
 func (r *SecurityRepository) GetWithScores(portfolioDB *sql.DB) ([]SecurityWithScore, error) {
-	// Fetch securities from universe.db (exclude indices)
-	query := `SELECT ` + securitiesColumns + ` FROM securities
-		WHERE json_extract(data, '$.type') IS NULL
-		OR json_extract(data, '$.type') != ?`
-	securityRows, err := r.universeDB.Query(query, string(ProductTypeIndex))
+	// Fetch all securities from universe.db (filter indices after applying overrides)
+	query := `SELECT ` + securitiesColumns + ` FROM securities`
+	securityRows, err := r.universeDB.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query securities: %w", err)
 	}
@@ -762,6 +760,13 @@ func (r *SecurityRepository) GetWithScores(portfolioDB *sql.DB) ([]SecurityWithS
 					securitiesMap[isin] = sws
 				}
 			}
+		}
+	}
+
+	// Filter out indices AFTER applying overrides (so product_type overrides take effect)
+	for isin, sws := range securitiesMap {
+		if sws.ProductType == string(ProductTypeIndex) {
+			delete(securitiesMap, isin)
 		}
 	}
 
