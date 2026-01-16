@@ -77,10 +77,16 @@ func ApplyOverrides(security *Security, overrides map[string]string) {
 		case reflect.Int, reflect.Int64:
 			if intVal, err := strconv.ParseInt(value, 10, 64); err == nil {
 				fieldValue.SetInt(intVal)
+			} else {
+				// Parse error - invalid override value, keeping default
+				// This indicates data integrity issue - validation should happen at override creation
 			}
 		case reflect.Float64:
 			if floatVal, err := strconv.ParseFloat(value, 64); err == nil {
 				fieldValue.SetFloat(floatVal)
+			} else {
+				// Parse error - invalid override value, keeping default
+				// This indicates data integrity issue - validation should happen at override creation
 			}
 		}
 	}
@@ -133,10 +139,16 @@ func ApplyOverridesToSecurityWithScore(sws *SecurityWithScore, overrides map[str
 		case reflect.Int, reflect.Int64:
 			if intVal, err := strconv.ParseInt(value, 10, 64); err == nil {
 				fieldValue.SetInt(intVal)
+			} else {
+				// Parse error - invalid override value, keeping default
+				// This indicates data integrity issue - validation should happen at override creation
 			}
 		case reflect.Float64:
 			if floatVal, err := strconv.ParseFloat(value, 64); err == nil {
 				fieldValue.SetFloat(floatVal)
+			} else {
+				// Parse error - invalid override value, keeping default
+				// This indicates data integrity issue - validation should happen at override creation
 			}
 		}
 	}

@@ -12,43 +12,24 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// setupTestDBForIndexFiltering creates a test database with securities including indices
+// setupTestDBForIndexFiltering creates a test database with JSON storage schema
 func setupTestDBForIndexFiltering(t *testing.T) *sql.DB {
 	db, err := sql.Open("sqlite3", ":memory:")
 	require.NoError(t, err)
 
-	// Create securities table with full schema
+	// Create securities table with JSON storage (migration 038 schema)
 	_, err = db.Exec(`
 		CREATE TABLE securities (
 			isin TEXT PRIMARY KEY,
 			symbol TEXT NOT NULL,
-			name TEXT NOT NULL,
-			product_type TEXT,
-			industry TEXT,
-			geography TEXT,
-			fullExchangeName TEXT,
-			market_code TEXT,
-			priority_multiplier REAL DEFAULT 1.0,
-			min_lot INTEGER DEFAULT 1,
-			active INTEGER DEFAULT 1,
-			allow_buy INTEGER DEFAULT 1,
-			allow_sell INTEGER DEFAULT 1,
-			currency TEXT,
-			last_synced INTEGER,
-			min_portfolio_target REAL,
-			max_portfolio_target REAL,
-			created_at INTEGER NOT NULL,
-			updated_at INTEGER NOT NULL
-		)
+			data TEXT NOT NULL,
+			last_synced INTEGER
+		) STRICT
 	`)
 	require.NoError(t, err)
 
 	// Create indices
 	_, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_securities_symbol ON securities(symbol)`)
-	require.NoError(t, err)
-	_, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_securities_market_code ON securities(market_code)`)
-	require.NoError(t, err)
-	_, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_securities_product_type ON securities(product_type)`)
 	require.NoError(t, err)
 
 	// Create tags tables (needed for scanSecurity)
@@ -78,32 +59,23 @@ func setupTestDBForIndexFiltering(t *testing.T) *sql.DB {
 
 // insertTestSecurities inserts test securities including indices
 func insertTestSecurities(t *testing.T, db *sql.DB) {
-	now := time.Now().Unix()
-
 	// Insert regular securities (EQUITY, ETF)
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, product_type, market_code, fullExchangeName, active, created_at, updated_at) VALUES
-		('US0378331005', 'AAPL.US', 'Apple Inc.', 'EQUITY', 'FIX', 'NASDAQ', 1, ?, ?),
-		('US5949181045', 'MSFT.US', 'Microsoft Corp', 'EQUITY', 'FIX', 'NASDAQ', 1, ?, ?),
-		('IE00B3XXRP09', 'VUSA.EU', 'Vanguard S&P 500 ETF', 'ETF', 'EU', 'LSE', 1, ?, ?),
-		('US0000000001', 'NULL_TYPE.US', 'Security with NULL type', NULL, 'FIX', 'NYSE', 1, ?, ?)
-	`, now, now, now, now, now, now, now, now)
+		INSERT INTO securities (isin, symbol, data, last_synced) VALUES
+		('US0378331005', 'AAPL.US', json_object('name', 'Apple Inc.', 'product_type', 'EQUITY', 'market_code', 'FIX', 'fullExchangeName', 'NASDAQ'), NULL),
+		('US5949181045', 'MSFT.US', json_object('name', 'Microsoft Corp', 'product_type', 'EQUITY', 'market_code', 'FIX', 'fullExchangeName', 'NASDAQ'), NULL),
+		('IE00B3XXRP09', 'VUSA.EU', json_object('name', 'Vanguard S&P 500 ETF', 'product_type', 'ETF', 'market_code', 'EU', 'fullExchangeName', 'LSE'), NULL),
+		('US0000000001', 'NULL_TYPE.US', json_object('name', 'Security with NULL type', 'market_code', 'FIX', 'fullExchangeName', 'NYSE'), NULL)
+	`)
 	require.NoError(t, err)
 
 	// Insert market indices (should be excluded from tradable queries)
 	_, err = db.Exec(`
-		INSERT INTO securities (isin, symbol, name, product_type, market_code, fullExchangeName, active, allow_buy, allow_sell, created_at, updated_at) VALUES
-		('INDEX-SP500.IDX', 'SP500.IDX', 'S&P 500', 'INDEX', 'FIX', NULL, 1, 0, 0, ?, ?),
-		('INDEX-NASDAQ.IDX', 'NASDAQ.IDX', 'NASDAQ Composite', 'INDEX', 'FIX', NULL, 1, 0, 0, ?, ?),
-		('INDEX-DAX.IDX', 'DAX.IDX', 'DAX (Germany)', 'INDEX', 'EU', NULL, 1, 0, 0, ?, ?)
-	`, now, now, now, now, now, now)
-	require.NoError(t, err)
-
-	// Insert inactive security (should be excluded regardless of type)
-	_, err = db.Exec(`
-		INSERT INTO securities (isin, symbol, name, product_type, market_code, active, created_at, updated_at)
-		VALUES ('US0000000002', 'INACTIVE.US', 'Inactive Security', 'EQUITY', 'FIX', 0, ?, ?)
-	`, now, now)
+		INSERT INTO securities (isin, symbol, data, last_synced) VALUES
+		('INDEX-SP500.IDX', 'SP500.IDX', json_object('name', 'S&P 500', 'product_type', 'INDEX', 'market_code', 'FIX'), NULL),
+		('INDEX-NASDAQ.IDX', 'NASDAQ.IDX', json_object('name', 'NASDAQ Composite', 'product_type', 'INDEX', 'market_code', 'FIX'), NULL),
+		('INDEX-DAX.IDX', 'DAX.IDX', json_object('name', 'DAX (Germany)', 'product_type', 'INDEX', 'market_code', 'EU'), NULL)
+	`)
 	require.NoError(t, err)
 }
 

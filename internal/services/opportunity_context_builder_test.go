@@ -229,10 +229,10 @@ func TestOpportunityContextBuilder_Build_ReturnsCompleteContext(t *testing.T) {
 		},
 		&ocbMockSecurityRepository{
 			securities: []universe.Security{
-				{ISIN: isin, Symbol: symbol, Currency: "USD", Geography: "US", Active: true, AllowBuy: true, AllowSell: true},
+				{ISIN: isin, Symbol: symbol, Currency: "USD", Geography: "US", AllowBuy: true, AllowSell: true},
 			},
 			byISIN: map[string]*universe.Security{
-				isin: {ISIN: isin, Symbol: symbol, Currency: "USD", Geography: "US", Active: true, AllowBuy: true, AllowSell: true},
+				isin: {ISIN: isin, Symbol: symbol, Currency: "USD", Geography: "US", AllowBuy: true, AllowSell: true},
 			},
 		},
 		&ocbMockAllocationRepository{allocations: map[string]float64{isin: 0.10}},
@@ -867,8 +867,8 @@ func TestOpportunityContextBuilder_Build_WithOptimizerWeights(t *testing.T) {
 		},
 		&ocbMockSecurityRepository{
 			securities: []universe.Security{
-				{ISIN: isin1, Symbol: "ASML", Active: true, Geography: "EU", Currency: "EUR", Name: "ASML Holding"},
-				{ISIN: isin2, Symbol: "AAPL", Active: true, Geography: "US", Currency: "USD", Name: "Apple Inc"},
+				{ISIN: isin1, Symbol: "ASML", Geography: "EU", Currency: "EUR", Name: "ASML Holding"},
+				{ISIN: isin2, Symbol: "AAPL", Geography: "US", Currency: "USD", Name: "Apple Inc"},
 			},
 		},
 		&ocbMockAllocationRepository{allocations: allocations},

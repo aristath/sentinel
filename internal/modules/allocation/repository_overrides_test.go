@@ -2,6 +2,7 @@ package allocation
 
 import (
 	"database/sql"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -22,9 +23,11 @@ func newTestSecurityProvider(db *sql.DB) *testSecurityProvider {
 }
 
 func (p *testSecurityProvider) GetAllActiveTradable() ([]SecurityInfo, error) {
-	// Query securities with active = 1 and not indices
-	query := `SELECT isin, symbol, name, geography, industry FROM securities
-		WHERE active = 1 AND (product_type IS NULL OR product_type != ?)`
+	// Query securities using JSON storage schema (migration 038)
+	// Filter out indices using JSON extraction
+	query := `SELECT isin, symbol, data, last_synced FROM securities
+		WHERE json_extract(data, '$.product_type') IS NULL
+		OR json_extract(data, '$.product_type') != ?`
 
 	rows, err := p.db.Query(query, string(domain.ProductTypeIndex))
 	if err != nil {
@@ -34,18 +37,29 @@ func (p *testSecurityProvider) GetAllActiveTradable() ([]SecurityInfo, error) {
 
 	var securities []SecurityInfo
 	for rows.Next() {
-		var sec SecurityInfo
-		var geography, industry sql.NullString
+		var isin, symbol, jsonData string
+		var lastSynced sql.NullInt64
 
-		if err := rows.Scan(&sec.ISIN, &sec.Symbol, &sec.Name, &geography, &industry); err != nil {
+		if err := rows.Scan(&isin, &symbol, &jsonData, &lastSynced); err != nil {
 			return nil, err
 		}
 
-		if geography.Valid {
-			sec.Geography = geography.String
+		// Parse JSON data
+		var data struct {
+			Name      string `json:"name"`
+			Geography string `json:"geography"`
+			Industry  string `json:"industry"`
 		}
-		if industry.Valid {
-			sec.Industry = industry.String
+		if err := json.Unmarshal([]byte(jsonData), &data); err != nil {
+			continue // Skip malformed JSON
+		}
+
+		sec := SecurityInfo{
+			ISIN:      isin,
+			Symbol:    symbol,
+			Name:      data.Name,
+			Geography: data.Geography,
+			Industry:  data.Industry,
 		}
 
 		securities = append(securities, sec)
@@ -124,19 +138,14 @@ func setupTestDBsForAllocation(t *testing.T) (*sql.DB, *sql.DB) {
 	require.NoError(t, err)
 	t.Cleanup(func() { universeDB.Close() })
 
-	// Create securities table
+	// Create securities table (migration 038 JSON storage schema)
 	_, err = universeDB.Exec(`
 		CREATE TABLE securities (
 			isin TEXT PRIMARY KEY,
 			symbol TEXT NOT NULL,
-			name TEXT NOT NULL,
-			product_type TEXT,
-			industry TEXT,
-			geography TEXT,
-			active INTEGER NOT NULL DEFAULT 1,
-			created_at INTEGER NOT NULL,
-			updated_at INTEGER NOT NULL
-		)
+			data TEXT NOT NULL,
+			last_synced INTEGER
+		) STRICT
 	`)
 	require.NoError(t, err)
 
@@ -162,16 +171,18 @@ func TestGetAvailableGeographies_RespectsOverrides(t *testing.T) {
 	now := time.Now().Unix()
 
 	// Security 1: US geography, override to WORLD
-	_, err := universeDB.Exec(`INSERT INTO securities (isin, symbol, name, geography, active, created_at, updated_at)
-		VALUES (?, ?, ?, ?, 1, ?, ?)`, "US0378331005", "AAPL.US", "Apple", "US", now, now)
+	jsonData1 := `{"name":"Apple","geography":"US"}`
+	_, err := universeDB.Exec(`INSERT INTO securities (isin, symbol, data, last_synced)
+		VALUES (?, ?, ?, ?)`, "US0378331005", "AAPL.US", jsonData1, now)
 	require.NoError(t, err)
 	_, err = universeDB.Exec(`INSERT INTO security_overrides (isin, field, value, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?)`, "US0378331005", "geography", "WORLD", now, now)
 	require.NoError(t, err)
 
 	// Security 2: EU geography, no override
-	_, err = universeDB.Exec(`INSERT INTO securities (isin, symbol, name, geography, active, created_at, updated_at)
-		VALUES (?, ?, ?, ?, 1, ?, ?)`, "IE00B4L5Y983", "IWDA.EU", "IWDA", "EU", now, now)
+	jsonData2 := `{"name":"IWDA","geography":"EU"}`
+	_, err = universeDB.Exec(`INSERT INTO securities (isin, symbol, data, last_synced)
+		VALUES (?, ?, ?, ?)`, "IE00B4L5Y983", "IWDA.EU", jsonData2, now)
 	require.NoError(t, err)
 
 	// Create repo with override support
@@ -195,16 +206,18 @@ func TestGetAvailableIndustries_RespectsOverrides(t *testing.T) {
 	now := time.Now().Unix()
 
 	// Security 1: Technology industry, override to Finance
-	_, err := universeDB.Exec(`INSERT INTO securities (isin, symbol, name, industry, active, created_at, updated_at)
-		VALUES (?, ?, ?, ?, 1, ?, ?)`, "US0378331005", "AAPL.US", "Apple", "Technology", now, now)
+	jsonData1 := `{"name":"Apple","industry":"Technology"}`
+	_, err := universeDB.Exec(`INSERT INTO securities (isin, symbol, data, last_synced)
+		VALUES (?, ?, ?, ?)`, "US0378331005", "AAPL.US", jsonData1, now)
 	require.NoError(t, err)
 	_, err = universeDB.Exec(`INSERT INTO security_overrides (isin, field, value, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?)`, "US0378331005", "industry", "Finance", now, now)
 	require.NoError(t, err)
 
 	// Security 2: Healthcare industry, no override
-	_, err = universeDB.Exec(`INSERT INTO securities (isin, symbol, name, industry, active, created_at, updated_at)
-		VALUES (?, ?, ?, ?, 1, ?, ?)`, "US5949181045", "MSFT.US", "Microsoft", "Healthcare", now, now)
+	jsonData2 := `{"name":"Microsoft","industry":"Healthcare"}`
+	_, err = universeDB.Exec(`INSERT INTO securities (isin, symbol, data, last_synced)
+		VALUES (?, ?, ?, ?)`, "US5949181045", "MSFT.US", jsonData2, now)
 	require.NoError(t, err)
 
 	// Create repo with override support
@@ -228,8 +241,9 @@ func TestGetAvailableGeographies_HandlesCSV(t *testing.T) {
 	now := time.Now().Unix()
 
 	// Security with CSV override "US, EU"
-	_, err := universeDB.Exec(`INSERT INTO securities (isin, symbol, name, geography, active, created_at, updated_at)
-		VALUES (?, ?, ?, ?, 1, ?, ?)`, "US0378331005", "AAPL.US", "Apple", "WORLD", now, now)
+	jsonData := `{"name":"Apple","geography":"WORLD"}`
+	_, err := universeDB.Exec(`INSERT INTO securities (isin, symbol, data, last_synced)
+		VALUES (?, ?, ?, ?)`, "US0378331005", "AAPL.US", jsonData, now)
 	require.NoError(t, err)
 	_, err = universeDB.Exec(`INSERT INTO security_overrides (isin, field, value, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?)`, "US0378331005", "geography", "US, EU", now, now)

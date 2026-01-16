@@ -3,26 +3,28 @@ package market_regime
 import (
 	"database/sql"
 	"fmt"
-	"time"
 
 	"github.com/aristath/sentinel/internal/domain"
+	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/rs/zerolog"
 )
 
 // IndexSyncService ensures market indices exist in the securities table
 // and have historical price data available for regime calculation.
 type IndexSyncService struct {
-	universeDB *sql.DB
-	configDB   *sql.DB
-	log        zerolog.Logger
+	securityRepo universe.SecurityRepositoryInterface
+	overrideRepo universe.OverrideRepositoryInterface
+	configDB     *sql.DB
+	log          zerolog.Logger
 }
 
 // NewIndexSyncService creates a new index sync service
-func NewIndexSyncService(universeDB, configDB *sql.DB, log zerolog.Logger) *IndexSyncService {
+func NewIndexSyncService(securityRepo universe.SecurityRepositoryInterface, overrideRepo universe.OverrideRepositoryInterface, configDB *sql.DB, log zerolog.Logger) *IndexSyncService {
 	return &IndexSyncService{
-		universeDB: universeDB,
-		configDB:   configDB,
-		log:        log.With().Str("component", "index_sync_service").Logger(),
+		securityRepo: securityRepo,
+		overrideRepo: overrideRepo,
+		configDB:     configDB,
+		log:          log.With().Str("component", "index_sync_service").Logger(),
 	}
 }
 
@@ -37,7 +39,6 @@ func NewIndexSyncService(universeDB, configDB *sql.DB, log zerolog.Logger) *Inde
 // Note: allow_buy/allow_sell are stored in security_overrides table (set to false for indices)
 func (s *IndexSyncService) SyncIndicesToSecurities() error {
 	knownIndices := GetKnownIndices()
-	now := time.Now().Unix()
 
 	synced := 0
 	skipped := 0
@@ -46,12 +47,8 @@ func (s *IndexSyncService) SyncIndicesToSecurities() error {
 		// Generate ISIN for index (indices don't have real ISINs)
 		isin := fmt.Sprintf("INDEX-%s", idx.Symbol)
 
-		// Check if already exists
-		var exists bool
-		err := s.universeDB.QueryRow(`
-			SELECT COUNT(*) > 0 FROM securities
-			WHERE isin = ?
-		`, isin).Scan(&exists)
+		// Check if already exists using repository
+		exists, err := s.securityRepo.Exists(isin)
 		if err != nil {
 			return fmt.Errorf("failed to check index existence for %s: %w", idx.Symbol, err)
 		}
@@ -61,23 +58,22 @@ func (s *IndexSyncService) SyncIndicesToSecurities() error {
 			continue
 		}
 
-		// Create index in securities table
-		_, err = s.universeDB.Exec(`
-			INSERT INTO securities
-			(isin, symbol, name, product_type, market_code, active, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, 1, ?, ?)
-		`, isin, idx.Symbol, idx.Name, string(domain.ProductTypeIndex), idx.MarketCode, now, now)
+		// Create index in securities table using repository
+		security := universe.Security{
+			ISIN:        isin,
+			Symbol:      idx.Symbol,
+			Name:        idx.Name,
+			ProductType: string(domain.ProductTypeIndex),
+			MarketCode:  idx.MarketCode,
+		}
+		err = s.securityRepo.Create(security)
 		if err != nil {
 			return fmt.Errorf("failed to create index %s in securities: %w", idx.Symbol, err)
 		}
 
 		// Set allow_buy=false and allow_sell=false for indices via security_overrides
 		for _, field := range []string{"allow_buy", "allow_sell"} {
-			_, err = s.universeDB.Exec(`
-				INSERT INTO security_overrides (isin, field, value, created_at, updated_at)
-				VALUES (?, ?, 'false', ?, ?)
-				ON CONFLICT(isin, field) DO UPDATE SET value = 'false', updated_at = excluded.updated_at
-			`, isin, field, now, now)
+			err = s.overrideRepo.SetOverride(isin, field, "false")
 			if err != nil {
 				s.log.Warn().Err(err).Str("isin", isin).Str("field", field).Msg("Failed to set override for index")
 			}
@@ -224,29 +220,41 @@ func (s *IndexSyncService) EnsureIndexExists(symbol string) (string, error) {
 	}
 
 	isin := fmt.Sprintf("INDEX-%s", symbol)
-	now := time.Now().Unix()
 
-	// Upsert the index
-	_, err := s.universeDB.Exec(`
-		INSERT INTO securities
-		(isin, symbol, name, product_type, market_code, active, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, 1, ?, ?)
-		ON CONFLICT(isin) DO UPDATE SET
-			name = excluded.name,
-			market_code = excluded.market_code,
-			updated_at = excluded.updated_at
-	`, isin, symbol, foundIdx.Name, string(domain.ProductTypeIndex), foundIdx.MarketCode, now, now)
+	// Check if index exists
+	exists, err := s.securityRepo.Exists(isin)
 	if err != nil {
-		return "", fmt.Errorf("failed to upsert index %s: %w", symbol, err)
+		return "", fmt.Errorf("failed to check index existence: %w", err)
+	}
+
+	if exists {
+		// Update existing index
+		updates := map[string]any{
+			"name":        foundIdx.Name,
+			"market_code": foundIdx.MarketCode,
+		}
+		err = s.securityRepo.Update(isin, updates)
+		if err != nil {
+			return "", fmt.Errorf("failed to update index %s: %w", symbol, err)
+		}
+	} else {
+		// Create new index
+		security := universe.Security{
+			ISIN:        isin,
+			Symbol:      symbol,
+			Name:        foundIdx.Name,
+			ProductType: string(domain.ProductTypeIndex),
+			MarketCode:  foundIdx.MarketCode,
+		}
+		err = s.securityRepo.Create(security)
+		if err != nil {
+			return "", fmt.Errorf("failed to create index %s: %w", symbol, err)
+		}
 	}
 
 	// Ensure allow_buy=false and allow_sell=false for indices via security_overrides
 	for _, field := range []string{"allow_buy", "allow_sell"} {
-		_, err = s.universeDB.Exec(`
-			INSERT INTO security_overrides (isin, field, value, created_at, updated_at)
-			VALUES (?, ?, 'false', ?, ?)
-			ON CONFLICT(isin, field) DO UPDATE SET value = 'false', updated_at = excluded.updated_at
-		`, isin, field, now, now)
+		err = s.overrideRepo.SetOverride(isin, field, "false")
 		if err != nil {
 			s.log.Warn().Err(err).Str("isin", isin).Str("field", field).Msg("Failed to set override for index")
 		}

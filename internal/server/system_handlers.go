@@ -34,6 +34,7 @@ type SystemHandlers struct {
 	configDB                *database.DB
 	universeDB              *database.DB
 	historyDB               *database.DB
+	securityRepo            universe.SecurityRepositoryInterface
 	workProcessor           *work.Processor
 	portfolioDisplayCalc    *display.PortfolioDisplayCalculator
 	displayManager          *display.StateManager
@@ -44,12 +45,23 @@ type SystemHandlers struct {
 	marketStatusWS          *tradernet.MarketStatusWebSocket
 }
 
+// systemHandlersSecurityProviderAdapter adapts SecurityRepository to SecurityProvider interface for display module
+type systemHandlersSecurityProviderAdapter struct {
+	repo universe.SecurityRepositoryInterface
+}
+
+// GetISINBySymbol returns ISIN for a given symbol
+func (a *systemHandlersSecurityProviderAdapter) GetISINBySymbol(symbol string) (string, error) {
+	return a.repo.GetISINBySymbol(symbol)
+}
+
 // NewSystemHandlers creates a new system handlers instance
 func NewSystemHandlers(
 	log zerolog.Logger,
 	dataDir string,
 	portfolioDB, configDB, universeDB, historyDB *database.DB,
 	historyDBClient universe.HistoryDBInterface,
+	securityRepo universe.SecurityRepositoryInterface,
 	workProcessor *work.Processor,
 	displayManager *display.StateManager,
 	brokerClient domain.BrokerClient,
@@ -65,9 +77,12 @@ func NewSystemHandlers(
 		log,
 	)
 
+	// Create security provider adapter for display calculator
+	securityProvider := &systemHandlersSecurityProviderAdapter{repo: securityRepo}
+
 	// Create portfolio display calculator with filtered price access
 	portfolioDisplayCalc := display.NewPortfolioDisplayCalculator(
-		universeDB.Conn(),
+		securityProvider,
 		portfolioDB.Conn(),
 		historyDBClient,
 		portfolioPerf,
@@ -82,6 +97,7 @@ func NewSystemHandlers(
 		configDB:                configDB,
 		universeDB:              universeDB,
 		historyDB:               historyDB,
+		securityRepo:            securityRepo,
 		workProcessor:           workProcessor,
 		portfolioDisplayCalc:    portfolioDisplayCalc,
 		displayManager:          displayManager,
@@ -271,13 +287,9 @@ func (h *SystemHandlers) GetSystemStatusSnapshot() (SystemStatusResponse, error)
 	}
 
 	// Query securities count (excludes indices - they are non-tradable)
-	var securityCount int
-	err = h.universeDB.Conn().QueryRow(`
-		SELECT COUNT(*) FROM securities WHERE active = 1 AND (product_type IS NULL OR product_type != ?)
-	`, string(domain.ProductTypeIndex)).Scan(&securityCount)
-
-	if err != nil && err != sql.ErrNoRows {
-		h.log.Error().Err(err).Msg("Failed to query securities")
+	securityCount, err := h.securityRepo.CountTradable()
+	if err != nil {
+		h.log.Error().Err(err).Msg("Failed to count securities")
 		recordErr(err)
 	}
 

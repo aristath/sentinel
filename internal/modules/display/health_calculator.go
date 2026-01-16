@@ -24,7 +24,6 @@ type HealthUpdate struct {
 
 // HealthCalculator calculates combined health scores for securities
 type HealthCalculator struct {
-	universeDB      *sql.DB
 	portfolioDB     *sql.DB
 	historyDBClient universe.HistoryDBInterface
 	configDB        *sql.DB
@@ -38,7 +37,7 @@ type HealthCalculator struct {
 
 // NewHealthCalculator creates a new health calculator
 func NewHealthCalculator(
-	universeDB, portfolioDB *sql.DB,
+	portfolioDB *sql.DB,
 	historyDBClient universe.HistoryDBInterface,
 	configDB *sql.DB,
 	log zerolog.Logger,
@@ -46,7 +45,6 @@ func NewHealthCalculator(
 	securityPerf := NewSecurityPerformanceService(historyDBClient, log)
 
 	return &HealthCalculator{
-		universeDB:      universeDB,
 		portfolioDB:     portfolioDB,
 		historyDBClient: historyDBClient,
 		configDB:        configDB,
@@ -203,14 +201,13 @@ func (h *HealthCalculator) getVolatilityComponent(isin string) (float64, error) 
 		return 0.5, nil // No ISIN, use neutral
 	}
 
-	// Query volatility from portfolio DB using optimized JOIN
+	// Query volatility from portfolio DB using ISIN (scores table uses ISIN as PRIMARY KEY)
 	var volatility sql.NullFloat64
 	err := h.portfolioDB.QueryRow(`
-		SELECT s.volatility
-		FROM scores s
-		JOIN securities sec ON s.symbol = sec.symbol
-		WHERE sec.isin = ?
-		ORDER BY s.calculated_at DESC
+		SELECT volatility
+		FROM scores
+		WHERE isin = ?
+		ORDER BY calculated_at DESC
 		LIMIT 1
 	`, isin).Scan(&volatility)
 
@@ -241,11 +238,10 @@ func (h *HealthCalculator) getHoldings() ([]struct {
 	MarketValue float64
 }, error) {
 	rows, err := h.portfolioDB.Query(`
-		SELECT p.symbol, COALESCE(s.isin, ''), p.market_value_eur
-		FROM positions p
-		LEFT JOIN securities s ON p.symbol = s.symbol
-		WHERE p.quantity > 0
-		ORDER BY p.market_value_eur DESC
+		SELECT symbol, isin, market_value_eur
+		FROM positions
+		WHERE quantity > 0
+		ORDER BY market_value_eur DESC
 	`)
 	if err != nil {
 		return nil, err

@@ -70,30 +70,8 @@ func TestCurrency_Constants(t *testing.T) {
 	assert.Equal(t, Currency("TEST"), CurrencyTEST)
 }
 
-func TestSecurity_Fields(t *testing.T) {
-	now := time.Now()
-	security := Security{
-		LastUpdated: now,
-		Symbol:      "AAPL.US",
-		Name:        "Apple Inc.",
-		Exchange:    "NASDAQ",
-		Geography:   "US",
-		Currency:    CurrencyUSD,
-		ISIN:        "US0378331005",
-		ID:          1,
-		Active:      true,
-	}
-
-	assert.Equal(t, now, security.LastUpdated)
-	assert.Equal(t, "AAPL.US", security.Symbol)
-	assert.Equal(t, "Apple Inc.", security.Name)
-	assert.Equal(t, "NASDAQ", security.Exchange)
-	assert.Equal(t, "US", security.Geography)
-	assert.Equal(t, CurrencyUSD, security.Currency)
-	assert.Equal(t, "US0378331005", security.ISIN)
-	assert.Equal(t, int64(1), security.ID)
-	assert.True(t, security.Active)
-}
+// Security tests removed - use universe.Security tests instead (single source of truth).
+// See internal/modules/universe/*_test.go for security model tests.
 
 func TestPosition_Fields(t *testing.T) {
 	now := time.Now()

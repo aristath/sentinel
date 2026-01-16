@@ -3,7 +3,6 @@ package universe
 import (
 	"database/sql"
 	"testing"
-	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
@@ -16,34 +15,67 @@ func setupTestDBWithISINPrimaryKey(t *testing.T) *sql.DB {
 	db, err := sql.Open("sqlite3", ":memory:")
 	require.NoError(t, err)
 
-	// Create securities table with ISIN as PRIMARY KEY (post-migration schema)
+	// Create securities table with JSON storage (migration 038 schema)
 	_, err = db.Exec(`
 		CREATE TABLE securities (
 			isin TEXT PRIMARY KEY,
 			symbol TEXT NOT NULL,
+			data TEXT NOT NULL,
+			last_synced INTEGER
+		) STRICT
+	`)
+	require.NoError(t, err)
+
+	// Create index on symbol for lookups
+	_, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_securities_symbol ON securities(symbol)`)
+	require.NoError(t, err)
+
+	// Create tags tables (needed for HardDelete)
+	_, err = db.Exec(`
+		CREATE TABLE tags (
+			id TEXT PRIMARY KEY,
 			name TEXT NOT NULL,
-			product_type TEXT,
-			industry TEXT,
-			geography TEXT,
-			fullExchangeName TEXT,
-			market_code TEXT,
-			priority_multiplier REAL DEFAULT 1.0,
-			min_lot INTEGER DEFAULT 1,
-			active INTEGER DEFAULT 1,
-			allow_buy INTEGER DEFAULT 1,
-			allow_sell INTEGER DEFAULT 1,
-			currency TEXT,
-			last_synced TEXT,
-			min_portfolio_target REAL,
-			max_portfolio_target REAL,
 			created_at INTEGER NOT NULL,
 			updated_at INTEGER NOT NULL
 		)
 	`)
 	require.NoError(t, err)
 
-	// Create index on symbol for lookups
-	_, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_securities_symbol ON securities(symbol)`)
+	_, err = db.Exec(`
+		CREATE TABLE security_tags (
+			isin TEXT NOT NULL,
+			tag_id TEXT NOT NULL,
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL,
+			PRIMARY KEY (isin, tag_id)
+		)
+	`)
+	require.NoError(t, err)
+
+	// Create broker_symbols table (needed for HardDelete)
+	_, err = db.Exec(`
+		CREATE TABLE broker_symbols (
+			isin TEXT NOT NULL,
+			broker TEXT NOT NULL,
+			symbol TEXT NOT NULL,
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL,
+			PRIMARY KEY (isin, broker)
+		)
+	`)
+	require.NoError(t, err)
+
+	// Create client_symbols table (needed for HardDelete)
+	_, err = db.Exec(`
+		CREATE TABLE client_symbols (
+			isin TEXT NOT NULL,
+			client TEXT NOT NULL,
+			symbol TEXT NOT NULL,
+			created_at INTEGER NOT NULL,
+			updated_at INTEGER NOT NULL,
+			PRIMARY KEY (isin, client)
+		)
+	`)
 	require.NoError(t, err)
 
 	return db
@@ -57,11 +89,10 @@ func TestGetByISIN_PrimaryMethod(t *testing.T) {
 	repo := NewSecurityRepository(db, log)
 
 	// Insert test data
-	testDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, created_at, updated_at)
-		VALUES ('US0378331005', 'AAPL.US', 'Apple Inc.', ?, ?)
-	`, testDate.Unix(), testDate.Unix())
+		INSERT INTO securities (isin, symbol, data, last_synced)
+		VALUES ('US0378331005', 'AAPL.US', json_object('name', 'Apple Inc.'), NULL)
+	`)
 	require.NoError(t, err)
 
 	// Execute
@@ -98,11 +129,10 @@ func TestGetBySymbol_HelperMethod_LooksUpISINFirst(t *testing.T) {
 	repo := NewSecurityRepository(db, log)
 
 	// Insert test data
-	testDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, created_at, updated_at)
-		VALUES ('US0378331005', 'AAPL.US', 'Apple Inc.', ?, ?)
-	`, testDate.Unix(), testDate.Unix())
+		INSERT INTO securities (isin, symbol, data, last_synced)
+		VALUES ('US0378331005', 'AAPL.US', json_object('name', 'Apple Inc.'), NULL)
+	`)
 	require.NoError(t, err)
 
 	// Execute - GetBySymbol should lookup ISIN first, then query by ISIN
@@ -123,17 +153,16 @@ func TestUpdate_ByISIN(t *testing.T) {
 	repo := NewSecurityRepository(db, log)
 
 	// Insert test data
-	testDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, active, created_at, updated_at)
-		VALUES ('US0378331005', 'AAPL.US', 'Apple Inc.', 1, ?, ?)
-	`, testDate.Unix(), testDate.Unix())
+		INSERT INTO securities (isin, symbol, data, last_synced)
+		VALUES ('US0378331005', 'AAPL.US', json_object('name', 'Apple Inc.', 'geography', 'US'), NULL)
+	`)
 	require.NoError(t, err)
 
 	// Execute - Update should use ISIN
 	err = repo.Update("US0378331005", map[string]interface{}{
-		"name":   "Apple Inc. Updated",
-		"active": false,
+		"name":      "Apple Inc. Updated",
+		"geography": "CN",
 	})
 	require.NoError(t, err)
 
@@ -142,7 +171,7 @@ func TestUpdate_ByISIN(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, security)
 	assert.Equal(t, "Apple Inc. Updated", security.Name)
-	assert.False(t, security.Active)
+	assert.Equal(t, "CN", security.Geography)
 }
 
 func TestDelete_ByISIN(t *testing.T) {
@@ -153,22 +182,20 @@ func TestDelete_ByISIN(t *testing.T) {
 	repo := NewSecurityRepository(db, log)
 
 	// Insert test data
-	testDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, active, created_at, updated_at)
-		VALUES ('US0378331005', 'AAPL.US', 'Apple Inc.', 1, ?, ?)
-	`, testDate.Unix(), testDate.Unix())
+		INSERT INTO securities (isin, symbol, data, last_synced)
+		VALUES ('US0378331005', 'AAPL.US', json_object('name', 'Apple Inc.'), NULL)
+	`)
 	require.NoError(t, err)
 
-	// Execute - Delete should use ISIN
-	err = repo.Delete("US0378331005")
+	// Execute - HardDelete should use ISIN (hard delete in new schema)
+	err = repo.HardDelete("US0378331005")
 	require.NoError(t, err)
 
-	// Verify soft delete (active = 0)
+	// Verify hard delete (security no longer exists)
 	security, err := repo.GetByISIN("US0378331005")
 	require.NoError(t, err)
-	require.NotNil(t, security)
-	assert.False(t, security.Active)
+	assert.Nil(t, security, "Security should be deleted (hard delete)")
 }
 
 func TestCreate_WithISINAsPrimaryKey(t *testing.T) {
@@ -183,7 +210,6 @@ func TestCreate_WithISINAsPrimaryKey(t *testing.T) {
 		ISIN:      "US0378331005",
 		Symbol:    "AAPL.US",
 		Name:      "Apple Inc.",
-		Active:    true,
 		AllowBuy:  true,
 		AllowSell: true,
 	}
@@ -208,11 +234,10 @@ func TestGetBySymbol_FallbackToSymbolLookup(t *testing.T) {
 	repo := NewSecurityRepository(db, log)
 
 	// Insert test data
-	testDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, created_at, updated_at)
-		VALUES ('US0378331005', 'AAPL.US', 'Apple Inc.', ?, ?)
-	`, testDate.Unix(), testDate.Unix())
+		INSERT INTO securities (isin, symbol, data, last_synced)
+		VALUES ('US0378331005', 'AAPL.US', json_object('name', 'Apple Inc.'), NULL)
+	`)
 	require.NoError(t, err)
 
 	// GetBySymbol should lookup by symbol column (indexed)
@@ -233,11 +258,10 @@ func TestGetByIdentifier_PrioritizesISIN(t *testing.T) {
 	repo := NewSecurityRepository(db, log)
 
 	// Insert test data
-	testDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, created_at, updated_at)
-		VALUES ('US0378331005', 'AAPL.US', 'Apple Inc.', ?, ?)
-	`, testDate.Unix(), testDate.Unix())
+		INSERT INTO securities (isin, symbol, data, last_synced)
+		VALUES ('US0378331005', 'AAPL.US', json_object('name', 'Apple Inc.'), NULL)
+	`)
 	require.NoError(t, err)
 
 	// Test with ISIN

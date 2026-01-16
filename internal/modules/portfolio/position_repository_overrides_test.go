@@ -2,6 +2,7 @@ package portfolio
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -23,12 +24,8 @@ func newTestSecurityProvider(db *sql.DB, log zerolog.Logger) *testSecurityProvid
 }
 
 func (p *testSecurityProvider) GetAllActive() ([]SecurityInfo, error) {
-	// Query securities
-	query := `
-		SELECT s.isin, s.symbol, s.name, s.geography, s.fullExchangeName, s.industry, s.currency
-		FROM securities s
-		WHERE s.active = 1
-	`
+	// Query securities using JSON storage schema (after migration 038)
+	query := `SELECT isin, symbol, data, last_synced FROM securities`
 	rows, err := p.db.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query securities: %w", err)
@@ -37,26 +34,36 @@ func (p *testSecurityProvider) GetAllActive() ([]SecurityInfo, error) {
 
 	var securities []SecurityInfo
 	for rows.Next() {
-		var sec SecurityInfo
-		var geography, fullExchangeName, industry, currency sql.NullString
+		var isin, symbol, jsonData string
+		var lastSynced sql.NullInt64
 
-		if err := rows.Scan(&sec.ISIN, &sec.Symbol, &sec.Name, &geography, &fullExchangeName, &industry, &currency); err != nil {
+		if err := rows.Scan(&isin, &symbol, &jsonData, &lastSynced); err != nil {
 			return nil, fmt.Errorf("failed to scan security: %w", err)
 		}
 
-		if geography.Valid {
-			sec.Geography = geography.String
+		// Parse JSON data
+		var data struct {
+			Name             string `json:"name"`
+			Geography        string `json:"geography"`
+			FullExchangeName string `json:"fullExchangeName"`
+			Industry         string `json:"industry"`
+			Currency         string `json:"currency"`
 		}
-		if fullExchangeName.Valid {
-			sec.FullExchangeName = fullExchangeName.String
+		if err := json.Unmarshal([]byte(jsonData), &data); err != nil {
+			p.log.Warn().Str("isin", isin).Err(err).Msg("Failed to parse JSON data")
+			continue
 		}
-		if industry.Valid {
-			sec.Industry = industry.String
+
+		sec := SecurityInfo{
+			ISIN:             isin,
+			Symbol:           symbol,
+			Name:             data.Name,
+			Geography:        data.Geography,
+			FullExchangeName: data.FullExchangeName,
+			Industry:         data.Industry,
+			Currency:         data.Currency,
+			AllowSell:        true, // default
 		}
-		if currency.Valid {
-			sec.Currency = currency.String
-		}
-		sec.AllowSell = true // default
 
 		securities = append(securities, sec)
 	}
@@ -82,7 +89,80 @@ func (p *testSecurityProvider) GetAllActive() ([]SecurityInfo, error) {
 }
 
 func (p *testSecurityProvider) GetAllActiveTradable() ([]SecurityInfo, error) {
-	return p.GetAllActive()
+	// Query securities excluding INDEX product_type (after migration 038)
+	query := `SELECT isin, symbol, data, last_synced FROM securities
+		WHERE json_extract(data, '$.product_type') IS NULL
+		OR json_extract(data, '$.product_type') != 'INDEX'`
+	rows, err := p.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query tradable securities: %w", err)
+	}
+	defer rows.Close()
+
+	var securities []SecurityInfo
+	for rows.Next() {
+		var isin, symbol, jsonData string
+		var lastSynced sql.NullInt64
+
+		if err := rows.Scan(&isin, &symbol, &jsonData, &lastSynced); err != nil {
+			return nil, fmt.Errorf("failed to scan security: %w", err)
+		}
+
+		// Parse JSON data
+		var data struct {
+			Name             string `json:"name"`
+			Geography        string `json:"geography"`
+			FullExchangeName string `json:"fullExchangeName"`
+			Industry         string `json:"industry"`
+			Currency         string `json:"currency"`
+		}
+		if err := json.Unmarshal([]byte(jsonData), &data); err != nil {
+			p.log.Warn().Str("isin", isin).Err(err).Msg("Failed to parse JSON data")
+			continue
+		}
+
+		sec := SecurityInfo{
+			ISIN:             isin,
+			Symbol:           symbol,
+			Name:             data.Name,
+			Geography:        data.Geography,
+			FullExchangeName: data.FullExchangeName,
+			Industry:         data.Industry,
+			Currency:         data.Currency,
+			AllowSell:        true, // default
+		}
+
+		securities = append(securities, sec)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating securities: %w", err)
+	}
+
+	// Apply overrides
+	for i := range securities {
+		overrides, err := p.getOverrides(securities[i].ISIN)
+		if err != nil {
+			p.log.Warn().Str("isin", securities[i].ISIN).Err(err).Msg("Failed to fetch overrides")
+			continue
+		}
+
+		if len(overrides) > 0 {
+			p.applyOverrides(&securities[i], overrides)
+		}
+	}
+
+	return securities, nil
+}
+
+func (p *testSecurityProvider) GetISINBySymbol(symbol string) (string, error) {
+	var isin string
+	query := `SELECT isin FROM securities WHERE symbol = ?`
+	err := p.db.QueryRow(query, symbol).Scan(&isin)
+	if err == sql.ErrNoRows {
+		return "", fmt.Errorf("security not found: %s", symbol)
+	}
+	return isin, err
 }
 
 func (p *testSecurityProvider) getOverrides(isin string) (map[string]string, error) {
@@ -162,25 +242,14 @@ func setupTestDBWithOverrides(t *testing.T) (*sql.DB, *sql.DB) {
 	require.NoError(t, err)
 	t.Cleanup(func() { universeDB.Close() })
 
-	// Create securities table
+	// Create securities table (migration 038 JSON storage schema)
 	_, err = universeDB.Exec(`
 		CREATE TABLE securities (
 			isin TEXT PRIMARY KEY,
 			symbol TEXT NOT NULL,
-			name TEXT NOT NULL,
-			product_type TEXT,
-			industry TEXT,
-			geography TEXT,
-			fullExchangeName TEXT,
-			market_code TEXT,
-			active INTEGER NOT NULL DEFAULT 1,
-			currency TEXT,
-			last_synced INTEGER,
-			min_portfolio_target REAL,
-			max_portfolio_target REAL,
-			created_at INTEGER NOT NULL,
-			updated_at INTEGER NOT NULL
-		)
+			data TEXT NOT NULL,
+			last_synced INTEGER
+		) STRICT
 	`)
 	require.NoError(t, err)
 
@@ -201,15 +270,17 @@ func setupTestDBWithOverrides(t *testing.T) (*sql.DB, *sql.DB) {
 	return portfolioDB, universeDB
 }
 
-// insertSecurityWithoutOverrideColumns inserts a security without override columns
+// insertSecurityWithoutOverrideColumns inserts a security using JSON storage schema
 func insertSecurityWithoutOverrideColumns(t *testing.T, db *sql.DB, isin, symbol, name string) {
 	t.Helper()
 
 	now := time.Now().Unix()
+	// Create JSON data with basic fields
+	jsonData := fmt.Sprintf(`{"name":"%s","product_type":"STOCK"}`, name)
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, active, product_type, created_at, updated_at)
-		VALUES (?, ?, ?, 1, 'STOCK', ?, ?)
-	`, isin, symbol, name, now, now)
+		INSERT INTO securities (isin, symbol, data, last_synced)
+		VALUES (?, ?, ?, ?)
+	`, isin, symbol, jsonData, now)
 	require.NoError(t, err)
 }
 
@@ -233,7 +304,11 @@ func TestGetWithSecurityInfo_AppliesGeographyOverride(t *testing.T) {
 
 	// Insert security with US geography
 	insertSecurityWithoutOverrideColumns(t, universeDB, "US0378331005", "AAPL.US", "Apple Inc.")
-	_, err := universeDB.Exec(`UPDATE securities SET geography = ? WHERE isin = ?`, "US", "US0378331005")
+	// Update JSON data to add geography field
+	_, err := universeDB.Exec(`
+		UPDATE securities
+		SET data = json_set(data, '$.geography', ?)
+		WHERE isin = ?`, "US", "US0378331005")
 	require.NoError(t, err)
 
 	// Override geography to WORLD
@@ -263,7 +338,11 @@ func TestGetWithSecurityInfo_AppliesIndustryOverride(t *testing.T) {
 
 	// Insert security with Technology industry
 	insertSecurityWithoutOverrideColumns(t, universeDB, "US0378331005", "AAPL.US", "Apple Inc.")
-	_, err := universeDB.Exec(`UPDATE securities SET industry = ? WHERE isin = ?`, "Technology", "US0378331005")
+	// Update JSON data to add industry field
+	_, err := universeDB.Exec(`
+		UPDATE securities
+		SET data = json_set(data, '$.industry', ?)
+		WHERE isin = ?`, "Technology", "US0378331005")
 	require.NoError(t, err)
 
 	// Override industry to Finance
@@ -316,31 +395,6 @@ func TestGetWithSecurityInfo_AppliesNameOverride(t *testing.T) {
 	assert.Equal(t, "Apple Custom Name", positions[0].StockName, "Name override not applied")
 }
 
-func TestGetWithSecurityInfo_WithoutSecurityRepo_UsesFallback(t *testing.T) {
-	portfolioDB, universeDB := setupTestDBWithOverrides(t)
-
-	// Insert security with US geography
-	insertSecurityWithoutOverrideColumns(t, universeDB, "US0378331005", "AAPL.US", "Apple Inc.")
-	_, err := universeDB.Exec(`UPDATE securities SET geography = ? WHERE isin = ?`, "US", "US0378331005")
-	require.NoError(t, err)
-
-	// Override geography to WORLD (should be ignored without SecurityRepo)
-	insertOverride(t, universeDB, "US0378331005", "geography", "WORLD")
-
-	// Insert position for this security
-	now := time.Now().Unix()
-	_, err = portfolioDB.Exec(`INSERT INTO positions (isin, symbol, quantity, avg_price, currency, currency_rate, last_updated)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`, "US0378331005", "AAPL.US", 100.0, 150.0, "USD", 1.1, now)
-	require.NoError(t, err)
-
-	// Create repo WITHOUT override support (nil SecurityRepo)
-	positionRepo := NewPositionRepository(portfolioDB, universeDB, nil, zerolog.Nop())
-
-	// Execute
-	positions, err := positionRepo.GetWithSecurityInfo()
-	require.NoError(t, err)
-	require.Len(t, positions, 1)
-
-	// Assert override NOT applied (fallback to direct query)
-	assert.Equal(t, "US", positions[0].Geography, "Should use base value when SecurityRepo is nil")
-}
+// Note: TestGetWithSecurityInfo_WithoutSecurityRepo_UsesFallback was removed
+// because the fallback anti-pattern has been eliminated. SecurityProvider is now
+// a required dependency with no fallbacks to mask DI failures.

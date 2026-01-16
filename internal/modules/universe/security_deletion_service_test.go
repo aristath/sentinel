@@ -69,6 +69,43 @@ func (m *mockSecurityRepoForDeletion) GetPositionsByTags(positionSymbols []strin
 	return nil, nil
 }
 
+// New interface methods added during refactoring
+func (m *mockSecurityRepoForDeletion) GetByISINs(isins []string) ([]Security, error) {
+	return nil, nil
+}
+func (m *mockSecurityRepoForDeletion) GetBySymbols(symbols []string) ([]Security, error) {
+	return nil, nil
+}
+func (m *mockSecurityRepoForDeletion) GetTradable() ([]Security, error) { return nil, nil }
+func (m *mockSecurityRepoForDeletion) GetByMarketCode(marketCode string) ([]Security, error) {
+	return nil, nil
+}
+func (m *mockSecurityRepoForDeletion) GetByGeography(geography string) ([]Security, error) {
+	return nil, nil
+}
+func (m *mockSecurityRepoForDeletion) GetByIndustry(industry string) ([]Security, error) {
+	return nil, nil
+}
+func (m *mockSecurityRepoForDeletion) GetDistinctGeographies() ([]string, error) { return nil, nil }
+func (m *mockSecurityRepoForDeletion) GetDistinctIndustries() ([]string, error)  { return nil, nil }
+func (m *mockSecurityRepoForDeletion) GetGeographiesAndIndustries() (map[string][]string, error) {
+	return nil, nil
+}
+func (m *mockSecurityRepoForDeletion) GetSecuritiesForOptimization() ([]SecurityOptimizationData, error) {
+	return nil, nil
+}
+func (m *mockSecurityRepoForDeletion) GetSecuritiesForCharts() ([]SecurityChartData, error) {
+	return nil, nil
+}
+func (m *mockSecurityRepoForDeletion) GetISINBySymbol(symbol string) (string, error) { return "", nil }
+func (m *mockSecurityRepoForDeletion) GetSymbolByISIN(isin string) (string, error)   { return "", nil }
+func (m *mockSecurityRepoForDeletion) BatchGetISINsBySymbols(symbols []string) (map[string]string, error) {
+	return nil, nil
+}
+func (m *mockSecurityRepoForDeletion) Exists(isin string) (bool, error)           { return false, nil }
+func (m *mockSecurityRepoForDeletion) ExistsBySymbol(symbol string) (bool, error) { return false, nil }
+func (m *mockSecurityRepoForDeletion) CountTradable() (int, error)                { return 0, nil }
+
 type mockPositionRepoForDeletion struct {
 	position  *portfolio.Position
 	getErr    error

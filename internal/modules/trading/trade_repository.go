@@ -10,12 +10,19 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// SecurityProvider defines the interface for getting security information
+// Used to avoid circular dependencies with universe module
+type SecurityProvider interface {
+	GetISINBySymbol(symbol string) (string, error)
+	BatchGetISINsBySymbols(symbols []string) (map[string]string, error)
+}
+
 // TradeRepository handles trade database operations
 // Faithful translation from Python: app/repositories/trade.py
 type TradeRepository struct {
-	ledgerDB   *sql.DB // ledger.db - trades table
-	universeDB *sql.DB // universe.db - securities table (for symbol->ISIN lookup, optional)
-	log        zerolog.Logger
+	ledgerDB         *sql.DB          // ledger.db - trades table
+	securityProvider SecurityProvider // For symbol->ISIN lookup (optional for backwards compatibility)
+	log              zerolog.Logger
 }
 
 // tradesColumns is the list of columns for the trades table
@@ -25,11 +32,11 @@ type TradeRepository struct {
 const tradesColumns = `id, symbol, isin, side, quantity, price, executed_at, order_id, currency, value_eur, source, mode, created_at`
 
 // NewTradeRepository creates a new trade repository
-func NewTradeRepository(ledgerDB *sql.DB, universeDB *sql.DB, log zerolog.Logger) *TradeRepository {
+func NewTradeRepository(ledgerDB *sql.DB, securityProvider SecurityProvider, log zerolog.Logger) *TradeRepository {
 	return &TradeRepository{
-		ledgerDB:   ledgerDB,
-		universeDB: universeDB,
-		log:        log.With().Str("repo", "trade").Logger(),
+		ledgerDB:         ledgerDB,
+		securityProvider: securityProvider,
+		log:              log.With().Str("repo", "trade").Logger(),
 	}
 }
 
@@ -68,13 +75,11 @@ func (r *TradeRepository) Create(trade Trade) error {
 	`
 
 	// Ensure ISIN is populated (required after migration)
-	// If not provided, try to lookup from securities table if universeDB is available
-	if trade.ISIN == "" && r.universeDB != nil {
-		queryISIN := "SELECT isin FROM securities WHERE symbol = ?"
-		row := r.universeDB.QueryRow(queryISIN, strings.ToUpper(strings.TrimSpace(trade.Symbol)))
-		var isin sql.NullString
-		if err := row.Scan(&isin); err == nil && isin.Valid {
-			trade.ISIN = isin.String
+	// If not provided, try to lookup from securities via provider
+	if trade.ISIN == "" && r.securityProvider != nil {
+		isin, err := r.securityProvider.GetISINBySymbol(trade.Symbol)
+		if err == nil {
+			trade.ISIN = isin
 		}
 	}
 
@@ -218,22 +223,15 @@ func (r *TradeRepository) GetAllInRange(startDate, endDate string) ([]Trade, err
 }
 
 // GetBySymbol retrieves trades for a specific symbol (helper method - looks up ISIN first)
-// This requires universeDB to lookup ISIN from securities table
+// This requires securityProvider to lookup ISIN from securities table
 // After migration: prefer GetByISIN for internal operations
 func (r *TradeRepository) GetBySymbol(symbol string, limit int) ([]Trade, error) {
-	// If universeDB is available, lookup ISIN first, then query by ISIN
-	if r.universeDB != nil {
-		query := "SELECT isin FROM securities WHERE symbol = ?"
-		rows, err := r.universeDB.Query(query, strings.ToUpper(strings.TrimSpace(symbol)))
-		if err == nil {
-			defer rows.Close()
-			if rows.Next() {
-				var isin string
-				if err := rows.Scan(&isin); err == nil && isin != "" {
-					// Query by ISIN (preferred after migration)
-					return r.GetByISIN(isin, limit)
-				}
-			}
+	// If security provider is available, lookup ISIN first, then query by ISIN
+	if r.securityProvider != nil {
+		isin, err := r.securityProvider.GetISINBySymbol(symbol)
+		if err == nil && isin != "" {
+			// Query by ISIN (preferred after migration)
+			return r.GetByISIN(isin, limit)
 		}
 	}
 
@@ -320,8 +318,8 @@ func (r *TradeRepository) GetByIdentifier(identifier string, limit int) ([]Trade
 // Excludes RESEARCH trades (order_id starting with 'RESEARCH_')
 // Returns map[isin]true for efficient lookup
 func (r *TradeRepository) GetRecentlyBoughtISINs(days int) (map[string]bool, error) {
-	if r.universeDB == nil {
-		return nil, fmt.Errorf("universe database not available for ISIN lookup")
+	if r.securityProvider == nil {
+		return nil, fmt.Errorf("security provider not available for ISIN lookup")
 	}
 
 	cutoff := time.Now().AddDate(0, 0, -days).Unix()
@@ -359,40 +357,18 @@ func (r *TradeRepository) GetRecentlyBoughtISINs(days int) (map[string]bool, err
 		return make(map[string]bool), nil
 	}
 
-	// Step 2: Look up ISINs using WHERE IN clause (single query for all symbols)
-	// Build placeholders for IN clause: ?, ?, ?, ...
-	placeholders := make([]string, len(symbols))
-	args := make([]interface{}, len(symbols))
-	for i, symbol := range symbols {
-		placeholders[i] = "?"
-		args[i] = symbol
-	}
-
-	isinQuery := fmt.Sprintf(`
-		SELECT DISTINCT isin
-		FROM securities
-		WHERE symbol IN (%s)
-		  AND isin IS NOT NULL
-		  AND isin != ''
-	`, strings.Join(placeholders, ", "))
-
-	isinRows, err := r.universeDB.Query(isinQuery, args...)
+	// Step 2: Look up ISINs using batch provider method (single query for all symbols)
+	symbolToISIN, err := r.securityProvider.BatchGetISINsBySymbols(symbols)
 	if err != nil {
 		return nil, fmt.Errorf("failed to lookup ISINs: %w", err)
 	}
-	defer isinRows.Close()
 
+	// Convert to set of ISINs
 	isins := make(map[string]bool)
-	for isinRows.Next() {
-		var isin string
-		if err := isinRows.Scan(&isin); err != nil {
-			return nil, fmt.Errorf("failed to scan ISIN: %w", err)
+	for _, isin := range symbolToISIN {
+		if isin != "" {
+			isins[isin] = true
 		}
-		isins[isin] = true
-	}
-
-	if err := isinRows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating ISIN rows: %w", err)
 	}
 
 	return isins, nil
@@ -402,8 +378,8 @@ func (r *TradeRepository) GetRecentlyBoughtISINs(days int) (map[string]bool, err
 // Excludes RESEARCH trades (order_id starting with 'RESEARCH_')
 // Returns map[isin]true for efficient lookup
 func (r *TradeRepository) GetRecentlySoldISINs(days int) (map[string]bool, error) {
-	if r.universeDB == nil {
-		return nil, fmt.Errorf("universe database not available for ISIN lookup")
+	if r.securityProvider == nil {
+		return nil, fmt.Errorf("security provider not available for ISIN lookup")
 	}
 
 	cutoff := time.Now().AddDate(0, 0, -days).Unix()
@@ -439,40 +415,18 @@ func (r *TradeRepository) GetRecentlySoldISINs(days int) (map[string]bool, error
 		return make(map[string]bool), nil
 	}
 
-	// Step 2: Look up ISINs using WHERE IN clause (single query for all symbols)
-	// Build placeholders for IN clause: ?, ?, ?, ...
-	placeholders := make([]string, len(symbols))
-	args := make([]interface{}, len(symbols))
-	for i, symbol := range symbols {
-		placeholders[i] = "?"
-		args[i] = symbol
-	}
-
-	isinQuery := fmt.Sprintf(`
-		SELECT DISTINCT isin
-		FROM securities
-		WHERE symbol IN (%s)
-		  AND isin IS NOT NULL
-		  AND isin != ''
-	`, strings.Join(placeholders, ", "))
-
-	isinRows, err := r.universeDB.Query(isinQuery, args...)
+	// Step 2: Look up ISINs using batch provider method (single query for all symbols)
+	symbolToISIN, err := r.securityProvider.BatchGetISINsBySymbols(symbols)
 	if err != nil {
 		return nil, fmt.Errorf("failed to lookup ISINs: %w", err)
 	}
-	defer isinRows.Close()
 
+	// Convert to set of ISINs
 	isins := make(map[string]bool)
-	for isinRows.Next() {
-		var isin string
-		if err := isinRows.Scan(&isin); err != nil {
-			return nil, fmt.Errorf("failed to scan ISIN: %w", err)
+	for _, isin := range symbolToISIN {
+		if isin != "" {
+			isins[isin] = true
 		}
-		isins[isin] = true
-	}
-
-	if err := isinRows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating ISIN rows: %w", err)
 	}
 
 	return isins, nil

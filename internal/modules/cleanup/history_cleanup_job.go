@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/aristath/sentinel/internal/database"
+	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/aristath/sentinel/internal/scheduler/base"
 	"github.com/rs/zerolog"
 )
@@ -13,19 +14,19 @@ import (
 // Runs daily to clean up historical data for symbols not in the universe
 type HistoryCleanupJob struct {
 	base.JobBase
-	historyDB   *database.DB
-	portfolioDB *database.DB
-	universeDB  *database.DB
-	log         zerolog.Logger
+	historyDB    *database.DB
+	portfolioDB  *database.DB
+	securityRepo universe.SecurityRepositoryInterface
+	log          zerolog.Logger
 }
 
 // NewHistoryCleanupJob creates a new history cleanup job
-func NewHistoryCleanupJob(historyDB, portfolioDB, universeDB *database.DB, log zerolog.Logger) *HistoryCleanupJob {
+func NewHistoryCleanupJob(historyDB, portfolioDB *database.DB, securityRepo universe.SecurityRepositoryInterface, log zerolog.Logger) *HistoryCleanupJob {
 	return &HistoryCleanupJob{
-		historyDB:   historyDB,
-		portfolioDB: portfolioDB,
-		universeDB:  universeDB,
-		log:         log.With().Str("job", "history_cleanup").Logger(),
+		historyDB:    historyDB,
+		portfolioDB:  portfolioDB,
+		securityRepo: securityRepo,
+		log:          log.With().Str("job", "history_cleanup").Logger(),
 	}
 }
 
@@ -110,20 +111,17 @@ func (j *HistoryCleanupJob) findOrphanedSymbols() ([]string, error) {
 		historyISINs[isin] = true
 	}
 
-	// Get active ISINs from universe.db
-	activeISINs := make(map[string]bool)
-	rows2, err := j.universeDB.Conn().Query("SELECT isin FROM securities WHERE active = 1")
+	// Get all securities from repository and extract ISINs
+	securities, err := j.securityRepo.GetAll()
 	if err != nil {
-		return nil, fmt.Errorf("failed to query universe ISINs: %w", err)
+		return nil, fmt.Errorf("failed to get securities: %w", err)
 	}
-	defer rows2.Close()
 
-	for rows2.Next() {
-		var isin string
-		if err := rows2.Scan(&isin); err != nil {
-			return nil, err
+	activeISINs := make(map[string]bool)
+	for _, sec := range securities {
+		if sec.ISIN != "" {
+			activeISINs[sec.ISIN] = true
 		}
-		activeISINs[isin] = true
 	}
 
 	// Find orphans (in history but not in universe)

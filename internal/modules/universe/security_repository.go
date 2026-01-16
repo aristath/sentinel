@@ -18,13 +18,11 @@ type SecurityRepository struct {
 	log          zerolog.Logger
 }
 
-// securitiesColumns is the list of columns for the securities table
-// Used to avoid SELECT * which can break when schema changes
-// Column order must match the table schema (matches SELECT * order)
+// securitiesColumns is the list of columns for the securities table (JSON storage schema)
+// After migration 038: Only 4 columns - isin, symbol, data (JSON blob), last_synced
+// All security data is stored as JSON in the 'data' column
 // Note: allow_buy, allow_sell, min_lot, priority_multiplier are stored in security_overrides table
-const securitiesColumns = `isin, symbol, name, product_type, industry, geography, fullExchangeName,
-market_code, active, currency, last_synced,
-min_portfolio_target, max_portfolio_target, created_at, updated_at`
+const securitiesColumns = `isin, symbol, data, last_synced`
 
 // NewSecurityRepository creates a new security repository (backward compatible, no override support)
 func NewSecurityRepository(universeDB *sql.DB, log zerolog.Logger) *SecurityRepository {
@@ -139,8 +137,13 @@ func (r *SecurityRepository) GetByIdentifier(identifier string) (*Security, erro
 
 // GetAllActive returns all active tradable securities (excludes indices)
 // Faithful translation of Python: async def get_all_active(self) -> List[Security]
+// GetAllActive returns all active securities (excludes indices)
+// After migration 038: All securities in table are active (no soft delete)
 func (r *SecurityRepository) GetAllActive() ([]Security, error) {
-	query := "SELECT " + securitiesColumns + " FROM securities WHERE active = 1 AND (product_type IS NULL OR product_type != ?)"
+	// Filter out indices using JSON extraction
+	query := `SELECT ` + securitiesColumns + ` FROM securities
+		WHERE json_extract(data, '$.product_type') IS NULL
+		OR json_extract(data, '$.product_type') != ?`
 
 	rows, err := r.universeDB.Query(query, string(ProductTypeIndex))
 	if err != nil {
@@ -180,9 +183,11 @@ func (r *SecurityRepository) GetAllActive() ([]Security, error) {
 
 // GetDistinctExchanges returns a list of distinct exchange names from active tradable securities (excludes indices)
 func (r *SecurityRepository) GetDistinctExchanges() ([]string, error) {
-	query := `SELECT DISTINCT fullExchangeName FROM securities
-		WHERE fullExchangeName IS NOT NULL AND fullExchangeName != '' AND active = 1
-		AND (product_type IS NULL OR product_type != ?)
+	query := `SELECT DISTINCT json_extract(data, '$.fullExchangeName') as fullExchangeName
+		FROM securities
+		WHERE json_extract(data, '$.fullExchangeName') IS NOT NULL
+		AND json_extract(data, '$.fullExchangeName') != ''
+		AND (json_extract(data, '$.product_type') IS NULL OR json_extract(data, '$.product_type') != ?)
 		ORDER BY fullExchangeName`
 
 	rows, err := r.universeDB.Query(query, string(ProductTypeIndex))
@@ -193,12 +198,12 @@ func (r *SecurityRepository) GetDistinctExchanges() ([]string, error) {
 
 	var exchanges []string
 	for rows.Next() {
-		var exchange sql.NullString
+		var exchange string
 		if err := rows.Scan(&exchange); err != nil {
 			return nil, fmt.Errorf("failed to scan exchange: %w", err)
 		}
-		if exchange.Valid && exchange.String != "" {
-			exchanges = append(exchanges, exchange.String)
+		if exchange != "" {
+			exchanges = append(exchanges, exchange)
 		}
 	}
 
@@ -211,8 +216,12 @@ func (r *SecurityRepository) GetDistinctExchanges() ([]string, error) {
 
 // GetAllActiveTradable returns all active tradable securities (excludes indices and cash)
 // Used for scoring and trading operations
+// After migration 038: Same as GetAllActive() (all securities in table are active)
 func (r *SecurityRepository) GetAllActiveTradable() ([]Security, error) {
-	query := "SELECT " + securitiesColumns + " FROM securities WHERE active = 1 AND (product_type IS NULL OR product_type != ?)"
+	// Filter out indices using JSON extraction
+	query := `SELECT ` + securitiesColumns + ` FROM securities
+		WHERE json_extract(data, '$.product_type') IS NULL
+		OR json_extract(data, '$.product_type') != ?`
 
 	rows, err := r.universeDB.Query(query, string(ProductTypeIndex))
 	if err != nil {
@@ -294,7 +303,9 @@ func (r *SecurityRepository) GetAll() ([]Security, error) {
 // GetByMarketCode returns all active tradable securities with the specified market code (excludes indices)
 // Used for per-region regime detection and grouping securities by market
 func (r *SecurityRepository) GetByMarketCode(marketCode string) ([]Security, error) {
-	query := "SELECT " + securitiesColumns + " FROM securities WHERE market_code = ? AND active = 1 AND (product_type IS NULL OR product_type != ?)"
+	query := `SELECT ` + securitiesColumns + ` FROM securities
+		WHERE json_extract(data, '$.market_code') = ?
+		AND (json_extract(data, '$.product_type') IS NULL OR json_extract(data, '$.product_type') != ?)`
 
 	rows, err := r.universeDB.Query(query, marketCode, string(ProductTypeIndex))
 	if err != nil {
@@ -335,10 +346,20 @@ func (r *SecurityRepository) GetByMarketCode(marketCode string) ([]Security, err
 // Create creates a new security in the repository
 // Note: allow_buy, allow_sell, min_lot, priority_multiplier should be set via security_overrides using the OverrideRepository
 func (r *SecurityRepository) Create(security Security) error {
-	now := time.Now().Unix()
+	// ISIN is required (PRIMARY KEY)
+	if security.ISIN == "" {
+		return fmt.Errorf("ISIN is required for security creation")
+	}
 
 	// Normalize symbol
 	security.Symbol = strings.ToUpper(strings.TrimSpace(security.Symbol))
+	security.ISIN = strings.ToUpper(strings.TrimSpace(security.ISIN))
+
+	// Serialize security data to JSON
+	jsonData, err := SecurityToJSON(&security)
+	if err != nil {
+		return fmt.Errorf("failed to serialize security to JSON: %w", err)
+	}
 
 	// Begin transaction
 	tx, err := r.universeDB.Begin()
@@ -347,35 +368,15 @@ func (r *SecurityRepository) Create(security Security) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	query := `
-		INSERT INTO securities
-		(isin, symbol, name, product_type, industry, geography, fullExchangeName,
-		 market_code, active, currency, min_portfolio_target, max_portfolio_target,
-		 created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`
+	// Insert into JSON storage schema: isin, symbol, data, last_synced
+	query := `INSERT INTO securities (isin, symbol, data, last_synced) VALUES (?, ?, ?, ?)`
 
-	// ISIN is required (PRIMARY KEY)
-	if security.ISIN == "" {
-		return fmt.Errorf("ISIN is required for security creation")
+	var lastSynced interface{}
+	if security.LastSynced != nil {
+		lastSynced = *security.LastSynced
 	}
 
-	_, err = tx.Exec(query,
-		strings.ToUpper(strings.TrimSpace(security.ISIN)),
-		security.Symbol,
-		security.Name,
-		nullString(security.ProductType),
-		nullString(security.Industry),
-		nullString(security.Geography),
-		nullString(security.FullExchangeName),
-		nullString(security.MarketCode),
-		boolToInt(security.Active),
-		nullString(security.Currency),
-		nullFloat64(security.MinPortfolioTarget),
-		nullFloat64(security.MaxPortfolioTarget),
-		now,
-		now,
-	)
+	_, err = tx.Exec(query, security.ISIN, security.Symbol, jsonData, lastSynced)
 	if err != nil {
 		return fmt.Errorf("failed to insert security: %w", err)
 	}
@@ -389,57 +390,25 @@ func (r *SecurityRepository) Create(security Security) error {
 }
 
 // Update updates security fields by ISIN
-// Note: allow_buy, allow_sell, min_lot, priority_multiplier should be set via security_overrides using the OverrideRepository
-func (r *SecurityRepository) Update(isin string, updates map[string]interface{}) error {
+// For JSON storage schema, this method:
+// 1. Reads the current JSON data
+// 2. Parses and updates the specified fields
+// 3. Serializes back to JSON
+// 4. Updates the database
+// Note: allow_buy, allow_sell, min_lot, priority_multiplier should be set via security_overrides
+func (r *SecurityRepository) Update(isin string, updates map[string]any) error {
 	if len(updates) == 0 {
 		return nil
 	}
 
-	// Whitelist of allowed update fields
-	// Note: allow_buy, allow_sell, priority_multiplier are NOT allowed here
-	// They should be set via security_overrides table
-	allowedFields := map[string]bool{
-		"active": true,
-		"name":   true, "product_type": true, "sector": true, "industry": true,
-		"geography": true, "fullExchangeName": true, "currency": true,
-		"exchange":             true,
-		"market_code":          true, // Tradernet market code for region mapping
-		"min_portfolio_target": true, "max_portfolio_target": true,
-		"isin":        true,
-		"symbol":      true,
-		"last_synced": true, // Unix timestamp
-		"min_lot":     true, // Minimum lot size from broker
+	isin = strings.ToUpper(strings.TrimSpace(isin))
+
+	// Special case: if "data" field is provided as complete JSON string, just update it directly
+	if dataStr, ok := updates["data"].(string); ok {
+		return r.updateJSONDirectly(isin, dataStr, updates)
 	}
 
-	// Validate all keys are in whitelist
-	for key := range updates {
-		if !allowedFields[key] {
-			return fmt.Errorf("invalid update field: %s", key)
-		}
-	}
-
-	// Add updated_at
-	now := time.Now().Unix()
-	updates["updated_at"] = now
-
-	// Convert booleans to integers
-	for _, boolField := range []string{"active"} {
-		if val, ok := updates[boolField]; ok {
-			if boolVal, isBool := val.(bool); isBool {
-				updates[boolField] = boolToInt(boolVal)
-			}
-		}
-	}
-
-	// Build SET clause
-	var setClauses []string
-	var values []interface{}
-	for key, val := range updates {
-		setClauses = append(setClauses, fmt.Sprintf("%s = ?", key))
-		values = append(values, val)
-	}
-	values = append(values, strings.ToUpper(strings.TrimSpace(isin)))
-
+	// Otherwise, read current data, modify fields, and write back
 	// Begin transaction
 	tx, err := r.universeDB.Begin()
 	if err != nil {
@@ -447,10 +416,110 @@ func (r *SecurityRepository) Update(isin string, updates map[string]interface{})
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Safe: all keys are validated against whitelist above, values use parameterized query
-	//nolint:gosec // G201: Field names are whitelisted, values are parameterized
-	query := fmt.Sprintf("UPDATE securities SET %s WHERE isin = ?", strings.Join(setClauses, ", "))
-	result, err := tx.Exec(query, values...)
+	// Read current security data
+	var symbol, jsonData string
+	var lastSynced sql.NullInt64
+	query := `SELECT symbol, data, last_synced FROM securities WHERE isin = ?`
+	err = tx.QueryRow(query, isin).Scan(&symbol, &jsonData, &lastSynced)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("security not found: %s", isin)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to read security: %w", err)
+	}
+
+	// Parse current JSON
+	data, err := ParseSecurityJSON(jsonData)
+	if err != nil {
+		return fmt.Errorf("failed to parse existing JSON: %w", err)
+	}
+
+	// Apply updates to JSON fields
+	if val, ok := updates["name"]; ok {
+		if strVal, ok := val.(string); ok {
+			data.Name = strVal
+		}
+	}
+	if val, ok := updates["product_type"]; ok {
+		if strVal, ok := val.(string); ok {
+			data.ProductType = strVal
+		}
+	}
+	if val, ok := updates["industry"]; ok {
+		if strVal, ok := val.(string); ok {
+			data.Industry = strVal
+		}
+	}
+	if val, ok := updates["geography"]; ok {
+		if strVal, ok := val.(string); ok {
+			data.Geography = strVal
+		}
+	}
+	if val, ok := updates["fullExchangeName"]; ok {
+		if strVal, ok := val.(string); ok {
+			data.FullExchangeName = strVal
+		}
+	}
+	if val, ok := updates["market_code"]; ok {
+		if strVal, ok := val.(string); ok {
+			data.MarketCode = strVal
+		}
+	}
+	if val, ok := updates["currency"]; ok {
+		if strVal, ok := val.(string); ok {
+			data.Currency = strVal
+		}
+	}
+	if val, ok := updates["min_lot"]; ok {
+		if intVal, ok := val.(int); ok {
+			data.MinLot = intVal
+		}
+	}
+	if val, ok := updates["min_portfolio_target"]; ok {
+		if floatVal, ok := val.(float64); ok {
+			data.MinPortfolioTarget = floatVal
+		}
+	}
+	if val, ok := updates["max_portfolio_target"]; ok {
+		if floatVal, ok := val.(float64); ok {
+			data.MaxPortfolioTarget = floatVal
+		}
+	}
+
+	// Serialize back to JSON
+	updatedJSON, err := SerializeSecurityJSON(data)
+	if err != nil {
+		return fmt.Errorf("failed to serialize updated JSON: %w", err)
+	}
+
+	// Build UPDATE statement
+	var setClauses []string
+	var values []interface{}
+
+	// Always update data column
+	setClauses = append(setClauses, "data = ?")
+	values = append(values, updatedJSON)
+
+	// Handle symbol update separately (it's its own column)
+	if val, ok := updates["symbol"]; ok {
+		if strVal, ok := val.(string); ok {
+			setClauses = append(setClauses, "symbol = ?")
+			values = append(values, strings.ToUpper(strings.TrimSpace(strVal)))
+		}
+	}
+
+	// Handle last_synced separately (it's its own column)
+	if val, ok := updates["last_synced"]; ok {
+		setClauses = append(setClauses, "last_synced = ?")
+		values = append(values, val)
+	}
+
+	// Add ISIN to WHERE clause
+	values = append(values, isin)
+
+	// Execute update
+	updateQuery := fmt.Sprintf("UPDATE securities SET %s WHERE isin = ?", strings.Join(setClauses, ", "))
+	result, err := tx.Exec(updateQuery, values...)
 	if err != nil {
 		return fmt.Errorf("failed to update security: %w", err)
 	}
@@ -464,10 +533,54 @@ func (r *SecurityRepository) Update(isin string, updates map[string]interface{})
 	return nil
 }
 
-// Delete soft deletes a security by ISIN (sets active=0)
-// Changed from symbol to ISIN as primary identifier
+// updateJSONDirectly updates the data column directly with provided JSON string
+func (r *SecurityRepository) updateJSONDirectly(isin string, jsonData string, updates map[string]any) error {
+	// Begin transaction
+	tx, err := r.universeDB.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// Build UPDATE statement
+	var setClauses []string
+	var values []interface{}
+
+	// Update data column
+	setClauses = append(setClauses, "data = ?")
+	values = append(values, jsonData)
+
+	// Handle last_synced if provided
+	if val, ok := updates["last_synced"]; ok {
+		setClauses = append(setClauses, "last_synced = ?")
+		values = append(values, val)
+	}
+
+	// Add ISIN to WHERE clause
+	values = append(values, isin)
+
+	// Execute update
+	query := fmt.Sprintf("UPDATE securities SET %s WHERE isin = ?", strings.Join(setClauses, ", "))
+	result, err := tx.Exec(query, values...)
+	if err != nil {
+		return fmt.Errorf("failed to update security: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	r.log.Info().Str("isin", isin).Int64("rows_affected", rowsAffected).Msg("Security updated (direct JSON)")
+	return nil
+}
+
+// Delete is deprecated after migration 038 - no soft delete with JSON storage
+// Only HardDelete is supported (actual removal from database)
+// This method is kept for interface compatibility but should not be used
 func (r *SecurityRepository) Delete(isin string) error {
-	return r.Update(isin, map[string]interface{}{"active": false})
+	r.log.Warn().Str("isin", isin).Msg("Delete() called but soft delete not supported with JSON storage - use HardDelete() instead")
+	return fmt.Errorf("soft delete not supported after migration 038 - use HardDelete() to permanently remove security")
 }
 
 // HardDelete permanently removes a security and all related data from universe.db
@@ -488,15 +601,7 @@ func (r *SecurityRepository) HardDelete(isin string) error {
 		return fmt.Errorf("failed to delete security_tags: %w", err)
 	}
 
-	_, err = tx.Exec("DELETE FROM broker_symbols WHERE isin = ?", isin)
-	if err != nil {
-		return fmt.Errorf("failed to delete broker_symbols: %w", err)
-	}
-
-	_, err = tx.Exec("DELETE FROM client_symbols WHERE isin = ?", isin)
-	if err != nil {
-		return fmt.Errorf("failed to delete client_symbols: %w", err)
-	}
+	// Note: security_overrides will be deleted automatically via CASCADE foreign key
 
 	// Delete the security itself
 	result, err := tx.Exec("DELETE FROM securities WHERE isin = ?", isin)
@@ -522,7 +627,10 @@ func (r *SecurityRepository) HardDelete(isin string) error {
 // Note: This method accesses multiple databases (universe.db and portfolio.db) - architecture violation
 func (r *SecurityRepository) GetWithScores(portfolioDB *sql.DB) ([]SecurityWithScore, error) {
 	// Fetch securities from universe.db (exclude indices)
-	securityRows, err := r.universeDB.Query("SELECT "+securitiesColumns+" FROM securities WHERE active = 1 AND (product_type IS NULL OR product_type != ?)", string(ProductTypeIndex))
+	query := `SELECT ` + securitiesColumns + ` FROM securities
+		WHERE json_extract(data, '$.product_type') IS NULL
+		OR json_extract(data, '$.product_type') != ?`
+	securityRows, err := r.universeDB.Query(query, string(ProductTypeIndex))
 	if err != nil {
 		return nil, fmt.Errorf("failed to query securities: %w", err)
 	}
@@ -555,7 +663,6 @@ func (r *SecurityRepository) GetWithScores(portfolioDB *sql.DB) ([]SecurityWithS
 			Industry:           security.Industry,
 			PriorityMultiplier: security.PriorityMultiplier,
 			MinLot:             security.MinLot,
-			Active:             security.Active,
 			AllowBuy:           security.AllowBuy,
 			AllowSell:          security.AllowSell,
 			Currency:           security.Currency,
@@ -759,89 +866,35 @@ func (r *SecurityRepository) GetWithScores(portfolioDB *sql.DB) ([]SecurityWithS
 // scanSecurity scans a database row into a Security struct
 // Note: allow_buy, allow_sell, min_lot, priority_multiplier are stored in security_overrides table
 func (r *SecurityRepository) scanSecurity(rows *sql.Rows) (Security, error) {
-	var security Security
-	var isin, productType, geography, fullExchangeName sql.NullString
-	var marketCode sql.NullString
-	var industry, currency sql.NullString
+	var isin, symbol, jsonData string
 	var lastSynced sql.NullInt64
-	var minPortfolioTarget, maxPortfolioTarget sql.NullFloat64
-	var active sql.NullInt64
-	var createdAt, updatedAt sql.NullInt64
 
-	// Table schema: isin, symbol, name, product_type, industry, geography, fullExchangeName,
-	// market_code, active, currency, last_synced, min_portfolio_target, max_portfolio_target, created_at, updated_at
-	// Note: allow_buy, allow_sell, min_lot, priority_multiplier are in security_overrides table
-	var symbol sql.NullString
-	err := rows.Scan(
-		&isin,               // isin (PRIMARY KEY)
-		&symbol,             // symbol
-		&security.Name,      // name
-		&productType,        // product_type
-		&industry,           // industry
-		&geography,          // geography
-		&fullExchangeName,   // fullExchangeName
-		&marketCode,         // market_code
-		&active,             // active
-		&currency,           // currency
-		&lastSynced,         // last_synced
-		&minPortfolioTarget, // min_portfolio_target
-		&maxPortfolioTarget, // max_portfolio_target
-		&createdAt,          // created_at
-		&updatedAt,          // updated_at
-	)
+	// Scan from JSON storage schema: isin, symbol, data, last_synced
+	err := rows.Scan(&isin, &symbol, &jsonData, &lastSynced)
 	if err != nil {
-		return security, err
+		return Security{}, fmt.Errorf("failed to scan row: %w", err)
 	}
 
-	// Handle nullable fields
-	if isin.Valid {
-		security.ISIN = isin.String
-	}
-	if symbol.Valid {
-		security.Symbol = symbol.String
-	}
-	if productType.Valid {
-		security.ProductType = productType.String
-	}
-	if geography.Valid {
-		security.Geography = geography.String
-	}
-	if fullExchangeName.Valid {
-		security.FullExchangeName = fullExchangeName.String
-	}
-	if marketCode.Valid {
-		security.MarketCode = marketCode.String
-	}
-	if industry.Valid {
-		security.Industry = industry.String
-	}
-	if currency.Valid {
-		security.Currency = currency.String
-	}
+	// Convert lastSynced to pointer
+	var ls *int64
 	if lastSynced.Valid {
-		security.LastSynced = &lastSynced.Int64
-	}
-	if minPortfolioTarget.Valid {
-		security.MinPortfolioTarget = minPortfolioTarget.Float64
-	}
-	if maxPortfolioTarget.Valid {
-		security.MaxPortfolioTarget = maxPortfolioTarget.Float64
+		ls = &lastSynced.Int64
 	}
 
-	// Handle boolean field (stored as integer in SQLite)
-	if active.Valid {
-		security.Active = active.Int64 != 0
+	// Parse JSON data to Security struct
+	security, err := SecurityFromJSON(isin, symbol, jsonData, ls)
+	if err != nil {
+		r.log.Error().
+			Err(err).
+			Str("isin", isin).
+			Str("symbol", symbol).
+			Msg("Failed to parse security JSON")
+		return Security{}, fmt.Errorf("failed to parse security JSON for %s: %w", isin, err)
 	}
-
-	// Timestamps are read but not stored in Security model
-	// (created_at and updated_at are database fields but not part of the domain model)
-
-	// Normalize symbol
-	security.Symbol = strings.ToUpper(strings.TrimSpace(security.Symbol))
 
 	// Apply defaults for fields moved to security_overrides
 	// These will be overridden by actual overrides in the calling method
-	ApplyDefaults(&security)
+	ApplyDefaults(security)
 
 	// Load tags for the security
 	// Use ISIN as primary identifier (security_tags table uses isin, not symbol)
@@ -849,7 +902,6 @@ func (r *SecurityRepository) scanSecurity(rows *sql.Rows) (Security, error) {
 		tagIDs, err := r.getTagsForSecurity(security.ISIN)
 		if err != nil {
 			// Log error but don't fail - tags are optional
-			// Note: In test environments, this error might be silently ignored if logger is disabled
 			r.log.Warn().Str("isin", security.ISIN).Str("symbol", security.Symbol).Err(err).Msg("Failed to load tags for security")
 			security.Tags = []string{} // Initialize to empty slice
 		} else if len(tagIDs) > 0 {
@@ -864,7 +916,7 @@ func (r *SecurityRepository) scanSecurity(rows *sql.Rows) (Security, error) {
 		security.Tags = []string{}
 	}
 
-	return security, nil
+	return *security, nil
 }
 
 // getTagsForSecurity loads tag IDs for a security by ISIN
@@ -1136,14 +1188,11 @@ func (r *SecurityRepository) GetByTags(tagIDs []string) ([]Security, error) {
 	placeholders = placeholders[:len(placeholders)-1] // Remove trailing comma
 
 	query := fmt.Sprintf(`
-		SELECT DISTINCT s.isin, s.symbol, s.name, s.product_type, s.industry, s.geography, s.fullExchangeName,
-			s.market_code, s.active, s.currency, s.last_synced,
-			s.min_portfolio_target, s.max_portfolio_target, s.created_at, s.updated_at
+		SELECT DISTINCT s.isin, s.symbol, s.data, s.last_synced
 		FROM securities s
 		INNER JOIN security_tags st ON s.isin = st.isin
 		WHERE st.tag_id IN (%s)
-		AND s.active = 1
-		AND (s.product_type IS NULL OR s.product_type != ?)
+		AND (json_extract(s.data, '$.product_type') IS NULL OR json_extract(s.data, '$.product_type') != ?)
 		ORDER BY s.symbol ASC
 	`, placeholders)
 
@@ -1248,15 +1297,12 @@ func (r *SecurityRepository) GetPositionsByTags(positionSymbols []string, tagIDs
 	tagPlaceholders = tagPlaceholders[:len(tagPlaceholders)-1]
 
 	query := fmt.Sprintf(`
-		SELECT DISTINCT s.isin, s.symbol, s.name, s.product_type, s.industry, s.geography, s.fullExchangeName,
-			s.market_code, s.active, s.currency, s.last_synced,
-			s.min_portfolio_target, s.max_portfolio_target, s.created_at, s.updated_at
+		SELECT DISTINCT s.isin, s.symbol, s.data, s.last_synced
 		FROM securities s
 		INNER JOIN security_tags st ON s.isin = st.isin
 		WHERE s.symbol IN (%s)
 		AND st.tag_id IN (%s)
-		AND s.active = 1
-		AND (s.product_type IS NULL OR s.product_type != ?)
+		AND (json_extract(s.data, '$.product_type') IS NULL OR json_extract(s.data, '$.product_type') != ?)
 		ORDER BY s.symbol ASC
 	`, symbolPlaceholders, tagPlaceholders)
 
@@ -1327,6 +1373,543 @@ func (r *SecurityRepository) GetPositionsByTags(positionSymbols []string, tagIDs
 		Msg("Queried positions by tags")
 
 	return securities, nil
+}
+
+// GetISINBySymbol returns just the ISIN for a given symbol
+// This is more efficient than GetBySymbol when you only need the ISIN
+func (r *SecurityRepository) GetISINBySymbol(symbol string) (string, error) {
+	var isin string
+	query := `SELECT isin FROM securities WHERE symbol = ?`
+	err := r.universeDB.QueryRow(query, strings.ToUpper(strings.TrimSpace(symbol))).Scan(&isin)
+	if err == sql.ErrNoRows {
+		return "", fmt.Errorf("security not found: %s", symbol)
+	}
+	if err != nil {
+		return "", fmt.Errorf("failed to query ISIN by symbol: %w", err)
+	}
+	return isin, nil
+}
+
+// GetSymbolByISIN returns just the symbol for a given ISIN
+// This is more efficient than GetByISIN when you only need the symbol
+func (r *SecurityRepository) GetSymbolByISIN(isin string) (string, error) {
+	var symbol string
+	query := `SELECT symbol FROM securities WHERE isin = ?`
+	err := r.universeDB.QueryRow(query, strings.ToUpper(strings.TrimSpace(isin))).Scan(&symbol)
+	if err == sql.ErrNoRows {
+		return "", fmt.Errorf("security not found: %s", isin)
+	}
+	if err != nil {
+		return "", fmt.Errorf("failed to query symbol by ISIN: %w", err)
+	}
+	return symbol, nil
+}
+
+// BatchGetISINsBySymbols returns a map of symbol → ISIN for multiple symbols
+// This is much more efficient than calling GetISINBySymbol in a loop
+func (r *SecurityRepository) BatchGetISINsBySymbols(symbols []string) (map[string]string, error) {
+	if len(symbols) == 0 {
+		return make(map[string]string), nil
+	}
+
+	// Normalize symbols
+	normalizedSymbols := make([]string, len(symbols))
+	for i, sym := range symbols {
+		normalizedSymbols[i] = strings.ToUpper(strings.TrimSpace(sym))
+	}
+
+	// Build query with placeholders
+	placeholders := strings.Repeat("?,", len(normalizedSymbols)-1) + "?"
+	query := fmt.Sprintf(`SELECT symbol, isin FROM securities WHERE symbol IN (%s)`, placeholders)
+
+	// Convert to []interface{} for Query
+	args := make([]interface{}, len(normalizedSymbols))
+	for i, sym := range normalizedSymbols {
+		args[i] = sym
+	}
+
+	rows, err := r.universeDB.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch query ISINs: %w", err)
+	}
+	defer rows.Close()
+
+	mapping := make(map[string]string)
+	for rows.Next() {
+		var symbol, isin string
+		if err := rows.Scan(&symbol, &isin); err != nil {
+			return nil, fmt.Errorf("failed to scan symbol/ISIN: %w", err)
+		}
+		mapping[symbol] = isin
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating symbol/ISIN results: %w", err)
+	}
+
+	return mapping, nil
+}
+
+// GetByISINs returns multiple securities by their ISINs (batch lookup)
+func (r *SecurityRepository) GetByISINs(isins []string) ([]Security, error) {
+	if len(isins) == 0 {
+		return []Security{}, nil
+	}
+
+	// Normalize ISINs
+	normalizedISINs := make([]string, len(isins))
+	for i, isin := range isins {
+		normalizedISINs[i] = strings.ToUpper(strings.TrimSpace(isin))
+	}
+
+	// Build query with placeholders
+	placeholders := strings.Repeat("?,", len(normalizedISINs)-1) + "?"
+	query := fmt.Sprintf(`SELECT %s FROM securities WHERE isin IN (%s)`, securitiesColumns, placeholders)
+
+	// Convert to []interface{} for Query
+	args := make([]interface{}, len(normalizedISINs))
+	for i, isin := range normalizedISINs {
+		args[i] = isin
+	}
+
+	rows, err := r.universeDB.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch query securities by ISIN: %w", err)
+	}
+	defer rows.Close()
+
+	var securities []Security
+	for rows.Next() {
+		security, err := r.scanSecurity(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan security: %w", err)
+		}
+		securities = append(securities, security)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating securities: %w", err)
+	}
+
+	// Apply overrides if override repository is available (batch mode for efficiency)
+	if r.overrideRepo != nil && len(securities) > 0 {
+		allOverrides, err := r.overrideRepo.GetAllOverrides()
+		if err != nil {
+			r.log.Warn().Err(err).Msg("Failed to fetch all overrides")
+		} else {
+			for i := range securities {
+				if overrides, exists := allOverrides[securities[i].ISIN]; exists && len(overrides) > 0 {
+					ApplyOverrides(&securities[i], overrides)
+				}
+			}
+		}
+	}
+
+	return securities, nil
+}
+
+// GetBySymbols returns multiple securities by their symbols (batch lookup)
+func (r *SecurityRepository) GetBySymbols(symbols []string) ([]Security, error) {
+	if len(symbols) == 0 {
+		return []Security{}, nil
+	}
+
+	// Normalize symbols
+	normalizedSymbols := make([]string, len(symbols))
+	for i, sym := range symbols {
+		normalizedSymbols[i] = strings.ToUpper(strings.TrimSpace(sym))
+	}
+
+	// Build query with placeholders
+	placeholders := strings.Repeat("?,", len(normalizedSymbols)-1) + "?"
+	query := fmt.Sprintf(`SELECT %s FROM securities WHERE symbol IN (%s)`, securitiesColumns, placeholders)
+
+	// Convert to []interface{} for Query
+	args := make([]interface{}, len(normalizedSymbols))
+	for i, sym := range normalizedSymbols {
+		args[i] = sym
+	}
+
+	rows, err := r.universeDB.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch query securities by symbol: %w", err)
+	}
+	defer rows.Close()
+
+	var securities []Security
+	for rows.Next() {
+		security, err := r.scanSecurity(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan security: %w", err)
+		}
+		securities = append(securities, security)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating securities: %w", err)
+	}
+
+	// Apply overrides if override repository is available (batch mode for efficiency)
+	if r.overrideRepo != nil && len(securities) > 0 {
+		allOverrides, err := r.overrideRepo.GetAllOverrides()
+		if err != nil {
+			r.log.Warn().Err(err).Msg("Failed to fetch all overrides")
+		} else {
+			for i := range securities {
+				if overrides, exists := allOverrides[securities[i].ISIN]; exists && len(overrides) > 0 {
+					ApplyOverrides(&securities[i], overrides)
+				}
+			}
+		}
+	}
+
+	return securities, nil
+}
+
+// GetTradable returns all tradable securities (excludes indices)
+// Replaces GetAllActive and GetAllActiveTradable (active column will be removed)
+func (r *SecurityRepository) GetTradable() ([]Security, error) {
+	// After migration: no active column, use JSON extraction for product_type
+	query := `SELECT ` + securitiesColumns + ` FROM securities
+		WHERE json_extract(data, '$.product_type') IS NULL
+		OR json_extract(data, '$.product_type') != ?`
+
+	rows, err := r.universeDB.Query(query, string(ProductTypeIndex))
+	if err != nil {
+		return nil, fmt.Errorf("failed to query tradable securities: %w", err)
+	}
+	defer rows.Close()
+
+	var securities []Security
+	for rows.Next() {
+		security, err := r.scanSecurity(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan security: %w", err)
+		}
+		securities = append(securities, security)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating securities: %w", err)
+	}
+
+	// Apply overrides if override repository is available (batch mode for efficiency)
+	if r.overrideRepo != nil && len(securities) > 0 {
+		allOverrides, err := r.overrideRepo.GetAllOverrides()
+		if err != nil {
+			r.log.Warn().Err(err).Msg("Failed to fetch all overrides")
+		} else {
+			for i := range securities {
+				if overrides, exists := allOverrides[securities[i].ISIN]; exists && len(overrides) > 0 {
+					ApplyOverrides(&securities[i], overrides)
+				}
+			}
+		}
+	}
+
+	return securities, nil
+}
+
+// GetByGeography returns securities filtered by geography
+func (r *SecurityRepository) GetByGeography(geography string) ([]Security, error) {
+	query := `SELECT ` + securitiesColumns + ` FROM securities
+		WHERE json_extract(data, '$.geography') = ?`
+
+	rows, err := r.universeDB.Query(query, geography)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query securities by geography: %w", err)
+	}
+	defer rows.Close()
+
+	var securities []Security
+	for rows.Next() {
+		security, err := r.scanSecurity(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan security: %w", err)
+		}
+		securities = append(securities, security)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating securities: %w", err)
+	}
+
+	// Apply overrides if override repository is available
+	if r.overrideRepo != nil && len(securities) > 0 {
+		allOverrides, err := r.overrideRepo.GetAllOverrides()
+		if err != nil {
+			r.log.Warn().Err(err).Msg("Failed to fetch all overrides")
+		} else {
+			for i := range securities {
+				if overrides, exists := allOverrides[securities[i].ISIN]; exists && len(overrides) > 0 {
+					ApplyOverrides(&securities[i], overrides)
+				}
+			}
+		}
+	}
+
+	return securities, nil
+}
+
+// GetByIndustry returns securities filtered by industry
+func (r *SecurityRepository) GetByIndustry(industry string) ([]Security, error) {
+	query := `SELECT ` + securitiesColumns + ` FROM securities
+		WHERE json_extract(data, '$.industry') = ?`
+
+	rows, err := r.universeDB.Query(query, industry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query securities by industry: %w", err)
+	}
+	defer rows.Close()
+
+	var securities []Security
+	for rows.Next() {
+		security, err := r.scanSecurity(rows)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan security: %w", err)
+		}
+		securities = append(securities, security)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating securities: %w", err)
+	}
+
+	// Apply overrides if override repository is available
+	if r.overrideRepo != nil && len(securities) > 0 {
+		allOverrides, err := r.overrideRepo.GetAllOverrides()
+		if err != nil {
+			r.log.Warn().Err(err).Msg("Failed to fetch all overrides")
+		} else {
+			for i := range securities {
+				if overrides, exists := allOverrides[securities[i].ISIN]; exists && len(overrides) > 0 {
+					ApplyOverrides(&securities[i], overrides)
+				}
+			}
+		}
+	}
+
+	return securities, nil
+}
+
+// GetDistinctGeographies returns a list of distinct geographies from active securities (excludes indices)
+func (r *SecurityRepository) GetDistinctGeographies() ([]string, error) {
+	query := `SELECT DISTINCT json_extract(data, '$.geography') as geography
+		FROM securities
+		WHERE json_extract(data, '$.geography') IS NOT NULL
+		AND json_extract(data, '$.geography') != ''
+		AND json_extract(data, '$.geography') != '0'
+		AND (json_extract(data, '$.product_type') IS NULL OR json_extract(data, '$.product_type') != ?)
+		ORDER BY geography`
+
+	rows, err := r.universeDB.Query(query, string(ProductTypeIndex))
+	if err != nil {
+		return nil, fmt.Errorf("failed to query distinct geographies: %w", err)
+	}
+	defer rows.Close()
+
+	var geographies []string
+	for rows.Next() {
+		var geography string
+		if err := rows.Scan(&geography); err != nil {
+			return nil, fmt.Errorf("failed to scan geography: %w", err)
+		}
+		geographies = append(geographies, geography)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating geographies: %w", err)
+	}
+
+	return geographies, nil
+}
+
+// GetDistinctIndustries returns a list of distinct industries from active securities (excludes indices)
+func (r *SecurityRepository) GetDistinctIndustries() ([]string, error) {
+	query := `SELECT DISTINCT json_extract(data, '$.industry') as industry
+		FROM securities
+		WHERE json_extract(data, '$.industry') IS NOT NULL
+		AND json_extract(data, '$.industry') != ''
+		AND (json_extract(data, '$.product_type') IS NULL OR json_extract(data, '$.product_type') != ?)
+		ORDER BY industry`
+
+	rows, err := r.universeDB.Query(query, string(ProductTypeIndex))
+	if err != nil {
+		return nil, fmt.Errorf("failed to query distinct industries: %w", err)
+	}
+	defer rows.Close()
+
+	var industries []string
+	for rows.Next() {
+		var industry string
+		if err := rows.Scan(&industry); err != nil {
+			return nil, fmt.Errorf("failed to scan industry: %w", err)
+		}
+		industries = append(industries, industry)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating industries: %w", err)
+	}
+
+	return industries, nil
+}
+
+// GetGeographiesAndIndustries returns a map of geography → list of industries
+func (r *SecurityRepository) GetGeographiesAndIndustries() (map[string][]string, error) {
+	query := `SELECT DISTINCT
+		json_extract(data, '$.geography') as geography,
+		json_extract(data, '$.industry') as industry
+		FROM securities
+		WHERE json_extract(data, '$.geography') IS NOT NULL
+		AND json_extract(data, '$.geography') != ''
+		AND json_extract(data, '$.geography') != '0'
+		AND json_extract(data, '$.industry') IS NOT NULL
+		AND json_extract(data, '$.industry') != ''
+		AND (json_extract(data, '$.product_type') IS NULL OR json_extract(data, '$.product_type') != ?)
+		ORDER BY geography, industry`
+
+	rows, err := r.universeDB.Query(query, string(ProductTypeIndex))
+	if err != nil {
+		return nil, fmt.Errorf("failed to query geographies and industries: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[string][]string)
+	for rows.Next() {
+		var geography, industry string
+		if err := rows.Scan(&geography, &industry); err != nil {
+			return nil, fmt.Errorf("failed to scan geography/industry: %w", err)
+		}
+
+		if _, exists := result[geography]; !exists {
+			result[geography] = []string{}
+		}
+		result[geography] = append(result[geography], industry)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating geographies/industries: %w", err)
+	}
+
+	return result, nil
+}
+
+// GetSecuritiesForOptimization returns minimal data needed for portfolio optimization
+func (r *SecurityRepository) GetSecuritiesForOptimization() ([]SecurityOptimizationData, error) {
+	query := `SELECT isin, symbol,
+		json_extract(data, '$.product_type') as product_type,
+		json_extract(data, '$.geography') as geography,
+		json_extract(data, '$.industry') as industry,
+		json_extract(data, '$.min_portfolio_target') as min_portfolio_target,
+		json_extract(data, '$.max_portfolio_target') as max_portfolio_target
+		FROM securities`
+
+	rows, err := r.universeDB.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query securities for optimization: %w", err)
+	}
+	defer rows.Close()
+
+	var result []SecurityOptimizationData
+	for rows.Next() {
+		var data SecurityOptimizationData
+		var productType, geography, industry sql.NullString
+		var minTarget, maxTarget sql.NullFloat64
+
+		err := rows.Scan(&data.ISIN, &data.Symbol, &productType, &geography, &industry, &minTarget, &maxTarget)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan optimization data: %w", err)
+		}
+
+		if productType.Valid {
+			data.ProductType = productType.String
+		}
+		if geography.Valid {
+			data.Geography = geography.String
+		}
+		if industry.Valid {
+			data.Industry = industry.String
+		}
+		if minTarget.Valid {
+			data.MinPortfolioTarget = minTarget.Float64
+		}
+		if maxTarget.Valid {
+			data.MaxPortfolioTarget = maxTarget.Float64
+		}
+
+		result = append(result, data)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating optimization data: %w", err)
+	}
+
+	return result, nil
+}
+
+// GetSecuritiesForCharts returns minimal data needed for chart generation
+func (r *SecurityRepository) GetSecuritiesForCharts() ([]SecurityChartData, error) {
+	query := `SELECT isin, symbol FROM securities
+		WHERE json_extract(data, '$.product_type') IS NULL
+		OR json_extract(data, '$.product_type') != ?`
+
+	rows, err := r.universeDB.Query(query, string(ProductTypeIndex))
+	if err != nil {
+		return nil, fmt.Errorf("failed to query securities for charts: %w", err)
+	}
+	defer rows.Close()
+
+	var result []SecurityChartData
+	for rows.Next() {
+		var data SecurityChartData
+		err := rows.Scan(&data.ISIN, &data.Symbol)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan chart data: %w", err)
+		}
+		result = append(result, data)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating chart data: %w", err)
+	}
+
+	return result, nil
+}
+
+// Exists checks if a security exists by ISIN
+func (r *SecurityRepository) Exists(isin string) (bool, error) {
+	var count int
+	query := `SELECT COUNT(*) FROM securities WHERE isin = ?`
+	err := r.universeDB.QueryRow(query, strings.ToUpper(strings.TrimSpace(isin))).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("failed to check security existence: %w", err)
+	}
+	return count > 0, nil
+}
+
+// ExistsBySymbol checks if a security exists by symbol
+func (r *SecurityRepository) ExistsBySymbol(symbol string) (bool, error) {
+	var count int
+	query := `SELECT COUNT(*) FROM securities WHERE symbol = ?`
+	err := r.universeDB.QueryRow(query, strings.ToUpper(strings.TrimSpace(symbol))).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("failed to check security existence by symbol: %w", err)
+	}
+	return count > 0, nil
+}
+
+// CountTradable returns the count of tradable securities (excludes indices)
+func (r *SecurityRepository) CountTradable() (int, error) {
+	var count int
+	query := `SELECT COUNT(*) FROM securities
+		WHERE json_extract(data, '$.product_type') IS NULL
+		OR json_extract(data, '$.product_type') != ?`
+	err := r.universeDB.QueryRow(query, string(ProductTypeIndex)).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count tradable securities: %w", err)
+	}
+	return count, nil
 }
 
 // Helper functions

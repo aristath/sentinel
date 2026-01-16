@@ -12,6 +12,40 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// testSecurityProvider wraps universe.SecurityRepository for testing
+type testSecurityProvider struct {
+	repo *universe.SecurityRepository
+}
+
+func newTestSecurityProvider(repo *universe.SecurityRepository) SecurityProvider {
+	return &testSecurityProvider{repo: repo}
+}
+
+func (p *testSecurityProvider) GetISINBySymbol(symbol string) (string, error) {
+	return p.repo.GetISINBySymbol(symbol)
+}
+
+func (p *testSecurityProvider) GetSymbolByISIN(isin string) (string, error) {
+	return p.repo.GetSymbolByISIN(isin)
+}
+
+func (p *testSecurityProvider) GetAll() ([]SecurityInfo, error) {
+	securities, err := p.repo.GetAll()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]SecurityInfo, len(securities))
+	for i, sec := range securities {
+		result[i] = SecurityInfo{
+			ISIN:        sec.ISIN,
+			Symbol:      sec.Symbol,
+			ProductType: sec.ProductType,
+		}
+	}
+	return result, nil
+}
+
 // mockHistoryDB is a test mock implementing universe.HistoryDBInterface
 type mockHistoryDB struct {
 	prices map[string][]universe.DailyPrice // keyed by ISIN
@@ -135,9 +169,9 @@ func setupTestDB(t *testing.T) (*sql.DB, func()) {
 		CREATE TABLE IF NOT EXISTS securities (
 			isin TEXT PRIMARY KEY,
 			symbol TEXT NOT NULL,
-			product_type TEXT NOT NULL,
-			active INTEGER DEFAULT 1
-		);
+			data TEXT NOT NULL,
+			last_synced INTEGER
+		) STRICT;
 	`)
 	require.NoError(t, err)
 
@@ -190,15 +224,17 @@ func TestDataPrep_ExtractTrainingExamples_MinimumHistory(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	// Insert security
+	// Insert security (JSON storage - migration 038)
 	_, err = universeDB.Exec(
-		"INSERT INTO securities (isin, symbol, product_type) VALUES (?, ?, ?)",
-		isin, symbol, "EQUITY",
+		"INSERT INTO securities (isin, symbol, data, last_synced) VALUES (?, ?, json_object('name', ?, 'product_type', 'EQUITY'), NULL)",
+		isin, symbol, symbol+" Inc",
 	)
 	require.NoError(t, err)
 
 	log := zerolog.Nop()
-	prep := NewDataPrep(mockHistory, portfolioDB, configDB, universeDB, log)
+	securityRepo := universe.NewSecurityRepository(universeDB, log)
+	securityProvider := newTestSecurityProvider(securityRepo)
+	prep := NewDataPrep(mockHistory, portfolioDB, configDB, securityProvider, log)
 
 	// Extract training examples for 6-month forward returns
 	examples, err := prep.ExtractTrainingExamples(
@@ -251,13 +287,15 @@ func TestDataPrep_ExtractTrainingExamples_InsufficientHistory(t *testing.T) {
 	}
 
 	_, err := universeDB.Exec(
-		"INSERT INTO securities (isin, symbol, product_type) VALUES (?, ?, ?)",
-		isin, symbol, "EQUITY",
+		"INSERT INTO securities (isin, symbol, data, last_synced) VALUES (?, ?, json_object('name', ?, 'product_type', 'EQUITY'), NULL)",
+		isin, symbol, symbol+" Inc",
 	)
 	require.NoError(t, err)
 
 	log := zerolog.Nop()
-	prep := NewDataPrep(mockHistory, portfolioDB, configDB, universeDB, log)
+	securityRepo := universe.NewSecurityRepository(universeDB, log)
+	securityProvider := newTestSecurityProvider(securityRepo)
+	prep := NewDataPrep(mockHistory, portfolioDB, configDB, securityProvider, log)
 
 	// Extract training examples
 	examples, err := prep.ExtractTrainingExamples(
@@ -300,7 +338,7 @@ func TestDataPrep_ExtractTrainingExamples_TimeWindowed(t *testing.T) {
 	}
 
 	_, err := universeDB.Exec(
-		"INSERT INTO securities (isin, symbol, product_type) VALUES (?, ?, ?)",
+		"INSERT INTO securities (isin, symbol, data, last_synced) VALUES (?, ?, json_object('name', 'Apple Inc.', 'product_type', ?), NULL)",
 		aaplISIN, aaplSymbol, "EQUITY",
 	)
 	require.NoError(t, err)
@@ -343,7 +381,7 @@ func TestDataPrep_ExtractTrainingExamples_TimeWindowed(t *testing.T) {
 	}
 
 	_, err = universeDB.Exec(
-		"INSERT INTO securities (isin, symbol, product_type) VALUES (?, ?, ?)",
+		"INSERT INTO securities (isin, symbol, data, last_synced) VALUES (?, ?, json_object('name', 'NEWCO Inc.', 'product_type', ?), NULL)",
 		newcoISIN, newcoSymbol, "EQUITY",
 	)
 	require.NoError(t, err)
@@ -358,7 +396,9 @@ func TestDataPrep_ExtractTrainingExamples_TimeWindowed(t *testing.T) {
 	require.NoError(t, err)
 
 	log := zerolog.Nop()
-	prep := NewDataPrep(mockHistory, portfolioDB, configDB, universeDB, log)
+	securityRepo := universe.NewSecurityRepository(universeDB, log)
+	securityProvider := newTestSecurityProvider(securityRepo)
+	prep := NewDataPrep(mockHistory, portfolioDB, configDB, securityProvider, log)
 
 	// Test 1: Training date 2020-01-15 (before NEWCO exists)
 	examples2020, err := prep.ExtractTrainingExamples(

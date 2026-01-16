@@ -3,7 +3,6 @@ package services
 import (
 	"fmt"
 
-	"github.com/aristath/sentinel/internal/domain"
 	planningdomain "github.com/aristath/sentinel/internal/modules/planning/domain"
 	"github.com/aristath/sentinel/internal/modules/portfolio"
 	scoringdomain "github.com/aristath/sentinel/internal/modules/scoring/domain"
@@ -127,17 +126,16 @@ func (b *OpportunityContextBuilder) buildContext(
 	optimizerWeights map[string]float64,
 ) (*planningdomain.OpportunityContext, error) {
 	// Convert securities to domain format and build lookup maps
-	domainSecurities := make([]domain.Security, 0, len(securities))
-	stocksByISIN := make(map[string]domain.Security)
+	domainSecurities := make([]universe.Security, 0, len(securities))
+	stocksByISIN := make(map[string]universe.Security)
 	symbolToISIN := make(map[string]string)
 
 	for _, sec := range securities {
-		domainSec := domain.Security{
+		domainSec := universe.Security{
 			Symbol:    sec.Symbol,
 			ISIN:      sec.ISIN,
-			Active:    sec.Active,
 			Geography: sec.Geography,
-			Currency:  domain.Currency(sec.Currency),
+			Currency:  sec.Currency,
 			Name:      sec.Name,
 			AllowBuy:  sec.AllowBuy,
 			AllowSell: sec.AllowSell,
@@ -287,7 +285,7 @@ func (b *OpportunityContextBuilder) fetchCurrentPrices(securities []universe.Sec
 // buildEnrichedPositions builds enriched positions and calculates total portfolio value.
 func (b *OpportunityContextBuilder) buildEnrichedPositions(
 	positions []portfolio.Position,
-	stocksByISIN map[string]domain.Security,
+	stocksByISIN map[string]universe.Security,
 	currentPrices map[string]float64,
 	cashBalances map[string]float64,
 ) ([]planningdomain.EnrichedPosition, float64) {
@@ -345,7 +343,6 @@ func (b *OpportunityContextBuilder) buildEnrichedPositions(
 			CurrentPrice:   currentPrice,
 			SecurityName:   security.Name,
 			Geography:      security.Geography,
-			Active:         security.Active,
 			AllowBuy:       allowBuy,
 			AllowSell:      allowSell,
 			MinLot:         minLot,

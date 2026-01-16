@@ -21,63 +21,105 @@ type SyncServiceInterface interface {
 // SecurityRepositoryInterface defines the contract for security repository operations
 // Used by UniverseService to enable testing with mocks
 type SecurityRepositoryInterface interface {
-	// GetBySymbol returns a security by symbol
+	// Core lookups
 	GetBySymbol(symbol string) (*Security, error)
-
-	// GetByISIN returns a security by ISIN
 	GetByISIN(isin string) (*Security, error)
-
-	// GetByIdentifier returns a security by symbol or ISIN (smart lookup)
 	GetByIdentifier(identifier string) (*Security, error)
 
-	// GetAllActive returns all active securities
-	GetAllActive() ([]Security, error)
-
-	// GetDistinctExchanges returns all distinct exchange names
-	GetDistinctExchanges() ([]string, error)
-
-	// GetAllActiveTradable returns all active and tradable securities
-	GetAllActiveTradable() ([]Security, error)
-
-	// GetAll returns all securities (active and inactive)
+	// Batch lookups
 	GetAll() ([]Security, error)
+	GetByISINs(isins []string) ([]Security, error)
+	GetBySymbols(symbols []string) ([]Security, error)
 
-	// Create creates a new security
-	Create(security Security) error
-
-	// Update updates a security by ISIN
-	Update(isin string, updates map[string]interface{}) error
-
-	// Delete deletes a security by ISIN
-	Delete(isin string) error
-
-	// GetWithScores returns securities with their scores joined
-	GetWithScores(portfolioDB *sql.DB) ([]SecurityWithScore, error)
-
-	// SetTagsForSecurity replaces all tags for a security (deletes existing, inserts new)
-	// symbol parameter is kept for backward compatibility, but we look up ISIN internally
-	SetTagsForSecurity(symbol string, tagIDs []string) error
-
-	// GetTagsForSecurity returns all tag IDs for a security (public method)
-	// symbol parameter is kept for backward compatibility, but we look up ISIN internally
-	GetTagsForSecurity(symbol string) ([]string, error)
-
-	// GetTagsWithUpdateTimes returns all tags for a security with their last update times
-	// symbol parameter is kept for backward compatibility, but we look up ISIN internally
-	GetTagsWithUpdateTimes(symbol string) (map[string]time.Time, error)
-
-	// UpdateSpecificTags updates only the specified tags for a security, preserving other tags
-	// symbol parameter is kept for backward compatibility, but we look up ISIN internally
-	UpdateSpecificTags(symbol string, tagIDs []string) error
-
-	// GetByTags returns active securities matching any of the provided tags
+	// Filtered queries
+	GetTradable() ([]Security, error)
+	GetByMarketCode(marketCode string) ([]Security, error)
+	GetByGeography(geography string) ([]Security, error)
+	GetByIndustry(industry string) ([]Security, error)
 	GetByTags(tagIDs []string) ([]Security, error)
-
-	// GetPositionsByTags returns securities that are in the provided position symbols AND have the specified tags
 	GetPositionsByTags(positionSymbols []string, tagIDs []string) ([]Security, error)
 
-	// HardDelete permanently removes a security and all related data from universe.db
+	// Metadata queries (NEW - replace direct queries)
+	GetDistinctGeographies() ([]string, error)
+	GetDistinctIndustries() ([]string, error)
+	GetDistinctExchanges() ([]string, error)
+	GetGeographiesAndIndustries() (map[string][]string, error)
+	GetSecuritiesForOptimization() ([]SecurityOptimizationData, error)
+	GetSecuritiesForCharts() ([]SecurityChartData, error)
+
+	// Symbol/ISIN conversion (NEW - replace 15+ direct queries)
+	GetISINBySymbol(symbol string) (string, error)
+	GetSymbolByISIN(isin string) (string, error)
+	BatchGetISINsBySymbols(symbols []string) (map[string]string, error)
+
+	// Existence checks (NEW - replace validation queries)
+	Exists(isin string) (bool, error)
+	ExistsBySymbol(symbol string) (bool, error)
+	CountTradable() (int, error)
+
+	// WithScores (joins with portfolio.db)
+	GetWithScores(portfolioDB *sql.DB) ([]SecurityWithScore, error)
+
+	// Write operations
+	Create(security Security) error
+	Update(isin string, updates map[string]interface{}) error
+	Delete(isin string) error
 	HardDelete(isin string) error
+
+	// Tag operations
+	SetTagsForSecurity(symbol string, tagIDs []string) error
+	GetTagsForSecurity(symbol string) ([]string, error)
+	GetTagsWithUpdateTimes(symbol string) (map[string]time.Time, error)
+	UpdateSpecificTags(symbol string, tagIDs []string) error
+
+	// Legacy methods (to be removed after refactoring)
+	GetAllActive() ([]Security, error)
+	GetAllActiveTradable() ([]Security, error)
+}
+
+// SecurityOptimizationData is the minimal data needed for portfolio optimization
+type SecurityOptimizationData struct {
+	Symbol             string  `json:"symbol"`
+	ISIN               string  `json:"isin"`
+	ProductType        string  `json:"product_type"`
+	Geography          string  `json:"geography"`
+	Industry           string  `json:"industry"`
+	MinPortfolioTarget float64 `json:"min_portfolio_target"`
+	MaxPortfolioTarget float64 `json:"max_portfolio_target"`
+}
+
+// SecurityChartData is the minimal data needed for chart generation
+type SecurityChartData struct {
+	Symbol string `json:"symbol"`
+	ISIN   string `json:"isin"`
+}
+
+// SecurityProvider provides read-only access to securities (subset of SecurityRepositoryInterface)
+// Used by other modules to avoid requiring write permissions
+type SecurityProvider interface {
+	GetByISIN(isin string) (*Security, error)
+	GetBySymbol(symbol string) (*Security, error)
+	GetByIdentifier(identifier string) (*Security, error)
+	GetAll() ([]Security, error)
+	GetByISINs(isins []string) ([]Security, error)
+	GetBySymbols(symbols []string) ([]Security, error)
+	GetTradable() ([]Security, error)
+	GetByMarketCode(marketCode string) ([]Security, error)
+	GetByGeography(geography string) ([]Security, error)
+	GetByIndustry(industry string) ([]Security, error)
+	GetByTags(tagIDs []string) ([]Security, error)
+	GetDistinctGeographies() ([]string, error)
+	GetDistinctIndustries() ([]string, error)
+	GetGeographiesAndIndustries() (map[string][]string, error)
+	GetSecuritiesForOptimization() ([]SecurityOptimizationData, error)
+	GetSecuritiesForCharts() ([]SecurityChartData, error)
+	GetISINBySymbol(symbol string) (string, error)
+	GetSymbolByISIN(isin string) (string, error)
+	BatchGetISINsBySymbols(symbols []string) (map[string]string, error)
+	Exists(isin string) (bool, error)
+	ExistsBySymbol(symbol string) (bool, error)
+	CountTradable() (int, error)
+	GetWithScores(portfolioDB *sql.DB) ([]SecurityWithScore, error)
 }
 
 // Compile-time check that SecurityRepository implements SecurityRepositoryInterface

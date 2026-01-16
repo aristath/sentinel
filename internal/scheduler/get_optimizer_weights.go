@@ -192,7 +192,7 @@ func (j *GetOptimizerWeightsJob) Run() error {
 			Industry:           sec.Industry,
 			MinPortfolioTarget: 0.0, // Could be from security settings
 			MaxPortfolioTarget: 1.0, // Could be from security settings
-			AllowBuy:           sec.Active,
+			AllowBuy:           sec.AllowBuy,
 			AllowSell:          true, // Default to true
 			MinLot:             1.0,
 			PriorityMultiplier: 1.0,

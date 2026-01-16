@@ -26,6 +26,7 @@ type SecurityInfo struct {
 type SecurityProvider interface {
 	GetAllActive() ([]SecurityInfo, error)
 	GetAllActiveTradable() ([]SecurityInfo, error)
+	GetISINBySymbol(symbol string) (string, error)
 }
 
 // PositionRepository handles position database operations
@@ -122,63 +123,10 @@ func (r *PositionRepository) GetWithSecurityInfo() ([]PositionWithSecurity, erro
 		return []PositionWithSecurity{}, nil
 	}
 
-	// Get securities with overrides applied
-	var securities []SecurityInfo
-	if r.securityProvider != nil {
-		// Use SecurityProvider (respects overrides)
-		securities, err = r.securityProvider.GetAllActive()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get securities with overrides: %w", err)
-		}
-	} else {
-		// Fallback to direct query (no overrides)
-		r.log.Warn().Msg("SecurityProvider not available, using direct query (overrides not applied)")
-		securityRows, err := r.universeDB.Query(`
-			SELECT isin, symbol, name, geography, fullExchangeName, industry, currency
-			FROM securities
-			WHERE active = 1
-		`)
-		if err != nil {
-			return nil, fmt.Errorf("failed to query securities: %w", err)
-		}
-		defer securityRows.Close()
-
-		for securityRows.Next() {
-			var sec SecurityInfo
-			var geography, fullExchangeName, industry, currency sql.NullString
-			if err := securityRows.Scan(
-				&sec.ISIN,
-				&sec.Symbol,
-				&sec.Name,
-				&geography,
-				&fullExchangeName,
-				&industry,
-				&currency,
-			); err != nil {
-				return nil, fmt.Errorf("failed to scan security: %w", err)
-			}
-
-			// Convert nullable fields
-			if geography.Valid {
-				sec.Geography = geography.String
-			}
-			if fullExchangeName.Valid {
-				sec.FullExchangeName = fullExchangeName.String
-			}
-			if industry.Valid {
-				sec.Industry = industry.String
-			}
-			if currency.Valid {
-				sec.Currency = currency.String
-			}
-			sec.AllowSell = true // Default when no overrides
-
-			securities = append(securities, sec)
-		}
-
-		if err := securityRows.Err(); err != nil {
-			return nil, fmt.Errorf("error iterating securities: %w", err)
-		}
+	// Get securities with overrides applied (SecurityProvider is required)
+	securities, err := r.securityProvider.GetAllActive()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get securities with overrides: %w", err)
 	}
 
 	// Build lookup map
@@ -222,23 +170,17 @@ func (r *PositionRepository) GetWithSecurityInfo() ([]PositionWithSecurity, erro
 }
 
 // GetBySymbol returns a position by symbol (helper method - looks up ISIN first)
-// This requires universeDB to lookup ISIN from securities table
+// This requires securityProvider to lookup ISIN from securities table
 func (r *PositionRepository) GetBySymbol(symbol string) (*Position, error) {
-	// Lookup ISIN from securities table
-	query := "SELECT isin FROM securities WHERE symbol = ?"
-	rows, err := r.universeDB.Query(query, strings.ToUpper(strings.TrimSpace(symbol)))
+	// Lookup ISIN from securities via provider
+	if r.securityProvider == nil {
+		return nil, fmt.Errorf("security provider not available for ISIN lookup")
+	}
+
+	isin, err := r.securityProvider.GetISINBySymbol(symbol)
 	if err != nil {
-		return nil, fmt.Errorf("failed to lookup ISIN for symbol: %w", err)
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		return nil, nil // Security not found, so no position
-	}
-
-	var isin string
-	if err := rows.Scan(&isin); err != nil {
-		return nil, fmt.Errorf("failed to scan ISIN: %w", err)
+		// Security not found
+		return nil, nil
 	}
 
 	if isin == "" {

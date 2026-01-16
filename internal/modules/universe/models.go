@@ -15,6 +15,7 @@ type Tag struct {
 // After Unix timestamp migration: LastSynced uses Unix timestamp (int64)
 // Converted to string only at JSON boundary for API compatibility
 // Geography and Industry support comma-separated values for multiple assignments
+// After migration 038: No Active field (all securities in table are active)
 type Security struct {
 	Currency           string   `json:"currency,omitempty"`
 	Name               string   `json:"name"`
@@ -32,7 +33,6 @@ type Security struct {
 	MinLot             int      `json:"min_lot"`
 	AllowSell          bool     `json:"allow_sell"`
 	AllowBuy           bool     `json:"allow_buy"`
-	Active             bool     `json:"active"`
 	Tags               []string `json:"tags,omitempty"`
 }
 
@@ -86,6 +86,7 @@ type SecurityScore struct {
 // SecurityWithScore combines security and score data
 // Used for GET /api/securities endpoint response
 // Client-specific symbols available via /api/securities/{isin}/client-symbols endpoint
+// After migration 038: No Active field (all securities in table are active)
 type SecurityWithScore struct {
 	QualityScore       *float64 `json:"quality_score,omitempty"`
 	OpportunityScore   *float64 `json:"opportunity_score,omitempty"`
@@ -118,6 +119,5 @@ type SecurityWithScore struct {
 	MinLot             int      `json:"min_lot"`
 	AllowSell          bool     `json:"allow_sell"`
 	AllowBuy           bool     `json:"allow_buy"`
-	Active             bool     `json:"active"`
 	Tags               []string `json:"tags,omitempty"`
 }

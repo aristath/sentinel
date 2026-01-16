@@ -232,7 +232,6 @@ func (h *UniverseHandlers) HandleGetStocks(w http.ResponseWriter, r *http.Reques
 			"industry":             sec.Industry,
 			"priority_multiplier":  sec.PriorityMultiplier,
 			"min_lot":              sec.MinLot,
-			"active":               sec.Active,
 			"allow_buy":            sec.AllowBuy,
 			"allow_sell":           sec.AllowSell,
 			"currency":             sec.Currency,
@@ -356,7 +355,6 @@ func (h *UniverseHandlers) HandleGetStock(w http.ResponseWriter, r *http.Request
 		"fullExchangeName":     security.FullExchangeName,
 		"priority_multiplier":  security.PriorityMultiplier,
 		"min_lot":              security.MinLot,
-		"active":               security.Active,
 		"allow_buy":            security.AllowBuy,
 		"allow_sell":           security.AllowSell,
 		"min_portfolio_target": security.MinPortfolioTarget,
@@ -827,7 +825,6 @@ func (h *UniverseHandlers) HandleUpdateStock(w http.ResponseWriter, r *http.Requ
 		"fullExchangeName":    updatedSecurity.FullExchangeName,
 		"priority_multiplier": updatedSecurity.PriorityMultiplier,
 		"min_lot":             updatedSecurity.MinLot,
-		"active":              updatedSecurity.Active,
 		"allow_buy":           updatedSecurity.AllowBuy,
 		"allow_sell":          updatedSecurity.AllowSell,
 		"tags":                updatedSecurity.Tags, // Read-only, internal only

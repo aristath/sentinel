@@ -1,13 +1,16 @@
 package market_regime
 
 import (
-	"database/sql"
 	"fmt"
 
-	"github.com/aristath/sentinel/internal/domain"
 	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/rs/zerolog"
 )
+
+// SecurityProvider provides read-only access to securities for ISIN lookups.
+type SecurityProvider interface {
+	GetISINBySymbol(symbol string) (string, error)
+}
 
 // MarketIndex represents a market index configuration
 type MarketIndex struct {
@@ -23,24 +26,24 @@ type MarketIndex struct {
 
 // MarketIndexService manages market index tracking for regime detection
 type MarketIndexService struct {
-	universeDB      *sql.DB
-	historyDBClient universe.HistoryDBInterface // Filtered and cached price access
-	tradernet       interface{}                 // Tradernet client (will be properly typed later)
-	log             zerolog.Logger
+	securityProvider SecurityProvider
+	historyDBClient  universe.HistoryDBInterface // Filtered and cached price access
+	tradernet        interface{}                 // Tradernet client (will be properly typed later)
+	log              zerolog.Logger
 }
 
 // NewMarketIndexService creates a new market index service
 func NewMarketIndexService(
-	universeDB *sql.DB,
+	securityProvider SecurityProvider,
 	historyDBClient universe.HistoryDBInterface,
 	tradernet interface{},
 	log zerolog.Logger,
 ) *MarketIndexService {
 	return &MarketIndexService{
-		universeDB:      universeDB,
-		historyDBClient: historyDBClient,
-		tradernet:       tradernet,
-		log:             log.With().Str("component", "market_index_service").Logger(),
+		securityProvider: securityProvider,
+		historyDBClient:  historyDBClient,
+		tradernet:        tradernet,
+		log:              log.With().Str("component", "market_index_service").Logger(),
 	}
 }
 
@@ -93,12 +96,8 @@ func (s *MarketIndexService) GetMarketReturns(days int) ([]float64, error) {
 // getIndexReturns gets daily returns for a specific index
 // Note: Market indices are stored with ISIN = "INDEX-SYMBOL" format in daily_prices.isin column
 func (s *MarketIndexService) getIndexReturns(symbol string, days int) ([]float64, error) {
-	// Lookup ISIN from securities table (indices have ISIN = "INDEX-SYMBOL")
-	var isin string
-	err := s.universeDB.QueryRow(`
-		SELECT isin FROM securities
-		WHERE symbol = ? AND product_type = ?
-	`, symbol, string(domain.ProductTypeIndex)).Scan(&isin)
+	// Lookup ISIN from securities table via provider
+	isin, err := s.securityProvider.GetISINBySymbol(symbol)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get ISIN for index %s: %w", symbol, err)
 	}

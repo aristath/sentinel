@@ -17,7 +17,8 @@ func NewAllocationSecurityProviderAdapter(repo universe.SecurityRepositoryInterf
 
 // GetAllActiveTradable returns all active and tradable securities
 func (a *AllocationSecurityProviderAdapter) GetAllActiveTradable() ([]allocation.SecurityInfo, error) {
-	securities, err := a.repo.GetAllActiveTradable()
+	// Use GetTradable() which replaces GetAllActiveTradable()
+	securities, err := a.repo.GetTradable()
 	if err != nil {
 		return nil, err
 	}

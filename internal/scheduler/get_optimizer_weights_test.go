@@ -107,7 +107,7 @@ func TestGetOptimizerWeightsJob_Run_Success(t *testing.T) {
 
 	// Mock security repo
 	securities := []universe.Security{
-		{ISIN: "US0378331005", Symbol: "AAPL", Geography: "US", Industry: "Technology", Active: true},
+		{ISIN: "US0378331005", Symbol: "AAPL", Geography: "US", Industry: "Technology"},
 	}
 	securitiesInterface := make([]interface{}, len(securities))
 	for i := range securities {

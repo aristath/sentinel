@@ -5,22 +5,22 @@ import (
 
 	"github.com/aristath/sentinel/internal/domain"
 	planningdomain "github.com/aristath/sentinel/internal/modules/planning/domain"
+	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/stretchr/testify/assert"
 )
 
 // createEnrichedPosition is a test helper that creates an EnrichedPosition from a Position and Security.
 // This simplifies test data setup by combining the old fragmented data into the new unified format.
-func createEnrichedPosition(pos domain.Position, sec domain.Security, currentPrice float64) planningdomain.EnrichedPosition {
+func createEnrichedPosition(pos domain.Position, sec universe.Security, currentPrice float64) planningdomain.EnrichedPosition {
 	return planningdomain.EnrichedPosition{
 		ISIN:         pos.ISIN,
 		Symbol:       pos.Symbol,
 		Quantity:     float64(pos.Quantity),
 		AverageCost:  pos.AverageCost,
-		Currency:     string(sec.Currency),
+		Currency:     sec.Currency,
 		SecurityName: sec.Name,
 		Geography:    sec.Geography,
-		Exchange:     sec.Exchange,
-		Active:       sec.Active,
+		Exchange:     sec.FullExchangeName,
 		AllowBuy:     sec.AllowBuy,
 		AllowSell:    sec.AllowSell,
 		MinLot:       sec.MinLot,
@@ -29,7 +29,7 @@ func createEnrichedPosition(pos domain.Position, sec domain.Security, currentPri
 }
 
 // createEnrichedPositionWithWeight creates an EnrichedPosition with WeightInPortfolio set.
-func createEnrichedPositionWithWeight(pos domain.Position, sec domain.Security, currentPrice, weight float64) planningdomain.EnrichedPosition {
+func createEnrichedPositionWithWeight(pos domain.Position, sec universe.Security, currentPrice, weight float64) planningdomain.EnrichedPosition {
 	enriched := createEnrichedPosition(pos, sec, currentPrice)
 	enriched.WeightInPortfolio = weight
 	return enriched

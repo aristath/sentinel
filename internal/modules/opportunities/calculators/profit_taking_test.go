@@ -5,6 +5,7 @@ import (
 
 	"github.com/aristath/sentinel/internal/domain"
 	planningdomain "github.com/aristath/sentinel/internal/modules/planning/domain"
+	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,8 +40,8 @@ func (m *mockSecurityRepo) GetTagsForSecurity(symbol string) ([]string, error) {
 	return []string{}, nil
 }
 
-func (m *mockSecurityRepo) GetByTags(tags []string) ([]domain.Security, error) {
-	return []domain.Security{}, nil
+func (m *mockSecurityRepo) GetByTags(tags []string) ([]universe.Security, error) {
+	return []universe.Security{}, nil
 }
 
 func TestProfitTakingCalculator_MaxSellPercentage(t *testing.T) {
@@ -103,11 +104,10 @@ func TestProfitTakingCalculator_MaxSellPercentage(t *testing.T) {
 				AverageCost: 10.0,
 			}
 
-			security := domain.Security{
+			security := universe.Security{
 				Symbol:    "TEST.US",
 				Name:      "Test Security",
 				ISIN:      "US1234567890",
-				Active:    true,
 				AllowSell: true,
 				Currency:  "EUR",
 			}
@@ -118,9 +118,9 @@ func TestProfitTakingCalculator_MaxSellPercentage(t *testing.T) {
 				EnrichedPositions: []planningdomain.EnrichedPosition{
 					createEnrichedPosition(position, security, 15.0),
 				},
-				Securities:        []domain.Security{security},
+				Securities:        []universe.Security{security},
 				CurrentPrices:     map[string]float64{"US1234567890": currentPrice},
-				StocksByISIN:      map[string]domain.Security{"US1234567890": security},
+				StocksByISIN:      map[string]universe.Security{"US1234567890": security},
 				IneligibleISINs:   map[string]bool{},
 				RecentlySoldISINs: map[string]bool{},
 				AllowSell:         true,
@@ -163,11 +163,10 @@ func TestProfitTakingCalculator_MaxSellPercentage_WithSellPercentageParam(t *tes
 		AverageCost: 10.0,
 	}
 
-	security := domain.Security{
+	security := universe.Security{
 		Symbol:    "TEST.US",
 		Name:      "Test Security",
 		ISIN:      "US1234567890",
-		Active:    true,
 		AllowSell: true,
 		Currency:  "EUR",
 	}
@@ -176,9 +175,9 @@ func TestProfitTakingCalculator_MaxSellPercentage_WithSellPercentageParam(t *tes
 		EnrichedPositions: []planningdomain.EnrichedPosition{
 			createEnrichedPosition(position, security, 15.0),
 		},
-		Securities:        []domain.Security{security},
+		Securities:        []universe.Security{security},
 		CurrentPrices:     map[string]float64{"US1234567890": 15.0},
-		StocksByISIN:      map[string]domain.Security{"US1234567890": security},
+		StocksByISIN:      map[string]universe.Security{"US1234567890": security},
 		IneligibleISINs:   map[string]bool{},
 		RecentlySoldISINs: map[string]bool{},
 		AllowSell:         true,
@@ -250,11 +249,10 @@ func TestProfitTakingCalculator_NoMaxSellPercentage(t *testing.T) {
 		AverageCost: 10.0,
 	}
 
-	security := domain.Security{
+	security := universe.Security{
 		Symbol:    "TEST.US",
 		Name:      "Test Security",
 		ISIN:      "US1234567890",
-		Active:    true,
 		AllowSell: true,
 		Currency:  "EUR",
 	}
@@ -263,9 +261,9 @@ func TestProfitTakingCalculator_NoMaxSellPercentage(t *testing.T) {
 		EnrichedPositions: []planningdomain.EnrichedPosition{
 			createEnrichedPosition(position, security, 15.0),
 		},
-		Securities:        []domain.Security{security},
+		Securities:        []universe.Security{security},
 		CurrentPrices:     map[string]float64{"US1234567890": 15.0},
-		StocksByISIN:      map[string]domain.Security{"US1234567890": security},
+		StocksByISIN:      map[string]universe.Security{"US1234567890": security},
 		IneligibleISINs:   map[string]bool{},
 		RecentlySoldISINs: map[string]bool{},
 		AllowSell:         true,

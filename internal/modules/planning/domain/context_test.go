@@ -3,8 +3,8 @@ package domain
 import (
 	"testing"
 
-	"github.com/aristath/sentinel/internal/domain"
 	scoringdomain "github.com/aristath/sentinel/internal/modules/scoring/domain"
+	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -14,7 +14,7 @@ func TestNewOpportunityContext(t *testing.T) {
 		{ISIN: "US0378331005", Symbol: "AAPL", Quantity: 10, CurrentPrice: 150.0, AverageCost: 140.0},
 		{ISIN: "US02079K3059", Symbol: "GOOGL", Quantity: 5, CurrentPrice: 2800.0, AverageCost: 2700.0},
 	}
-	securities := []domain.Security{
+	securities := []universe.Security{
 		{ISIN: "US0378331005", Symbol: "AAPL", Name: "Apple Inc."},
 		{ISIN: "US02079K3059", Symbol: "GOOGL", Name: "Alphabet Inc."},
 	}
@@ -62,7 +62,7 @@ func TestNewEvaluationContext(t *testing.T) {
 	enrichedPositions := []EnrichedPosition{
 		{ISIN: "US0378331005", Symbol: "AAPL", Quantity: 10, CurrentPrice: 150.0, AverageCost: 140.0},
 	}
-	securities := []domain.Security{
+	securities := []universe.Security{
 		{ISIN: "US0378331005", Symbol: "AAPL", Name: "Apple Inc."},
 	}
 	availableCash := 1000.0
@@ -135,7 +135,7 @@ func TestFromOpportunityContext(t *testing.T) {
 	enrichedPositions := []EnrichedPosition{
 		{ISIN: "US0378331005", Symbol: "AAPL", Quantity: 10, CurrentPrice: 150.0, AverageCost: 140.0},
 	}
-	securities := []domain.Security{
+	securities := []universe.Security{
 		{ISIN: "US0378331005", Symbol: "AAPL", Name: "Apple Inc."},
 	}
 	availableCash := 1000.0
@@ -172,7 +172,7 @@ func TestFromOpportunityContext(t *testing.T) {
 
 // TestNewOpportunityContext_ISINKeys verifies that OpportunityContext uses ISIN keys for all maps
 func TestNewOpportunityContext_ISINKeys(t *testing.T) {
-	securities := []domain.Security{
+	securities := []universe.Security{
 		{ISIN: "US0378331005", Symbol: "AAPL.US", Name: "Apple Inc."},
 		{ISIN: "US5949181045", Symbol: "MSFT.US", Name: "Microsoft Corp."},
 	}
@@ -210,7 +210,7 @@ func TestNewOpportunityContext_ISINKeys(t *testing.T) {
 
 // TestOpportunityContext_NoSymbolKeys verifies no Symbol keys exist in internal maps
 func TestOpportunityContext_NoSymbolKeys(t *testing.T) {
-	securities := []domain.Security{
+	securities := []universe.Security{
 		{ISIN: "US0378331005", Symbol: "AAPL.US", Name: "Apple Inc."},
 		{ISIN: "US5949181045", Symbol: "MSFT.US", Name: "Microsoft Corp."},
 	}
@@ -287,7 +287,7 @@ func TestOpportunityContext_NoSymbolKeys(t *testing.T) {
 
 // TestOpportunityContext_NoDualKeyDuplication verifies no dual-key duplication
 func TestOpportunityContext_NoDualKeyDuplication(t *testing.T) {
-	securities := []domain.Security{
+	securities := []universe.Security{
 		{ISIN: "US0378331005", Symbol: "AAPL.US", Name: "Apple Inc."},
 		{ISIN: "US5949181045", Symbol: "MSFT.US", Name: "Microsoft Corp."},
 		{ISIN: "US88160R1014", Symbol: "TSLA.US", Name: "Tesla Inc."},
@@ -323,7 +323,7 @@ func TestOpportunityContext_ConstraintMapsISINKeys(t *testing.T) {
 	ctx := NewOpportunityContext(
 		nil,
 		[]EnrichedPosition{},
-		[]domain.Security{},
+		[]universe.Security{},
 		1000.0,
 		2500.0,
 		map[string]float64{},
@@ -346,7 +346,7 @@ func TestOpportunityContext_ConstraintMapsISINKeys(t *testing.T) {
 
 // TestOpportunityContext_SecuritiesWithoutISIN tests handling of securities missing ISINs
 func TestOpportunityContext_SecuritiesWithoutISIN(t *testing.T) {
-	securities := []domain.Security{
+	securities := []universe.Security{
 		{ISIN: "US0378331005", Symbol: "AAPL.US", Name: "Apple Inc."},
 		{ISIN: "", Symbol: "INVALID.US", Name: "Invalid Security"}, // No ISIN
 	}
@@ -375,7 +375,6 @@ func TestOpportunityContext_EnrichedPositions_Present(t *testing.T) {
 			Quantity:     100.0,
 			AverageCost:  150.0,
 			CurrentPrice: 160.0,
-			Active:       true,
 			AllowBuy:     true,
 			AllowSell:    true,
 		},
@@ -402,7 +401,6 @@ func TestOpportunityContext_EnrichedPositions_ISIN_DirectAccess(t *testing.T) {
 			AverageCost:  150.0,
 			CurrentPrice: 160.0,
 			Geography:    "US",
-			Active:       true,
 			AllowBuy:     true,
 			AllowSell:    true,
 		},
@@ -413,7 +411,6 @@ func TestOpportunityContext_EnrichedPositions_ISIN_DirectAccess(t *testing.T) {
 			AverageCost:  300.0,
 			CurrentPrice: 320.0,
 			Geography:    "US",
-			Active:       true,
 			AllowBuy:     true,
 			AllowSell:    true,
 		},

@@ -156,9 +156,7 @@ func (d *MarketStateDetector) updateExchangeCounts() error {
 	exchangeCounts := make(map[string]int)
 	for i := range securities {
 		sec := &securities[i]
-		if !sec.Active {
-			continue // Skip inactive securities
-		}
+		// After migration 038: All securities in table are active
 		if sec.FullExchangeName == "" {
 			continue // Skip securities without exchange
 		}

@@ -31,22 +31,8 @@ const (
 	ProductTypeUnknown ProductType = "UNKNOWN"
 )
 
-// Security represents a tradable security
-type Security struct {
-	LastUpdated time.Time `json:"last_updated"`
-	Symbol      string    `json:"symbol"`
-	Name        string    `json:"name"`
-	Exchange    string    `json:"exchange"`
-	Geography   string    `json:"geography"` // Comma-separated for multiple geographies
-	Currency    Currency  `json:"currency"`
-	ISIN        string    `json:"isin"`
-	ID          int64     `json:"id"`
-	Active      bool      `json:"active"`
-	// Constraint fields for opportunity filtering
-	AllowSell bool `json:"allow_sell"` // Whether selling is allowed for this security
-	AllowBuy  bool `json:"allow_buy"`  // Whether buying is allowed for this security
-	MinLot    int  `json:"min_lot"`    // Minimum lot size for trading
-}
+// Security type removed - use universe.Security directly (single source of truth).
+// After migration 038: All security data is in universe.Security with JSON storage.
 
 // Position represents a portfolio position
 type Position struct {

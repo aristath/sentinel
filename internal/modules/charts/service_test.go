@@ -18,14 +18,14 @@ func setupTestUniverseDB(t *testing.T) *sql.DB {
 	db, err := sql.Open("sqlite3", ":memory:")
 	require.NoError(t, err)
 
+	// Migration 038: JSON storage schema
 	_, err = db.Exec(`
 		CREATE TABLE securities (
 			isin TEXT PRIMARY KEY,
 			symbol TEXT NOT NULL,
-			name TEXT NOT NULL,
-			product_type TEXT,
-			active INTEGER DEFAULT 1
-		)
+			data TEXT NOT NULL,
+			last_synced INTEGER
+		) STRICT
 	`)
 	require.NoError(t, err)
 
@@ -85,19 +85,19 @@ func TestGetSparklinesAggregated_ExcludesIndices(t *testing.T) {
 
 	// Insert regular securities
 	_, err := universeDB.Exec(`
-		INSERT INTO securities (isin, symbol, name, product_type, active)
+		INSERT INTO securities (isin, symbol, data, last_synced)
 		VALUES
-			('US0378331005', 'AAPL', 'Apple Inc.', 'EQUITY', 1),
-			('US5949181045', 'MSFT', 'Microsoft Corp', 'EQUITY', 1)
+			('US0378331005', 'AAPL', json_object('name', 'Apple Inc.', 'product_type', 'EQUITY'), NULL),
+			('US5949181045', 'MSFT', json_object('name', 'Microsoft Corp', 'product_type', 'EQUITY'), NULL)
 	`)
 	require.NoError(t, err)
 
 	// Insert market indices (should be excluded from sparklines)
 	_, err = universeDB.Exec(`
-		INSERT INTO securities (isin, symbol, name, product_type, active)
+		INSERT INTO securities (isin, symbol, data, last_synced)
 		VALUES
-			('INDEX-SP500.IDX', 'SP500.IDX', 'S&P 500', 'INDEX', 1),
-			('INDEX-NASDAQ.IDX', 'NASDAQ.IDX', 'NASDAQ Composite', 'INDEX', 1)
+			('INDEX-SP500.IDX', 'SP500.IDX', json_object('name', 'S&P 500', 'product_type', 'INDEX'), NULL),
+			('INDEX-NASDAQ.IDX', 'NASDAQ.IDX', json_object('name', 'NASDAQ Composite', 'product_type', 'INDEX'), NULL)
 	`)
 	require.NoError(t, err)
 
@@ -121,7 +121,9 @@ func TestGetSparklinesAggregated_ExcludesIndices(t *testing.T) {
 	`, week1, week2, week1, week2, week1, week2, week1, week2)
 	require.NoError(t, err)
 
-	service := NewService(historyDBClient, nil, universeDB, log)
+	// Create SecurityRepository
+	securityRepo := universe.NewSecurityRepository(universeDB, log)
+	service := NewService(historyDBClient, securityRepo, log)
 
 	// Execute
 	sparklines, err := service.GetSparklinesAggregated("1Y")
@@ -146,17 +148,17 @@ func TestGetSparklinesAggregated_IncludesNullProductType(t *testing.T) {
 
 	// Insert security with NULL product_type (should be included)
 	_, err := universeDB.Exec(`
-		INSERT INTO securities (isin, symbol, name, product_type, active)
+		INSERT INTO securities (isin, symbol, data, last_synced)
 		VALUES
-			('US0378331005', 'AAPL', 'Apple Inc.', NULL, 1)
+			('US0378331005', 'AAPL', json_object('name', 'Apple Inc.'), NULL)
 	`)
 	require.NoError(t, err)
 
 	// Insert index (should be excluded)
 	_, err = universeDB.Exec(`
-		INSERT INTO securities (isin, symbol, name, product_type, active)
+		INSERT INTO securities (isin, symbol, data, last_synced)
 		VALUES
-			('INDEX-SP500.IDX', 'SP500.IDX', 'S&P 500', 'INDEX', 1)
+			('INDEX-SP500.IDX', 'SP500.IDX', json_object('name', 'S&P 500', 'product_type', 'INDEX'), NULL)
 	`)
 	require.NoError(t, err)
 
@@ -172,7 +174,9 @@ func TestGetSparklinesAggregated_IncludesNullProductType(t *testing.T) {
 	`, recentDate, recentDate)
 	require.NoError(t, err)
 
-	service := NewService(historyDBClient, nil, universeDB, log)
+	// Create SecurityRepository
+	securityRepo := universe.NewSecurityRepository(universeDB, log)
+	service := NewService(historyDBClient, securityRepo, log)
 
 	// Execute
 	sparklines, err := service.GetSparklinesAggregated("1Y")

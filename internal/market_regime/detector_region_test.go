@@ -3,6 +3,7 @@ package market_regime
 import (
 	"database/sql"
 	"testing"
+	"time"
 
 	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/rs/zerolog"
@@ -11,6 +12,118 @@ import (
 
 	_ "github.com/mattn/go-sqlite3"
 )
+
+// mockSecurityProvider implements SecurityProvider for testing
+type mockSecurityProvider struct {
+	db *sql.DB
+}
+
+func (m *mockSecurityProvider) GetISINBySymbol(symbol string) (string, error) {
+	var isin string
+	err := m.db.QueryRow("SELECT isin FROM securities WHERE symbol = ?", symbol).Scan(&isin)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return isin, err
+}
+
+// mockSecurityRepo implements SecurityRepositoryInterface for testing
+type mockSecurityRepo struct {
+	db *sql.DB
+}
+
+func (m *mockSecurityRepo) Exists(isin string) (bool, error) {
+	var count int
+	err := m.db.QueryRow("SELECT COUNT(*) FROM securities WHERE isin = ?", isin).Scan(&count)
+	return count > 0, err
+}
+
+func (m *mockSecurityRepo) Create(sec universe.Security) error {
+	_, err := m.db.Exec(`INSERT INTO securities (isin, symbol, name, product_type, market_code, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
+		sec.ISIN, sec.Symbol, sec.Name, sec.ProductType, sec.MarketCode, 0, 0)
+	return err
+}
+
+func (m *mockSecurityRepo) Update(isin string, updates map[string]any) error {
+	return nil // Not needed for these tests
+}
+
+// Implement remaining interface methods as no-ops (not used in these tests)
+func (m *mockSecurityRepo) GetBySymbol(symbol string) (*universe.Security, error) { return nil, nil }
+func (m *mockSecurityRepo) GetByISIN(isin string) (*universe.Security, error)     { return nil, nil }
+func (m *mockSecurityRepo) GetByIdentifier(identifier string) (*universe.Security, error) {
+	return nil, nil
+}
+func (m *mockSecurityRepo) GetAll() ([]universe.Security, error)       { return nil, nil }
+func (m *mockSecurityRepo) GetAllActive() ([]universe.Security, error) { return nil, nil }
+func (m *mockSecurityRepo) GetAllActiveTradable() ([]universe.Security, error) {
+	return nil, nil
+}
+func (m *mockSecurityRepo) GetByISINs(isins []string) ([]universe.Security, error) { return nil, nil }
+func (m *mockSecurityRepo) GetBySymbols(symbols []string) ([]universe.Security, error) {
+	return nil, nil
+}
+func (m *mockSecurityRepo) GetTradable() ([]universe.Security, error) { return nil, nil }
+func (m *mockSecurityRepo) GetByMarketCode(marketCode string) ([]universe.Security, error) {
+	return nil, nil
+}
+func (m *mockSecurityRepo) GetByGeography(geography string) ([]universe.Security, error) {
+	return nil, nil
+}
+func (m *mockSecurityRepo) GetByIndustry(industry string) ([]universe.Security, error) {
+	return nil, nil
+}
+func (m *mockSecurityRepo) GetByTags(tagIDs []string) ([]universe.Security, error) { return nil, nil }
+func (m *mockSecurityRepo) GetPositionsByTags(positionSymbols []string, tagIDs []string) ([]universe.Security, error) {
+	return nil, nil
+}
+func (m *mockSecurityRepo) GetDistinctGeographies() ([]string, error) { return nil, nil }
+func (m *mockSecurityRepo) GetDistinctIndustries() ([]string, error)  { return nil, nil }
+func (m *mockSecurityRepo) GetDistinctExchanges() ([]string, error)   { return nil, nil }
+func (m *mockSecurityRepo) GetGeographiesAndIndustries() (map[string][]string, error) {
+	return nil, nil
+}
+func (m *mockSecurityRepo) GetSecuritiesForOptimization() ([]universe.SecurityOptimizationData, error) {
+	return nil, nil
+}
+func (m *mockSecurityRepo) GetSecuritiesForCharts() ([]universe.SecurityChartData, error) {
+	return nil, nil
+}
+func (m *mockSecurityRepo) GetISINBySymbol(symbol string) (string, error) { return "", nil }
+func (m *mockSecurityRepo) GetSymbolByISIN(isin string) (string, error)   { return "", nil }
+func (m *mockSecurityRepo) BatchGetISINsBySymbols(symbols []string) (map[string]string, error) {
+	return nil, nil
+}
+func (m *mockSecurityRepo) ExistsBySymbol(symbol string) (bool, error) { return false, nil }
+func (m *mockSecurityRepo) CountTradable() (int, error)                { return 0, nil }
+func (m *mockSecurityRepo) GetWithScores(portfolioDB *sql.DB) ([]universe.SecurityWithScore, error) {
+	return nil, nil
+}
+func (m *mockSecurityRepo) Delete(isin string) error                                { return nil }
+func (m *mockSecurityRepo) HardDelete(isin string) error                            { return nil }
+func (m *mockSecurityRepo) SetTagsForSecurity(symbol string, tagIDs []string) error { return nil }
+func (m *mockSecurityRepo) GetTagsForSecurity(symbol string) ([]string, error)      { return nil, nil }
+func (m *mockSecurityRepo) GetTagsWithUpdateTimes(symbol string) (map[string]time.Time, error) {
+	return nil, nil
+}
+func (m *mockSecurityRepo) UpdateSpecificTags(symbol string, tagIDs []string) error { return nil }
+
+// mockOverrideRepo implements OverrideRepositoryInterface for testing
+type mockOverrideRepo struct{}
+
+func (m *mockOverrideRepo) SetOverride(isin, field, value string) error    { return nil }
+func (m *mockOverrideRepo) GetOverride(isin, field string) (string, error) { return "", nil }
+func (m *mockOverrideRepo) GetOverrides(isin string) (map[string]string, error) {
+	return nil, nil
+}
+func (m *mockOverrideRepo) GetAllOverrides() (map[string]map[string]string, error) {
+	return nil, nil
+}
+func (m *mockOverrideRepo) DeleteOverride(isin, field string) error { return nil }
+func (m *mockOverrideRepo) DeleteAllOverrides(isin string) error    { return nil }
+func (m *mockOverrideRepo) GetAllSecuritiesWithOverrides() (map[string]map[string]string, error) {
+	return nil, nil
+}
 
 // setupDetectorTestDBs sets up all databases needed for detector calculation tests
 func setupDetectorTestDBs(t *testing.T) (*sql.DB, *sql.DB, *sql.DB, *universe.HistoryDB) {
@@ -262,7 +375,7 @@ func TestCalculateRegimeScoreForRegion_BullMarket(t *testing.T) {
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 
 	// Create services
-	indexService := NewMarketIndexService(universeDB, historyDBClient, nil, log)
+	indexService := NewMarketIndexService(&mockSecurityProvider{db: universeDB}, historyDBClient, nil, log)
 	persistence := NewRegimePersistence(configDB, log)
 	detector := NewMarketRegimeDetector(log)
 	detector.SetMarketIndexService(indexService)
@@ -297,7 +410,7 @@ func TestCalculateRegimeScoreForRegion_BearMarket(t *testing.T) {
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 
 	// Create services
-	indexService := NewMarketIndexService(universeDB, historyDBClient, nil, log)
+	indexService := NewMarketIndexService(&mockSecurityProvider{db: universeDB}, historyDBClient, nil, log)
 	persistence := NewRegimePersistence(configDB, log)
 	detector := NewMarketRegimeDetector(log)
 	detector.SetMarketIndexService(indexService)
@@ -327,7 +440,7 @@ func TestCalculateRegimeScoreForRegion_NoIndicesForRegion(t *testing.T) {
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 
 	// Create services
-	indexService := NewMarketIndexService(universeDB, historyDBClient, nil, log)
+	indexService := NewMarketIndexService(&mockSecurityProvider{db: universeDB}, historyDBClient, nil, log)
 	persistence := NewRegimePersistence(configDB, log)
 	detector := NewMarketRegimeDetector(log)
 	detector.SetMarketIndexService(indexService)
@@ -364,7 +477,7 @@ func TestCalculateAllRegionScores(t *testing.T) {
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 
 	// Create services
-	indexService := NewMarketIndexService(universeDB, historyDBClient, nil, log)
+	indexService := NewMarketIndexService(&mockSecurityProvider{db: universeDB}, historyDBClient, nil, log)
 	persistence := NewRegimePersistence(configDB, log)
 	detector := NewMarketRegimeDetector(log)
 	detector.SetMarketIndexService(indexService)
@@ -413,7 +526,7 @@ func TestCalculateAllRegionScores_PartialFailure(t *testing.T) {
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 
 	// Create services
-	indexService := NewMarketIndexService(universeDB, historyDBClient, nil, log)
+	indexService := NewMarketIndexService(&mockSecurityProvider{db: universeDB}, historyDBClient, nil, log)
 	persistence := NewRegimePersistence(configDB, log)
 	detector := NewMarketRegimeDetector(log)
 	detector.SetMarketIndexService(indexService)
@@ -450,8 +563,10 @@ func TestPerRegionRegimeDetection_CompleteFlow(t *testing.T) {
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 
 	// Step 1: Create services
-	indexSyncService := NewIndexSyncService(universeDB, configDB, log)
-	indexService := NewMarketIndexService(universeDB, historyDBClient, nil, log)
+	securityRepo := &mockSecurityRepo{db: universeDB}
+	overrideRepo := &mockOverrideRepo{}
+	indexSyncService := NewIndexSyncService(securityRepo, overrideRepo, configDB, log)
+	indexService := NewMarketIndexService(&mockSecurityProvider{db: universeDB}, historyDBClient, nil, log)
 	persistence := NewRegimePersistence(configDB, log)
 	detector := NewMarketRegimeDetector(log)
 	detector.SetMarketIndexService(indexService)

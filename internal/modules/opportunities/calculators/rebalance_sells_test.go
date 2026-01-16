@@ -5,6 +5,7 @@ import (
 
 	"github.com/aristath/sentinel/internal/domain"
 	planningdomain "github.com/aristath/sentinel/internal/modules/planning/domain"
+	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -60,12 +61,11 @@ func TestRebalanceSellsCalculator_MaxSellPercentage(t *testing.T) {
 				Quantity: tt.positionQuantity,
 			}
 
-			security := domain.Security{
+			security := universe.Security{
 				Symbol:    "TEST.US",
 				Name:      "Test Security",
 				ISIN:      "US1234567890",
 				Geography: "US",
-				Active:    true,
 				AllowSell: true,
 				Currency:  "EUR",
 			}
@@ -85,9 +85,9 @@ func TestRebalanceSellsCalculator_MaxSellPercentage(t *testing.T) {
 				EnrichedPositions: []planningdomain.EnrichedPosition{
 					createEnrichedPosition(position, security, 15.0),
 				},
-				Securities:             []domain.Security{security},
+				Securities:             []universe.Security{security},
 				CurrentPrices:          map[string]float64{"US1234567890": currentPrice},
-				StocksByISIN:           map[string]domain.Security{"US1234567890": security},
+				StocksByISIN:           map[string]universe.Security{"US1234567890": security},
 				GeographyAllocations:   countryAllocations,
 				GeographyWeights:       countryWeights,
 				IneligibleISINs:        map[string]bool{},
@@ -122,26 +122,24 @@ func TestRebalanceSellsCalculator_MaxSellPercentage_MultiplePositions(t *testing
 	position1 := domain.Position{Symbol: "STOCK_A.US", ISIN: "US1111111111", Quantity: 1000}
 	position2 := domain.Position{Symbol: "STOCK_B.US", ISIN: "US2222222222", Quantity: 500}
 
-	security1 := domain.Security{
+	security1 := universe.Security{
 		Symbol:    "STOCK_A.US",
 		Name:      "Stock A",
 		ISIN:      "US1111111111",
 		Geography: "US",
-		Active:    true,
 		AllowSell: true,
 		Currency:  "EUR",
 	}
-	security2 := domain.Security{
+	security2 := universe.Security{
 		Symbol:    "STOCK_B.US",
 		Name:      "Stock B",
 		ISIN:      "US2222222222",
 		Geography: "US",
-		Active:    true,
 		AllowSell: true,
 		Currency:  "EUR",
 	}
 
-	securities := []domain.Security{security1, security2}
+	securities := []universe.Security{security1, security2}
 
 	countryAllocations := map[string]float64{
 		"US": 0.60, // Overweight by 10%
@@ -158,7 +156,7 @@ func TestRebalanceSellsCalculator_MaxSellPercentage_MultiplePositions(t *testing
 		},
 		Securities:             securities,
 		CurrentPrices:          map[string]float64{"US1111111111": 10.0, "US2222222222": 20.0},
-		StocksByISIN:           map[string]domain.Security{"US1111111111": security1, "US2222222222": security2},
+		StocksByISIN:           map[string]universe.Security{"US1111111111": security1, "US2222222222": security2},
 		GeographyAllocations:   countryAllocations,
 		GeographyWeights:       countryWeights,
 		IneligibleISINs:        map[string]bool{},
@@ -198,12 +196,11 @@ func TestRebalanceSellsCalculator_NoMaxSellPercentage_DefaultsToHardcodedCap(t *
 		Quantity: 1000,
 	}
 
-	security := domain.Security{
+	security := universe.Security{
 		Symbol:    "TEST.US",
 		Name:      "Test Security",
 		ISIN:      "US1234567890",
 		Geography: "US",
-		Active:    true,
 		AllowSell: true,
 		Currency:  "EUR",
 	}
@@ -220,9 +217,9 @@ func TestRebalanceSellsCalculator_NoMaxSellPercentage_DefaultsToHardcodedCap(t *
 		EnrichedPositions: []planningdomain.EnrichedPosition{
 			createEnrichedPosition(position, security, 15.0),
 		},
-		Securities:             []domain.Security{security},
+		Securities:             []universe.Security{security},
 		CurrentPrices:          map[string]float64{"US1234567890": 10.0},
-		StocksByISIN:           map[string]domain.Security{"US1234567890": security},
+		StocksByISIN:           map[string]universe.Security{"US1234567890": security},
 		GeographyAllocations:   countryAllocations,
 		GeographyWeights:       countryWeights,
 		IneligibleISINs:        map[string]bool{},

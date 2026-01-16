@@ -69,6 +69,64 @@ func setupLiveTradingMode(t *testing.T, settingsService *settings.Service) {
 	assert.NoError(t, err)
 }
 
+// testSecurityProvider wraps universe.SecurityRepository for testing
+// Converts universe.Security to portfolio.SecurityInfo
+type testSecurityProvider struct {
+	repo *universe.SecurityRepository
+}
+
+func newTestSecurityProvider(repo *universe.SecurityRepository) *testSecurityProvider {
+	return &testSecurityProvider{repo: repo}
+}
+
+func (p *testSecurityProvider) GetAllActive() ([]portfolio.SecurityInfo, error) {
+	securities, err := p.repo.GetAll()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]portfolio.SecurityInfo, 0, len(securities))
+	for _, sec := range securities {
+		result = append(result, portfolio.SecurityInfo{
+			ISIN:             sec.ISIN,
+			Symbol:           sec.Symbol,
+			Name:             sec.Name,
+			Geography:        sec.Geography,
+			FullExchangeName: sec.FullExchangeName,
+			Industry:         sec.Industry,
+			Currency:         sec.Currency,
+			AllowSell:        true, // Default to true for tests
+		})
+	}
+	return result, nil
+}
+
+func (p *testSecurityProvider) GetAllActiveTradable() ([]portfolio.SecurityInfo, error) {
+	securities, err := p.repo.GetTradable()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]portfolio.SecurityInfo, 0, len(securities))
+	for _, sec := range securities {
+		result = append(result, portfolio.SecurityInfo{
+			ISIN:             sec.ISIN,
+			Symbol:           sec.Symbol,
+			Name:             sec.Name,
+			Geography:        sec.Geography,
+			FullExchangeName: sec.FullExchangeName,
+			Industry:         sec.Industry,
+			Currency:         sec.Currency,
+			AllowSell:        true, // Default to true for tests
+		})
+	}
+	return result, nil
+}
+
+func (p *testSecurityProvider) GetISINBySymbol(symbol string) (string, error) {
+	return p.repo.GetISINBySymbol(symbol)
+}
+
 // Test HARD Fail-Safe: Security validation blocks when repository unavailable
 func TestValidateTrade_HardFailSafe_BlocksWhenSecurityRepoUnavailable(t *testing.T) {
 	log := zerolog.New(nil).Level(zerolog.Disabled)
@@ -116,9 +174,10 @@ func TestValidateTrade_SoftFailSafe_AllowsWhenMarketHoursUnavailable(t *testing.
 	defer cleanupConfig()
 
 	// Create repositories
-	tradeRepo := NewTradeRepository(ledgerDB.Conn(), universeDB.Conn(), log)
 	securityRepo := universe.NewSecurityRepository(universeDB.Conn(), log)
-	positionRepo := portfolio.NewPositionRepository(portfolioDB.Conn(), universeDB.Conn(), nil, log)
+	securityProvider := newTestSecurityProvider(securityRepo)
+	tradeRepo := NewTradeRepository(ledgerDB.Conn(), securityRepo, log)
+	positionRepo := portfolio.NewPositionRepository(portfolioDB.Conn(), universeDB.Conn(), securityProvider, log)
 	settingsService := settings.NewService(settings.NewRepository(configDB.Conn(), log), log)
 
 	// Set trading mode to "live" so we can test market hours fail-safe
@@ -183,7 +242,8 @@ func TestValidateTrade_HardFailSafe_BlocksWhenTradeRepoUnavailable(t *testing.T)
 
 	// Create repositories
 	securityRepo := universe.NewSecurityRepository(universeDB.Conn(), log)
-	positionRepo := portfolio.NewPositionRepository(portfolioDB.Conn(), universeDB.Conn(), nil, log)
+	securityProvider := newTestSecurityProvider(securityRepo)
+	positionRepo := portfolio.NewPositionRepository(portfolioDB.Conn(), universeDB.Conn(), securityProvider, log)
 	settingsService := settings.NewService(settings.NewRepository(configDB.Conn(), log), log)
 
 	// Set trading mode to "live" so we can test trade repo fail-safe
@@ -249,9 +309,10 @@ func TestValidateTrade_WithMarketHoursService(t *testing.T) {
 	defer cleanupConfig()
 
 	// Create repositories
-	tradeRepo := NewTradeRepository(ledgerDB.Conn(), universeDB.Conn(), log)
 	securityRepo := universe.NewSecurityRepository(universeDB.Conn(), log)
-	positionRepo := portfolio.NewPositionRepository(portfolioDB.Conn(), universeDB.Conn(), nil, log)
+	securityProvider := newTestSecurityProvider(securityRepo)
+	tradeRepo := NewTradeRepository(ledgerDB.Conn(), securityRepo, log)
+	positionRepo := portfolio.NewPositionRepository(portfolioDB.Conn(), universeDB.Conn(), securityProvider, log)
 	settingsService := settings.NewService(settings.NewRepository(configDB.Conn(), log), log)
 	marketHoursService := market_hours.NewMarketHoursService()
 
@@ -318,9 +379,10 @@ func TestValidateTrade_BlocksInsufficientQuantity(t *testing.T) {
 	defer cleanupConfig()
 
 	// Create repositories
-	tradeRepo := NewTradeRepository(ledgerDB.Conn(), universeDB.Conn(), log)
 	securityRepo := universe.NewSecurityRepository(universeDB.Conn(), log)
-	positionRepo := portfolio.NewPositionRepository(portfolioDB.Conn(), universeDB.Conn(), nil, log)
+	securityProvider := newTestSecurityProvider(securityRepo)
+	tradeRepo := NewTradeRepository(ledgerDB.Conn(), securityRepo, log)
+	positionRepo := portfolio.NewPositionRepository(portfolioDB.Conn(), universeDB.Conn(), securityProvider, log)
 	settingsService := settings.NewService(settings.NewRepository(configDB.Conn(), log), log)
 
 	// Set trading mode to "live" so we can test position validation
@@ -386,9 +448,10 @@ func TestValidateTrade_AllowsValidQuantity(t *testing.T) {
 	defer cleanupConfig()
 
 	// Create repositories
-	tradeRepo := NewTradeRepository(ledgerDB.Conn(), universeDB.Conn(), log)
 	securityRepo := universe.NewSecurityRepository(universeDB.Conn(), log)
-	positionRepo := portfolio.NewPositionRepository(portfolioDB.Conn(), universeDB.Conn(), nil, log)
+	securityProvider := newTestSecurityProvider(securityRepo)
+	tradeRepo := NewTradeRepository(ledgerDB.Conn(), securityRepo, log)
+	positionRepo := portfolio.NewPositionRepository(portfolioDB.Conn(), universeDB.Conn(), securityProvider, log)
 	settingsService := settings.NewService(settings.NewRepository(configDB.Conn(), log), log)
 
 	// Set trading mode to "live" so we can test position validation

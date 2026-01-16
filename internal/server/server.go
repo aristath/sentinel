@@ -127,6 +127,7 @@ func New(cfg Config) *Server {
 		cfg.UniverseDB,
 		cfg.HistoryDB,
 		cfg.Container.HistoryDBClient,
+		cfg.Container.SecurityRepo,
 		workProcessor,
 		cfg.DisplayManager,
 		tradernetClient,
@@ -442,9 +443,11 @@ func (s *Server) setupRoutes() {
 		optimizationCashManager := s.container.CashManager
 		optimizationService := s.container.OptimizerService
 		optimizationPlannerConfigRepo := s.container.PlannerConfigRepo
+		optimizationSecurityRepo := s.container.SecurityRepo
 		optimizationHandler := optimizationhandlers.NewHandler(
 			optimizationService,
 			s.configDB.Conn(),
+			optimizationSecurityRepo,
 			optimizationTradernetClient,
 			optimizationCurrencyExchangeService,
 			optimizationDividendRepo,
@@ -496,7 +499,6 @@ func (s *Server) setupRoutes() {
 		chartsService := charts.NewService(
 			s.container.HistoryDBClient,
 			chartsSecurityRepo,
-			s.universeDB.Conn(),
 			s.log,
 		)
 		chartsHandler := chartshandlers.NewHandler(chartsService, s.log)

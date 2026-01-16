@@ -6,9 +6,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/aristath/sentinel/internal/domain"
 	"github.com/aristath/sentinel/internal/modules/opportunities"
 	planningdomain "github.com/aristath/sentinel/internal/modules/planning/domain"
+	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
@@ -33,16 +33,16 @@ func (m *mockTagFilter) IsMarketVolatile(ctx *planningdomain.OpportunityContext,
 // mockSecurityRepo implements SecurityRepository interface for testing
 type mockSecurityRepo struct{}
 
-func (m *mockSecurityRepo) GetAllActive() ([]domain.Security, error) {
-	return []domain.Security{}, nil
+func (m *mockSecurityRepo) GetAllActive() ([]universe.Security, error) {
+	return []universe.Security{}, nil
 }
 
-func (m *mockSecurityRepo) GetByTags(tags []string) ([]domain.Security, error) {
-	return []domain.Security{}, nil
+func (m *mockSecurityRepo) GetByTags(tags []string) ([]universe.Security, error) {
+	return []universe.Security{}, nil
 }
 
-func (m *mockSecurityRepo) GetPositionsByTags(positionSymbols []string, tags []string) ([]domain.Security, error) {
-	return []domain.Security{}, nil
+func (m *mockSecurityRepo) GetPositionsByTags(positionSymbols []string, tags []string) ([]universe.Security, error) {
+	return []universe.Security{}, nil
 }
 
 func (m *mockSecurityRepo) GetTagsForSecurity(symbol string) ([]string, error) {

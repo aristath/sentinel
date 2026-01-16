@@ -171,14 +171,14 @@ func (s *Service) BatchEvaluate(ctx context.Context, sequences []domain.ActionSe
 			if sec.Geography != "" {
 				geographyPtr = &sec.Geography
 			}
-			// Note: domain.Security doesn't have Industry field, so we can't include it
+			// Note: universe.Security doesn't have Industry field, so we can't include it
 			// This is acceptable as Industry is optional in evaluation models
 			evalSec := models.Security{
 				ISIN:      sec.ISIN,
 				Symbol:    sec.Symbol,
 				Name:      sec.Name,
 				Geography: geographyPtr,
-				Industry:  nil, // domain.Security doesn't have Industry field
+				Industry:  nil, // universe.Security doesn't have Industry field
 				Currency:  string(sec.Currency),
 			}
 			evalSecurities = append(evalSecurities, evalSec)

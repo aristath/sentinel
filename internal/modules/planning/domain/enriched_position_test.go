@@ -54,7 +54,6 @@ func TestEnrichedPosition_GainPercent_EqualCostAndPrice(t *testing.T) {
 
 func TestEnrichedPosition_CanBuy_ActiveAndAllowed(t *testing.T) {
 	pos := EnrichedPosition{
-		Active:   true,
 		AllowBuy: true,
 	}
 
@@ -62,8 +61,8 @@ func TestEnrichedPosition_CanBuy_ActiveAndAllowed(t *testing.T) {
 }
 
 func TestEnrichedPosition_CanBuy_InactiveSecurity(t *testing.T) {
+	t.Skip("After migration 038: No inactive securities (no soft delete)")
 	pos := EnrichedPosition{
-		Active:   false,
 		AllowBuy: true,
 	}
 
@@ -72,7 +71,6 @@ func TestEnrichedPosition_CanBuy_InactiveSecurity(t *testing.T) {
 
 func TestEnrichedPosition_CanBuy_ActiveButNotAllowed(t *testing.T) {
 	pos := EnrichedPosition{
-		Active:   true,
 		AllowBuy: false,
 	}
 
@@ -81,7 +79,6 @@ func TestEnrichedPosition_CanBuy_ActiveButNotAllowed(t *testing.T) {
 
 func TestEnrichedPosition_CanSell_ActiveAndAllowed(t *testing.T) {
 	pos := EnrichedPosition{
-		Active:    true,
 		AllowSell: true,
 	}
 
@@ -89,8 +86,8 @@ func TestEnrichedPosition_CanSell_ActiveAndAllowed(t *testing.T) {
 }
 
 func TestEnrichedPosition_CanSell_InactiveSecurity(t *testing.T) {
+	t.Skip("After migration 038: No inactive securities (no soft delete)")
 	pos := EnrichedPosition{
-		Active:    false,
 		AllowSell: true,
 	}
 
@@ -99,7 +96,6 @@ func TestEnrichedPosition_CanSell_InactiveSecurity(t *testing.T) {
 
 func TestEnrichedPosition_CanSell_ActiveButNotAllowed(t *testing.T) {
 	pos := EnrichedPosition{
-		Active:    true,
 		AllowSell: false,
 	}
 
@@ -132,7 +128,6 @@ func TestEnrichedPosition_AllFieldsPopulated(t *testing.T) {
 		SecurityName: "Apple Inc.",
 		Geography:    "US",
 		Exchange:     "NASDAQ",
-		Active:       true,
 		AllowBuy:     true,
 		AllowSell:    true,
 		MinLot:       1,
@@ -165,7 +160,7 @@ func TestEnrichedPosition_AllFieldsPopulated(t *testing.T) {
 	assert.Equal(t, "Apple Inc.", pos.SecurityName)
 	assert.Equal(t, "US", pos.Geography)
 	assert.Equal(t, "NASDAQ", pos.Exchange)
-	assert.True(t, pos.Active)
+	// Active field removed after migration 038 (no soft delete - all securities in DB are active)
 	assert.True(t, pos.AllowBuy)
 	assert.True(t, pos.AllowSell)
 	assert.Equal(t, 1, pos.MinLot)

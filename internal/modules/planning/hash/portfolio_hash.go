@@ -218,7 +218,6 @@ func GeneratePortfolioHash(
 			"industry":             industry,
 			"min_lot":              security.MinLot,
 			"priority_multiplier":  security.PriorityMultiplier,
-			"active":               security.Active,
 		}
 	}
 

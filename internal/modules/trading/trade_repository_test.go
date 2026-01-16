@@ -2,6 +2,7 @@ package trading
 
 import (
 	"database/sql"
+	"github.com/aristath/sentinel/internal/modules/universe"
 	"testing"
 	"time"
 
@@ -183,7 +184,8 @@ func TestGetRecentlyBoughtISINs_ReturnsISINsNotSymbols(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Test
-	repo := NewTradeRepository(ledgerDB, universeDB, log)
+	securityRepo := universe.NewSecurityRepository(universeDB, log)
+	repo := NewTradeRepository(ledgerDB, securityRepo, log)
 	isins, err := repo.GetRecentlyBoughtISINs(30)
 
 	// Assertions
@@ -218,7 +220,8 @@ func TestGetRecentlySoldISINs_ReturnsISINsNotSymbols(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Test
-	repo := NewTradeRepository(ledgerDB, universeDB, log)
+	securityRepo := universe.NewSecurityRepository(universeDB, log)
+	repo := NewTradeRepository(ledgerDB, securityRepo, log)
 	isins, err := repo.GetRecentlySoldISINs(30)
 
 	// Assertions
@@ -261,7 +264,8 @@ func TestGetRecentlyBoughtISINs_ExcludesResearchTrades(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Test
-	repo := NewTradeRepository(ledgerDB, universeDB, log)
+	securityRepo := universe.NewSecurityRepository(universeDB, log)
+	repo := NewTradeRepository(ledgerDB, securityRepo, log)
 	isins, err := repo.GetRecentlyBoughtISINs(30)
 
 	// Assertions
@@ -305,7 +309,8 @@ func TestGetRecentlyBoughtISINs_OnlyRecentTrades(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Test
-	repo := NewTradeRepository(ledgerDB, universeDB, log)
+	securityRepo := universe.NewSecurityRepository(universeDB, log)
+	repo := NewTradeRepository(ledgerDB, securityRepo, log)
 	isins, err := repo.GetRecentlyBoughtISINs(30)
 
 	// Assertions
@@ -349,7 +354,8 @@ func TestGetRecentlySoldISINs_OnlyRecentTrades(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Test
-	repo := NewTradeRepository(ledgerDB, universeDB, log)
+	securityRepo := universe.NewSecurityRepository(universeDB, log)
+	repo := NewTradeRepository(ledgerDB, securityRepo, log)
 	isins, err := repo.GetRecentlySoldISINs(30)
 
 	// Assertions
@@ -368,7 +374,8 @@ func TestGetRecentlyBoughtISINs_EmptyResult(t *testing.T) {
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 
 	// Test with empty database
-	repo := NewTradeRepository(ledgerDB, universeDB, log)
+	securityRepo := universe.NewSecurityRepository(universeDB, log)
+	repo := NewTradeRepository(ledgerDB, securityRepo, log)
 	isins, err := repo.GetRecentlyBoughtISINs(30)
 
 	// Assertions
@@ -386,7 +393,8 @@ func TestGetRecentlySoldISINs_EmptyResult(t *testing.T) {
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 
 	// Test with empty database
-	repo := NewTradeRepository(ledgerDB, universeDB, log)
+	securityRepo := universe.NewSecurityRepository(universeDB, log)
+	repo := NewTradeRepository(ledgerDB, securityRepo, log)
 	isins, err := repo.GetRecentlySoldISINs(30)
 
 	// Assertions

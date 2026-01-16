@@ -1,8 +1,8 @@
 package domain
 
 import (
-	"github.com/aristath/sentinel/internal/domain"
 	scoringdomain "github.com/aristath/sentinel/internal/modules/scoring/domain"
+	"github.com/aristath/sentinel/internal/modules/universe"
 )
 
 // OpportunityContext contains all data needed by opportunity calculators
@@ -10,17 +10,18 @@ import (
 //
 // CURRENCY INVARIANT: All monetary values are in EUR.
 // Currency conversion happens at the input boundary before this context is created.
+// After removing universe.Security: Uses universe.Security directly (single source of truth).
 type OpportunityContext struct {
 	// Portfolio state
 	PortfolioContext       *scoringdomain.PortfolioContext `json:"portfolio_context"`
 	EnrichedPositions      []EnrichedPosition              `json:"enriched_positions"` // REPLACES old Positions field
-	Securities             []domain.Security               `json:"securities"`
+	Securities             []universe.Security             `json:"securities"`
 	AvailableCashEUR       float64                         `json:"available_cash_eur"`
 	TotalPortfolioValueEUR float64                         `json:"total_portfolio_value_eur"`
 
 	// Market data (ALL PRICES IN EUR, ALL KEYS ARE ISIN)
-	CurrentPrices map[string]float64         `json:"current_prices"` // Key: ISIN (e.g., "US0378331005"), Value: Price in EUR
-	StocksByISIN  map[string]domain.Security `json:"stocks_by_isin"` // Key: ISIN (primary lookup)
+	CurrentPrices map[string]float64           `json:"current_prices"` // Key: ISIN (e.g., "US0378331005"), Value: Price in EUR
+	StocksByISIN  map[string]universe.Security `json:"stocks_by_isin"` // Key: ISIN (primary lookup)
 
 	// Optional enrichment data
 	SecurityScores       map[string]float64 `json:"security_scores,omitempty"`       // Final scores by ISIN (internal identifier)
@@ -62,16 +63,17 @@ type OpportunityContext struct {
 }
 
 // NewOpportunityContext creates a new OpportunityContext with defaults.
+// After removing universe.Security: Uses universe.Security directly (single source of truth).
 func NewOpportunityContext(
 	portfolioContext *scoringdomain.PortfolioContext,
 	enrichedPositions []EnrichedPosition,
-	securities []domain.Security,
+	securities []universe.Security,
 	availableCashEUR float64,
 	totalPortfolioValueEUR float64,
 	currentPrices map[string]float64,
 ) *OpportunityContext {
 	// Build stocks by ISIN map (ONLY - no Symbol map)
-	stocksByISIN := make(map[string]domain.Security, len(securities))
+	stocksByISIN := make(map[string]universe.Security, len(securities))
 	for _, sec := range securities {
 		if sec.ISIN != "" {
 			stocksByISIN[sec.ISIN] = sec
@@ -136,17 +138,18 @@ func (ctx *OpportunityContext) CalculateMinTradeAmount(maxCostRatio float64) flo
 }
 
 // EvaluationContext contains all data needed to simulate and score action sequences.
+// After removing universe.Security: Uses universe.Security directly (single source of truth).
 type EvaluationContext struct {
 	// Portfolio state (same as OpportunityContext)
 	PortfolioContext       *scoringdomain.PortfolioContext `json:"portfolio_context"`
 	EnrichedPositions      []EnrichedPosition              `json:"enriched_positions"` // REPLACES old Positions field
-	Securities             []domain.Security               `json:"securities"`
+	Securities             []universe.Security             `json:"securities"`
 	AvailableCashEUR       float64                         `json:"available_cash_eur"`
 	TotalPortfolioValueEUR float64                         `json:"total_portfolio_value_eur"`
 
 	// Market data (ALL KEYS ARE ISIN)
-	CurrentPrices map[string]float64         `json:"current_prices"` // Key: ISIN (e.g., "US0378331005")
-	StocksByISIN  map[string]domain.Security `json:"stocks_by_isin"` // Key: ISIN (primary identifier)
+	CurrentPrices map[string]float64           `json:"current_prices"` // Key: ISIN (e.g., "US0378331005")
+	StocksByISIN  map[string]universe.Security `json:"stocks_by_isin"` // Key: ISIN (primary identifier)
 
 	// Configuration
 	TransactionCostFixed   float64 `json:"transaction_cost_fixed"`
@@ -157,16 +160,17 @@ type EvaluationContext struct {
 }
 
 // NewEvaluationContext creates a new EvaluationContext with defaults.
+// After removing universe.Security: Uses universe.Security directly (single source of truth).
 func NewEvaluationContext(
 	portfolioContext *scoringdomain.PortfolioContext,
 	enrichedPositions []EnrichedPosition,
-	securities []domain.Security,
+	securities []universe.Security,
 	availableCashEUR float64,
 	totalPortfolioValueEUR float64,
 	currentPrices map[string]float64,
 ) *EvaluationContext {
 	// Build stocks by ISIN map (ONLY - no Symbol map)
-	stocksByISIN := make(map[string]domain.Security, len(securities))
+	stocksByISIN := make(map[string]universe.Security, len(securities))
 	for _, sec := range securities {
 		if sec.ISIN != "" {
 			stocksByISIN[sec.ISIN] = sec

@@ -14,30 +14,16 @@ func setupTestDBForValidation(t *testing.T) *sql.DB {
 	db, err := sql.Open("sqlite3", ":memory:")
 	require.NoError(t, err)
 
-	// Create securities table with current schema (isin as PRIMARY KEY)
+	// Create securities table with migration 038 JSON storage schema
 	// Note: For test purposes, we allow NULL isin to test validation logic
 	// In production, isin is NOT NULL, but tests need to validate missing ISINs
 	_, err = db.Exec(`
 		CREATE TABLE securities (
 			isin TEXT PRIMARY KEY,
 			symbol TEXT NOT NULL,
-			name TEXT NOT NULL,
-			product_type TEXT,
-			industry TEXT,
-			geography TEXT,
-			fullExchangeName TEXT,
-			priority_multiplier REAL DEFAULT 1.0,
-			min_lot INTEGER DEFAULT 1,
-			active INTEGER DEFAULT 1,
-			allow_buy INTEGER DEFAULT 1,
-			allow_sell INTEGER DEFAULT 1,
-			currency TEXT,
-			last_synced TEXT,
-			min_portfolio_target REAL,
-			max_portfolio_target REAL,
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		)
+			data TEXT NOT NULL,
+			last_synced INTEGER
+		) STRICT
 	`)
 	require.NoError(t, err)
 
@@ -70,9 +56,8 @@ func TestValidateAllSecuritiesHaveISIN_AllHaveISIN(t *testing.T) {
 
 	// Insert securities with ISINs
 	_, err := db.Exec(`
-		INSERT INTO securities (symbol, isin, name, created_at, updated_at) VALUES
-		('AAPL.US', 'US0378331005', 'Apple Inc.', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
-		('MSFT.US', 'US5949181045', 'Microsoft Corp.', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')
+		INSERT INTO securities (isin, symbol, data, last_synced) VALUES ('US0378331005', 'AAPL.US', json_object('name', 'Apple Inc.'), NULL),
+		('MSFT.US', 'US5949181045', json_object('name', 'Microsoft Corp.'), NULL)
 	`)
 	require.NoError(t, err)
 
@@ -89,10 +74,9 @@ func TestValidateAllSecuritiesHaveISIN_MissingISIN(t *testing.T) {
 	// Insert securities - one with ISIN, one without
 	// Note: Using empty string as isin for test purposes (can't use NULL as PRIMARY KEY)
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, created_at, updated_at) VALUES
-		('US0378331005', 'AAPL.US', 'Apple Inc.', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
-		('', 'MSFT.US', 'Microsoft Corp.', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
-		(' ', 'GOOGL.US', 'Google Inc.', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')
+		INSERT INTO securities (isin, symbol, data, last_synced) VALUES ('US0378331005', 'AAPL.US', json_object('name', 'Apple Inc.'), NULL),
+		('', 'MSFT.US', json_object('name', 'Microsoft Corp.'), NULL),
+		(' ', 'GOOGL.US', json_object('name', 'Google Inc.'), NULL)
 	`)
 	require.NoError(t, err)
 
@@ -110,9 +94,8 @@ func TestValidateNoDuplicateISINs_NoDuplicates(t *testing.T) {
 
 	// Insert securities with unique ISINs
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, created_at, updated_at) VALUES
-		('US0378331005', 'AAPL.US', 'Apple Inc.', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
-		('US5949181045', 'MSFT.US', 'Microsoft Corp.', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')
+		INSERT INTO securities (isin, symbol, data, last_synced) VALUES ('US0378331005', 'AAPL.US', json_object('name', 'Apple Inc.'), NULL),
+		('US5949181045', 'MSFT.US', json_object('name', 'Microsoft Corp.'), NULL)
 	`)
 	require.NoError(t, err)
 
@@ -130,9 +113,8 @@ func TestValidateNoDuplicateISINs_HasDuplicates(t *testing.T) {
 	// Note: With isin as PRIMARY KEY, duplicates are prevented at DB level
 	// This test verifies the validator correctly reports no duplicates when all ISINs are unique
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, created_at, updated_at) VALUES
-		('US0378331005', 'AAPL.US', 'Apple Inc.', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
-		('US5949181045', 'MSFT.US', 'Microsoft Corp.', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')
+		INSERT INTO securities (isin, symbol, data, last_synced) VALUES ('US0378331005', 'AAPL.US', json_object('name', 'Apple Inc.'), NULL),
+		('US5949181045', 'MSFT.US', json_object('name', 'Microsoft Corp.'), NULL)
 	`)
 	require.NoError(t, err)
 
@@ -150,10 +132,9 @@ func TestValidateNoDuplicateISINs_IgnoresNullAndEmpty(t *testing.T) {
 	// Insert securities - some with ISIN, some without (empty string)
 	// Note: Can't use NULL as PRIMARY KEY, so using empty string for test
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, created_at, updated_at) VALUES
-		('US0378331005', 'AAPL.US', 'Apple Inc.', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
-		('', 'MSFT.US', 'Microsoft Corp.', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
-		(' ', 'GOOGL.US', 'Google Inc.', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')
+		INSERT INTO securities (isin, symbol, data, last_synced) VALUES ('US0378331005', 'AAPL.US', json_object('name', 'Apple Inc.'), NULL),
+		('', 'MSFT.US', json_object('name', 'Microsoft Corp.'), NULL),
+		(' ', 'GOOGL.US', json_object('name', 'Google Inc.'), NULL)
 	`)
 	require.NoError(t, err)
 
@@ -169,9 +150,8 @@ func TestValidateForeignKeys_AllValid(t *testing.T) {
 
 	// Insert securities with ISINs
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, created_at, updated_at) VALUES
-		('US0378331005', 'AAPL.US', 'Apple Inc.', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
-		('US5949181045', 'MSFT.US', 'Microsoft Corp.', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')
+		INSERT INTO securities (isin, symbol, data, last_synced) VALUES ('US0378331005', 'AAPL.US', json_object('name', 'Apple Inc.'), NULL),
+		('US5949181045', 'MSFT.US', json_object('name', 'Microsoft Corp.'), NULL)
 	`)
 	require.NoError(t, err)
 
@@ -203,8 +183,7 @@ func TestValidateForeignKeys_OrphanedReferences(t *testing.T) {
 
 	// Insert only one security
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, created_at, updated_at) VALUES
-		('US0378331005', 'AAPL.US', 'Apple Inc.', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')
+		INSERT INTO securities (isin, symbol, data, last_synced) VALUES ('US0378331005', 'AAPL.US', json_object('name', 'Apple Inc.'), NULL)
 	`)
 	require.NoError(t, err)
 
@@ -235,9 +214,8 @@ func TestValidateAll_Comprehensive(t *testing.T) {
 
 	// Insert valid data
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, created_at, updated_at) VALUES
-		('US0378331005', 'AAPL.US', 'Apple Inc.', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z'),
-		('US5949181045', 'MSFT.US', 'Microsoft Corp.', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')
+		INSERT INTO securities (isin, symbol, data, last_synced) VALUES ('US0378331005', 'AAPL.US', json_object('name', 'Apple Inc.'), NULL),
+		('US5949181045', 'MSFT.US', json_object('name', 'Microsoft Corp.'), NULL)
 	`)
 	require.NoError(t, err)
 
@@ -256,8 +234,7 @@ func TestValidateAll_FailsOnMissingISIN(t *testing.T) {
 
 	// Insert security without ISIN (using empty string for test)
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, created_at, updated_at) VALUES
-		('', 'AAPL.US', 'Apple Inc.', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')
+		INSERT INTO securities (isin, symbol, data, last_synced) VALUES ('', 'AAPL.US', json_object('name', 'Apple Inc.'), NULL)
 	`)
 	require.NoError(t, err)
 

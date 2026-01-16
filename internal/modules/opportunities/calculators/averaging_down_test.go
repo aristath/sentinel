@@ -6,6 +6,7 @@ import (
 
 	"github.com/aristath/sentinel/internal/domain"
 	planningdomain "github.com/aristath/sentinel/internal/modules/planning/domain"
+	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -41,8 +42,8 @@ func (m *mockSecurityRepoAveragingDown) GetTagsForSecurity(symbol string) ([]str
 	return []string{}, nil
 }
 
-func (m *mockSecurityRepoAveragingDown) GetByTags(tags []string) ([]domain.Security, error) {
-	return []domain.Security{}, nil
+func (m *mockSecurityRepoAveragingDown) GetByTags(tags []string) ([]universe.Security, error) {
+	return []universe.Security{}, nil
 }
 
 func TestAveragingDownCalculator_WithTagFiltering_PreFiltersPositions(t *testing.T) {
@@ -72,20 +73,18 @@ func TestAveragingDownCalculator_WithTagFiltering_PreFiltersPositions(t *testing
 		AverageCost: 20.0,
 	}
 
-	security1 := domain.Security{
+	security1 := universe.Security{
 		Symbol:   "TEST.US",
 		Name:     "Test Security",
 		ISIN:     "US1234567890",
-		Active:   true,
 		AllowBuy: true,
 		Currency: "EUR",
 		MinLot:   1,
 	}
-	security2 := domain.Security{
+	security2 := universe.Security{
 		Symbol:   "OTHER.US",
 		Name:     "Other Security",
 		ISIN:     "US0987654321",
-		Active:   true,
 		AllowBuy: true,
 		Currency: "EUR",
 		MinLot:   1,
@@ -96,9 +95,9 @@ func TestAveragingDownCalculator_WithTagFiltering_PreFiltersPositions(t *testing
 			createEnrichedPosition(position1, security1, 15.0),
 			createEnrichedPosition(position2, security2, 15.0),
 		},
-		Securities:          []domain.Security{security1, security2},
+		Securities:          []universe.Security{security1, security2},
 		CurrentPrices:       map[string]float64{"US1234567890": 15.0, "US0987654321": 15.0}, // 25% loss
-		StocksByISIN:        map[string]domain.Security{"US1234567890": security1, "US0987654321": security2},
+		StocksByISIN:        map[string]universe.Security{"US1234567890": security1, "US0987654321": security2},
 		AvailableCashEUR:    1000.0,
 		IneligibleISINs:     map[string]bool{},
 		RecentlyBoughtISINs: map[string]bool{},
@@ -143,20 +142,18 @@ func TestAveragingDownCalculator_WithoutTagFiltering_ProcessesAllPositions(t *te
 		AverageCost: 20.0,
 	}
 
-	security1 := domain.Security{
+	security1 := universe.Security{
 		Symbol:   "TEST.US",
 		Name:     "Test Security",
 		ISIN:     "US1234567890",
-		Active:   true,
 		AllowBuy: true,
 		Currency: "EUR",
 		MinLot:   1,
 	}
-	security2 := domain.Security{
+	security2 := universe.Security{
 		Symbol:   "OTHER.US",
 		Name:     "Other Security",
 		ISIN:     "US0987654321",
-		Active:   true,
 		AllowBuy: true,
 		Currency: "EUR",
 		MinLot:   1,
@@ -167,9 +164,9 @@ func TestAveragingDownCalculator_WithoutTagFiltering_ProcessesAllPositions(t *te
 			createEnrichedPosition(position1, security1, 15.0),
 			createEnrichedPosition(position2, security2, 15.0),
 		},
-		Securities:          []domain.Security{security1, security2},
+		Securities:          []universe.Security{security1, security2},
 		CurrentPrices:       map[string]float64{"US1234567890": 15.0, "US0987654321": 15.0},
-		StocksByISIN:        map[string]domain.Security{"US1234567890": security1, "US0987654321": security2},
+		StocksByISIN:        map[string]universe.Security{"US1234567890": security1, "US0987654321": security2},
 		AvailableCashEUR:    1000.0,
 		IneligibleISINs:     map[string]bool{},
 		RecentlyBoughtISINs: map[string]bool{},
@@ -206,11 +203,10 @@ func TestAveragingDownCalculator_EnforcesAllowBuy(t *testing.T) {
 		AverageCost: 20.0,
 	}
 
-	security := domain.Security{
+	security := universe.Security{
 		Symbol:   "TEST.US",
 		Name:     "Test Security",
 		ISIN:     "US1234567890",
-		Active:   true,
 		AllowBuy: false, // Buying not allowed
 		Currency: "EUR",
 		MinLot:   1,
@@ -220,9 +216,9 @@ func TestAveragingDownCalculator_EnforcesAllowBuy(t *testing.T) {
 		EnrichedPositions: []planningdomain.EnrichedPosition{
 			createEnrichedPosition(position, security, 15.0),
 		},
-		Securities:          []domain.Security{security},
+		Securities:          []universe.Security{security},
 		CurrentPrices:       map[string]float64{"US1234567890": 15.0},
-		StocksByISIN:        map[string]domain.Security{"US1234567890": security},
+		StocksByISIN:        map[string]universe.Security{"US1234567890": security},
 		AvailableCashEUR:    1000.0,
 		IneligibleISINs:     map[string]bool{},
 		RecentlyBoughtISINs: map[string]bool{},
@@ -256,11 +252,10 @@ func TestAveragingDownCalculator_RoundsToLotSize(t *testing.T) {
 		AverageCost: 20.0,
 	}
 
-	security := domain.Security{
+	security := universe.Security{
 		Symbol:   "TEST.US",
 		Name:     "Test Security",
 		ISIN:     "US1234567890",
-		Active:   true,
 		AllowBuy: true,
 		Currency: "EUR",
 		MinLot:   1,
@@ -270,9 +265,9 @@ func TestAveragingDownCalculator_RoundsToLotSize(t *testing.T) {
 		EnrichedPositions: []planningdomain.EnrichedPosition{
 			createEnrichedPosition(position, security, 15.0),
 		},
-		Securities:             []domain.Security{security},
+		Securities:             []universe.Security{security},
 		CurrentPrices:          map[string]float64{"US1234567890": 15.0},
-		StocksByISIN:           map[string]domain.Security{"US1234567890": security},
+		StocksByISIN:           map[string]universe.Security{"US1234567890": security},
 		AvailableCashEUR:       10000.0,
 		TotalPortfolioValueEUR: 10000.0,
 		IneligibleISINs:        map[string]bool{},
@@ -313,11 +308,10 @@ func TestAveragingDownCalculator_KellyBasedQuantity_WhenAvailable(t *testing.T) 
 		AverageCost: 20.0,
 	}
 
-	security := domain.Security{
+	security := universe.Security{
 		Symbol:   "TEST.US",
 		Name:     "Test Security",
 		ISIN:     "US1234567890",
-		Active:   true,
 		AllowBuy: true,
 		Currency: "EUR",
 		MinLot:   1,
@@ -327,9 +321,9 @@ func TestAveragingDownCalculator_KellyBasedQuantity_WhenAvailable(t *testing.T) 
 		EnrichedPositions: []planningdomain.EnrichedPosition{
 			createEnrichedPosition(position, security, 15.0),
 		},
-		Securities:             []domain.Security{security},
+		Securities:             []universe.Security{security},
 		CurrentPrices:          map[string]float64{"US1234567890": 15.0},
-		StocksByISIN:           map[string]domain.Security{"US1234567890": security},
+		StocksByISIN:           map[string]universe.Security{"US1234567890": security},
 		AvailableCashEUR:       10000.0,
 		TotalPortfolioValueEUR: 10000.0,
 		IneligibleISINs:        map[string]bool{},
@@ -373,11 +367,10 @@ func TestAveragingDownCalculator_PercentageBasedQuantity_Fallback(t *testing.T) 
 		AverageCost: 20.0,
 	}
 
-	security := domain.Security{
+	security := universe.Security{
 		Symbol:   "TEST.US",
 		Name:     "Test Security",
 		ISIN:     "US1234567890",
-		Active:   true,
 		AllowBuy: true,
 		Currency: "EUR",
 		MinLot:   1,
@@ -387,9 +380,9 @@ func TestAveragingDownCalculator_PercentageBasedQuantity_Fallback(t *testing.T) 
 		EnrichedPositions: []planningdomain.EnrichedPosition{
 			createEnrichedPosition(position, security, 15.0),
 		},
-		Securities:             []domain.Security{security},
+		Securities:             []universe.Security{security},
 		CurrentPrices:          map[string]float64{"US1234567890": 15.0},
-		StocksByISIN:           map[string]domain.Security{"US1234567890": security},
+		StocksByISIN:           map[string]universe.Security{"US1234567890": security},
 		AvailableCashEUR:       10000.0,
 		TotalPortfolioValueEUR: 10000.0,
 		IneligibleISINs:        map[string]bool{},
@@ -429,11 +422,10 @@ func TestAveragingDownCalculator_UsesConfigurablePercent_NotHardcoded(t *testing
 		AverageCost: 20.0,
 	}
 
-	security := domain.Security{
+	security := universe.Security{
 		Symbol:   "TEST.US",
 		Name:     "Test Security",
 		ISIN:     "US1234567890",
-		Active:   true,
 		AllowBuy: true,
 		Currency: "EUR",
 		MinLot:   1,
@@ -443,9 +435,9 @@ func TestAveragingDownCalculator_UsesConfigurablePercent_NotHardcoded(t *testing
 		EnrichedPositions: []planningdomain.EnrichedPosition{
 			createEnrichedPosition(position, security, 15.0),
 		},
-		Securities:          []domain.Security{security},
+		Securities:          []universe.Security{security},
 		CurrentPrices:       map[string]float64{"US1234567890": 15.0},
-		StocksByISIN:        map[string]domain.Security{"US1234567890": security},
+		StocksByISIN:        map[string]universe.Security{"US1234567890": security},
 		AvailableCashEUR:    10000.0,
 		IneligibleISINs:     map[string]bool{},
 		RecentlyBoughtISINs: map[string]bool{},
@@ -498,11 +490,10 @@ func TestAveragingDownCalculator_SkipsAveragingDown_WhenAtKellyOptimal(t *testin
 		AverageCost: 20.0,
 	}
 
-	security := domain.Security{
+	security := universe.Security{
 		Symbol:   "TEST.US",
 		Name:     "Test Security",
 		ISIN:     "US1234567890",
-		Active:   true,
 		AllowBuy: true,
 		Currency: "EUR",
 		MinLot:   1,
@@ -512,9 +503,9 @@ func TestAveragingDownCalculator_SkipsAveragingDown_WhenAtKellyOptimal(t *testin
 		EnrichedPositions: []planningdomain.EnrichedPosition{
 			createEnrichedPosition(position, security, 15.0),
 		},
-		Securities:             []domain.Security{security},
+		Securities:             []universe.Security{security},
 		CurrentPrices:          map[string]float64{"US1234567890": 15.0},
-		StocksByISIN:           map[string]domain.Security{"US1234567890": security},
+		StocksByISIN:           map[string]universe.Security{"US1234567890": security},
 		AvailableCashEUR:       10000.0,
 		TotalPortfolioValueEUR: 10000.0,
 		IneligibleISINs:        map[string]bool{},
@@ -556,11 +547,10 @@ func TestAveragingDownCalculator_TagBasedQualityGates_ValueTrap(t *testing.T) {
 		AverageCost: 20.0,
 	}
 
-	security := domain.Security{
+	security := universe.Security{
 		Symbol:   "TEST.US",
 		Name:     "Test Security",
 		ISIN:     "US1234567890",
-		Active:   true,
 		AllowBuy: true,
 		Currency: "EUR",
 		MinLot:   1,
@@ -570,9 +560,9 @@ func TestAveragingDownCalculator_TagBasedQualityGates_ValueTrap(t *testing.T) {
 		EnrichedPositions: []planningdomain.EnrichedPosition{
 			createEnrichedPosition(position, security, 15.0),
 		},
-		Securities:          []domain.Security{security},
+		Securities:          []universe.Security{security},
 		CurrentPrices:       map[string]float64{"US1234567890": 15.0},
-		StocksByISIN:        map[string]domain.Security{"US1234567890": security},
+		StocksByISIN:        map[string]universe.Security{"US1234567890": security},
 		AvailableCashEUR:    1000.0,
 		IneligibleISINs:     map[string]bool{},
 		RecentlyBoughtISINs: map[string]bool{},
@@ -619,20 +609,18 @@ func TestAveragingDownCalculator_TagBasedPriorityBoosting_QualityValue(t *testin
 		AverageCost: 20.0,
 	}
 
-	security1 := domain.Security{
+	security1 := universe.Security{
 		Symbol:   "QUALITY.US",
 		Name:     "Quality Security",
 		ISIN:     "US1111111111",
-		Active:   true,
 		AllowBuy: true,
 		Currency: "EUR",
 		MinLot:   1,
 	}
-	security2 := domain.Security{
+	security2 := universe.Security{
 		Symbol:   "NORMAL.US",
 		Name:     "Normal Security",
 		ISIN:     "US2222222222",
-		Active:   true,
 		AllowBuy: true,
 		Currency: "EUR",
 		MinLot:   1,
@@ -643,9 +631,9 @@ func TestAveragingDownCalculator_TagBasedPriorityBoosting_QualityValue(t *testin
 			createEnrichedPosition(position1, security1, 15.0),
 			createEnrichedPosition(position2, security2, 15.0),
 		},
-		Securities:          []domain.Security{security1, security2},
+		Securities:          []universe.Security{security1, security2},
 		CurrentPrices:       map[string]float64{"US1111111111": 15.0, "US2222222222": 15.0}, // Same loss
-		StocksByISIN:        map[string]domain.Security{"US1111111111": security1, "US2222222222": security2},
+		StocksByISIN:        map[string]universe.Security{"US1111111111": security1, "US2222222222": security2},
 		AvailableCashEUR:    10000.0,
 		IneligibleISINs:     map[string]bool{},
 		RecentlyBoughtISINs: map[string]bool{},
@@ -696,20 +684,18 @@ func TestAveragingDownCalculator_SortsByPriorityDescending(t *testing.T) {
 		AverageCost: 20.0,
 	}
 
-	security1 := domain.Security{
+	security1 := universe.Security{
 		Symbol:   "DEEP.US",
 		Name:     "Deep Loss Security",
 		ISIN:     "US1111111111",
-		Active:   true,
 		AllowBuy: true,
 		Currency: "EUR",
 		MinLot:   1,
 	}
-	security2 := domain.Security{
+	security2 := universe.Security{
 		Symbol:   "SHALLOW.US",
 		Name:     "Shallow Loss Security",
 		ISIN:     "US2222222222",
-		Active:   true,
 		AllowBuy: true,
 		Currency: "EUR",
 		MinLot:   1,
@@ -720,9 +706,9 @@ func TestAveragingDownCalculator_SortsByPriorityDescending(t *testing.T) {
 			createEnrichedPosition(position1, security1, 12.0), // 40% loss
 			createEnrichedPosition(position2, security2, 18.0), // 10% loss
 		},
-		Securities:          []domain.Security{security1, security2},
+		Securities:          []universe.Security{security1, security2},
 		CurrentPrices:       map[string]float64{"US1111111111": 12.0, "US2222222222": 18.0}, // 40% vs 10% loss
-		StocksByISIN:        map[string]domain.Security{"US1111111111": security1, "US2222222222": security2},
+		StocksByISIN:        map[string]universe.Security{"US1111111111": security1, "US2222222222": security2},
 		AvailableCashEUR:    10000.0,
 		IneligibleISINs:     map[string]bool{},
 		RecentlyBoughtISINs: map[string]bool{},
@@ -764,10 +750,10 @@ func TestAveragingDownCalculator_RespectsMaxPositionsLimit(t *testing.T) {
 	calc := NewAveragingDownCalculator(tagFilter, securityRepo, log)
 
 	enrichedPositions := []planningdomain.EnrichedPosition{}
-	securities := []domain.Security{}
+	securities := []universe.Security{}
 	prices := map[string]float64{}
-	stocksByISIN := map[string]domain.Security{}
-	stocksBySymbol := map[string]domain.Security{}
+	stocksByISIN := map[string]universe.Security{}
+	stocksBySymbol := map[string]universe.Security{}
 
 	symbols := []string{"A.US", "B.US", "C.US", "D.US", "E.US"}
 	for i, symbol := range symbols {
@@ -778,11 +764,10 @@ func TestAveragingDownCalculator_RespectsMaxPositionsLimit(t *testing.T) {
 			Quantity:    100,
 			AverageCost: 20.0,
 		}
-		security := domain.Security{
+		security := universe.Security{
 			Symbol:   symbol,
 			Name:     symbol,
 			ISIN:     isin,
-			Active:   true,
 			AllowBuy: true,
 			Currency: "EUR",
 			MinLot:   1,

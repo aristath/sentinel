@@ -584,15 +584,15 @@ func (p *Planner) generatePortfolioHash(ctx *domain.OpportunityContext) string {
 		})
 	}
 
-	// Convert domain.Security to universe.Security for hashing
+	// Convert universe.Security to universe.Security for hashing
 	// Note: We use ctx.StocksBySymbol which has the full Security objects
 	securities := make([]*universe.Security, 0, len(ctx.Securities))
 	for _, sec := range ctx.Securities {
 		securities = append(securities, &universe.Security{
 			Symbol:             sec.Symbol,
 			Geography:          sec.Geography,
-			AllowBuy:           sec.Active, // Use Active as default for AllowBuy
-			AllowSell:          false,      // Default to false for safety
+			AllowBuy:           true,  // After migration 038: All securities in database are active
+			AllowSell:          false, // Default to false for safety
 			MinPortfolioTarget: 0,
 			MaxPortfolioTarget: 0,
 		})

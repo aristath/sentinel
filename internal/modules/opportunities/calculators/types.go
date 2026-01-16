@@ -4,9 +4,9 @@
 package calculators
 
 import (
-	appdomain "github.com/aristath/sentinel/internal/domain"
 	"github.com/aristath/sentinel/internal/modules/planning/domain"
 	"github.com/aristath/sentinel/internal/modules/scoring/scorers"
+	"github.com/aristath/sentinel/internal/modules/universe"
 )
 
 // TagFilter defines the interface for tag-based pre-filtering of opportunities.
@@ -23,9 +23,10 @@ type TagFilter interface {
 }
 
 // SecurityRepository defines the interface for security repository operations needed by calculators.
+// After removing universe.Security: Uses universe.Security directly (single source of truth).
 type SecurityRepository interface {
 	GetTagsForSecurity(symbol string) ([]string, error)
-	GetByTags(tags []string) ([]appdomain.Security, error)
+	GetByTags(tags []string) ([]universe.Security, error)
 }
 
 // BuildConcentrationContext builds a ConcentrationContext from an OpportunityContext.

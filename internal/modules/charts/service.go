@@ -2,12 +2,10 @@
 package charts
 
 import (
-	"database/sql"
 	"fmt"
 	"sort"
 	"time"
 
-	"github.com/aristath/sentinel/internal/domain"
 	"github.com/aristath/sentinel/internal/modules/universe"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/rs/zerolog"
@@ -23,7 +21,6 @@ type ChartDataPoint struct {
 type Service struct {
 	historyDBClient universe.HistoryDBInterface // Filtered and cached price access
 	securityRepo    *universe.SecurityRepository
-	universeDB      *sql.DB // For querying securities (universe.db)
 	log             zerolog.Logger
 }
 
@@ -31,13 +28,11 @@ type Service struct {
 func NewService(
 	historyDBClient universe.HistoryDBInterface,
 	securityRepo *universe.SecurityRepository,
-	universeDB *sql.DB,
 	log zerolog.Logger,
 ) *Service {
 	return &Service{
 		historyDBClient: historyDBClient,
 		securityRepo:    securityRepo,
-		universeDB:      universeDB,
 		log:             log.With().Str("service", "charts").Logger(),
 	}
 }
@@ -59,36 +54,31 @@ func (s *Service) GetSparklinesAggregated(period string) (map[string][]ChartData
 		return nil, fmt.Errorf("invalid period: %s (must be 1Y or 5Y)", period)
 	}
 
-	// Get all active tradable securities with ISINs (excludes indices)
-	rows, err := s.universeDB.Query("SELECT symbol, isin FROM securities WHERE active = 1 AND isin != '' AND (product_type IS NULL OR product_type != ?)", string(domain.ProductTypeIndex))
+	// Get all securities for charts (excludes indices, only those with ISINs)
+	securities, err := s.securityRepo.GetSecuritiesForCharts()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get active securities: %w", err)
+		return nil, fmt.Errorf("failed to get securities for charts: %w", err)
 	}
-	defer rows.Close()
 
 	result := make(map[string][]ChartDataPoint)
 
-	for rows.Next() {
-		var symbol string
-		var isin sql.NullString
-		if err := rows.Scan(&symbol, &isin); err != nil {
-			s.log.Warn().Err(err).Msg("Failed to scan symbol")
-			continue
-		}
+	for _, security := range securities {
+		symbol := security.Symbol
+		isin := security.ISIN
 
-		// Skip securities without ISIN
-		if !isin.Valid || isin.String == "" {
+		// Skip securities without ISIN (defensive, should already be filtered)
+		if isin == "" {
 			s.log.Debug().Str("symbol", symbol).Msg("Skipping security without ISIN")
 			continue
 		}
 
 		// Get aggregated prices
-		prices, err := s.getAggregatedPrices(isin.String, startDate, groupBy)
+		prices, err := s.getAggregatedPrices(isin, startDate, groupBy)
 		if err != nil {
 			s.log.Debug().
 				Err(err).
 				Str("symbol", symbol).
-				Str("isin", isin.String).
+				Str("isin", isin).
 				Msg("Failed to get aggregated prices for symbol")
 			continue
 		}
@@ -96,10 +86,6 @@ func (s *Service) GetSparklinesAggregated(period string) (map[string][]ChartData
 		if len(prices) > 0 {
 			result[symbol] = prices
 		}
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating securities: %w", err)
 	}
 
 	return result, nil

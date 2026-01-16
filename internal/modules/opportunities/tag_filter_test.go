@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aristath/sentinel/internal/domain"
 	planningdomain "github.com/aristath/sentinel/internal/modules/planning/domain"
 	scoringdomain "github.com/aristath/sentinel/internal/modules/scoring/domain"
 	"github.com/aristath/sentinel/internal/modules/universe"
@@ -20,29 +19,14 @@ func setupTagFilterTestDB(t *testing.T) *sql.DB {
 	db, err := sql.Open("sqlite3", ":memory:")
 	require.NoError(t, err)
 
-	// Create securities table
+	// Create securities table (JSON storage - migration 038)
 	_, err = db.Exec(`
 		CREATE TABLE securities (
 			isin TEXT PRIMARY KEY,
-			symbol TEXT,
-			name TEXT NOT NULL,
-			product_type TEXT,
-			industry TEXT,
-			geography TEXT,
-			fullExchangeName TEXT,
-			priority_multiplier REAL DEFAULT 1.0,
-			min_lot INTEGER DEFAULT 1,
-			active INTEGER DEFAULT 1,
-			allow_buy INTEGER DEFAULT 1,
-			allow_sell INTEGER DEFAULT 1,
-			currency TEXT,
-			last_synced TEXT,
-			min_portfolio_target REAL,
-			max_portfolio_target REAL,
-			created_at TEXT,
-			updated_at TEXT,
-			market_code TEXT
-		)
+			symbol TEXT NOT NULL,
+			data TEXT NOT NULL,
+			last_synced INTEGER
+		) STRICT
 	`)
 	require.NoError(t, err)
 
@@ -71,10 +55,9 @@ func setupTagFilterTestDB(t *testing.T) *sql.DB {
 	`)
 	require.NoError(t, err)
 
-	// Create indexes
+	// Create indexes (migration 038: removed idx_securities_active)
 	_, err = db.Exec(`
 		CREATE INDEX IF NOT EXISTS idx_securities_symbol ON securities(symbol);
-		CREATE INDEX IF NOT EXISTS idx_securities_active ON securities(active);
 		CREATE INDEX IF NOT EXISTS idx_security_tags_isin ON security_tags(isin);
 		CREATE INDEX IF NOT EXISTS idx_security_tags_tag_id ON security_tags(tag_id);
 	`)
@@ -90,19 +73,18 @@ func TestTagBasedFilter_GetOpportunityCandidates_WithCash(t *testing.T) {
 
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 	universeRepo := universe.NewSecurityRepository(db, log)
-	securityRepo := NewSecurityRepositoryAdapter(universeRepo)
-	filter := NewTagBasedFilter(securityRepo, log)
+	filter := NewTagBasedFilter(universeRepo, log)
 
 	now := time.Now().Unix()
 
 	// Insert test securities
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, active, created_at, updated_at)
+		INSERT INTO securities (isin, symbol, data, last_synced)
 		VALUES
-			('US0378331005', 'AAPL', 'Apple Inc', 1, ?, ?),
-			('US5949181045', 'MSFT', 'Microsoft Corp', 1, ?, ?),
-			('US02079K3059', 'GOOGL', 'Alphabet Inc', 1, ?, ?)
-	`, now, now, now, now, now, now)
+			('US0378331005', 'AAPL', json_object('name', 'Apple Inc'), NULL),
+			('US5949181045', 'MSFT', json_object('name', 'Microsoft Corp'), NULL),
+			('US02079K3059', 'GOOGL', json_object('name', 'Alphabet Inc'), NULL)
+	`)
 	require.NoError(t, err)
 
 	// Insert tags
@@ -132,7 +114,7 @@ func TestTagBasedFilter_GetOpportunityCandidates_WithCash(t *testing.T) {
 	ctx := planningdomain.NewOpportunityContext(
 		&scoringdomain.PortfolioContext{},
 		[]planningdomain.EnrichedPosition{},
-		[]domain.Security{},
+		[]universe.Security{},
 		2000.0, // Available cash > 1000
 		10000.0,
 		map[string]float64{},
@@ -156,18 +138,17 @@ func TestTagBasedFilter_GetOpportunityCandidates_NoCash(t *testing.T) {
 
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 	universeRepo := universe.NewSecurityRepository(db, log)
-	securityRepo := NewSecurityRepositoryAdapter(universeRepo)
-	filter := NewTagBasedFilter(securityRepo, log)
+	filter := NewTagBasedFilter(universeRepo, log)
 
 	now := time.Now().Unix()
 
 	// Insert test securities
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, active, created_at, updated_at)
+		INSERT INTO securities (isin, symbol, data, last_synced)
 		VALUES
-			('US0378331005', 'AAPL', 'Apple Inc', 1, ?, ?),
-			('US5949181045', 'MSFT', 'Microsoft Corp', 1, ?, ?)
-	`, now, now, now, now)
+			('US0378331005', 'AAPL', json_object('name', 'Apple Inc'), NULL),
+			('US5949181045', 'MSFT', json_object('name', 'Microsoft Corp'), NULL)
+	`)
 	require.NoError(t, err)
 
 	// Insert tags
@@ -192,7 +173,7 @@ func TestTagBasedFilter_GetOpportunityCandidates_NoCash(t *testing.T) {
 	ctx := planningdomain.NewOpportunityContext(
 		&scoringdomain.PortfolioContext{},
 		[]planningdomain.EnrichedPosition{},
-		[]domain.Security{},
+		[]universe.Security{},
 		500.0, // Available cash < 1000 (no value opportunities)
 		10000.0,
 		map[string]float64{},
@@ -215,19 +196,18 @@ func TestTagBasedFilter_GetSellCandidates(t *testing.T) {
 
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 	universeRepo := universe.NewSecurityRepository(db, log)
-	securityRepo := NewSecurityRepositoryAdapter(universeRepo)
-	filter := NewTagBasedFilter(securityRepo, log)
+	filter := NewTagBasedFilter(universeRepo, log)
 
 	now := time.Now().Unix()
 
 	// Insert test securities
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, active, created_at, updated_at)
+		INSERT INTO securities (isin, symbol, data, last_synced)
 		VALUES
-			('US0378331005', 'AAPL', 'Apple Inc', 1, ?, ?),
-			('US5949181045', 'MSFT', 'Microsoft Corp', 1, ?, ?),
-			('US02079K3059', 'GOOGL', 'Alphabet Inc', 1, ?, ?)
-	`, now, now, now, now, now, now)
+			('US0378331005', 'AAPL', json_object('name', 'Apple Inc'), NULL),
+			('US5949181045', 'MSFT', json_object('name', 'Microsoft Corp'), NULL),
+			('US02079K3059', 'GOOGL', json_object('name', 'Alphabet Inc'), NULL)
+	`)
 	require.NoError(t, err)
 
 	// Insert tags
@@ -258,7 +238,7 @@ func TestTagBasedFilter_GetSellCandidates(t *testing.T) {
 			{Symbol: "MSFT", Quantity: 5},
 			{Symbol: "GOOGL", Quantity: 3}, // No sell tags
 		},
-		[]domain.Security{},
+		[]universe.Security{},
 		1000.0,
 		10000.0,
 		map[string]float64{},
@@ -283,14 +263,13 @@ func TestTagBasedFilter_GetSellCandidates_NoPositions(t *testing.T) {
 
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 	universeRepo := universe.NewSecurityRepository(db, log)
-	securityRepo := NewSecurityRepositoryAdapter(universeRepo)
-	filter := NewTagBasedFilter(securityRepo, log)
+	filter := NewTagBasedFilter(universeRepo, log)
 
 	// Create opportunity context with no positions
 	ctx := planningdomain.NewOpportunityContext(
 		&scoringdomain.PortfolioContext{},
 		[]planningdomain.EnrichedPosition{},
-		[]domain.Security{},
+		[]universe.Security{},
 		1000.0,
 		10000.0,
 		map[string]float64{},
@@ -311,12 +290,11 @@ func TestTagBasedFilter_isMarketVolatile(t *testing.T) {
 
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 	universeRepo := universe.NewSecurityRepository(db, log)
-	securityRepo := NewSecurityRepositoryAdapter(universeRepo)
-	filter := NewTagBasedFilter(securityRepo, log)
+	filter := NewTagBasedFilter(universeRepo, log)
 
 	now := time.Now().Unix()
 
-	// Insert test securities
+	// Insert test securities (JSON storage - migration 038)
 	symbols := []string{"AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA"}
 	placeholders := ""
 	args := []interface{}{}
@@ -324,12 +302,12 @@ func TestTagBasedFilter_isMarketVolatile(t *testing.T) {
 		if i > 0 {
 			placeholders += ", "
 		}
-		placeholders += "(?, ?, ?, ?, ?, ?)"
-		args = append(args, "ISIN"+symbol, symbol, symbol+" Inc", 1, now, now)
+		placeholders += "(?, ?, json_object('name', ?), NULL)"
+		args = append(args, "ISIN"+symbol, symbol, symbol+" Inc")
 	}
 
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, active, created_at, updated_at)
+		INSERT INTO securities (isin, symbol, data, last_synced)
 		VALUES `+placeholders, args...)
 	require.NoError(t, err)
 
@@ -364,7 +342,7 @@ func TestTagBasedFilter_isMarketVolatile(t *testing.T) {
 	ctx := planningdomain.NewOpportunityContext(
 		&scoringdomain.PortfolioContext{},
 		[]planningdomain.EnrichedPosition{},
-		[]domain.Security{},
+		[]universe.Security{},
 		1000.0,
 		10000.0,
 		map[string]float64{},
@@ -385,18 +363,17 @@ func TestTagBasedFilter_isMarketVolatile_NotVolatile(t *testing.T) {
 
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 	universeRepo := universe.NewSecurityRepository(db, log)
-	securityRepo := NewSecurityRepositoryAdapter(universeRepo)
-	filter := NewTagBasedFilter(securityRepo, log)
+	filter := NewTagBasedFilter(universeRepo, log)
 
 	now := time.Now().Unix()
 
 	// Insert test securities
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, active, created_at, updated_at)
+		INSERT INTO securities (isin, symbol, data, last_synced)
 		VALUES
-			('US0378331005', 'AAPL', 'Apple Inc', 1, ?, ?),
-			('US5949181045', 'MSFT', 'Microsoft Corp', 1, ?, ?)
-	`, now, now, now, now)
+			('US0378331005', 'AAPL', json_object('name', 'Apple Inc'), NULL),
+			('US5949181045', 'MSFT', json_object('name', 'Microsoft Corp'), NULL)
+	`)
 	require.NoError(t, err)
 
 	// Insert volatility-spike tag
@@ -419,7 +396,7 @@ func TestTagBasedFilter_isMarketVolatile_NotVolatile(t *testing.T) {
 	ctx := planningdomain.NewOpportunityContext(
 		&scoringdomain.PortfolioContext{},
 		[]planningdomain.EnrichedPosition{},
-		[]domain.Security{},
+		[]universe.Security{},
 		1000.0,
 		10000.0,
 		map[string]float64{},

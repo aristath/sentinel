@@ -47,16 +47,19 @@ func InitializeRepositories(container *Container, log zerolog.Logger) error {
 		log,
 	)
 
-	// Score repository (needs portfolioDB and universeDB for GetBySymbol)
+	// Score repository (needs portfolioDB and securityProvider for GetBySymbol)
+	scoreSecurityProvider := NewTradingSecurityProviderAdapter(container.SecurityRepo)
 	container.ScoreRepo = universe.NewScoreRepositoryWithUniverse(
 		container.PortfolioDB.Conn(),
-		container.UniverseDB.Conn(),
+		scoreSecurityProvider,
 		log,
 	)
 
-	// Dividend repository (needs ledgerDB)
+	// Dividend repository (needs ledgerDB and security provider for ISIN lookup)
+	dividendSecurityProvider := NewTradingSecurityProviderAdapter(container.SecurityRepo)
 	container.DividendRepo = dividends.NewDividendRepository(
 		container.LedgerDB.Conn(),
+		dividendSecurityProvider,
 		log,
 	)
 
@@ -66,10 +69,11 @@ func InitializeRepositories(container *Container, log zerolog.Logger) error {
 		log,
 	)
 
-	// Trade repository (needs ledgerDB and universeDB for ISIN lookup)
+	// Trade repository (needs ledgerDB and security provider for ISIN lookup)
+	tradingSecurityProvider := NewTradingSecurityProviderAdapter(container.SecurityRepo)
 	container.TradeRepo = trading.NewTradeRepository(
 		container.LedgerDB.Conn(),
-		container.UniverseDB.Conn(),
+		tradingSecurityProvider,
 		log,
 	)
 

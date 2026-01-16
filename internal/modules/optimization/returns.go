@@ -34,20 +34,20 @@ const (
 
 // ReturnsCalculator calculates expected returns for portfolio optimization.
 type ReturnsCalculator struct {
-	db             *sql.DB // portfolio.db
-	universeDB     *sql.DB // universe.db (for symbol -> ISIN lookup)
-	formulaStorage *symbolic_regression.FormulaStorage
-	log            zerolog.Logger
+	db               *sql.DB // portfolio.db
+	securityProvider SecurityProvider
+	formulaStorage   *symbolic_regression.FormulaStorage
+	log              zerolog.Logger
 }
 
 // NewReturnsCalculator creates a new returns calculator.
-func NewReturnsCalculator(db *sql.DB, universeDB *sql.DB, log zerolog.Logger) *ReturnsCalculator {
+func NewReturnsCalculator(db *sql.DB, securityProvider SecurityProvider, log zerolog.Logger) *ReturnsCalculator {
 	formulaStorage := symbolic_regression.NewFormulaStorage(db, log)
 	return &ReturnsCalculator{
-		db:             db,
-		universeDB:     universeDB,
-		formulaStorage: formulaStorage,
-		log:            log.With().Str("component", "returns").Logger(),
+		db:               db,
+		securityProvider: securityProvider,
+		formulaStorage:   formulaStorage,
+		log:              log.With().Str("component", "returns").Logger(),
 	}
 }
 
@@ -323,21 +323,19 @@ func (rc *ReturnsCalculator) getCAGRAndDividend(isin string, symbol string) (*fl
 	if isin != "" {
 		// Use ISIN directly (PRIMARY KEY lookup - fastest)
 		queryISIN = isin
-	} else if rc.universeDB != nil {
-		// Lookup ISIN from securities table (indexed query)
-		err := rc.universeDB.QueryRow("SELECT isin FROM securities WHERE symbol = ?", symbol).Scan(&queryISIN)
+	} else if rc.securityProvider != nil {
+		// Lookup ISIN from securities table via provider
+		var err error
+		queryISIN, err = rc.securityProvider.GetISINBySymbol(symbol)
 		if err != nil {
-			if err == sql.ErrNoRows {
-				return nil, 0.0, nil // Security not found
-			}
-			return nil, 0.0, fmt.Errorf("failed to lookup ISIN for symbol %s: %w", symbol, err)
+			return nil, 0.0, nil // Security not found
 		}
 		if queryISIN == "" {
 			return nil, 0.0, nil // No ISIN found
 		}
 	} else {
-		// No ISIN and no universeDB - cannot query
-		return nil, 0.0, fmt.Errorf("ISIN required but not available and universeDB not provided")
+		// No ISIN and no securityProvider - cannot query
+		return nil, 0.0, fmt.Errorf("ISIN required but not available and securityProvider not provided")
 	}
 
 	// Query scores directly by ISIN (PRIMARY KEY - fastest)
@@ -425,21 +423,19 @@ func (rc *ReturnsCalculator) getScore(isin string, symbol string) (float64, erro
 	if isin != "" {
 		// Use ISIN directly (PRIMARY KEY lookup - fastest)
 		queryISIN = isin
-	} else if rc.universeDB != nil {
-		// Lookup ISIN from securities table (indexed query)
-		err := rc.universeDB.QueryRow("SELECT isin FROM securities WHERE symbol = ?", symbol).Scan(&queryISIN)
+	} else if rc.securityProvider != nil {
+		// Lookup ISIN from securities table via provider
+		var err error
+		queryISIN, err = rc.securityProvider.GetISINBySymbol(symbol)
 		if err != nil {
-			if err == sql.ErrNoRows {
-				return 0.5, nil // Security not found, default to neutral
-			}
-			return 0.5, fmt.Errorf("failed to lookup ISIN for symbol %s: %w", symbol, err)
+			return 0.5, nil // Security not found, default to neutral
 		}
 		if queryISIN == "" {
 			return 0.5, nil // No ISIN found, default to neutral
 		}
 	} else {
-		// No ISIN and no universeDB - cannot query
-		return 0.5, fmt.Errorf("ISIN required but not available and universeDB not provided")
+		// No ISIN and no securityProvider - cannot query
+		return 0.5, fmt.Errorf("ISIN required but not available and securityProvider not provided")
 	}
 
 	// Query scores directly by ISIN (PRIMARY KEY - fastest)
@@ -470,27 +466,21 @@ func (rc *ReturnsCalculator) getQualityScores(isin string, symbol string) (*floa
 	if isin != "" {
 		// Use ISIN directly (PRIMARY KEY lookup - fastest)
 		queryISIN = isin
-	} else if rc.universeDB != nil {
-		// Lookup ISIN from securities table (indexed query)
-		err := rc.universeDB.QueryRow("SELECT isin FROM securities WHERE symbol = ?", symbol).Scan(&queryISIN)
+	} else if rc.securityProvider != nil {
+		// Lookup ISIN from securities table via provider
+		var err error
+		queryISIN, err = rc.securityProvider.GetISINBySymbol(symbol)
 		if err != nil {
-			if err == sql.ErrNoRows {
-				return nil, nil // Security not found
-			}
-			rc.log.Debug().
-				Err(err).
-				Str("symbol", symbol).
-				Msg("Failed to lookup ISIN for quality scores")
-			return nil, nil
+			return nil, nil // Security not found
 		}
 		if queryISIN == "" {
 			return nil, nil // No ISIN found
 		}
 	} else {
-		// No ISIN and no universeDB - cannot query
+		// No ISIN and no securityProvider - cannot query
 		rc.log.Debug().
 			Str("symbol", symbol).
-			Msg("ISIN required but not available and universeDB not provided")
+			Msg("ISIN required but not available and securityProvider not provided")
 		return nil, nil
 	}
 

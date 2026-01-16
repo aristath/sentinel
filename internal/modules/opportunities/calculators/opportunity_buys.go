@@ -5,8 +5,8 @@ import (
 	"math"
 	"sort"
 
-	"github.com/aristath/sentinel/internal/domain"
 	planningdomain "github.com/aristath/sentinel/internal/modules/planning/domain"
+	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/rs/zerolog"
 )
 
@@ -146,7 +146,7 @@ func (c *OpportunityBuysCalculator) Calculate(
 
 	for _, symbol := range candidateSymbols {
 		// Look up security to get ISIN
-		var security domain.Security
+		var security universe.Security
 		var found bool
 		for _, sec := range ctx.Securities {
 			if sec.Symbol == symbol {

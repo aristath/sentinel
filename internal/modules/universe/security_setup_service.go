@@ -127,7 +127,6 @@ func (s *SecuritySetupService) CreateSecurity(
 		Geography:        stringValue(country), // Map broker country to geography
 		FullExchangeName: stringValue(fullExchangeName),
 		Industry:         stringValue(industry),
-		Active:           true,
 	}
 
 	err = s.securityRepo.Create(security)
@@ -363,7 +362,6 @@ func (s *SecuritySetupService) AddSecurityByIdentifier(
 		ISIN:             stringValue(isin),
 		Industry:         stringValue(industry),
 		Currency:         stringValue(currency),
-		Active:           true,
 	}
 
 	err = s.securityRepo.Create(security)

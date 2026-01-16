@@ -29,19 +29,15 @@ func setupMarketIndexTestDB(t *testing.T) (*sql.DB, *sql.DB, *universe.HistoryDB
 	historyDB, err := sql.Open("sqlite3", historyFile.Name())
 	require.NoError(t, err)
 
-	// Create universe schema
+	// Create universe schema with JSON storage (migration 038)
 	_, err = universeDB.Exec(`
 		CREATE TABLE IF NOT EXISTS securities (
 			isin TEXT PRIMARY KEY,
 			symbol TEXT NOT NULL,
-			name TEXT NOT NULL,
-			product_type TEXT,
-			active INTEGER DEFAULT 1,
-			allow_buy INTEGER DEFAULT 1,
-			allow_sell INTEGER DEFAULT 1,
-			created_at INTEGER NOT NULL,
-			updated_at INTEGER NOT NULL
-		);
+			data TEXT NOT NULL,
+			last_synced INTEGER
+		) STRICT;
+		CREATE INDEX IF NOT EXISTS idx_securities_symbol ON securities(symbol);
 	`)
 	require.NoError(t, err)
 
@@ -78,8 +74,6 @@ func setupMarketIndexTestDB(t *testing.T) (*sql.DB, *sql.DB, *universe.HistoryDB
 
 // setupTestIndices creates valid Tradernet indices in the test database
 func setupTestIndices(t *testing.T, universeDB *sql.DB) {
-	now := time.Now().Unix()
-
 	// Create indices matching the known indices from index_discovery.go
 	indices := []struct {
 		symbol string
@@ -95,10 +89,9 @@ func setupTestIndices(t *testing.T, universeDB *sql.DB) {
 	for _, idx := range indices {
 		isin := "INDEX-" + idx.symbol
 		_, err := universeDB.Exec(`
-			INSERT OR REPLACE INTO securities
-			(isin, symbol, name, product_type, active, allow_buy, allow_sell, created_at, updated_at)
-			VALUES (?, ?, ?, 'INDEX', 1, 0, 0, ?, ?)
-		`, isin, idx.symbol, idx.name, now, now)
+			INSERT OR REPLACE INTO securities (isin, symbol, data, last_synced)
+			VALUES (?, ?, json_object('name', ?, 'product_type', 'INDEX'), NULL)
+		`, isin, idx.symbol, idx.name)
 		require.NoError(t, err)
 	}
 }
@@ -126,7 +119,9 @@ func setupTestPrices(t *testing.T, historyDB *sql.DB, symbols []string, days int
 
 func TestGetMarketReturns(t *testing.T) {
 	universeDB, historyDB, historyDBClient := setupMarketIndexTestDB(t)
-	service := NewMarketIndexService(universeDB, historyDBClient, nil, zerolog.Nop())
+	log := zerolog.Nop()
+	securityRepo := universe.NewSecurityRepository(universeDB, log)
+	service := NewMarketIndexService(securityRepo, historyDBClient, nil, log)
 
 	// Setup indices with valid Tradernet symbols
 	setupTestIndices(t, universeDB)
@@ -179,7 +174,9 @@ func TestGetMarketReturns(t *testing.T) {
 
 func TestGetMarketReturns_PartialRegionData(t *testing.T) {
 	universeDB, historyDB, historyDBClient := setupMarketIndexTestDB(t)
-	service := NewMarketIndexService(universeDB, historyDBClient, nil, zerolog.Nop())
+	log := zerolog.Nop()
+	securityRepo := universe.NewSecurityRepository(universeDB, log)
+	service := NewMarketIndexService(securityRepo, historyDBClient, nil, log)
 
 	// Setup indices
 	setupTestIndices(t, universeDB)
@@ -200,7 +197,9 @@ func TestGetMarketReturns_PartialRegionData(t *testing.T) {
 
 func TestGetReturnsForRegion(t *testing.T) {
 	universeDB, historyDB, historyDBClient := setupMarketIndexTestDB(t)
-	service := NewMarketIndexService(universeDB, historyDBClient, nil, zerolog.Nop())
+	log := zerolog.Nop()
+	securityRepo := universe.NewSecurityRepository(universeDB, log)
+	service := NewMarketIndexService(securityRepo, historyDBClient, nil, log)
 
 	// Setup indices
 	setupTestIndices(t, universeDB)
@@ -256,7 +255,9 @@ func TestGetReturnsForRegion(t *testing.T) {
 
 func TestGetReturnsForAllRegions(t *testing.T) {
 	universeDB, historyDB, historyDBClient := setupMarketIndexTestDB(t)
-	service := NewMarketIndexService(universeDB, historyDBClient, nil, zerolog.Nop())
+	log := zerolog.Nop()
+	securityRepo := universe.NewSecurityRepository(universeDB, log)
+	service := NewMarketIndexService(securityRepo, historyDBClient, nil, log)
 
 	// Setup indices
 	setupTestIndices(t, universeDB)
@@ -284,7 +285,9 @@ func TestGetReturnsForAllRegions(t *testing.T) {
 
 func TestGetPriceIndicesForRegion(t *testing.T) {
 	universeDB, _, historyDBClient := setupMarketIndexTestDB(t)
-	service := NewMarketIndexService(universeDB, historyDBClient, nil, zerolog.Nop())
+	log := zerolog.Nop()
+	securityRepo := universe.NewSecurityRepository(universeDB, log)
+	service := NewMarketIndexService(securityRepo, historyDBClient, nil, log)
 
 	t.Run("Returns correct indices for each region", func(t *testing.T) {
 		usIndices := service.GetPriceIndicesForRegion(RegionUS)

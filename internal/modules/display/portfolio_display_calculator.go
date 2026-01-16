@@ -12,28 +12,34 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// SecurityProvider provides read-only access to securities for ISIN lookups.
+type SecurityProvider interface {
+	GetISINBySymbol(symbol string) (string, error)
+}
+
 // PortfolioDisplayCalculator calculates portfolio display state from metrics
 type PortfolioDisplayCalculator struct {
-	universeDB      *sql.DB
-	portfolioDB     *sql.DB
-	historyDBClient universe.HistoryDBInterface
-	portfolioPerf   *PortfolioPerformanceService
-	log             zerolog.Logger
+	securityProvider SecurityProvider
+	portfolioDB      *sql.DB
+	historyDBClient  universe.HistoryDBInterface
+	portfolioPerf    *PortfolioPerformanceService
+	log              zerolog.Logger
 }
 
 // NewPortfolioDisplayCalculator creates a new portfolio display calculator
 func NewPortfolioDisplayCalculator(
-	universeDB, portfolioDB *sql.DB,
+	securityProvider SecurityProvider,
+	portfolioDB *sql.DB,
 	historyDBClient universe.HistoryDBInterface,
 	portfolioPerf *PortfolioPerformanceService,
 	log zerolog.Logger,
 ) *PortfolioDisplayCalculator {
 	return &PortfolioDisplayCalculator{
-		universeDB:      universeDB,
-		portfolioDB:     portfolioDB,
-		historyDBClient: historyDBClient,
-		portfolioPerf:   portfolioPerf,
-		log:             log.With().Str("service", "portfolio_display_calculator").Logger(),
+		securityProvider: securityProvider,
+		portfolioDB:      portfolioDB,
+		historyDBClient:  historyDBClient,
+		portfolioPerf:    portfolioPerf,
+		log:              log.With().Str("service", "portfolio_display_calculator").Logger(),
 	}
 }
 
@@ -260,19 +266,14 @@ func (c *PortfolioDisplayCalculator) getTotalPortfolioValue() (float64, error) {
 
 // getSecurityPerformance gets trailing 12mo CAGR for a security
 func (c *PortfolioDisplayCalculator) getSecurityPerformance(symbol string, target float64) (float64, error) {
-	// Get ISIN from security
-	var isin sql.NullString
-	err := c.universeDB.QueryRow("SELECT isin FROM securities WHERE symbol = ?", symbol).Scan(&isin)
+	// Get ISIN from security via provider
+	isin, err := c.securityProvider.GetISINBySymbol(symbol)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			c.log.Debug().Str("symbol", symbol).Msg("Security not found in universe")
-			return 0, nil
-		}
-		c.log.Warn().Err(err).Str("symbol", symbol).Msg("Failed to get ISIN for security")
+		c.log.Debug().Str("symbol", symbol).Msg("Security not found in universe")
 		return 0, nil
 	}
 
-	if !isin.Valid || isin.String == "" {
+	if isin == "" {
 		c.log.Debug().Str("symbol", symbol).Msg("Security has no ISIN, skipping performance calculation")
 		return 0, nil
 	}
@@ -281,12 +282,12 @@ func (c *PortfolioDisplayCalculator) getSecurityPerformance(symbol string, targe
 	securityPerf := NewSecurityPerformanceService(c.historyDBClient, c.log)
 
 	// Calculate trailing 12mo CAGR using ISIN
-	cagr, err := securityPerf.CalculateTrailing12MoCAGR(isin.String)
+	cagr, err := securityPerf.CalculateTrailing12MoCAGR(isin)
 	if err != nil {
 		c.log.Warn().
 			Err(err).
 			Str("symbol", symbol).
-			Str("isin", isin.String).
+			Str("isin", isin).
 			Msg("Failed to calculate security performance")
 		return 0, nil // Return 0 instead of error to avoid blocking display
 	}
@@ -411,16 +412,11 @@ func (c *PortfolioDisplayCalculator) mapRange(value, inMin, inMax, outMin, outMa
 
 // getSettingFloat retrieves a float setting with fallback to default
 func (c *PortfolioDisplayCalculator) getSettingFloat(key string, defaultVal float64) float64 {
-	var value float64
-	err := c.universeDB.QueryRow("SELECT value FROM settings WHERE key = ?", key).Scan(&value)
-	if err != nil {
-		// Fallback to SettingDefaults
-		if val, ok := settings.SettingDefaults[key]; ok {
-			if fval, ok := val.(float64); ok {
-				return fval
-			}
+	// Use SettingDefaults from settings package
+	if val, ok := settings.SettingDefaults[key]; ok {
+		if fval, ok := val.(float64); ok {
+			return fval
 		}
-		return defaultVal
 	}
-	return value
+	return defaultVal
 }

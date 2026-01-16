@@ -10,12 +10,18 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// SecurityProvider defines the interface for getting security information
+// Used to avoid circular dependencies with universe module
+type SecurityProvider interface {
+	GetISINBySymbol(symbol string) (string, error)
+}
+
 // DividendRepository handles dividend database operations
 // Faithful translation from Python: app/modules/dividends/database/dividend_repository.py
 type DividendRepository struct {
-	ledgerDB   *sql.DB // ledger.db - dividend_history table
-	universeDB *sql.DB // universe.db - securities table (for symbol->ISIN lookup, optional)
-	log        zerolog.Logger
+	ledgerDB         *sql.DB          // ledger.db - dividend_history table
+	securityProvider SecurityProvider // For symbol->ISIN lookup (optional for backwards compatibility)
+	log              zerolog.Logger
 }
 
 // dividendHistoryColumns is the list of columns for the dividend_history table
@@ -25,10 +31,11 @@ const dividendHistoryColumns = `id, symbol, isin, cash_flow_id, amount, currency
 reinvested, reinvested_at, reinvested_quantity, pending_bonus, bonus_cleared, cleared_at, created_at`
 
 // NewDividendRepository creates a new dividend repository
-func NewDividendRepository(ledgerDB *sql.DB, log zerolog.Logger) *DividendRepository {
+func NewDividendRepository(ledgerDB *sql.DB, securityProvider SecurityProvider, log zerolog.Logger) *DividendRepository {
 	return &DividendRepository{
-		ledgerDB: ledgerDB,
-		log:      log.With().Str("repo", "dividend").Logger(),
+		ledgerDB:         ledgerDB,
+		securityProvider: securityProvider,
+		log:              log.With().Str("repo", "dividend").Logger(),
 	}
 }
 
@@ -38,13 +45,11 @@ func (r *DividendRepository) Create(dividend *DividendRecord) error {
 	now := time.Now().Unix()
 
 	// Ensure ISIN is populated (required after migration)
-	// If not provided, try to lookup from securities table if universeDB is available
-	if dividend.ISIN == "" && r.universeDB != nil {
-		queryISIN := "SELECT isin FROM securities WHERE symbol = ?"
-		row := r.universeDB.QueryRow(queryISIN, strings.ToUpper(strings.TrimSpace(dividend.Symbol)))
-		var isin sql.NullString
-		if err := row.Scan(&isin); err == nil && isin.Valid {
-			dividend.ISIN = isin.String
+	// If not provided, try to lookup from securities via provider
+	if dividend.ISIN == "" && r.securityProvider != nil {
+		isin, err := r.securityProvider.GetISINBySymbol(dividend.Symbol)
+		if err == nil {
+			dividend.ISIN = isin
 		}
 	}
 
@@ -152,22 +157,15 @@ func (r *DividendRepository) ExistsForCashFlow(cashFlowID int) (bool, error) {
 }
 
 // GetBySymbol retrieves all dividend records for a symbol (helper method - looks up ISIN first)
-// This requires universeDB to lookup ISIN from securities table
+// This requires securityProvider to lookup ISIN from securities table
 // After migration: prefer GetByISIN for internal operations
 func (r *DividendRepository) GetBySymbol(symbol string) ([]DividendRecord, error) {
-	// If universeDB is available, lookup ISIN first, then query by ISIN
-	if r.universeDB != nil {
-		query := "SELECT isin FROM securities WHERE symbol = ?"
-		rows, err := r.universeDB.Query(query, strings.ToUpper(strings.TrimSpace(symbol)))
-		if err == nil {
-			defer rows.Close()
-			if rows.Next() {
-				var isin string
-				if err := rows.Scan(&isin); err == nil && isin != "" {
-					// Query by ISIN (preferred after migration)
-					return r.GetByISIN(isin)
-				}
-			}
+	// If security provider is available, lookup ISIN first, then query by ISIN
+	if r.securityProvider != nil {
+		isin, err := r.securityProvider.GetISINBySymbol(symbol)
+		if err == nil && isin != "" {
+			// Query by ISIN (preferred after migration)
+			return r.GetByISIN(isin)
 		}
 	}
 

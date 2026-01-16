@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/aristath/sentinel/internal/database"
+	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/aristath/sentinel/pkg/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -53,7 +54,7 @@ func TestHistoryCleanupJob_OrphanedData(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = universeDB.Conn().Exec(`
-			CREATE TABLE securities (isin TEXT PRIMARY KEY, symbol TEXT, name TEXT, active INTEGER)
+			CREATE TABLE securities (isin TEXT PRIMARY KEY, symbol TEXT NOT NULL, data TEXT NOT NULL, last_synced INTEGER) STRICT
 		`)
 		require.NoError(t, err)
 
@@ -73,7 +74,7 @@ func TestHistoryCleanupJob_OrphanedData(t *testing.T) {
 		require.NoError(t, err)
 
 		// Insert active symbol in universe (using ISIN as PRIMARY KEY)
-		_, err = universeDB.Conn().Exec("INSERT INTO securities (isin, symbol, name, active) VALUES ('US0378331005', 'AAPL', 'Apple Inc', 1)")
+		_, err = universeDB.Conn().Exec("INSERT INTO securities (isin, symbol, data, last_synced) VALUES ('US0378331005', 'AAPL', json_object('name', 'Apple Inc'), NULL)")
 		require.NoError(t, err)
 
 		// Insert price data for both active and orphaned symbols (using ISINs)
@@ -90,7 +91,8 @@ func TestHistoryCleanupJob_OrphanedData(t *testing.T) {
 		require.NoError(t, err)
 
 		// Create cleanup job
-		job := NewHistoryCleanupJob(historyDB, portfolioDB, universeDB, log)
+		securityRepo := universe.NewSecurityRepository(universeDB.Conn(), log)
+		job := NewHistoryCleanupJob(historyDB, portfolioDB, securityRepo, log)
 
 		// Run cleanup
 		err = job.Run()
@@ -157,12 +159,12 @@ func TestHistoryCleanupJob_OrphanedData(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = universeDB.Conn().Exec(`
-			CREATE TABLE securities (isin TEXT PRIMARY KEY, symbol TEXT, name TEXT, active INTEGER)
+			CREATE TABLE securities (isin TEXT PRIMARY KEY, symbol TEXT NOT NULL, data TEXT NOT NULL, last_synced INTEGER) STRICT
 		`)
 		require.NoError(t, err)
 
 		// Insert active symbols in universe (using ISIN as PRIMARY KEY)
-		_, err = universeDB.Conn().Exec("INSERT INTO securities (isin, symbol, name, active) VALUES ('US0378331005', 'AAPL', 'Apple Inc', 1), ('US02079K3059', 'GOOGL', 'Google', 1)")
+		_, err = universeDB.Conn().Exec("INSERT INTO securities (isin, symbol, data, last_synced) VALUES ('US0378331005', 'AAPL', json_object('name', 'Apple Inc'), NULL), ('US02079K3059', 'GOOGL', json_object('name', 'Google'), NULL)")
 		require.NoError(t, err)
 
 		// Insert price data for all symbols (using ISINs)
@@ -173,7 +175,8 @@ func TestHistoryCleanupJob_OrphanedData(t *testing.T) {
 		require.NoError(t, err)
 
 		// Create cleanup job
-		job := NewHistoryCleanupJob(historyDB, portfolioDB, universeDB, log)
+		securityRepo := universe.NewSecurityRepository(universeDB.Conn(), log)
+		job := NewHistoryCleanupJob(historyDB, portfolioDB, securityRepo, log)
 
 		// Run cleanup
 		err = job.Run()
@@ -217,6 +220,7 @@ func TestHistoryCleanupJob_Name(t *testing.T) {
 	require.NoError(t, err)
 	defer universeDB.Close()
 
-	job := NewHistoryCleanupJob(historyDB, portfolioDB, universeDB, log)
+	securityRepo := universe.NewSecurityRepository(universeDB.Conn(), log)
+	job := NewHistoryCleanupJob(historyDB, portfolioDB, securityRepo, log)
 	assert.Equal(t, "history_cleanup", job.Name())
 }

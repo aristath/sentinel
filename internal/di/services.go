@@ -354,13 +354,14 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 	// ==========================================
 
 	// Opportunities service (with unified calculators - tag-based optimization controlled by config)
-	// Create adapter to bridge between universe.SecurityRepository and opportunities.SecurityRepository interface
-	securityRepoAdapter := opportunities.NewSecurityRepositoryAdapter(container.SecurityRepo)
-	tagFilter := opportunities.NewTagBasedFilter(securityRepoAdapter, log)
-	container.OpportunitiesService = opportunities.NewService(tagFilter, securityRepoAdapter, log)
+	// After removing domain.Security: universe.SecurityRepository directly implements opportunities.SecurityRepository
+	tagFilter := opportunities.NewTagBasedFilter(container.SecurityRepo, log)
+	container.OpportunitiesService = opportunities.NewService(tagFilter, container.SecurityRepo, log)
 
 	// Risk builder (needed for sequences service)
-	container.RiskBuilder = optimization.NewRiskModelBuilder(container.HistoryDBClient, container.UniverseDB.Conn(), container.ConfigDB.Conn(), log)
+	// Use TradingSecurityProviderAdapter for ISIN lookups
+	optimizationSecurityProvider := NewTradingSecurityProviderAdapter(container.SecurityRepo)
+	container.RiskBuilder = optimization.NewRiskModelBuilder(container.HistoryDBClient, optimizationSecurityProvider, container.ConfigDB.Conn(), log)
 
 	// Constraint enforcer for sequences service
 	// Uses security lookup to check per-security allow_buy/allow_sell constraints
@@ -462,7 +463,7 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 	// Returns calculator
 	container.ReturnsCalc = optimization.NewReturnsCalculator(
 		container.PortfolioDB.Conn(),
-		container.UniverseDB.Conn(),
+		optimizationSecurityProvider,
 		log,
 	)
 
@@ -584,7 +585,6 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 
 	// Health calculator (calculates portfolio health scores)
 	container.HealthCalculator = display.NewHealthCalculator(
-		container.UniverseDB.Conn(),
 		container.PortfolioDB.Conn(),
 		container.HistoryDBClient,
 		container.ConfigDB.Conn(),
@@ -640,8 +640,10 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 	// ==========================================
 
 	// Market index service for market-wide regime detection
+	// Use TradingSecurityProviderAdapter for ISIN lookups
+	marketIndexSecurityProvider := NewTradingSecurityProviderAdapter(container.SecurityRepo)
 	container.MarketIndexService = market_regime.NewMarketIndexService(
-		container.UniverseDB.Conn(),
+		marketIndexSecurityProvider,
 		container.HistoryDBClient,
 		container.BrokerClient,
 		log,
@@ -652,7 +654,8 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 
 	// Index sync service - ensures indices exist in both config DB and universe DB
 	container.IndexSyncService = market_regime.NewIndexSyncService(
-		container.UniverseDB.Conn(),
+		container.SecurityRepo,
+		container.OverrideRepo,
 		container.ConfigDB.Conn(),
 		log,
 	)

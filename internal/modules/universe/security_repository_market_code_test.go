@@ -3,7 +3,6 @@ package universe
 import (
 	"database/sql"
 	"testing"
-	"time"
 
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
@@ -12,41 +11,24 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// setupTestDBWithMarketCode creates a test database with market_code column
+// setupTestDBWithMarketCode creates a test database with JSON storage schema
 func setupTestDBWithMarketCode(t *testing.T) *sql.DB {
 	db, err := sql.Open("sqlite3", ":memory:")
 	require.NoError(t, err)
 
-	// Create securities table with market_code column (new schema)
+	// Create securities table with JSON storage (migration 038 schema)
 	_, err = db.Exec(`
 		CREATE TABLE securities (
 			isin TEXT PRIMARY KEY,
 			symbol TEXT NOT NULL,
-			name TEXT NOT NULL,
-			product_type TEXT,
-			industry TEXT,
-			geography TEXT,
-			fullExchangeName TEXT,
-			market_code TEXT,
-			priority_multiplier REAL DEFAULT 1.0,
-			min_lot INTEGER DEFAULT 1,
-			active INTEGER DEFAULT 1,
-			allow_buy INTEGER DEFAULT 1,
-			allow_sell INTEGER DEFAULT 1,
-			currency TEXT,
-			last_synced INTEGER,
-			min_portfolio_target REAL,
-			max_portfolio_target REAL,
-			created_at INTEGER NOT NULL,
-			updated_at INTEGER NOT NULL
-		)
+			data TEXT NOT NULL,
+			last_synced INTEGER
+		) STRICT
 	`)
 	require.NoError(t, err)
 
 	// Create indices
 	_, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_securities_symbol ON securities(symbol)`)
-	require.NoError(t, err)
-	_, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_securities_market_code ON securities(market_code)`)
 	require.NoError(t, err)
 
 	// Create tags table (needed for scanSecurity)
@@ -87,7 +69,6 @@ func TestCreate_WithMarketCode(t *testing.T) {
 		Symbol:     "AAPL.US",
 		Name:       "Apple Inc.",
 		MarketCode: "FIX",
-		Active:     true,
 		AllowBuy:   true,
 		AllowSell:  true,
 	}
@@ -110,11 +91,10 @@ func TestGetByISIN_ReturnsMarketCode(t *testing.T) {
 	repo := NewSecurityRepository(db, log)
 
 	// Insert test data with market_code
-	testDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, market_code, created_at, updated_at)
-		VALUES ('US0378331005', 'AAPL.US', 'Apple Inc.', 'FIX', ?, ?)
-	`, testDate.Unix(), testDate.Unix())
+		INSERT INTO securities (isin, symbol, data, last_synced)
+		VALUES ('US0378331005', 'AAPL.US', json_object('name', 'Apple Inc.', 'market_code', 'FIX'), NULL)
+	`)
 	require.NoError(t, err)
 
 	// Execute
@@ -134,11 +114,10 @@ func TestUpdate_MarketCode(t *testing.T) {
 	repo := NewSecurityRepository(db, log)
 
 	// Insert test data
-	testDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, market_code, created_at, updated_at)
-		VALUES ('US0378331005', 'AAPL.US', 'Apple Inc.', 'FIX', ?, ?)
-	`, testDate.Unix(), testDate.Unix())
+		INSERT INTO securities (isin, symbol, data, last_synced)
+		VALUES ('US0378331005', 'AAPL.US', json_object('name', 'Apple Inc.', 'market_code', 'FIX'), NULL)
+	`)
 	require.NoError(t, err)
 
 	// Update market_code
@@ -162,26 +141,21 @@ func TestGetByMarketCode(t *testing.T) {
 	repo := NewSecurityRepository(db, log)
 
 	// Insert test data with different market codes
-	testDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, market_code, active, created_at, updated_at) VALUES
-		('US0378331005', 'AAPL.US', 'Apple Inc.', 'FIX', 1, ?, ?),
-		('US5949181045', 'MSFT.US', 'Microsoft', 'FIX', 1, ?, ?),
-		('DE0007164600', 'SAP.EU', 'SAP SE', 'EU', 1, ?, ?),
-		('HK0000069689', 'BYD.AS', 'BYD Company', 'HKEX', 1, ?, ?),
-		('US0000000001', 'INACTIVE.US', 'Inactive', 'FIX', 0, ?, ?)
-	`, testDate.Unix(), testDate.Unix(), testDate.Unix(), testDate.Unix(),
-		testDate.Unix(), testDate.Unix(), testDate.Unix(), testDate.Unix(),
-		testDate.Unix(), testDate.Unix())
+		INSERT INTO securities (isin, symbol, data, last_synced) VALUES
+		('US0378331005', 'AAPL.US', json_object('name', 'Apple Inc.', 'market_code', 'FIX'), NULL),
+		('US5949181045', 'MSFT.US', json_object('name', 'Microsoft', 'market_code', 'FIX'), NULL),
+		('DE0007164600', 'SAP.EU', json_object('name', 'SAP SE', 'market_code', 'EU'), NULL),
+		('HK0000069689', 'BYD.AS', json_object('name', 'BYD Company', 'market_code', 'HKEX'), NULL)
+	`)
 	require.NoError(t, err)
 
 	// Test GetByMarketCode for FIX (US markets)
 	fixSecurities, err := repo.GetByMarketCode("FIX")
 	require.NoError(t, err)
-	assert.Len(t, fixSecurities, 2) // Only active ones
+	assert.Len(t, fixSecurities, 2) // AAPL and MSFT
 	for _, sec := range fixSecurities {
 		assert.Equal(t, "FIX", sec.MarketCode)
-		assert.True(t, sec.Active)
 	}
 
 	// Test GetByMarketCode for EU
@@ -210,11 +184,10 @@ func TestGetAllActive_IncludesMarketCode(t *testing.T) {
 	repo := NewSecurityRepository(db, log)
 
 	// Insert test data
-	testDate := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, market_code, active, created_at, updated_at)
-		VALUES ('US0378331005', 'AAPL.US', 'Apple Inc.', 'FIX', 1, ?, ?)
-	`, testDate.Unix(), testDate.Unix())
+		INSERT INTO securities (isin, symbol, data, last_synced)
+		VALUES ('US0378331005', 'AAPL.US', json_object('name', 'Apple Inc.', 'market_code', 'FIX'), NULL)
+	`)
 	require.NoError(t, err)
 
 	// Execute
@@ -236,7 +209,6 @@ func TestMarketCode_EmptyIsValid(t *testing.T) {
 		ISIN:      "US0378331005",
 		Symbol:    "AAPL.US",
 		Name:      "Apple Inc.",
-		Active:    true,
 		AllowBuy:  true,
 		AllowSell: true,
 		// MarketCode intentionally empty

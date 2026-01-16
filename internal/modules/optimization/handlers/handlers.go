@@ -14,6 +14,7 @@ import (
 	"github.com/aristath/sentinel/internal/modules/dividends"
 	"github.com/aristath/sentinel/internal/modules/optimization"
 	planningrepo "github.com/aristath/sentinel/internal/modules/planning/repository"
+	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/aristath/sentinel/internal/services"
 	"github.com/rs/zerolog"
 )
@@ -29,6 +30,7 @@ type OptimizationCache struct {
 type Handler struct {
 	service                 *optimization.OptimizerService
 	db                      *sql.DB
+	securityRepo            universe.SecurityRepositoryInterface
 	brokerClient            domain.BrokerClient
 	currencyExchangeService domain.CurrencyExchangeServiceInterface
 	dividendRepo            *dividends.DividendRepository
@@ -46,6 +48,7 @@ type Handler struct {
 func NewHandler(
 	service *optimization.OptimizerService,
 	db *sql.DB,
+	securityRepo universe.SecurityRepositoryInterface,
 	brokerClient domain.BrokerClient,
 	currencyExchangeService *services.CurrencyExchangeService,
 	dividendRepo *dividends.DividendRepository,
@@ -56,6 +59,7 @@ func NewHandler(
 	return &Handler{
 		service:                 service,
 		db:                      db,
+		securityRepo:            securityRepo,
 		brokerClient:            brokerClient,
 		currencyExchangeService: currencyExchangeService,
 		dividendRepo:            dividendRepo,
@@ -258,54 +262,33 @@ func (h *Handler) getSettings() (optimization.Settings, error) {
 }
 
 func (h *Handler) getSecurities() ([]optimization.Security, error) {
-	// Note: allow_buy, allow_sell, min_lot, priority_multiplier are now in security_overrides table
-	// Using defaults here: allow_buy=true, allow_sell=true, min_lot=1, priority_multiplier=1.0
-	query := `
-		SELECT
-			symbol,
-			COALESCE(isin, '') as isin,
-			COALESCE(product_type, 'UNKNOWN') as product_type,
-			COALESCE(geography, 'OTHER') as geography,
-			COALESCE(industry, 'OTHER') as industry,
-			COALESCE(min_portfolio_target, 0.0) as min_portfolio_target,
-			COALESCE(max_portfolio_target, 0.0) as max_portfolio_target
-		FROM securities
-		WHERE active = 1
-	`
-
-	rows, err := h.db.Query(query)
+	// Get securities from repository
+	secData, err := h.securityRepo.GetSecuritiesForOptimization()
 	if err != nil {
-		return nil, fmt.Errorf("failed to query securities: %w", err)
+		return nil, fmt.Errorf("failed to get securities for optimization: %w", err)
 	}
-	defer rows.Close()
 
-	securities := make([]optimization.Security, 0)
-	for rows.Next() {
-		var sec optimization.Security
-
-		err := rows.Scan(
-			&sec.Symbol,
-			&sec.ISIN,
-			&sec.ProductType,
-			&sec.Geography,
-			&sec.Industry,
-			&sec.MinPortfolioTarget,
-			&sec.MaxPortfolioTarget,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan security: %w", err)
+	// Convert to optimization.Security type
+	securities := make([]optimization.Security, 0, len(secData))
+	for _, data := range secData {
+		sec := optimization.Security{
+			Symbol:             data.Symbol,
+			ISIN:               data.ISIN,
+			ProductType:        data.ProductType,
+			Geography:          data.Geography,
+			Industry:           data.Industry,
+			MinPortfolioTarget: data.MinPortfolioTarget,
+			MaxPortfolioTarget: data.MaxPortfolioTarget,
+			// Apply defaults for fields now stored in security_overrides
+			AllowBuy:           true,
+			AllowSell:          true,
+			MinLot:             1,
+			PriorityMultiplier: 1.0,
 		}
-
-		// Apply defaults for fields now stored in security_overrides
-		sec.AllowBuy = true
-		sec.AllowSell = true
-		sec.MinLot = 1
-		sec.PriorityMultiplier = 1.0
-
 		securities = append(securities, sec)
 	}
 
-	return securities, rows.Err()
+	return securities, nil
 }
 
 func (h *Handler) getPositions() (map[string]optimization.Position, error) {

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"testing"
 
+	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,26 +20,19 @@ func setupUniverseTestDB(t *testing.T) *sql.DB {
 	_, err = db.Exec("PRAGMA foreign_keys = ON")
 	require.NoError(t, err)
 
-	// Create securities table matching universe schema (after migration 036)
+	// Create securities table with JSON storage (migration 038 schema)
 	_, err = db.Exec(`
 		CREATE TABLE securities (
 			isin TEXT PRIMARY KEY,
 			symbol TEXT NOT NULL,
-			name TEXT NOT NULL,
-			product_type TEXT,
-			industry TEXT,
-			geography TEXT,
-			fullExchangeName TEXT,
-			market_code TEXT,
-			active INTEGER DEFAULT 1,
-			currency TEXT,
-			last_synced INTEGER,
-			min_portfolio_target REAL,
-			max_portfolio_target REAL,
-			created_at INTEGER NOT NULL,
-			updated_at INTEGER NOT NULL
-		)
+			data TEXT NOT NULL,
+			last_synced INTEGER
+		) STRICT
 	`)
+	require.NoError(t, err)
+
+	// Create index on symbol for lookups
+	_, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_securities_symbol ON securities(symbol)`)
 	require.NoError(t, err)
 
 	// Create security_overrides table (EAV pattern for user customizations)
@@ -63,7 +57,9 @@ func TestIndexSyncService_SyncIndicesToSecurities(t *testing.T) {
 	defer universeDB.Close()
 
 	log := zerolog.New(nil).Level(zerolog.Disabled)
-	service := NewIndexSyncService(universeDB, nil, log)
+	securityRepo := universe.NewSecurityRepository(universeDB, log)
+	overrideRepo := universe.NewOverrideRepository(universeDB, log)
+	service := NewIndexSyncService(securityRepo, overrideRepo, nil, log)
 
 	// Execute
 	err := service.SyncIndicesToSecurities()
@@ -71,17 +67,20 @@ func TestIndexSyncService_SyncIndicesToSecurities(t *testing.T) {
 
 	// Verify indices were created
 	var count int
-	err = universeDB.QueryRow(`SELECT COUNT(*) FROM securities WHERE product_type = 'INDEX'`).Scan(&count)
+	err = universeDB.QueryRow(`SELECT COUNT(*) FROM securities WHERE json_extract(data, '$.product_type') = 'INDEX'`).Scan(&count)
 	require.NoError(t, err)
 
 	// Should have all known indices
 	knownCount := len(GetKnownIndices())
 	assert.Equal(t, knownCount, count, "All known indices should be in securities table")
 
-	// Verify specific index
+	// Verify specific index using JSON extraction
 	var isin, symbol, name, productType, marketCode string
 	err = universeDB.QueryRow(`
-		SELECT isin, symbol, name, product_type, market_code
+		SELECT isin, symbol,
+		       json_extract(data, '$.name') as name,
+		       json_extract(data, '$.product_type') as product_type,
+		       json_extract(data, '$.market_code') as market_code
 		FROM securities WHERE symbol = 'SP500.IDX'
 	`).Scan(&isin, &symbol, &name, &productType, &marketCode)
 	require.NoError(t, err)
@@ -112,7 +111,9 @@ func TestIndexSyncService_Idempotent(t *testing.T) {
 	defer universeDB.Close()
 
 	log := zerolog.New(nil).Level(zerolog.Disabled)
-	service := NewIndexSyncService(universeDB, nil, log)
+	securityRepo := universe.NewSecurityRepository(universeDB, log)
+	overrideRepo := universe.NewOverrideRepository(universeDB, log)
+	service := NewIndexSyncService(securityRepo, overrideRepo, nil, log)
 
 	// Execute twice
 	err := service.SyncIndicesToSecurities()
@@ -123,7 +124,7 @@ func TestIndexSyncService_Idempotent(t *testing.T) {
 
 	// Verify no duplicates
 	var count int
-	err = universeDB.QueryRow(`SELECT COUNT(*) FROM securities WHERE product_type = 'INDEX'`).Scan(&count)
+	err = universeDB.QueryRow(`SELECT COUNT(*) FROM securities WHERE json_extract(data, '$.product_type') = 'INDEX'`).Scan(&count)
 	require.NoError(t, err)
 
 	knownCount := len(GetKnownIndices())
@@ -135,16 +136,18 @@ func TestIndexSyncService_EnsureIndexExists(t *testing.T) {
 	defer universeDB.Close()
 
 	log := zerolog.New(nil).Level(zerolog.Disabled)
-	service := NewIndexSyncService(universeDB, nil, log)
+	securityRepo := universe.NewSecurityRepository(universeDB, log)
+	overrideRepo := universe.NewOverrideRepository(universeDB, log)
+	service := NewIndexSyncService(securityRepo, overrideRepo, nil, log)
 
 	// Test creating a new index
 	isin, err := service.EnsureIndexExists("DAX.IDX")
 	require.NoError(t, err)
 	assert.Equal(t, "INDEX-DAX.IDX", isin)
 
-	// Verify it was created
+	// Verify it was created (using JSON extraction for name field after migration 038)
 	var name string
-	err = universeDB.QueryRow(`SELECT name FROM securities WHERE isin = ?`, isin).Scan(&name)
+	err = universeDB.QueryRow(`SELECT json_extract(data, '$.name') FROM securities WHERE isin = ?`, isin).Scan(&name)
 	require.NoError(t, err)
 	assert.Equal(t, "DAX (Germany)", name)
 
@@ -165,7 +168,9 @@ func TestIndexSyncService_EnsureIndexExists_UnknownSymbol(t *testing.T) {
 	defer universeDB.Close()
 
 	log := zerolog.New(nil).Level(zerolog.Disabled)
-	service := NewIndexSyncService(universeDB, nil, log)
+	securityRepo := universe.NewSecurityRepository(universeDB, log)
+	overrideRepo := universe.NewOverrideRepository(universeDB, log)
+	service := NewIndexSyncService(securityRepo, overrideRepo, nil, log)
 
 	// Test with unknown symbol
 	_, err := service.EnsureIndexExists("UNKNOWN.IDX")
@@ -175,7 +180,7 @@ func TestIndexSyncService_EnsureIndexExists_UnknownSymbol(t *testing.T) {
 
 func TestIndexSyncService_GetIndicesWithISIN(t *testing.T) {
 	log := zerolog.New(nil).Level(zerolog.Disabled)
-	service := NewIndexSyncService(nil, nil, log)
+	service := NewIndexSyncService(nil, nil, nil, log)
 
 	indices := service.GetIndicesWithISIN()
 
@@ -203,7 +208,9 @@ func TestIndexSyncService_SyncAll(t *testing.T) {
 	defer configDB.Close()
 
 	log := zerolog.New(nil).Level(zerolog.Disabled)
-	service := NewIndexSyncService(universeDB, configDB, log)
+	securityRepo := universe.NewSecurityRepository(universeDB, log)
+	overrideRepo := universe.NewOverrideRepository(universeDB, log)
+	service := NewIndexSyncService(securityRepo, overrideRepo, configDB, log)
 
 	// Execute
 	err := service.SyncAll()
@@ -211,7 +218,7 @@ func TestIndexSyncService_SyncAll(t *testing.T) {
 
 	// Verify indices in securities table
 	var secCount int
-	err = universeDB.QueryRow(`SELECT COUNT(*) FROM securities WHERE product_type = 'INDEX'`).Scan(&secCount)
+	err = universeDB.QueryRow(`SELECT COUNT(*) FROM securities WHERE json_extract(data, '$.product_type') = 'INDEX'`).Scan(&secCount)
 	require.NoError(t, err)
 	assert.Greater(t, secCount, 0, "Should have indices in securities table")
 
@@ -227,26 +234,28 @@ func TestIndexSyncService_RegionMapping(t *testing.T) {
 	defer universeDB.Close()
 
 	log := zerolog.New(nil).Level(zerolog.Disabled)
-	service := NewIndexSyncService(universeDB, nil, log)
+	securityRepo := universe.NewSecurityRepository(universeDB, log)
+	overrideRepo := universe.NewOverrideRepository(universeDB, log)
+	service := NewIndexSyncService(securityRepo, overrideRepo, nil, log)
 
 	err := service.SyncIndicesToSecurities()
 	require.NoError(t, err)
 
 	// Verify US indices have FIX market code
 	var usMarketCode string
-	err = universeDB.QueryRow(`SELECT market_code FROM securities WHERE symbol = 'SP500.IDX'`).Scan(&usMarketCode)
+	err = universeDB.QueryRow(`SELECT json_extract(data, '$.market_code') FROM securities WHERE symbol = 'SP500.IDX'`).Scan(&usMarketCode)
 	require.NoError(t, err)
 	assert.Equal(t, "FIX", usMarketCode)
 
 	// Verify EU indices have EU market code
 	var euMarketCode string
-	err = universeDB.QueryRow(`SELECT market_code FROM securities WHERE symbol = 'DAX.IDX'`).Scan(&euMarketCode)
+	err = universeDB.QueryRow(`SELECT json_extract(data, '$.market_code') FROM securities WHERE symbol = 'DAX.IDX'`).Scan(&euMarketCode)
 	require.NoError(t, err)
 	assert.Equal(t, "EU", euMarketCode)
 
 	// Verify Asia indices have HKEX market code
 	var asiaMarketCode string
-	err = universeDB.QueryRow(`SELECT market_code FROM securities WHERE symbol = 'HSI.IDX'`).Scan(&asiaMarketCode)
+	err = universeDB.QueryRow(`SELECT json_extract(data, '$.market_code') FROM securities WHERE symbol = 'HSI.IDX'`).Scan(&asiaMarketCode)
 	require.NoError(t, err)
 	assert.Equal(t, "HKEX", asiaMarketCode)
 }

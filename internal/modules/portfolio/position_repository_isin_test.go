@@ -48,10 +48,9 @@ func setupTestDBForPositionsWithISIN(t *testing.T) (*sql.DB, *sql.DB) {
 		CREATE TABLE securities (
 			isin TEXT PRIMARY KEY,
 			symbol TEXT NOT NULL,
-			name TEXT NOT NULL,
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		)
+			data TEXT NOT NULL,
+			last_synced INTEGER
+		) STRICT
 	`)
 	require.NoError(t, err)
 
@@ -105,10 +104,10 @@ func TestPositionRepository_GetBySymbol_HelperMethod(t *testing.T) {
 	defer portfolioDB.Close()
 	defer universeDB.Close()
 
-	// Insert security
+	// Insert security (JSON storage - migration 038)
 	_, err := universeDB.Exec(`
-		INSERT INTO securities (isin, symbol, name, created_at, updated_at)
-		VALUES ('US0378331005', 'AAPL.US', 'Apple Inc.', '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')
+		INSERT INTO securities (isin, symbol, data, last_synced)
+		VALUES ('US0378331005', 'AAPL.US', json_object('name', 'Apple Inc.'), NULL)
 	`)
 	require.NoError(t, err)
 
@@ -120,7 +119,8 @@ func TestPositionRepository_GetBySymbol_HelperMethod(t *testing.T) {
 	require.NoError(t, err)
 
 	log := zerolog.New(nil).Level(zerolog.Disabled)
-	repo := NewPositionRepository(portfolioDB, universeDB, nil, log)
+	securityProvider := newTestSecurityProvider(universeDB, log)
+	repo := NewPositionRepository(portfolioDB, universeDB, securityProvider, log)
 
 	// GetBySymbol should lookup ISIN first, then query by ISIN
 	position, err := repo.GetBySymbol("AAPL.US")

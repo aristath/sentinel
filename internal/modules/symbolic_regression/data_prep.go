@@ -11,13 +11,20 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// SecurityProvider provides read-only access to securities for ISIN/symbol conversions and listing.
+type SecurityProvider interface {
+	GetISINBySymbol(symbol string) (string, error)
+	GetSymbolByISIN(isin string) (string, error)
+	GetAll() ([]SecurityInfo, error)
+}
+
 // DataPrep extracts historical training examples for symbolic regression
 type DataPrep struct {
-	historyDB   universe.HistoryDBInterface // history.db - filtered daily prices
-	portfolioDB *sql.DB                     // portfolio.db - scores, calculated_metrics
-	configDB    *sql.DB                     // config.db - market_regime_history
-	universeDB  *sql.DB                     // universe.db - securities
-	log         zerolog.Logger
+	historyDB        universe.HistoryDBInterface // history.db - filtered daily prices
+	portfolioDB      *sql.DB                     // portfolio.db - scores, calculated_metrics
+	configDB         *sql.DB                     // config.db - market_regime_history
+	securityProvider SecurityProvider            // For ISIN/symbol lookups
+	log              zerolog.Logger
 }
 
 // NewDataPrep creates a new data preparation service
@@ -25,7 +32,7 @@ func NewDataPrep(
 	historyDB universe.HistoryDBInterface,
 	portfolioDB *sql.DB,
 	configDB *sql.DB,
-	universeDB *sql.DB,
+	securityProvider SecurityProvider,
 	log zerolog.Logger,
 ) *DataPrep {
 	var logger zerolog.Logger
@@ -36,11 +43,11 @@ func NewDataPrep(
 	}
 
 	return &DataPrep{
-		historyDB:   historyDB,
-		portfolioDB: portfolioDB,
-		configDB:    configDB,
-		universeDB:  universeDB,
-		log:         logger,
+		historyDB:        historyDB,
+		portfolioDB:      portfolioDB,
+		configDB:         configDB,
+		securityProvider: securityProvider,
+		log:              logger,
 	}
 }
 
@@ -140,30 +147,9 @@ type SecurityInfo struct {
 	ProductType string
 }
 
-// getAllSecurities retrieves all active securities from universe database
+// getAllSecurities retrieves all securities from security provider
 func (dp *DataPrep) getAllSecurities() ([]SecurityInfo, error) {
-	query := `
-		SELECT isin, symbol, product_type
-		FROM securities
-	`
-
-	rows, err := dp.universeDB.Query(query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query securities: %w", err)
-	}
-	defer rows.Close()
-
-	var securities []SecurityInfo
-	for rows.Next() {
-		var sec SecurityInfo
-		err := rows.Scan(&sec.ISIN, &sec.Symbol, &sec.ProductType)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan security: %w", err)
-		}
-		securities = append(securities, sec)
-	}
-
-	return securities, nil
+	return dp.securityProvider.GetAll()
 }
 
 // hasSufficientHistory checks if security has data at both training and target dates
@@ -287,9 +273,8 @@ func (dp *DataPrep) extractInputs(isin string, date time.Time) (*TrainingInputs,
 	}
 
 	// Extract metrics from calculated_metrics (need symbol, not isin)
-	// Get symbol from universe DB
-	var symbol string
-	err = dp.universeDB.QueryRow("SELECT symbol FROM securities WHERE isin = ?", isin).Scan(&symbol)
+	// Get symbol from security provider
+	symbol, err := dp.securityProvider.GetSymbolByISIN(isin)
 	if err != nil {
 		dp.log.Debug().Str("isin", isin).Err(err).Msg("Failed to get symbol, skipping metrics")
 		symbol = "" // Will cause metrics extraction to fail gracefully
@@ -368,21 +353,14 @@ func (dp *DataPrep) extractMetrics(symbol string, date time.Time) (map[string]fl
 		return make(map[string]float64), nil // Return empty map if no symbol
 	}
 
-	// Lookup ISIN from symbol (if universeDB available)
-	var isin string
-	if dp.universeDB != nil {
-		err := dp.universeDB.QueryRow("SELECT isin FROM securities WHERE symbol = ?", symbol).Scan(&isin)
-		if err != nil {
-			// Symbol not found or no ISIN - return empty map gracefully
-			dp.log.Debug().Str("symbol", symbol).Err(err).Msg("Failed to lookup ISIN for symbol")
-			return make(map[string]float64), nil
-		}
-		if isin == "" {
-			return make(map[string]float64), nil
-		}
-	} else {
-		// No universeDB - cannot lookup ISIN, return empty map
-		dp.log.Debug().Str("symbol", symbol).Msg("UniverseDB not available, cannot lookup ISIN")
+	// Lookup ISIN from symbol via security provider
+	isin, err := dp.securityProvider.GetISINBySymbol(symbol)
+	if err != nil {
+		// Symbol not found or no ISIN - return empty map gracefully
+		dp.log.Debug().Str("symbol", symbol).Err(err).Msg("Failed to lookup ISIN for symbol")
+		return make(map[string]float64), nil
+	}
+	if isin == "" {
 		return make(map[string]float64), nil
 	}
 

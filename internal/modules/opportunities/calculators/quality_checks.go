@@ -69,7 +69,7 @@ func CheckQualityGates(
 		// Look up security by ISIN - O(1) lookup
 		if sec, ok := ctx.StocksByISIN[isin]; ok {
 			// Dividend yield would come from security if it had that field
-			// Currently domain.Security doesn't have DividendYield field
+			// Currently universe.Security doesn't have DividendYield field
 			_ = sec // Use sec if DividendYield field is added later
 			dividendYield = 0.0
 		}

@@ -12,6 +12,21 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// mockScoreSecurityProvider implements ScoreSecurityProvider for testing
+type mockScoreSecurityProvider struct {
+	universeDB *sql.DB
+}
+
+func (m *mockScoreSecurityProvider) GetISINBySymbol(symbol string) (string, error) {
+	var isin string
+	query := `SELECT isin FROM securities WHERE symbol = ?`
+	err := m.universeDB.QueryRow(query, symbol).Scan(&isin)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return isin, err
+}
+
 func setupTestDBForScoresWithISIN(t *testing.T) *sql.DB {
 	db, err := sql.Open("sqlite3", ":memory:")
 	require.NoError(t, err)
@@ -177,8 +192,13 @@ func TestScoreRepository_GetBySymbol_HelperMethod(t *testing.T) {
 	`, testDate.Unix())
 	require.NoError(t, err)
 
+	// Create mock security provider for testing
+	mockSecurityProvider := &mockScoreSecurityProvider{
+		universeDB: universeDB,
+	}
+
 	log := zerolog.New(nil).Level(zerolog.Disabled)
-	repo := NewScoreRepositoryWithUniverse(portfolioDB, universeDB, log)
+	repo := NewScoreRepositoryWithUniverse(portfolioDB, mockSecurityProvider, log)
 
 	// GetBySymbol should lookup ISIN first, then query by ISIN
 	score, err := repo.GetBySymbol("AAPL.US")

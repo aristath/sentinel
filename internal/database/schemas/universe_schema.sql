@@ -3,32 +3,17 @@
 -- This schema represents the final state after all migrations
 
 -- Securities table: investment universe (ISIN as PRIMARY KEY)
--- geography and industry support comma-separated values for multiple assignments
+-- Migration 038: JSON storage - all security data stored as JSON blob in 'data' column
 -- User-configurable fields (allow_buy, allow_sell, priority_multiplier) are stored in security_overrides
+-- No soft delete (active column removed) - only hard delete supported
 CREATE TABLE IF NOT EXISTS securities (
     isin TEXT PRIMARY KEY,
     symbol TEXT NOT NULL,
-    name TEXT NOT NULL,
-    product_type TEXT,
-    industry TEXT,                     -- Comma-separated for multiple industries (e.g., "Technology, Finance")
-    geography TEXT,                    -- Comma-separated for multiple geographies (e.g., "EU, US")
-    fullExchangeName TEXT,
-    market_code TEXT,                  -- Tradernet market code (e.g., "FIX", "EU", "HKEX") for region mapping
-    active INTEGER DEFAULT 1,          -- Boolean: 1 = active, 0 = inactive (soft delete)
-    currency TEXT,
-    last_synced INTEGER,               -- Unix timestamp (seconds since epoch)
-    min_portfolio_target REAL,
-    max_portfolio_target REAL,
-    min_lot INTEGER DEFAULT 1,         -- Minimum lot size from broker (base data, user overrides in security_overrides)
-    created_at INTEGER NOT NULL,       -- Unix timestamp (seconds since epoch)
-    updated_at INTEGER NOT NULL        -- Unix timestamp (seconds since epoch)
+    data TEXT NOT NULL CHECK (json_valid(data)),  -- JSON blob with validity check: {name, product_type, industry, geography, currency, fullExchangeName, market_code, min_lot, min_portfolio_target, max_portfolio_target, tradernet_raw}
+    last_synced INTEGER                            -- Unix timestamp (seconds since epoch)
 ) STRICT;
 
-CREATE INDEX IF NOT EXISTS idx_securities_active ON securities(active);
-CREATE INDEX IF NOT EXISTS idx_securities_geography ON securities(geography);
-CREATE INDEX IF NOT EXISTS idx_securities_industry ON securities(industry);
 CREATE INDEX IF NOT EXISTS idx_securities_symbol ON securities(symbol);
-CREATE INDEX IF NOT EXISTS idx_securities_market_code ON securities(market_code);
 
 -- Security overrides table: EAV pattern for user customizations
 -- Stores overrides for fields like allow_buy, allow_sell, min_lot, priority_multiplier,

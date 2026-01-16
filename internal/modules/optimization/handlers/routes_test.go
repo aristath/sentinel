@@ -9,6 +9,7 @@ import (
 	"github.com/aristath/sentinel/internal/domain"
 	"github.com/aristath/sentinel/internal/modules/dividends"
 	"github.com/aristath/sentinel/internal/modules/optimization"
+	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/aristath/sentinel/internal/services"
 	testingpkg "github.com/aristath/sentinel/internal/testing"
 	"github.com/go-chi/chi/v5"
@@ -21,6 +22,7 @@ func TestRegisterRoutes(t *testing.T) {
 	// Create mock dependencies
 	service := &optimization.OptimizerService{}
 	var db *sql.DB = nil
+	var securityRepo universe.SecurityRepositoryInterface = nil
 	tradernetClient := testingpkg.NewMockBrokerClient()
 	currencyExchangeService := &services.CurrencyExchangeService{}
 	dividendRepo := &dividends.DividendRepository{}
@@ -30,6 +32,7 @@ func TestRegisterRoutes(t *testing.T) {
 	handler := NewHandler(
 		service,
 		db,
+		securityRepo,
 		tradernetClient,
 		currencyExchangeService,
 		dividendRepo,
@@ -90,6 +93,7 @@ func TestRegisterRoutes_RoutePrefix(t *testing.T) {
 	// Verify that routes are registered under /optimizer prefix
 	service := &optimization.OptimizerService{}
 	var db *sql.DB = nil
+	var securityRepo universe.SecurityRepositoryInterface = nil
 	tradernetClient := testingpkg.NewMockBrokerClient()
 	currencyExchangeService := &services.CurrencyExchangeService{}
 	dividendRepo := &dividends.DividendRepository{}
@@ -98,6 +102,7 @@ func TestRegisterRoutes_RoutePrefix(t *testing.T) {
 	handler := NewHandler(
 		service,
 		db,
+		securityRepo,
 		tradernetClient,
 		currencyExchangeService,
 		dividendRepo,

@@ -102,7 +102,7 @@ func (j *TradernetMetadataSyncJob) Run() error {
 
 // fetchAndUpdateMetadata fetches metadata from Tradernet and updates the security
 // Returns true if any fields were updated, false if no data from Tradernet
-// Tradernet is the source of truth - always overwrites existing values
+// Tradernet is the source of truth - stores complete API response as JSON
 // User customizations should be stored in security_overrides table
 func (j *TradernetMetadataSyncJob) fetchAndUpdateMetadata(security *universe.Security) (bool, error) {
 	// Use GetSecurityMetadata which calls getAllSecurities API
@@ -119,63 +119,67 @@ func (j *TradernetMetadataSyncJob) fetchAndUpdateMetadata(security *universe.Sec
 		return false, nil // Not an error, just no data
 	}
 
-	// Build update map - always update from Tradernet (source of truth)
-	updates := make(map[string]any)
-
-	// Geography: from country code
-	if info.Country != nil && *info.Country != "" {
-		updates["geography"] = *info.Country
-		j.log.Debug().
-			Str("symbol", security.Symbol).
-			Str("geography", *info.Country).
-			Msg("Setting geography from Tradernet")
+	// Build SecurityData from BrokerSecurityInfo - store complete API response as JSON
+	data := universe.SecurityData{
+		Name:               stringValue(info.Name),
+		Currency:           stringValue(info.Currency),
+		Geography:          stringValue(info.CountryOfRisk), // Use CountryOfRisk as primary source
+		Industry:           mapSectorToIndustry(stringValue(info.Sector)),
+		FullExchangeName:   stringValue(info.ExchangeName),
+		MarketCode:         stringValue(info.Market),
+		MinLot:             intValue(info.LotSize),
+		ProductType:        security.ProductType,        // Preserve existing
+		MinPortfolioTarget: security.MinPortfolioTarget, // Preserve existing
+		MaxPortfolioTarget: security.MaxPortfolioTarget, // Preserve existing
+		TradernetRaw: map[string]interface{}{
+			"country":         stringValue(info.Country),
+			"country_of_risk": stringValue(info.CountryOfRisk),
+			"sector":          stringValue(info.Sector),
+			"exchange_code":   stringValue(info.ExchangeCode),
+			"lot_size":        intValue(info.LotSize),
+		},
 	}
 
-	// Industry: from sector code (map to readable industry name)
-	if info.Sector != nil && *info.Sector != "" {
-		industry := mapSectorToIndustry(*info.Sector)
-		updates["industry"] = industry
-		j.log.Debug().
-			Str("symbol", security.Symbol).
-			Str("sector", *info.Sector).
-			Str("industry", industry).
-			Msg("Setting industry from Tradernet sector")
+	// Serialize to JSON
+	jsonData, err := universe.SerializeSecurityJSON(&data)
+	if err != nil {
+		return false, fmt.Errorf("failed to serialize security data: %w", err)
 	}
 
-	// Full exchange name
-	if info.ExchangeName != nil && *info.ExchangeName != "" {
-		updates["fullExchangeName"] = *info.ExchangeName
-		j.log.Debug().
-			Str("symbol", security.Symbol).
-			Str("exchangeName", *info.ExchangeName).
-			Msg("Setting exchange name from Tradernet")
+	// Update security with JSON data and last_synced timestamp
+	updates := map[string]any{
+		"data":        jsonData,
+		"last_synced": time.Now().Unix(),
 	}
 
-	// Market code
-	if info.Market != nil && *info.Market != "" {
-		updates["market_code"] = *info.Market
-		j.log.Debug().
-			Str("symbol", security.Symbol).
-			Str("marketCode", *info.Market).
-			Msg("Setting market code from Tradernet")
+	err = j.securityRepo.Update(security.ISIN, updates)
+	if err != nil {
+		return false, fmt.Errorf("failed to update security %s: %w", security.Symbol, err)
 	}
 
-	// Update security if Tradernet provided any data
-	if len(updates) > 0 {
-		err := j.securityRepo.Update(security.ISIN, updates)
-		if err != nil {
-			return false, fmt.Errorf("failed to update security %s: %w", security.Symbol, err)
-		}
+	j.log.Info().
+		Str("symbol", security.Symbol).
+		Str("isin", security.ISIN).
+		Str("geography", data.Geography).
+		Str("industry", data.Industry).
+		Msg("Updated security metadata from Tradernet (JSON)")
+	return true, nil
+}
 
-		j.log.Info().
-			Str("symbol", security.Symbol).
-			Str("isin", security.ISIN).
-			Int("fieldsUpdated", len(updates)).
-			Msg("Updated security metadata from Tradernet")
-		return true, nil
+// stringValue safely extracts string from nullable pointer
+func stringValue(s *string) string {
+	if s == nil {
+		return ""
 	}
+	return *s
+}
 
-	return false, nil
+// intValue safely extracts int from nullable pointer
+func intValue(i *int) int {
+	if i == nil {
+		return 1 // Default lot size
+	}
+	return *i
 }
 
 // mapSectorToIndustry maps Tradernet sector codes to readable industry names

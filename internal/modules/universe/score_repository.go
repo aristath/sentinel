@@ -9,12 +9,17 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// ScoreSecurityProvider provides read-only access to securities for ISIN lookups.
+type ScoreSecurityProvider interface {
+	GetISINBySymbol(symbol string) (string, error)
+}
+
 // ScoreRepository handles score database operations
 // Faithful translation from Python: app/repositories/score.py
 type ScoreRepository struct {
-	portfolioDB *sql.DB // portfolio.db - scores table
-	universeDB  *sql.DB // universe.db - securities table (for symbol->ISIN lookup, optional)
-	log         zerolog.Logger
+	portfolioDB      *sql.DB // portfolio.db - scores table
+	securityProvider ScoreSecurityProvider
+	log              zerolog.Logger
 }
 
 // scoresColumns is the list of columns for the scores table
@@ -34,13 +39,13 @@ func NewScoreRepository(portfolioDB *sql.DB, log zerolog.Logger) *ScoreRepositor
 	}
 }
 
-// NewScoreRepositoryWithUniverse creates a new score repository with universe DB access
+// NewScoreRepositoryWithUniverse creates a new score repository with security provider
 // This is needed for GetBySymbol to lookup ISIN from symbol
-func NewScoreRepositoryWithUniverse(portfolioDB *sql.DB, universeDB *sql.DB, log zerolog.Logger) *ScoreRepository {
+func NewScoreRepositoryWithUniverse(portfolioDB *sql.DB, securityProvider ScoreSecurityProvider, log zerolog.Logger) *ScoreRepository {
 	return &ScoreRepository{
-		portfolioDB: portfolioDB,
-		universeDB:  universeDB,
-		log:         log.With().Str("repo", "score").Logger(),
+		portfolioDB:      portfolioDB,
+		securityProvider: securityProvider,
+		log:              log.With().Str("repo", "score").Logger(),
 	}
 }
 
@@ -67,27 +72,20 @@ func (r *ScoreRepository) GetByISIN(isin string) (*SecurityScore, error) {
 }
 
 // GetBySymbol returns a score by symbol (helper method - looks up ISIN first)
-// This requires universeDB to lookup ISIN from securities table
+// This requires securityProvider to lookup ISIN from symbol
 func (r *ScoreRepository) GetBySymbol(symbol string) (*SecurityScore, error) {
-	if r.universeDB == nil {
-		return nil, fmt.Errorf("GetBySymbol requires universeDB - use NewScoreRepositoryWithUniverse or GetByISIN directly")
+	if r.securityProvider == nil {
+		return nil, fmt.Errorf("GetBySymbol requires securityProvider - use NewScoreRepositoryWithUniverse or GetByISIN directly")
 	}
 
-	// Lookup ISIN from securities table
-	query := "SELECT isin FROM securities WHERE symbol = ?"
-	rows, err := r.universeDB.Query(query, strings.ToUpper(strings.TrimSpace(symbol)))
+	// Lookup ISIN from security provider
+	isin, err := r.securityProvider.GetISINBySymbol(strings.ToUpper(strings.TrimSpace(symbol)))
 	if err != nil {
-		return nil, fmt.Errorf("failed to lookup ISIN for symbol: %w", err)
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
 		return nil, nil // Security not found, so no score
 	}
 
-	var isin string
-	if err := rows.Scan(&isin); err != nil {
-		return nil, fmt.Errorf("failed to scan ISIN: %w", err)
+	if isin == "" {
+		return nil, nil // No ISIN found, so no score
 	}
 
 	if isin == "" {

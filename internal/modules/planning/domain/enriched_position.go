@@ -43,16 +43,16 @@ type EnrichedPosition struct {
 	WeightInPortfolio float64 // Percentage of total portfolio value
 }
 
-// CanBuy returns true if the security is active and buying is allowed.
-// This encapsulates the common check: Active && AllowBuy.
+// CanBuy returns true if buying is allowed for this security.
+// After migration 038: All securities in database are active (no soft delete), so we only check AllowBuy.
 func (e *EnrichedPosition) CanBuy() bool {
-	return e.Active && e.AllowBuy
+	return e.AllowBuy
 }
 
-// CanSell returns true if the security is active and selling is allowed.
-// This encapsulates the common check: Active && AllowSell.
+// CanSell returns true if selling is allowed for this security.
+// After migration 038: All securities in database are active (no soft delete), so we only check AllowSell.
 func (e *EnrichedPosition) CanSell() bool {
-	return e.Active && e.AllowSell
+	return e.AllowSell
 }
 
 // GainPercent calculates the gain/loss percentage from cost basis.

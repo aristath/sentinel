@@ -273,33 +273,36 @@ func TestSyncFromTradernet_Success(t *testing.T) {
 	require.NoError(t, err)
 	defer universeDB.Close()
 
-	// Create securities table with ISIN as PRIMARY KEY
+	// Create securities table with JSON storage (migration 038)
 	_, err = universeDB.Exec(`
 		CREATE TABLE securities (
 			isin TEXT PRIMARY KEY,
 			symbol TEXT NOT NULL,
-			name TEXT NOT NULL,
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		)
+			data TEXT NOT NULL,
+			last_synced INTEGER
+		) STRICT
 	`)
 	require.NoError(t, err)
 
 	// Insert test securities
 	_, err = universeDB.Exec(`
-		INSERT INTO securities (isin, symbol, name, created_at, updated_at)
+		INSERT INTO securities (isin, symbol, data, last_synced)
 		VALUES
-			('US0378331005', 'AAPL', 'Apple Inc.', strftime('%s', 'now'), strftime('%s', 'now')),
-			('US5949181045', 'MSFT', 'Microsoft Corp.', strftime('%s', 'now'), strftime('%s', 'now'))
+			('US0378331005', 'AAPL', json_object('name', 'Apple Inc.'), NULL),
+			('US5949181045', 'MSFT', json_object('name', 'Microsoft Corp.'), NULL)
 	`)
 	require.NoError(t, err)
 
+	// Create security provider
+	securityProvider := newTestSecurityProvider(universeDB, log)
+
 	service := &PortfolioService{
-		brokerClient: mockTradernetClient,
-		positionRepo: mockPositionRepo,
-		cashManager:  mockCashManager,
-		universeDB:   universeDB,
-		log:          log,
+		brokerClient:     mockTradernetClient,
+		positionRepo:     mockPositionRepo,
+		cashManager:      mockCashManager,
+		universeDB:       universeDB,
+		securityProvider: securityProvider,
+		log:              log,
 	}
 
 	// Mock data
@@ -360,32 +363,35 @@ func TestSyncFromTradernet_DeleteStale(t *testing.T) {
 	require.NoError(t, err)
 	defer universeDB.Close()
 
-	// Create securities table with ISIN as PRIMARY KEY
+	// Create securities table with JSON storage (migration 038)
 	_, err = universeDB.Exec(`
 		CREATE TABLE securities (
 			isin TEXT PRIMARY KEY,
 			symbol TEXT NOT NULL,
-			name TEXT NOT NULL,
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		)
+			data TEXT NOT NULL,
+			last_synced INTEGER
+		) STRICT
 	`)
 	require.NoError(t, err)
 
 	// Insert test securities
 	_, err = universeDB.Exec(`
-		INSERT INTO securities (isin, symbol, name, created_at, updated_at)
+		INSERT INTO securities (isin, symbol, data, last_synced)
 		VALUES
-			('US0378331005', 'AAPL', 'Apple Inc.', strftime('%s', 'now'), strftime('%s', 'now'))
+			('US0378331005', 'AAPL', json_object('name', 'Apple Inc.'), NULL)
 	`)
 	require.NoError(t, err)
 
+	// Create security provider
+	securityProvider := newTestSecurityProvider(universeDB, log)
+
 	service := &PortfolioService{
-		brokerClient: mockTradernetClient,
-		positionRepo: mockPositionRepo,
-		cashManager:  mockCashManager,
-		universeDB:   universeDB,
-		log:          log,
+		brokerClient:     mockTradernetClient,
+		positionRepo:     mockPositionRepo,
+		cashManager:      mockCashManager,
+		universeDB:       universeDB,
+		securityProvider: securityProvider,
+		log:              log,
 	}
 
 	// Mock data - Tradernet has AAPL, DB has AAPL and MSFT (MSFT is stale)
@@ -438,32 +444,35 @@ func TestSyncFromTradernet_SkipZeroQuantity(t *testing.T) {
 	require.NoError(t, err)
 	defer universeDB.Close()
 
-	// Create securities table with ISIN as PRIMARY KEY
+	// Create securities table with JSON storage (migration 038)
 	_, err = universeDB.Exec(`
 		CREATE TABLE securities (
 			isin TEXT PRIMARY KEY,
 			symbol TEXT NOT NULL,
-			name TEXT NOT NULL,
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		)
+			data TEXT NOT NULL,
+			last_synced INTEGER
+		) STRICT
 	`)
 	require.NoError(t, err)
 
 	// Insert test securities
 	_, err = universeDB.Exec(`
-		INSERT INTO securities (isin, symbol, name, created_at, updated_at)
+		INSERT INTO securities (isin, symbol, data, last_synced)
 		VALUES
-			('US0378331005', 'AAPL', 'Apple Inc.', strftime('%s', 'now'), strftime('%s', 'now'))
+			('US0378331005', 'AAPL', json_object('name', 'Apple Inc.'), NULL)
 	`)
 	require.NoError(t, err)
 
+	// Create security provider
+	securityProvider := newTestSecurityProvider(universeDB, log)
+
 	service := &PortfolioService{
-		brokerClient: mockTradernetClient,
-		positionRepo: mockPositionRepo,
-		cashManager:  mockCashManager,
-		universeDB:   universeDB,
-		log:          log,
+		brokerClient:     mockTradernetClient,
+		positionRepo:     mockPositionRepo,
+		cashManager:      mockCashManager,
+		universeDB:       universeDB,
+		securityProvider: securityProvider,
+		log:              log,
 	}
 
 	// Mock data - one position with zero quantity
@@ -582,33 +591,36 @@ func TestSyncFromTradernet_UpsertError(t *testing.T) {
 	require.NoError(t, err)
 	defer universeDB.Close()
 
-	// Create securities table with ISIN as PRIMARY KEY
+	// Create securities table with JSON storage (migration 038)
 	_, err = universeDB.Exec(`
 		CREATE TABLE securities (
 			isin TEXT PRIMARY KEY,
 			symbol TEXT NOT NULL,
-			name TEXT NOT NULL,
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		)
+			data TEXT NOT NULL,
+			last_synced INTEGER
+		) STRICT
 	`)
 	require.NoError(t, err)
 
 	// Insert test securities
 	_, err = universeDB.Exec(`
-		INSERT INTO securities (isin, symbol, name, created_at, updated_at)
+		INSERT INTO securities (isin, symbol, data, last_synced)
 		VALUES
-			('US0378331005', 'AAPL', 'Apple Inc.', strftime('%s', 'now'), strftime('%s', 'now')),
-			('US5949181045', 'MSFT', 'Microsoft Corp.', strftime('%s', 'now'), strftime('%s', 'now'))
+			('US0378331005', 'AAPL', json_object('name', 'Apple Inc.'), NULL),
+			('US5949181045', 'MSFT', json_object('name', 'Microsoft Corp.'), NULL)
 	`)
 	require.NoError(t, err)
 
+	// Create security provider
+	securityProvider := newTestSecurityProvider(universeDB, log)
+
 	service := &PortfolioService{
-		brokerClient: mockTradernetClient,
-		positionRepo: mockPositionRepo,
-		cashManager:  mockCashManager,
-		universeDB:   universeDB,
-		log:          log,
+		brokerClient:     mockTradernetClient,
+		positionRepo:     mockPositionRepo,
+		cashManager:      mockCashManager,
+		universeDB:       universeDB,
+		securityProvider: securityProvider,
+		log:              log,
 	}
 
 	tradernetPositions := []domain.BrokerPosition{
@@ -652,32 +664,35 @@ func TestSyncFromTradernet_CashBalancesError(t *testing.T) {
 	require.NoError(t, err)
 	defer universeDB.Close()
 
-	// Create securities table with ISIN as PRIMARY KEY
+	// Create securities table with JSON storage (migration 038)
 	_, err = universeDB.Exec(`
 		CREATE TABLE securities (
 			isin TEXT PRIMARY KEY,
 			symbol TEXT NOT NULL,
-			name TEXT NOT NULL,
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		)
+			data TEXT NOT NULL,
+			last_synced INTEGER
+		) STRICT
 	`)
 	require.NoError(t, err)
 
 	// Insert test securities
 	_, err = universeDB.Exec(`
-		INSERT INTO securities (isin, symbol, name, created_at, updated_at)
+		INSERT INTO securities (isin, symbol, data, last_synced)
 		VALUES
-			('US0378331005', 'AAPL', 'Apple Inc.', strftime('%s', 'now'), strftime('%s', 'now'))
+			('US0378331005', 'AAPL', json_object('name', 'Apple Inc.'), NULL)
 	`)
 	require.NoError(t, err)
 
+	// Create security provider
+	securityProvider := newTestSecurityProvider(universeDB, log)
+
 	service := &PortfolioService{
-		brokerClient: mockTradernetClient,
-		positionRepo: mockPositionRepo,
-		cashManager:  mockCashManager,
-		universeDB:   universeDB,
-		log:          log,
+		brokerClient:     mockTradernetClient,
+		positionRepo:     mockPositionRepo,
+		cashManager:      mockCashManager,
+		universeDB:       universeDB,
+		securityProvider: securityProvider,
+		log:              log,
 	}
 
 	tradernetPositions := []domain.BrokerPosition{
@@ -1162,20 +1177,23 @@ func TestSyncFromTradernet_SkipPositionWithoutISIN(t *testing.T) {
 		CREATE TABLE securities (
 			isin TEXT PRIMARY KEY,
 			symbol TEXT NOT NULL,
-			name TEXT NOT NULL,
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		)
+			data TEXT NOT NULL,
+			last_synced INTEGER
+		) STRICT
 	`)
 	require.NoError(t, err)
 	// Note: No securities inserted - symbol won't be found
 
+	// Create security provider (even though DB is empty)
+	securityProvider := newTestSecurityProvider(universeDB, log)
+
 	service := &PortfolioService{
-		brokerClient: mockTradernetClient,
-		positionRepo: mockPositionRepo,
-		cashManager:  mockCashManager,
-		universeDB:   universeDB,
-		log:          log,
+		brokerClient:     mockTradernetClient,
+		positionRepo:     mockPositionRepo,
+		cashManager:      mockCashManager,
+		universeDB:       universeDB,
+		securityProvider: securityProvider,
+		log:              log,
 	}
 
 	// Mock Tradernet returns position for symbol not in universe
@@ -1228,7 +1246,7 @@ func TestGetPortfolioSummary_PositionError(t *testing.T) {
 func TestGetAllSecurityGeographiesAndIndustries_ExcludesIndices(t *testing.T) {
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 
-	// Create test universeDB with geography, industry, and product_type columns
+	// Create test universeDB with JSON storage schema (migration 038)
 	universeDB, err := sql.Open("sqlite3", ":memory:")
 	require.NoError(t, err)
 	defer universeDB.Close()
@@ -1237,38 +1255,36 @@ func TestGetAllSecurityGeographiesAndIndustries_ExcludesIndices(t *testing.T) {
 		CREATE TABLE securities (
 			isin TEXT PRIMARY KEY,
 			symbol TEXT NOT NULL,
-			name TEXT NOT NULL,
-			product_type TEXT,
-			geography TEXT,
-			industry TEXT,
-			active INTEGER DEFAULT 1,
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		)
+			data TEXT NOT NULL,
+			last_synced INTEGER
+		) STRICT
 	`)
 	require.NoError(t, err)
 
 	// Insert regular securities
 	_, err = universeDB.Exec(`
-		INSERT INTO securities (isin, symbol, name, product_type, geography, industry, active, created_at, updated_at)
+		INSERT INTO securities (isin, symbol, data, last_synced)
 		VALUES
-			('US0378331005', 'AAPL', 'Apple Inc.', 'EQUITY', 'United States', 'Technology', 1, strftime('%s', 'now'), strftime('%s', 'now')),
-			('DE0007164600', 'SAP', 'SAP SE', 'EQUITY', 'Germany', 'Technology', 1, strftime('%s', 'now'), strftime('%s', 'now'))
+			('US0378331005', 'AAPL', json_object('name', 'Apple Inc.', 'product_type', 'EQUITY', 'geography', 'United States', 'industry', 'Technology'), NULL),
+			('DE0007164600', 'SAP', json_object('name', 'SAP SE', 'product_type', 'EQUITY', 'geography', 'Germany', 'industry', 'Technology'), NULL)
 	`)
 	require.NoError(t, err)
 
 	// Insert market indices (should be excluded)
 	_, err = universeDB.Exec(`
-		INSERT INTO securities (isin, symbol, name, product_type, geography, industry, active, created_at, updated_at)
+		INSERT INTO securities (isin, symbol, data, last_synced)
 		VALUES
-			('INDEX-SP500.IDX', 'SP500.IDX', 'S&P 500', 'INDEX', 'United States', 'Index', 1, strftime('%s', 'now'), strftime('%s', 'now')),
-			('INDEX-DAX.IDX', 'DAX.IDX', 'DAX', 'INDEX', 'Germany', 'Index', 1, strftime('%s', 'now'), strftime('%s', 'now'))
+			('INDEX-SP500.IDX', 'SP500.IDX', json_object('name', 'S&P 500', 'product_type', 'INDEX', 'geography', 'United States', 'industry', 'Index'), NULL),
+			('INDEX-DAX.IDX', 'DAX.IDX', json_object('name', 'DAX', 'product_type', 'INDEX', 'geography', 'Germany', 'industry', 'Index'), NULL)
 	`)
 	require.NoError(t, err)
 
+	// Create security provider with universe DB
+	securityProvider := newTestSecurityProvider(universeDB, log)
+
 	service := &PortfolioService{
-		universeDB: universeDB,
-		log:        log,
+		securityProvider: securityProvider,
+		log:              log,
 	}
 
 	// Execute
@@ -1298,36 +1314,35 @@ func TestGetAllSecurityGeographiesAndIndustries_IncludesNullProductType(t *testi
 		CREATE TABLE securities (
 			isin TEXT PRIMARY KEY,
 			symbol TEXT NOT NULL,
-			name TEXT NOT NULL,
-			product_type TEXT,
-			geography TEXT,
-			industry TEXT,
-			active INTEGER DEFAULT 1,
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		)
+			data TEXT NOT NULL,
+			last_synced INTEGER
+		) STRICT
 	`)
 	require.NoError(t, err)
 
 	// Insert security with NULL product_type (should be included)
 	_, err = universeDB.Exec(`
-		INSERT INTO securities (isin, symbol, name, product_type, geography, industry, active, created_at, updated_at)
+		INSERT INTO securities (isin, symbol, data, last_synced)
 		VALUES
-			('US0378331005', 'AAPL', 'Apple Inc.', NULL, 'United States', 'Technology', 1, strftime('%s', 'now'), strftime('%s', 'now'))
+			('US0378331005', 'AAPL', json_object('name', 'Apple Inc.', 'geography', 'United States', 'industry', 'Technology'), NULL)
 	`)
 	require.NoError(t, err)
 
 	// Insert index (should be excluded)
 	_, err = universeDB.Exec(`
-		INSERT INTO securities (isin, symbol, name, product_type, geography, industry, active, created_at, updated_at)
+		INSERT INTO securities (isin, symbol, data, last_synced)
 		VALUES
-			('INDEX-SP500.IDX', 'SP500.IDX', 'S&P 500', 'INDEX', 'United States', 'Index', 1, strftime('%s', 'now'), strftime('%s', 'now'))
+			('INDEX-SP500.IDX', 'SP500.IDX', json_object('name', 'S&P 500', 'product_type', 'INDEX', 'geography', 'United States', 'industry', 'Index'), NULL)
 	`)
 	require.NoError(t, err)
 
+	// Create security provider
+	securityProvider := newTestSecurityProvider(universeDB, log)
+
 	service := &PortfolioService{
-		universeDB: universeDB,
-		log:        log,
+		universeDB:       universeDB,
+		securityProvider: securityProvider,
+		log:              log,
 	}
 
 	// Execute

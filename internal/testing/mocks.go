@@ -656,6 +656,32 @@ func (m *MockSecurityRepository) GetBySymbol(symbol string) (*universe.Security,
 	return nil, nil
 }
 
+// BatchGetISINsBySymbols returns a map of symbol → ISIN for multiple symbols
+func (m *MockSecurityRepository) BatchGetISINsBySymbols(symbols []string) (map[string]string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.err != nil {
+		return nil, m.err
+	}
+
+	result := make(map[string]string)
+	for _, symbol := range symbols {
+		// First try direct lookup
+		if sec, ok := m.securities[symbol]; ok {
+			result[symbol] = sec.ISIN
+			continue
+		}
+		// Fallback: search by symbol in all securities
+		for _, sec := range m.securities {
+			if sec.Symbol == symbol {
+				result[symbol] = sec.ISIN
+				break
+			}
+		}
+	}
+	return result, nil
+}
+
 // GetByISIN returns a security by ISIN
 func (m *MockSecurityRepository) GetByISIN(isin string) (*universe.Security, error) {
 	m.mu.RLock()
@@ -688,9 +714,8 @@ func (m *MockSecurityRepository) GetAllActive() ([]universe.Security, error) {
 	}
 	var result []universe.Security
 	for _, sec := range m.securities {
-		if sec.Active {
-			result = append(result, *sec)
-		}
+		// After migration 038: All securities in table are active
+		result = append(result, *sec)
 	}
 	return result, nil
 }
@@ -724,7 +749,8 @@ func (m *MockSecurityRepository) GetAllActiveTradable() ([]universe.Security, er
 	}
 	var result []universe.Security
 	for _, sec := range m.securities {
-		if sec.Active && (sec.AllowBuy || sec.AllowSell) {
+		// After migration 038: All securities in table are active
+		if sec.AllowBuy || sec.AllowSell {
 			result = append(result, *sec)
 		}
 	}
@@ -774,10 +800,6 @@ func (m *MockSecurityRepository) Update(isin string, updates map[string]interfac
 		// Apply updates (simplified implementation)
 		for key, value := range updates {
 			switch key {
-			case "active":
-				if val, ok := value.(bool); ok {
-					sec.Active = val
-				}
 			case "name":
 				if val, ok := value.(string); ok {
 					sec.Name = val
@@ -834,7 +856,6 @@ func (m *MockSecurityRepository) GetWithScores(portfolioDB *sql.DB) ([]universe.
 			MinLot:             sec.MinLot,
 			AllowSell:          sec.AllowSell,
 			AllowBuy:           sec.AllowBuy,
-			Active:             sec.Active,
 			Tags:               sec.Tags,
 		})
 	}
@@ -907,12 +928,11 @@ func (m *MockSecurityRepository) GetByTags(tagIDs []string) ([]universe.Security
 	}
 	var result []universe.Security
 	for _, sec := range m.securities {
-		if sec.Active {
-			for _, tag := range sec.Tags {
-				if tagSet[tag] {
-					result = append(result, *sec)
-					break
-				}
+		// After migration 038: All securities in table are active
+		for _, tag := range sec.Tags {
+			if tagSet[tag] {
+				result = append(result, *sec)
+				break
 			}
 		}
 	}
@@ -944,6 +964,268 @@ func (m *MockSecurityRepository) GetPositionsByTags(positionSymbols []string, ta
 				}
 			}
 		}
+	}
+	return result, nil
+}
+
+// GetISINBySymbol returns just the ISIN for a given symbol
+func (m *MockSecurityRepository) GetISINBySymbol(symbol string) (string, error) {
+	sec, err := m.GetBySymbol(symbol)
+	if err != nil {
+		return "", err
+	}
+	if sec == nil {
+		return "", fmt.Errorf("security not found: %s", symbol)
+	}
+	return sec.ISIN, nil
+}
+
+// Exists checks if a security exists by ISIN
+func (m *MockSecurityRepository) Exists(isin string) (bool, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.err != nil {
+		return false, m.err
+	}
+	_, ok := m.securities[isin]
+	return ok, nil
+}
+
+// ExistsBySymbol checks if a security exists by symbol
+func (m *MockSecurityRepository) ExistsBySymbol(symbol string) (bool, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.err != nil {
+		return false, m.err
+	}
+	for _, sec := range m.securities {
+		if sec.Symbol == symbol {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// CountTradable returns the count of tradable securities (non-indices)
+func (m *MockSecurityRepository) CountTradable() (int, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.err != nil {
+		return 0, m.err
+	}
+	count := 0
+	for _, sec := range m.securities {
+		if sec.ProductType != "INDEX" {
+			count++
+		}
+	}
+	return count, nil
+}
+
+// GetByGeography returns securities by geography
+func (m *MockSecurityRepository) GetByGeography(geography string) ([]universe.Security, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.err != nil {
+		return nil, m.err
+	}
+	var result []universe.Security
+	for _, sec := range m.securities {
+		if sec.Geography == geography {
+			result = append(result, *sec)
+		}
+	}
+	return result, nil
+}
+
+// GetByIndustry returns securities by industry
+func (m *MockSecurityRepository) GetByIndustry(industry string) ([]universe.Security, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.err != nil {
+		return nil, m.err
+	}
+	var result []universe.Security
+	for _, sec := range m.securities {
+		if sec.Industry == industry {
+			result = append(result, *sec)
+		}
+	}
+	return result, nil
+}
+
+// GetByMarketCode returns securities by market code
+func (m *MockSecurityRepository) GetByMarketCode(marketCode string) ([]universe.Security, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.err != nil {
+		return nil, m.err
+	}
+	var result []universe.Security
+	for _, sec := range m.securities {
+		if sec.MarketCode == marketCode && sec.ProductType != "INDEX" {
+			result = append(result, *sec)
+		}
+	}
+	return result, nil
+}
+
+// GetTradable returns all tradable securities (non-indices)
+func (m *MockSecurityRepository) GetTradable() ([]universe.Security, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.err != nil {
+		return nil, m.err
+	}
+	var result []universe.Security
+	for _, sec := range m.securities {
+		if sec.ProductType != "INDEX" {
+			result = append(result, *sec)
+		}
+	}
+	return result, nil
+}
+
+// GetGeographiesAndIndustries returns a map of geography → industries
+func (m *MockSecurityRepository) GetGeographiesAndIndustries() (map[string][]string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.err != nil {
+		return nil, m.err
+	}
+	result := make(map[string][]string)
+	for _, sec := range m.securities {
+		if sec.Geography != "" && sec.Industry != "" && sec.ProductType != "INDEX" {
+			result[sec.Geography] = append(result[sec.Geography], sec.Industry)
+		}
+	}
+	return result, nil
+}
+
+// GetSecuritiesForOptimization returns minimal data for optimization
+func (m *MockSecurityRepository) GetSecuritiesForOptimization() ([]universe.SecurityOptimizationData, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.err != nil {
+		return nil, m.err
+	}
+	var result []universe.SecurityOptimizationData
+	for _, sec := range m.securities {
+		result = append(result, universe.SecurityOptimizationData{
+			Symbol:             sec.Symbol,
+			ISIN:               sec.ISIN,
+			ProductType:        sec.ProductType,
+			Geography:          sec.Geography,
+			Industry:           sec.Industry,
+			MinPortfolioTarget: sec.MinPortfolioTarget,
+			MaxPortfolioTarget: sec.MaxPortfolioTarget,
+		})
+	}
+	return result, nil
+}
+
+// GetSecuritiesForCharts returns minimal data for charts
+func (m *MockSecurityRepository) GetSecuritiesForCharts() ([]universe.SecurityChartData, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.err != nil {
+		return nil, m.err
+	}
+	var result []universe.SecurityChartData
+	for _, sec := range m.securities {
+		if sec.ProductType != "INDEX" {
+			result = append(result, universe.SecurityChartData{
+				Symbol: sec.Symbol,
+				ISIN:   sec.ISIN,
+			})
+		}
+	}
+	return result, nil
+}
+
+// GetSymbolByISIN returns just the symbol for a given ISIN
+func (m *MockSecurityRepository) GetSymbolByISIN(isin string) (string, error) {
+	sec, err := m.GetByISIN(isin)
+	if err != nil {
+		return "", err
+	}
+	if sec == nil {
+		return "", fmt.Errorf("security not found: %s", isin)
+	}
+	return sec.Symbol, nil
+}
+
+// GetByISINs returns securities for multiple ISINs
+func (m *MockSecurityRepository) GetByISINs(isins []string) ([]universe.Security, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.err != nil {
+		return nil, m.err
+	}
+	var result []universe.Security
+	for _, isin := range isins {
+		if sec, ok := m.securities[isin]; ok {
+			result = append(result, *sec)
+		}
+	}
+	return result, nil
+}
+
+// GetBySymbols returns securities for multiple symbols
+func (m *MockSecurityRepository) GetBySymbols(symbols []string) ([]universe.Security, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.err != nil {
+		return nil, m.err
+	}
+	var result []universe.Security
+	for _, symbol := range symbols {
+		for _, sec := range m.securities {
+			if sec.Symbol == symbol {
+				result = append(result, *sec)
+				break
+			}
+		}
+	}
+	return result, nil
+}
+
+// GetDistinctIndustries returns all distinct industries
+func (m *MockSecurityRepository) GetDistinctIndustries() ([]string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.err != nil {
+		return nil, m.err
+	}
+	industries := make(map[string]bool)
+	for _, sec := range m.securities {
+		if sec.Industry != "" && sec.Industry != "0" && sec.ProductType != "INDEX" {
+			industries[sec.Industry] = true
+		}
+	}
+	result := make([]string, 0, len(industries))
+	for industry := range industries {
+		result = append(result, industry)
+	}
+	return result, nil
+}
+
+// GetDistinctGeographies returns all distinct geographies
+func (m *MockSecurityRepository) GetDistinctGeographies() ([]string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.err != nil {
+		return nil, m.err
+	}
+	geographies := make(map[string]bool)
+	for _, sec := range m.securities {
+		if sec.Geography != "" && sec.Geography != "0" && sec.ProductType != "INDEX" {
+			geographies[sec.Geography] = true
+		}
+	}
+	result := make([]string, 0, len(geographies))
+	for geography := range geographies {
+		result = append(result, geography)
 	}
 	return result, nil
 }

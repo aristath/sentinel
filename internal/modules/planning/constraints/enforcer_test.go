@@ -358,7 +358,7 @@ func TestEnforcer_EnforceConstraints_MissingSecurity(t *testing.T) {
 
 	// Context without this security but with global flags set
 	ctx := &planningdomain.OpportunityContext{
-		StocksByISIN:        make(map[string]domain.Security),
+		StocksByISIN:        make(map[string]universe.Security),
 		AllowSell:           true,
 		AllowBuy:            true,
 		RecentlySoldISINs:   make(map[string]bool),
@@ -472,8 +472,8 @@ func TestEnforcer_EnforceConstraints_MaxSellPercentage(t *testing.T) {
 				Quantity: float64(position.Quantity),
 			},
 		},
-		Securities:        []domain.Security{{Symbol: "PPA.GR", ISIN: "GR1234567890"}},
-		StocksByISIN:      map[string]domain.Security{"GR1234567890": {Symbol: "PPA.GR", ISIN: "GR1234567890"}},
+		Securities:        []universe.Security{{Symbol: "PPA.GR", ISIN: "GR1234567890"}},
+		StocksByISIN:      map[string]universe.Security{"GR1234567890": {Symbol: "PPA.GR", ISIN: "GR1234567890"}},
 		IneligibleISINs:   map[string]bool{},
 		RecentlySoldISINs: map[string]bool{},
 		AllowSell:         true,
@@ -567,8 +567,8 @@ func TestEnforcer_EnforceConstraints_MaxSellPercentage_BuyNotAffected(t *testing
 
 	ctx := &planningdomain.OpportunityContext{
 		EnrichedPositions: []planningdomain.EnrichedPosition{},
-		Securities:        []domain.Security{{Symbol: "TEST.US", ISIN: "US1234567890"}},
-		StocksByISIN:      map[string]domain.Security{"US1234567890": {Symbol: "TEST.US", ISIN: "US1234567890"}},
+		Securities:        []universe.Security{{Symbol: "TEST.US", ISIN: "US1234567890"}},
+		StocksByISIN:      map[string]universe.Security{"US1234567890": {Symbol: "TEST.US", ISIN: "US1234567890"}},
 		IneligibleISINs:   map[string]bool{},
 		RecentlySoldISINs: map[string]bool{},
 		AllowBuy:          true,
@@ -617,8 +617,8 @@ func TestEnforcer_EnforceConstraints_MaxSellPercentage_NoPosition(t *testing.T) 
 	// No positions in context
 	ctx := &planningdomain.OpportunityContext{
 		EnrichedPositions: []planningdomain.EnrichedPosition{},
-		Securities:        []domain.Security{{Symbol: "TEST.US", ISIN: "US1234567890"}},
-		StocksByISIN:      map[string]domain.Security{"US1234567890": {Symbol: "TEST.US", ISIN: "US1234567890"}},
+		Securities:        []universe.Security{{Symbol: "TEST.US", ISIN: "US1234567890"}},
+		StocksByISIN:      map[string]universe.Security{"US1234567890": {Symbol: "TEST.US", ISIN: "US1234567890"}},
 		IneligibleISINs:   map[string]bool{},
 		RecentlySoldISINs: map[string]bool{},
 		AllowSell:         true,
@@ -728,13 +728,13 @@ func createTestContext(security universe.Security) *planningdomain.OpportunityCo
 }
 
 func createTestContextWithMultipleSecurities(securities []universe.Security) *planningdomain.OpportunityContext {
-	// Convert universe.Security to domain.Security for context
-	domainSecurities := make([]domain.Security, len(securities))
-	stocksBySymbol := make(map[string]domain.Security)
-	stocksByISIN := make(map[string]domain.Security)
+	// Convert universe.Security to universe.Security for context
+	domainSecurities := make([]universe.Security, len(securities))
+	stocksBySymbol := make(map[string]universe.Security)
+	stocksByISIN := make(map[string]universe.Security)
 
 	for i, sec := range securities {
-		domainSec := domain.Security{
+		domainSec := universe.Security{
 			Symbol: sec.Symbol,
 			Name:   sec.Name,
 			ISIN:   sec.ISIN,

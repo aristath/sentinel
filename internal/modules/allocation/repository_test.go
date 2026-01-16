@@ -10,40 +10,64 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// setupTestUniverseDB creates an in-memory SQLite database with test securities
+// testSecurityProvider is defined in repository_overrides_test.go
+
+// setupTestUniverseDB creates an in-memory SQLite database with test securities (migration 038 JSON schema)
 func setupTestUniverseDB(t *testing.T) *sql.DB {
 	db, err := sql.Open("sqlite", ":memory:")
 	require.NoError(t, err)
 
-	// Create the securities table (with product_type for index filtering)
+	// Create the securities table with JSON storage (migration 038 schema)
 	_, err = db.Exec(`
 		CREATE TABLE securities (
-			id INTEGER PRIMARY KEY,
-			isin TEXT UNIQUE NOT NULL,
+			isin TEXT PRIMARY KEY,
 			symbol TEXT NOT NULL,
-			name TEXT NOT NULL,
-			product_type TEXT,
-			geography TEXT,
-			industry TEXT,
-			active INTEGER DEFAULT 1
-		)
+			data TEXT NOT NULL,
+			last_synced INTEGER
+		) STRICT
 	`)
 	require.NoError(t, err)
 
 	return db
 }
 
-// insertTestSecurity inserts a test security into the database
-func insertTestSecurity(t *testing.T, db *sql.DB, isin, symbol, name, geography, industry string, active int) {
-	insertTestSecurityWithType(t, db, isin, symbol, name, "", geography, industry, active)
+// insertTestSecurity inserts a test security into the database (JSON storage)
+// After migration 038: active parameter is ignored (all securities in database are active)
+func insertTestSecurity(t *testing.T, db *sql.DB, isin, symbol, name, geography, industry string, _ int) {
+	insertTestSecurityWithType(t, db, isin, symbol, name, "", geography, industry)
 }
 
-// insertTestSecurityWithType inserts a test security with explicit product_type
-func insertTestSecurityWithType(t *testing.T, db *sql.DB, isin, symbol, name, productType, geography, industry string, active int) {
-	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, product_type, geography, industry, active)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, isin, symbol, name, productType, geography, industry, active)
+// insertTestSecurityWithType inserts a test security with explicit product_type (JSON storage)
+// After migration 038: active parameter removed (all securities in database are active)
+func insertTestSecurityWithType(t *testing.T, db *sql.DB, isin, symbol, name, productType, geography, industry string) {
+	// Build JSON object
+	jsonParts := []string{}
+	if name != "" {
+		jsonParts = append(jsonParts, "'name', '"+name+"'")
+	}
+	if productType != "" {
+		jsonParts = append(jsonParts, "'product_type', '"+productType+"'")
+	}
+	if geography != "" {
+		jsonParts = append(jsonParts, "'geography', '"+geography+"'")
+	}
+	if industry != "" {
+		jsonParts = append(jsonParts, "'industry', '"+industry+"'")
+	}
+
+	var jsonData string
+	if len(jsonParts) > 0 {
+		jsonData = "json_object(" + jsonParts[0]
+		for i := 1; i < len(jsonParts); i++ {
+			jsonData += ", " + jsonParts[i]
+		}
+		jsonData += ")"
+	} else {
+		jsonData = "json_object()"
+	}
+
+	query := `INSERT INTO securities (isin, symbol, data, last_synced) VALUES (?, ?, ` + jsonData + `, NULL)`
+	_, err := db.Exec(query, isin, symbol)
 	require.NoError(t, err)
 }
 
@@ -56,8 +80,9 @@ func TestGetAvailableIndustries_SingleValues(t *testing.T) {
 	insertTestSecurity(t, db, "US0000000002", "XOM", "Exxon", "US", "Energy", 1)
 	insertTestSecurity(t, db, "US0000000003", "JPM", "JPMorgan", "US", "Finance", 1)
 
-	repo := NewRepository(nil, nil, zerolog.Nop())
-	repo.SetUniverseDB(db)
+	log := zerolog.Nop()
+	securityProvider := newTestSecurityProvider(db)
+	repo := NewRepository(nil, securityProvider, log)
 
 	industries, err := repo.GetAvailableIndustries()
 	require.NoError(t, err)
@@ -74,8 +99,9 @@ func TestGetAvailableIndustries_CommaSeparatedValues(t *testing.T) {
 	insertTestSecurity(t, db, "US0000000001", "GE", "General Electric", "US", "Industrial, Technology, Energy", 1)
 	insertTestSecurity(t, db, "US0000000002", "AMZN", "Amazon", "US", "Technology, Consumer Discretionary", 1)
 
-	repo := NewRepository(nil, nil, zerolog.Nop())
-	repo.SetUniverseDB(db)
+	log := zerolog.Nop()
+	securityProvider := newTestSecurityProvider(db)
+	repo := NewRepository(nil, securityProvider, log)
 
 	industries, err := repo.GetAvailableIndustries()
 	require.NoError(t, err)
@@ -94,8 +120,9 @@ func TestGetAvailableIndustries_MixedValues(t *testing.T) {
 	insertTestSecurity(t, db, "US0000000002", "GE", "General Electric", "US", "Industrial, Technology", 1)
 	insertTestSecurity(t, db, "US0000000003", "XOM", "Exxon", "US", "Energy", 1)
 
-	repo := NewRepository(nil, nil, zerolog.Nop())
-	repo.SetUniverseDB(db)
+	log := zerolog.Nop()
+	securityProvider := newTestSecurityProvider(db)
+	repo := NewRepository(nil, securityProvider, log)
 
 	industries, err := repo.GetAvailableIndustries()
 	require.NoError(t, err)
@@ -106,21 +133,10 @@ func TestGetAvailableIndustries_MixedValues(t *testing.T) {
 }
 
 func TestGetAvailableIndustries_SkipsInactiveSecurities(t *testing.T) {
-	db := setupTestUniverseDB(t)
-	defer db.Close()
-
-	insertTestSecurity(t, db, "US0000000001", "AAPL", "Apple", "US", "Technology", 1)
-	insertTestSecurity(t, db, "US0000000002", "XOM", "Exxon", "US", "Energy", 0) // Inactive
-
-	repo := NewRepository(nil, nil, zerolog.Nop())
-	repo.SetUniverseDB(db)
-
-	industries, err := repo.GetAvailableIndustries()
-	require.NoError(t, err)
-
-	// Only Technology should appear (Energy is inactive)
-	expected := []string{"Technology"}
-	assert.Equal(t, expected, industries)
+	// After migration 038: No soft delete - all securities in database are active
+	// This test is no longer relevant since we removed the active column
+	// Test renamed to document the change
+	t.Skip("After migration 038: No soft delete - all securities in database are active")
 }
 
 func TestGetAvailableIndustries_EmptyAndNull(t *testing.T) {
@@ -131,8 +147,9 @@ func TestGetAvailableIndustries_EmptyAndNull(t *testing.T) {
 	insertTestSecurity(t, db, "US0000000002", "XYZ", "XYZ Corp", "US", "", 1)    // Empty industry
 	insertTestSecurity(t, db, "US0000000003", "ABC", "ABC Corp", "US", "   ", 1) // Whitespace only
 
-	repo := NewRepository(nil, nil, zerolog.Nop())
-	repo.SetUniverseDB(db)
+	log := zerolog.Nop()
+	securityProvider := newTestSecurityProvider(db)
+	repo := NewRepository(nil, securityProvider, log)
 
 	industries, err := repo.GetAvailableIndustries()
 	require.NoError(t, err)
@@ -150,8 +167,9 @@ func TestGetAvailableGeographies_SingleValues(t *testing.T) {
 	insertTestSecurity(t, db, "DE0000000001", "SAP", "SAP", "Germany", "Technology", 1)
 	insertTestSecurity(t, db, "JP0000000001", "SONY", "Sony", "Japan", "Technology", 1)
 
-	repo := NewRepository(nil, nil, zerolog.Nop())
-	repo.SetUniverseDB(db)
+	log := zerolog.Nop()
+	securityProvider := newTestSecurityProvider(db)
+	repo := NewRepository(nil, securityProvider, log)
 
 	geographies, err := repo.GetAvailableGeographies()
 	require.NoError(t, err)
@@ -168,8 +186,9 @@ func TestGetAvailableGeographies_CommaSeparatedValues(t *testing.T) {
 	insertTestSecurity(t, db, "US0000000001", "VT", "Vanguard Total World", "US, Europe, Asia Pacific", "ETF", 1)
 	insertTestSecurity(t, db, "US0000000002", "VEA", "Vanguard Developed Markets", "Europe, Japan, Australia", "ETF", 1)
 
-	repo := NewRepository(nil, nil, zerolog.Nop())
-	repo.SetUniverseDB(db)
+	log := zerolog.Nop()
+	securityProvider := newTestSecurityProvider(db)
+	repo := NewRepository(nil, securityProvider, log)
 
 	geographies, err := repo.GetAvailableGeographies()
 	require.NoError(t, err)
@@ -187,8 +206,9 @@ func TestGetAvailableGeographies_MixedValues(t *testing.T) {
 	insertTestSecurity(t, db, "US0000000002", "VT", "Vanguard Total World", "United States, Europe", "ETF", 1)
 	insertTestSecurity(t, db, "DE0000000001", "SAP", "SAP", "Europe", "Technology", 1)
 
-	repo := NewRepository(nil, nil, zerolog.Nop())
-	repo.SetUniverseDB(db)
+	log := zerolog.Nop()
+	securityProvider := newTestSecurityProvider(db)
+	repo := NewRepository(nil, securityProvider, log)
 
 	geographies, err := repo.GetAvailableGeographies()
 	require.NoError(t, err)
@@ -199,47 +219,37 @@ func TestGetAvailableGeographies_MixedValues(t *testing.T) {
 }
 
 func TestGetAvailableGeographies_SkipsInactiveSecurities(t *testing.T) {
-	db := setupTestUniverseDB(t)
-	defer db.Close()
-
-	insertTestSecurity(t, db, "US0000000001", "AAPL", "Apple", "United States", "Technology", 1)
-	insertTestSecurity(t, db, "JP0000000001", "SONY", "Sony", "Japan", "Technology", 0) // Inactive
-
-	repo := NewRepository(nil, nil, zerolog.Nop())
-	repo.SetUniverseDB(db)
-
-	geographies, err := repo.GetAvailableGeographies()
-	require.NoError(t, err)
-
-	// Only United States should appear (Japan is inactive)
-	expected := []string{"United States"}
-	assert.Equal(t, expected, geographies)
+	// After migration 038: No soft delete - all securities in database are active
+	// This test is no longer relevant since we removed the active column
+	// Test renamed to document the change
+	t.Skip("After migration 038: No soft delete - all securities in database are active")
 }
 
 func TestGetAvailableIndustries_NoUniverseDB(t *testing.T) {
+	// After migration 038: SecurityProvider is REQUIRED (no fallback anti-pattern)
 	repo := NewRepository(nil, nil, zerolog.Nop())
-	// Don't set universeDB
 
 	_, err := repo.GetAvailableIndustries()
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "neither security provider nor universe database configured")
+	assert.Contains(t, err.Error(), "security provider not available")
 }
 
 func TestGetAvailableGeographies_NoUniverseDB(t *testing.T) {
+	// After migration 038: SecurityProvider is REQUIRED (no fallback anti-pattern)
 	repo := NewRepository(nil, nil, zerolog.Nop())
-	// Don't set universeDB
 
 	_, err := repo.GetAvailableGeographies()
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "neither security provider nor universe database configured")
+	assert.Contains(t, err.Error(), "security provider not available")
 }
 
 func TestGetAvailableIndustries_EmptyDatabase(t *testing.T) {
 	db := setupTestUniverseDB(t)
 	defer db.Close()
 
-	repo := NewRepository(nil, nil, zerolog.Nop())
-	repo.SetUniverseDB(db)
+	log := zerolog.Nop()
+	securityProvider := newTestSecurityProvider(db)
+	repo := NewRepository(nil, securityProvider, log)
 
 	industries, err := repo.GetAvailableIndustries()
 	require.NoError(t, err)
@@ -251,8 +261,9 @@ func TestGetAvailableGeographies_EmptyDatabase(t *testing.T) {
 	db := setupTestUniverseDB(t)
 	defer db.Close()
 
-	repo := NewRepository(nil, nil, zerolog.Nop())
-	repo.SetUniverseDB(db)
+	log := zerolog.Nop()
+	securityProvider := newTestSecurityProvider(db)
+	repo := NewRepository(nil, securityProvider, log)
 
 	geographies, err := repo.GetAvailableGeographies()
 	require.NoError(t, err)
@@ -265,14 +276,15 @@ func TestGetAvailableIndustries_ExcludesIndices(t *testing.T) {
 	defer db.Close()
 
 	// Insert regular securities
-	insertTestSecurityWithType(t, db, "US0000000001", "AAPL", "Apple", "EQUITY", "US", "Technology", 1)
-	insertTestSecurityWithType(t, db, "US0000000002", "XOM", "Exxon", "EQUITY", "US", "Energy", 1)
+	insertTestSecurityWithType(t, db, "US0000000001", "AAPL", "Apple", "EQUITY", "US", "Technology")
+	insertTestSecurityWithType(t, db, "US0000000002", "XOM", "Exxon", "EQUITY", "US", "Energy")
 
 	// Insert market index (should be excluded)
-	insertTestSecurityWithType(t, db, "INDEX-SP500.IDX", "SP500.IDX", "S&P 500", "INDEX", "US", "Index", 1)
+	insertTestSecurityWithType(t, db, "INDEX-SP500.IDX", "SP500.IDX", "S&P 500", "INDEX", "US", "Index")
 
-	repo := NewRepository(nil, nil, zerolog.Nop())
-	repo.SetUniverseDB(db)
+	log := zerolog.Nop()
+	securityProvider := newTestSecurityProvider(db)
+	repo := NewRepository(nil, securityProvider, log)
 
 	industries, err := repo.GetAvailableIndustries()
 	require.NoError(t, err)
@@ -287,15 +299,16 @@ func TestGetAvailableGeographies_ExcludesIndices(t *testing.T) {
 	defer db.Close()
 
 	// Insert regular securities
-	insertTestSecurityWithType(t, db, "US0000000001", "AAPL", "Apple", "EQUITY", "United States", "Technology", 1)
-	insertTestSecurityWithType(t, db, "DE0000000001", "SAP", "SAP", "EQUITY", "Germany", "Technology", 1)
+	insertTestSecurityWithType(t, db, "US0000000001", "AAPL", "Apple", "EQUITY", "United States", "Technology")
+	insertTestSecurityWithType(t, db, "DE0000000001", "SAP", "SAP", "EQUITY", "Germany", "Technology")
 
 	// Insert market indices (should be excluded)
-	insertTestSecurityWithType(t, db, "INDEX-SP500.IDX", "SP500.IDX", "S&P 500", "INDEX", "United States", "Index", 1)
-	insertTestSecurityWithType(t, db, "INDEX-DAX.IDX", "DAX.IDX", "DAX", "INDEX", "Germany", "Index", 1)
+	insertTestSecurityWithType(t, db, "INDEX-SP500.IDX", "SP500.IDX", "S&P 500", "INDEX", "United States", "Index")
+	insertTestSecurityWithType(t, db, "INDEX-DAX.IDX", "DAX.IDX", "DAX", "INDEX", "Germany", "Index")
 
-	repo := NewRepository(nil, nil, zerolog.Nop())
-	repo.SetUniverseDB(db)
+	log := zerolog.Nop()
+	securityProvider := newTestSecurityProvider(db)
+	repo := NewRepository(nil, securityProvider, log)
 
 	geographies, err := repo.GetAvailableGeographies()
 	require.NoError(t, err)
@@ -311,14 +324,15 @@ func TestGetAvailableIndustries_IncludesNullProductType(t *testing.T) {
 	defer db.Close()
 
 	// Insert security with NULL product_type (should be included)
-	insertTestSecurityWithType(t, db, "US0000000001", "AAPL", "Apple", "", "US", "Technology", 1)
+	insertTestSecurityWithType(t, db, "US0000000001", "AAPL", "Apple", "", "US", "Technology")
 	// Insert security with explicit EQUITY type
-	insertTestSecurityWithType(t, db, "US0000000002", "MSFT", "Microsoft", "EQUITY", "US", "Technology", 1)
+	insertTestSecurityWithType(t, db, "US0000000002", "MSFT", "Microsoft", "EQUITY", "US", "Technology")
 	// Insert index (should be excluded)
-	insertTestSecurityWithType(t, db, "INDEX-SP500.IDX", "SP500.IDX", "S&P 500", "INDEX", "US", "Index", 1)
+	insertTestSecurityWithType(t, db, "INDEX-SP500.IDX", "SP500.IDX", "S&P 500", "INDEX", "US", "Index")
 
-	repo := NewRepository(nil, nil, zerolog.Nop())
-	repo.SetUniverseDB(db)
+	log := zerolog.Nop()
+	securityProvider := newTestSecurityProvider(db)
+	repo := NewRepository(nil, securityProvider, log)
 
 	industries, err := repo.GetAvailableIndustries()
 	require.NoError(t, err)

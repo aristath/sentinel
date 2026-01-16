@@ -67,11 +67,11 @@ func hashRegimeAwareCovKey(isins []string, lookbackDays int, regimeScore float64
 
 // RiskModelBuilder builds covariance matrices and risk models for optimization.
 type RiskModelBuilder struct {
-	historyDBClient universe.HistoryDBInterface // Filtered and cached price access
-	universeDB      *sql.DB                     // universe.db (for symbol -> ISIN lookup)
-	configDB        *sql.DB                     // config.db (for market_indices table)
-	cache           *calculations.Cache         // calculations.db (optional, for caching results)
-	log             zerolog.Logger
+	historyDBClient  universe.HistoryDBInterface // Filtered and cached price access
+	securityProvider SecurityProvider            // For symbol -> ISIN lookup
+	configDB         *sql.DB                     // config.db (for market_indices table)
+	cache            *calculations.Cache         // calculations.db (optional, for caching results)
+	log              zerolog.Logger
 }
 
 type RegimeAwareRiskOptions struct {
@@ -89,12 +89,12 @@ type indexSpec struct {
 
 // NewRiskModelBuilder creates a new risk model builder.
 // configDB is optional (can be nil) - if provided, enables dynamic index lookup for regime-aware calculations.
-func NewRiskModelBuilder(historyDBClient universe.HistoryDBInterface, universeDB *sql.DB, configDB *sql.DB, log zerolog.Logger) *RiskModelBuilder {
+func NewRiskModelBuilder(historyDBClient universe.HistoryDBInterface, securityProvider SecurityProvider, configDB *sql.DB, log zerolog.Logger) *RiskModelBuilder {
 	return &RiskModelBuilder{
-		historyDBClient: historyDBClient,
-		universeDB:      universeDB,
-		configDB:        configDB,
-		log:             log.With().Str("component", "risk_model").Logger(),
+		historyDBClient:  historyDBClient,
+		securityProvider: securityProvider,
+		configDB:         configDB,
+		log:              log.With().Str("component", "risk_model").Logger(),
 	}
 }
 
@@ -927,14 +927,13 @@ func (rb *RiskModelBuilder) getFallbackIndices() []indexSpec {
 	return indices
 }
 
-// lookupISIN looks up the ISIN for a symbol in the universe database
+// lookupISIN looks up the ISIN for a symbol via security provider
 func (rb *RiskModelBuilder) lookupISIN(symbol string) string {
-	if rb.universeDB == nil {
+	if rb.securityProvider == nil {
 		return ""
 	}
 
-	var isin string
-	err := rb.universeDB.QueryRow("SELECT isin FROM securities WHERE symbol = ?", symbol).Scan(&isin)
+	isin, err := rb.securityProvider.GetISINBySymbol(symbol)
 	if err != nil {
 		return ""
 	}

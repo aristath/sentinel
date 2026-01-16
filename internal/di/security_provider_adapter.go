@@ -16,9 +16,10 @@ func NewSecurityProviderAdapter(repo universe.SecurityRepositoryInterface) *Secu
 	return &SecurityProviderAdapter{repo: repo}
 }
 
-// GetAllActive returns all active securities
+// GetAllActive returns all active securities (excludes indices)
+// Uses GetTradable() which replaces GetAllActive()
 func (a *SecurityProviderAdapter) GetAllActive() ([]portfolio.SecurityInfo, error) {
-	securities, err := a.repo.GetAllActive()
+	securities, err := a.repo.GetTradable()
 	if err != nil {
 		return nil, err
 	}
@@ -40,9 +41,10 @@ func (a *SecurityProviderAdapter) GetAllActive() ([]portfolio.SecurityInfo, erro
 	return result, nil
 }
 
-// GetAllActiveTradable returns all active and tradable securities
+// GetAllActiveTradable returns all active and tradable securities (excludes indices)
+// Uses GetTradable() which replaces GetAllActiveTradable()
 func (a *SecurityProviderAdapter) GetAllActiveTradable() ([]portfolio.SecurityInfo, error) {
-	securities, err := a.repo.GetAllActiveTradable()
+	securities, err := a.repo.GetTradable()
 	if err != nil {
 		return nil, err
 	}
@@ -62,4 +64,9 @@ func (a *SecurityProviderAdapter) GetAllActiveTradable() ([]portfolio.SecurityIn
 	}
 
 	return result, nil
+}
+
+// GetISINBySymbol returns ISIN for a given symbol
+func (a *SecurityProviderAdapter) GetISINBySymbol(symbol string) (string, error) {
+	return a.repo.GetISINBySymbol(symbol)
 }

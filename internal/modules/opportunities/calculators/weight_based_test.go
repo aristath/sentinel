@@ -5,6 +5,7 @@ import (
 
 	"github.com/aristath/sentinel/internal/domain"
 	planningdomain "github.com/aristath/sentinel/internal/modules/planning/domain"
+	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -60,11 +61,10 @@ func TestWeightBasedCalculator_MaxSellPercentage(t *testing.T) {
 				Quantity: tt.positionQuantity,
 			}
 
-			security := domain.Security{
+			security := universe.Security{
 				Symbol:    "TEST.US",
 				Name:      "Test Security",
 				ISIN:      "US1234567890",
-				Active:    true,
 				AllowSell: true,
 				Currency:  "EUR",
 			}
@@ -77,9 +77,9 @@ func TestWeightBasedCalculator_MaxSellPercentage(t *testing.T) {
 				EnrichedPositions: []planningdomain.EnrichedPosition{
 					createEnrichedPositionWithWeight(position, security, currentPrice, 1.0),
 				},
-				Securities:             []domain.Security{security},
+				Securities:             []universe.Security{security},
 				CurrentPrices:          map[string]float64{"US1234567890": currentPrice}, // ISIN key ✅
-				StocksByISIN:           map[string]domain.Security{"US1234567890": security},
+				StocksByISIN:           map[string]universe.Security{"US1234567890": security},
 				TotalPortfolioValueEUR: tt.positionQuantity * currentPrice,       // All in one position
 				TargetWeights:          map[string]float64{"US1234567890": 0.40}, // Target 40% (ISIN key ✅)
 				IneligibleISINs:        map[string]bool{},
@@ -113,10 +113,10 @@ func TestWeightBasedCalculator_MaxSellPercentage_MultiplePositions(t *testing.T)
 	position1 := domain.Position{Symbol: "STOCK_A.US", ISIN: "US1111111111", Quantity: 1000}
 	position2 := domain.Position{Symbol: "STOCK_B.US", ISIN: "US2222222222", Quantity: 500}
 
-	security1 := domain.Security{Symbol: "STOCK_A.US", Name: "Stock A", ISIN: "US1111111111", Active: true, AllowSell: true, Currency: "EUR"}
-	security2 := domain.Security{Symbol: "STOCK_B.US", Name: "Stock B", ISIN: "US2222222222", Active: true, AllowSell: true, Currency: "EUR"}
+	security1 := universe.Security{Symbol: "STOCK_A.US", Name: "Stock A", ISIN: "US1111111111", AllowSell: true, Currency: "EUR"}
+	security2 := universe.Security{Symbol: "STOCK_B.US", Name: "Stock B", ISIN: "US2222222222", AllowSell: true, Currency: "EUR"}
 
-	securities := []domain.Security{security1, security2}
+	securities := []universe.Security{security1, security2}
 
 	// Portfolio: 66% STOCK_A (10000), 33% STOCK_B (5000), total 15000
 	// Targets: 40% STOCK_A, 20% STOCK_B
@@ -127,7 +127,7 @@ func TestWeightBasedCalculator_MaxSellPercentage_MultiplePositions(t *testing.T)
 		},
 		Securities:             securities,
 		CurrentPrices:          map[string]float64{"US1111111111": 10.0, "US2222222222": 10.0}, // ISIN keys ✅
-		StocksByISIN:           map[string]domain.Security{"US1111111111": securities[0], "US2222222222": securities[1]},
+		StocksByISIN:           map[string]universe.Security{"US1111111111": securities[0], "US2222222222": securities[1]},
 		TotalPortfolioValueEUR: 15000,
 		TargetWeights:          map[string]float64{"US1111111111": 0.40, "US2222222222": 0.20}, // ISIN keys ✅
 		IneligibleISINs:        map[string]bool{},
@@ -168,11 +168,10 @@ func TestWeightBasedCalculator_NoMaxSellPercentage(t *testing.T) {
 		Quantity: 1000,
 	}
 
-	security := domain.Security{
+	security := universe.Security{
 		Symbol:    "TEST.US",
 		Name:      "Test Security",
 		ISIN:      "US1234567890",
-		Active:    true,
 		AllowSell: true,
 		Currency:  "EUR",
 	}
@@ -181,9 +180,9 @@ func TestWeightBasedCalculator_NoMaxSellPercentage(t *testing.T) {
 		EnrichedPositions: []planningdomain.EnrichedPosition{
 			createEnrichedPositionWithWeight(position, security, 10.0, 1.0),
 		},
-		Securities:             []domain.Security{security},
+		Securities:             []universe.Security{security},
 		CurrentPrices:          map[string]float64{"US1234567890": 10.0}, // ISIN key ✅
-		StocksByISIN:           map[string]domain.Security{"US1234567890": security},
+		StocksByISIN:           map[string]universe.Security{"US1234567890": security},
 		TotalPortfolioValueEUR: 10000,
 		TargetWeights:          map[string]float64{"US1234567890": 0.20}, // Severely overweight (ISIN key ✅)
 		IneligibleISINs:        map[string]bool{},

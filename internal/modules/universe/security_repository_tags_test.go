@@ -16,29 +16,14 @@ func setupSecurityTagsTestDB(t *testing.T) *sql.DB {
 	db, err := sql.Open("sqlite3", ":memory:")
 	require.NoError(t, err)
 
-	// Create securities table (after migration 030: isin is PRIMARY KEY)
+	// Create securities table with JSON storage (migration 038 schema)
 	_, err = db.Exec(`
 		CREATE TABLE securities (
 			isin TEXT PRIMARY KEY,
 			symbol TEXT NOT NULL,
-			name TEXT NOT NULL,
-			product_type TEXT,
-			industry TEXT,
-			geography TEXT,
-			fullExchangeName TEXT,
-			market_code TEXT,
-			priority_multiplier REAL DEFAULT 1.0,
-			min_lot INTEGER DEFAULT 1,
-			active INTEGER DEFAULT 1,
-			allow_buy INTEGER DEFAULT 1,
-			allow_sell INTEGER DEFAULT 1,
-			currency TEXT,
-			last_synced TEXT,
-			min_portfolio_target REAL,
-			max_portfolio_target REAL,
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		)
+			data TEXT NOT NULL,
+			last_synced INTEGER
+		) STRICT
 	`)
 	require.NoError(t, err)
 
@@ -70,7 +55,6 @@ func setupSecurityTagsTestDB(t *testing.T) *sql.DB {
 	// Create indexes
 	_, err = db.Exec(`
 		CREATE INDEX IF NOT EXISTS idx_securities_symbol ON securities(symbol);
-		CREATE INDEX IF NOT EXISTS idx_securities_active ON securities(active);
 		CREATE INDEX IF NOT EXISTS idx_security_tags_isin ON security_tags(isin);
 		CREATE INDEX IF NOT EXISTS idx_security_tags_tag_id ON security_tags(tag_id);
 	`)
@@ -87,12 +71,10 @@ func TestSecurityRepository_getTagsForSecurity_NoTags(t *testing.T) {
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 	repo := NewSecurityRepository(db, log)
 
-	now := time.Now().Unix()
 	// Insert test security with ISIN (using symbol as ISIN for test simplicity)
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, active, created_at, updated_at)
-		VALUES ('US0378331005', 'AAPL', 'Apple Inc', 1, ?, ?)
-	`, now, now)
+		INSERT INTO securities (isin, symbol, data, last_synced) VALUES ('US0378331005', 'AAPL', json_object('name', 'Apple Inc'), NULL)
+	`)
 	require.NoError(t, err)
 
 	// Execute - getTagsForSecurity expects ISIN
@@ -114,9 +96,8 @@ func TestSecurityRepository_getTagsForSecurity_MultipleTags(t *testing.T) {
 	now := time.Now().Unix()
 	// Insert test security with ISIN
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, active, created_at, updated_at)
-		VALUES ('US0378331005', 'AAPL', 'Apple Inc', 1, ?, ?)
-	`, now, now)
+		INSERT INTO securities (isin, symbol, data, last_synced) VALUES ('US0378331005', 'AAPL', json_object('name', 'Apple Inc'), NULL)
+	`)
 	require.NoError(t, err)
 
 	// Insert tags
@@ -173,12 +154,10 @@ func TestSecurityRepository_setTagsForSecurity_NewTags(t *testing.T) {
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 	repo := NewSecurityRepository(db, log)
 
-	now := time.Now().Unix()
 	// Insert test security with ISIN
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, active, created_at, updated_at)
-		VALUES ('US0378331005', 'AAPL', 'Apple Inc', 1, ?, ?)
-	`, now, now)
+		INSERT INTO securities (isin, symbol, data, last_synced) VALUES ('US0378331005', 'AAPL', json_object('name', 'Apple Inc'), NULL)
+	`)
 	require.NoError(t, err)
 
 	// Execute - SetTagsForSecurity accepts symbol and looks up ISIN internally
@@ -214,12 +193,10 @@ func TestSecurityRepository_setTagsForSecurity_ReplaceTags(t *testing.T) {
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 	repo := NewSecurityRepository(db, log)
 
-	now := time.Now().Unix()
 	// Insert test security with ISIN
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, active, created_at, updated_at)
-		VALUES ('US0378331005', 'AAPL', 'Apple Inc', 1, ?, ?)
-	`, now, now)
+		INSERT INTO securities (isin, symbol, data, last_synced) VALUES ('US0378331005', 'AAPL', json_object('name', 'Apple Inc'), NULL)
+	`)
 	require.NoError(t, err)
 
 	// Set initial tags
@@ -250,12 +227,10 @@ func TestSecurityRepository_setTagsForSecurity_EmptyArray(t *testing.T) {
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 	repo := NewSecurityRepository(db, log)
 
-	now := time.Now().Unix()
 	// Insert test security with ISIN
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, active, created_at, updated_at)
-		VALUES ('US0378331005', 'AAPL', 'Apple Inc', 1, ?, ?)
-	`, now, now)
+		INSERT INTO securities (isin, symbol, data, last_synced) VALUES ('US0378331005', 'AAPL', json_object('name', 'Apple Inc'), NULL)
+	`)
 	require.NoError(t, err)
 
 	// Set initial tags
@@ -286,9 +261,8 @@ func TestSecurityRepository_scanSecurity_IncludesTags(t *testing.T) {
 	// Insert test security with ISIN
 	now := time.Now().Unix()
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, active, created_at, updated_at)
-		VALUES ('US0378331005', 'AAPL', 'Apple Inc', 1, ?, ?)
-	`, now, now)
+		INSERT INTO securities (isin, symbol, data, last_synced) VALUES ('US0378331005', 'AAPL', json_object('name', 'Apple Inc'), NULL)
+	`)
 	require.NoError(t, err)
 
 	// Insert tags
@@ -352,9 +326,8 @@ func TestSecurityRepository_GetTagsForSecurity_Public(t *testing.T) {
 	now := time.Now().Unix()
 	// Insert test security with ISIN
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, active, created_at, updated_at)
-		VALUES ('US0378331005', 'AAPL', 'Apple Inc', 1, ?, ?)
-	`, now, now)
+		INSERT INTO securities (isin, symbol, data, last_synced) VALUES ('US0378331005', 'AAPL', json_object('name', 'Apple Inc'), NULL)
+	`)
 	require.NoError(t, err)
 
 	// Insert tags
@@ -391,12 +364,11 @@ func TestSecurityRepository_GetByTags_SingleTag(t *testing.T) {
 
 	// Insert test securities with ISINs
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, active, created_at, updated_at)
-		VALUES
-			('US0378331005', 'AAPL', 'Apple Inc', 1, ?, ?),
-			('US5949181045', 'MSFT', 'Microsoft Corp', 1, ?, ?),
-			('US02079K3059', 'GOOGL', 'Alphabet Inc', 1, ?, ?)
-	`, now, now, now, now, now, now)
+		INSERT INTO securities (isin, symbol, data, last_synced) VALUES
+			('US0378331005', 'AAPL', json_object('name', 'Apple Inc'), NULL),
+			('US5949181045', 'MSFT', json_object('name', 'Microsoft Corp'), NULL),
+			('US02079K3059', 'GOOGL', json_object('name', 'Alphabet Inc'), NULL)
+	`)
 	require.NoError(t, err)
 
 	// Insert tags
@@ -474,12 +446,11 @@ func TestSecurityRepository_GetByTags_MultipleTags(t *testing.T) {
 
 	// Insert test securities with ISINs
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, active, created_at, updated_at)
-		VALUES
-			('US0378331005', 'AAPL', 'Apple Inc', 1, ?, ?),
-			('US5949181045', 'MSFT', 'Microsoft Corp', 1, ?, ?),
-			('US02079K3059', 'GOOGL', 'Alphabet Inc', 1, ?, ?)
-	`, now, now, now, now, now, now)
+		INSERT INTO securities (isin, symbol, data, last_synced) VALUES
+			('US0378331005', 'AAPL', json_object('name', 'Apple Inc'), NULL),
+			('US5949181045', 'MSFT', json_object('name', 'Microsoft Corp'), NULL),
+			('US02079K3059', 'GOOGL', json_object('name', 'Alphabet Inc'), NULL)
+	`)
 	require.NoError(t, err)
 
 	// Insert tags
@@ -517,13 +488,10 @@ func TestSecurityRepository_GetByTags_NoMatches(t *testing.T) {
 	log := zerolog.New(nil).Level(zerolog.Disabled)
 	repo := NewSecurityRepository(db, log)
 
-	now := time.Now().Unix()
-
 	// Insert test security with ISIN
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, active, created_at, updated_at)
-		VALUES ('US0378331005', 'AAPL', 'Apple Inc', 1, ?, ?)
-	`, now, now)
+		INSERT INTO securities (isin, symbol, data, last_synced) VALUES ('US0378331005', 'AAPL', json_object('name', 'Apple Inc'), NULL)
+	`)
 	require.NoError(t, err)
 
 	// Execute - get securities with non-existent tag
@@ -546,12 +514,11 @@ func TestSecurityRepository_GetPositionsByTags(t *testing.T) {
 
 	// Insert test securities with ISINs
 	_, err := db.Exec(`
-		INSERT INTO securities (isin, symbol, name, active, created_at, updated_at)
-		VALUES
-			('US0378331005', 'AAPL', 'Apple Inc', 1, ?, ?),
-			('US5949181045', 'MSFT', 'Microsoft Corp', 1, ?, ?),
-			('US02079K3059', 'GOOGL', 'Alphabet Inc', 1, ?, ?)
-	`, now, now, now, now, now, now)
+		INSERT INTO securities (isin, symbol, data, last_synced) VALUES
+			('US0378331005', 'AAPL', json_object('name', 'Apple Inc'), NULL),
+			('US5949181045', 'MSFT', json_object('name', 'Microsoft Corp'), NULL),
+			('US02079K3059', 'GOOGL', json_object('name', 'Alphabet Inc'), NULL)
+	`)
 	require.NoError(t, err)
 
 	// Insert tags

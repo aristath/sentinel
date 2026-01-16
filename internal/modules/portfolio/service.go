@@ -510,61 +510,24 @@ func (s *PortfolioService) getAllSecurityGeographiesAndIndustries() (map[string]
 	geographies := make(map[string]bool)
 	industries := make(map[string]bool)
 
-	if s.securityProvider != nil {
-		// Use SecurityProvider (respects overrides)
-		securities, err := s.securityProvider.GetAllActiveTradable()
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get securities: %w", err)
-		}
+	// SecurityProvider is required - no fallback
+	securities, err := s.securityProvider.GetAllActiveTradable()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get securities: %w", err)
+	}
 
-		for _, sec := range securities {
-			if sec.Geography != "" {
-				geos := utils.ParseCSV(sec.Geography)
-				for _, geo := range geos {
-					geographies[geo] = true
-				}
-			}
-			if sec.Industry != "" {
-				inds := utils.ParseCSV(sec.Industry)
-				for _, ind := range inds {
-					industries[ind] = true
-				}
+	for _, sec := range securities {
+		if sec.Geography != "" {
+			geos := utils.ParseCSV(sec.Geography)
+			for _, geo := range geos {
+				geographies[geo] = true
 			}
 		}
-	} else {
-		// Fallback to direct query (no overrides)
-		s.log.Warn().Msg("SecurityProvider not available, using direct query (overrides not applied)")
-		query := "SELECT geography, industry FROM securities WHERE active = 1 AND (product_type IS NULL OR product_type != ?)"
-
-		rows, err := s.universeDB.Query(query, string(domain.ProductTypeIndex))
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to query securities: %w", err)
-		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var geography, industry sql.NullString
-			if err := rows.Scan(&geography, &industry); err != nil {
-				return nil, nil, fmt.Errorf("failed to scan security: %w", err)
+		if sec.Industry != "" {
+			inds := utils.ParseCSV(sec.Industry)
+			for _, ind := range inds {
+				industries[ind] = true
 			}
-
-			if geography.Valid && geography.String != "" {
-				geos := utils.ParseCSV(geography.String)
-				for _, geo := range geos {
-					geographies[geo] = true
-				}
-			}
-
-			if industry.Valid && industry.String != "" {
-				inds := utils.ParseCSV(industry.String)
-				for _, ind := range inds {
-					industries[ind] = true
-				}
-			}
-		}
-
-		if err := rows.Err(); err != nil {
-			return nil, nil, fmt.Errorf("error iterating securities: %w", err)
 		}
 	}
 
@@ -613,53 +576,51 @@ func (s *PortfolioService) SyncFromTradernet() error {
 			continue
 		}
 
-		// Lookup ISIN from securities table (required for Upsert)
+		// Lookup ISIN from securities via provider (required for Upsert)
 		// Note: Cash positions should not come from Tradernet positions - they're synced separately
-		var isin string
-		query := "SELECT isin FROM securities WHERE symbol = ?"
-		row := s.universeDB.QueryRow(query, strings.ToUpper(strings.TrimSpace(tradernetPos.Symbol)))
-		if err := row.Scan(&isin); err != nil {
-			if err == sql.ErrNoRows {
-				// Security not in universe - auto-add it
-				s.log.Info().
-					Str("symbol", tradernetPos.Symbol).
-					Msg("Security not found in universe, automatically adding it")
+		if s.securityProvider == nil {
+			s.log.Error().Msg("Security provider not available, cannot sync positions")
+			return fmt.Errorf("security provider not available")
+		}
 
-				// Use SecuritySetupService to add the security with full data pipeline
-				// Note: User-configurable fields are set via security_overrides after creation
-				if s.securitySetupService != nil {
-					_, addErr := s.securitySetupService.AddSecurityByIdentifier(tradernetPos.Symbol)
-					if addErr != nil {
-						s.log.Error().
-							Err(addErr).
-							Str("symbol", tradernetPos.Symbol).
-							Msg("Failed to auto-add security to universe, skipping position")
-						continue
-					}
+		isin, err := s.securityProvider.GetISINBySymbol(tradernetPos.Symbol)
+		if err != nil {
+			// Security not in universe - auto-add it
+			s.log.Info().
+				Str("symbol", tradernetPos.Symbol).
+				Msg("Security not found in universe, automatically adding it")
 
-					// Retry ISIN lookup after adding security
-					row = s.universeDB.QueryRow(query, strings.ToUpper(strings.TrimSpace(tradernetPos.Symbol)))
-					if err := row.Scan(&isin); err != nil {
-						s.log.Error().
-							Err(err).
-							Str("symbol", tradernetPos.Symbol).
-							Msg("Failed to lookup ISIN after auto-add, skipping position")
-						continue
-					}
-
-					s.log.Info().
+			// Use SecuritySetupService to add the security with full data pipeline
+			// Note: User-configurable fields are set via security_overrides after creation
+			if s.securitySetupService != nil {
+				_, addErr := s.securitySetupService.AddSecurityByIdentifier(tradernetPos.Symbol)
+				if addErr != nil {
+					s.log.Error().
+						Err(addErr).
 						Str("symbol", tradernetPos.Symbol).
-						Str("isin", isin).
-						Msg("Successfully auto-added security to universe")
-				} else {
-					s.log.Warn().
-						Str("symbol", tradernetPos.Symbol).
-						Msg("Security not found in universe and setup service not available, skipping position")
+						Msg("Failed to auto-add security to universe, skipping position")
 					continue
 				}
+
+				// Retry ISIN lookup after adding security
+				isin, err = s.securityProvider.GetISINBySymbol(tradernetPos.Symbol)
+				if err != nil {
+					s.log.Error().
+						Err(err).
+						Str("symbol", tradernetPos.Symbol).
+						Msg("Failed to lookup ISIN after auto-add, skipping position")
+					continue
+				}
+
+				s.log.Info().
+					Str("symbol", tradernetPos.Symbol).
+					Str("isin", isin).
+					Msg("Successfully auto-added security to universe")
 			} else {
-				s.log.Warn().Err(err).Str("symbol", tradernetPos.Symbol).Msg("Failed to lookup ISIN, skipping position")
-				continue // Skip on lookup errors
+				s.log.Warn().
+					Str("symbol", tradernetPos.Symbol).
+					Msg("Security not found in universe and setup service not available, skipping position")
+				continue
 			}
 		}
 		if isin == "" {
