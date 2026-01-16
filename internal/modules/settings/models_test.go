@@ -95,3 +95,37 @@ func TestTemperamentSettingsInValidRange(t *testing.T) {
 		assert.LessOrEqual(t, floatVal, 1.0, "%s must be <= 1", setting)
 	}
 }
+
+// ============================================================================
+// JOB SCHEDULING SETTINGS TESTS
+// ============================================================================
+
+func TestRemovedJobSettingsDoNotExist(t *testing.T) {
+	// Settings removed as part of work type interval simplification
+	removedSettings := []string{
+		"job_sync_cycle_minutes",
+		"job_maintenance_hour",
+	}
+
+	for _, key := range removedSettings {
+		_, exists := SettingDefaults[key]
+		assert.False(t, exists, "Setting %s should NOT exist (removed)", key)
+	}
+}
+
+func TestJobAutoDeployMinutesExists(t *testing.T) {
+	// job_auto_deploy_minutes is the only configurable job interval
+	val, exists := SettingDefaults["job_auto_deploy_minutes"]
+	assert.True(t, exists, "job_auto_deploy_minutes must exist")
+
+	floatVal, ok := val.(float64)
+	assert.True(t, ok, "job_auto_deploy_minutes must be float64")
+	assert.Equal(t, 5.0, floatVal, "default should be 5.0 minutes")
+}
+
+func TestJobAutoDeployMinutesHasDescription(t *testing.T) {
+	desc, exists := SettingDescriptions["job_auto_deploy_minutes"]
+	assert.True(t, exists, "job_auto_deploy_minutes description must exist")
+	assert.NotEmpty(t, desc, "description must not be empty")
+	assert.Contains(t, desc, "user-configurable", "description should mention it's user-configurable")
+}

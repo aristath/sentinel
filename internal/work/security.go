@@ -48,11 +48,18 @@ type SecurityDeps struct {
 // RegisterSecurityWorkTypes registers all per-security work types with the registry
 func RegisterSecurityWorkTypes(registry *Registry, deps *SecurityDeps) {
 	// security:sync - Sync historical data for a security
+	//
+	// Interval: 24 hours (hardcoded)
+	// Rationale: Historical data providers (exchanges, data vendors) update daily after market close.
+	//            Syncing more frequently would fetch duplicate data; less frequently would miss updates.
+	//
+	// Market timing: AfterMarketClose
+	// Rationale: Ensures complete daily data is available before fetching.
 	registry.Register(&WorkType{
 		ID:           "security:sync",
 		Priority:     PriorityMedium,
 		MarketTiming: AfterMarketClose,
-		Interval:     24 * time.Hour,
+		Interval:     24 * time.Hour, // Hardcoded - matches data provider refresh
 		FindSubjects: func() []string {
 			return deps.HistorySyncService.GetStaleSecurities()
 		},
@@ -68,12 +75,19 @@ func RegisterSecurityWorkTypes(registry *Registry, deps *SecurityDeps) {
 	})
 
 	// security:technical - Calculate technical indicators for a security
+	//
+	// Interval: 24 hours (hardcoded)
+	// Rationale: Technical indicators (RSI, MACD, moving averages) use daily price data.
+	//            Daily calculation captures market trends without noise from intraday volatility.
+	//
+	// Market timing: AfterMarketClose
+	// Rationale: Depends on security:sync completing with fresh daily data.
 	registry.Register(&WorkType{
 		ID:           "security:technical",
 		DependsOn:    []string{"security:sync"},
 		Priority:     PriorityMedium,
 		MarketTiming: AfterMarketClose,
-		Interval:     24 * time.Hour,
+		Interval:     24 * time.Hour, // Hardcoded - daily technicals are optimal
 		FindSubjects: func() []string {
 			return deps.TechnicalService.GetSecuritiesNeedingTechnicals()
 		},
@@ -89,12 +103,20 @@ func RegisterSecurityWorkTypes(registry *Registry, deps *SecurityDeps) {
 	})
 
 	// security:formula - Run formula discovery for a security
+	//
+	// Interval: 30 days (hardcoded)
+	// Rationale: Symbolic regression is computationally expensive (genetic programming, hours per security).
+	//            Monthly discovery balances capturing new patterns vs resource usage.
+	//            More frequent would waste compute; less frequent would miss regime changes.
+	//
+	// Market timing: AfterMarketClose
+	// Rationale: CPU-intensive operation should not run during active trading hours.
 	registry.Register(&WorkType{
 		ID:           "security:formula",
 		DependsOn:    []string{"security:technical"},
 		Priority:     PriorityLow,
 		MarketTiming: AfterMarketClose,
-		Interval:     30 * 24 * time.Hour, // Monthly
+		Interval:     30 * 24 * time.Hour, // Hardcoded - monthly for expensive computation
 		FindSubjects: func() []string {
 			return deps.FormulaService.GetSecuritiesNeedingDiscovery()
 		},
@@ -110,12 +132,19 @@ func RegisterSecurityWorkTypes(registry *Registry, deps *SecurityDeps) {
 	})
 
 	// security:tags - Update tags for a security
+	//
+	// Interval: 7 days (hardcoded)
+	// Rationale: Tags (momentum, value, quality) are derived from medium-term trends.
+	//            Weekly updates capture market changes without excessive tag churn.
+	//
+	// Market timing: AfterMarketClose
+	// Rationale: Depends on security:sync for fresh data to calculate tags.
 	registry.Register(&WorkType{
 		ID:           "security:tags",
 		DependsOn:    []string{"security:sync"},
 		Priority:     PriorityLow,
 		MarketTiming: AfterMarketClose,
-		Interval:     7 * 24 * time.Hour, // Weekly
+		Interval:     7 * 24 * time.Hour, // Hardcoded - weekly tag updates are optimal
 		FindSubjects: func() []string {
 			return deps.TagService.GetSecuritiesNeedingTagUpdate()
 		},
@@ -132,11 +161,18 @@ func RegisterSecurityWorkTypes(registry *Registry, deps *SecurityDeps) {
 
 	// security:metadata - Sync Tradernet metadata for a security
 	// Syncs geography (from CntryOfRisk), industry (raw sector code), min_lot (from quotes.x_lot)
+	//
+	// Interval: 24 hours (hardcoded)
+	// Rationale: Metadata (geography, industry, lot size) changes infrequently but impacts allocation.
+	//            Daily sync ensures current data without excessive API calls.
+	//
+	// Market timing: AnyTime
+	// Rationale: Metadata sync is independent of market hours and can run anytime.
 	registry.Register(&WorkType{
 		ID:           "security:metadata",
 		Priority:     PriorityLow,
 		MarketTiming: AnyTime,
-		Interval:     24 * time.Hour, // Daily
+		Interval:     24 * time.Hour, // Hardcoded - daily metadata sync is optimal
 		FindSubjects: func() []string {
 			return deps.MetadataSyncService.GetAllActiveISINs()
 		},

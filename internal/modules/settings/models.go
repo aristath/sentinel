@@ -57,9 +57,7 @@ var SettingDefaults = map[string]interface{}{
 	"display_health_drift_speed":        0.5,    // Cluster movement speed multiplier
 
 	// Job scheduling intervals
-	"job_sync_cycle_minutes":  15.0, // Unified sync cycle interval
-	"job_maintenance_hour":    3.0,  // Daily maintenance hour (0-23)
-	"job_auto_deploy_minutes": 5.0,  // Auto-deploy check interval (minutes)
+	"job_auto_deploy_minutes": 5.0, // Auto-deploy check interval (minutes)
 
 	// Universe Pruning settings
 	"universe_pruning_enabled":         1.0,  // 1.0 = enabled, 0.0 = disabled
@@ -195,6 +193,9 @@ var SettingDescriptions = map[string]string{
 	"risk_tolerance":         "Risk tolerance level (0 = conservative/risk-averse, 0.5 = balanced, 1 = risk-taking). Controls volatility acceptance, drawdown tolerance, position concentration, quality floors.",
 	"temperament_aggression": "Aggression level (0 = passive/conservative, 0.5 = balanced, 1 = aggressive). Controls scoring thresholds, action frequency, evaluation weights, position sizing, and opportunity pursuit.",
 	"temperament_patience":   "Patience level (0 = impatient, 0.5 = balanced, 1 = patient). Controls hold periods, cooldowns, windfall thresholds, rebalance triggers, and dividend focus.",
+
+	// Job scheduling
+	"job_auto_deploy_minutes": "Auto-deploy check interval in minutes. Only work interval that's user-configurable - all other intervals (sync, maintenance, security, trading, analysis) are operationally optimized and hardcoded for production reliability.",
 
 	// Trading settings
 	"limit_order_buffer_percent":  "Buffer percentage for limit orders (5% = buy up to 5% above market price, sell down to 5% below)",

@@ -61,11 +61,19 @@ type SyncDeps struct {
 // RegisterSyncWorkTypes registers all sync work types with the registry
 func RegisterSyncWorkTypes(registry *Registry, deps *SyncDeps) {
 	// sync:portfolio - Sync portfolio from broker (root of sync chain)
+	//
+	// Interval: 5 minutes (hardcoded)
+	// Rationale: Optimal balance between data freshness and API load during market hours.
+	//            Too frequent (<5 min) risks rate limiting; too slow (>5 min) delays trade execution.
+	//
+	// Market timing: DuringMarketOpen
+	// Rationale: Portfolio syncing during market hours is critical for position tracking.
+	//            Paused when markets closed to conserve broker API quota.
 	registry.Register(&WorkType{
 		ID:           "sync:portfolio",
 		Priority:     PriorityHigh,
 		MarketTiming: DuringMarketOpen,
-		Interval:     5 * time.Minute,
+		Interval:     5 * time.Minute, // Hardcoded - operationally optimized
 		FindSubjects: func() []string {
 			// Always return work, interval check handles frequency
 			return []string{""}
@@ -145,11 +153,18 @@ func RegisterSyncWorkTypes(registry *Registry, deps *SyncDeps) {
 	})
 
 	// sync:rates - Sync exchange rates (independent, runs anytime)
+	//
+	// Interval: 1 hour (hardcoded)
+	// Rationale: Exchange rates change slowly. Hourly updates provide sufficient accuracy
+	//            for multi-currency portfolio calculations without excessive API calls.
+	//
+	// Market timing: AnyTime
+	// Rationale: Exchange rates are independent of market hours. Can run anytime.
 	registry.Register(&WorkType{
 		ID:           "sync:rates",
 		Priority:     PriorityMedium,
 		MarketTiming: AnyTime,
-		Interval:     1 * time.Hour,
+		Interval:     1 * time.Hour, // Hardcoded - operationally optimized
 		FindSubjects: func() []string {
 			return []string{""}
 		},

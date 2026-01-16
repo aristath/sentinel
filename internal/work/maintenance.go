@@ -48,11 +48,19 @@ type MaintenanceDeps struct {
 // RegisterMaintenanceWorkTypes registers all maintenance work types with the registry
 func RegisterMaintenanceWorkTypes(registry *Registry, deps *MaintenanceDeps) {
 	// maintenance:backup - Daily local backup
+	//
+	// Interval: 24 hours (hardcoded)
+	// Rationale: Daily backups are industry standard for financial data.
+	//            More frequent would waste disk space; less frequent risks data loss.
+	//
+	// Market timing: AllMarketsClosed
+	// Rationale: Backup during off-hours minimizes impact on trading operations.
+	//            Uses BackedUpToday() check to prevent duplicate backups if app restarts.
 	registry.Register(&WorkType{
 		ID:           "maintenance:backup",
 		Priority:     PriorityLow,
 		MarketTiming: AllMarketsClosed,
-		Interval:     24 * time.Hour,
+		Interval:     24 * time.Hour, // Hardcoded - daily backups are optimal
 		FindSubjects: func() []string {
 			if deps.BackupService.BackedUpToday() {
 				return nil
@@ -71,12 +79,18 @@ func RegisterMaintenanceWorkTypes(registry *Registry, deps *MaintenanceDeps) {
 	})
 
 	// maintenance:r2-backup - Upload backup to R2 cloud storage
+	//
+	// Interval: 24 hours (hardcoded)
+	// Rationale: Daily cloud backups align with local backups for disaster recovery.
+	//
+	// Market timing: AllMarketsClosed
+	// Rationale: Cloud uploads during off-hours avoid bandwidth competition with trading.
 	registry.Register(&WorkType{
 		ID:           "maintenance:r2-backup",
 		DependsOn:    []string{"maintenance:backup"},
 		Priority:     PriorityLow,
 		MarketTiming: AllMarketsClosed,
-		Interval:     24 * time.Hour,
+		Interval:     24 * time.Hour, // Hardcoded - daily cloud backups are optimal
 		FindSubjects: func() []string {
 			return []string{""}
 		},
@@ -92,12 +106,18 @@ func RegisterMaintenanceWorkTypes(registry *Registry, deps *MaintenanceDeps) {
 	})
 
 	// maintenance:r2-rotation - Rotate old R2 backups
+	//
+	// Interval: 24 hours (hardcoded)
+	// Rationale: Daily backup rotation manages storage costs while retaining history.
+	//
+	// Market timing: AllMarketsClosed
+	// Rationale: Rotation after backup upload ensures consistent backup sets.
 	registry.Register(&WorkType{
 		ID:           "maintenance:r2-rotation",
 		DependsOn:    []string{"maintenance:r2-backup"},
 		Priority:     PriorityLow,
 		MarketTiming: AllMarketsClosed,
-		Interval:     24 * time.Hour,
+		Interval:     24 * time.Hour, // Hardcoded - daily rotation is optimal
 		FindSubjects: func() []string {
 			return []string{""}
 		},
@@ -113,12 +133,18 @@ func RegisterMaintenanceWorkTypes(registry *Registry, deps *MaintenanceDeps) {
 	})
 
 	// maintenance:vacuum - Vacuum databases
+	//
+	// Interval: 24 hours (hardcoded)
+	// Rationale: Daily database vacuum reclaims space and optimizes SQLite performance.
+	//
+	// Market timing: AllMarketsClosed
+	// Rationale: Vacuum can lock tables briefly; run during off-hours for safety.
 	registry.Register(&WorkType{
 		ID:           "maintenance:vacuum",
 		DependsOn:    []string{"maintenance:backup"},
 		Priority:     PriorityLow,
 		MarketTiming: AllMarketsClosed,
-		Interval:     24 * time.Hour,
+		Interval:     24 * time.Hour, // Hardcoded - daily vacuum is optimal
 		FindSubjects: func() []string {
 			return []string{""}
 		},
@@ -134,11 +160,17 @@ func RegisterMaintenanceWorkTypes(registry *Registry, deps *MaintenanceDeps) {
 	})
 
 	// maintenance:health - Database health checks
+	//
+	// Interval: 24 hours (hardcoded)
+	// Rationale: Daily health checks catch data integrity issues early.
+	//
+	// Market timing: AllMarketsClosed
+	// Rationale: Health checks can be I/O intensive; run during off-hours.
 	registry.Register(&WorkType{
 		ID:           "maintenance:health",
 		Priority:     PriorityLow,
 		MarketTiming: AllMarketsClosed,
-		Interval:     24 * time.Hour,
+		Interval:     24 * time.Hour, // Hardcoded - daily health checks are optimal
 		FindSubjects: func() []string {
 			return []string{""}
 		},
@@ -154,11 +186,17 @@ func RegisterMaintenanceWorkTypes(registry *Registry, deps *MaintenanceDeps) {
 	})
 
 	// maintenance:cleanup:history - Clean old history data
+	//
+	// Interval: 24 hours (hardcoded)
+	// Rationale: Daily history cleanup prevents database bloat from stale data.
+	//
+	// Market timing: AllMarketsClosed
+	// Rationale: Cleanup operations during off-hours minimize impact on queries.
 	registry.Register(&WorkType{
 		ID:           "maintenance:cleanup:history",
 		Priority:     PriorityLow,
 		MarketTiming: AllMarketsClosed,
-		Interval:     24 * time.Hour,
+		Interval:     24 * time.Hour, // Hardcoded - daily cleanup is optimal
 		FindSubjects: func() []string {
 			return []string{""}
 		},
@@ -174,11 +212,17 @@ func RegisterMaintenanceWorkTypes(registry *Registry, deps *MaintenanceDeps) {
 	})
 
 	// maintenance:cleanup:cache - Clean expired cache
+	//
+	// Interval: 24 hours (hardcoded)
+	// Rationale: Daily cache cleanup removes stale entries and frees memory.
+	//
+	// Market timing: AllMarketsClosed
+	// Rationale: Cache cleanup during off-hours avoids cache misses during trading.
 	registry.Register(&WorkType{
 		ID:           "maintenance:cleanup:cache",
 		Priority:     PriorityLow,
 		MarketTiming: AllMarketsClosed,
-		Interval:     24 * time.Hour,
+		Interval:     24 * time.Hour, // Hardcoded - daily cleanup is optimal
 		FindSubjects: func() []string {
 			return []string{""}
 		},
@@ -194,11 +238,18 @@ func RegisterMaintenanceWorkTypes(registry *Registry, deps *MaintenanceDeps) {
 	})
 
 	// maintenance:cleanup:recommendations - GC old recommendations (runs hourly)
+	//
+	// Interval: 1 hour (hardcoded)
+	// Rationale: Recommendations are ephemeral (expire after use). Hourly cleanup prevents
+	//            recommendation table bloat while being lightweight enough to run frequently.
+	//
+	// Market timing: AnyTime
+	// Rationale: Lightweight operation, can run during market hours without impact.
 	registry.Register(&WorkType{
 		ID:           "maintenance:cleanup:recommendations",
 		Priority:     PriorityLow,
 		MarketTiming: AnyTime,
-		Interval:     1 * time.Hour,
+		Interval:     1 * time.Hour, // Hardcoded - hourly GC is optimal
 		FindSubjects: func() []string {
 			return []string{""}
 		},
@@ -214,11 +265,17 @@ func RegisterMaintenanceWorkTypes(registry *Registry, deps *MaintenanceDeps) {
 	})
 
 	// maintenance:cleanup:client-data - Clean expired client data cache
+	//
+	// Interval: 24 hours (hardcoded)
+	// Rationale: Daily client data cleanup prevents stale price/rate data from accumulating.
+	//
+	// Market timing: AllMarketsClosed
+	// Rationale: Cleanup during off-hours ensures fresh data ready for market open.
 	registry.Register(&WorkType{
 		ID:           "maintenance:cleanup:client-data",
 		Priority:     PriorityLow,
 		MarketTiming: AllMarketsClosed,
-		Interval:     24 * time.Hour,
+		Interval:     24 * time.Hour, // Hardcoded - daily cleanup is optimal
 		FindSubjects: func() []string {
 			return []string{""}
 		},

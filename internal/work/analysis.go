@@ -20,11 +20,20 @@ type AnalysisDeps struct {
 // RegisterAnalysisWorkTypes registers all analysis work types with the registry
 func RegisterAnalysisWorkTypes(registry *Registry, deps *AnalysisDeps) {
 	// analysis:market-regime - Daily market regime analysis
+	//
+	// Interval: 24 hours (hardcoded)
+	// Rationale: Market regimes (bull/bear/sideways) are long-term trends that change slowly.
+	//            Daily analysis captures regime shifts without noise from intraday volatility.
+	//            More frequent would produce false signals; less frequent would miss transitions.
+	//
+	// Market timing: AllMarketsClosed
+	// Rationale: Regime detection uses daily closing prices. Must run after all markets close
+	//            to ensure complete data for analysis.
 	registry.Register(&WorkType{
 		ID:           "analysis:market-regime",
 		Priority:     PriorityMedium,
 		MarketTiming: AllMarketsClosed,
-		Interval:     24 * time.Hour,
+		Interval:     24 * time.Hour, // Hardcoded - daily regime analysis is optimal
 		FindSubjects: func() []string {
 			if deps.MarketRegimeService.NeedsAnalysis() {
 				return []string{""}

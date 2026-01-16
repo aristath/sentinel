@@ -49,11 +49,19 @@ func RegisterTradingWorkTypes(registry *Registry, deps *TradingDeps) {
 	})
 
 	// trading:retry - Retry failed trades
+	//
+	// Interval: 1 hour (hardcoded)
+	// Rationale: Failed trades (broker errors, connectivity issues) should retry reasonably fast
+	//            without spamming the broker. 1 hour balances responsiveness vs rate limiting.
+	//            Too frequent risks account suspension; too slow misses market windows.
+	//
+	// Market timing: DuringMarketOpen
+	// Rationale: Can only execute trades during market hours.
 	registry.Register(&WorkType{
 		ID:           "trading:retry",
 		Priority:     PriorityMedium,
 		MarketTiming: DuringMarketOpen,
-		Interval:     1 * time.Hour,
+		Interval:     1 * time.Hour, // Hardcoded - optimal for error recovery
 		FindSubjects: func() []string {
 			if deps.RetryService.HasFailedTrades() {
 				return []string{""}
