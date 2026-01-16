@@ -108,9 +108,9 @@ func (h *HealthCalculator) CalculateAllHealth() (*HealthUpdate, error) {
 // calculateSecurityHealth calculates combined health score for a security
 func (h *HealthCalculator) calculateSecurityHealth(symbol, isin string, target float64) (float64, error) {
 	// Component 1: Security Score (0-100 scale)
-	scoreComponent, err := h.getScoreComponent(symbol)
+	scoreComponent, err := h.getScoreComponent(isin)
 	if err != nil {
-		h.log.Debug().Err(err).Str("symbol", symbol).Msg("Failed to get score component")
+		h.log.Debug().Err(err).Str("isin", isin).Msg("Failed to get score component")
 		scoreComponent = 0.5 // Neutral default
 	}
 
@@ -148,15 +148,15 @@ func (h *HealthCalculator) calculateSecurityHealth(symbol, isin string, target f
 }
 
 // getScoreComponent gets normalized security score (0-1)
-func (h *HealthCalculator) getScoreComponent(symbol string) (float64, error) {
+func (h *HealthCalculator) getScoreComponent(isin string) (float64, error) {
 	var score sql.NullFloat64
 	err := h.portfolioDB.QueryRow(`
 		SELECT total_score
 		FROM scores
-		WHERE symbol = ?
-		ORDER BY calculated_at DESC
+		WHERE isin = ?
+		ORDER BY last_updated DESC
 		LIMIT 1
-	`, symbol).Scan(&score)
+	`, isin).Scan(&score)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -207,7 +207,7 @@ func (h *HealthCalculator) getVolatilityComponent(isin string) (float64, error) 
 		SELECT volatility
 		FROM scores
 		WHERE isin = ?
-		ORDER BY calculated_at DESC
+		ORDER BY last_updated DESC
 		LIMIT 1
 	`, isin).Scan(&volatility)
 
