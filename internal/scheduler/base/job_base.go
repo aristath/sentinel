@@ -13,7 +13,7 @@ func (j *JobBase) SetJob(qj interface{}) {
 }
 
 // GetProgressReporter returns the progress reporter for this job (may be nil)
-// Returns interface{} to avoid import cycles - caller must type assert to *queue.ProgressReporter
+// Returns interface{} to avoid import cycles - caller must type assert to the appropriate progress reporter type
 func (j *JobBase) GetProgressReporter() interface{} {
 	if j.queueJob == nil {
 		return nil

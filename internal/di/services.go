@@ -147,9 +147,6 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 		// Don't fail startup - reconnect loop will handle it
 	}
 
-	// NOTE: Queue system removed - Work Processor handles all job execution
-	// See work.go for the new event-driven work system
-
 	// Settings service (needed for trade safety and other services)
 	container.SettingsService = settings.NewService(container.SettingsRepo, log)
 

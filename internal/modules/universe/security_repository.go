@@ -21,8 +21,7 @@ type SecurityRepository struct {
 // securitiesColumns is the list of columns for the securities table
 // Used to avoid SELECT * which can break when schema changes
 // Column order must match the table schema (matches SELECT * order)
-// After migration 036: allow_buy, allow_sell, min_lot, priority_multiplier are removed
-// These fields are now stored in security_overrides table with defaults applied at read time
+// Note: allow_buy, allow_sell, min_lot, priority_multiplier are stored in security_overrides table
 const securitiesColumns = `isin, symbol, name, product_type, industry, geography, fullExchangeName,
 market_code, active, currency, last_synced,
 min_portfolio_target, max_portfolio_target, created_at, updated_at`
@@ -334,8 +333,7 @@ func (r *SecurityRepository) GetByMarketCode(marketCode string) ([]Security, err
 }
 
 // Create creates a new security in the repository
-// Note: allow_buy, allow_sell, min_lot, priority_multiplier are no longer stored in securities table
-// They should be set via security_overrides using the OverrideRepository
+// Note: allow_buy, allow_sell, min_lot, priority_multiplier should be set via security_overrides using the OverrideRepository
 func (r *SecurityRepository) Create(security Security) error {
 	now := time.Now().Unix()
 
@@ -391,9 +389,7 @@ func (r *SecurityRepository) Create(security Security) error {
 }
 
 // Update updates security fields by ISIN
-// Changed from symbol to ISIN as primary identifier
-// Note: allow_buy, allow_sell, min_lot, priority_multiplier are no longer in securities table
-// They should be set via security_overrides using the OverrideRepository
+// Note: allow_buy, allow_sell, min_lot, priority_multiplier should be set via security_overrides using the OverrideRepository
 func (r *SecurityRepository) Update(isin string, updates map[string]interface{}) error {
 	if len(updates) == 0 {
 		return nil
@@ -761,8 +757,7 @@ func (r *SecurityRepository) GetWithScores(portfolioDB *sql.DB) ([]SecurityWithS
 }
 
 // scanSecurity scans a database row into a Security struct
-// After migration 036: allow_buy, allow_sell, min_lot, priority_multiplier are removed from DB
-// These fields are now stored in security_overrides table with defaults applied at read time
+// Note: allow_buy, allow_sell, min_lot, priority_multiplier are stored in security_overrides table
 func (r *SecurityRepository) scanSecurity(rows *sql.Rows) (Security, error) {
 	var security Security
 	var isin, productType, geography, fullExchangeName sql.NullString
@@ -773,9 +768,9 @@ func (r *SecurityRepository) scanSecurity(rows *sql.Rows) (Security, error) {
 	var active sql.NullInt64
 	var createdAt, updatedAt sql.NullInt64
 
-	// Table schema after migration 036: isin, symbol, name, product_type, industry, geography, fullExchangeName,
+	// Table schema: isin, symbol, name, product_type, industry, geography, fullExchangeName,
 	// market_code, active, currency, last_synced, min_portfolio_target, max_portfolio_target, created_at, updated_at
-	// Note: allow_buy, allow_sell, min_lot, priority_multiplier have been moved to security_overrides
+	// Note: allow_buy, allow_sell, min_lot, priority_multiplier are in security_overrides table
 	var symbol sql.NullString
 	err := rows.Scan(
 		&isin,               // isin (PRIMARY KEY)

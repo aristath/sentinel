@@ -191,7 +191,6 @@ type SecurityRepositoryForDividendsInterface interface {
 }
 
 // SecurityForDividends is a simplified interface for security data
-// Note: YahooSymbol removed - dividend yields now calculated internally
 type SecurityForDividends struct {
 	ISIN     string // Primary identifier for internal operations
 	Symbol   string // For broker API
@@ -199,10 +198,6 @@ type SecurityForDividends struct {
 	Currency string
 	MinLot   int
 }
-
-// NOTE: YahooClientForDividendsInterface has been removed.
-// Dividend yields are now calculated internally using DividendYieldCalculator.
-// The StabilityDataForDividends type is no longer used.
 
 // TradeExecutionServiceInterface defines the contract for trade execution service operations
 // Used by scheduler to enable testing with mocks

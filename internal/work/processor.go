@@ -302,3 +302,15 @@ func (p *Processor) popRetryQueue() (*WorkItem, *WorkType) {
 
 	return item, wt
 }
+
+// GetRegistry returns the work type registry.
+// This allows external access to registered work types for status reporting.
+func (p *Processor) GetRegistry() *Registry {
+	return p.registry
+}
+
+// GetCompletion returns the completion tracker.
+// This allows external access to completion history for status reporting.
+func (p *Processor) GetCompletion() *CompletionTracker {
+	return p.completion
+}

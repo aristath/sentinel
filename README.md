@@ -139,7 +139,7 @@ Note: All functionality has been migrated to Go - Tradernet API is integrated di
 **Language:** Go 1.23+
 - **HTTP Router:** Chi (stdlib-based, lightweight)
 - **Database:** SQLite with modernc.org/sqlite (pure Go, no CGo)
-- **Scheduler:** Custom queue-based scheduler (`queue.Scheduler`) with market-aware intervals (5min/10min when markets open, paused when closed)
+- **Scheduler:** Work Processor with market-aware intervals (5min/10min when markets open, paused when closed)
 - **Logging:** zerolog (structured, high-performance)
 - **Configuration:** godotenv
 
@@ -307,14 +307,14 @@ See [docs/api/README.md](docs/api/README.md) for the complete API documentation 
 
 ## Background Jobs
 
-The system runs scheduled background jobs for autonomous operation using a custom queue-based scheduler (`queue.Scheduler`) with market-aware intervals. All jobs are split into individual, single-responsibility units for maximum modularity and testability.
+The system runs scheduled background jobs for autonomous operation using the Work Processor with market-aware intervals. All jobs are split into individual, single-responsibility units for maximum modularity and testability.
 
 ### Job System Architecture
 
 The job system consists of three main components:
-1. **QueueManager** - Manages job queue and execution history
-2. **TimeScheduler** (`queue.Scheduler`) - Enqueues time-based jobs with market-aware intervals
-3. **WorkerPool** - Processes jobs asynchronously with retry logic and progress reporting
+1. **Work Processor** - Executes work items with dependency resolution and market timing
+2. **Work Registry** - Registers and manages all work types
+3. **Completion Tracker** - Tracks work completion history for interval-based execution
 
 Jobs can be:
 - **Time-based**: Scheduled via `TimeScheduler` with market-aware intervals (5min/10min when markets open, paused when closed)

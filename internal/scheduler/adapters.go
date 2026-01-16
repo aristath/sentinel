@@ -636,9 +636,6 @@ func (a *SecurityRepositoryForDividendsAdapter) GetBySymbol(symbol string) (*Sec
 	}, nil
 }
 
-// NOTE: YahooClientForDividendsAdapter has been removed.
-// Dividend yields are now calculated internally using DividendYieldCalculator.
-
 // TradeExecutionServiceAdapter adapts *services.TradeExecutionService to TradeExecutionServiceInterface
 type TradeExecutionServiceAdapter struct {
 	service *services.TradeExecutionService

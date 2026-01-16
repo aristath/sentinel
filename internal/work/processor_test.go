@@ -568,3 +568,53 @@ func TestProcessor_SystemBusyCheck(t *testing.T) {
 	// After 100ms with 50ms per execution, we expect at most 2 completed
 	assert.LessOrEqual(t, execCount.Load(), int32(3))
 }
+
+func TestProcessor_GetRegistry(t *testing.T) {
+	registry := NewRegistry()
+	completion := NewCompletionTracker()
+	market := NewMarketTimingChecker(&MockMarketChecker{})
+
+	p := NewProcessor(registry, completion, market)
+
+	// Should return the same registry instance
+	assert.Equal(t, registry, p.GetRegistry())
+
+	// Should allow access to registered work types
+	registry.Register(&WorkType{
+		ID:       "test:work",
+		Priority: PriorityMedium,
+		FindSubjects: func() []string {
+			return []string{""}
+		},
+		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
+			return nil
+		},
+	})
+
+	wt := p.GetRegistry().Get("test:work")
+	require.NotNil(t, wt)
+	assert.Equal(t, "test:work", wt.ID)
+}
+
+func TestProcessor_GetCompletion(t *testing.T) {
+	registry := NewRegistry()
+	completion := NewCompletionTracker()
+	market := NewMarketTimingChecker(&MockMarketChecker{})
+
+	p := NewProcessor(registry, completion, market)
+
+	// Should return the same completion tracker instance
+	assert.Equal(t, completion, p.GetCompletion())
+
+	// Should allow access to completion history
+	item := &WorkItem{
+		ID:      "test:work",
+		TypeID:  "test:work",
+		Subject: "",
+	}
+	p.GetCompletion().MarkCompleted(item)
+
+	lastRun, exists := p.GetCompletion().GetCompletion("test:work", "")
+	assert.True(t, exists)
+	assert.False(t, lastRun.IsZero())
+}

@@ -72,29 +72,27 @@ type Container struct {
 	ClientDataRepo     *clientdata.Repository
 
 	// Services
-	CurrencyExchangeService  *services.CurrencyExchangeService
-	ExchangeRateCacheService *services.ExchangeRateCacheService
-	PriceConversionService   *services.PriceConversionService
-	DividendYieldCalculator  *dividends.DividendYieldCalculator
-	CashManager              domain.CashManager // Interface
-	TradeSafetyService       *trading.TradeSafetyService
-	TradingService           *trading.TradingService
-	PortfolioService         *portfolio.PortfolioService
-	CashFlowsService         *cash_flows.CashFlowsService
-	UniverseService          *universe.UniverseService
-	TagAssigner              *universe.TagAssigner
-	TradeExecutionService    *services.TradeExecutionService
-	SettingsService          *settings.Service
-	MarketHoursService       *market_hours.MarketHoursService
-	MarketStateDetector      *market_regime.MarketStateDetector
-	EventBus                 *events.Bus
-	EventManager             *events.Manager
-	TickerContentService     *ticker.TickerContentService
-	HealthCalculator         *display.HealthCalculator
-	HealthUpdater            *display.HealthUpdater
-	ModeManager              *display.ModeManager
-	// NOTE: QueueManager, WorkerPool, JobHistory, JobRegistry removed
-	// All job execution now goes through Work Processor at container.WorkComponents
+	CurrencyExchangeService   *services.CurrencyExchangeService
+	ExchangeRateCacheService  *services.ExchangeRateCacheService
+	PriceConversionService    *services.PriceConversionService
+	DividendYieldCalculator   *dividends.DividendYieldCalculator
+	CashManager               domain.CashManager // Interface
+	TradeSafetyService        *trading.TradeSafetyService
+	TradingService            *trading.TradingService
+	PortfolioService          *portfolio.PortfolioService
+	CashFlowsService          *cash_flows.CashFlowsService
+	UniverseService           *universe.UniverseService
+	TagAssigner               *universe.TagAssigner
+	TradeExecutionService     *services.TradeExecutionService
+	SettingsService           *settings.Service
+	MarketHoursService        *market_hours.MarketHoursService
+	MarketStateDetector       *market_regime.MarketStateDetector
+	EventBus                  *events.Bus
+	EventManager              *events.Manager
+	TickerContentService      *ticker.TickerContentService
+	HealthCalculator          *display.HealthCalculator
+	HealthUpdater             *display.HealthUpdater
+	ModeManager               *display.ModeManager
 	NegativeBalanceRebalancer *rebalancing.NegativeBalanceRebalancer
 	OpportunitiesService      *opportunities.Service
 	RiskBuilder               *optimization.RiskModelBuilder
@@ -150,5 +148,3 @@ type Container struct {
 	UpdateDisplayTicker func() error
 	EmergencyRebalance  func() error
 }
-
-// NOTE: JobInstances removed - all jobs now handled by Work Processor (see work.go)

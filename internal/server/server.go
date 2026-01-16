@@ -186,9 +186,6 @@ func New(cfg Config) *Server {
 	return s
 }
 
-// NOTE: SetJobs, SetTagUpdateJob, SetTradernetMetadataSyncJob methods removed
-// All job triggering now goes through Work Processor endpoints at /api/work/*
-
 // setupMiddleware configures middleware
 func (s *Server) setupMiddleware(devMode bool) {
 	// Recovery from panics
@@ -309,13 +306,7 @@ func (s *Server) setupRoutes() {
 
 			// Job triggers (manual operation triggers)
 			r.Route("/jobs", func(r chi.Router) {
-				// Original composite jobs
-				r.Post("/health-check", systemHandlers.HandleTriggerHealthCheck)
-				r.Post("/sync-cycle", systemHandlers.HandleTriggerSyncCycle)
-				r.Post("/dividend-reinvestment", systemHandlers.HandleTriggerDividendReinvestment)
-				r.Post("/planner-batch", systemHandlers.HandleTriggerPlannerBatch)
 				r.Post("/event-based-trading", systemHandlers.HandleTriggerEventBasedTrading)
-				r.Post("/tag-update", systemHandlers.HandleTriggerTagUpdate)
 
 				// Individual sync jobs
 				r.Post("/sync-trades", systemHandlers.HandleTriggerSyncTrades)
@@ -326,7 +317,6 @@ func (s *Server) setupRoutes() {
 				r.Post("/update-display-ticker", systemHandlers.HandleTriggerUpdateDisplayTicker)
 
 				// Individual planning jobs
-				r.Post("/generate-portfolio-hash", systemHandlers.HandleTriggerGeneratePortfolioHash)
 				r.Post("/get-optimizer-weights", systemHandlers.HandleTriggerGetOptimizerWeights)
 				r.Post("/build-opportunity-context", systemHandlers.HandleTriggerBuildOpportunityContext)
 				r.Post("/create-trade-plan", systemHandlers.HandleTriggerCreateTradePlan)
@@ -334,10 +324,7 @@ func (s *Server) setupRoutes() {
 
 				// Individual dividend jobs
 				r.Post("/get-unreinvested-dividends", systemHandlers.HandleTriggerGetUnreinvestedDividends)
-				r.Post("/group-dividends-by-symbol", systemHandlers.HandleTriggerGroupDividendsBySymbol)
-				r.Post("/check-dividend-yields", systemHandlers.HandleTriggerCheckDividendYields)
 				r.Post("/create-dividend-recommendations", systemHandlers.HandleTriggerCreateDividendRecommendations)
-				r.Post("/set-pending-bonuses", systemHandlers.HandleTriggerSetPendingBonuses)
 				r.Post("/execute-dividend-trades", systemHandlers.HandleTriggerExecuteDividendTrades)
 
 				// Individual health check jobs

@@ -154,21 +154,20 @@ type TradernetStatusResponse struct {
 	Message   string `json:"message,omitempty"`
 }
 
-// JobsStatusResponse represents scheduler job status
+// JobsStatusResponse represents work processor job status
 type JobsStatusResponse struct {
-	TotalJobs int       `json:"total_jobs"`
-	Jobs      []JobInfo `json:"jobs"`
-	LastRun   string    `json:"last_run,omitempty"`
-	NextRun   string    `json:"next_run,omitempty"`
+	WorkTypes []WorkTypeStatus `json:"work_types"`
 }
 
-// JobInfo represents information about a single job
-type JobInfo struct {
-	Name     string `json:"name"`
-	Schedule string `json:"schedule"`
-	LastRun  string `json:"last_run,omitempty"`
-	NextRun  string `json:"next_run,omitempty"`
-	Status   string `json:"status"` // "active", "idle", "failed"
+// WorkTypeStatus represents the status of a work type
+type WorkTypeStatus struct {
+	ID           string   `json:"id"`
+	Priority     string   `json:"priority"`
+	MarketTiming string   `json:"market_timing"`
+	Interval     string   `json:"interval"`           // e.g., "5m", "1h", "24h", "0" for on-demand
+	LastRun      *string  `json:"last_run,omitempty"` // RFC3339 or null
+	NextRun      *string  `json:"next_run,omitempty"` // RFC3339 or null
+	DependsOn    []string `json:"depends_on"`
 }
 
 // MarketsStatusResponse represents market status
@@ -596,24 +595,91 @@ func (h *SystemHandlers) RefreshCredentials() error {
 	return fmt.Errorf("credentials not found in settings database")
 }
 
-// HandleJobsStatus returns scheduler job status
+// HandleJobsStatus returns work processor job status
 func (h *SystemHandlers) HandleJobsStatus(w http.ResponseWriter, r *http.Request) {
 	h.log.Debug().Msg("Getting jobs status")
 
-	// Job history is now tracked by the Work Processor's completion tracker
-	// Use GET /api/work/types to list available work types
+	if h.workProcessor == nil {
+		http.Error(w, "Work processor not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	registry := h.workProcessor.GetRegistry()
+	completion := h.workProcessor.GetCompletion()
+
+	workTypes := registry.ByPriority()
+	workTypeStatuses := make([]WorkTypeStatus, 0, len(workTypes))
+
+	for _, wt := range workTypes {
+		// Get last completion time (for global work, subject is empty)
+		lastRun, hasLastRun := completion.GetCompletion(wt.ID, "")
+
+		status := WorkTypeStatus{
+			ID:           wt.ID,
+			Priority:     wt.Priority.String(),
+			MarketTiming: wt.MarketTiming.String(),
+			Interval:     formatInterval(wt.Interval),
+			DependsOn:    wt.DependsOn,
+		}
+
+		// Set last run time if available
+		if hasLastRun {
+			lastRunStr := lastRun.Format(time.RFC3339)
+			status.LastRun = &lastRunStr
+		}
+
+		// Calculate next run time
+		// For on-demand work (interval = 0), next run is null
+		// For interval-based work with no last run, next run is null
+		// For interval-based work with last run, next run = last run + interval
+		if wt.Interval > 0 && hasLastRun {
+			nextRun := lastRun.Add(wt.Interval)
+			nextRunStr := nextRun.Format(time.RFC3339)
+			status.NextRun = &nextRunStr
+		}
+
+		workTypeStatuses = append(workTypeStatuses, status)
+	}
+
 	response := JobsStatusResponse{
-		TotalJobs: 0,
-		Jobs:      []JobInfo{},
-		LastRun:   time.Now().Add(-5 * time.Minute).Format(time.RFC3339),
-		NextRun:   time.Now().Add(5 * time.Minute).Format(time.RFC3339),
+		WorkTypes: workTypeStatuses,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.log.Error().Err(err).Msg("Failed to encode jobs status response")
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }
 
-// calculateNextOpenCloseTimes removed - market hours functionality removed
+// formatInterval formats a duration as a human-readable string (e.g., "5m", "1h", "24h", "0" for zero)
+func formatInterval(d time.Duration) string {
+	if d == 0 {
+		return "0"
+	}
+
+	hours := int(d.Hours())
+	minutes := int(d.Minutes()) % 60
+	seconds := int(d.Seconds()) % 60
+
+	if hours > 0 {
+		if minutes > 0 {
+			return fmt.Sprintf("%dh%dm", hours, minutes)
+		}
+		return fmt.Sprintf("%dh", hours)
+	}
+
+	if minutes > 0 {
+		return fmt.Sprintf("%dm", minutes)
+	}
+
+	if seconds > 0 {
+		return fmt.Sprintf("%ds", seconds)
+	}
+
+	return "0"
+}
 
 // HandleMarketsStatus returns individual market status from WebSocket cache
 func (h *SystemHandlers) HandleMarketsStatus(w http.ResponseWriter, r *http.Request) {
@@ -875,75 +941,6 @@ func (h *SystemHandlers) getSystemStats() (float64, float64) {
 // Job Trigger Endpoints
 // ============================================================================
 
-// HandleTriggerSyncCycle - DEPRECATED: Use Work Processor endpoints instead
-// POST /api/jobs/sync-cycle
-// The sync cycle composite job has been removed. Use individual sync work types:
-// - POST /api/work/sync:portfolio/execute
-// - POST /api/work/sync:trades/execute
-// - POST /api/work/sync:cashflows/execute
-// - POST /api/work/sync:prices/execute
-// - POST /api/work/sync:rates/execute
-func (h *SystemHandlers) HandleTriggerSyncCycle(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	h.writeJSON(w, map[string]string{
-		"status":  "deprecated",
-		"message": "SyncCycle composite job removed. Use Work Processor endpoints: POST /api/work/sync:portfolio/execute, etc.",
-	})
-}
-
-// HandleTriggerHealthCheck triggers the health check job immediately
-// POST /api/jobs/health-check
-// NOTE: HealthCheck composite job removed - use Work Processor or individual health check endpoints
-func (h *SystemHandlers) HandleTriggerHealthCheck(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	h.writeJSON(w, map[string]string{
-		"status":  "deprecated",
-		"message": "HealthCheck composite job removed. Use Work Processor endpoints: POST /api/work/maintenance:health/execute, or individual endpoints: /api/jobs/check-core-databases, /api/jobs/check-history-databases, /api/jobs/check-wal-checkpoints",
-	})
-}
-
-// HandleTriggerDividendReinvestment triggers the dividend reinvestment job immediately
-// POST /api/jobs/dividend-reinvestment
-// NOTE: DividendReinvestment composite job removed - use Work Processor or individual dividend endpoints
-func (h *SystemHandlers) HandleTriggerDividendReinvestment(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	h.writeJSON(w, map[string]string{
-		"status":  "deprecated",
-		"message": "DividendReinvestment composite job removed. Use Work Processor endpoints: POST /api/work/dividend:detect/execute, etc., or individual endpoints: /api/jobs/get-unreinvested-dividends, /api/jobs/check-dividend-yields, etc.",
-	})
-}
-
-// HandleTriggerPlannerBatch - DEPRECATED: Use Work Processor endpoints instead
-// POST /api/jobs/planner-batch
-// The planner batch composite job has been removed. Use individual planner work types:
-// - POST /api/work/planner:weights/execute
-// - POST /api/work/planner:context/execute
-// - POST /api/work/planner:plan/execute
-// - POST /api/work/planner:recommendations/execute
-func (h *SystemHandlers) HandleTriggerPlannerBatch(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	h.writeJSON(w, map[string]string{
-		"status":  "deprecated",
-		"message": "PlannerBatch composite job removed. Use Work Processor endpoints: POST /api/work/planner:weights/execute, etc.",
-	})
-}
-
 // HandleTriggerEventBasedTrading triggers the event-based trading job immediately
 // POST /api/jobs/event-based-trading
 func (h *SystemHandlers) HandleTriggerEventBasedTrading(w http.ResponseWriter, r *http.Request) {
@@ -1033,22 +1030,6 @@ func (h *SystemHandlers) HandleSyncRecommendations(w http.ResponseWriter, r *htt
 	})
 }
 
-// HandleTriggerTagUpdate triggers the tag update job immediately
-// POST /api/jobs/tag-update
-// NOTE: Tag updates require a specific ISIN. Use POST /api/work/security:tags/{isin}/execute instead.
-func (h *SystemHandlers) HandleTriggerTagUpdate(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// Tag update requires a subject (ISIN) - return deprecation message
-	h.writeJSON(w, map[string]string{
-		"status":  "deprecated",
-		"message": "Tag update requires a specific ISIN. Use Work Processor endpoint: POST /api/work/security:tags/{isin}/execute",
-	})
-}
-
 // ==========================================
 // INDIVIDUAL SYNC JOB HANDLERS
 // ==========================================
@@ -1135,18 +1116,6 @@ func (h *SystemHandlers) HandleTriggerUpdateDisplayTicker(w http.ResponseWriter,
 // INDIVIDUAL PLANNING JOB HANDLERS
 // ==========================================
 
-func (h *SystemHandlers) HandleTriggerGeneratePortfolioHash(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	// Portfolio hash generation is now internal to the planner workflow
-	h.writeJSON(w, map[string]string{
-		"status":  "deprecated",
-		"message": "Portfolio hash generation is now internal to planner workflow. Use POST /api/work/planner:weights/execute to start the planner chain.",
-	})
-}
-
 func (h *SystemHandlers) HandleTriggerGetOptimizerWeights(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -1216,30 +1185,6 @@ func (h *SystemHandlers) HandleTriggerGetUnreinvestedDividends(w http.ResponseWr
 	h.writeJSON(w, map[string]string{"status": "success", "message": "Get unreinvested dividends triggered successfully"})
 }
 
-func (h *SystemHandlers) HandleTriggerGroupDividendsBySymbol(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	// This is now part of dividend:analyze
-	h.writeJSON(w, map[string]string{
-		"status":  "deprecated",
-		"message": "Group dividends by symbol is now part of dividend analysis. Use POST /api/work/dividend:analyze/execute",
-	})
-}
-
-func (h *SystemHandlers) HandleTriggerCheckDividendYields(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	// This is now part of dividend:analyze
-	h.writeJSON(w, map[string]string{
-		"status":  "deprecated",
-		"message": "Check dividend yields is now part of dividend analysis. Use POST /api/work/dividend:analyze/execute",
-	})
-}
-
 func (h *SystemHandlers) HandleTriggerCreateDividendRecommendations(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -1251,18 +1196,6 @@ func (h *SystemHandlers) HandleTriggerCreateDividendRecommendations(w http.Respo
 		return
 	}
 	h.writeJSON(w, map[string]string{"status": "success", "message": "Create dividend recommendations triggered successfully"})
-}
-
-func (h *SystemHandlers) HandleTriggerSetPendingBonuses(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	// This is now internal to the dividend workflow
-	h.writeJSON(w, map[string]string{
-		"status":  "deprecated",
-		"message": "Set pending bonuses is now internal to dividend workflow. Use POST /api/work/dividend:detect/execute to start the chain.",
-	})
 }
 
 func (h *SystemHandlers) HandleTriggerExecuteDividendTrades(w http.ResponseWriter, r *http.Request) {
