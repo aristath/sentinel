@@ -124,8 +124,9 @@ func TestMetadataSyncService_StoresRawTradernetData(t *testing.T) {
 	syncService := NewMetadataSyncService(repo, mockBroker, log)
 
 	// Execute metadata sync
-	err = syncService.SyncMetadata("US0378331005")
+	symbol, err := syncService.SyncMetadata("US0378331005")
 	require.NoError(t, err)
+	assert.Equal(t, "AAPL.US", symbol)
 
 	// Verify raw format stored in database
 	var storedJSON string
@@ -193,8 +194,9 @@ func TestMetadataSyncService_EmptyResponse(t *testing.T) {
 	syncService := NewMetadataSyncService(repo, mockBroker, log)
 
 	// Should not error, but also should not update
-	err = syncService.SyncMetadata("US0378331005")
+	symbol, err := syncService.SyncMetadata("US0378331005")
 	require.NoError(t, err)
+	assert.Equal(t, "AAPL.US", symbol)
 
 	// Verify data column unchanged (still placeholder {})
 	var storedJSON string
@@ -219,6 +221,7 @@ func TestMetadataSyncService_SecurityNotFound(t *testing.T) {
 	syncService := NewMetadataSyncService(repo, mockBroker, log)
 
 	// Should not error when security doesn't exist
-	err := syncService.SyncMetadata("NONEXISTENT")
+	symbol, err := syncService.SyncMetadata("NONEXISTENT")
 	require.NoError(t, err)
+	assert.Equal(t, "", symbol)
 }

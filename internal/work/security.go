@@ -32,7 +32,7 @@ type TagUpdateServiceInterface interface {
 
 // MetadataSyncServiceInterface defines the metadata sync service interface
 type MetadataSyncServiceInterface interface {
-	SyncMetadata(isin string) error
+	SyncMetadata(isin string) (string, error)
 	GetAllActiveISINs() []string
 }
 
@@ -172,10 +172,15 @@ func RegisterSecurityWorkTypes(registry *Registry, deps *SecurityDeps) {
 			return deps.MetadataSyncService.GetAllActiveISINs()
 		},
 		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
-
-			err := deps.MetadataSyncService.SyncMetadata(subject)
+			// Sync metadata and get symbol for progress reporting
+			symbol, err := deps.MetadataSyncService.SyncMetadata(subject)
 			if err != nil {
 				return fmt.Errorf("failed to sync metadata for %s: %w", subject, err)
+			}
+
+			// Report progress with symbol
+			if progress != nil && symbol != "" {
+				progress.ReportPhase("completed", fmt.Sprintf("Synced: %s", symbol))
 			}
 
 			return nil

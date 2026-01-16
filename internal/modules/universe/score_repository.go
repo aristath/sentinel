@@ -142,16 +142,29 @@ func (r *ScoreRepository) GetBySymbol(symbol string) (*SecurityScore, error) {
 	return r.GetByISIN(isin)
 }
 
-// GetByIdentifier returns a score by symbol or ISIN
+// GetByIdentifier returns a score by symbol or ISIN (smart lookup).
+// This method automatically detects whether the identifier is an ISIN or symbol:
+// - If identifier is 12 characters and starts with 2 letters, tries ISIN lookup first
+// - Otherwise, falls back to symbol lookup (requires securityProvider)
+// This is useful for user input where the format may be ambiguous.
+//
+// Parameters:
+//   - identifier: Security symbol or ISIN
+//
+// Returns:
+//   - *SecurityScore: Score object if found, nil if not found
+//   - error: Error if query fails
+//
 // Faithful translation of Python: async def get_by_identifier(self, identifier: str) -> Optional[SecurityScore]
 func (r *ScoreRepository) GetByIdentifier(identifier string) (*SecurityScore, error) {
 	identifier = strings.ToUpper(strings.TrimSpace(identifier))
 
 	// Check if it looks like an ISIN (12 chars, starts with 2 letters)
+	// ISIN format: 2-letter country code + 9 alphanumeric + 1 check digit
 	if len(identifier) == 12 && len(identifier) >= 2 {
 		firstTwo := identifier[:2]
 		if (firstTwo[0] >= 'A' && firstTwo[0] <= 'Z') && (firstTwo[1] >= 'A' && firstTwo[1] <= 'Z') {
-			// Try ISIN lookup first
+			// Try ISIN lookup first (more specific, less ambiguous)
 			score, err := r.GetByISIN(identifier)
 			if err != nil {
 				return nil, err
@@ -162,11 +175,18 @@ func (r *ScoreRepository) GetByIdentifier(identifier string) (*SecurityScore, er
 		}
 	}
 
-	// Fall back to symbol lookup
+	// Fall back to symbol lookup (requires securityProvider)
 	return r.GetBySymbol(identifier)
 }
 
-// GetAll returns all scores
+// GetAll returns all scores from the database.
+// This method retrieves all security scores regardless of score value.
+// Use GetTop() if you only need the highest-scored securities.
+//
+// Returns:
+//   - []SecurityScore: List of all scores (empty slice if none found)
+//   - error: Error if query fails
+//
 // Faithful translation of Python: async def get_all(self) -> List[SecurityScore]
 func (r *ScoreRepository) GetAll() ([]SecurityScore, error) {
 	query := "SELECT " + scoresColumns + " FROM scores"
@@ -193,7 +213,17 @@ func (r *ScoreRepository) GetAll() ([]SecurityScore, error) {
 	return scores, nil
 }
 
-// GetTop returns top scored securities
+// GetTop returns top scored securities ordered by total_score descending.
+// This is useful for finding the best investment opportunities.
+// Only returns securities with a non-null total_score.
+//
+// Parameters:
+//   - limit: Maximum number of scores to return
+//
+// Returns:
+//   - []SecurityScore: List of top scores (ordered by total_score DESC)
+//   - error: Error if query fails
+//
 // Faithful translation of Python: async def get_top(self, limit: int = 10) -> List[SecurityScore]
 func (r *ScoreRepository) GetTop(limit int) ([]SecurityScore, error) {
 	query := `
@@ -225,7 +255,17 @@ func (r *ScoreRepository) GetTop(limit int) ([]SecurityScore, error) {
 	return scores, nil
 }
 
-// Upsert inserts or updates a score
+// Upsert inserts or updates a score in the database.
+// Uses INSERT OR REPLACE to handle both insert and update in a single operation.
+// ISIN is the primary key after migration 030. The score's calculated_at timestamp
+// is stored in the last_updated column.
+//
+// Parameters:
+//   - score: SecurityScore object to upsert
+//
+// Returns:
+//   - error: Error if database operation fails
+//
 // Faithful translation of Python: async def upsert(self, score: SecurityScore) -> None
 func (r *ScoreRepository) Upsert(score SecurityScore) error {
 	now := time.Now().Unix()
@@ -234,7 +274,7 @@ func (r *ScoreRepository) Upsert(score SecurityScore) error {
 		calculatedAt = score.CalculatedAt.Unix()
 	}
 
-	// Normalize symbol
+	// Normalize symbol (for logging purposes - not stored in scores table after migration)
 	score.Symbol = strings.ToUpper(strings.TrimSpace(score.Symbol))
 
 	// Begin transaction
@@ -244,11 +284,13 @@ func (r *ScoreRepository) Upsert(score SecurityScore) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// ISIN is required (PRIMARY KEY)
+	// ISIN is required (PRIMARY KEY after migration 030)
 	if score.ISIN == "" {
 		return fmt.Errorf("ISIN is required for score upsert")
 	}
 
+	// INSERT OR REPLACE handles both insert and update
+	// If ISIN exists, replaces all columns; if not, inserts new row
 	query := `
 		INSERT OR REPLACE INTO scores
 		(isin, total_score, quality_score, opportunity_score, analyst_score,
@@ -260,8 +302,8 @@ func (r *ScoreRepository) Upsert(score SecurityScore) error {
 	`
 
 	_, err = tx.Exec(query,
-		strings.ToUpper(strings.TrimSpace(score.ISIN)),
-		nullFloat64(score.TotalScore),
+		strings.ToUpper(strings.TrimSpace(score.ISIN)), // Normalize ISIN
+		nullFloat64(score.TotalScore),                  // Convert to sql.NullFloat64 (NULL if 0)
 		nullFloat64(score.QualityScore),
 		nullFloat64(score.OpportunityScore),
 		nullFloat64(score.AnalystScore),
@@ -269,17 +311,17 @@ func (r *ScoreRepository) Upsert(score SecurityScore) error {
 		nullFloat64(score.Volatility),
 		nullFloat64(score.CAGRScore),
 		nullFloat64(score.ConsistencyScore),
-		nullInt64(score.HistoryYears),
+		nullInt64(score.HistoryYears), // Convert to sql.NullInt64 (NULL if 0)
 		nullFloat64(score.TechnicalScore),
 		nullFloat64(score.StabilityScore),
 		nullFloat64(score.SharpeScore),
 		nullFloat64(score.DrawdownScore),
 		nullFloat64(score.DividendBonus),
 		nullFloat64(score.FinancialStrengthScore),
-		nullFloat64(score.RSI),
-		nullFloat64(score.EMA200),
-		nullFloat64(score.Below52wHighPct),
-		calculatedAt,
+		nullFloat64(score.RSI),             // Technical indicator: Relative Strength Index
+		nullFloat64(score.EMA200),          // Technical indicator: 200-day Exponential Moving Average
+		nullFloat64(score.Below52wHighPct), // Percentage below 52-week high
+		calculatedAt,                       // Unix timestamp of calculation
 	)
 	if err != nil {
 		return fmt.Errorf("failed to upsert score: %w", err)
@@ -293,8 +335,15 @@ func (r *ScoreRepository) Upsert(score SecurityScore) error {
 	return nil
 }
 
-// Delete deletes score by ISIN
-// Changed from symbol to ISIN as primary identifier
+// Delete deletes a score by ISIN.
+// After migration 030, ISIN is the primary key (replacing symbol).
+// This operation is idempotent - it does not error if the score doesn't exist.
+//
+// Parameters:
+//   - isin: Security ISIN
+//
+// Returns:
+//   - error: Error if database operation fails
 func (r *ScoreRepository) Delete(isin string) error {
 	isin = strings.ToUpper(strings.TrimSpace(isin))
 
@@ -320,7 +369,13 @@ func (r *ScoreRepository) Delete(isin string) error {
 	return nil
 }
 
-// DeleteAll deletes all scores
+// DeleteAll deletes all scores from the database.
+// This is a destructive operation typically used for testing or complete reset.
+// Use with caution in production.
+//
+// Returns:
+//   - error: Error if database operation fails
+//
 // Faithful translation of Python: async def delete_all(self) -> None
 func (r *ScoreRepository) DeleteAll() error {
 	// Begin transaction
@@ -345,11 +400,23 @@ func (r *ScoreRepository) DeleteAll() error {
 	return nil
 }
 
-// scanScore scans a database row into a SecurityScore struct
-// Column order after migration: isin, total_score, quality_score, opportunity_score,
-// analyst_score, allocation_fit_score, volatility, cagr_score, consistency_score, history_years,
-// technical_score, stability_score, sharpe_score, drawdown_score, dividend_bonus,
-// financial_strength_score, rsi, ema_200, below_52w_high_pct, last_updated
+// scanScore scans a database row into a SecurityScore struct.
+// This is an internal helper method used by all query methods.
+// It handles nullable fields by using sql.NullFloat64 and sql.NullInt64 types.
+//
+// Column order after migration 030:
+//
+//	isin, total_score, quality_score, opportunity_score, analyst_score,
+//	allocation_fit_score, volatility, cagr_score, consistency_score, history_years,
+//	technical_score, stability_score, sharpe_score, drawdown_score, dividend_bonus,
+//	financial_strength_score, rsi, ema_200, below_52w_high_pct, last_updated
+//
+// Parameters:
+//   - rows: Database rows iterator (must be positioned on a valid row)
+//
+// Returns:
+//   - SecurityScore: Scanned score object
+//   - error: Error if scanning fails
 func (r *ScoreRepository) scanScore(rows *sql.Rows) (SecurityScore, error) {
 	var score SecurityScore
 	var isin sql.NullString

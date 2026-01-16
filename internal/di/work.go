@@ -948,7 +948,7 @@ type metadataSyncAdapter struct {
 	service *universe.MetadataSyncService
 }
 
-func (a *metadataSyncAdapter) SyncMetadata(isin string) error {
+func (a *metadataSyncAdapter) SyncMetadata(isin string) (string, error) {
 	return a.service.SyncMetadata(isin)
 }
 

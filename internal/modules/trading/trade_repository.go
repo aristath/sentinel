@@ -1,3 +1,6 @@
+// Package trading provides repository implementations for managing trade transactions.
+// This file implements the TradeRepository, which handles trade records stored in ledger.db.
+// Trades represent executed buy/sell transactions and form an immutable audit trail.
 package trading
 
 import (
@@ -10,19 +13,26 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// SecurityProvider defines the interface for getting security information
-// Used to avoid circular dependencies with universe module
+// SecurityProvider defines the interface for getting security information.
+// This interface is used to avoid circular dependencies with the universe module.
+// It provides symbol-to-ISIN lookups for trade records.
 type SecurityProvider interface {
-	GetISINBySymbol(symbol string) (string, error)
-	BatchGetISINsBySymbols(symbols []string) (map[string]string, error)
+	GetISINBySymbol(symbol string) (string, error)                      // Resolve single symbol to ISIN
+	BatchGetISINsBySymbols(symbols []string) (map[string]string, error) // Batch resolve symbols to ISINs
 }
 
-// TradeRepository handles trade database operations
+// TradeRepository handles trade database operations for the immutable audit trail.
+// Trades are stored in ledger.db and represent executed buy/sell transactions.
+// The repository can optionally use a SecurityProvider to resolve symbols to ISINs
+// for backward compatibility and for methods that need ISIN lookups.
+//
+// The repository also manages pending retries for failed trades with a 7-hour retry interval.
+//
 // Faithful translation from Python: app/repositories/trade.py
 type TradeRepository struct {
-	ledgerDB         *sql.DB          // ledger.db - trades table
-	securityProvider SecurityProvider // For symbol->ISIN lookup (optional for backwards compatibility)
-	log              zerolog.Logger
+	ledgerDB         *sql.DB          // ledger.db - trades table (immutable audit trail)
+	securityProvider SecurityProvider // Optional provider for symbol -> ISIN lookup
+	log              zerolog.Logger   // Structured logger
 }
 
 // tradesColumns is the list of columns for the trades table
@@ -31,7 +41,16 @@ type TradeRepository struct {
 // After migration 017: bucket_id removed, currency_rate not scanned
 const tradesColumns = `id, symbol, isin, side, quantity, price, executed_at, order_id, currency, value_eur, source, mode, created_at`
 
-// NewTradeRepository creates a new trade repository
+// NewTradeRepository creates a new trade repository.
+// The securityProvider is optional but recommended for full functionality (symbol lookups, ISIN resolution).
+//
+// Parameters:
+//   - ledgerDB: Database connection to ledger.db
+//   - securityProvider: Provider for symbol -> ISIN lookup (can be nil, but limits functionality)
+//   - log: Structured logger
+//
+// Returns:
+//   - *TradeRepository: Initialized repository instance
 func NewTradeRepository(ledgerDB *sql.DB, securityProvider SecurityProvider, log zerolog.Logger) *TradeRepository {
 	return &TradeRepository{
 		ledgerDB:         ledgerDB,
@@ -40,7 +59,17 @@ func NewTradeRepository(ledgerDB *sql.DB, securityProvider SecurityProvider, log
 	}
 }
 
-// Create inserts a new trade record
+// Create inserts a new trade record into the immutable audit trail.
+// This method validates the trade, checks for duplicates by order_id, and automatically
+// resolves ISIN from symbol if not provided (via securityProvider).
+// Duplicate trades (same order_id) are silently skipped to prevent double-recording.
+//
+// Parameters:
+//   - trade: Trade object to create
+//
+// Returns:
+//   - error: Error if validation fails or database operation fails
+//
 // Faithful translation of Python: async def create(self, trade: Trade) -> None
 func (r *TradeRepository) Create(trade Trade) error {
 	// Validate trade before database insertion to prevent constraint violations
@@ -111,7 +140,16 @@ func (r *TradeRepository) Create(trade Trade) error {
 	return nil
 }
 
-// GetByOrderID retrieves a trade by broker order ID
+// GetByOrderID retrieves a trade by broker order ID.
+// Order IDs are unique identifiers from the broker API and are used to prevent duplicate trades.
+//
+// Parameters:
+//   - orderID: Broker order ID
+//
+// Returns:
+//   - *Trade: Trade object if found, nil if not found
+//   - error: Error if query fails
+//
 // Faithful translation of Python: async def get_by_order_id(self, order_id: str) -> Optional[Trade]
 func (r *TradeRepository) GetByOrderID(orderID string) (*Trade, error) {
 	query := "SELECT " + tradesColumns + " FROM trades WHERE order_id = ?"
@@ -128,7 +166,16 @@ func (r *TradeRepository) GetByOrderID(orderID string) (*Trade, error) {
 	return &trade, nil
 }
 
-// Exists checks if a trade with the given order_id already exists
+// Exists checks if a trade with the given order_id already exists.
+// This is used to prevent duplicate trade recording during sync operations.
+//
+// Parameters:
+//   - orderID: Broker order ID
+//
+// Returns:
+//   - bool: True if trade exists, false otherwise
+//   - error: Error if query fails
+//
 // Faithful translation of Python: async def exists(self, order_id: str) -> bool
 func (r *TradeRepository) Exists(orderID string) (bool, error) {
 	query := "SELECT 1 FROM trades WHERE order_id = ? LIMIT 1"
@@ -145,7 +192,16 @@ func (r *TradeRepository) Exists(orderID string) (bool, error) {
 	return true, nil
 }
 
-// GetHistory retrieves trade history, most recent first
+// GetHistory retrieves trade history, most recent first.
+// This is useful for displaying recent trading activity.
+//
+// Parameters:
+//   - limit: Maximum number of trades to return
+//
+// Returns:
+//   - []Trade: List of trades (ordered by executed_at DESC)
+//   - error: Error if query fails
+//
 // Faithful translation of Python: async def get_history(self, limit: int = 50) -> List[Trade]
 func (r *TradeRepository) GetHistory(limit int) ([]Trade, error) {
 	query := `
@@ -176,9 +232,19 @@ func (r *TradeRepository) GetHistory(limit int) ([]Trade, error) {
 	return trades, nil
 }
 
-// GetAllInRange retrieves all trades within a date range
+// GetAllInRange retrieves all trades within a date range.
+// Dates are converted from YYYY-MM-DD format to Unix timestamps at midnight UTC.
+// Useful for generating reports or analyzing trading activity over a specific period.
+//
+// Parameters:
+//   - startDate: Start date in YYYY-MM-DD format (inclusive, midnight UTC)
+//   - endDate: End date in YYYY-MM-DD format (inclusive, end of day UTC)
+//
+// Returns:
+//   - []Trade: List of trades within the date range (ordered by executed_at ASC)
+//   - error: Error if date parsing fails or query fails
+//
 // Faithful translation of Python: async def get_all_in_range(self, start_date: str, end_date: str) -> List[Trade]
-// startDate and endDate are in YYYY-MM-DD format, converted to Unix timestamps at midnight UTC
 func (r *TradeRepository) GetAllInRange(startDate, endDate string) ([]Trade, error) {
 	// Convert YYYY-MM-DD to Unix timestamps at midnight UTC
 	startTime, err := time.Parse("2006-01-02", startDate)
@@ -265,7 +331,17 @@ func (r *TradeRepository) GetBySymbol(symbol string, limit int) ([]Trade, error)
 	return trades, nil
 }
 
-// GetByISIN retrieves trades for a specific ISIN
+// GetByISIN retrieves trades for a specific ISIN.
+// This is the preferred method after migration 030 (ISIN is the primary identifier).
+//
+// Parameters:
+//   - isin: Security ISIN
+//   - limit: Maximum number of trades to return
+//
+// Returns:
+//   - []Trade: List of trades for the ISIN (ordered by executed_at DESC)
+//   - error: Error if query fails
+//
 // Faithful translation of Python: async def get_by_isin(self, isin: str, limit: int = 100) -> List[Trade]
 func (r *TradeRepository) GetByISIN(isin string, limit int) ([]Trade, error) {
 	query := `
@@ -314,9 +390,17 @@ func (r *TradeRepository) GetByIdentifier(identifier string, limit int) ([]Trade
 	return r.GetBySymbol(identifier, limit)
 }
 
-// GetRecentlyBoughtISINs returns ISINs of securities bought in the last N days
-// Excludes RESEARCH trades (order_id starting with 'RESEARCH_')
-// Returns map[isin]true for efficient lookup
+// GetRecentlyBoughtISINs returns ISINs of securities bought in the last N days.
+// This is used for cooloff period calculations to prevent immediate re-selling.
+// Excludes RESEARCH trades (order_id starting with 'RESEARCH_') as they are test trades.
+// Returns a map[isin]true for efficient O(1) lookup.
+//
+// Parameters:
+//   - days: Number of days to look back
+//
+// Returns:
+//   - map[string]bool: Set of ISINs (map[isin]true) bought in the last N days
+//   - error: Error if securityProvider is missing or query fails
 func (r *TradeRepository) GetRecentlyBoughtISINs(days int) (map[string]bool, error) {
 	if r.securityProvider == nil {
 		return nil, fmt.Errorf("security provider not available for ISIN lookup")
@@ -374,9 +458,17 @@ func (r *TradeRepository) GetRecentlyBoughtISINs(days int) (map[string]bool, err
 	return isins, nil
 }
 
-// GetRecentlySoldISINs returns ISINs of securities sold in the last N days
-// Excludes RESEARCH trades (order_id starting with 'RESEARCH_')
-// Returns map[isin]true for efficient lookup
+// GetRecentlySoldISINs returns ISINs of securities sold in the last N days.
+// This is used for cooloff period calculations to prevent immediate re-buying.
+// Excludes RESEARCH trades (order_id starting with 'RESEARCH_') as they are test trades.
+// Returns a map[isin]true for efficient O(1) lookup.
+//
+// Parameters:
+//   - days: Number of days to look back
+//
+// Returns:
+//   - map[string]bool: Set of ISINs (map[isin]true) sold in the last N days
+//   - error: Error if securityProvider is missing or query fails
 func (r *TradeRepository) GetRecentlySoldISINs(days int) (map[string]bool, error) {
 	if r.securityProvider == nil {
 		return nil, fmt.Errorf("security provider not available for ISIN lookup")

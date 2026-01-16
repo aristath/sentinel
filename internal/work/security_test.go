@@ -87,9 +87,9 @@ type MockMetadataSyncService struct {
 	mock.Mock
 }
 
-func (m *MockMetadataSyncService) SyncMetadata(isin string) error {
+func (m *MockMetadataSyncService) SyncMetadata(isin string) (string, error) {
 	args := m.Called(isin)
-	return args.Error(0)
+	return args.String(0), args.Error(1)
 }
 
 func (m *MockMetadataSyncService) GetAllActiveISINs() []string {
@@ -298,7 +298,7 @@ func TestSecurityMetadata_Execute(t *testing.T) {
 	registry := NewRegistry()
 
 	metadataService := &MockMetadataSyncService{}
-	metadataService.On("SyncMetadata", "NL0010273215").Return(nil)
+	metadataService.On("SyncMetadata", "NL0010273215").Return("ASML.EU", nil)
 	metadataService.On("GetAllActiveISINs").Return([]string{"NL0010273215"}).Maybe()
 
 	deps := &SecurityDeps{

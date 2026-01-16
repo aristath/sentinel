@@ -1,3 +1,6 @@
+// Package portfolio provides repository implementations for managing portfolio positions.
+// This file implements the PositionRepository, which handles position data stored in portfolio.db.
+// Positions represent current holdings with quantities, prices, and P&L calculations.
 package portfolio
 
 import (
@@ -9,36 +12,56 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// SecurityInfo represents security information needed for positions
+// SecurityInfo represents security information needed for positions.
+// This is a simplified view of security data used when joining positions with securities.
+// It includes fields relevant to position management (ISIN, symbol, name, geography, etc.).
 type SecurityInfo struct {
-	ISIN             string
-	Symbol           string
-	Name             string
-	Geography        string
-	FullExchangeName string
-	Industry         string
-	Currency         string
-	AllowSell        bool
+	ISIN             string // Primary identifier
+	Symbol           string // Trading symbol
+	Name             string // Company name
+	Geography        string // Country/region
+	FullExchangeName string // Exchange name
+	Industry         string // Industry sector
+	Currency         string // Trading currency
+	AllowSell        bool   // Whether selling is allowed (from overrides)
 }
 
-// SecurityProvider defines the contract for getting security information
-// Defined here to avoid import cycle with universe package
+// SecurityProvider defines the contract for getting security information.
+// This interface is defined here to avoid import cycles with the universe package.
+// It provides a clean abstraction for fetching security data with overrides applied.
 type SecurityProvider interface {
-	GetAllActive() ([]SecurityInfo, error)
-	GetAllActiveTradable() ([]SecurityInfo, error)
-	GetISINBySymbol(symbol string) (string, error)
+	GetAllActive() ([]SecurityInfo, error)         // Get all active securities
+	GetAllActiveTradable() ([]SecurityInfo, error) // Get all tradable securities
+	GetISINBySymbol(symbol string) (string, error) // Resolve symbol to ISIN
 }
 
-// PositionRepository handles position database operations
+// PositionRepository handles position database operations for portfolio management.
+// Positions are stored in portfolio.db and represent current holdings with quantities,
+// average cost, current prices, market values, and unrealized P&L calculations.
+// After migration 030, ISIN is the primary key (replacing symbol).
+//
+// The repository can optionally use a SecurityProvider to resolve symbols to ISINs
+// and to fetch security metadata with overrides applied.
+//
 // Faithful translation from Python: app/modules/portfolio/database/position_repository.py
 type PositionRepository struct {
-	portfolioDB      *sql.DB          // portfolio.db - positions
-	universeDB       *sql.DB          // universe.db - securities
-	securityProvider SecurityProvider // Optional: for override support
-	log              zerolog.Logger
+	portfolioDB      *sql.DB          // portfolio.db - positions table
+	universeDB       *sql.DB          // universe.db - securities (for lookups, if needed)
+	securityProvider SecurityProvider // Optional provider for symbol -> ISIN lookup and security metadata
+	log              zerolog.Logger   // Structured logger
 }
 
-// NewPositionRepository creates a new position repository
+// NewPositionRepository creates a new position repository.
+// The securityProvider is optional but recommended for full functionality (symbol lookups, overrides).
+//
+// Parameters:
+//   - portfolioDB: Database connection to portfolio.db
+//   - universeDB: Database connection to universe.db (for security lookups, if needed)
+//   - securityProvider: Provider for security lookups (can be nil, but limits functionality)
+//   - log: Structured logger
+//
+// Returns:
+//   - *PositionRepository: Initialized repository instance
 func NewPositionRepository(
 	portfolioDB, universeDB *sql.DB,
 	securityProvider SecurityProvider,
@@ -52,10 +75,19 @@ func NewPositionRepository(
 	}
 }
 
-// GetAll returns all positions
+// GetAll returns all positions from the database.
+// This method retrieves all portfolio positions regardless of quantity or value.
+// Positions are returned with ISIN as the primary identifier (after migration 030).
+//
+// Returns:
+//   - []Position: List of all positions (empty slice if none found)
+//   - error: Error if query fails
+//
 // Faithful translation of Python: async def get_all(self) -> List[Position]
-// Column order after migration: isin, symbol, quantity, avg_price, ...
 func (r *PositionRepository) GetAll() ([]Position, error) {
+	// Column order after migration 030: isin, symbol, quantity, avg_price, current_price,
+	// currency, currency_rate, market_value_eur, cost_basis_eur, unrealized_pnl,
+	// unrealized_pnl_pct, last_updated, first_bought, last_sold
 	query := `SELECT isin, symbol, quantity, avg_price, current_price, currency,
 		currency_rate, market_value_eur, cost_basis_eur, unrealized_pnl,
 		unrealized_pnl_pct, last_updated, first_bought, last_sold
@@ -83,9 +115,16 @@ func (r *PositionRepository) GetAll() ([]Position, error) {
 	return positions, nil
 }
 
-// GetWithSecurityInfo returns all positions with security info joined
+// GetWithSecurityInfo returns all positions with security information joined.
+// This method merges position data with security metadata (name, geography, industry, etc.)
+// and respects user-configurable overrides (allow_sell, name, etc.) via SecurityProvider.
+// This is useful for displaying positions in the UI with full context.
+//
+// Returns:
+//   - []PositionWithSecurity: List of positions with security metadata
+//   - error: Error if query fails or securityProvider is missing
+//
 // Faithful translation of Python: async def get_with_security_info(self) -> List[Dict]
-// Note: This method accesses both state.db (positions) and config.db (securities)
 func (r *PositionRepository) GetWithSecurityInfo() ([]PositionWithSecurity, error) {
 	// Get positions from portfolio.db
 	// Column order after migration: isin, symbol, quantity, avg_price, ...
@@ -169,8 +208,17 @@ func (r *PositionRepository) GetWithSecurityInfo() ([]PositionWithSecurity, erro
 	return result, nil
 }
 
-// GetBySymbol returns a position by symbol (helper method - looks up ISIN first)
-// This requires securityProvider to lookup ISIN from securities table
+// GetBySymbol returns a position by symbol (helper method - looks up ISIN first).
+// This method requires a securityProvider to resolve symbol -> ISIN.
+// If securityProvider is not configured, returns an error directing the caller
+// to use GetByISIN directly.
+//
+// Parameters:
+//   - symbol: Security symbol
+//
+// Returns:
+//   - *Position: Position object if found, nil if security not found
+//   - error: Error if securityProvider is missing or query fails
 func (r *PositionRepository) GetBySymbol(symbol string) (*Position, error) {
 	// Lookup ISIN from securities via provider
 	if r.securityProvider == nil {
@@ -187,19 +235,29 @@ func (r *PositionRepository) GetBySymbol(symbol string) (*Position, error) {
 		return nil, nil // No ISIN found
 	}
 
-	// Query position by ISIN
+	// Query position by ISIN (primary key)
 	return r.GetByISIN(isin)
 }
 
-// GetByISIN returns a position by ISIN (primary method)
-// After migration: isin is PRIMARY KEY
+// GetByISIN returns a position by ISIN (primary method).
+// ISIN is the primary key for positions after migration 030.
+//
+// Parameters:
+//   - isin: Security ISIN
+//
+// Returns:
+//   - *Position: Position object if found, nil if not found
+//   - error: Error if query fails
 func (r *PositionRepository) GetByISIN(isin string) (*Position, error) {
-	// Column order after migration: isin, symbol, quantity, avg_price, ...
+	// Column order after migration 030: isin, symbol, quantity, avg_price, current_price,
+	// currency, currency_rate, market_value_eur, cost_basis_eur, unrealized_pnl,
+	// unrealized_pnl_pct, last_updated, first_bought, last_sold
 	query := `SELECT isin, symbol, quantity, avg_price, current_price, currency,
 		currency_rate, market_value_eur, cost_basis_eur, unrealized_pnl,
 		unrealized_pnl_pct, last_updated, first_bought, last_sold
 		FROM positions WHERE isin = ?`
 
+	// Normalize ISIN to uppercase and trim whitespace
 	rows, err := r.portfolioDB.Query(query, strings.ToUpper(strings.TrimSpace(isin)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to query position by ISIN: %w", err)
@@ -218,16 +276,29 @@ func (r *PositionRepository) GetByISIN(isin string) (*Position, error) {
 	return &pos, nil
 }
 
-// GetByIdentifier returns a position by symbol or ISIN (smart lookup)
+// GetByIdentifier returns a position by symbol or ISIN (smart lookup).
+// This method automatically detects whether the identifier is an ISIN or symbol:
+// - If identifier is 12 characters and starts with 2 letters, tries ISIN lookup first
+// - Otherwise, falls back to symbol lookup (requires securityProvider)
+// This is useful for user input where the format may be ambiguous.
+//
+// Parameters:
+//   - identifier: Security symbol or ISIN
+//
+// Returns:
+//   - *Position: Position object if found, nil if not found
+//   - error: Error if query fails
+//
 // Faithful translation of Python: async def get_by_identifier(self, identifier: str) -> Optional[Position]
 func (r *PositionRepository) GetByIdentifier(identifier string) (*Position, error) {
 	identifier = strings.ToUpper(strings.TrimSpace(identifier))
 
 	// Check if it looks like an ISIN (12 chars, starts with 2 letters)
+	// ISIN format: 2-letter country code + 9 alphanumeric + 1 check digit
 	if len(identifier) == 12 && len(identifier) >= 2 {
 		firstTwo := identifier[:2]
 		if (firstTwo[0] >= 'A' && firstTwo[0] <= 'Z') && (firstTwo[1] >= 'A' && firstTwo[1] <= 'Z') {
-			// Try ISIN lookup first
+			// Try ISIN lookup first (more specific, less ambiguous)
 			pos, err := r.GetByISIN(identifier)
 			if err != nil {
 				return nil, err
@@ -238,11 +309,17 @@ func (r *PositionRepository) GetByIdentifier(identifier string) (*Position, erro
 		}
 	}
 
-	// Fall back to symbol lookup
+	// Fall back to symbol lookup (requires securityProvider)
 	return r.GetBySymbol(identifier)
 }
 
-// GetCount returns the total number of positions
+// GetCount returns the total number of positions in the portfolio.
+// This is useful for portfolio statistics and validation.
+//
+// Returns:
+//   - int: Total number of positions
+//   - error: Error if query fails
+//
 // Faithful translation of Python: async def get_count(self) -> int
 func (r *PositionRepository) GetCount() (int, error) {
 	query := "SELECT COUNT(*) as count FROM positions"
@@ -256,7 +333,14 @@ func (r *PositionRepository) GetCount() (int, error) {
 	return count, nil
 }
 
-// GetTotalValue returns the total portfolio value in EUR
+// GetTotalValue returns the total portfolio value in EUR.
+// This sums all position market values (market_value_eur column).
+// Returns 0.0 if no positions exist or all values are NULL.
+//
+// Returns:
+//   - float64: Total portfolio value in EUR
+//   - error: Error if query fails
+//
 // Faithful translation of Python: async def get_total_value(self) -> float
 func (r *PositionRepository) GetTotalValue() (float64, error) {
 	query := "SELECT COALESCE(SUM(market_value_eur), 0) as total FROM positions"
@@ -270,8 +354,22 @@ func (r *PositionRepository) GetTotalValue() (float64, error) {
 	return total, nil
 }
 
-// scanPosition scans a database row into a Position struct
-// Column order after migration: isin, symbol, quantity, avg_price, ...
+// scanPosition scans a database row into a Position struct.
+// This is an internal helper method used by all query methods.
+// It handles nullable fields by using sql.NullFloat64 and sql.NullInt64 types.
+//
+// Column order after migration 030:
+//
+//	isin, symbol, quantity, avg_price, current_price, currency,
+//	currency_rate, market_value_eur, cost_basis_eur, unrealized_pnl,
+//	unrealized_pnl_pct, last_updated, first_bought, last_sold
+//
+// Parameters:
+//   - rows: Database rows iterator (must be positioned on a valid row)
+//
+// Returns:
+//   - Position: Scanned position object
+//   - error: Error if scanning fails
 func (r *PositionRepository) scanPosition(rows *sql.Rows) (Position, error) {
 	var pos Position
 	var isin sql.NullString
@@ -347,8 +445,16 @@ func (r *PositionRepository) scanPosition(rows *sql.Rows) (Position, error) {
 	return pos, nil
 }
 
-// Upsert inserts or updates a position
-// After migration: isin is PRIMARY KEY
+// Upsert inserts or updates a position in the database.
+// Uses INSERT OR REPLACE to handle both insert and update in a single operation.
+// ISIN is the primary key after migration 030. The position's timestamps are stored
+// as Unix timestamps (integers).
+//
+// Parameters:
+//   - position: Position object to upsert
+//
+// Returns:
+//   - error: Error if database operation fails
 func (r *PositionRepository) Upsert(position Position) error {
 	now := time.Now().Unix()
 
@@ -424,8 +530,15 @@ func (r *PositionRepository) Upsert(position Position) error {
 	return nil
 }
 
-// Delete deletes a specific position by ISIN
-// Changed from symbol to ISIN as primary identifier
+// Delete deletes a specific position by ISIN.
+// After migration 030, ISIN is the primary key (replacing symbol).
+// This operation is idempotent - it does not error if the position doesn't exist.
+//
+// Parameters:
+//   - isin: Security ISIN
+//
+// Returns:
+//   - error: Error if database operation fails
 func (r *PositionRepository) Delete(isin string) error {
 	isin = strings.ToUpper(strings.TrimSpace(isin))
 
@@ -451,7 +564,13 @@ func (r *PositionRepository) Delete(isin string) error {
 	return nil
 }
 
-// DeleteAll deletes all positions (used during sync)
+// DeleteAll deletes all positions from the database.
+// This is typically used during portfolio sync operations to clear stale positions
+// before repopulating from the broker. Use with caution.
+//
+// Returns:
+//   - error: Error if database operation fails
+//
 // Faithful translation of Python: async def delete_all(self) -> None
 func (r *PositionRepository) DeleteAll() error {
 	// Begin transaction
@@ -476,8 +595,21 @@ func (r *PositionRepository) DeleteAll() error {
 	return nil
 }
 
-// UpdatePrice updates current price and recalculates market value and P&L by ISIN
-// Changed from symbol to ISIN as primary identifier
+// UpdatePrice updates current price and recalculates market value and P&L by ISIN.
+// This method performs all calculations in SQL for efficiency:
+// - market_value_eur = quantity * price / currency_rate
+// - unrealized_pnl = (price - avg_price) * quantity / currency_rate
+// - unrealized_pnl_pct = ((price / avg_price) - 1) * 100
+//
+// After migration 030, ISIN is the primary key (replacing symbol).
+//
+// Parameters:
+//   - isin: Security ISIN
+//   - price: Current market price in security's native currency
+//   - currencyRate: Exchange rate from security currency to EUR
+//
+// Returns:
+//   - error: Error if database operation fails
 func (r *PositionRepository) UpdatePrice(isin string, price float64, currencyRate float64) error {
 	isin = strings.ToUpper(strings.TrimSpace(isin))
 	now := time.Now().Unix()
@@ -536,8 +668,17 @@ func (r *PositionRepository) UpdatePrice(isin string, price float64, currencyRat
 	return nil
 }
 
-// UpdateLastSoldAt updates the last_sold_at timestamp after a sell by ISIN
-// Changed from symbol to ISIN as primary identifier
+// UpdateLastSoldAt updates the last_sold_at timestamp after a sell by ISIN.
+// The timestamp is stored as a Unix timestamp at midnight UTC (date only, no time).
+// This is used to track when positions were last sold for cooloff period calculations.
+//
+// After migration 030, ISIN is the primary key (replacing symbol).
+//
+// Parameters:
+//   - isin: Security ISIN
+//
+// Returns:
+//   - error: Error if database operation fails
 func (r *PositionRepository) UpdateLastSoldAt(isin string) error {
 	isin = strings.ToUpper(strings.TrimSpace(isin))
 	// Store as Unix timestamp at midnight UTC (date only)
