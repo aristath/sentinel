@@ -24,44 +24,60 @@
 #include <Arduino_LED_Matrix.h>
 
 // LED Matrix instance
+// The ArduinoLEDMatrix library provides hardware-accelerated rendering
+// for the 8x13 LED matrix on Arduino Uno Q
 ArduinoLEDMatrix matrix;
 
 // Matrix dimensions
+// The LED matrix has 8 rows and 13 columns, for a total of 104 pixels
 const uint8_t MATRIX_ROWS = 8;
 const uint8_t MATRIX_COLS = 13;
 
 // Scrolling text state
-String currentText = "";
-int scrollOffset = 0;
-unsigned long lastScrollTime = 0;
-int scrollSpeed = 80;  // ms per pixel
+// These variables track the current scrolling text display mode
+String currentText = "";           // The text string currently being displayed
+int scrollOffset = 0;                // Current horizontal scroll position in pixels
+unsigned long lastScrollTime = 0;   // Timestamp of last scroll update (for timing)
+int scrollSpeed = 80;                // Scroll speed in milliseconds per pixel (lower = faster)
 
 // Portfolio health animation state
+// Maximum number of security clusters that can be displayed simultaneously
+// Limited by available RAM and processing power
 #define MAX_SECURITIES 20
 
+/**
+ * SecurityCluster represents a single security's health visualization
+ * 
+ * Each security is displayed as an animated cluster that moves organically
+ * using Perlin noise. The cluster size and brightness are determined by
+ * the security's health score (0-100).
+ */
 struct SecurityCluster {
-    char symbol[11];      // Symbol (10 chars + null terminator)
-    uint8_t health;       // Health 0-100
-    float centerX;        // Floating point position (0-12.99)
-    float centerY;        // Floating point position (0-7.99)
-    float velocityX;      // Movement velocity
-    float velocityY;
-    float noiseOffsetX;   // Perlin noise offset
-    float noiseOffsetY;
-    float radius;         // Cluster size
-    bool active;          // Is this cluster active?
+    char symbol[11];      // Security symbol (10 chars + null terminator, e.g., "AAPL.US")
+    uint8_t health;       // Health score 0-100 (0=unhealthy, 100=excellent)
+    float centerX;        // Current X position (0.0 to 12.99, floating point for smooth movement)
+    float centerY;        // Current Y position (0.0 to 7.99, floating point for smooth movement)
+    float velocityX;      // Current horizontal velocity (pixels per frame)
+    float velocityY;      // Current vertical velocity (pixels per frame)
+    float noiseOffsetX;   // Perlin noise X offset (incremented each frame for animation)
+    float noiseOffsetY;   // Perlin noise Y offset (incremented each frame for animation)
+    float radius;        // Visual cluster radius (larger for healthier securities)
+    bool active;         // Whether this cluster is currently active and should be rendered
 };
 
-SecurityCluster clusters[MAX_SECURITIES];
-uint8_t numActiveClusters = 0;
-bool healthMode = false;
-unsigned long lastHealthFrame = 0;
-uint16_t healthFrameInterval = 16; // ~60 FPS
+// Portfolio health animation state variables
+SecurityCluster clusters[MAX_SECURITIES];  // Array of all security clusters
+uint8_t numActiveClusters = 0;             // Number of currently active clusters
+bool healthMode = false;                    // Whether health animation mode is active (vs text scrolling)
+unsigned long lastHealthFrame = 0;         // Timestamp of last health animation frame
+uint16_t healthFrameInterval = 16;         // Frame interval in milliseconds (~60 FPS = 16ms per frame)
 
-// 5x7 bitmap font - each character is 5 columns, stored as column bytes (LSB = top row)
-// Only uppercase letters, numbers, and common symbols
-const uint8_t FONT_WIDTH = 5;
-const uint8_t FONT_HEIGHT = 7;
+// 5x7 bitmap font configuration
+// Each character is 5 columns wide, stored as column bytes where LSB = top row
+// This is a custom font supporting uppercase letters, numbers, and common symbols
+// Font data is stored in PROGMEM (program memory) to save RAM
+const uint8_t FONT_WIDTH = 5;   // Character width in pixels (5 columns)
+const uint8_t FONT_HEIGHT = 7;  // Character height in pixels (7 rows)
 
 // Font data stored in PROGMEM to save RAM
 const uint8_t PROGMEM font_data[][5] = {
@@ -119,8 +135,18 @@ const uint8_t PROGMEM font_data[][5] = {
     {0x40, 0x40, 0x40, 0x40, 0x40}, // '_' - index 51
 };
 
-// Character to font index mapping
+/**
+ * Maps a character to its font data index
+ * 
+ * The font_data array contains bitmap data for each supported character.
+ * This function converts a character to the corresponding index in that array.
+ * Unsupported characters are mapped to space (index 0).
+ * 
+ * @param c The character to map
+ * @return The font data index for the character, or 0 (space) if unsupported
+ */
 int getCharIndex(char c) {
+    // Special symbols and punctuation
     if (c == ' ') return 0;
     if (c == '!') return 1;
     if (c == '$') return 2;
@@ -133,130 +159,222 @@ int getCharIndex(char c) {
     if (c == '-') return 9;
     if (c == '.') return 10;
     if (c == '/') return 11;
+    // Numbers: '0' is index 12, '1' is 13, etc.
     if (c >= '0' && c <= '9') return 12 + (c - '0');
     if (c == ':') return 22;
     if (c == '=') return 23;
     if (c == '?') return 24;
+    // Uppercase letters: 'A' is index 25, 'B' is 26, etc.
     if (c >= 'A' && c <= 'Z') return 25 + (c - 'A');
-    if (c >= 'a' && c <= 'z') return 25 + (c - 'a');  // lowercase -> uppercase
+    // Lowercase letters are converted to uppercase (same font glyph)
+    if (c >= 'a' && c <= 'z') return 25 + (c - 'a');
     if (c == '_') return 51;
-    return 0;  // Unknown char -> space
+    // Unknown character -> space (index 0)
+    return 0;
 }
 
-// Get column data for a character
+/**
+ * Gets a single column of bitmap data for a character
+ * 
+ * Each character is 5 columns wide. This function retrieves the byte data
+ * for a specific column (0-4) of a character. The byte represents which
+ * pixels in that column should be lit (LSB = top row).
+ * 
+ * @param c The character to get column data for
+ * @param col The column index (0-4)
+ * @return The column byte data, or 0 if column is out of range
+ */
 uint8_t getCharColumn(char c, int col) {
     if (col < 0 || col >= FONT_WIDTH) return 0;
     int idx = getCharIndex(c);
+    // Read from PROGMEM (program memory) to save RAM
     return pgm_read_byte(&font_data[idx][col]);
 }
 
-// Calculate total width of text in columns (including gaps)
+/**
+ * Calculates the total width of text in columns (including gaps between characters)
+ * 
+ * Each character is 5 pixels wide, with 1 pixel gap between characters.
+ * This function calculates the total width needed to display the entire text string.
+ * 
+ * @param text The text string to measure
+ * @return Total width in pixels (including character gaps)
+ */
 int getTextWidth(const String& text) {
     return text.length() * (FONT_WIDTH + 1);  // +1 for gap between chars
 }
 
-// Get column byte at position in rendered text
+/**
+ * Gets the column byte data at a specific position in the rendered text
+ * 
+ * This function maps a horizontal pixel position in the scrolling text
+ * to the corresponding column byte data. It handles character boundaries
+ * and gaps between characters.
+ * 
+ * @param text The text string being rendered
+ * @param col The horizontal pixel position (0 = leftmost)
+ * @return The column byte data at that position, or 0 if out of bounds or in a gap
+ */
 uint8_t getTextColumn(const String& text, int col) {
     if (col < 0 || text.length() == 0) return 0;
     
-    int charWidth = FONT_WIDTH + 1;  // char width + gap
-    int charIndex = col / charWidth;
-    int charCol = col % charWidth;
+    // Each character takes up FONT_WIDTH pixels + 1 gap pixel
+    int charWidth = FONT_WIDTH + 1;
+    int charIndex = col / charWidth;  // Which character this position is in
+    int charCol = col % charWidth;   // Which column within that character
     
+    // Check bounds
     if (charIndex >= (int)text.length()) return 0;
-    if (charCol >= FONT_WIDTH) return 0;  // Gap column
+    if (charCol >= FONT_WIDTH) return 0;  // This is a gap column (empty)
     
+    // Get the column data for this character
     return getCharColumn(text.charAt(charIndex), charCol);
 }
 
-// Render current frame to matrix
+/**
+ * Renders the current scrolling text frame to the LED matrix
+ * 
+ * This function takes the current scroll position and renders the visible
+ * portion of the text onto the LED matrix. The text scrolls from right to left,
+ * with padding on both sides so it scrolls completely off-screen before looping.
+ * 
+ * The frame buffer uses 3-bit grayscale (0-7 brightness levels), where 7 is
+ * maximum brightness and 0 is off.
+ */
 void renderFrame() {
+    // If no text, clear the matrix
     if (currentText.length() == 0) {
         matrix.clear();
         return;
     }
     
+    // Frame buffer: 8 rows x 13 columns = 104 pixels
     uint8_t frame[MATRIX_ROWS * MATRIX_COLS];
     int textWidth = getTextWidth(currentText);
+    // Total scroll width includes padding on both sides for smooth scrolling
     int totalWidth = MATRIX_COLS + textWidth + MATRIX_COLS;  // padding + text + padding
     
-    // Render each pixel
+    // Render each pixel in the matrix
     for (int row = 0; row < MATRIX_ROWS; row++) {
         for (int col = 0; col < MATRIX_COLS; col++) {
-            int textCol = scrollOffset + col - MATRIX_COLS;  // Subtract left padding
+            // Calculate which column in the text corresponds to this matrix column
+            // scrollOffset is the current scroll position, MATRIX_COLS is left padding
+            int textCol = scrollOffset + col - MATRIX_COLS;
             uint8_t colData = 0;
             
+            // Get column data if we're within the text bounds
             if (textCol >= 0 && textCol < textWidth) {
                 colData = getTextColumn(currentText, textCol);
             }
             
-            // Check if this row's bit is set in the column
-            // Font uses LSB = row 0 (top)
+            // Check if this row's bit is set in the column byte
+            // Font uses LSB = row 0 (top row), so we check bit position 'row'
+            // If set, use maximum brightness (7), otherwise off (0)
             uint8_t pixel = (colData & (1 << row)) ? 7 : 0;
             frame[row * MATRIX_COLS + col] = pixel;
         }
     }
     
+    // Send frame to hardware for display
     matrix.draw(frame);
 }
 
 /**
- * Set scrolling text
- * Text will scroll continuously until changed
+ * Sets the scrolling text to display on the LED matrix
+ * 
+ * This function is called via the Arduino Bridge from the Python app.
+ * It sets the text that will scroll continuously from right to left.
+ * The text will loop indefinitely until changed or cleared.
+ * 
+ * @param text The text string to display (will be converted to uppercase if needed)
  */
 void setText(String text) {
     currentText = text;
-    scrollOffset = 0;
-    lastScrollTime = millis();
-    renderFrame();
+    scrollOffset = 0;              // Reset scroll position to start
+    lastScrollTime = millis();    // Reset scroll timer
+    renderFrame();                 // Render initial frame immediately
 }
 
 /**
- * Set RGB LED 3 color (sync indicator)
- * RGB LEDs are active-low: LOW = ON, HIGH = OFF
+ * Sets RGB LED 3 color (service health/sync indicator)
+ * 
+ * LED 3 is used to indicate the health status of the main Sentinel service.
+ * This function is called via the Arduino Bridge from the Python app.
+ * 
+ * RGB LEDs on Arduino Uno Q are active-low: LOW = ON, HIGH = OFF
+ * This means we write LOW to turn on a color channel and HIGH to turn it off.
+ * 
+ * @param r Red component (0-255, any non-zero value turns red on)
+ * @param g Green component (0-255, any non-zero value turns green on)
+ * @param b Blue component (0-255, any non-zero value turns blue on)
  */
 void setRGB3(int r, int g, int b) {
+    // Active-low: LOW = LED on, HIGH = LED off
     digitalWrite(LED3_R, r > 0 ? LOW : HIGH);
     digitalWrite(LED3_G, g > 0 ? LOW : HIGH);
     digitalWrite(LED3_B, b > 0 ? LOW : HIGH);
 }
 
 /**
- * Set RGB LED 4 color (processing indicator)
- * RGB LEDs are active-low: LOW = ON, HIGH = OFF
+ * Sets RGB LED 4 color (planner activity/processing indicator)
+ * 
+ * LED 4 is used to indicate when the planning system is actively generating
+ * recommendations or evaluating trade sequences.
+ * This function is called via the Arduino Bridge from the Python app.
+ * 
+ * RGB LEDs on Arduino Uno Q are active-low: LOW = ON, HIGH = OFF
+ * 
+ * @param r Red component (0-255, any non-zero value turns red on)
+ * @param g Green component (0-255, any non-zero value turns green on)
+ * @param b Blue component (0-255, any non-zero value turns blue on)
  */
 void setRGB4(int r, int g, int b) {
+    // Active-low: LOW = LED on, HIGH = LED off
     digitalWrite(LED4_R, r > 0 ? LOW : HIGH);
     digitalWrite(LED4_G, g > 0 ? LOW : HIGH);
     digitalWrite(LED4_B, b > 0 ? LOW : HIGH);
 }
 
 /**
- * Clear the LED matrix and stop scrolling
+ * Clears the LED matrix and stops text scrolling
+ * 
+ * This function is called via the Arduino Bridge from the Python app.
+ * It turns off all pixels on the LED matrix and resets the scrolling state.
+ * This does not affect RGB LEDs 3 or 4.
  */
 void clearMatrix() {
-    currentText = "";
-    scrollOffset = 0;
-    matrix.clear();
+    currentText = "";      // Clear text string
+    scrollOffset = 0;     // Reset scroll position
+    matrix.clear();        // Turn off all matrix pixels
 }
 
 /**
- * Set specific number of pixels to light up (for system stats visualization)
- * Fills pixels from left-to-right, top-to-bottom
+ * Sets a specific number of pixels to light up (for system stats visualization)
+ * 
+ * This function is used to display system statistics as a bar graph.
+ * Pixels are filled from left-to-right, top-to-bottom order.
+ * This function is called via the Arduino Bridge from the Python app.
+ * 
+ * @param pixelsOn Number of pixels to light up (0-104, clamped to valid range)
  */
 void setPixelCount(int pixelsOn) {
-    // Stop any scrolling and health mode
+    // Stop any scrolling and health mode when switching to stats mode
     currentText = "";
     healthMode = false;
     
+    // Clamp pixel count to valid range (0 to total matrix size)
     pixelsOn = constrain(pixelsOn, 0, MATRIX_ROWS * MATRIX_COLS);
     
+    // Create frame buffer
     uint8_t frame[MATRIX_ROWS * MATRIX_COLS];
     
+    // Fill pixels from left-to-right, top-to-bottom
+    // Each pixel is either maximum brightness (7) or off (0)
     for (int i = 0; i < MATRIX_ROWS * MATRIX_COLS; i++) {
         frame[i] = (i < pixelsOn) ? 7 : 0;
     }
     
+    // Render frame to matrix
     matrix.draw(frame);
 }
 
@@ -265,9 +383,17 @@ void setPixelCount(int pixelsOn) {
 // ============================================================================
 
 /**
- * Simple hash function for Perlin noise
+ * Simple hash function for Perlin noise generation
+ * 
+ * This hash function converts an integer input into a pseudo-random integer.
+ * It's used to generate deterministic "random" gradients for Perlin noise.
+ * The same input always produces the same output (deterministic).
+ * 
+ * @param x Input integer value
+ * @return Hashed integer value
  */
 int32_t hash(int32_t x) {
+    // Multi-stage hash mixing for good distribution
     x = ((x >> 16) ^ x) * 0x45d9f3b;
     x = ((x >> 16) ^ x) * 0x45d9f3b;
     x = (x >> 16) ^ x;
@@ -276,13 +402,29 @@ int32_t hash(int32_t x) {
 
 /**
  * Gradient function for Perlin noise
+ * 
+ * Converts a hash value into a gradient value. The gradient determines
+ * the direction and magnitude of the noise at a point.
+ * 
+ * @param hash Hash value (determines gradient direction)
+ * @param x Position offset within the grid cell
+ * @return Gradient value (positive or negative based on hash)
  */
 float gradient(int32_t hash, float x) {
+    // Use least significant bit to determine gradient direction
     return (hash & 1) ? x : -x;
 }
 
 /**
- * Linear interpolation
+ * Linear interpolation between two values
+ * 
+ * Interpolates between 'a' and 'b' using parameter 't' (0.0 to 1.0).
+ * When t=0, returns a; when t=1, returns b; values in between are interpolated.
+ * 
+ * @param a Start value
+ * @param b End value
+ * @param t Interpolation parameter (0.0 to 1.0)
+ * @return Interpolated value
  */
 float lerp(float a, float b, float t) {
     return a + t * (b - a);
@@ -290,26 +432,55 @@ float lerp(float a, float b, float t) {
 
 /**
  * Simple 1D Perlin noise implementation
- * Returns value between -1 and 1
+ * 
+ * Perlin noise generates smooth, organic-looking random values that vary
+ * continuously. This is used to create natural-looking movement for the
+ * portfolio health clusters.
+ * 
+ * The algorithm:
+ * 1. Determines which grid cell the point falls in
+ * 2. Gets hash values for the grid cell boundaries
+ * 3. Calculates gradients at those boundaries
+ * 4. Interpolates between the gradients using a smooth curve
+ * 
+ * @param x Input position (can be fractional)
+ * @return Noise value between -1.0 and 1.0
  */
 float perlinNoise(float x) {
+    // Get integer part (grid cell index) and fractional part (position within cell)
     int32_t xi = (int32_t)x;
     float xf = x - xi;
     
-    // Fade curve (smoothstep)
+    // Fade curve (smoothstep) for smooth interpolation
+    // This creates a smooth transition instead of linear interpolation
     float u = xf * xf * (3.0 - 2.0 * xf);
     
-    // Hash function for pseudo-random gradients
+    // Get hash values for grid cell boundaries (deterministic pseudo-random)
     int32_t a = hash(xi);
     int32_t b = hash(xi + 1);
     
-    // Interpolate
+    // Interpolate between gradients at the two boundaries
     return lerp(gradient(a, xf), gradient(b, xf - 1.0), u);
 }
 
 /**
- * Parse JSON and initialize clusters
- * Expected format: {"securities":[{"symbol":"AAPL","health":0.85}, ...]}
+ * Parses JSON data and initializes security clusters for health animation
+ * 
+ * This function performs simple JSON parsing (no external library) to extract
+ * security symbols and health scores from the JSON string received from Python.
+ * 
+ * Expected JSON format:
+ * {
+ *   "securities": [
+ *     {"symbol": "AAPL", "health": 0.85},
+ *     {"symbol": "MSFT", "health": 0.92},
+ *     ...
+ *   ]
+ * }
+ * 
+ * Health values are expected as floats (0.0 to 1.0) and converted to 0-100 scale.
+ * 
+ * @param jsonData JSON string containing securities array with symbol and health fields
  */
 void parseAndInitClusters(String jsonData) {
     numActiveClusters = 0;
@@ -361,12 +532,17 @@ void parseAndInitClusters(String jsonData) {
         }
         
         // Initialize cluster position and physics
+        // Random starting position within matrix bounds (0-12.9 for X, 0-7.9 for Y)
         clusters[numActiveClusters].centerX = random(0, 130) / 10.0; // 0-13
         clusters[numActiveClusters].centerY = random(0, 80) / 10.0;  // 0-8
+        // Start with zero velocity (will be set by Perlin noise)
         clusters[numActiveClusters].velocityX = 0;
         clusters[numActiveClusters].velocityY = 0;
+        // Random noise offsets ensure each cluster moves independently
         clusters[numActiveClusters].noiseOffsetX = random(0, 1000) / 10.0;
         clusters[numActiveClusters].noiseOffsetY = random(0, 1000) / 10.0;
+        // Radius scales with health: healthier securities have larger clusters
+        // Base radius 2.0, up to 3.5 for 100% health
         clusters[numActiveClusters].radius = 2.0 + (clusters[numActiveClusters].health / 100.0) * 1.5;
         clusters[numActiveClusters].active = true;
         
@@ -376,29 +552,42 @@ void parseAndInitClusters(String jsonData) {
 }
 
 /**
- * Update cluster positions using Perlin noise
+ * Updates cluster positions using Perlin noise for organic movement
+ * 
+ * This function is called each frame to animate the security clusters.
+ * Each cluster moves organically using Perlin noise, which creates smooth,
+ * natural-looking motion. Clusters bounce softly off the matrix boundaries.
+ * 
+ * The animation uses:
+ * - Perlin noise to generate smooth, continuous movement directions
+ * - Velocity smoothing (90% old + 10% new) for fluid motion
+ * - Soft boundary bouncing to keep clusters within matrix bounds
  */
 void updateHealthClusters() {
     for (uint8_t i = 0; i < numActiveClusters; i++) {
         if (!clusters[i].active) continue;
         
-        // Update Perlin noise offsets
+        // Update Perlin noise offsets (increment for continuous animation)
+        // Small increment (0.01) creates smooth, slow movement
         clusters[i].noiseOffsetX += 0.01;
         clusters[i].noiseOffsetY += 0.01;
         
-        // Get noise values (-1 to 1)
+        // Get noise values (-1 to 1) for X and Y movement directions
         float noiseX = perlinNoise(clusters[i].noiseOffsetX);
         float noiseY = perlinNoise(clusters[i].noiseOffsetY);
         
-        // Update velocity (smoothed)
+        // Update velocity with smoothing (90% old + 10% new)
+        // This creates fluid, organic motion instead of jerky movement
         clusters[i].velocityX = clusters[i].velocityX * 0.9 + noiseX * 0.1;
         clusters[i].velocityY = clusters[i].velocityY * 0.9 + noiseY * 0.1;
         
-        // Update position
+        // Update position based on velocity
+        // Small multiplier (0.05) keeps movement smooth and controlled
         clusters[i].centerX += clusters[i].velocityX * 0.05;
         clusters[i].centerY += clusters[i].velocityY * 0.05;
         
-        // Soft boundary bounce
+        // Soft boundary bounce - keep clusters within matrix bounds
+        // When hitting a boundary, reverse velocity and reduce it by 50%
         if (clusters[i].centerX < 0) {
             clusters[i].centerX = 0;
             clusters[i].velocityX *= -0.5;
@@ -419,7 +608,17 @@ void updateHealthClusters() {
 }
 
 /**
- * Render health frame to LED matrix
+ * Renders the portfolio health animation frame to the LED matrix
+ * 
+ * This function calculates the brightness of each pixel based on its distance
+ * from the nearest security cluster. Pixels closer to cluster centers are
+ * brighter, and brightness also scales with the security's health score.
+ * 
+ * The algorithm:
+ * 1. For each pixel, find the nearest active cluster
+ * 2. Calculate distance from pixel to cluster center
+ * 3. Calculate brightness based on distance (falloff) and health score
+ * 4. Map to 3-bit grayscale (0-7 brightness levels)
  */
 void renderHealthFrame() {
     uint8_t frame[MATRIX_ROWS * MATRIX_COLS];
@@ -446,15 +645,19 @@ void renderHealthFrame() {
             
             // Calculate brightness based on distance and health
             uint8_t brightness = 0;
+            // Only render if we have clusters and pixel is within 2x radius
             if (numActiveClusters > 0 && minDist < clusters[nearestCluster].radius * 2) {
-                // Falloff from center
+                // Falloff from center: 1.0 at center, 0.0 at 2x radius
+                // Creates smooth gradient from cluster center to edge
                 float falloff = 1.0 - (minDist / (clusters[nearestCluster].radius * 2));
                 if (falloff < 0) falloff = 0;
                 
-                // Health-based brightness (health is 0-100)
+                // Health-based brightness: healthier securities are brighter
+                // Health is stored as 0-100, convert to 0.0-1.0 factor
                 float healthFactor = clusters[nearestCluster].health / 100.0;
                 
                 // Map to 0-7 brightness (3-bit grayscale)
+                // Multiply falloff, health factor, and max brightness (7)
                 brightness = (uint8_t)(falloff * healthFactor * 7.0);
             }
             
@@ -466,45 +669,65 @@ void renderHealthFrame() {
 }
 
 /**
- * Set portfolio health data - Bridge function
- * Receives JSON with securities and health scores
+ * Sets portfolio health data and starts health animation mode
+ * 
+ * This function is called via the Arduino Bridge from the Python app.
+ * It receives JSON data with security symbols and health scores, parses it,
+ * initializes the clusters, and switches the display to health animation mode.
+ * 
+ * @param jsonData JSON string containing securities array with symbol and health fields
  */
 void setPortfolioHealth(String jsonData) {
-    // Stop text scrolling
+    // Stop text scrolling when switching to health mode
     currentText = "";
     
-    // Parse JSON and initialize clusters
+    // Parse JSON and initialize clusters with security data
     parseAndInitClusters(jsonData);
     
-    // Enable health mode
+    // Enable health animation mode (disables text scrolling)
     healthMode = true;
-    lastHealthFrame = millis();
+    lastHealthFrame = millis();  // Reset animation timer
     
-    // Render initial frame
+    // Render initial frame immediately
     renderHealthFrame();
 }
 
 /**
- * Stop health mode and return to text mode
+ * Stops health animation mode and clears the matrix
+ * 
+ * This function is called via the Arduino Bridge from the Python app.
+ * It disables health mode, clears all clusters, and clears the LED matrix.
+ * The display can then be used for text scrolling or other modes.
  */
 void stopHealthMode() {
-    healthMode = false;
-    numActiveClusters = 0;
-    matrix.clear();
+    healthMode = false;        // Disable health mode
+    numActiveClusters = 0;      // Clear all clusters
+    matrix.clear();             // Turn off all matrix pixels
 }
 
+/**
+ * Arduino setup function - called once at startup
+ * 
+ * Initializes all hardware (LED matrix, RGB LEDs) and sets up communication
+ * with the Python app via the Arduino Bridge. This function runs once when
+ * the Arduino boots up.
+ */
 void setup() {
-    // Initialize LED matrix
+    // Initialize LED matrix hardware
     matrix.begin();
-    matrix.setGrayscaleBits(3);  // 3-bit grayscale (0-7 brightness levels)
-    matrix.clear();
+    // Set 3-bit grayscale mode (0-7 brightness levels, 8 total levels)
+    // This provides smooth brightness gradients for text and health animation
+    matrix.setGrayscaleBits(3);
+    matrix.clear();  // Start with matrix cleared
     
-    // Initialize RGB LED 3 pins (sync indicator)
+    // Initialize RGB LED 3 pins (service health/sync indicator)
+    // These pins control the red, green, and blue channels of LED 3
     pinMode(LED3_R, OUTPUT);
     pinMode(LED3_G, OUTPUT);
     pinMode(LED3_B, OUTPUT);
     
-    // Initialize RGB LED 4 pins (processing indicator)
+    // Initialize RGB LED 4 pins (planner activity/processing indicator)
+    // These pins control the red, green, and blue channels of LED 4
     pinMode(LED4_R, OUTPUT);
     pinMode(LED4_G, OUTPUT);
     pinMode(LED4_B, OUTPUT);
@@ -513,15 +736,18 @@ void setup() {
     setRGB3(0, 0, 0);
     setRGB4(0, 0, 0);
     
-    // Flash LED3 green briefly to indicate sketch started
+    // Flash LED3 green briefly to indicate sketch started successfully
+    // This provides visual feedback that the Arduino is running
     setRGB3(0, 255, 0);
     delay(500);
     setRGB3(0, 0, 0);
     
-    // Initialize Bridge for communication with Linux MPU
+    // Initialize Bridge for communication with Linux MPU (Python app)
+    // The Bridge allows the Python app to call functions on the Arduino
     Bridge.begin();
     
     // Expose functions to Python via Bridge
+    // These functions can be called from the Python app using Bridge.call()
     Bridge.provide("setText", setText);
     Bridge.provide("setRGB3", setRGB3);
     Bridge.provide("setRGB4", setRGB4);
@@ -531,39 +757,58 @@ void setup() {
     Bridge.provide("stopHealthMode", stopHealthMode);
 }
 
+/**
+ * Arduino loop function - called repeatedly after setup
+ * 
+ * This is the main animation loop. It handles:
+ * - Text scrolling animation (when text mode is active)
+ * - Portfolio health animation (when health mode is active)
+ * 
+ * The loop runs continuously, updating the display at appropriate intervals
+ * to create smooth animations. A small delay prevents CPU busy-waiting.
+ */
 void loop() {
-    // Handle text scrolling
+    // Handle text scrolling animation
+    // Only scroll if we have text and health mode is not active
     if (currentText.length() > 0 && !healthMode) {
         unsigned long now = millis();
+        // Check if enough time has passed for next scroll step
         if (now - lastScrollTime >= (unsigned long)scrollSpeed) {
             lastScrollTime = now;
             
-            // Advance scroll position
+            // Advance scroll position by one pixel
             scrollOffset++;
             
-            // Calculate total scroll width (padding + text + padding)
+            // Calculate total scroll width (left padding + text + right padding)
             int textWidth = getTextWidth(currentText);
             int totalWidth = MATRIX_COLS + textWidth + MATRIX_COLS;
             
-            // Loop back when text has scrolled off
+            // Loop back to start when text has completely scrolled off
+            // This creates continuous scrolling effect
             if (scrollOffset >= totalWidth) {
                 scrollOffset = 0;
             }
             
+            // Render the current frame with new scroll position
             renderFrame();
         }
     }
     
-    // Handle health animation
+    // Handle portfolio health animation
+    // Only animate if health mode is active and we have clusters
     if (healthMode && numActiveClusters > 0) {
         unsigned long now = millis();
+        // Check if enough time has passed for next animation frame (~60 FPS)
         if (now - lastHealthFrame >= healthFrameInterval) {
             lastHealthFrame = now;
+            // Update cluster positions using Perlin noise
             updateHealthClusters();
+            // Render the updated frame
             renderHealthFrame();
         }
     }
     
-    // Small delay to prevent busy-waiting
+    // Small delay to prevent busy-waiting and reduce CPU usage
+    // This allows other Arduino tasks to run
     delay(1);
 }
