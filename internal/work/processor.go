@@ -99,10 +99,16 @@ func (p *Processor) Trigger() {
 
 // ExecuteNow immediately executes a specific work type, bypassing timing checks.
 // This is used for manual triggers via the API.
+// Note: This bypasses market timing and interval checks, but still respects dependencies.
 func (p *Processor) ExecuteNow(workTypeID string, subject string) error {
 	wt := p.registry.Get(workTypeID)
 	if wt == nil {
 		return fmt.Errorf("unknown work type: %s", workTypeID)
+	}
+
+	// Still check dependencies - can't run work if deps haven't completed
+	if !p.dependenciesMet(wt, subject) {
+		return fmt.Errorf("dependencies not met for work type %s", workTypeID)
 	}
 
 	item := NewWorkItem(wt, subject)
