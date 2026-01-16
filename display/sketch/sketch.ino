@@ -9,8 +9,8 @@
  * 
  * Hardware:
  * - LED Matrix: 8 rows x 13 columns (104 LEDs)
- * - RGB LED 3: LED3_R, LED3_G, LED3_B - Active LOW
- * - RGB LED 4: LED4_R, LED4_G, LED4_B - Active LOW
+ * - RGB LED 3: LED_BUILTIN (R), LED_BUILTIN+1 (G), LED_BUILTIN+2 (B) - Active LOW
+ * - RGB LED 4: LED_BUILTIN+3 (R), LED_BUILTIN+4 (G), LED_BUILTIN+5 (B) - Active LOW
  * 
  * Bridge Functions Exposed:
  * - setText(text) - Set scrolling text
@@ -308,11 +308,12 @@ void setText(String text) {
  * @param g Green component (0-255, any non-zero value turns green on)
  * @param b Blue component (0-255, any non-zero value turns blue on)
  */
-void setRGB3(int r, int g, int b) {
+void setRGB3(uint8_t r, uint8_t g, uint8_t b) {
     // Active-low: LOW = LED on, HIGH = LED off
-    digitalWrite(LED3_R, r > 0 ? LOW : HIGH);
-    digitalWrite(LED3_G, g > 0 ? LOW : HIGH);
-    digitalWrite(LED3_B, b > 0 ? LOW : HIGH);
+    // LED3 uses LED_BUILTIN (R), LED_BUILTIN+1 (G), LED_BUILTIN+2 (B)
+    digitalWrite(LED_BUILTIN, r > 0 ? LOW : HIGH);
+    digitalWrite(LED_BUILTIN + 1, g > 0 ? LOW : HIGH);
+    digitalWrite(LED_BUILTIN + 2, b > 0 ? LOW : HIGH);
 }
 
 /**
@@ -328,11 +329,12 @@ void setRGB3(int r, int g, int b) {
  * @param g Green component (0-255, any non-zero value turns green on)
  * @param b Blue component (0-255, any non-zero value turns blue on)
  */
-void setRGB4(int r, int g, int b) {
+void setRGB4(uint8_t r, uint8_t g, uint8_t b) {
     // Active-low: LOW = LED on, HIGH = LED off
-    digitalWrite(LED4_R, r > 0 ? LOW : HIGH);
-    digitalWrite(LED4_G, g > 0 ? LOW : HIGH);
-    digitalWrite(LED4_B, b > 0 ? LOW : HIGH);
+    // LED4 uses LED_BUILTIN+3 (R), LED_BUILTIN+4 (G), LED_BUILTIN+5 (B)
+    digitalWrite(LED_BUILTIN + 3, r > 0 ? LOW : HIGH);
+    digitalWrite(LED_BUILTIN + 4, g > 0 ? LOW : HIGH);
+    digitalWrite(LED_BUILTIN + 5, b > 0 ? LOW : HIGH);
 }
 
 /**
@@ -721,16 +723,16 @@ void setup() {
     matrix.clear();  // Start with matrix cleared
     
     // Initialize RGB LED 3 pins (service health/sync indicator)
-    // These pins control the red, green, and blue channels of LED 3
-    pinMode(LED3_R, OUTPUT);
-    pinMode(LED3_G, OUTPUT);
-    pinMode(LED3_B, OUTPUT);
-    
+    // LED3: LED_BUILTIN (R), LED_BUILTIN+1 (G), LED_BUILTIN+2 (B)
+    pinMode(LED_BUILTIN, OUTPUT);       // LED3 R
+    pinMode(LED_BUILTIN + 1, OUTPUT);   // LED3 G
+    pinMode(LED_BUILTIN + 2, OUTPUT);   // LED3 B
+
     // Initialize RGB LED 4 pins (planner activity/processing indicator)
-    // These pins control the red, green, and blue channels of LED 4
-    pinMode(LED4_R, OUTPUT);
-    pinMode(LED4_G, OUTPUT);
-    pinMode(LED4_B, OUTPUT);
+    // LED4: LED_BUILTIN+3 (R), LED_BUILTIN+4 (G), LED_BUILTIN+5 (B)
+    pinMode(LED_BUILTIN + 3, OUTPUT);   // LED4 R
+    pinMode(LED_BUILTIN + 4, OUTPUT);   // LED4 G
+    pinMode(LED_BUILTIN + 5, OUTPUT);   // LED4 B
     
     // Start with all LEDs off (active-low: HIGH = OFF)
     setRGB3(0, 0, 0);
