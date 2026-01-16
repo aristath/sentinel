@@ -1,8 +1,22 @@
 /**
- * Maps tag IDs to human-readable names
- * Based on TAG_SUGGESTIONS.md
+ * Tag Name Mappings Utility
+ *
+ * Maps tag IDs (internal identifiers) to human-readable names for display in the UI.
+ * Also provides color coding for tags based on their category (opportunity, danger, characteristic).
+ *
+ * Tag Categories:
+ * - Opportunity Tags: Positive indicators (value, quality, technical, dividend, momentum, score)
+ * - Danger Tags: Warning indicators (volatility, overvaluation, instability, underperformance, risk)
+ * - Characteristic Tags: Descriptive tags (risk profile, growth profile, time horizon)
+ * - Enhanced Tags: Advanced tags (quality gates, bubble detection, value traps, optimizer alignment, regime-specific)
+ *
+ * Based on TAG_SUGGESTIONS.md documentation.
  */
 
+/**
+ * Map of tag IDs to human-readable display names
+ * @type {Object<string, string>}
+ */
 const TAG_NAMES = {
   // Opportunity Tags - Value
   'value-opportunity': 'Value Opportunity',
@@ -109,16 +123,25 @@ const TAG_NAMES = {
 };
 
 /**
- * Get human-readable name for a tag ID
- * @param {string} tagId - The tag ID (e.g., 'value-opportunity')
- * @returns {string} Human-readable name (e.g., 'Value Opportunity')
+ * Gets the human-readable name for a tag ID
+ *
+ * Returns the mapped display name if available, otherwise returns the tag ID itself.
+ * This ensures the UI always displays something meaningful, even for unknown tags.
+ *
+ * @param {string} tagId - The tag ID (e.g., 'value-opportunity', 'high-dividend')
+ * @returns {string} Human-readable name (e.g., 'Value Opportunity', 'High Dividend Yield')
+ *                   or the tagId itself if not found in mapping
  */
 export function getTagName(tagId) {
   return TAG_NAMES[tagId] || tagId;
 }
 
 /**
- * Get all tag names for an array of tag IDs
+ * Gets human-readable names for an array of tag IDs
+ *
+ * Maps an array of tag IDs to their display names.
+ * Returns empty array for invalid input (null, undefined, non-array).
+ *
  * @param {string[]} tagIds - Array of tag IDs
  * @returns {string[]} Array of human-readable names
  */
@@ -128,12 +151,21 @@ export function getTagNames(tagIds) {
 }
 
 /**
- * Get tag color variant based on tag category
+ * Gets the color and variant for a tag based on its category
+ *
+ * Determines the appropriate Mantine Badge color and variant based on tag category:
+ * - Opportunity tags: Green (positive indicators)
+ * - Danger tags: Red (warnings, risks)
+ * - Characteristic tags: Blue (descriptive, neutral)
+ * - Unknown tags: Gray (default)
+ *
  * @param {string} tagId - The tag ID
- * @returns {object} Mantine Badge props with color and variant
+ * @returns {Object} Mantine Badge props with:
+ *   - color: 'green' | 'red' | 'blue' | 'gray'
+ *   - variant: 'light' (always light variant for readability)
  */
 export function getTagColor(tagId) {
-  // Opportunity tags - green/blue
+  // Opportunity tags - green (positive indicators, good opportunities)
   if (tagId.startsWith('value-') ||
       tagId.startsWith('high-') ||
       tagId.startsWith('good-') ||
@@ -170,7 +202,7 @@ export function getTagColor(tagId) {
     return { color: 'green', variant: 'light' };
   }
 
-  // Danger tags - red/orange
+  // Danger tags - red (warnings, risks, negative indicators)
   if (tagId.startsWith('volatile') ||
       tagId.startsWith('over') ||
       (tagId.startsWith('under') && tagId !== 'underweight') ||
@@ -190,7 +222,7 @@ export function getTagColor(tagId) {
     return { color: 'red', variant: 'light' };
   }
 
-  // Characteristic tags - blue/gray
+  // Characteristic tags - blue (descriptive, neutral information)
   if (tagId.startsWith('low-') ||
       tagId.startsWith('medium-') ||
       tagId.startsWith('high-risk') ||
@@ -207,6 +239,6 @@ export function getTagColor(tagId) {
     return { color: 'blue', variant: 'light' };
   }
 
-  // Default
+  // Default - unknown or unclassified tags
   return { color: 'gray', variant: 'light' };
 }
