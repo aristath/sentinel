@@ -27,6 +27,8 @@ const DEFAULT_VISIBLE_COLUMNS = {
   exchange: true,   // Stock exchange
   sector: true,     // Industry sector
   tags: true,       // Security tags
+  qty: true,        // Position quantity
+  price: true,      // Current price
   value: true,      // Portfolio value
   score: true,      // Priority score
   mult: true,       // Priority multiplier (numeric input)

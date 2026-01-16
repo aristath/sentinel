@@ -5,7 +5,7 @@
  * Provides comprehensive security information and management capabilities.
  *
  * Features:
- * - Sortable columns (symbol, name, geography, exchange, sector, value, score, priority)
+ * - Sortable columns (symbol, name, geography, exchange, sector, qty, price, value, score, priority)
  * - Filtering by geography, industry, search query, minimum score
  * - Column visibility toggle (show/hide columns)
  * - Sparkline charts (1Y or 5Y timeframe)
@@ -25,7 +25,7 @@ import { useAppStore } from '../../stores/appStore';
 import { usePortfolioStore } from '../../stores/portfolioStore';
 import { SecuritySparkline } from '../charts/SecuritySparkline';
 import { RatingIcon } from './RatingIcon';
-import { formatCurrency } from '../../utils/formatters';
+import { formatCurrency, formatNumber } from '../../utils/formatters';
 import { getTagName, getTagColor } from '../../utils/tagNames';
 import { useEffect, useState } from 'react';
 
@@ -189,6 +189,8 @@ export function SecurityTable() {
     if (visibleColumns.exchange) count++;
     if (visibleColumns.sector) count++;
     if (visibleColumns.tags) count++;
+    if (visibleColumns.qty) count++;
+    if (visibleColumns.price) count++;
     if (visibleColumns.value) count++;
     if (visibleColumns.score) count++;
     if (visibleColumns.mult) count++;
@@ -259,6 +261,20 @@ export function SecurityTable() {
                 onClick={() => toggleColumnVisibility('tags')}
               >
                 Tags
+              </Menu.Item>
+              <Menu.Item
+                className="security-table__column-toggle"
+                leftSection={visibleColumns.qty ? <IconCheck size={14} /> : <span style={{ width: 14 }} />}
+                onClick={() => toggleColumnVisibility('qty')}
+              >
+                Qty
+              </Menu.Item>
+              <Menu.Item
+                className="security-table__column-toggle"
+                leftSection={visibleColumns.price ? <IconCheck size={14} /> : <span style={{ width: 14 }} />}
+                onClick={() => toggleColumnVisibility('price')}
+              >
+                Price
               </Menu.Item>
               <Menu.Item
                 className="security-table__column-toggle"
@@ -443,6 +459,30 @@ export function SecurityTable() {
                 </Table.Th>
               )}
               {visibleColumns.tags && <Table.Th className="security-table__th security-table__th--tags">Tags</Table.Th>}
+              {visibleColumns.qty && (
+                <Table.Th className="security-table__th security-table__th--qty" ta="right">
+                  <Text
+                    className="security-table__sort-label"
+                    size="xs"
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => handleSort('position_quantity')}
+                  >
+                    Qty {sortBy === 'position_quantity' && (sortDesc ? '▼' : '▲')}
+                  </Text>
+                </Table.Th>
+              )}
+              {visibleColumns.price && (
+                <Table.Th className="security-table__th security-table__th--price" ta="right">
+                  <Text
+                    className="security-table__sort-label"
+                    size="xs"
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => handleSort('current_price')}
+                  >
+                    Price {sortBy === 'current_price' && (sortDesc ? '▼' : '▲')}
+                  </Text>
+                </Table.Th>
+              )}
               {visibleColumns.value && (
                 <Table.Th className="security-table__th security-table__th--value" ta="right">
                   <Text
@@ -593,6 +633,22 @@ export function SecurityTable() {
                       ) : (
                         <Text className="security-table__no-tags" size="sm" c="dimmed">-</Text>
                       )}
+                    </Table.Td>
+                  )}
+                  {/* Qty column - displays position quantity as integer */}
+                  {visibleColumns.qty && (
+                    <Table.Td className="security-table__td security-table__td--qty" ta="right">
+                      <Text className="security-table__qty" size="sm" style={{ fontFamily: 'var(--mantine-font-family)' }}>
+                        {security.position_quantity ? formatNumber(security.position_quantity, 0) : '-'}
+                      </Text>
+                    </Table.Td>
+                  )}
+                  {/* Price column - displays current price with currency formatting */}
+                  {visibleColumns.price && (
+                    <Table.Td className="security-table__td security-table__td--price" ta="right">
+                      <Text className="security-table__price" size="sm" style={{ fontFamily: 'var(--mantine-font-family)' }}>
+                        {security.current_price ? formatCurrency(security.current_price, security.currency || 'EUR') : '-'}
+                      </Text>
                     </Table.Td>
                   )}
                   {/* Value column - position value with concentration alert indicator */}
