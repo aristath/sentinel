@@ -421,9 +421,18 @@ func (p *Processor) executeItem(item *WorkItem, wt *WorkType) error {
 	} else {
 		progress.emitCompleted(duration)
 
-		// Update cache with new expiration
-		if p.cache != nil && wt.Interval > 0 {
-			expiresAt := time.Now().Add(wt.Interval).Unix()
+		// Update cache to track completion (for dependency resolution and interval staleness)
+		if p.cache != nil {
+			var expiresAt int64
+			if wt.Interval > 0 {
+				// Interval-based work: cache until interval expires
+				expiresAt = time.Now().Add(wt.Interval).Unix()
+			} else {
+				// Non-interval work: cache with far-future expiration for dependency tracking
+				// Use 1 year to effectively mark as "completed indefinitely"
+				expiresAt = time.Now().Add(365 * 24 * time.Hour).Unix()
+			}
+
 			if err := p.cache.Set(item.ID, expiresAt); err != nil {
 				log.Warn().Err(err).Str("work", item.ID).Msg("Failed to update cache")
 			}
