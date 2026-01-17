@@ -169,14 +169,6 @@ func (p *Processor) processOne() {
 
 	// Execute asynchronously
 	go func() {
-		startTime := time.Now()
-
-		// Create progress reporter
-		progress := NewProgressReporter(p.eventEmitter, item.ID, item.TypeID, item.Subject)
-
-		// Emit started event
-		progress.emitStarted()
-
 		defer func() {
 			p.mu.Lock()
 			delete(p.inFlight, item.ID)
@@ -189,34 +181,16 @@ func (p *Processor) processOne() {
 			}
 		}()
 
-		ctx, cancel := context.WithTimeout(context.Background(), p.timeout)
-		defer cancel()
+		err := p.executeItem(item, wt)
 
-		err := p.executeWithContext(ctx, item, wt, progress)
-		duration := time.Since(startTime)
-
+		// Handle retries on failure
 		if err != nil {
-			if ctx.Err() == context.DeadlineExceeded {
-				log.Error().Str("work", item.ID).Msg("work timed out")
-			} else {
-				log.Error().Err(err).Str("work", item.ID).Msg("work failed")
-			}
-
 			item.Retries++
-
-			// Emit failed event
-			progress.emitFailed(err, duration, item.Retries)
-
 			if item.Retries < MaxRetries {
 				p.pushRetryQueue(item)
 			} else {
 				log.Warn().Str("work", item.ID).Int("retries", item.Retries).Msg("max retries reached, skipping")
 			}
-		} else {
-			p.completion.MarkCompleted(item)
-
-			// Emit completed event
-			progress.emitCompleted(duration)
 		}
 	}()
 }
