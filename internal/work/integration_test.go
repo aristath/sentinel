@@ -483,43 +483,10 @@ func TestIntegration_IntervalStalenessCheck(t *testing.T) {
 }
 
 func TestIntegration_CompletionTrackerPersistsDuringSession(t *testing.T) {
+	t.Skip("CompletionTracker removed - persistence now handled by Cache via database")
 	// Test that completion data persists across processor restarts within a session.
-
-	registry := NewRegistry()
-	market := NewMarketTimingChecker(&MockMarketChecker{allMarketsClosed: true})
-
-	execCount := atomic.Int32{}
-
-	registry.Register(&WorkType{
-		ID:       "planner:weights",
-		Interval: time.Hour,
-		FindSubjects: func() []string {
-			return []string{""}
-		},
-		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
-			execCount.Add(1)
-			return nil
-		},
-	})
-
-	// First processor run
-	p1 := NewProcessor(registry, market, nil)
-	go p1.Run()
-	p1.Trigger()
-	time.Sleep(200 * time.Millisecond)
-	p1.Stop()
-
-	assert.Equal(t, int32(1), execCount.Load())
-
-	// Second processor run with same completion tracker
-	p2 := NewProcessor(registry, market, nil)
-	go p2.Run()
-	p2.Trigger()
-	time.Sleep(200 * time.Millisecond)
-	p2.Stop()
-
-	// Should still be 1 - completion data persisted
-	assert.Equal(t, int32(1), execCount.Load(), "completion should persist across processor restarts")
+	// This feature is now handled by Cache using cache.db instead of in-memory CompletionTracker.
+	// See TestCache_PersistenceAcrossRestarts for database-backed persistence tests.
 }
 
 func TestIntegration_PriorityOrdering(t *testing.T) {
