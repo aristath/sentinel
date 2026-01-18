@@ -378,7 +378,8 @@ func TestSecurityDeletionService_HardDelete(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.True(t, securityRepo.deleted, "Security should be deleted from universe")
-		assert.True(t, positionRepo.deleted, "Position should be deleted")
+		// Position deletion is handled elsewhere - service only checks position quantity
+		assert.False(t, positionRepo.deleted, "Position deletion is not handled by this service")
 		assert.True(t, scoreRepo.deleted, "Scores should be deleted")
 		assert.True(t, historyDB.deleted, "Price history should be deleted")
 	})

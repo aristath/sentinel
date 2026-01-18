@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aristath/sentinel/internal/market_regime"
 	"github.com/aristath/sentinel/internal/modules/adaptation"
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog"
@@ -26,6 +27,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 		CREATE TABLE IF NOT EXISTS market_regime_history (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			recorded_at INTEGER NOT NULL,
+			region TEXT NOT NULL DEFAULT 'GLOBAL',
 			raw_score REAL NOT NULL,
 			smoothed_score REAL NOT NULL,
 			discrete_regime TEXT
@@ -47,9 +49,9 @@ func setupTestDB(t *testing.T) *sql.DB {
 
 	for _, d := range testData {
 		_, err = db.Exec(`
-			INSERT INTO market_regime_history (recorded_at, raw_score, smoothed_score, discrete_regime)
-			VALUES (?, ?, ?, ?)
-		`, d.recordedAt, d.rawScore, d.smoothedScore, d.discreteRegime)
+			INSERT INTO market_regime_history (recorded_at, region, raw_score, smoothed_score, discrete_regime)
+			VALUES (?, ?, ?, ?, ?)
+		`, d.recordedAt, "GLOBAL", d.rawScore, d.smoothedScore, d.discreteRegime)
 		require.NoError(t, err)
 	}
 
@@ -62,7 +64,8 @@ func TestHandleGetCurrent(t *testing.T) {
 	defer db.Close()
 
 	adaptiveService := adaptation.NewAdaptiveMarketService(nil, nil, nil, nil, logger)
-	handler := NewHandler(db, adaptiveService, logger)
+	regimePersistence := market_regime.NewRegimePersistence(db, logger)
+	handler := NewHandler(regimePersistence, adaptiveService, logger)
 
 	req := httptest.NewRequest("GET", "/api/adaptation/current", nil)
 	w := httptest.NewRecorder()
@@ -98,7 +101,8 @@ func TestHandleGetHistory(t *testing.T) {
 	defer db.Close()
 
 	adaptiveService := adaptation.NewAdaptiveMarketService(nil, nil, nil, nil, logger)
-	handler := NewHandler(db, adaptiveService, logger)
+	regimePersistence := market_regime.NewRegimePersistence(db, logger)
+	handler := NewHandler(regimePersistence, adaptiveService, logger)
 
 	req := httptest.NewRequest("GET", "/api/adaptation/history?limit=10", nil)
 	w := httptest.NewRecorder()
@@ -132,7 +136,8 @@ func TestHandleGetAdaptiveWeights(t *testing.T) {
 	defer db.Close()
 
 	adaptiveService := adaptation.NewAdaptiveMarketService(nil, nil, nil, nil, logger)
-	handler := NewHandler(db, adaptiveService, logger)
+	regimePersistence := market_regime.NewRegimePersistence(db, logger)
+	handler := NewHandler(regimePersistence, adaptiveService, logger)
 
 	req := httptest.NewRequest("GET", "/api/adaptation/adaptive-weights", nil)
 	w := httptest.NewRecorder()
@@ -162,7 +167,8 @@ func TestHandleGetAdaptiveParameters(t *testing.T) {
 	defer db.Close()
 
 	adaptiveService := adaptation.NewAdaptiveMarketService(nil, nil, nil, nil, logger)
-	handler := NewHandler(db, adaptiveService, logger)
+	regimePersistence := market_regime.NewRegimePersistence(db, logger)
+	handler := NewHandler(regimePersistence, adaptiveService, logger)
 
 	req := httptest.NewRequest("GET", "/api/adaptation/adaptive-parameters", nil)
 	w := httptest.NewRecorder()
@@ -192,7 +198,8 @@ func TestHandleGetComponentPerformance(t *testing.T) {
 	defer db.Close()
 
 	adaptiveService := adaptation.NewAdaptiveMarketService(nil, nil, nil, nil, logger)
-	handler := NewHandler(db, adaptiveService, logger)
+	regimePersistence := market_regime.NewRegimePersistence(db, logger)
+	handler := NewHandler(regimePersistence, adaptiveService, logger)
 
 	req := httptest.NewRequest("GET", "/api/adaptation/component-performance", nil)
 	w := httptest.NewRecorder()
@@ -215,7 +222,8 @@ func TestHandleGetPerformanceHistory(t *testing.T) {
 	defer db.Close()
 
 	adaptiveService := adaptation.NewAdaptiveMarketService(nil, nil, nil, nil, logger)
-	handler := NewHandler(db, adaptiveService, logger)
+	regimePersistence := market_regime.NewRegimePersistence(db, logger)
+	handler := NewHandler(regimePersistence, adaptiveService, logger)
 
 	req := httptest.NewRequest("GET", "/api/adaptation/performance-history", nil)
 	w := httptest.NewRecorder()
@@ -238,7 +246,8 @@ func TestRouteIntegration(t *testing.T) {
 	defer db.Close()
 
 	adaptiveService := adaptation.NewAdaptiveMarketService(nil, nil, nil, nil, logger)
-	handler := NewHandler(db, adaptiveService, logger)
+	regimePersistence := market_regime.NewRegimePersistence(db, logger)
+	handler := NewHandler(regimePersistence, adaptiveService, logger)
 
 	router := chi.NewRouter()
 	handler.RegisterRoutes(router)

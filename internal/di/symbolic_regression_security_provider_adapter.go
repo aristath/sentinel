@@ -25,20 +25,20 @@ func (a *SymbolicRegressionSecurityProviderAdapter) GetSymbolByISIN(isin string)
 	return a.repo.GetSymbolByISIN(isin)
 }
 
-// GetAll returns all securities as SecurityInfo
+// GetAll returns all securities, converting universe.Security to symbolic_regression.SecurityInfo
 func (a *SymbolicRegressionSecurityProviderAdapter) GetAll() ([]symbolic_regression.SecurityInfo, error) {
 	securities, err := a.repo.GetAll()
 	if err != nil {
 		return nil, err
 	}
 
-	result := make([]symbolic_regression.SecurityInfo, 0, len(securities))
-	for _, sec := range securities {
-		result = append(result, symbolic_regression.SecurityInfo{
+	result := make([]symbolic_regression.SecurityInfo, len(securities))
+	for i, sec := range securities {
+		result[i] = symbolic_regression.SecurityInfo{
 			ISIN:        sec.ISIN,
 			Symbol:      sec.Symbol,
 			ProductType: sec.ProductType,
-		})
+		}
 	}
 
 	return result, nil
