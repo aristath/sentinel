@@ -14,6 +14,7 @@ import (
 	"github.com/aristath/sentinel/internal/modules/dividends"
 	"github.com/aristath/sentinel/internal/modules/optimization"
 	planningrepo "github.com/aristath/sentinel/internal/modules/planning/repository"
+	"github.com/aristath/sentinel/internal/modules/settings"
 	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/aristath/sentinel/internal/services"
 	"github.com/rs/zerolog"
@@ -30,6 +31,7 @@ type OptimizationCache struct {
 type Handler struct {
 	service                 *optimization.OptimizerService
 	db                      *sql.DB
+	settingsRepo            *settings.Repository
 	securityRepo            universe.SecurityRepositoryInterface
 	brokerClient            domain.BrokerClient
 	currencyExchangeService domain.CurrencyExchangeServiceInterface
@@ -45,9 +47,11 @@ type Handler struct {
 // currencyExchangeService is used to convert non-EUR cash balances to EUR.
 // cashManager is used to get cash balances.
 // plannerConfigRepo is used to read optimizer settings from planner configuration.
+// settingsRepo is used to read global settings (target_return_threshold_pct).
 func NewHandler(
 	service *optimization.OptimizerService,
 	db *sql.DB,
+	settingsRepo *settings.Repository,
 	securityRepo universe.SecurityRepositoryInterface,
 	brokerClient domain.BrokerClient,
 	currencyExchangeService *services.CurrencyExchangeService,
@@ -59,6 +63,7 @@ func NewHandler(
 	return &Handler{
 		service:                 service,
 		db:                      db,
+		settingsRepo:            settingsRepo,
 		securityRepo:            securityRepo,
 		brokerClient:            brokerClient,
 		currencyExchangeService: currencyExchangeService,
@@ -240,15 +245,10 @@ func (h *Handler) getSettings() (optimization.Settings, error) {
 	}
 
 	// Get target_return_threshold_pct from global settings (not moved to planner config)
-	var targetReturnThresholdPctStr string
-	query := `SELECT COALESCE((SELECT value FROM settings WHERE key = 'target_return_threshold_pct'), '0.80') as target_return_threshold_pct`
-	err = h.db.QueryRow(query).Scan(&targetReturnThresholdPctStr)
+	targetReturnThresholdPct, err := h.settingsRepo.GetFloat("target_return_threshold_pct", 0.80)
 	if err != nil {
-		return optimization.Settings{}, fmt.Errorf("failed to query global settings: %w", err)
+		return optimization.Settings{}, fmt.Errorf("failed to get target_return_threshold_pct: %w", err)
 	}
-
-	targetReturnThresholdPct := 0.80 // Default: 80% of target
-	fmt.Sscanf(targetReturnThresholdPctStr, "%f", &targetReturnThresholdPct)
 
 	return optimization.Settings{
 		Blend:                    config.OptimizerBlend,

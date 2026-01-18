@@ -2,7 +2,6 @@ package optimization
 
 import (
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/aristath/sentinel/internal/market_regime"
 	"github.com/aristath/sentinel/internal/modules/calculations"
+	"github.com/aristath/sentinel/internal/modules/config"
 	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/rs/zerolog"
 )
@@ -69,7 +69,7 @@ func hashRegimeAwareCovKey(isins []string, lookbackDays int, regimeScore float64
 type RiskModelBuilder struct {
 	historyDBClient  universe.HistoryDBInterface // Filtered and cached price access
 	securityProvider SecurityProvider            // For symbol -> ISIN lookup
-	configDB         *sql.DB                     // config.db (for market_indices table)
+	marketIndexRepo  MarketIndexRepository       // Market indices configuration
 	cache            *calculations.Cache         // calculations.db (optional, for caching results)
 	log              zerolog.Logger
 }
@@ -87,13 +87,20 @@ type indexSpec struct {
 	Region string
 }
 
+// MarketIndexRepository provides access to market indices configuration
+// Interface allows for easy testing and future extension
+// Uses config.MarketIndex to avoid duplication
+type MarketIndexRepository interface {
+	GetEnabledPriceIndices() ([]config.MarketIndex, error)
+}
+
 // NewRiskModelBuilder creates a new risk model builder.
-// configDB is optional (can be nil) - if provided, enables dynamic index lookup for regime-aware calculations.
-func NewRiskModelBuilder(historyDBClient universe.HistoryDBInterface, securityProvider SecurityProvider, configDB *sql.DB, log zerolog.Logger) *RiskModelBuilder {
+// marketIndexRepo is optional (can be nil) - if provided, enables dynamic index lookup for regime-aware calculations.
+func NewRiskModelBuilder(historyDBClient universe.HistoryDBInterface, securityProvider SecurityProvider, marketIndexRepo MarketIndexRepository, log zerolog.Logger) *RiskModelBuilder {
 	return &RiskModelBuilder{
 		historyDBClient:  historyDBClient,
 		securityProvider: securityProvider,
-		configDB:         configDB,
+		marketIndexRepo:  marketIndexRepo,
 		log:              log.With().Str("component", "risk_model").Logger(),
 	}
 }
@@ -824,18 +831,18 @@ func calculateCovarianceLedoitWolf(returns map[string][]float64, isins []string)
 }
 
 // getMarketIndices returns market indices for regime calculation.
-// If configDB is available, queries the market_indices table for enabled PRICE indices.
+// If marketIndexRepo is available, queries the market_indices table for enabled PRICE indices.
 // Otherwise, falls back to known indices from the index discovery module.
 func (rb *RiskModelBuilder) getMarketIndices() []indexSpec {
-	// Try to get indices from config database first
-	if rb.configDB != nil {
-		indices, err := rb.getIndicesFromDB()
+	// Try to get indices from repository first
+	if rb.marketIndexRepo != nil {
+		indices, err := rb.getIndicesFromRepo()
 		if err == nil && len(indices) > 0 {
-			rb.log.Debug().Int("count", len(indices)).Msg("Using market indices from database")
+			rb.log.Debug().Int("count", len(indices)).Msg("Using market indices from repository")
 			return indices
 		}
 		if err != nil {
-			rb.log.Warn().Err(err).Msg("Failed to get market indices from database, using fallback")
+			rb.log.Warn().Err(err).Msg("Failed to get market indices from repository, using fallback")
 		}
 	}
 
@@ -843,53 +850,32 @@ func (rb *RiskModelBuilder) getMarketIndices() []indexSpec {
 	return rb.getFallbackIndices()
 }
 
-// getIndicesFromDB queries market_indices table for enabled PRICE indices
-// Note: market_indices is in configDB, securities is in universeDB - separate queries required
-func (rb *RiskModelBuilder) getIndicesFromDB() ([]indexSpec, error) {
-	// Step 1: Get enabled PRICE indices from config DB
-	query := `
-		SELECT symbol, region
-		FROM market_indices
-		WHERE enabled = 1 AND index_type = 'PRICE'
-	`
-
-	rows, err := rb.configDB.Query(query)
+// getIndicesFromRepo queries market indices from repository and looks up ISINs
+// Note: market_indices are accessed via MarketIndexRepository (config.db), securities are in universe.db - separate queries required
+func (rb *RiskModelBuilder) getIndicesFromRepo() ([]indexSpec, error) {
+	// Step 1: Get enabled PRICE indices from repository
+	marketIndices, err := rb.marketIndexRepo.GetEnabledPriceIndices()
 	if err != nil {
-		return nil, fmt.Errorf("failed to query market indices: %w", err)
-	}
-	defer rows.Close()
-
-	// Collect symbols and regions
-	type indexMeta struct {
-		Symbol string
-		Region string
-	}
-	var metas []indexMeta
-	for rows.Next() {
-		var m indexMeta
-		if err := rows.Scan(&m.Symbol, &m.Region); err != nil {
-			return nil, fmt.Errorf("failed to scan market index: %w", err)
-		}
-		metas = append(metas, m)
+		return nil, fmt.Errorf("failed to get market indices from repository: %w", err)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating market indices: %w", err)
+	if len(marketIndices) == 0 {
+		return nil, fmt.Errorf("no enabled price indices found")
 	}
 
 	// Step 2: Look up ISINs from universe DB for each index
 	var indices []indexSpec
-	for _, m := range metas {
-		isin := rb.lookupISIN(m.Symbol)
+	for _, idx := range marketIndices {
+		isin := rb.lookupISIN(idx.Symbol)
 		if isin == "" {
-			rb.log.Debug().Str("symbol", m.Symbol).Msg("Index not found in securities table, skipping")
+			rb.log.Debug().Str("symbol", idx.Symbol).Msg("Index not found in securities table, skipping")
 			continue
 		}
 
 		indices = append(indices, indexSpec{
-			Symbol: m.Symbol,
+			Symbol: idx.Symbol,
 			ISIN:   isin,
-			Region: m.Region,
+			Region: idx.Region,
 		})
 	}
 
