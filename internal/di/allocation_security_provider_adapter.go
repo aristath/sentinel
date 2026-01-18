@@ -1,7 +1,6 @@
 package di
 
 import (
-	"github.com/aristath/sentinel/internal/modules/allocation"
 	"github.com/aristath/sentinel/internal/modules/universe"
 )
 
@@ -16,23 +15,8 @@ func NewAllocationSecurityProviderAdapter(repo universe.SecurityRepositoryInterf
 }
 
 // GetAllActiveTradable returns all active and tradable securities
-func (a *AllocationSecurityProviderAdapter) GetAllActiveTradable() ([]allocation.SecurityInfo, error) {
+func (a *AllocationSecurityProviderAdapter) GetAllActiveTradable() ([]universe.Security, error) {
 	// Use GetTradable() which replaces GetAllActiveTradable()
-	securities, err := a.repo.GetTradable()
-	if err != nil {
-		return nil, err
-	}
-
-	result := make([]allocation.SecurityInfo, len(securities))
-	for i, sec := range securities {
-		result[i] = allocation.SecurityInfo{
-			ISIN:      sec.ISIN,
-			Symbol:    sec.Symbol,
-			Name:      sec.Name,
-			Geography: sec.Geography,
-			Industry:  sec.Industry,
-		}
-	}
-
-	return result, nil
+	// Returns universe.Security directly - no conversion needed
+	return a.repo.GetTradable()
 }
