@@ -125,10 +125,13 @@ func CalculateSellQualityScore(
 	// Apply quality-based adjustment
 	// Low quality (< 0.5) = boost sell priority
 	// High quality (> 0.7) = reduce sell priority
+	// IMPORTANT: Tag-based quality takes precedence - if IsHighQuality is already true
+	// from protected tags, do NOT apply low-quality boost from numeric scores
 	if result.QualityScore > 0 {
-		if result.QualityScore < 0.5 {
+		if result.QualityScore < 0.5 && !result.IsHighQuality {
 			// Low quality: boost priority proportionally
 			// Score 0.3 → boost of (0.5 - 0.3) = 0.2, multiplier = 1.2
+			// Only apply if NOT already marked as high quality by tags
 			boost := 1.0 + (0.5 - result.QualityScore)
 			result.SellPriorityBoost *= boost
 		} else if result.QualityScore > 0.7 {
