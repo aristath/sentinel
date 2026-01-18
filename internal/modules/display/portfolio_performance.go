@@ -14,17 +14,17 @@ import (
 
 // PortfolioPerformanceService calculates portfolio performance metrics for display visualization
 type PortfolioPerformanceService struct {
-	portfolioDB *sql.DB
-	configDB    *sql.DB
-	log         zerolog.Logger
+	portfolioDB  *sql.DB
+	settingsRepo *settings.Repository
+	log          zerolog.Logger
 }
 
 // NewPortfolioPerformanceService creates a new portfolio performance service
-func NewPortfolioPerformanceService(portfolioDB, configDB *sql.DB, log zerolog.Logger) *PortfolioPerformanceService {
+func NewPortfolioPerformanceService(portfolioDB *sql.DB, settingsRepo *settings.Repository, log zerolog.Logger) *PortfolioPerformanceService {
 	return &PortfolioPerformanceService{
-		portfolioDB: portfolioDB,
-		configDB:    configDB,
-		log:         log.With().Str("service", "portfolio_performance").Logger(),
+		portfolioDB:  portfolioDB,
+		settingsRepo: settingsRepo,
+		log:          log.With().Str("service", "portfolio_performance").Logger(),
 	}
 }
 
@@ -274,8 +274,17 @@ func (s *PortfolioPerformanceService) GetPerformanceVsTarget() (float64, error) 
 
 // getSettingFloat retrieves a float setting with fallback to default
 func (s *PortfolioPerformanceService) getSettingFloat(key string, defaultVal float64) float64 {
-	var value float64
-	err := s.configDB.QueryRow("SELECT value FROM settings WHERE key = ?", key).Scan(&value)
+	if s.settingsRepo == nil {
+		// Fallback to SettingDefaults
+		if val, ok := settings.SettingDefaults[key]; ok {
+			if fval, ok := val.(float64); ok {
+				return fval
+			}
+		}
+		return defaultVal
+	}
+
+	value, err := s.settingsRepo.GetFloat(key, defaultVal)
 	if err != nil {
 		// Fallback to SettingDefaults
 		if val, ok := settings.SettingDefaults[key]; ok {

@@ -26,7 +26,7 @@ type HealthUpdate struct {
 type HealthCalculator struct {
 	portfolioDB     *sql.DB
 	historyDBClient universe.HistoryDBInterface
-	configDB        *sql.DB
+	settingsRepo    *settings.Repository
 	securityPerf    *SecurityPerformanceService
 	log             zerolog.Logger
 	scoreWeight     float64
@@ -39,7 +39,7 @@ type HealthCalculator struct {
 func NewHealthCalculator(
 	portfolioDB *sql.DB,
 	historyDBClient universe.HistoryDBInterface,
-	configDB *sql.DB,
+	settingsRepo *settings.Repository,
 	log zerolog.Logger,
 ) *HealthCalculator {
 	securityPerf := NewSecurityPerformanceService(historyDBClient, log)
@@ -47,7 +47,7 @@ func NewHealthCalculator(
 	return &HealthCalculator{
 		portfolioDB:     portfolioDB,
 		historyDBClient: historyDBClient,
-		configDB:        configDB,
+		settingsRepo:    settingsRepo,
 		securityPerf:    securityPerf,
 		log:             log.With().Str("service", "health_calculator").Logger(),
 		scoreWeight:     0.4,
@@ -279,8 +279,17 @@ func (h *HealthCalculator) loadSettings() {
 
 // getSettingFloat retrieves a float setting with fallback to default
 func (h *HealthCalculator) getSettingFloat(key string, defaultVal float64) float64 {
-	var value float64
-	err := h.configDB.QueryRow("SELECT value FROM settings WHERE key = ?", key).Scan(&value)
+	if h.settingsRepo == nil {
+		// Fallback to SettingDefaults
+		if val, ok := settings.SettingDefaults[key]; ok {
+			if fval, ok := val.(float64); ok {
+				return fval
+			}
+		}
+		return defaultVal
+	}
+
+	value, err := h.settingsRepo.GetFloat(key, defaultVal)
 	if err != nil {
 		// Fallback to SettingDefaults
 		if val, ok := settings.SettingDefaults[key]; ok {

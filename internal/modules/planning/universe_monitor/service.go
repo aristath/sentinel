@@ -5,7 +5,6 @@ package universe_monitor
 
 import (
 	"crypto/md5"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -19,6 +18,7 @@ import (
 	"github.com/aristath/sentinel/internal/modules/planning"
 	planningrepo "github.com/aristath/sentinel/internal/modules/planning/repository"
 	"github.com/aristath/sentinel/internal/modules/portfolio"
+	"github.com/aristath/sentinel/internal/modules/settings"
 	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/rs/zerolog"
 )
@@ -31,7 +31,7 @@ type UniverseMonitor struct {
 	configRepo         planningrepo.ConfigRepositoryInterface
 	recommendationRepo planning.RecommendationRepositoryInterface // Interface - can be DB or in-memory
 	plannerRepo        planningrepo.PlannerRepositoryInterface    // Interface - can be DB or in-memory
-	configDB           *sql.DB                                    // For global settings query
+	settingsRepo       *settings.Repository                       // For global settings query
 	log                zerolog.Logger
 
 	// In-memory state
@@ -52,7 +52,7 @@ func NewUniverseMonitor(
 	configRepo planningrepo.ConfigRepositoryInterface,
 	recommendationRepo planning.RecommendationRepositoryInterface, // Interface - can be DB or in-memory
 	plannerRepo planningrepo.PlannerRepositoryInterface, // Interface - can be DB or in-memory
-	configDB *sql.DB,
+	settingsRepo *settings.Repository,
 	log zerolog.Logger,
 ) *UniverseMonitor {
 	return &UniverseMonitor{
@@ -62,7 +62,7 @@ func NewUniverseMonitor(
 		configRepo:         configRepo,
 		recommendationRepo: recommendationRepo,
 		plannerRepo:        plannerRepo,
-		configDB:           configDB,
+		settingsRepo:       settingsRepo,
 		log:                log.With().Str("component", "universe_monitor").Logger(),
 	}
 }
@@ -248,28 +248,13 @@ func (m *UniverseMonitor) calculateUniverseHash() (string, error) {
 	return hex.EncodeToString(hash[:]), nil
 }
 
-// getAllGlobalSettings retrieves all settings from config.db.settings table
+// getAllGlobalSettings retrieves all settings from settings repository
 func (m *UniverseMonitor) getAllGlobalSettings() (map[string]string, error) {
-	rows, err := m.configDB.Query("SELECT key, value FROM settings ORDER BY key")
-	if err != nil {
-		return nil, fmt.Errorf("failed to query settings: %w", err)
-	}
-	defer rows.Close()
-
-	settings := make(map[string]string)
-	for rows.Next() {
-		var key, value string
-		if err := rows.Scan(&key, &value); err != nil {
-			return nil, fmt.Errorf("failed to scan setting: %w", err)
-		}
-		settings[key] = value
+	if m.settingsRepo == nil {
+		return make(map[string]string), nil
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating settings: %w", err)
-	}
-
-	return settings, nil
+	return m.settingsRepo.GetAll()
 }
 
 // invalidateAllWithRetry invalidates all recommendations, sequences, and evaluations with retry logic

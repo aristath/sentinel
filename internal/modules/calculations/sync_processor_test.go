@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,7 +28,7 @@ func (m *mockSecuritySyncer) RefreshSingleSecurity(symbol string) error {
 func TestDefaultSyncProcessor_NeedsSync_NeverSynced(t *testing.T) {
 	processor := NewDefaultSyncProcessor(nil, zerolog.Nop())
 
-	security := SecurityInfo{
+	security := universe.Security{
 		ISIN:       "TEST_ISIN",
 		Symbol:     "TEST",
 		LastSynced: nil, // Never synced
@@ -40,7 +41,7 @@ func TestDefaultSyncProcessor_NeedsSync_RecentlysynSynced(t *testing.T) {
 	processor := NewDefaultSyncProcessor(nil, zerolog.Nop())
 
 	recent := time.Now().Add(-1 * time.Hour).Unix() // 1 hour ago
-	security := SecurityInfo{
+	security := universe.Security{
 		ISIN:       "TEST_ISIN",
 		Symbol:     "TEST",
 		LastSynced: &recent,
@@ -53,7 +54,7 @@ func TestDefaultSyncProcessor_NeedsSync_OldSync(t *testing.T) {
 	processor := NewDefaultSyncProcessor(nil, zerolog.Nop())
 
 	old := time.Now().Add(-25 * time.Hour).Unix() // 25 hours ago
-	security := SecurityInfo{
+	security := universe.Security{
 		ISIN:       "TEST_ISIN",
 		Symbol:     "TEST",
 		LastSynced: &old,
@@ -67,7 +68,7 @@ func TestDefaultSyncProcessor_NeedsSync_ExactThreshold(t *testing.T) {
 
 	// Exactly at threshold (24 hours ago)
 	threshold := time.Now().Add(-24 * time.Hour).Unix()
-	security := SecurityInfo{
+	security := universe.Security{
 		ISIN:       "TEST_ISIN",
 		Symbol:     "TEST",
 		LastSynced: &threshold,
@@ -82,7 +83,7 @@ func TestDefaultSyncProcessor_NeedsSync_JustPastThreshold(t *testing.T) {
 
 	// One second past threshold
 	pastThreshold := time.Now().Add(-24*time.Hour - 1*time.Second).Unix()
-	security := SecurityInfo{
+	security := universe.Security{
 		ISIN:       "TEST_ISIN",
 		Symbol:     "TEST",
 		LastSynced: &pastThreshold,
@@ -96,7 +97,7 @@ func TestDefaultSyncProcessor_ProcessSync_Success(t *testing.T) {
 	syncer := &mockSecuritySyncer{}
 	processor := NewDefaultSyncProcessor(syncer, zerolog.Nop())
 
-	security := SecurityInfo{
+	security := universe.Security{
 		ISIN:   "TEST_ISIN",
 		Symbol: "TEST",
 	}
@@ -110,7 +111,7 @@ func TestDefaultSyncProcessor_ProcessSync_Error(t *testing.T) {
 	syncer := &mockSecuritySyncer{err: errors.New("sync failed")}
 	processor := NewDefaultSyncProcessor(syncer, zerolog.Nop())
 
-	security := SecurityInfo{
+	security := universe.Security{
 		ISIN:   "TEST_ISIN",
 		Symbol: "TEST",
 	}
@@ -124,7 +125,7 @@ func TestDefaultSyncProcessor_ProcessSync_MultipleSecurities(t *testing.T) {
 	syncer := &mockSecuritySyncer{}
 	processor := NewDefaultSyncProcessor(syncer, zerolog.Nop())
 
-	securities := []SecurityInfo{
+	securities := []universe.Security{
 		{ISIN: "ISIN1", Symbol: "SYM1"},
 		{ISIN: "ISIN2", Symbol: "SYM2"},
 		{ISIN: "ISIN3", Symbol: "SYM3"},

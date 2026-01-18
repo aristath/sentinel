@@ -1,9 +1,9 @@
 package rebalancing
 
 import (
-	"database/sql"
 	"testing"
 
+	"github.com/aristath/sentinel/internal/modules/settings"
 	"github.com/aristath/sentinel/pkg/logger"
 )
 
@@ -60,16 +60,16 @@ func TestService_GetTriggerChecker(t *testing.T) {
 	service := NewService(
 		triggerChecker,
 		negativeRebalancer,
-		nil,            // planningService
-		nil,            // positionRepo
-		nil,            // securityRepo
-		nil,            // allocRepo
-		nil,            // cashManager
-		nil,            // brokerClient
-		nil,            // configRepo
-		nil,            // recommendationRepo
-		nil,            // contextBuilder
-		(*sql.DB)(nil), // configDB
+		nil,                         // planningService
+		nil,                         // positionRepo
+		nil,                         // securityRepo
+		nil,                         // allocRepo
+		nil,                         // cashManager
+		nil,                         // brokerClient
+		nil,                         // configRepo
+		nil,                         // recommendationRepo
+		nil,                         // contextBuilder
+		(*settings.Repository)(nil), // settingsRepo
 		log,
 	)
 
@@ -87,16 +87,16 @@ func TestService_GetNegativeBalanceRebalancer(t *testing.T) {
 	service := NewService(
 		triggerChecker,
 		negativeRebalancer,
-		nil,            // planningService
-		nil,            // positionRepo
-		nil,            // securityRepo
-		nil,            // allocRepo
-		nil,            // cashManager
-		nil,            // brokerClient
-		nil,            // configRepo
-		nil,            // recommendationRepo
-		nil,            // contextBuilder
-		(*sql.DB)(nil), // configDB
+		nil,                         // planningService
+		nil,                         // positionRepo
+		nil,                         // securityRepo
+		nil,                         // allocRepo
+		nil,                         // cashManager
+		nil,                         // brokerClient
+		nil,                         // configRepo
+		nil,                         // recommendationRepo
+		nil,                         // contextBuilder
+		(*settings.Repository)(nil), // settingsRepo
 		log,
 	)
 
@@ -114,16 +114,16 @@ func TestService_CalculateRebalanceTrades_InsufficientCash(t *testing.T) {
 	service := NewService(
 		triggerChecker,
 		negativeRebalancer,
-		nil,            // planningService
-		nil,            // positionRepo
-		nil,            // securityRepo
-		nil,            // allocRepo
-		nil,            // cashManager
-		nil,            // brokerClient
-		nil,            // configRepo
-		nil,            // recommendationRepo
-		nil,            // contextBuilder
-		(*sql.DB)(nil), // configDB
+		nil,                         // planningService
+		nil,                         // positionRepo
+		nil,                         // securityRepo
+		nil,                         // allocRepo
+		nil,                         // cashManager
+		nil,                         // brokerClient
+		nil,                         // configRepo
+		nil,                         // recommendationRepo
+		nil,                         // contextBuilder
+		(*settings.Repository)(nil), // settingsRepo
 		log,
 	)
 

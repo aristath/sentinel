@@ -3,18 +3,12 @@ package calculations
 import (
 	"time"
 
+	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/rs/zerolog"
 )
 
 // SyncThresholdHours is how old last_synced must be to require processing (24 hours)
 const SyncThresholdHours = 24
-
-// SecurityInfo holds minimal security data for sync processing
-type SecurityInfo struct {
-	ISIN       string
-	Symbol     string
-	LastSynced *int64
-}
 
 // SecuritySyncer defines the interface for syncing a single security.
 // This is implemented by universe.SyncService.RefreshSingleSecurity.
@@ -42,7 +36,8 @@ func NewDefaultSyncProcessor(syncer SecuritySyncer, log zerolog.Logger) *Default
 // A security needs sync if:
 // - last_synced is NULL (never synced)
 // - last_synced is older than SyncThresholdHours
-func (sp *DefaultSyncProcessor) NeedsSync(security SecurityInfo) bool {
+// Uses universe.Security directly to avoid duplicate types.
+func (sp *DefaultSyncProcessor) NeedsSync(security universe.Security) bool {
 	if security.LastSynced == nil {
 		return true // Never synced
 	}
@@ -55,6 +50,7 @@ func (sp *DefaultSyncProcessor) NeedsSync(security SecurityInfo) bool {
 // 1. Sync historical prices
 // 2. Refresh score
 // 3. Update last_synced timestamp
-func (sp *DefaultSyncProcessor) ProcessSync(security SecurityInfo) error {
+// Uses universe.Security directly to avoid duplicate types.
+func (sp *DefaultSyncProcessor) ProcessSync(security universe.Security) error {
 	return sp.syncer.RefreshSingleSecurity(security.Symbol)
 }
