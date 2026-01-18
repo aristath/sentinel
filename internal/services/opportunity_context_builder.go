@@ -44,6 +44,7 @@ type OpportunityContextBuilder struct {
 	priceClient            PriceClient                     // Price client for current prices
 	priceConversionService PriceConversionServiceInterface // Price conversion service
 	brokerClient           BrokerClient                    // Broker client for pending orders
+	returnsCalc            ExpectedReturnsCalculator       // Expected returns calculator (uses existing optimization logic)
 	log                    zerolog.Logger                  // Structured logger
 }
 
@@ -61,6 +62,7 @@ type OpportunityContextBuilder struct {
  * @param priceClient - Price client for current prices
  * @param priceConversionService - Price conversion service
  * @param brokerClient - Broker client for pending orders
+ * @param returnsCalc - Expected returns calculator (uses existing optimization logic)
  * @param log - Structured logger
  * @returns *OpportunityContextBuilder - New opportunity context builder instance
  */
@@ -76,6 +78,7 @@ func NewOpportunityContextBuilder(
 	priceClient PriceClient,
 	priceConversionService PriceConversionServiceInterface,
 	brokerClient BrokerClient,
+	returnsCalc ExpectedReturnsCalculator,
 	log zerolog.Logger,
 ) *OpportunityContextBuilder {
 	return &OpportunityContextBuilder{
@@ -90,6 +93,7 @@ func NewOpportunityContextBuilder(
 		priceClient:            priceClient,
 		priceConversionService: priceConversionService,
 		brokerClient:           brokerClient,
+		returnsCalc:            returnsCalc,
 		log:                    log.With().Str("service", "opportunity_context_builder").Logger(),
 	}
 }
@@ -227,14 +231,35 @@ func (b *OpportunityContextBuilder) buildContext(
 	cagrs := b.populateCAGRs(isinList)
 	targetReturn, thresholdPct := b.getTargetReturnSettings()
 
+	// Get regime score (needed for expected returns calculation)
+	regimeScore := b.getRegimeScore()
+
+	// Calculate expected returns using the unified optimization calculator
+	// This applies multipliers, regime adjustment, and minimum return filter
+	var expectedReturns map[string]float64
+	if b.returnsCalc != nil {
+		var err error
+		expectedReturns, err = b.returnsCalc.CalculateExpectedReturnsForUniverse(
+			securities,
+			regimeScore,
+			targetReturn,
+			thresholdPct,
+		)
+		if err != nil {
+			b.log.Warn().Err(err).Msg("Failed to calculate expected returns, using empty map")
+			expectedReturns = make(map[string]float64)
+		}
+	} else {
+		expectedReturns = make(map[string]float64)
+	}
+
 	// Get quality scores
 	longTermScores, stabilityScores := b.populateQualityScores(isinList)
 
 	// Get value trap data
 	opportunityScores, momentumScores, volatility := b.populateValueTrapData(isinList)
 
-	// Get regime score
-	regimeScore := b.getRegimeScore()
+	// Note: regimeScore already fetched above for expected returns calculation
 
 	// Get risk metrics
 	sharpe, maxDrawdown := b.populateRiskMetrics(isinList)
@@ -272,6 +297,7 @@ func (b *OpportunityContextBuilder) buildContext(
 		IndustryAllocations:      industryAllocations,
 		IndustryWeights:          industryWeights,
 		CAGRs:                    cagrs,
+		ExpectedReturns:          expectedReturns,
 		LongTermScores:           longTermScores,
 		StabilityScores:          stabilityScores,
 		TargetReturn:             targetReturn,

@@ -33,6 +33,7 @@ type OpportunityContext struct {
 
 	// Target return filtering data (for flexible penalty system)
 	CAGRs                    map[string]float64 `json:"cagrs,omitempty"`                       // CAGR by ISIN (for target return filtering)
+	ExpectedReturns          map[string]float64 `json:"expected_returns,omitempty"`            // Adjusted expected returns by ISIN (includes multipliers, dividends, regime)
 	LongTermScores           map[string]float64 `json:"long_term_scores,omitempty"`            // Long-term scores by ISIN (for quality override)
 	StabilityScores          map[string]float64 `json:"stability_scores,omitempty"`            // Stability scores by ISIN (for quality override, replaces stability)
 	TargetReturn             float64            `json:"target_return,omitempty"`               // Target annual return (default: 0.11 = 11%)

@@ -357,11 +357,7 @@ func (c *AveragingDownCalculator) Calculate(
 			continue
 		}
 
-		// Check if we have enough cash
-		if totalCostEUR > ctx.AvailableCashEUR {
-			exclusions.Add(isin, symbol, securityName, fmt.Sprintf("insufficient cash: need €%.2f, have €%.2f", totalCostEUR, ctx.AvailableCashEUR))
-			continue
-		}
+		// NOTE: Cash check removed - sequence generator handles cash feasibility
 
 		// Calculate priority with tag-based boosting
 		priority := c.calculatePriority(lossPercent, securityTags, config)

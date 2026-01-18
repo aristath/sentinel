@@ -254,6 +254,7 @@ func TestOpportunityContextBuilder_Build_ReturnsCompleteContext(t *testing.T) {
 		&ocbMockPriceClient{quotes: map[string]*float64{symbol: &price}},
 		&ocbMockPriceConversionService{convertedPrices: map[string]float64{isin: 139.5}}, // USD to EUR
 		&ocbMockBrokerClient{connected: true, pendingOrders: []domain.BrokerPendingOrder{}},
+		nil, // ExpectedReturnsCalculator - not needed for this test
 		log,
 	)
 
@@ -302,6 +303,7 @@ func TestOpportunityContextBuilder_Build_PopulatesCooloffFromTrades(t *testing.T
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{connected: false},
+		nil, // ExpectedReturnsCalculator - not needed for this test
 		log,
 	)
 
@@ -358,6 +360,7 @@ func TestOpportunityContextBuilder_Build_PopulatesCooloffFromPendingOrders(t *te
 				{Symbol: pendingBuySymbol, Side: "BUY", Quantity: 10, Price: 300.0},
 			},
 		},
+		nil, // ExpectedReturnsCalculator - not needed for this test
 		log,
 	)
 
@@ -408,6 +411,7 @@ func TestOpportunityContextBuilder_Build_MergesCooloffSources(t *testing.T) {
 				{Symbol: pendingSoldSymbol, Side: "SELL", Quantity: 5, Price: 300.0},
 			},
 		},
+		nil, // ExpectedReturnsCalculator - not needed for this test
 		log,
 	)
 
@@ -448,6 +452,7 @@ func TestOpportunityContextBuilder_Build_PopulatesGeographyWeights(t *testing.T)
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{connected: false},
+		nil, // ExpectedReturnsCalculator - not needed for this test
 		log,
 	)
 
@@ -485,6 +490,7 @@ func TestOpportunityContextBuilder_Build_PopulatesSecurityScores(t *testing.T) {
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{connected: false},
+		nil, // ExpectedReturnsCalculator - not needed for this test
 		log,
 	)
 
@@ -520,6 +526,7 @@ func TestOpportunityContextBuilder_Build_PopulatesRiskMetrics(t *testing.T) {
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{connected: false},
+		nil, // ExpectedReturnsCalculator - not needed for this test
 		log,
 	)
 
@@ -556,6 +563,7 @@ func TestOpportunityContextBuilder_Build_PopulatesCAGRs(t *testing.T) {
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{connected: false},
+		nil, // ExpectedReturnsCalculator - not needed for this test
 		log,
 	)
 
@@ -603,6 +611,7 @@ func TestOpportunityContextBuilder_Build_ConvertsAllPricesToEUR(t *testing.T) {
 		// PriceConversionService returns prices keyed by symbol, then implementation converts to ISIN
 		&ocbMockPriceConversionService{convertedPrices: map[string]float64{symbol: priceEUR}},
 		&ocbMockBrokerClient{connected: false},
+		nil, // ExpectedReturnsCalculator - not needed for this test
 		log,
 	)
 
@@ -639,6 +648,7 @@ func TestOpportunityContextBuilder_Build_UsesConfiguredCooloffDays(t *testing.T)
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{connected: false},
+		nil, // ExpectedReturnsCalculator - not needed for this test
 		log,
 	)
 
@@ -667,6 +677,7 @@ func TestOpportunityContextBuilder_Build_HandlesEmptyPositions(t *testing.T) {
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{connected: false},
+		nil, // ExpectedReturnsCalculator - not needed for this test
 		log,
 	)
 
@@ -707,6 +718,7 @@ func TestOpportunityContextBuilder_Build_HandlesMissingPrices(t *testing.T) {
 		&ocbMockPriceClient{quotes: map[string]*float64{}}, // No prices
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{connected: false},
+		nil, // ExpectedReturnsCalculator - not needed for this test
 		log,
 	)
 
@@ -736,6 +748,7 @@ func TestOpportunityContextBuilder_Build_HandlesBrokerDisconnected(t *testing.T)
 			connected:     false, // Disconnected
 			pendingOrders: []domain.BrokerPendingOrder{},
 		},
+		nil, // ExpectedReturnsCalculator - not needed for this test
 		log,
 	)
 
@@ -774,6 +787,7 @@ func TestOpportunityContextBuilder_Build_PopulatesValueTrapData(t *testing.T) {
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{connected: false},
+		nil, // ExpectedReturnsCalculator - not needed for this test
 		log,
 	)
 
@@ -807,6 +821,7 @@ func TestOpportunityContextBuilder_Build_HandlesPositionRepoError(t *testing.T) 
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{connected: false},
+		nil, // ExpectedReturnsCalculator - not needed for this test
 		log,
 	)
 
@@ -833,6 +848,7 @@ func TestOpportunityContextBuilder_Build_HandlesSecurityRepoError(t *testing.T) 
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{connected: false},
+		nil, // ExpectedReturnsCalculator - not needed for this test
 		log,
 	)
 
@@ -892,6 +908,7 @@ func TestOpportunityContextBuilder_Build_WithOptimizerWeights(t *testing.T) {
 			"AAPL": 150.0,
 		}},
 		&ocbMockBrokerClient{connected: false},
+		nil, // ExpectedReturnsCalculator - not needed for this test
 		log,
 	)
 
@@ -934,6 +951,7 @@ func TestOpportunityContextBuilder_Build_WithoutOptimizerWeights(t *testing.T) {
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{connected: false},
+		nil, // ExpectedReturnsCalculator - not needed for this test
 		log,
 	)
 
@@ -970,6 +988,7 @@ func TestOpportunityContextBuilder_Build_WithEmptyOptimizerWeights(t *testing.T)
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{connected: false},
+		nil, // ExpectedReturnsCalculator - not needed for this test
 		log,
 	)
 

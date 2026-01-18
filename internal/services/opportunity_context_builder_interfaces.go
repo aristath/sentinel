@@ -78,4 +78,17 @@ type BrokerClient interface {
 	GetPendingOrders() ([]domain.BrokerPendingOrder, error)
 }
 
+// ExpectedReturnsCalculator calculates expected returns for securities.
+// This interface wraps the optimization.ReturnsCalculator to avoid circular dependencies.
+type ExpectedReturnsCalculator interface {
+	// CalculateExpectedReturnsForUniverse calculates expected returns for universe securities.
+	// Returns a map of ISIN -> expected return (securities below minimum are excluded).
+	CalculateExpectedReturnsForUniverse(
+		securities []universe.Security,
+		regimeScore float64,
+		targetReturn float64,
+		targetReturnThresholdPct float64,
+	) (map[string]float64, error)
+}
+
 // Removed DismissedFilterRepository - dismissed filter functionality removed

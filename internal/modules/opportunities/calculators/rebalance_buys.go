@@ -95,13 +95,8 @@ func (c *RebalanceBuysCalculator) Calculate(
 		return domain.CalculatorResult{PreFiltered: exclusions.Result()}, nil
 	}
 
-	if ctx.AvailableCashEUR <= minTradeAmount {
-		c.log.Debug().
-			Float64("available_cash", ctx.AvailableCashEUR).
-			Float64("min_trade_amount", minTradeAmount).
-			Msg("No available cash (below minimum trade amount)")
-		return domain.CalculatorResult{PreFiltered: exclusions.Result()}, nil
-	}
+	// NOTE: Cash checks removed - sequence generator handles cash feasibility
+	// This allows SELL→BUY sequences where sells generate cash for buys
 
 	// Check if we have geography allocations and weights
 	if ctx.GeographyAllocations == nil || ctx.GeographyWeights == nil {
@@ -150,6 +145,7 @@ func (c *RebalanceBuysCalculator) Calculate(
 
 		// Skip if recently bought (ISIN lookup)
 		if ctx.RecentlyBoughtISINs[isin] { // ISIN key ✅
+			c.log.Debug().Str("symbol", symbol).Msg("FILTER: recently bought")
 			exclusions.Add(isin, symbol, securityName, "recently bought (cooling off period)")
 			continue
 		}
@@ -157,6 +153,7 @@ func (c *RebalanceBuysCalculator) Calculate(
 		// Skip if tag-based pre-filtering is enabled and symbol not in candidate set
 		if config.EnableTagFiltering && candidateMap != nil {
 			if !candidateMap[symbol] {
+				c.log.Debug().Str("symbol", symbol).Str("geography", security.Geography).Msg("FILTER: no matching opportunity tags")
 				exclusions.Add(isin, symbol, securityName, "no matching opportunity tags")
 				continue
 			}
@@ -165,15 +162,14 @@ func (c *RebalanceBuysCalculator) Calculate(
 		// Get security and extract geography
 		geography := security.Geography
 		if geography == "" {
+			c.log.Debug().Str("symbol", symbol).Msg("FILTER: no geography")
 			exclusions.Add(isin, symbol, securityName, "no geography assigned")
 			continue
 		}
 
 		// Check per-security constraint: AllowBuy must be true
 		if !security.AllowBuy {
-			c.log.Debug().
-				Str("symbol", symbol).
-				Msg("Skipping security: allow_buy=false")
+			c.log.Debug().Str("symbol", symbol).Str("geography", geography).Msg("FILTER: allow_buy=false")
 			exclusions.Add(isin, symbol, securityName, "allow_buy=false")
 			continue
 		}
@@ -192,9 +188,12 @@ func (c *RebalanceBuysCalculator) Calculate(
 			}
 		}
 		if matchedGeo == "" {
+			c.log.Debug().Str("symbol", symbol).Str("geography", geography).Msg("FILTER: geography not underweight")
 			exclusions.Add(isin, symbol, securityName, "geography not underweight")
 			continue
 		}
+
+		c.log.Debug().Str("symbol", symbol).Str("matched_geo", matchedGeo).Float64("underweight", underweight).Msg("PASSED geography filter")
 
 		// Get security score (ISIN lookup)
 		score := 0.5 // Default neutral score
@@ -327,9 +326,7 @@ func (c *RebalanceBuysCalculator) Calculate(
 
 		// Calculate quantity
 		targetValue := maxValuePerPosition
-		if targetValue > ctx.AvailableCashEUR {
-			targetValue = ctx.AvailableCashEUR
-		}
+		// NOTE: Cash cap removed - sequence generator handles cash feasibility
 
 		quantity := int(targetValue / currentPrice)
 		if quantity == 0 {
@@ -379,11 +376,7 @@ func (c *RebalanceBuysCalculator) Calculate(
 		transactionCost := ctx.TransactionCostFixed + (valueEUR * ctx.TransactionCostPercent)
 		totalCostEUR := valueEUR + transactionCost
 
-		// Check if we have enough cash
-		if totalCostEUR > ctx.AvailableCashEUR {
-			exclusions.Add(isin, symbol, securityName, fmt.Sprintf("insufficient cash: need €%.2f, have €%.2f", totalCostEUR, ctx.AvailableCashEUR))
-			continue
-		}
+		// NOTE: Cash check removed - sequence generator handles cash feasibility
 
 		// Priority based on underweight and score
 		priority := scored.underweight * scored.score * 0.6

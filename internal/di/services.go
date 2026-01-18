@@ -588,9 +588,19 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 	)
 	log.Info().Msg("State monitor initialized (not started yet)")
 
+	// Returns calculator - moved here to be available for OpportunityContextBuilder
+	// Calculates expected returns for securities based on historical data
+	// This is the SINGLE source of truth for expected return calculations (applies multipliers, regime adjustment, etc.)
+	container.ReturnsCalc = optimization.NewReturnsCalculator(
+		container.PortfolioDB.Conn(),
+		optimizationSecurityProvider,
+		log,
+	)
+
 	// Opportunity Context Builder - unified context building for opportunities, planning, and rebalancing
 	// Builds comprehensive context objects for opportunity calculators, planning, and rebalancing
 	// Context includes positions, securities, allocation, recent trades, scores, settings, regime, cash, prices
+	// Uses ReturnsCalc for unified expected return calculations (same as optimizer)
 	container.OpportunityContextBuilder = services.NewOpportunityContextBuilder(
 		&ocbPositionRepoAdapter{repo: container.PositionRepo},
 		&ocbSecurityRepoAdapter{repo: container.SecurityRepo},
@@ -603,6 +613,7 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 		&brokerPriceClientAdapter{client: container.BrokerClient},
 		container.PriceConversionService,
 		&ocbBrokerClientAdapter{client: container.BrokerClient},
+		container.ReturnsCalc, // Unified expected returns calculator
 		log,
 	)
 	log.Info().Msg("Opportunity context builder initialized")
@@ -616,13 +627,7 @@ func InitializeServices(container *Container, cfg *config.Config, displayManager
 	// Manages portfolio constraints (allocation limits, concentration limits, etc.)
 	container.ConstraintsMgr = optimization.NewConstraintsManager(log)
 
-	// Returns calculator
-	// Calculates expected returns for securities based on historical data
-	container.ReturnsCalc = optimization.NewReturnsCalculator(
-		container.PortfolioDB.Conn(),
-		optimizationSecurityProvider,
-		log,
-	)
+	// Note: ReturnsCalc already initialized above (before OpportunityContextBuilder) for unified expected returns
 
 	// Kelly Position Sizer
 	// Calculates optimal position sizes using Kelly Criterion

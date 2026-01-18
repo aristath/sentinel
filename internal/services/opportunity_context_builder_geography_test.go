@@ -133,6 +133,7 @@ func TestPopulateGeographyWeights_FiltersUnusedGeographies(t *testing.T) {
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{},
+		nil, // ExpectedReturnsCalculator
 		log,
 	)
 
@@ -198,6 +199,7 @@ func TestPopulateGeographyWeights_NormalizesCorrectly(t *testing.T) {
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{},
+		nil, // ExpectedReturnsCalculator
 		log,
 	)
 
@@ -241,6 +243,7 @@ func TestPopulateGeographyWeights_ExcludesIndexSecurities(t *testing.T) {
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{},
+		nil, // ExpectedReturnsCalculator
 		log,
 	)
 
@@ -282,6 +285,7 @@ func TestPopulateGeographyWeights_HandlesMultipleGeographiesPerSecurity(t *testi
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{},
+		nil, // ExpectedReturnsCalculator
 		log,
 	)
 
@@ -324,6 +328,7 @@ func TestPopulateGeographyWeights_EmptySecurities(t *testing.T) {
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{},
+		nil, // ExpectedReturnsCalculator
 		log,
 	)
 
@@ -361,6 +366,7 @@ func TestPopulateGeographyWeights_NoMatchingGeographies(t *testing.T) {
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{},
+		nil, // ExpectedReturnsCalculator
 		log,
 	)
 
@@ -415,6 +421,7 @@ func TestBuild_IntegrationWithGeographyWeights(t *testing.T) {
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{},
+		nil, // ExpectedReturnsCalculator
 		log,
 	)
 

@@ -6,6 +6,7 @@ import (
 	"math"
 
 	"github.com/aristath/sentinel/internal/modules/symbolic_regression"
+	"github.com/aristath/sentinel/internal/modules/universe"
 	"github.com/rs/zerolog"
 )
 
@@ -540,6 +541,42 @@ func (rc *ReturnsCalculator) calculateStaticExpectedReturn(
 
 	// Calculate base expected return using static formula
 	return (totalReturnCAGR * cagrWeight) + (targetReturn * scoreFactor * scoreWeight)
+}
+
+// CalculateExpectedReturnsForUniverse calculates expected returns for universe securities.
+// This is an adapter method that converts universe.Security to optimization.Security
+// and delegates to the existing CalculateExpectedReturns method.
+// Implements the services.ExpectedReturnsCalculator interface.
+func (rc *ReturnsCalculator) CalculateExpectedReturnsForUniverse(
+	securities []universe.Security,
+	regimeScore float64,
+	targetReturn float64,
+	targetReturnThresholdPct float64,
+) (map[string]float64, error) {
+	// Convert universe.Security to optimization.Security
+	optSecurities := make([]Security, 0, len(securities))
+	for _, sec := range securities {
+		optSecurities = append(optSecurities, Security{
+			ISIN:               sec.ISIN,
+			Symbol:             sec.Symbol,
+			ProductType:        sec.ProductType,
+			Geography:          sec.Geography,
+			Industry:           sec.Industry,
+			PriorityMultiplier: sec.PriorityMultiplier,
+			AllowBuy:           sec.AllowBuy,
+			AllowSell:          sec.AllowSell,
+			MinLot:             float64(sec.MinLot),
+		})
+	}
+
+	// Delegate to existing method (no dividend bonuses in this context)
+	return rc.CalculateExpectedReturns(
+		optSecurities,
+		regimeScore,
+		make(map[string]float64), // Empty dividend bonuses
+		targetReturn,
+		targetReturnThresholdPct,
+	)
 }
 
 // Helper functions

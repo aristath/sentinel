@@ -131,6 +131,7 @@ func TestPopulateIndustryWeights_FiltersUnusedIndustries(t *testing.T) {
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{},
+		nil, // ExpectedReturnsCalculator
 		log,
 	)
 
@@ -196,6 +197,7 @@ func TestPopulateIndustryWeights_NormalizesCorrectly(t *testing.T) {
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{},
+		nil, // ExpectedReturnsCalculator
 		log,
 	)
 
@@ -239,6 +241,7 @@ func TestPopulateIndustryWeights_ExcludesIndexSecurities(t *testing.T) {
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{},
+		nil, // ExpectedReturnsCalculator
 		log,
 	)
 
@@ -281,6 +284,7 @@ func TestPopulateIndustryWeights_HandlesMultipleIndustriesPerSecurity(t *testing
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{},
+		nil, // ExpectedReturnsCalculator
 		log,
 	)
 
@@ -323,6 +327,7 @@ func TestPopulateIndustryWeights_EmptySecurities(t *testing.T) {
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{},
+		nil, // ExpectedReturnsCalculator
 		log,
 	)
 
@@ -360,6 +365,7 @@ func TestPopulateIndustryWeights_NoMatchingIndustries(t *testing.T) {
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{},
+		nil, // ExpectedReturnsCalculator
 		log,
 	)
 
@@ -413,6 +419,7 @@ func TestBuild_IntegrationWithIndustryWeights(t *testing.T) {
 		&ocbMockPriceClient{},
 		&ocbMockPriceConversionService{},
 		&ocbMockBrokerClient{},
+		nil, // ExpectedReturnsCalculator
 		log,
 	)
 

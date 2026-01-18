@@ -159,10 +159,7 @@ func (c *WeightBasedCalculator) Calculate(
 				exclusions.Add(isin, symbol, securityName, "recently bought (cooling off period)")
 				continue
 			}
-			if ctx.AvailableCashEUR <= 0 {
-				exclusions.Add(isin, symbol, securityName, "no available cash")
-				continue
-			}
+			// NOTE: Cash check removed - sequence generator handles cash feasibility
 
 			// Check per-security constraint: AllowBuy must be true
 			if !security.AllowBuy {
@@ -308,9 +305,7 @@ func (c *WeightBasedCalculator) Calculate(
 			if targetValue > maxValuePerTrade {
 				targetValue = maxValuePerTrade
 			}
-			if targetValue > ctx.AvailableCashEUR {
-				targetValue = ctx.AvailableCashEUR
-			}
+			// NOTE: Cash cap removed - sequence generator handles cash feasibility
 
 			quantity := int(targetValue / currentPrice)
 			if quantity == 0 {
@@ -344,10 +339,7 @@ func (c *WeightBasedCalculator) Calculate(
 				continue
 			}
 
-			if totalCostEUR > ctx.AvailableCashEUR {
-				exclusions.Add(isin, symbol, securityName, fmt.Sprintf("insufficient cash: need €%.2f, have €%.2f", totalCostEUR, ctx.AvailableCashEUR))
-				continue
-			}
+			// NOTE: Cash check removed - sequence generator handles cash feasibility
 
 			priority := abs(diff) * 0.8
 
@@ -501,9 +493,21 @@ func (c *WeightBasedCalculator) Calculate(
 			// Cap at MaxSellPercentage (risk management)
 			if maxSellPercentage < 1.0 {
 				maxAllowed := int(foundPosition.Quantity * maxSellPercentage)
+				c.log.Debug().
+					Str("symbol", symbol).
+					Int("quantity_before_cap", quantity).
+					Int("max_allowed", maxAllowed).
+					Float64("max_sell_percentage", maxSellPercentage).
+					Float64("position_quantity", foundPosition.Quantity).
+					Msg("Applying max_sell_percentage cap")
 				if quantity > maxAllowed {
 					quantity = maxAllowed
 				}
+			} else {
+				c.log.Debug().
+					Str("symbol", symbol).
+					Float64("max_sell_percentage", maxSellPercentage).
+					Msg("Max sell percentage cap NOT applied (>= 1.0)")
 			}
 
 			// Round quantity to lot size and validate
@@ -515,6 +519,22 @@ func (c *WeightBasedCalculator) Calculate(
 					Msg("Skipping security: quantity below minimum lot size after rounding")
 				exclusions.Add(isin, symbol, securityName, fmt.Sprintf("quantity below minimum lot size %d", security.MinLot))
 				continue
+			}
+
+			// Re-check max_sell_percentage after lot rounding
+			// This filters out candidates where lot size forces a larger quantity than allowed
+			if maxSellPercentage < 1.0 {
+				maxAllowedAfterRounding := foundPosition.Quantity * maxSellPercentage
+				if float64(quantity) > maxAllowedAfterRounding {
+					c.log.Debug().
+						Str("symbol", symbol).
+						Int("rounded_quantity", quantity).
+						Float64("max_allowed", maxAllowedAfterRounding).
+						Float64("max_sell_percentage", maxSellPercentage).
+						Msg("Skipping security: lot-rounded quantity exceeds max_sell_percentage")
+					exclusions.Add(isin, symbol, securityName, fmt.Sprintf("lot-rounded quantity %d exceeds max %.0f (%.0f%% of position)", quantity, maxAllowedAfterRounding, maxSellPercentage*100))
+					continue
+				}
 			}
 
 			// Ensure we don't exceed position quantity after rounding

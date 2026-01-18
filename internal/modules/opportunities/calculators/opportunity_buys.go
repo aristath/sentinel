@@ -64,13 +64,8 @@ func (c *OpportunityBuysCalculator) Calculate(
 		return planningdomain.CalculatorResult{PreFiltered: exclusions.Result()}, nil
 	}
 
-	if ctx.AvailableCashEUR <= minTradeAmount {
-		c.log.Debug().
-			Float64("available_cash", ctx.AvailableCashEUR).
-			Float64("min_trade_amount", minTradeAmount).
-			Msg("Insufficient cash for opportunity buys (below minimum trade amount)")
-		return planningdomain.CalculatorResult{PreFiltered: exclusions.Result()}, nil
-	}
+	// NOTE: Cash checks removed - sequence generator handles cash feasibility
+	// This allows SELL→BUY sequences where sells generate cash for buys
 
 	// Extract config for tag filtering
 	var config *planningdomain.PlannerConfiguration
@@ -236,80 +231,47 @@ func (c *OpportunityBuysCalculator) Calculate(
 			continue
 		}
 
-		// Apply target return filtering with flexible penalty system (if data available)
-		// Get target return and threshold (defaults: 11% target, 80% threshold = 8.8% minimum)
+		// Apply expected return filtering using unified calculator
+		// ExpectedReturns already has:
+		// - 6% absolute minimum filter applied (securities below are excluded)
+		// - Priority multipliers applied
+		// - Regime adjustments applied
+		// - Quality-aware penalty system applied
+		var expectedReturn *float64
+		if ctx.ExpectedReturns != nil {
+			if expRet, ok := ctx.ExpectedReturns[isin]; ok {
+				expectedReturn = &expRet
+			}
+		}
+
+		// If no expected return, the security was filtered by the unified calculator
+		// (typically below 6% minimum return after adjustments)
+		if expectedReturn == nil {
+			c.log.Debug().
+				Str("symbol", symbol).
+				Str("isin", isin).
+				Msg("Filtered out: no expected return (failed unified return filter)")
+			exclusions.Add(isin, symbol, securityName, "below minimum expected return (unified filter)")
+			continue
+		}
+
+		// Get target return for threshold comparison
 		targetReturn := ctx.TargetReturn
 		if targetReturn == 0 {
 			targetReturn = 0.11 // Default 11%
 		}
 		thresholdPct := ctx.TargetReturnThresholdPct
 		if thresholdPct == 0 {
-			thresholdPct = 0.70 // Default 70% (aligned with tag_assigner for 15-20 year horizon)
+			thresholdPct = 0.70 // Default 70%
 		}
-		minCAGRThreshold := targetReturn * thresholdPct
+		minReturnThreshold := targetReturn * thresholdPct
 
-		// Absolute minimum guardrail: Never allow below 6% CAGR or 50% of target (whichever is higher)
-		absoluteMinCAGR := math.Max(0.06, targetReturn*0.50)
-
-		// Get CAGR if available (ISIN lookup only)
-		var cagr *float64
-		if ctx.CAGRs != nil {
-			if cagrVal, ok := ctx.CAGRs[isin]; ok { // ISIN key ✅
-				cagr = &cagrVal
-			}
-		}
-
-		// Apply absolute minimum guardrail (hard filter)
-		if cagr != nil && *cagr < absoluteMinCAGR {
-			c.log.Debug().
-				Str("symbol", symbol).
-				Str("isin", isin).
-				Float64("cagr", *cagr).
-				Float64("absolute_min", absoluteMinCAGR).
-				Msg("Filtered out: below absolute minimum CAGR (hard filter)")
-			exclusions.Add(isin, symbol, securityName, fmt.Sprintf("CAGR %.1f%% below absolute minimum %.1f%%", *cagr*100, absoluteMinCAGR*100))
-			continue
-		}
-
-		// Apply flexible penalty if below threshold (if CAGR available)
+		// Apply score penalty if expected return is below threshold
+		// Note: ExpectedReturns already has penalties baked in, this adds priority adjustment
 		penalty := 0.0
-		if cagr != nil && *cagr < minCAGRThreshold {
-			// Calculate penalty based on how far below threshold
-			// Penalty increases as CAGR gets further below threshold
-			// Max penalty: 30% reduction
-			shortfallRatio := (minCAGRThreshold - *cagr) / minCAGRThreshold
-			penalty = math.Min(0.3, shortfallRatio*0.5) // Up to 30% penalty
-
-			// Quality override: Get quality scores for penalty reduction
-			var longTermScore, stabilityScore *float64
-			if ctx.LongTermScores != nil {
-				if lt, ok := ctx.LongTermScores[isin]; ok { // ISIN key ✅
-					longTermScore = &lt
-				}
-			}
-			if ctx.StabilityScores != nil {
-				if stab, ok := ctx.StabilityScores[isin]; ok { // ISIN key ✅
-					stabilityScore = &stab
-				}
-			}
-
-			// Calculate quality score for override
-			qualityScore := 0.0
-			if longTermScore != nil && stabilityScore != nil {
-				qualityScore = (*longTermScore + *stabilityScore) / 2.0
-			} else if longTermScore != nil {
-				qualityScore = *longTermScore
-			} else if stabilityScore != nil {
-				qualityScore = *stabilityScore
-			}
-
-			// Apply quality override: Only exceptional quality gets significant reduction
-			if qualityScore > 0.80 {
-				penalty *= 0.65 // Reduce penalty by 35% for exceptional quality (0.80+)
-			} else if qualityScore > 0.75 {
-				penalty *= 0.80 // Reduce penalty by 20% for high quality (0.75-0.80)
-			}
-			// Quality below 0.75 gets no override (full penalty applies)
+		if *expectedReturn < minReturnThreshold {
+			shortfallRatio := (minReturnThreshold - *expectedReturn) / minReturnThreshold
+			penalty = math.Min(0.2, shortfallRatio*0.3) // Up to 20% priority penalty
 
 			// Apply penalty to score
 			score = score * (1.0 - penalty)
@@ -317,10 +279,9 @@ func (c *OpportunityBuysCalculator) Calculate(
 			c.log.Debug().
 				Str("symbol", symbol).
 				Str("isin", isin).
-				Float64("cagr", *cagr).
-				Float64("min_threshold", minCAGRThreshold).
+				Float64("expected_return", *expectedReturn).
+				Float64("min_threshold", minReturnThreshold).
 				Float64("penalty", penalty).
-				Float64("quality_score", qualityScore).
 				Float64("score_before_penalty", scored.score).
 				Float64("score_after_penalty", score).
 				Msg("Applied flexible penalty (quality-aware)")
@@ -446,9 +407,7 @@ func (c *OpportunityBuysCalculator) Calculate(
 			}
 		}
 
-		if targetValue > ctx.AvailableCashEUR {
-			targetValue = ctx.AvailableCashEUR
-		}
+		// NOTE: Cash cap removed - sequence generator handles cash feasibility
 
 		quantity := int(targetValue / currentPrice)
 		if quantity == 0 {
@@ -496,11 +455,7 @@ func (c *OpportunityBuysCalculator) Calculate(
 		transactionCost := ctx.TransactionCostFixed + (valueEUR * ctx.TransactionCostPercent)
 		totalCostEUR := valueEUR + transactionCost
 
-		// Check if we have enough cash
-		if totalCostEUR > ctx.AvailableCashEUR {
-			exclusions.Add(isin, symbol, securityName, fmt.Sprintf("insufficient cash: need €%.2f, have €%.2f", totalCostEUR, ctx.AvailableCashEUR))
-			continue
-		}
+		// NOTE: Cash check removed - sequence generator handles cash feasibility
 
 		// Calculate priority with tag-based boosting
 		priority := c.calculatePriority(score, securityTags, config)
