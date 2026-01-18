@@ -43,6 +43,8 @@ func RegisterTradingWorkTypes(registry *Registry, deps *TradingDeps) {
 				return fmt.Errorf("failed to execute trades: %w", err)
 			}
 
+			// Cache clearing is handled by TradeExecuted event handler in work_triggers.go
+			// This ensures all trade execution paths (execute, retry, manual) clear caches consistently
 			return nil
 		},
 	})

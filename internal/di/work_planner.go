@@ -64,7 +64,7 @@ func (a *plannerServiceAdapter) CreatePlan(ctx interface{}) (interface{}, error)
 	// Get opportunity context from cache
 	var opportunityContext planningdomain.OpportunityContext
 	if err := a.cache.GetJSON("opportunity-context", &opportunityContext); err != nil {
-		return nil, nil
+		return nil, fmt.Errorf("opportunity-context not found in cache: %w", err)
 	}
 
 	// Get planner configuration

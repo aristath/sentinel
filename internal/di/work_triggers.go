@@ -27,6 +27,18 @@ func registerTriggers(container *Container, processor *work.Processor, workCache
 		processor.Trigger()
 	})
 
+	// TradeExecuted -> Clear planner cache and trigger
+	// This ensures planner recalculates immediately after trade execution
+	// (faster than waiting for StateChanged which polls every minute)
+	bus.Subscribe(events.TradeExecuted, func(e *events.Event) {
+		// Clear planner caches from SQLite cache (planner no longer uses in-memory cache)
+		_ = workCache.Delete("optimizer_weights")
+		_ = workCache.Delete("opportunity-context")
+		_ = workCache.Delete("sequences")
+		_ = workCache.Delete("best-sequence")
+		processor.Trigger()
+	})
+
 	// RecommendationsReady -> trigger trading
 	bus.Subscribe(events.RecommendationsReady, func(e *events.Event) {
 		processor.Trigger()
