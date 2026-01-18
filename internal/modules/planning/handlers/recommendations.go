@@ -82,6 +82,30 @@ func (h *RecommendationsHandler) handleGet(w http.ResponseWriter, r *http.Reques
 			"recommendations": recommendations,
 		}
 
+		// Include rejected opportunities and pre-filtered securities for debugging
+		// Get portfolio hash from first recommendation (if available)
+		var portfolioHash string
+		if len(recommendations) > 0 {
+			portfolioHash = recommendations[0].PortfolioHash
+		}
+
+		if portfolioHash != "" {
+			// Get rejected opportunities
+			if rejected := h.recommendationRepo.GetRejectedOpportunities(portfolioHash); len(rejected) > 0 {
+				response["rejected_opportunities"] = rejected
+			}
+
+			// Get pre-filtered securities
+			if preFiltered := h.recommendationRepo.GetPreFilteredSecurities(portfolioHash); len(preFiltered) > 0 {
+				response["pre_filtered_securities"] = preFiltered
+			}
+
+			// Get rejected sequences
+			if rejectedSeqs := h.recommendationRepo.GetRejectedSequences(portfolioHash); len(rejectedSeqs) > 0 {
+				response["rejected_sequences"] = rejectedSeqs
+			}
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(response)
 	}

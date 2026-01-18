@@ -459,6 +459,18 @@ func (r *InMemoryRecommendationRepository) GetPreFilteredSecurities(portfolioHas
 	return nil
 }
 
+// GetRejectedOpportunities retrieves rejected opportunities for a portfolio hash (in-memory).
+// Returns nil if no rejected opportunities exist for the given hash.
+func (r *InMemoryRecommendationRepository) GetRejectedOpportunities(portfolioHash string) []planningdomain.RejectedOpportunity {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if rejected, exists := r.rejectedOpportunities[portfolioHash]; exists {
+		return rejected
+	}
+	return nil
+}
+
 // StoreRejectedSequences stores rejected sequences for a portfolio hash (in-memory).
 // Rejected sequences are evaluated action sequences that were not selected for the final plan.
 func (r *InMemoryRecommendationRepository) StoreRejectedSequences(rejected []planningdomain.RejectedSequence, portfolioHash string) error {

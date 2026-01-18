@@ -48,6 +48,10 @@ type RecommendationRepositoryInterface interface {
 	// GetPreFilteredSecurities retrieves pre-filtered securities for a portfolio hash
 	GetPreFilteredSecurities(portfolioHash string) []planningdomain.PreFilteredSecurity
 
+	// GetRejectedOpportunities retrieves rejected opportunities for a portfolio hash
+	// Used to debug why opportunities were not selected in the final plan
+	GetRejectedOpportunities(portfolioHash string) []planningdomain.RejectedOpportunity
+
 	// StoreRejectedSequences stores rejected sequences for a portfolio hash
 	// Used to track evaluated sequences that were not selected for the final plan
 	StoreRejectedSequences(rejected []planningdomain.RejectedSequence, portfolioHash string) error
