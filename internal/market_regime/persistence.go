@@ -17,11 +17,12 @@ type RegimePersistence struct {
 
 // RegimeHistoryEntry represents a single regime score record
 type RegimeHistoryEntry struct {
-	ID            int64
-	RecordedAt    time.Time
-	Region        string  // Region: US, EU, ASIA, or GLOBAL
-	RawScore      float64 // Raw score before smoothing
-	SmoothedScore float64 // Smoothed score (EMA)
+	ID             int64
+	RecordedAt     time.Time
+	Region         string  // Region: US, EU, ASIA, or GLOBAL
+	RawScore       float64 // Raw score before smoothing
+	SmoothedScore  float64 // Smoothed score (EMA)
+	DiscreteRegime string  // Discrete regime classification (bull, bear, neutral)
 }
 
 // NewRegimePersistence creates a new regime persistence manager
@@ -83,8 +84,9 @@ func (rp *RegimePersistence) GetScoreChange() (float64, error) {
 
 // GetRegimeHistory returns recent regime history entries
 func (rp *RegimePersistence) GetRegimeHistory(limit int) ([]RegimeHistoryEntry, error) {
-	query := `SELECT id, recorded_at, raw_score, smoothed_score
+	query := `SELECT id, recorded_at, region, raw_score, smoothed_score, discrete_regime
 	          FROM market_regime_history
+	          WHERE region = 'GLOBAL'
 	          ORDER BY recorded_at DESC
 	          LIMIT ?`
 
@@ -102,8 +104,10 @@ func (rp *RegimePersistence) GetRegimeHistory(limit int) ([]RegimeHistoryEntry, 
 		if err := rows.Scan(
 			&entry.ID,
 			&recordedAtUnix,
+			&entry.Region,
 			&entry.RawScore,
 			&entry.SmoothedScore,
+			&entry.DiscreteRegime,
 		); err != nil {
 			return nil, err
 		}
@@ -230,7 +234,7 @@ func (rp *RegimePersistence) GetAllCurrentScores() (map[string]float64, error) {
 
 // GetRegimeHistoryForRegion returns recent regime history entries for a specific region
 func (rp *RegimePersistence) GetRegimeHistoryForRegion(region string, limit int) ([]RegimeHistoryEntry, error) {
-	query := `SELECT id, recorded_at, region, raw_score, smoothed_score
+	query := `SELECT id, recorded_at, region, raw_score, smoothed_score, discrete_regime
 	          FROM market_regime_history
 	          WHERE region = ?
 	          ORDER BY id DESC
@@ -253,6 +257,7 @@ func (rp *RegimePersistence) GetRegimeHistoryForRegion(region string, limit int)
 			&entry.Region,
 			&entry.RawScore,
 			&entry.SmoothedScore,
+			&entry.DiscreteRegime,
 		); err != nil {
 			return nil, err
 		}
@@ -265,4 +270,114 @@ func (rp *RegimePersistence) GetRegimeHistoryForRegion(region string, limit int)
 	}
 
 	return entries, nil
+}
+
+// GetLatestEntry returns the most recent regime history entry for GLOBAL region
+// This includes all fields: raw_score, smoothed_score, discrete_regime, and recorded_at
+func (rp *RegimePersistence) GetLatestEntry() (*RegimeHistoryEntry, error) {
+	query := `SELECT id, recorded_at, raw_score, smoothed_score, discrete_regime
+	          FROM market_regime_history
+	          WHERE region = 'GLOBAL'
+	          ORDER BY id DESC
+	          LIMIT 1`
+
+	var entry RegimeHistoryEntry
+	var recordedAtUnix sql.NullInt64
+
+	err := rp.db.QueryRow(query).Scan(
+		&entry.ID,
+		&recordedAtUnix,
+		&entry.RawScore,
+		&entry.SmoothedScore,
+		&entry.DiscreteRegime,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil // No history yet
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if recordedAtUnix.Valid {
+		entry.RecordedAt = time.Unix(recordedAtUnix.Int64, 0).UTC()
+	}
+	entry.Region = "GLOBAL"
+
+	return &entry, nil
+}
+
+// GetLatestEntryForRegion returns the most recent regime history entry for a specific region
+func (rp *RegimePersistence) GetLatestEntryForRegion(region string) (*RegimeHistoryEntry, error) {
+	query := `SELECT id, recorded_at, raw_score, smoothed_score, discrete_regime
+	          FROM market_regime_history
+	          WHERE region = ?
+	          ORDER BY id DESC
+	          LIMIT 1`
+
+	var entry RegimeHistoryEntry
+	var recordedAtUnix sql.NullInt64
+
+	err := rp.db.QueryRow(query, region).Scan(
+		&entry.ID,
+		&recordedAtUnix,
+		&entry.RawScore,
+		&entry.SmoothedScore,
+		&entry.DiscreteRegime,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil // No history yet
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if recordedAtUnix.Valid {
+		entry.RecordedAt = time.Unix(recordedAtUnix.Int64, 0).UTC()
+	}
+	entry.Region = region
+
+	return &entry, nil
+}
+
+// GetEntryAtOrBeforeDate returns the most recent regime history entry at or before the given date
+// Uses GLOBAL region by default. Returns nil if no entry exists before or at the given date.
+func (rp *RegimePersistence) GetEntryAtOrBeforeDate(targetDate time.Time) (*RegimeHistoryEntry, error) {
+	return rp.GetEntryAtOrBeforeDateForRegion("GLOBAL", targetDate)
+}
+
+// GetEntryAtOrBeforeDateForRegion returns the most recent regime history entry at or before the given date for a specific region
+// Returns nil if no entry exists before or at the given date.
+func (rp *RegimePersistence) GetEntryAtOrBeforeDateForRegion(region string, targetDate time.Time) (*RegimeHistoryEntry, error) {
+	// Convert target date to Unix timestamp (midnight UTC for the date)
+	targetTimestamp := time.Date(targetDate.Year(), targetDate.Month(), targetDate.Day(), 23, 59, 59, 0, time.UTC).Unix()
+
+	query := `SELECT id, recorded_at, raw_score, smoothed_score, discrete_regime
+	          FROM market_regime_history
+	          WHERE region = ? AND recorded_at <= ?
+	          ORDER BY recorded_at DESC
+	          LIMIT 1`
+
+	var entry RegimeHistoryEntry
+	var recordedAtUnix sql.NullInt64
+
+	err := rp.db.QueryRow(query, region, targetTimestamp).Scan(
+		&entry.ID,
+		&recordedAtUnix,
+		&entry.RawScore,
+		&entry.SmoothedScore,
+		&entry.DiscreteRegime,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil // No entry at or before this date
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if recordedAtUnix.Valid {
+		entry.RecordedAt = time.Unix(recordedAtUnix.Int64, 0).UTC()
+	}
+	entry.Region = region
+
+	return &entry, nil
 }
