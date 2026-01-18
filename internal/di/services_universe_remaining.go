@@ -9,6 +9,7 @@ package di
 import (
 	"github.com/aristath/sentinel/internal/modules/scoring/scorers"
 	"github.com/aristath/sentinel/internal/modules/universe"
+	"github.com/aristath/sentinel/internal/services"
 	"github.com/rs/zerolog"
 )
 
@@ -49,6 +50,19 @@ func initializeRemainingUniverseServices(container *Container, log zerolog.Logge
 	// Security scorer (used by handlers)
 	// Calculates security scores (total score, component scores)
 	container.SecurityScorer = scorers.NewSecurityScorer()
+
+	// Security service - loads complete Security data from all sources
+	// Single entry point for getting a complete Security with all data (basic, scores, position, tags, price)
+	// Create price client adapter for broker quotes (same adapter used by OpportunityContextBuilder)
+	priceClientAdapter := &brokerPriceClientAdapter{client: container.BrokerClient}
+	container.SecurityService = services.NewSecurityService(
+		container.SecurityRepo,
+		container.ScoreRepo,
+		container.PositionRepo,
+		container.HistoryDBClient,
+		priceClientAdapter, // Optional - can be nil, price loading will be skipped
+		log,
+	)
 
 	return nil
 }

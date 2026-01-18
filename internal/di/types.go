@@ -108,6 +108,7 @@ type Container struct {
 	PortfolioService          *portfolio.PortfolioService                   // Portfolio management
 	CashFlowsService          *cash_flows.CashFlowsService                  // Cash flow processing
 	UniverseService           *universe.UniverseService                     // Security universe management
+	SecurityService           *services.SecurityService                     // Complete security data loading (all sources)
 	TagAssigner               *universe.TagAssigner                         // Auto-tagging securities
 	TradeExecutionService     *services.TradeExecutionService               // Trade execution (broker integration)
 	SettingsService           *settings.Service                             // Settings management
