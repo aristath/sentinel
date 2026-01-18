@@ -44,7 +44,7 @@ func (c *WeightBasedCalculator) Calculate(
 	maxValuePerTrade := GetFloatParam(params, "max_value_per_trade", 500.0)
 	maxBuyPositions := GetIntParam(params, "max_buy_positions", 5)
 	maxSellPositions := GetIntParam(params, "max_sell_positions", 5)
-	maxSellPercentage := GetFloatParam(params, "max_sell_percentage", 1.0) // Risk management cap
+	maxSellPercentage := GetFloatParam(params, "max_sell_percentage", 0.20) // Risk management cap (default 20% - matches config)
 
 	// Calculate minimum trade amount based on transaction costs (default: 1% max cost ratio)
 	maxCostRatio := GetFloatParam(params, "max_cost_ratio", 0.01) // Default 1% max cost
@@ -443,6 +443,41 @@ func (c *WeightBasedCalculator) Calculate(
 				continue
 			}
 
+			// Get config from params for quality checks
+			var config *planningdomain.PlannerConfiguration
+			if cfg, ok := params["config"].(*planningdomain.PlannerConfiguration); ok && cfg != nil {
+				config = cfg
+			}
+
+			// Quality protection for sells - adjust quantity based on position quality
+			var securityTags []string
+			if c.securityRepo != nil {
+				tags, err := c.securityRepo.GetTagsForSecurity(symbol)
+				if err == nil && len(tags) > 0 {
+					securityTags = tags
+				}
+			}
+
+			qualityScore := CalculateSellQualityScore(ctx, isin, securityTags, config)
+
+			// Use SellPriorityBoost for quantity adjustment (already compounds all quality factors)
+			// SellPriorityBoost > 1 = low quality (sell more)
+			// SellPriorityBoost < 1 = high quality (sell less)
+			qualityAdjustment := qualityScore.SellPriorityBoost
+
+			if qualityScore.IsHighQuality {
+				c.log.Debug().
+					Str("symbol", symbol).
+					Float64("quality_score", qualityScore.QualityScore).
+					Float64("sell_priority_boost", qualityScore.SellPriorityBoost).
+					Msg("Reduced weight-based sell for high-quality position")
+			} else if qualityScore.HasNegativeTags {
+				c.log.Debug().
+					Str("symbol", symbol).
+					Float64("sell_priority_boost", qualityScore.SellPriorityBoost).
+					Msg("Increased weight-based sell for low-quality position")
+			}
+
 			// Calculate target reduction
 			targetReduction := abs(diff) * ctx.TotalPortfolioValueEUR
 			if targetReduction > maxValuePerTrade {
@@ -455,6 +490,12 @@ func (c *WeightBasedCalculator) Calculate(
 			}
 			if float64(quantity) > foundPosition.Quantity {
 				quantity = int(foundPosition.Quantity)
+			}
+
+			// Apply quality-based adjustment
+			quantity = int(float64(quantity) * qualityAdjustment)
+			if quantity == 0 {
+				quantity = 1
 			}
 
 			// Cap at MaxSellPercentage (risk management)

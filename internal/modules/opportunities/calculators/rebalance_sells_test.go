@@ -185,11 +185,11 @@ func TestRebalanceSellsCalculator_MaxSellPercentage_MultiplePositions(t *testing
 	}
 }
 
-func TestRebalanceSellsCalculator_NoMaxSellPercentage_DefaultsToHardcodedCap(t *testing.T) {
+func TestRebalanceSellsCalculator_NoMaxSellPercentage_DefaultsTo20Percent(t *testing.T) {
 	log := zerolog.Nop()
 	calc := NewRebalanceSellsCalculator(nil, nil, log)
 
-	// When max_sell_percentage is not provided, the old hardcoded 50% cap should apply
+	// When max_sell_percentage is not provided, should default to 20% (config default)
 	position := domain.Position{
 		Symbol:   "TEST.US",
 		ISIN:     "US1234567890",
@@ -237,6 +237,6 @@ func TestRebalanceSellsCalculator_NoMaxSellPercentage_DefaultsToHardcodedCap(t *
 	require.NoError(t, err)
 	require.Len(t, result.Candidates, 1)
 
-	// Without max_sell_percentage, should still cap at 50% (old hardcoded limit)
-	assert.LessOrEqual(t, result.Candidates[0].Quantity, 500, "Should cap at 50% when max_sell_percentage not provided")
+	// Without max_sell_percentage, should cap at 20% (new default matching config)
+	assert.LessOrEqual(t, result.Candidates[0].Quantity, 200, "Should cap at 20% when max_sell_percentage not provided")
 }

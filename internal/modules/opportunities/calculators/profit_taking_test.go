@@ -235,13 +235,13 @@ func TestProfitTakingCalculator_MaxSellPercentage_WithSellPercentageParam(t *tes
 	}
 }
 
-func TestProfitTakingCalculator_NoMaxSellPercentage(t *testing.T) {
+func TestProfitTakingCalculator_NoMaxSellPercentage_DefaultsTo20Percent(t *testing.T) {
 	log := zerolog.Nop()
 	tagFilter := &mockTagFilter{sellCandidates: []string{}}
 	securityRepo := &mockSecurityRepo{tags: map[string][]string{}}
 	calc := NewProfitTakingCalculator(tagFilter, securityRepo, log)
 
-	// When max_sell_percentage is not provided, should use sell_percentage (default 100%)
+	// When max_sell_percentage is not provided, should default to 20% (config default)
 	position := domain.Position{
 		Symbol:      "TEST.US",
 		ISIN:        "US1234567890",
@@ -275,13 +275,193 @@ func TestProfitTakingCalculator_NoMaxSellPercentage(t *testing.T) {
 	params := map[string]interface{}{
 		"min_gain_threshold": 0.15,
 		"config":             config,
-		// No max_sell_percentage provided
+		// No max_sell_percentage provided - should default to 20%
 	}
 
 	result, err := calc.Calculate(ctx, params)
 	require.NoError(t, err)
 	require.Len(t, result.Candidates, 1)
 
-	// Should sell 100% (1000 shares) when no max_sell_percentage is set
-	assert.Equal(t, 1000, result.Candidates[0].Quantity)
+	// Should cap at 20% (200 shares) when no max_sell_percentage is set (new default)
+	assert.LessOrEqual(t, result.Candidates[0].Quantity, 200,
+		"Should cap at 20%% when max_sell_percentage not provided")
+}
+
+func TestProfitTakingCalculator_HighQualityProtection(t *testing.T) {
+	log := zerolog.Nop()
+	tagFilter := &mockTagFilter{sellCandidates: []string{}}
+	securityRepo := &mockSecurityRepo{
+		tags: map[string][]string{
+			"QUALITY.US": {"high-quality", "consistent-grower"},
+		},
+	}
+	calc := NewProfitTakingCalculator(tagFilter, securityRepo, log)
+
+	// High-quality position with moderate gains should have reduced sell quantity
+	position := domain.Position{
+		Symbol:      "QUALITY.US",
+		ISIN:        "US1234567890",
+		Quantity:    1000,
+		AverageCost: 10.0,
+	}
+
+	security := universe.Security{
+		Symbol:    "QUALITY.US",
+		Name:      "Quality Security",
+		ISIN:      "US1234567890",
+		AllowSell: true,
+		Currency:  "EUR",
+	}
+
+	ctx := &planningdomain.OpportunityContext{
+		EnrichedPositions: []planningdomain.EnrichedPosition{
+			createEnrichedPosition(position, security, 12.0), // 20% gain (moderate, not windfall)
+		},
+		Securities:        []universe.Security{security},
+		CurrentPrices:     map[string]float64{"US1234567890": 12.0},
+		StocksByISIN:      map[string]universe.Security{"US1234567890": security},
+		IneligibleISINs:   map[string]bool{},
+		RecentlySoldISINs: map[string]bool{},
+		AllowSell:         true,
+		StabilityScores:   map[string]float64{"US1234567890": 0.9}, // High stability
+	}
+
+	config := planningdomain.NewDefaultConfiguration()
+	config.EnableTagFiltering = false // Disable tag pre-filtering for this test
+
+	params := map[string]interface{}{
+		"min_gain_threshold":  0.15,
+		"max_sell_percentage": 0.20, // 20% max
+		"windfall_threshold":  0.30, // 30% windfall
+		"config":              config,
+	}
+
+	result, err := calc.Calculate(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, result.Candidates, 1, "Should generate one sell candidate")
+
+	// High-quality position should have reduced quantity via SellPriorityBoost
+	// With tags "high-quality" + "consistent-grower" and stability 0.9:
+	// SellPriorityBoost ≈ 0.75 * 0.75 * 0.9 ≈ 0.506 (roughly 50% of original)
+	// 20% max of 1000 = 200, then ~50% reduction ≈ 100-105 shares
+	assert.Less(t, result.Candidates[0].Quantity, 150,
+		"High-quality position should have significantly reduced sell quantity")
+	assert.Greater(t, result.Candidates[0].Quantity, 50,
+		"High-quality position should still sell some shares")
+}
+
+func TestProfitTakingCalculator_LowQualityBoostedSelling(t *testing.T) {
+	log := zerolog.Nop()
+	tagFilter := &mockTagFilter{sellCandidates: []string{}}
+	securityRepo := &mockSecurityRepo{
+		tags: map[string][]string{
+			"LOWQ.US": {"stagnant", "underperforming"},
+		},
+	}
+	calc := NewProfitTakingCalculator(tagFilter, securityRepo, log)
+
+	// Low-quality position should have boosted sell quantity
+	position := domain.Position{
+		Symbol:      "LOWQ.US",
+		ISIN:        "US9999999999",
+		Quantity:    1000,
+		AverageCost: 10.0,
+	}
+
+	security := universe.Security{
+		Symbol:    "LOWQ.US",
+		Name:      "Low Quality Security",
+		ISIN:      "US9999999999",
+		AllowSell: true,
+		Currency:  "EUR",
+	}
+
+	ctx := &planningdomain.OpportunityContext{
+		EnrichedPositions: []planningdomain.EnrichedPosition{
+			createEnrichedPosition(position, security, 12.0), // 20% gain
+		},
+		Securities:        []universe.Security{security},
+		CurrentPrices:     map[string]float64{"US9999999999": 12.0},
+		StocksByISIN:      map[string]universe.Security{"US9999999999": security},
+		IneligibleISINs:   map[string]bool{},
+		RecentlySoldISINs: map[string]bool{},
+		AllowSell:         true,
+	}
+
+	config := planningdomain.NewDefaultConfiguration()
+	config.EnableTagFiltering = false // Disable tag pre-filtering for this test
+
+	params := map[string]interface{}{
+		"min_gain_threshold":  0.15,
+		"max_sell_percentage": 0.20, // 20% max
+		"config":              config,
+	}
+
+	result, err := calc.Calculate(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, result.Candidates, 1)
+
+	// Low-quality position should have boosted quantity (20% boost capped at maxSellPercentage)
+	// Base would be 200 (20% of 1000), boosted by 20% = 240, but capped at 200
+	// So it should still be 200 (capped)
+	assert.LessOrEqual(t, result.Candidates[0].Quantity, 200,
+		"Low-quality position should respect max_sell_percentage cap")
+}
+
+func TestProfitTakingCalculator_WindfallOverridesQualityProtection(t *testing.T) {
+	log := zerolog.Nop()
+	tagFilter := &mockTagFilter{sellCandidates: []string{}}
+	securityRepo := &mockSecurityRepo{
+		tags: map[string][]string{
+			"QUALITY.US": {"high-quality", "consistent-grower"},
+		},
+	}
+	calc := NewProfitTakingCalculator(tagFilter, securityRepo, log)
+
+	// High-quality position with windfall gains should NOT have reduced quantity
+	position := domain.Position{
+		Symbol:      "QUALITY.US",
+		ISIN:        "US1234567890",
+		Quantity:    1000,
+		AverageCost: 10.0,
+	}
+
+	security := universe.Security{
+		Symbol:    "QUALITY.US",
+		Name:      "Quality Security",
+		ISIN:      "US1234567890",
+		AllowSell: true,
+		Currency:  "EUR",
+	}
+
+	ctx := &planningdomain.OpportunityContext{
+		EnrichedPositions: []planningdomain.EnrichedPosition{
+			createEnrichedPosition(position, security, 15.0), // 50% gain (windfall!)
+		},
+		Securities:        []universe.Security{security},
+		CurrentPrices:     map[string]float64{"US1234567890": 15.0},
+		StocksByISIN:      map[string]universe.Security{"US1234567890": security},
+		IneligibleISINs:   map[string]bool{},
+		RecentlySoldISINs: map[string]bool{},
+		AllowSell:         true,
+		StabilityScores:   map[string]float64{"US1234567890": 0.9},
+	}
+
+	config := planningdomain.NewDefaultConfiguration()
+	config.EnableTagFiltering = false // Disable tag pre-filtering for this test
+
+	params := map[string]interface{}{
+		"min_gain_threshold":  0.15,
+		"max_sell_percentage": 0.20,
+		"windfall_threshold":  0.30, // 30% threshold - 50% gain qualifies as windfall
+		"config":              config,
+	}
+
+	result, err := calc.Calculate(ctx, params)
+	require.NoError(t, err)
+	require.Len(t, result.Candidates, 1)
+
+	// Windfall overrides quality protection - should get full 20% (200 shares)
+	assert.Equal(t, 200, result.Candidates[0].Quantity,
+		"Windfall gains should override high-quality protection")
 }

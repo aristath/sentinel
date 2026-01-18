@@ -45,13 +45,13 @@ func (c *ProfitTakingCalculator) Calculate(
 	params map[string]interface{},
 ) (domain.CalculatorResult, error) {
 	// Parameters with defaults
-	minGainThreshold := GetFloatParam(params, "min_gain_threshold", 0.15)  // 15% minimum gain
-	windfallThreshold := GetFloatParam(params, "windfall_threshold", 0.30) // 30% for windfall
-	minHoldDays := GetIntParam(params, "min_hold_days", 90)                // Minimum holding period
-	sellPercentage := GetFloatParam(params, "sell_percentage", 1.0)        // Sell 100% by default
-	maxSellPercentage := GetFloatParam(params, "max_sell_percentage", 1.0) // Risk management cap (from config)
-	maxPositions := GetIntParam(params, "max_positions", 0)                // 0 = unlimited
-	_ = minHoldDays                                                        // Reserved for future use
+	minGainThreshold := GetFloatParam(params, "min_gain_threshold", 0.15)   // 15% minimum gain
+	windfallThreshold := GetFloatParam(params, "windfall_threshold", 0.30)  // 30% for windfall
+	minHoldDays := GetIntParam(params, "min_hold_days", 90)                 // Minimum holding period
+	sellPercentage := GetFloatParam(params, "sell_percentage", 1.0)         // Sell 100% by default
+	maxSellPercentage := GetFloatParam(params, "max_sell_percentage", 0.20) // Risk management cap (default 20% - matches config)
+	maxPositions := GetIntParam(params, "max_positions", 0)                 // 0 = unlimited
+	_ = minHoldDays                                                         // Reserved for future use
 
 	// Initialize exclusion collector
 	exclusions := NewExclusionCollector(c.Name())
@@ -169,11 +169,55 @@ func (c *ProfitTakingCalculator) Calculate(
 		// Determine if windfall
 		isWindfall := gainPercent >= windfallThreshold
 
+		// Get security tags for quality protection and priority boosting
+		var securityTags []string
+		if c.securityRepo != nil {
+			tags, err := c.securityRepo.GetTagsForSecurity(position.Symbol)
+			if err == nil && len(tags) > 0 {
+				securityTags = tags
+			}
+		}
+
 		// Calculate quantity to sell
 		// Apply both sellPercentage (strategy) and maxSellPercentage (risk management cap)
 		// The effective percentage is the minimum of the two
 		effectiveSellPct := sellPercentage
 		if maxSellPercentage < effectiveSellPct {
+			effectiveSellPct = maxSellPercentage
+		}
+
+		// Quality protection - adjust sell percentage based on position quality
+		qualityScore := CalculateSellQualityScore(ctx, isin, securityTags, config)
+
+		// Apply quality-based adjustment using SellPriorityBoost
+		// SellPriorityBoost > 1 = low quality (sell more)
+		// SellPriorityBoost < 1 = high quality (sell less)
+		// But for windfall gains, we override the high-quality protection
+		if !isWindfall {
+			// Non-windfall: apply full quality adjustment
+			effectiveSellPct *= qualityScore.SellPriorityBoost
+			if qualityScore.IsHighQuality {
+				c.log.Debug().
+					Str("symbol", symbol).
+					Float64("quality_score", qualityScore.QualityScore).
+					Float64("sell_priority_boost", qualityScore.SellPriorityBoost).
+					Float64("gain_percent", gainPercent).
+					Msg("Reduced profit-taking quantity for high-quality position")
+			}
+		} else if qualityScore.HasNegativeTags {
+			// Windfall with negative tags: still boost selling low-quality positions
+			// Apply only the positive boost portion (use max of 1.0 and SellPriorityBoost)
+			if qualityScore.SellPriorityBoost > 1.0 {
+				effectiveSellPct *= qualityScore.SellPriorityBoost
+				c.log.Debug().
+					Str("symbol", symbol).
+					Float64("sell_priority_boost", qualityScore.SellPriorityBoost).
+					Msg("Boosted windfall profit-taking for low-quality position")
+			}
+		}
+
+		// Cap at maxSellPercentage after quality adjustment
+		if effectiveSellPct > maxSellPercentage {
 			effectiveSellPct = maxSellPercentage
 		}
 
@@ -201,15 +245,6 @@ func (c *ProfitTakingCalculator) Calculate(
 		// Apply transaction costs
 		transactionCost := ctx.TransactionCostFixed + (valueEUR * ctx.TransactionCostPercent)
 		netValueEUR := valueEUR - transactionCost
-
-		// Get security tags for priority boosting and reason enhancement
-		var securityTags []string
-		if config.EnableTagFiltering && c.securityRepo != nil {
-			tags, err := c.securityRepo.GetTagsForSecurity(position.Symbol)
-			if err == nil && len(tags) > 0 {
-				securityTags = tags
-			}
-		}
 
 		// Calculate priority with tag-based boosting
 		priority := c.calculatePriority(gainPercent, isWindfall, securityTags, config)

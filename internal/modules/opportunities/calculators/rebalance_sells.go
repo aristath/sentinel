@@ -46,7 +46,7 @@ func (c *RebalanceSellsCalculator) Calculate(
 ) (domain.CalculatorResult, error) {
 	// Parameters with defaults
 	minOverweightThreshold := GetFloatParam(params, "min_overweight_threshold", 0.05) // 5% overweight
-	maxSellPercentage := GetFloatParam(params, "max_sell_percentage", 0.50)           // Risk management cap (default 50%)
+	maxSellPercentage := GetFloatParam(params, "max_sell_percentage", 0.20)           // Risk management cap (default 20% - matches config)
 	maxPositions := GetIntParam(params, "max_positions", 0)                           // 0 = unlimited
 
 	// Initialize exclusion collector
@@ -107,19 +107,22 @@ func (c *RebalanceSellsCalculator) Calculate(
 
 	var candidates []domain.ActionCandidate
 
+	// Group eligible positions by geography
+	positionsByGeography := make(map[string][]domain.EnrichedPosition)
+
 	for _, position := range ctx.EnrichedPositions {
 		isin := position.ISIN
 		symbol := position.Symbol
 		securityName := position.SecurityName
 
 		// Skip if ineligible (ISIN lookup)
-		if ctx.IneligibleISINs[isin] { // ISIN key ✅
+		if ctx.IneligibleISINs[isin] {
 			exclusions.Add(isin, symbol, securityName, "marked as ineligible")
 			continue
 		}
 
 		// Skip if recently sold (ISIN lookup)
-		if ctx.RecentlySoldISINs[isin] { // ISIN key ✅
+		if ctx.RecentlySoldISINs[isin] {
 			exclusions.Add(isin, symbol, securityName, "recently sold (cooling off period)")
 			continue
 		}
@@ -141,26 +144,8 @@ func (c *RebalanceSellsCalculator) Calculate(
 			continue
 		}
 
-		// Check if any of the position's geographies are overweight
-		geos := utils.ParseCSV(geography)
-		var overweight float64
-		var matchedGeo string
-		for _, geo := range geos {
-			if ow, ok := overweightGeographies[geo]; ok {
-				if ow > overweight {
-					overweight = ow
-					matchedGeo = geo
-				}
-			}
-		}
-		if matchedGeo == "" {
-			exclusions.Add(isin, symbol, securityName, "geography not overweight")
-			continue
-		}
-
-		// Current price embedded in position (no lookup needed)
-		currentPrice := position.CurrentPrice
-		if currentPrice <= 0 {
+		// Current price check
+		if position.CurrentPrice <= 0 {
 			c.log.Warn().
 				Str("symbol", symbol).
 				Str("isin", isin).
@@ -169,71 +154,113 @@ func (c *RebalanceSellsCalculator) Calculate(
 			continue
 		}
 
-		// Calculate how much to sell (proportional to overweight)
-		// Start with proportional amount based on how overweight we are
-		sellPercentage := overweight / (overweight + minOverweightThreshold)
-
-		// Cap at maxSellPercentage (risk management limit)
-		if sellPercentage > maxSellPercentage {
-			sellPercentage = maxSellPercentage
+		// Check if any of the position's geographies are overweight and group
+		geos := utils.ParseCSV(geography)
+		for _, geo := range geos {
+			if _, ok := overweightGeographies[geo]; ok {
+				positionsByGeography[geo] = append(positionsByGeography[geo], position)
+			}
 		}
+	}
 
-		quantity := int(float64(position.Quantity) * sellPercentage)
-		if quantity == 0 {
-			quantity = 1
-		}
-
-		// Round quantity to lot size and validate
-		quantity = RoundToLotSize(quantity, position.MinLot)
-		if quantity <= 0 {
-			c.log.Debug().
-				Str("symbol", symbol).
-				Int("min_lot", position.MinLot).
-				Msg("Skipping security: quantity below minimum lot size after rounding")
-			exclusions.Add(isin, symbol, securityName, fmt.Sprintf("quantity below minimum lot size %d", position.MinLot))
+	// Process each overweight geography using the new sell plan calculation
+	for geo, overweight := range overweightGeographies {
+		positions := positionsByGeography[geo]
+		if len(positions) == 0 {
 			continue
 		}
 
-		// Calculate value
-		valueEUR := float64(quantity) * currentPrice
+		// Calculate optimal sell plan for this geography
+		sellPlan, err := CalculateGeographySellPlan(
+			geo,
+			overweight,
+			positions,
+			ctx,
+			maxSellPercentage,
+			c.securityRepo,
+			config,
+		)
+		if err != nil {
+			c.log.Error().Err(err).Str("geography", geo).Msg("Failed to calculate sell plan")
+			continue
+		}
 
-		// Apply transaction costs
-		transactionCost := ctx.TransactionCostFixed + (valueEUR * ctx.TransactionCostPercent)
-		netValueEUR := valueEUR - transactionCost
+		// Create candidates from the sell plan
+		for _, posSell := range sellPlan.PositionSells {
+			// Quality-based protection: check if position should be protected
+			var securityTags []string
+			if c.securityRepo != nil {
+				tags, tagErr := c.securityRepo.GetTagsForSecurity(posSell.Symbol)
+				if tagErr == nil {
+					securityTags = tags
+				}
+			}
 
-		// Priority based on how overweight the country is
-		priority := overweight * 0.5 // Lower priority than profit-taking
+			qualityScore := CalculateSellQualityScore(ctx, posSell.ISIN, securityTags, config)
 
-		// Apply tag-based priority boosts (with regime-aware logic, sell calculator - no quantum penalty)
-		if config.EnableTagFiltering && c.securityRepo != nil {
-			securityTags, err := c.securityRepo.GetTagsForSecurity(position.Symbol)
-			if err == nil && len(securityTags) > 0 {
+			// Protect high-quality positions unless really necessary (overweight > 20%)
+			if qualityScore.IsHighQuality && overweight < 0.20 {
+				c.log.Debug().
+					Str("symbol", posSell.Symbol).
+					Str("isin", posSell.ISIN).
+					Float64("quality_score", qualityScore.QualityScore).
+					Msg("Protected high-quality position from rebalance sell")
+				exclusions.Add(posSell.ISIN, posSell.Symbol, posSell.Name, "protected high-quality position")
+				continue
+			}
+
+			// Calculate net value after transaction costs
+			valueEUR := posSell.SellValueEUR
+			transactionCost := ctx.TransactionCostFixed + (valueEUR * ctx.TransactionCostPercent)
+			netValueEUR := valueEUR - transactionCost
+
+			// Priority based on overweight and quality (low quality = higher priority)
+			priority := overweight * 0.5 * posSell.QualityPriority
+
+			// Apply tag-based priority boosts
+			if config.EnableTagFiltering && len(securityTags) > 0 {
 				priority = ApplyTagBasedPriorityBoosts(priority, securityTags, "rebalance_sells", c.securityRepo)
 			}
+
+			// Find position for currency info
+			var currency string
+			var currentPrice float64
+			for _, pos := range positions {
+				if pos.ISIN == posSell.ISIN {
+					currency = pos.Currency
+					currentPrice = pos.CurrentPrice
+					break
+				}
+			}
+
+			// Build reason with quality info
+			reason := fmt.Sprintf("Rebalance: %s overweight by %.1f%%", geo, overweight*100)
+			if qualityScore.HasNegativeTags {
+				reason += " [Low Quality]"
+			}
+
+			// Build tags
+			tags := []string{"rebalance", "sell", "overweight"}
+			if qualityScore.HasNegativeTags {
+				tags = append(tags, "low_quality")
+			}
+
+			candidate := domain.ActionCandidate{
+				Side:     "SELL",
+				ISIN:     posSell.ISIN,
+				Symbol:   posSell.Symbol,
+				Name:     posSell.Name,
+				Quantity: posSell.SellQuantity,
+				Price:    currentPrice,
+				ValueEUR: netValueEUR,
+				Currency: currency,
+				Priority: priority,
+				Reason:   reason,
+				Tags:     tags,
+			}
+
+			candidates = append(candidates, candidate)
 		}
-
-		// Build reason
-		reason := fmt.Sprintf("Rebalance: %s overweight by %.1f%%",
-			matchedGeo, overweight*100)
-
-		// Build tags
-		tags := []string{"rebalance", "sell", "overweight"}
-
-		candidate := domain.ActionCandidate{
-			Side:     "SELL",
-			ISIN:     isin,         // PRIMARY identifier ✅
-			Symbol:   symbol,       // BOUNDARY identifier
-			Name:     securityName, // Embedded security metadata
-			Quantity: quantity,
-			Price:    position.CurrentPrice,
-			ValueEUR: netValueEUR,
-			Currency: position.Currency, // Embedded from position
-			Priority: priority,
-			Reason:   reason,
-			Tags:     tags,
-		}
-
-		candidates = append(candidates, candidate)
 	}
 
 	// Limit to max positions if specified
