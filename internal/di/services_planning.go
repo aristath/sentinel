@@ -119,11 +119,12 @@ func initializePlanningServices(container *Container, log zerolog.Logger) error 
 	// Builds comprehensive context objects for opportunity calculators, planning, and rebalancing
 	// Context includes positions, securities, allocation, recent trades, scores, settings, regime, cash, prices
 	// Uses ReturnsCalc for unified expected return calculations (same as optimizer)
+	// Note: Repositories are used directly (they implement the service interfaces via Go's structural typing)
 	container.OpportunityContextBuilder = services.NewOpportunityContextBuilder(
-		&ocbPositionRepoAdapter{repo: container.PositionRepo},
-		&ocbSecurityRepoAdapter{repo: container.SecurityRepo},
-		&ocbAllocationRepoAdapter{repo: container.AllocRepo},
-		&ocbTradeRepoAdapter{repo: container.TradeRepo},
+		container.PositionRepo, // Direct use - implements services.PositionRepository
+		container.SecurityRepo, // Direct use - implements services.SecurityRepository
+		container.AllocRepo,    // Direct use - implements services.AllocationRepository
+		container.TradeRepo,    // Direct use - implements services.TradeRepository
 		&ocbScoresRepoAdapter{db: container.PortfolioDB.Conn()},
 		&ocbSettingsRepoAdapter{repo: container.SettingsRepo, configRepo: container.PlannerConfigRepo},
 		&ocbRegimeRepoAdapter{adapter: container.RegimeScoreProvider},

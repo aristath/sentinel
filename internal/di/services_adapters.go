@@ -17,13 +17,11 @@ import (
 	"github.com/aristath/sentinel/internal/domain"
 	"github.com/aristath/sentinel/internal/market_regime"
 	"github.com/aristath/sentinel/internal/modules/adaptation"
-	"github.com/aristath/sentinel/internal/modules/allocation"
 	"github.com/aristath/sentinel/internal/modules/optimization"
 	planningdomain "github.com/aristath/sentinel/internal/modules/planning/domain"
 	planningrepo "github.com/aristath/sentinel/internal/modules/planning/repository"
 	"github.com/aristath/sentinel/internal/modules/portfolio"
 	"github.com/aristath/sentinel/internal/modules/settings"
-	"github.com/aristath/sentinel/internal/modules/trading"
 	"github.com/aristath/sentinel/internal/modules/universe"
 )
 
@@ -249,62 +247,9 @@ func (a *tagSettingsAdapter) GetAdjustedVolatilityParams() universe.VolatilityPa
 // ==========================================
 // Adapters for OpportunityContextBuilder
 // ==========================================
-
-// ocbPositionRepoAdapter adapts portfolio.PositionRepository to services.PositionRepository
-type ocbPositionRepoAdapter struct {
-	repo *portfolio.PositionRepository
-}
-
-func (a *ocbPositionRepoAdapter) GetAll() ([]portfolio.Position, error) {
-	return a.repo.GetAll()
-}
-
-// ocbSecurityRepoAdapter adapts universe.SecurityRepository to services.SecurityRepository
-type ocbSecurityRepoAdapter struct {
-	repo *universe.SecurityRepository
-}
-
-func (a *ocbSecurityRepoAdapter) GetAllActive() ([]universe.Security, error) {
-	return a.repo.GetAllActive()
-}
-
-func (a *ocbSecurityRepoAdapter) GetByISIN(isin string) (*universe.Security, error) {
-	return a.repo.GetByISIN(isin)
-}
-
-func (a *ocbSecurityRepoAdapter) GetBySymbol(symbol string) (*universe.Security, error) {
-	return a.repo.GetBySymbol(symbol)
-}
-
-// ocbAllocationRepoAdapter adapts allocation.Repository to services.AllocationRepository
-type ocbAllocationRepoAdapter struct {
-	repo *allocation.Repository
-}
-
-func (a *ocbAllocationRepoAdapter) GetAll() (map[string]float64, error) {
-	return a.repo.GetAll()
-}
-
-func (a *ocbAllocationRepoAdapter) GetGeographyTargets() (map[string]float64, error) {
-	return a.repo.GetGeographyTargets()
-}
-
-func (a *ocbAllocationRepoAdapter) GetIndustryTargets() (map[string]float64, error) {
-	return a.repo.GetIndustryTargets()
-}
-
-// ocbTradeRepoAdapter adapts trading.TradeRepository to services.TradeRepository
-type ocbTradeRepoAdapter struct {
-	repo *trading.TradeRepository
-}
-
-func (a *ocbTradeRepoAdapter) GetRecentlySoldISINs(days int) (map[string]bool, error) {
-	return a.repo.GetRecentlySoldISINs(days)
-}
-
-func (a *ocbTradeRepoAdapter) GetRecentlyBoughtISINs(days int) (map[string]bool, error) {
-	return a.repo.GetRecentlyBoughtISINs(days)
-}
+// Note: Position, Security, Allocation, and Trade repositories are used directly
+// (they implement the service interfaces via Go's structural typing).
+// Only adapters with actual logic remain below.
 
 // ocbScoresRepoAdapter adapts database to services.ScoresRepository
 // Uses direct database queries like the scheduler adapters
