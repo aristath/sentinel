@@ -3,6 +3,7 @@ package handlers
 import (
 	"testing"
 
+	"github.com/aristath/sentinel/internal/market_regime"
 	"github.com/aristath/sentinel/internal/modules/adaptation"
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog"
@@ -15,7 +16,8 @@ func TestRegisterRoutes(t *testing.T) {
 	defer db.Close()
 
 	adaptiveService := adaptation.NewAdaptiveMarketService(nil, nil, nil, nil, logger)
-	handler := NewHandler(db, adaptiveService, logger)
+	regimePersistence := market_regime.NewRegimePersistence(db, logger)
+	handler := NewHandler(regimePersistence, adaptiveService, logger)
 
 	router := chi.NewRouter()
 

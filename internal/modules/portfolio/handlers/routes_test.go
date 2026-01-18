@@ -1,13 +1,13 @@
 package handlers
 
 import (
-	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/aristath/sentinel/internal/domain"
 	"github.com/aristath/sentinel/internal/modules/portfolio"
+	"github.com/aristath/sentinel/internal/modules/settings"
 	testingpkg "github.com/aristath/sentinel/internal/testing"
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog"
@@ -22,7 +22,7 @@ func TestRegisterRoutes(t *testing.T) {
 	tradernetClient := testingpkg.NewMockBrokerClient()
 	var currencyExchangeService domain.CurrencyExchangeServiceInterface = nil
 	var cashManager domain.CashManager = nil
-	var configDB *sql.DB = nil
+	var settingsRepo *settings.Repository = nil
 
 	// Create handler - we're only testing that RegisterRoutes works, not handler execution
 	handler := NewHandler(
@@ -31,7 +31,7 @@ func TestRegisterRoutes(t *testing.T) {
 		tradernetClient,
 		currencyExchangeService,
 		cashManager,
-		configDB,
+		settingsRepo,
 		zerolog.Nop(),
 	)
 
@@ -99,7 +99,7 @@ func TestRegisterRoutes_RoutePrefix(t *testing.T) {
 	tradernetClient := testingpkg.NewMockBrokerClient()
 	var currencyExchangeService domain.CurrencyExchangeServiceInterface = nil
 	var cashManager domain.CashManager = nil
-	var configDB *sql.DB = nil
+	var settingsRepo *settings.Repository = nil
 
 	handler := NewHandler(
 		positionRepo,
@@ -107,7 +107,7 @@ func TestRegisterRoutes_RoutePrefix(t *testing.T) {
 		tradernetClient,
 		currencyExchangeService,
 		cashManager,
-		configDB,
+		settingsRepo,
 		zerolog.Nop(),
 	)
 

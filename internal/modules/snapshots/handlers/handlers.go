@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/aristath/sentinel/internal/domain"
+	"github.com/aristath/sentinel/internal/market_regime"
 	"github.com/aristath/sentinel/internal/modules/adaptation"
 	"github.com/aristath/sentinel/internal/modules/market_hours"
 	"github.com/aristath/sentinel/internal/modules/portfolio"
@@ -21,7 +22,7 @@ type Handler struct {
 	positionRepo       *portfolio.PositionRepository
 	historyDB          universe.HistoryDBInterface
 	ledgerDB           *sql.DB
-	configDB           *sql.DB
+	regimePersistence  *market_regime.RegimePersistence
 	cashManager        domain.CashManager
 	adaptiveService    *adaptation.AdaptiveMarketService
 	marketHoursService *market_hours.MarketHoursService
@@ -33,7 +34,7 @@ func NewHandler(
 	positionRepo *portfolio.PositionRepository,
 	historyDB universe.HistoryDBInterface,
 	ledgerDB *sql.DB,
-	configDB *sql.DB,
+	regimePersistence *market_regime.RegimePersistence,
 	cashManager domain.CashManager,
 	adaptiveService *adaptation.AdaptiveMarketService,
 	marketHoursService *market_hours.MarketHoursService,
@@ -43,7 +44,7 @@ func NewHandler(
 		positionRepo:       positionRepo,
 		historyDB:          historyDB,
 		ledgerDB:           ledgerDB,
-		configDB:           configDB,
+		regimePersistence:  regimePersistence,
 		cashManager:        cashManager,
 		adaptiveService:    adaptiveService,
 		marketHoursService: marketHoursService,
@@ -63,8 +64,19 @@ func (h *Handler) HandleGetComplete(w http.ResponseWriter, r *http.Request) {
 	// Get market context
 	var smoothedScore float64
 	var discreteRegime string
-	h.configDB.QueryRow(`SELECT smoothed_score, discrete_regime FROM market_regime_history ORDER BY id DESC LIMIT 1`).
-		Scan(&smoothedScore, &discreteRegime)
+	if h.regimePersistence != nil {
+		entry, err := h.regimePersistence.GetLatestEntry()
+		if err == nil && entry != nil {
+			smoothedScore = float64(entry.SmoothedScore)
+			discreteRegime = entry.DiscreteRegime
+		} else {
+			smoothedScore = 0.0
+			discreteRegime = "neutral"
+		}
+	} else {
+		smoothedScore = 0.0
+		discreteRegime = "neutral"
+	}
 
 	isOpen := false
 	status, err := h.marketHoursService.GetMarketStatus("XETRA", time.Now())
@@ -167,14 +179,21 @@ func (h *Handler) HandleGetMarketContext(w http.ResponseWriter, r *http.Request)
 	// Get latest regime score
 	var rawScore, smoothedScore float64
 	var discreteRegime string
-	err := h.configDB.QueryRow(`SELECT raw_score, smoothed_score, discrete_regime
-		FROM market_regime_history ORDER BY id DESC LIMIT 1`).
-		Scan(&rawScore, &smoothedScore, &discreteRegime)
 
-	if err == sql.ErrNoRows {
+	if h.regimePersistence != nil {
+		entry, err := h.regimePersistence.GetLatestEntry()
+		if err != nil {
+			h.log.Warn().Err(err).Msg("Failed to get regime score")
+			rawScore, smoothedScore, discreteRegime = 0.0, 0.0, "neutral"
+		} else if entry == nil {
+			rawScore, smoothedScore, discreteRegime = 0.0, 0.0, "neutral"
+		} else {
+			rawScore = float64(entry.RawScore)
+			smoothedScore = float64(entry.SmoothedScore)
+			discreteRegime = entry.DiscreteRegime
+		}
+	} else {
 		rawScore, smoothedScore, discreteRegime = 0.0, 0.0, "neutral"
-	} else if err != nil {
-		h.log.Warn().Err(err).Msg("Failed to get regime score")
 	}
 
 	// Get adaptive weights

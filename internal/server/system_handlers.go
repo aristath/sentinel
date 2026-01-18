@@ -77,11 +77,12 @@ func NewSystemHandlers(
 	marketHoursService *market_hours.MarketHoursService,
 	marketStatusWS *tradernet.MarketStatusWebSocket,
 	metadataSyncService MetadataSyncService,
+	settingsRepo *settings.Repository,
 ) *SystemHandlers {
 	// Create portfolio performance service
 	portfolioPerf := display.NewPortfolioPerformanceService(
 		portfolioDB.Conn(),
-		configDB.Conn(),
+		settingsRepo,
 		log,
 	)
 

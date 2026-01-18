@@ -2,7 +2,6 @@
 package handlers
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/aristath/sentinel/internal/domain"
 	"github.com/aristath/sentinel/internal/modules/portfolio"
+	"github.com/aristath/sentinel/internal/modules/settings"
 	"github.com/rs/zerolog"
 )
 
@@ -22,7 +22,7 @@ type Handler struct {
 	brokerClient            domain.BrokerClient
 	currencyExchangeService domain.CurrencyExchangeServiceInterface
 	cashManager             domain.CashManager
-	configDB                *sql.DB
+	settingsRepo            *settings.Repository
 	log                     zerolog.Logger
 }
 
@@ -33,7 +33,7 @@ func NewHandler(
 	brokerClient domain.BrokerClient,
 	currencyExchangeService domain.CurrencyExchangeServiceInterface,
 	cashManager domain.CashManager,
-	configDB *sql.DB,
+	settingsRepo *settings.Repository,
 	log zerolog.Logger,
 ) *Handler {
 	return &Handler{
@@ -42,7 +42,7 @@ func NewHandler(
 		brokerClient:            brokerClient,
 		currencyExchangeService: currencyExchangeService,
 		cashManager:             cashManager,
-		configDB:                configDB,
+		settingsRepo:            settingsRepo,
 		log:                     log.With().Str("handler", "portfolio").Logger(),
 	}
 }
@@ -152,7 +152,7 @@ func (h *Handler) HandleGetCashBreakdown(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Add virtual test cash if in research mode
-	h.log.Debug().Bool("configDB_nil", h.configDB == nil).Msg("About to add virtual test cash")
+	h.log.Debug().Bool("settingsRepo_nil", h.settingsRepo == nil).Msg("About to add virtual test cash")
 	if err := h.addVirtualTestCash(cashBalancesMap); err != nil {
 		h.log.Warn().Err(err).Msg("Failed to add virtual test cash to cash breakdown, continuing without it")
 	} else {
@@ -655,21 +655,21 @@ func (h *Handler) writeError(w http.ResponseWriter, status int, message string) 
 // TEST currency is added to cashBalances map, and also added to EUR for AvailableCashEUR calculation
 // This matches the implementation in scheduler/planner_batch.go and rebalancing/service.go
 func (h *Handler) addVirtualTestCash(cashBalances map[string]float64) error {
-	if h.configDB == nil {
-		h.log.Debug().Msg("configDB is nil, skipping virtual test cash")
-		return nil // No config DB available, skip
+	if h.settingsRepo == nil {
+		h.log.Debug().Msg("settingsRepo is nil, skipping virtual test cash")
+		return nil // No settings repository available, skip
 	}
 
 	// Check trading mode - only add test cash in research mode
-	var tradingMode string
-	err := h.configDB.QueryRow("SELECT value FROM settings WHERE key = 'trading_mode'").Scan(&tradingMode)
+	tradingModeValue, err := h.settingsRepo.Get("trading_mode")
 	if err != nil {
-		if err == sql.ErrNoRows {
-			// Default to research mode if not set
-			tradingMode = "research"
-		} else {
-			return fmt.Errorf("failed to get trading mode: %w", err)
-		}
+		return fmt.Errorf("failed to get trading mode: %w", err)
+	}
+
+	// Default to research mode if not set
+	tradingMode := "research"
+	if tradingModeValue != nil {
+		tradingMode = *tradingModeValue
 	}
 
 	// Only add test cash in research mode
@@ -678,22 +678,9 @@ func (h *Handler) addVirtualTestCash(cashBalances map[string]float64) error {
 	}
 
 	// Get virtual_test_cash setting
-	var virtualTestCashStr string
-	var virtualTestCash float64
-	err = h.configDB.QueryRow("SELECT value FROM settings WHERE key = 'virtual_test_cash'").Scan(&virtualTestCashStr)
+	virtualTestCash, err := h.settingsRepo.GetFloat("virtual_test_cash", 0.0)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			// No virtual test cash set, default to 0 so it can be edited in UI
-			virtualTestCash = 0
-		} else {
-			return fmt.Errorf("failed to get virtual_test_cash: %w", err)
-		}
-	} else {
-		// Parse virtual test cash amount
-		_, err = fmt.Sscanf(virtualTestCashStr, "%f", &virtualTestCash)
-		if err != nil {
-			return fmt.Errorf("failed to parse virtual_test_cash: %w", err)
-		}
+		return fmt.Errorf("failed to get virtual_test_cash: %w", err)
 	}
 
 	// Always add TEST currency to cashBalances, even if 0 (so it can be edited in UI)

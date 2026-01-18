@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/aristath/sentinel/internal/market_regime"
 	"github.com/aristath/sentinel/internal/modules/adaptation"
 	"github.com/aristath/sentinel/internal/modules/market_hours"
 	"github.com/aristath/sentinel/internal/modules/portfolio"
@@ -134,11 +135,14 @@ func setupTestHandler(t *testing.T) *Handler {
 	)
 	marketHoursService := market_hours.NewMarketHoursService()
 
+	// Create RegimePersistence instance
+	regimePersistence := market_regime.NewRegimePersistence(configDB, logger)
+
 	return NewHandler(
 		positionRepo,
 		historyDB,
 		ledgerDB,
-		configDB,
+		regimePersistence,
 		cashManager,
 		adaptiveService,
 		marketHoursService,

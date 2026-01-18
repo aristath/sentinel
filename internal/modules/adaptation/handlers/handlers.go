@@ -2,68 +2,67 @@
 package handlers
 
 import (
-	"database/sql"
 	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/aristath/sentinel/internal/market_regime"
 	"github.com/aristath/sentinel/internal/modules/adaptation"
 	"github.com/rs/zerolog"
 )
 
 // Handler handles market regime and adaptation HTTP requests
 type Handler struct {
-	configDB        *sql.DB
-	adaptiveService *adaptation.AdaptiveMarketService
-	log             zerolog.Logger
+	regimePersistence *market_regime.RegimePersistence
+	adaptiveService   *adaptation.AdaptiveMarketService
+	log               zerolog.Logger
 }
 
 // NewHandler creates a new adaptation handler
 func NewHandler(
-	configDB *sql.DB,
+	regimePersistence *market_regime.RegimePersistence,
 	adaptiveService *adaptation.AdaptiveMarketService,
 	log zerolog.Logger,
 ) *Handler {
 	return &Handler{
-		configDB:        configDB,
-		adaptiveService: adaptiveService,
-		log:             log.With().Str("handler", "adaptation").Logger(),
+		regimePersistence: regimePersistence,
+		adaptiveService:   adaptiveService,
+		log:               log.With().Str("handler", "adaptation").Logger(),
 	}
 }
 
 // HandleGetCurrent handles GET /api/adaptation/current
 func (h *Handler) HandleGetCurrent(w http.ResponseWriter, r *http.Request) {
-	// Get latest regime score from history
-	query := `SELECT recorded_at, raw_score, smoothed_score, discrete_regime
-	          FROM market_regime_history
-	          ORDER BY id DESC LIMIT 1`
-
-	var recordedAt int64
 	var rawScore, smoothedScore float64
 	var discreteRegime string
+	var recordedAt time.Time
 
-	err := h.configDB.QueryRow(query).Scan(&recordedAt, &rawScore, &smoothedScore, &discreteRegime)
-	if err == sql.ErrNoRows {
-		// No regime history yet
-		response := map[string]interface{}{
-			"data": map[string]interface{}{
-				"raw_score":       0.0,
-				"smoothed_score":  0.0,
-				"discrete_regime": "neutral",
-				"recorded_at":     time.Now().Format(time.RFC3339),
-			},
-			"metadata": map[string]interface{}{
-				"timestamp": time.Now().Format(time.RFC3339),
-			},
+	if h.regimePersistence != nil {
+		entry, err := h.regimePersistence.GetLatestEntry()
+		if err != nil {
+			h.log.Error().Err(err).Msg("Failed to get current regime score")
+			http.Error(w, "Failed to get current regime score", http.StatusInternalServerError)
+			return
 		}
-		h.writeJSON(w, http.StatusOK, response)
-		return
-	}
-	if err != nil {
-		h.log.Error().Err(err).Msg("Failed to get current regime score")
-		http.Error(w, "Failed to get current regime score", http.StatusInternalServerError)
-		return
+		if entry == nil {
+			// No regime history yet
+			rawScore = 0.0
+			smoothedScore = 0.0
+			discreteRegime = "neutral"
+			recordedAt = time.Now()
+		} else {
+			rawScore = float64(entry.RawScore)
+			smoothedScore = float64(entry.SmoothedScore)
+			discreteRegime = entry.DiscreteRegime
+			recordedAt = entry.RecordedAt
+		}
+	} else {
+		// No regime persistence available
+		rawScore = 0.0
+		smoothedScore = 0.0
+		discreteRegime = "neutral"
+		recordedAt = time.Now()
 	}
 
 	response := map[string]interface{}{
@@ -71,7 +70,7 @@ func (h *Handler) HandleGetCurrent(w http.ResponseWriter, r *http.Request) {
 			"raw_score":       rawScore,
 			"smoothed_score":  smoothedScore,
 			"discrete_regime": discreteRegime,
-			"recorded_at":     time.Unix(recordedAt, 0).Format(time.RFC3339),
+			"recorded_at":     recordedAt.Format(time.RFC3339),
 		},
 		"metadata": map[string]interface{}{
 			"timestamp": time.Now().Format(time.RFC3339),
@@ -91,36 +90,25 @@ func (h *Handler) HandleGetHistory(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	query := `SELECT recorded_at, raw_score, smoothed_score, discrete_regime
-	          FROM market_regime_history
-	          ORDER BY id DESC LIMIT ?`
+	var history []map[string]interface{}
 
-	rows, err := h.configDB.Query(query, limit)
-	if err != nil {
-		h.log.Error().Err(err).Msg("Failed to get regime history")
-		http.Error(w, "Failed to get regime history", http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
-
-	history := make([]map[string]interface{}, 0)
-	for rows.Next() {
-		var recordedAt int64
-		var rawScore, smoothedScore float64
-		var discreteRegime string
-
-		err := rows.Scan(&recordedAt, &rawScore, &smoothedScore, &discreteRegime)
+	if h.regimePersistence != nil {
+		entries, err := h.regimePersistence.GetRegimeHistory(limit)
 		if err != nil {
-			h.log.Error().Err(err).Msg("Failed to scan regime history row")
-			continue
+			h.log.Error().Err(err).Msg("Failed to get regime history")
+			http.Error(w, "Failed to get regime history", http.StatusInternalServerError)
+			return
 		}
 
-		history = append(history, map[string]interface{}{
-			"recorded_at":     time.Unix(recordedAt, 0).Format(time.RFC3339),
-			"raw_score":       rawScore,
-			"smoothed_score":  smoothedScore,
-			"discrete_regime": discreteRegime,
-		})
+		history = make([]map[string]interface{}, 0, len(entries))
+		for _, entry := range entries {
+			history = append(history, map[string]interface{}{
+				"recorded_at":     entry.RecordedAt.Format(time.RFC3339),
+				"raw_score":       float64(entry.RawScore),
+				"smoothed_score":  float64(entry.SmoothedScore),
+				"discrete_regime": entry.DiscreteRegime,
+			})
+		}
 	}
 
 	response := map[string]interface{}{
@@ -140,13 +128,20 @@ func (h *Handler) HandleGetHistory(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) HandleGetAdaptiveWeights(w http.ResponseWriter, r *http.Request) {
 	// Get current regime score
 	var smoothedScore float64
-	err := h.configDB.QueryRow(`SELECT smoothed_score FROM market_regime_history ORDER BY id DESC LIMIT 1`).Scan(&smoothedScore)
-	if err == sql.ErrNoRows {
+	if h.regimePersistence != nil {
+		entry, err := h.regimePersistence.GetLatestEntry()
+		if err != nil {
+			h.log.Error().Err(err).Msg("Failed to get regime score")
+			http.Error(w, "Failed to get regime score", http.StatusInternalServerError)
+			return
+		}
+		if entry != nil {
+			smoothedScore = float64(entry.SmoothedScore)
+		} else {
+			smoothedScore = 0.0 // Default to neutral
+		}
+	} else {
 		smoothedScore = 0.0 // Default to neutral
-	} else if err != nil {
-		h.log.Error().Err(err).Msg("Failed to get regime score")
-		http.Error(w, "Failed to get regime score", http.StatusInternalServerError)
-		return
 	}
 
 	// Calculate adaptive weights
@@ -169,13 +164,20 @@ func (h *Handler) HandleGetAdaptiveWeights(w http.ResponseWriter, r *http.Reques
 func (h *Handler) HandleGetAdaptiveParameters(w http.ResponseWriter, r *http.Request) {
 	// Get current regime score
 	var smoothedScore float64
-	err := h.configDB.QueryRow(`SELECT smoothed_score FROM market_regime_history ORDER BY id DESC LIMIT 1`).Scan(&smoothedScore)
-	if err == sql.ErrNoRows {
+	if h.regimePersistence != nil {
+		entry, err := h.regimePersistence.GetLatestEntry()
+		if err != nil {
+			h.log.Error().Err(err).Msg("Failed to get regime score")
+			http.Error(w, "Failed to get regime score", http.StatusInternalServerError)
+			return
+		}
+		if entry != nil {
+			smoothedScore = float64(entry.SmoothedScore)
+		} else {
+			smoothedScore = 0.0 // Default to neutral
+		}
+	} else {
 		smoothedScore = 0.0 // Default to neutral
-	} else if err != nil {
-		h.log.Error().Err(err).Msg("Failed to get regime score")
-		http.Error(w, "Failed to get regime score", http.StatusInternalServerError)
-		return
 	}
 
 	// Calculate all adaptive parameters
