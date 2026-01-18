@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
 	maindomain "github.com/aristath/sentinel/internal/domain"
 	"github.com/aristath/sentinel/internal/modules/opportunities"
@@ -309,9 +310,35 @@ func (p *Planner) CreatePlanWithDetailedProgress(ctx *domain.OpportunityContext,
 	}, nil
 }
 
+// CacheInterface defines methods needed for caching planner data
+type CacheInterface interface {
+	SetJSON(key string, value interface{}, expiresAt int64) error
+}
+
+// CreatePlanWithCache creates a holistic plan and caches sequences and best-sequence in the provided cache.
+func (p *Planner) CreatePlanWithCache(ctx *domain.OpportunityContext, config *domain.PlannerConfiguration, cache CacheInterface) (*domain.HolisticPlan, error) {
+	if cache == nil {
+		// Fallback to regular CreatePlan if no cache provided
+		return p.CreatePlan(ctx, config)
+	}
+
+	planResult, err := p.CreatePlanWithRejectionsAndCache(ctx, config, nil, cache)
+	if err != nil {
+		return nil, err
+	}
+	return planResult.Plan, nil
+}
+
 // CreatePlanWithRejections creates a holistic trading plan with rejection tracking.
 // The progressCallback is called during sequence generation and evaluation to report progress.
 func (p *Planner) CreatePlanWithRejections(ctx *domain.OpportunityContext, config *domain.PlannerConfiguration, progressCallback progress.Callback) (*PlanResult, error) {
+	return p.CreatePlanWithRejectionsAndCache(ctx, config, progressCallback, nil)
+}
+
+// CreatePlanWithRejectionsAndCache creates a holistic trading plan with rejection tracking and optional caching.
+// The progressCallback is called during sequence generation and evaluation to report progress.
+// If cache is provided, sequences and best-sequence will be cached with 5-minute expiration.
+func (p *Planner) CreatePlanWithRejectionsAndCache(ctx *domain.OpportunityContext, config *domain.PlannerConfiguration, progressCallback progress.Callback, cache CacheInterface) (*PlanResult, error) {
 	p.log.Info().Msg("Creating holistic plan")
 
 	// Apply configuration to context
@@ -346,6 +373,14 @@ func (p *Planner) CreatePlanWithRejections(ctx *domain.OpportunityContext, confi
 	sequences, err := p.sequencesService.GenerateSequences(opportunities, ctx, config, progressCallback)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate sequences: %w", err)
+	}
+
+	// Cache sequences if cache is provided
+	if cache != nil {
+		expiresAt := time.Now().Add(5 * time.Minute).Unix()
+		if err := cache.SetJSON("sequences", sequences, expiresAt); err != nil {
+			p.log.Warn().Err(err).Msg("Failed to cache sequences")
+		}
 	}
 
 	// Track which opportunities are in which sequences
@@ -405,6 +440,15 @@ func (p *Planner) CreatePlanWithRejections(ctx *domain.OpportunityContext, confi
 				PreFilteredSecurities: preFilteredSecurities,
 			}, nil
 		}
+
+		// Cache best-sequence (HolisticPlan) if cache is provided (fallback path)
+		if cache != nil {
+			expiresAt := time.Now().Add(5 * time.Minute).Unix()
+			if err := cache.SetJSON("best-sequence", plan, expiresAt); err != nil {
+				p.log.Warn().Err(err).Msg("Failed to cache best-sequence (fallback path)")
+			}
+		}
+
 		rejected := p.buildRejectedOpportunities(identifiedOpportunitiesList, opportunitiesInSequences, opportunitiesInSelectedSequence, plan)
 		return &PlanResult{
 			Plan:                  plan,
@@ -440,20 +484,7 @@ func (p *Planner) CreatePlanWithRejections(ctx *domain.OpportunityContext, confi
 
 	// Step 5: Select the best sequence (highest score)
 	// All actions are already validated by the generator - no re-filtering needed
-	if len(bestSequences) == 0 {
-		p.log.Info().Msg("No sequences generated")
-		rejected := p.buildRejectedOpportunities(identifiedOpportunitiesList, opportunitiesInSequences, nil, nil)
-		return &PlanResult{
-			Plan: &domain.HolisticPlan{
-				Steps:         []domain.HolisticStep{},
-				CurrentScore:  0.0,
-				EndStateScore: 0.0,
-				Feasible:      true,
-			},
-			RejectedOpportunities: rejected,
-			PreFilteredSecurities: preFilteredSecurities,
-		}, nil
-	}
+	// Note: len(bestSequences) == 0 is already checked above at line 462
 
 	// Take the best sequence (first in sorted list)
 	bestSequence := bestSequences[0]
@@ -465,6 +496,14 @@ func (p *Planner) CreatePlanWithRejections(ctx *domain.OpportunityContext, confi
 		Float64("end_score", bestSequence.Result.EndScore).
 		Float64("improvement", bestSequence.Result.EndScore-bestPlan.CurrentScore).
 		Msg("Selected best sequence")
+
+	// Cache best-sequence (HolisticPlan) if cache is provided
+	if cache != nil {
+		expiresAt := time.Now().Add(5 * time.Minute).Unix()
+		if err := cache.SetJSON("best-sequence", bestPlan, expiresAt); err != nil {
+			p.log.Warn().Err(err).Msg("Failed to cache best-sequence")
+		}
+	}
 
 	// Log top 5 candidates for debugging
 	for i := 0; i < min(5, len(bestSequences)); i++ {

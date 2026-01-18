@@ -105,11 +105,11 @@ func InitializeWork(container *Container, log zerolog.Logger) (*WorkComponents, 
 
 	handlers := work.NewHandlers(processor, registry)
 
-	// Create work cache
+	// Create work cache (still used by dividend work)
 	workCache := newWorkCache()
 
-	// Register planner work types
-	registerPlannerWork(registry, container, workCache, log)
+	// Register planner work types (use SQLite cache from processor, not in-memory workCache)
+	registerPlannerWork(registry, container, cache, log)
 
 	// Register sync work types
 	registerSyncWork(registry, container, log)

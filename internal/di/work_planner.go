@@ -8,6 +8,7 @@ package di
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/aristath/sentinel/internal/events"
@@ -21,7 +22,6 @@ import (
 // Planner adapters - wrap existing planner jobs
 type plannerOptimizerAdapter struct {
 	container *Container
-	cache     *workCache
 	log       zerolog.Logger
 }
 
@@ -41,17 +41,15 @@ func (a *plannerOptimizerAdapter) CalculateWeights(ctx context.Context) (map[str
 
 type plannerContextBuilderAdapter struct {
 	container *Container
-	cache     *workCache
+	cache     *work.Cache // SQLite cache
 }
 
 func (a *plannerContextBuilderAdapter) Build() (interface{}, error) {
 	// Get optimizer weights from cache (set by planner:weights work type)
-	weightsInterface := a.cache.Get("optimizer_weights")
 	var weights map[string]float64
-	if weightsInterface != nil {
-		if w, ok := weightsInterface.(map[string]float64); ok {
-			weights = w
-		}
+	if err := a.cache.GetJSON("optimizer_weights", &weights); err != nil {
+		// Cache miss or expired - use empty weights
+		weights = make(map[string]float64)
 	}
 
 	return a.container.OpportunityContextBuilder.Build(weights)
@@ -59,13 +57,13 @@ func (a *plannerContextBuilderAdapter) Build() (interface{}, error) {
 
 type plannerServiceAdapter struct {
 	container *Container
-	cache     *workCache
+	cache     *work.Cache // SQLite cache for storing sequences/best-sequence
 }
 
 func (a *plannerServiceAdapter) CreatePlan(ctx interface{}) (interface{}, error) {
 	// Get opportunity context from cache
-	opportunityContext := a.cache.Get("opportunity_context")
-	if opportunityContext == nil {
+	var opportunityContext planningdomain.OpportunityContext
+	if err := a.cache.GetJSON("opportunity-context", &opportunityContext); err != nil {
 		return nil, nil
 	}
 
@@ -75,13 +73,9 @@ func (a *plannerServiceAdapter) CreatePlan(ctx interface{}) (interface{}, error)
 		return nil, err
 	}
 
-	// Use the existing planner service with type assertion
-	ctxTyped, ok := opportunityContext.(*planningdomain.OpportunityContext)
-	if !ok {
-		return nil, nil
-	}
-
-	return a.container.PlannerService.CreatePlan(ctxTyped, config)
+	// Call CreatePlanWithCache directly on *planningplanner.Planner
+	// PlannerService is *planningplanner.Planner (not an interface), so we can call CreatePlanWithCache directly
+	return a.container.PlannerService.CreatePlanWithCache(&opportunityContext, config, a.cache)
 }
 
 type plannerRecommendationRepoAdapter struct {
@@ -90,10 +84,23 @@ type plannerRecommendationRepoAdapter struct {
 }
 
 func (a *plannerRecommendationRepoAdapter) Store(recommendations interface{}) error {
-	// Type assert the plan to HolisticPlan
-	plan, ok := recommendations.(*planningdomain.HolisticPlan)
-	if !ok {
-		return fmt.Errorf("invalid plan type: expected *HolisticPlan")
+	// Convert from JSON map (unmarshaled from cache) to *HolisticPlan
+	var plan *planningdomain.HolisticPlan
+	switch v := recommendations.(type) {
+	case *planningdomain.HolisticPlan:
+		plan = v
+	case map[string]interface{}:
+		// Unmarshal from JSON map (cache stores as JSON)
+		jsonData, err := json.Marshal(v)
+		if err != nil {
+			return fmt.Errorf("failed to marshal plan for conversion: %w", err)
+		}
+		plan = &planningdomain.HolisticPlan{}
+		if err := json.Unmarshal(jsonData, plan); err != nil {
+			return fmt.Errorf("failed to unmarshal plan from cache: %w", err)
+		}
+	default:
+		return fmt.Errorf("invalid plan type: expected *HolisticPlan or map[string]interface{}, got %T", v)
 	}
 
 	// Generate portfolio hash for tracking using the hash package
@@ -171,12 +178,12 @@ func (a *plannerEventManagerAdapter) Emit(event string, data interface{}) {
 	a.container.EventManager.Emit(events.JobProgress, event, nil)
 }
 
-func registerPlannerWork(registry *work.Registry, container *Container, cache *workCache, log zerolog.Logger) {
+func registerPlannerWork(registry *work.Registry, container *Container, workCache *work.Cache, log zerolog.Logger) {
 	deps := &work.PlannerDeps{
-		Cache:              cache,
-		OptimizerService:   &plannerOptimizerAdapter{container: container, cache: cache, log: log},
-		ContextBuilder:     &plannerContextBuilderAdapter{container: container, cache: cache},
-		PlannerService:     &plannerServiceAdapter{container: container, cache: cache},
+		Cache:              workCache, // Use SQLite cache instead of in-memory
+		OptimizerService:   &plannerOptimizerAdapter{container: container, log: log},
+		ContextBuilder:     &plannerContextBuilderAdapter{container: container, cache: workCache},
+		PlannerService:     &plannerServiceAdapter{container: container, cache: workCache},
 		RecommendationRepo: &plannerRecommendationRepoAdapter{container: container, log: log},
 		EventManager:       &plannerEventManagerAdapter{container: container},
 	}

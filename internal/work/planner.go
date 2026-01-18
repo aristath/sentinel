@@ -2,17 +2,10 @@ package work
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"time"
 )
-
-// PlannerCache defines the cache interface for planner work types
-type PlannerCache interface {
-	Has(key string) bool
-	Get(key string) interface{}
-	Set(key string, value interface{})
-	Delete(key string)
-	DeletePrefix(prefix string)
-}
 
 // OptimizerServiceInterface defines the optimizer service interface
 type OptimizerServiceInterface interface {
@@ -41,7 +34,7 @@ type EventManagerInterface interface {
 
 // PlannerDeps contains all dependencies for planner work types
 type PlannerDeps struct {
-	Cache              PlannerCache
+	Cache              *Cache // SQLite cache for JSON storage
 	OptimizerService   OptimizerServiceInterface
 	ContextBuilder     OpportunityContextBuilderInterface
 	PlannerService     PlannerServiceInterface
@@ -54,10 +47,12 @@ func RegisterPlannerWorkTypes(registry *Registry, deps *PlannerDeps) {
 	// planner:weights - Calculate optimizer weights
 	registry.Register(&WorkType{
 		ID:           "planner:weights",
+		Interval:     5 * time.Minute, // Run every 5 minutes
 		MarketTiming: AnyTime,
 		FindSubjects: func() []string {
-			if deps.Cache.Has("optimizer_weights") {
-				return nil
+			expiresAt := deps.Cache.GetExpiresAt("optimizer_weights")
+			if expiresAt > 0 && time.Now().Unix() < expiresAt {
+				return nil // Still valid, skip work
 			}
 			return []string{""}
 		},
@@ -77,7 +72,48 @@ func RegisterPlannerWorkTypes(registry *Registry, deps *PlannerDeps) {
 				progress.ReportPhase("completed", fmt.Sprintf("Calculated weights for %d securities", len(weights)))
 			}
 
-			deps.Cache.Set("optimizer_weights", weights)
+			// Marshal new weights to JSON for comparison
+			newWeightsJSON, err := json.Marshal(weights)
+			if err != nil {
+				return fmt.Errorf("failed to marshal weights: %w", err)
+			}
+
+			// Get existing cached weights for comparison
+			var existingWeights map[string]float64
+			err = deps.Cache.GetJSON("optimizer_weights", &existingWeights)
+			if err != nil {
+				// Cache miss or expired - store new weights and delete dependent caches
+				expiresAt := time.Now().Add(5 * time.Minute).Unix()
+				if err := deps.Cache.SetJSON("optimizer_weights", weights, expiresAt); err != nil {
+					return fmt.Errorf("failed to store weights: %w", err)
+				}
+				// Delete dependent caches
+				_ = deps.Cache.Delete("opportunity-context")
+				_ = deps.Cache.Delete("sequences")
+				_ = deps.Cache.Delete("best-sequence")
+			} else {
+				// Compare weights
+				existingWeightsJSON, err := json.Marshal(existingWeights)
+				if err != nil || string(newWeightsJSON) != string(existingWeightsJSON) {
+					// Weights changed - update and delete dependent caches
+					expiresAt := time.Now().Add(5 * time.Minute).Unix()
+					if err := deps.Cache.SetJSON("optimizer_weights", weights, expiresAt); err != nil {
+						return fmt.Errorf("failed to store weights: %w", err)
+					}
+					// Delete dependent caches
+					_ = deps.Cache.Delete("opportunity-context")
+					_ = deps.Cache.Delete("sequences")
+					_ = deps.Cache.Delete("best-sequence")
+				} else {
+					// Weights unchanged - extend expiration of all caches by 5 minutes
+					extension := 5 * time.Minute
+					_ = deps.Cache.ExtendExpiration("optimizer_weights", extension)
+					_ = deps.Cache.ExtendExpiration("opportunity-context", extension)
+					_ = deps.Cache.ExtendExpiration("sequences", extension)
+					_ = deps.Cache.ExtendExpiration("best-sequence", extension)
+				}
+			}
+
 			return nil
 		},
 	})
@@ -88,8 +124,9 @@ func RegisterPlannerWorkTypes(registry *Registry, deps *PlannerDeps) {
 		DependsOn:    []string{"planner:weights"},
 		MarketTiming: AnyTime,
 		FindSubjects: func() []string {
-			if deps.Cache.Has("opportunity_context") {
-				return nil
+			expiresAt := deps.Cache.GetExpiresAt("opportunity-context")
+			if expiresAt > 0 && time.Now().Unix() < expiresAt {
+				return nil // Still valid, skip work
 			}
 			return []string{""}
 		},
@@ -100,7 +137,10 @@ func RegisterPlannerWorkTypes(registry *Registry, deps *PlannerDeps) {
 				return fmt.Errorf("failed to build opportunity context: %w", err)
 			}
 
-			deps.Cache.Set("opportunity_context", opportunityContext)
+			expiresAt := time.Now().Add(5 * time.Minute).Unix()
+			if err := deps.Cache.SetJSON("opportunity-context", opportunityContext, expiresAt); err != nil {
+				return fmt.Errorf("failed to store opportunity context: %w", err)
+			}
 			return nil
 		},
 	})
@@ -111,26 +151,21 @@ func RegisterPlannerWorkTypes(registry *Registry, deps *PlannerDeps) {
 		DependsOn:    []string{"planner:context"},
 		MarketTiming: AnyTime,
 		FindSubjects: func() []string {
-			if deps.Cache.Has("trade_plan") {
-				return nil
+			expiresAt := deps.Cache.GetExpiresAt("best-sequence")
+			if expiresAt > 0 && time.Now().Unix() < expiresAt {
+				return nil // Still valid, skip work
 			}
 			return []string{""}
 		},
 		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
-
-			// Get context from cache
-			opportunityContext := deps.Cache.Get("opportunity_context")
-			if opportunityContext == nil {
-				return fmt.Errorf("opportunity context not found in cache")
-			}
-
-			// Create plan
-			plan, err := deps.PlannerService.CreatePlan(opportunityContext)
+			// Create plan (adapter gets context from cache automatically)
+			// This will cache sequences and best-sequence internally via CreatePlanWithCache
+			_, err := deps.PlannerService.CreatePlan(nil)
 			if err != nil {
 				return fmt.Errorf("failed to create trade plan: %w", err)
 			}
 
-			deps.Cache.Set("trade_plan", plan)
+			// Plan is already cached as "best-sequence" by CreatePlanWithCache, no need to cache again
 			return nil
 		},
 	})
@@ -141,21 +176,23 @@ func RegisterPlannerWorkTypes(registry *Registry, deps *PlannerDeps) {
 		DependsOn:    []string{"planner:plan"},
 		MarketTiming: AnyTime,
 		FindSubjects: func() []string {
-			// This runs whenever there's a trade plan to store
-			if !deps.Cache.Has("trade_plan") {
-				return nil
+			// This runs whenever there's a best-sequence to store
+			expiresAt := deps.Cache.GetExpiresAt("best-sequence")
+			if expiresAt == 0 || time.Now().Unix() >= expiresAt {
+				return nil // No valid plan to store
 			}
 			return []string{""}
 		},
 		Execute: func(ctx context.Context, subject string, progress *ProgressReporter) error {
 
-			// Get plan from cache
-			plan := deps.Cache.Get("trade_plan")
-			if plan == nil {
-				return fmt.Errorf("trade plan not found in cache")
+			// Get plan from cache - unmarshal as interface{} (JSON unmarshals to map[string]interface{})
+			// The adapter receives interface{} and will unmarshal to *HolisticPlan
+			var plan interface{}
+			if err := deps.Cache.GetJSON("best-sequence", &plan); err != nil {
+				return fmt.Errorf("best-sequence not found in cache: %w", err)
 			}
 
-			// Store recommendations
+			// Store recommendations - adapter handles conversion from JSON map to *HolisticPlan
 			err := deps.RecommendationRepo.Store(plan)
 			if err != nil {
 				return fmt.Errorf("failed to store recommendations: %w", err)
@@ -165,7 +202,7 @@ func RegisterPlannerWorkTypes(registry *Registry, deps *PlannerDeps) {
 			deps.EventManager.Emit("RecommendationsReady", nil)
 
 			// Clear cache after successful storage
-			deps.Cache.Delete("trade_plan")
+			_ = deps.Cache.Delete("best-sequence")
 
 			return nil
 		},

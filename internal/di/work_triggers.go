@@ -19,13 +19,11 @@ func registerTriggers(container *Container, processor *work.Processor, workCache
 
 	// StateChanged -> Clear planner cache and trigger
 	bus.Subscribe(events.StateChanged, func(e *events.Event) {
-		cache.DeletePrefix("planner:")
-		cache.DeletePrefix("optimizer_weights")
-		cache.DeletePrefix("opportunity_context")
-		cache.DeletePrefix("trade_plan")
-		if err := workCache.DeleteByPrefix("planner:"); err != nil {
-			log.Warn().Err(err).Msg("Failed to clear planner work cache")
-		}
+		// Clear planner caches from SQLite cache (planner no longer uses in-memory cache)
+		_ = workCache.Delete("optimizer_weights")
+		_ = workCache.Delete("opportunity-context")
+		_ = workCache.Delete("sequences")
+		_ = workCache.Delete("best-sequence")
 		processor.Trigger()
 	})
 
