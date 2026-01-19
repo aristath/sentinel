@@ -295,14 +295,12 @@ func getEnvAsBool(key string, defaultValue bool) bool {
 	return defaultValue
 }
 
-/**
- * loadDeploymentConfig loads deployment configuration with hardcoded defaults.
- *
- * Deployment is enabled by default and uses GitHub Actions artifacts for deployment.
- * This saves 1GB+ disk space by not requiring Go toolchain on the device.
- *
- * @returns *DeploymentConfig - Deployment configuration with defaults
- */
+// loadDeploymentConfig loads deployment configuration with hardcoded defaults.
+//
+// Deployment is enabled by default and uses GitHub Actions artifacts for deployment.
+// This saves 1GB+ disk space by not requiring Go toolchain on the device.
+//
+// Returns *DeploymentConfig - Deployment configuration with defaults
 func loadDeploymentConfig() *DeploymentConfig {
 	return &DeploymentConfig{
 		Enabled:                true, // Enabled by default
