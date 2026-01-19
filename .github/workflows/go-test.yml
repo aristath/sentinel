@@ -51,7 +51,7 @@ jobs:
           - { name: "symbolic-regression", packages: "./internal/modules/symbolic_regression/..." }
           - { name: "trading", packages: "./internal/modules/trading/..." }
           - { name: "universe", packages: "./internal/modules/universe/..." }
-          - { name: "infrastructure", packages: "./internal/queue ./internal/reliability ./internal/scheduler ./internal/services ./internal/ticker ./internal/utils ./pkg/..." }
+          - { name: "infrastructure", packages: "./internal/reliability ./internal/services ./internal/ticker ./internal/utils ./pkg/..." }
 
     steps:
     - uses: actions/checkout@v4

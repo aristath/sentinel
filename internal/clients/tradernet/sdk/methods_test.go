@@ -462,7 +462,7 @@ func TestGetAllSecuritiesBatch_Chunking(t *testing.T) {
 		tickerValue, _ := filterSpec["value"].(string)
 
 		// Count commas to determine number of tickers
-		chunkSize := len(tickerValue) - len(tickerValue) + 1
+		chunkSize := 1
 		for _, c := range tickerValue {
 			if c == ',' {
 				chunkSize++
