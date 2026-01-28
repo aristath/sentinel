@@ -450,7 +450,8 @@ class Planner:
             block_reason = ""
             if price > 0:
                 hist_rows = hist_prices_map.get(symbol, [])
-                historical_prices = [r["close"] for r in hist_rows if r["close"] and r["close"] > 0]
+                sorted_hist = sorted(hist_rows, key=lambda p: p["date"])
+                historical_prices = [r["close"] for r in sorted_hist if r["close"] and r["close"] > 0]
 
                 if historical_prices:
                     allow_trade, reason = check_trade_blocking(price, historical_prices, symbol)
