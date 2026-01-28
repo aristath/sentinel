@@ -15,6 +15,23 @@ MAX_LOG_SIZE=$((10 * 1024 * 1024))
 MAX_LOG_FILES=3
 BRANCH="main"
 
+# SSH multiplexing to prevent connection exhaustion
+# Uses a control socket that auto-closes after 30s idle
+SSH_CONTROL_DIR="/tmp/ssh-deploy-$$"
+SSH_CONTROL_PATH="$SSH_CONTROL_DIR/control-%r@%h:%p"
+export GIT_SSH_COMMAND="ssh -o ControlMaster=auto -o ControlPath=$SSH_CONTROL_PATH -o ControlPersist=30 -o BatchMode=yes"
+
+cleanup_ssh() {
+    # Close any open SSH control connections
+    if [ -d "$SSH_CONTROL_DIR" ]; then
+        for socket in "$SSH_CONTROL_DIR"/control-*; do
+            [ -e "$socket" ] && ssh -o ControlPath="$socket" -O exit _ 2>/dev/null || true
+        done
+        rm -rf "$SSH_CONTROL_DIR"
+    fi
+}
+trap cleanup_ssh EXIT
+
 log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') $1" >> "$LOG_FILE"
 }
@@ -32,7 +49,8 @@ rotate_logs() {
     mv "$LOG_FILE" "$LOG_FILE.1"
 }
 
-mkdir -p "$LOG_DIR"
+mkdir -p "$LOG_DIR" "$SSH_CONTROL_DIR"
+chmod 700 "$SSH_CONTROL_DIR"
 rotate_logs
 cd "$REPO_DIR"
 
