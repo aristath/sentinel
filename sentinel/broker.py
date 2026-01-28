@@ -243,6 +243,8 @@ class Broker:
 
             if response and "result" in response:
                 ps = response["result"].get("ps", {})
+                # Debug: log raw account data
+                logger.info(f"Raw acc data from broker: {ps.get('acc', [])}")
 
                 # Parse positions from ps.pos
                 for pos in ps.get("pos", []):
