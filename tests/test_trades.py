@@ -72,6 +72,8 @@ class TestUpsertTrade:
             broker_trade_id="123",
             symbol="AAPL.US",
             side="BUY",
+            quantity=10.0,
+            price=150.0,
             executed_at="2024-01-15T10:30:00",
             raw_data=raw_data,
         )
@@ -95,6 +97,8 @@ class TestUpsertTrade:
             broker_trade_id="123",
             symbol="AAPL.US",
             side="BUY",
+            quantity=10.0,
+            price=150.0,
             executed_at="2024-01-15T10:30:00",
             raw_data=raw_data1,
         )
@@ -104,6 +108,8 @@ class TestUpsertTrade:
             broker_trade_id="123",
             symbol="AAPL.US",
             side="BUY",
+            quantity=10.0,
+            price=150.0,
             executed_at="2024-01-15T10:31:00",
             raw_data=raw_data2,
         )
@@ -129,6 +135,8 @@ class TestUpsertTrade:
             broker_trade_id="456",
             symbol="MSFT.US",
             side="SELL",
+            quantity=10.0,
+            price=150.0,
             executed_at="2024-01-16T14:00:00",
             raw_data=raw_data,
         )
@@ -151,6 +159,8 @@ class TestGetTrades:
                 broker_trade_id=f"trade_{i}",
                 symbol=f"SYM{i}.US",
                 side="BUY",
+                quantity=10.0,
+                price=150.0,
                 executed_at=f"2024-01-{15 + i:02d}T10:00:00",
                 raw_data={"id": f"trade_{i}"},
             )
@@ -165,6 +175,8 @@ class TestGetTrades:
             broker_trade_id="1",
             symbol="AAPL.US",
             side="BUY",
+            quantity=10.0,
+            price=150.0,
             executed_at="2024-01-15T10:00:00",
             raw_data={"id": "1"},
         )
@@ -172,6 +184,8 @@ class TestGetTrades:
             broker_trade_id="2",
             symbol="MSFT.US",
             side="BUY",
+            quantity=10.0,
+            price=150.0,
             executed_at="2024-01-16T10:00:00",
             raw_data={"id": "2"},
         )
@@ -187,6 +201,8 @@ class TestGetTrades:
             broker_trade_id="1",
             symbol="AAPL.US",
             side="BUY",
+            quantity=10.0,
+            price=150.0,
             executed_at="2024-01-15T10:00:00",
             raw_data={"id": "1"},
         )
@@ -194,6 +210,8 @@ class TestGetTrades:
             broker_trade_id="2",
             symbol="AAPL.US",
             side="SELL",
+            quantity=10.0,
+            price=150.0,
             executed_at="2024-01-16T10:00:00",
             raw_data={"id": "2"},
         )
@@ -213,6 +231,8 @@ class TestGetTrades:
             broker_trade_id="1",
             symbol="AAPL.US",
             side="BUY",
+            quantity=10.0,
+            price=150.0,
             executed_at="2024-01-10T10:00:00",
             raw_data={"id": "1"},
         )
@@ -220,6 +240,8 @@ class TestGetTrades:
             broker_trade_id="2",
             symbol="AAPL.US",
             side="BUY",
+            quantity=10.0,
+            price=150.0,
             executed_at="2024-01-15T10:00:00",
             raw_data={"id": "2"},
         )
@@ -227,6 +249,8 @@ class TestGetTrades:
             broker_trade_id="3",
             symbol="AAPL.US",
             side="BUY",
+            quantity=10.0,
+            price=150.0,
             executed_at="2024-01-20T10:00:00",
             raw_data={"id": "3"},
         )
@@ -252,6 +276,8 @@ class TestGetTrades:
                 broker_trade_id=f"trade_{i:02d}",
                 symbol="AAPL.US",
                 side="BUY",
+                quantity=10.0,
+                price=150.0,
                 executed_at=f"2024-01-{10 + i:02d}T10:00:00",
                 raw_data={"id": f"trade_{i:02d}"},
             )
@@ -277,6 +303,8 @@ class TestGetTrades:
             broker_trade_id="123",
             symbol="AAPL.US",
             side="BUY",
+            quantity=10.0,
+            price=150.0,
             executed_at="2024-01-15T10:00:00",
             raw_data=raw_data,
         )
@@ -294,6 +322,8 @@ class TestGetTrades:
             broker_trade_id="1",
             symbol="AAPL.US",
             side="BUY",
+            quantity=10.0,
+            price=150.0,
             executed_at="2024-01-15T10:00:00",
             raw_data={"id": "1"},
         )
@@ -301,6 +331,8 @@ class TestGetTrades:
             broker_trade_id="2",
             symbol="AAPL.US",
             side="SELL",
+            quantity=10.0,
+            price=150.0,
             executed_at="2024-01-16T10:00:00",
             raw_data={"id": "2"},
         )
@@ -308,6 +340,8 @@ class TestGetTrades:
             broker_trade_id="3",
             symbol="MSFT.US",
             side="BUY",
+            quantity=10.0,
+            price=150.0,
             executed_at="2024-01-15T10:00:00",
             raw_data={"id": "3"},
         )
@@ -329,6 +363,8 @@ class TestGetTradesCount:
                 broker_trade_id=f"trade_{i}",
                 symbol="AAPL.US",
                 side="BUY",
+                quantity=10.0,
+                price=150.0,
                 executed_at=f"2024-01-{15 + i:02d}T10:00:00",
                 raw_data={"id": f"trade_{i}"},
             )
@@ -343,6 +379,8 @@ class TestGetTradesCount:
             broker_trade_id="1",
             symbol="AAPL.US",
             side="BUY",
+            quantity=10.0,
+            price=150.0,
             executed_at="2024-01-15T10:00:00",
             raw_data={"id": "1"},
         )
@@ -350,6 +388,8 @@ class TestGetTradesCount:
             broker_trade_id="2",
             symbol="AAPL.US",
             side="SELL",
+            quantity=10.0,
+            price=150.0,
             executed_at="2024-01-16T10:00:00",
             raw_data={"id": "2"},
         )
@@ -357,6 +397,8 @@ class TestGetTradesCount:
             broker_trade_id="3",
             symbol="MSFT.US",
             side="BUY",
+            quantity=10.0,
+            price=150.0,
             executed_at="2024-01-15T10:00:00",
             raw_data={"id": "3"},
         )
@@ -390,10 +432,10 @@ class TestBrokerGetTradesHistory:
 
         broker = Broker()
 
-        # Mock the API call
+        # Mock the API call - actual API returns {"trades": {"trade": [...]}}
         mock_response = {
-            "result": {
-                "trades": [
+            "trades": {
+                "trade": [
                     {"id": "1", "instr_nm": "AAPL.US", "type": 1, "date": "2024-01-15 10:30:00"},
                     {"id": "2", "instr_nm": "MSFT.US", "type": 2, "date": "2024-01-16 11:00:00"},
                 ]
@@ -416,9 +458,10 @@ class TestBrokerGetTradesHistory:
 
         broker = Broker()
 
+        # Actual API returns {"trades": {"trade": [...]}}
         mock_response = {
-            "result": {
-                "trades": [
+            "trades": {
+                "trade": [
                     {"id": "1", "instr_nm": "AAPL.US", "type": 1, "date": "2024-01-15"},  # type 1 = BUY
                     {"id": "2", "instr_nm": "MSFT.US", "type": 2, "date": "2024-01-16"},  # type 2 = SELL
                 ]
@@ -444,9 +487,10 @@ class TestBrokerGetTradesHistory:
 
         broker = Broker()
 
+        # Actual API returns {"trades": {"trade": [...]}}
         mock_response = {
-            "result": {
-                "trades": [
+            "trades": {
+                "trade": [
                     {"id": "1", "instr_nm": "AAPL.US", "type": 1, "date": "2024-01-15"},
                 ]
             }
@@ -506,6 +550,8 @@ class TestSyncTradesJob:
             broker_trade_id="123",
             symbol="AAPL.US",
             side="BUY",
+            quantity=10.0,
+            price=150.0,
             executed_at="2024-01-15T10:30:00",
             raw_data={"id": "123", "original": True},
         )
@@ -553,6 +599,8 @@ class TestCooloffIntegration:
             broker_trade_id="recent_sell",
             symbol="AAPL.US",
             side="SELL",
+            quantity=10.0,
+            price=150.0,
             executed_at=yesterday,
             raw_data={"id": "recent_sell"},
         )
@@ -576,6 +624,8 @@ class TestCooloffIntegration:
             broker_trade_id="recent_buy",
             symbol="AAPL.US",
             side="BUY",
+            quantity=10.0,
+            price=150.0,
             executed_at=yesterday,
             raw_data={"id": "recent_buy"},
         )
@@ -598,6 +648,8 @@ class TestCooloffIntegration:
             broker_trade_id="old_sell",
             symbol="AAPL.US",
             side="SELL",
+            quantity=10.0,
+            price=150.0,
             executed_at=old_date,
             raw_data={"id": "old_sell"},
         )
@@ -624,6 +676,8 @@ class TestSecurityHasRecentTrade:
             broker_trade_id="recent",
             symbol="AAPL.US",
             side="BUY",
+            quantity=10.0,
+            price=150.0,
             executed_at=now,
             raw_data={"id": "recent"},
         )
@@ -654,6 +708,8 @@ class TestSecurityHasRecentTrade:
             broker_trade_id="old",
             symbol="AAPL.US",
             side="BUY",
+            quantity=10.0,
+            price=150.0,
             executed_at=old_time,
             raw_data={"id": "old"},
         )

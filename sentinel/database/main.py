@@ -882,6 +882,8 @@ class Database(BaseDatabase):
                     broker_trade_id TEXT UNIQUE NOT NULL,
                     symbol TEXT NOT NULL,
                     side TEXT NOT NULL CHECK(side IN ('BUY', 'SELL')),
+                    quantity REAL NOT NULL,
+                    price REAL NOT NULL,
                     executed_at TEXT NOT NULL,
                     raw_data TEXT NOT NULL,
                     FOREIGN KEY (symbol) REFERENCES securities(symbol)
@@ -1011,6 +1013,8 @@ CREATE TABLE IF NOT EXISTS trades (
     broker_trade_id TEXT UNIQUE NOT NULL,
     symbol TEXT NOT NULL,
     side TEXT NOT NULL CHECK(side IN ('BUY', 'SELL')),
+    quantity REAL NOT NULL,
+    price REAL NOT NULL,
     executed_at TEXT NOT NULL,
     raw_data TEXT NOT NULL,
     FOREIGN KEY (symbol) REFERENCES securities(symbol)

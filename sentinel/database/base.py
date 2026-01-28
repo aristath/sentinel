@@ -148,6 +148,8 @@ class BaseDatabase:
         broker_trade_id: str,
         symbol: str,
         side: str,
+        quantity: float,
+        price: float,
         executed_at: str,
         raw_data: dict,
     ) -> int:
@@ -158,6 +160,8 @@ class BaseDatabase:
             broker_trade_id: Unique trade ID from the broker
             symbol: Security symbol
             side: 'BUY' or 'SELL'
+            quantity: Number of shares/units
+            price: Price per share/unit
             executed_at: ISO format datetime string
             raw_data: Full trade data from broker API
 
@@ -167,9 +171,9 @@ class BaseDatabase:
         import json
 
         cursor = await self.conn.execute(
-            """INSERT OR IGNORE INTO trades (broker_trade_id, symbol, side, executed_at, raw_data)
-               VALUES (?, ?, ?, ?, ?)""",
-            (broker_trade_id, symbol, side, executed_at, json.dumps(raw_data)),
+            """INSERT OR IGNORE INTO trades (broker_trade_id, symbol, side, quantity, price, executed_at, raw_data)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (broker_trade_id, symbol, side, quantity, price, executed_at, json.dumps(raw_data)),
         )
         await self.conn.commit()
         return cursor.lastrowid or 0

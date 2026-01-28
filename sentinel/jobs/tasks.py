@@ -117,6 +117,8 @@ async def sync_trades(db, broker) -> None:
         trade_id = str(trade.get("id", ""))
         symbol = trade.get("symbol", trade.get("instr_nm", ""))
         side = trade.get("side", "BUY")
+        quantity = float(trade.get("q", 0))
+        price = float(trade.get("p", 0))
         date_str = trade.get("date", "")
 
         if not trade_id or not symbol:
@@ -129,6 +131,8 @@ async def sync_trades(db, broker) -> None:
             broker_trade_id=trade_id,
             symbol=symbol,
             side=side,
+            quantity=quantity,
+            price=price,
             executed_at=executed_at,
             raw_data=trade,
         )

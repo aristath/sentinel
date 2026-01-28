@@ -365,6 +365,8 @@ class TestTrades:
             broker_trade_id="123",
             symbol="TEST",
             side="BUY",
+            quantity=10.0,
+            price=150.0,
             executed_at="2024-01-15T10:00:00",
             raw_data={"id": "123", "qty": 100, "price": 50.0},
         )
@@ -378,6 +380,8 @@ class TestTrades:
             broker_trade_id="1",
             symbol="TEST",
             side="BUY",
+            quantity=10.0,
+            price=150.0,
             executed_at="2024-01-15T10:00:00",
             raw_data={"id": "1"},
         )
@@ -385,6 +389,8 @@ class TestTrades:
             broker_trade_id="2",
             symbol="TEST",
             side="SELL",
+            quantity=10.0,
+            price=150.0,
             executed_at="2024-01-16T10:00:00",
             raw_data={"id": "2"},
         )
@@ -405,6 +411,8 @@ class TestTrades:
                 broker_trade_id=f"trade_{i}",
                 symbol="TEST",
                 side="BUY",
+                quantity=10.0,
+                price=150.0,
                 executed_at=f"2024-01-{10 + i:02d}T10:00:00",
                 raw_data={"id": f"trade_{i}"},
             )
