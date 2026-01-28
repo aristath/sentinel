@@ -300,6 +300,7 @@ class Broker:
             if price is not None:
                 kwargs["price"] = price
             response = self._trading.buy(symbol, **kwargs)
+            logger.info(f"Buy {symbol} response: {response}")
             return response.get("order_id") if response else None
         except Exception as e:
             logger.error(f"Failed to buy {symbol}: {e}")
@@ -327,6 +328,7 @@ class Broker:
             if price is not None:
                 kwargs["price"] = price
             response = self._trading.sell(symbol, **kwargs)
+            logger.info(f"Sell {symbol} response: {response}")
             return response.get("order_id") if response else None
         except Exception as e:
             logger.error(f"Failed to sell {symbol}: {e}")
