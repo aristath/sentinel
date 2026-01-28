@@ -422,8 +422,9 @@ class Broker:
             )
 
             trades = []
-            if response and "result" in response:
-                raw_trades = response["result"].get("trades", [])
+            if response and "trades" in response:
+                # API returns {"trades": {"trade": [...], "max_trade_id": [...]}}
+                raw_trades = response.get("trades", {}).get("trade", [])
 
                 for trade in raw_trades:
                     # Extract key fields for indexing
