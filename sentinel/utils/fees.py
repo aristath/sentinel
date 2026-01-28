@@ -7,8 +7,6 @@ Usage:
     breakdown = await calculator.calculate_batch(trades)
 """
 
-from typing import Optional
-
 
 class FeeCalculator:
     """Calculates transaction fees for trades."""
@@ -31,6 +29,7 @@ class FeeCalculator:
 
         if self._settings_instance is None:
             from sentinel.settings import Settings
+
             self._settings_instance = Settings()
 
         return self._settings_instance
@@ -43,8 +42,8 @@ class FeeCalculator:
             Tuple of (fixed_fee, percentage_fee_decimal)
         """
         settings = await self._get_settings()
-        fixed_fee = await settings.get('transaction_fee_fixed', 2.0)
-        pct_fee = await settings.get('transaction_fee_percent', 0.2) / 100
+        fixed_fee = await settings.get("transaction_fee_fixed", 2.0)
+        pct_fee = await settings.get("transaction_fee_percent", 0.2) / 100
         return fixed_fee, pct_fee
 
     async def calculate(self, trade_value_eur: float) -> float:
@@ -60,12 +59,7 @@ class FeeCalculator:
         fixed_fee, pct_fee = await self.get_fee_config()
         return fixed_fee + (trade_value_eur * pct_fee)
 
-    def calculate_with_config(
-        self,
-        trade_value_eur: float,
-        fixed_fee: float,
-        pct_fee: float
-    ) -> float:
+    def calculate_with_config(self, trade_value_eur: float, fixed_fee: float, pct_fee: float) -> float:
         """
         Calculate transaction cost using provided fee configuration.
 
@@ -109,13 +103,13 @@ class FeeCalculator:
         total_sell_value = 0.0
 
         for trade in trades:
-            action = trade.get('action', '')
-            value = abs(trade.get('value_eur', 0))
+            action = trade.get("action", "")
+            value = abs(trade.get("value_eur", 0))
 
-            if action == 'buy':
+            if action == "buy":
                 num_buys += 1
                 total_buy_value += value
-            elif action == 'sell':
+            elif action == "sell":
                 num_sells += 1
                 total_sell_value += value
 
@@ -123,11 +117,11 @@ class FeeCalculator:
         sell_fees = num_sells * fixed_fee + total_sell_value * pct_fee
 
         return {
-            'total_fees': buy_fees + sell_fees,
-            'buy_fees': buy_fees,
-            'sell_fees': sell_fees,
-            'num_buys': num_buys,
-            'num_sells': num_sells,
-            'total_buy_value': total_buy_value,
-            'total_sell_value': total_sell_value,
+            "total_fees": buy_fees + sell_fees,
+            "buy_fees": buy_fees,
+            "sell_fees": sell_fees,
+            "num_buys": num_buys,
+            "num_sells": num_sells,
+            "total_buy_value": total_buy_value,
+            "total_sell_value": total_sell_value,
         }

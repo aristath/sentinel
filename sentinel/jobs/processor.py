@@ -7,10 +7,10 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
-from sentinel.jobs.types import Job, MarketTiming
+from sentinel.jobs.market import MarketChecker
 from sentinel.jobs.queue import Queue
 from sentinel.jobs.registry import Registry
-from sentinel.jobs.market import MarketChecker, BrokerMarketChecker
+from sentinel.jobs.types import Job, MarketTiming
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +126,7 @@ class Processor:
                 duration_ms = int((datetime.now() - start).total_seconds() * 1000)
 
                 # Update last_run timestamp (for non-parameterized jobs)
-                if ':' not in job_id or job_id.count(':') == 1:
+                if ":" not in job_id or job_id.count(":") == 1:
                     # Simple job like "sync:portfolio" - update last_run
                     try:
                         await self._db.mark_job_completed(job_type)
@@ -135,9 +135,7 @@ class Processor:
 
                 # Log to history (don't crash if logging fails)
                 try:
-                    await self._db.log_job_execution(
-                        job_id, job_type, 'completed', None, duration_ms, 0
-                    )
+                    await self._db.log_job_execution(job_id, job_type, "completed", None, duration_ms, 0)
                 except Exception as log_err:
                     logger.warning(f"Failed to log job execution: {log_err}")
                 logger.info(f"Job {job_id} completed in {duration_ms}ms")
@@ -146,7 +144,7 @@ class Processor:
                 duration_ms = int(JOB_TIMEOUT.total_seconds() * 1000)
 
                 # Mark job as failed for backoff (simple jobs only)
-                if ':' not in job_id or job_id.count(':') == 1:
+                if ":" not in job_id or job_id.count(":") == 1:
                     try:
                         await self._db.mark_job_failed(job_type)
                     except Exception as e:
@@ -154,7 +152,7 @@ class Processor:
 
                 try:
                     await self._db.log_job_execution(
-                        job_id, job_type, 'failed', 'Job timed out after 15 minutes', duration_ms, 0
+                        job_id, job_type, "failed", "Job timed out after 15 minutes", duration_ms, 0
                     )
                 except Exception as log_err:
                     logger.warning(f"Failed to log job execution: {log_err}")
@@ -164,16 +162,14 @@ class Processor:
                 duration_ms = int((datetime.now() - start).total_seconds() * 1000)
 
                 # Mark job as failed for backoff (simple jobs only)
-                if ':' not in job_id or job_id.count(':') == 1:
+                if ":" not in job_id or job_id.count(":") == 1:
                     try:
                         await self._db.mark_job_failed(job_type)
                     except Exception as mark_err:
                         logger.warning(f"Failed to mark job {job_type} as failed: {mark_err}")
 
                 try:
-                    await self._db.log_job_execution(
-                        job_id, job_type, 'failed', str(e), duration_ms, 0
-                    )
+                    await self._db.log_job_execution(job_id, job_type, "failed", str(e), duration_ms, 0)
                 except Exception as log_err:
                     logger.warning(f"Failed to log job execution: {log_err}")
                 logger.error(f"Job {job_id} failed: {e}")
@@ -198,11 +194,9 @@ class Processor:
             # Check if this dependency is a parameterized job type
             schedule = await self._db.get_job_schedule(dep_type)
 
-            if schedule and schedule.get('is_parameterized'):
+            if schedule and schedule.get("is_parameterized"):
                 # Parameterized dependency - check ALL instances
-                dep_satisfied = await self._check_parameterized_dependency(
-                    schedule, market_open
-                )
+                dep_satisfied = await self._check_parameterized_dependency(schedule, market_open)
                 if not dep_satisfied:
                     all_deps_satisfied = False
             else:
@@ -226,16 +220,16 @@ class Processor:
         """
         from datetime import datetime, timedelta
 
-        job_type = schedule['job_type']
-        param_source = schedule.get('parameter_source')
-        param_field = schedule.get('parameter_field')
+        job_type = schedule["job_type"]
+        param_source = schedule.get("parameter_source")
+        param_field = schedule.get("parameter_field")
 
         if not param_source or not param_field:
             logger.warning(f"Parameterized dep {job_type} missing parameter config")
             return True  # Can't check, assume satisfied
 
         # Get entities
-        source_method = getattr(self._db, f'get_{param_source}', None)
+        source_method = getattr(self._db, f"get_{param_source}", None)
         if not source_method:
             logger.warning(f"Unknown parameter source for dep: {param_source}")
             return True  # Can't check, assume satisfied
@@ -250,9 +244,9 @@ class Processor:
             return True  # No instances to check
 
         # Calculate interval
-        interval_minutes = schedule['interval_minutes']
-        if market_open and schedule.get('interval_market_open_minutes'):
-            interval_minutes = schedule['interval_market_open_minutes']
+        interval_minutes = schedule["interval_minutes"]
+        if market_open and schedule.get("interval_market_open_minutes"):
+            interval_minutes = schedule["interval_market_open_minutes"]
         interval = timedelta(minutes=interval_minutes)
 
         # Check each instance
@@ -261,7 +255,7 @@ class Processor:
             if not param_value:
                 continue
 
-            job_id = f'{job_type}:{param_value}'
+            job_id = f"{job_type}:{param_value}"
 
             # Check if in queue (pending execution)
             if self._queue.contains(job_id):

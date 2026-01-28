@@ -5,6 +5,7 @@ Contains methods that are identical between Database and SimulationDatabase.
 """
 
 from typing import Optional
+
 import aiosqlite
 
 
@@ -26,9 +27,7 @@ class BaseDatabase:
 
     async def get_security(self, symbol: str) -> Optional[dict]:
         """Get a security by symbol."""
-        cursor = await self.conn.execute(
-            "SELECT * FROM securities WHERE symbol = ?", (symbol,)
-        )
+        cursor = await self.conn.execute("SELECT * FROM securities WHERE symbol = ?", (symbol,))
         row = await cursor.fetchone()
         return dict(row) if row else None
 
@@ -47,16 +46,16 @@ class BaseDatabase:
         if existing:
             sets = ", ".join(f"{k} = ?" for k in data.keys())
             await self.conn.execute(
-                f"UPDATE securities SET {sets} WHERE symbol = ?",
-                (*data.values(), symbol)
+                f"UPDATE securities SET {sets} WHERE symbol = ?",  # noqa: S608
+                (*data.values(), symbol),
             )
         else:
-            data['symbol'] = symbol
+            data["symbol"] = symbol
             cols = ", ".join(data.keys())
             placeholders = ", ".join("?" * len(data))
             await self.conn.execute(
-                f"INSERT INTO securities ({cols}) VALUES ({placeholders})",
-                tuple(data.values())
+                f"INSERT INTO securities ({cols}) VALUES ({placeholders})",  # noqa: S608
+                tuple(data.values()),
             )
         await self.conn.commit()
 
@@ -66,9 +65,7 @@ class BaseDatabase:
 
     async def get_position(self, symbol: str) -> Optional[dict]:
         """Get a position by symbol."""
-        cursor = await self.conn.execute(
-            "SELECT * FROM positions WHERE symbol = ?", (symbol,)
-        )
+        cursor = await self.conn.execute("SELECT * FROM positions WHERE symbol = ?", (symbol,))
         row = await cursor.fetchone()
         return dict(row) if row else None
 
@@ -84,16 +81,16 @@ class BaseDatabase:
         if existing:
             sets = ", ".join(f"{k} = ?" for k in data.keys())
             await self.conn.execute(
-                f"UPDATE positions SET {sets} WHERE symbol = ?",
-                (*data.values(), symbol)
+                f"UPDATE positions SET {sets} WHERE symbol = ?",  # noqa: S608
+                (*data.values(), symbol),
             )
         else:
-            data['symbol'] = symbol
+            data["symbol"] = symbol
             cols = ", ".join(data.keys())
             placeholders = ", ".join("?" * len(data))
             await self.conn.execute(
-                f"INSERT INTO positions ({cols}) VALUES ({placeholders})",
-                tuple(data.values())
+                f"INSERT INTO positions ({cols}) VALUES ({placeholders})",  # noqa: S608
+                tuple(data.values()),
             )
         await self.conn.commit()
 
@@ -105,14 +102,14 @@ class BaseDatabase:
         """Get all cash balances as a dictionary of currency -> amount."""
         cursor = await self.conn.execute("SELECT currency, amount FROM cash_balances")
         rows = await cursor.fetchall()
-        return {row['currency']: row['amount'] for row in rows}
+        return {row["currency"]: row["amount"] for row in rows}
 
     async def set_cash_balance(self, currency: str, amount: float) -> None:
         """Set cash balance for a currency."""
         await self.conn.execute(
             """INSERT OR REPLACE INTO cash_balances (currency, amount, updated_at)
                VALUES (?, ?, datetime('now'))""",
-            (currency, amount)
+            (currency, amount),
         )
         await self.conn.commit()
 
@@ -124,7 +121,7 @@ class BaseDatabase:
                 await self.conn.execute(
                     """INSERT INTO cash_balances (currency, amount, updated_at)
                        VALUES (?, ?, datetime('now'))""",
-                    (currency, amount)
+                    (currency, amount),
                 )
         await self.conn.commit()
 

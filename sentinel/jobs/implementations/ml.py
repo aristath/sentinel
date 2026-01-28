@@ -20,8 +20,8 @@ class MLRetrainJob(BaseJob):
 
     def __init__(self, symbol: str, retrainer):
         super().__init__(
-            _id=f'ml:retrain:{symbol}',
-            _job_type='ml:retrain',
+            _id=f"ml:retrain:{symbol}",
+            _job_type="ml:retrain",
             _timeout=timedelta(minutes=30),
             _market_timing=MarketTiming.ALL_MARKETS_CLOSED,
             _subject=symbol,
@@ -52,8 +52,8 @@ class MLMonitorJob(BaseJob):
 
     def __init__(self, symbol: str, monitor):
         super().__init__(
-            _id=f'ml:monitor:{symbol}',
-            _job_type='ml:monitor',
+            _id=f"ml:monitor:{symbol}",
+            _job_type="ml:monitor",
             _timeout=timedelta(minutes=10),
             _market_timing=MarketTiming.ANY_TIME,
             _subject=symbol,
@@ -65,7 +65,7 @@ class MLMonitorJob(BaseJob):
         """Execute ML performance monitoring."""
         result = await self._monitor.track_symbol_performance(self._symbol)
 
-        if result and result.get('predictions_evaluated', 0) > 0:
+        if result and result.get("predictions_evaluated", 0) > 0:
             logger.info(
                 f"ML performance for {self._symbol}: "
                 f"MAE={result.get('mean_absolute_error', 0):.4f}, "
@@ -73,9 +73,7 @@ class MLMonitorJob(BaseJob):
                 f"N={result['predictions_evaluated']}"
             )
 
-            if result.get('drift_detected'):
+            if result.get("drift_detected"):
                 logger.warning(f"ML DRIFT DETECTED for {self._symbol}!")
         else:
-            logger.info(
-                f"ML monitoring for {self._symbol}: no predictions to evaluate"
-            )
+            logger.info(f"ML monitoring for {self._symbol}: no predictions to evaluate")

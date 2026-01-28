@@ -30,6 +30,7 @@ class LEDBridge:
         """
         try:
             from arduino.app_utils import Bridge
+
             self._bridge = Bridge
             self._connected = True
             logger.info("LED Bridge connected to Arduino MCU")

@@ -19,8 +19,8 @@ class CalculateScoresJob(BaseJob):
 
     def __init__(self, analyzer):
         super().__init__(
-            _id='scoring:calculate',
-            _job_type='scoring:calculate',
+            _id="scoring:calculate",
+            _job_type="scoring:calculate",
             _timeout=timedelta(minutes=30),
             _market_timing=MarketTiming.ANY_TIME,
         )

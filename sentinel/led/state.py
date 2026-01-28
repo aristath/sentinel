@@ -18,6 +18,7 @@ class Trade:
         symbol: Security symbol (e.g., "AMD.EU")
         sell_pct: For sells, percentage of position being sold (0-100)
     """
+
     action: str
     amount: float
     symbol: str
@@ -33,7 +34,7 @@ class Trade:
         """
         amount_str = f"${self.amount:,.2f}"
 
-        if self.action == 'SELL':
+        if self.action == "SELL":
             return f"SELL {amount_str} ({int(self.sell_pct)}%) {self.symbol}"
         else:
             return f"BUY {amount_str} {self.symbol}"

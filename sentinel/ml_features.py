@@ -5,10 +5,11 @@ for the ML prediction system. All feature names and their order are defined
 here as the single source of truth.
 """
 
-import pandas as pd
-import numpy as np
-from typing import Dict, List, Optional, Tuple
 import logging
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
+import pandas as pd
 import ta
 
 logger = logging.getLogger(__name__)
@@ -22,25 +23,25 @@ logger = logging.getLogger(__name__)
 # Each security's ML model uses ONLY that security's own data - no cross-contamination
 FEATURE_NAMES: List[str] = [
     # Price & Returns (4 features)
-    'return_1d',
-    'return_5d',
-    'return_20d',
-    'return_60d',
+    "return_1d",
+    "return_5d",
+    "return_20d",
+    "return_60d",
     # Price position (1 feature)
-    'price_normalized',
+    "price_normalized",
     # Volatility (3 features)
-    'volatility_10d',
-    'volatility_30d',
-    'atr_14d',
+    "volatility_10d",
+    "volatility_30d",
+    "atr_14d",
     # Volume (2 features)
-    'volume_normalized',
-    'volume_trend',
+    "volume_normalized",
+    "volume_trend",
     # Technical Indicators (3 features)
-    'rsi_14',
-    'macd',
-    'bollinger_position',
+    "rsi_14",
+    "macd",
+    "bollinger_position",
     # Sentiment (1 feature)
-    'sentiment_score',
+    "sentiment_score",
 ]
 
 # Total number of features (used by ml_ensemble.py)
@@ -48,20 +49,20 @@ NUM_FEATURES = len(FEATURE_NAMES)  # 14
 
 # Default feature values for when data is insufficient
 DEFAULT_FEATURES: Dict[str, float] = {
-    'return_1d': 0.0,
-    'return_5d': 0.0,
-    'return_20d': 0.0,
-    'return_60d': 0.0,
-    'price_normalized': 0.0,
-    'volatility_10d': 0.02,
-    'volatility_30d': 0.02,
-    'atr_14d': 0.02,
-    'volume_normalized': 1.0,
-    'volume_trend': 0.0,
-    'rsi_14': 0.5,
-    'macd': 0.0,
-    'bollinger_position': 0.5,
-    'sentiment_score': 0.5,
+    "return_1d": 0.0,
+    "return_5d": 0.0,
+    "return_20d": 0.0,
+    "return_60d": 0.0,
+    "price_normalized": 0.0,
+    "volatility_10d": 0.02,
+    "volatility_30d": 0.02,
+    "atr_14d": 0.02,
+    "volume_normalized": 1.0,
+    "volume_trend": 0.0,
+    "rsi_14": 0.5,
+    "macd": 0.0,
+    "bollinger_position": 0.5,
+    "sentiment_score": 0.5,
 }
 
 
@@ -90,8 +91,8 @@ def validate_features(features: Dict[str, float]) -> Tuple[Dict[str, float], Lis
         Tuple of (cleaned features dict, list of warnings)
     """
     # Physical constraints: features that have mathematical bounds
-    NON_NEGATIVE = {'volatility_10d', 'volatility_30d', 'atr_14d', 'volume_normalized'}
-    ZERO_TO_ONE = {'rsi_14', 'sentiment_score'}
+    NON_NEGATIVE = {"volatility_10d", "volatility_30d", "atr_14d", "volume_normalized"}
+    ZERO_TO_ONE = {"rsi_14", "sentiment_score"}
 
     cleaned = {}
     warnings = []
@@ -159,123 +160,123 @@ class FeatureExtractor:
             return DEFAULT_FEATURES.copy()
 
         # Ensure data is sorted by date
-        price_data = price_data.sort_values('date').reset_index(drop=True)
+        price_data = price_data.sort_values("date").reset_index(drop=True)
         features = {}
 
         try:
             # =====================================================================
             # Price & Returns (4 features)
             # =====================================================================
-            features['return_1d'] = self._calculate_return(price_data, periods=1)
-            features['return_5d'] = self._calculate_return(price_data, periods=5)
-            features['return_20d'] = self._calculate_return(price_data, periods=20)
-            features['return_60d'] = self._calculate_return(price_data, periods=60)
+            features["return_1d"] = self._calculate_return(price_data, periods=1)
+            features["return_5d"] = self._calculate_return(price_data, periods=5)
+            features["return_20d"] = self._calculate_return(price_data, periods=20)
+            features["return_60d"] = self._calculate_return(price_data, periods=60)
 
             # =====================================================================
             # Price Position (1 feature)
             # =====================================================================
-            current_price = price_data['close'].iloc[-1]
-            ma_200 = price_data['close'].rolling(200).mean().iloc[-1]
+            current_price = price_data["close"].iloc[-1]
+            ma_200 = price_data["close"].rolling(200).mean().iloc[-1]
             if pd.notna(ma_200) and ma_200 > 0:
-                features['price_normalized'] = (current_price - ma_200) / ma_200
+                features["price_normalized"] = (current_price - ma_200) / ma_200
             else:
-                features['price_normalized'] = 0.0
+                features["price_normalized"] = 0.0
 
             # =====================================================================
             # Volatility (3 features)
             # =====================================================================
-            returns = price_data['close'].pct_change()
+            returns = price_data["close"].pct_change()
 
             vol_10 = returns.rolling(10).std().iloc[-1]
-            features['volatility_10d'] = float(vol_10) if pd.notna(vol_10) else 0.02
+            features["volatility_10d"] = float(vol_10) if pd.notna(vol_10) else 0.02
 
             vol_30 = returns.rolling(30).std().iloc[-1]
-            features['volatility_30d'] = float(vol_30) if pd.notna(vol_30) else 0.02
+            features["volatility_30d"] = float(vol_30) if pd.notna(vol_30) else 0.02
 
             # ATR (Average True Range)
-            if 'high' in price_data.columns and 'low' in price_data.columns:
+            if "high" in price_data.columns and "low" in price_data.columns:
                 try:
                     atr_indicator = ta.volatility.AverageTrueRange(
-                        price_data['high'], price_data['low'], price_data['close'], window=14
+                        price_data["high"], price_data["low"], price_data["close"], window=14
                     )
                     atr_value = atr_indicator.average_true_range().iloc[-1]
                     if pd.notna(atr_value) and current_price > 0:
-                        features['atr_14d'] = float(atr_value / current_price)
+                        features["atr_14d"] = float(atr_value / current_price)
                     else:
-                        features['atr_14d'] = 0.02
+                        features["atr_14d"] = 0.02
                 except Exception as e:
                     logger.debug(f"{symbol}: ATR calculation failed: {e}")
-                    features['atr_14d'] = 0.02
+                    features["atr_14d"] = 0.02
             else:
-                features['atr_14d'] = 0.02
+                features["atr_14d"] = 0.02
 
             # =====================================================================
             # Volume (2 features)
             # =====================================================================
-            if 'volume' in price_data.columns and price_data['volume'].notna().any():
-                current_volume = price_data['volume'].iloc[-1]
-                avg_volume_20d = price_data['volume'].rolling(20).mean().iloc[-1]
+            if "volume" in price_data.columns and price_data["volume"].notna().any():  # type: ignore[reportGeneralClassIssues]
+                current_volume = price_data["volume"].iloc[-1]
+                avg_volume_20d = price_data["volume"].rolling(20).mean().iloc[-1]
 
                 if pd.notna(avg_volume_20d) and avg_volume_20d > 0 and pd.notna(current_volume):
-                    features['volume_normalized'] = float(current_volume / avg_volume_20d)
+                    features["volume_normalized"] = float(current_volume / avg_volume_20d)
                 else:
-                    features['volume_normalized'] = 1.0
+                    features["volume_normalized"] = 1.0
 
-                volume_ma_5 = price_data['volume'].rolling(5).mean().iloc[-1]
-                volume_ma_20 = price_data['volume'].rolling(20).mean().iloc[-1]
+                volume_ma_5 = price_data["volume"].rolling(5).mean().iloc[-1]
+                volume_ma_20 = price_data["volume"].rolling(20).mean().iloc[-1]
                 if pd.notna(volume_ma_5) and pd.notna(volume_ma_20) and volume_ma_20 > 0:
-                    features['volume_trend'] = float((volume_ma_5 - volume_ma_20) / volume_ma_20)
+                    features["volume_trend"] = float((volume_ma_5 - volume_ma_20) / volume_ma_20)
                 else:
-                    features['volume_trend'] = 0.0
+                    features["volume_trend"] = 0.0
             else:
-                features['volume_normalized'] = 1.0
-                features['volume_trend'] = 0.0
+                features["volume_normalized"] = 1.0
+                features["volume_trend"] = 0.0
 
             # =====================================================================
             # Technical Indicators (3 features)
             # =====================================================================
             # RSI
             try:
-                rsi_indicator = ta.momentum.RSIIndicator(price_data['close'], window=14)
+                rsi_indicator = ta.momentum.RSIIndicator(price_data["close"], window=14)
                 rsi_value = rsi_indicator.rsi().iloc[-1]
-                features['rsi_14'] = float(rsi_value / 100.0) if pd.notna(rsi_value) else 0.5
+                features["rsi_14"] = float(rsi_value / 100.0) if pd.notna(rsi_value) else 0.5
             except Exception as e:
                 logger.debug(f"{symbol}: RSI calculation failed: {e}")
-                features['rsi_14'] = 0.5
+                features["rsi_14"] = 0.5
 
             # MACD
             try:
-                macd_indicator = ta.trend.MACD(price_data['close'])
+                macd_indicator = ta.trend.MACD(price_data["close"])
                 macd_value = macd_indicator.macd_diff().iloc[-1]
                 if pd.notna(macd_value) and current_price > 0:
                     normalized_macd = np.clip(macd_value / current_price, -0.1, 0.1) / 0.1
-                    features['macd'] = float(normalized_macd)
+                    features["macd"] = float(normalized_macd)
                 else:
-                    features['macd'] = 0.0
+                    features["macd"] = 0.0
             except Exception as e:
                 logger.debug(f"{symbol}: MACD calculation failed: {e}")
-                features['macd'] = 0.0
+                features["macd"] = 0.0
 
             # Bollinger Bands position
             try:
-                bollinger = ta.volatility.BollingerBands(price_data['close'], window=20, window_dev=2)
+                bollinger = ta.volatility.BollingerBands(price_data["close"], window=20, window_dev=2)
                 bb_high = bollinger.bollinger_hband().iloc[-1]
                 bb_low = bollinger.bollinger_lband().iloc[-1]
                 if pd.notna(bb_high) and pd.notna(bb_low) and bb_high > bb_low:
-                    features['bollinger_position'] = float((current_price - bb_low) / (bb_high - bb_low))
+                    features["bollinger_position"] = float((current_price - bb_low) / (bb_high - bb_low))
                 else:
-                    features['bollinger_position'] = 0.5
+                    features["bollinger_position"] = 0.5
             except Exception as e:
                 logger.debug(f"{symbol}: Bollinger calculation failed: {e}")
-                features['bollinger_position'] = 0.5
+                features["bollinger_position"] = 0.5
 
             # =====================================================================
             # Sentiment (1 feature)
             # =====================================================================
             if sentiment_score is not None and pd.notna(sentiment_score):
-                features['sentiment_score'] = float(np.clip(sentiment_score, 0.0, 1.0))
+                features["sentiment_score"] = float(np.clip(sentiment_score, 0.0, 1.0))
             else:
-                features['sentiment_score'] = 0.5  # Default neutral sentiment
+                features["sentiment_score"] = 0.5  # Default neutral sentiment
 
         except Exception as e:
             logger.error(f"{symbol}: Feature extraction failed: {e}", exc_info=True)
@@ -294,8 +295,8 @@ class FeatureExtractor:
             return 0.0
 
         try:
-            current = price_data['close'].iloc[-1]
-            past = price_data['close'].iloc[-(periods + 1)]
+            current = price_data["close"].iloc[-1]
+            past = price_data["close"].iloc[-(periods + 1)]
             if pd.notna(current) and pd.notna(past) and past > 0:
                 return float((current / past) - 1.0)
             return 0.0

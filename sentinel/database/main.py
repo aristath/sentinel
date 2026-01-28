@@ -8,10 +8,12 @@ Usage:
     await db.set_setting('key', 'value')
 """
 
-import aiosqlite
+import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
-import json
+
+import aiosqlite
 
 from sentinel.database.base import BaseDatabase
 
@@ -19,7 +21,7 @@ from sentinel.database.base import BaseDatabase
 class Database(BaseDatabase):
     """Single source of truth for all database operations."""
 
-    _instances: dict[str, 'Database'] = {}  # path -> instance
+    _instances: dict[str, "Database"] = {}  # path -> instance
     _default_path: str = None
 
     def __new__(cls, path: str = None):
@@ -31,7 +33,7 @@ class Database(BaseDatabase):
         """
         if path is None:
             if cls._default_path is None:
-                cls._default_path = str(Path(__file__).parent.parent / 'data' / 'sentinel.db')
+                cls._default_path = str(Path(__file__).parent.parent / "data" / "sentinel.db")
             path = cls._default_path
 
         if path not in cls._instances:
@@ -46,7 +48,7 @@ class Database(BaseDatabase):
         # Path is already set in __new__, nothing to do here
         pass
 
-    async def connect(self) -> 'Database':
+    async def connect(self) -> "Database":
         """Connect to database and initialize schema."""
         if self._connection is None:
             self._path.parent.mkdir(parents=True, exist_ok=True)
@@ -75,24 +77,19 @@ class Database(BaseDatabase):
 
     async def get_setting(self, key: str, default: Any = None) -> Any:
         """Get a setting value by key."""
-        cursor = await self.conn.execute(
-            "SELECT value FROM settings WHERE key = ?", (key,)
-        )
+        cursor = await self.conn.execute("SELECT value FROM settings WHERE key = ?", (key,))
         row = await cursor.fetchone()
         if row is None:
             return default
         try:
-            return json.loads(row['value'])
+            return json.loads(row["value"])
         except (json.JSONDecodeError, TypeError):
-            return row['value']
+            return row["value"]
 
     async def set_setting(self, key: str, value: Any) -> None:
         """Set a setting value."""
         json_value = json.dumps(value) if not isinstance(value, str) else value
-        await self.conn.execute(
-            "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
-            (key, json_value)
-        )
+        await self.conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, json_value))
         await self.conn.commit()
 
     async def get_all_settings(self) -> dict:
@@ -102,9 +99,9 @@ class Database(BaseDatabase):
         result = {}
         for row in rows:
             try:
-                result[row['key']] = json.loads(row['value'])
+                result[row["key"]] = json.loads(row["value"])
             except (json.JSONDecodeError, TypeError):
-                result[row['key']] = row['value']
+                result[row["key"]] = row["value"]
         return result
 
     # -------------------------------------------------------------------------
@@ -114,20 +111,22 @@ class Database(BaseDatabase):
     async def update_quote_data(self, symbol: str, quote_data: dict) -> None:
         """Update quote data for a security."""
         import time
+
         await self.conn.execute(
             "UPDATE securities SET quote_data = ?, quote_updated_at = ? WHERE symbol = ?",
-            (json.dumps(quote_data), int(time.time()), symbol)
+            (json.dumps(quote_data), int(time.time()), symbol),
         )
         await self.conn.commit()
 
     async def update_quotes_bulk(self, quotes: dict[str, dict]) -> None:
         """Update quote data for multiple securities."""
         import time
+
         now = int(time.time())
         for symbol, quote_data in quotes.items():
             await self.conn.execute(
                 "UPDATE securities SET quote_data = ?, quote_updated_at = ? WHERE symbol = ?",
-                (json.dumps(quote_data), now, symbol)
+                (json.dumps(quote_data), now, symbol),
             )
         await self.conn.commit()
 
@@ -142,8 +141,15 @@ class Database(BaseDatabase):
                 """INSERT OR REPLACE INTO prices
                    (symbol, date, open, high, low, close, volume)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (symbol, price['date'], price.get('open'), price.get('high'),
-                 price.get('low'), price['close'], price.get('volume'))
+                (
+                    symbol,
+                    price["date"],
+                    price.get("open"),
+                    price.get("high"),
+                    price.get("low"),
+                    price["close"],
+                    price.get("volume"),
+                ),
             )
         await self.conn.commit()
 
@@ -154,8 +160,15 @@ class Database(BaseDatabase):
                 """INSERT OR REPLACE INTO prices
                    (symbol, date, open, high, low, close, volume)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (symbol, price['date'], price.get('open'), price.get('high'),
-                 price.get('low'), price['close'], price.get('volume'))
+                (
+                    symbol,
+                    price["date"],
+                    price.get("open"),
+                    price.get("high"),
+                    price.get("low"),
+                    price["close"],
+                    price.get("volume"),
+                ),
             )
         await self.conn.commit()
 
@@ -172,7 +185,7 @@ class Database(BaseDatabase):
         if not symbols:
             return {}
 
-        placeholders = ','.join('?' * len(symbols))
+        placeholders = ",".join("?" * len(symbols))
 
         if days:
             # Use window function to get top N rows per symbol
@@ -185,14 +198,14 @@ class Database(BaseDatabase):
                 )
                 WHERE rn <= ?
                 ORDER BY symbol, date DESC
-            """
+            """  # noqa: S608
             params = [*symbols, days]
         else:
             query = f"""
                 SELECT * FROM prices
                 WHERE symbol IN ({placeholders})
                 ORDER BY symbol, date DESC
-            """
+            """  # noqa: S608
             params = symbols
 
         cursor = await self.conn.execute(query, params)
@@ -202,8 +215,8 @@ class Database(BaseDatabase):
         result = {s: [] for s in symbols}
         for row in rows:
             row_dict = dict(row)
-            row_dict.pop('rn', None)  # Remove window function column if present
-            result[row['symbol']].append(row_dict)
+            row_dict.pop("rn", None)  # Remove window function column if present
+            result[row["symbol"]].append(row_dict)
 
         return result
 
@@ -211,13 +224,12 @@ class Database(BaseDatabase):
     # Trades (extended methods beyond BaseDatabase)
     # -------------------------------------------------------------------------
 
-    async def record_trade(self, symbol: str, side: str, quantity: float,
-                          price: float, **extra) -> int:
+    async def record_trade(self, symbol: str, side: str, quantity: float, price: float, **extra) -> int:
         """Record a trade."""
         cursor = await self.conn.execute(
             """INSERT INTO trades (symbol, side, quantity, price, executed_at)
                VALUES (?, ?, ?, ?, datetime('now'))""",
-            (symbol, side, quantity, price)
+            (symbol, side, quantity, price),
         )
         await self.conn.commit()
         return cursor.lastrowid
@@ -231,16 +243,13 @@ class Database(BaseDatabase):
         await self.conn.execute(
             """INSERT OR REPLACE INTO allocation_targets (type, name, weight)
                VALUES (?, ?, ?)""",
-            (target_type, name, weight)
+            (target_type, name, weight),
         )
         await self.conn.commit()
 
     async def delete_allocation_target(self, target_type: str, name: str) -> None:
         """Delete an allocation target."""
-        await self.conn.execute(
-            "DELETE FROM allocation_targets WHERE type = ? AND name = ?",
-            (target_type, name)
-        )
+        await self.conn.execute("DELETE FROM allocation_targets WHERE type = ? AND name = ?", (target_type, name))
         await self.conn.commit()
 
     # -------------------------------------------------------------------------
@@ -250,30 +259,28 @@ class Database(BaseDatabase):
     async def cache_get(self, key: str) -> Optional[str]:
         """Get a cached value by key. Returns None if not found or expired."""
         import time
-        cursor = await self.conn.execute(
-            "SELECT value, expires_at FROM cache WHERE key = ?",
-            (key,)
-        )
+
+        cursor = await self.conn.execute("SELECT value, expires_at FROM cache WHERE key = ?", (key,))
         row = await cursor.fetchone()
         if not row:
             return None
 
         # Check expiry
-        if row['expires_at'] is not None and row['expires_at'] < int(time.time()):
+        if row["expires_at"] is not None and row["expires_at"] < int(time.time()):
             # Expired - delete and return None
             await self.conn.execute("DELETE FROM cache WHERE key = ?", (key,))
             await self.conn.commit()
             return None
 
-        return row['value']
+        return row["value"]
 
     async def cache_set(self, key: str, value: str, ttl_seconds: int = None) -> None:
         """Set a cached value. TTL is optional (None = never expires)."""
         import time
+
         expires_at = int(time.time()) + ttl_seconds if ttl_seconds else None
         await self.conn.execute(
-            "INSERT OR REPLACE INTO cache (key, value, expires_at) VALUES (?, ?, ?)",
-            (key, value, expires_at)
+            "INSERT OR REPLACE INTO cache (key, value, expires_at) VALUES (?, ?, ?)", (key, value, expires_at)
         )
         await self.conn.commit()
 
@@ -285,10 +292,7 @@ class Database(BaseDatabase):
     async def cache_clear(self, prefix: str = None) -> int:
         """Clear cache entries. If prefix given, only clear keys starting with it."""
         if prefix:
-            cursor = await self.conn.execute(
-                "DELETE FROM cache WHERE key LIKE ?",
-                (f"{prefix}%",)
-            )
+            cursor = await self.conn.execute("DELETE FROM cache WHERE key LIKE ?", (f"{prefix}%",))
         else:
             cursor = await self.conn.execute("DELETE FROM cache")
         await self.conn.commit()
@@ -297,9 +301,9 @@ class Database(BaseDatabase):
     async def cache_cleanup_expired(self) -> int:
         """Remove all expired cache entries."""
         import time
+
         cursor = await self.conn.execute(
-            "DELETE FROM cache WHERE expires_at IS NOT NULL AND expires_at < ?",
-            (int(time.time()),)
+            "DELETE FROM cache WHERE expires_at IS NOT NULL AND expires_at < ?", (int(time.time()),)
         )
         await self.conn.commit()
         return cursor.rowcount
@@ -311,6 +315,7 @@ class Database(BaseDatabase):
     async def update_security_metadata(self, symbol: str, data: dict, market_id: str = None) -> None:
         """Update security with raw Tradernet metadata."""
         import json
+
         updates = ["data = ?", "last_synced = datetime('now')"]
         params = [json.dumps(data)]
 
@@ -319,15 +324,12 @@ class Database(BaseDatabase):
             params.append(market_id)
 
         # Extract useful fields from data
-        if 'lot' in data:
+        if "lot" in data:
             updates.append("min_lot = ?")
-            params.append(int(float(data['lot'])))
+            params.append(int(float(data["lot"])))
 
         params.append(symbol)
-        await self.conn.execute(
-            f"UPDATE securities SET {', '.join(updates)} WHERE symbol = ?",
-            params
-        )
+        await self.conn.execute(f"UPDATE securities SET {', '.join(updates)} WHERE symbol = ?", params)  # noqa: S608
         await self.conn.commit()
 
     # -------------------------------------------------------------------------
@@ -352,7 +354,7 @@ class Database(BaseDatabase):
         )
         rows = await cursor.fetchall()
         for row in rows:
-            for val in row['geography'].split(','):
+            for val in row["geography"].split(","):
                 val = val.strip()
                 if val:
                     geographies.add(val)
@@ -363,14 +365,14 @@ class Database(BaseDatabase):
         )
         rows = await cursor.fetchall()
         for row in rows:
-            for val in row['industry'].split(','):
+            for val in row["industry"].split(","):
                 val = val.strip()
                 if val:
                     industries.add(val)
 
         return {
-            'geographies': list(geographies),
-            'industries': list(industries),
+            "geographies": list(geographies),
+            "industries": list(industries),
         }
 
     # -------------------------------------------------------------------------
@@ -393,42 +395,37 @@ class Database(BaseDatabase):
             """INSERT INTO job_history
                (job_id, job_type, status, error, duration_ms, executed_at, retry_count)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (job_id, job_type, status, error, duration_ms,
-             int(datetime.now().timestamp()), retry_count)
+            (job_id, job_type, status, error, duration_ms, int(datetime.now().timestamp()), retry_count),
         )
         await self.conn.commit()
 
-    async def get_last_job_completion(self, job_type: str) -> Optional['datetime']:
+    async def get_last_job_completion(self, job_type: str) -> Optional[datetime]:
         """Get the timestamp of the last successful completion for a job type."""
-        from datetime import datetime
-
         cursor = await self.conn.execute(
             """SELECT executed_at FROM job_history
                WHERE job_type = ? AND status = 'completed'
                ORDER BY executed_at DESC LIMIT 1""",
-            (job_type,)
+            (job_type,),
         )
         row = await cursor.fetchone()
         if row:
-            return datetime.fromtimestamp(row['executed_at'])
+            return datetime.fromtimestamp(row["executed_at"])
         return None
 
-    async def get_last_job_completion_by_id(self, job_id: str) -> Optional['datetime']:
+    async def get_last_job_completion_by_id(self, job_id: str) -> Optional[datetime]:
         """Get the timestamp of the last successful completion for a specific job ID.
 
         Use this for parameterized jobs like ML jobs where job_id includes the symbol.
         """
-        from datetime import datetime
-
         cursor = await self.conn.execute(
             """SELECT executed_at FROM job_history
                WHERE job_id = ? AND status = 'completed'
                ORDER BY executed_at DESC LIMIT 1""",
-            (job_id,)
+            (job_id,),
         )
         row = await cursor.fetchone()
         if row:
-            return datetime.fromtimestamp(row['executed_at'])
+            return datetime.fromtimestamp(row["executed_at"])
         return None
 
     async def is_job_completed(self, job_id: str) -> bool:
@@ -436,7 +433,7 @@ class Database(BaseDatabase):
         cursor = await self.conn.execute(
             """SELECT 1 FROM job_history
                WHERE job_id = ? AND status = 'completed' LIMIT 1""",
-            (job_id,)
+            (job_id,),
         )
         return await cursor.fetchone() is not None
 
@@ -447,16 +444,14 @@ class Database(BaseDatabase):
                       executed_at, retry_count
                FROM job_history
                ORDER BY executed_at DESC LIMIT ?""",
-            (limit,)
+            (limit,),
         )
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
 
     async def get_ml_enabled_securities(self) -> list[dict]:
         """Get securities with ML enabled."""
-        cursor = await self.conn.execute(
-            "SELECT symbol FROM securities WHERE ml_enabled = 1 AND active = 1"
-        )
+        cursor = await self.conn.execute("SELECT symbol FROM securities WHERE ml_enabled = 1 AND active = 1")
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
 
@@ -466,9 +461,7 @@ class Database(BaseDatabase):
 
     async def get_job_schedules(self) -> list[dict]:
         """Get all job schedules."""
-        cursor = await self.conn.execute(
-            "SELECT * FROM job_schedules ORDER BY category, job_type"
-        )
+        cursor = await self.conn.execute("SELECT * FROM job_schedules ORDER BY category, job_type")
         return [dict(row) for row in await cursor.fetchall()]
 
     async def is_job_expired(self, job_type: str, market_open: bool = False) -> bool:
@@ -483,28 +476,27 @@ class Database(BaseDatabase):
         - failures < 3: use exponential backoff (2^failures minutes)
         - failures >= 3: use normal interval (stop aggressive retries)
         """
-        from datetime import datetime
-
         cursor = await self.conn.execute(
-            "SELECT last_run, interval_minutes, interval_market_open_minutes, consecutive_failures FROM job_schedules WHERE job_type = ?",
-            (job_type,)
+            "SELECT last_run, interval_minutes, interval_market_open_minutes, consecutive_failures"
+            " FROM job_schedules WHERE job_type = ?",
+            (job_type,),
         )
         row = await cursor.fetchone()
         if row is None:
             return False  # Unknown job
 
-        last_run = row['last_run'] or 0
-        consecutive_failures = row['consecutive_failures'] or 0
+        last_run = row["last_run"] or 0
+        consecutive_failures = row["consecutive_failures"] or 0
 
         # Determine interval based on failure count
         if 0 < consecutive_failures < 3:
             # Exponential backoff: 2^failures minutes (2, 4 minutes)
-            interval = 2 ** consecutive_failures
+            interval = 2**consecutive_failures
         else:
             # Normal interval (no failures, or >= 3 failures)
-            interval = row['interval_minutes']
-            if market_open and row['interval_market_open_minutes']:
-                interval = row['interval_market_open_minutes']
+            interval = row["interval_minutes"]
+            if market_open and row["interval_market_open_minutes"]:
+                interval = row["interval_market_open_minutes"]
 
         if last_run == 0:
             return True  # Never run or forced = expired
@@ -516,10 +508,7 @@ class Database(BaseDatabase):
         Set the last run timestamp for a job.
         Used to force a job to run by setting timestamp to 0.
         """
-        await self.conn.execute(
-            "UPDATE job_schedules SET last_run = ? WHERE job_type = ?",
-            (timestamp, job_type)
-        )
+        await self.conn.execute("UPDATE job_schedules SET last_run = ? WHERE job_type = ?", (timestamp, job_type))
         await self.conn.commit()
 
     async def mark_job_completed(self, job_type: str) -> None:
@@ -528,8 +517,7 @@ class Database(BaseDatabase):
 
         now = int(datetime.now().timestamp())
         await self.conn.execute(
-            "UPDATE job_schedules SET last_run = ?, consecutive_failures = 0 WHERE job_type = ?",
-            (now, job_type)
+            "UPDATE job_schedules SET last_run = ?, consecutive_failures = 0 WHERE job_type = ?", (now, job_type)
         )
         await self.conn.commit()
 
@@ -540,16 +528,13 @@ class Database(BaseDatabase):
         now = int(datetime.now().timestamp())
         await self.conn.execute(
             "UPDATE job_schedules SET last_run = ?, consecutive_failures = consecutive_failures + 1 WHERE job_type = ?",
-            (now, job_type)
+            (now, job_type),
         )
         await self.conn.commit()
 
     async def get_job_schedule(self, job_type: str) -> Optional[dict]:
         """Get a single job schedule by type."""
-        cursor = await self.conn.execute(
-            "SELECT * FROM job_schedules WHERE job_type = ?",
-            (job_type,)
-        )
+        cursor = await self.conn.execute("SELECT * FROM job_schedules WHERE job_type = ?", (job_type,))
         row = await cursor.fetchone()
         return dict(row) if row else None
 
@@ -613,8 +598,8 @@ class Database(BaseDatabase):
             params.append(job_type)
 
             await self.conn.execute(
-                f"UPDATE job_schedules SET {', '.join(updates)} WHERE job_type = ?",
-                params
+                f"UPDATE job_schedules SET {', '.join(updates)} WHERE job_type = ?",  # noqa: S608
+                params,
             )
         else:
             await self.conn.execute(
@@ -624,11 +609,21 @@ class Database(BaseDatabase):
                     is_parameterized, parameter_source, parameter_field,
                     created_at, updated_at)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (job_type, 1 if enabled else 0 if enabled is not None else 1,
-                 interval_minutes or 60, interval_market_open_minutes,
-                 market_timing or 0, dependencies or '[]', description, category,
-                 1 if is_parameterized else 0, parameter_source, parameter_field,
-                 now, now)
+                (
+                    job_type,
+                    1 if enabled else 0 if enabled is not None else 1,
+                    interval_minutes or 60,
+                    interval_market_open_minutes,
+                    market_timing or 0,
+                    dependencies or "[]",
+                    description,
+                    category,
+                    1 if is_parameterized else 0,
+                    parameter_source,
+                    parameter_field,
+                    now,
+                    now,
+                ),
             )
         await self.conn.commit()
 
@@ -640,24 +635,25 @@ class Database(BaseDatabase):
             return
 
         from datetime import datetime
+
         now = int(datetime.now().timestamp())
 
         # Default job schedules
         # (job_type, interval, interval_open, timing, category, description, is_param, param_source, param_field)
         defaults = [
-            ('sync:portfolio', 30, 5, 0, 'sync', 'Sync portfolio positions from broker', False, None, None),
-            ('sync:prices', 30, 5, 0, 'sync', 'Sync historical prices for securities', False, None, None),
-            ('sync:quotes', 1440, 1440, 0, 'sync', 'Sync current quotes', False, None, None),
-            ('sync:metadata', 1440, 1440, 0, 'sync', 'Sync security metadata', False, None, None),
-            ('sync:exchange_rates', 60, 60, 0, 'sync', 'Sync exchange rates', False, None, None),
-            ('scoring:calculate', 1440, 1440, 0, 'scoring', 'Calculate security scores', False, None, None),
-            ('analytics:regime', 10080, 10080, 3, 'analytics', 'Train regime detection model', False, None, None),
-            ('trading:check_markets', 30, 30, 2, 'trading', 'Check which markets are open', False, None, None),
-            ('trading:execute', 30, 15, 2, 'trading', 'Execute pending trade recommendations', False, None, None),
-            ('planning:refresh', 60, 30, 0, 'trading', 'Refresh trading plan and recommendations', False, None, None),
-            ('ml:retrain', 10080, 10080, 3, 'ml', 'Retrain ML models', True, 'ml_enabled_securities', 'symbol'),
-            ('ml:monitor', 10080, 10080, 0, 'ml', 'Monitor ML performance', True, 'ml_enabled_securities', 'symbol'),
-            ('backup:r2', 1440, 1440, 0, 'backup', 'Backup data folder to Cloudflare R2', False, None, None),
+            ("sync:portfolio", 30, 5, 0, "sync", "Sync portfolio positions from broker", False, None, None),
+            ("sync:prices", 30, 5, 0, "sync", "Sync historical prices for securities", False, None, None),
+            ("sync:quotes", 1440, 1440, 0, "sync", "Sync current quotes", False, None, None),
+            ("sync:metadata", 1440, 1440, 0, "sync", "Sync security metadata", False, None, None),
+            ("sync:exchange_rates", 60, 60, 0, "sync", "Sync exchange rates", False, None, None),
+            ("scoring:calculate", 1440, 1440, 0, "scoring", "Calculate security scores", False, None, None),
+            ("analytics:regime", 10080, 10080, 3, "analytics", "Train regime detection model", False, None, None),
+            ("trading:check_markets", 30, 30, 2, "trading", "Check which markets are open", False, None, None),
+            ("trading:execute", 30, 15, 2, "trading", "Execute pending trade recommendations", False, None, None),
+            ("planning:refresh", 60, 30, 0, "trading", "Refresh trading plan and recommendations", False, None, None),
+            ("ml:retrain", 10080, 10080, 3, "ml", "Retrain ML models", True, "ml_enabled_securities", "symbol"),
+            ("ml:monitor", 10080, 10080, 0, "ml", "Monitor ML performance", True, "ml_enabled_securities", "symbol"),
+            ("backup:r2", 1440, 1440, 0, "backup", "Backup data folder to Cloudflare R2", False, None, None),
         ]
 
         for job_type, interval, interval_open, timing, cat, desc, is_param, param_src, param_field in defaults:
@@ -668,23 +664,32 @@ class Database(BaseDatabase):
                     is_parameterized, parameter_source, parameter_field,
                     created_at, updated_at)
                    VALUES (?, 1, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?)""",
-                (job_type, interval, interval_open, timing, desc, cat,
-                 1 if is_param else 0, param_src, param_field, now, now)
+                (
+                    job_type,
+                    interval,
+                    interval_open,
+                    timing,
+                    desc,
+                    cat,
+                    1 if is_param else 0,
+                    param_src,
+                    param_field,
+                    now,
+                    now,
+                ),
             )
         await self.conn.commit()
 
-    async def get_last_job_completion_by_prefix(self, prefix: str) -> Optional['datetime']:
+    async def get_last_job_completion_by_prefix(self, prefix: str) -> Optional[datetime]:
         """Get most recent completion time for jobs matching prefix."""
-        from datetime import datetime
-
         cursor = await self.conn.execute(
             """SELECT executed_at FROM job_history
                WHERE job_id LIKE ? AND status = 'completed'
                ORDER BY executed_at DESC LIMIT 1""",
-            (prefix + '%',)
+            (prefix + "%",),
         )
         row = await cursor.fetchone()
-        return datetime.fromtimestamp(row['executed_at']) if row else None
+        return datetime.fromtimestamp(row["executed_at"]) if row else None
 
     async def get_job_history_for_type(self, job_type: str, limit: int = 50) -> list[dict]:
         """Get job history for jobs matching type prefix."""
@@ -693,7 +698,7 @@ class Database(BaseDatabase):
                FROM job_history
                WHERE job_id LIKE ?
                ORDER BY executed_at DESC LIMIT ?""",
-            (job_type + '%', limit)
+            (job_type + "%", limit),
         )
         return [dict(row) for row in await cursor.fetchall()]
 
@@ -858,14 +863,10 @@ class Database(BaseDatabase):
         # Migration: add last_run column to job_schedules if missing
         cursor = await self.conn.execute("PRAGMA table_info(job_schedules)")
         columns = {row[1] for row in await cursor.fetchall()}
-        if 'last_run' not in columns:
-            await self.conn.execute(
-                "ALTER TABLE job_schedules ADD COLUMN last_run INTEGER DEFAULT 0"
-            )
-        if 'consecutive_failures' not in columns:
-            await self.conn.execute(
-                "ALTER TABLE job_schedules ADD COLUMN consecutive_failures INTEGER DEFAULT 0"
-            )
+        if "last_run" not in columns:
+            await self.conn.execute("ALTER TABLE job_schedules ADD COLUMN last_run INTEGER DEFAULT 0")
+        if "consecutive_failures" not in columns:
+            await self.conn.execute("ALTER TABLE job_schedules ADD COLUMN consecutive_failures INTEGER DEFAULT 0")
 
 
 SCHEMA = """

@@ -1,16 +1,16 @@
 """ML model retraining pipeline - per-symbol models."""
 
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional
-from pathlib import Path
 import logging
+from datetime import datetime
+from typing import Dict, Optional
 
-from sentinel.ml_ensemble import EnsembleBlender
-from sentinel.ml_trainer import TrainingDataGenerator
-from sentinel.ml_features import FEATURE_NAMES
+import numpy as np
+import pandas as pd
+
 from sentinel.database import Database
+from sentinel.ml_ensemble import EnsembleBlender
+from sentinel.ml_features import FEATURE_NAMES
+from sentinel.ml_trainer import TrainingDataGenerator
 from sentinel.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -49,16 +49,16 @@ class MLRetrainer:
         logger.info(f"      Generated {new_samples} new samples")
 
         logger.info("[2/4] Finding symbols with sufficient training data...")
-        min_samples = await self.settings.get('ml_min_samples_per_symbol', 100)
+        min_samples = await self.settings.get("ml_min_samples_per_symbol", 100)
         symbols_with_data = await self._get_symbols_with_sufficient_data(min_samples)
         logger.info(f"      Found {len(symbols_with_data)} symbols with >= {min_samples} samples")
 
         if not symbols_with_data:
             return {
-                'status': 'skipped',
-                'reason': 'No symbols with sufficient training data',
-                'symbols_trained': 0,
-                'symbols_skipped': 0,
+                "status": "skipped",
+                "reason": "No symbols with sufficient training data",
+                "symbols_trained": 0,
+                "symbols_skipped": 0,
             }
 
         logger.info("[3/4] Training models per symbol...")
@@ -67,14 +67,16 @@ class MLRetrainer:
         symbols_skipped = 0
 
         for i, (symbol, sample_count) in enumerate(symbols_with_data.items()):
-            logger.info(f"      [{i+1}/{len(symbols_with_data)}] {symbol} ({sample_count} samples)...")
+            logger.info(f"      [{i + 1}/{len(symbols_with_data)}] {symbol} ({sample_count} samples)...")
 
             try:
                 metrics = await self._train_symbol(symbol)
                 if metrics:
                     results[symbol] = metrics
                     symbols_trained += 1
-                    logger.info(f"      {symbol}: RMSE={metrics['validation_rmse']:.4f}, R²={metrics['validation_r2']:.4f}")
+                    logger.info(
+                        f"      {symbol}: RMSE={metrics['validation_rmse']:.4f}, R²={metrics['validation_r2']:.4f}"
+                    )
                 else:
                     symbols_skipped += 1
             except Exception as e:
@@ -85,10 +87,10 @@ class MLRetrainer:
         logger.info(f"      Trained: {symbols_trained}, Skipped: {symbols_skipped}")
 
         return {
-            'status': 'completed',
-            'symbols_trained': symbols_trained,
-            'symbols_skipped': symbols_skipped,
-            'results': results,
+            "status": "completed",
+            "symbols_trained": symbols_trained,
+            "symbols_skipped": symbols_skipped,
+            "results": results,
         }
 
     async def retrain_symbol(self, symbol: str) -> Optional[Dict]:
@@ -103,7 +105,7 @@ class MLRetrainer:
         """
         await self.db.connect()
 
-        min_samples = await self.settings.get('ml_min_samples_per_symbol', 100)
+        min_samples = await self.settings.get("ml_min_samples_per_symbol", 100)
         sample_count = await self._get_sample_count(symbol)
 
         if sample_count < min_samples:
@@ -132,15 +134,15 @@ class MLRetrainer:
         await self._update_model_record(symbol, len(X), metrics)
 
         return {
-            'validation_rmse': metrics['ensemble_val_rmse'],
-            'validation_mae': metrics['ensemble_val_mae'],
-            'validation_r2': metrics['ensemble_val_r2'],
-            'training_samples': len(X),
+            "validation_rmse": metrics["ensemble_val_rmse"],
+            "validation_mae": metrics["ensemble_val_mae"],
+            "validation_r2": metrics["ensemble_val_r2"],
+            "training_samples": len(X),
         }
 
     async def _generate_new_samples(self) -> int:
         """Generate training samples from recent data."""
-        horizon_days = await self.settings.get('ml_prediction_horizon_days', 14)
+        horizon_days = await self.settings.get("ml_prediction_horizon_days", 14)
 
         df = await self.trainer.generate_incremental_samples(
             lookback_days=90,
@@ -162,7 +164,7 @@ class MLRetrainer:
         cursor = await self.db.conn.execute(query, (min_samples,))
         rows = await cursor.fetchall()
 
-        return {row['symbol']: row['sample_count'] for row in rows}
+        return {row["symbol"]: row["sample_count"] for row in rows}
 
     async def _get_sample_count(self, symbol: str) -> int:
         """Get training sample count for a symbol."""
@@ -173,7 +175,7 @@ class MLRetrainer:
         """
         cursor = await self.db.conn.execute(query, (symbol,))
         row = await cursor.fetchone()
-        return row['count'] if row else 0
+        return row["count"] if row else 0
 
     async def _load_training_data(self, symbol: str) -> tuple[np.ndarray, np.ndarray]:
         """Load training data for a specific symbol."""
@@ -191,7 +193,8 @@ class MLRetrainer:
         df = pd.DataFrame([dict(row) for row in rows])
 
         # 14 features per security - no cross-security data
-        from sentinel.ml_features import FEATURE_NAMES, DEFAULT_FEATURES
+        from sentinel.ml_features import DEFAULT_FEATURES
+
         db_feature_columns = FEATURE_NAMES
 
         # Use default values from centralized definition
@@ -204,7 +207,7 @@ class MLRetrainer:
                 df[col] = df[col].fillna(defaults.get(col, 0.0))
 
         X = df[db_feature_columns].values.astype(np.float32)
-        y = df['future_return'].values.astype(np.float32)
+        y = df["future_return"].values.astype(np.float32)
 
         # Remove any remaining NaN/Inf values
         valid_mask = np.all(np.isfinite(X), axis=1) & np.isfinite(y)
@@ -221,12 +224,13 @@ class MLRetrainer:
                 validation_r2, last_trained_at)
                VALUES (?, ?, ?, ?, ?, ?)""",
             (
-                symbol, training_samples,
-                metrics['ensemble_val_rmse'],
-                metrics['ensemble_val_mae'],
-                metrics['ensemble_val_r2'],
-                datetime.now().isoformat()
-            )
+                symbol,
+                training_samples,
+                metrics["ensemble_val_rmse"],
+                metrics["ensemble_val_mae"],
+                metrics["ensemble_val_r2"],
+                datetime.now().isoformat(),
+            ),
         )
         await self.db.conn.commit()
 
@@ -241,6 +245,6 @@ class MLRetrainer:
         models = [dict(row) for row in rows]
 
         return {
-            'total_models': len(models),
-            'models': models,
+            "total_models": len(models),
+            "models": models,
         }

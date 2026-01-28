@@ -10,4 +10,4 @@ Usage:
 
 from sentinel.led.controller import LEDController
 
-__all__ = ['LEDController']
+__all__ = ["LEDController"]

@@ -6,6 +6,7 @@ All writes go to the in-memory copy only.
 """
 
 from typing import Optional
+
 import aiosqlite
 
 from sentinel.database.base import BaseDatabase
@@ -20,8 +21,8 @@ class SimulationDatabase(BaseDatabase):
 
     def __init__(self):
         self._connection: Optional[aiosqlite.Connection] = None
-        self._path = ':memory:'
-        self._simulation_date: str = ''  # Current simulation date for filtering
+        self._path = ":memory:"
+        self._simulation_date: str = ""  # Current simulation date for filtering
 
     def set_simulation_date(self, date_str: str):
         """Set the current simulation date for date-aware queries."""
@@ -29,22 +30,20 @@ class SimulationDatabase(BaseDatabase):
 
     async def initialize_from(self, source_db):
         """Create in-memory copy from real database (READ-ONLY from source)."""
-        self._connection = await aiosqlite.connect(':memory:')
+        self._connection = await aiosqlite.connect(":memory:")
         self._connection.row_factory = aiosqlite.Row
 
         # Copy schema
-        cursor = await source_db.conn.execute(
-            "SELECT sql FROM sqlite_master WHERE type='table' AND sql IS NOT NULL"
-        )
+        cursor = await source_db.conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND sql IS NOT NULL")
         for row in await cursor.fetchall():
-            if row['sql']:
+            if row["sql"]:
                 try:
-                    await self._connection.execute(row['sql'])
+                    await self._connection.execute(row["sql"])
                 except aiosqlite.OperationalError:
                     pass
 
         # Copy read-only reference data only
-        for table in ['settings', 'securities', 'prices', 'scores', 'allocation_targets']:
+        for table in ["settings", "securities", "prices", "scores", "allocation_targets"]:
             await self._copy_table(source_db, table)
 
         await self._connection.commit()
@@ -52,19 +51,19 @@ class SimulationDatabase(BaseDatabase):
     async def _copy_table(self, source_db, table: str):
         """Copy table data from source (READ-ONLY operation on source)."""
         try:
-            cursor = await source_db.conn.execute(f"SELECT * FROM {table}")
+            cursor = await source_db.conn.execute(f"SELECT * FROM {table}")  # noqa: S608
             rows = await cursor.fetchall()
             if not rows:
                 return
             columns = [desc[0] for desc in cursor.description]
-            placeholders = ','.join(['?' for _ in columns])
-            cols_str = ','.join(columns)
+            placeholders = ",".join(["?" for _ in columns])
+            cols_str = ",".join(columns)
             for row in rows:
                 await self._connection.execute(
-                    f"INSERT OR REPLACE INTO {table} ({cols_str}) VALUES ({placeholders})",
-                    tuple(row)
+                    f"INSERT OR REPLACE INTO {table} ({cols_str}) VALUES ({placeholders})",  # noqa: S608
+                    tuple(row),
                 )
-        except Exception:
+        except Exception:  # noqa: S110
             pass
 
     async def close(self):
@@ -106,8 +105,7 @@ class SimulationDatabase(BaseDatabase):
     async def set_cash_balance(self, currency: str, amount: float) -> None:
         """Set cash balance for a currency (simulation version without timestamp)."""
         await self.conn.execute(
-            "INSERT OR REPLACE INTO cash_balances (currency, amount) VALUES (?, ?)",
-            (currency, amount)
+            "INSERT OR REPLACE INTO cash_balances (currency, amount) VALUES (?, ?)", (currency, amount)
         )
         await self.conn.commit()
 
@@ -117,7 +115,6 @@ class SimulationDatabase(BaseDatabase):
         for currency, amount in balances.items():
             if amount > 0:
                 await self.conn.execute(
-                    "INSERT INTO cash_balances (currency, amount) VALUES (?, ?)",
-                    (currency, amount)
+                    "INSERT INTO cash_balances (currency, amount) VALUES (?, ?)", (currency, amount)
                 )
         await self.conn.commit()

@@ -19,12 +19,12 @@ class RetryConfig:
     max_cooloff: timedelta = timedelta(minutes=5)
 
     @staticmethod
-    def default() -> 'RetryConfig':
+    def default() -> "RetryConfig":
         """Default retry configuration."""
         return RetryConfig()
 
     @staticmethod
-    def for_sync() -> 'RetryConfig':
+    def for_sync() -> "RetryConfig":
         """Retry configuration for sync jobs (more retries)."""
         return RetryConfig(
             max_retries=5,
@@ -32,7 +32,7 @@ class RetryConfig:
         )
 
     @staticmethod
-    def for_analytics() -> 'RetryConfig':
+    def for_analytics() -> "RetryConfig":
         """Retry configuration for analytics jobs (longer cooloff)."""
         return RetryConfig(
             max_retries=3,
@@ -41,7 +41,7 @@ class RetryConfig:
         )
 
     @staticmethod
-    def infinite() -> 'RetryConfig':
+    def infinite() -> "RetryConfig":
         """Infinite retry configuration."""
         return RetryConfig(
             max_retries=-1,

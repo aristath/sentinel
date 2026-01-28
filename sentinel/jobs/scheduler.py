@@ -7,9 +7,9 @@ import json
 import logging
 from typing import Optional
 
+from sentinel.jobs.market import BrokerMarketChecker
 from sentinel.jobs.queue import Queue
 from sentinel.jobs.registry import Registry
-from sentinel.jobs.market import BrokerMarketChecker
 from sentinel.jobs.types import MarketTiming
 
 logger = logging.getLogger(__name__)
@@ -79,23 +79,23 @@ class Scheduler:
             return
 
         for schedule in schedules:
-            if not schedule['enabled']:
+            if not schedule["enabled"]:
                 continue
 
-            job_type = schedule['job_type']
+            job_type = schedule["job_type"]
 
             # Skip unregistered job types
             if not self._registry.is_registered(job_type):
                 continue
 
-            if schedule.get('is_parameterized'):
+            if schedule.get("is_parameterized"):
                 await self._check_parameterized_job(schedule, market_open)
             else:
                 await self._check_simple_job(schedule, market_open)
 
     async def _check_simple_job(self, schedule: dict, market_open: bool) -> None:
         """Check and enqueue a simple (non-parameterized) job if expired."""
-        job_type = schedule['job_type']
+        job_type = schedule["job_type"]
 
         # Skip if already in queue
         if self._queue.contains(job_type):
@@ -104,7 +104,7 @@ class Scheduler:
         # Check if expired using database method (with market-aware interval)
         if await self._db.is_job_expired(job_type, market_open=market_open):
             try:
-                job = await self._registry.create(job_type, {'_schedule': schedule})
+                job = await self._registry.create(job_type, {"_schedule": schedule})
                 self._apply_schedule_to_job(job, schedule)
                 if await self._queue.enqueue(job):
                     logger.debug(f"Enqueued expired job: {job_type}")
@@ -113,16 +113,16 @@ class Scheduler:
 
     async def _check_parameterized_job(self, schedule: dict, market_open: bool) -> None:
         """Check and enqueue parameterized jobs (one per entity) if expired."""
-        job_type = schedule['job_type']
-        param_source = schedule.get('parameter_source')
-        param_field = schedule.get('parameter_field')
+        job_type = schedule["job_type"]
+        param_source = schedule.get("parameter_source")
+        param_field = schedule.get("parameter_field")
 
         if not param_source or not param_field:
             logger.warning(f"Parameterized job {job_type} missing parameter_source or parameter_field")
             return
 
         # Get parameter values from database
-        source_method = getattr(self._db, f'get_{param_source}', None)
+        source_method = getattr(self._db, f"get_{param_source}", None)
         if not source_method:
             logger.warning(f"Unknown parameter source: {param_source}")
             return
@@ -135,9 +135,10 @@ class Scheduler:
 
         # Use shorter interval when markets are open (if configured)
         from datetime import datetime, timedelta
-        interval_minutes = schedule['interval_minutes']
-        if market_open and schedule.get('interval_market_open_minutes'):
-            interval_minutes = schedule['interval_market_open_minutes']
+
+        interval_minutes = schedule["interval_minutes"]
+        if market_open and schedule.get("interval_market_open_minutes"):
+            interval_minutes = schedule["interval_market_open_minutes"]
         interval = timedelta(minutes=interval_minutes)
 
         for entity in entities:
@@ -145,7 +146,7 @@ class Scheduler:
             if not param_value:
                 continue
 
-            job_id = f'{job_type}:{param_value}'
+            job_id = f"{job_type}:{param_value}"
 
             # Skip if already in queue
             if self._queue.contains(job_id):
@@ -157,10 +158,13 @@ class Scheduler:
 
             if last is None or datetime.now() - last >= interval:
                 try:
-                    job = await self._registry.create(job_type, {
-                        param_field: param_value,
-                        '_schedule': schedule,
-                    })
+                    job = await self._registry.create(
+                        job_type,
+                        {
+                            param_field: param_value,
+                            "_schedule": schedule,
+                        },
+                    )
                     self._apply_schedule_to_job(job, schedule)
                     if await self._queue.enqueue(job):
                         logger.debug(f"Enqueued parameterized job: {job_id}")
@@ -170,13 +174,13 @@ class Scheduler:
     def _apply_schedule_to_job(self, job, schedule: dict) -> None:
         """Apply schedule configuration to job instance."""
         # Override market_timing from database if set
-        market_timing = schedule.get('market_timing')
-        if market_timing is not None and hasattr(job, '_market_timing'):
+        market_timing = schedule.get("market_timing")
+        if market_timing is not None and hasattr(job, "_market_timing"):
             job._market_timing = MarketTiming(market_timing)
 
         # Override dependencies from database if set
-        deps_str = schedule.get('dependencies')
-        if deps_str and hasattr(job, '_dependencies'):
+        deps_str = schedule.get("dependencies")
+        if deps_str and hasattr(job, "_dependencies"):
             try:
                 deps = json.loads(deps_str)
                 if isinstance(deps, list):

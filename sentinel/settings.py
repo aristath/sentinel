@@ -12,69 +12,57 @@ No hardcoded magic numbers.
 """
 
 from typing import Any
-from sentinel.database import Database
 
+from sentinel.database import Database
 
 # Default settings - applied on first run, then configurable via UI
 DEFAULTS = {
     # Trading mode: 'research' or 'live'
     # In research mode, no actual trades are executed
-    'trading_mode': 'research',
-
+    "trading_mode": "research",
     # Transaction costs
-    'transaction_fee_fixed': 2.0,       # Fixed fee per trade (EUR)
-    'transaction_fee_percent': 0.2,     # Percentage fee (0.2%)
-
+    "transaction_fee_fixed": 2.0,  # Fixed fee per trade (EUR)
+    "transaction_fee_percent": 0.2,  # Percentage fee (0.2%)
     # Position limits (for planner)
-    'max_position_pct': 20,             # Max 20% of portfolio in one position
-    'min_position_pct': 2,              # Min 2% position size
-    'min_trade_value': 100.0,           # Minimum trade value (EUR)
-
+    "max_position_pct": 20,  # Max 20% of portfolio in one position
+    "min_position_pct": 2,  # Min 2% position size
+    "min_trade_value": 100.0,  # Minimum trade value (EUR)
     # Cash management
-    'min_cash_buffer': 0.005,           # Keep 0.5% cash minimum
-    'target_cash_pct': 5,               # Target 5% cash
-
+    "min_cash_buffer": 0.005,  # Keep 0.5% cash minimum
+    "target_cash_pct": 5,  # Target 5% cash
     # Scoring
-    'score_lookback_years': 10,         # Years of history for scoring
-
+    "score_lookback_years": 10,  # Years of history for scoring
     # Rebalancing
-    'rebalance_threshold_pct': 5,       # Rebalance when 5% off target
-
+    "rebalance_threshold_pct": 5,  # Rebalance when 5% off target
     # Diversification
-    'diversification_impact_pct': 10,   # Max ±10% score adjustment for diversification
-
+    "diversification_impact_pct": 10,  # Max ±10% score adjustment for diversification
     # Trade cool-off
-    'trade_cooloff_days': 30,           # Days to wait before opposite action after trade
-
+    "trade_cooloff_days": 30,  # Days to wait before opposite action after trade
     # API
-    'tradernet_api_key': '',
-    'tradernet_api_secret': '',
-
+    "tradernet_api_key": "",
+    "tradernet_api_secret": "",
     # Advanced Analytics
-    'use_regime_adjustment': False,
+    "use_regime_adjustment": False,
     # Regime Detection
-    'regime_n_states': 3,
-    'regime_lookback_days': 504,
-    'regime_weight_adjustment': 0.2,  # ±20% weight adjustments
-
+    "regime_n_states": 3,
+    "regime_lookback_days": 504,
+    "regime_weight_adjustment": 0.2,  # ±20% weight adjustments
     # LED Display (Arduino UNO Q orbital visualization)
-    'led_display_enabled': False,  # Disabled by default for dev environments
-    'led_brightness': 200,         # Global LED brightness 0-255
-
+    "led_display_enabled": False,  # Disabled by default for dev environments
+    "led_brightness": 200,  # Global LED brightness 0-255
     # Cloudflare R2 Backup
-    'r2_account_id': '',
-    'r2_access_key': '',
-    'r2_secret_key': '',
-    'r2_bucket_name': '',
-    'r2_backup_retention_days': 30,
-
+    "r2_account_id": "",
+    "r2_access_key": "",
+    "r2_secret_key": "",
+    "r2_bucket_name": "",
+    "r2_backup_retention_days": 30,
     # ML Per-Security Prediction (per-security settings in securities table)
-    'ml_ensemble_nn_weight': 0.5,
-    'ml_ensemble_xgb_weight': 0.5,
-    'ml_prediction_horizon_days': 14,  # Predict 14 days ahead
-    'ml_training_lookback_years': 8,
-    'ml_validation_split': 0.2,
-    'ml_min_samples_per_symbol': 100,  # Min samples to train a model for a symbol
+    "ml_ensemble_nn_weight": 0.5,
+    "ml_ensemble_xgb_weight": 0.5,
+    "ml_prediction_horizon_days": 14,  # Predict 14 days ahead
+    "ml_training_lookback_years": 8,
+    "ml_validation_split": 0.2,
+    "ml_min_samples_per_symbol": 100,  # Min samples to train a model for a symbol
 }
 
 

@@ -7,7 +7,7 @@ and dampen ML predictions when regime disagrees with prediction direction.
 
 import json
 import logging
-from typing import Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Tuple
 
 if TYPE_CHECKING:
     from sentinel.database import Database
@@ -25,25 +25,25 @@ def calculate_regime_score(quote_data: dict) -> float:
     Returns:
         Regime score between -1.0 and +1.0
     """
-    chg5 = quote_data.get('chg5', 0) or 0
-    chg22 = quote_data.get('chg22', 0) or 0
-    chg110 = quote_data.get('chg110', 0) or 0
-    chg220 = quote_data.get('chg220', 0) or 0
+    chg5 = quote_data.get("chg5", 0) or 0
+    chg22 = quote_data.get("chg22", 0) or 0
+    chg110 = quote_data.get("chg110", 0) or 0
+    chg220 = quote_data.get("chg220", 0) or 0
 
     # Multi-timeframe momentum (weighted toward medium-term)
     # Normalize each timeframe by typical range
     momentum = (
-        0.10 * (chg5 / 10) +      # 5-day, +/-10% typical
-        0.25 * (chg22 / 20) +     # 1-month, +/-20% typical
-        0.40 * (chg110 / 40) +    # ~6-month, heaviest weight
-        0.25 * (chg220 / 60)      # ~1-year, +/-60% typical
+        0.10 * (chg5 / 10)  # 5-day, +/-10% typical
+        + 0.25 * (chg22 / 20)  # 1-month, +/-20% typical
+        + 0.40 * (chg110 / 40)  # ~6-month, heaviest weight
+        + 0.25 * (chg220 / 60)  # ~1-year, +/-60% typical
     )
     momentum = max(-1.0, min(1.0, momentum))
 
     # Position in 52-week range (0 = at lows, 1 = at highs)
-    ltp = quote_data.get('ltp', 0) or 0
-    x_max = quote_data.get('x_max', 0) or 0
-    x_min = quote_data.get('x_min', 0) or 0
+    ltp = quote_data.get("ltp", 0) or 0
+    x_max = quote_data.get("x_max", 0) or 0
+    x_min = quote_data.get("x_min", 0) or 0
 
     if x_max > x_min and ltp > 0:
         position = (ltp - x_min) / (x_max - x_min)
@@ -55,11 +55,7 @@ def calculate_regime_score(quote_data: dict) -> float:
     return max(-1.0, min(1.0, regime_score))
 
 
-def apply_regime_dampening(
-    ml_return: float,
-    regime_score: float,
-    max_dampening: float = 0.4
-) -> float:
+def apply_regime_dampening(ml_return: float, regime_score: float, max_dampening: float = 0.4) -> float:
     """
     Apply regime-based dampening to ML return prediction.
 
@@ -87,11 +83,7 @@ def apply_regime_dampening(
     return ml_return * (1 - dampening)
 
 
-async def get_regime_adjusted_return(
-    symbol: str,
-    ml_return: float,
-    db: 'Database'
-) -> Tuple[float, float, float]:
+async def get_regime_adjusted_return(symbol: str, ml_return: float, db: "Database") -> Tuple[float, float, float]:
     """
     Get regime-adjusted return for a symbol.
 
@@ -105,13 +97,13 @@ async def get_regime_adjusted_return(
     """
     security = await db.get_security(symbol)
 
-    if not security or not security.get('quote_data'):
+    if not security or not security.get("quote_data"):
         # No quote data available - return ML prediction unchanged
         logger.debug(f"{symbol}: No quote data, using raw ML prediction")
         return ml_return, 0.0, 0.0
 
     try:
-        quote_data = json.loads(security['quote_data'])
+        quote_data = json.loads(security["quote_data"])
     except (json.JSONDecodeError, TypeError):
         return ml_return, 0.0, 0.0
 

@@ -3,17 +3,17 @@
 Neural network implemented in pure NumPy for lightweight deployment.
 """
 
-import numpy as np
-from typing import Dict, Optional, List, Tuple
-from datetime import datetime
-import pickle
 import json
-from pathlib import Path
 import logging
+import pickle
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, Optional, Tuple
 
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
+import numpy as np
 import xgboost as xgb
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 
 from sentinel.ml_features import FEATURE_NAMES, NUM_FEATURES
 
@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # NumPy Neural Network Implementation
 # =============================================================================
+
 
 class NumpyNeuralNetwork:
     """
@@ -116,11 +117,11 @@ class NumpyNeuralNetwork:
 
             # Cache for backward pass
             cache = {
-                'x': x,
-                'x_norm': x_norm,
-                'mean': batch_mean,
-                'var': batch_var,
-                'gamma': gamma,
+                "x": x,
+                "x_norm": x_norm,
+                "mean": batch_mean,
+                "var": batch_var,
+                "gamma": gamma,
             }
         else:
             # Use running statistics for inference
@@ -142,7 +143,7 @@ class NumpyNeuralNetwork:
         Returns:
             Tuple of (dx, dgamma, dbeta)
         """
-        x, x_norm, mean, var, gamma = cache['x'], cache['x_norm'], cache['mean'], cache['var'], cache['gamma']
+        x, x_norm, mean, var, gamma = cache["x"], cache["x_norm"], cache["mean"], cache["var"], cache["gamma"]
         N = x.shape[0]
 
         # Gradients
@@ -205,35 +206,33 @@ class NumpyNeuralNetwork:
 
         # Layer 1: Linear -> BatchNorm -> ReLU -> Dropout
         z1 = X @ self.weights[0] + self.biases[0]
-        self.cache['z1_pre'] = z1
-        bn1_out, self.cache['bn1'] = self._batchnorm_forward(
-            z1, self.bn1_gamma, self.bn1_beta,
-            self.bn1_running_mean, self.bn1_running_var
+        self.cache["z1_pre"] = z1
+        bn1_out, self.cache["bn1"] = self._batchnorm_forward(
+            z1, self.bn1_gamma, self.bn1_beta, self.bn1_running_mean, self.bn1_running_var
         )
         a1 = self._relu(bn1_out)
-        self.cache['a1_pre_dropout'] = a1
-        a1, self.cache['dropout1_mask'] = self._dropout(a1, self.dropout_rates[1])
-        self.cache['a1'] = a1
+        self.cache["a1_pre_dropout"] = a1
+        a1, self.cache["dropout1_mask"] = self._dropout(a1, self.dropout_rates[1])
+        self.cache["a1"] = a1
 
         # Layer 2: Linear -> BatchNorm -> ReLU -> Dropout
         z2 = a1 @ self.weights[1] + self.biases[1]
-        self.cache['z2_pre'] = z2
-        bn2_out, self.cache['bn2'] = self._batchnorm_forward(
-            z2, self.bn2_gamma, self.bn2_beta,
-            self.bn2_running_mean, self.bn2_running_var
+        self.cache["z2_pre"] = z2
+        bn2_out, self.cache["bn2"] = self._batchnorm_forward(
+            z2, self.bn2_gamma, self.bn2_beta, self.bn2_running_mean, self.bn2_running_var
         )
         a2 = self._relu(bn2_out)
-        self.cache['a2_pre_dropout'] = a2
-        a2, self.cache['dropout2_mask'] = self._dropout(a2, self.dropout_rates[2])
-        self.cache['a2'] = a2
+        self.cache["a2_pre_dropout"] = a2
+        a2, self.cache["dropout2_mask"] = self._dropout(a2, self.dropout_rates[2])
+        self.cache["a2"] = a2
 
         # Layer 3: Linear -> ReLU -> Dropout (no BatchNorm)
         z3 = a2 @ self.weights[2] + self.biases[2]
-        self.cache['z3'] = z3
+        self.cache["z3"] = z3
         a3 = self._relu(z3)
-        self.cache['a3_pre_dropout'] = a3
-        a3, self.cache['dropout3_mask'] = self._dropout(a3, self.dropout_rates[3])
-        self.cache['a3'] = a3
+        self.cache["a3_pre_dropout"] = a3
+        a3, self.cache["dropout3_mask"] = self._dropout(a3, self.dropout_rates[3])
+        self.cache["a3"] = a3
 
         # Output layer: Linear (no activation)
         output = a3 @ self.weights[3] + self.biases[3]
@@ -259,61 +258,57 @@ class NumpyNeuralNetwork:
         dout = 2 * (predictions - y.reshape(-1, 1)) / batch_size
 
         # Layer 4 (output) gradients
-        gradients['W4'] = self.cache['a3'].T @ dout
-        gradients['b4'] = np.sum(dout, axis=0)
+        gradients["W4"] = self.cache["a3"].T @ dout
+        gradients["b4"] = np.sum(dout, axis=0)
         da3 = dout @ self.weights[3].T
 
         # Dropout 3 backward
-        da3 = self._dropout_backward(da3, self.cache['dropout3_mask'], self.dropout_rates[3])
+        da3 = self._dropout_backward(da3, self.cache["dropout3_mask"], self.dropout_rates[3])
 
         # ReLU 3 backward
-        dz3 = self._relu_backward(da3, self.cache['z3'])
+        dz3 = self._relu_backward(da3, self.cache["z3"])
 
         # Layer 3 gradients
-        gradients['W3'] = self.cache['a2'].T @ dz3
-        gradients['b3'] = np.sum(dz3, axis=0)
+        gradients["W3"] = self.cache["a2"].T @ dz3
+        gradients["b3"] = np.sum(dz3, axis=0)
         da2 = dz3 @ self.weights[2].T
 
         # Dropout 2 backward
-        da2 = self._dropout_backward(da2, self.cache['dropout2_mask'], self.dropout_rates[2])
+        da2 = self._dropout_backward(da2, self.cache["dropout2_mask"], self.dropout_rates[2])
 
         # ReLU 2 backward
-        dbn2 = self._relu_backward(da2, self.cache['z2_pre'])
+        dbn2 = self._relu_backward(da2, self.cache["z2_pre"])
 
         # BatchNorm 2 backward
-        if self.cache['bn2'] is not None:
-            dz2, gradients['bn2_gamma'], gradients['bn2_beta'] = self._batchnorm_backward(
-                dbn2, self.cache['bn2']
-            )
+        if self.cache["bn2"] is not None:
+            dz2, gradients["bn2_gamma"], gradients["bn2_beta"] = self._batchnorm_backward(dbn2, self.cache["bn2"])
         else:
             dz2 = dbn2
-            gradients['bn2_gamma'] = np.zeros_like(self.bn2_gamma)
-            gradients['bn2_beta'] = np.zeros_like(self.bn2_beta)
+            gradients["bn2_gamma"] = np.zeros_like(self.bn2_gamma)
+            gradients["bn2_beta"] = np.zeros_like(self.bn2_beta)
 
         # Layer 2 gradients
-        gradients['W2'] = self.cache['a1'].T @ dz2
-        gradients['b2'] = np.sum(dz2, axis=0)
+        gradients["W2"] = self.cache["a1"].T @ dz2
+        gradients["b2"] = np.sum(dz2, axis=0)
         da1 = dz2 @ self.weights[1].T
 
         # Dropout 1 backward
-        da1 = self._dropout_backward(da1, self.cache['dropout1_mask'], self.dropout_rates[1])
+        da1 = self._dropout_backward(da1, self.cache["dropout1_mask"], self.dropout_rates[1])
 
         # ReLU 1 backward
-        dbn1 = self._relu_backward(da1, self.cache['z1_pre'])
+        dbn1 = self._relu_backward(da1, self.cache["z1_pre"])
 
         # BatchNorm 1 backward
-        if self.cache['bn1'] is not None:
-            dz1, gradients['bn1_gamma'], gradients['bn1_beta'] = self._batchnorm_backward(
-                dbn1, self.cache['bn1']
-            )
+        if self.cache["bn1"] is not None:
+            dz1, gradients["bn1_gamma"], gradients["bn1_beta"] = self._batchnorm_backward(dbn1, self.cache["bn1"])
         else:
             dz1 = dbn1
-            gradients['bn1_gamma'] = np.zeros_like(self.bn1_gamma)
-            gradients['bn1_beta'] = np.zeros_like(self.bn1_beta)
+            gradients["bn1_gamma"] = np.zeros_like(self.bn1_gamma)
+            gradients["bn1_beta"] = np.zeros_like(self.bn1_beta)
 
         # Layer 1 gradients
-        gradients['W1'] = X.T @ dz1
-        gradients['b1'] = np.sum(dz1, axis=0)
+        gradients["W1"] = X.T @ dz1
+        gradients["b1"] = np.sum(dz1, axis=0)
 
         return gradients
 
@@ -328,34 +323,42 @@ class NumpyNeuralNetwork:
     def get_state(self) -> Dict:
         """Get all model parameters as a dictionary."""
         return {
-            'W1': self.weights[0], 'b1': self.biases[0],
-            'W2': self.weights[1], 'b2': self.biases[1],
-            'W3': self.weights[2], 'b3': self.biases[2],
-            'W4': self.weights[3], 'b4': self.biases[3],
-            'bn1_gamma': self.bn1_gamma, 'bn1_beta': self.bn1_beta,
-            'bn1_running_mean': self.bn1_running_mean, 'bn1_running_var': self.bn1_running_var,
-            'bn2_gamma': self.bn2_gamma, 'bn2_beta': self.bn2_beta,
-            'bn2_running_mean': self.bn2_running_mean, 'bn2_running_var': self.bn2_running_var,
+            "W1": self.weights[0],
+            "b1": self.biases[0],
+            "W2": self.weights[1],
+            "b2": self.biases[1],
+            "W3": self.weights[2],
+            "b3": self.biases[2],
+            "W4": self.weights[3],
+            "b4": self.biases[3],
+            "bn1_gamma": self.bn1_gamma,
+            "bn1_beta": self.bn1_beta,
+            "bn1_running_mean": self.bn1_running_mean,
+            "bn1_running_var": self.bn1_running_var,
+            "bn2_gamma": self.bn2_gamma,
+            "bn2_beta": self.bn2_beta,
+            "bn2_running_mean": self.bn2_running_mean,
+            "bn2_running_var": self.bn2_running_var,
         }
 
     def set_state(self, state: Dict):
         """Load model parameters from a dictionary."""
-        self.weights[0] = state['W1']
-        self.biases[0] = state['b1']
-        self.weights[1] = state['W2']
-        self.biases[1] = state['b2']
-        self.weights[2] = state['W3']
-        self.biases[2] = state['b3']
-        self.weights[3] = state['W4']
-        self.biases[3] = state['b4']
-        self.bn1_gamma = state['bn1_gamma']
-        self.bn1_beta = state['bn1_beta']
-        self.bn1_running_mean = state['bn1_running_mean']
-        self.bn1_running_var = state['bn1_running_var']
-        self.bn2_gamma = state['bn2_gamma']
-        self.bn2_beta = state['bn2_beta']
-        self.bn2_running_mean = state['bn2_running_mean']
-        self.bn2_running_var = state['bn2_running_var']
+        self.weights[0] = state["W1"]
+        self.biases[0] = state["b1"]
+        self.weights[1] = state["W2"]
+        self.biases[1] = state["b2"]
+        self.weights[2] = state["W3"]
+        self.biases[2] = state["b3"]
+        self.weights[3] = state["W4"]
+        self.biases[3] = state["b4"]
+        self.bn1_gamma = state["bn1_gamma"]
+        self.bn1_beta = state["bn1_beta"]
+        self.bn1_running_mean = state["bn1_running_mean"]
+        self.bn1_running_var = state["bn1_running_var"]
+        self.bn2_gamma = state["bn2_gamma"]
+        self.bn2_beta = state["bn2_beta"]
+        self.bn2_running_mean = state["bn2_running_mean"]
+        self.bn2_running_var = state["bn2_running_var"]
 
     def copy_state(self) -> Dict:
         """Create a deep copy of the current state."""
@@ -369,7 +372,7 @@ class EarlyStopping:
     def __init__(self, patience: int = 10):
         self.patience = patience
         self.counter = 0
-        self.best_loss = float('inf')
+        self.best_loss = float("inf")
         self.best_state = None
 
     def __call__(self, val_loss: float, model: NumpyNeuralNetwork) -> bool:
@@ -447,8 +450,7 @@ class NeuralNetReturnPredictor:
         n_train = len(X_train_scaled)
         if n_train < 2:
             raise ValueError(
-                f"Training requires at least 2 samples, got {n_train}. "
-                "BatchNorm cannot operate on single samples."
+                f"Training requires at least 2 samples, got {n_train}. BatchNorm cannot operate on single samples."
             )
 
         # Adam optimizer state
@@ -458,7 +460,7 @@ class NeuralNetReturnPredictor:
         early_stop = EarlyStopping(patience=10)
 
         # Training history
-        history = {'loss': [], 'val_loss': []}
+        history = {"loss": [], "val_loss": []}
 
         effective_batch_size = min(batch_size, n_train)
 
@@ -475,8 +477,8 @@ class NeuralNetReturnPredictor:
 
             for i in range(0, n_train, effective_batch_size):
                 # Get batch
-                X_batch = X_shuffled[i:i + effective_batch_size]
-                y_batch = y_shuffled[i:i + effective_batch_size]
+                X_batch = X_shuffled[i : i + effective_batch_size]
+                y_batch = y_shuffled[i : i + effective_batch_size]
 
                 # Skip batch if too small (BatchNorm needs >= 2)
                 if len(X_batch) < 2:
@@ -498,13 +500,13 @@ class NeuralNetReturnPredictor:
 
             if samples_processed > 0:
                 epoch_loss /= samples_processed
-            history['loss'].append(epoch_loss)
+            history["loss"].append(epoch_loss)
 
             # Validation phase
             self.model.eval_mode()
             val_predictions = self.model.forward(X_val_scaled)
             val_loss = np.mean((val_predictions.flatten() - y_val) ** 2)
-            history['val_loss'].append(val_loss)
+            history["val_loss"].append(val_loss)
 
             # Early stopping check
             if early_stop(val_loss, self.model):
@@ -524,26 +526,23 @@ class NeuralNetReturnPredictor:
         val_r2 = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0.0
 
         return {
-            'history': history,
-            'val_mae': float(val_mae),
-            'val_rmse': float(val_rmse),
-            'val_r2': float(val_r2),
-            'epochs_trained': len(history['loss']),
+            "history": history,
+            "val_mae": float(val_mae),
+            "val_rmse": float(val_rmse),
+            "val_r2": float(val_r2),
+            "epochs_trained": len(history["loss"]),
         }
 
     def _init_adam(self) -> Dict:
         """Initialize Adam optimizer state."""
         state = {
-            'm': {},  # First moment
-            'v': {},  # Second moment
+            "m": {},  # First moment
+            "v": {},  # Second moment
         }
-        param_names = [
-            'W1', 'b1', 'W2', 'b2', 'W3', 'b3', 'W4', 'b4',
-            'bn1_gamma', 'bn1_beta', 'bn2_gamma', 'bn2_beta'
-        ]
+        param_names = ["W1", "b1", "W2", "b2", "W3", "b3", "W4", "b4", "bn1_gamma", "bn1_beta", "bn2_gamma", "bn2_beta"]
         for name in param_names:
-            state['m'][name] = 0
-            state['v'][name] = 0
+            state["m"][name] = 0
+            state["v"][name] = 0
         return state
 
     def _adam_update(
@@ -559,40 +558,40 @@ class NeuralNetReturnPredictor:
         """Apply Adam optimizer update."""
         # Map gradient names to model attributes
         param_map = {
-            'W1': (self.model.weights, 0),
-            'b1': (self.model.biases, 0),
-            'W2': (self.model.weights, 1),
-            'b2': (self.model.biases, 1),
-            'W3': (self.model.weights, 2),
-            'b3': (self.model.biases, 2),
-            'W4': (self.model.weights, 3),
-            'b4': (self.model.biases, 3),
+            "W1": (self.model.weights, 0),
+            "b1": (self.model.biases, 0),
+            "W2": (self.model.weights, 1),
+            "b2": (self.model.biases, 1),
+            "W3": (self.model.weights, 2),
+            "b3": (self.model.biases, 2),
+            "W4": (self.model.weights, 3),
+            "b4": (self.model.biases, 3),
         }
 
         # Update weights and biases
         for name, (container, idx) in param_map.items():
             if name in gradients:
                 g = gradients[name]
-                state['m'][name] = beta1 * state['m'][name] + (1 - beta1) * g
-                state['v'][name] = beta2 * state['v'][name] + (1 - beta2) * (g ** 2)
-                m_hat = state['m'][name] / (1 - beta1 ** t)
-                v_hat = state['v'][name] / (1 - beta2 ** t)
+                state["m"][name] = beta1 * state["m"][name] + (1 - beta1) * g
+                state["v"][name] = beta2 * state["v"][name] + (1 - beta2) * (g**2)
+                m_hat = state["m"][name] / (1 - beta1**t)
+                v_hat = state["v"][name] / (1 - beta2**t)
                 container[idx] -= lr * m_hat / (np.sqrt(v_hat) + eps)
 
         # Update BatchNorm parameters
         bn_params = [
-            ('bn1_gamma', 'bn1_gamma'),
-            ('bn1_beta', 'bn1_beta'),
-            ('bn2_gamma', 'bn2_gamma'),
-            ('bn2_beta', 'bn2_beta'),
+            ("bn1_gamma", "bn1_gamma"),
+            ("bn1_beta", "bn1_beta"),
+            ("bn2_gamma", "bn2_gamma"),
+            ("bn2_beta", "bn2_beta"),
         ]
         for grad_name, attr_name in bn_params:
             if grad_name in gradients:
                 g = gradients[grad_name]
-                state['m'][grad_name] = beta1 * state['m'][grad_name] + (1 - beta1) * g
-                state['v'][grad_name] = beta2 * state['v'][grad_name] + (1 - beta2) * (g ** 2)
-                m_hat = state['m'][grad_name] / (1 - beta1 ** t)
-                v_hat = state['v'][grad_name] / (1 - beta2 ** t)
+                state["m"][grad_name] = beta1 * state["m"][grad_name] + (1 - beta1) * g
+                state["v"][grad_name] = beta2 * state["v"][grad_name] + (1 - beta2) * (g**2)
+                m_hat = state["m"][grad_name] / (1 - beta1**t)
+                v_hat = state["v"][grad_name] / (1 - beta2**t)
                 current = getattr(self.model, attr_name)
                 setattr(self.model, attr_name, current - lr * m_hat / (np.sqrt(v_hat) + eps))
 
@@ -618,19 +617,19 @@ class NeuralNetReturnPredictor:
 
         # Save model state as NumPy archive
         state = self.model.get_state()
-        np.savez(path / 'nn_model.npz', **state)
+        np.savez(path / "nn_model.npz", **state)
 
         # Save scaler
-        with open(path / 'nn_scaler.pkl', 'wb') as f:
+        with open(path / "nn_scaler.pkl", "wb") as f:
             pickle.dump(self.scaler, f)
 
         # Save metadata
         metadata = {
-            'model_type': 'numpy_neural_network',
-            'input_dim': self.input_dim,
-            'architecture': [self.input_dim, 64, 32, 16, 1],
+            "model_type": "numpy_neural_network",
+            "input_dim": self.input_dim,
+            "architecture": [self.input_dim, 64, 32, 16, 1],
         }
-        with open(path / 'nn_metadata.json', 'w') as f:
+        with open(path / "nn_metadata.json", "w") as f:
             json.dump(metadata, f, indent=2)
 
     def load(self, path: str):
@@ -638,7 +637,7 @@ class NeuralNetReturnPredictor:
         path = Path(path)
 
         # Check for old PyTorch format
-        if (path / 'nn_model.pt').exists() and not (path / 'nn_model.npz').exists():
+        if (path / "nn_model.pt").exists() and not (path / "nn_model.npz").exists():
             raise RuntimeError(
                 f"Found old PyTorch model at {path / 'nn_model.pt'}. "
                 "This format is no longer supported after NumPy migration. "
@@ -646,29 +645,29 @@ class NeuralNetReturnPredictor:
             )
 
         # Check for old Keras format
-        if (path / 'nn_model.keras').exists():
+        if (path / "nn_model.keras").exists():
             raise RuntimeError(
                 f"Found old Keras model at {path / 'nn_model.keras'}. "
                 "This format is no longer supported. Delete and retrain."
             )
 
         # Load metadata to get input_dim
-        with open(path / 'nn_metadata.json', 'r') as f:
+        with open(path / "nn_metadata.json", "r") as f:
             metadata = json.load(f)
-            self.input_dim = metadata.get('input_dim', NUM_FEATURES)
+            self.input_dim = metadata.get("input_dim", NUM_FEATURES)
 
         # Rebuild model with correct input dim
         self.build_model(input_dim=self.input_dim)
 
         # Load model state from NumPy archive
-        with np.load(path / 'nn_model.npz') as data:
+        with np.load(path / "nn_model.npz") as data:
             state = {key: data[key] for key in data.files}
         self.model.set_state(state)
         self.model.eval_mode()
 
         # Load scaler
-        with open(path / 'nn_scaler.pkl', 'rb') as f:
-            self.scaler = pickle.load(f)
+        with open(path / "nn_scaler.pkl", "rb") as f:
+            self.scaler = pickle.load(f)  # noqa: S301
 
 
 class XGBoostReturnPredictor:
@@ -710,12 +709,13 @@ class XGBoostReturnPredictor:
             learning_rate=0.05,
             subsample=0.8,
             colsample_bytree=0.8,
-            objective='reg:squarederror',
+            objective="reg:squarederror",
             random_state=42,
         )
 
         self.model.fit(
-            X_train_scaled, y_train,
+            X_train_scaled,
+            y_train,
             eval_set=[(X_val_scaled, y_val)],
             verbose=False,
         )
@@ -735,20 +735,16 @@ class XGBoostReturnPredictor:
 
         # Log top features
         if self.feature_importance:
-            sorted_features = sorted(
-                self.feature_importance.items(),
-                key=lambda x: x[1],
-                reverse=True
-            )
+            sorted_features = sorted(self.feature_importance.items(), key=lambda x: x[1], reverse=True)
             logger.info("XGBoost feature importance (top 5):")
             for name, importance in sorted_features[:5]:
                 logger.info(f"  {name}: {importance:.4f}")
 
         return {
-            'val_mae': float(val_mae),
-            'val_rmse': float(val_rmse),
-            'val_r2': float(val_r2),
-            'feature_importance': self.feature_importance,
+            "val_mae": float(val_mae),
+            "val_rmse": float(val_rmse),
+            "val_r2": float(val_r2),
+            "feature_importance": self.feature_importance,
         }
 
     def _extract_feature_importance(self) -> Dict[str, float]:
@@ -786,20 +782,20 @@ class XGBoostReturnPredictor:
         path.mkdir(parents=True, exist_ok=True)
 
         # Save model
-        self.model.save_model(str(path / 'xgb_model.json'))
+        self.model.save_model(str(path / "xgb_model.json"))
 
         # Save scaler
-        with open(path / 'xgb_scaler.pkl', 'wb') as f:
+        with open(path / "xgb_scaler.pkl", "wb") as f:
             pickle.dump(self.scaler, f)
 
         # Save metadata with feature importance
         metadata = {
-            'model_type': 'xgboost',
-            'n_estimators': int(self.model.n_estimators),
-            'max_depth': int(self.model.max_depth),
-            'feature_importance': self.feature_importance or {},
+            "model_type": "xgboost",
+            "n_estimators": int(self.model.n_estimators),
+            "max_depth": int(self.model.max_depth),
+            "feature_importance": self.feature_importance or {},
         }
-        with open(path / 'xgb_metadata.json', 'w') as f:
+        with open(path / "xgb_metadata.json", "w") as f:
             json.dump(metadata, f, indent=2)
 
     def load(self, path: str):
@@ -808,18 +804,18 @@ class XGBoostReturnPredictor:
 
         # Load model
         self.model = xgb.XGBRegressor()
-        self.model.load_model(str(path / 'xgb_model.json'))
+        self.model.load_model(str(path / "xgb_model.json"))
 
         # Load scaler
-        with open(path / 'xgb_scaler.pkl', 'rb') as f:
-            self.scaler = pickle.load(f)
+        with open(path / "xgb_scaler.pkl", "rb") as f:
+            self.scaler = pickle.load(f)  # noqa: S301
 
         # Load feature importance from metadata if available
-        metadata_path = path / 'xgb_metadata.json'
+        metadata_path = path / "xgb_metadata.json"
         if metadata_path.exists():
-            with open(metadata_path, 'r') as f:
+            with open(metadata_path, "r") as f:
                 metadata = json.load(f)
-                self.feature_importance = metadata.get('feature_importance', {})
+                self.feature_importance = metadata.get("feature_importance", {})
 
 
 class EnsembleBlender:
@@ -833,7 +829,8 @@ class EnsembleBlender:
             nn_weight: Weight for neural network (default 0.5)
             xgb_weight: Weight for XGBoost (default 0.5)
         """
-        assert abs(nn_weight + xgb_weight - 1.0) < 1e-6, "Weights must sum to 1.0"
+        if abs(nn_weight + xgb_weight - 1.0) >= 1e-6:
+            raise ValueError("Weights must sum to 1.0")
 
         self.nn_weight = nn_weight
         self.xgb_weight = xgb_weight
@@ -859,9 +856,7 @@ class EnsembleBlender:
             Combined training metrics (all computed on the same validation set)
         """
         # Split data ONCE - both models use the same split
-        X_train, X_val, y_train, y_val = train_test_split(
-            X, y, test_size=validation_split, random_state=42
-        )
+        X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=validation_split, random_state=42)
 
         logger.info(f"Training data: {len(X_train)} samples, Validation: {len(X_val)} samples")
 
@@ -888,11 +883,11 @@ class EnsembleBlender:
         logger.info(f"Ensemble validation: MAE={ensemble_mae:.4f}, RMSE={ensemble_rmse:.4f}, R²={ensemble_r2:.4f}")
 
         return {
-            'nn_metrics': nn_metrics,
-            'xgb_metrics': xgb_metrics,
-            'ensemble_val_mae': float(ensemble_mae),
-            'ensemble_val_rmse': float(ensemble_rmse),
-            'ensemble_val_r2': float(ensemble_r2),
+            "nn_metrics": nn_metrics,
+            "xgb_metrics": xgb_metrics,
+            "ensemble_val_mae": float(ensemble_mae),
+            "ensemble_val_rmse": float(ensemble_rmse),
+            "ensemble_val_r2": float(ensemble_r2),
         }
 
     def predict(self, X: np.ndarray) -> np.ndarray:
@@ -920,10 +915,10 @@ class EnsembleBlender:
         """
         # Test with various inputs
         test_inputs = [
-            np.zeros((1, NUM_FEATURES)),           # All zeros
-            np.ones((1, NUM_FEATURES)),            # All ones
-            np.random.randn(5, NUM_FEATURES),      # Random normal
-            np.random.randn(5, NUM_FEATURES) * 10, # Larger values
+            np.zeros((1, NUM_FEATURES)),  # All zeros
+            np.ones((1, NUM_FEATURES)),  # All ones
+            np.random.randn(5, NUM_FEATURES),  # Random normal
+            np.random.randn(5, NUM_FEATURES) * 10,  # Larger values
         ]
 
         for i, test_X in enumerate(test_inputs):
@@ -931,12 +926,9 @@ class EnsembleBlender:
             try:
                 preds = self.predict(test_X)
                 if not np.all(np.isfinite(preds)):
-                    raise ValueError(
-                        f"Model produces non-finite predictions (NaN/Inf) "
-                        f"for test case {i+1}"
-                    )
+                    raise ValueError(f"Model produces non-finite predictions (NaN/Inf) for test case {i + 1}")
             except Exception as e:
-                raise ValueError(f"Model prediction failed: {e}")
+                raise ValueError(f"Model prediction failed: {e}") from e
 
         return True
 
@@ -953,7 +945,7 @@ class EnsembleBlender:
         # Validate model before saving
         self.validate_before_save()
 
-        path = Path(f'data/ml_models/{symbol}')
+        path = Path(f"data/ml_models/{symbol}")
         path.mkdir(parents=True, exist_ok=True)
 
         # Save both models
@@ -962,13 +954,13 @@ class EnsembleBlender:
 
         # Save ensemble metadata
         metadata = {
-            'symbol': symbol,
-            'nn_weight': self.nn_weight,
-            'xgb_weight': self.xgb_weight,
-            'ensemble_type': 'numpy_nn_xgb_blend',
-            'saved_at': datetime.now().isoformat(),
+            "symbol": symbol,
+            "nn_weight": self.nn_weight,
+            "xgb_weight": self.xgb_weight,
+            "ensemble_type": "numpy_nn_xgb_blend",
+            "saved_at": datetime.now().isoformat(),
         }
-        with open(path / 'ensemble_metadata.json', 'w') as f:
+        with open(path / "ensemble_metadata.json", "w") as f:
             json.dump(metadata, f, indent=2)
 
     def load(self, symbol: str):
@@ -978,30 +970,30 @@ class EnsembleBlender:
         Args:
             symbol: Security ticker
         """
-        path = Path(f'data/ml_models/{symbol}')
+        path = Path(f"data/ml_models/{symbol}")
 
         # Load both models
         self.nn_predictor.load(path)
         self.xgb_predictor.load(path)
 
         # Load ensemble metadata
-        with open(path / 'ensemble_metadata.json', 'r') as f:
+        with open(path / "ensemble_metadata.json", "r") as f:
             metadata = json.load(f)
-            self.nn_weight = metadata['nn_weight']
-            self.xgb_weight = metadata['xgb_weight']
+            self.nn_weight = metadata["nn_weight"]
+            self.xgb_weight = metadata["xgb_weight"]
 
     @staticmethod
     def model_exists(symbol: str) -> bool:
         """Check if a trained model exists for a symbol."""
-        path = Path(f'data/ml_models/{symbol}')
+        path = Path(f"data/ml_models/{symbol}")
         # Check for all required files (NumPy format)
         required_files = [
-            'ensemble_metadata.json',
-            'nn_model.npz',  # Changed from .pt to .npz
-            'nn_scaler.pkl',
-            'nn_metadata.json',
-            'xgb_model.json',
-            'xgb_scaler.pkl',
-            'xgb_metadata.json',
+            "ensemble_metadata.json",
+            "nn_model.npz",  # Changed from .pt to .npz
+            "nn_scaler.pkl",
+            "nn_metadata.json",
+            "xgb_model.json",
+            "xgb_scaler.pkl",
+            "xgb_metadata.json",
         ]
         return all((path / f).exists() for f in required_files)

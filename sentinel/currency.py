@@ -10,11 +10,13 @@ Usage:
 
 import json
 import logging
-import requests
 from typing import Optional
+
+import requests
+
+from sentinel.config.currencies import RATE_FETCH_CURRENCIES
 from sentinel.database import Database
 from sentinel.settings import Settings
-from sentinel.config.currencies import RATE_FETCH_CURRENCIES
 
 logger = logging.getLogger(__name__)
 
@@ -32,31 +34,21 @@ class Currency:
     async def sync_rates(self) -> dict:
         """Fetch current exchange rates from Tradernet API."""
         try:
-            params = {
-                'cmd': 'getCrossRatesForDate',
-                'params': {
-                    'base_currency': 'EUR',
-                    'currencies': self.CURRENCIES
-                }
-            }
-            response = requests.get(
-                'https://tradernet.com/api/',
-                params={'q': json.dumps(params)},
-                timeout=10
-            )
+            params = {"cmd": "getCrossRatesForDate", "params": {"base_currency": "EUR", "currencies": self.CURRENCIES}}
+            response = requests.get("https://tradernet.com/api/", params={"q": json.dumps(params)}, timeout=10)
             data = response.json()
 
-            if 'rates' in data:
+            if "rates" in data:
                 # Tradernet returns: 1 EUR = X other_currency
                 # We need: 1 other_currency = Y EUR (invert the rates)
-                rates = {'EUR': 1.0}
-                for curr, rate in data['rates'].items():
+                rates = {"EUR": 1.0}
+                for curr, rate in data["rates"].items():
                     if rate > 0:
                         rates[curr] = 1.0 / rate  # Invert: 1 USD = 1/1.17 EUR
 
                 # Save to settings and cache (2 hours = 7200 seconds)
-                await self._settings.set('exchange_rates', rates)
-                await self._db.cache_set('currency:rates', json.dumps(rates), ttl_seconds=7200)
+                await self._settings.set("exchange_rates", rates)
+                await self._db.cache_set("currency:rates", json.dumps(rates), ttl_seconds=7200)
                 self._rates_cache = rates
                 return rates
         except Exception as e:
@@ -71,20 +63,21 @@ class Currency:
             return self._rates_cache
 
         # Check DB cache first (2 hours = 7200 seconds)
-        cached = await self._db.cache_get('currency:rates')
+        cached = await self._db.cache_get("currency:rates")
         if cached is not None:
             self._rates_cache = json.loads(cached)
             return self._rates_cache
 
         # Try to load from settings
-        stored = await self._settings.get('exchange_rates')
+        stored = await self._settings.get("exchange_rates")
         if stored and isinstance(stored, dict):
             self._rates_cache = stored
             # Store in cache for next time
-            await self._db.cache_set('currency:rates', json.dumps(stored), ttl_seconds=7200)
+            await self._db.cache_set("currency:rates", json.dumps(stored), ttl_seconds=7200)
         else:
             # Fallback defaults from config (single source of truth)
             from sentinel.config.currencies import DEFAULT_RATES
+
             self._rates_cache = DEFAULT_RATES.copy()
 
         return self._rates_cache
@@ -96,7 +89,7 @@ class Currency:
 
     async def to_eur(self, amount: float, currency: str) -> float:
         """Convert amount from currency to EUR."""
-        if currency.upper() == 'EUR':
+        if currency.upper() == "EUR":
             return amount
         rate = await self.get_rate(currency)
         return amount * rate
@@ -105,7 +98,7 @@ class Currency:
         """Manually set exchange rate for a currency."""
         rates = await self.get_rates()
         rates[currency.upper()] = rate
-        await self._settings.set('exchange_rates', rates)
+        await self._settings.set("exchange_rates", rates)
         self._rates_cache = rates
 
     def clear_cache(self) -> None:

@@ -13,12 +13,12 @@ Usage:
     await scheduler.start()
 """
 
-from sentinel.jobs.types import MarketTiming, Job, BaseJob, JobWrapper
+from sentinel.jobs.market import BrokerMarketChecker, MarketChecker
+from sentinel.jobs.processor import Processor
 from sentinel.jobs.queue import Queue
 from sentinel.jobs.registry import Registry, RetryConfig
-from sentinel.jobs.processor import Processor
 from sentinel.jobs.scheduler import Scheduler, SyncScheduler
-from sentinel.jobs.market import MarketChecker, BrokerMarketChecker
+from sentinel.jobs.types import BaseJob, Job, JobWrapper, MarketTiming
 
 __all__ = [
     # Types

@@ -12,15 +12,16 @@ Usage:
 """
 
 import time
-from typing import TypeVar, Generic, Optional
 from dataclasses import dataclass
+from typing import Generic, Optional, TypeVar
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 @dataclass
 class CacheEntry(Generic[T]):
     """A cached value with expiration timestamp."""
+
     value: T
     expires_at: float
     created_at: float
@@ -34,7 +35,7 @@ class Cache(Generic[T]):
     returns the same cache object throughout the application.
     """
 
-    _instances: dict[str, 'Cache'] = {}
+    _instances: dict[str, "Cache"] = {}
 
     def __new__(cls, name: str, ttl_seconds: int = 86400):
         """Named singleton pattern - one cache instance per name."""
@@ -122,12 +123,12 @@ class Cache(Generic[T]):
         total_requests = self._hits + self._misses
 
         return {
-            'name': self._name,
-            'entries': valid_entries,
-            'ttl_seconds': self._ttl,
-            'hits': self._hits,
-            'misses': self._misses,
-            'hit_rate': self._hits / total_requests if total_requests > 0 else 0.0,
+            "name": self._name,
+            "entries": valid_entries,
+            "ttl_seconds": self._ttl,
+            "hits": self._hits,
+            "misses": self._misses,
+            "hit_rate": self._hits / total_requests if total_requests > 0 else 0.0,
         }
 
     def reset_stats(self) -> None:

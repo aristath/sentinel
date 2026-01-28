@@ -1,10 +1,10 @@
 """ML performance monitoring and drift detection - per-symbol tracking."""
 
-import pandas as pd
-import numpy as np
+import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
-import logging
+
+import numpy as np
 
 from sentinel.database import Database
 from sentinel.settings import Settings
@@ -42,7 +42,7 @@ class MLMonitor:
         await self.db.connect()
 
         # Get prediction horizon from settings
-        horizon_days = await self.settings.get('ml_prediction_horizon_days', 14)
+        horizon_days = await self.settings.get("ml_prediction_horizon_days", 14)
 
         # Get predictions from horizon_days to 2*horizon_days ago
         start_date = (datetime.now() - timedelta(days=2 * horizon_days)).isoformat()
@@ -60,17 +60,17 @@ class MLMonitor:
         if len(predictions) == 0:
             logger.info("No predictions to evaluate yet")
             return {
-                'status': 'success',
-                'symbols_evaluated': 0,
-                'total_predictions_evaluated': 0,
-                'drift_detected': [],
-                'message': 'No predictions to evaluate yet'
+                "status": "success",
+                "symbols_evaluated": 0,
+                "total_predictions_evaluated": 0,
+                "drift_detected": [],
+                "message": "No predictions to evaluate yet",
             }
 
         # Group predictions by symbol
         symbol_predictions: Dict[str, List] = {}
         for pred_row in predictions:
-            symbol = pred_row['symbol']
+            symbol = pred_row["symbol"]
             if symbol not in symbol_predictions:
                 symbol_predictions[symbol] = []
             symbol_predictions[symbol].append(pred_row)
@@ -84,16 +84,16 @@ class MLMonitor:
         for symbol, preds in symbol_predictions.items():
             metrics = await self._evaluate_symbol(symbol, preds, horizon_days)
 
-            if metrics and metrics['predictions_evaluated'] > 0:
+            if metrics and metrics["predictions_evaluated"] > 0:
                 per_symbol_metrics[symbol] = metrics
-                total_evaluated += metrics['predictions_evaluated']
+                total_evaluated += metrics["predictions_evaluated"]
 
                 # Store metrics
                 await self._store_symbol_metrics(symbol, tracked_at, metrics)
 
                 # Check drift for this symbol
                 is_drifting = await self._check_symbol_drift(
-                    symbol, metrics['mean_absolute_error'], metrics['root_mean_squared_error']
+                    symbol, metrics["mean_absolute_error"], metrics["root_mean_squared_error"]
                 )
 
                 if is_drifting:
@@ -105,7 +105,7 @@ class MLMonitor:
                         """UPDATE ml_performance_tracking
                            SET drift_detected = 1
                            WHERE symbol = ? AND tracked_at = ?""",
-                        (symbol, tracked_at)
+                        (symbol, tracked_at),
                     )
                     await self.db.conn.commit()
 
@@ -114,22 +114,20 @@ class MLMonitor:
             logger.warning(f"Drift detected in: {', '.join(drift_detected)}")
 
         return {
-            'status': 'success',
-            'symbols_evaluated': len(per_symbol_metrics),
-            'total_predictions_evaluated': total_evaluated,
-            'drift_detected': drift_detected,
-            'per_symbol_metrics': per_symbol_metrics,
+            "status": "success",
+            "symbols_evaluated": len(per_symbol_metrics),
+            "total_predictions_evaluated": total_evaluated,
+            "drift_detected": drift_detected,
+            "per_symbol_metrics": per_symbol_metrics,
         }
 
-    async def _evaluate_symbol(
-        self, symbol: str, predictions: List, horizon_days: int
-    ) -> Optional[Dict]:
+    async def _evaluate_symbol(self, symbol: str, predictions: List, horizon_days: int) -> Optional[Dict]:
         """Evaluate predictions for a single symbol."""
         errors = []
 
         for pred_row in predictions:
-            predicted_at = pred_row['predicted_at']
-            predicted_return = pred_row['predicted_return']
+            predicted_at = pred_row["predicted_at"]
+            predicted_return = pred_row["predicted_return"]
 
             if predicted_return is None:
                 continue
@@ -146,19 +144,17 @@ class MLMonitor:
         errors = np.array(errors)
 
         mae = float(np.mean(np.abs(errors)))
-        rmse = float(np.sqrt(np.mean(errors ** 2)))
+        rmse = float(np.sqrt(np.mean(errors**2)))
         bias = float(np.mean(errors))
 
         return {
-            'mean_absolute_error': mae,
-            'root_mean_squared_error': rmse,
-            'prediction_bias': bias,
-            'predictions_evaluated': len(errors),
+            "mean_absolute_error": mae,
+            "root_mean_squared_error": rmse,
+            "prediction_bias": bias,
+            "predictions_evaluated": len(errors),
         }
 
-    async def _get_actual_return(
-        self, symbol: str, prediction_date: str, horizon_days: int
-    ) -> Optional[float]:
+    async def _get_actual_return(self, symbol: str, prediction_date: str, horizon_days: int) -> Optional[float]:
         """Get actual return for a prediction."""
         try:
             pred_dt = datetime.fromisoformat(prediction_date)
@@ -172,15 +168,13 @@ class MLMonitor:
             WHERE symbol = ? AND date >= ?
             ORDER BY date ASC LIMIT 1
         """
-        cursor = await self.db.conn.execute(
-            query_pred, (symbol, pred_dt.strftime('%Y-%m-%d'))
-        )
+        cursor = await self.db.conn.execute(query_pred, (symbol, pred_dt.strftime("%Y-%m-%d")))
         pred_price_row = await cursor.fetchone()
 
         if not pred_price_row:
             return None
 
-        pred_price = pred_price_row['close']
+        pred_price = pred_price_row["close"]
         if pred_price is None or pred_price <= 0:
             return None
 
@@ -191,15 +185,13 @@ class MLMonitor:
             WHERE symbol = ? AND date >= ?
             ORDER BY date ASC LIMIT 1
         """
-        cursor = await self.db.conn.execute(
-            query_future, (symbol, future_dt.strftime('%Y-%m-%d'))
-        )
+        cursor = await self.db.conn.execute(query_future, (symbol, future_dt.strftime("%Y-%m-%d")))
         future_price_row = await cursor.fetchone()
 
         if not future_price_row:
             return None
 
-        future_price = future_price_row['close']
+        future_price = future_price_row["close"]
         if future_price is None or future_price <= 0:
             return None
 
@@ -215,21 +207,20 @@ class MLMonitor:
                     prediction_bias, drift_detected, predictions_evaluated)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    symbol, tracked_at,
-                    metrics['mean_absolute_error'],
-                    metrics['root_mean_squared_error'],
-                    metrics['prediction_bias'],
+                    symbol,
+                    tracked_at,
+                    metrics["mean_absolute_error"],
+                    metrics["root_mean_squared_error"],
+                    metrics["prediction_bias"],
                     0,  # drift_detected - updated later if needed
-                    metrics['predictions_evaluated']
-                )
+                    metrics["predictions_evaluated"],
+                ),
             )
             await self.db.conn.commit()
         except Exception as e:
             logger.error(f"Failed to store metrics for {symbol}: {e}")
 
-    async def _check_symbol_drift(
-        self, symbol: str, current_mae: float, current_rmse: float
-    ) -> bool:
+    async def _check_symbol_drift(self, symbol: str, current_mae: float, current_rmse: float) -> bool:
         """
         Check for model drift for a specific symbol.
 
@@ -251,8 +242,10 @@ class MLMonitor:
             logger.debug(f"{symbol}: Not enough historical data for drift detection")
             return False
 
-        historical_mae = [row['mean_absolute_error'] for row in historical if row['mean_absolute_error'] is not None]
-        historical_rmse = [row['root_mean_squared_error'] for row in historical if row['root_mean_squared_error'] is not None]
+        historical_mae = [row["mean_absolute_error"] for row in historical if row["mean_absolute_error"] is not None]
+        historical_rmse = [
+            row["root_mean_squared_error"] for row in historical if row["root_mean_squared_error"] is not None
+        ]
 
         if len(historical_mae) < 5:
             return False
@@ -290,7 +283,7 @@ class MLMonitor:
         cursor = await self.db.conn.execute(query_agg)
         agg = await cursor.fetchone()
 
-        if not agg or agg['symbols'] is None or agg['symbols'] == 0:
+        if not agg or agg["symbols"] is None or agg["symbols"] == 0:
             return "No performance data available yet."
 
         # Get per-symbol recent metrics
@@ -316,31 +309,31 @@ class MLMonitor:
         """
         cursor = await self.db.conn.execute(query_drift)
         drifting = await cursor.fetchall()
-        drifting_symbols = [r['symbol'] for r in drifting]
+        drifting_symbols = [r["symbol"] for r in drifting]
 
         report = f"""
 ML Performance Report (Last 30 Days)
-{'='*70}
+{"=" * 70}
 
 Aggregate Statistics:
-- Symbols tracked: {agg['symbols']}
-- Total predictions evaluated: {agg['total_predictions'] or 0}
-- Mean MAE: {(agg['avg_mae'] or 0):.4f}
-- Mean RMSE: {(agg['avg_rmse'] or 0):.4f}
-- Mean Bias: {(agg['avg_bias'] or 0):.4f}
-- Drift events: {agg['drift_count'] or 0}
+- Symbols tracked: {agg["symbols"]}
+- Total predictions evaluated: {agg["total_predictions"] or 0}
+- Mean MAE: {(agg["avg_mae"] or 0):.4f}
+- Mean RMSE: {(agg["avg_rmse"] or 0):.4f}
+- Mean Bias: {(agg["avg_bias"] or 0):.4f}
+- Drift events: {agg["drift_count"] or 0}
 
 Top 10 Symbols by MAE (worst first):
 """
         for row in symbol_stats:
-            drift_flag = " [DRIFT]" if row['drift_count'] and row['drift_count'] > 0 else ""
+            drift_flag = " [DRIFT]" if row["drift_count"] and row["drift_count"] > 0 else ""
             report += f"  {row['symbol']}: MAE={row['avg_mae']:.4f}, RMSE={row['avg_rmse']:.4f}{drift_flag}\n"
 
         if drifting_symbols:
-            report += f"\nSymbols with recent drift (last 7 days):\n"
+            report += "\nSymbols with recent drift (last 7 days):\n"
             report += f"  {', '.join(drifting_symbols)}\n"
         else:
-            report += f"\nNo drift detected in last 7 days.\n"
+            report += "\nNo drift detected in last 7 days.\n"
 
         return report
 
@@ -352,7 +345,7 @@ Top 10 Symbols by MAE (worst first):
         """
         await self.db.connect()
 
-        horizon_days = await self.settings.get('ml_prediction_horizon_days', 14)
+        horizon_days = await self.settings.get("ml_prediction_horizon_days", 14)
 
         # Get predictions for this symbol from horizon_days to 2*horizon_days ago
         start_date = (datetime.now() - timedelta(days=2 * horizon_days)).isoformat()
@@ -373,26 +366,26 @@ Top 10 Symbols by MAE (worst first):
         # Evaluate predictions
         metrics = await self._evaluate_symbol(symbol, predictions, horizon_days)
 
-        if metrics and metrics['predictions_evaluated'] > 0:
+        if metrics and metrics["predictions_evaluated"] > 0:
             tracked_at = datetime.now().isoformat()
             await self._store_symbol_metrics(symbol, tracked_at, metrics)
 
             # Check drift
             is_drifting = await self._check_symbol_drift(
-                symbol, metrics['mean_absolute_error'], metrics['root_mean_squared_error']
+                symbol, metrics["mean_absolute_error"], metrics["root_mean_squared_error"]
             )
 
             if is_drifting:
-                metrics['drift_detected'] = True
+                metrics["drift_detected"] = True
                 await self.db.conn.execute(
                     """UPDATE ml_performance_tracking
                        SET drift_detected = 1
                        WHERE symbol = ? AND tracked_at = ?""",
-                    (symbol, tracked_at)
+                    (symbol, tracked_at),
                 )
                 await self.db.conn.commit()
             else:
-                metrics['drift_detected'] = False
+                metrics["drift_detected"] = False
 
         return metrics
 
@@ -407,7 +400,7 @@ Top 10 Symbols by MAE (worst first):
             WHERE symbol = ? AND tracked_at >= datetime('now', ? || ' days')
             ORDER BY tracked_at DESC
         """
-        cursor = await self.db.conn.execute(query, (symbol, f'-{days}'))
+        cursor = await self.db.conn.execute(query, (symbol, f"-{days}"))
         rows = await cursor.fetchall()
 
         return [dict(row) for row in rows]

@@ -33,6 +33,5 @@ Thumbs.db
 
 # Web build
 web/node_modules/
-web/dist/
 
 sentinel/data/

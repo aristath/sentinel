@@ -19,7 +19,6 @@ Usage:
         print(progress.current_date, progress.portfolio_value)
 """
 
-import numpy as np
 import random
 import tempfile
 from dataclasses import dataclass, field
@@ -27,26 +26,29 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import AsyncGenerator, Optional
 
-from sentinel.database import Database
-from sentinel.database.simulation import SimulationDatabase
+import numpy as np
+
 from sentinel.analyzer import Analyzer
 from sentinel.broker import Broker
+from sentinel.database import Database
+from sentinel.database.simulation import SimulationDatabase
 
 
 class RebalanceFrequency:
-    DAILY = 'daily'
-    WEEKLY = 'weekly'
-    MONTHLY = 'monthly'
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    MONTHLY = "monthly"
 
 
 @dataclass
 class BacktestConfig:
     """Configuration for a backtest run."""
+
     start_date: str  # YYYY-MM-DD
     end_date: str  # YYYY-MM-DD
     initial_capital: float = 10000.0
     monthly_deposit: float = 0.0
-    rebalance_frequency: str = 'weekly'
+    rebalance_frequency: str = "weekly"
     # Securities selection
     use_existing_universe: bool = True
     pick_random: bool = True
@@ -54,22 +56,23 @@ class BacktestConfig:
     symbols: list[str] = field(default_factory=list)
 
     def get_start_date(self) -> date:
-        return datetime.strptime(self.start_date, '%Y-%m-%d').date()
+        return datetime.strptime(self.start_date, "%Y-%m-%d").date()
 
     def get_end_date(self) -> date:
-        return datetime.strptime(self.end_date, '%Y-%m-%d').date()
+        return datetime.strptime(self.end_date, "%Y-%m-%d").date()
 
 
 @dataclass
 class BacktestProgress:
     """Progress update during backtest simulation."""
+
     current_date: str
     progress_pct: float
     portfolio_value: float
     status: str  # 'preparing', 'discovering', 'downloading', 'running', 'completed', 'error', 'cancelled'
-    message: str = ''
-    phase: str = ''  # 'prepare_db', 'discover_symbols', 'download_prices', 'simulate'
-    current_item: str = ''  # Current symbol being processed
+    message: str = ""
+    phase: str = ""  # 'prepare_db', 'discover_symbols', 'download_prices', 'simulate'
+    current_item: str = ""  # Current symbol being processed
     items_done: int = 0
     items_total: int = 0
 
@@ -77,6 +80,7 @@ class BacktestProgress:
 @dataclass
 class PortfolioSnapshot:
     """Daily snapshot of portfolio state."""
+
     date: str
     total_value: float
     cash: float
@@ -87,6 +91,7 @@ class PortfolioSnapshot:
 @dataclass
 class SimulatedTrade:
     """A trade executed during simulation."""
+
     date: str
     symbol: str
     action: str
@@ -98,6 +103,7 @@ class SimulatedTrade:
 @dataclass
 class SecurityPerformance:
     """Performance breakdown for a single security."""
+
     symbol: str
     name: str
     total_invested: float
@@ -112,6 +118,7 @@ class SecurityPerformance:
 @dataclass
 class BacktestResult:
     """Final results of a backtest run."""
+
     config: BacktestConfig
     snapshots: list[PortfolioSnapshot]
     trades: list[SimulatedTrade]
@@ -133,7 +140,7 @@ class BacktestDatabaseBuilder:
         self.config = config
         self.real_db = real_db
         self.temp_dir = tempfile.mkdtemp()
-        self.temp_path = Path(self.temp_dir) / 'backtest.db'
+        self.temp_path = Path(self.temp_dir) / "backtest.db"
         self.temp_db: Database = None
         self.broker = Broker()
         self._symbols: list[str] = []
@@ -150,9 +157,12 @@ class BacktestDatabaseBuilder:
         """
         # Phase 1: Prepare database
         yield BacktestProgress(
-            current_date='', progress_pct=0, portfolio_value=0,
-            status='preparing', phase='prepare_db',
-            message='Preparing database...'
+            current_date="",
+            progress_pct=0,
+            portfolio_value=0,
+            status="preparing",
+            phase="prepare_db",
+            message="Preparing database...",
         )
 
         # Create a fresh database at the temp path
@@ -162,17 +172,23 @@ class BacktestDatabaseBuilder:
 
         # Phase 2: Discover symbols
         yield BacktestProgress(
-            current_date='', progress_pct=0, portfolio_value=0,
-            status='discovering', phase='discover_symbols',
-            message='Discovering securities...'
+            current_date="",
+            progress_pct=0,
+            portfolio_value=0,
+            status="discovering",
+            phase="discover_symbols",
+            message="Discovering securities...",
         )
         self._symbols = await self._get_symbols()
 
         if not self._symbols:
             yield BacktestProgress(
-                current_date='', progress_pct=0, portfolio_value=0,
-                status='error', phase='discover_symbols',
-                message='No securities found for backtest'
+                current_date="",
+                progress_pct=0,
+                portfolio_value=0,
+                status="error",
+                phase="discover_symbols",
+                message="No securities found for backtest",
             )
             return
 
@@ -180,19 +196,29 @@ class BacktestDatabaseBuilder:
         total = len(self._symbols)
         for i, symbol in enumerate(self._symbols):
             yield BacktestProgress(
-                current_date='', progress_pct=(i / total) * 100, portfolio_value=0,
-                status='downloading', phase='download_prices',
-                message='Downloading historical data...',
-                current_item=symbol, items_done=i, items_total=total
+                current_date="",
+                progress_pct=(i / total) * 100,
+                portfolio_value=0,
+                status="downloading",
+                phase="download_prices",
+                message="Downloading historical data...",
+                current_item=symbol,
+                items_done=i,
+                items_total=total,
             )
             await self._populate_symbol(symbol)
 
         # Phase 4: Calculate scores for all securities
         yield BacktestProgress(
-            current_date='', progress_pct=100, portfolio_value=0,
-            status='preparing', phase='calculate_scores',
-            message='Calculating scores...',
-            current_item='', items_done=total, items_total=total
+            current_date="",
+            progress_pct=100,
+            portfolio_value=0,
+            status="preparing",
+            phase="calculate_scores",
+            message="Calculating scores...",
+            current_item="",
+            items_done=total,
+            items_total=total,
         )
         await self._calculate_scores()
 
@@ -203,8 +229,7 @@ class BacktestDatabaseBuilder:
         rows = await cursor.fetchall()
         for row in rows:
             await self.temp_db.conn.execute(
-                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
-                (row['key'], row['value'])
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (row["key"], row["value"])
             )
 
         # Copy allocation targets
@@ -213,7 +238,7 @@ class BacktestDatabaseBuilder:
         for row in rows:
             await self.temp_db.conn.execute(
                 "INSERT OR REPLACE INTO allocation_targets (type, name, weight) VALUES (?, ?, ?)",
-                (row['type'], row['name'], row['weight'])
+                (row["type"], row["name"], row["weight"]),
             )
 
         await self.temp_db.conn.commit()
@@ -222,7 +247,7 @@ class BacktestDatabaseBuilder:
         """Get list of symbols to use in backtest based on config."""
         if self.config.use_existing_universe:
             securities = await self.real_db.get_all_securities(active_only=True)
-            return [s['symbol'] for s in securities]
+            return [s["symbol"] for s in securities]
         elif self.config.pick_random:
             # Fetch top EU securities from Tradernet API and pick random
             available = await self.broker.get_available_securities()
@@ -250,11 +275,11 @@ class BacktestDatabaseBuilder:
         """Copy security and price data from real database to temp database."""
         # Insert security
         cols = list(security.keys())
-        placeholders = ','.join(['?' for _ in cols])
-        cols_str = ','.join(cols)
+        placeholders = ",".join(["?" for _ in cols])
+        cols_str = ",".join(cols)
         await self.temp_db.conn.execute(
-            f"INSERT OR REPLACE INTO securities ({cols_str}) VALUES ({placeholders})",
-            tuple(security.values())
+            f"INSERT OR REPLACE INTO securities ({cols_str}) VALUES ({placeholders})",  # noqa: S608
+            tuple(security.values()),
         )
 
         # Insert prices
@@ -262,21 +287,27 @@ class BacktestDatabaseBuilder:
             await self.temp_db.conn.execute(
                 """INSERT OR REPLACE INTO prices (symbol, date, open, high, low, close, volume)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (symbol, price['date'], price.get('open'), price.get('high'),
-                 price.get('low'), price['close'], price.get('volume'))
+                (
+                    symbol,
+                    price["date"],
+                    price.get("open"),
+                    price.get("high"),
+                    price.get("low"),
+                    price["close"],
+                    price.get("volume"),
+                ),
             )
 
         # Copy score if exists in real DB
         cursor = await self.real_db.conn.execute(
-            "SELECT symbol, score, components, calculated_at FROM scores WHERE symbol = ?",
-            (symbol,)
+            "SELECT symbol, score, components, calculated_at FROM scores WHERE symbol = ?", (symbol,)
         )
         score_row = await cursor.fetchone()
         if score_row:
             await self.temp_db.conn.execute(
                 """INSERT OR REPLACE INTO scores (symbol, score, components, calculated_at)
                    VALUES (?, ?, ?, ?)""",
-                (score_row['symbol'], score_row['score'], score_row['components'], score_row['calculated_at'])
+                (score_row["symbol"], score_row["score"], score_row["components"], score_row["calculated_at"]),
             )
 
         await self.temp_db.conn.commit()
@@ -288,10 +319,10 @@ class BacktestDatabaseBuilder:
         # Fetch security info
         info = await self.broker.get_security_info(symbol)
         if info:
-            name = info.get('short_name', info.get('name', symbol))
-            currency = info.get('currency', info.get('curr', 'EUR'))
-            market_id = str(info.get('mrkt', {}).get('mkt_id', ''))
-            min_lot = int(float(info.get('lot', 1)))
+            name = info.get("short_name", info.get("name", symbol))
+            currency = info.get("currency", info.get("curr", "EUR"))
+            market_id = str(info.get("mrkt", {}).get("mkt_id", ""))
+            min_lot = int(float(info.get("lot", 1)))
 
             await self.temp_db.upsert_security(
                 symbol,
@@ -303,7 +334,7 @@ class BacktestDatabaseBuilder:
             )
         else:
             # Create minimal security entry
-            await self.temp_db.upsert_security(symbol, name=symbol, currency='EUR', active=True)
+            await self.temp_db.upsert_security(symbol, name=symbol, currency="EUR", active=True)
 
         # Fetch historical prices (10 years)
         prices_data = await self.broker.get_historical_prices_bulk([symbol], years=10)
@@ -313,8 +344,15 @@ class BacktestDatabaseBuilder:
                 await self.temp_db.conn.execute(
                     """INSERT OR REPLACE INTO prices (symbol, date, open, high, low, close, volume)
                        VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (symbol, price['date'], price.get('open'), price.get('high'),
-                     price.get('low'), price['close'], price.get('volume'))
+                    (
+                        symbol,
+                        price["date"],
+                        price.get("open"),
+                        price.get("high"),
+                        price.get("low"),
+                        price["close"],
+                        price.get("volume"),
+                    ),
                 )
             await self.temp_db.conn.commit()
 
@@ -336,6 +374,7 @@ class BacktestDatabaseBuilder:
     async def cleanup(self) -> None:
         """Close and remove temporary database file and directory."""
         import shutil
+
         try:
             if self.temp_db:
                 await self.temp_db.close()
@@ -345,7 +384,7 @@ class BacktestDatabaseBuilder:
                 self.temp_path.unlink()
             if Path(self.temp_dir).exists():
                 shutil.rmtree(self.temp_dir, ignore_errors=True)
-        except Exception:
+        except Exception:  # noqa: S110
             pass
 
 
@@ -360,7 +399,7 @@ class BacktestBroker:
 
     def __init__(self, sim_db: SimulationDatabase):
         self._db = sim_db
-        self._simulation_date: str = ''
+        self._simulation_date: str = ""
         # Cache validated prices per symbol: {symbol: {date: close_price}}
         self._validated_prices: dict[str, dict[str, float]] = {}
 
@@ -380,12 +419,12 @@ class BacktestBroker:
         if price is None:
             return None
         return {
-            'symbol': symbol,
-            'price': price,
-            'bid': price,
-            'ask': price,
-            'change': 0,
-            'change_percent': 0,
+            "symbol": symbol,
+            "price": price,
+            "bid": price,
+            "ask": price,
+            "change": 0,
+            "change_percent": 0,
         }
 
     async def get_quotes(self, symbols: list[str]) -> dict[str, dict]:
@@ -436,7 +475,7 @@ class BacktestBroker:
             """SELECT date, open, high, low, close, volume
                FROM prices WHERE symbol = ?
                ORDER BY date ASC""",
-            (symbol,)
+            (symbol,),
         )
         rows = await cursor.fetchall()
 
@@ -452,9 +491,7 @@ class BacktestBroker:
         validated = validator.validate_and_interpolate(raw_prices)
 
         # Cache as date -> close price mapping
-        self._validated_prices[symbol] = {
-            p['date']: p['close'] for p in validated if p.get('close')
-        }
+        self._validated_prices[symbol] = {p["date"]: p["close"] for p in validated if p.get("close")}
 
     async def get_portfolio(self) -> dict:
         """Return simulated portfolio state."""
@@ -463,11 +500,11 @@ class BacktestBroker:
 
         # Update prices to historical values
         for pos in positions:
-            price = await self._get_historical_price(pos['symbol'])
+            price = await self._get_historical_price(pos["symbol"])
             if price:
-                pos['current_price'] = price
+                pos["current_price"] = price
 
-        return {'positions': positions, 'cash': cash}
+        return {"positions": positions, "cash": cash}
 
     async def buy(self, symbol: str, quantity: int) -> Optional[str]:
         return f"BACKTEST-BUY-{symbol}-{quantity}"
@@ -489,7 +526,7 @@ class Backtester:
         self._cancelled = False
         self._sim_db: Optional[SimulationDatabase] = None
         self._sim_broker: Optional[BacktestBroker] = None
-        self._simulation_date: str = ''
+        self._simulation_date: str = ""
 
     def cancel(self):
         self._cancelled = True
@@ -509,18 +546,18 @@ class Backtester:
             async for progress in builder.build():
                 if self._cancelled:
                     yield BacktestProgress(
-                        current_date='',
+                        current_date="",
                         progress_pct=0,
                         portfolio_value=0,
-                        status='cancelled',
-                        message='Backtest cancelled',
+                        status="cancelled",
+                        message="Backtest cancelled",
                     )
                     return
 
                 yield progress
 
                 # Check if build had an error
-                if progress.status == 'error':
+                if progress.status == "error":
                     return
 
             # Phase 4: Initialize simulation environment from temp database
@@ -530,7 +567,7 @@ class Backtester:
             self._sim_broker = BacktestBroker(self._sim_db)
 
             # Initialize cash
-            await self._sim_db.set_cash_balance('EUR', self.config.initial_capital)
+            await self._sim_db.set_cash_balance("EUR", self.config.initial_capital)
 
             start_date = self.config.get_start_date()
             end_date = self.config.get_end_date()
@@ -552,9 +589,9 @@ class Backtester:
                         current_date=str(current_date),
                         progress_pct=(days_processed / total_days) * 100 if total_days > 0 else 0,
                         portfolio_value=await self._get_portfolio_value(),
-                        status='cancelled',
-                        phase='simulate',
-                        message='Backtest cancelled',
+                        status="cancelled",
+                        phase="simulate",
+                        message="Backtest cancelled",
                     )
                     return
 
@@ -571,9 +608,7 @@ class Backtester:
                 if self.config.monthly_deposit > 0:
                     if current_date.day == 1 and current_date.month != last_month_deposited:
                         cash = await self._sim_db.get_cash_balances()
-                        await self._sim_db.set_cash_balance(
-                            'EUR', cash.get('EUR', 0) + self.config.monthly_deposit
-                        )
+                        await self._sim_db.set_cash_balance("EUR", cash.get("EUR", 0) + self.config.monthly_deposit)
                         total_deposits += self.config.monthly_deposit
                         last_month_deposited = current_date.month
 
@@ -599,9 +634,9 @@ class Backtester:
                         current_date=self._simulation_date,
                         progress_pct=(days_processed / total_days) * 100 if total_days > 0 else 0,
                         portfolio_value=snapshot.total_value,
-                        status='running',
-                        phase='simulate',
-                        message=f'Running simulation...',
+                        status="running",
+                        phase="simulate",
+                        message="Running simulation...",
                     )
 
                 current_date += timedelta(days=1)
@@ -612,12 +647,13 @@ class Backtester:
 
         except Exception as e:
             import traceback
+
             traceback.print_exc()
             yield BacktestProgress(
-                current_date='',
+                current_date="",
                 progress_pct=0,
                 portfolio_value=0,
-                status='error',
+                status="error",
                 message=str(e),
             )
         finally:
@@ -630,21 +666,15 @@ class Backtester:
     def _should_rebalance(self, current_date: date, last: Optional[date], freq: str) -> bool:
         if last is None:
             return True
-        if freq == 'daily':
+        if freq == "daily":
             return True
-        elif freq == 'weekly':
+        elif freq == "weekly":
             return current_date.weekday() == 0 and (current_date - last).days >= 5
-        elif freq == 'monthly':
+        elif freq == "monthly":
             return current_date.month != last.month
         return False
 
-    async def _is_in_cooloff(
-        self,
-        symbol: str,
-        action: str,
-        security_tracking: dict,
-        cooloff_days: int
-    ) -> bool:
+    async def _is_in_cooloff(self, symbol: str, action: str, security_tracking: dict, cooloff_days: int) -> bool:
         """
         Check if security is in cool-off period during backtest.
         Uses trades table in simulation database.
@@ -655,22 +685,22 @@ class Backtester:
             """SELECT side, executed_at FROM trades
                WHERE symbol = ?
                ORDER BY executed_at DESC LIMIT 1""",
-            (symbol,)
+            (symbol,),
         )
         row = await cursor.fetchone()
 
         if not row:
             return False  # No trade history
 
-        last_action = row['side']
-        last_date = datetime.strptime(row['executed_at'][:10], '%Y-%m-%d').date()
-        current_date = datetime.strptime(self._simulation_date, '%Y-%m-%d').date()
+        last_action = row["side"]
+        last_date = datetime.strptime(row["executed_at"][:10], "%Y-%m-%d").date()
+        current_date = datetime.strptime(self._simulation_date, "%Y-%m-%d").date()
         days_since = (current_date - last_date).days
 
         # Check if opposite action within cool-off period
-        if action == 'buy' and last_action == 'SELL' and days_since < cooloff_days:
+        if action == "buy" and last_action == "SELL" and days_since < cooloff_days:
             return True
-        if action == 'sell' and last_action == 'BUY' and days_since < cooloff_days:
+        if action == "sell" and last_action == "BUY" and days_since < cooloff_days:
             return True
 
         return False
@@ -678,6 +708,7 @@ class Backtester:
     async def _get_portfolio_value(self) -> float:
         """Get portfolio value using the Portfolio class."""
         from sentinel.portfolio import Portfolio
+
         portfolio = Portfolio(db=self._sim_db, broker=self._sim_broker)
         return await portfolio.total_value()
 
@@ -685,11 +716,9 @@ class Backtester:
         """Update position prices to current simulation date."""
         positions = await self._sim_db.get_all_positions()
         for pos in positions:
-            quote = await self._sim_broker.get_quote(pos['symbol'])
-            if quote and quote.get('price'):
-                await self._sim_db.upsert_position(
-                    pos['symbol'], current_price=quote['price']
-                )
+            quote = await self._sim_broker.get_quote(pos["symbol"])
+            if quote and quote.get("price"):
+                await self._sim_db.upsert_position(pos["symbol"], current_price=quote["price"])
 
     async def _execute_rebalance(self, security_tracking: dict) -> list[SimulatedTrade]:
         """
@@ -700,10 +729,10 @@ class Backtester:
         2. Gets recommendations from the Planner
         3. Executes the recommended trades
         """
+        from sentinel.analyzer import Analyzer
+        from sentinel.currency import Currency
         from sentinel.planner import Planner
         from sentinel.portfolio import Portfolio
-        from sentinel.currency import Currency
-        from sentinel.analyzer import Analyzer
 
         trades = []
         currency = Currency()
@@ -721,11 +750,9 @@ class Backtester:
         recommendations = await planner.get_recommendations()
 
         # Get cool-off setting
-        settings_data = await self._sim_db.conn.execute(
-            "SELECT value FROM settings WHERE key = 'trade_cooloff_days'"
-        )
+        settings_data = await self._sim_db.conn.execute("SELECT value FROM settings WHERE key = 'trade_cooloff_days'")
         cooloff_setting = await settings_data.fetchone()
-        cooloff_days = int(cooloff_setting['value']) if cooloff_setting else 30
+        cooloff_days = int(cooloff_setting["value"]) if cooloff_setting else 30
 
         # Execute each recommendation
         for rec in recommendations:
@@ -752,72 +779,70 @@ class Backtester:
 
         # Get security info
         sec = await self._sim_db.get_security(symbol)
-        sec_name = sec.get('name', symbol) if sec else symbol
+        sec_name = sec.get("name", symbol) if sec else symbol
 
         # Initialize tracking
         if symbol not in tracking:
             tracking[symbol] = {
-                'name': sec_name,
-                'total_invested': 0,
-                'total_sold': 0,
-                'num_buys': 0,
-                'num_sells': 0,
+                "name": sec_name,
+                "total_invested": 0,
+                "total_sold": 0,
+                "num_buys": 0,
+                "num_sells": 0,
             }
 
         cost_local = quantity * price
         cost_eur = await currency.to_eur(cost_local, sec_currency)
 
-        if action == 'buy':
+        if action == "buy":
             # Check cash
             cash = await self._sim_db.get_cash_balances()
-            cash_eur = cash.get('EUR', 0)
+            cash_eur = cash.get("EUR", 0)
 
             if cash_eur < cost_eur:
                 return None
 
             # Deduct cash
-            await self._sim_db.set_cash_balance('EUR', cash_eur - cost_eur)
+            await self._sim_db.set_cash_balance("EUR", cash_eur - cost_eur)
 
             # Update position
             pos = await self._sim_db.get_position(symbol)
-            if pos and pos.get('quantity', 0) > 0:
-                old_qty = pos['quantity']
-                old_cost = pos.get('avg_cost') or price
+            if pos and pos.get("quantity", 0) > 0:
+                old_qty = pos["quantity"]
+                old_cost = pos.get("avg_cost") or price
                 new_qty = old_qty + quantity
                 new_avg = ((old_qty * old_cost) + (quantity * price)) / new_qty
                 await self._sim_db.upsert_position(
-                    symbol, quantity=new_qty, avg_cost=new_avg,
-                    current_price=price, currency=sec_currency
+                    symbol, quantity=new_qty, avg_cost=new_avg, current_price=price, currency=sec_currency
                 )
             else:
                 await self._sim_db.upsert_position(
-                    symbol, quantity=quantity, avg_cost=price,
-                    current_price=price, currency=sec_currency
+                    symbol, quantity=quantity, avg_cost=price, current_price=price, currency=sec_currency
                 )
 
-            tracking[symbol]['total_invested'] += cost_eur
-            tracking[symbol]['num_buys'] += 1
+            tracking[symbol]["total_invested"] += cost_eur
+            tracking[symbol]["num_buys"] += 1
 
-        elif action == 'sell':
+        elif action == "sell":
             pos = await self._sim_db.get_position(symbol)
-            if not pos or pos.get('quantity', 0) < quantity:
+            if not pos or pos.get("quantity", 0) < quantity:
                 return None
 
-            new_qty = pos['quantity'] - quantity
+            new_qty = pos["quantity"] - quantity
             await self._sim_db.upsert_position(symbol, quantity=new_qty, current_price=price)
 
             # Add proceeds
             cash = await self._sim_db.get_cash_balances()
-            await self._sim_db.set_cash_balance('EUR', cash.get('EUR', 0) + cost_eur)
+            await self._sim_db.set_cash_balance("EUR", cash.get("EUR", 0) + cost_eur)
 
-            tracking[symbol]['total_sold'] += cost_eur
-            tracking[symbol]['num_sells'] += 1
+            tracking[symbol]["total_sold"] += cost_eur
+            tracking[symbol]["num_sells"] += 1
 
         # Record trade in simulation database for cool-off tracking
         await self._sim_db.conn.execute(
             """INSERT INTO trades (symbol, side, quantity, price, executed_at)
                VALUES (?, ?, ?, ?, ?)""",
-            (symbol, action.upper(), quantity, price, self._simulation_date)
+            (symbol, action.upper(), quantity, price, self._simulation_date),
         )
         await self._sim_db.conn.commit()
 
@@ -832,10 +857,8 @@ class Backtester:
 
     async def _create_snapshot(self) -> PortfolioSnapshot:
         """Create snapshot using Portfolio class."""
-        from sentinel.portfolio import Portfolio
         from sentinel.currency import Currency
 
-        portfolio = Portfolio(db=self._sim_db, broker=self._sim_broker)
         currency = Currency()
 
         # Cash
@@ -850,15 +873,15 @@ class Backtester:
         positions_value = 0.0
 
         for pos in positions_data:
-            price = pos.get('current_price', 0) or 0
-            qty = pos.get('quantity', 0)
-            pos_currency = pos.get('currency', 'EUR')
+            price = pos.get("current_price", 0) or 0
+            qty = pos.get("quantity", 0)
+            pos_currency = pos.get("currency", "EUR")
             value_eur = await currency.to_eur(price * qty, pos_currency)
             positions_value += value_eur
-            positions[pos['symbol']] = {
-                'quantity': qty,
-                'price': price,
-                'value': value_eur,
+            positions[pos["symbol"]] = {
+                "quantity": qty,
+                "price": price,
+                "value": value_eur,
             }
 
         return PortfolioSnapshot(
@@ -879,12 +902,18 @@ class Backtester:
         """Calculate results using Analyzer methods."""
         if not snapshots:
             return BacktestResult(
-                config=self.config, snapshots=[], trades=[],
+                config=self.config,
+                snapshots=[],
+                trades=[],
                 initial_value=self.config.initial_capital,
                 final_value=self.config.initial_capital,
                 total_deposits=total_deposits,
-                total_return=0, total_return_pct=0, cagr=0,
-                max_drawdown=0, sharpe_ratio=0, security_performance=[],
+                total_return=0,
+                total_return_pct=0,
+                cagr=0,
+                max_drawdown=0,
+                sharpe_ratio=0,
+                security_performance=[],
             )
 
         initial_value = snapshots[0].total_value
@@ -914,23 +943,25 @@ class Backtester:
         security_performance = []
         for symbol, tracking in security_tracking.items():
             final_pos = snapshots[-1].positions.get(symbol, {})
-            final_value_sec = final_pos.get('value', 0)
-            total_invested = tracking['total_invested']
-            total_sold = tracking['total_sold']
+            final_value_sec = final_pos.get("value", 0)
+            total_invested = tracking["total_invested"]
+            total_sold = tracking["total_sold"]
             total_return_sec = final_value_sec + total_sold - total_invested
             return_pct = (total_return_sec / total_invested * 100) if total_invested > 0 else 0
 
-            security_performance.append(SecurityPerformance(
-                symbol=symbol,
-                name=tracking['name'],
-                total_invested=total_invested,
-                total_sold=total_sold,
-                final_value=final_value_sec,
-                total_return=total_return_sec,
-                return_pct=return_pct,
-                num_buys=tracking['num_buys'],
-                num_sells=tracking['num_sells'],
-            ))
+            security_performance.append(
+                SecurityPerformance(
+                    symbol=symbol,
+                    name=tracking["name"],
+                    total_invested=total_invested,
+                    total_sold=total_sold,
+                    final_value=final_value_sec,
+                    total_return=total_return_sec,
+                    return_pct=return_pct,
+                    num_buys=tracking["num_buys"],
+                    num_sells=tracking["num_sells"],
+                )
+            )
 
         security_performance.sort(key=lambda x: x.total_return, reverse=True)
 

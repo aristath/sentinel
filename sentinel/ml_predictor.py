@@ -1,22 +1,21 @@
 """Production ML predictor with per-symbol models and wavelet score blending."""
 
-import time
-import numpy as np
-from typing import Dict, Optional
-from datetime import datetime
-from pathlib import Path
 import json
 import logging
+import time
+from datetime import datetime
+from typing import Dict, Optional
 
+import numpy as np
+
+from sentinel.database import Database
 from sentinel.ml_ensemble import EnsembleBlender
 from sentinel.ml_features import (
-    FEATURE_NAMES,
     DEFAULT_FEATURES,
     features_to_array,
     validate_features,
 )
 from sentinel.ml_regime import get_regime_adjusted_return
-from sentinel.database import Database
 from sentinel.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -69,7 +68,7 @@ class MLPredictor:
             return self._fallback_to_wavelet(wavelet_score)
 
         # Check cache first (12 hours = 43200 seconds)
-        cache_key = f'ml:prediction:{symbol}:{date}'
+        cache_key = f"ml:prediction:{symbol}:{date}"
         cached = await self.db.cache_get(cache_key)
         if cached is not None:
             logger.debug(f"{symbol}: Using cached ML prediction")
@@ -109,9 +108,7 @@ class MLPredictor:
             return self._fallback_to_wavelet(wavelet_score)
 
         # Apply regime-based dampening
-        adjusted_return, regime_score, dampening = await get_regime_adjusted_return(
-            symbol, predicted_return, self.db
-        )
+        adjusted_return, regime_score, dampening = await get_regime_adjusted_return(symbol, predicted_return, self.db)
 
         # Convert adjusted return to score (0-1)
         # Map returns: -10% → 0.0, 0% → 0.5, +10% → 1.0
@@ -122,19 +119,18 @@ class MLPredictor:
 
         # Store prediction (use adjusted return)
         await self._store_prediction(
-            symbol, features, adjusted_return, ml_score,
-            wavelet_score, ml_blend_ratio, final_score, inference_time_ms
+            symbol, features, adjusted_return, ml_score, wavelet_score, ml_blend_ratio, final_score, inference_time_ms
         )
 
         result = {
-            'ml_predicted_return': float(adjusted_return),
-            'ml_raw_return': float(predicted_return),
-            'regime_score': float(regime_score),
-            'regime_dampening': float(dampening),
-            'ml_score': float(ml_score),
-            'wavelet_score': float(wavelet_score),
-            'blend_ratio': float(ml_blend_ratio),
-            'final_score': float(final_score),
+            "ml_predicted_return": float(adjusted_return),
+            "ml_raw_return": float(predicted_return),
+            "regime_score": float(regime_score),
+            "regime_dampening": float(dampening),
+            "ml_score": float(ml_score),
+            "wavelet_score": float(wavelet_score),
+            "blend_ratio": float(ml_blend_ratio),
+            "final_score": float(final_score),
         }
 
         # Cache result (12 hours = 43200 seconds)
@@ -188,16 +184,15 @@ class MLPredictor:
     def _fallback_to_wavelet(self, wavelet_score: float) -> Dict[str, float]:
         """Fallback to wavelet score if ML unavailable."""
         return {
-            'ml_predicted_return': 0.0,
-            'ml_score': wavelet_score,
-            'wavelet_score': wavelet_score,
-            'blend_ratio': 0.0,
-            'final_score': wavelet_score,
+            "ml_predicted_return": 0.0,
+            "ml_score": wavelet_score,
+            "wavelet_score": wavelet_score,
+            "blend_ratio": 0.0,
+            "final_score": wavelet_score,
         }
 
     async def _store_prediction(
-        self, symbol, features, predicted_return, ml_score,
-        wavelet_score, blend_ratio, final_score, inference_time_ms
+        self, symbol, features, predicted_return, ml_score, wavelet_score, blend_ratio, final_score, inference_time_ms
     ):
         """Store prediction in database for tracking."""
         try:
@@ -210,11 +205,18 @@ class MLPredictor:
                     blend_ratio, final_score, inference_time_ms)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    prediction_id, symbol, None,  # model_version no longer used
+                    prediction_id,
+                    symbol,
+                    None,  # model_version no longer used
                     datetime.now().isoformat(),
-                    json.dumps(features), predicted_return, ml_score,
-                    wavelet_score, blend_ratio, final_score, inference_time_ms
-                )
+                    json.dumps(features),
+                    predicted_return,
+                    ml_score,
+                    wavelet_score,
+                    blend_ratio,
+                    final_score,
+                    inference_time_ms,
+                ),
             )
             await self.db.conn.commit()
         except Exception as e:

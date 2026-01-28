@@ -13,24 +13,25 @@ Usage:
     print(motion.momentum)  # -1.0 to 1.0
 """
 
-import numpy as np
 from dataclasses import dataclass
 from typing import Optional
+
+import numpy as np
 import pywt
 from scipy import stats
 
+from sentinel.cache import Cache
 from sentinel.database import Database
 from sentinel.security import Security
-from sentinel.cache import Cache
-
 
 # Module-level cache for Motion objects (24h TTL)
-_motion_cache: Cache = Cache('motion', ttl_seconds=86400)
+_motion_cache: Cache = Cache("motion", ttl_seconds=86400)
 
 
 @dataclass
 class Motion:
     """Represents the analyzed motion/behavior of a security."""
+
     symbol: str
 
     # Trend (long-term direction)
@@ -100,7 +101,7 @@ class Analyzer:
             return None
 
         # Extract close prices (oldest first)
-        closes = np.array([p['close'] for p in reversed(prices)])
+        closes = np.array([p["close"] for p in reversed(prices)])
 
         # Calculate log returns
         returns = np.diff(np.log(closes))
@@ -109,8 +110,8 @@ class Analyzer:
         components = self._decompose(closes)
 
         # Calculate metrics
-        trend_dir, trend_str = self._analyze_trend(components['long_term'])
-        momentum = self._calculate_momentum(components['medium_term'])
+        trend_dir, trend_str = self._analyze_trend(components["long_term"])
+        momentum = self._calculate_momentum(components["medium_term"])
         cycle_pos, cycle_pos_raw = self._calculate_cycle_position(closes)
         vol, vol_trend = self._analyze_volatility(returns)
         consistency = self._calculate_consistency(closes, components)
@@ -138,10 +139,10 @@ class Analyzer:
             volatility=vol,
             volatility_trend=vol_trend,
             consistency=consistency,
-            long_term_component=components['long_term'],
-            medium_term_component=components['medium_term'],
-            short_term_component=components['short_term'],
-            noise_component=components['noise'],
+            long_term_component=components["long_term"],
+            medium_term_component=components["medium_term"],
+            short_term_component=components["short_term"],
+            noise_component=components["noise"],
             cagr=cagr,
             sharpe=sharpe,
             max_drawdown=max_dd,
@@ -168,10 +169,10 @@ class Analyzer:
         # Pad to power of 2 for cleaner decomposition
         n = len(prices)
         next_pow2 = 2 ** int(np.ceil(np.log2(n)))
-        padded = np.pad(prices, (0, next_pow2 - n), mode='edge')
+        padded = np.pad(prices, (0, next_pow2 - n), mode="edge")
 
         # Perform wavelet decomposition
-        wavelet = 'db4'
+        wavelet = "db4"
         level = 4
         coeffs = pywt.wavedec(padded, wavelet, level=level)
 
@@ -185,15 +186,15 @@ class Analyzer:
         # Approximation (trend) + details at each level
         long_term = pywt.waverec([coeffs[0]] + [np.zeros_like(c) for c in coeffs[1:]], wavelet)[:n]
         medium_term = reconstruct_level(coeffs, 1, level)  # cD4
-        short_term = reconstruct_level(coeffs, 2, level)   # cD3
-        weekly = reconstruct_level(coeffs, 3, level)       # cD2
-        noise = reconstruct_level(coeffs, 4, level)        # cD1
+        short_term = reconstruct_level(coeffs, 2, level)  # cD3
+        weekly = reconstruct_level(coeffs, 3, level)  # cD2
+        noise = reconstruct_level(coeffs, 4, level)  # cD1
 
         return {
-            'long_term': long_term,
-            'medium_term': medium_term,
-            'short_term': short_term + weekly,
-            'noise': noise,
+            "long_term": long_term,
+            "medium_term": medium_term,
+            "short_term": short_term + weekly,
+            "noise": noise,
         }
 
     def _analyze_trend(self, long_term: np.ndarray) -> tuple[str, float]:
@@ -209,14 +210,14 @@ class Analyzer:
 
         # Determine direction
         if normalized_slope > 0.05:
-            direction = 'up'
+            direction = "up"
         elif normalized_slope < -0.05:
-            direction = 'down'
+            direction = "down"
         else:
-            direction = 'flat'
+            direction = "flat"
 
         # Strength is R-squared (how well the line fits)
-        strength = r_value ** 2
+        strength = r_value**2
 
         return direction, strength
 
@@ -253,13 +254,13 @@ class Analyzer:
 
             ratio = recent_vol / (historical_vol + 1e-10)
             if ratio > 1.2:
-                trend = 'increasing'
+                trend = "increasing"
             elif ratio < 0.8:
-                trend = 'decreasing'
+                trend = "decreasing"
             else:
-                trend = 'stable'
+                trend = "stable"
         else:
-            trend = 'stable'
+            trend = "stable"
 
         return vol, trend
 
@@ -268,8 +269,7 @@ class Analyzer:
         Calculate how consistently the security follows its trend.
         High consistency = smooth movement along trend.
         """
-        trend = components['long_term']
-        noise = components['noise']
+        trend = components["long_term"]
 
         # Ratio of trend variance to total variance
         trend_var = np.var(trend)
@@ -368,11 +368,11 @@ class Analyzer:
 
         # Combine all components
         sophisticated_signal = (
-            0.40 * base_signal +
-            0.20 * velocity_boost +
-            0.15 * alignment_score +
-            0.15 * mr_personality +
-            0.10 * time_factor
+            0.40 * base_signal
+            + 0.20 * velocity_boost
+            + 0.15 * alignment_score
+            + 0.15 * mr_personality
+            + 0.10 * time_factor
         )
 
         sophisticated_signal = np.clip(sophisticated_signal, -1.0, 1.0)
@@ -433,7 +433,7 @@ class Analyzer:
 
         # Calculate price velocity (recent direction)
         lookback = min(5, len(prices) - 1)
-        recent_change = (prices[-1] - prices[-(lookback+1)]) / prices[-(lookback+1)]
+        recent_change = (prices[-1] - prices[-(lookback + 1)]) / prices[-(lookback + 1)]
 
         # Normalize velocity (typically ±5% over 5 days)
         normalized_velocity = np.clip(recent_change / 0.05, -1.0, 1.0)
@@ -517,7 +517,7 @@ class Analyzer:
                 continue
 
             # Calculate Z-score at this point
-            historical_window = prices[i-window:i]
+            historical_window = prices[i - window : i]
             mean = np.mean(historical_window)
             std = np.std(historical_window)
 
@@ -589,7 +589,7 @@ class Analyzer:
             time_factor = 1.0 - max(0.0, acf_20)
 
             return np.clip(time_factor, 0.0, 1.0)
-        except:
+        except Exception:
             return 0.5  # Neutral if calculation fails
 
     async def _calculate_expected_return(
@@ -658,38 +658,40 @@ class Analyzer:
 
         # Base expected return
         expected_return = (
-            0.30 * quality +
-            0.40 * mean_reversion +
-            0.20 * adjusted_momentum +
-            0.10 * (consistency_bonus + 0.5)  # Shift to positive range
+            0.30 * quality
+            + 0.40 * mean_reversion
+            + 0.20 * adjusted_momentum
+            + 0.10 * (consistency_bonus + 0.5)  # Shift to positive range
         )
 
         # Apply regime adjustment if enabled
         from sentinel.settings import Settings
+
         settings = Settings()
-        use_regime = await settings.get('use_regime_adjustment', False)
+        use_regime = await settings.get("use_regime_adjustment", False)
 
         if use_regime:
             from sentinel.regime_detector import RegimeDetector
+
             detector = RegimeDetector()
             regime_data = await detector.detect_current_regime(symbol)
 
             # Adjust component weights based on regime
-            if regime_data['regime_name'] == 'Bull':
+            if regime_data["regime_name"] == "Bull":
                 # Boost momentum, reduce mean reversion
                 expected_return = (
-                    0.30 * quality +
-                    0.30 * mean_reversion +  # Reduce from 40%
-                    0.30 * adjusted_momentum +  # Increase from 20%
-                    0.10 * (consistency_bonus + 0.5)
+                    0.30 * quality
+                    + 0.30 * mean_reversion  # Reduce from 40%
+                    + 0.30 * adjusted_momentum  # Increase from 20%
+                    + 0.10 * (consistency_bonus + 0.5)
                 )
-            elif regime_data['regime_name'] == 'Bear':
+            elif regime_data["regime_name"] == "Bear":
                 # Boost quality, reduce momentum
                 expected_return = (
-                    0.40 * quality +  # Increase from 30%
-                    0.40 * mean_reversion +
-                    0.10 * adjusted_momentum +  # Reduce from 20%
-                    0.10 * (consistency_bonus + 0.5)
+                    0.40 * quality  # Increase from 30%
+                    + 0.40 * mean_reversion
+                    + 0.10 * adjusted_momentum  # Reduce from 20%
+                    + 0.10 * (consistency_bonus + 0.5)
                 )
             # Sideways: keep default weights
 
@@ -721,9 +723,9 @@ class Analyzer:
 
         results = {}
         for sec in securities:
-            motion = await self.analyze(sec['symbol'])
+            motion = await self.analyze(sec["symbol"])
             if motion:
-                results[sec['symbol']] = motion
+                results[sec["symbol"]] = motion
 
         return results
 
@@ -742,21 +744,21 @@ class Analyzer:
 
         count = 0
         for sec in securities:
-            motion = await self.analyze(sec['symbol'], use_cache=use_cache)
+            motion = await self.analyze(sec["symbol"], use_cache=use_cache)
             if motion is not None:
-                security = Security(sec['symbol'], db=self._db)
+                security = Security(sec["symbol"], db=self._db)
                 components = {
-                    'trend': motion.trend_direction,
-                    'trend_strength': motion.trend_strength,
-                    'momentum': motion.momentum,
-                    'cycle_position': motion.cycle_position,
-                    'cycle_position_pct': motion.cycle_position_raw,
-                    'expected_return': motion.expected_return,
-                    'sharpe': motion.sharpe,
-                    'cagr': motion.cagr,
-                    'consistency': motion.consistency,
-                    'max_drawdown': motion.max_drawdown,
-                    'volatility': motion.volatility,
+                    "trend": motion.trend_direction,
+                    "trend_strength": motion.trend_strength,
+                    "momentum": motion.momentum,
+                    "cycle_position": motion.cycle_position,
+                    "cycle_position_pct": motion.cycle_position_raw,
+                    "expected_return": motion.expected_return,
+                    "sharpe": motion.sharpe,
+                    "cagr": motion.cagr,
+                    "consistency": motion.consistency,
+                    "max_drawdown": motion.max_drawdown,
+                    "volatility": motion.volatility,
                 }
                 await security.set_score(motion.expected_return, components)
                 count += 1

@@ -11,8 +11,9 @@ Usage:
 
 from datetime import datetime, timedelta
 from typing import Optional
-from sentinel.database import Database
+
 from sentinel.broker import Broker
+from sentinel.database import Database
 from sentinel.settings import Settings
 
 # Duplicate trade protection: skip if traded within this many minutes
@@ -30,7 +31,7 @@ class Security:
         self._data: Optional[dict] = None
         self._position: Optional[dict] = None
 
-    async def load(self) -> 'Security':
+    async def load(self) -> "Security":
         """Load security data from database."""
         self._data = await self._db.get_security(self.symbol)
         self._position = await self._db.get_position(self.symbol)
@@ -48,35 +49,35 @@ class Security:
 
     @property
     def name(self) -> Optional[str]:
-        return self._data.get('name') if self._data else None
+        return self._data.get("name") if self._data else None
 
     @property
     def currency(self) -> str:
-        return self._data.get('currency', 'EUR') if self._data else 'EUR'
+        return self._data.get("currency", "EUR") if self._data else "EUR"
 
     @property
     def geography(self) -> Optional[str]:
-        return self._data.get('geography') if self._data else None
+        return self._data.get("geography") if self._data else None
 
     @property
     def industry(self) -> Optional[str]:
-        return self._data.get('industry') if self._data else None
+        return self._data.get("industry") if self._data else None
 
     @property
     def min_lot(self) -> int:
-        return self._data.get('min_lot', 1) if self._data else 1
+        return self._data.get("min_lot", 1) if self._data else 1
 
     @property
     def active(self) -> bool:
-        return bool(self._data.get('active', 1)) if self._data else False
+        return bool(self._data.get("active", 1)) if self._data else False
 
     @property
     def allow_buy(self) -> bool:
-        return bool(self._data.get('allow_buy', 1)) if self._data else True
+        return bool(self._data.get("allow_buy", 1)) if self._data else True
 
     @property
     def allow_sell(self) -> bool:
-        return bool(self._data.get('allow_sell', 1)) if self._data else True
+        return bool(self._data.get("allow_sell", 1)) if self._data else True
 
     # -------------------------------------------------------------------------
     # Position
@@ -85,17 +86,17 @@ class Security:
     @property
     def quantity(self) -> float:
         """Current position quantity."""
-        return self._position.get('quantity', 0) if self._position else 0
+        return self._position.get("quantity", 0) if self._position else 0
 
     @property
     def avg_cost(self) -> Optional[float]:
         """Average cost basis."""
-        return self._position.get('avg_cost') if self._position else None
+        return self._position.get("avg_cost") if self._position else None
 
     @property
     def current_price(self) -> Optional[float]:
         """Last known price."""
-        return self._position.get('current_price') if self._position else None
+        return self._position.get("current_price") if self._position else None
 
     def has_position(self) -> bool:
         """Check if we own this security."""
@@ -108,14 +109,10 @@ class Security:
     async def get_price(self) -> Optional[float]:
         """Get current price from broker."""
         quote = await self._broker.get_quote(self.symbol)
-        if quote and quote.get('price'):
+        if quote and quote.get("price"):
             # Update cached price in database
-            await self._db.upsert_position(
-                self.symbol,
-                current_price=quote['price'],
-                updated_at='now'
-            )
-            return quote['price']
+            await self._db.upsert_position(self.symbol, current_price=quote["price"], updated_at="now")
+            return quote["price"]
         return self.current_price
 
     async def get_quote(self) -> Optional[dict]:
@@ -145,20 +142,21 @@ class Security:
         if not trades:
             return False
         last_trade = trades[0]
-        executed_at = datetime.fromisoformat(last_trade['executed_at'])
+        executed_at = datetime.fromisoformat(last_trade["executed_at"])
         cutoff = datetime.now() - timedelta(minutes=TRADE_COOLOFF_MINUTES)
         return executed_at > cutoff
 
     def _is_asian_market(self) -> bool:
         """Check if this security is on an Asian market (requires limit orders)."""
-        return self.symbol.endswith('.AS')
+        return self.symbol.endswith(".AS")
 
     def _get_quote_data(self) -> Optional[dict]:
         """Get parsed quote data from the security."""
         import json
+
         if not self._data:
             return None
-        quote_str = self._data.get('quote_data')
+        quote_str = self._data.get("quote_data")
         if not quote_str:
             return None
         try:
@@ -171,14 +169,14 @@ class Security:
         quote = self._get_quote_data()
         if not quote:
             return None
-        return quote.get('ask') or quote.get('bap')
+        return quote.get("ask") or quote.get("bap")
 
     def _get_bid_price(self) -> Optional[float]:
         """Get the bid price from quote data (for sell orders)."""
         quote = self._get_quote_data()
         if not quote:
             return None
-        return quote.get('bid') or quote.get('bbp')
+        return quote.get("bid") or quote.get("bbp")
 
     async def buy(self, quantity: int, auto_convert: bool = True) -> Optional[str]:
         """Buy this security. Returns order ID if successful.
@@ -207,10 +205,11 @@ class Security:
         trade_value = price * quantity
 
         # Auto-convert currency if needed and enabled
-        if auto_convert and self.currency != 'EUR':
+        if auto_convert and self.currency != "EUR":
             from sentinel.currency_exchange import CurrencyExchangeService
+
             fx = CurrencyExchangeService()
-            converted = await fx.ensure_balance(self.currency, trade_value, source_currency='EUR')
+            converted = await fx.ensure_balance(self.currency, trade_value, source_currency="EUR")
             if not converted:
                 raise ValueError(
                     f"Insufficient {self.currency} balance and auto-conversion failed. "
@@ -226,7 +225,7 @@ class Security:
 
         order_id = await self._broker.buy(self.symbol, quantity, price=limit_price)
         if order_id:
-            await self._db.record_trade(self.symbol, 'BUY', quantity, price)
+            await self._db.record_trade(self.symbol, "BUY", quantity, price)
         return order_id
 
     async def sell(self, quantity: int) -> Optional[str]:
@@ -256,7 +255,7 @@ class Security:
         order_id = await self._broker.sell(self.symbol, quantity, price=limit_price)
         if order_id:
             price = await self.get_price()
-            await self._db.record_trade(self.symbol, 'SELL', quantity, price or 0)
+            await self._db.record_trade(self.symbol, "SELL", quantity, price or 0)
         return order_id
 
     # -------------------------------------------------------------------------
@@ -265,19 +264,18 @@ class Security:
 
     async def get_score(self) -> Optional[float]:
         """Get the calculated score for this security."""
-        cursor = await self._db.conn.execute(
-            "SELECT score FROM scores WHERE symbol = ?", (self.symbol,)
-        )
+        cursor = await self._db.conn.execute("SELECT score FROM scores WHERE symbol = ?", (self.symbol,))
         row = await cursor.fetchone()
-        return row['score'] if row else None
+        return row["score"] if row else None
 
     async def set_score(self, score: float, components: dict = None) -> None:
         """Set the calculated score for this security."""
         import json
+
         await self._db.conn.execute(
             """INSERT OR REPLACE INTO scores (symbol, score, components, calculated_at)
                VALUES (?, ?, ?, datetime('now'))""",
-            (self.symbol, score, json.dumps(components) if components else None)
+            (self.symbol, score, json.dumps(components) if components else None),
         )
         await self._db.conn.commit()
 

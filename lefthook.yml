@@ -1,0 +1,84 @@
+pre-commit:
+  parallel: true
+  commands:
+    trailing-whitespace:
+      glob: "*.{py,js,ts,jsx,tsx,json,yml,yaml,toml,md,html,css}"
+      run: |
+        for f in {staged_files}; do
+          if [ -f "$f" ]; then
+            sed -i '' 's/[[:space:]]*$//' "$f"
+          fi
+        done
+      stage_fixed: true
+
+    end-of-file-newline:
+      glob: "*.{py,js,ts,jsx,tsx,json,yml,yaml,toml,md,html,css}"
+      run: |
+        for f in {staged_files}; do
+          if [ -f "$f" ] && [ -s "$f" ] && [ "$(tail -c1 "$f" | wc -l)" -eq 0 ]; then
+            echo "" >> "$f"
+          fi
+        done
+      stage_fixed: true
+
+    validate-yaml:
+      glob: "*.{yml,yaml}"
+      run: |
+        for f in {staged_files}; do
+          .venv/bin/python -c "import yaml; yaml.safe_load(open('$f'))" || exit 1
+        done
+
+    validate-json:
+      glob: "*.json"
+      run: |
+        for f in {staged_files}; do
+          .venv/bin/python -c "import json; json.load(open('$f'))" || exit 1
+        done
+
+    validate-toml:
+      glob: "*.toml"
+      run: |
+        for f in {staged_files}; do
+          .venv/bin/python -c "import tomllib; tomllib.load(open('$f','rb'))" || exit 1
+        done
+
+    merge-conflict-markers:
+      glob: "*.{py,js,ts,jsx,tsx,json,yml,yaml,toml,md,html,css}"
+      run: |
+        for f in {staged_files}; do
+          if grep -qE '^(<{7}|>{7}|={7})' "$f" 2>/dev/null; then
+            echo "Merge conflict marker found in $f"
+            exit 1
+          fi
+        done
+
+    large-file-check:
+      run: |
+        for f in {staged_files}; do
+          if [ -f "$f" ]; then
+            size=$(wc -c < "$f" | tr -d ' ')
+            if [ "$size" -gt 1048576 ]; then
+              echo "File $f is larger than 1MB ($size bytes)"
+              exit 1
+            fi
+          fi
+        done
+
+    ruff-format:
+      glob: "*.py"
+      run: .venv/bin/ruff format {staged_files}
+      stage_fixed: true
+
+    ruff-check:
+      glob: "*.py"
+      run: .venv/bin/ruff check --fix {staged_files}
+      stage_fixed: true
+
+    pyright:
+      glob: "*.py"
+      run: .venv/bin/pyright {staged_files}
+
+    frontend-build:
+      glob: "web/src/**\nweb/index.html"
+      run: cd web && npm run build
+      stage_fixed: true

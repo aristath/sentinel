@@ -10,11 +10,12 @@ Usage:
 """
 
 from typing import Optional
-from sentinel.database import Database
+
 from sentinel.broker import Broker
-from sentinel.settings import Settings
-from sentinel.security import Security
 from sentinel.currency import Currency
+from sentinel.database import Database
+from sentinel.security import Security
+from sentinel.settings import Settings
 
 
 class Portfolio:
@@ -34,36 +35,33 @@ class Portfolio:
         self._currency = Currency()
         self._cash: dict[str, float] = {}
 
-    async def sync(self) -> 'Portfolio':
+    async def sync(self) -> "Portfolio":
         """Sync portfolio state from broker to database."""
         data = await self._broker.get_portfolio()
 
         # Update positions and securities
-        for pos in data.get('positions', []):
-            symbol = pos['symbol']
+        for pos in data.get("positions", []):
+            symbol = pos["symbol"]
 
             # Ensure security exists in database
             existing = await self._db.get_security(symbol)
             if not existing:
                 await self._db.upsert_security(
-                    symbol,
-                    name=pos.get('name', symbol),
-                    currency=pos.get('currency', 'EUR'),
-                    active=1
+                    symbol, name=pos.get("name", symbol), currency=pos.get("currency", "EUR"), active=1
                 )
 
             # Update position
             await self._db.upsert_position(
                 symbol,
-                quantity=pos['quantity'],
-                avg_cost=pos.get('avg_cost'),
-                current_price=pos.get('current_price'),
-                currency=pos.get('currency', 'EUR'),
-                updated_at='now'
+                quantity=pos["quantity"],
+                avg_cost=pos.get("avg_cost"),
+                current_price=pos.get("current_price"),
+                currency=pos.get("currency", "EUR"),
+                updated_at="now",
             )
 
         # Store cash balances in memory and database
-        self._cash = data.get('cash', {})
+        self._cash = data.get("cash", {})
         await self._db.set_cash_balances(self._cash)
         return self
 
@@ -71,7 +69,7 @@ class Portfolio:
     # Value Calculations
     # -------------------------------------------------------------------------
 
-    async def total_value(self, currency: str = 'EUR') -> float:
+    async def total_value(self, currency: str = "EUR") -> float:
         """Get total portfolio value in specified currency (default EUR)."""
         positions = await self._db.get_all_positions()
 
@@ -85,16 +83,16 @@ class Portfolio:
 
         # Sum position values, converted to EUR
         for pos in positions:
-            price = pos.get('current_price', 0)
-            qty = pos.get('quantity', 0)
-            pos_currency = pos.get('currency', 'EUR')
+            price = pos.get("current_price", 0)
+            qty = pos.get("quantity", 0)
+            pos_currency = pos.get("currency", "EUR")
             value_in_local = price * qty
             value_in_eur = await self._currency.to_eur(value_in_local, pos_currency)
             total += value_in_eur
 
         return total
 
-    async def cash(self, currency: str = 'EUR') -> float:
+    async def cash(self, currency: str = "EUR") -> float:
         """Get available cash in specified currency."""
         cash_balances = await self.get_cash_balances()
         return cash_balances.get(currency, 0)
@@ -131,7 +129,7 @@ class Portfolio:
         rows = await self._db.get_all_securities(active_only)
         result = []
         for row in rows:
-            sec = Security(row['symbol'])
+            sec = Security(row["symbol"])
             await sec.load()
             result.append(sec)
         return result
@@ -149,17 +147,17 @@ class Portfolio:
         total = await self.total_value()
 
         if total == 0:
-            return {'by_security': {}, 'by_geography': {}, 'by_industry': {}}
+            return {"by_security": {}, "by_geography": {}, "by_industry": {}}
 
         by_security = {}
         by_geography = {}
         by_industry = {}
 
         for pos in positions:
-            symbol = pos['symbol']
-            price = pos.get('current_price', 0)
-            qty = pos.get('quantity', 0)
-            pos_currency = pos.get('currency', 'EUR')
+            symbol = pos["symbol"]
+            price = pos.get("current_price", 0)
+            qty = pos.get("quantity", 0)
+            pos_currency = pos.get("currency", "EUR")
 
             # Convert to EUR
             value_local = price * qty
@@ -172,27 +170,27 @@ class Portfolio:
             sec_data = await self._db.get_security(symbol)
             if sec_data:
                 # Handle comma-separated geographies (split equally)
-                geo_str = sec_data.get('geography', '') or ''
-                geos = [g.strip() for g in geo_str.split(',') if g.strip()]
+                geo_str = sec_data.get("geography", "") or ""
+                geos = [g.strip() for g in geo_str.split(",") if g.strip()]
                 if not geos:
-                    geos = ['Unknown']
+                    geos = ["Unknown"]
                 geo_weight = pct / len(geos)
                 for geo in geos:
                     by_geography[geo] = by_geography.get(geo, 0) + geo_weight
 
                 # Handle comma-separated industries (split equally)
-                ind_str = sec_data.get('industry', '') or ''
-                inds = [i.strip() for i in ind_str.split(',') if i.strip()]
+                ind_str = sec_data.get("industry", "") or ""
+                inds = [i.strip() for i in ind_str.split(",") if i.strip()]
                 if not inds:
-                    inds = ['Unknown']
+                    inds = ["Unknown"]
                 ind_weight = pct / len(inds)
                 for ind in inds:
                     by_industry[ind] = by_industry.get(ind, 0) + ind_weight
 
         return {
-            'by_security': by_security,
-            'by_geography': by_geography,
-            'by_industry': by_industry,
+            "by_security": by_security,
+            "by_geography": by_geography,
+            "by_industry": by_industry,
         }
 
     async def get_target_allocations(self) -> dict:
@@ -206,10 +204,10 @@ class Portfolio:
         geo_weights = {}
         ind_weights = {}
         for t in targets:
-            if t['type'] == 'geography':
-                geo_weights[t['name']] = t['weight']
-            elif t['type'] == 'industry':
-                ind_weights[t['name']] = t['weight']
+            if t["type"] == "geography":
+                geo_weights[t["name"]] = t["weight"]
+            elif t["type"] == "industry":
+                ind_weights[t["name"]] = t["weight"]
 
         # Normalize to percentages
         def normalize(weights: dict) -> dict:
@@ -219,8 +217,8 @@ class Portfolio:
             return {k: v / total for k, v in weights.items()}
 
         return {
-            'geography': normalize(geo_weights),
-            'industry': normalize(ind_weights),
+            "geography": normalize(geo_weights),
+            "industry": normalize(ind_weights),
         }
 
     # -------------------------------------------------------------------------
@@ -236,30 +234,30 @@ class Portfolio:
         targets = await self.get_target_allocations()
 
         geo_dev = {}
-        for name, target_pct in targets['geography'].items():
-            current_pct = current['by_geography'].get(name, 0)
+        for name, target_pct in targets["geography"].items():
+            current_pct = current["by_geography"].get(name, 0)
             geo_dev[name] = current_pct - target_pct
 
         ind_dev = {}
-        for name, target_pct in targets['industry'].items():
-            current_pct = current['by_industry'].get(name, 0)
+        for name, target_pct in targets["industry"].items():
+            current_pct = current["by_industry"].get(name, 0)
             ind_dev[name] = current_pct - target_pct
 
         return {
-            'geography': geo_dev,
-            'industry': ind_dev,
+            "geography": geo_dev,
+            "industry": ind_dev,
         }
 
     async def needs_rebalance(self) -> bool:
         """Check if portfolio needs rebalancing based on threshold."""
-        threshold = await self._settings.get('rebalance_threshold', 0.05)
+        threshold = await self._settings.get("rebalance_threshold", 0.05)
         deviations = await self.deviation_from_targets()
 
-        for dev in deviations['geography'].values():
+        for dev in deviations["geography"].values():
             if abs(dev) > threshold:
                 return True
 
-        for dev in deviations['industry'].values():
+        for dev in deviations["industry"].values():
             if abs(dev) > threshold:
                 return True
 

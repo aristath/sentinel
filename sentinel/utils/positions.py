@@ -8,8 +8,6 @@ Usage:
     totals = await calculator.calculate_portfolio_values(positions)
 """
 
-from typing import Optional
-
 
 class PositionCalculator:
     """Calculates position values and allocations."""
@@ -31,6 +29,7 @@ class PositionCalculator:
             return self._converter
         if self._currency_instance is None:
             from sentinel.currency import Currency
+
             self._currency_instance = Currency()
         return self._currency_instance
 
@@ -47,12 +46,7 @@ class PositionCalculator:
         """
         return quantity * price
 
-    async def calculate_value_eur(
-        self,
-        quantity: float,
-        price: float,
-        currency: str
-    ) -> float:
+    async def calculate_value_eur(self, quantity: float, price: float, currency: str) -> float:
         """
         Calculate position value in EUR.
 
@@ -104,38 +98,30 @@ class PositionCalculator:
 
         # First pass: calculate values
         for pos in positions:
-            qty = pos.get('quantity', 0)
-            price = pos.get('current_price', 0)
-            currency = pos.get('currency', 'EUR')
+            qty = pos.get("quantity", 0)
+            price = pos.get("current_price", 0)
+            currency = pos.get("currency", "EUR")
 
             value_eur = await self.calculate_value_eur(qty, price, currency)
 
-            pos_with_value = {**pos, 'value_eur': value_eur}
+            pos_with_value = {**pos, "value_eur": value_eur}
             positions_with_values.append(pos_with_value)
             total_value_eur += value_eur
 
         # Second pass: calculate allocations
         allocations = {}
         for pos in positions_with_values:
-            symbol = pos.get('symbol', '')
+            symbol = pos.get("symbol", "")
             if symbol:
-                allocations[symbol] = self.calculate_allocation(
-                    pos['value_eur'],
-                    total_value_eur
-                )
+                allocations[symbol] = self.calculate_allocation(pos["value_eur"], total_value_eur)
 
         return {
-            'total_value_eur': total_value_eur,
-            'positions_with_values': positions_with_values,
-            'allocations': allocations,
+            "total_value_eur": total_value_eur,
+            "positions_with_values": positions_with_values,
+            "allocations": allocations,
         }
 
-    def calculate_profit(
-        self,
-        quantity: float,
-        current_price: float,
-        avg_cost: float
-    ) -> tuple[float, float]:
+    def calculate_profit(self, quantity: float, current_price: float, avg_cost: float) -> tuple[float, float]:
         """
         Calculate profit/loss for a position.
 

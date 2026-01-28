@@ -19,8 +19,8 @@ class PortfolioSyncJob(BaseJob):
 
     def __init__(self, portfolio):
         super().__init__(
-            _id='sync:portfolio',
-            _job_type='sync:portfolio',
+            _id="sync:portfolio",
+            _job_type="sync:portfolio",
             _timeout=timedelta(minutes=5),
             _market_timing=MarketTiming.ANY_TIME,
         )
@@ -42,8 +42,8 @@ class PriceSyncJob(BaseJob):
 
     def __init__(self, db, broker, cache):
         super().__init__(
-            _id='sync:prices',
-            _job_type='sync:prices',
+            _id="sync:prices",
+            _job_type="sync:prices",
             _timeout=timedelta(minutes=30),
             _market_timing=MarketTiming.ANY_TIME,
         )
@@ -58,7 +58,7 @@ class PriceSyncJob(BaseJob):
         logger.info(f"Cleared {cleared} cached analyses before price sync")
 
         securities = await self._db.get_all_securities(active_only=True)
-        symbols = [s['symbol'] for s in securities]
+        symbols = [s["symbol"] for s in securities]
 
         prices = await self._broker.get_historical_prices_bulk(symbols, years=10)
         synced = 0
@@ -80,8 +80,8 @@ class QuoteSyncJob(BaseJob):
 
     def __init__(self, db, broker):
         super().__init__(
-            _id='sync:quotes',
-            _job_type='sync:quotes',
+            _id="sync:quotes",
+            _job_type="sync:quotes",
             _timeout=timedelta(minutes=10),
             _market_timing=MarketTiming.ANY_TIME,
         )
@@ -91,7 +91,7 @@ class QuoteSyncJob(BaseJob):
     async def execute(self) -> None:
         """Execute quote sync."""
         securities = await self._db.get_all_securities(active_only=True)
-        symbols = [s['symbol'] for s in securities]
+        symbols = [s["symbol"] for s in securities]
 
         if not symbols:
             logger.info("No securities to sync quotes for")
@@ -114,8 +114,8 @@ class MetadataSyncJob(BaseJob):
 
     def __init__(self, db, broker):
         super().__init__(
-            _id='sync:metadata',
-            _job_type='sync:metadata',
+            _id="sync:metadata",
+            _job_type="sync:metadata",
             _timeout=timedelta(minutes=15),
             _market_timing=MarketTiming.ANY_TIME,
         )
@@ -128,10 +128,10 @@ class MetadataSyncJob(BaseJob):
         synced = 0
 
         for sec in securities:
-            symbol = sec['symbol']
+            symbol = sec["symbol"]
             info = await self._broker.get_security_info(symbol)
             if info:
-                market_id = str(info.get('mrkt', {}).get('mkt_id', ''))
+                market_id = str(info.get("mrkt", {}).get("mkt_id", ""))
                 await self._db.update_security_metadata(symbol, info, market_id)
                 synced += 1
 
@@ -144,8 +144,8 @@ class ExchangeRateSyncJob(BaseJob):
 
     def __init__(self):
         super().__init__(
-            _id='sync:exchange_rates',
-            _job_type='sync:exchange_rates',
+            _id="sync:exchange_rates",
+            _job_type="sync:exchange_rates",
             _timeout=timedelta(minutes=5),
             _market_timing=MarketTiming.ANY_TIME,
         )

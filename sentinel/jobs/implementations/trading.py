@@ -8,8 +8,8 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 
 from sentinel.jobs.types import BaseJob, MarketTiming
-from sentinel.settings import Settings
 from sentinel.security import Security
+from sentinel.settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +24,8 @@ class CheckMarketsJob(BaseJob):
 
     def __init__(self, broker, db, planner):
         super().__init__(
-            _id='trading:check_markets',
-            _job_type='trading:check_markets',
+            _id="trading:check_markets",
+            _job_type="trading:check_markets",
             _timeout=timedelta(minutes=10),
             _market_timing=MarketTiming.DURING_MARKET_OPEN,
         )
@@ -40,13 +40,13 @@ class CheckMarketsJob(BaseJob):
             return
 
         # Get market status
-        market_data = await self._broker.get_market_status('*')
+        market_data = await self._broker.get_market_status("*")
         if not market_data:
             logger.warning("Could not get market status")
             return
 
-        markets = market_data.get('m', [])
-        open_markets = {m.get('n2'): m for m in markets if m.get('s') == 'OPEN'}
+        markets = market_data.get("m", [])
+        open_markets = {m.get("n2"): m for m in markets if m.get("s") == "OPEN"}
 
         if not open_markets:
             logger.info("No markets currently open")
@@ -59,14 +59,14 @@ class CheckMarketsJob(BaseJob):
         open_securities = []
 
         for sec in securities:
-            data = sec.get('data')
+            data = sec.get("data")
             if data:
                 try:
                     sec_data = json.loads(data) if isinstance(data, str) else data
-                    market_id = sec_data.get('mrkt', {}).get('mkt_id')
+                    market_id = sec_data.get("mrkt", {}).get("mkt_id")
                     for m in markets:
-                        if str(m.get('i')) == str(market_id) and m.get('s') == 'OPEN':
-                            open_securities.append(sec['symbol'])
+                        if str(m.get("i")) == str(market_id) and m.get("s") == "OPEN":
+                            open_securities.append(sec["symbol"])
                             break
                 except (json.JSONDecodeError, KeyError, TypeError, ValueError):
                     pass
@@ -88,8 +88,7 @@ class CheckMarketsJob(BaseJob):
         # Log recommendations (actual execution requires live mode)
         for rec in actionable:
             logger.info(
-                f"Ready to {rec.action.upper()}: {rec.quantity} x {rec.symbol} "
-                f"@ {rec.price:.2f} {rec.currency}"
+                f"Ready to {rec.action.upper()}: {rec.quantity} x {rec.symbol} @ {rec.price:.2f} {rec.currency}"
             )
 
 
@@ -101,8 +100,8 @@ class RebalanceJob(BaseJob):
 
     def __init__(self, planner):
         super().__init__(
-            _id='trading:rebalance',
-            _job_type='trading:rebalance',
+            _id="trading:rebalance",
+            _job_type="trading:rebalance",
             _timeout=timedelta(minutes=15),
             _market_timing=MarketTiming.ANY_TIME,
         )
@@ -112,18 +111,12 @@ class RebalanceJob(BaseJob):
         """Execute rebalance check."""
         summary = await self._planner.get_rebalance_summary()
 
-        if summary['needs_rebalance']:
-            logger.warning(
-                f"Portfolio needs rebalancing! Total deviation: "
-                f"{summary['total_deviation']:.1%}"
-            )
+        if summary["needs_rebalance"]:
+            logger.warning(f"Portfolio needs rebalancing! Total deviation: {summary['total_deviation']:.1%}")
 
             recommendations = await self._planner.get_recommendations()
             for rec in recommendations:
-                logger.warning(
-                    f"  {rec.action.upper()} {rec.symbol}: "
-                    f"€{abs(rec.value_delta_eur):.0f} ({rec.reason})"
-                )
+                logger.warning(f"  {rec.action.upper()} {rec.symbol}: €{abs(rec.value_delta_eur):.0f} ({rec.reason})")
         else:
             logger.info("Portfolio is balanced")
 
@@ -142,8 +135,8 @@ class ExecuteTradesJob(BaseJob):
 
     def __init__(self, broker, db, planner):
         super().__init__(
-            _id='trading:execute',
-            _job_type='trading:execute',
+            _id="trading:execute",
+            _job_type="trading:execute",
             _timeout=timedelta(minutes=15),
             _market_timing=MarketTiming.DURING_MARKET_OPEN,
         )
@@ -159,9 +152,9 @@ class ExecuteTradesJob(BaseJob):
 
         # Check trading mode
         settings = Settings()
-        trading_mode = await settings.get('trading_mode', 'research')
+        trading_mode = await settings.get("trading_mode", "research")
 
-        if trading_mode != 'live':
+        if trading_mode != "live":
             logger.info(f"Trading mode is '{trading_mode}', skipping actual execution")
             # Still log what would happen
             await self._log_pending_trades()
@@ -186,8 +179,8 @@ class ExecuteTradesJob(BaseJob):
             return
 
         # Sort by priority (highest first) and execute sells before buys
-        sells = sorted([r for r in actionable if r.action == 'sell'], key=lambda x: -x.priority)
-        buys = sorted([r for r in actionable if r.action == 'buy'], key=lambda x: -x.priority)
+        sells = sorted([r for r in actionable if r.action == "sell"], key=lambda x: -x.priority)
+        buys = sorted([r for r in actionable if r.action == "buy"], key=lambda x: -x.priority)
 
         executed = []
         failed = []
@@ -220,7 +213,7 @@ class ExecuteTradesJob(BaseJob):
             security = Security(rec.symbol)
             await security.load()
 
-            if rec.action == 'sell':
+            if rec.action == "sell":
                 order_id = await security.sell(rec.quantity)
                 action_str = "SELL"
             else:
@@ -243,12 +236,12 @@ class ExecuteTradesJob(BaseJob):
 
     async def _get_open_market_symbols(self) -> set[str]:
         """Get symbols whose markets are currently open."""
-        market_data = await self._broker.get_market_status('*')
+        market_data = await self._broker.get_market_status("*")
         if not market_data:
             return set()
 
-        markets = market_data.get('m', [])
-        open_market_ids = {str(m.get('i')) for m in markets if m.get('s') == 'OPEN'}
+        markets = market_data.get("m", [])
+        open_market_ids = {str(m.get("i")) for m in markets if m.get("s") == "OPEN"}
 
         if not open_market_ids:
             return set()
@@ -257,13 +250,13 @@ class ExecuteTradesJob(BaseJob):
         open_symbols = set()
 
         for sec in securities:
-            data = sec.get('data')
+            data = sec.get("data")
             if data:
                 try:
                     sec_data = json.loads(data) if isinstance(data, str) else data
-                    market_id = str(sec_data.get('mrkt', {}).get('mkt_id'))
+                    market_id = str(sec_data.get("mrkt", {}).get("mkt_id"))
                     if market_id in open_market_ids:
-                        open_symbols.add(sec['symbol'])
+                        open_symbols.add(sec["symbol"])
                 except (json.JSONDecodeError, KeyError, TypeError, ValueError):
                     pass
 
@@ -300,8 +293,8 @@ class RefreshPlanJob(BaseJob):
 
     def __init__(self, db, planner):
         super().__init__(
-            _id='planning:refresh',
-            _job_type='planning:refresh',
+            _id="planning:refresh",
+            _job_type="planning:refresh",
             _timeout=timedelta(minutes=10),
             _market_timing=MarketTiming.ANY_TIME,
         )
@@ -311,7 +304,7 @@ class RefreshPlanJob(BaseJob):
     async def execute(self) -> None:
         """Clear caches and regenerate plan."""
         # Clear planner-related caches
-        cleared = await self._db.cache_clear('planner:')
+        cleared = await self._db.cache_clear("planner:")
         logger.info(f"Cleared {cleared} planner cache entries")
 
         # Regenerate ideal portfolio (this will cache the result)
@@ -320,6 +313,6 @@ class RefreshPlanJob(BaseJob):
 
         # Regenerate recommendations (this will cache the result)
         recommendations = await self._planner.get_recommendations()
-        buys = [r for r in recommendations if r.action == 'buy']
-        sells = [r for r in recommendations if r.action == 'sell']
+        buys = [r for r in recommendations if r.action == "buy"]
+        sells = [r for r in recommendations if r.action == "sell"]
         logger.info(f"Generated {len(recommendations)} recommendations: {len(buys)} buys, {len(sells)} sells")

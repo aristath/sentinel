@@ -52,9 +52,9 @@ class BrokerMarketChecker:
             return
         self._refresh_in_progress = True
         try:
-            data = await self._broker.get_market_status('*')
+            data = await self._broker.get_market_status("*")
             if data:
-                self._market_data = {m.get('n2'): m for m in data.get('m', [])}
+                self._market_data = {m.get("n2"): m for m in data.get("m", [])}
                 self._last_fetch = datetime.now()
                 logger.debug(f"Market data refreshed: {len(self._market_data)} markets")
         except Exception as e:
@@ -69,25 +69,25 @@ class BrokerMarketChecker:
 
     def is_any_market_open(self) -> bool:
         """Check if any market is currently open."""
-        return any(m.get('s') == 'OPEN' for m in self._market_data.values())
+        return any(m.get("s") == "OPEN" for m in self._market_data.values())
 
     def is_security_market_open(self, symbol: str) -> bool:
         """Check if the market for a specific security is open."""
-        if '.' not in symbol:
+        if "." not in symbol:
             return False
-        suffix = symbol.split('.')[-1]
-        market_map = {'US': 'NASDAQ', 'GR': 'XETRA', 'L': 'LSE'}
+        suffix = symbol.split(".")[-1]
+        market_map = {"US": "NASDAQ", "GR": "XETRA", "L": "LSE"}
         market_name = market_map.get(suffix)
         if not market_name:
             return False
         market = self._market_data.get(market_name)
-        return market is not None and market.get('s') == 'OPEN'
+        return market is not None and market.get("s") == "OPEN"
 
     def are_all_markets_closed(self) -> bool:
         """Check if all markets are closed."""
         if not self._market_data:
             return True
-        return all(m.get('s') != 'OPEN' for m in self._market_data.values())
+        return all(m.get("s") != "OPEN" for m in self._market_data.values())
 
 
 def can_execute_now(job: Job, checker: MarketChecker) -> bool:

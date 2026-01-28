@@ -9,34 +9,39 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
+
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
+
+from sentinel.backtester import (
+    BacktestConfig,
+    Backtester,
+    BacktestProgress,
+    BacktestResult,
+    get_active_backtest,
+    set_active_backtest,
+)
+from sentinel.broker import Broker
+from sentinel.cache import Cache
+from sentinel.database import Database
+from sentinel.jobs import (
+    Processor,
+    Queue,
+    Registry,
+    Scheduler,
+)
+from sentinel.jobs.implementations import register_all_jobs
+from sentinel.jobs.market import BrokerMarketChecker
+from sentinel.portfolio import Portfolio
+from sentinel.price_validator import PriceValidator, get_price_anomaly_warning
+from sentinel.security import Security
+from sentinel.settings import Settings
 
 logger = logging.getLogger(__name__)
-from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
-from pathlib import Path
-
-from fastapi.responses import StreamingResponse
-
-from sentinel.database import Database
-from sentinel.broker import Broker
-from sentinel.settings import Settings
-from sentinel.portfolio import Portfolio
-from sentinel.security import Security
-from sentinel.price_validator import PriceValidator, get_price_anomaly_warning
-from sentinel.cache import Cache
-from sentinel.backtester import (
-    Backtester, BacktestConfig, BacktestProgress, BacktestResult,
-    get_active_backtest, set_active_backtest,
-)
-
-# Job system imports
-from sentinel.jobs import (
-    Queue, Registry, Processor, Scheduler,
-)
-from sentinel.jobs.market import BrokerMarketChecker
-from sentinel.jobs.implementations import register_all_jobs
 
 # Global instances
 _queue: Queue = None
@@ -49,17 +54,18 @@ _led_task: asyncio.Task = None
 
 def _apply_schedule_to_job(job, schedule: dict) -> None:
     """Apply schedule configuration to job instance."""
-    from sentinel.jobs.types import MarketTiming
     import json
 
+    from sentinel.jobs.types import MarketTiming
+
     # Override market_timing from database if set
-    market_timing = schedule.get('market_timing')
-    if market_timing is not None and hasattr(job, '_market_timing'):
+    market_timing = schedule.get("market_timing")
+    if market_timing is not None and hasattr(job, "_market_timing"):
         job._market_timing = MarketTiming(market_timing)
 
     # Override dependencies from database if set
-    deps_str = schedule.get('dependencies')
-    if deps_str and hasattr(job, '_dependencies'):
+    deps_str = schedule.get("dependencies")
+    if deps_str and hasattr(job, "_dependencies"):
         try:
             deps = json.loads(deps_str)
             if isinstance(deps, list):
@@ -85,6 +91,7 @@ async def lifespan(app: FastAPI):
 
     # Sync exchange rates on startup
     from sentinel.currency import Currency
+
     currency = Currency()
     await currency.sync_rates()
     logger.info("Exchange rates synced")
@@ -94,10 +101,10 @@ async def lifespan(app: FastAPI):
 
     # Initialize job system components
     from sentinel.analyzer import Analyzer
-    from sentinel.regime_detector import RegimeDetector
-    from sentinel.planner import Planner
-    from sentinel.ml_retrainer import MLRetrainer
     from sentinel.ml_monitor import MLMonitor
+    from sentinel.ml_retrainer import MLRetrainer
+    from sentinel.planner import Planner
+    from sentinel.regime_detector import RegimeDetector
 
     portfolio = Portfolio()
     analyzer = Analyzer()
@@ -105,15 +112,22 @@ async def lifespan(app: FastAPI):
     planner = Planner()
     retrainer = MLRetrainer()
     monitor = MLMonitor()
-    cache = Cache('motion')
+    cache = Cache("motion")
 
     # Initialize job system
     _queue = Queue()
     _registry = Registry()
     await register_all_jobs(
-        _registry, db, broker, portfolio, analyzer,
-        detector, planner,
-        retrainer, monitor, cache,
+        _registry,
+        db,
+        broker,
+        portfolio,
+        analyzer,
+        detector,
+        planner,
+        retrainer,
+        monitor,
+        cache,
     )
 
     market_checker = BrokerMarketChecker(broker)
@@ -132,6 +146,7 @@ async def lifespan(app: FastAPI):
 
     # Start LED controller (checks setting internally, no-op if disabled)
     from sentinel.led import LEDController
+
     _led_controller = LEDController()
     _led_task = asyncio.create_task(_led_controller.start())
 
@@ -164,16 +179,14 @@ async def _sync_missing_prices(db: Database, broker: Broker):
         logger.info("No positions to sync prices for")
         return
 
-    symbols = [p['symbol'] for p in positions]
+    symbols = [p["symbol"] for p in positions]
 
     # Check which symbols are missing price data
     missing = []
     for symbol in symbols:
-        cursor = await db.conn.execute(
-            "SELECT COUNT(*) as cnt FROM prices WHERE symbol = ?", (symbol,)
-        )
+        cursor = await db.conn.execute("SELECT COUNT(*) as cnt FROM prices WHERE symbol = ?", (symbol,))
         row = await cursor.fetchone()
-        if row['cnt'] < 100:  # Less than 100 days of data
+        if row["cnt"] < 100:  # Less than 100 days of data
             missing.append(symbol)
 
     if not missing:
@@ -215,6 +228,7 @@ app.add_middleware(
 # Settings API
 # -----------------------------------------------------------------------------
 
+
 @app.get("/api/settings")
 async def get_settings():
     """Get all settings."""
@@ -226,7 +240,7 @@ async def get_settings():
 async def set_setting(key: str, value: dict):
     """Set a setting value."""
     settings = Settings()
-    await settings.set(key, value.get('value'))
+    await settings.set(key, value.get("value"))
     return {"status": "ok"}
 
 
@@ -234,11 +248,12 @@ async def set_setting(key: str, value: dict):
 # LED Display API
 # -----------------------------------------------------------------------------
 
+
 @app.get("/api/led/status")
 async def get_led_status():
     """Get LED display status and settings."""
     settings = Settings()
-    enabled = await settings.get('led_display_enabled', False)
+    enabled = await settings.get("led_display_enabled", False)
     return {
         "enabled": enabled,
         "running": _led_controller.is_running if _led_controller else False,
@@ -250,8 +265,8 @@ async def get_led_status():
 async def set_led_enabled(data: dict):
     """Enable or disable LED display."""
     settings = Settings()
-    enabled = data.get('enabled', False)
-    await settings.set('led_display_enabled', enabled)
+    enabled = data.get("enabled", False)
+    await settings.set("led_display_enabled", enabled)
     return {"enabled": enabled}
 
 
@@ -268,10 +283,12 @@ async def refresh_led_display():
 # Exchange Rates API
 # -----------------------------------------------------------------------------
 
+
 @app.get("/api/exchange-rates")
 async def get_exchange_rates():
     """Get all exchange rates to EUR."""
     from sentinel.currency import Currency
+
     currency = Currency()
     return await currency.get_rates()
 
@@ -280,6 +297,7 @@ async def get_exchange_rates():
 async def sync_exchange_rates():
     """Sync exchange rates from Tradernet API."""
     from sentinel.currency import Currency
+
     currency = Currency()
     rates = await currency.sync_rates()
     return rates
@@ -289,14 +307,16 @@ async def sync_exchange_rates():
 async def set_exchange_rate(curr: str, data: dict):
     """Manually set exchange rate for a currency to EUR."""
     from sentinel.currency import Currency
+
     currency = Currency()
-    await currency.set_rate(curr, data.get('rate', 1.0))
+    await currency.set_rate(curr, data.get("rate", 1.0))
     return {"status": "ok"}
 
 
 # -----------------------------------------------------------------------------
 # Markets API
 # -----------------------------------------------------------------------------
+
 
 @app.get("/api/markets/status")
 async def get_markets_status():
@@ -311,37 +331,39 @@ async def get_markets_status():
 
     market_ids_needed = set()
     for sec in securities:
-        data = sec.get('data')
+        data = sec.get("data")
         if data:
             try:
                 sec_data = _json.loads(data) if isinstance(data, str) else data
-                mkt_id = sec_data.get('mrkt', {}).get('mkt_id')
+                mkt_id = sec_data.get("mrkt", {}).get("mkt_id")
                 if mkt_id is not None:
                     market_ids_needed.add(str(mkt_id))
             except (_json.JSONDecodeError, KeyError, TypeError, ValueError):
                 pass
 
     # Get market status from broker
-    market_data = await broker.get_market_status('*')
+    market_data = await broker.get_market_status("*")
     if not market_data:
         return {"markets": [], "any_open": False}
 
     # Filter to only markets that have securities in our universe
-    markets_list = market_data.get('m', [])
+    markets_list = market_data.get("m", [])
     filtered_markets = []
     seen = set()
     for m in markets_list:
-        mkt_id = str(m.get('i', ''))
-        market_name = m.get('n2', mkt_id)
+        mkt_id = str(m.get("i", ""))
+        market_name = m.get("n2", mkt_id)
         if mkt_id in market_ids_needed and market_name not in seen:
             seen.add(market_name)
-            filtered_markets.append({
-                "name": market_name,
-                "status": m.get('s', 'UNKNOWN'),
-                "is_open": m.get('s') == 'OPEN',
-            })
+            filtered_markets.append(
+                {
+                    "name": market_name,
+                    "status": m.get("s", "UNKNOWN"),
+                    "is_open": m.get("s") == "OPEN",
+                }
+            )
 
-    any_open = any(m['is_open'] for m in filtered_markets)
+    any_open = any(m["is_open"] for m in filtered_markets)
 
     return {
         "markets": filtered_markets,
@@ -353,6 +375,7 @@ async def get_markets_status():
 # Meta API
 # -----------------------------------------------------------------------------
 
+
 @app.get("/api/meta/categories")
 async def get_categories():
     """Get combined default + existing categories from database."""
@@ -362,8 +385,8 @@ async def get_categories():
     existing = await db.get_distinct_categories()
 
     return {
-        'geographies': sorted(set(DEFAULT_GEOGRAPHIES + existing['geographies'])),
-        'industries': sorted(set(DEFAULT_INDUSTRIES + existing['industries'])),
+        "geographies": sorted(set(DEFAULT_GEOGRAPHIES + existing["geographies"])),
+        "industries": sorted(set(DEFAULT_INDUSTRIES + existing["industries"])),
     }
 
 
@@ -371,10 +394,12 @@ async def get_categories():
 # Portfolio API
 # -----------------------------------------------------------------------------
 
+
 @app.get("/api/portfolio")
 async def get_portfolio():
     """Get current portfolio state."""
     from sentinel.currency import Currency
+
     currency = Currency()
 
     portfolio = Portfolio()
@@ -385,26 +410,26 @@ async def get_portfolio():
     # Get security names and add EUR-converted values to each position
     db = Database()
     for pos in positions:
-        symbol = pos['symbol']
-        price = pos.get('current_price', 0)
-        qty = pos.get('quantity', 0)
-        avg_cost = pos.get('avg_cost', 0)
-        pos_currency = pos.get('currency', 'EUR')
+        symbol = pos["symbol"]
+        price = pos.get("current_price", 0)
+        qty = pos.get("quantity", 0)
+        avg_cost = pos.get("avg_cost", 0)
+        pos_currency = pos.get("currency", "EUR")
         value_local = price * qty
         value_eur = await currency.to_eur(value_local, pos_currency)
-        pos['value_local'] = value_local
-        pos['value_eur'] = value_eur
+        pos["value_local"] = value_local
+        pos["value_eur"] = value_eur
 
         # Calculate profit percentage
         if avg_cost and avg_cost > 0:
-            pos['profit_pct'] = ((price - avg_cost) / avg_cost) * 100
+            pos["profit_pct"] = ((price - avg_cost) / avg_cost) * 100
         else:
-            pos['profit_pct'] = 0
+            pos["profit_pct"] = 0
 
         # Get security name
         sec = await db.get_security(symbol)
         if sec:
-            pos['name'] = sec.get('name', symbol)
+            pos["name"] = sec.get("name", symbol)
 
     # Get cash balances from portfolio (stored in DB)
     portfolio_obj = Portfolio()
@@ -455,6 +480,7 @@ async def get_allocations():
 # Securities API
 # -----------------------------------------------------------------------------
 
+
 @app.get("/api/securities")
 async def get_securities():
     """Get all securities in universe."""
@@ -465,7 +491,7 @@ async def get_securities():
 @app.post("/api/securities")
 async def add_security(data: dict):
     """Add a new security to the universe."""
-    symbol = data.get('symbol')
+    symbol = data.get("symbol")
     if not symbol:
         raise HTTPException(status_code=400, detail="Symbol is required")
 
@@ -483,10 +509,10 @@ async def add_security(data: dict):
         raise HTTPException(status_code=404, detail="Security not found in broker")
 
     # Extract relevant data
-    name = info.get('short_name', info.get('name', symbol))
-    currency = info.get('currency', info.get('curr', 'EUR'))
-    market_id = str(info.get('mrkt', {}).get('mkt_id', ''))
-    min_lot = int(float(info.get('lot', 1)))
+    name = info.get("short_name", info.get("name", symbol))
+    currency = info.get("currency", info.get("curr", "EUR"))
+    market_id = str(info.get("mrkt", {}).get("mkt_id", ""))
+    min_lot = int(float(info.get("lot", 1)))
 
     # Save to database
     await db.upsert_security(
@@ -496,8 +522,8 @@ async def add_security(data: dict):
         market_id=market_id,
         min_lot=min_lot,
         active=True,
-        geography=data.get('geography', ''),
-        industry=data.get('industry', ''),
+        geography=data.get("geography", ""),
+        industry=data.get("industry", ""),
     )
 
     # Save full metadata
@@ -524,7 +550,7 @@ async def delete_security(symbol: str, sell_position: bool = True):
 
     # Check for position
     position = await db.get_position(symbol)
-    quantity = position.get('quantity', 0) if position else 0
+    quantity = position.get("quantity", 0) if position else 0
 
     # Sell position if requested and exists
     if sell_position and quantity > 0:
@@ -566,14 +592,23 @@ async def get_security(symbol: str):
 
 @app.put("/api/securities/{symbol}")
 async def update_security(symbol: str, data: dict):
-    """Update security metadata (geography, industry, allow_buy, allow_sell, user_multiplier, ml_enabled, ml_blend_ratio)."""
+    """Update security metadata (geography, industry, allow_buy/sell, user_multiplier, ml settings)."""
     db = Database()
     existing = await db.get_security(symbol)
     if not existing:
         raise HTTPException(status_code=404, detail="Security not found")
 
     # Only allow updating specific fields
-    allowed_fields = ['geography', 'industry', 'allow_buy', 'allow_sell', 'user_multiplier', 'active', 'ml_enabled', 'ml_blend_ratio']
+    allowed_fields = [
+        "geography",
+        "industry",
+        "allow_buy",
+        "allow_sell",
+        "user_multiplier",
+        "active",
+        "ml_enabled",
+        "ml_blend_ratio",
+    ]
     updates = {k: v for k, v in data.items() if k in allowed_fields}
 
     if updates:
@@ -592,9 +627,10 @@ async def get_unified_view(period: str = "1Y"):
 
     Returns all securities with their positions, prices, scores, and recommendations.
     """
+    import json
+
     from sentinel.currency import Currency
     from sentinel.planner import Planner
-    import json
 
     db = Database()
     broker = Broker()
@@ -605,17 +641,17 @@ async def get_unified_view(period: str = "1Y"):
     securities = await db.get_all_securities(active_only=False)
 
     # Fetch current quotes from broker for all symbols at once
-    all_symbols = [sec['symbol'] for sec in securities]
+    all_symbols = [sec["symbol"] for sec in securities]
     current_quotes = await broker.get_quotes(all_symbols)
 
     # Get all positions
     positions = await db.get_all_positions()
-    positions_map = {p['symbol']: p for p in positions}
+    positions_map = {p["symbol"]: p for p in positions}
 
     # Get all scores
     cursor = await db.conn.execute("SELECT * FROM scores")
     scores = await cursor.fetchall()
-    scores_map = {s['symbol']: dict(s) for s in scores}
+    scores_map = {s["symbol"]: dict(s) for s in scores}
 
     # Get latest ML predictions for each symbol (for wavelet/ML score breakdown)
     cursor = await db.conn.execute("""
@@ -626,7 +662,7 @@ async def get_unified_view(period: str = "1Y"):
         )
     """)
     ml_preds = await cursor.fetchall()
-    ml_preds_map = {p['symbol']: dict(p) for p in ml_preds}
+    ml_preds_map = {p["symbol"]: dict(p) for p in ml_preds}
 
     # Get recommendations (uses setting)
     recommendations = await planner.get_recommendations()
@@ -639,9 +675,9 @@ async def get_unified_view(period: str = "1Y"):
     # Calculate total portfolio value for allocation percentages
     total_value = 0
     for pos in positions:
-        price = pos.get('current_price', 0)
-        qty = pos.get('quantity', 0)
-        pos_currency = pos.get('currency', 'EUR')
+        price = pos.get("current_price", 0)
+        qty = pos.get("quantity", 0)
+        pos_currency = pos.get("currency", "EUR")
         value_eur = await currency.to_eur(price * qty, pos_currency)
         total_value += value_eur
 
@@ -652,7 +688,7 @@ async def get_unified_view(period: str = "1Y"):
         post_plan_total_value += rec.value_delta_eur  # positive for buys, negative for sells
 
     # Determine price data limit based on period
-    days_map = {'1M': 30, '1Y': 365, '5Y': 1825, '10Y': 3650}
+    days_map = {"1M": 30, "1Y": 365, "5Y": 1825, "10Y": 3650}
     days = days_map.get(period, 365)
 
     # Fetch all prices in a single bulk query
@@ -670,7 +706,7 @@ async def get_unified_view(period: str = "1Y"):
     # Build unified response
     result = []
     for sec in securities:
-        symbol = sec['symbol']
+        symbol = sec["symbol"]
         position = positions_map.get(symbol)
         score_data = scores_map.get(symbol, {})
         recommendation = recommendations_map.get(symbol)
@@ -679,26 +715,26 @@ async def get_unified_view(period: str = "1Y"):
         prices = all_prices_validated.get(symbol, [])
 
         # Calculate position data
-        has_position = position is not None and position.get('quantity', 0) > 0
-        quantity = position.get('quantity', 0) if position else 0
-        avg_cost = position.get('avg_cost', 0) if position else 0
+        has_position = position is not None and position.get("quantity", 0) > 0
+        quantity = position.get("quantity", 0) if position else 0
+        avg_cost = position.get("avg_cost", 0) if position else 0
 
         # Get current price: prefer live quote, fallback to position, then historical
         quote = current_quotes.get(symbol)
-        current_price = quote.get('price', 0) if quote else 0
+        current_price = quote.get("price", 0) if quote else 0
         if current_price <= 0 and position:
-            current_price = position.get('current_price', 0)
+            current_price = position.get("current_price", 0)
         if current_price <= 0 and prices:
-            current_price = prices[0]['close']
+            current_price = prices[0]["close"]
 
         # Check for price anomaly
         price_warning = None
         if current_price > 0 and prices:
-            historical_closes = [p['close'] for p in prices if p.get('close') and p['close'] > 0]
+            historical_closes = [p["close"] for p in prices if p.get("close") and p["close"] > 0]
             price_warning = get_price_anomaly_warning(current_price, historical_closes, symbol)
 
         # Calculate P/L
-        sec_currency = sec.get('currency', 'EUR')
+        sec_currency = sec.get("currency", "EUR")
         if has_position and avg_cost > 0:
             profit_pct = ((current_price - avg_cost) / avg_cost) * 100
             profit_value = (current_price - avg_cost) * quantity
@@ -725,19 +761,28 @@ async def get_unified_view(period: str = "1Y"):
 
         # Parse score components
         components = {}
-        if score_data.get('components'):
+        if score_data.get("components"):
             try:
-                components = json.loads(score_data['components']) if isinstance(score_data['components'], str) else score_data['components']
+                components = (
+                    json.loads(score_data["components"])
+                    if isinstance(score_data["components"], str)
+                    else score_data["components"]
+                )
             except (json.JSONDecodeError, TypeError, ValueError):
                 pass
 
         # Apply user conviction adjustment to expected return
         from sentinel.utils.scoring import adjust_score_for_conviction
-        user_multiplier = sec.get('user_multiplier', 1.0) or 1.0
+
+        user_multiplier = sec.get("user_multiplier", 1.0) or 1.0
 
         # Use blended final_score from ML predictions if available, otherwise fall back to wavelet score
         ml_pred = ml_preds_map.get(symbol, {})
-        base_expected_return = ml_pred.get('final_score') if ml_pred.get('final_score') is not None else (components.get('expected_return', 0) or 0)
+        base_expected_return = (
+            ml_pred.get("final_score")
+            if ml_pred.get("final_score") is not None
+            else (components.get("expected_return", 0) or 0)
+        )
         adjusted_expected_return = adjust_score_for_conviction(base_expected_return, user_multiplier)
         conviction_boost = adjusted_expected_return - base_expected_return
 
@@ -745,63 +790,58 @@ async def get_unified_view(period: str = "1Y"):
         rec_info = None
         if recommendation:
             rec_info = {
-                'action': recommendation.action,
-                'quantity': recommendation.quantity,
-                'value_delta_eur': recommendation.value_delta_eur,
-                'reason': recommendation.reason,
-                'priority': recommendation.priority,
+                "action": recommendation.action,
+                "quantity": recommendation.quantity,
+                "value_delta_eur": recommendation.value_delta_eur,
+                "reason": recommendation.reason,
+                "priority": recommendation.priority,
             }
 
-        result.append({
-            'symbol': symbol,
-            'name': sec.get('name', symbol),
-            'currency': sec_currency,
-            'geography': sec.get('geography'),
-            'industry': sec.get('industry'),
-            'min_lot': sec.get('min_lot', 1),
-            'active': sec.get('active', 1),
-            'allow_buy': sec.get('allow_buy', 1),
-            'allow_sell': sec.get('allow_sell', 1),
-            'user_multiplier': sec.get('user_multiplier', 1.0),
-            'ml_enabled': sec.get('ml_enabled', 0),
-            'ml_blend_ratio': sec.get('ml_blend_ratio', 0.5),
-
-            # Position data
-            'has_position': has_position,
-            'quantity': quantity,
-            'avg_cost': avg_cost,
-            'current_price': current_price,
-            'value_local': value_local,
-            'value_eur': value_eur,
-            'profit_pct': profit_pct,
-            'profit_value': profit_value,
-            'profit_value_eur': profit_value_eur,
-
-            # Price anomaly warning (if any)
-            'price_warning': price_warning,
-
-            # Allocations
-            'current_allocation': current_alloc,
-            'post_plan_allocation': post_plan_alloc,
-            'ideal_allocation': ideal_alloc,
-            'target_allocation': ideal_alloc,  # Alias for backwards compatibility
-
-            # Score data (adjusted by user conviction)
-            'score': (score_data.get('score') or 0) + conviction_boost,
-            'expected_return': adjusted_expected_return,
-            'base_expected_return': base_expected_return,
-            'score_components': components,
-
-            # ML prediction breakdown (for chart projections)
-            'wavelet_score': ml_preds_map.get(symbol, {}).get('wavelet_score'),
-            'ml_score': ml_preds_map.get(symbol, {}).get('ml_score'),
-
-            # Price history (for chart)
-            'prices': [{'date': p['date'], 'close': p['close']} for p in reversed(prices)],
-
-            # Recommendation
-            'recommendation': rec_info,
-        })
+        result.append(
+            {
+                "symbol": symbol,
+                "name": sec.get("name", symbol),
+                "currency": sec_currency,
+                "geography": sec.get("geography"),
+                "industry": sec.get("industry"),
+                "min_lot": sec.get("min_lot", 1),
+                "active": sec.get("active", 1),
+                "allow_buy": sec.get("allow_buy", 1),
+                "allow_sell": sec.get("allow_sell", 1),
+                "user_multiplier": sec.get("user_multiplier", 1.0),
+                "ml_enabled": sec.get("ml_enabled", 0),
+                "ml_blend_ratio": sec.get("ml_blend_ratio", 0.5),
+                # Position data
+                "has_position": has_position,
+                "quantity": quantity,
+                "avg_cost": avg_cost,
+                "current_price": current_price,
+                "value_local": value_local,
+                "value_eur": value_eur,
+                "profit_pct": profit_pct,
+                "profit_value": profit_value,
+                "profit_value_eur": profit_value_eur,
+                # Price anomaly warning (if any)
+                "price_warning": price_warning,
+                # Allocations
+                "current_allocation": current_alloc,
+                "post_plan_allocation": post_plan_alloc,
+                "ideal_allocation": ideal_alloc,
+                "target_allocation": ideal_alloc,  # Alias for backwards compatibility
+                # Score data (adjusted by user conviction)
+                "score": (score_data.get("score") or 0) + conviction_boost,
+                "expected_return": adjusted_expected_return,
+                "base_expected_return": base_expected_return,
+                "score_components": components,
+                # ML prediction breakdown (for chart projections)
+                "wavelet_score": ml_preds_map.get(symbol, {}).get("wavelet_score"),
+                "ml_score": ml_preds_map.get(symbol, {}).get("ml_score"),
+                # Price history (for chart)
+                "prices": [{"date": p["date"], "close": p["close"]} for p in reversed(prices)],
+                # Recommendation
+                "recommendation": rec_info,
+            }
+        )
 
     return result
 
@@ -839,6 +879,7 @@ async def sync_all_prices():
 async def calculate_scores():
     """Calculate scores for all securities."""
     from sentinel.analyzer import Analyzer
+
     analyzer = Analyzer()
     count = await analyzer.update_scores()
     return {"calculated": count}
@@ -847,6 +888,7 @@ async def calculate_scores():
 # -----------------------------------------------------------------------------
 # Trading API
 # -----------------------------------------------------------------------------
+
 
 @app.get("/api/trades")
 async def get_trades(limit: int = 100):
@@ -881,24 +923,25 @@ async def sell_security(symbol: str, quantity: int):
 # Allocation Targets API
 # -----------------------------------------------------------------------------
 
+
 @app.get("/api/allocation-targets")
 async def get_allocation_targets():
     """Get all allocation targets."""
     db = Database()
     targets = await db.get_allocation_targets()
     return {
-        "geography": [t for t in targets if t['type'] == 'geography'],
-        "industry": [t for t in targets if t['type'] == 'industry'],
+        "geography": [t for t in targets if t["type"] == "geography"],
+        "industry": [t for t in targets if t["type"] == "industry"],
     }
 
 
 @app.put("/api/allocation-targets/{target_type}/{name}")
 async def set_allocation_target(target_type: str, name: str, data: dict):
     """Set an allocation target weight."""
-    if target_type not in ('geography', 'industry'):
+    if target_type not in ("geography", "industry"):
         raise HTTPException(status_code=400, detail="Invalid target type")
     db = Database()
-    await db.set_allocation_target(target_type, name, data.get('weight', 1.0))
+    await db.set_allocation_target(target_type, name, data.get("weight", 1.0))
     return {"status": "ok"}
 
 
@@ -911,32 +954,36 @@ async def get_allocation_current():
 
     # Format geography allocations
     geography = []
-    all_geos = set(current.get('by_geography', {}).keys()) | set(targets.get('geography', {}).keys())
+    all_geos = set(current.get("by_geography", {}).keys()) | set(targets.get("geography", {}).keys())
     for geo in sorted(all_geos):
-        current_pct = current.get('by_geography', {}).get(geo, 0) * 100
-        target_pct = targets.get('geography', {}).get(geo, 0) * 100
-        geography.append({
-            'name': geo,
-            'current_pct': current_pct,
-            'target_pct': target_pct,
-        })
+        current_pct = current.get("by_geography", {}).get(geo, 0) * 100
+        target_pct = targets.get("geography", {}).get(geo, 0) * 100
+        geography.append(
+            {
+                "name": geo,
+                "current_pct": current_pct,
+                "target_pct": target_pct,
+            }
+        )
 
     # Format industry allocations
     industry = []
-    all_inds = set(current.get('by_industry', {}).keys()) | set(targets.get('industry', {}).keys())
+    all_inds = set(current.get("by_industry", {}).keys()) | set(targets.get("industry", {}).keys())
     for ind in sorted(all_inds):
-        current_pct = current.get('by_industry', {}).get(ind, 0) * 100
-        target_pct = targets.get('industry', {}).get(ind, 0) * 100
-        industry.append({
-            'name': ind,
-            'current_pct': current_pct,
-            'target_pct': target_pct,
-        })
+        current_pct = current.get("by_industry", {}).get(ind, 0) * 100
+        target_pct = targets.get("industry", {}).get(ind, 0) * 100
+        industry.append(
+            {
+                "name": ind,
+                "current_pct": current_pct,
+                "target_pct": target_pct,
+            }
+        )
 
     return {
-        'geography': geography,
-        'industry': industry,
-        'alerts': [],  # TODO: implement concentration alerts if needed
+        "geography": geography,
+        "industry": industry,
+        "alerts": [],  # TODO: implement concentration alerts if needed
     }
 
 
@@ -949,12 +996,12 @@ async def get_allocation_targets_formatted():
     geography = {}
     industry = {}
     for t in targets:
-        if t['type'] == 'geography':
-            geography[t['name']] = t['weight']
-        elif t['type'] == 'industry':
-            industry[t['name']] = t['weight']
+        if t["type"] == "geography":
+            geography[t["name"]] = t["weight"]
+        elif t["type"] == "industry":
+            industry[t["name"]] = t["weight"]
 
-    return {'geography': geography, 'industry': industry}
+    return {"geography": geography, "industry": industry}
 
 
 @app.get("/api/allocation/available-geographies")
@@ -964,9 +1011,9 @@ async def get_available_geographies():
     # Only from securities + allocation_targets, NOT defaults
     existing = await db.get_distinct_categories()
     targets = await db.get_allocation_targets()
-    target_geos = {t['name'] for t in targets if t['type'] == 'geography'}
-    geographies = sorted(set(existing['geographies']) | target_geos)
-    return {'geographies': geographies}
+    target_geos = {t["name"] for t in targets if t["type"] == "geography"}
+    geographies = sorted(set(existing["geographies"]) | target_geos)
+    return {"geographies": geographies}
 
 
 @app.get("/api/allocation/available-industries")
@@ -976,18 +1023,18 @@ async def get_available_industries():
     # Only from securities + allocation_targets, NOT defaults
     existing = await db.get_distinct_categories()
     targets = await db.get_allocation_targets()
-    target_inds = {t['name'] for t in targets if t['type'] == 'industry'}
-    industries = sorted(set(existing['industries']) | target_inds)
-    return {'industries': industries}
+    target_inds = {t["name"] for t in targets if t["type"] == "industry"}
+    industries = sorted(set(existing["industries"]) | target_inds)
+    return {"industries": industries}
 
 
 @app.put("/api/allocation/targets/geography")
 async def save_geography_targets(data: dict):
     """Save all geography targets at once."""
     db = Database()
-    targets = data.get('targets', {})
+    targets = data.get("targets", {})
     for name, weight in targets.items():
-        await db.set_allocation_target('geography', name, weight)
+        await db.set_allocation_target("geography", name, weight)
     return {"status": "ok"}
 
 
@@ -995,9 +1042,9 @@ async def save_geography_targets(data: dict):
 async def save_industry_targets(data: dict):
     """Save all industry targets at once."""
     db = Database()
-    targets = data.get('targets', {})
+    targets = data.get("targets", {})
     for name, weight in targets.items():
-        await db.set_allocation_target('industry', name, weight)
+        await db.set_allocation_target("industry", name, weight)
     return {"status": "ok"}
 
 
@@ -1005,7 +1052,7 @@ async def save_industry_targets(data: dict):
 async def delete_geography_target(name: str):
     """Delete a geography target. Category disappears from UI if not used by any security."""
     db = Database()
-    await db.delete_allocation_target('geography', name)
+    await db.delete_allocation_target("geography", name)
     return {"status": "ok"}
 
 
@@ -1013,7 +1060,7 @@ async def delete_geography_target(name: str):
 async def delete_industry_target(name: str):
     """Delete an industry target. Category disappears from UI if not used by any security."""
     db = Database()
-    await db.delete_allocation_target('industry', name)
+    await db.delete_allocation_target("industry", name)
     return {"status": "ok"}
 
 
@@ -1021,13 +1068,12 @@ async def delete_industry_target(name: str):
 # Scores API
 # -----------------------------------------------------------------------------
 
+
 @app.get("/api/scores")
 async def get_scores():
     """Get all security scores."""
     db = Database()
-    cursor = await db.conn.execute(
-        "SELECT symbol, score, components, calculated_at FROM scores ORDER BY score DESC"
-    )
+    cursor = await db.conn.execute("SELECT symbol, score, components, calculated_at FROM scores ORDER BY score DESC")
     rows = await cursor.fetchall()
     return [dict(row) for row in rows]
 
@@ -1035,6 +1081,7 @@ async def get_scores():
 # -----------------------------------------------------------------------------
 # Planner API
 # -----------------------------------------------------------------------------
+
 
 @app.get("/api/planner/recommendations")
 async def get_recommendations(min_value: Optional[float] = None):
@@ -1049,7 +1096,7 @@ async def get_recommendations(min_value: Optional[float] = None):
 
     # Use provided min_value or fall back to setting
     if min_value is None:
-        min_value = await settings.get('min_trade_value', default=100.0)
+        min_value = await settings.get("min_trade_value", default=100.0)
 
     recommendations = await planner.get_recommendations(
         min_trade_value=min_value,
@@ -1057,13 +1104,13 @@ async def get_recommendations(min_value: Optional[float] = None):
 
     # Calculate summary with transaction fees
     current_cash = await portfolio.total_cash_eur()
-    fixed_fee = await settings.get('transaction_fee_fixed', 2.0)
-    pct_fee = await settings.get('transaction_fee_percent', 0.2) / 100
+    fixed_fee = await settings.get("transaction_fee_fixed", 2.0)
+    pct_fee = await settings.get("transaction_fee_percent", 0.2) / 100
 
-    total_sell_value = sum(abs(r.value_delta_eur) for r in recommendations if r.action == 'sell')
-    total_buy_value = sum(r.value_delta_eur for r in recommendations if r.action == 'buy')
-    num_sells = sum(1 for r in recommendations if r.action == 'sell')
-    num_buys = sum(1 for r in recommendations if r.action == 'buy')
+    total_sell_value = sum(abs(r.value_delta_eur) for r in recommendations if r.action == "sell")
+    total_buy_value = sum(r.value_delta_eur for r in recommendations if r.action == "buy")
+    num_sells = sum(1 for r in recommendations if r.action == "sell")
+    num_buys = sum(1 for r in recommendations if r.action == "buy")
 
     sell_fees = num_sells * fixed_fee + total_sell_value * pct_fee
     buy_fees = num_buys * fixed_fee + total_buy_value * pct_fee
@@ -1099,7 +1146,7 @@ async def get_recommendations(min_value: Optional[float] = None):
             "total_buy_value": total_buy_value,
             "total_fees": total_fees,
             "cash_after_plan": cash_after_plan,
-        }
+        },
     }
 
 
@@ -1107,6 +1154,7 @@ async def get_recommendations(min_value: Optional[float] = None):
 async def get_ideal_portfolio():
     """Get the calculated ideal portfolio allocations."""
     from sentinel.planner import Planner
+
     planner = Planner()
     ideal = await planner.calculate_ideal_portfolio()
     current = await planner.get_current_allocations()
@@ -1121,6 +1169,7 @@ async def get_ideal_portfolio():
 async def get_rebalance_summary():
     """Get summary of portfolio alignment with ideal allocations."""
     from sentinel.planner import Planner
+
     planner = Planner()
     return await planner.get_rebalance_summary()
 
@@ -1128,6 +1177,7 @@ async def get_rebalance_summary():
 # -----------------------------------------------------------------------------
 # Jobs API
 # -----------------------------------------------------------------------------
+
 
 @app.get("/api/jobs")
 async def get_jobs():
@@ -1172,17 +1222,17 @@ async def run_job(job_type: str, immediate: bool = False, params: dict = None):
 
         if immediate:
             # Execute immediately, bypassing queue
-            import asyncio
             from datetime import datetime
+
             start = datetime.now()
             try:
                 await job.execute()
                 duration_ms = int((datetime.now() - start).total_seconds() * 1000)
-                await db.log_job_execution(job.id(), job.type(), 'completed', None, duration_ms, 0)
+                await db.log_job_execution(job.id(), job.type(), "completed", None, duration_ms, 0)
                 return {"status": "completed", "job_id": job.id(), "duration_ms": duration_ms}
             except Exception as e:
                 duration_ms = int((datetime.now() - start).total_seconds() * 1000)
-                await db.log_job_execution(job.id(), job.type(), 'failed', str(e), duration_ms, 0)
+                await db.log_job_execution(job.id(), job.type(), "failed", str(e), duration_ms, 0)
                 return {"status": "failed", "job_id": job.id(), "error": str(e)}
         else:
             enqueued = await _queue.enqueue(job)
@@ -1191,7 +1241,7 @@ async def run_job(job_type: str, immediate: bool = False, params: dict = None):
                 "job_id": job.id(),
             }
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @app.post("/api/jobs/refresh-all")
@@ -1208,10 +1258,10 @@ async def refresh_all():
 # -----------------------------------------------------------------------------
 
 MARKET_TIMING_LABELS = {
-    0: 'Any time',
-    1: 'After market close',
-    2: 'During market open',
-    3: 'All markets closed',
+    0: "Any time",
+    1: "After market close",
+    2: "During market open",
+    3: "All markets closed",
 }
 
 
@@ -1226,32 +1276,31 @@ async def get_job_schedules():
     # Enrich with runtime info
     result = []
     for s in schedules:
-        job_type = s['job_type']
+        job_type = s["job_type"]
 
         # Check if queued (for parameterized jobs, check prefix)
-        is_queued = job_type in pending_ids or any(
-            pid.startswith(job_type + ':') for pid in pending_ids
-        )
+        is_queued = job_type in pending_ids or any(pid.startswith(job_type + ":") for pid in pending_ids)
 
         # Get most recent execution (not just successful ones)
         history = await db.get_job_history_for_type(job_type, limit=1)
         if history:
-            last_run = datetime.fromtimestamp(history[0]['executed_at']).isoformat()
-            last_status = history[0]['status']
+            last_run = datetime.fromtimestamp(history[0]["executed_at"]).isoformat()
+            last_status = history[0]["status"]
         else:
             last_run = None
             last_status = None
 
         # Parse dependencies
         import json
+
         try:
-            dependencies = json.loads(s.get('dependencies') or '[]')
+            dependencies = json.loads(s.get("dependencies") or "[]")
         except (json.JSONDecodeError, TypeError):
             dependencies = []
 
         # Get instance count for parameterized jobs
         instance_count = None
-        if s['is_parameterized'] and s.get('parameter_source'):
+        if s["is_parameterized"] and s.get("parameter_source"):
             source_method = getattr(db, f"get_{s['parameter_source']}", None)
             if source_method:
                 try:
@@ -1260,24 +1309,26 @@ async def get_job_schedules():
                 except Exception:
                     instance_count = 0
 
-        result.append({
-            'job_type': s['job_type'],
-            'enabled': bool(s['enabled']),
-            'interval_minutes': s['interval_minutes'],
-            'interval_market_open_minutes': s.get('interval_market_open_minutes'),
-            'market_timing': s['market_timing'],
-            'market_timing_label': MARKET_TIMING_LABELS.get(s['market_timing'], 'Unknown'),
-            'dependencies': dependencies,
-            'description': s.get('description'),
-            'category': s.get('category'),
-            'is_parameterized': bool(s.get('is_parameterized')),
-            'parameter_source': s.get('parameter_source'),
-            'parameter_field': s.get('parameter_field'),
-            'instance_count': instance_count,
-            'last_run': last_run,
-            'last_status': last_status,
-            'is_queued': is_queued,
-        })
+        result.append(
+            {
+                "job_type": s["job_type"],
+                "enabled": bool(s["enabled"]),
+                "interval_minutes": s["interval_minutes"],
+                "interval_market_open_minutes": s.get("interval_market_open_minutes"),
+                "market_timing": s["market_timing"],
+                "market_timing_label": MARKET_TIMING_LABELS.get(s["market_timing"], "Unknown"),
+                "dependencies": dependencies,
+                "description": s.get("description"),
+                "category": s.get("category"),
+                "is_parameterized": bool(s.get("is_parameterized")),
+                "parameter_source": s.get("parameter_source"),
+                "parameter_field": s.get("parameter_field"),
+                "instance_count": instance_count,
+                "last_run": last_run,
+                "last_status": last_status,
+                "is_queued": is_queued,
+            }
+        )
 
     return {"schedules": result}
 
@@ -1295,33 +1346,33 @@ async def update_job_schedule(job_type: str, data: dict):
         raise HTTPException(status_code=404, detail=f"Unknown job type: {job_type}")
 
     # Validate enabled
-    if 'enabled' in data:
-        val = data['enabled']
+    if "enabled" in data:
+        val = data["enabled"]
         if not isinstance(val, bool):
             raise HTTPException(status_code=400, detail="enabled must be a boolean")
 
     # Validate interval_minutes
-    if 'interval_minutes' in data:
-        val = data['interval_minutes']
+    if "interval_minutes" in data:
+        val = data["interval_minutes"]
         if not isinstance(val, int) or val < 1 or val > 10080:
             raise HTTPException(status_code=400, detail="interval_minutes must be between 1 and 10080")
 
     # Validate interval_market_open_minutes
-    if 'interval_market_open_minutes' in data:
-        val = data['interval_market_open_minutes']
+    if "interval_market_open_minutes" in data:
+        val = data["interval_market_open_minutes"]
         if val is not None and (not isinstance(val, int) or val < 1 or val > 10080):
             raise HTTPException(status_code=400, detail="interval_market_open_minutes must be between 1 and 10080")
 
     # Validate market_timing
-    if 'market_timing' in data:
-        val = data['market_timing']
+    if "market_timing" in data:
+        val = data["market_timing"]
         if not isinstance(val, int) or val < 0 or val > 3:
             raise HTTPException(status_code=400, detail="market_timing must be 0, 1, 2, or 3")
 
     # Validate dependencies
     dependencies = None
-    if 'dependencies' in data:
-        deps = data['dependencies']
+    if "dependencies" in data:
+        deps = data["dependencies"]
         if not isinstance(deps, list):
             raise HTTPException(status_code=400, detail="dependencies must be an array")
         for dep in deps:
@@ -1331,10 +1382,10 @@ async def update_job_schedule(job_type: str, data: dict):
 
     await db.upsert_job_schedule(
         job_type,
-        enabled=data.get('enabled'),
-        interval_minutes=data.get('interval_minutes'),
-        interval_market_open_minutes=data.get('interval_market_open_minutes'),
-        market_timing=data.get('market_timing'),
+        enabled=data.get("enabled"),
+        interval_minutes=data.get("interval_minutes"),
+        interval_market_open_minutes=data.get("interval_market_open_minutes"),
+        market_timing=data.get("market_timing"),
         dependencies=dependencies,
     )
     return {"status": "ok"}
@@ -1356,6 +1407,7 @@ async def get_job_history(job_type: str = None, limit: int = 50):
 # -----------------------------------------------------------------------------
 # Cache Management
 # -----------------------------------------------------------------------------
+
 
 @app.get("/api/cache/stats")
 async def get_cache_stats():
@@ -1384,13 +1436,14 @@ async def clear_cache(name: str = None):
 # Backtest API
 # -----------------------------------------------------------------------------
 
+
 @app.get("/api/backtest/run")
 async def run_backtest(
     start_date: str,
     end_date: str,
     initial_capital: float = 10000.0,
     monthly_deposit: float = 0.0,
-    rebalance_frequency: str = 'weekly',
+    rebalance_frequency: str = "weekly",
     use_existing_universe: bool = True,
     pick_random: bool = True,
     random_count: int = 10,
@@ -1408,7 +1461,7 @@ async def run_backtest(
     from dataclasses import asdict
 
     # Parse comma-separated symbols
-    symbols_list = [s.strip() for s in symbols.split(',') if s.strip()] if symbols else []
+    symbols_list = [s.strip() for s in symbols.split(",") if s.strip()] if symbols else []
 
     config = BacktestConfig(
         start_date=start_date,
@@ -1430,64 +1483,64 @@ async def run_backtest(
             async for update in backtester.run():
                 if isinstance(update, BacktestProgress):
                     event_data = {
-                        'current_date': update.current_date,
-                        'progress_pct': update.progress_pct,
-                        'portfolio_value': update.portfolio_value,
-                        'status': update.status,
-                        'message': update.message,
-                        'phase': update.phase,
-                        'current_item': update.current_item,
-                        'items_done': update.items_done,
-                        'items_total': update.items_total,
+                        "current_date": update.current_date,
+                        "progress_pct": update.progress_pct,
+                        "portfolio_value": update.portfolio_value,
+                        "status": update.status,
+                        "message": update.message,
+                        "phase": update.phase,
+                        "current_item": update.current_item,
+                        "items_done": update.items_done,
+                        "items_total": update.items_total,
                     }
                     yield f"event: progress\ndata: {json.dumps(event_data)}\n\n"
 
-                    if update.status in ('error', 'cancelled'):
+                    if update.status in ("error", "cancelled"):
                         break
 
                 elif isinstance(update, BacktestResult):
                     # Convert result to JSON-serializable format
                     result_data = {
-                        'config': asdict(update.config),
-                        'snapshots': [
+                        "config": asdict(update.config),
+                        "snapshots": [
                             {
-                                'date': s.date,
-                                'total_value': s.total_value,
-                                'cash': s.cash,
-                                'positions_value': s.positions_value,
+                                "date": s.date,
+                                "total_value": s.total_value,
+                                "cash": s.cash,
+                                "positions_value": s.positions_value,
                             }
                             for s in update.snapshots
                         ],
-                        'trades': [
+                        "trades": [
                             {
-                                'date': t.date,
-                                'symbol': t.symbol,
-                                'action': t.action,
-                                'quantity': t.quantity,
-                                'price': t.price,
-                                'value': t.value,
+                                "date": t.date,
+                                "symbol": t.symbol,
+                                "action": t.action,
+                                "quantity": t.quantity,
+                                "price": t.price,
+                                "value": t.value,
                             }
                             for t in update.trades
                         ],
-                        'initial_value': update.initial_value,
-                        'final_value': update.final_value,
-                        'total_deposits': update.total_deposits,
-                        'total_return': update.total_return,
-                        'total_return_pct': update.total_return_pct,
-                        'cagr': update.cagr,
-                        'max_drawdown': update.max_drawdown,
-                        'sharpe_ratio': update.sharpe_ratio,
-                        'security_performance': [
+                        "initial_value": update.initial_value,
+                        "final_value": update.final_value,
+                        "total_deposits": update.total_deposits,
+                        "total_return": update.total_return,
+                        "total_return_pct": update.total_return_pct,
+                        "cagr": update.cagr,
+                        "max_drawdown": update.max_drawdown,
+                        "sharpe_ratio": update.sharpe_ratio,
+                        "security_performance": [
                             {
-                                'symbol': sp.symbol,
-                                'name': sp.name,
-                                'total_invested': sp.total_invested,
-                                'total_sold': sp.total_sold,
-                                'final_value': sp.final_value,
-                                'total_return': sp.total_return,
-                                'return_pct': sp.return_pct,
-                                'num_buys': sp.num_buys,
-                                'num_sells': sp.num_sells,
+                                "symbol": sp.symbol,
+                                "name": sp.name,
+                                "total_invested": sp.total_invested,
+                                "total_sold": sp.total_sold,
+                                "final_value": sp.final_value,
+                                "total_return": sp.total_return,
+                                "return_pct": sp.return_pct,
+                                "num_buys": sp.num_buys,
+                                "num_sells": sp.num_sells,
                             }
                             for sp in update.security_performance
                         ],
@@ -1495,7 +1548,7 @@ async def run_backtest(
                     yield f"event: result\ndata: {json.dumps(result_data)}\n\n"
 
         except Exception as e:
-            error_data = {'message': str(e)}
+            error_data = {"message": str(e)}
             yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
         finally:
             set_active_backtest(None)
@@ -1525,10 +1578,12 @@ async def cancel_backtest():
 # Advanced Analytics API
 # -----------------------------------------------------------------------------
 
+
 @app.get("/api/analytics/regime/{symbol}")
 async def get_regime_status(symbol: str):
     """Get current regime for a security."""
     from sentinel.regime_detector import RegimeDetector
+
     detector = RegimeDetector()
     regime = await detector.detect_current_regime(symbol)
     history = await detector.get_regime_history(symbol, days=90)
@@ -1539,20 +1594,22 @@ async def get_regime_status(symbol: str):
 async def get_all_regimes():
     """Get current regimes for all active securities."""
     from sentinel.regime_detector import RegimeDetector
+
     db = Database()
     detector = RegimeDetector()
 
     securities = await db.get_all_securities(active_only=True)
     results = {}
     for sec in securities:
-        regime = await detector.detect_current_regime(sec['symbol'])
-        results[sec['symbol']] = regime
+        regime = await detector.detect_current_regime(sec["symbol"])
+        results[sec["symbol"]] = regime
     return results
 
 
 # -----------------------------------------------------------------------------
 # Backup API
 # -----------------------------------------------------------------------------
+
 
 @app.post("/api/backup/run")
 async def run_backup():
@@ -1561,24 +1618,24 @@ async def run_backup():
         raise HTTPException(status_code=503, detail="Job system not initialized")
 
     try:
-        job = await _registry.create('backup:r2', {})
+        job = await _registry.create("backup:r2", {})
         enqueued = await _queue.enqueue(job)
         return {
             "status": "enqueued" if enqueued else "already_queued",
             "job_id": job.id(),
         }
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @app.get("/api/backup/status")
 async def get_backup_status():
     """List recent backups from R2."""
     settings = Settings()
-    account_id = await settings.get('r2_account_id', '')
-    access_key = await settings.get('r2_access_key', '')
-    secret_key = await settings.get('r2_secret_key', '')
-    bucket_name = await settings.get('r2_bucket_name', '')
+    account_id = await settings.get("r2_account_id", "")
+    access_key = await settings.get("r2_access_key", "")
+    secret_key = await settings.get("r2_secret_key", "")
+    bucket_name = await settings.get("r2_bucket_name", "")
 
     if not all([account_id, access_key, secret_key, bucket_name]):
         return {"configured": False, "backups": []}
@@ -1587,19 +1644,19 @@ async def get_backup_status():
         from sentinel.jobs.implementations.backup import _get_r2_client
 
         client = _get_r2_client(account_id, access_key, secret_key)
-        response = client.list_objects_v2(Bucket=bucket_name, Prefix='backups/')
-        contents = response.get('Contents', [])
+        response = client.list_objects_v2(Bucket=bucket_name, Prefix="backups/")
+        contents = response.get("Contents", [])
 
         backups = sorted(
             [
                 {
-                    "key": obj['Key'],
-                    "size_bytes": obj.get('Size', 0),
-                    "last_modified": obj['LastModified'].isoformat() if obj.get('LastModified') else None,
+                    "key": obj["Key"],
+                    "size_bytes": obj.get("Size", 0),
+                    "last_modified": obj["LastModified"].isoformat() if obj.get("LastModified") else None,
                 }
                 for obj in contents
             ],
-            key=lambda x: x['last_modified'] or '',
+            key=lambda x: x["last_modified"] or "",
             reverse=True,
         )
 
@@ -1612,12 +1669,13 @@ async def get_backup_status():
 # Health Check
 # -----------------------------------------------------------------------------
 
+
 @app.get("/api/health")
 async def health():
     """Health check endpoint."""
     broker = Broker()
     settings = Settings()
-    trading_mode = await settings.get('trading_mode', 'research')
+    trading_mode = await settings.get("trading_mode", "research")
     return {
         "status": "healthy",
         "broker_connected": broker.connected,
@@ -1629,6 +1687,7 @@ async def health():
 # ML Prediction API Endpoints (Per-Symbol Models)
 # -----------------------------------------------------------------------------
 
+
 @app.get("/api/ml/status")
 async def get_ml_status():
     """Get ML system status."""
@@ -1638,21 +1697,19 @@ async def get_ml_status():
     await db.connect()
 
     # Count securities with ML enabled
-    cursor = await db.conn.execute(
-        "SELECT COUNT(*) as count FROM securities WHERE ml_enabled = 1 AND active = 1"
-    )
+    cursor = await db.conn.execute("SELECT COUNT(*) as count FROM securities WHERE ml_enabled = 1 AND active = 1")
     enabled_row = await cursor.fetchone()
-    securities_ml_enabled = enabled_row['count'] if enabled_row else 0
+    securities_ml_enabled = enabled_row["count"] if enabled_row else 0
 
     # Count symbols with trained models
     cursor = await db.conn.execute("SELECT COUNT(*) as count FROM ml_models")
     total_models_row = await cursor.fetchone()
-    symbols_with_models = total_models_row['count'] if total_models_row else 0
+    symbols_with_models = total_models_row["count"] if total_models_row else 0
 
     # Count total training samples
     cursor = await db.conn.execute("SELECT COUNT(*) as count FROM ml_training_samples")
     total_samples_row = await cursor.fetchone()
-    total_samples = total_samples_row['count'] if total_samples_row else 0
+    total_samples = total_samples_row["count"] if total_samples_row else 0
 
     # Get aggregate metrics across all models
     cursor = await db.conn.execute(
@@ -1665,12 +1722,12 @@ async def get_ml_status():
     metrics_row = await cursor.fetchone()
 
     aggregate_metrics = None
-    if metrics_row and metrics_row['avg_rmse'] is not None:
+    if metrics_row and metrics_row["avg_rmse"] is not None:
         aggregate_metrics = {
-            'avg_validation_rmse': metrics_row['avg_rmse'],
-            'avg_validation_mae': metrics_row['avg_mae'],
-            'avg_validation_r2': metrics_row['avg_r2'],
-            'total_trained_samples': metrics_row['total_trained_samples'],
+            "avg_validation_rmse": metrics_row["avg_rmse"],
+            "avg_validation_mae": metrics_row["avg_mae"],
+            "avg_validation_r2": metrics_row["avg_r2"],
+            "total_trained_samples": metrics_row["total_trained_samples"],
         }
 
     # Get list of ML-enabled securities with their settings
@@ -1681,34 +1738,29 @@ async def get_ml_status():
     ml_securities = await cursor.fetchall()
 
     return {
-        'securities_ml_enabled': securities_ml_enabled,
-        'symbols_with_models': symbols_with_models,
-        'total_training_samples': total_samples,
-        'aggregate_metrics': aggregate_metrics,
-        'ml_securities': [
-            {'symbol': row['symbol'], 'blend_ratio': row['ml_blend_ratio']}
-            for row in ml_securities
-        ],
+        "securities_ml_enabled": securities_ml_enabled,
+        "symbols_with_models": symbols_with_models,
+        "total_training_samples": total_samples,
+        "aggregate_metrics": aggregate_metrics,
+        "ml_securities": [{"symbol": row["symbol"], "blend_ratio": row["ml_blend_ratio"]} for row in ml_securities],
     }
 
 
 @app.post("/api/ml/retrain")
 async def trigger_retraining():
     """Manually trigger ML model retraining for all ML-enabled symbols."""
-    from sentinel.ml_retrainer import MLRetrainer
     from sentinel.database import Database
+    from sentinel.ml_retrainer import MLRetrainer
 
     db = Database()
     await db.connect()
 
     # Get symbols with ML enabled
-    cursor = await db.conn.execute(
-        "SELECT symbol FROM securities WHERE ml_enabled = 1 AND active = 1"
-    )
+    cursor = await db.conn.execute("SELECT symbol FROM securities WHERE ml_enabled = 1 AND active = 1")
     rows = await cursor.fetchall()
 
     if not rows:
-        return {'status': 'skipped', 'reason': 'No securities have ML enabled'}
+        return {"status": "skipped", "reason": "No securities have ML enabled"}
 
     retrainer = MLRetrainer()
     results = {}
@@ -1716,20 +1768,20 @@ async def trigger_retraining():
     skipped = 0
 
     for row in rows:
-        symbol = row['symbol']
+        symbol = row["symbol"]
         result = await retrainer.retrain_symbol(symbol)
         if result:
             results[symbol] = result
             trained += 1
         else:
-            results[symbol] = {'status': 'skipped', 'reason': 'Insufficient data'}
+            results[symbol] = {"status": "skipped", "reason": "Insufficient data"}
             skipped += 1
 
     return {
-        'status': 'completed',
-        'symbols_trained': trained,
-        'symbols_skipped': skipped,
-        'results': results,
+        "status": "completed",
+        "symbols_trained": trained,
+        "symbols_skipped": skipped,
+        "results": results,
     }
 
 
@@ -1742,37 +1794,35 @@ async def trigger_retraining_symbol(symbol: str):
     result = await retrainer.retrain_symbol(symbol)
 
     if result is None:
-        return {'status': 'skipped', 'symbol': symbol, 'reason': 'Insufficient training data'}
+        return {"status": "skipped", "symbol": symbol, "reason": "Insufficient training data"}
 
-    return {'status': 'trained', 'symbol': symbol, **result}
+    return {"status": "trained", "symbol": symbol, **result}
 
 
 @app.get("/api/ml/performance")
 async def get_ml_performance():
     """Get ML model performance metrics and report for ML-enabled securities."""
-    from sentinel.ml_monitor import MLMonitor
     from sentinel.database import Database
+    from sentinel.ml_monitor import MLMonitor
 
     db = Database()
     await db.connect()
 
     # Get symbols with ML enabled
-    cursor = await db.conn.execute(
-        "SELECT symbol FROM securities WHERE ml_enabled = 1 AND active = 1"
-    )
+    cursor = await db.conn.execute("SELECT symbol FROM securities WHERE ml_enabled = 1 AND active = 1")
     rows = await cursor.fetchall()
 
     if not rows:
         return {
-            'metrics': {'status': 'skipped', 'reason': 'No securities have ML enabled'},
-            'report': 'No ML-enabled securities to monitor.',
+            "metrics": {"status": "skipped", "reason": "No securities have ML enabled"},
+            "report": "No ML-enabled securities to monitor.",
         }
 
     monitor = MLMonitor()
     all_metrics = {}
 
     for row in rows:
-        symbol = row['symbol']
+        symbol = row["symbol"]
         result = await monitor.track_symbol_performance(symbol)
         if result:
             all_metrics[symbol] = result
@@ -1780,8 +1830,8 @@ async def get_ml_performance():
     report = await monitor.generate_report()
 
     return {
-        'metrics': all_metrics,
-        'report': report,
+        "metrics": all_metrics,
+        "report": report,
     }
 
 
@@ -1803,14 +1853,14 @@ async def list_ml_models():
     models = await cursor.fetchall()
 
     return {
-        'models': [
+        "models": [
             {
-                'symbol': m['symbol'],
-                'training_samples': m['training_samples'],
-                'validation_rmse': m['validation_rmse'],
-                'validation_mae': m['validation_mae'],
-                'validation_r2': m['validation_r2'],
-                'last_trained_at': m['last_trained_at'],
+                "symbol": m["symbol"],
+                "training_samples": m["training_samples"],
+                "validation_rmse": m["validation_rmse"],
+                "validation_mae": m["validation_mae"],
+                "validation_r2": m["validation_r2"],
+                "last_trained_at": m["last_trained_at"],
             }
             for m in models
         ]
@@ -1827,45 +1877,42 @@ async def get_ml_model(symbol: str):
     await db.connect()
 
     # Get model record
-    cursor = await db.conn.execute(
-        "SELECT * FROM ml_models WHERE symbol = ?", (symbol,)
-    )
+    cursor = await db.conn.execute("SELECT * FROM ml_models WHERE symbol = ?", (symbol,))
     model_row = await cursor.fetchone()
 
     if not model_row:
-        return {'error': f'No model found for {symbol}'}
+        return {"error": f"No model found for {symbol}"}
 
     # Check if model files exist
     model_exists = EnsembleBlender.model_exists(symbol)
 
     # Get sample count for this symbol
-    cursor = await db.conn.execute(
-        "SELECT COUNT(*) as count FROM ml_training_samples WHERE symbol = ?",
-        (symbol,)
-    )
+    cursor = await db.conn.execute("SELECT COUNT(*) as count FROM ml_training_samples WHERE symbol = ?", (symbol,))
     sample_row = await cursor.fetchone()
 
     return {
-        'symbol': model_row['symbol'],
-        'training_samples': model_row['training_samples'],
-        'validation_rmse': model_row['validation_rmse'],
-        'validation_mae': model_row['validation_mae'],
-        'validation_r2': model_row['validation_r2'],
-        'last_trained_at': model_row['last_trained_at'],
-        'model_files_exist': model_exists,
-        'available_samples': sample_row['count'] if sample_row else 0,
+        "symbol": model_row["symbol"],
+        "training_samples": model_row["training_samples"],
+        "validation_rmse": model_row["validation_rmse"],
+        "validation_mae": model_row["validation_mae"],
+        "validation_r2": model_row["validation_r2"],
+        "last_trained_at": model_row["last_trained_at"],
+        "model_files_exist": model_exists,
+        "available_samples": sample_row["count"] if sample_row else 0,
     }
 
 
 @app.get("/api/ml/train/{symbol}/stream")
 async def train_symbol_stream(symbol: str):
     """Train ML model for a symbol with SSE progress updates."""
-    from starlette.responses import StreamingResponse
-    from sentinel.ml_trainer import TrainingDataGenerator
-    from sentinel.ml_retrainer import MLRetrainer
-    from sentinel.database import Database
-    from sentinel.settings import Settings
     import json
+
+    from starlette.responses import StreamingResponse
+
+    from sentinel.database import Database
+    from sentinel.ml_retrainer import MLRetrainer
+    from sentinel.ml_trainer import TrainingDataGenerator
+    from sentinel.settings import Settings
 
     async def generate():
         db = Database()
@@ -1881,10 +1928,11 @@ async def train_symbol_stream(symbol: str):
                 return
 
             # Step 2: Generate training samples
-            yield f"data: {json.dumps({'step': 2, 'total': 5, 'message': 'Generating training samples...', 'progress': 20})}\n\n"
+            evt = json.dumps({"step": 2, "total": 5, "message": "Generating training samples...", "progress": 20})
+            yield f"data: {evt}\n\n"
             trainer = TrainingDataGenerator()
-            horizon_days = await settings.get('ml_prediction_horizon_days', 14)
-            lookback_years = await settings.get('ml_training_lookback_years', 8)
+            horizon_days = await settings.get("ml_prediction_horizon_days", 14)
+            lookback_years = await settings.get("ml_training_lookback_years", 8)
 
             samples_df = await trainer.generate_training_data_for_symbol(
                 symbol,
@@ -1892,19 +1940,21 @@ async def train_symbol_stream(symbol: str):
                 prediction_horizon_days=horizon_days,
             )
             sample_count = len(samples_df) if samples_df is not None else 0
-            msg = f'Generated {sample_count} samples'
+            msg = f"Generated {sample_count} samples"
             yield f"data: {json.dumps({'step': 2, 'total': 5, 'message': msg, 'progress': 40})}\n\n"
 
             # Step 3: Check minimum samples
-            yield f"data: {json.dumps({'step': 3, 'total': 5, 'message': 'Checking data sufficiency...', 'progress': 50})}\n\n"
-            min_samples = await settings.get('ml_min_samples_per_symbol', 100)
+            evt = json.dumps({"step": 3, "total": 5, "message": "Checking data sufficiency...", "progress": 50})
+            yield f"data: {evt}\n\n"
+            min_samples = await settings.get("ml_min_samples_per_symbol", 100)
             if sample_count < min_samples:
-                err_msg = f'Insufficient samples: {sample_count} < {min_samples} required'
+                err_msg = f"Insufficient samples: {sample_count} < {min_samples} required"
                 yield f"data: {json.dumps({'error': err_msg})}\n\n"
                 return
 
             # Step 4: Train model
-            yield f"data: {json.dumps({'step': 4, 'total': 5, 'message': 'Training neural network + XGBoost...', 'progress': 60})}\n\n"
+            evt = json.dumps({"step": 4, "total": 5, "message": "Training neural network + XGBoost...", "progress": 60})
+            yield f"data: {evt}\n\n"
             retrainer = MLRetrainer()
             metrics = await retrainer.retrain_symbol(symbol)
 
@@ -1913,10 +1963,14 @@ async def train_symbol_stream(symbol: str):
                 return
 
             rmse_msg = f"RMSE: {metrics['validation_rmse']:.4f}"
-            yield f"data: {json.dumps({'step': 4, 'total': 5, 'message': rmse_msg, 'progress': 90})}\n\n"
+            evt = json.dumps({"step": 4, "total": 5, "message": rmse_msg, "progress": 90})
+            yield f"data: {evt}\n\n"
 
             # Step 5: Done
-            yield f"data: {json.dumps({'step': 5, 'total': 5, 'message': 'Model saved', 'progress': 100, 'complete': True, 'metrics': metrics})}\n\n"
+            evt = json.dumps(
+                {"step": 5, "total": 5, "message": "Model saved", "progress": 100, "complete": True, "metrics": metrics}
+            )
+            yield f"data: {evt}\n\n"
 
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
@@ -1927,48 +1981,41 @@ async def train_symbol_stream(symbol: str):
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-        }
+        },
     )
 
 
 @app.delete("/api/ml/training-data/{symbol}")
 async def delete_training_data(symbol: str):
     """Delete all training data and model for a symbol."""
-    from sentinel.database import Database
-    from pathlib import Path
     import shutil
+    from pathlib import Path
+
+    from sentinel.database import Database
 
     db = Database()
     await db.connect()
 
     # Delete training samples
-    await db.conn.execute(
-        "DELETE FROM ml_training_samples WHERE symbol = ?", (symbol,)
-    )
+    await db.conn.execute("DELETE FROM ml_training_samples WHERE symbol = ?", (symbol,))
 
     # Delete predictions
-    await db.conn.execute(
-        "DELETE FROM ml_predictions WHERE symbol = ?", (symbol,)
-    )
+    await db.conn.execute("DELETE FROM ml_predictions WHERE symbol = ?", (symbol,))
 
     # Delete model record
-    await db.conn.execute(
-        "DELETE FROM ml_models WHERE symbol = ?", (symbol,)
-    )
+    await db.conn.execute("DELETE FROM ml_models WHERE symbol = ?", (symbol,))
 
     # Delete performance tracking
-    await db.conn.execute(
-        "DELETE FROM ml_performance_tracking WHERE symbol = ?", (symbol,)
-    )
+    await db.conn.execute("DELETE FROM ml_performance_tracking WHERE symbol = ?", (symbol,))
 
     await db.conn.commit()
 
     # Delete model files
-    model_path = Path('data/ml_models') / symbol
+    model_path = Path("data/ml_models") / symbol
     if model_path.exists():
         shutil.rmtree(model_path)
 
-    return {'status': 'deleted', 'symbol': symbol}
+    return {"status": "deleted", "symbol": symbol}
 
 
 @app.get("/api/ml/training-status/{symbol}")
@@ -1981,27 +2028,22 @@ async def get_training_status(symbol: str):
     await db.connect()
 
     # Get sample count
-    cursor = await db.conn.execute(
-        "SELECT COUNT(*) as count FROM ml_training_samples WHERE symbol = ?",
-        (symbol,)
-    )
+    cursor = await db.conn.execute("SELECT COUNT(*) as count FROM ml_training_samples WHERE symbol = ?", (symbol,))
     row = await cursor.fetchone()
-    sample_count = row['count'] if row else 0
+    sample_count = row["count"] if row else 0
 
     # Get model info
-    cursor = await db.conn.execute(
-        "SELECT * FROM ml_models WHERE symbol = ?", (symbol,)
-    )
+    cursor = await db.conn.execute("SELECT * FROM ml_models WHERE symbol = ?", (symbol,))
     model_row = await cursor.fetchone()
 
     # Check if model files exist
     model_exists = EnsembleBlender.model_exists(symbol)
 
     return {
-        'symbol': symbol,
-        'sample_count': sample_count,
-        'model_exists': model_exists,
-        'model_info': dict(model_row) if model_row else None,
+        "symbol": symbol,
+        "sample_count": sample_count,
+        "model_exists": model_exists,
+        "model_info": dict(model_row) if model_row else None,
     }
 
 

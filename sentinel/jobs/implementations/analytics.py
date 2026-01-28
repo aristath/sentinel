@@ -20,8 +20,8 @@ class RegimeJob(BaseJob):
 
     def __init__(self, detector, db):
         super().__init__(
-            _id='analytics:regime',
-            _job_type='analytics:regime',
+            _id="analytics:regime",
+            _job_type="analytics:regime",
             _timeout=timedelta(minutes=30),
             _market_timing=MarketTiming.ALL_MARKETS_CLOSED,
         )
@@ -31,7 +31,7 @@ class RegimeJob(BaseJob):
     async def execute(self) -> None:
         """Execute regime model training."""
         securities = await self._db.get_all_securities(active_only=True)
-        symbols = [s['symbol'] for s in securities]
+        symbols = [s["symbol"] for s in securities]
 
         if len(symbols) < 3:
             logger.warning("Not enough securities for regime detection")

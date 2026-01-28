@@ -7,11 +7,11 @@ Handles currency conversions between EUR, USD, HKD, and GBP via Tradernet API.
 
 import logging
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import List, Optional
 
 from sentinel.broker import Broker
-from sentinel.database import Database
 from sentinel.config.currencies import DIRECT_PAIRS, RATE_SYMBOLS
+from sentinel.database import Database
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ConversionStep:
     """A single step in a currency conversion path."""
+
     from_currency: str
     to_currency: str
     symbol: str
@@ -35,7 +36,7 @@ class CurrencyExchangeService:
     DIRECT_PAIRS = DIRECT_PAIRS
     RATE_SYMBOLS = RATE_SYMBOLS
 
-    _instance: Optional['CurrencyExchangeService'] = None
+    _instance: Optional["CurrencyExchangeService"] = None
 
     def __new__(cls):
         """Singleton pattern."""
@@ -51,9 +52,7 @@ class CurrencyExchangeService:
         self._broker = Broker()
         self._db = Database()
 
-    def get_conversion_path(
-        self, from_currency: str, to_currency: str
-    ) -> List[ConversionStep]:
+    def get_conversion_path(self, from_currency: str, to_currency: str) -> List[ConversionStep]:
         """Get the conversion path between two currencies.
 
         Args:
@@ -149,8 +148,8 @@ class CurrencyExchangeService:
 
             # Fetch quote
             quote = await self._broker.get_quote(symbol)
-            if quote and quote.get('price', 0) > 0:
-                rate = quote['price']
+            if quote and quote.get("price", 0) > 0:
+                rate = quote["price"]
                 return 1.0 / rate if inverse else rate
 
             return None
@@ -158,12 +157,7 @@ class CurrencyExchangeService:
             logger.error(f"Failed to get rate {from_curr}/{to_curr}: {e}")
             return None
 
-    async def exchange(
-        self,
-        from_currency: str,
-        to_currency: str,
-        amount: float
-    ) -> Optional[dict]:
+    async def exchange(self, from_currency: str, to_currency: str, amount: float) -> Optional[dict]:
         """Execute a currency exchange.
 
         Args:
@@ -244,15 +238,10 @@ class CurrencyExchangeService:
             order_id = await self._broker.sell(step.symbol, int(amount))
 
         if order_id:
-            return {'order_id': order_id, 'symbol': step.symbol, 'action': step.action, 'amount': amount}
+            return {"order_id": order_id, "symbol": step.symbol, "action": step.action, "amount": amount}
         return None
 
-    async def ensure_balance(
-        self,
-        currency: str,
-        min_amount: float,
-        source_currency: str = "EUR"
-    ) -> bool:
+    async def ensure_balance(self, currency: str, min_amount: float, source_currency: str = "EUR") -> bool:
         """Ensure we have at least min_amount in the target currency.
 
         If insufficient balance, converts from source_currency.
@@ -308,13 +297,12 @@ class CurrencyExchangeService:
 
             # Execute conversion
             logger.info(
-                f"Converting {source_amount_needed:.2f} {source_currency} "
-                f"to {currency} (need {min_amount:.2f})"
+                f"Converting {source_amount_needed:.2f} {source_currency} to {currency} (need {min_amount:.2f})"
             )
             result = await self.exchange(source_currency, currency, source_amount_needed)
 
             if result:
-                logger.info(f"Currency exchange completed")
+                logger.info("Currency exchange completed")
                 return True
             else:
                 logger.error("Currency exchange failed")
@@ -343,4 +331,5 @@ def get_stock_currency(geography: str) -> str:
         Currency code (EUR, USD, HKD, GBP)
     """
     from sentinel.config.currencies import get_currency_for_geography
+
     return get_currency_for_geography(geography)

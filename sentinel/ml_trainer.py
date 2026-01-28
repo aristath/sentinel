@@ -1,17 +1,17 @@
 """Generate ML training data from historical market data."""
 
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-from typing import List, Dict, Optional
-import uuid
 import logging
+import uuid
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional
 
-from sentinel.database import Database
-from sentinel.ml_features import FeatureExtractor, FEATURE_NAMES
-from sentinel.settings import Settings
+import pandas as pd
+
 from sentinel.analyzer import Analyzer
+from sentinel.database import Database
+from sentinel.ml_features import FeatureExtractor
 from sentinel.price_validator import PriceValidator
+from sentinel.settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ class TrainingDataGenerator:
 
     async def generate_training_data(
         self,
-        start_date: str = '2017-01-01',
+        start_date: str = "2017-01-01",
         end_date: str = None,
         symbols: Optional[List[str]] = None,
         prediction_horizon_days: int = 14,
@@ -56,7 +56,7 @@ class TrainingDataGenerator:
         await self.db.connect()
 
         if end_date is None:
-            end_date = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
+            end_date = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
 
         if symbols is None:
             symbols = await self._get_universe_symbols()
@@ -70,7 +70,7 @@ class TrainingDataGenerator:
 
         for idx, symbol in enumerate(symbols):
             if (idx + 1) % 10 == 0 or idx == 0:
-                logger.info(f"[{idx+1}/{total_symbols}] Processing {symbol}...")
+                logger.info(f"[{idx + 1}/{total_symbols}] Processing {symbol}...")
 
             price_data = await self._get_price_data(symbol, start_date, end_date)
             if price_data is None or len(price_data) < 200:
@@ -100,7 +100,7 @@ class TrainingDataGenerator:
         await self._store_training_data(df)
 
         # Save to CSV for inspection
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         csv_path = f"data/ml_training_data_{timestamp}.csv"
         df.to_csv(csv_path, index=False)
         logger.info(f"Saved to {csv_path}")
@@ -122,10 +122,10 @@ class TrainingDataGenerator:
 
         # Rolling windows (step = 7 days for weekly samples)
         for i in range(200, len(price_data) - prediction_horizon_days, 7):
-            sample_date = price_data.iloc[i]['date']
+            sample_date = price_data.iloc[i]["date"]
 
             # Extract features at this point in time
-            window_data = price_data.iloc[:i+1].copy()  # Only data up to this point
+            window_data = price_data.iloc[: i + 1].copy()  # Only data up to this point
 
             try:
                 # Extract features (ML predicts independently per security)
@@ -137,8 +137,8 @@ class TrainingDataGenerator:
                 )
 
                 # Calculate label (future return)
-                current_price = price_data.iloc[i]['close']
-                future_price = price_data.iloc[i + prediction_horizon_days]['close']
+                current_price = price_data.iloc[i]["close"]
+                future_price = price_data.iloc[i + prediction_horizon_days]["close"]
 
                 if pd.isna(current_price) or pd.isna(future_price) or current_price <= 0:
                     continue
@@ -147,13 +147,13 @@ class TrainingDataGenerator:
 
                 # Create sample
                 sample = {
-                    'sample_id': str(uuid.uuid4()),
-                    'symbol': symbol,
-                    'sample_date': sample_date,
+                    "sample_id": str(uuid.uuid4()),
+                    "symbol": symbol,
+                    "sample_date": sample_date,
                     **features,
-                    'future_return': future_return,
-                    'prediction_horizon_days': prediction_horizon_days,
-                    'created_at': datetime.now().isoformat(),
+                    "future_return": future_return,
+                    "prediction_horizon_days": prediction_horizon_days,
+                    "created_at": datetime.now().isoformat(),
                 }
 
                 samples.append(sample)
@@ -164,9 +164,7 @@ class TrainingDataGenerator:
 
         return samples
 
-    async def _get_price_data(
-        self, symbol: str, start_date: str, end_date: str
-    ) -> pd.DataFrame:
+    async def _get_price_data(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
         """Get historical OHLCV data for symbol, validated and interpolated."""
         query = """
             SELECT date, open, high, low, close, volume
@@ -185,7 +183,7 @@ class TrainingDataGenerator:
 
         # Convert numeric columns before validation
         for price in price_list:
-            for col in ['open', 'high', 'low', 'close', 'volume']:
+            for col in ["open", "high", "low", "close", "volume"]:
                 if col in price and price[col] is not None:
                     try:
                         price[col] = float(price[col])
@@ -196,17 +194,14 @@ class TrainingDataGenerator:
         validator = PriceValidator()
         validated_prices = validator.validate_and_interpolate(price_list)
 
-        df = pd.DataFrame(
-            validated_prices,
-            columns=['date', 'open', 'high', 'low', 'close', 'volume']
-        )
+        df = pd.DataFrame(validated_prices, columns=["date", "open", "high", "low", "close", "volume"])
 
         return df
 
     async def _get_universe_symbols(self) -> List[str]:
         """Get list of symbols in universe."""
         securities = await self.db.get_all_securities(active_only=True)
-        return [s['symbol'] for s in securities]
+        return [s["symbol"] for s in securities]
 
     async def _store_training_data(self, df: pd.DataFrame):
         """Store training samples in database."""
@@ -217,25 +212,38 @@ class TrainingDataGenerator:
 
         # 14 features per security - no cross-security data
         db_columns = [
-            'sample_id', 'symbol', 'sample_date',
-            'return_1d', 'return_5d', 'return_20d', 'return_60d',
-            'price_normalized', 'volatility_10d', 'volatility_30d',
-            'atr_14d', 'volume_normalized', 'volume_trend',
-            'rsi_14', 'macd', 'bollinger_position',
-            'sentiment_score',
-            'future_return', 'prediction_horizon_days', 'created_at'
+            "sample_id",
+            "symbol",
+            "sample_date",
+            "return_1d",
+            "return_5d",
+            "return_20d",
+            "return_60d",
+            "price_normalized",
+            "volatility_10d",
+            "volatility_30d",
+            "atr_14d",
+            "volume_normalized",
+            "volume_trend",
+            "rsi_14",
+            "macd",
+            "bollinger_position",
+            "sentiment_score",
+            "future_return",
+            "prediction_horizon_days",
+            "created_at",
         ]
 
         # Batch insert
         batch_size = 30
         insert_sql = f"""
             INSERT OR REPLACE INTO ml_training_samples
-            ({', '.join(db_columns)})
-            VALUES ({', '.join(['?' for _ in db_columns])})
-        """
+            ({", ".join(db_columns)})
+            VALUES ({", ".join(["?" for _ in db_columns])})
+        """  # noqa: S608
 
         for i in range(0, len(df), batch_size):
-            batch = df.iloc[i:i+batch_size]
+            batch = df.iloc[i : i + batch_size]
 
             for _, row in batch.iterrows():
                 values = [row.get(col, 0.0) for col in db_columns]
@@ -268,16 +276,14 @@ class TrainingDataGenerator:
         await self.db.connect()
 
         # Calculate date range
-        end_date = (datetime.now() - timedelta(days=prediction_horizon_days)).strftime('%Y-%m-%d')
-        start_date = (datetime.now() - timedelta(days=lookback_years * 365)).strftime('%Y-%m-%d')
+        end_date = (datetime.now() - timedelta(days=prediction_horizon_days)).strftime("%Y-%m-%d")
+        start_date = (datetime.now() - timedelta(days=lookback_years * 365)).strftime("%Y-%m-%d")
 
         logger.info(f"Generating training data for {symbol}...")
         logger.info(f"Period: {start_date} to {end_date}")
 
         # Get price data for this symbol only - no cross-security data
-        price_data = await self._get_price_data(
-            symbol, start_date, datetime.now().strftime('%Y-%m-%d')
-        )
+        price_data = await self._get_price_data(symbol, start_date, datetime.now().strftime("%Y-%m-%d"))
 
         if len(price_data) < 200 + prediction_horizon_days:
             logger.warning(f"{symbol}: Insufficient price data ({len(price_data)} rows)")
@@ -321,7 +327,9 @@ class TrainingDataGenerator:
         await self.db.connect()
 
         # Calculate date range
-        feature_start = (datetime.now() - timedelta(days=lookback_days + prediction_horizon_days + 200)).strftime('%Y-%m-%d')
+        feature_start = (datetime.now() - timedelta(days=lookback_days + prediction_horizon_days + 200)).strftime(
+            "%Y-%m-%d"
+        )
 
         symbols = await self._get_universe_symbols()
 
@@ -330,7 +338,7 @@ class TrainingDataGenerator:
 
         # Process each symbol independently
         for symbol in symbols:
-            price_data = await self._get_price_data(symbol, feature_start, datetime.now().strftime('%Y-%m-%d'))
+            price_data = await self._get_price_data(symbol, feature_start, datetime.now().strftime("%Y-%m-%d"))
             if len(price_data) < 200 + prediction_horizon_days:
                 continue
 
@@ -339,8 +347,8 @@ class TrainingDataGenerator:
             sample_end_idx = len(price_data) - prediction_horizon_days
 
             for i in range(sample_start_idx, sample_end_idx, 7):
-                sample_date = price_data.iloc[i]['date']
-                window_data = price_data.iloc[:i+1].copy()
+                sample_date = price_data.iloc[i]["date"]
+                window_data = price_data.iloc[: i + 1].copy()
 
                 try:
                     # Extract features (per-security, no cross-security data)
@@ -351,8 +359,8 @@ class TrainingDataGenerator:
                         sentiment_score=None,
                     )
 
-                    current_price = price_data.iloc[i]['close']
-                    future_price = price_data.iloc[i + prediction_horizon_days]['close']
+                    current_price = price_data.iloc[i]["close"]
+                    future_price = price_data.iloc[i + prediction_horizon_days]["close"]
 
                     if pd.isna(current_price) or pd.isna(future_price) or current_price <= 0:
                         continue
@@ -360,13 +368,13 @@ class TrainingDataGenerator:
                     future_return = (future_price / current_price) - 1.0
 
                     sample = {
-                        'sample_id': str(uuid.uuid4()),
-                        'symbol': symbol,
-                        'sample_date': sample_date,
+                        "sample_id": str(uuid.uuid4()),
+                        "symbol": symbol,
+                        "sample_date": sample_date,
                         **features,
-                        'future_return': future_return,
-                        'prediction_horizon_days': prediction_horizon_days,
-                        'created_at': datetime.now().isoformat(),
+                        "future_return": future_return,
+                        "prediction_horizon_days": prediction_horizon_days,
+                        "created_at": datetime.now().isoformat(),
                     }
                     all_samples.append(sample)
 

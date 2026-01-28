@@ -9,10 +9,10 @@ import asyncio
 import logging
 from typing import Optional
 
+from sentinel.led.bridge import LEDBridge
+from sentinel.led.state import Trade
 from sentinel.planner import Planner
 from sentinel.settings import Settings
-from sentinel.led.state import Trade
-from sentinel.led.bridge import LEDBridge
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ class LEDController:
         Checks if LED display is enabled in settings, connects to
         the MCU bridge, and begins the display loop.
         """
-        enabled = await self._settings.get('led_display_enabled', False)
+        enabled = await self._settings.get("led_display_enabled", False)
         if not enabled:
             logger.info("LED display disabled by setting")
             return
@@ -74,21 +74,21 @@ class LEDController:
             # Convert recommendations to Trade objects
             self._trades = []
             for rec in recommendations:
-                if rec.action == 'sell':
+                if rec.action == "sell":
                     # Calculate sell percentage
                     if rec.current_value_eur > 0:
                         sell_pct = (abs(rec.value_delta_eur) / rec.current_value_eur) * 100
                     else:
                         sell_pct = 100
                     trade = Trade(
-                        action='SELL',
+                        action="SELL",
                         amount=abs(rec.value_delta_eur),
                         symbol=rec.symbol,
                         sell_pct=sell_pct,
                     )
                 else:
                     trade = Trade(
-                        action='BUY',
+                        action="BUY",
                         amount=rec.value_delta_eur,
                         symbol=rec.symbol,
                     )
