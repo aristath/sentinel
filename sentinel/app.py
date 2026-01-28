@@ -1,0 +1,2045 @@
+"""
+Sentinel Web API - FastAPI entry point.
+
+Usage:
+    uvicorn sentinel.app:app --host 0.0.0.0 --port 8000
+"""
+
+import asyncio
+import logging
+from contextlib import asynccontextmanager
+from datetime import datetime
+from typing import Optional
+from fastapi import FastAPI, HTTPException
+
+logger = logging.getLogger(__name__)
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+from pathlib import Path
+
+from fastapi.responses import StreamingResponse
+
+from sentinel.database import Database
+from sentinel.broker import Broker
+from sentinel.settings import Settings
+from sentinel.portfolio import Portfolio
+from sentinel.security import Security
+from sentinel.price_validator import PriceValidator, get_price_anomaly_warning
+from sentinel.cache import Cache
+from sentinel.backtester import (
+    Backtester, BacktestConfig, BacktestProgress, BacktestResult,
+    get_active_backtest, set_active_backtest,
+)
+
+# Job system imports
+from sentinel.jobs import (
+    Queue, Registry, Processor, Scheduler,
+)
+from sentinel.jobs.market import BrokerMarketChecker
+from sentinel.jobs.implementations import register_all_jobs
+
+# Global instances
+_queue: Queue = None
+_registry: Registry = None
+_processor: Processor = None
+_scheduler: Scheduler = None
+_led_controller = None
+_led_task: asyncio.Task = None
+
+
+def _apply_schedule_to_job(job, schedule: dict) -> None:
+    """Apply schedule configuration to job instance."""
+    from sentinel.jobs.types import MarketTiming
+    import json
+
+    # Override market_timing from database if set
+    market_timing = schedule.get('market_timing')
+    if market_timing is not None and hasattr(job, '_market_timing'):
+        job._market_timing = MarketTiming(market_timing)
+
+    # Override dependencies from database if set
+    deps_str = schedule.get('dependencies')
+    if deps_str and hasattr(job, '_dependencies'):
+        try:
+            deps = json.loads(deps_str)
+            if isinstance(deps, list):
+                job._dependencies = deps
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize services on startup, cleanup on shutdown."""
+    global _queue, _registry, _processor, _scheduler, _led_controller, _led_task
+
+    # Startup
+    db = Database()
+    await db.connect()
+
+    settings = Settings()
+    await settings.init_defaults()
+
+    broker = Broker()
+    await broker.connect()
+
+    # Sync exchange rates on startup
+    from sentinel.currency import Currency
+    currency = Currency()
+    await currency.sync_rates()
+    logger.info("Exchange rates synced")
+
+    # Check if we need to sync historical prices
+    await _sync_missing_prices(db, broker)
+
+    # Initialize job system components
+    from sentinel.analyzer import Analyzer
+    from sentinel.correlation_cleaner import CorrelationCleaner
+    from sentinel.regime_detector import RegimeDetector
+    from sentinel.transfer_entropy import TransferEntropyAnalyzer
+    from sentinel.planner import Planner
+    from sentinel.ml_retrainer import MLRetrainer
+    from sentinel.ml_monitor import MLMonitor
+
+    portfolio = Portfolio()
+    analyzer = Analyzer()
+    cleaner = CorrelationCleaner()
+    detector = RegimeDetector()
+    te_analyzer = TransferEntropyAnalyzer()
+    planner = Planner()
+    retrainer = MLRetrainer()
+    monitor = MLMonitor()
+    cache = Cache('motion')
+
+    # Initialize job system
+    _queue = Queue()
+    _registry = Registry()
+    await register_all_jobs(
+        _registry, db, broker, portfolio, analyzer,
+        cleaner, detector, te_analyzer, planner,
+        retrainer, monitor, cache,
+    )
+
+    market_checker = BrokerMarketChecker(broker)
+    await market_checker.refresh()
+
+    _processor = Processor(db, _queue, _registry, market_checker)
+    await _processor.start()
+
+    # Seed default job schedules before starting scheduler
+    await db.seed_default_job_schedules()
+
+    _scheduler = Scheduler(db, _queue, _registry, market_checker)
+    await _scheduler.start()
+
+    logger.info("Job system started")
+
+    # Start LED controller (checks setting internally, no-op if disabled)
+    from sentinel.led import LEDController
+    _led_controller = LEDController()
+    _led_task = asyncio.create_task(_led_controller.start())
+
+    yield
+
+    # Shutdown
+    if _scheduler:
+        await _scheduler.stop()
+    if _processor:
+        await _processor.stop()
+    logger.info("Job system stopped")
+
+    if _led_controller:
+        _led_controller.stop()
+    if _led_task:
+        _led_task.cancel()
+        try:
+            await _led_task
+        except asyncio.CancelledError:
+            pass
+
+    await db.close()
+
+
+async def _sync_missing_prices(db: Database, broker: Broker):
+    """Sync historical prices for securities that don't have price data."""
+    # Get all positions (these are the securities we care about)
+    positions = await db.get_all_positions()
+    if not positions:
+        logger.info("No positions to sync prices for")
+        return
+
+    symbols = [p['symbol'] for p in positions]
+
+    # Check which symbols are missing price data
+    missing = []
+    for symbol in symbols:
+        cursor = await db.conn.execute(
+            "SELECT COUNT(*) as cnt FROM prices WHERE symbol = ?", (symbol,)
+        )
+        row = await cursor.fetchone()
+        if row['cnt'] < 100:  # Less than 100 days of data
+            missing.append(symbol)
+
+    if not missing:
+        logger.info(f"All {len(symbols)} securities have price data")
+        return
+
+    logger.info(f"Syncing historical prices for {len(missing)} securities: {missing}")
+
+    # Fetch in bulk
+    prices_data = await broker.get_historical_prices_bulk(missing, years=10)
+
+    # Save to database
+    for symbol, prices in prices_data.items():
+        if prices:
+            await db.save_prices(symbol, prices)
+            logger.info(f"Saved {len(prices)} prices for {symbol}")
+
+    logger.info("Historical price sync complete")
+
+
+app = FastAPI(
+    title="Sentinel",
+    description="Long-term portfolio management system",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+# CORS for development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# -----------------------------------------------------------------------------
+# Settings API
+# -----------------------------------------------------------------------------
+
+@app.get("/api/settings")
+async def get_settings():
+    """Get all settings."""
+    settings = Settings()
+    return await settings.all()
+
+
+@app.put("/api/settings/{key}")
+async def set_setting(key: str, value: dict):
+    """Set a setting value."""
+    settings = Settings()
+    await settings.set(key, value.get('value'))
+    return {"status": "ok"}
+
+
+# -----------------------------------------------------------------------------
+# LED Display API
+# -----------------------------------------------------------------------------
+
+@app.get("/api/led/status")
+async def get_led_status():
+    """Get LED display status and settings."""
+    settings = Settings()
+    enabled = await settings.get('led_display_enabled', False)
+    return {
+        "enabled": enabled,
+        "running": _led_controller.is_running if _led_controller else False,
+        "trade_count": _led_controller.trade_count if _led_controller else 0,
+    }
+
+
+@app.put("/api/led/enabled")
+async def set_led_enabled(data: dict):
+    """Enable or disable LED display."""
+    settings = Settings()
+    enabled = data.get('enabled', False)
+    await settings.set('led_display_enabled', enabled)
+    return {"enabled": enabled}
+
+
+@app.post("/api/led/refresh")
+async def refresh_led_display():
+    """Force an immediate LED display refresh."""
+    if not _led_controller or not _led_controller.is_running:
+        return {"status": "not_running"}
+    await _led_controller.force_refresh()
+    return {"status": "refreshed", "trade_count": _led_controller.trade_count}
+
+
+# -----------------------------------------------------------------------------
+# Exchange Rates API
+# -----------------------------------------------------------------------------
+
+@app.get("/api/exchange-rates")
+async def get_exchange_rates():
+    """Get all exchange rates to EUR."""
+    from sentinel.currency import Currency
+    currency = Currency()
+    return await currency.get_rates()
+
+
+@app.post("/api/exchange-rates/sync")
+async def sync_exchange_rates():
+    """Sync exchange rates from Tradernet API."""
+    from sentinel.currency import Currency
+    currency = Currency()
+    rates = await currency.sync_rates()
+    return rates
+
+
+@app.put("/api/exchange-rates/{curr}")
+async def set_exchange_rate(curr: str, data: dict):
+    """Manually set exchange rate for a currency to EUR."""
+    from sentinel.currency import Currency
+    currency = Currency()
+    await currency.set_rate(curr, data.get('rate', 1.0))
+    return {"status": "ok"}
+
+
+# -----------------------------------------------------------------------------
+# Meta API
+# -----------------------------------------------------------------------------
+
+@app.get("/api/meta/categories")
+async def get_categories():
+    """Get combined default + existing categories from database."""
+    from sentinel.config.categories import DEFAULT_GEOGRAPHIES, DEFAULT_INDUSTRIES
+
+    db = Database()
+    existing = await db.get_distinct_categories()
+
+    return {
+        'geographies': sorted(set(DEFAULT_GEOGRAPHIES + existing['geographies'])),
+        'industries': sorted(set(DEFAULT_INDUSTRIES + existing['industries'])),
+    }
+
+
+# -----------------------------------------------------------------------------
+# Portfolio API
+# -----------------------------------------------------------------------------
+
+@app.get("/api/portfolio")
+async def get_portfolio():
+    """Get current portfolio state."""
+    from sentinel.currency import Currency
+    currency = Currency()
+
+    portfolio = Portfolio()
+    positions = await portfolio.positions()
+    total = await portfolio.total_value()
+    allocations = await portfolio.get_allocations()
+
+    # Get security names and add EUR-converted values to each position
+    db = Database()
+    for pos in positions:
+        symbol = pos['symbol']
+        price = pos.get('current_price', 0)
+        qty = pos.get('quantity', 0)
+        avg_cost = pos.get('avg_cost', 0)
+        pos_currency = pos.get('currency', 'EUR')
+        value_local = price * qty
+        value_eur = await currency.to_eur(value_local, pos_currency)
+        pos['value_local'] = value_local
+        pos['value_eur'] = value_eur
+
+        # Calculate profit percentage
+        if avg_cost and avg_cost > 0:
+            pos['profit_pct'] = ((price - avg_cost) / avg_cost) * 100
+        else:
+            pos['profit_pct'] = 0
+
+        # Get security name
+        sec = await db.get_security(symbol)
+        if sec:
+            pos['name'] = sec.get('name', symbol)
+
+    # Get cash balances from portfolio (stored in DB)
+    portfolio_obj = Portfolio()
+    cash = await portfolio_obj.get_cash_balances()
+
+    # Calculate total cash in EUR
+    total_cash_eur = 0
+    for curr, amount in cash.items():
+        total_cash_eur += await currency.to_eur(amount, curr)
+
+    # Calculate total value including cash
+    total_eur = total + total_cash_eur
+
+    return {
+        "positions": positions,
+        "total_value": total,
+        "total_value_eur": total_eur,
+        "cash": cash,
+        "total_cash_eur": total_cash_eur,
+        "allocations": allocations,
+    }
+
+
+@app.post("/api/portfolio/sync")
+async def sync_portfolio():
+    """Sync portfolio from broker."""
+    portfolio = Portfolio()
+    await portfolio.sync()
+    return {"status": "ok"}
+
+
+@app.get("/api/portfolio/allocations")
+async def get_allocations():
+    """Get current vs target allocations."""
+    portfolio = Portfolio()
+    current = await portfolio.get_allocations()
+    targets = await portfolio.get_target_allocations()
+    deviations = await portfolio.deviation_from_targets()
+
+    return {
+        "current": current,
+        "targets": targets,
+        "deviations": deviations,
+    }
+
+
+# -----------------------------------------------------------------------------
+# Securities API
+# -----------------------------------------------------------------------------
+
+@app.get("/api/securities")
+async def get_securities():
+    """Get all securities in universe."""
+    db = Database()
+    return await db.get_all_securities(active_only=False)
+
+
+@app.post("/api/securities")
+async def add_security(data: dict):
+    """Add a new security to the universe."""
+    symbol = data.get('symbol')
+    if not symbol:
+        raise HTTPException(status_code=400, detail="Symbol is required")
+
+    db = Database()
+    broker = Broker()
+
+    # Check if already exists
+    existing = await db.get_security(symbol)
+    if existing:
+        raise HTTPException(status_code=400, detail="Security already exists")
+
+    # Get info from broker
+    info = await broker.get_security_info(symbol)
+    if not info:
+        raise HTTPException(status_code=404, detail="Security not found in broker")
+
+    # Extract relevant data
+    name = info.get('short_name', info.get('name', symbol))
+    currency = info.get('currency', info.get('curr', 'EUR'))
+    market_id = str(info.get('mrkt', {}).get('mkt_id', ''))
+    min_lot = int(float(info.get('lot', 1)))
+
+    # Save to database
+    await db.upsert_security(
+        symbol,
+        name=name,
+        currency=currency,
+        market_id=market_id,
+        min_lot=min_lot,
+        active=True,
+        geography=data.get('geography', ''),
+        industry=data.get('industry', ''),
+    )
+
+    # Save full metadata
+    await db.update_security_metadata(symbol, info, market_id)
+
+    # Fetch and save 10 years of historical prices
+    prices_data = await broker.get_historical_prices_bulk([symbol], years=10)
+    prices = prices_data.get(symbol, [])
+    if prices:
+        await db.replace_prices(symbol, prices)
+
+    return {"status": "ok", "symbol": symbol, "name": name, "prices_count": len(prices)}
+
+
+@app.delete("/api/securities/{symbol}")
+async def delete_security(symbol: str, sell_position: bool = True):
+    """Delete a security from the universe. Optionally sells any existing position first."""
+    db = Database()
+
+    # Check if exists
+    existing = await db.get_security(symbol)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Security not found")
+
+    # Check for position
+    position = await db.get_position(symbol)
+    quantity = position.get('quantity', 0) if position else 0
+
+    # Sell position if requested and exists
+    if sell_position and quantity > 0:
+        security = Security(symbol)
+        await security.load()
+        order_id = await security.sell(quantity)
+        if not order_id:
+            raise HTTPException(status_code=400, detail="Failed to sell position")
+
+    # Delete all data for this security from database
+    await db.conn.execute("DELETE FROM securities WHERE symbol = ?", (symbol,))
+    await db.conn.execute("DELETE FROM positions WHERE symbol = ?", (symbol,))
+    await db.conn.execute("DELETE FROM prices WHERE symbol = ?", (symbol,))
+    await db.conn.execute("DELETE FROM trades WHERE symbol = ?", (symbol,))
+    await db.conn.execute("DELETE FROM scores WHERE symbol = ?", (symbol,))
+    await db.conn.commit()
+
+    return {"status": "ok", "sold_quantity": quantity if sell_position else 0}
+
+
+@app.get("/api/securities/{symbol}")
+async def get_security(symbol: str):
+    """Get a specific security."""
+    security = Security(symbol)
+    if not await security.exists():
+        raise HTTPException(status_code=404, detail="Security not found")
+    await security.load()
+    return {
+        "symbol": security.symbol,
+        "name": security.name,
+        "currency": security.currency,
+        "geography": security.geography,
+        "industry": security.industry,
+        "quantity": security.quantity,
+        "current_price": security.current_price,
+        "score": await security.get_score(),
+    }
+
+
+@app.put("/api/securities/{symbol}")
+async def update_security(symbol: str, data: dict):
+    """Update security metadata (geography, industry, allow_buy, allow_sell, user_multiplier, ml_enabled, ml_blend_ratio)."""
+    db = Database()
+    existing = await db.get_security(symbol)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Security not found")
+
+    # Only allow updating specific fields
+    allowed_fields = ['geography', 'industry', 'allow_buy', 'allow_sell', 'user_multiplier', 'active', 'ml_enabled', 'ml_blend_ratio']
+    updates = {k: v for k, v in data.items() if k in allowed_fields}
+
+    if updates:
+        await db.upsert_security(symbol, **updates)
+
+    return {"status": "ok"}
+
+
+@app.get("/api/unified")
+async def get_unified_view(period: str = "1Y"):
+    """
+    Get aggregated data for unified security cards view.
+
+    Args:
+        period: Price history period - 1M, 1Y, 5Y, 10Y
+
+    Returns all securities with their positions, prices, scores, and recommendations.
+    """
+    from sentinel.currency import Currency
+    from sentinel.planner import Planner
+    import json
+
+    db = Database()
+    broker = Broker()
+    currency = Currency()
+    planner = Planner()
+
+    # Get all securities
+    securities = await db.get_all_securities(active_only=False)
+
+    # Fetch current quotes from broker for all symbols at once
+    all_symbols = [sec['symbol'] for sec in securities]
+    current_quotes = await broker.get_quotes(all_symbols)
+
+    # Get all positions
+    positions = await db.get_all_positions()
+    positions_map = {p['symbol']: p for p in positions}
+
+    # Get all scores
+    cursor = await db.conn.execute("SELECT * FROM scores")
+    scores = await cursor.fetchall()
+    scores_map = {s['symbol']: dict(s) for s in scores}
+
+    # Get latest ML predictions for each symbol (for wavelet/ML score breakdown)
+    cursor = await db.conn.execute("""
+        SELECT symbol, wavelet_score, ml_score, final_score
+        FROM ml_predictions
+        WHERE predicted_at = (
+            SELECT MAX(predicted_at) FROM ml_predictions p2 WHERE p2.symbol = ml_predictions.symbol
+        )
+    """)
+    ml_preds = await cursor.fetchall()
+    ml_preds_map = {p['symbol']: dict(p) for p in ml_preds}
+
+    # Get recommendations (uses setting)
+    recommendations = await planner.get_recommendations()
+    recommendations_map = {r.symbol: r for r in recommendations}
+
+    # Get ideal allocations
+    ideal = await planner.calculate_ideal_portfolio()
+    current_allocs = await planner.get_current_allocations()
+
+    # Calculate total portfolio value for allocation percentages
+    total_value = 0
+    for pos in positions:
+        price = pos.get('current_price', 0)
+        qty = pos.get('quantity', 0)
+        pos_currency = pos.get('currency', 'EUR')
+        value_eur = await currency.to_eur(price * qty, pos_currency)
+        total_value += value_eur
+
+    # Calculate post-plan total value (current value + net effect of all recommendations)
+    # Note: buys use cash, sells add cash, so net change in invested value = sum of all value_deltas
+    post_plan_total_value = total_value
+    for rec in recommendations:
+        post_plan_total_value += rec.value_delta_eur  # positive for buys, negative for sells
+
+    # Determine price data limit based on period
+    days_map = {'1M': 30, '1Y': 365, '5Y': 1825, '10Y': 3650}
+    days = days_map.get(period, 365)
+
+    # Fetch all prices in a single bulk query
+    all_prices_raw = await db.get_prices_bulk(all_symbols, days=days)
+
+    # Validate all prices upfront
+    validator = PriceValidator()
+    all_prices_validated = {}
+    for symbol, raw_prices in all_prices_raw.items():
+        # Prices come from DB newest-first, validator expects oldest-first
+        validated = validator.validate_and_interpolate(list(reversed(raw_prices)))
+        # Reverse back to newest-first for our processing
+        all_prices_validated[symbol] = list(reversed(validated))
+
+    # Build unified response
+    result = []
+    for sec in securities:
+        symbol = sec['symbol']
+        position = positions_map.get(symbol)
+        score_data = scores_map.get(symbol, {})
+        recommendation = recommendations_map.get(symbol)
+
+        # Get pre-fetched and validated prices
+        prices = all_prices_validated.get(symbol, [])
+
+        # Calculate position data
+        has_position = position is not None and position.get('quantity', 0) > 0
+        quantity = position.get('quantity', 0) if position else 0
+        avg_cost = position.get('avg_cost', 0) if position else 0
+
+        # Get current price: prefer live quote, fallback to position, then historical
+        quote = current_quotes.get(symbol)
+        current_price = quote.get('price', 0) if quote else 0
+        if current_price <= 0 and position:
+            current_price = position.get('current_price', 0)
+        if current_price <= 0 and prices:
+            current_price = prices[0]['close']
+
+        # Check for price anomaly
+        price_warning = None
+        if current_price > 0 and prices:
+            historical_closes = [p['close'] for p in prices if p.get('close') and p['close'] > 0]
+            price_warning = get_price_anomaly_warning(current_price, historical_closes, symbol)
+
+        # Calculate P/L
+        sec_currency = sec.get('currency', 'EUR')
+        if has_position and avg_cost > 0:
+            profit_pct = ((current_price - avg_cost) / avg_cost) * 100
+            profit_value = (current_price - avg_cost) * quantity
+            profit_value_eur = await currency.to_eur(profit_value, sec_currency)
+        else:
+            profit_pct = 0
+            profit_value = 0
+            profit_value_eur = 0
+
+        # Convert to EUR
+        value_local = current_price * quantity
+        value_eur = await currency.to_eur(value_local, sec_currency) if has_position else 0
+
+        # Current and ideal allocations
+        current_alloc = current_allocs.get(symbol, 0) * 100
+        ideal_alloc = ideal.get(symbol, 0) * 100
+
+        # Post-plan allocation (what allocation will be after executing recommendations)
+        if recommendation:
+            post_plan_value = value_eur + recommendation.value_delta_eur
+        else:
+            post_plan_value = value_eur
+        post_plan_alloc = (post_plan_value / post_plan_total_value * 100) if post_plan_total_value > 0 else 0
+
+        # Parse score components
+        components = {}
+        if score_data.get('components'):
+            try:
+                components = json.loads(score_data['components']) if isinstance(score_data['components'], str) else score_data['components']
+            except (json.JSONDecodeError, TypeError, ValueError):
+                pass
+
+        # Apply user conviction adjustment to expected return
+        from sentinel.utils.scoring import adjust_score_for_conviction
+        user_multiplier = sec.get('user_multiplier', 1.0) or 1.0
+
+        # Use blended final_score from ML predictions if available, otherwise fall back to wavelet score
+        ml_pred = ml_preds_map.get(symbol, {})
+        base_expected_return = ml_pred.get('final_score') if ml_pred.get('final_score') is not None else (components.get('expected_return', 0) or 0)
+        adjusted_expected_return = adjust_score_for_conviction(base_expected_return, user_multiplier)
+        conviction_boost = adjusted_expected_return - base_expected_return
+
+        # Build recommendation info
+        rec_info = None
+        if recommendation:
+            rec_info = {
+                'action': recommendation.action,
+                'quantity': recommendation.quantity,
+                'value_delta_eur': recommendation.value_delta_eur,
+                'reason': recommendation.reason,
+                'priority': recommendation.priority,
+            }
+
+        result.append({
+            'symbol': symbol,
+            'name': sec.get('name', symbol),
+            'currency': sec_currency,
+            'geography': sec.get('geography'),
+            'industry': sec.get('industry'),
+            'min_lot': sec.get('min_lot', 1),
+            'active': sec.get('active', 1),
+            'allow_buy': sec.get('allow_buy', 1),
+            'allow_sell': sec.get('allow_sell', 1),
+            'user_multiplier': sec.get('user_multiplier', 1.0),
+            'ml_enabled': sec.get('ml_enabled', 0),
+            'ml_blend_ratio': sec.get('ml_blend_ratio', 0.5),
+
+            # Position data
+            'has_position': has_position,
+            'quantity': quantity,
+            'avg_cost': avg_cost,
+            'current_price': current_price,
+            'value_local': value_local,
+            'value_eur': value_eur,
+            'profit_pct': profit_pct,
+            'profit_value': profit_value,
+            'profit_value_eur': profit_value_eur,
+
+            # Price anomaly warning (if any)
+            'price_warning': price_warning,
+
+            # Allocations
+            'current_allocation': current_alloc,
+            'post_plan_allocation': post_plan_alloc,
+            'ideal_allocation': ideal_alloc,
+            'target_allocation': ideal_alloc,  # Alias for backwards compatibility
+
+            # Score data (adjusted by user conviction)
+            'score': (score_data.get('score') or 0) + conviction_boost,
+            'expected_return': adjusted_expected_return,
+            'base_expected_return': base_expected_return,
+            'score_components': components,
+
+            # ML prediction breakdown (for chart projections)
+            'wavelet_score': ml_preds_map.get(symbol, {}).get('wavelet_score'),
+            'ml_score': ml_preds_map.get(symbol, {}).get('ml_score'),
+
+            # Price history (for chart)
+            'prices': [{'date': p['date'], 'close': p['close']} for p in reversed(prices)],
+
+            # Recommendation
+            'recommendation': rec_info,
+        })
+
+    return result
+
+
+@app.get("/api/securities/{symbol}/prices")
+async def get_prices(symbol: str, days: int = 365):
+    """Get historical prices for a security (validated)."""
+    security = Security(symbol)
+    raw_prices = await security.get_historical_prices(days)
+    # Prices come newest-first, validator expects oldest-first
+    validator = PriceValidator()
+    validated = validator.validate_and_interpolate(list(reversed(raw_prices)))
+    # Return newest-first
+    return list(reversed(validated))
+
+
+@app.post("/api/securities/{symbol}/sync-prices")
+async def sync_prices(symbol: str, days: int = 365):
+    """Sync historical prices from broker."""
+    security = Security(symbol)
+    count = await security.sync_prices(days)
+    return {"synced": count}
+
+
+@app.post("/api/prices/sync-all")
+async def sync_all_prices():
+    """Sync historical prices for all securities with positions."""
+    db = Database()
+    broker = Broker()
+    await _sync_missing_prices(db, broker)
+    return {"status": "ok"}
+
+
+@app.post("/api/scores/calculate")
+async def calculate_scores():
+    """Calculate scores for all securities."""
+    from sentinel.analyzer import Analyzer
+    analyzer = Analyzer()
+    count = await analyzer.update_scores()
+    return {"calculated": count}
+
+
+# -----------------------------------------------------------------------------
+# Trading API
+# -----------------------------------------------------------------------------
+
+@app.get("/api/trades")
+async def get_trades(limit: int = 100):
+    """Get recent trades."""
+    db = Database()
+    return await db.get_trades(limit=limit)
+
+
+@app.post("/api/securities/{symbol}/buy")
+async def buy_security(symbol: str, quantity: int):
+    """Buy a security."""
+    security = Security(symbol)
+    await security.load()
+    order_id = await security.buy(quantity)
+    if not order_id:
+        raise HTTPException(status_code=400, detail="Buy order failed")
+    return {"order_id": order_id}
+
+
+@app.post("/api/securities/{symbol}/sell")
+async def sell_security(symbol: str, quantity: int):
+    """Sell a security."""
+    security = Security(symbol)
+    await security.load()
+    order_id = await security.sell(quantity)
+    if not order_id:
+        raise HTTPException(status_code=400, detail="Sell order failed")
+    return {"order_id": order_id}
+
+
+# -----------------------------------------------------------------------------
+# Allocation Targets API
+# -----------------------------------------------------------------------------
+
+@app.get("/api/allocation-targets")
+async def get_allocation_targets():
+    """Get all allocation targets."""
+    db = Database()
+    targets = await db.get_allocation_targets()
+    return {
+        "geography": [t for t in targets if t['type'] == 'geography'],
+        "industry": [t for t in targets if t['type'] == 'industry'],
+    }
+
+
+@app.put("/api/allocation-targets/{target_type}/{name}")
+async def set_allocation_target(target_type: str, name: str, data: dict):
+    """Set an allocation target weight."""
+    if target_type not in ('geography', 'industry'):
+        raise HTTPException(status_code=400, detail="Invalid target type")
+    db = Database()
+    await db.set_allocation_target(target_type, name, data.get('weight', 1.0))
+    return {"status": "ok"}
+
+
+@app.get("/api/allocation/current")
+async def get_allocation_current():
+    """Get current allocation data formatted for radar charts."""
+    portfolio = Portfolio()
+    current = await portfolio.get_allocations()
+    targets = await portfolio.get_target_allocations()
+
+    # Format geography allocations
+    geography = []
+    all_geos = set(current.get('by_geography', {}).keys()) | set(targets.get('geography', {}).keys())
+    for geo in sorted(all_geos):
+        current_pct = current.get('by_geography', {}).get(geo, 0) * 100
+        target_pct = targets.get('geography', {}).get(geo, 0) * 100
+        geography.append({
+            'name': geo,
+            'current_pct': current_pct,
+            'target_pct': target_pct,
+        })
+
+    # Format industry allocations
+    industry = []
+    all_inds = set(current.get('by_industry', {}).keys()) | set(targets.get('industry', {}).keys())
+    for ind in sorted(all_inds):
+        current_pct = current.get('by_industry', {}).get(ind, 0) * 100
+        target_pct = targets.get('industry', {}).get(ind, 0) * 100
+        industry.append({
+            'name': ind,
+            'current_pct': current_pct,
+            'target_pct': target_pct,
+        })
+
+    return {
+        'geography': geography,
+        'industry': industry,
+        'alerts': [],  # TODO: implement concentration alerts if needed
+    }
+
+
+@app.get("/api/allocation/targets")
+async def get_allocation_targets_formatted():
+    """Get allocation targets as {geography: {name: weight}, industry: {name: weight}}."""
+    db = Database()
+    targets = await db.get_allocation_targets()
+
+    geography = {}
+    industry = {}
+    for t in targets:
+        if t['type'] == 'geography':
+            geography[t['name']] = t['weight']
+        elif t['type'] == 'industry':
+            industry[t['name']] = t['weight']
+
+    return {'geography': geography, 'industry': industry}
+
+
+@app.get("/api/allocation/available-geographies")
+async def get_available_geographies():
+    """Get available geographies from securities and allocation_targets only (no defaults)."""
+    db = Database()
+    # Only from securities + allocation_targets, NOT defaults
+    existing = await db.get_distinct_categories()
+    targets = await db.get_allocation_targets()
+    target_geos = {t['name'] for t in targets if t['type'] == 'geography'}
+    geographies = sorted(set(existing['geographies']) | target_geos)
+    return {'geographies': geographies}
+
+
+@app.get("/api/allocation/available-industries")
+async def get_available_industries():
+    """Get available industries from securities and allocation_targets only (no defaults)."""
+    db = Database()
+    # Only from securities + allocation_targets, NOT defaults
+    existing = await db.get_distinct_categories()
+    targets = await db.get_allocation_targets()
+    target_inds = {t['name'] for t in targets if t['type'] == 'industry'}
+    industries = sorted(set(existing['industries']) | target_inds)
+    return {'industries': industries}
+
+
+@app.put("/api/allocation/targets/geography")
+async def save_geography_targets(data: dict):
+    """Save all geography targets at once."""
+    db = Database()
+    targets = data.get('targets', {})
+    for name, weight in targets.items():
+        await db.set_allocation_target('geography', name, weight)
+    return {"status": "ok"}
+
+
+@app.put("/api/allocation/targets/industry")
+async def save_industry_targets(data: dict):
+    """Save all industry targets at once."""
+    db = Database()
+    targets = data.get('targets', {})
+    for name, weight in targets.items():
+        await db.set_allocation_target('industry', name, weight)
+    return {"status": "ok"}
+
+
+@app.delete("/api/allocation/targets/geography/{name}")
+async def delete_geography_target(name: str):
+    """Delete a geography target. Category disappears from UI if not used by any security."""
+    db = Database()
+    await db.delete_allocation_target('geography', name)
+    return {"status": "ok"}
+
+
+@app.delete("/api/allocation/targets/industry/{name}")
+async def delete_industry_target(name: str):
+    """Delete an industry target. Category disappears from UI if not used by any security."""
+    db = Database()
+    await db.delete_allocation_target('industry', name)
+    return {"status": "ok"}
+
+
+# -----------------------------------------------------------------------------
+# Scores API
+# -----------------------------------------------------------------------------
+
+@app.get("/api/scores")
+async def get_scores():
+    """Get all security scores."""
+    db = Database()
+    cursor = await db.conn.execute(
+        "SELECT symbol, score, components, calculated_at FROM scores ORDER BY score DESC"
+    )
+    rows = await cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
+# -----------------------------------------------------------------------------
+# Planner API
+# -----------------------------------------------------------------------------
+
+@app.get("/api/planner/recommendations")
+async def get_recommendations(min_value: Optional[float] = None):
+    """Get trade recommendations to move toward ideal portfolio."""
+    from sentinel.planner import Planner
+    from sentinel.portfolio import Portfolio
+    from sentinel.settings import Settings
+
+    planner = Planner()
+    portfolio = Portfolio()
+    settings = Settings()
+
+    # Use provided min_value or fall back to setting
+    if min_value is None:
+        min_value = await settings.get('min_trade_value', default=100.0)
+
+    recommendations = await planner.get_recommendations(
+        min_trade_value=min_value,
+    )
+
+    # Calculate summary with transaction fees
+    current_cash = await portfolio.total_cash_eur()
+    fixed_fee = await settings.get('transaction_fee_fixed', 2.0)
+    pct_fee = await settings.get('transaction_fee_percent', 0.2) / 100
+
+    total_sell_value = sum(abs(r.value_delta_eur) for r in recommendations if r.action == 'sell')
+    total_buy_value = sum(r.value_delta_eur for r in recommendations if r.action == 'buy')
+    num_sells = sum(1 for r in recommendations if r.action == 'sell')
+    num_buys = sum(1 for r in recommendations if r.action == 'buy')
+
+    sell_fees = num_sells * fixed_fee + total_sell_value * pct_fee
+    buy_fees = num_buys * fixed_fee + total_buy_value * pct_fee
+    total_fees = sell_fees + buy_fees
+
+    # Cash after plan: start + sells - sell_fees - buys - buy_fees
+    cash_after_plan = current_cash + total_sell_value - sell_fees - total_buy_value - buy_fees
+
+    return {
+        "recommendations": [
+            {
+                "symbol": r.symbol,
+                "action": r.action,
+                "current_allocation_pct": r.current_allocation * 100,
+                "target_allocation_pct": r.target_allocation * 100,
+                "allocation_delta_pct": r.allocation_delta * 100,
+                "current_value_eur": r.current_value_eur,
+                "target_value_eur": r.target_value_eur,
+                "value_delta_eur": r.value_delta_eur,
+                "quantity": r.quantity,
+                "price": r.price,
+                "currency": r.currency,
+                "lot_size": r.lot_size,
+                "expected_return": r.expected_return,
+                "priority": r.priority,
+                "reason": r.reason,
+            }
+            for r in recommendations
+        ],
+        "summary": {
+            "current_cash": current_cash,
+            "total_sell_value": total_sell_value,
+            "total_buy_value": total_buy_value,
+            "total_fees": total_fees,
+            "cash_after_plan": cash_after_plan,
+        }
+    }
+
+
+@app.get("/api/planner/ideal")
+async def get_ideal_portfolio():
+    """Get the calculated ideal portfolio allocations."""
+    from sentinel.planner import Planner
+    planner = Planner()
+    ideal = await planner.calculate_ideal_portfolio()
+    current = await planner.get_current_allocations()
+
+    return {
+        "ideal": {k: v * 100 for k, v in ideal.items()},
+        "current": {k: v * 100 for k, v in current.items()},
+    }
+
+
+@app.get("/api/planner/summary")
+async def get_rebalance_summary():
+    """Get summary of portfolio alignment with ideal allocations."""
+    from sentinel.planner import Planner
+    planner = Planner()
+    return await planner.get_rebalance_summary()
+
+
+# -----------------------------------------------------------------------------
+# Jobs API
+# -----------------------------------------------------------------------------
+
+@app.get("/api/jobs")
+async def get_jobs():
+    """Get current job, pending jobs and recent job history."""
+    db = Database()
+    pending = _queue.get_all() if _queue else []
+    history = await db.get_job_history(limit=10)
+
+    # Get current running job from processor
+    current_job = None
+    if _processor and _processor._current_job:
+        current_job = _processor._current_job
+
+    return {
+        "current": current_job,
+        "pending": [
+            {
+                "job_id": job.id(),
+                "type": job.type(),
+            }
+            for job in pending
+        ],
+        "history": history,
+        "registered_types": _registry.list_types() if _registry else [],
+    }
+
+
+@app.post("/api/jobs/{job_type:path}/run")
+async def run_job(job_type: str, immediate: bool = False, params: dict = None):
+    """Manually trigger a job by type. Use immediate=true to bypass queue."""
+    if not _registry or not _queue:
+        raise HTTPException(status_code=503, detail="Job system not initialized")
+
+    try:
+        job = await _registry.create(job_type, params or {})
+
+        # Apply schedule configuration from database
+        db = Database()
+        schedule = await db.get_job_schedule(job_type)
+        if schedule:
+            _apply_schedule_to_job(job, schedule)
+
+        if immediate:
+            # Execute immediately, bypassing queue
+            import asyncio
+            from datetime import datetime
+            start = datetime.now()
+            try:
+                await job.execute()
+                duration_ms = int((datetime.now() - start).total_seconds() * 1000)
+                await db.log_job_execution(job.id(), job.type(), 'completed', None, duration_ms, 0)
+                return {"status": "completed", "job_id": job.id(), "duration_ms": duration_ms}
+            except Exception as e:
+                duration_ms = int((datetime.now() - start).total_seconds() * 1000)
+                await db.log_job_execution(job.id(), job.type(), 'failed', str(e), duration_ms, 0)
+                return {"status": "failed", "job_id": job.id(), "error": str(e)}
+        else:
+            enqueued = await _queue.enqueue(job)
+            return {
+                "status": "enqueued" if enqueued else "already_queued",
+                "job_id": job.id(),
+            }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.post("/api/jobs/refresh-all")
+async def refresh_all():
+    """Reset last_run timestamp to 0 for all jobs, forcing them to run."""
+    db = Database()
+    await db.conn.execute("UPDATE job_schedules SET last_run = 0")
+    await db.conn.commit()
+    return {"status": "ok", "message": "All job timestamps reset to 0"}
+
+
+# -----------------------------------------------------------------------------
+# Job Schedules API
+# -----------------------------------------------------------------------------
+
+MARKET_TIMING_LABELS = {
+    0: 'Any time',
+    1: 'After market close',
+    2: 'During market open',
+    3: 'All markets closed',
+}
+
+
+@app.get("/api/jobs/schedules")
+async def get_job_schedules():
+    """Get all job schedule configurations with status info."""
+    db = Database()
+    schedules = await db.get_job_schedules()
+    pending = _queue.get_all() if _queue else []
+    pending_ids = {job.id() for job in pending}
+
+    # Enrich with runtime info
+    result = []
+    for s in schedules:
+        job_type = s['job_type']
+
+        # Check if queued (for parameterized jobs, check prefix)
+        is_queued = job_type in pending_ids or any(
+            pid.startswith(job_type + ':') for pid in pending_ids
+        )
+
+        # Get most recent execution (not just successful ones)
+        history = await db.get_job_history_for_type(job_type, limit=1)
+        if history:
+            last_run = datetime.fromtimestamp(history[0]['executed_at']).isoformat()
+            last_status = history[0]['status']
+        else:
+            last_run = None
+            last_status = None
+
+        # Parse dependencies
+        import json
+        try:
+            dependencies = json.loads(s.get('dependencies') or '[]')
+        except (json.JSONDecodeError, TypeError):
+            dependencies = []
+
+        # Get instance count for parameterized jobs
+        instance_count = None
+        if s['is_parameterized'] and s.get('parameter_source'):
+            source_method = getattr(db, f"get_{s['parameter_source']}", None)
+            if source_method:
+                try:
+                    entities = await source_method()
+                    instance_count = len(entities)
+                except Exception:
+                    instance_count = 0
+
+        result.append({
+            'job_type': s['job_type'],
+            'enabled': bool(s['enabled']),
+            'interval_minutes': s['interval_minutes'],
+            'interval_market_open_minutes': s.get('interval_market_open_minutes'),
+            'market_timing': s['market_timing'],
+            'market_timing_label': MARKET_TIMING_LABELS.get(s['market_timing'], 'Unknown'),
+            'dependencies': dependencies,
+            'description': s.get('description'),
+            'category': s.get('category'),
+            'is_parameterized': bool(s.get('is_parameterized')),
+            'parameter_source': s.get('parameter_source'),
+            'parameter_field': s.get('parameter_field'),
+            'instance_count': instance_count,
+            'last_run': last_run,
+            'last_status': last_status,
+            'is_queued': is_queued,
+        })
+
+    return {"schedules": result}
+
+
+@app.put("/api/jobs/schedules/{job_type:path}")
+async def update_job_schedule(job_type: str, data: dict):
+    """Update a job's schedule configuration."""
+    import json
+
+    db = Database()
+
+    # Check if job_type exists
+    existing = await db.get_job_schedule(job_type)
+    if not existing:
+        raise HTTPException(status_code=404, detail=f"Unknown job type: {job_type}")
+
+    # Validate enabled
+    if 'enabled' in data:
+        val = data['enabled']
+        if not isinstance(val, bool):
+            raise HTTPException(status_code=400, detail="enabled must be a boolean")
+
+    # Validate interval_minutes
+    if 'interval_minutes' in data:
+        val = data['interval_minutes']
+        if not isinstance(val, int) or val < 1 or val > 10080:
+            raise HTTPException(status_code=400, detail="interval_minutes must be between 1 and 10080")
+
+    # Validate interval_market_open_minutes
+    if 'interval_market_open_minutes' in data:
+        val = data['interval_market_open_minutes']
+        if val is not None and (not isinstance(val, int) or val < 1 or val > 10080):
+            raise HTTPException(status_code=400, detail="interval_market_open_minutes must be between 1 and 10080")
+
+    # Validate market_timing
+    if 'market_timing' in data:
+        val = data['market_timing']
+        if not isinstance(val, int) or val < 0 or val > 3:
+            raise HTTPException(status_code=400, detail="market_timing must be 0, 1, 2, or 3")
+
+    # Validate dependencies
+    dependencies = None
+    if 'dependencies' in data:
+        deps = data['dependencies']
+        if not isinstance(deps, list):
+            raise HTTPException(status_code=400, detail="dependencies must be an array")
+        for dep in deps:
+            if not isinstance(dep, str):
+                raise HTTPException(status_code=400, detail="each dependency must be a string")
+        dependencies = json.dumps(deps)
+
+    await db.upsert_job_schedule(
+        job_type,
+        enabled=data.get('enabled'),
+        interval_minutes=data.get('interval_minutes'),
+        interval_market_open_minutes=data.get('interval_market_open_minutes'),
+        market_timing=data.get('market_timing'),
+        dependencies=dependencies,
+    )
+    return {"status": "ok"}
+
+
+@app.get("/api/jobs/history")
+async def get_job_history(job_type: str = None, limit: int = 50):
+    """Get job execution history."""
+    db = Database()
+
+    if job_type:
+        history = await db.get_job_history_for_type(job_type, limit=limit)
+    else:
+        history = await db.get_job_history(limit=limit)
+
+    return {"history": history}
+
+
+# -----------------------------------------------------------------------------
+# Cache Management
+# -----------------------------------------------------------------------------
+
+@app.get("/api/cache/stats")
+async def get_cache_stats():
+    """Get statistics for all caches."""
+    return Cache.get_all_stats()
+
+
+@app.post("/api/cache/clear")
+async def clear_cache(name: str = None):
+    """
+    Clear cache entries.
+
+    Args:
+        name: Specific cache name to clear (e.g., 'motion'), or None for all caches
+    """
+    if name:
+        cache = Cache(name)
+        cleared = cache.clear()
+        return {"cleared": {name: cleared}}
+    else:
+        cleared = Cache.clear_all()
+        return {"cleared": cleared}
+
+
+# -----------------------------------------------------------------------------
+# Backtest API
+# -----------------------------------------------------------------------------
+
+@app.get("/api/backtest/run")
+async def run_backtest(
+    start_date: str,
+    end_date: str,
+    initial_capital: float = 10000.0,
+    monthly_deposit: float = 0.0,
+    rebalance_frequency: str = 'weekly',
+    use_existing_universe: bool = True,
+    pick_random: bool = True,
+    random_count: int = 10,
+    symbols: str = "",  # Comma-separated
+):
+    """
+    Run a backtest simulation via Server-Sent Events (SSE).
+
+    Returns events:
+    - progress: {current_date, progress_pct, portfolio_value, status, phase, current_item, items_done, items_total}
+    - result: Full backtest results when complete
+    - error: Error message if something goes wrong
+    """
+    import json
+    from dataclasses import asdict
+
+    # Parse comma-separated symbols
+    symbols_list = [s.strip() for s in symbols.split(',') if s.strip()] if symbols else []
+
+    config = BacktestConfig(
+        start_date=start_date,
+        end_date=end_date,
+        initial_capital=initial_capital,
+        monthly_deposit=monthly_deposit,
+        rebalance_frequency=rebalance_frequency,
+        use_existing_universe=use_existing_universe,
+        pick_random=pick_random,
+        random_count=random_count,
+        symbols=symbols_list,
+    )
+
+    backtester = Backtester(config)
+    set_active_backtest(backtester)
+
+    async def event_generator():
+        try:
+            async for update in backtester.run():
+                if isinstance(update, BacktestProgress):
+                    event_data = {
+                        'current_date': update.current_date,
+                        'progress_pct': update.progress_pct,
+                        'portfolio_value': update.portfolio_value,
+                        'status': update.status,
+                        'message': update.message,
+                        'phase': update.phase,
+                        'current_item': update.current_item,
+                        'items_done': update.items_done,
+                        'items_total': update.items_total,
+                    }
+                    yield f"event: progress\ndata: {json.dumps(event_data)}\n\n"
+
+                    if update.status in ('error', 'cancelled'):
+                        break
+
+                elif isinstance(update, BacktestResult):
+                    # Convert result to JSON-serializable format
+                    result_data = {
+                        'config': asdict(update.config),
+                        'snapshots': [
+                            {
+                                'date': s.date,
+                                'total_value': s.total_value,
+                                'cash': s.cash,
+                                'positions_value': s.positions_value,
+                            }
+                            for s in update.snapshots
+                        ],
+                        'trades': [
+                            {
+                                'date': t.date,
+                                'symbol': t.symbol,
+                                'action': t.action,
+                                'quantity': t.quantity,
+                                'price': t.price,
+                                'value': t.value,
+                            }
+                            for t in update.trades
+                        ],
+                        'initial_value': update.initial_value,
+                        'final_value': update.final_value,
+                        'total_deposits': update.total_deposits,
+                        'total_return': update.total_return,
+                        'total_return_pct': update.total_return_pct,
+                        'cagr': update.cagr,
+                        'max_drawdown': update.max_drawdown,
+                        'sharpe_ratio': update.sharpe_ratio,
+                        'security_performance': [
+                            {
+                                'symbol': sp.symbol,
+                                'name': sp.name,
+                                'total_invested': sp.total_invested,
+                                'total_sold': sp.total_sold,
+                                'final_value': sp.final_value,
+                                'total_return': sp.total_return,
+                                'return_pct': sp.return_pct,
+                                'num_buys': sp.num_buys,
+                                'num_sells': sp.num_sells,
+                            }
+                            for sp in update.security_performance
+                        ],
+                    }
+                    yield f"event: result\ndata: {json.dumps(result_data)}\n\n"
+
+        except Exception as e:
+            error_data = {'message': str(e)}
+            yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
+        finally:
+            set_active_backtest(None)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.post("/api/backtest/cancel")
+async def cancel_backtest():
+    """Cancel a running backtest."""
+    backtest = get_active_backtest()
+    if backtest:
+        backtest.cancel()
+        return {"status": "ok", "message": "Backtest cancellation requested"}
+    return {"status": "ok", "message": "No active backtest to cancel"}
+
+
+# -----------------------------------------------------------------------------
+# Advanced Analytics API
+# -----------------------------------------------------------------------------
+
+@app.get("/api/analytics/regime/{symbol}")
+async def get_regime_status(symbol: str):
+    """Get current regime for a security."""
+    from sentinel.regime_detector import RegimeDetector
+    detector = RegimeDetector()
+    regime = await detector.detect_current_regime(symbol)
+    history = await detector.get_regime_history(symbol, days=90)
+    return {"current": regime, "history": history}
+
+
+@app.get("/api/analytics/regimes")
+async def get_all_regimes():
+    """Get current regimes for all active securities."""
+    from sentinel.regime_detector import RegimeDetector
+    db = Database()
+    detector = RegimeDetector()
+
+    securities = await db.get_all_securities(active_only=True)
+    results = {}
+    for sec in securities:
+        regime = await detector.detect_current_regime(sec['symbol'])
+        results[sec['symbol']] = regime
+    return results
+
+
+@app.get("/api/analytics/correlation")
+async def get_correlation_matrix(matrix_type: str = 'cleaned'):
+    """Get correlation matrix (raw or cleaned)."""
+    from sentinel.correlation_cleaner import CorrelationCleaner
+    cleaner = CorrelationCleaner()
+    matrix, symbols = await cleaner.get_latest_correlation(matrix_type)
+
+    if matrix is None:
+        raise HTTPException(404, "No correlation matrix found")
+
+    return {
+        'matrix': matrix.tolist(),
+        'symbols': symbols,
+        'matrix_type': matrix_type
+    }
+
+
+@app.get("/api/analytics/transfer-entropy/{symbol}")
+async def get_transfer_entropy(symbol: str):
+    """Get transfer entropy relationships for a security."""
+    from sentinel.transfer_entropy import TransferEntropyAnalyzer
+    te_analyzer = TransferEntropyAnalyzer()
+
+    leading = await te_analyzer.get_leading_indicators(symbol)
+    return {
+        'symbol': symbol,
+        'leading_indicators': leading,
+    }
+
+
+@app.get("/api/analytics/optimization/compare")
+async def compare_optimization_methods():
+    """Compare different optimization methods."""
+    from sentinel.planner import Planner
+    from sentinel.entropy_optimizer import EntropyOptimizer
+    from sentinel.portfolio_optimizer import PortfolioOptimizer
+
+    db = Database()
+    planner = Planner()
+
+    # Get scores
+    securities = await db.get_all_securities(active_only=True)
+    scores = {}
+    for sec in securities:
+        cursor = await db.conn.execute(
+            "SELECT score FROM scores WHERE symbol = ?", (sec['symbol'],)
+        )
+        row = await cursor.fetchone()
+        if row and row['score'] is not None:
+            scores[sec['symbol']] = row['score']
+
+    constraints = {
+        'max_position': 20,
+        'min_position': 2,
+        'cash_target': 5,
+    }
+
+    results = {}
+
+    # Classic
+    try:
+        results['classic'] = await planner._classic_allocation(scores, constraints)
+    except Exception as e:
+        results['classic'] = {'error': str(e)}
+
+    # Entropy
+    try:
+        entropy_opt = EntropyOptimizer()
+        results['entropy_shannon'] = await entropy_opt.optimize(scores, constraints)
+    except Exception as e:
+        results['entropy_shannon'] = {'error': str(e)}
+
+    # skfolio (if available)
+    try:
+        from sentinel.portfolio_optimizer import SKFOLIO_AVAILABLE
+        if SKFOLIO_AVAILABLE:
+            skfolio_opt = PortfolioOptimizer()
+            symbols = list(scores.keys())
+            results['skfolio_mv'] = await skfolio_opt.optimize_with_skfolio(
+                symbols, method='mean_variance'
+            )
+        else:
+            results['skfolio_mv'] = {'error': 'skfolio not installed'}
+    except Exception as e:
+        results['skfolio_mv'] = {'error': str(e)}
+
+    return results
+
+
+@app.post("/api/analytics/entropy/optimize")
+async def run_entropy_optimization(data: dict):
+    """Run custom entropy optimization."""
+    from sentinel.entropy_optimizer import EntropyOptimizer
+
+    method = data.get('method', 'shannon')
+    entropy_weight = data.get('entropy_weight', 0.3)
+
+    # Update settings temporarily
+    settings = Settings()
+    await settings.set('entropy_method', method)
+    await settings.set('entropy_weight', entropy_weight)
+
+    optimizer = EntropyOptimizer(method=method)
+
+    # Get expected returns
+    db = Database()
+    securities = await db.get_all_securities(active_only=True)
+    scores = {}
+    for sec in securities:
+        cursor = await db.conn.execute(
+            "SELECT score FROM scores WHERE symbol = ?", (sec['symbol'],)
+        )
+        row = await cursor.fetchone()
+        if row and row['score'] is not None:
+            scores[sec['symbol']] = row['score']
+
+    constraints = {
+        'max_position': 20,
+        'min_position': 2,
+        'cash_target': 5,
+    }
+
+    result = await optimizer.optimize(scores, constraints)
+
+    return {'allocations': result, 'method': method}
+
+
+# -----------------------------------------------------------------------------
+# Health Check
+# -----------------------------------------------------------------------------
+
+@app.get("/api/health")
+async def health():
+    """Health check endpoint."""
+    broker = Broker()
+    settings = Settings()
+    trading_mode = await settings.get('trading_mode', 'research')
+    return {
+        "status": "healthy",
+        "broker_connected": broker.connected,
+        "trading_mode": trading_mode,
+    }
+
+
+# -----------------------------------------------------------------------------
+# ML Prediction API Endpoints (Per-Symbol Models)
+# -----------------------------------------------------------------------------
+
+@app.get("/api/ml/status")
+async def get_ml_status():
+    """Get ML system status."""
+    from sentinel.database import Database
+
+    db = Database()
+    await db.connect()
+
+    # Count securities with ML enabled
+    cursor = await db.conn.execute(
+        "SELECT COUNT(*) as count FROM securities WHERE ml_enabled = 1 AND active = 1"
+    )
+    enabled_row = await cursor.fetchone()
+    securities_ml_enabled = enabled_row['count'] if enabled_row else 0
+
+    # Count symbols with trained models
+    cursor = await db.conn.execute("SELECT COUNT(*) as count FROM ml_models")
+    total_models_row = await cursor.fetchone()
+    symbols_with_models = total_models_row['count'] if total_models_row else 0
+
+    # Count total training samples
+    cursor = await db.conn.execute("SELECT COUNT(*) as count FROM ml_training_samples")
+    total_samples_row = await cursor.fetchone()
+    total_samples = total_samples_row['count'] if total_samples_row else 0
+
+    # Get aggregate metrics across all models
+    cursor = await db.conn.execute(
+        """SELECT AVG(validation_rmse) as avg_rmse,
+                  AVG(validation_mae) as avg_mae,
+                  AVG(validation_r2) as avg_r2,
+                  SUM(training_samples) as total_trained_samples
+           FROM ml_models"""
+    )
+    metrics_row = await cursor.fetchone()
+
+    aggregate_metrics = None
+    if metrics_row and metrics_row['avg_rmse'] is not None:
+        aggregate_metrics = {
+            'avg_validation_rmse': metrics_row['avg_rmse'],
+            'avg_validation_mae': metrics_row['avg_mae'],
+            'avg_validation_r2': metrics_row['avg_r2'],
+            'total_trained_samples': metrics_row['total_trained_samples'],
+        }
+
+    # Get list of ML-enabled securities with their settings
+    cursor = await db.conn.execute(
+        """SELECT symbol, ml_blend_ratio FROM securities
+           WHERE ml_enabled = 1 AND active = 1"""
+    )
+    ml_securities = await cursor.fetchall()
+
+    return {
+        'securities_ml_enabled': securities_ml_enabled,
+        'symbols_with_models': symbols_with_models,
+        'total_training_samples': total_samples,
+        'aggregate_metrics': aggregate_metrics,
+        'ml_securities': [
+            {'symbol': row['symbol'], 'blend_ratio': row['ml_blend_ratio']}
+            for row in ml_securities
+        ],
+    }
+
+
+@app.post("/api/ml/retrain")
+async def trigger_retraining():
+    """Manually trigger ML model retraining for all ML-enabled symbols."""
+    from sentinel.ml_retrainer import MLRetrainer
+    from sentinel.database import Database
+
+    db = Database()
+    await db.connect()
+
+    # Get symbols with ML enabled
+    cursor = await db.conn.execute(
+        "SELECT symbol FROM securities WHERE ml_enabled = 1 AND active = 1"
+    )
+    rows = await cursor.fetchall()
+
+    if not rows:
+        return {'status': 'skipped', 'reason': 'No securities have ML enabled'}
+
+    retrainer = MLRetrainer()
+    results = {}
+    trained = 0
+    skipped = 0
+
+    for row in rows:
+        symbol = row['symbol']
+        result = await retrainer.retrain_symbol(symbol)
+        if result:
+            results[symbol] = result
+            trained += 1
+        else:
+            results[symbol] = {'status': 'skipped', 'reason': 'Insufficient data'}
+            skipped += 1
+
+    return {
+        'status': 'completed',
+        'symbols_trained': trained,
+        'symbols_skipped': skipped,
+        'results': results,
+    }
+
+
+@app.post("/api/ml/retrain/{symbol}")
+async def trigger_retraining_symbol(symbol: str):
+    """Manually trigger ML model retraining for a specific symbol."""
+    from sentinel.ml_retrainer import MLRetrainer
+
+    retrainer = MLRetrainer()
+    result = await retrainer.retrain_symbol(symbol)
+
+    if result is None:
+        return {'status': 'skipped', 'symbol': symbol, 'reason': 'Insufficient training data'}
+
+    return {'status': 'trained', 'symbol': symbol, **result}
+
+
+@app.get("/api/ml/performance")
+async def get_ml_performance():
+    """Get ML model performance metrics and report for ML-enabled securities."""
+    from sentinel.ml_monitor import MLMonitor
+    from sentinel.database import Database
+
+    db = Database()
+    await db.connect()
+
+    # Get symbols with ML enabled
+    cursor = await db.conn.execute(
+        "SELECT symbol FROM securities WHERE ml_enabled = 1 AND active = 1"
+    )
+    rows = await cursor.fetchall()
+
+    if not rows:
+        return {
+            'metrics': {'status': 'skipped', 'reason': 'No securities have ML enabled'},
+            'report': 'No ML-enabled securities to monitor.',
+        }
+
+    monitor = MLMonitor()
+    all_metrics = {}
+
+    for row in rows:
+        symbol = row['symbol']
+        result = await monitor.track_symbol_performance(symbol)
+        if result:
+            all_metrics[symbol] = result
+
+    report = await monitor.generate_report()
+
+    return {
+        'metrics': all_metrics,
+        'report': report,
+    }
+
+
+@app.get("/api/ml/models")
+async def list_ml_models():
+    """List all per-symbol ML models."""
+    from sentinel.database import Database
+
+    db = Database()
+    await db.connect()
+
+    query = """
+        SELECT symbol, training_samples, validation_rmse,
+               validation_mae, validation_r2, last_trained_at
+        FROM ml_models
+        ORDER BY last_trained_at DESC
+    """
+    cursor = await db.conn.execute(query)
+    models = await cursor.fetchall()
+
+    return {
+        'models': [
+            {
+                'symbol': m['symbol'],
+                'training_samples': m['training_samples'],
+                'validation_rmse': m['validation_rmse'],
+                'validation_mae': m['validation_mae'],
+                'validation_r2': m['validation_r2'],
+                'last_trained_at': m['last_trained_at'],
+            }
+            for m in models
+        ]
+    }
+
+
+@app.get("/api/ml/models/{symbol}")
+async def get_ml_model(symbol: str):
+    """Get ML model details for a specific symbol."""
+    from sentinel.database import Database
+    from sentinel.ml_ensemble import EnsembleBlender
+
+    db = Database()
+    await db.connect()
+
+    # Get model record
+    cursor = await db.conn.execute(
+        "SELECT * FROM ml_models WHERE symbol = ?", (symbol,)
+    )
+    model_row = await cursor.fetchone()
+
+    if not model_row:
+        return {'error': f'No model found for {symbol}'}
+
+    # Check if model files exist
+    model_exists = EnsembleBlender.model_exists(symbol)
+
+    # Get sample count for this symbol
+    cursor = await db.conn.execute(
+        "SELECT COUNT(*) as count FROM ml_training_samples WHERE symbol = ?",
+        (symbol,)
+    )
+    sample_row = await cursor.fetchone()
+
+    return {
+        'symbol': model_row['symbol'],
+        'training_samples': model_row['training_samples'],
+        'validation_rmse': model_row['validation_rmse'],
+        'validation_mae': model_row['validation_mae'],
+        'validation_r2': model_row['validation_r2'],
+        'last_trained_at': model_row['last_trained_at'],
+        'model_files_exist': model_exists,
+        'available_samples': sample_row['count'] if sample_row else 0,
+    }
+
+
+@app.get("/api/ml/train/{symbol}/stream")
+async def train_symbol_stream(symbol: str):
+    """Train ML model for a symbol with SSE progress updates."""
+    from starlette.responses import StreamingResponse
+    from sentinel.ml_trainer import TrainingDataGenerator
+    from sentinel.ml_retrainer import MLRetrainer
+    from sentinel.database import Database
+    from sentinel.settings import Settings
+    import json
+
+    async def generate():
+        db = Database()
+        await db.connect()
+        settings = Settings()
+
+        try:
+            # Step 1: Check if symbol exists
+            yield f"data: {json.dumps({'step': 1, 'total': 5, 'message': 'Checking symbol...', 'progress': 0})}\n\n"
+            security = await db.get_security(symbol)
+            if not security:
+                yield f"data: {json.dumps({'error': 'Symbol not found'})}\n\n"
+                return
+
+            # Step 2: Generate training samples
+            yield f"data: {json.dumps({'step': 2, 'total': 5, 'message': 'Generating training samples...', 'progress': 20})}\n\n"
+            trainer = TrainingDataGenerator()
+            horizon_days = await settings.get('ml_prediction_horizon_days', 14)
+            lookback_years = await settings.get('ml_training_lookback_years', 8)
+
+            samples_df = await trainer.generate_training_data_for_symbol(
+                symbol,
+                lookback_years=lookback_years,
+                prediction_horizon_days=horizon_days,
+            )
+            sample_count = len(samples_df) if samples_df is not None else 0
+            msg = f'Generated {sample_count} samples'
+            yield f"data: {json.dumps({'step': 2, 'total': 5, 'message': msg, 'progress': 40})}\n\n"
+
+            # Step 3: Check minimum samples
+            yield f"data: {json.dumps({'step': 3, 'total': 5, 'message': 'Checking data sufficiency...', 'progress': 50})}\n\n"
+            min_samples = await settings.get('ml_min_samples_per_symbol', 100)
+            if sample_count < min_samples:
+                err_msg = f'Insufficient samples: {sample_count} < {min_samples} required'
+                yield f"data: {json.dumps({'error': err_msg})}\n\n"
+                return
+
+            # Step 4: Train model
+            yield f"data: {json.dumps({'step': 4, 'total': 5, 'message': 'Training neural network + XGBoost...', 'progress': 60})}\n\n"
+            retrainer = MLRetrainer()
+            metrics = await retrainer.retrain_symbol(symbol)
+
+            if not metrics:
+                yield f"data: {json.dumps({'error': 'Training failed'})}\n\n"
+                return
+
+            rmse_msg = f"RMSE: {metrics['validation_rmse']:.4f}"
+            yield f"data: {json.dumps({'step': 4, 'total': 5, 'message': rmse_msg, 'progress': 90})}\n\n"
+
+            # Step 5: Done
+            yield f"data: {json.dumps({'step': 5, 'total': 5, 'message': 'Model saved', 'progress': 100, 'complete': True, 'metrics': metrics})}\n\n"
+
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        }
+    )
+
+
+@app.delete("/api/ml/training-data/{symbol}")
+async def delete_training_data(symbol: str):
+    """Delete all training data and model for a symbol."""
+    from sentinel.database import Database
+    from pathlib import Path
+    import shutil
+
+    db = Database()
+    await db.connect()
+
+    # Delete training samples
+    await db.conn.execute(
+        "DELETE FROM ml_training_samples WHERE symbol = ?", (symbol,)
+    )
+
+    # Delete predictions
+    await db.conn.execute(
+        "DELETE FROM ml_predictions WHERE symbol = ?", (symbol,)
+    )
+
+    # Delete model record
+    await db.conn.execute(
+        "DELETE FROM ml_models WHERE symbol = ?", (symbol,)
+    )
+
+    # Delete performance tracking
+    await db.conn.execute(
+        "DELETE FROM ml_performance_tracking WHERE symbol = ?", (symbol,)
+    )
+
+    await db.conn.commit()
+
+    # Delete model files
+    model_path = Path('data/ml_models') / symbol
+    if model_path.exists():
+        shutil.rmtree(model_path)
+
+    return {'status': 'deleted', 'symbol': symbol}
+
+
+@app.get("/api/ml/training-status/{symbol}")
+async def get_training_status(symbol: str):
+    """Get ML training status for a symbol."""
+    from sentinel.database import Database
+    from sentinel.ml_ensemble import EnsembleBlender
+
+    db = Database()
+    await db.connect()
+
+    # Get sample count
+    cursor = await db.conn.execute(
+        "SELECT COUNT(*) as count FROM ml_training_samples WHERE symbol = ?",
+        (symbol,)
+    )
+    row = await cursor.fetchone()
+    sample_count = row['count'] if row else 0
+
+    # Get model info
+    cursor = await db.conn.execute(
+        "SELECT * FROM ml_models WHERE symbol = ?", (symbol,)
+    )
+    model_row = await cursor.fetchone()
+
+    # Check if model files exist
+    model_exists = EnsembleBlender.model_exists(symbol)
+
+    return {
+        'symbol': symbol,
+        'sample_count': sample_count,
+        'model_exists': model_exists,
+        'model_info': dict(model_row) if model_row else None,
+    }
+
+
+# -----------------------------------------------------------------------------
+# Static Files (Web UI)
+# -----------------------------------------------------------------------------
+
+web_dir = Path(__file__).parent.parent / "web" / "dist"
+
+if web_dir.exists():
+    from fastapi.responses import FileResponse
+
+    # Serve static assets
+    app.mount("/assets", StaticFiles(directory=str(web_dir / "assets")), name="assets")
+
+    # Catch-all for client-side routing - serve index.html
+    @app.get("/{path:path}")
+    async def serve_spa(path: str):
+        """Serve index.html for all non-API routes (SPA support)."""
+        file_path = web_dir / path
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(file_path)
+        return FileResponse(web_dir / "index.html")

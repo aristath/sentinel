@@ -1,0 +1,8 @@
+# Orbital Display - Arduino UNO Q build configuration
+# Deploy via arduino-app-cli or auto-deploy script
+
+profiles:
+  unoq:
+    fqbn: arduino:zephyr:unoq
+    libraries:
+      - MsgPack@0.4.2

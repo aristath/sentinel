@@ -1,0 +1,44 @@
+.allocation-table-wrapper {
+}
+
+.allocation-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.allocation-table__symbol {
+  width: 80px;
+  padding: 4px 8px 4px 0;
+  font-size: 12px;
+  font-family: monospace;
+  white-space: nowrap;
+}
+
+.allocation-table__bar-cell {
+  width: 100%;
+  padding: 4px 0;
+}
+
+.allocation-bar {
+  display: flex;
+  width: 100%;
+  height: 16px;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.allocation-bar__segment {
+  height: 100%;
+}
+
+.allocation-bar__segment--gray {
+  background-color: var(--mantine-color-gray-6);
+}
+
+.allocation-bar__segment--green {
+  background-color: var(--mantine-color-green-6);
+}
+
+.allocation-bar__segment--red {
+  background-color: var(--mantine-color-red-6);
+}

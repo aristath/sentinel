@@ -1,0 +1,43 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv
+ENV
+
+# Testing
+.pytest_cache
+.coverage
+htmlcov
+tests/
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Build artifacts
+*.egg-info
+dist
+build
+
+# Docs
+*.md
+!README.md
+
+# Local data (mounted as volume instead)
+data/sentinel.db
+data/ml_models/
+
+# Misc
+.DS_Store
+*.log
+.env.example

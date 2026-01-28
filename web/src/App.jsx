@@ -1,0 +1,180 @@
+import { AppShell, Group, Title, ActionIcon, Badge, Tooltip, Switch, Text } from '@mantine/core';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { IconSettings, IconClock, IconRefresh, IconChartLine, IconPlanet } from '@tabler/icons-react';
+
+import UnifiedPage from './pages/UnifiedPage';
+import { SchedulerModal } from './components/SchedulerModal';
+import { SettingsModal } from './components/SettingsModal';
+import { BacktestModal } from './components/BacktestModal';
+import { getSchedulerStatus, refreshAll, getSettings, updateSetting, getLedStatus, setLedEnabled } from './api/client';
+import { useState } from 'react';
+
+function App() {
+  const [schedulerOpen, setSchedulerOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [backtestOpen, setBacktestOpen] = useState(false);
+  const queryClient = useQueryClient();
+
+  const { data: schedulerStatus } = useQuery({
+    queryKey: ['scheduler'],
+    queryFn: getSchedulerStatus,
+    refetchInterval: 10000,
+  });
+
+  const { data: settings } = useQuery({
+    queryKey: ['settings'],
+    queryFn: getSettings,
+  });
+
+  const { data: ledStatus } = useQuery({
+    queryKey: ['ledStatus'],
+    queryFn: getLedStatus,
+    refetchInterval: 30000,
+  });
+
+  const refreshMutation = useMutation({
+    mutationFn: refreshAll,
+    onSuccess: () => {
+      queryClient.invalidateQueries();
+    },
+  });
+
+  const tradingModeMutation = useMutation({
+    mutationFn: (mode) => updateSetting('trading_mode', mode),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings'] });
+    },
+  });
+
+  const ledMutation = useMutation({
+    mutationFn: setLedEnabled,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ledStatus'] });
+    },
+  });
+
+  const runningJobs = schedulerStatus?.pending?.length || 0;
+  const isRefreshing = refreshMutation.isPending || runningJobs > 0;
+  const isLive = settings?.trading_mode === 'live';
+  const ledEnabled = ledStatus?.enabled || false;
+  const ledRunning = ledStatus?.running || false;
+
+  return (
+    <>
+      <AppShell header={{ height: 50 }} padding="md" className="app">
+        <AppShell.Header className="app__header">
+          <Group h="100%" px="md" justify="space-between" className="app__header-content">
+            <Title order={3} c="blue" className="app__logo">
+              Sentinel
+            </Title>
+
+            <Group gap="md" className="app__controls">
+              <Group gap="xs" className="app__trading-mode">
+                <Text size="sm" c={isLive ? 'red' : 'dimmed'} className={`app__trading-mode-label ${isLive ? 'app__trading-mode-label--live' : 'app__trading-mode-label--research'}`}>
+                  {isLive ? 'LIVE' : 'Research'}
+                </Text>
+                <Switch
+                  checked={isLive}
+                  onChange={(e) =>
+                    tradingModeMutation.mutate(e.currentTarget.checked ? 'live' : 'research')
+                  }
+                  color="red"
+                  size="sm"
+                  disabled={tradingModeMutation.isPending}
+                  className="app__trading-mode-switch"
+                />
+              </Group>
+
+              <Group gap="xs" className="app__actions">
+                <Tooltip label={ledEnabled ? (ledRunning ? 'LED Display Active' : 'LED Display Enabled') : 'LED Display Off'}>
+                  <ActionIcon
+                    variant={ledEnabled ? 'light' : 'subtle'}
+                    color={ledEnabled ? (ledRunning ? 'teal' : 'blue') : 'gray'}
+                    size="lg"
+                    onClick={() => ledMutation.mutate(!ledEnabled)}
+                    loading={ledMutation.isPending}
+                    className="app__action-btn app__action-btn--led"
+                  >
+                    <IconPlanet size={20} />
+                  </ActionIcon>
+                </Tooltip>
+
+                {!isLive && (
+                  <Tooltip label="Backtest Portfolio">
+                    <ActionIcon
+                      variant="subtle"
+                      size="lg"
+                      onClick={() => setBacktestOpen(true)}
+                      className="app__action-btn app__action-btn--backtest"
+                    >
+                      <IconChartLine size={20} />
+                    </ActionIcon>
+                  </Tooltip>
+                )}
+
+                <Tooltip label="Refresh All (sync rates, portfolio, prices, scores)">
+                  <ActionIcon
+                    variant="subtle"
+                    size="lg"
+                    onClick={() => refreshMutation.mutate()}
+                    loading={refreshMutation.isPending}
+                    disabled={isRefreshing}
+                    className="app__action-btn app__action-btn--refresh"
+                  >
+                    <IconRefresh size={20} />
+                  </ActionIcon>
+                </Tooltip>
+
+                <Tooltip label="Scheduler">
+                  <ActionIcon
+                    variant="subtle"
+                    size="lg"
+                    onClick={() => setSchedulerOpen(true)}
+                    pos="relative"
+                    className="app__action-btn app__action-btn--scheduler"
+                  >
+                    <IconClock size={20} />
+                    {runningJobs > 0 && (
+                      <Badge
+                        size="sm"
+                        color="blue"
+                        circle
+                        pos="absolute"
+                        top={-4}
+                        right={-4}
+                        className="app__running-jobs-badge"
+                      >
+                        {runningJobs}
+                      </Badge>
+                    )}
+                  </ActionIcon>
+                </Tooltip>
+
+                <Tooltip label="Settings">
+                  <ActionIcon
+                    variant="subtle"
+                    size="lg"
+                    onClick={() => setSettingsOpen(true)}
+                    className="app__action-btn app__action-btn--settings"
+                  >
+                    <IconSettings size={20} />
+                  </ActionIcon>
+                </Tooltip>
+              </Group>
+            </Group>
+          </Group>
+        </AppShell.Header>
+
+        <AppShell.Main className="app__main">
+          <UnifiedPage />
+        </AppShell.Main>
+      </AppShell>
+
+      <SchedulerModal opened={schedulerOpen} onClose={() => setSchedulerOpen(false)} />
+      <SettingsModal opened={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <BacktestModal opened={backtestOpen} onClose={() => setBacktestOpen(false)} />
+    </>
+  );
+}
+
+export default App;

@@ -1,0 +1,31 @@
+{
+  "name": "sentinel-web",
+  "version": "1.0.0",
+  "description": "Sentinel Portfolio Management UI",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mantine/charts": "^7.17.8",
+    "@mantine/core": "^7.15.0",
+    "@mantine/dates": "^7.15.0",
+    "@mantine/hooks": "^7.15.0",
+    "@mui/x-charts": "^8.26.0",
+    "@tabler/icons-react": "^3.36.1",
+    "@tanstack/react-query": "^5.62.0",
+    "dayjs": "^1.11.10",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.1.0",
+    "recharts": "^2.15.4"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.0"
+  }
+}

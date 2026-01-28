@@ -1,0 +1,11 @@
+.unified {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--mantine-spacing-md);
+}
+
+@media (min-width: 900px) {
+  .unified {
+    grid-template-columns: 1fr 2fr;
+  }
+}
