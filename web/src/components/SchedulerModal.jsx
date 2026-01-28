@@ -1,4 +1,3 @@
-import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Modal,
@@ -11,22 +10,43 @@ import {
   Tabs,
   Paper,
   Group,
-  Switch,
-  NumberInput,
   Select,
-  MultiSelect,
   Tooltip,
   Table,
   ScrollArea,
 } from '@mantine/core';
 import { useDebouncedCallback } from '@mantine/hooks';
-import { IconClock, IconList, IconHistory, IconGitBranch, IconPlayerPlay } from '@tabler/icons-react';
+import { IconClock, IconActivity, IconHistory, IconPlayerPlay } from '@tabler/icons-react';
 import { getJobSchedules, updateJobSchedule, runJob, getSchedulerStatus, getJobHistory } from '../api/client';
+import { IntervalPicker } from './IntervalPicker';
 
 function formatTime(isoString) {
   if (!isoString) return 'Never';
   const date = new Date(isoString);
   return date.toLocaleString();
+}
+
+function formatRelativeTime(isoString) {
+  if (!isoString) return 'Never';
+  const date = new Date(isoString);
+  const now = new Date();
+  const diff = date - now;
+
+  if (diff < 0) {
+    // In the past
+    const mins = Math.abs(Math.round(diff / 60000));
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.round(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return formatTime(isoString);
+  }
+
+  // In the future
+  const mins = Math.round(diff / 60000);
+  if (mins < 60) return `in ${mins}m`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `in ${hours}h`;
+  return formatTime(isoString);
 }
 
 function formatDuration(ms) {
@@ -37,17 +57,6 @@ function formatDuration(ms) {
 }
 
 function JobScheduleRow({ job, onUpdate, onRun, isUpdating }) {
-  // Local state for number inputs to avoid sending requests on every keystroke
-  const [interval, setInterval] = useState(job.interval_minutes);
-  const [intervalOpen, setIntervalOpen] = useState(job.interval_market_open_minutes || job.interval_minutes);
-
-  // Sync local state when job prop changes (e.g., after server refresh)
-  useEffect(() => {
-    setInterval(job.interval_minutes);
-    setIntervalOpen(job.interval_market_open_minutes || job.interval_minutes);
-  }, [job.interval_minutes, job.interval_market_open_minutes]);
-
-  // Debounced update for number inputs
   const debouncedUpdateInterval = useDebouncedCallback((val) => {
     if (val && val !== job.interval_minutes) {
       onUpdate(job.job_type, { interval_minutes: val });
@@ -62,94 +71,69 @@ function JobScheduleRow({ job, onUpdate, onRun, isUpdating }) {
 
   return (
     <Paper p="sm" withBorder className="scheduler-modal__job-row">
-      <Group justify="space-between" wrap="nowrap">
-        <div style={{ flex: 1 }}>
+      <Stack gap="xs">
+        <Group justify="space-between" wrap="nowrap">
           <Group gap="xs">
-            <Switch
-              checked={job.enabled}
-              onChange={(e) => onUpdate(job.job_type, { enabled: e.currentTarget.checked })}
-              size="sm"
-              className="scheduler-modal__enable-switch"
-            />
             <Text fw={500} size="sm" className="scheduler-modal__job-name">{job.job_type}</Text>
-            {job.is_parameterized && (
-              <Tooltip label={`Runs per ${job.parameter_field} from ${job.parameter_source}`}>
-                <Badge color="violet" size="sm" variant="light">
-                  x{job.instance_count ?? '?'}
-                </Badge>
-              </Tooltip>
-            )}
-            {job.is_queued && <Badge color="blue" size="sm">Queued</Badge>}
             {job.last_status && (
               <Badge color={job.last_status === 'completed' ? 'green' : 'red'} size="sm">
                 {job.last_status}
               </Badge>
             )}
           </Group>
-          <Text size="xs" c="dimmed" className="scheduler-modal__job-desc">
-            {job.description}
-          </Text>
-        </div>
-
-        <Group gap="xs" wrap="nowrap">
-          <NumberInput
-            label="Interval"
-            value={interval}
-            onChange={(val) => {
-              setInterval(val);
-              debouncedUpdateInterval(val);
-            }}
-            min={1}
-            max={10080}
-            w={80}
-            size="xs"
-            suffix="m"
-          />
-          <NumberInput
-            label="Open"
-            value={intervalOpen}
-            onChange={(val) => {
-              setIntervalOpen(val);
-              debouncedUpdateIntervalOpen(val);
-            }}
-            min={1}
-            max={10080}
-            w={80}
-            size="xs"
-            suffix="m"
-          />
-          <Select
-            label="Timing"
-            value={String(job.market_timing)}
-            onChange={(val) => onUpdate(job.job_type, { market_timing: parseInt(val) })}
-            data={[
-              { value: '0', label: 'Any time' },
-              { value: '1', label: 'After close' },
-              { value: '2', label: 'During open' },
-              { value: '3', label: 'All closed' },
-            ]}
-            w={110}
-            size="xs"
-          />
-          <Button
-            size="xs"
-            variant="light"
-            onClick={() => onRun(job.job_type)}
-            disabled={job.is_queued || job.is_parameterized || isUpdating}
-            title={job.is_parameterized ? 'Parameterized jobs run automatically' : undefined}
-            leftSection={<IconPlayerPlay size={14} />}
-            className="scheduler-modal__run-btn"
-          >
-            Run
-          </Button>
+          <Group gap="xs" wrap="nowrap">
+            <Select
+              label="Timing"
+              value={String(job.market_timing)}
+              onChange={(val) => onUpdate(job.job_type, { market_timing: parseInt(val) })}
+              data={[
+                { value: '0', label: 'Any time' },
+                { value: '1', label: 'After close' },
+                { value: '2', label: 'During open' },
+                { value: '3', label: 'All closed' },
+              ]}
+              w={110}
+              size="xs"
+            />
+            <Button
+              size="xs"
+              variant="light"
+              onClick={() => onRun(job.job_type)}
+              disabled={isUpdating}
+              leftSection={<IconPlayerPlay size={14} />}
+              className="scheduler-modal__run-btn"
+            >
+              Run
+            </Button>
+          </Group>
         </Group>
-      </Group>
+        <Text size="xs" c="dimmed" className="scheduler-modal__job-desc">
+          {job.description}
+        </Text>
+        <Group gap="lg">
+          <IntervalPicker
+            label="Interval"
+            value={job.interval_minutes}
+            onChange={debouncedUpdateInterval}
+          />
+          <IntervalPicker
+            label="Market open"
+            value={job.interval_market_open_minutes || job.interval_minutes}
+            onChange={debouncedUpdateIntervalOpen}
+          />
+          {job.next_run && (
+            <Text size="xs" c="dimmed">
+              Next: {formatRelativeTime(job.next_run)}
+            </Text>
+          )}
+        </Group>
+      </Stack>
     </Paper>
   );
 }
 
 function JobScheduleList({ schedules, onUpdate, onRun, isUpdating }) {
-  const categories = ['sync', 'scoring', 'analytics', 'trading', 'ml'];
+  const categories = ['sync', 'scoring', 'analytics', 'trading', 'ml', 'backup'];
 
   return (
     <Stack gap="lg">
@@ -180,32 +164,67 @@ function JobScheduleList({ schedules, onUpdate, onRun, isUpdating }) {
   );
 }
 
-function PendingJobsList({ jobs }) {
-  if (!jobs || jobs.length === 0) {
-    return <Text c="dimmed" ta="center" py="xl">No jobs in queue</Text>;
-  }
+function StatusPanel({ status }) {
+  const { current, upcoming, recent } = status || {};
 
   return (
-    <Table striped highlightOnHover>
-      <Table.Thead>
-        <Table.Tr>
-          <Table.Th>Job ID</Table.Th>
-          <Table.Th>Type</Table.Th>
-          <Table.Th>Enqueued</Table.Th>
-          <Table.Th>Retries</Table.Th>
-        </Table.Tr>
-      </Table.Thead>
-      <Table.Tbody>
-        {jobs.map((job, i) => (
-          <Table.Tr key={job.job_id || i}>
-            <Table.Td><Text size="sm" fw={500}>{job.job_id}</Text></Table.Td>
-            <Table.Td><Text size="sm" c="dimmed">{job.type}</Text></Table.Td>
-            <Table.Td><Text size="sm" c="dimmed">{formatTime(job.enqueued_at)}</Text></Table.Td>
-            <Table.Td><Badge color={job.retry_count > 0 ? 'orange' : 'gray'} size="sm">{job.retry_count}</Badge></Table.Td>
-          </Table.Tr>
-        ))}
-      </Table.Tbody>
-    </Table>
+    <Stack gap="lg">
+      {/* Currently Running */}
+      <Paper p="md" withBorder>
+        <Text fw={600} size="sm" mb="xs">Currently Running</Text>
+        {current ? (
+          <Group gap="sm">
+            <Loader size="sm" />
+            <Text size="sm">{current}</Text>
+          </Group>
+        ) : (
+          <Text size="sm" c="dimmed">No job running</Text>
+        )}
+      </Paper>
+
+      {/* Upcoming Jobs */}
+      <Paper p="md" withBorder>
+        <Text fw={600} size="sm" mb="xs">Upcoming Jobs</Text>
+        {upcoming && upcoming.length > 0 ? (
+          <Stack gap="xs">
+            {upcoming.map((job, i) => (
+              <Group key={i} justify="space-between">
+                <Text size="sm">{job.job_type}</Text>
+                <Text size="sm" c="dimmed">{formatRelativeTime(job.next_run)}</Text>
+              </Group>
+            ))}
+          </Stack>
+        ) : (
+          <Text size="sm" c="dimmed">No upcoming jobs</Text>
+        )}
+      </Paper>
+
+      {/* Recent Jobs */}
+      <Paper p="md" withBorder>
+        <Text fw={600} size="sm" mb="xs">Recent Jobs</Text>
+        {recent && recent.length > 0 ? (
+          <Stack gap="xs">
+            {recent.map((job, i) => (
+              <Group key={i} justify="space-between">
+                <Group gap="xs">
+                  <Text size="sm">{job.job_type}</Text>
+                  <Badge
+                    color={job.status === 'completed' ? 'green' : 'red'}
+                    size="sm"
+                    variant="light"
+                  >
+                    {job.status}
+                  </Badge>
+                </Group>
+                <Text size="sm" c="dimmed">{formatRelativeTime(job.executed_at)}</Text>
+              </Group>
+            ))}
+          </Stack>
+        ) : (
+          <Text size="sm" c="dimmed">No recent jobs</Text>
+        )}
+      </Paper>
+    </Stack>
   );
 }
 
@@ -256,63 +275,6 @@ function JobHistoryList({ history }) {
   );
 }
 
-function JobDependenciesList({ schedules, onUpdate }) {
-  // Build options list (all job types)
-  const allJobTypes = schedules.map(s => ({
-    value: s.job_type,
-    label: s.job_type,
-  }));
-
-  const categories = ['sync', 'scoring', 'analytics', 'trading', 'ml'];
-
-  return (
-    <ScrollArea h={400}>
-      <Stack gap="md">
-        {categories.map(cat => {
-          const jobs = schedules.filter(s => s.category === cat);
-          if (jobs.length === 0) return null;
-
-          return (
-            <div key={cat}>
-              <Text fw={600} tt="capitalize" mb="xs" c="dimmed" size="sm">
-                {cat}
-              </Text>
-              <Stack gap="xs">
-                {jobs.map(job => {
-                  // Options exclude the job itself
-                  const options = allJobTypes.filter(o => o.value !== job.job_type);
-                  const currentDeps = Array.isArray(job.dependencies) ? job.dependencies : [];
-
-                  return (
-                    <Paper key={job.job_type} p="sm" withBorder>
-                      <Group justify="space-between" align="flex-start">
-                        <div style={{ flex: '0 0 200px' }}>
-                          <Text size="sm" fw={500}>{job.job_type}</Text>
-                          <Text size="xs" c="dimmed">{job.description}</Text>
-                        </div>
-                        <MultiSelect
-                          placeholder="No dependencies"
-                          data={options}
-                          value={currentDeps}
-                          onChange={(deps) => onUpdate(job.job_type, deps)}
-                          clearable
-                          searchable
-                          size="xs"
-                          style={{ flex: 1 }}
-                        />
-                      </Group>
-                    </Paper>
-                  );
-                })}
-              </Stack>
-            </div>
-          );
-        })}
-      </Stack>
-    </ScrollArea>
-  );
-}
-
 export function SchedulerModal({ opened, onClose }) {
   const queryClient = useQueryClient();
 
@@ -324,11 +286,11 @@ export function SchedulerModal({ opened, onClose }) {
     enabled: opened,
   });
 
-  // Fetch queue status
+  // Fetch scheduler status (current, upcoming, recent)
   const { data: statusData, isLoading: loadingStatus } = useQuery({
     queryKey: ['scheduler'],
     queryFn: getSchedulerStatus,
-    refetchInterval: opened ? 5000 : false,
+    refetchInterval: opened ? 3000 : false,
     enabled: opened,
   });
 
@@ -354,6 +316,7 @@ export function SchedulerModal({ opened, onClose }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['scheduler'] });
       queryClient.invalidateQueries({ queryKey: ['jobSchedules'] });
+      queryClient.invalidateQueries({ queryKey: ['jobHistory'] });
     },
   });
 
@@ -366,9 +329,8 @@ export function SchedulerModal({ opened, onClose }) {
   };
 
   const schedules = schedulesData?.schedules || [];
-  const pendingJobs = statusData?.pending || [];
   const history = historyData?.history || [];
-  const queueLength = pendingJobs.length;
+  const currentJob = statusData?.current;
 
   const isLoading = loadingSchedules || loadingStatus || loadingHistory;
 
@@ -377,14 +339,16 @@ export function SchedulerModal({ opened, onClose }) {
       opened={opened}
       onClose={onClose}
       title={
-        <Text fw={600} className="scheduler-modal__title">
-          Job Scheduler
-          {queueLength > 0 && (
-            <Badge color="blue" size="sm" ml="sm">
-              {queueLength} queued
+        <Group gap="sm">
+          <Text fw={600} className="scheduler-modal__title">
+            Job Scheduler
+          </Text>
+          {currentJob && (
+            <Badge color="blue" size="sm" leftSection={<Loader size={10} color="white" />}>
+              {currentJob}
             </Badge>
           )}
-        </Text>
+        </Group>
       }
       size="xl"
       className="scheduler-modal"
@@ -396,21 +360,22 @@ export function SchedulerModal({ opened, onClose }) {
       ) : schedulesError ? (
         <Text c="red">Error loading schedules: {schedulesError.message}</Text>
       ) : (
-        <Tabs defaultValue="jobs">
+        <Tabs defaultValue="status">
           <Tabs.List>
+            <Tabs.Tab value="status" leftSection={<IconActivity size={16} />}>
+              Status
+            </Tabs.Tab>
             <Tabs.Tab value="jobs" leftSection={<IconClock size={16} />}>
               Jobs
-            </Tabs.Tab>
-            <Tabs.Tab value="queue" leftSection={<IconList size={16} />}>
-              Queue ({queueLength})
             </Tabs.Tab>
             <Tabs.Tab value="history" leftSection={<IconHistory size={16} />}>
               History
             </Tabs.Tab>
-            <Tabs.Tab value="dependencies" leftSection={<IconGitBranch size={16} />}>
-              Dependencies
-            </Tabs.Tab>
           </Tabs.List>
+
+          <Tabs.Panel value="status" pt="md">
+            <StatusPanel status={statusData} />
+          </Tabs.Panel>
 
           <Tabs.Panel value="jobs" pt="md">
             <JobScheduleList
@@ -431,27 +396,8 @@ export function SchedulerModal({ opened, onClose }) {
             )}
           </Tabs.Panel>
 
-          <Tabs.Panel value="queue" pt="md">
-            <PendingJobsList jobs={pendingJobs} />
-          </Tabs.Panel>
-
           <Tabs.Panel value="history" pt="md">
             <JobHistoryList history={history} />
-          </Tabs.Panel>
-
-          <Tabs.Panel value="dependencies" pt="md">
-            <Text size="sm" c="dimmed" mb="md">
-              Select which jobs must complete before each job can run.
-            </Text>
-            <JobDependenciesList
-              schedules={schedules}
-              onUpdate={(jobType, deps) =>
-                updateMutation.mutate({
-                  jobType,
-                  data: { dependencies: deps },
-                })
-              }
-            />
           </Tabs.Panel>
         </Tabs>
       )}

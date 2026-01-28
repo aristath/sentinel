@@ -1,9 +1,8 @@
 """Test ML monitor module - per-symbol tracking."""
 
+from unittest.mock import AsyncMock
+
 import pytest
-import numpy as np
-from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock
 
 from sentinel.ml_monitor import MLMonitor
 
@@ -30,10 +29,10 @@ async def test_track_performance_no_predictions(monitor):
 
     result = await monitor.track_performance()
 
-    assert result['status'] == 'success'
-    assert result['total_predictions_evaluated'] == 0
-    assert result['symbols_evaluated'] == 0
-    assert result['drift_detected'] == []
+    assert result["status"] == "success"
+    assert result["total_predictions_evaluated"] == 0
+    assert result["symbols_evaluated"] == 0
+    assert result["drift_detected"] == []
 
 
 @pytest.mark.asyncio
@@ -43,14 +42,14 @@ async def test_get_actual_return(monitor):
     monitor.db.conn = AsyncMock()
 
     # Mock price lookups
-    pred_price_row = {'close': 100.0}
-    future_price_row = {'close': 110.0}
+    pred_price_row = {"close": 100.0}
+    future_price_row = {"close": 110.0}
 
     cursor_mock = AsyncMock()
     cursor_mock.fetchone = AsyncMock(side_effect=[pred_price_row, future_price_row])
     monitor.db.conn.execute = AsyncMock(return_value=cursor_mock)
 
-    result = await monitor._get_actual_return('TEST', '2024-01-01', 14)
+    result = await monitor._get_actual_return("TEST", "2024-01-01", 14)
 
     # 10% return
     assert result is not None
@@ -62,7 +61,7 @@ async def test_get_actual_return_invalid_date(monitor):
     """Test actual return with invalid date."""
     monitor.db = AsyncMock()
 
-    result = await monitor._get_actual_return('TEST', 'invalid-date', 14)
+    result = await monitor._get_actual_return("TEST", "invalid-date", 14)
     assert result is None
 
 
@@ -76,7 +75,7 @@ async def test_get_actual_return_no_price(monitor):
     cursor_mock.fetchone = AsyncMock(return_value=None)
     monitor.db.conn.execute = AsyncMock(return_value=cursor_mock)
 
-    result = await monitor._get_actual_return('TEST', '2024-01-01', 14)
+    result = await monitor._get_actual_return("TEST", "2024-01-01", 14)
     assert result is None
 
 
@@ -88,13 +87,12 @@ async def test_check_symbol_drift_insufficient_history(monitor):
 
     # Less than 5 historical records
     cursor_mock = AsyncMock()
-    cursor_mock.fetchall = AsyncMock(return_value=[
-        {'mean_absolute_error': 0.02, 'root_mean_squared_error': 0.03}
-        for _ in range(3)
-    ])
+    cursor_mock.fetchall = AsyncMock(
+        return_value=[{"mean_absolute_error": 0.02, "root_mean_squared_error": 0.03} for _ in range(3)]
+    )
     monitor.db.conn.execute = AsyncMock(return_value=cursor_mock)
 
-    result = await monitor._check_symbol_drift('TEST', 0.05, 0.06)
+    result = await monitor._check_symbol_drift("TEST", 0.05, 0.06)
 
     # Should not detect drift with insufficient history
     assert result is False
@@ -107,17 +105,14 @@ async def test_check_symbol_drift_normal(monitor):
     monitor.db.conn = AsyncMock()
 
     # Historical data with consistent error
-    historical = [
-        {'mean_absolute_error': 0.02, 'root_mean_squared_error': 0.03}
-        for _ in range(15)
-    ]
+    historical = [{"mean_absolute_error": 0.02, "root_mean_squared_error": 0.03} for _ in range(15)]
     cursor_mock = AsyncMock()
     cursor_mock.fetchall = AsyncMock(return_value=historical)
     monitor.db.conn.execute = AsyncMock(return_value=cursor_mock)
 
     # Current error within normal range
-    result = await monitor._check_symbol_drift('TEST', 0.021, 0.031)
-    assert result == False  # Use == instead of is for numpy bool compatibility
+    result = await monitor._check_symbol_drift("TEST", 0.021, 0.031)
+    assert not result
 
 
 @pytest.mark.asyncio
@@ -129,7 +124,7 @@ async def test_check_symbol_drift_detected(monitor):
     # Historical data with some variance (required to establish drift baseline)
     # Mean MAE ≈ 0.02, std ≈ 0.005
     historical = [
-        {'mean_absolute_error': 0.015 + (i % 5) * 0.002, 'root_mean_squared_error': 0.025 + (i % 5) * 0.002}
+        {"mean_absolute_error": 0.015 + (i % 5) * 0.002, "root_mean_squared_error": 0.025 + (i % 5) * 0.002}
         for i in range(15)
     ]
     cursor_mock = AsyncMock()
@@ -139,8 +134,8 @@ async def test_check_symbol_drift_detected(monitor):
     # Current error much higher than historical (> baseline + 2σ)
     # With mean ≈ 0.02 and std ≈ 0.003, threshold is about 0.026
     # Current MAE of 0.10 should definitely trigger drift
-    result = await monitor._check_symbol_drift('TEST', 0.10, 0.15)
-    assert result == True  # Use == instead of is for numpy bool compatibility
+    result = await monitor._check_symbol_drift("TEST", 0.10, 0.15)
+    assert result
 
 
 @pytest.mark.asyncio
@@ -152,30 +147,30 @@ async def test_evaluate_symbol(monitor):
     # Mock price lookups for actual return calculation
     async def mock_execute(query, params=None):
         cursor = AsyncMock()
-        if 'close FROM prices' in query:
+        if "close FROM prices" in query:
             # Return different prices based on query
-            if 'date >=' in query and params:
+            if "date >=" in query and params:
                 date_str = params[1]
-                if '2024-01-01' in date_str:
-                    cursor.fetchone = AsyncMock(return_value={'close': 100.0})
+                if "2024-01-01" in date_str:
+                    cursor.fetchone = AsyncMock(return_value={"close": 100.0})
                 else:
-                    cursor.fetchone = AsyncMock(return_value={'close': 105.0})
+                    cursor.fetchone = AsyncMock(return_value={"close": 105.0})
         return cursor
 
     monitor.db.conn.execute = mock_execute
 
     predictions = [
-        {'symbol': 'TEST', 'predicted_at': '2024-01-01T12:00:00', 'predicted_return': 0.05},
-        {'symbol': 'TEST', 'predicted_at': '2024-01-02T12:00:00', 'predicted_return': 0.03},
+        {"symbol": "TEST", "predicted_at": "2024-01-01T12:00:00", "predicted_return": 0.05},
+        {"symbol": "TEST", "predicted_at": "2024-01-02T12:00:00", "predicted_return": 0.03},
     ]
 
-    result = await monitor._evaluate_symbol('TEST', predictions, 14)
+    result = await monitor._evaluate_symbol("TEST", predictions, 14)
 
     assert result is not None
-    assert 'mean_absolute_error' in result
-    assert 'root_mean_squared_error' in result
-    assert 'prediction_bias' in result
-    assert result['predictions_evaluated'] == 2
+    assert "mean_absolute_error" in result
+    assert "root_mean_squared_error" in result
+    assert "prediction_bias" in result
+    assert result["predictions_evaluated"] == 2
 
 
 @pytest.mark.asyncio
@@ -186,7 +181,7 @@ async def test_generate_report_no_data(monitor):
     monitor.db.conn = AsyncMock()
 
     cursor_mock = AsyncMock()
-    cursor_mock.fetchone = AsyncMock(return_value={'symbols': None})
+    cursor_mock.fetchone = AsyncMock(return_value={"symbols": None})
     cursor_mock.fetchall = AsyncMock(return_value=[])
     monitor.db.conn.execute = AsyncMock(return_value=cursor_mock)
 
@@ -204,24 +199,25 @@ async def test_generate_report_with_data(monitor):
 
     # Mock aggregate query result
     agg_result = {
-        'symbols': 5,
-        'avg_mae': 0.025,
-        'avg_rmse': 0.035,
-        'avg_bias': 0.002,
-        'drift_count': 1,
-        'total_predictions': 100,
+        "symbols": 5,
+        "avg_mae": 0.025,
+        "avg_rmse": 0.035,
+        "avg_bias": 0.002,
+        "drift_count": 1,
+        "total_predictions": 100,
     }
 
     # Mock per-symbol query result
     symbol_stats = [
-        {'symbol': 'AAPL', 'avg_mae': 0.03, 'avg_rmse': 0.04, 'drift_count': 1},
-        {'symbol': 'MSFT', 'avg_mae': 0.02, 'avg_rmse': 0.03, 'drift_count': 0},
+        {"symbol": "AAPL", "avg_mae": 0.03, "avg_rmse": 0.04, "drift_count": 1},
+        {"symbol": "MSFT", "avg_mae": 0.02, "avg_rmse": 0.03, "drift_count": 0},
     ]
 
     # Mock drifting symbols
-    drifting = [{'symbol': 'AAPL'}]
+    drifting = [{"symbol": "AAPL"}]
 
     call_count = [0]
+
     async def mock_execute(query, params=None):
         cursor = AsyncMock()
         call_count[0] += 1
@@ -253,12 +249,12 @@ async def test_get_symbol_history(monitor):
 
     history = [
         {
-            'tracked_at': '2024-01-15T12:00:00',
-            'mean_absolute_error': 0.02,
-            'root_mean_squared_error': 0.03,
-            'prediction_bias': 0.001,
-            'drift_detected': 0,
-            'predictions_evaluated': 10,
+            "tracked_at": "2024-01-15T12:00:00",
+            "mean_absolute_error": 0.02,
+            "root_mean_squared_error": 0.03,
+            "prediction_bias": 0.001,
+            "drift_detected": 0,
+            "predictions_evaluated": 10,
         }
         for _ in range(5)
     ]
@@ -267,7 +263,7 @@ async def test_get_symbol_history(monitor):
     cursor_mock.fetchall = AsyncMock(return_value=history)
     monitor.db.conn.execute = AsyncMock(return_value=cursor_mock)
 
-    result = await monitor.get_symbol_history('TEST', days=30)
+    result = await monitor.get_symbol_history("TEST", days=30)
 
     assert len(result) == 5
-    assert result[0]['mean_absolute_error'] == 0.02
+    assert result[0]["mean_absolute_error"] == 0.02

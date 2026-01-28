@@ -1,14 +1,15 @@
 """Test ML ensemble models."""
 
-import pytest
 import numpy as np
+import pytest
 from sklearn.model_selection import train_test_split
+
 from sentinel.ml_ensemble import (
+    EnsembleBlender,
     NeuralNetReturnPredictor,
     XGBoostReturnPredictor,
-    EnsembleBlender,
 )
-from sentinel.ml_features import NUM_FEATURES, FEATURE_NAMES
+from sentinel.ml_features import FEATURE_NAMES, NUM_FEATURES
 
 
 def test_feature_count():
@@ -33,15 +34,13 @@ def test_nn_build_train_predict():
     y = np.random.randn(1000) * 0.05  # Returns -5% to +5%
 
     # Split data (new API requires pre-split data)
-    X_train, X_val, y_train, y_val = train_test_split(
-        X, y, test_size=0.2, random_state=42
-    )
+    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
 
     # Train with new API
     metrics = nn.train(X_train, y_train, X_val, y_val, epochs=5, batch_size=64)
-    assert 'val_mae' in metrics
-    assert 'val_rmse' in metrics
-    assert metrics['val_mae'] > 0
+    assert "val_mae" in metrics
+    assert "val_rmse" in metrics
+    assert metrics["val_mae"] > 0
 
     # Predict
     preds = nn.predict(X[:10])
@@ -59,20 +58,18 @@ def test_xgb_train_predict():
     y = np.random.randn(1000) * 0.05
 
     # Split data (new API requires pre-split data)
-    X_train, X_val, y_train, y_val = train_test_split(
-        X, y, test_size=0.2, random_state=42
-    )
+    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
 
     # Train with new API
     metrics = xgb_model.train(X_train, y_train, X_val, y_val)
-    assert 'val_mae' in metrics
-    assert 'val_rmse' in metrics
-    assert metrics['val_mae'] > 0
+    assert "val_mae" in metrics
+    assert "val_rmse" in metrics
+    assert metrics["val_mae"] > 0
 
     # Check feature importance is extracted
-    assert 'feature_importance' in metrics
-    assert isinstance(metrics['feature_importance'], dict)
-    assert len(metrics['feature_importance']) == NUM_FEATURES
+    assert "feature_importance" in metrics
+    assert isinstance(metrics["feature_importance"], dict)
+    assert len(metrics["feature_importance"]) == NUM_FEATURES
 
     # Predict
     preds = xgb_model.predict(X[:10])
@@ -91,10 +88,10 @@ def test_ensemble_blending():
 
     # Train (EnsembleBlender.train() handles the split internally)
     metrics = ensemble.train(X, y, validation_split=0.2)
-    assert 'ensemble_val_mae' in metrics
-    assert 'ensemble_val_rmse' in metrics
-    assert 'nn_metrics' in metrics
-    assert 'xgb_metrics' in metrics
+    assert "ensemble_val_mae" in metrics
+    assert "ensemble_val_rmse" in metrics
+    assert "nn_metrics" in metrics
+    assert "xgb_metrics" in metrics
 
     # Predict
     preds = ensemble.predict(X[:10])
@@ -117,18 +114,15 @@ def test_ensemble_consistent_validation():
     # All validation metrics should be computed on the same set
     # So ensemble metrics should be a blend of individual metrics
     # (not exactly, but reasonable relationship)
-    assert metrics['nn_metrics']['val_rmse'] > 0
-    assert metrics['xgb_metrics']['val_rmse'] > 0
-    assert metrics['ensemble_val_rmse'] > 0
+    assert metrics["nn_metrics"]["val_rmse"] > 0
+    assert metrics["xgb_metrics"]["val_rmse"] > 0
+    assert metrics["ensemble_val_rmse"] > 0
 
     # Ensemble should generally not be worse than the worst individual model
     # (though not guaranteed with small noisy data)
-    max_individual_rmse = max(
-        metrics['nn_metrics']['val_rmse'],
-        metrics['xgb_metrics']['val_rmse']
-    )
+    max_individual_rmse = max(metrics["nn_metrics"]["val_rmse"], metrics["xgb_metrics"]["val_rmse"])
     # Allow some tolerance for noise
-    assert metrics['ensemble_val_rmse'] < max_individual_rmse * 1.5
+    assert metrics["ensemble_val_rmse"] < max_individual_rmse * 1.5
 
 
 def test_ensemble_weights_sum_to_one():
@@ -138,7 +132,7 @@ def test_ensemble_weights_sum_to_one():
     assert ensemble.nn_weight + ensemble.xgb_weight == 1.0
 
     # Invalid weights should raise
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         EnsembleBlender(nn_weight=0.6, xgb_weight=0.6)
 
 
@@ -169,7 +163,8 @@ def test_ensemble_save_load(tmp_path):
     # Cleanup
     import shutil
     from pathlib import Path
-    model_path = Path(f'data/ml_models/{symbol}')
+
+    model_path = Path(f"data/ml_models/{symbol}")
     if model_path.exists():
         shutil.rmtree(model_path)
 
@@ -177,7 +172,7 @@ def test_ensemble_save_load(tmp_path):
 def test_model_exists():
     """Test model existence check."""
     # Non-existent symbol
-    assert EnsembleBlender.model_exists('DEFINITELY_NOT_A_SYMBOL') is False
+    assert EnsembleBlender.model_exists("DEFINITELY_NOT_A_SYMBOL") is False
 
     # Create a model and check it exists
     ensemble = EnsembleBlender(nn_weight=0.5, xgb_weight=0.5)
@@ -194,7 +189,8 @@ def test_model_exists():
     # Cleanup
     import shutil
     from pathlib import Path
-    model_path = Path(f'data/ml_models/{symbol}')
+
+    model_path = Path(f"data/ml_models/{symbol}")
     if model_path.exists():
         shutil.rmtree(model_path)
 
@@ -212,8 +208,8 @@ class TestNeuralNetArchitecture:
         # NumPy model has 4 linear layers (weights)
         assert len(model.weights) == 4
         # Has BatchNorm parameters for first two layers
-        assert hasattr(model, 'bn1_gamma')
-        assert hasattr(model, 'bn2_gamma')
+        assert hasattr(model, "bn1_gamma")
+        assert hasattr(model, "bn2_gamma")
         # Has dropout rates
         assert len(model.dropout_rates) == 5
 
@@ -336,8 +332,8 @@ class TestMetricsCalculation:
         metrics = predictor.train(X[:160], y[:160], X[160:], y[160:])
 
         # MAE should be positive and reasonable for this data
-        assert metrics['val_mae'] > 0
-        assert metrics['val_mae'] < 1.0  # Reasonable for normalized returns
+        assert metrics["val_mae"] > 0
+        assert metrics["val_mae"] < 1.0  # Reasonable for normalized returns
 
     def test_rmse_greater_than_mae(self):
         """RMSE is always >= MAE due to squaring larger errors."""
@@ -348,7 +344,7 @@ class TestMetricsCalculation:
         predictor = XGBoostReturnPredictor()
         metrics = predictor.train(X[:160], y[:160], X[160:], y[160:])
 
-        assert metrics['val_rmse'] >= metrics['val_mae']
+        assert metrics["val_rmse"] >= metrics["val_mae"]
 
     def test_r2_bounded(self):
         """R^2 should be bounded (can be negative for poor fits)."""
@@ -360,7 +356,7 @@ class TestMetricsCalculation:
         metrics = predictor.train(X[:160], y[:160], X[160:], y[160:])
 
         # R^2 should be less than 1 (perfect fit)
-        assert metrics['val_r2'] <= 1.0
+        assert metrics["val_r2"] <= 1.0
 
 
 class TestModelPersistence:
@@ -376,9 +372,9 @@ class TestModelPersistence:
         predictor.train(X[:80], y[:80], X[80:], y[80:], epochs=2)
         predictor.save(str(tmp_path))
 
-        assert (tmp_path / 'nn_model.npz').exists()  # NumPy format
-        assert (tmp_path / 'nn_scaler.pkl').exists()
-        assert (tmp_path / 'nn_metadata.json').exists()
+        assert (tmp_path / "nn_model.npz").exists()  # NumPy format
+        assert (tmp_path / "nn_scaler.pkl").exists()
+        assert (tmp_path / "nn_metadata.json").exists()
 
     def test_xgb_save_creates_all_files(self, tmp_path):
         """XGBoost save creates model, scaler, and metadata files."""
@@ -390,13 +386,14 @@ class TestModelPersistence:
         predictor.train(X[:80], y[:80], X[80:], y[80:])
         predictor.save(str(tmp_path))
 
-        assert (tmp_path / 'xgb_model.json').exists()
-        assert (tmp_path / 'xgb_scaler.pkl').exists()
-        assert (tmp_path / 'xgb_metadata.json').exists()
+        assert (tmp_path / "xgb_model.json").exists()
+        assert (tmp_path / "xgb_scaler.pkl").exists()
+        assert (tmp_path / "xgb_metadata.json").exists()
 
     def test_xgb_metadata_contains_feature_importance(self, tmp_path):
         """XGBoost metadata includes feature importance."""
         import json
+
         np.random.seed(42)
         X = np.random.randn(100, NUM_FEATURES)
         y = np.random.randn(100)
@@ -405,11 +402,11 @@ class TestModelPersistence:
         predictor.train(X[:80], y[:80], X[80:], y[80:])
         predictor.save(str(tmp_path))
 
-        with open(tmp_path / 'xgb_metadata.json', 'r') as f:
+        with open(tmp_path / "xgb_metadata.json", "r") as f:
             metadata = json.load(f)
 
-        assert 'feature_importance' in metadata
-        assert isinstance(metadata['feature_importance'], dict)
+        assert "feature_importance" in metadata
+        assert isinstance(metadata["feature_importance"], dict)
 
 
 class TestMLEnsembleEdgeCases:

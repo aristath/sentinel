@@ -6,18 +6,18 @@ These tests verify the intended behavior of utility functions:
 3. Position value calculations
 """
 
+from unittest.mock import AsyncMock
+
 import pytest
-import numpy as np
-from unittest.mock import AsyncMock, MagicMock
 
 from sentinel.utils.fees import FeeCalculator
-from sentinel.utils.scoring import adjust_score_for_conviction
 from sentinel.utils.positions import PositionCalculator
-
+from sentinel.utils.scoring import adjust_score_for_conviction
 
 # =============================================================================
 # Fee Calculator Tests
 # =============================================================================
+
 
 class TestFeeCalculator:
     """Tests for FeeCalculator."""
@@ -27,10 +27,12 @@ class TestFeeCalculator:
         """Create mock settings with default fees."""
         settings = AsyncMock()
         # Default: €2 fixed + 0.2% variable
-        settings.get = AsyncMock(side_effect=lambda key, default: {
-            'transaction_fee_fixed': 2.0,
-            'transaction_fee_percent': 0.2,
-        }.get(key, default))
+        settings.get = AsyncMock(
+            side_effect=lambda key, default: {
+                "transaction_fee_fixed": 2.0,
+                "transaction_fee_percent": 0.2,
+            }.get(key, default)
+        )
         return settings
 
     @pytest.fixture
@@ -92,84 +94,85 @@ class TestFeeCalculator:
     @pytest.mark.asyncio
     async def test_calculate_batch_single_buy(self, calculator):
         """Single buy trade."""
-        trades = [{'action': 'buy', 'value_eur': 1000.0}]
+        trades = [{"action": "buy", "value_eur": 1000.0}]
         result = await calculator.calculate_batch(trades)
 
-        assert result['num_buys'] == 1
-        assert result['num_sells'] == 0
-        assert result['total_buy_value'] == 1000.0
-        assert result['total_sell_value'] == 0.0
+        assert result["num_buys"] == 1
+        assert result["num_sells"] == 0
+        assert result["total_buy_value"] == 1000.0
+        assert result["total_sell_value"] == 0.0
         # €2 + €2 = €4
-        assert abs(result['buy_fees'] - 4.0) < 0.01
-        assert result['sell_fees'] == 0.0
-        assert abs(result['total_fees'] - 4.0) < 0.01
+        assert abs(result["buy_fees"] - 4.0) < 0.01
+        assert result["sell_fees"] == 0.0
+        assert abs(result["total_fees"] - 4.0) < 0.01
 
     @pytest.mark.asyncio
     async def test_calculate_batch_single_sell(self, calculator):
         """Single sell trade."""
-        trades = [{'action': 'sell', 'value_eur': 500.0}]
+        trades = [{"action": "sell", "value_eur": 500.0}]
         result = await calculator.calculate_batch(trades)
 
-        assert result['num_buys'] == 0
-        assert result['num_sells'] == 1
+        assert result["num_buys"] == 0
+        assert result["num_sells"] == 1
         # €2 + €1 = €3
-        assert abs(result['sell_fees'] - 3.0) < 0.01
+        assert abs(result["sell_fees"] - 3.0) < 0.01
 
     @pytest.mark.asyncio
     async def test_calculate_batch_multiple_trades(self, calculator):
         """Multiple buys and sells."""
         trades = [
-            {'action': 'buy', 'value_eur': 1000.0},
-            {'action': 'buy', 'value_eur': 2000.0},
-            {'action': 'sell', 'value_eur': 500.0},
+            {"action": "buy", "value_eur": 1000.0},
+            {"action": "buy", "value_eur": 2000.0},
+            {"action": "sell", "value_eur": 500.0},
         ]
         result = await calculator.calculate_batch(trades)
 
-        assert result['num_buys'] == 2
-        assert result['num_sells'] == 1
-        assert result['total_buy_value'] == 3000.0
-        assert result['total_sell_value'] == 500.0
+        assert result["num_buys"] == 2
+        assert result["num_sells"] == 1
+        assert result["total_buy_value"] == 3000.0
+        assert result["total_sell_value"] == 500.0
 
         # Buy fees: 2 * €2 fixed + €3000 * 0.2% = €4 + €6 = €10
-        assert abs(result['buy_fees'] - 10.0) < 0.01
+        assert abs(result["buy_fees"] - 10.0) < 0.01
         # Sell fees: 1 * €2 fixed + €500 * 0.2% = €2 + €1 = €3
-        assert abs(result['sell_fees'] - 3.0) < 0.01
+        assert abs(result["sell_fees"] - 3.0) < 0.01
         # Total: €13
-        assert abs(result['total_fees'] - 13.0) < 0.01
+        assert abs(result["total_fees"] - 13.0) < 0.01
 
     @pytest.mark.asyncio
     async def test_calculate_batch_empty(self, calculator):
         """Empty trade list."""
         result = await calculator.calculate_batch([])
 
-        assert result['num_buys'] == 0
-        assert result['num_sells'] == 0
-        assert result['total_fees'] == 0.0
+        assert result["num_buys"] == 0
+        assert result["num_sells"] == 0
+        assert result["total_fees"] == 0.0
 
     @pytest.mark.asyncio
     async def test_calculate_batch_negative_values_use_abs(self, calculator):
         """Negative values should use absolute value."""
-        trades = [{'action': 'buy', 'value_eur': -1000.0}]
+        trades = [{"action": "buy", "value_eur": -1000.0}]
         result = await calculator.calculate_batch(trades)
 
-        assert result['total_buy_value'] == 1000.0  # Absolute value
+        assert result["total_buy_value"] == 1000.0  # Absolute value
 
     @pytest.mark.asyncio
     async def test_calculate_batch_unknown_action_ignored(self, calculator):
         """Unknown actions are ignored."""
         trades = [
-            {'action': 'hold', 'value_eur': 1000.0},
-            {'action': 'buy', 'value_eur': 500.0},
+            {"action": "hold", "value_eur": 1000.0},
+            {"action": "buy", "value_eur": 500.0},
         ]
         result = await calculator.calculate_batch(trades)
 
-        assert result['num_buys'] == 1
-        assert result['total_buy_value'] == 500.0
+        assert result["num_buys"] == 1
+        assert result["total_buy_value"] == 500.0
 
 
 # =============================================================================
 # Scoring Utilities Tests
 # =============================================================================
+
 
 class TestAdjustScoreForConviction:
     """Tests for adjust_score_for_conviction function."""
@@ -238,6 +241,7 @@ class TestAdjustScoreForConviction:
 # Position Calculator Tests
 # =============================================================================
 
+
 class TestPositionCalculator:
     """Tests for PositionCalculator."""
 
@@ -245,10 +249,12 @@ class TestPositionCalculator:
     def mock_converter(self):
         """Create mock currency converter."""
         converter = AsyncMock()
+
         # EUR is 1:1, USD at 1.10 (1 USD = 0.91 EUR)
         async def to_eur(amount, currency):
-            rates = {'EUR': 1.0, 'USD': 0.91, 'GBP': 1.17, 'CHF': 1.02}
+            rates = {"EUR": 1.0, "USD": 0.91, "GBP": 1.17, "CHF": 1.02}
             return amount * rates.get(currency, 1.0)
+
         converter.to_eur = to_eur
         return converter
 
@@ -275,7 +281,7 @@ class TestPositionCalculator:
     @pytest.mark.asyncio
     async def test_calculate_value_eur_same_currency(self, calculator):
         """EUR position needs no conversion."""
-        value = await calculator.calculate_value_eur(100, 50.0, 'EUR')
+        value = await calculator.calculate_value_eur(100, 50.0, "EUR")
         assert value == 5000.0
 
     @pytest.mark.asyncio
@@ -283,7 +289,7 @@ class TestPositionCalculator:
         """USD position converts to EUR."""
         # 100 shares at $50 = $5000 USD
         # At 0.91 rate: $5000 * 0.91 = €4550
-        value = await calculator.calculate_value_eur(100, 50.0, 'USD')
+        value = await calculator.calculate_value_eur(100, 50.0, "USD")
         assert abs(value - 4550.0) < 0.01
 
     @pytest.mark.asyncio
@@ -291,7 +297,7 @@ class TestPositionCalculator:
         """GBP position converts to EUR."""
         # 10 shares at £100 = £1000 GBP
         # At 1.17 rate: £1000 * 1.17 = €1170
-        value = await calculator.calculate_value_eur(10, 100.0, 'GBP')
+        value = await calculator.calculate_value_eur(10, 100.0, "GBP")
         assert abs(value - 1170.0) < 0.01
 
     # -------------------------------------------------------------------------
@@ -366,35 +372,37 @@ class TestPositionCalculator:
     @pytest.mark.asyncio
     async def test_calculate_portfolio_values_single(self, calculator):
         """Single position portfolio."""
-        positions = [{
-            'symbol': 'TEST',
-            'quantity': 100,
-            'current_price': 50.0,
-            'currency': 'EUR',
-        }]
+        positions = [
+            {
+                "symbol": "TEST",
+                "quantity": 100,
+                "current_price": 50.0,
+                "currency": "EUR",
+            }
+        ]
         result = await calculator.calculate_portfolio_values(positions)
 
-        assert abs(result['total_value_eur'] - 5000.0) < 0.01
-        assert len(result['positions_with_values']) == 1
-        assert result['positions_with_values'][0]['value_eur'] == 5000.0
-        assert abs(result['allocations']['TEST'] - 1.0) < 0.001  # 100%
+        assert abs(result["total_value_eur"] - 5000.0) < 0.01
+        assert len(result["positions_with_values"]) == 1
+        assert result["positions_with_values"][0]["value_eur"] == 5000.0
+        assert abs(result["allocations"]["TEST"] - 1.0) < 0.001  # 100%
 
     @pytest.mark.asyncio
     async def test_calculate_portfolio_values_multiple(self, calculator):
         """Multiple position portfolio with different currencies."""
         positions = [
-            {'symbol': 'EUR_POS', 'quantity': 100, 'current_price': 50.0, 'currency': 'EUR'},
-            {'symbol': 'USD_POS', 'quantity': 100, 'current_price': 50.0, 'currency': 'USD'},
+            {"symbol": "EUR_POS", "quantity": 100, "current_price": 50.0, "currency": "EUR"},
+            {"symbol": "USD_POS", "quantity": 100, "current_price": 50.0, "currency": "USD"},
         ]
         result = await calculator.calculate_portfolio_values(positions)
 
         # EUR: €5000, USD: $5000 * 0.91 = €4550
         expected_total = 5000.0 + 4550.0
-        assert abs(result['total_value_eur'] - expected_total) < 0.01
+        assert abs(result["total_value_eur"] - expected_total) < 0.01
 
         # Allocations
-        eur_alloc = result['allocations']['EUR_POS']
-        usd_alloc = result['allocations']['USD_POS']
+        eur_alloc = result["allocations"]["EUR_POS"]
+        usd_alloc = result["allocations"]["USD_POS"]
         assert abs(eur_alloc - (5000.0 / expected_total)) < 0.001
         assert abs(usd_alloc - (4550.0 / expected_total)) < 0.001
         assert abs(eur_alloc + usd_alloc - 1.0) < 0.001  # Sum to 100%
@@ -404,36 +412,39 @@ class TestPositionCalculator:
         """Empty portfolio."""
         result = await calculator.calculate_portfolio_values([])
 
-        assert result['total_value_eur'] == 0.0
-        assert len(result['positions_with_values']) == 0
-        assert len(result['allocations']) == 0
+        assert result["total_value_eur"] == 0.0
+        assert len(result["positions_with_values"]) == 0
+        assert len(result["allocations"]) == 0
 
     @pytest.mark.asyncio
     async def test_calculate_portfolio_values_zero_quantity(self, calculator):
         """Position with zero quantity."""
-        positions = [{
-            'symbol': 'EMPTY',
-            'quantity': 0,
-            'current_price': 100.0,
-            'currency': 'EUR',
-        }]
+        positions = [
+            {
+                "symbol": "EMPTY",
+                "quantity": 0,
+                "current_price": 100.0,
+                "currency": "EUR",
+            }
+        ]
         result = await calculator.calculate_portfolio_values(positions)
 
-        assert result['total_value_eur'] == 0.0
-        assert result['allocations']['EMPTY'] == 0.0
+        assert result["total_value_eur"] == 0.0
+        assert result["allocations"]["EMPTY"] == 0.0
 
     @pytest.mark.asyncio
     async def test_calculate_portfolio_values_missing_fields(self, calculator):
         """Position with missing fields uses defaults."""
-        positions = [{'symbol': 'PARTIAL'}]  # Missing quantity, price, currency
+        positions = [{"symbol": "PARTIAL"}]  # Missing quantity, price, currency
         result = await calculator.calculate_portfolio_values(positions)
 
-        assert result['total_value_eur'] == 0.0
+        assert result["total_value_eur"] == 0.0
 
 
 # =============================================================================
 # Edge Cases and Error Handling
 # =============================================================================
+
 
 class TestEdgeCases:
     """Edge case tests for utilities."""
@@ -460,10 +471,12 @@ class TestEdgeCases:
     async def test_fee_with_very_large_trade(self):
         """Very large trade values don't overflow."""
         settings = AsyncMock()
-        settings.get = AsyncMock(side_effect=lambda k, d: {
-            'transaction_fee_fixed': 2.0,
-            'transaction_fee_percent': 0.2,
-        }.get(k, d))
+        settings.get = AsyncMock(
+            side_effect=lambda k, d: {
+                "transaction_fee_fixed": 2.0,
+                "transaction_fee_percent": 0.2,
+            }.get(k, d)
+        )
         calc = FeeCalculator(settings=settings)
 
         # €1 billion trade
@@ -475,10 +488,12 @@ class TestEdgeCases:
     async def test_fee_with_fractional_cents(self):
         """Fractional cent values are handled."""
         settings = AsyncMock()
-        settings.get = AsyncMock(side_effect=lambda k, d: {
-            'transaction_fee_fixed': 1.999,
-            'transaction_fee_percent': 0.199,
-        }.get(k, d))
+        settings.get = AsyncMock(
+            side_effect=lambda k, d: {
+                "transaction_fee_fixed": 1.999,
+                "transaction_fee_percent": 0.199,
+            }.get(k, d)
+        )
         calc = FeeCalculator(settings=settings)
 
         fee = await calc.calculate(100.0)

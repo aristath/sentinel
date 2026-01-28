@@ -6,8 +6,6 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional, Protocol
 
-from sentinel.jobs.types import Job, MarketTiming
-
 logger = logging.getLogger(__name__)
 
 # How often to refresh market data (5 minutes)
@@ -88,24 +86,3 @@ class BrokerMarketChecker:
         if not self._market_data:
             return True
         return all(m.get("s") != "OPEN" for m in self._market_data.values())
-
-
-def can_execute_now(job: Job, checker: MarketChecker) -> bool:
-    """Check if a job can execute based on market timing constraints."""
-    timing = job.market_timing()
-    subject = job.subject()
-
-    if timing == MarketTiming.ANY_TIME:
-        return True
-    elif timing == MarketTiming.AFTER_MARKET_CLOSE:
-        if subject:
-            return not checker.is_security_market_open(subject)
-        return not checker.is_any_market_open()
-    elif timing == MarketTiming.DURING_MARKET_OPEN:
-        if subject:
-            return checker.is_security_market_open(subject)
-        return checker.is_any_market_open()
-    elif timing == MarketTiming.ALL_MARKETS_CLOSED:
-        return checker.are_all_markets_closed()
-
-    return False

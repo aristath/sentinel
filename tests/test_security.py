@@ -11,13 +11,13 @@ These tests verify the intended behavior of the Security class:
 8. Asian market handling (limit orders)
 """
 
-import pytest
-import pytest_asyncio
-from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
 import json
+from datetime import datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock
 
-from sentinel.security import Security, TRADE_COOLOFF_MINUTES
+import pytest
+
+from sentinel.security import TRADE_COOLOFF_MINUTES, Security
 
 
 class TestSecurityLoad:
@@ -26,53 +26,57 @@ class TestSecurityLoad:
     @pytest.fixture
     def mock_db(self):
         db = MagicMock()
-        db.get_security = AsyncMock(return_value={
-            'symbol': 'AAPL.US',
-            'name': 'Apple Inc.',
-            'currency': 'USD',
-            'geography': 'United States',
-            'industry': 'Technology',
-            'min_lot': 1,
-            'active': 1,
-            'allow_buy': 1,
-            'allow_sell': 1,
-        })
-        db.get_position = AsyncMock(return_value={
-            'symbol': 'AAPL.US',
-            'quantity': 10,
-            'avg_cost': 150.00,
-            'current_price': 175.00,
-        })
+        db.get_security = AsyncMock(
+            return_value={
+                "symbol": "AAPL.US",
+                "name": "Apple Inc.",
+                "currency": "USD",
+                "geography": "United States",
+                "industry": "Technology",
+                "min_lot": 1,
+                "active": 1,
+                "allow_buy": 1,
+                "allow_sell": 1,
+            }
+        )
+        db.get_position = AsyncMock(
+            return_value={
+                "symbol": "AAPL.US",
+                "quantity": 10,
+                "avg_cost": 150.00,
+                "current_price": 175.00,
+            }
+        )
         return db
 
     @pytest.fixture
     def mock_broker(self):
         broker = MagicMock()
-        broker.get_quote = AsyncMock(return_value={'price': 175.50, 'bid': 175.40, 'ask': 175.60})
+        broker.get_quote = AsyncMock(return_value={"price": 175.50, "bid": 175.40, "ask": 175.60})
         return broker
 
     @pytest.mark.asyncio
     async def test_load_populates_data(self, mock_db, mock_broker):
         """load() populates security data from database."""
-        security = Security('AAPL.US', db=mock_db, broker=mock_broker)
+        security = Security("AAPL.US", db=mock_db, broker=mock_broker)
         await security.load()
 
         assert security._data is not None
-        assert security._data['name'] == 'Apple Inc.'
+        assert security._data["name"] == "Apple Inc."
 
     @pytest.mark.asyncio
     async def test_load_populates_position(self, mock_db, mock_broker):
         """load() populates position data from database."""
-        security = Security('AAPL.US', db=mock_db, broker=mock_broker)
+        security = Security("AAPL.US", db=mock_db, broker=mock_broker)
         await security.load()
 
         assert security._position is not None
-        assert security._position['quantity'] == 10
+        assert security._position["quantity"] == 10
 
     @pytest.mark.asyncio
     async def test_load_returns_self(self, mock_db, mock_broker):
         """load() returns self for chaining."""
-        security = Security('AAPL.US', db=mock_db, broker=mock_broker)
+        security = Security("AAPL.US", db=mock_db, broker=mock_broker)
         result = await security.load()
         assert result is security
 
@@ -84,10 +88,10 @@ class TestSecurityExists:
     async def test_exists_returns_true_when_in_database(self):
         """exists() returns True when security is in database."""
         db = MagicMock()
-        db.get_security = AsyncMock(return_value={'symbol': 'AAPL.US', 'name': 'Apple'})
+        db.get_security = AsyncMock(return_value={"symbol": "AAPL.US", "name": "Apple"})
         db.get_position = AsyncMock(return_value=None)
 
-        security = Security('AAPL.US', db=db)
+        security = Security("AAPL.US", db=db)
         assert await security.exists() is True
 
     @pytest.mark.asyncio
@@ -97,17 +101,17 @@ class TestSecurityExists:
         db.get_security = AsyncMock(return_value=None)
         db.get_position = AsyncMock(return_value=None)
 
-        security = Security('NONEXISTENT', db=db)
+        security = Security("NONEXISTENT", db=db)
         assert await security.exists() is False
 
     @pytest.mark.asyncio
     async def test_exists_loads_data_if_not_loaded(self):
         """exists() calls load() if data not already loaded."""
         db = MagicMock()
-        db.get_security = AsyncMock(return_value={'symbol': 'AAPL.US'})
+        db.get_security = AsyncMock(return_value={"symbol": "AAPL.US"})
         db.get_position = AsyncMock(return_value=None)
 
-        security = Security('AAPL.US', db=db)
+        security = Security("AAPL.US", db=db)
         assert security._data is None  # Not loaded yet
         await security.exists()
         db.get_security.assert_called_once()
@@ -119,46 +123,46 @@ class TestSecurityProperties:
     @pytest.fixture
     def loaded_security(self):
         """Create a loaded security with sample data."""
-        security = Security('AAPL.US')
+        security = Security("AAPL.US")
         security._data = {
-            'symbol': 'AAPL.US',
-            'name': 'Apple Inc.',
-            'currency': 'USD',
-            'geography': 'United States',
-            'industry': 'Technology',
-            'min_lot': 1,
-            'active': 1,
-            'allow_buy': 1,
-            'allow_sell': 1,
+            "symbol": "AAPL.US",
+            "name": "Apple Inc.",
+            "currency": "USD",
+            "geography": "United States",
+            "industry": "Technology",
+            "min_lot": 1,
+            "active": 1,
+            "allow_buy": 1,
+            "allow_sell": 1,
         }
         security._position = {
-            'quantity': 10,
-            'avg_cost': 150.00,
-            'current_price': 175.00,
+            "quantity": 10,
+            "avg_cost": 150.00,
+            "current_price": 175.00,
         }
         return security
 
     def test_name_property(self, loaded_security):
         """name property returns security name."""
-        assert loaded_security.name == 'Apple Inc.'
+        assert loaded_security.name == "Apple Inc."
 
     def test_currency_property(self, loaded_security):
         """currency property returns currency code."""
-        assert loaded_security.currency == 'USD'
+        assert loaded_security.currency == "USD"
 
     def test_currency_defaults_to_eur(self):
         """currency defaults to EUR when not set."""
-        security = Security('TEST')
+        security = Security("TEST")
         security._data = {}
-        assert security.currency == 'EUR'
+        assert security.currency == "EUR"
 
     def test_geography_property(self, loaded_security):
         """geography property returns country/region."""
-        assert loaded_security.geography == 'United States'
+        assert loaded_security.geography == "United States"
 
     def test_industry_property(self, loaded_security):
         """industry property returns industry classification."""
-        assert loaded_security.industry == 'Technology'
+        assert loaded_security.industry == "Technology"
 
     def test_min_lot_property(self, loaded_security):
         """min_lot property returns minimum trading lot."""
@@ -166,7 +170,7 @@ class TestSecurityProperties:
 
     def test_min_lot_defaults_to_1(self):
         """min_lot defaults to 1 when not set."""
-        security = Security('TEST')
+        security = Security("TEST")
         security._data = {}
         assert security.min_lot == 1
 
@@ -176,8 +180,8 @@ class TestSecurityProperties:
 
     def test_active_false_when_inactive(self):
         """active returns False when set to 0."""
-        security = Security('TEST')
-        security._data = {'active': 0}
+        security = Security("TEST")
+        security._data = {"active": 0}
         assert security.active is False
 
     def test_allow_buy_property(self, loaded_security):
@@ -195,20 +199,20 @@ class TestPositionProperties:
     @pytest.fixture
     def security_with_position(self):
         """Security with an existing position."""
-        security = Security('AAPL.US')
-        security._data = {'symbol': 'AAPL.US'}
+        security = Security("AAPL.US")
+        security._data = {"symbol": "AAPL.US"}
         security._position = {
-            'quantity': 10,
-            'avg_cost': 150.00,
-            'current_price': 175.00,
+            "quantity": 10,
+            "avg_cost": 150.00,
+            "current_price": 175.00,
         }
         return security
 
     @pytest.fixture
     def security_without_position(self):
         """Security without a position."""
-        security = Security('AAPL.US')
-        security._data = {'symbol': 'AAPL.US'}
+        security = Security("AAPL.US")
+        security._data = {"symbol": "AAPL.US"}
         security._position = None
         return security
 
@@ -250,10 +254,10 @@ class TestMarketData:
         db = MagicMock()
         db.upsert_position = AsyncMock()
         broker = MagicMock()
-        broker.get_quote = AsyncMock(return_value={'price': 180.00})
+        broker.get_quote = AsyncMock(return_value={"price": 180.00})
 
-        security = Security('AAPL.US', db=db, broker=broker)
-        security._position = {'current_price': 175.00}
+        security = Security("AAPL.US", db=db, broker=broker)
+        security._position = {"current_price": 175.00}
 
         price = await security.get_price()
         assert price == 180.00
@@ -264,9 +268,9 @@ class TestMarketData:
         db = MagicMock()
         db.upsert_position = AsyncMock()
         broker = MagicMock()
-        broker.get_quote = AsyncMock(return_value={'price': 180.00})
+        broker.get_quote = AsyncMock(return_value={"price": 180.00})
 
-        security = Security('AAPL.US', db=db, broker=broker)
+        security = Security("AAPL.US", db=db, broker=broker)
         await security.get_price()
 
         db.upsert_position.assert_called_once()
@@ -278,8 +282,8 @@ class TestMarketData:
         broker = MagicMock()
         broker.get_quote = AsyncMock(return_value=None)
 
-        security = Security('AAPL.US', db=db, broker=broker)
-        security._position = {'current_price': 175.00}
+        security = Security("AAPL.US", db=db, broker=broker)
+        security._position = {"current_price": 175.00}
 
         price = await security.get_price()
         assert price == 175.00
@@ -288,33 +292,37 @@ class TestMarketData:
     async def test_get_quote_returns_full_quote(self):
         """get_quote() returns full quote data."""
         broker = MagicMock()
-        broker.get_quote = AsyncMock(return_value={
-            'price': 180.00,
-            'bid': 179.90,
-            'ask': 180.10,
-            'volume': 1000000,
-        })
+        broker.get_quote = AsyncMock(
+            return_value={
+                "price": 180.00,
+                "bid": 179.90,
+                "ask": 180.10,
+                "volume": 1000000,
+            }
+        )
 
-        security = Security('AAPL.US', broker=broker)
+        security = Security("AAPL.US", broker=broker)
         quote = await security.get_quote()
 
-        assert quote['price'] == 180.00
-        assert quote['bid'] == 179.90
+        assert quote["price"] == 180.00
+        assert quote["bid"] == 179.90
 
     @pytest.mark.asyncio
     async def test_get_historical_prices(self):
         """get_historical_prices() fetches from database."""
         db = MagicMock()
-        db.get_prices = AsyncMock(return_value=[
-            {'date': '2024-01-01', 'close': 150.00},
-            {'date': '2024-01-02', 'close': 152.00},
-        ])
+        db.get_prices = AsyncMock(
+            return_value=[
+                {"date": "2024-01-01", "close": 150.00},
+                {"date": "2024-01-02", "close": 152.00},
+            ]
+        )
 
-        security = Security('AAPL.US', db=db)
+        security = Security("AAPL.US", db=db)
         prices = await security.get_historical_prices(days=30)
 
         assert len(prices) == 2
-        db.get_prices.assert_called_once_with('AAPL.US', 30)
+        db.get_prices.assert_called_once_with("AAPL.US", 30)
 
     @pytest.mark.asyncio
     async def test_sync_prices(self):
@@ -322,11 +330,11 @@ class TestMarketData:
         db = MagicMock()
         db.replace_prices = AsyncMock()
         broker = MagicMock()
-        broker.get_historical_prices_bulk = AsyncMock(return_value={
-            'AAPL.US': [{'date': '2024-01-01', 'close': 150.00}] * 100
-        })
+        broker.get_historical_prices_bulk = AsyncMock(
+            return_value={"AAPL.US": [{"date": "2024-01-01", "close": 150.00}] * 100}
+        )
 
-        security = Security('AAPL.US', db=db, broker=broker)
+        security = Security("AAPL.US", db=db, broker=broker)
         count = await security.sync_prices(days=365)
 
         assert count == 100
@@ -345,25 +353,25 @@ class TestTradingBuy:
         db.upsert_position = AsyncMock()  # Required for get_price()
 
         broker = MagicMock()
-        broker.get_quote = AsyncMock(return_value={'price': 100.00})
-        broker.buy = AsyncMock(return_value='ORDER123')
+        broker.get_quote = AsyncMock(return_value={"price": 100.00})
+        broker.buy = AsyncMock(return_value="ORDER123")
 
-        security = Security('AAPL.US', db=db, broker=broker)
+        security = Security("AAPL.US", db=db, broker=broker)
         security._data = {
-            'symbol': 'AAPL.US',
-            'currency': 'EUR',
-            'min_lot': 1,
-            'allow_buy': 1,
-            'allow_sell': 1,
+            "symbol": "AAPL.US",
+            "currency": "EUR",
+            "min_lot": 1,
+            "allow_buy": 1,
+            "allow_sell": 1,
         }
-        security._position = {'current_price': 100.00}
+        security._position = {"current_price": 100.00}
         return security
 
     @pytest.mark.asyncio
     async def test_buy_places_order(self, tradeable_security):
         """buy() places order with broker."""
         order_id = await tradeable_security.buy(10)
-        assert order_id == 'ORDER123'
+        assert order_id == "ORDER123"
         tradeable_security._broker.buy.assert_called_once()
 
     @pytest.mark.asyncio
@@ -381,25 +389,25 @@ class TestTradingBuy:
         db.upsert_position = AsyncMock()
 
         broker = MagicMock()
-        broker.get_quote = AsyncMock(return_value={'price': 100.00})
-        broker.buy = AsyncMock(return_value='ORDER123')
+        broker.get_quote = AsyncMock(return_value={"price": 100.00})
+        broker.buy = AsyncMock(return_value="ORDER123")
 
-        security = Security('TEST', db=db, broker=broker)
+        security = Security("TEST", db=db, broker=broker)
         security._data = {
-            'currency': 'EUR',
-            'min_lot': 10,  # Lot size of 10
-            'allow_buy': 1,
+            "currency": "EUR",
+            "min_lot": 10,  # Lot size of 10
+            "allow_buy": 1,
         }
-        security._position = {'current_price': 100.00}
+        security._position = {"current_price": 100.00}
 
         await security.buy(25)  # Should round down to 20
-        broker.buy.assert_called_with('TEST', 20, price=None)
+        broker.buy.assert_called_with("TEST", 20, price=None)
 
     @pytest.mark.asyncio
     async def test_buy_fails_when_not_allowed(self):
         """buy() raises error when allow_buy is False."""
-        security = Security('TEST')
-        security._data = {'allow_buy': 0, 'min_lot': 1}
+        security = Security("TEST")
+        security._data = {"allow_buy": 0, "min_lot": 1}
 
         with pytest.raises(ValueError, match="not allowed"):
             await security.buy(10)
@@ -411,13 +419,13 @@ class TestTradingBuy:
         db.get_trades = AsyncMock(return_value=[])
 
         broker = MagicMock()
-        broker.get_quote = AsyncMock(return_value={'price': 100.00})
+        broker.get_quote = AsyncMock(return_value={"price": 100.00})
 
-        security = Security('TEST', db=db, broker=broker)
+        security = Security("TEST", db=db, broker=broker)
         security._data = {
-            'currency': 'EUR',
-            'min_lot': 10,
-            'allow_buy': 1,
+            "currency": "EUR",
+            "min_lot": 10,
+            "allow_buy": 1,
         }
         security._position = {}
 
@@ -433,9 +441,9 @@ class TestTradingBuy:
         broker = MagicMock()
         broker.get_quote = AsyncMock(return_value=None)
 
-        security = Security('TEST', db=db, broker=broker)
-        security._data = {'currency': 'EUR', 'min_lot': 1, 'allow_buy': 1}
-        security._position = {'current_price': None}
+        security = Security("TEST", db=db, broker=broker)
+        security._data = {"currency": "EUR", "min_lot": 1, "allow_buy": 1}
+        security._position = {"current_price": None}
 
         with pytest.raises(ValueError, match="no valid price"):
             await security.buy(10)
@@ -453,25 +461,25 @@ class TestTradingSell:
         db.upsert_position = AsyncMock()  # Required for get_price()
 
         broker = MagicMock()
-        broker.get_quote = AsyncMock(return_value={'price': 100.00})
-        broker.sell = AsyncMock(return_value='ORDER456')
+        broker.get_quote = AsyncMock(return_value={"price": 100.00})
+        broker.sell = AsyncMock(return_value="ORDER456")
 
-        security = Security('AAPL.US', db=db, broker=broker)
+        security = Security("AAPL.US", db=db, broker=broker)
         security._data = {
-            'symbol': 'AAPL.US',
-            'currency': 'EUR',
-            'min_lot': 1,
-            'allow_buy': 1,
-            'allow_sell': 1,
+            "symbol": "AAPL.US",
+            "currency": "EUR",
+            "min_lot": 1,
+            "allow_buy": 1,
+            "allow_sell": 1,
         }
-        security._position = {'quantity': 100, 'current_price': 100.00}
+        security._position = {"quantity": 100, "current_price": 100.00}
         return security
 
     @pytest.mark.asyncio
     async def test_sell_places_order(self, sellable_security):
         """sell() places order with broker."""
         order_id = await sellable_security.sell(10)
-        assert order_id == 'ORDER456'
+        assert order_id == "ORDER456"
 
     @pytest.mark.asyncio
     async def test_sell_records_trade(self, sellable_security):
@@ -482,9 +490,9 @@ class TestTradingSell:
     @pytest.mark.asyncio
     async def test_sell_fails_when_not_allowed(self):
         """sell() raises error when allow_sell is False."""
-        security = Security('TEST')
-        security._data = {'allow_sell': 0, 'min_lot': 1}
-        security._position = {'quantity': 100}
+        security = Security("TEST")
+        security._data = {"allow_sell": 0, "min_lot": 1}
+        security._position = {"quantity": 100}
 
         with pytest.raises(ValueError, match="not allowed"):
             await security.sell(10)
@@ -495,9 +503,9 @@ class TestTradingSell:
         db = MagicMock()
         db.get_trades = AsyncMock(return_value=[])
 
-        security = Security('TEST', db=db)
-        security._data = {'allow_sell': 1, 'min_lot': 1}
-        security._position = {'quantity': 10}
+        security = Security("TEST", db=db)
+        security._data = {"allow_sell": 1, "min_lot": 1}
+        security._position = {"quantity": 10}
 
         with pytest.raises(ValueError, match="only own"):
             await security.sell(20)
@@ -511,19 +519,19 @@ class TestTradingSell:
         db.upsert_position = AsyncMock()
 
         broker = MagicMock()
-        broker.get_quote = AsyncMock(return_value={'price': 100.00})
-        broker.sell = AsyncMock(return_value='ORDER456')
+        broker.get_quote = AsyncMock(return_value={"price": 100.00})
+        broker.sell = AsyncMock(return_value="ORDER456")
 
-        security = Security('TEST', db=db, broker=broker)
+        security = Security("TEST", db=db, broker=broker)
         security._data = {
-            'currency': 'EUR',
-            'min_lot': 10,
-            'allow_sell': 1,
+            "currency": "EUR",
+            "min_lot": 10,
+            "allow_sell": 1,
         }
-        security._position = {'quantity': 100, 'current_price': 100.00}
+        security._position = {"quantity": 100, "current_price": 100.00}
 
         await security.sell(25)  # Should round to 20
-        broker.sell.assert_called_with('TEST', 20, price=None)
+        broker.sell.assert_called_with("TEST", 20, price=None)
 
 
 class TestTradeCooloff:
@@ -535,16 +543,14 @@ class TestTradeCooloff:
         recent_trade_time = datetime.now() - timedelta(minutes=30)
 
         db = MagicMock()
-        db.get_trades = AsyncMock(return_value=[{
-            'executed_at': recent_trade_time.isoformat()
-        }])
+        db.get_trades = AsyncMock(return_value=[{"executed_at": recent_trade_time.isoformat()}])
 
         broker = MagicMock()
-        broker.get_quote = AsyncMock(return_value={'price': 100.00})
+        broker.get_quote = AsyncMock(return_value={"price": 100.00})
 
-        security = Security('TEST', db=db, broker=broker)
-        security._data = {'currency': 'EUR', 'min_lot': 1, 'allow_buy': 1}
-        security._position = {'current_price': 100.00}
+        security = Security("TEST", db=db, broker=broker)
+        security._data = {"currency": "EUR", "min_lot": 1, "allow_buy": 1}
+        security._position = {"current_price": 100.00}
 
         with pytest.raises(ValueError, match="already submitted"):
             await security.buy(10)
@@ -555,22 +561,20 @@ class TestTradeCooloff:
         old_trade_time = datetime.now() - timedelta(minutes=TRADE_COOLOFF_MINUTES + 10)
 
         db = MagicMock()
-        db.get_trades = AsyncMock(return_value=[{
-            'executed_at': old_trade_time.isoformat()
-        }])
+        db.get_trades = AsyncMock(return_value=[{"executed_at": old_trade_time.isoformat()}])
         db.record_trade = AsyncMock()
         db.upsert_position = AsyncMock()
 
         broker = MagicMock()
-        broker.get_quote = AsyncMock(return_value={'price': 100.00})
-        broker.buy = AsyncMock(return_value='ORDER123')
+        broker.get_quote = AsyncMock(return_value={"price": 100.00})
+        broker.buy = AsyncMock(return_value="ORDER123")
 
-        security = Security('TEST', db=db, broker=broker)
-        security._data = {'currency': 'EUR', 'min_lot': 1, 'allow_buy': 1}
-        security._position = {'current_price': 100.00}
+        security = Security("TEST", db=db, broker=broker)
+        security._data = {"currency": "EUR", "min_lot": 1, "allow_buy": 1}
+        security._position = {"current_price": 100.00}
 
         order_id = await security.buy(10)
-        assert order_id == 'ORDER123'
+        assert order_id == "ORDER123"
 
     @pytest.mark.asyncio
     async def test_sell_fails_within_cooloff_period(self):
@@ -578,13 +582,11 @@ class TestTradeCooloff:
         recent_trade_time = datetime.now() - timedelta(minutes=30)
 
         db = MagicMock()
-        db.get_trades = AsyncMock(return_value=[{
-            'executed_at': recent_trade_time.isoformat()
-        }])
+        db.get_trades = AsyncMock(return_value=[{"executed_at": recent_trade_time.isoformat()}])
 
-        security = Security('TEST', db=db)
-        security._data = {'min_lot': 1, 'allow_sell': 1}
-        security._position = {'quantity': 100}
+        security = Security("TEST", db=db)
+        security._data = {"min_lot": 1, "allow_sell": 1}
+        security._position = {"quantity": 100}
 
         with pytest.raises(ValueError, match="already submitted"):
             await security.sell(10)
@@ -595,17 +597,17 @@ class TestAsianMarketHandling:
 
     def test_is_asian_market_true_for_as_suffix(self):
         """_is_asian_market() returns True for .AS symbols."""
-        security = Security('ASML.AS')
+        security = Security("ASML.AS")
         assert security._is_asian_market() is True
 
     def test_is_asian_market_false_for_us_suffix(self):
         """_is_asian_market() returns False for .US symbols."""
-        security = Security('AAPL.US')
+        security = Security("AAPL.US")
         assert security._is_asian_market() is False
 
     def test_is_asian_market_false_for_eu_suffix(self):
         """_is_asian_market() returns False for .EU symbols."""
-        security = Security('SAP.EU')
+        security = Security("SAP.EU")
         assert security._is_asian_market() is False
 
     @pytest.mark.asyncio
@@ -617,21 +619,21 @@ class TestAsianMarketHandling:
         db.upsert_position = AsyncMock()
 
         broker = MagicMock()
-        broker.get_quote = AsyncMock(return_value={'price': 100.00})
-        broker.buy = AsyncMock(return_value='ORDER123')
+        broker.get_quote = AsyncMock(return_value={"price": 100.00})
+        broker.buy = AsyncMock(return_value="ORDER123")
 
-        security = Security('ASML.AS', db=db, broker=broker)
+        security = Security("ASML.AS", db=db, broker=broker)
         security._data = {
-            'currency': 'EUR',
-            'min_lot': 1,
-            'allow_buy': 1,
-            'quote_data': json.dumps({'ask': 102.50, 'bid': 99.50}),
+            "currency": "EUR",
+            "min_lot": 1,
+            "allow_buy": 1,
+            "quote_data": json.dumps({"ask": 102.50, "bid": 99.50}),
         }
-        security._position = {'current_price': 100.00}
+        security._position = {"current_price": 100.00}
 
         await security.buy(10)
         # Should be called with price (limit order)
-        broker.buy.assert_called_with('ASML.AS', 10, price=102.50)
+        broker.buy.assert_called_with("ASML.AS", 10, price=102.50)
 
     @pytest.mark.asyncio
     async def test_sell_uses_limit_order_for_asian_market(self):
@@ -642,20 +644,20 @@ class TestAsianMarketHandling:
         db.upsert_position = AsyncMock()
 
         broker = MagicMock()
-        broker.get_quote = AsyncMock(return_value={'price': 100.00})
-        broker.sell = AsyncMock(return_value='ORDER456')
+        broker.get_quote = AsyncMock(return_value={"price": 100.00})
+        broker.sell = AsyncMock(return_value="ORDER456")
 
-        security = Security('ASML.AS', db=db, broker=broker)
+        security = Security("ASML.AS", db=db, broker=broker)
         security._data = {
-            'currency': 'EUR',
-            'min_lot': 1,
-            'allow_sell': 1,
-            'quote_data': json.dumps({'ask': 102.50, 'bid': 99.50}),
+            "currency": "EUR",
+            "min_lot": 1,
+            "allow_sell": 1,
+            "quote_data": json.dumps({"ask": 102.50, "bid": 99.50}),
         }
-        security._position = {'quantity': 100, 'current_price': 100.00}
+        security._position = {"quantity": 100, "current_price": 100.00}
 
         await security.sell(10)
-        broker.sell.assert_called_with('ASML.AS', 10, price=99.50)
+        broker.sell.assert_called_with("ASML.AS", 10, price=99.50)
 
     @pytest.mark.asyncio
     async def test_buy_fails_if_no_ask_price_for_asian_market(self):
@@ -665,16 +667,16 @@ class TestAsianMarketHandling:
         db.upsert_position = AsyncMock()
 
         broker = MagicMock()
-        broker.get_quote = AsyncMock(return_value={'price': 100.00})
+        broker.get_quote = AsyncMock(return_value={"price": 100.00})
 
-        security = Security('ASML.AS', db=db, broker=broker)
+        security = Security("ASML.AS", db=db, broker=broker)
         security._data = {
-            'currency': 'EUR',
-            'min_lot': 1,
-            'allow_buy': 1,
-            'quote_data': None,  # No quote data
+            "currency": "EUR",
+            "min_lot": 1,
+            "allow_buy": 1,
+            "quote_data": None,  # No quote data
         }
-        security._position = {'current_price': 100.00}
+        security._position = {"current_price": 100.00}
 
         with pytest.raises(ValueError, match="no ask price"):
             await security.buy(10)
@@ -688,11 +690,11 @@ class TestScoring:
         """get_score() returns the calculated score."""
         db = MagicMock()
         mock_cursor = MagicMock()
-        mock_cursor.fetchone = AsyncMock(return_value={'score': 0.75})
+        mock_cursor.fetchone = AsyncMock(return_value={"score": 0.75})
         db.conn = MagicMock()
         db.conn.execute = AsyncMock(return_value=mock_cursor)
 
-        security = Security('AAPL.US', db=db)
+        security = Security("AAPL.US", db=db)
         score = await security.get_score()
         assert score == 0.75
 
@@ -705,7 +707,7 @@ class TestScoring:
         db.conn = MagicMock()
         db.conn.execute = AsyncMock(return_value=mock_cursor)
 
-        security = Security('AAPL.US', db=db)
+        security = Security("AAPL.US", db=db)
         score = await security.get_score()
         assert score is None
 
@@ -717,8 +719,8 @@ class TestScoring:
         db.conn.execute = AsyncMock()
         db.conn.commit = AsyncMock()
 
-        security = Security('AAPL.US', db=db)
-        await security.set_score(0.85, components={'ml': 0.8, 'momentum': 0.9})
+        security = Security("AAPL.US", db=db)
+        await security.set_score(0.85, components={"ml": 0.8, "momentum": 0.9})
 
         db.conn.execute.assert_called_once()
         db.conn.commit.assert_called_once()
@@ -732,41 +734,43 @@ class TestManagement:
         """save() updates security data in database."""
         db = MagicMock()
         db.upsert_security = AsyncMock()
-        db.get_security = AsyncMock(return_value={'symbol': 'AAPL.US', 'name': 'Apple'})
+        db.get_security = AsyncMock(return_value={"symbol": "AAPL.US", "name": "Apple"})
 
-        security = Security('AAPL.US', db=db)
-        await security.save(name='Apple Inc.', active=1)
+        security = Security("AAPL.US", db=db)
+        await security.save(name="Apple Inc.", active=1)
 
-        db.upsert_security.assert_called_once_with('AAPL.US', name='Apple Inc.', active=1)
+        db.upsert_security.assert_called_once_with("AAPL.US", name="Apple Inc.", active=1)
 
     @pytest.mark.asyncio
     async def test_save_reloads_data(self):
         """save() reloads security data after update."""
         db = MagicMock()
         db.upsert_security = AsyncMock()
-        db.get_security = AsyncMock(return_value={'symbol': 'AAPL.US', 'name': 'Apple Inc.'})
+        db.get_security = AsyncMock(return_value={"symbol": "AAPL.US", "name": "Apple Inc."})
 
-        security = Security('AAPL.US', db=db)
-        security._data = {'symbol': 'AAPL.US', 'name': 'Apple'}
+        security = Security("AAPL.US", db=db)
+        security._data = {"symbol": "AAPL.US", "name": "Apple"}
 
-        await security.save(name='Apple Inc.')
+        await security.save(name="Apple Inc.")
 
-        assert security._data['name'] == 'Apple Inc.'
+        assert security._data["name"] == "Apple Inc."
 
     @pytest.mark.asyncio
     async def test_get_trades_returns_trade_history(self):
         """get_trades() returns trade history for this security."""
         db = MagicMock()
-        db.get_trades = AsyncMock(return_value=[
-            {'side': 'BUY', 'quantity': 10, 'price': 150.00},
-            {'side': 'SELL', 'quantity': 5, 'price': 160.00},
-        ])
+        db.get_trades = AsyncMock(
+            return_value=[
+                {"side": "BUY", "quantity": 10, "price": 150.00},
+                {"side": "SELL", "quantity": 5, "price": 160.00},
+            ]
+        )
 
-        security = Security('AAPL.US', db=db)
+        security = Security("AAPL.US", db=db)
         trades = await security.get_trades(limit=50)
 
         assert len(trades) == 2
-        db.get_trades.assert_called_once_with('AAPL.US', 50)
+        db.get_trades.assert_called_once_with("AAPL.US", 50)
 
 
 class TestQuoteDataParsing:
@@ -774,61 +778,55 @@ class TestQuoteDataParsing:
 
     def test_get_quote_data_parses_json(self):
         """_get_quote_data() parses JSON from quote_data field."""
-        security = Security('TEST')
-        security._data = {
-            'quote_data': json.dumps({'bid': 99.50, 'ask': 100.50, 'ltp': 100.00})
-        }
+        security = Security("TEST")
+        security._data = {"quote_data": json.dumps({"bid": 99.50, "ask": 100.50, "ltp": 100.00})}
 
         quote = security._get_quote_data()
-        assert quote['bid'] == 99.50
-        assert quote['ask'] == 100.50
+        assert quote["bid"] == 99.50
+        assert quote["ask"] == 100.50
 
     def test_get_quote_data_returns_none_when_no_data(self):
         """_get_quote_data() returns None when no quote_data."""
-        security = Security('TEST')
+        security = Security("TEST")
         security._data = {}
 
         assert security._get_quote_data() is None
 
     def test_get_quote_data_returns_none_on_invalid_json(self):
         """_get_quote_data() returns None on invalid JSON."""
-        security = Security('TEST')
-        security._data = {'quote_data': 'invalid json'}
+        security = Security("TEST")
+        security._data = {"quote_data": "invalid json"}
 
         assert security._get_quote_data() is None
 
     def test_get_ask_price_from_quote(self):
         """_get_ask_price() extracts ask price from quote."""
-        security = Security('TEST')
-        security._data = {
-            'quote_data': json.dumps({'ask': 100.50})
-        }
+        security = Security("TEST")
+        security._data = {"quote_data": json.dumps({"ask": 100.50})}
 
         assert security._get_ask_price() == 100.50
 
     def test_get_ask_price_falls_back_to_bap(self):
         """_get_ask_price() falls back to 'bap' field."""
-        security = Security('TEST')
+        security = Security("TEST")
         security._data = {
-            'quote_data': json.dumps({'bap': 100.50})  # bap = best ask price
+            "quote_data": json.dumps({"bap": 100.50})  # bap = best ask price
         }
 
         assert security._get_ask_price() == 100.50
 
     def test_get_bid_price_from_quote(self):
         """_get_bid_price() extracts bid price from quote."""
-        security = Security('TEST')
-        security._data = {
-            'quote_data': json.dumps({'bid': 99.50})
-        }
+        security = Security("TEST")
+        security._data = {"quote_data": json.dumps({"bid": 99.50})}
 
         assert security._get_bid_price() == 99.50
 
     def test_get_bid_price_falls_back_to_bbp(self):
         """_get_bid_price() falls back to 'bbp' field."""
-        security = Security('TEST')
+        security = Security("TEST")
         security._data = {
-            'quote_data': json.dumps({'bbp': 99.50})  # bbp = best bid price
+            "quote_data": json.dumps({"bbp": 99.50})  # bbp = best bid price
         }
 
         assert security._get_bid_price() == 99.50

@@ -54,8 +54,8 @@ export const getRecommendations = (minValue) => {
 
 // Jobs/Scheduler
 export const getSchedulerStatus = () => request('/jobs');
-export const runJob = (jobName, immediate = false) =>
-  request(`/jobs/${encodeURIComponent(jobName)}/run?immediate=${immediate}`, { method: 'POST' });
+export const runJob = (jobName) =>
+  request(`/jobs/${encodeURIComponent(jobName)}/run`, { method: 'POST' });
 export const refreshAll = () =>
   request('/jobs/refresh-all', { method: 'POST' });
 

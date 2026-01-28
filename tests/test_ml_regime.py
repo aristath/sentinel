@@ -1,7 +1,6 @@
 """Tests for regime detection and ML prediction dampening."""
 
-import pytest
-from sentinel.ml_regime import calculate_regime_score, apply_regime_dampening
+from sentinel.ml_regime import apply_regime_dampening, calculate_regime_score
 
 
 class TestCalculateRegimeScore:
@@ -9,28 +8,19 @@ class TestCalculateRegimeScore:
 
     def test_bullish_regime(self):
         """Strong positive momentum + high in range = bullish."""
-        quote = {
-            'chg5': 2, 'chg22': 8, 'chg110': 25, 'chg220': 40,
-            'ltp': 95, 'x_max': 100, 'x_min': 60
-        }
+        quote = {"chg5": 2, "chg22": 8, "chg110": 25, "chg220": 40, "ltp": 95, "x_max": 100, "x_min": 60}
         score = calculate_regime_score(quote)
         assert score > 0.5, f"Expected bullish (>0.5), got {score}"
 
     def test_bearish_regime(self):
         """Strong negative momentum + low in range = bearish."""
-        quote = {
-            'chg5': -3, 'chg22': -10, 'chg110': -30, 'chg220': -45,
-            'ltp': 65, 'x_max': 100, 'x_min': 60
-        }
+        quote = {"chg5": -3, "chg22": -10, "chg110": -30, "chg220": -45, "ltp": 65, "x_max": 100, "x_min": 60}
         score = calculate_regime_score(quote)
         assert score < -0.5, f"Expected bearish (<-0.5), got {score}"
 
     def test_neutral_regime(self):
         """Mixed signals = neutral."""
-        quote = {
-            'chg5': 1, 'chg22': -2, 'chg110': 5, 'chg220': -3,
-            'ltp': 80, 'x_max': 100, 'x_min': 60
-        }
+        quote = {"chg5": 1, "chg22": -2, "chg110": 5, "chg220": -3, "ltp": 80, "x_max": 100, "x_min": 60}
         score = calculate_regime_score(quote)
         assert -0.3 < score < 0.3, f"Expected neutral, got {score}"
 
@@ -41,42 +31,33 @@ class TestCalculateRegimeScore:
 
     def test_none_values_treated_as_zero(self):
         """None values in quote data are treated as zero."""
-        quote = {
-            'chg5': None, 'chg22': None, 'chg110': None, 'chg220': None,
-            'ltp': None, 'x_max': None, 'x_min': None
-        }
+        quote = {"chg5": None, "chg22": None, "chg110": None, "chg220": None, "ltp": None, "x_max": None, "x_min": None}
         score = calculate_regime_score(quote)
         assert score == 0.0
 
     def test_score_clamped_to_range(self):
         """Extreme values should be clamped to [-1, 1]."""
         # Extremely bullish
-        quote = {
-            'chg5': 100, 'chg22': 200, 'chg110': 300, 'chg220': 400,
-            'ltp': 100, 'x_max': 100, 'x_min': 10
-        }
+        quote = {"chg5": 100, "chg22": 200, "chg110": 300, "chg220": 400, "ltp": 100, "x_max": 100, "x_min": 10}
         score = calculate_regime_score(quote)
         assert score <= 1.0
 
         # Extremely bearish
-        quote = {
-            'chg5': -100, 'chg22': -200, 'chg110': -300, 'chg220': -400,
-            'ltp': 10, 'x_max': 100, 'x_min': 10
-        }
+        quote = {"chg5": -100, "chg22": -200, "chg110": -300, "chg220": -400, "ltp": 10, "x_max": 100, "x_min": 10}
         score = calculate_regime_score(quote)
         assert score >= -1.0
 
     def test_position_contribution(self):
         """Position in 52-week range affects score."""
         # Same momentum, different positions
-        base = {'chg5': 0, 'chg22': 0, 'chg110': 0, 'chg220': 0}
+        base = {"chg5": 0, "chg22": 0, "chg110": 0, "chg220": 0}
 
         # At 52-week high
-        high_quote = {**base, 'ltp': 100, 'x_max': 100, 'x_min': 50}
+        high_quote = {**base, "ltp": 100, "x_max": 100, "x_min": 50}
         high_score = calculate_regime_score(high_quote)
 
         # At 52-week low
-        low_quote = {**base, 'ltp': 50, 'x_max': 100, 'x_min': 50}
+        low_quote = {**base, "ltp": 50, "x_max": 100, "x_min": 50}
         low_score = calculate_regime_score(low_quote)
 
         assert high_score > low_score
@@ -152,19 +133,13 @@ class TestRegimeScoreInterpretation:
 
     def test_strong_bullish_range(self):
         """Score > 0.5 indicates strong bullish."""
-        quote = {
-            'chg5': 5, 'chg22': 15, 'chg110': 35, 'chg220': 50,
-            'ltp': 98, 'x_max': 100, 'x_min': 50
-        }
+        quote = {"chg5": 5, "chg22": 15, "chg110": 35, "chg220": 50, "ltp": 98, "x_max": 100, "x_min": 50}
         score = calculate_regime_score(quote)
         assert score > 0.5
 
     def test_strong_bearish_range(self):
         """Score < -0.5 indicates strong bearish."""
-        quote = {
-            'chg5': -5, 'chg22': -15, 'chg110': -35, 'chg220': -50,
-            'ltp': 52, 'x_max': 100, 'x_min': 50
-        }
+        quote = {"chg5": -5, "chg22": -15, "chg110": -35, "chg220": -50, "ltp": 52, "x_max": 100, "x_min": 50}
         score = calculate_regime_score(quote)
         assert score < -0.5
 
@@ -174,20 +149,14 @@ class TestEdgeCases:
 
     def test_zero_range_52_week(self):
         """x_max == x_min should use neutral position."""
-        quote = {
-            'chg5': 0, 'chg22': 0, 'chg110': 0, 'chg220': 0,
-            'ltp': 100, 'x_max': 100, 'x_min': 100
-        }
+        quote = {"chg5": 0, "chg22": 0, "chg110": 0, "chg220": 0, "ltp": 100, "x_max": 100, "x_min": 100}
         score = calculate_regime_score(quote)
         # With zero momentum and neutral position, score should be 0
         assert score == 0.0
 
     def test_negative_ltp(self):
         """Negative or zero ltp should use neutral position."""
-        quote = {
-            'chg5': 0, 'chg22': 0, 'chg110': 0, 'chg220': 0,
-            'ltp': 0, 'x_max': 100, 'x_min': 50
-        }
+        quote = {"chg5": 0, "chg22": 0, "chg110": 0, "chg220": 0, "ltp": 0, "x_max": 100, "x_min": 50}
         score = calculate_regime_score(quote)
         assert score == 0.0
 

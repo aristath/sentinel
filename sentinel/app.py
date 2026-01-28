@@ -28,13 +28,9 @@ from sentinel.backtester import (
 from sentinel.broker import Broker
 from sentinel.cache import Cache
 from sentinel.database import Database
-from sentinel.jobs import (
-    Processor,
-    Queue,
-    Registry,
-    Scheduler,
-)
-from sentinel.jobs.implementations import register_all_jobs
+from sentinel.jobs import get_status, reschedule, run_now
+from sentinel.jobs import init as init_jobs
+from sentinel.jobs import stop as stop_jobs
 from sentinel.jobs.market import BrokerMarketChecker
 from sentinel.portfolio import Portfolio
 from sentinel.price_validator import PriceValidator, get_price_anomaly_warning
@@ -45,40 +41,15 @@ from sentinel.version import VERSION
 logger = logging.getLogger(__name__)
 
 # Global instances
-_queue: Queue = None
-_registry: Registry = None
-_processor: Processor = None
-_scheduler: Scheduler = None
+_scheduler = None  # APScheduler instance
 _led_controller = None
 _led_task: asyncio.Task = None
-
-
-def _apply_schedule_to_job(job, schedule: dict) -> None:
-    """Apply schedule configuration to job instance."""
-    import json
-
-    from sentinel.jobs.types import MarketTiming
-
-    # Override market_timing from database if set
-    market_timing = schedule.get("market_timing")
-    if market_timing is not None and hasattr(job, "_market_timing"):
-        job._market_timing = MarketTiming(market_timing)
-
-    # Override dependencies from database if set
-    deps_str = schedule.get("dependencies")
-    if deps_str and hasattr(job, "_dependencies"):
-        try:
-            deps = json.loads(deps_str)
-            if isinstance(deps, list):
-                job._dependencies = deps
-        except (json.JSONDecodeError, TypeError):
-            pass
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize services on startup, cleanup on shutdown."""
-    global _queue, _registry, _processor, _scheduler, _led_controller, _led_task
+    global _scheduler, _led_controller, _led_task
 
     # Startup
     db = Database()
@@ -115,11 +86,15 @@ async def lifespan(app: FastAPI):
     monitor = MLMonitor()
     cache = Cache("motion")
 
-    # Initialize job system
-    _queue = Queue()
-    _registry = Registry()
-    await register_all_jobs(
-        _registry,
+    # Seed default job schedules before starting scheduler
+    await db.seed_default_job_schedules()
+
+    # Initialize market checker
+    market_checker = BrokerMarketChecker(broker)
+    await market_checker.refresh()
+
+    # Initialize APScheduler-based job system
+    _scheduler = await init_jobs(
         db,
         broker,
         portfolio,
@@ -129,21 +104,9 @@ async def lifespan(app: FastAPI):
         retrainer,
         monitor,
         cache,
+        market_checker,
     )
-
-    market_checker = BrokerMarketChecker(broker)
-    await market_checker.refresh()
-
-    _processor = Processor(db, _queue, _registry, market_checker)
-    await _processor.start()
-
-    # Seed default job schedules before starting scheduler
-    await db.seed_default_job_schedules()
-
-    _scheduler = Scheduler(db, _queue, _registry, market_checker)
-    await _scheduler.start()
-
-    logger.info("Job system started")
+    logger.info("Job scheduler started")
 
     # Start LED controller (checks setting internally, no-op if disabled)
     from sentinel.led import LEDController
@@ -154,11 +117,8 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
-    if _scheduler:
-        await _scheduler.stop()
-    if _processor:
-        await _processor.stop()
-    logger.info("Job system stopped")
+    await stop_jobs()
+    logger.info("Job scheduler stopped")
 
     if _led_controller:
         _led_controller.stop()
@@ -1182,76 +1142,30 @@ async def get_rebalance_summary():
 
 @app.get("/api/jobs")
 async def get_jobs():
-    """Get current job, pending jobs and recent job history."""
-    db = Database()
-    pending = _queue.get_all() if _queue else []
-    history = await db.get_job_history(limit=10)
-
-    # Get current running job from processor
-    current_job = None
-    if _processor and _processor._current_job:
-        current_job = _processor._current_job
-
-    return {
-        "current": current_job,
-        "pending": [
-            {
-                "job_id": job.id(),
-                "type": job.type(),
-            }
-            for job in pending
-        ],
-        "history": history,
-        "registered_types": _registry.list_types() if _registry else [],
-    }
+    """Get current job, upcoming jobs and recent job history."""
+    status = await get_status()
+    return status
 
 
 @app.post("/api/jobs/{job_type:path}/run")
-async def run_job(job_type: str, immediate: bool = False, params: dict = None):
-    """Manually trigger a job by type. Use immediate=true to bypass queue."""
-    if not _registry or not _queue:
-        raise HTTPException(status_code=503, detail="Job system not initialized")
-
-    try:
-        job = await _registry.create(job_type, params or {})
-
-        # Apply schedule configuration from database
-        db = Database()
-        schedule = await db.get_job_schedule(job_type)
-        if schedule:
-            _apply_schedule_to_job(job, schedule)
-
-        if immediate:
-            # Execute immediately, bypassing queue
-            from datetime import datetime
-
-            start = datetime.now()
-            try:
-                await job.execute()
-                duration_ms = int((datetime.now() - start).total_seconds() * 1000)
-                await db.log_job_execution(job.id(), job.type(), "completed", None, duration_ms, 0)
-                return {"status": "completed", "job_id": job.id(), "duration_ms": duration_ms}
-            except Exception as e:
-                duration_ms = int((datetime.now() - start).total_seconds() * 1000)
-                await db.log_job_execution(job.id(), job.type(), "failed", str(e), duration_ms, 0)
-                return {"status": "failed", "job_id": job.id(), "error": str(e)}
-        else:
-            enqueued = await _queue.enqueue(job)
-            return {
-                "status": "enqueued" if enqueued else "already_queued",
-                "job_id": job.id(),
-            }
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+async def run_job_endpoint(job_type: str):
+    """Manually trigger a job by type. Executes immediately."""
+    result = await run_now(job_type)
+    if result.get("status") == "failed" and "Unknown job type" in result.get("error", ""):
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
 
 
 @app.post("/api/jobs/refresh-all")
 async def refresh_all():
-    """Reset last_run timestamp to 0 for all jobs, forcing them to run."""
+    """Reset last_run timestamp to 0 for all jobs and reschedule."""
     db = Database()
     await db.conn.execute("UPDATE job_schedules SET last_run = 0")
     await db.conn.commit()
-    return {"status": "ok", "message": "All job timestamps reset to 0"}
+    schedules = await db.get_job_schedules()
+    for s in schedules:
+        await reschedule(s["job_type"], db)
+    return {"status": "ok", "message": "All jobs rescheduled"}
 
 
 # -----------------------------------------------------------------------------
@@ -1271,16 +1185,18 @@ async def get_job_schedules():
     """Get all job schedule configurations with status info."""
     db = Database()
     schedules = await db.get_job_schedules()
-    pending = _queue.get_all() if _queue else []
-    pending_ids = {job.id() for job in pending}
+
+    # Get next run times from APScheduler
+    next_run_times = {}
+    if _scheduler:
+        for job in _scheduler.get_jobs():
+            if job.next_run_time:
+                next_run_times[job.id] = job.next_run_time.isoformat()
 
     # Enrich with runtime info
     result = []
     for s in schedules:
         job_type = s["job_type"]
-
-        # Check if queued (for parameterized jobs, check prefix)
-        is_queued = job_type in pending_ids or any(pid.startswith(job_type + ":") for pid in pending_ids)
 
         # Get most recent execution (not just successful ones)
         history = await db.get_job_history_for_type(job_type, limit=1)
@@ -1291,43 +1207,18 @@ async def get_job_schedules():
             last_run = None
             last_status = None
 
-        # Parse dependencies
-        import json
-
-        try:
-            dependencies = json.loads(s.get("dependencies") or "[]")
-        except (json.JSONDecodeError, TypeError):
-            dependencies = []
-
-        # Get instance count for parameterized jobs
-        instance_count = None
-        if s["is_parameterized"] and s.get("parameter_source"):
-            source_method = getattr(db, f"get_{s['parameter_source']}", None)
-            if source_method:
-                try:
-                    entities = await source_method()
-                    instance_count = len(entities)
-                except Exception:
-                    instance_count = 0
-
         result.append(
             {
                 "job_type": s["job_type"],
-                "enabled": bool(s["enabled"]),
                 "interval_minutes": s["interval_minutes"],
                 "interval_market_open_minutes": s.get("interval_market_open_minutes"),
                 "market_timing": s["market_timing"],
                 "market_timing_label": MARKET_TIMING_LABELS.get(s["market_timing"], "Unknown"),
-                "dependencies": dependencies,
                 "description": s.get("description"),
                 "category": s.get("category"),
-                "is_parameterized": bool(s.get("is_parameterized")),
-                "parameter_source": s.get("parameter_source"),
-                "parameter_field": s.get("parameter_field"),
-                "instance_count": instance_count,
                 "last_run": last_run,
                 "last_status": last_status,
-                "is_queued": is_queued,
+                "next_run": next_run_times.get(job_type),
             }
         )
 
@@ -1337,20 +1228,12 @@ async def get_job_schedules():
 @app.put("/api/jobs/schedules/{job_type:path}")
 async def update_job_schedule(job_type: str, data: dict):
     """Update a job's schedule configuration."""
-    import json
-
     db = Database()
 
     # Check if job_type exists
     existing = await db.get_job_schedule(job_type)
     if not existing:
         raise HTTPException(status_code=404, detail=f"Unknown job type: {job_type}")
-
-    # Validate enabled
-    if "enabled" in data:
-        val = data["enabled"]
-        if not isinstance(val, bool):
-            raise HTTPException(status_code=400, detail="enabled must be a boolean")
 
     # Validate interval_minutes
     if "interval_minutes" in data:
@@ -1370,25 +1253,16 @@ async def update_job_schedule(job_type: str, data: dict):
         if not isinstance(val, int) or val < 0 or val > 3:
             raise HTTPException(status_code=400, detail="market_timing must be 0, 1, 2, or 3")
 
-    # Validate dependencies
-    dependencies = None
-    if "dependencies" in data:
-        deps = data["dependencies"]
-        if not isinstance(deps, list):
-            raise HTTPException(status_code=400, detail="dependencies must be an array")
-        for dep in deps:
-            if not isinstance(dep, str):
-                raise HTTPException(status_code=400, detail="each dependency must be a string")
-        dependencies = json.dumps(deps)
-
     await db.upsert_job_schedule(
         job_type,
-        enabled=data.get("enabled"),
         interval_minutes=data.get("interval_minutes"),
         interval_market_open_minutes=data.get("interval_market_open_minutes"),
         market_timing=data.get("market_timing"),
-        dependencies=dependencies,
     )
+
+    # Reschedule the job in APScheduler
+    await reschedule(job_type, db)
+
     return {"status": "ok"}
 
 
@@ -1615,18 +1489,8 @@ async def get_all_regimes():
 @app.post("/api/backup/run")
 async def run_backup():
     """Trigger an immediate R2 backup."""
-    if not _registry or not _queue:
-        raise HTTPException(status_code=503, detail="Job system not initialized")
-
-    try:
-        job = await _registry.create("backup:r2", {})
-        enqueued = await _queue.enqueue(job)
-        return {
-            "status": "enqueued" if enqueued else "already_queued",
-            "job_id": job.id(),
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
+    result = await run_now("backup:r2")
+    return result
 
 
 @app.get("/api/backup/status")
@@ -1642,7 +1506,7 @@ async def get_backup_status():
         return {"configured": False, "backups": []}
 
     try:
-        from sentinel.jobs.implementations.backup import _get_r2_client
+        from sentinel.jobs.tasks import _get_r2_client
 
         client = _get_r2_client(account_id, access_key, secret_key)
         response = client.list_objects_v2(Bucket=bucket_name, Prefix="backups/")

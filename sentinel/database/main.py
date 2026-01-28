@@ -9,6 +9,7 @@ Usage:
 """
 
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -16,6 +17,8 @@ from typing import Any, Optional
 import aiosqlite
 
 from sentinel.database.base import BaseDatabase
+
+logger = logging.getLogger(__name__)
 
 
 class Database(BaseDatabase):
@@ -543,16 +546,11 @@ class Database(BaseDatabase):
     async def upsert_job_schedule(
         self,
         job_type: str,
-        enabled: Optional[bool] = None,
         interval_minutes: Optional[int] = None,
         interval_market_open_minutes: Optional[int] = None,
         market_timing: Optional[int] = None,
-        dependencies: Optional[str] = None,
         description: Optional[str] = None,
         category: Optional[str] = None,
-        is_parameterized: Optional[bool] = None,
-        parameter_source: Optional[str] = None,
-        parameter_field: Optional[str] = None,
     ) -> None:
         """Insert or update a job schedule."""
         from datetime import datetime
@@ -564,9 +562,6 @@ class Database(BaseDatabase):
             # Build update query with only provided fields
             updates = []
             params = []
-            if enabled is not None:
-                updates.append("enabled = ?")
-                params.append(1 if enabled else 0)
             if interval_minutes is not None:
                 updates.append("interval_minutes = ?")
                 params.append(interval_minutes)
@@ -576,24 +571,12 @@ class Database(BaseDatabase):
             if market_timing is not None:
                 updates.append("market_timing = ?")
                 params.append(market_timing)
-            if dependencies is not None:
-                updates.append("dependencies = ?")
-                params.append(dependencies)
             if description is not None:
                 updates.append("description = ?")
                 params.append(description)
             if category is not None:
                 updates.append("category = ?")
                 params.append(category)
-            if is_parameterized is not None:
-                updates.append("is_parameterized = ?")
-                params.append(1 if is_parameterized else 0)
-            if parameter_source is not None:
-                updates.append("parameter_source = ?")
-                params.append(parameter_source)
-            if parameter_field is not None:
-                updates.append("parameter_field = ?")
-                params.append(parameter_field)
 
             updates.append("updated_at = ?")
             params.append(now)
@@ -606,23 +589,17 @@ class Database(BaseDatabase):
         else:
             await self.conn.execute(
                 """INSERT INTO job_schedules
-                   (job_type, enabled, interval_minutes, interval_market_open_minutes,
-                    market_timing, dependencies, description, category,
-                    is_parameterized, parameter_source, parameter_field,
+                   (job_type, interval_minutes, interval_market_open_minutes,
+                    market_timing, description, category,
                     created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     job_type,
-                    1 if enabled else 0 if enabled is not None else 1,
                     interval_minutes or 60,
                     interval_market_open_minutes,
                     market_timing or 0,
-                    dependencies or "[]",
                     description,
                     category,
-                    1 if is_parameterized else 0,
-                    parameter_source,
-                    parameter_field,
                     now,
                     now,
                 ),
@@ -641,31 +618,31 @@ class Database(BaseDatabase):
         now = int(datetime.now().timestamp())
 
         # Default job schedules
-        # (job_type, interval, interval_open, timing, category, description, is_param, param_source, param_field)
+        # (job_type, interval, interval_open, timing, category, description)
         defaults = [
-            ("sync:portfolio", 30, 5, 0, "sync", "Sync portfolio positions from broker", False, None, None),
-            ("sync:prices", 30, 5, 0, "sync", "Sync historical prices for securities", False, None, None),
-            ("sync:quotes", 1440, 1440, 0, "sync", "Sync current quotes", False, None, None),
-            ("sync:metadata", 1440, 1440, 0, "sync", "Sync security metadata", False, None, None),
-            ("sync:exchange_rates", 60, 60, 0, "sync", "Sync exchange rates", False, None, None),
-            ("scoring:calculate", 1440, 1440, 0, "scoring", "Calculate security scores", False, None, None),
-            ("analytics:regime", 10080, 10080, 3, "analytics", "Train regime detection model", False, None, None),
-            ("trading:check_markets", 30, 30, 2, "trading", "Check which markets are open", False, None, None),
-            ("trading:execute", 30, 15, 2, "trading", "Execute pending trade recommendations", False, None, None),
-            ("planning:refresh", 60, 30, 0, "trading", "Refresh trading plan and recommendations", False, None, None),
-            ("ml:retrain", 10080, 10080, 3, "ml", "Retrain ML models", True, "ml_enabled_securities", "symbol"),
-            ("ml:monitor", 10080, 10080, 0, "ml", "Monitor ML performance", True, "ml_enabled_securities", "symbol"),
-            ("backup:r2", 1440, 1440, 0, "backup", "Backup data folder to Cloudflare R2", False, None, None),
+            ("sync:portfolio", 30, 5, 0, "sync", "Sync portfolio positions from broker"),
+            ("sync:prices", 30, 5, 0, "sync", "Sync historical prices for securities"),
+            ("sync:quotes", 1440, 1440, 0, "sync", "Sync current quotes"),
+            ("sync:metadata", 1440, 1440, 0, "sync", "Sync security metadata"),
+            ("sync:exchange_rates", 60, 60, 0, "sync", "Sync exchange rates"),
+            ("scoring:calculate", 1440, 1440, 0, "scoring", "Calculate security scores"),
+            ("analytics:regime", 10080, 10080, 3, "analytics", "Train regime detection model"),
+            ("trading:check_markets", 30, 30, 2, "trading", "Check which markets are open"),
+            ("trading:execute", 30, 15, 2, "trading", "Execute pending trade recommendations"),
+            ("trading:rebalance", 60, 60, 0, "trading", "Check portfolio rebalance needs"),
+            ("planning:refresh", 60, 30, 0, "trading", "Refresh trading plan and recommendations"),
+            ("ml:retrain", 10080, 10080, 3, "ml", "Retrain ML models for all ML-enabled securities"),
+            ("ml:monitor", 10080, 10080, 0, "ml", "Monitor ML performance for all ML-enabled securities"),
+            ("backup:r2", 1440, 1440, 0, "backup", "Backup data folder to Cloudflare R2"),
         ]
 
-        for job_type, interval, interval_open, timing, cat, desc, is_param, param_src, param_field in defaults:
+        for job_type, interval, interval_open, timing, cat, desc in defaults:
             await self.conn.execute(
                 """INSERT INTO job_schedules
-                   (job_type, enabled, interval_minutes, interval_market_open_minutes,
-                    market_timing, dependencies, description, category,
-                    is_parameterized, parameter_source, parameter_field,
+                   (job_type, interval_minutes, interval_market_open_minutes,
+                    market_timing, description, category,
                     created_at, updated_at)
-                   VALUES (?, 1, ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     job_type,
                     interval,
@@ -673,9 +650,6 @@ class Database(BaseDatabase):
                     timing,
                     desc,
                     cat,
-                    1 if is_param else 0,
-                    param_src,
-                    param_field,
                     now,
                     now,
                 ),
@@ -844,16 +818,11 @@ class Database(BaseDatabase):
         -- Job Schedules (configurable job intervals and settings)
         CREATE TABLE IF NOT EXISTS job_schedules (
             job_type TEXT PRIMARY KEY,
-            enabled INTEGER DEFAULT 1,
             interval_minutes INTEGER NOT NULL,
             interval_market_open_minutes INTEGER,
             market_timing INTEGER DEFAULT 0,
-            dependencies TEXT DEFAULT '[]',
             description TEXT,
             category TEXT,
-            is_parameterized INTEGER DEFAULT 0,
-            parameter_source TEXT,
-            parameter_field TEXT,
             last_run INTEGER DEFAULT 0,
             consecutive_failures INTEGER DEFAULT 0,
             created_at INTEGER NOT NULL,
@@ -862,6 +831,9 @@ class Database(BaseDatabase):
         CREATE INDEX IF NOT EXISTS idx_job_schedules_category ON job_schedules(category, job_type);
         """)
 
+        # Migration: Remove deprecated columns from job_schedules if they exist
+        await self._migrate_job_schedules()
+
         # Migration: add last_run column to job_schedules if missing
         cursor = await self.conn.execute("PRAGMA table_info(job_schedules)")
         columns = {row[1] for row in await cursor.fetchall()}
@@ -869,6 +841,65 @@ class Database(BaseDatabase):
             await self.conn.execute("ALTER TABLE job_schedules ADD COLUMN last_run INTEGER DEFAULT 0")
         if "consecutive_failures" not in columns:
             await self.conn.execute("ALTER TABLE job_schedules ADD COLUMN consecutive_failures INTEGER DEFAULT 0")
+
+    async def _migrate_job_schedules(self) -> None:
+        """Migrate job_schedules table to remove deprecated columns."""
+        # Check if old columns exist
+        cursor = await self.conn.execute("PRAGMA table_info(job_schedules)")
+        columns = {row[1] for row in await cursor.fetchall()}
+
+        # Columns to remove (if they exist)
+        deprecated_columns = {"enabled", "dependencies", "is_parameterized", "parameter_source", "parameter_field"}
+
+        if not deprecated_columns & columns:
+            # No migration needed
+            return
+
+        logger.info("Migrating job_schedules table to remove deprecated columns...")
+
+        # SQLite doesn't support DROP COLUMN directly (before 3.35), so we need to:
+        # 1. Create new table with clean schema
+        # 2. Copy data
+        # 3. Drop old table
+        # 4. Rename new table
+
+        await self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS job_schedules_new (
+                job_type TEXT PRIMARY KEY,
+                interval_minutes INTEGER NOT NULL,
+                interval_market_open_minutes INTEGER,
+                market_timing INTEGER DEFAULT 0,
+                description TEXT,
+                category TEXT,
+                last_run INTEGER DEFAULT 0,
+                consecutive_failures INTEGER DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            )
+        """)
+
+        await self.conn.execute("""
+            INSERT OR REPLACE INTO job_schedules_new
+                (job_type, interval_minutes, interval_market_open_minutes,
+                 market_timing, description, category, last_run,
+                 consecutive_failures, created_at, updated_at)
+            SELECT
+                job_type, interval_minutes, interval_market_open_minutes,
+                market_timing, description, category,
+                COALESCE(last_run, 0),
+                COALESCE(consecutive_failures, 0),
+                created_at, updated_at
+            FROM job_schedules
+        """)
+
+        await self.conn.execute("DROP TABLE job_schedules")
+        await self.conn.execute("ALTER TABLE job_schedules_new RENAME TO job_schedules")
+        await self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_job_schedules_category ON job_schedules(category, job_type)"
+        )
+
+        await self.conn.commit()
+        logger.info("job_schedules migration complete")
 
 
 SCHEMA = """
